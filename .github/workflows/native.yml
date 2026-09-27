@@ -83,7 +83,7 @@ jobs:
         run: echo "hash=$(node scripts/android-apk.mjs fingerprint)" >> "$GITHUB_OUTPUT"
 
       - id: cached
-        uses: actions/cache/restore@v5
+        uses: actions/cache/restore@v6
         with:
           path: ${{ runner.temp }}/apk-cache
           key: canary-apk-${{ runner.os }}-${{ steps.fingerprint.outputs.hash }}
@@ -138,7 +138,7 @@ jobs:
           df -h "$GITHUB_WORKSPACE"
 
       - if: steps.rebundle.outcome != 'success'
-        uses: actions/cache/save@v5
+        uses: actions/cache/save@v6
         with:
           path: ${{ runner.temp }}/apk-cache
           key: canary-apk-${{ runner.os }}-${{ steps.fingerprint.outputs.hash }}
