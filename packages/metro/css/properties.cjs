@@ -848,8 +848,22 @@ function finishTransition(out, context) {
   }
   // Not `transition`: that is also a prop some native views take, `expo-image`'s among them.
   out['$transition'] = spec;
-  // The parts this rule wrote replace any a weaker rule set on its own.
-  for (const [part, key] of Object.entries(TIMING_KEYS)) if (parts[part]) out[key] = null;
+  cascadingTiming(parts, out, context);
+}
+
+/**
+ * Each timing part a rule with a property list wrote, cascading on its own as a longhand does: a
+ * stronger rule that names only the properties keeps this rule's duration, and a weaker one's is
+ * replaced. A list of more than one pairs with this rule's properties alone, so it is baked into
+ * the spec and replaces a weaker part without standing in for itself.
+ */
+function cascadingTiming(parts, out, context) {
+  for (const [part, key] of Object.entries(TIMING_KEYS)) {
+    const list = parts[part];
+    if (!list) continue;
+    if (list.length > 1) out[key] = null;
+    else out[key] = part === 'timing-function' ? easing(list[0], context) : milliseconds(list[0]);
+  }
 }
 
 /** The timing parts, and the key each cascades under when a rule sets it with no property list. */

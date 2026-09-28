@@ -49,7 +49,7 @@ import { page } from '../screen-styles.ts';
         >Translate on two axes, by half its width, 3D rotation and iOS skew, scale.</text
       >
 
-      <view class="flex-row items-start gap-4">
+      <view class="flex-row flex-wrap items-start gap-4">
         <view class="flex-row space-x-3 border border-zinc-400">
           <view class="size-6 bg-sky-500"></view>
           <view class="size-6 bg-sky-500"></view>

@@ -84,13 +84,14 @@ export interface Booted extends MountResult {
   pointer(id: string, type: string, init?: PointerEventInit): void;
 }
 
-export function boot(component: Type<unknown>): Booted {
+export function boot(component: Type<unknown>, { asAnAppMounts = false } = {}): Booted {
   root = document.createElement('app-root');
   document.body.appendChild(root);
   // `styles.css` imports `reset.css` into Tailwind's `base` layer, the same substitution
   // `examples/web/src/main.ts` makes and for the same cascade-layer reason documented there.
   // Injecting it again as an unlayered `<style>` would beat every Tailwind utility on the page.
-  mounted = mount(root, component, { injectReset: false });
+  // A test of what `mount` does by default asks for no options at all.
+  mounted = mount(root, component, asAnAppMounts ? {} : { injectReset: false });
 
   const byId = (id: string): HTMLElement => {
     const el = document.getElementById(id);

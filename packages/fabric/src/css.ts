@@ -205,6 +205,12 @@ export interface DeferredDeclaration {
    */
   readonly whenSet?: unknown;
   /**
+   * What to write when the reference resolves to nothing: the property's initial value, which is
+   * what a browser gives a property whose `var()` cannot be substituted. Only where it differs
+   * from leaving the property out: `flex-shrink` starts at 1 in CSS and at 0 in Yoga.
+   */
+  readonly unset?: unknown;
+  /**
    * For a colour built from `channels`, the token its alpha comes from:
    * `rgba(var(--bs-primary-rgb), var(--bs-bg-opacity))`. A written alpha is an `adjust` instead.
    */
@@ -1291,11 +1297,12 @@ export class StyleResolver {
     important: Record<string, unknown> | null,
   ): void {
     for (const declaration of settlingOrder(deferred)) {
-      const value = this.settled(declaration, own, parentInherited, tokens);
-      if (value === undefined) {
-        if (this.onUndefinedToken) this.reportUndefined(declaration, tokens);
-        continue;
+      const settled = this.settled(declaration, own, parentInherited, tokens);
+      if (settled === undefined && this.onUndefinedToken) {
+        this.reportUndefined(declaration, tokens);
       }
+      const value = settled ?? declaration.unset;
+      if (value === undefined) continue;
       for (const prop of declaration.props) {
         if (!declaration.important && important && prop in important) continue;
         own[prop] = value;
@@ -1432,15 +1439,17 @@ export class StyleResolver {
  * Plain ones first and important ones after, so an important one wins whatever order they matched
  * in; and a plain one never writes over an important declaration. The font size before everything
  * else, because an em anywhere on the node is measured against it, whichever rule it came from:
- * '.x { padding: 1em } .y { font-size: 2em }'.
+ * '.x { padding: 1em } .y { font-size: 2em }'. Then the colour, because a `currentcolor` anywhere
+ * on the node is the node's own colour: a ring's default, beside a `color: var(--c)`.
  */
 function settlingOrder(deferred: readonly DeferredDeclaration[]): readonly DeferredDeclaration[] {
   const byImportance = deferred.some((one) => one.important)
     ? [...deferred.filter((one) => !one.important), ...deferred.filter((one) => one.important)]
     : deferred;
-  const sizes = (one: DeferredDeclaration) => one.props.includes('fontSize');
-  return byImportance.some(sizes)
-    ? [...byImportance.filter(sizes), ...byImportance.filter((one) => !sizes(one))]
+  const rank = (one: DeferredDeclaration) =>
+    one.props.includes('fontSize') ? 0 : one.props.includes('color') ? 1 : 2;
+  return byImportance.some((one) => rank(one) < 2)
+    ? [0, 1, 2].flatMap((wanted) => byImportance.filter((one) => rank(one) === wanted))
     : byImportance;
 }
 

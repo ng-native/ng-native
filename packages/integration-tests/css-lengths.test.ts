@@ -347,7 +347,8 @@ describe('a length written with no unit', () => {
 
   it('does not read a bare number token as a length either', () => {
     // `translate-x-[3]` is `--tw-translate-x: 3`, read by `translate` on device.
-    const { rules } = refusals('.a { --x: 3; translate: var(--x) 0 }');
+    const { refused, rules } = refusals('.a { --x: 3; translate: var(--x) 0 }');
+    assert.deepEqual(refused, []);
     const target = {
       name: 'view',
       parent: null,

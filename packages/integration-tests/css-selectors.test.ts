@@ -187,7 +187,8 @@ describe('alternatives inside :is() and :where(), some of them ancestor tests', 
 
   it('keeps the specificity of the most specific alternative, as :is() has', () => {
     const [first, second] = compileCss('.x:is(#id *, .a) { color: red }').rules as StyleRule[];
-    assert.equal(first!.specificity, second!.specificity);
+    assert.equal(first!.specificity, ruleFor('.x#id').specificity);
+    assert.equal(second!.specificity, first!.specificity);
   });
 });
 

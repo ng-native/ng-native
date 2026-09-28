@@ -278,10 +278,11 @@ async function build() {
 
   const arbitrary = valid(
     functional.flatMap((root) => [
+      // A negative utility is a root of its own in Tailwind's list (`-rotate`, `-inset`), so
+      // this is every negated arbitrary value too: `-rotate-[30deg]` as well as `-mt-[13px]`.
       ...ARBITRARY.map((value) => `${root}-${value}`),
       ...THEME_VALUES.map((value) => `${root}-${value}`),
       `${root}-brand/50`,
-      `-${root}-[13px]`,
       `${root}-red-500/50`,
       `${root}-[#1a2b3c]/[0.3]`,
     ]),

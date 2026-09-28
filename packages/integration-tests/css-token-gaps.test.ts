@@ -98,13 +98,23 @@ describe('flex with a token', () => {
     assert.equal(style['flexBasis'], '0%');
   });
 
-  it('does nothing when the token is not set, as an invalid flex does on the web', () => {
-    // `flex-(--x)` with no --x is invalid at computed-value time: the element keeps `0 1 auto`.
-    // Writing the shrink and the basis before knowing whether the token was there changed both.
+  it("takes flex's initial value when the token is not set, as the web does", () => {
+    // `flex-(--x)` with no --x is invalid at computed-value time, and such a property takes its
+    // initial value, `0 1 auto`, whatever a weaker rule set. Left out, Yoga's own shrink of 0
+    // applied, and a row that shrank on the web did not on a phone.
     const style = resolvedStyle('.a { flex: var(--missing); }');
-    assert.equal(style['flexGrow'], undefined);
-    assert.equal(style['flexShrink'], undefined);
-    assert.equal(style['flexBasis'], undefined);
+    assert.equal(style['flexGrow'], 0);
+    assert.equal(style['flexShrink'], 1);
+    assert.equal(style['flexBasis'], 'auto');
+    const over = resolvedStyle('.a { flex: 1; } .a.a { flex: var(--missing); }');
+    assert.equal(over['flexGrow'], 0);
+  });
+
+  it('gives each flex longhand its initial value when its token is not set', () => {
+    assert.equal(resolvedStyle('.a { flex-shrink: var(--missing); }')['flexShrink'], 1);
+    assert.equal(resolvedStyle('.a { flex-grow: var(--missing); }')['flexGrow'], 0);
+    assert.equal(resolvedStyle('.a { flex-basis: var(--missing); }')['flexBasis'], 'auto');
+    assert.equal(resolvedStyle('.a { --s: 0; flex-shrink: var(--s); }')['flexShrink'], 0);
   });
 });
 

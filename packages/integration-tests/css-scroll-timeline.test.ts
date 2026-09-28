@@ -189,6 +189,15 @@ describe('a scroll-driven animation on the native side', () => {
     assert.ok(Math.abs(opacity - (1 - 0.3153)) < 0.01, `${opacity}`);
   });
 
+  it('eases a segment by its own keyframe timing function, over a linear animation', () => {
+    // The keyframe's `animation-timing-function` eases the stretch it starts, as on the clock.
+    const eased =
+      '@keyframes fade { from { opacity: 1; animation-timing-function: ease-in } to { opacity: 0 } }' +
+      ' .a { animation: fade linear both; animation-timeline: scroll(); animation-range: 0 100px; }';
+    const opacity = scene(eased).at(50)!['opacity'] as number;
+    assert.ok(Math.abs(opacity - (1 - 0.3153)) < 0.01, `${opacity}`);
+  });
+
   it('drives transforms: a transform list, and translate, rotate and scale', () => {
     const list = scene(
       '@keyframes shrink { to { transform: translateY(-40px) scale(0.8) } } .a { animation: shrink linear both; animation-timeline: scroll(); animation-range: 0 200px; }',

@@ -14,12 +14,11 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { commands, page, userEvent } from 'vitest/browser';
 import { CascadeApp } from '../src/cascade-app.ts';
-import { injectResetStylesheet } from '../src/mount.ts';
 import { boot, settle, waitFor, type Booted } from './boot.ts';
 
-async function scene(): Promise<Booted> {
+async function scene(options: { asAnAppMounts?: boolean } = {}): Promise<Booted> {
   await page.viewport(1200, 800);
-  const booted = boot(CascadeApp);
+  const booted = boot(CascadeApp, options);
   await settle();
   return booted;
 }
@@ -217,9 +216,9 @@ describe('the reset mount injects by default', () => {
   afterEach(() => document.getElementById('angular-native-web-reset')?.remove());
 
   it('leaves every utility above it', async () => {
-    const { byId } = await scene();
-    injectResetStylesheet(document);
-    await settle();
+    // As an app mounts, with the reset injected by `mount` itself.
+    const { byId } = await scene({ asAnAppMounts: true });
+    expect(document.getElementById('angular-native-web-reset')).not.toBeNull();
     const framed = computed(byId('tinted-frame'));
     expect(framed.borderTopWidth).toBe('2px');
     expect(framed.borderTopColor).toBe('rgb(255, 0, 0)');

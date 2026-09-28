@@ -8,7 +8,7 @@
  * native can animate this way is opacity and the transforms; anything else holds its first frame.
  */
 import type { ScrollRange } from './native-drive.ts';
-import { at, type AnimationSpec } from './transition.ts';
+import { at, type AnimationSpec, type TrackPoint } from './transition.ts';
 
 type Track = readonly { offset: number; value: unknown }[];
 
@@ -167,7 +167,8 @@ function laid(
 ): ScrollRange | null {
   const values = track.map((point) => pick(point.value));
   if (values.some((value) => value === null)) return null;
-  const numeric = track.map((point, i) => ({ offset: point.offset, value: values[i]! }));
+  // Each point keeps its own timing function, which eases the stretch it starts.
+  const numeric = track.map((point, i) => ({ ...point, value: values[i]! }));
   const points = sampled(numeric, spec, start, Math.max(end - start, 1e-3));
   const fills = spec.fill;
   const backwards = fills === 'backwards' || fills === 'both';
@@ -179,17 +180,17 @@ function laid(
 
 /** A numeric track's points along the scroll, each eased segment sampled, in offset order. */
 function sampled(
-  numeric: readonly { offset: number; value: number }[],
+  numeric: readonly (TrackPoint & { value: number })[],
   spec: AnimationSpec,
   start: number,
   span: number,
 ): [number, number][] {
   const reversed = spec.direction === 'reverse' || spec.direction === 'alternate-reverse';
-  const steps = isLinear(spec.easing) ? 1 : SAMPLES;
   const points: [number, number][] = [];
   for (let i = 0; i < numeric.length - 1; i++) {
     const from = numeric[i]!;
     const to = numeric[i + 1]!;
+    const steps = isLinear(from.easing ?? spec.easing) ? 1 : SAMPLES;
     for (let s = i === 0 ? 0 : 1; s <= steps; s++) {
       const offset = from.offset + ((to.offset - from.offset) * s) / steps;
       const value = at(numeric, offset, spec.easing) as number;

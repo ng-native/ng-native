@@ -743,6 +743,12 @@ describe("a keyframe's own timing function", () => {
       frames.map((frame) => (frame as Frame & { easing?: number[] }).easing),
       [[0.8, 0, 1, 1], [0, 0, 1, 1], undefined],
     );
+    // As the module Metro writes carries it: JSON, which keeps nothing a frame holds off its keys.
+    const written = JSON.parse(JSON.stringify(sheet(css))) as ReturnType<typeof sheet>;
+    assert.deepEqual(
+      written.keyframes!['drop']!.map((frame) => (frame as Frame & { easing?: number[] }).easing),
+      [[0.8, 0, 1, 1], [0, 0, 1, 1], undefined],
+    );
     assert.equal(JSON.stringify(sheet(css)).includes('timing'), false, 'nothing left unfinished');
     assert.deepEqual(Object.getOwnPropertySymbols(frames[0]!.declarations), []);
   });

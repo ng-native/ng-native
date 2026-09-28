@@ -9,6 +9,12 @@
  * horizontal layout, which is the only one compared, so only the physical ones are read.
  */
 
+import { createRequire } from 'node:module';
+
+const { compileCss } = createRequire(import.meta.url)('@ng-native/metro/css/compile.cjs') as {
+  compileCss(css: string, context: string): { rules: { declarations: Record<string, unknown> }[] };
+};
+
 type Style = Readonly<Record<string, unknown>>;
 
 /** How one property compares: the verdict, and what each side said, for a failure's message. */
@@ -610,7 +616,7 @@ function operation(op: Record<string, unknown>, box: number): Matrix {
 
 /** A transition longhand, against the one spec ours holds per property. */
 function sameTransition(property: string, browser: string, value: unknown): boolean {
-  if (property === 'transition-property') return value !== undefined;
+  if (property === 'transition-property') return sameTransitionProperties(browser, value);
   const first = browser.split(/,(?![^(]*\))/)[0]!.trim();
   const ms = first.endsWith('ms') ? parseFloat(first) : parseFloat(first) * 1000;
   const curve = curveOf(first);
@@ -628,6 +634,18 @@ function sameTransition(property: string, browser: string, value: unknown): bool
   if (!value || typeof value !== 'object' || Array.isArray(value)) return same(value);
   const entries = Object.values(value as Record<string, Record<string, unknown>>);
   return entries.length > 0 && entries.every((entry) => same(entry[key]));
+}
+
+/**
+ * Chrome's `transition-property` list against the props the node's transition is keyed by. The
+ * list is compiled on its own to find the props its names stand for: that names them as the
+ * compiler does, and what is checked here is that the cascade picked the right list.
+ */
+function sameTransitionProperties(browser: string, value: unknown): boolean {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const [rule] = compileCss(`.x { transition-property: ${browser} }`, 'transition-property').rules;
+  const expected = Object.keys((rule?.declarations['$transition'] ?? {}) as object).sort();
+  return JSON.stringify(Object.keys(value).sort()) === JSON.stringify(expected);
 }
 
 /**

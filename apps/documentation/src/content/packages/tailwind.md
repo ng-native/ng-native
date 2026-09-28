@@ -99,11 +99,12 @@ become a text's `numberOfLines` and `ellipsizeMode`, which is how native truncat
 the `<text>` rather than on a view around it. `tabular-nums` and the other numeric variants become
 `fontVariant`.
 
-The filter utilities follow the platform table on that page: `brightness-*` works on both
-platforms, and `blur-*`, `grayscale`, `hue-rotate-*`, `drop-shadow-*` and the rest are drawn on
-Android only, so unscoped they are dropped with a warning. Write them as `android:grayscale` to keep
-them for Android. `skew-x-*` and `skew-y-*` are the other way round: Android draws no skew, so write
-them as `ios:skew-x-3`.
+The filter utilities follow the platform table on that page: `brightness-*` works on both platforms,
+and `blur-*`, `grayscale`, `hue-rotate-*`, `drop-shadow-*` and the rest are drawn on Android only,
+so unscoped they are dropped with a warning. Write them as `android:grayscale` to keep them for
+Android. `skew-x-*` and `skew-y-*` are the other way round: React Native on Android leaves `skewX()`
+out and turns `skewY()` into a rotation, so unscoped they are dropped with a warning too. Write them
+as `ios:skew-x-3` to keep them for iOS.
 
 Utilities that build one value out of several classes combine on an element as they do on the web:
 `translate-x-2 translate-y-4` moves along both axes, `shadow-lg ring-2 ring-blue-500` draws the ring
@@ -122,8 +123,9 @@ end margin beat a left or right one whatever the cascade says (see [what CSS rea
 device](/packages/fabric/supported-css)). Use `ms-*` and `me-*` on those children. `divide-double`
 is dropped with a warning, as a native border has no double style.
 
-Variants and utilities that style a pseudo-element, `placeholder:`, `before:`, `file:` and the
-rest, are refused with a build warning, as a pseudo-element is in any stylesheet.
+Variants and utilities that style a pseudo-element, `placeholder:`, `before:`, `file:` and the rest,
+are refused with a build warning: native has no element for a pseudo-element to be, so there is
+nothing for them to style.
 
 A unitless `line-height`, the ratio form CSS defines and the one Tailwind's `leading-*` utilities
 write, works with or without a `font-size` beside it. When the rule also sets a `font-size`, as

@@ -79,9 +79,9 @@ and holds each case to:
 
 - the build does not throw, and the case either takes effect or is refused with a warning;
 - what it commits is a prop React Native declares, with a keyword it takes;
-- what it resolves to agrees with what Chrome computes, on iOS, Android, in dark mode, at two more
-  widths, with every state an attribute sets, and on the web host (the web preset and
-  `@ng-native/web`'s reset);
+- what it resolves to agrees with what Chrome computes, on iOS and on the web host (the web preset
+  and `@ng-native/web`'s reset); and each variant probe agrees again on Android, in dark mode, at
+  two more widths and with every state an attribute sets, with the `android:` pairs on Android;
 - what a view hands down to a text inside it agrees too;
 - its transform comes to the matrix Chrome's does, and its animation paints what Chrome's does at
   points through its first cycle;

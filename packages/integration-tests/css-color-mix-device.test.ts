@@ -331,6 +331,34 @@ describe('the shadows design systems write, with tokens in them', () => {
     assert.equal(inset(['ring']), false);
   });
 
+  it('takes an empty-fallback token as the colour when the shadow has no other', () => {
+    // `var(--x,)` is inset-or-nothing in Tailwind's ring, which has a colour of its own. A shadow
+    // with no other colour term is coloured by it, as a browser reads it: read as inset, a red
+    // shadow came out black. What the token holds decides, since either can be written there.
+    const css =
+      '.s { box-shadow: var(--colour,) 0 0 4px 2px } .red { --colour: red } .in { --colour: inset }';
+    const shadow = (classes: string[]) =>
+      (resolvedStyle(css, classes)['boxShadow'] as Record<string, unknown>[])[0]!;
+    assert.equal(shadow(['s', 'red'])['color'], 'rgb(255, 0, 0)');
+    assert.equal(shadow(['s', 'red'])['inset'], false);
+    assert.equal(shadow(['s', 'in'])['inset'], true);
+  });
+
+  it('takes currentcolor from a colour the node sets from a token, whatever the order', () => {
+    // Both are settled on device. The colour has to be settled first, or the shadow reads the
+    // inherited one, or black, where a browser uses the node's own.
+    for (const css of [
+      '.ring { box-shadow: 0 0 0 2px var(--ring-colour, currentcolor) } .green { --c: rgb(0, 128, 0); color: var(--c) }',
+      '.green { --c: rgb(0, 128, 0); color: var(--c) } .ring { box-shadow: 0 0 0 2px var(--ring-colour, currentcolor) }',
+    ]) {
+      const shadow = resolvedStyle(css, ['ring', 'green'])['boxShadow'] as Record<
+        string,
+        unknown
+      >[];
+      assert.equal(shadow[0]!['color'], 'rgb(0, 128, 0)', css);
+    }
+  });
+
   it("takes a currentcolor fallback in a shadow as the node's own colour", () => {
     // Tailwind's default ring colour. The colour in scope is the node's own, else inherited.
     const css =

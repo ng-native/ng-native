@@ -520,8 +520,15 @@ function deferVar(value, context) {
     reference,
     ...(arithmetic?.adjust ? { adjust: arithmetic.adjust } : {}),
     ...fallbacks(varPart, kind, context),
+    ...(property in UNSET ? { unset: UNSET[property] } : {}),
   };
 }
+
+/**
+ * A property's initial value, where it differs from leaving the property out on native: what a
+ * browser gives a property whose `var()` cannot be substituted, and what the engine writes then.
+ */
+const UNSET = { 'flex-grow': 0, 'flex-shrink': 1, 'flex-basis': 'auto' };
 
 /** Why an at-rule where a style rule was expected is refused, naming the at-rule as written. */
 function refusedAtRule(rule, context) {

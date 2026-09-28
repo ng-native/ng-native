@@ -133,10 +133,11 @@ token in it, `transform` takes the translate, scale, rotate and skew functions.
 
 `skewX()` and `skewY()` are drawn on iOS only. React Native on Android breaks a transform down into
 the rotation, scale and translation an Android view has, and a view has no skew, so `skewX()` is
-left out and `skewY()` comes out as a rotation. A skew is refused as a filter iOS does not draw is,
-the other way round: dropped with a warning in any rule that can apply on Android, and kept in a
-rule scoped with a `.platform-ios` ancestor (Tailwind's `ios:` variant), in an iOS build, and in a
-keyframe of one.
+left out and `skewY()` comes out as a rotation. A skew is refused the way a filter iOS does not draw
+is, with the platforms the other way round: it is dropped with a warning in any rule that can apply
+on Android, and kept in a rule scoped with a `.platform-ios` ancestor (Tailwind's `ios:` variant),
+in an iOS build, and in a keyframe of one. A skew of 0 is kept everywhere, since it draws the same
+on Android.
 
 `box-shadow` and `text-shadow` both work, though native has room for exactly one `text-shadow`, not
 a list. On iOS a `text-shadow` is drawn inside the text's own box, so a blur or offset that
@@ -203,8 +204,11 @@ unitless line-height, a ratio for `aspect-ratio`, a whole `box-shadow` list, or 
 channels for `rgba(var(--channels), <alpha>)`, which is how Bootstrap writes its color utilities.
 A shorthand may mix `var()`s and written values: `padding: var(--y) var(--x)`,
 `border: var(--width) solid var(--colour)`. `flex: var(--grow)` is `flex: <number>`: it grows by
-the token, shrinks by 1, and starts from a basis of 0, once the token is set; with no token it
-leaves the element as it was, as an invalid `flex` does on the web.
+the token, shrinks by 1, and starts from a basis of 0, once the token is set. With no token it is
+`flex`'s initial value, `0 1 auto`, whatever a weaker rule set, as on the web, where a `var()` that
+cannot be substituted gives the property its initial value; `flex-grow`, `flex-shrink` and
+`flex-basis` take theirs the same way. Yoga's own shrink is 0, so this is the one place an unset
+token writes something rather than nothing.
 
 A length needs a unit, as in a browser: `margin-top: 3` is dropped with a warning, and so is a
 token holding a bare number where a length is read. `0` needs none, a bare number is a factor

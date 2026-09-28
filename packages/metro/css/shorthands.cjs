@@ -298,14 +298,15 @@ function flexGrowing(list, context) {
   const [only, ...rest] = list;
   if (rest.length || only?.length !== 1 || only[0].type !== 'var') return null;
   // The shrink and the basis `flex: <number>` sets, written only once the token is known to be
-  // there: with no token the declaration is invalid on the web, and the element keeps its own.
+  // there. With no token the declaration is invalid at computed-value time on the web, and `flex`
+  // takes its initial value, `0 1 auto`, whatever a weaker rule set.
   const grow = reference(only[0], ['flexGrow'], 'number', context);
   return {
     declarations: {},
     deferred: [
-      grow,
-      { ...grow, props: ['flexShrink'], whenSet: 1 },
-      { ...grow, props: ['flexBasis'], whenSet: '0%' },
+      { ...grow, unset: 0 },
+      { ...grow, props: ['flexShrink'], whenSet: 1, unset: 1 },
+      { ...grow, props: ['flexBasis'], whenSet: '0%', unset: 'auto' },
     ],
   };
 }

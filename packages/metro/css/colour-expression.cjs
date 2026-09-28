@@ -197,7 +197,7 @@ function oneShadow(shadow, context) {
     }
   }
   checkLengths(shadow, lengths, context);
-  const expression = colour.length ? colourExpression(colour, context) : { color: 'black' };
+  const expression = shadowColour(colour, slot, context);
   return {
     offsetX: lengths[0],
     offsetY: lengths[1],
@@ -206,6 +206,17 @@ function oneShadow(shadow, context) {
     color: isDeferred(expression) ? { __colour: expression } : expression.color,
     inset,
   };
+}
+
+/**
+ * A shadow's colour: its colour terms; or with none, the empty-fallback token, which is the colour
+ * or the word inset, and what the token holds says which (Tailwind's ring, which has a colour of
+ * its own, is the other kind); or black.
+ */
+function shadowColour(colour, slot, context) {
+  if (colour.length) return colourExpression(colour, context);
+  if (slot) return { reference: slot.value.name.ident, fallback: 'black' };
+  return { color: 'black' };
 }
 
 /** A `var()` with an empty fallback, which in a shadow can only stand for `inset` or nothing. */

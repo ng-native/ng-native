@@ -885,7 +885,9 @@ describe('every Tailwind utility', () => {
     for (const world of WORLDS) {
       const recorded = oracle[world.name];
       assert.ok(recorded, `no ${world.name} world in the oracle: pnpm tailwind-oracle`);
-      const inWorld = world.name === 'base' ? cases : measuredIn(world, cases);
+      // The base and web worlds measure every case; the others, what they change.
+      const inWorld =
+        world.name === 'base' || world.name === 'web' ? cases : measuredIn(world, cases);
       const missing = inWorld
         .filter((test) => !(test.name in recorded.cases))
         .map((test) => test.name);

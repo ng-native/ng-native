@@ -410,7 +410,7 @@ describe('real Tailwind output, end to end', () => {
     assert.equal(shadow[0]!.offsetY, 1);
     assert.equal(shadow[0]!.blurRadius, 3);
     assert.equal(importantFor('bg-red-500!')?.['backgroundColor'], 'rgb(251, 44, 54)');
-    assert.equal(stylesFor(important, 'text-lg')['lineHeight'], 24);
+    assert.equal(importantFor('leading-6!')?.['lineHeight'], 24);
   });
 
   it('drops the fully transparent placeholders from a shadow chain', () => {

@@ -3,7 +3,7 @@
  */
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { mkdtempSync, writeFileSync, readFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -22,7 +22,8 @@ const HERE = fileURLToPath(new URL('.', import.meta.url));
 export function build(preset: 'native' | 'web', classes: string): string {
   const dir = HERE;
   const entry = join(dir, `.preset-test-${preset}-${process.pid}.css`);
-  const out = join(mkdtempSync(join(tmpdir(), 'preset-')), 'out.css');
+  const outDir = mkdtempSync(join(tmpdir(), 'preset-'));
+  const out = join(outDir, 'out.css');
   writeFileSync(
     entry,
     [
@@ -38,7 +39,8 @@ export function build(preset: 'native' | 'web', classes: string): string {
     execFileSync('npx', ['@tailwindcss/cli', '-i', entry, '-o', out], { cwd: dir, stdio: 'pipe' });
     return readFileSync(out, 'utf8');
   } finally {
-    execFileSync('rm', ['-f', entry]);
+    rmSync(entry, { force: true });
+    rmSync(outDir, { recursive: true, force: true });
   }
 }
 

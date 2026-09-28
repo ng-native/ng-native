@@ -138,17 +138,25 @@ describe('compiling a transition', () => {
     );
   });
 
-  it('resets the timing a weaker rule set, for each part a transition rule writes', () => {
-    // A shorthand writes all four longhands, so a duration from a weaker rule no longer applies.
+  it('writes each part a transition rule sets as its own longhand too', () => {
+    // A shorthand writes all four longhands, so a duration from a weaker rule no longer applies,
+    // and a stronger rule that writes only the properties still has this one's timing.
     assert.deepEqual(
       Object.entries(declarationsOf('transition: opacity 1s;')).filter(
         ([key]) => key.startsWith('$transition') && key !== '$transition',
       ),
       [
-        ['$transitionDuration', null],
-        ['$transitionEasing', null],
-        ['$transitionDelay', null],
+        ['$transitionDuration', 1000],
+        ['$transitionEasing', [0.25, 0.1, 0.25, 1]],
+        ['$transitionDelay', 0],
       ],
+    );
+    // A list pairs with this rule's own properties, so it replaces a weaker part and no more.
+    assert.equal(
+      declarationsOf('transition-property: opacity, color; transition-duration: 1s, 2s;')[
+        '$transitionDuration'
+      ],
+      null,
     );
     // `transition-property` alone writes only itself, and leaves the others to the cascade.
     assert.deepEqual(Object.keys(declarationsOf('transition-property: opacity;')), ['$transition']);
@@ -499,6 +507,20 @@ describe('running a transition', () => {
     s.classes('timed own faded');
     s.tick(200);
     assert.equal(s.painted('opacity'), 0.5, 'its own 400ms, not the 200ms beneath it');
+  });
+
+  it("keeps a weaker rule's timing when a stronger one names only the properties", () => {
+    // The longhands cascade one at a time: the stronger rule's list, the weaker rule's timing.
+    const s = scene(
+      `view { opacity: 1; }
+       view.slow { transition-property: opacity; transition-duration: 400ms; transition-timing-function: linear; }
+       view.slow.named { transition-property: opacity, background-color; }
+       view.faded { opacity: 0; }`,
+    );
+    s.classes('slow named');
+    s.classes('slow named faded');
+    s.tick(200);
+    assert.equal(s.painted('opacity'), 0.5, "the weaker rule's 400ms linear, not no transition");
   });
 
   it('never sends the separate timing to native', () => {

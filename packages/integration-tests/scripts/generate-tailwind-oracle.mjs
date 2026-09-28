@@ -75,8 +75,11 @@ function element(world, test, attributes) {
   const own = `${attributes}${world.states ? STATES : ''}`;
   // A sibling after the child, so `space-*` and `divide-*`, which skip the last child, reach it.
   const child = world.name === 'base' ? '<span data-child></span><span></span>' : '';
-  const node = `<div class="${classes}"${own}>${child}</div>`;
-  if (!world.states) return `<div>${node}</div>`;
+  // On the web host a view is marked as `@ng-native/web` marks the elements it creates, which is
+  // what its reset applies to: React Native's flex and border defaults.
+  const rn = world.name === 'web' ? ' data-rn="view"' : '';
+  const node = `<div class="${classes}"${own}${rn}>${child}</div>`;
+  if (!world.states) return `<div${rn}>${node}</div>`;
   const ancestor = ['group', ...STATE_CLASSES].join(' ');
   return `<div class="${ancestor}"${STATES}><div class="peer"${STATES}></div>${node}</div>`;
 }

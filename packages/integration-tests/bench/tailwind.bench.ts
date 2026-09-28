@@ -1,6 +1,8 @@
 /**
- * A screen of Tailwind cards through the engine: what a Tailwind app pays on device to style a
- * list the first time and to restyle it when the theme changes.
+ * A screen of Tailwind cards through the engine: the JavaScript a Tailwind app runs to style a list
+ * the first time and to restyle it when the theme changes, against the fake Fabric host. Node with
+ * its JIT off, as `pnpm bench` runs, ranks changes the way Hermes on a device does; it does not
+ * measure the native side, and a device's own times are several times these.
  *
  *     pnpm bench:tailwind
  *     ROWS=300 RUNS=15 ...           the list's size, and how many times each step is timed
