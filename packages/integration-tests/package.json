@@ -9,7 +9,8 @@
     "tailwind-oracle": "node scripts/generate-tailwind-oracle.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "bench": "node --no-opt --no-sparkplug --no-maglev --import ./bench/release.mjs --import @ng-native/testing/register bench/renderer.bench.ts",
-    "bench:screens": "node --no-opt --no-sparkplug --no-maglev --import ./bench/release.mjs --import ./register-linker.mjs bench/screens.bench.ts"
+    "bench:screens": "node --no-opt --no-sparkplug --no-maglev --import ./bench/release.mjs --import ./register-linker.mjs bench/screens.bench.ts",
+    "bench:tailwind": "node --no-opt --no-sparkplug --no-maglev --import ./bench/release.mjs --import ./register-linker.mjs bench/tailwind.bench.ts"
   },
   "nx": {
     "tags": [

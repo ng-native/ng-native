@@ -1366,7 +1366,7 @@ export class StyleResolver {
     parentInherited: Record<string, unknown>,
     tokens: Readonly<Record<string, TokenValue>>,
   ): unknown {
-    if (value === null || typeof value !== 'object') return value;
+    if (!needsFilling(value)) return value;
     const fill = (part: unknown) => this.filledIn(part, declaration, own, parentInherited, tokens);
     if (Array.isArray(value)) return this.filledList(value, fill, tokens);
     const marked = settledMarker(value, tokens);
@@ -1822,10 +1822,12 @@ const SLOT_KINDS = {
   __variants: 'fontVariant',
 } as const satisfies Record<string, TokenKind>;
 
+const SLOT_ENTRIES = Object.entries(SLOT_KINDS);
+
 /** The slot a list entry is, and the form of token that fills it; undefined for an entry. */
 function slotOf(part: unknown): { marker: ShadowsMarker; kind: TokenKind } | undefined {
   if (part === null || typeof part !== 'object') return undefined;
-  for (const [key, kind] of Object.entries(SLOT_KINDS)) {
+  for (const [key, kind] of SLOT_ENTRIES) {
     const marker = (part as Record<string, ShadowsMarker | undefined>)[key];
     if (marker) return { marker, kind };
   }
@@ -1847,6 +1849,25 @@ function invisible(colour: unknown): boolean {
   const parts = typeof colour === 'string' ? RGB.exec(colour) : null;
   return parts?.[4] !== undefined && Number(parts[4]) === 0;
 }
+
+/**
+ * Whether a compiled value has something in it to settle: a marker, slot or deferred length at
+ * any depth. One with none is used as it is. Asked of values from the sheet, which never change,
+ * so the answer is kept: Tailwind's reset fills three of a shadow's five slots with one on every
+ * node.
+ */
+function needsFilling(value: unknown): value is object {
+  if (value === null || typeof value !== 'object') return false;
+  let answer = NEEDS_FILLING.get(value);
+  if (answer === undefined) {
+    answer = Object.entries(value).some(
+      ([key, part]) => key.startsWith('__') || needsFilling(part),
+    );
+    NEEDS_FILLING.set(value, answer);
+  }
+  return answer;
+}
+const NEEDS_FILLING = new WeakMap<object, boolean>();
 
 /** What `settledMarker` says of a part that is not a token's marker at all. */
 const NOT_A_MARKER = Symbol('not a marker');
