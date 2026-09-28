@@ -1178,8 +1178,8 @@
     }
   },
   "tailwind": {
-    "rules": 1064,
-    "dropped": 99,
+    "rules": 1055,
+    "dropped": 108,
     "emitted": [
       "$animation",
       "$transition",
@@ -1302,6 +1302,9 @@
       "position": {
         "position: fixed is not supported. Yoga has no viewport to fix to and no scroll container to stick within. Use `position: absolute` inside the element you meant to pin to; for a header that should stay put, put it outside the scroll view rather than inside it.": 1,
         "position: sticky is not supported. Yoga has no viewport to fix to and no scroll container to stick within. Use `position: absolute` inside the element you meant to pin to; for a header that should stay put, put it outside the scroll view rather than inside it.": 1
+      },
+      "transform": {
+        "transform: skewX() is not drawn on Android. React Native breaks a transform down into the rotation, scale and translation an Android view has, and a view has no skew, so this would leave the view unskewed, or turned, on an Android phone. Scope the rule to iOS with a .platform-ios ancestor (Tailwind's ios: variant).": 9
       }
     }
   }

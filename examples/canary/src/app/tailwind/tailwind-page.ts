@@ -42,10 +42,12 @@ import { page } from '../screen-styles.ts';
         <view class="h-8 w-24 border border-zinc-400">
           <view class="h-8 w-12 translate-x-1/2 bg-green-500"></view>
         </view>
-        <view class="size-10 rotate-x-45 skew-x-12 bg-purple-500"></view>
+        <view class="size-10 rotate-x-45 ios:skew-x-12 bg-purple-500"></view>
         <view class="size-10 scale-x-50 scale-y-75 bg-amber-500"></view>
       </view>
-      <text class="hint">Translate on two axes, by half its width, 3D rotation, scale.</text>
+      <text class="hint"
+        >Translate on two axes, by half its width, 3D rotation and iOS skew, scale.</text
+      >
 
       <view class="flex-row items-start gap-4">
         <view class="flex-row space-x-3 border border-zinc-400">

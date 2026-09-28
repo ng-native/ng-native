@@ -27,7 +27,7 @@ const CLASSES =
   'shadow-lg ring-2 ring-blue-500 inset-shadow-sm shadow-red-500 text-green-500 ' +
   'brightness-50 android:blur-sm android:grayscale ' +
   'bg-linear-to-r from-red-500 via-blue-500 to-green-500 dark:via-none ' +
-  'rotate-x-12 skew-x-6 translate-x-1/2 -translate-y-full ring-inset ring-offset-2 ring-offset-white ' +
+  'rotate-x-12 skew-x-6 ios:skew-x-6 translate-x-1/2 -translate-y-full ring-inset ring-offset-2 ring-offset-white ' +
   'text-shadow-xs text-shadow-red-500 android:drop-shadow-lg android:drop-shadow-red-500 ' +
   'space-x-2 space-y-4 space-x-reverse divide-x divide-y-2 divide-red-500 divide-dashed me-6 my-6 ' +
   'border-x-4 border-l-2 border-x-red-500 border-l-blue-500 border-s-2 ' +
@@ -117,9 +117,19 @@ describe('Tailwind utilities that combine on one node', () => {
     // was in the sheet, since a slot is a whole function rather than a function's argument.
     assert.deepEqual(refusedFor('transform'), []);
     assert.deepEqual(paint('rotate-x-12')['transform'], [{ rotateX: '12deg' }]);
-    assert.deepEqual(paint('rotate-x-12 skew-x-6')['transform'], [
+    assert.deepEqual(paint('rotate-x-12 ios:skew-x-6')['transform'], [
       { rotateX: '12deg' },
       { skewX: '6deg' },
+    ]);
+  });
+
+  it('refuses a skew that can apply on Android, where a view has no skew, and keeps ios:', () => {
+    const refusals = refusedFor('--tw-skew-x');
+    assert.equal(refusals.length, 1);
+    assert.match(refusals[0]!, /skewX\(\) is not drawn on Android/);
+    assert.deepEqual(paint('rotate-x-12 skew-x-6')['transform'], [{ rotateX: '12deg' }]);
+    assert.deepEqual(paint('rotate-x-12 ios:skew-x-6', 'android')['transform'], [
+      { rotateX: '12deg' },
     ]);
   });
 

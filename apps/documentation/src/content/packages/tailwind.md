@@ -102,7 +102,8 @@ the `<text>` rather than on a view around it. `tabular-nums` and the other numer
 The filter utilities follow the platform table on that page: `brightness-*` works on both
 platforms, and `blur-*`, `grayscale`, `hue-rotate-*`, `drop-shadow-*` and the rest are drawn on
 Android only, so unscoped they are dropped with a warning. Write them as `android:grayscale` to keep
-them for Android.
+them for Android. `skew-x-*` and `skew-y-*` are the other way round: Android draws no skew, so write
+them as `ios:skew-x-3`.
 
 Utilities that build one value out of several classes combine on an element as they do on the web:
 `translate-x-2 translate-y-4` moves along both axes, `shadow-lg ring-2 ring-blue-500` draws the ring

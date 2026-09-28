@@ -131,6 +131,13 @@ Any of them can take tokens, `translate: var(--tw-translate-x) var(--tw-translat
 token is read in degrees whatever unit it was written in, so `--r: 0.25turn` turns 90. With a
 token in it, `transform` takes the translate, scale, rotate and skew functions.
 
+`skewX()` and `skewY()` are drawn on iOS only. React Native on Android breaks a transform down into
+the rotation, scale and translation an Android view has, and a view has no skew, so `skewX()` is
+left out and `skewY()` comes out as a rotation. A skew is refused as a filter iOS does not draw is,
+the other way round: dropped with a warning in any rule that can apply on Android, and kept in a
+rule scoped with a `.platform-ios` ancestor (Tailwind's `ios:` variant), in an iOS build, and in a
+keyframe of one.
+
 `box-shadow` and `text-shadow` both work, though native has room for exactly one `text-shadow`, not
 a list. On iOS a `text-shadow` is drawn inside the text's own box, so a blur or offset that
 reaches past it is cut off square; give the text padding as deep as the shadow. A `box-shadow` can

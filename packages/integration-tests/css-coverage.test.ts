@@ -305,6 +305,84 @@ describe('filter, per platform', () => {
   });
 });
 
+describe('skew, per platform', () => {
+  // React Native on Android breaks a transform down into the rotation, scale and translation an
+  // Android view has, and a view has no skew: skewX() is left out, and skewY() comes out as a
+  // rotation. iOS draws both. A skew compiled for Android was a silent difference.
+
+  it('refuses a skew in a rule that can apply on Android, and names it', () => {
+    for (const fn of ['skewX(12deg)', 'skewY(12deg)']) {
+      assert.throws(
+        () => declarationsOf(`transform: rotate(10deg) ${fn}`),
+        (error: Error) => {
+          assert.match(error.message, /skew[XY]\(\) is not drawn on Android/);
+          assert.match(error.message, /\.platform-ios/, 'says how to keep it for iOS');
+          return true;
+        },
+        fn,
+      );
+    }
+  });
+
+  it('keeps a skew of 0, which draws the same on Android: how a variant takes one back out', () => {
+    assert.deepEqual(declarationsOf('transform: skewX(0deg)'), { transform: [{ skewX: '0deg' }] });
+  });
+
+  it('keeps a skew in a rule scoped to iOS, which is what ios: compiles to', () => {
+    const sheet = compileCss('.platform-ios .a { transform: skewX(12deg) }', 'test');
+    assert.deepEqual(sheet.rules[0].declarations, { transform: [{ skewX: '12deg' }] });
+  });
+
+  it('keeps a skew in an iOS build, and refuses it in an Android one', () => {
+    const css = '.a { transform: skewX(12deg) }';
+    assert.deepEqual(compileCss(css, 'test', { platform: 'ios' }).rules[0].declarations, {
+      transform: [{ skewX: '12deg' }],
+    });
+    assert.throws(() => compileCss(css, 'test', { platform: 'android' }), /not drawn on Android/);
+  });
+
+  it('keeps the rest of the rule, and says what it dropped', () => {
+    const dropped: string[] = [];
+    const sheet = compileCss('.a { opacity: 0.5; transform: skewX(12deg) }', 'test', {
+      onUnsupported: (message: string) => dropped.push(message),
+    });
+    assert.deepEqual(sheet.rules[0].declarations, { opacity: 0.5 });
+    assert.equal(dropped.length, 1);
+    assert.match(dropped[0]!, /dropped 'transform'.*skewX\(\) is not drawn on Android/);
+  });
+
+  it('refuses a skew token where it sets it, and keeps it for iOS', () => {
+    // Tailwind's shape: skew-x-12 sets a slot every transform utility reads.
+    const dropped: string[] = [];
+    const sheet = compileCss(
+      '.s { --s: skewX(12deg) } .platform-ios .t { --s: skewX(12deg) }',
+      'test',
+      { onUnsupported: (message: string) => dropped.push(message) },
+    );
+    assert.equal(dropped.length, 1);
+    assert.match(dropped[0]!, /dropped '--s'.*skewX\(\) is not drawn on Android/);
+    const tokensOf = (name: string) =>
+      sheet.rules.find((rule: { compounds: { classes: string[] }[] }) =>
+        rule.compounds.some((c) => c.classes.includes(name)),
+      )?.tokens;
+    assert.equal(tokensOf('s'), undefined);
+    assert.deepEqual(tokensOf('t'), { '--s': { transform: [{ skewX: '12deg' }] } });
+  });
+
+  it('checks a keyframe, which has no selector to scope it', () => {
+    assert.throws(
+      () => compileCss('@keyframes lean { to { transform: skewX(12deg) } }', 'test'),
+      /skewX\(\) is not drawn on Android/,
+    );
+    const sheet = compileCss('@keyframes lean { to { transform: skewX(12deg) } }', 'test', {
+      platform: 'ios',
+    });
+    assert.deepEqual(sheet.keyframes['lean'][0].declarations, {
+      transform: [{ skewX: '12deg' }],
+    });
+  });
+});
+
 describe('background sizing', () => {
   // Only meaningful now that a background can be a gradient rather than nothing.
   it('takes the keywords and an explicit pair', () => {

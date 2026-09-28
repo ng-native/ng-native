@@ -1539,6 +1539,51 @@ function assertVariantsKnown(tokens, deferred, from) {
   }
 }
 
+/** Refuse what one of the platforms a rule applies on would not draw: see the checks below. */
+function assertDrawnEverywhere(declaration, out, tokens, deferred, from, platforms, context) {
+  const name = declaration.value?.name;
+  assertDrawn(out, deferred, from, platforms, context);
+  assertTokenDrawn(tokens, name, platforms, context);
+  assertSkewDrawn(out, tokens, deferred, from, name, platforms, context);
+}
+
+/**
+ * The first skew in a compiled transform list, or null. React Native on Android breaks a transform
+ * down into the rotation, scale and translation an Android view has, and a view has no skew:
+ * `skewX()` is left out, and `skewY()` comes out as a rotation. A skew of 0 draws the same there.
+ */
+function skewIn(list) {
+  if (!Array.isArray(list)) return null;
+  const entry = list.find(
+    (one) => one && ['skewX', 'skewY'].some((key) => key in one && parseFloat(one[key]) !== 0),
+  );
+  return entry ? Object.keys(entry)[0] : null;
+}
+
+/**
+ * Refuse a skew in a rule that can apply on Android, where it is not drawn: in the transform, in
+ * one settled on device, or in a transform token the rule sets. The mirror of `assertDrawn`.
+ */
+function assertSkewDrawn(out, tokens, deferred, from, name, platforms, context) {
+  if (!platforms.includes('android')) return;
+  const pending = deferred
+    .slice(from)
+    .filter((one) => one.props?.includes('transform') && skewIn(one.within));
+  const token = typeof name === 'string' ? skewIn(tokens[name]?.transform) : null;
+  const skew =
+    skewIn(out.transform) ?? token ?? (pending.length ? skewIn(pending[0].within) : null);
+  if (!skew) return;
+  if (skewIn(out.transform)) delete out.transform;
+  if (token) delete tokens[name];
+  for (const one of pending) deferred.splice(deferred.indexOf(one), 1);
+  throw new CssUnsupported(
+    `${context}: transform: ${skew}() is not drawn on Android. React Native breaks a transform ` +
+      `down into the rotation, scale and translation an Android view has, and a view has no skew, ` +
+      `so this would leave the view unskewed, or turned, on an Android phone. Scope the rule to ` +
+      `iOS with a .platform-ios ancestor (Tailwind's ios: variant).`,
+  );
+}
+
 function undrawn(name, context) {
   return new CssUnsupported(
     `${context}: filter: ${name}() is not drawn on iOS. React Native draws brightness() and ` +
@@ -1601,8 +1646,7 @@ function compileCss(source, context = 'styles', options = {}) {
     const before = deferred.length;
     try {
       add(declaration, out, tokens, deferred, context);
-      assertDrawn(out, deferred, before, platforms, context);
-      assertTokenDrawn(tokens, declaration.value?.name, platforms, context);
+      assertDrawnEverywhere(declaration, out, tokens, deferred, before, platforms, context);
       assertVariantsKnown(tokens, deferred, before);
     } catch (error) {
       if (!onUnsupported || !(error instanceof CssUnsupported)) throw error;
