@@ -71,6 +71,53 @@ describe('flattening Tailwind for the engine', () => {
     assert.deepEqual(stylesFor(css, 'border-t'), { borderTopWidth: 1 });
   });
 
+  it('draws the logical border utilities, border-y and border-x among them', () => {
+    // Tailwind writes these with the logical properties, `border-block-width` for `border-y`. The
+    // width was not mapped, so `border-y` drew nothing, and the style warned on every one of them.
+    const css = `
+      @property --tw-border-style { syntax: "*"; initial-value: solid }
+      .border-y { border-block-style: var(--tw-border-style); border-block-width: 1px }
+      .border-bs { border-block-start-style: var(--tw-border-style); border-block-start-width: 1px }
+      .border-be { border-block-end-style: var(--tw-border-style); border-block-end-width: 1px }
+      .border-x { border-inline-style: var(--tw-border-style); border-inline-width: 1px }
+      .border-s { border-inline-start-style: var(--tw-border-style); border-inline-start-width: 1px }
+    `;
+    const refused: string[] = [];
+    compileCss(flattenTailwind(css), 'tailwind', {
+      onUnsupported: (message: string) => refused.push(message),
+    });
+    assert.deepEqual(refused, []);
+    assert.deepEqual(stylesFor(css, 'border-y'), { borderTopWidth: 1, borderBottomWidth: 1 });
+    assert.deepEqual(stylesFor(css, 'border-bs'), { borderTopWidth: 1 });
+    assert.deepEqual(stylesFor(css, 'border-be'), { borderBottomWidth: 1 });
+    assert.deepEqual(stylesFor(css, 'border-x'), { borderLeftWidth: 1, borderRightWidth: 1 });
+    assert.deepEqual(stylesFor(css, 'border-s'), { borderStartWidth: 1 });
+  });
+
+  it('drops an important per-side border style of solid too', () => {
+    // `border-t-2!` and the important divide utilities mark the side style important. It is still only solid, and
+    // kept, the compiler refuses it with a warning on every important border.
+    const refused: string[] = [];
+    compileCss(
+      flattenTailwind(
+        '@property --tw-border-style { syntax: "*"; initial-value: solid }\n' +
+          '.border-t-2\\! { border-top-style: var(--tw-border-style) !important; ' +
+          'border-top-width: 2px !important }',
+      ),
+      'tailwind',
+      { onUnsupported: (message) => refused.push(message) },
+    );
+    assert.deepEqual(refused, []);
+  });
+
+  it('folds the arithmetic Tailwind writes for a negative integer', () => {
+    // `-z-10` is `z-index: calc(10 * -1)` and `-order-1` is `order: calc(1 * -1)`. lightningcss
+    // folds a calc() of lengths but leaves one of plain numbers, which the compiler refuses.
+    const css = '.-z-10 { z-index: calc(10 * -1) }\n.-order-1 { order: calc(1 * -1) }';
+    assert.equal(stylesFor(css, '-z-10')['zIndex'], -10);
+    assert.doesNotMatch(flattenTailwind(css), /calc/);
+  });
+
   it('drops pseudo-element selectors and keeps the rest of the list', () => {
     const out = flattenTailwind('.a, ::before, .b { flex: 1 }');
     assert.doesNotMatch(out, /::before/);
@@ -78,10 +125,27 @@ describe('flattening Tailwind for the engine', () => {
     assert.match(out, /\.b/);
   });
 
-  it('drops a rule whose every selector was a pseudo-element', () => {
-    const out = flattenTailwind('::before, ::after { content: "x" }\n.a { flex: 1 }');
-    assert.doesNotMatch(out, /content/);
-    assert.match(out, /\.a/);
+  it('reads an escaped comma in a class name as part of it, not as a list', () => {
+    // `placeholder-[rgb(10,20,30)]` is `.placeholder-\\[rgb\\(10\\,20\\,30\\)\\]::placeholder`.
+    // Split at every comma, its halves were invalid selectors, and the whole build threw.
+    const refused: string[] = [];
+    const css = '.a-\\[rgb\\(1\\,2\\,3\\)\\]::placeholder { color: red }\n.b { flex: 1 }';
+    const sheet = compileCss(flattenTailwind(css), 'tailwind', {
+      onUnsupported: (message: string) => refused.push(message),
+    });
+    assert.equal(sheet.rules.length, 1, '.b');
+    assert.equal(refused.length, 1, 'the placeholder rule, refused as one');
+  });
+
+  it('leaves a rule that is only pseudo-elements for the compiler to refuse out loud', () => {
+    // `placeholder:text-gray-400` and `before:` are classes an app asked for. Dropped here, they
+    // did nothing with nothing to say so; the compiler says why pseudo-elements are not supported.
+    const refused: string[] = [];
+    compileCss(flattenTailwind('.x::placeholder { color: red }\n.a { flex: 1 }'), 'tailwind', {
+      onUnsupported: (message: string) => refused.push(message),
+    });
+    assert.equal(refused.length, 1);
+    assert.match(refused[0]!, /pseudo-elements like ::before are never supported/);
   });
 
   it('resolves the theme variables and folds the arithmetic they were in', () => {
@@ -183,6 +247,16 @@ describe('flattening Tailwind for the engine', () => {
     ]);
   });
 
+  it('reads an important gradient direction without its importance', () => {
+    // `bg-linear-to-r!` marks its `--tw-gradient-position` important too. Read into the gradient
+    // with it, the direction becomes `to right !important,` and lightningcss refuses the sheet.
+    const out = flattenTailwind(
+      '.bg-linear-to-r\\! { --tw-gradient-position: to right in oklab !important; ' +
+        'background-image: linear-gradient(var(--tw-gradient-stops)) !important }',
+    );
+    assert.match(out, /linear-gradient\(\s*to right,/);
+  });
+
   it('rewrites a gradient composed out of custom properties into one with holes in it', () => {
     // Tailwind builds a gradient across three classes: one says which way it runs, one gives the
     // first colour, one gives the last. It joins them with `--tw-gradient-stops`, a *string* the
@@ -234,6 +308,38 @@ describe('flattening Tailwind for the engine', () => {
     assert.match(out, /box-shadow:\s*0 1px 2px #0000001a/, 'the fallback colour, not the word');
   });
 
+  it('drops a slot nothing reads once the build has filled it in, rather than warning about it', () => {
+    // `ease-in` sets `--tw-ease` for `.transition` to read, and the build fills that in. The token
+    // itself, a cubic-bezier() no token form holds, warned on every ease-* class in every app.
+    const refused: string[] = [];
+    const css =
+      '.transition { transition-property: opacity; ' +
+      'transition-timing-function: var(--tw-ease, ease); transition-duration: 150ms }\n' +
+      '.ease-in { --tw-ease: cubic-bezier(0.4, 0, 1, 1); ' +
+      'transition-timing-function: cubic-bezier(0.4, 0, 1, 1) }\n' +
+      '* { --tw-ease: initial }';
+    const out = flattenTailwind(css);
+    compileCss(out, 'tailwind', { onUnsupported: (message: string) => refused.push(message) });
+    assert.deepEqual(refused, []);
+    assert.doesNotMatch(out, /--tw-ease/);
+    // A slot left for the device is still read there, and stays.
+    assert.match(
+      flattenTailwind('.a { --tw-x: 1px; translate: var(--tw-x) }\n.b { translate: var(--tw-x) }'),
+      /--tw-x: 1px/,
+    );
+  });
+
+  it('folds rem and px together, since a rem is a fixed 16 points here', () => {
+    // `translate-x-[calc(1rem+2px)]` beside another translate class leaves its slot for the
+    // device, and a calc() in a slot is only read once it is one length.
+    const out = flattenTailwind(
+      '.a { --tw-translate-x: calc(1rem + 2px); --b: calc(2rem - 4px) }\n' +
+        '.b { translate: var(--tw-translate-x) }',
+    );
+    assert.match(out, /--tw-translate-x: 18px/);
+    assert.match(out, /--b: 28px/);
+  });
+
   it('leaves a plain rule alone', () => {
     const out = flattenTailwind('.a { flex: 1; background-color: #fff }');
     assert.match(out, /flex:\s*1/);
@@ -282,12 +388,58 @@ describe('real Tailwind output, end to end', () => {
     assert.match(shadow[0]!.color, /^rgba?\(/, 'a colour, not the word initial');
   });
 
+  it('compiles important utilities, including ones that set a custom property', () => {
+    // `shadow!` puts `!important` on its `--tw-shadow` too. The importance belongs to the
+    // declaration, not the value: carried into the `var()` it substitutes into, it lands in the
+    // middle of `box-shadow` and lightningcss refuses the whole sheet.
+    const important =
+      css +
+      '.shadow\\! { --tw-shadow: 0 1px 3px 0 var(--tw-shadow-color, rgb(0 0 0 / 0.1)), ' +
+      '0 1px 2px -1px var(--tw-shadow-color, rgb(0 0 0 / 0.1)) !important; box-shadow: ' +
+      'var(--tw-inset-shadow), var(--tw-inset-ring-shadow), var(--tw-ring-offset-shadow), ' +
+      'var(--tw-ring-shadow), var(--tw-shadow) !important; }\n' +
+      '.leading-6\\! { --tw-leading: 1.5rem !important; line-height: 1.5rem !important; }\n' +
+      '.bg-red-500\\! { background-color: rgb(251, 44, 54) !important; }\n';
+    const sheet = compileCss(flattenTailwind(important), 'tailwind', { onUnsupported: () => {} });
+    const importantFor = (className: string) =>
+      sheet.rules.find((r) => r.compounds.some((c) => c.classes.includes(className)))?.important as
+        Record<string, unknown> | undefined;
+    const shadow = importantFor('shadow!')?.['boxShadow'] as
+      { offsetY: number; blurRadius: number }[] | undefined;
+    assert.equal(shadow?.length, 2, 'shadow! should paint its two shadows');
+    assert.equal(shadow[0]!.offsetY, 1);
+    assert.equal(shadow[0]!.blurRadius, 3);
+    assert.equal(importantFor('bg-red-500!')?.['backgroundColor'], 'rgb(251, 44, 54)');
+    assert.equal(stylesFor(important, 'text-lg')['lineHeight'], 24);
+  });
+
   it('drops the fully transparent placeholders from a shadow chain', () => {
     // `box-shadow` composes five slots - inset, inset ring, ring offset, ring, shadow - and four
     // of them are `0 0 #0000` on anything that only wanted a drop shadow. They paint nothing, and
     // sending four extra shadow maps per node to paint nothing is worth not doing.
     const shadow = stylesFor(css, 'shadow-lg')['boxShadow'] as unknown[];
     assert.equal(shadow.length, 2, 'the two the utility actually declared');
+  });
+
+  it('keeps the timing of duration-, ease- and delay- for the transition beside them', () => {
+    // Tailwind 4.3's output for `transition duration-700 ease-linear delay-150`. The three timing
+    // utilities write the longhand on its own, with no property list, and were dropped.
+    const css =
+      ':root { --default-transition-duration: 150ms; ' +
+      '--default-transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1) }\n' +
+      '.transition { transition-property: color, opacity; ' +
+      'transition-timing-function: var(--tw-ease, var(--default-transition-timing-function)); ' +
+      'transition-duration: var(--tw-duration, var(--default-transition-duration)) }\n' +
+      '.delay-150 { transition-delay: 150ms }\n' +
+      '.duration-700 { --tw-duration: 700ms; transition-duration: 700ms }\n' +
+      '.ease-linear { --tw-ease: linear; transition-timing-function: linear }\n' +
+      '@layer properties { *, ::before { --tw-duration: initial; --tw-ease: initial } }';
+    assert.equal(stylesFor(css, 'duration-700')['$transitionDuration'], 700);
+    assert.deepEqual(stylesFor(css, 'ease-linear')['$transitionEasing'], [0, 0, 1, 1]);
+    assert.equal(stylesFor(css, 'delay-150')['$transitionDelay'], 150);
+    // Not baked into `.transition` itself, which every other element with it shares.
+    const own = stylesFor(css, 'transition')['$transition'] as Record<string, { duration: number }>;
+    assert.equal(own['opacity']!.duration, 150);
   });
 
   it('drops a utility it cannot express instead of failing the build', () => {
@@ -334,14 +486,16 @@ describe('real Tailwind output, end to end', () => {
     const sheet = compileCss(flattenTailwind(css), 'tailwind', {
       onUnsupported: (message: string) => refused.push(message),
     });
-    const filterOf = (className: string) =>
+    // Each utility's filter is its slot, a token the engine splices into the list on device, so
+    // that two filter classes on one node draw both. See tailwind-combining.test.ts.
+    const slotOf = (className: string, slot: string) =>
       sheet.rules.find((rule) => rule.compounds.some((c) => c.classes.includes(className)))
-        ?.declarations['filter'];
+        ?.tokens?.[slot]?.filter;
 
-    assert.equal(filterOf('grayscale'), undefined, 'dropped');
-    assert.match(refused.join('\n'), /dropped 'filter'.*grayscale\(\) is not drawn on iOS/);
-    assert.deepEqual(filterOf('android:grayscale'), [{ grayscale: 1 }]);
-    assert.deepEqual(filterOf('brightness-50'), [{ brightness: 0.5 }]);
+    assert.equal(slotOf('grayscale', '--tw-grayscale'), undefined, 'dropped');
+    assert.match(refused.join('\n'), /dropped '--tw-grayscale'.*grayscale\(\) is not drawn on iOS/);
+    assert.deepEqual(slotOf('android:grayscale', '--tw-grayscale'), [{ grayscale: 1 }]);
+    assert.deepEqual(slotOf('brightness-50', '--tw-brightness'), [{ brightness: 0.5 }]);
   });
 
   it('keeps a stacked variant, whose root classes may sit on one node', () => {
@@ -363,6 +517,17 @@ describe('real Tailwind output, end to end', () => {
       'dark.platform-android x',
       'platform-android dark x',
     ]);
+  });
+
+  it('keeps a stacked variant whose class has an escaped comma in it', () => {
+    // `dark:android:bg-[rgb(1,2,3)]`: split at the escaped commas, the selector no longer looked
+    // like a stacked variant, and the compiler refused the combinator inside `:is()`.
+    const refused: string[] = [];
+    const css = '.dark :is(.platform-android .x-\\[rgb\\(1\\,2\\,3\\)\\]) { color: red }';
+    compileCss(flattenTailwind(css), 'tailwind', {
+      onUnsupported: (message: string) => refused.push(message),
+    });
+    assert.deepEqual(refused, []);
   });
 
   it('keeps a stacked variant that also carries a same-node pseudo, like ios:dark:press:', () => {

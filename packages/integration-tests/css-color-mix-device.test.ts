@@ -307,6 +307,45 @@ describe('the shadows design systems write, with tokens in them', () => {
     assert.equal(themed[0]!['offsetY'], 4, 'the token s own shadow');
   });
 
+  it('reads a shadow token whose colour is another token', () => {
+    // Tailwind's `ring-2` sets `--tw-ring-shadow: 0 0 0 2px var(--tw-ring-color, ...)`, and
+    // `ring-blue-500` sets the colour from a class of its own.
+    const shadows = resolvedStyle(
+      '.ring { --ring: 0 0 0 2px var(--ring-colour, #000); box-shadow: var(--ring) } ' +
+        '.blue { --ring-colour: rgb(0, 0, 255) }',
+      ['ring', 'blue'],
+    )['boxShadow'] as Record<string, unknown>[];
+    assert.equal(shadows.length, 1);
+    assert.equal(shadows[0]!['spreadDistance'], 2);
+    assert.equal(shadows[0]!['color'], 'rgb(0, 0, 255)');
+  });
+
+  it('insets a shadow from a token that is the word inset or nothing', () => {
+    // `--tw-ring-shadow: var(--tw-ring-inset,) 0 0 0 2px ...`, and `ring-inset` sets the word.
+    const css =
+      '.ring { --ring: var(--ring-inset,) 0 0 0 2px rgb(0, 0, 255); box-shadow: var(--ring) } ' +
+      '.in { --ring-inset: inset }';
+    const inset = (classes: string[]) =>
+      (resolvedStyle(css, classes)['boxShadow'] as Record<string, unknown>[])[0]!['inset'];
+    assert.equal(inset(['ring', 'in']), true);
+    assert.equal(inset(['ring']), false);
+  });
+
+  it("takes a currentcolor fallback in a shadow as the node's own colour", () => {
+    // Tailwind's default ring colour. The colour in scope is the node's own, else inherited.
+    const css =
+      '.ring { box-shadow: 0 0 0 2px var(--ring-colour, currentcolor) } .green { color: rgb(0, 128, 0) }';
+    const own = resolvedStyle(css, ['ring', 'green'])['boxShadow'] as Record<string, unknown>[];
+    assert.equal(own[0]!['color'], 'rgb(0, 128, 0)');
+    const inherited = resolvedStyle(css, ['ring'], ['green'])['boxShadow'] as Record<
+      string,
+      unknown
+    >[];
+    assert.equal(inherited[0]!['color'], 'rgb(0, 128, 0)');
+    const none = resolvedStyle(css, ['ring'])['boxShadow'] as Record<string, unknown>[];
+    assert.equal(none[0]!['color'], 'black', 'the initial colour');
+  });
+
   it('takes an hsla() of tokens as the colour, as Bulma writes its shadows', () => {
     const [shadow] = shadowsOf(
       '0px 0.0625em 0.125em hsla(var(--h), var(--s), var(--l), 0.1)',

@@ -15,6 +15,7 @@
  * if it does arrive, by dropping what it cannot express, but the warnings are noise nobody needs.
  */
 const { transform, Features } = require('lightningcss');
+const { markUnitless } = require('@ng-native/metro/css/compile.cjs');
 
 /** `@layer a, b;` - the statement that orders layers, which is meaningless once they are gone. */
 const LAYER_STATEMENT = /@layer\s+[^;{]+;/g;
@@ -30,20 +31,27 @@ function rewriteAtRule(css, prelude, keepBody) {
   for (let at = out.indexOf(prelude); at !== -1; at = out.indexOf(prelude, at)) {
     const open = out.indexOf('{', at);
     if (open === -1) break;
-    let depth = 0;
-    let close = -1;
-    for (let i = open; i < out.length; i++) {
-      if (out[i] === '{') depth++;
-      else if (out[i] === '}' && --depth === 0) {
-        close = i;
-        break;
-      }
-    }
+    const close = blockEnd(out, open);
     if (close === -1) break;
     const body = keepBody ? out.slice(open + 1, close) : '';
     out = out.slice(0, at) + body + out.slice(close + 1);
   }
   return out;
+}
+
+/** The index of the brace that closes the block opened at `open`, or -1. */
+function blockEnd(css, open) {
+  let depth = 0;
+  for (let i = open; i < css.length; i++) {
+    if (css[i] === '{') depth++;
+    else if (css[i] === '}' && --depth === 0) return i;
+  }
+  return -1;
+}
+
+/** A custom property's value, less `!important`, which belongs to the declaration, not the value. */
+function withoutImportant(value) {
+  return value.replace(/\s*!\s*important\s*$/i, '').trim();
 }
 
 /**
@@ -58,7 +66,7 @@ function collectVariables(css) {
   const values = new Map();
   const conflicting = new Set();
   for (const [, name, value] of css.matchAll(/(--[\w-]+)\s*:\s*([^;{}]+)[;}]/g)) {
-    const trimmed = value.trim();
+    const trimmed = withoutImportant(value);
     if (values.has(name) && values.get(name) !== trimmed) conflicting.add(name);
     values.set(name, trimmed);
   }
@@ -143,6 +151,79 @@ const RUNTIME_SUPPLIED =
   /^--(safe-area-inset-(top|right|bottom|left)|hairline|tw-gradient-(from|via|to)(-position)?)$/;
 
 /**
+ * The `--tw-*` slots one utility sets and another reads, which only the node can answer.
+ *
+ * `translate-x-2` sets `--tw-translate-x` and `translate-y-4` sets `--tw-translate-y`, and each
+ * reads both. Substituted here, each rule takes the other axis from the `*` reset, and the one the
+ * sheet writes last wins with its zero. Left as `var()`, the engine reads each slot from whatever
+ * class set it on that node, which is what the web does.
+ *
+ * Only a slot the sheet sets somewhere other than the reset, read by a rule that does not set it
+ * itself or set again by a rule that does not read it, and only where the engine resolves `var()`
+ * per node: a transform, a shadow or a filter, or a part of a shadow slot, as `ring-blue-500` sets
+ * the colour of `ring-2`'s. Anything else stays settled here.
+ */
+function crossRuleVariables(css) {
+  const set = new Set();
+  const setWithoutReading = new Set();
+  const readElsewhere = new Set();
+  const readWhereSet = new Set();
+  for (const [, selector, body] of css.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
+    if (selectorList(selector).some((one) => one.trim() === '*')) continue;
+    const declared = new Set([...body.matchAll(/(--tw-[\w-]+)\s*:/g)].map((match) => match[1]));
+    const read = new Set();
+    for (const [, property, value] of body.matchAll(/(-?-?[\w-]+)\s*:\s*([^;]+)/g)) {
+      const perNode = RESOLVED_PER_NODE.test(property) || SHADOW_SLOT.test(property);
+      for (const [, name] of value.matchAll(/var\(\s*(--tw-[\w-]+)/g)) {
+        if (perNode || REVERSE_SLOT.test(name)) read.add(name);
+      }
+    }
+    for (const name of declared) {
+      set.add(name);
+      if (!read.has(name)) setWithoutReading.add(name);
+    }
+    for (const name of read) (declared.has(name) ? readWhereSet : readElsewhere).add(name);
+  }
+  // A slot a rule reads where it sets it, which another rule sets without reading: `drop-shadow-lg`
+  // reads the `--tw-drop-shadow` it sets, and `drop-shadow-red-500` sets it again, coloured.
+  return new Set([
+    ...[...readElsewhere].filter((name) => set.has(name)),
+    ...[...readWhereSet].filter((name) => setWithoutReading.has(name)),
+  ]);
+}
+
+/**
+ * The 0 or 1 `space-x-reverse` and `divide-y-reverse` set, which `space-x-2` and `divide-y-2` read
+ * inside a margin or border width's `calc()`: settled here, the reverse class does nothing.
+ */
+const REVERSE_SLOT = /^--tw-(space|divide)-[xy]-reverse$/;
+
+/**
+ * A bare number times a reverse slot: `divide-x-[3]` is `calc(3 * var(--tw-divide-x-reverse))`,
+ * and the slot is 0 or 1, so the width has no unit and a browser drops it.
+ */
+const UNITLESS_REVERSE =
+  /calc\((-?\d*\.?\d+)(\s*\*\s*(?:var\(--tw-(?:space|divide)-[xy]-reverse\)|calc\(1 - var\(--tw-(?:space|divide)-[xy]-reverse\)\)))\)/g;
+
+/** Each such number tagged as `markUnitless` tags one, so it is refused as needing a unit. */
+function markUnitlessReverse(css) {
+  return css.replace(UNITLESS_REVERSE, (whole, number, rest) =>
+    Number(number) === 0 ? whole : `calc(${number}__unitless${rest})`,
+  );
+}
+
+/** Properties whose `var()` the engine resolves per node, from the tokens in scope there. */
+const RESOLVED_PER_NODE =
+  /^(translate|scale|rotate|transform|box-shadow|text-shadow|filter|font-variant-numeric)$/;
+
+/**
+ * A shadow slot, whose own parts another class may set: `ring-blue-500` its colour,
+ * `ring-offset-2` the width it is pushed out by, `ring-inset` whether it is inset. A drop shadow
+ * keeps its shape in `--tw-drop-shadow-size`, which `drop-shadow-red-500` colours.
+ */
+const SHADOW_SLOT = /^--tw-[\w-]*shadow(-size)?$/;
+
+/**
  * Replace `var()` with what it resolves to, repeatedly, because theme values reference each other.
  *
  * A reference that resolves to nothing is left as it is: the engine resolves `var()` on device
@@ -159,20 +240,20 @@ const RUNTIME_SUPPLIED =
  * Only the rule's own block is consulted, not its ancestors'. That is enough for the pattern this
  * exists for, and anything wider is a cascade question the engine answers on device.
  */
-function substituteInRules(css, values) {
+function substituteInRules(css, values, runtime) {
   return css.replace(/([^{}]+)\{([^{}]*)\}/g, (whole, selector, body) => {
     const local = new Map(values);
     let changed = false;
     for (const [, name, value] of body.matchAll(/(--[\w-]+)\s*:\s*([^;{}]+)[;}]?/g)) {
-      const trimmed = value.trim();
+      const trimmed = withoutImportant(value);
       if (local.get(name) !== trimmed) changed = true;
       local.set(name, trimmed);
     }
-    return changed ? `${selector}{${substituteVariables(body, local)}}` : whole;
+    return changed ? `${selector}{${substituteVariables(body, local, runtime)}}` : whole;
   });
 }
 
-function substituteVariables(css, values) {
+function substituteVariables(css, values, runtime) {
   let out = css;
   for (let pass = 0; pass < 5; pass++) {
     let changed = false;
@@ -180,7 +261,7 @@ function substituteVariables(css, values) {
     for (let found = nextVar(out, from); found; found = nextVar(out, from)) {
       // A runtime-supplied property is left exactly as written, fallback and all, because only
       // the device can answer it.
-      if (RUNTIME_SUPPLIED.test(found.name)) {
+      if (RUNTIME_SUPPLIED.test(found.name) || runtime.has(found.name)) {
         from = found.end;
         continue;
       }
@@ -203,28 +284,43 @@ function substituteVariables(css, values) {
   return out;
 }
 
-/** A selector list with its pseudo-element halves removed; null when nothing is left. */
-function withoutPseudoElements(selectors) {
-  const kept = selectors
-    .split(',')
-    .map((one) => one.trim())
-    .filter((one) => one && !one.includes('::'));
-  return kept.length ? kept.join(', ') : null;
+/**
+ * A selector list split into its selectors: at a comma that is neither escaped, as in Tailwind's
+ * `.placeholder-\\[rgb\\(1\\,2\\,3\\)\\]`, nor inside parentheses, as in `:is(.a, .b)`.
+ */
+function selectorList(selectors) {
+  const list = [''];
+  let depth = 0;
+  for (let i = 0; i < selectors.length; i++) {
+    const c = selectors[i];
+    if (c === '\\') {
+      list[list.length - 1] += c + (selectors[++i] ?? '');
+      continue;
+    }
+    if (c === '(') depth++;
+    else if (c === ')') depth--;
+    if (c === ',' && depth === 0) list.push('');
+    else list[list.length - 1] += c;
+  }
+  return list;
 }
 
 /**
- * Drop the selectors that address something no template declares.
+ * Drop the pseudo-element selectors from a list that has others: Tailwind's reset is
+ * `*, ::before, ::after, ::backdrop`, and only its `*` addresses anything a template declares.
  *
  * `::before`, `::file-selector-button` and friends would mean synthesising view hierarchy from a
- * stylesheet, which this project refuses on purpose - see ADR 0001. The compiler would drop the
- * whole rule with a warning; here a rule that is *only* pseudo-elements is dropped whole, and one
- * that is partly them keeps the rest.
+ * stylesheet, which this project refuses on purpose - see ADR 0001. A rule that is *only*
+ * pseudo-elements is left whole for the compiler, which refuses it with a warning that says so:
+ * `placeholder:text-gray-400` is a class an app asked for, and dropped here it did nothing with
+ * nothing to say why.
  */
 function dropPseudoElementRules(css) {
   return css.replace(/([^{}]+)\{([^{}]*)\}/g, (whole, selectors, body) => {
     if (!selectors.includes('::')) return whole;
-    const kept = withoutPseudoElements(selectors);
-    return kept === null ? '' : `${kept} {${body}}`;
+    const all = selectorList(selectors).map((one) => one.trim());
+    const kept = all.filter((one) => one && !one.includes('::'));
+    return kept.length && kept.length < all.length ? `${kept.join(', ')} {${body}}` : whole;
   });
 }
 
@@ -261,7 +357,78 @@ function fold(css) {
       Features.ColorFunction,
   }).code.toString();
   // Lowering can reintroduce feature detection around what it just lowered.
-  return rewriteAtRule(out, '@supports', true);
+  return rewriteAtRule(foldSimpleCalc(out), '@supports', true);
+}
+
+/**
+ * The calc() lightningcss leaves: one of plain numbers, and any inside a custom property.
+ *
+ * Tailwind writes a negative integer as `calc(10 * -1)` for `-z-10`, a spacing slot as
+ * `--tw-translate-x: calc(.25rem * 2)`, and a fraction as `calc(1/2 * 100%)`. lightningcss folds
+ * none of them - it cannot know what a custom property will be used as - and the compiler refuses
+ * all three. Only numbers in one unit are folded, with `*` and `/` before `+` and `-`; a calc() with
+ * two units, a var() or brackets in it is left for the compiler to judge.
+ */
+function foldSimpleCalc(css) {
+  // Innermost first, and again, so `calc(calc(1rem + 2px) * -1)` comes down to one length.
+  for (let before = ''; before !== css;) {
+    before = css;
+    css = css.replace(/calc\(([^()]*)\)/gi, (whole, inside) => simpleCalc(inside) ?? whole);
+  }
+  return css;
+}
+
+/** Points in a rem: fixed, with no root element to change it. See `values.cjs`. */
+const REM = 16;
+
+/** One unit's arithmetic, as `<number><unit>`, or null when it is not that simple. */
+function simpleCalc(expression) {
+  const terms = [...expression.matchAll(/\s*(-?[\d.]+)([a-z%]*)\s*([*/]|\s[+-]\s|$)/gi)];
+  if (terms.map((term) => term[0]).join('') !== expression) return null;
+  const sum = products(terms);
+  return sum === null ? null : added(sum);
+}
+
+/** Each run of `*` and `/` as one signed term of the sum around it; null when one cannot be. */
+function products(terms) {
+  const sum = [];
+  let product = null;
+  let op = '';
+  let sign = 1;
+  for (const [, digits, unit, next] of terms) {
+    const value = { n: Number(digits), unit: unit.toLowerCase() };
+    product = product === null ? value : combine(product, value, op);
+    if (product === null) return null;
+    op = next.trim();
+    if (op === '*' || op === '/') continue;
+    sum.push({ ...product, sign });
+    product = null;
+    sign = op === '-' ? -1 : 1;
+  }
+  return sum;
+}
+
+/** Signed terms added up, in their one unit; null when they are in two. */
+function added(sum) {
+  // A rem is 16 points in this engine, as the compiler reads one, so rem and px add up.
+  if (sum.some((term) => term.unit === 'px')) {
+    for (const term of sum)
+      if (term.unit === 'rem') Object.assign(term, { n: term.n * REM, unit: 'px' });
+  }
+  const units = new Set(sum.filter((term) => term.n !== 0).map((term) => term.unit));
+  if (units.size > 1) return null;
+  const total = sum.reduce((acc, term) => acc + term.sign * term.n, 0);
+  return `${round(total)}${[...units][0] ?? sum[0]?.unit ?? ''}`;
+}
+
+/** `a * b` or `a / b`, keeping the one unit a product may have; null when that is not so. */
+function combine(a, b, op) {
+  if (op === '*') {
+    if (a.unit && b.unit) return null;
+    return { n: a.n * b.n, unit: a.unit || b.unit };
+  }
+  if (b.unit || b.n === 0) return null;
+  return { n: a.n / b.n, unit: a.unit };
 }
 
 /**
@@ -291,7 +458,8 @@ function round(value) {
 }
 
 /**
- * `border-top-style: solid` and its siblings.
+ * `border-top-style: solid` and its siblings, logical ones included: `border-y` is
+ * `border-block-style` and `border-x` is `border-inline-style`.
  *
  * React Native has one `borderStyle` for the whole box, so a per-side one cannot be expressed;
  * `solid` is also its default, so Tailwind's `border-t` means nothing but its width. A side style
@@ -299,7 +467,36 @@ function round(value) {
  * something native cannot do, and should hear about it.
  */
 function dropRedundantBorderStyles(css) {
-  return css.replace(/\s*border-(top|right|bottom|left)-style\s*:\s*solid\s*;/g, '');
+  return css.replace(
+    /\s*border-(top|right|bottom|left|(inline|block)(-start|-end)?)-style\s*:\s*solid\s*(!\s*important\s*)?;/g,
+    '',
+  );
+}
+
+/**
+ * The `--tw-*` declarations nothing reads once the build has filled every `var()` it could.
+ *
+ * `ease-in` sets `--tw-ease` for `.transition` to read, and that read is settled here, so the
+ * declaration is left over: a token in every bundle, and one the compiler warned about on every
+ * `ease-*` class, since a cubic-bezier() is not a value a token can hold. A slot left for the
+ * device is still read by a `var()` and stays.
+ */
+function dropUnreadSlots(css) {
+  const read = new Set([...css.matchAll(/var\(\s*(--tw-[\w-]+)/g)].map((match) => match[1]));
+  return css.replace(/(^|[;{])\s*(--tw-[\w-]+)\s*:[^;{}]*;?/g, (whole, before, name) =>
+    read.has(name) ? whole : before,
+  );
+}
+
+/**
+ * A declaration left with no value once its empty slots were substituted away.
+ *
+ * `.transform` is `transform: var(--tw-rotate-x,) ... var(--tw-skew-y,)`, five slots nobody set.
+ * The web reads the empty result as invalid, which is `none`, so it is no transform at all; kept,
+ * the compiler refuses `transform: ` with a warning. A custom property may be empty, and stays.
+ */
+function dropEmptyDeclarations(css) {
+  return css.replace(/(^|[;{])\s*[a-z][\w-]*\s*:\s*(!\s*important\s*)?(?=;|})/gi, '$1');
 }
 
 /**
@@ -329,7 +526,7 @@ function expandGradients(css, values) {
 
     const position = /--tw-gradient-position\s*:\s*([^;}]+)/.exec(body)?.[1] ?? '';
     // `in oklab` asks for an interpolation space, which native has no say in.
-    const prelude = position.replace(/\bin\s+[\w-]+/g, '').trim();
+    const prelude = withoutImportant(position.replace(/\bin\s+[\w-]+/g, ''));
     const stops = GRADIENT_STOPS.map((stop) => {
       const fallback = values.get(`--tw-gradient-${stop}-position`);
       const at = fallback
@@ -352,7 +549,9 @@ function expandGradients(css, values) {
 const CLASS = String.raw`\.(?:\\.|[\w-])+`;
 // A trailing pseudo-class or attribute selector - `:active`, `[data-disabled]`, `:focus` - is what
 // a same-node variant (`press:`, `focus:`, `disabled:`) stacked on top adds after the `:is()`.
-const STACKED = new RegExp(String.raw`^\s*(${CLASS})\s+:is\((${CLASS})\s+([^()]+)\)([^\s]*)\s*$`);
+const STACKED = new RegExp(
+  String.raw`^\s*(${CLASS})\s+:is\((${CLASS})\s+((?:\\.|[^()\\])+)\)([^\s]*)\s*$`,
+);
 
 /**
  * A stacked variant, rewritten as the ancestor tests it means.
@@ -375,7 +574,7 @@ function expandStackedVariants(css) {
   return css.replace(/([^{}]+)\{([^{}]*)\}/g, (whole, selectors, body) => {
     if (!selectors.includes(':is(')) return whole;
     let changed = false;
-    const expanded = selectors.split(',').flatMap((selector) => {
+    const expanded = selectorList(selectors).flatMap((selector) => {
       const match = STACKED.exec(selector);
       if (!match) return [selector.trim()];
       changed = true;
@@ -393,13 +592,53 @@ function expandStackedVariants(css) {
  * @param {string} css the CSS the Tailwind CLI produced
  * @returns {string} CSS with the browser-only parts answered or removed
  */
+/** A compound selector: no whitespace or combinator outside parentheses, escapes allowed. */
+const COMPOUND = String.raw`(?:\\.|\((?:\\.|[^()\\])*\)|[^\s>+~,()\\])+`;
+const WHERE_CHILD = new RegExp(String.raw`:where\((${COMPOUND})\s*>\s*(${COMPOUND})\)`, 'g');
+
+/**
+ * `:where(.space-x-2 > :not(:last-child))` as `:where(.space-x-2) > :where(:not(:last-child))`:
+ * the same children, at the same zero specificity, in a form the compiler reads. Tailwind 4 writes
+ * every `space-*` and `divide-*` utility this way, and the compiler takes only a compound inside
+ * `:where()`.
+ */
+function childrenOfWhere(css) {
+  return css.replace(WHERE_CHILD, ':where($1) > :where($2)');
+}
+
+/**
+ * The `*` reset, less the reverse slots. On the web the reset is in a layer under every utility;
+ * unwrapped here it comes after them, and ties with `space-x-reverse`, whose `:where()` has no
+ * specificity to beat it by, so the reverse class set its slot to 1 and the reset put it back to
+ * 0. Every rule that reads a reverse slot sets it to 0 itself, so the reset's copy says nothing.
+ */
+function resetWithoutReverseSlots(css) {
+  return css.replace(/([^{}]+)\{([^{}]*)\}/g, (rule, selector, body) =>
+    selectorList(selector).some((one) => one.trim() === '*')
+      ? `${selector}{${body.replace(/--tw-(space|divide)-[xy]-reverse\s*:[^;}]*;?/g, '')}}`
+      : rule,
+  );
+}
+
 function flattenTailwind(css) {
-  let out = css.replace(LAYER_STATEMENT, '');
+  // Before any pass of lightningcss here, which reads `m-[3]`'s bare 3 as 3px and hides it from
+  // the compiler: see `markUnitless`.
+  let out = childrenOfWhere(markUnitlessReverse(markUnitless(css)).replace(LAYER_STATEMENT, ''));
   out = rewriteAtRule(out, '@layer', true);
   out = rewriteAtRule(out, '@supports', true);
+  out = resetWithoutReverseSlots(out);
   const values = collectVariables(out);
+  const runtime = crossRuleVariables(out);
   out = rewriteAtRule(out, '@property', false);
   out = expandGradients(out, values);
+  // `via-none` empties the chain, which is how the web takes a `via-*` stop back out. With the
+  // chain gone, it says the same by leaving the middle stop with no colour, which is not painted.
+  // Only where it is the rule's one declaration, which is `via-none`: the `*` reset writes the same
+  // thing, and there it would give every element a token for nothing.
+  out = out.replace(
+    /\{\s*--tw-gradient-via-stops\s*:\s*initial\s*(!\s*important\s*)?;?\s*\}/g,
+    (_, important) => `{ --tw-gradient-via: none${important ? ' !important' : ''}; }`,
+  );
   // The chain the gradient used to be assembled through, now that nothing reads it. Left in, it
   // is a token per gradient class in every bundle, holding the word `initial`.
   out = out.replace(/--tw-gradient(-via)?-stops\s*:[^;}]*;?/g, '');
@@ -411,11 +650,13 @@ function flattenTailwind(css) {
   out = out.replace(/--tw-gradient-via\s*:\s*(#0000|transparent|initial)\s*;?/g, '');
   // Rule-local first: a property a rule declares and reads is that rule's business, and the
   // file-wide map holds the `*` reset that would otherwise win.
-  out = substituteInRules(out, values);
-  out = substituteVariables(out, values);
+  out = substituteInRules(out, values, runtime);
+  out = substituteVariables(out, values, runtime);
+  out = dropUnreadSlots(out);
   out = dropPseudoElementRules(out);
   out = expandStackedVariants(out);
   out = dropRedundantBorderStyles(out);
+  out = dropEmptyDeclarations(out);
   return resolveUnitlessLineHeight(fold(out));
 }
 

@@ -280,7 +280,7 @@ describe('tokens', () => {
       const none = compileCss('view { border: 2px red }').rules[0].declarations;
       assert.deepEqual(
         [none.borderTopWidth, none.borderLeftWidth, none.borderStyle],
-        [0, 0, undefined],
+        [0, 0, 'none'],
       );
     });
 

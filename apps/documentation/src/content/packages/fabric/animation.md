@@ -57,6 +57,11 @@ A duration or delay can be a token, or `calc()` with tokens in it, which is how 
 its rows: `animation-delay: calc(var(--i) * 60ms)` with `[style.--i]="$index"` on each. A token of
 time is read in milliseconds whatever unit it was written in.
 
+An `animation-timing-function` written inside a keyframe eases from that keyframe to the next, as
+in CSS, over the animation's own: Tailwind's `animate-bounce` falls on one curve and rises on
+another. A keyframe that sets `transform: none` eases to the identity of the transforms beside it,
+so a translate in percent eases back to `0%`.
+
 `animation-direction` plays every iteration forwards (`normal`), backwards (`reverse`), or there
 and back (`alternate`, and `alternate-reverse` starting backwards); with a fill, the frame held at
 the end is the one the last iteration finished on.
@@ -83,6 +88,12 @@ The `transition-*` longhands follow the same order rule. `transition-property`,
 `transition-duration`, `transition-timing-function` and `transition-delay` pair up by position,
 with a shorter list repeating, and a longhand after `transition` overrides that part, including
 setting it back to `0s`.
+
+A timing longhand also cascades on its own, as in a browser: a rule that sets only
+`transition-duration`, `transition-timing-function` or `transition-delay` applies to the
+transition another rule names, so Tailwind's `transition duration-300 ease-linear` runs for
+300ms. Such a rule takes a single value, since the property list that would size a longer one is
+in another rule.
 
 ## Scroll-driven animations
 

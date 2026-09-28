@@ -14,6 +14,7 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { commands, page, userEvent } from 'vitest/browser';
 import { CascadeApp } from '../src/cascade-app.ts';
+import { injectResetStylesheet } from '../src/mount.ts';
 import { boot, settle, waitFor, type Booted } from './boot.ts';
 
 async function scene(): Promise<Booted> {
@@ -205,5 +206,23 @@ describe('the Tailwind web preset', () => {
     // property `web.css` fills from `env()`, set as a static style the way a test device would.
     expect(computed(byId('notched')).paddingTop).toBe('30px');
     expect(computed(byId('unnotched')).paddingTop).toBe('0px');
+  });
+});
+
+describe('the reset mount injects by default', () => {
+  // `mount` injects `reset.css` into the head unless told not to, after the app's own stylesheet.
+  // Unlayered, and as specific as a class, it beat every Tailwind utility it shares a property
+  // with: a `border-2` drew nothing, a `flex-row` stacked, a `hidden` showed. In Tailwind's `base`
+  // layer it is below every utility, which is where a reset belongs.
+  afterEach(() => document.getElementById('angular-native-web-reset')?.remove());
+
+  it('leaves every utility above it', async () => {
+    const { byId } = await scene();
+    injectResetStylesheet(document);
+    await settle();
+    const framed = computed(byId('tinted-frame'));
+    expect(framed.borderTopWidth).toBe('2px');
+    expect(framed.borderTopColor).toBe('rgb(255, 0, 0)');
+    expect(computed(byId('column').parentElement!).flexDirection).toBe('row');
   });
 });

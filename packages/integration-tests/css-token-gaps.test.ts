@@ -30,6 +30,32 @@ function resolvedStyle(css: string): Record<string, unknown> {
   return resolver.resolve(node, 1).style as Record<string, unknown>;
 }
 
+describe('a token of the wrong kind', () => {
+  // A browser drops a declaration whose var() substitutes to the wrong type: `translate` needs a
+  // length, and `30deg` is not one. Reading the token's number instead moved the box 30 points.
+  it('does not read an angle as a length', () => {
+    assert.equal(
+      resolvedStyle('.a { --x: 30deg; translate: var(--x) 0 }')['__translate'],
+      undefined,
+    );
+  });
+
+  it('does not read a length as a scale factor', () => {
+    assert.equal(resolvedStyle('.a { --s: 13px; scale: var(--s) }')['__scale'], undefined);
+  });
+
+  it('does not read an angle as a scale factor', () => {
+    assert.equal(resolvedStyle('.a { --s: 30deg; scale: var(--s) }')['__scale'], undefined);
+  });
+
+  it('still reads a zero as a length, which CSS allows unitless', () => {
+    assert.deepEqual(resolvedStyle('.a { --x: 0; translate: var(--x) 4px }')['__translate'], [
+      { translateX: 0 },
+      { translateY: 4 },
+    ]);
+  });
+});
+
 describe('text-shadow with tokens', () => {
   it('takes its colour from a token', () => {
     const style = resolvedStyle('.a { --glow: #3b82f6; text-shadow: 0 1px 2px var(--glow); }');
@@ -47,6 +73,17 @@ describe('text-shadow with tokens', () => {
     assert.equal(style['textShadowColor'], 'rgb(128, 128, 128)');
   });
 
+  it('refuses a whole text-shadow in one token, with a reason, rather than crashing', () => {
+    // Tailwind's `text-shadow-(--x)`. Native's text shadow is three props, and a token is read in
+    // one form, so the parts have to be written out.
+    const dropped: string[] = [];
+    compileCss('.a { text-shadow: var(--x) }', 't', {
+      onUnsupported: (message: string) => dropped.push(message),
+    });
+    assert.equal(dropped.length, 1);
+    assert.match(dropped[0]!, /dropped 'text-shadow'.*write its parts out/);
+  });
+
   it('is not written when its colour token is not set', () => {
     const style = resolvedStyle('.a { text-shadow: 0 1px 2px var(--nothing); }');
     assert.equal(style['textShadowColor'], undefined);
@@ -59,6 +96,15 @@ describe('flex with a token', () => {
     assert.equal(style['flexGrow'], 2);
     assert.equal(style['flexShrink'], 1);
     assert.equal(style['flexBasis'], '0%');
+  });
+
+  it('does nothing when the token is not set, as an invalid flex does on the web', () => {
+    // `flex-(--x)` with no --x is invalid at computed-value time: the element keeps `0 1 auto`.
+    // Writing the shrink and the basis before knowing whether the token was there changed both.
+    const style = resolvedStyle('.a { flex: var(--missing); }');
+    assert.equal(style['flexGrow'], undefined);
+    assert.equal(style['flexShrink'], undefined);
+    assert.equal(style['flexBasis'], undefined);
   });
 });
 
@@ -109,5 +155,78 @@ describe('a logical border side with a token in it', () => {
     assert.equal(style['borderTopColor'], 'rgb(0, 0, 255)');
     assert.equal(style['borderBottomColor'], 'rgb(0, 0, 255)');
     assert.equal(style['borderBottomWidth'], 1);
+  });
+});
+
+describe('the direction a flex box lays out in', () => {
+  // Every node is a column, on native and in @ng-native/web's reset alike, so one class string lays
+  // out the same on both hosts: `display: flex` does not make a row, as it does in a plain browser.
+  // A row is written, as `flex-row`. See components/layout.md.
+  const direction = (css: string, classes = ['a']) => {
+    const target = (parent: StyleTarget | null, own: string[]): StyleTarget => ({
+      name: 'view',
+      parent,
+      classes: new Set(own),
+      props: {},
+      sheet: null,
+      hostSheet: null,
+      styleCache: null,
+      styleDirty: true,
+    });
+    const resolver = new StyleResolver(compileCss(css, 'flex'), {
+      width: 400,
+      height: 800,
+      colorScheme: 'light',
+    });
+    return resolver.resolve(target(target(null, []), classes), 1).style['flexDirection'];
+  };
+
+  it('keeps a flex box a column, as every node on both hosts is', () => {
+    assert.equal(direction('.a { display: flex }'), undefined);
+    assert.equal(direction('.a { display: inline-flex }'), undefined);
+  });
+
+  it('lays out in a row where a row is written', () => {
+    assert.equal(direction('.a { display: flex; flex-direction: row }'), 'row');
+  });
+});
+
+describe('a border style that draws no border', () => {
+  // `border-style: none` and `hidden` make every border width 0 on the web, whatever set the
+  // width. Compiled to widths of 0, a width from a later rule - `border-hidden border-x` - drew.
+  const style = (css: string, classes: string[]) => {
+    const target = (parent: StyleTarget | null, own: string[]): StyleTarget => ({
+      name: 'view',
+      parent,
+      classes: new Set(own),
+      props: {},
+      sheet: null,
+      hostSheet: null,
+      styleCache: null,
+      styleDirty: true,
+    });
+    const resolver = new StyleResolver(compileCss(css, 'border'), {
+      width: 400,
+      height: 800,
+      colorScheme: 'light',
+    });
+    return resolver.resolve(target(target(null, []), classes), 1).style;
+  };
+
+  it('zeroes a width a later rule sets', () => {
+    const resolved = style(
+      '.hidden-b { border-style: hidden } .x { border-left-width: 2px; border-right-width: 2px }',
+      ['hidden-b', 'x'],
+    );
+    assert.equal(resolved['borderLeftWidth'], 0);
+    assert.equal(resolved['borderRightWidth'], 0);
+  });
+
+  it('draws again once a later rule gives it a style', () => {
+    const resolved = style(
+      '.n { border-style: none } .s { border-style: solid; border-width: 2px }',
+      ['n', 's'],
+    );
+    assert.equal(resolved['borderTopWidth'] ?? resolved['borderWidth'], 2);
   });
 });

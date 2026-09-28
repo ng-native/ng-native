@@ -104,6 +104,26 @@ platforms, and `blur-*`, `grayscale`, `hue-rotate-*`, `drop-shadow-*` and the re
 Android only, so unscoped they are dropped with a warning. Write them as `android:grayscale` to keep
 them for Android.
 
+Utilities that build one value out of several classes combine on an element as they do on the web:
+`translate-x-2 translate-y-4` moves along both axes, `shadow-lg ring-2 ring-blue-500` draws the ring
+beside the shadow, `shadow-red-500` colors the shadow, and `brightness-50 android:grayscale` draws
+both filters on Android. `text-shadow-red-500` and `android:drop-shadow-red-500` color a text shadow
+and a drop shadow the same way, and `tabular-nums oldstyle-nums` keeps both numeric variants. A ring
+with no color class is drawn in the element's text color, as `currentcolor` is on the web;
+`ring-inset` insets it, and `ring-offset-2 ring-offset-white` draws the offset in its color with the
+ring beyond it.
+
+`space-x-*`, `space-y-*` and `divide-*` style every child but the last, with the same zero
+specificity as on the web, so a child's own `me-*` or `border-*` class wins over them.
+`space-x-reverse` and `divide-x-reverse` swap the side, for a `flex-row-reverse` parent. One
+exception: a child's `mx-*` or `ml-*` does not win over `space-x-*`, because native lets a start or
+end margin beat a left or right one whatever the cascade says (see [what CSS reaches a
+device](/packages/fabric/supported-css)). Use `ms-*` and `me-*` on those children. `divide-double`
+is dropped with a warning, as a native border has no double style.
+
+Variants and utilities that style a pseudo-element, `placeholder:`, `before:`, `file:` and the
+rest, are refused with a build warning, as a pseudo-element is in any stylesheet.
+
 A unitless `line-height`, the ratio form CSS defines and the one Tailwind's `leading-*` utilities
 write, works with or without a `font-size` beside it. When the rule also sets a `font-size`, as
 every type-scale utility does, the build multiplies the two. Otherwise it is settled on device

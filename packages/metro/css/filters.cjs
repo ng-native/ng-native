@@ -43,6 +43,8 @@ function undrawnOnIos(list) {
   if (!Array.isArray(list)) return null;
   for (const primitive of list) {
     const key = Object.keys(primitive ?? {})[0];
+    // A slot filled from a token on device, whose token was checked where it was set.
+    if (key === '__filters') continue;
     if (key && !DRAWN_ON_IOS.has(key)) return CSS_NAMES[key] ?? key;
   }
   return null;

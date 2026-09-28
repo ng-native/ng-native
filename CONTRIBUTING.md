@@ -70,6 +70,35 @@ Write the test that pins down the expected behavior before changing
 `packages/fabric`'s or `packages/metro`'s CSS code, and keep coverage high there - that is what
 catches a regression this engine would otherwise hide.
 
+Every Tailwind utility is checked too. `tailwind-sweep.test.ts` builds a stylesheet from every
+utility Tailwind lists (a spread of the values of a scale, all of a handful), arbitrary values, the
+values of an app's own theme (`fixtures/tailwind-sweep-theme.css`), `!`, every variant and the pairs
+of utilities that build one value together, and holds each case to:
+
+- the build does not throw, and the case either takes effect or is refused with a warning;
+- what it commits is a prop React Native declares, with a keyword it takes;
+- what it resolves to agrees with what Chrome computes, on iOS, Android, in dark mode, at two more
+  widths, with every state an attribute sets, and on the web host (the web preset and
+  `@ng-native/web`'s reset);
+- what a view hands down to a text inside it agrees too;
+- its transform comes to the matrix Chrome's does, and its animation paints what Chrome's does at
+  points through its first cycle;
+- its layout, by Yoga configured as React Native configures it, lands where the web host puts it;
+- the module Metro writes holds exactly the sheet checked.
+
+A difference that is a design decision, a known gap or Yoga's own behaviour is listed in the test
+with its reason, and the test fails when one stops happening. Two fixtures record what it compares
+against:
+
+```sh
+cd packages/integration-tests
+pnpm tailwind-oracle                                   # Chrome's answers, after a Tailwind upgrade
+TAILWIND_SWEEP_UPDATE=1 node --import ./register-linker.mjs --test tailwind-sweep.test.ts
+```
+
+Read the diff of the second before committing it: each line is a utility that is refused
+differently.
+
 ## Architecture rules
 
 [`ARCHITECTURE.md`](./ARCHITECTURE.md) lists the rules the design depends on (AOT only, zoneless

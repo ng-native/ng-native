@@ -87,7 +87,11 @@ function injectStyle(document: Document, id: string, css: string): void {
   if (document.getElementById(id)) return;
   const style = document.createElement('style');
   style.id = id;
-  style.textContent = css;
+  // In Tailwind's `base` layer, below every utility, as `@import '@ng-native/web/reset.css'
+  // layer(base)` puts it. Injected unlayered after the app's stylesheet, a reset rule is as
+  // specific as a class and later, so it beat `border-2`, `flex-row` and `hidden` alike. With no
+  // Tailwind on the page, a layered rule still loses to every unlayered one, as a reset should.
+  style.textContent = `@layer base {\n${css}\n}`;
   document.head.appendChild(style);
 }
 

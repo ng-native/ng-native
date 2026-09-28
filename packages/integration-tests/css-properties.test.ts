@@ -105,10 +105,12 @@ describe('the parts of a shorthand the author left out', () => {
 
   it('border: none and border: 0, which paint no border whatever the colour', () => {
     // CSS computes the width of a border whose style is `none` as 0, which is also how native is
-    // told there is no border. Native has no `none` style to send, and ignores one it is sent.
-    assert.deepEqual(declarationsOf('border: none'), everySide('Width', 0));
-    assert.deepEqual(declarationsOf('border: 0'), everySide('Width', 0));
-    assert.deepEqual(declarationsOf('border: 2px none red'), everySide('Width', 0));
+    // told there is no border.
+    // The none style is kept for the engine, which settles it into widths and sends none of it.
+    const none = { ...everySide('Width', 0), borderStyle: 'none' };
+    assert.deepEqual(declarationsOf('border: none'), none);
+    assert.deepEqual(declarationsOf('border: 0'), none);
+    assert.deepEqual(declarationsOf('border: 2px none red'), none);
   });
 
   it('reads the width keywords as the lengths CSS defines them as', () => {
@@ -295,6 +297,53 @@ describe('properties React Native supports that we were rejecting', () => {
   it('logical properties, as the Yoga style every native view reads', () => {
     assert.deepEqual(declarationsOf('margin-inline: 4px'), { marginLeft: 4, marginRight: 4 });
     assert.deepEqual(declarationsOf('padding-block: 6px'), { paddingTop: 6, paddingBottom: 6 });
+  });
+});
+
+describe('keywords React Native does not take', () => {
+  // Fabric drops a keyword it has no reading for without a word, so each of these compiled
+  // cleanly and did nothing on device.
+  it('takes auto and pointer as a cursor, reads default as auto, and refuses the rest', () => {
+    assert.deepEqual(declarationsOf('cursor: pointer'), { cursor: 'pointer' });
+    assert.deepEqual(declarationsOf('cursor: default'), { cursor: 'auto' });
+    assert.throws(() => declarationsOf('cursor: alias'), /cursor: alias is not supported/);
+  });
+
+  it('reads overflow auto as scroll, and clip as hidden, the nearest Yoga has', () => {
+    assert.deepEqual(declarationsOf('overflow: auto'), { overflow: 'scroll' });
+    assert.deepEqual(declarationsOf('overflow: clip'), { overflow: 'hidden' });
+    assert.deepEqual(declarationsOf('overflow: scroll'), { overflow: 'scroll' });
+  });
+
+  it('refuses the plus-darker blend mode, which native does not draw', () => {
+    assert.deepEqual(declarationsOf('mix-blend-mode: plus-lighter'), {
+      mixBlendMode: 'plus-lighter',
+    });
+    assert.throws(() => declarationsOf('mix-blend-mode: plus-darker'), /plus-darker/);
+  });
+
+  it('refuses an overline, which native text does not draw', () => {
+    assert.throws(() => declarationsOf('text-decoration-line: overline'), /overline/);
+  });
+});
+
+describe('lengths in units native has no word for', () => {
+  it('reads an outline offset in rem, which lightningcss hands over unparsed', () => {
+    // `outline-offset` is a property lightningcss does not know, and its value arrived as the bare
+    // number in it: 1.25rem was an offset of 1.25 points, not 20.
+    assert.deepEqual(declarationsOf('outline-offset: 1.25rem'), { outlineOffset: 20 });
+  });
+
+  it('refuses an outline offset in percent, which CSS does not take', () => {
+    assert.throws(() => declarationsOf('outline-offset: 37%'), /outline-offset/);
+  });
+
+  it('reads a font size in percent as a share of the inherited one, as an em is', () => {
+    // `fontSize: '37%'` is not a value native takes; the size it means is known on device.
+    const [rule] = compileCss('view { font-size: 37% }').rules;
+    assert.deepEqual(rule.deferred, [
+      { props: ['fontSize'], compute: { unit: 'em', factor: 0.37 } },
+    ]);
   });
 });
 
@@ -912,10 +961,10 @@ describe('the logical border shorthands', () => {
 
   it('border-inline and border-block draw both of their sides', () => {
     assert.deepEqual(declarationsOf('border-inline: 1px solid red'), {
-      borderStartWidth: 1,
-      borderStartColor: 'rgb(255, 0, 0)',
-      borderEndWidth: 1,
-      borderEndColor: 'rgb(255, 0, 0)',
+      borderLeftWidth: 1,
+      borderLeftColor: 'rgb(255, 0, 0)',
+      borderRightWidth: 1,
+      borderRightColor: 'rgb(255, 0, 0)',
     });
     assert.deepEqual(declarationsOf('border-block: 1px solid red'), {
       borderTopWidth: 1,

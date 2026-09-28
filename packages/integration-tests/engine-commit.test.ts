@@ -294,6 +294,23 @@ describe('what a commit sends', () => {
     return fabric.committed[0]!.props;
   };
 
+  it("converts a drop-shadow filter's colour, which Android refuses as a string", () => {
+    // Android's filter parser reads the colour as a number and throws on a string, taking the
+    // whole surface down, where a box shadow's string colour is only dropped.
+    const fabric = createFakeFabric();
+    const engine = new Engine(fabric, 1, { processColor: (value) => `processed ${value}` });
+    const view = engine.createElement('view');
+    engine.setProp(view, 'style', {
+      filter: [{ brightness: 0.5 }, { dropShadow: { offsetX: 0, offsetY: 4, color: 'red' } }],
+    });
+    engine.appendChild(engine.root, view);
+    engine.commit();
+    assert.deepEqual(fabric.committed[0]!.props['filter'], [
+      { brightness: 0.5 },
+      { dropShadow: { offsetX: 0, offsetY: 4, color: 'processed red' } },
+    ]);
+  });
+
   it('keeps hyphenated attributes to the engine, since no native prop is spelt that way', () => {
     const props = committed({ 'data-row': '3', testID: 'row' });
     assert.equal(props['data-row'], undefined);

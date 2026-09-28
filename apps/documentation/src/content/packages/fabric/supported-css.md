@@ -114,6 +114,11 @@ platforms too, so `grayscale` there is dropped with a warning, while `android:gr
 A filter inside `@keyframes` is checked against the platform alone, since a keyframe has no
 selector to scope it.
 
+A `filter` can also be a list of tokens, each holding one function or nothing: `filter:
+var(--blur,) var(--grayscale,)` draws whichever of them are set on the element, from whichever
+rules set them. Each token is checked against the platforms of the rule that sets it, so
+`--grayscale: grayscale(1)` in a rule that can apply on iOS is dropped with the same warning.
+
 `transform` takes the translate, scale, rotate, skew and perspective functions. The individual
 properties `translate`, `rotate` and `scale`, which are what Tailwind 4 writes, are properties of
 their own, as on the web: `.rotate-45.translate-x-4` both turns and moves, and each can be
@@ -134,8 +139,10 @@ relative color, `rgba(var(--channels), 0.25)` or an `hsl()` of tokens; a length 
 a `var()` or `calc()` around one (`0 0 0 var(--ring-width)`); and a whole shadow that is a token,
 in a list with others, with the shadows after its name as the fallback. A shadow whose lengths are
 all one token is the exception, since a token is read in one form: write its lengths out, or put
-the whole shadow in the token. A `text-shadow` takes tokens the same way, in its color and its
-lengths.
+the whole shadow in the token. A shadow token can have a token in its color too, `--ring: 0 0 0
+2px var(--ring-color, currentcolor)`, filled in where it is used. `currentcolor` as the fallback
+of a shadow's color is the element's `color`, or the one it inherits, or black. A `text-shadow`
+takes tokens the same way, in its color and its lengths.
 
 Truncation is a paragraph's props on native, not a style, and CSS's three ways of asking for it
 compile to them: `white-space: nowrap` to `numberOfLines: 1`, `line-clamp` or `-webkit-line-clamp`
@@ -159,6 +166,12 @@ because a column of flex children cannot pretend to flow them side by side.
 
 `overflow` is one value for both axes - Yoga has no separate `overflow-x`/`overflow-y` - so a rule
 that gives them different values is dropped with a warning rather than silently picking one.
+`overflow: auto` is read as `scroll`, which is how Yoga lays out a scroll container, and `clip` as
+`hidden`. `cursor` takes `auto` and `pointer`, the two a pointer on an iPad draws, with `default`
+read as `auto`; any other cursor is dropped with a warning, as is a `mix-blend-mode` native does not
+draw (`plus-darker`) and an `overline`. `align-content: baseline` is the start it comes to in both
+engines. `border-style: none` and `hidden` draw no border whichever rule set the width, as on the
+web, so `border-hidden border-x` draws no side.
 
 The logical properties all work: `inset-inline`, `inset-block`, `margin-inline`, `margin-block`,
 `padding-inline` and `padding-block`, with their `-start` and `-end` longhands, and the border
@@ -183,7 +196,13 @@ unitless line-height, a ratio for `aspect-ratio`, a whole `box-shadow` list, or 
 channels for `rgba(var(--channels), <alpha>)`, which is how Bootstrap writes its color utilities.
 A shorthand may mix `var()`s and written values: `padding: var(--y) var(--x)`,
 `border: var(--width) solid var(--colour)`. `flex: var(--grow)` is `flex: <number>`: it grows by
-the token, shrinks by 1, and starts from a basis of 0.
+the token, shrinks by 1, and starts from a basis of 0, once the token is set; with no token it
+leaves the element as it was, as an invalid `flex` does on the web.
+
+A length needs a unit, as in a browser: `margin-top: 3` is dropped with a warning, and so is a
+token holding a bare number where a length is read. `0` needs none, a bare number is a factor
+inside `calc()`, and `line-height` takes a ratio. An `opacity` outside 0 to 1 is clamped into it,
+and a `font-weight` outside 1 to 1000 is dropped.
 
 `calc()` may add one viewport or font-relative length to absolute ones
 (`calc(1.375rem + 1.5vw)`), which is settled on device. `min()`, `max()` and `clamp()` fold when
@@ -198,11 +217,20 @@ The keywords that switch a property off - `max-width: none`, `z-index: auto`,
 The CSS-wide keywords (`inherit`, `initial`, `unset`, `revert`, `revert-layer`) are dropped, and
 the warning says so.
 
-Layout is Yoga's, which follows CSS flexbox with one difference worth knowing: an absolutely
+Layout is Yoga's, which follows CSS flexbox with a few differences worth knowing. An absolutely
 positioned child's percentage size is taken from the width its parent was offered, not the width
 the parent shrinks to. A child at `width: 84%` inside a parent sized by `align-self: flex-start` is
 84% of the space around the parent. Give a parent like that an explicit size, as a star rating's
 row of fixed-width stars has.
+
+Three more:
+
+- A box whose margins are larger than its container is 0 high in Yoga, with its children
+  overflowing it. A browser keeps the box as tall as its content.
+- A percentage `min-height` is measured against the height of the box two levels up rather than the
+  parent's: `min-height: 50%` in a 40-point box inside an 80-point one is 40 points, not 20.
+- A percentage `gap` in a box with no fixed size along that axis grows the box by the gap. A
+  browser resolves the percentage against the size the box ends up with.
 
 Transitions, `animate.enter`/`animate.leave`, `@keyframes` and `animation` are their own page: see
 [Animation](/packages/fabric/animation).

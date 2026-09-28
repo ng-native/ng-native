@@ -1151,6 +1151,39 @@ function flattenStyle(value: unknown, into: Record<string, unknown>): Record<str
   return into;
 }
 
+/** The timing a rule can set apart from a property list, and the part of the spec each sets. */
+const TRANSITION_TIMING = {
+  $transitionDuration: 'duration',
+  $transitionDelay: 'delay',
+  $transitionEasing: 'easing',
+} as const;
+
+/**
+ * The transition spec, with any timing set by a rule of its own laid over it: `.duration-700`
+ * beside `.transition`. A rule that writes the timing itself compiles it to `null`, which is how
+ * a stronger transition keeps its own.
+ *
+ * Every key is taken out of `props`: they are instructions for this engine, and nothing native
+ * has ever heard of them. See `animated` for why each `delete` is guarded.
+ */
+function transitionSpec(
+  props: Record<string, unknown>,
+): Record<string, TransitionSpec> | undefined {
+  // Keyed `$transition` by the compiler, so a view's own `transition` prop reaches it.
+  let spec = props['$transition'] as Record<string, TransitionSpec> | undefined;
+  if (spec !== undefined) delete props['$transition'];
+  for (const [key, part] of Object.entries(TRANSITION_TIMING)) {
+    if (!(key in props)) continue;
+    const value = props[key];
+    delete props[key];
+    if (value === null || spec === undefined) continue;
+    const timed: Record<string, TransitionSpec> = {};
+    for (const name of Object.keys(spec)) timed[name] = { ...spec[name]!, [part]: value };
+    spec = timed;
+  }
+  return spec;
+}
+
 /**
  * The keys CSS's `translate`, `rotate` and `scale` compile to, in the order they apply. The
  * compiler's `INDIVIDUAL_TRANSFORMS` in `packages/metro/css/properties.cjs` writes the same three.
@@ -2276,11 +2309,7 @@ export class Engine implements HostEngine {
   }
 
   private transitioned(node: EngineNode, props: Record<string, unknown>): Record<string, unknown> {
-    // Keyed `$transition` by the compiler, so a view's own `transition` prop reaches it.
-    const spec = props['$transition'] as Record<string, TransitionSpec> | undefined;
-    // A spec is instructions for this engine; nothing native has ever heard of it. See `animated`
-    // for why the `delete` is guarded.
-    if (spec !== undefined) delete props['$transition'];
+    const spec = transitionSpec(props);
     if (!spec && !node.transitions) return props;
 
     const state = (node.transitions ??= new Map());
@@ -2406,6 +2435,7 @@ export class Engine implements HostEngine {
         out[key] = this.resolveAssetSource(value);
       else if (NESTED_COLOR_LIST_PROPS.has(key)) out[key] = this.processNestedColors(value);
       else if (key === 'experimental_backgroundImage') out[key] = this.processGradients(value);
+      else if (key === 'filter') out[key] = this.processFilters(value);
       // A bound style's transform is still the CSS string: see `inline-transform.ts`.
       else if (key === 'transform' && typeof value === 'string') out[key] = transformList(value);
       else out[key] = value;
@@ -2420,6 +2450,21 @@ export class Engine implements HostEngine {
       const item = entry as Record<string, unknown>;
       if (item?.['color'] === undefined) return entry;
       return { ...item, color: this.color(item['color'] as string | number) };
+    });
+  }
+
+  /**
+   * Copy a filter list, running a drop shadow's colour through the host's converter. Android reads
+   * that colour as a number and throws on a string, taking the whole surface down with it.
+   */
+  private processFilters(value: unknown): unknown {
+    if (!Array.isArray(value)) return value;
+    return value.map((entry) => {
+      const shadow = (entry as { dropShadow?: Record<string, unknown> })?.dropShadow;
+      if (shadow?.['color'] === undefined) return entry;
+      return {
+        dropShadow: { ...shadow, color: this.color(shadow['color'] as string | number) },
+      };
     });
   }
 

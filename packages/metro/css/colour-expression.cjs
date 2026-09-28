@@ -183,10 +183,13 @@ function shadowsWithColourTokens(terms, context) {
 function oneShadow(shadow, context) {
   // A whole shadow that is a token, in a list of others: Pico's hover shadow, then its ring.
   if (shadow.length === 1 && shadow[0].type === 'var') return shadowToken(shadow[0], context);
-  const inset = shadow.some(isInset);
+  // `var(--tw-ring-inset,)`: a token that is the word `inset` or nothing, which is what an empty
+  // fallback in a shadow can only be. Settled on device, from whichever class set it.
+  const slot = shadow.find(isInsetSlot);
+  const inset = slot ? { __inset: { reference: slot.value.name.ident } } : shadow.some(isInset);
   const lengths = [];
   const colour = [];
-  for (const term of shadow.filter((one) => !isInset(one))) {
+  for (const term of shadow.filter((one) => !isInset(one) && one !== slot)) {
     if (isLength(term) || (term.type === 'var' && isLengthSlot(shadow, term))) {
       lengths.push(shadowLength(term, context));
     } else {
@@ -204,6 +207,12 @@ function oneShadow(shadow, context) {
     inset,
   };
 }
+
+/** A `var()` with an empty fallback, which in a shadow can only stand for `inset` or nothing. */
+const isInsetSlot = (term) =>
+  term.type === 'var' &&
+  Array.isArray(term.value?.fallback) &&
+  meaningful(term.value.fallback).length === 0;
 
 const isInset = (term) =>
   term.type === 'token' && term.value?.type === 'ident' && term.value.value === 'inset';

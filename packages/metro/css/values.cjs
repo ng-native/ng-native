@@ -46,6 +46,9 @@ const round = (value) => {
 
 const camel = (property) => property.replace(/-([a-z])/g, (_, c) => c.toUpperCase());
 
+/** What a value that is not a length is, for the message that says so. */
+const NOT_A_LENGTH = { color: 'a colour', time: 'a time', angle: 'an angle', string: 'a string' };
+
 /** A length, in the numbers RN wants (points) or a percentage string. */
 // eslint-disable-next-line complexity -- a dispatch table: one flat case per CSS form
 function length(value, context) {
@@ -63,6 +66,13 @@ function length(value, context) {
     case 'dimension': {
       const { unit, value: n } = value.value ?? value;
       if (unit === 'px') return round(n);
+      // Tagged by `markUnitless` in compile.cjs: a bare number, which a browser drops.
+      if (unit === '__unitless') {
+        throw new CssUnsupported(
+          `${context}: a length needs a unit: '${round(n)}' is a bare number, which a browser drops. ` +
+            `Write ${round(n)}px, or 0 for none.`,
+        );
+      }
       if (unit === 'rem') return round(n * REM);
       // Relative to something known only after the cascade has run, or that changes while the app
       // is open. Marked here and resolved at match time, beside var().
@@ -94,7 +104,7 @@ function length(value, context) {
     default:
       if ('unit' in value) return length({ type: 'dimension', value }, context);
       throw new CssUnsupported(
-        `${context}: unsupported length ${JSON.stringify(value).slice(0, 60)}`,
+        `${context}: expected a length, and ${NOT_A_LENGTH[value?.type] ?? `'${value?.type}'`} is not one`,
       );
   }
 }
@@ -388,12 +398,38 @@ function tokenValue(parts, context) {
   attempt('length', () => length(part.value ?? part, context));
   attempt('color', () => color(part.value ?? part, context));
   attempt('keyword', () => keyword(part.value ?? part, context));
-  attempt('number', () => number(part.value ?? part, context));
+  // Not a length or a time: `13px` read as 13 scaled a box thirteen times, where a browser drops
+  // the declaration.
+  if (!hasUnit(part)) attempt('number', () => number(part.value ?? part, context));
   attempt('weight', () => weight(part.value ?? part));
   Object.assign(out, unitForms(part));
   if (part.value?.type === 'number') Object.assign(out, bareNumber(part.value.value));
+  const filter = functionForm(part, 'filter', FILTER_FUNCTIONS) ?? dropShadowWithTokens(part);
+  if (filter !== undefined) out.filter = filter;
+  const transform = functionForm(part, 'transform', TRANSFORM_FUNCTIONS);
+  if (transform !== undefined) out.transform = transform;
+  Object.assign(out, variantForm(out.keyword));
 
   return Object.keys(out).length ? out : null;
+}
+
+/**
+ * A font variant, as the one-entry list `fontVariant` takes: a slot of Tailwind's numeric ones.
+ * Required here rather than at the top: properties.cjs requires this module.
+ */
+const variantForm = (word) =>
+  require('./properties.cjs').FONT_VARIANTS.has(word) ? { fontVariant: [word] } : {};
+
+/**
+ * Whether a token is a length or a time, which are not numbers. An angle keeps its number: a hue
+ * is written `221deg` and read as the number of degrees by an `hsl()` of tokens.
+ */
+function hasUnit(part) {
+  if (['length', 'time', 'resolution'].includes(part?.type)) return true;
+  const inner = part?.value;
+  return (
+    inner?.type === 'dimension' || (typeof inner === 'object' && inner !== null && 'unit' in inner)
+  );
 }
 
 /**
@@ -458,8 +494,44 @@ function listValue(parts) {
   if (channels !== null) return { channels };
   const family = firstFamily(parts);
   if (family !== null) return { family };
-  const shadow = shadowForm(parts);
+  const shadow = shadowForm(parts) ?? shadowWithTokens(parts);
   return shadow === undefined ? null : { shadow };
+}
+
+/**
+ * A shadow token with another token for its colour, `0 0 0 2px var(--tw-ring-color, ...)`, as
+ * the list `box-shadow` would defer: each colour a marker the device fills in where the token is
+ * used, from the tokens in scope there. What `ring-2` beside `ring-blue-500` is.
+ */
+function shadowWithTokens(parts) {
+  try {
+    // Required here rather than at the top: colour-expression.cjs requires this module.
+    return require('./colour-expression.cjs').shadowsWithColourTokens(parts, 'token');
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * A `drop-shadow()` token with another token for its colour,
+ * `drop-shadow(0 4px 4px var(--tw-drop-shadow-color, ...))`, as the one-entry filter list it
+ * stands for, its colour settled on device as `shadowWithTokens` settles a shadow's. What
+ * `drop-shadow-lg` beside `drop-shadow-red-500` is.
+ */
+function dropShadowWithTokens(part) {
+  if (part?.type !== 'function' || part.value?.name !== 'drop-shadow') return undefined;
+  try {
+    const [shadow, ...more] = require('./colour-expression.cjs').shadowsWithColourTokens(
+      part.value.arguments,
+      'token',
+    );
+    // A drop shadow has no spread and is never inset.
+    if (more.length || shadow.spreadDistance !== 0 || shadow.inset !== false) return undefined;
+    const { offsetX, offsetY, blurRadius, color } = shadow;
+    return [{ dropShadow: { offsetX, offsetY, standardDeviation: blurRadius, color } }];
+  } catch {
+    return undefined;
+  }
 }
 
 const isNumber = (value) => value?.type === 'number';
@@ -513,6 +585,52 @@ function shadowForm(parts) {
   }
 }
 
+/** The filter functions, which a token can hold one of: Tailwind gives each its own slot. */
+const FILTER_FUNCTIONS = new Set([
+  'blur',
+  'brightness',
+  'contrast',
+  'drop-shadow',
+  'grayscale',
+  'hue-rotate',
+  'invert',
+  'opacity',
+  'saturate',
+  'sepia',
+]);
+
+/** The transform functions Tailwind gives a slot of their own: its 3D rotations and skews. */
+const TRANSFORM_FUNCTIONS = new Set(['rotateX', 'rotateY', 'rotateZ', 'skewX', 'skewY']);
+
+/**
+ * A token holding one function of a list property, as that property would compile it:
+ * `--tw-grayscale: grayscale(100%)` as a `filter`, `--tw-rotate-x: rotateX(12deg)` as a
+ * `transform`. Parsed as the property for the same reason `shadowForm` parses a shadow.
+ */
+function functionForm(part, property, names) {
+  if (part?.type !== 'function' || !names.has(part.value?.name)) return undefined;
+  const text = cssText([part]);
+  if (text === null) return undefined;
+  let parsed;
+  try {
+    require('lightningcss').transform({
+      filename: 'token.css',
+      code: Buffer.from(`a{${property}:${text}}`),
+      visitor: {
+        Declaration(declaration) {
+          if (declaration.property === property) parsed = declaration.value;
+        },
+      },
+    });
+    if (!parsed) return undefined;
+    const out = {};
+    require('./properties.cjs').translate(property, parsed, out);
+    return out[property === 'filter' ? 'filter' : 'transform'];
+  } catch {
+    return undefined;
+  }
+}
+
 /** A raw token list as CSS text again, or null if it holds anything this cannot write back. */
 function cssText(parts) {
   let text = '';
@@ -528,6 +646,11 @@ function cssText(parts) {
 function partText(part) {
   const value = part?.value;
   if (part?.type === 'length') return `${value.value}${value.unit}`;
+  if (part?.type === 'angle') return `${value.value}${value.type}`;
+  if (part?.type === 'function') {
+    const inner = cssText(value.arguments ?? []);
+    return inner === null ? null : `${value.name}(${inner})`;
+  }
   if (part?.type === 'color') {
     try {
       return color(value, 'token');
@@ -543,6 +666,8 @@ function partText(part) {
       return ',';
     case 'number':
       return String(value.value);
+    case 'percentage':
+      return `${value.value * 100}%`;
     case 'ident':
     case 'delim':
       return value.value;

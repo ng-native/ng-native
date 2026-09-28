@@ -274,6 +274,12 @@ function textShadow(parts, context) {
       `${context}: native has room for one text-shadow, not ${shadows.length}`,
     );
   }
+  if (shadows[0].__shadows) {
+    throw new CssUnsupported(
+      `${context}: a whole text-shadow in one token is three props on native, and a token is ` +
+        `read in one form: write its parts out, with tokens in them if they vary.`,
+    );
+  }
   const [{ offsetX, offsetY, blurRadius, color }] = shadows;
   const declarations = {};
   const deferred = [];
@@ -291,9 +297,16 @@ function textShadow(parts, context) {
 function flexGrowing(list, context) {
   const [only, ...rest] = list;
   if (rest.length || only?.length !== 1 || only[0].type !== 'var') return null;
+  // The shrink and the basis `flex: <number>` sets, written only once the token is known to be
+  // there: with no token the declaration is invalid on the web, and the element keeps its own.
+  const grow = reference(only[0], ['flexGrow'], 'number', context);
   return {
-    declarations: { flexShrink: 1, flexBasis: '0%' },
-    deferred: [reference(only[0], ['flexGrow'], 'number', context)],
+    declarations: {},
+    deferred: [
+      grow,
+      { ...grow, props: ['flexShrink'], whenSet: 1 },
+      { ...grow, props: ['flexBasis'], whenSet: '0%' },
+    ],
   };
 }
 

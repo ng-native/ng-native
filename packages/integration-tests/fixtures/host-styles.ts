@@ -16,11 +16,11 @@ import { View } from '../../components/src/view.ts';
       color: rgb(3, 3, 3);
     }
     :host-context(.dark) .label {
-      letter-spacing: 4;
+      letter-spacing: 4px;
     }
     /* For the kid's own elements: the parent's class="active" on the host must not pick it up. */
     .active {
-      padding: 9;
+      padding: 9px;
     }
   `,
 })

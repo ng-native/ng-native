@@ -12,45 +12,10 @@
  */
 import assert from 'node:assert/strict';
 import { before, describe, it } from 'node:test';
-import { execFileSync } from 'node:child_process';
-import { mkdtempSync, writeFileSync, readFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
 import { createRequire } from 'node:module';
-import { fileURLToPath } from 'node:url';
 import { Engine, type StyleSheet } from '@ng-native/fabric';
-import { createFakeFabric, type FakeFabric, type FakeFabricNode } from '@ng-native/testing';
-
-/** This package, so the CLI resolves `@ng-native/tailwind` the way an app would. */
-const HERE = fileURLToPath(new URL('.', import.meta.url));
-
-/**
- * Builds one preset with the real CLI and hands back its output.
- *
- * Run from this package, which has the workspace dependency installed - the CLI resolves imports
- * from the entry file's own directory, so a temp directory somewhere else cannot see
- * `@ng-native/tailwind` at all.
- */
-function build(preset: 'native' | 'web', classes: string): string {
-  const dir = HERE;
-  const entry = join(dir, `.preset-test-${preset}.css`);
-  const out = join(mkdtempSync(join(tmpdir(), 'preset-')), 'out.css');
-  writeFileSync(
-    entry,
-    [
-      `@import 'tailwindcss/theme.css';`,
-      `@import 'tailwindcss/utilities.css';`,
-      `@import '@ng-native/tailwind/${preset}.css';`,
-      `@source inline("${classes}");`,
-    ].join('\n'),
-  );
-  try {
-    execFileSync('npx', ['@tailwindcss/cli', '-i', entry, '-o', out], { cwd: dir, stdio: 'pipe' });
-    return readFileSync(out, 'utf8');
-  } finally {
-    execFileSync('rm', ['-f', entry]);
-  }
-}
+import { createFakeFabric } from '@ng-native/testing';
+import { build, committedProps } from './tailwind-cli.ts';
 
 const CLASSES =
   '{hover:,press:,hovered:,focus-visible:,ios:,web:,native:,dark:}bg-red-500 pb-safe h-hairline font-mono';
@@ -184,8 +149,8 @@ describe('the two Tailwind presets', () => {
     const sheet = compileCss(flattenTailwind(css), 'tailwind', {
       onUnsupported: (message: string) => refused.push(message),
     });
-    // `:checked` has nothing to read on native, and says so at build time. The CLI also scans
-    // this directory, so other utilities are refused beside it; none for a combinator.
+    // `:checked` has nothing to read on native, and says so at build time. None of them is
+    // refused for a combinator.
     assert.ok(refused.some((message) => /':checked' has no state on native to read/.test(message)));
     assert.deepEqual(
       refused.filter((message) => /combinator/.test(message)),
@@ -234,11 +199,3 @@ describe('the two Tailwind presets', () => {
     assert.equal(background(), colour('peer-data-[state=on]:bg-yellow-500'), 'peer-data-[...]:');
   });
 });
-
-/** The props a node was last committed with. */
-function committedProps(fabric: FakeFabric, node: unknown): Record<string, unknown> {
-  const all = (n: FakeFabricNode): FakeFabricNode[] => [n, ...n.children.flatMap(all)];
-  const found = fabric.committed.flatMap(all).find((n) => n.instanceHandle === node);
-  assert.ok(found, 'committed');
-  return found.props;
-}

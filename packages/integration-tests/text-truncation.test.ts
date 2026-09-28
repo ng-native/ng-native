@@ -59,6 +59,12 @@ describe('truncation written in CSS', () => {
   it('refuses a clamp that is not a whole number of lines', () => {
     assert.throws(() => declarationsOf('line-clamp: 1.5'), /line-clamp.*whole number of lines/);
     assert.throws(() => declarationsOf('line-clamp: 0'), /line-clamp.*whole number of lines/);
+    // A length is not a number of lines: `line-clamp-[13px]` was thirteen of them.
+    assert.throws(
+      () => declarationsOf('-webkit-line-clamp: 13px'),
+      /'-webkit-line-clamp' takes no length/,
+    );
+    assert.throws(() => declarationsOf('line-clamp: 30deg'), /'line-clamp' takes no angle/);
   });
 
   it('reads white-space: nowrap as one line, and normal as no limit', () => {

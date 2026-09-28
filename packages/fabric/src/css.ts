@@ -125,6 +125,12 @@ export interface TokenValue {
   readonly lineHeight?: { readonly __defer: DeferredDeclaration['compute'] };
   /** A whole shadow list, in the processed shape `boxShadow` takes. */
   readonly shadow?: readonly unknown[];
+  /** One filter function, as the one-entry list `filter` takes: a slot of Tailwind's filters. */
+  readonly filter?: readonly unknown[];
+  /** One transform function, as the one-entry list `transform` takes: a 3D rotation or skew. */
+  readonly transform?: readonly unknown[];
+  /** One font variant, as the one-entry list `fontVariant` takes: a numeric variant's slot. */
+  readonly fontVariant?: readonly string[];
   /** Bare colour channels, `13, 110, 253`, for an `rgba(var(--x), <alpha>)` to finish. */
   readonly channels?: readonly number[];
   /**
@@ -160,6 +166,9 @@ export type TokenKind =
   | 'family'
   | 'lineHeight'
   | 'shadow'
+  | 'filter'
+  | 'transform'
+  | 'fontVariant'
   | 'channels';
 
 /**
@@ -190,6 +199,11 @@ export interface DeferredDeclaration {
    */
   readonly alternatives?: readonly string[];
   readonly fallback?: unknown;
+  /**
+   * What to write when the reference resolves, whatever it resolves to: `flex: var(--grow)` sets a
+   * shrink of 1 and a basis of 0%, but only when there is a grow for them to go with.
+   */
+  readonly whenSet?: unknown;
   /**
    * For a colour built from `channels`, the token its alpha comes from:
    * `rgba(var(--bs-primary-rgb), var(--bs-bg-opacity))`. A written alpha is an `adjust` instead.
@@ -421,7 +435,24 @@ const INHERITED = new Set([
   'textTransform',
   'textDecorationLine',
   'writingDirection',
+  // CSS inherits a text shadow, and `user-select: auto` takes the parent's, so a card's
+  // `text-shadow-md` or `select-none` reaches the text inside it.
+  'textShadowOffset',
+  'textShadowRadius',
+  'textShadowColor',
+  'selectable',
 ]);
+
+/**
+ * `border-style: none`, which the compiler writes as a style native does not have. On the web it
+ * makes every border width 0, whichever rule set the width, so `border-hidden border-x` draws no
+ * side. Settled here, once the cascade has picked a style, and not sent on.
+ */
+function drawNoBorder(own: Record<string, unknown>): void {
+  delete own['borderStyle'];
+  for (const key of Object.keys(own)) if (/^border\w*Width$/.test(key)) own[key] = 0;
+  own['borderWidth'] = 0;
+}
 
 /**
  * Deterministic work counters for the matcher.
@@ -1037,6 +1068,7 @@ export class StyleResolver {
     if (result.deferred) {
       this.applyDeferred(result.deferred, own, tokens, parentInherited, result.important);
     }
+    if (own['borderStyle'] === 'none') drawNoBorder(own);
 
     const cache: StyleCache = {
       epoch,
@@ -1259,17 +1291,7 @@ export class StyleResolver {
     important: Record<string, unknown> | null,
   ): void {
     for (const declaration of settlingOrder(deferred)) {
-      let value =
-        declaration.within !== undefined
-          ? this.settledWithin(declaration.within, declaration, own, parentInherited, tokens)
-          : declaration.compute
-            ? this.computed(declaration, own, parentInherited)
-            : referenced(declaration, tokens);
-      // A token defined in `em` or a viewport unit cannot be settled where it is defined: a
-      // browser substitutes it and works it out where it is used, so the same here.
-      const pending = (value as { __defer?: DeferredDeclaration['compute'] } | null)?.__defer;
-      if (pending)
-        value = this.computed({ ...declaration, compute: pending }, own, parentInherited);
+      const value = this.settled(declaration, own, parentInherited, tokens);
       if (value === undefined) {
         if (this.onUndefinedToken) this.reportUndefined(declaration, tokens);
         continue;
@@ -1279,6 +1301,31 @@ export class StyleResolver {
         own[prop] = value;
       }
     }
+  }
+
+  /** One deferred declaration's value, from the tokens in scope and the node's own style. */
+  private settled(
+    declaration: DeferredDeclaration,
+    own: Record<string, unknown>,
+    parentInherited: Record<string, unknown>,
+    tokens: Readonly<Record<string, TokenValue>>,
+  ): unknown {
+    if (declaration.within !== undefined) {
+      return this.settledWithin(declaration.within, declaration, own, parentInherited, tokens);
+    }
+    if (declaration.compute) return this.computed(declaration, own, parentInherited);
+    const value = referenced(declaration, tokens);
+    if (declaration.whenSet !== undefined)
+      return value === undefined ? undefined : declaration.whenSet;
+    // A token defined in `em` or a viewport unit cannot be settled where it is defined: a
+    // browser substitutes it and works it out where it is used, so the same here.
+    const pending = (value as { __defer?: DeferredDeclaration['compute'] } | null)?.__defer;
+    if (pending) return this.computed({ ...declaration, compute: pending }, own, parentInherited);
+    // A token can hold a structured value with markers of its own: a shadow token whose colour
+    // is another token, as Tailwind's rings are.
+    return typeof value === 'object' && value !== null
+      ? this.settledWithin(value, declaration, own, parentInherited, tokens)
+      : value;
   }
 
   /** A reference with nothing defined for it and nothing to fall back to. */
@@ -1323,6 +1370,8 @@ export class StyleResolver {
     const fill = (part: unknown) => this.filledIn(part, declaration, own, parentInherited, tokens);
     if (Array.isArray(value)) return this.filledList(value, fill, tokens);
     const marked = settledMarker(value, tokens);
+    // `currentcolor` is the colour in scope, which only the node knows: Tailwind's ring default.
+    if (marked === 'currentcolor') return own['color'] ?? parentInherited['color'] ?? 'black';
     if (marked !== NOT_A_MARKER) return marked ?? UNSETTLED;
     const pending = (value as { __defer?: DeferredDeclaration['compute'] }).__defer;
     if (pending) return this.computed({ ...declaration, compute: pending }, own, parentInherited);
@@ -1335,7 +1384,10 @@ export class StyleResolver {
     return out;
   }
 
-  /** A list's parts filled in, a whole shadow token standing for however many shadows it holds. */
+  /**
+   * A list's parts filled in, a whole shadow or filter token standing for however many entries it
+   * holds: none, for an empty filter slot.
+   */
   private filledList(
     value: readonly unknown[],
     fill: (part: unknown) => unknown,
@@ -1343,14 +1395,14 @@ export class StyleResolver {
   ): unknown {
     const parts: unknown[] = [];
     for (const part of value) {
-      const shadows = (part as { __shadows?: ShadowsMarker } | null)?.__shadows;
-      if (!shadows) {
+      const slot = slotOf(part);
+      if (!slot) {
         const filled = fill(part);
         if (filled === UNSETTLED) return UNSETTLED;
         parts.push(filled);
         continue;
       }
-      const filled = fill(formOf(tokens[shadows.reference], 'shadow') ?? shadows.fallback);
+      const filled = fill(formOf(tokens[slot.marker.reference], slot.kind) ?? slot.marker.fallback);
       if (filled === UNSETTLED || !Array.isArray(filled)) return UNSETTLED;
       parts.push(...filled);
     }
@@ -1667,10 +1719,47 @@ function resolveCalc(
   marker: CalcMarker,
   tokens: Readonly<Record<string, TokenValue>>,
 ): number | string | undefined {
+  const percentage = wholePercentage(marker, tokens);
+  if (percentage !== undefined) return percentage;
+  if (bareNumberAsLength(marker, tokens)) return undefined;
   const value = calculated(marker.expression, marker.kind, tokens);
   if (value === undefined || !Number.isFinite(value)) return undefined;
   const rounded = Math.round(value * 1000) / 1000;
   return marker.kind === 'angle' ? `${rounded}deg` : rounded;
+}
+
+/**
+ * Whether a length is one token holding a bare number other than 0: `--tw-translate-x: 3`, from
+ * `translate-x-[3]`, which a browser drops. Inside arithmetic a bare number is a factor, and fine.
+ */
+function bareNumberAsLength(
+  marker: CalcMarker,
+  tokens: Readonly<Record<string, TokenValue>>,
+): boolean {
+  if (marker.kind !== 'length' || typeof marker.expression !== 'object') return false;
+  if (Array.isArray(marker.expression)) return false;
+  const token = tokens[(marker.expression as { reference: string }).reference];
+  return (
+    token !== undefined &&
+    token.length === undefined &&
+    token.number !== undefined &&
+    token.number !== 0
+  );
+}
+
+/**
+ * A length that is one token holding a percentage, `translate-x-1/2`'s 50%, passed on as it is:
+ * a share of a box nobody has laid out yet can be used, but not added to or scaled here.
+ */
+function wholePercentage(
+  marker: CalcMarker,
+  tokens: Readonly<Record<string, TokenValue>>,
+): string | undefined {
+  if (marker.kind !== 'length' || typeof marker.expression !== 'object') return undefined;
+  if (Array.isArray(marker.expression)) return undefined;
+  const leaf = marker.expression as { reference: string };
+  const value = formOf(tokens[leaf.reference], 'length');
+  return typeof value === 'string' && value.endsWith('%') ? value : undefined;
 }
 
 function calculated(
@@ -1712,13 +1801,35 @@ function tokenNumber(token: TokenValue | undefined, kind: CalcMarker['kind']): n
   if (!token) return undefined;
   const own = kind === 'number' ? undefined : FORM_OF_KIND[kind](token);
   if (own !== undefined) return typeof own === 'number' ? own : undefined;
+  // An angle is a number of degrees to a hue, and neither a length nor a factor: `30deg` as a
+  // translate moved a box thirty points, and as a scale made it thirty times the size, where a
+  // browser drops the declaration.
+  if (token.angle !== undefined) return undefined;
   return token.number;
 }
 
-/** A whole shadow token in a shadow list, and the shadows to use when it is not set. */
+/** A whole shadow, filter or transform token in a list, and the entries to use when it is unset. */
 interface ShadowsMarker {
   readonly reference: string;
   readonly fallback?: readonly unknown[];
+}
+
+/** The slot a list entry can be instead of an entry: one per list property that has them. */
+const SLOT_KINDS = {
+  __shadows: 'shadow',
+  __filters: 'filter',
+  __transforms: 'transform',
+  __variants: 'fontVariant',
+} as const satisfies Record<string, TokenKind>;
+
+/** The slot a list entry is, and the form of token that fills it; undefined for an entry. */
+function slotOf(part: unknown): { marker: ShadowsMarker; kind: TokenKind } | undefined {
+  if (part === null || typeof part !== 'object') return undefined;
+  for (const [key, kind] of Object.entries(SLOT_KINDS)) {
+    const marker = (part as Record<string, ShadowsMarker | undefined>)[key];
+    if (marker) return { marker, kind };
+  }
+  return undefined;
 }
 
 function resolveLength(
@@ -1744,6 +1855,9 @@ const NOT_A_MARKER = Symbol('not a marker');
 function settledMarker(value: object, tokens: Readonly<Record<string, TokenValue>>): unknown {
   const colour = colourMarker(value);
   if (colour) return resolveColour(colour, tokens);
+  // Whether a shadow is inset, from a token that is the word or nothing: `ring-inset`.
+  const inset = (value as { __inset?: { reference: string } }).__inset;
+  if (inset) return formOf(tokens[inset.reference], 'keyword') === 'inset';
   const token = (value as { __length?: LengthMarker }).__length;
   if (token) return resolveLength(token, tokens);
   const sum = (value as { __calc?: CalcMarker }).__calc;

@@ -166,3 +166,30 @@ describe('opting out of an inherited line height', () => {
     assert.equal(s.painted().child['lineHeight'], 16);
   });
 });
+
+describe('the text properties a view hands down', () => {
+  // CSS inherits these, so `text-shadow-md` or `select-none` on a card reaches every text in it.
+  // Native reads them on the text only, and a view that wore them did nothing for its contents.
+  function childOf(css: string, classes: string): Record<string, unknown> {
+    const fabric = createFakeFabric();
+    const engine = new Engine(fabric, 1, { globalStyles: compileCss(css) as StyleSheet });
+    const parent = engine.createElement('view');
+    const child = engine.createElement('text');
+    engine.setClasses(parent, classes);
+    engine.appendChild(engine.root, parent);
+    engine.appendChild(parent, child);
+    engine.commit();
+    return flatten(fabric.committed)[0]!.children[0]!.props;
+  }
+
+  it('hands a text shadow down to the text inside', () => {
+    const child = childOf('.glow { text-shadow: 0 1px 2px rgb(0, 0, 0) }', 'glow');
+    assert.deepEqual(child['textShadowOffset'], { width: 0, height: 1 });
+    assert.equal(child['textShadowRadius'], 2);
+    assert.equal(child['textShadowColor'], 'rgb(0, 0, 0)');
+  });
+
+  it("hands selectability down, as user-select: auto takes the parent's", () => {
+    assert.equal(childOf('.plain { user-select: none }', 'plain')['selectable'], false);
+  });
+});

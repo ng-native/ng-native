@@ -291,7 +291,7 @@ function shadows(value: string) {
         .map(parseFloat);
       return { x, y, blur, spread, color, inset: /\binset\b/.test(one) };
     })
-    .filter((shadow) => !/,\s*0\)$/.test(shadow.color));
+    .filter((shadow) => !/^~?rgba\(.*,\s*0\)$/.test(shadow.color));
 }
 
 function sameShadows(browser: string, value: unknown): boolean {
@@ -386,7 +386,6 @@ const DELIBERATE: Record<string, Partial<Record<CorpusProperty, string>>> = {
     'padding-left': TWO_VARS,
     display: FLEX_ONLY,
   },
-  'bulma .box': { 'box-shadow': HSL_TOKENS },
   'bulma .is-size-3': { 'line-height': BODY_LINE_HEIGHT },
   'bulma .tag': { 'background-color': HSL_TOKENS, display: FLEX_ONLY },
   'pico .grid': { display: FLEX_ONLY },

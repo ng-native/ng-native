@@ -307,9 +307,18 @@ export function tween(from: unknown, to: unknown, t: number): unknown {
 function atRest(shape: readonly unknown[]): unknown[] {
   return shape.map((entry) => {
     const name = operation(entry);
-    return name !== null && name in IDENTITY ? { [name]: IDENTITY[name] } : entry;
+    if (name === null || !(name in IDENTITY)) return entry;
+    // At rest in the unit it is written in, so it can be eased toward: `-25%` from `0%`, and
+    // `1turn` from `0turn`. A bare 0 beside a percentage is a pair `tween` cannot blend.
+    const written = (entry as Record<string, unknown>)[name];
+    const unit = typeof written === 'string' ? UNIT.exec(written)?.[2] : undefined;
+    return { [name]: unit ? `0${unit}` : IDENTITY[name] };
   });
 }
+
+/** A transform list with something in it; `none` is an empty one, and means the same as none. */
+const hasOperations = (value: unknown): value is readonly unknown[] =>
+  Array.isArray(value) && value.length > 0;
 
 /** The name of a single-key transform operation, or null for anything else. */
 function operation(entry: unknown): string | null {
@@ -330,11 +339,11 @@ function operation(entry: unknown): string | null {
  * so whichever side is absent is read as each operation at rest, which is CSS's `none`.
  */
 function interpolateTransform(from: unknown, to: unknown, t: number): unknown[] | null {
-  const shape = Array.isArray(to) ? to : Array.isArray(from) ? from : null;
+  const shape = hasOperations(to) ? to : hasOperations(from) ? from : null;
   if (!shape) return null;
 
-  const start = Array.isArray(from) ? from : atRest(shape);
-  const end = Array.isArray(to) ? to : atRest(shape);
+  const start = hasOperations(from) ? from : atRest(shape);
+  const end = hasOperations(to) ? to : atRest(shape);
   if (start.length !== end.length) return null;
 
   const out: unknown[] = [];
@@ -511,6 +520,8 @@ export interface AnimationSpec {
 export interface Keyframe {
   readonly offset: number;
   readonly declarations: Record<string, unknown>;
+  /** The `animation-timing-function` written in this keyframe, easing it to the next. */
+  readonly easing?: readonly number[];
 }
 
 export interface RunningAnimation {
@@ -518,7 +529,7 @@ export interface RunningAnimation {
   /** When it was paused, while it is; the clock it is sampled at stands still there. */
   pausedAt?: number;
   /** Per property, the offsets that mention it, in order. Built once when the animation starts. */
-  readonly tracks: Map<string, { offset: number; value: unknown }[]>;
+  readonly tracks: Map<string, TrackPoint[]>;
   start: number;
   /** What the properties read right now. Empty once a finished animation stops filling. */
   values: Record<string, unknown>;
@@ -535,13 +546,14 @@ export interface RunningAnimation {
 export function tracksOf(
   frames: readonly Keyframe[],
   resting: Record<string, unknown>,
-): Map<string, { offset: number; value: unknown }[]> {
-  const tracks = new Map<string, { offset: number; value: unknown }[]>();
+): Map<string, TrackPoint[]> {
+  const tracks = new Map<string, TrackPoint[]>();
 
   for (const frame of frames) {
     for (const property of Object.keys(frame.declarations)) {
       const track = tracks.get(property) ?? [];
-      track.push({ offset: frame.offset, value: frame.declarations[property] });
+      const point = { offset: frame.offset, value: frame.declarations[property] };
+      track.push(frame.easing ? { ...point, easing: frame.easing } : point);
       tracks.set(property, track);
     }
   }
@@ -633,8 +645,18 @@ function backwards(direction: AnimationSpec['direction'], iteration: number): bo
   }
 }
 
+/**
+ * One property's value at one keyframe, and the curve a keyframe of its own eases it on to the
+ * next one by, where it has one.
+ */
+export interface TrackPoint {
+  readonly offset: number;
+  readonly value: unknown;
+  readonly easing?: readonly number[];
+}
+
 export function at(
-  track: readonly { offset: number; value: unknown }[],
+  track: readonly TrackPoint[],
   local: number,
   easing: readonly number[],
 ): unknown {
@@ -645,7 +667,12 @@ export function at(
   const to = track[index + 1] ?? from;
   const span = to.offset - from.offset;
   const t = span <= 0 ? 1 : (local - from.offset) / span;
-  return interpolate(from.value, to.value, bezier(easing, Math.min(1, Math.max(0, t))));
+  // A keyframe's own timing function eases the stretch it starts, over the animation's.
+  return interpolate(
+    from.value,
+    to.value,
+    bezier(from.easing ?? easing, Math.min(1, Math.max(0, t))),
+  );
 }
 
 /**

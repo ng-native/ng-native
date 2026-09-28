@@ -28,6 +28,7 @@ const {
   finishTransition,
   animationTimeWithTokens,
   finishAnimation,
+  frameEasing,
   finishBox,
   unsupported,
   kindOf,
@@ -398,6 +399,35 @@ function gradientLayers(parts) {
 }
 
 /**
+ * The list properties that can be written as slots of tokens, the marker each slot is, and the
+ * prop the list lands in.
+ */
+const SLOTTED = {
+  filter: { marker: '__filters', prop: 'filter' },
+  transform: { marker: '__transforms', prop: 'transform' },
+  'font-variant-numeric': { marker: '__variants', prop: 'fontVariant' },
+};
+
+/**
+ * One slot of a list that is all tokens, `var(--tw-blur,)`: a token holding a function, or
+ * nothing. Tailwind gives each filter utility, and each 3D rotation and skew, a slot of its own
+ * and has every one of them read all the slots, so `blur-sm grayscale` is one list made of two
+ * classes, spliced on device.
+ */
+function listSlot(part, marker, context) {
+  const fallback = part.value?.fallback;
+  if (fallback && meaningful(fallback).length) {
+    throw new CssUnsupported(
+      `${context}: a slot's fallback in a list of tokens can only be empty, as in 'var(--x,)'. ` +
+        `Put the function in the token instead.`,
+    );
+  }
+  return {
+    [marker]: { reference: part.value?.name?.ident, ...(fallback ? { fallback: [] } : {}) },
+  };
+}
+
+/**
  * A declaration whose value contains `var()`, recorded for resolution at match time.
  *
  * The reference and the fallback are settled here, along with which RN property the result lands
@@ -437,6 +467,12 @@ function deferVar(value, context) {
   );
   if (property === 'box-shadow' && !(written.length === 1 && written[0].type === 'var')) {
     return { props: ['boxShadow'], within: shadowsWithColourTokens(parts, context) };
+  }
+
+  if (SLOTTED[property] && written.every((part) => part.type === 'var')) {
+    const { marker, prop } = SLOTTED[property];
+    const within = written.map((part) => listSlot(part, marker, context));
+    return { props: [prop], within };
   }
 
   const channels = parts.length === 1 ? deferChannels(parts[0], property, context) : null;
@@ -928,6 +964,35 @@ function ancestorArgument(argument) {
   return rest.some((piece) => piece.type === 'combinator') ? null : rest;
 }
 
+/**
+ * A selector as the selectors it is the union of, wherever `:is()` or `:where()` has an ancestor
+ * test among other alternatives: `.x:where(.dark, .dark *)` is `.x:where(.dark)` or
+ * `.x:where(.dark *)`.
+ *
+ * An ancestor test is a requirement of the whole compound, not one alternative of a list, so kept
+ * in the list it was required alongside the others: an element that was dark and inside something
+ * dark. That is Tailwind's own class-based dark mode, and it matched nothing, silently. Split, each
+ * alternative is a rule of its own and any one of them matching is a match, which is what a list is.
+ */
+function alternatives(parts) {
+  let variants = [[]];
+  for (const part of parts) {
+    const options = partAlternatives(part);
+    variants = variants.flatMap((variant) => options.map((option) => [...variant, ...option]));
+  }
+  return variants;
+}
+
+/** One part of a selector as the parts it may be instead: itself, or one per alternative. */
+function partAlternatives(part) {
+  const functional = part.type === 'pseudo-class' && (part.kind === 'is' || part.kind === 'where');
+  if (!functional || !part.selectors) return [[part]];
+  // An argument can hold alternatives of its own, which are more alternatives of this one.
+  const args = part.selectors.flatMap(alternatives);
+  if (args.length < 2 || !args.some(ancestorArgument)) return [[{ ...part, selectors: args }]];
+  return args.map((argument) => [{ ...part, selectors: [argument] }]);
+}
+
 /** The two combinators that relate a node to its siblings rather than its ancestors. */
 const SIBLING = new Set(['next-sibling', 'later-sibling']);
 
@@ -1079,6 +1144,9 @@ function selector(parts, context) {
 function tokenKeyword(tokens) {
   if (!Array.isArray(tokens) || tokens.length !== 1) return null;
   const token = tokens[0];
+  // A plain token only: a length or an angle holds its number here too, and read as one it lost
+  // its unit, so `line-clamp: 13px` was thirteen lines.
+  if (token?.type !== 'token') return null;
   const value = token?.value?.value ?? token?.value;
   return typeof value === 'string' || typeof value === 'number' ? value : null;
 }
@@ -1108,9 +1176,16 @@ function addCustomColor(name, parts, out, deferred, context) {
   return true;
 }
 
+/** The clamps, which lightningcss does not parse and which take a number of lines. */
+const LINE_CLAMP = new Set(['line-clamp', '-webkit-line-clamp']);
+
+/** Lengths CSS gives no percentage to, which lightningcss does not know and so cannot refuse. */
+const NO_PERCENT = new Set(['outline-offset']);
+
 /**
- * An older spelling lightningcss does not know, `grid-column-gap` for `column-gap`, which arrives
- * as raw tokens. Read as a token is, so a unit is not lost on the way.
+ * A length lightningcss does not know: an older spelling, `grid-column-gap` for `column-gap`, or
+ * a property it has no parser for, `outline-offset`. It arrives as raw tokens, and is read as a
+ * token is, so a unit is not lost on the way: read as a word, 1.25rem was 1.25.
  */
 function addAliased(name, parts, out, deferred, context) {
   const value = tokenValue(parts, context);
@@ -1119,7 +1194,19 @@ function addAliased(name, parts, out, deferred, context) {
     return;
   }
   if (value?.length === undefined) throw unsupported(name, context);
+  if (typeof value.length === 'string' && value.length.endsWith('%') && NO_PERCENT.has(name)) {
+    throw new CssUnsupported(`${context}: '${name}' takes a length, not a percentage`);
+  }
   for (const prop of propsFor(name)) out[prop] = value.length;
+}
+
+/** A `--x` definition's value, in every form it can be read as. */
+function customToken(name, parts, context) {
+  const value = deferHslToken(parts) ?? tokenValue(parts, `${context} (${name})`);
+  if (value === null) {
+    throw new CssUnsupported(`${context}: '${name}' has a value native cannot express in any form`);
+  }
+  return value;
 }
 
 /** A `--x` definition, or a property lightningcss does not know but React Native supports. */
@@ -1128,24 +1215,39 @@ function addCustom(declaration, out, tokens, deferred, context) {
   const parts = declaration.value?.value;
 
   if (name.startsWith('--')) {
-    const value = deferHslToken(parts) ?? tokenValue(parts, `${context} (${name})`);
-    if (value === null) {
-      throw new CssUnsupported(
-        `${context}: '${name}' has a value native cannot express in any form`,
-      );
-    }
-    tokens[name] = value;
+    tokens[name] = customToken(name, parts, context);
     return;
   }
 
   if (kindOf(name) === 'color' && addCustomColor(name, parts, out, deferred, context)) return;
 
-  if (ALIASES[name]) {
+  if (ALIASES[name] || kindOf(name) === 'length') {
     addAliased(name, parts, out, deferred, context);
     return;
   }
 
+  // `font-variant-numeric: var(--tw-ordinal,) ...`: a list of slots, which lightningcss hands over
+  // as a property it does not know.
+  if (SLOTTED[name] && parts?.some((part) => part.type === 'var')) {
+    deferred.push(deferVar({ propertyId: { property: name }, value: parts }, context));
+    return;
+  }
+
+  addCustomWord(name, parts, out, context);
+}
+
+/**
+ * A property lightningcss does not know that takes a word or a number: `line-clamp: 3`, or
+ * `font-variant-numeric: oldstyle-nums proportional-nums`.
+ */
+function addCustomWord(name, parts, out, context) {
   const word = tokenKeyword(parts) ?? tokenWords(parts);
+  // A clamp given a length or an angle: the value is wrong, not the property, and the fallback
+  // below would call `-webkit-line-clamp` a vendor property native does not read, which it does.
+  const kind = parts?.length === 1 ? parts[0]?.type : undefined;
+  if (word === null && LINE_CLAMP.has(name) && ['length', 'angle', 'time'].includes(kind)) {
+    throw new CssUnsupported(`${context}: '${name}' takes no ${kind} here`);
+  }
   if (word === null) throw unsupported(name, context);
   translate(name, word, out, context);
 }
@@ -1195,6 +1297,9 @@ function unparsedValue(value, out, context) {
         `implement. Write the value it stands for.`,
     );
   }
+  // A bare number `markUnitless` tagged, which lightningcss hands over as an unknown dimension.
+  const bare = parts.find((part) => part.value?.unit === '__unitless');
+  if (bare) length({ type: 'dimension', value: bare.value }, context);
   const text = parts.map((part) => part.value?.value ?? part.value?.name ?? part.type).join(' ');
   throw new CssUnsupported(`${context}: '${property}: ${text}' is not a value native can take`);
 }
@@ -1302,7 +1407,9 @@ function addDeclaration(declaration, out, tokens, deferred, context) {
 /** Whether a structured value has a length in it that only the device can settle. */
 function holdsMarker(value) {
   if (value === null || typeof value !== 'object') return false;
-  if (value.__defer || value.__colour || value.__length || value.__shadows) return true;
+  if (value.__defer || value.__colour || value.__length || value.__shadows || value.__inset) {
+    return true;
+  }
   return Object.values(value).some(holdsMarker);
 }
 
@@ -1397,7 +1504,43 @@ function assertDrawn(out, deferred, from, platforms, context) {
 
   if (settled) delete out.filter;
   for (const one of pending) deferred.splice(deferred.indexOf(one), 1);
-  throw new CssUnsupported(
+  throw undrawn(name, context);
+}
+
+/**
+ * The same for a filter token, refused where it is set: `blur-sm` sets `--tw-blur` and has every
+ * filter slot read on device, so this is the last place that knows which platforms it is for.
+ */
+function assertTokenDrawn(tokens, name, platforms, context) {
+  if (!platforms.includes('ios') || typeof name !== 'string') return;
+  const fn = undrawnOnIos(tokens[name]?.filter);
+  if (!fn) return;
+  delete tokens[name];
+  throw undrawn(fn, context);
+}
+
+/**
+ * Refuse a font variant list whose rule sets one of its slots to a variant native has no way to
+ * ask a font for: `slashed-zero` sets `--tw-slashed-zero` and reads it in the same rule. Checked
+ * there, since on device the slot would be left out without a word.
+ */
+function assertVariantsKnown(tokens, deferred, from) {
+  for (const one of deferred.slice(from)) {
+    if (!one.props?.includes('fontVariant') || !Array.isArray(one.within)) continue;
+    for (const slot of one.within) {
+      const token = tokens[slot?.__variants?.reference];
+      if (!token || token.fontVariant) continue;
+      deferred.splice(deferred.indexOf(one), 1);
+      delete tokens[slot.__variants.reference];
+      throw new CssUnsupported(
+        `font-variant-numeric: '${token.keyword}' is not a font variant native can ask a font for.`,
+      );
+    }
+  }
+}
+
+function undrawn(name, context) {
+  return new CssUnsupported(
     `${context}: filter: ${name}() is not drawn on iOS. React Native draws brightness() and ` +
       `opacity() on both platforms and every other filter function on Android only, so this ` +
       `would leave the view unchanged on an iPhone. Scope the rule to Android with a ` +
@@ -1459,6 +1602,8 @@ function compileCss(source, context = 'styles', options = {}) {
     try {
       add(declaration, out, tokens, deferred, context);
       assertDrawn(out, deferred, before, platforms, context);
+      assertTokenDrawn(tokens, declaration.value?.name, platforms, context);
+      assertVariantsKnown(tokens, deferred, before);
     } catch (error) {
       if (!onUnsupported || !(error instanceof CssUnsupported)) throw error;
       // A var() arrives as `unparsed`, which names the parser's shape rather than the property.
@@ -1542,11 +1687,12 @@ function compileCss(source, context = 'styles', options = {}) {
       const built = buildRule(rule, platforms, context);
       if (!built) continue;
       for (const parts of group) {
-        rules.push({
-          ...selector(parts, context),
-          order: orderOf(parts),
-          ...built,
-        });
+        // One rule per alternative an ancestor test is among; each as specific as the selector
+        // written, which is what `:is()` makes all of them.
+        const { specificity } = selector(parts, context);
+        for (const one of alternatives(parts)) {
+          rules.push({ ...selector(one, context), specificity, order: orderOf(parts), ...built });
+        }
       }
     }
   }
@@ -1620,9 +1766,11 @@ function compileCss(source, context = 'styles', options = {}) {
       declare(declaration, declarations, {}, [], context, addFrameDeclaration, targets);
     }
     finishBox(declarations, context);
+    const easing = frameEasing(declarations, context);
     return (frame.selectors ?? []).map((selector) => ({
       offset: keyframeOffset(selector),
       declarations,
+      ...(easing ? { easing } : {}),
     }));
   }
 
@@ -1630,7 +1778,7 @@ function compileCss(source, context = 'styles', options = {}) {
   try {
     lightning.transform({
       filename: `${context}.css`,
-      code: Buffer.from(flattened.code),
+      code: Buffer.from(markUnitless(flattened.code)),
       visitor: {
         Rule(rule) {
           return guarded(() => compileRule(rule), locationOf(rule));
@@ -1844,6 +1992,75 @@ function positionTests(part) {
  *
  * Skipped unless the sheet actually nests, because it is a second parse of every stylesheet.
  */
+/**
+ * Each bare number in a length's value tagged with a unit of its own, so it reaches the compiler
+ * as the mistake it is.
+ *
+ * A browser drops `margin-top: 3`: only 0 may be written without a unit. lightningcss reads it as
+ * 3px, so Tailwind's `m-[3]` was a margin on a phone and nothing on the web, and the compiler had
+ * no way to tell. Tagged `3__unitless`, it arrives as a dimension no length has, and is refused
+ * as one that needs a unit. Only at the top level of the value: a number inside `calc()` is a
+ * factor, and custom properties and `line-height` take bare numbers.
+ */
+function markUnitless(code) {
+  return code.replace(
+    /([{;]\s*)([a-z][a-z-]*)(\s*:)([^;{}]*)/g,
+    (whole, before, name, colon, value) =>
+      takesUnits(name) ? `${before}${name}${colon}${tagBareNumbers(value)}` : whole,
+  );
+}
+
+/** Whether a property's bare numbers other than 0 are an error: every length but line-height. */
+const takesUnits = (name) =>
+  name !== 'line-height' && (kindOf(name) === 'length' || UNIT_SHORTHANDS.has(name));
+
+/** Lengths `kindOf` does not name, whose values are one or more lengths. */
+const UNIT_SHORTHANDS = new Set([
+  'translate',
+  'gap',
+  'inset',
+  'inset-inline',
+  'inset-block',
+  'margin-inline',
+  'margin-block',
+  'padding-inline',
+  'padding-block',
+  'border-width',
+  'border-inline-width',
+  'border-block-width',
+  'border-radius',
+  'transform-origin',
+  'background-size',
+  'background-position',
+  'background-position-x',
+  'background-position-y',
+]);
+
+/** A value's top-level bare numbers, other than 0, with the unit that says they had none. */
+function tagBareNumbers(value) {
+  let depth = 0;
+  let out = '';
+  // A calc() of numbers alone is a number too: `-inset-[3]` is `calc(3 * -1)`.
+  const numeric = value.replace(/calc\(([-+*/\d.\s]+)\)/gi, (whole, inside) => {
+    const result = arithmetic(inside);
+    return result === null ? whole : String(result);
+  });
+  for (const token of numeric.split(/(\s+|,|\(|\))/)) {
+    if (token === '(') depth++;
+    else if (token === ')') depth--;
+    const bare = depth === 0 && /^[+-]?(\d+\.?\d*|\.\d+)$/.test(token) && Number(token) !== 0;
+    out += bare ? `${token}__unitless` : token;
+  }
+  return out;
+}
+
+/** Plain-number arithmetic: `3 * -1`. Null for anything with more than numbers in it. */
+function arithmetic(text) {
+  if (!/^[-+*/\d.\s]+$/.test(text)) return null;
+  const result = Function(`"use strict"; return (${text});`)();
+  return Number.isFinite(result) ? Math.round(result * 1000) / 1000 : null;
+}
+
 function flatten(source, context) {
   const unchanged = { code: source, lineOf: (line) => line };
   if (!source.includes('&') && !NESTED_BLOCK.test(source)) return unchanged;
@@ -1934,4 +2151,4 @@ const NESTED_BLOCK = /\{[^{}]*\{/;
 const INDIVIDUAL_TRANSFORM = /([{;\s])(translate|rotate|scale)(\s*:)/g;
 const HIDDEN_TRANSFORM = '--ng-native-individual-';
 
-module.exports = { compileCss, CssUnsupported, deferHslToken, linear, opacityOf };
+module.exports = { compileCss, CssUnsupported, deferHslToken, linear, markUnitless, opacityOf };

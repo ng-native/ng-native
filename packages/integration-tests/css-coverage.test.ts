@@ -246,6 +246,44 @@ describe('filter, per platform', () => {
     assert.equal(dropped.length, 1);
   });
 
+  it('reads a filter list made of tokens, one slot each, for the device to fill', () => {
+    // Tailwind's shape: every filter utility sets its own slot and reads all of them, so
+    // `blur-sm grayscale` is one list made of two classes.
+    const sheet = compileCss(
+      '.platform-android .g { --g: grayscale(1); filter: var(--b,) var(--g,) }',
+      'test',
+    );
+    const [rule] = sheet.rules;
+    assert.deepEqual(rule.tokens, { '--g': { filter: [{ grayscale: 1 }] } });
+    assert.deepEqual(rule.deferred, [
+      {
+        props: ['filter'],
+        within: [
+          { __filters: { reference: '--b', fallback: [] } },
+          { __filters: { reference: '--g', fallback: [] } },
+        ],
+      },
+    ]);
+  });
+
+  it('refuses a filter token iOS does not draw where it sets it, and keeps it for Android', () => {
+    const dropped: string[] = [];
+    const sheet = compileCss(
+      '.g { --g: grayscale(1) } .platform-android .h { --g: grayscale(1) } .b { --b: brightness(0.5) }',
+      'test',
+      { onUnsupported: (message: string) => dropped.push(message) },
+    );
+    assert.equal(dropped.length, 1);
+    assert.match(dropped[0]!, /dropped '--g'.*grayscale\(\) is not drawn on iOS/);
+    const tokensOf = (name: string) =>
+      sheet.rules.find((rule: { compounds: { classes: string[] }[] }) =>
+        rule.compounds.some((c) => c.classes.includes(name)),
+      )?.tokens;
+    assert.equal(tokensOf('g'), undefined);
+    assert.deepEqual(tokensOf('h'), { '--g': { filter: [{ grayscale: 1 }] } });
+    assert.deepEqual(tokensOf('b')!['--b']!.filter, [{ brightness: 0.5 }]);
+  });
+
   it('checks a filter whose length is only known on device', () => {
     const dropped: string[] = [];
     const sheet = compileCss('.a { filter: blur(0.5em) }', 'test', {
@@ -346,9 +384,15 @@ describe('names Fabric actually reads', () => {
     assert.deepEqual(declarationsOf('border-inline-end-color: red'), {
       borderEndColor: 'rgb(255, 0, 0)',
     });
+    // One colour for both is left and right, which a later `border-left-color` can override:
+    // Yoga's start and end outrank left and right whatever the order.
     assert.deepEqual(declarationsOf('border-inline-color: red'), {
+      borderLeftColor: 'rgb(255, 0, 0)',
+      borderRightColor: 'rgb(255, 0, 0)',
+    });
+    assert.deepEqual(declarationsOf('border-inline-color: red blue'), {
       borderStartColor: 'rgb(255, 0, 0)',
-      borderEndColor: 'rgb(255, 0, 0)',
+      borderEndColor: 'rgb(0, 0, 255)',
     });
   });
 
@@ -356,7 +400,11 @@ describe('names Fabric actually reads', () => {
     assert.deepEqual(declarationsOf('border-inline-start-width: 2px'), { borderStartWidth: 2 });
     assert.deepEqual(declarationsOf('border-inline-end-width: 2px'), { borderEndWidth: 2 });
     assert.deepEqual(declarationsOf('border-inline-width: 3px'), {
-      borderStartWidth: 3,
+      borderLeftWidth: 3,
+      borderRightWidth: 3,
+    });
+    assert.deepEqual(declarationsOf('border-inline-width: 1px 3px'), {
+      borderStartWidth: 1,
       borderEndWidth: 3,
     });
   });
@@ -411,7 +459,9 @@ describe('the alignment keywords Yoga reads', () => {
     // lightningcss hands 'baseline' over as the 'first' baseline position.
     assert.deepEqual(declarationsOf('align-items: baseline'), { alignItems: 'baseline' });
     assert.deepEqual(declarationsOf('align-self: first baseline'), { alignSelf: 'baseline' });
-    assert.deepEqual(declarationsOf('align-content: baseline'), { alignContent: 'baseline' });
+    // Neither engine has a baseline for the lines of a wrapping box: CSS falls back to start, and
+    // React Native does not take the word at all, so it is the start it comes to.
+    assert.deepEqual(declarationsOf('align-content: baseline'), { alignContent: 'flex-start' });
     assert.throws(() => declarationsOf('align-items: last baseline'), /last baseline/);
   });
 
@@ -462,9 +512,11 @@ describe('the line styles native can draw', () => {
   });
 
   it('reads a style of none as no line, as the shorthands already did', () => {
-    // CSS computes the width of a line styled none as 0. Native has no none style to send.
-    assert.deepEqual(declarationsOf('border-style: none'), everySide('Width', 0));
-    assert.deepEqual(declarationsOf('border-style: hidden'), everySide('Width', 0));
+    // CSS computes the width of a line styled none as 0. Native has no none style, so the style
+    // is kept only for the engine, which zeroes a width a later rule sets and sends none of it.
+    const none = { ...everySide('Width', 0), borderStyle: 'none' };
+    assert.deepEqual(declarationsOf('border-style: none'), none);
+    assert.deepEqual(declarationsOf('border-style: hidden'), none);
     assert.deepEqual(declarationsOf('outline-style: none'), { outlineWidth: 0 });
   });
 });

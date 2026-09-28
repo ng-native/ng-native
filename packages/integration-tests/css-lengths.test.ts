@@ -303,3 +303,77 @@ describe('viewport and font-relative lengths', () => {
     ]);
   });
 });
+
+describe('a length written with no unit', () => {
+  // A browser drops `margin-top: 3`: only 0 may go without a unit. lightningcss reads it as 3px,
+  // so Tailwind's `m-[3]` was a 3pt margin on a phone and nothing on the web.
+  const refusals = (css: string) => {
+    const refused: string[] = [];
+    const sheet = compileCss(css, 'unitless', { onUnsupported: (m: string) => refused.push(m) });
+    return { refused, rules: sheet.rules };
+  };
+
+  it('is refused, and says a length needs a unit', () => {
+    for (const declaration of [
+      'margin-top: 3',
+      'width: 0.35',
+      'padding: 0 3',
+      'translate: 3 4',
+      'gap: 2',
+      'transform-origin: 3',
+      'background-size: 3',
+      'background-position: 3',
+      'margin: calc(3 * -1)',
+      'inset-inline: 3',
+    ]) {
+      const { refused } = refusals(`.a { ${declaration} }`);
+      assert.equal(refused.length, 1, declaration);
+      assert.match(refused[0]!, /needs a unit/, declaration);
+    }
+  });
+
+  it('still takes a zero, a unitless line-height and a number inside calc()', () => {
+    for (const declaration of [
+      'margin: 0',
+      'line-height: 1.5',
+      'width: calc(3 * 2px)',
+      'flex: 1',
+      'z-index: 3',
+      'opacity: 0.5',
+    ]) {
+      assert.deepEqual(refusals(`.a { ${declaration} }`).refused, [], declaration);
+    }
+  });
+
+  it('does not read a bare number token as a length either', () => {
+    // `translate-x-[3]` is `--tw-translate-x: 3`, read by `translate` on device.
+    const { rules } = refusals('.a { --x: 3; translate: var(--x) 0 }');
+    const target = {
+      name: 'view',
+      parent: null,
+      classes: new Set(['a']),
+      props: {},
+      sheet: null,
+      hostSheet: null,
+      styleCache: null,
+      styleDirty: true,
+    };
+    const resolver = new StyleResolver({ rules, keyframes: {} } as never, {
+      width: 400,
+      height: 800,
+      colorScheme: 'light',
+    });
+    assert.equal(resolver.resolve(target as never, 1).style['__translate'], undefined);
+  });
+});
+
+describe('numbers CSS keeps in range', () => {
+  it('clamps an opacity above 1, as a browser does', () => {
+    assert.deepEqual(declarationsOf('opacity: 3'), { opacity: 1 });
+    assert.deepEqual(declarationsOf('opacity: -1'), { opacity: 0 });
+  });
+
+  it('refuses a font weight outside 1 to 1000, which a browser drops', () => {
+    assert.throws(() => declarationsOf('font-weight: 0.35'), /font-weight/);
+  });
+});

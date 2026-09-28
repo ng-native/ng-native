@@ -108,7 +108,7 @@ player (`music`), a run tracker with maps (`runs`) and a notes app (`notes`).
 | `@ng-native/platform`   | `mount()`, the Angular renderer, and `HttpClient` for React Native.                |
 | `@ng-native/components` | The elements: views, text, images, lists, inputs, pressables, gestures, animation. |
 | `@ng-native/router`     | Native stack and tab navigation over `@angular/router`.                            |
-| `@ng-native/device`     | Keyboard, screen, color scheme, app state, accessibility, deep links and more.    |
+| `@ng-native/device`     | Keyboard, screen, color scheme, app state, accessibility, deep links and more.     |
 | `@ng-native/expo`       | Expo's modules as Angular services and directives.                                 |
 | `@ng-native/icons`      | `<ng-icon>` with the `@ng-icons` sets, drawn as native SVG.                        |
 | `@ng-native/metro`      | The Metro preset: the Angular compiler, the CSS compiler and hot reload.           |

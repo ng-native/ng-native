@@ -160,6 +160,37 @@ describe('an ancestor test inside :is()', () => {
   });
 });
 
+describe('alternatives inside :is() and :where(), some of them ancestor tests', () => {
+  // `&:where(.dark, .dark *)` is the class-based dark mode Tailwind's own docs give: the element
+  // is dark, or inside something that is. Compiled as one compound needing both, it matched only
+  // an element that was dark and inside something dark, so `dark:` did nothing, and said nothing.
+  const anyRule = (selector: string, target: StyleTarget) =>
+    compileCss(`${selector} { color: red }`).rules.some((rule: StyleRule) => matches(target, rule));
+
+  it('matches the element itself, or one inside it, as either alternative says', () => {
+    const selector = '.x:where(.dark, .dark *)';
+    assert.equal(anyRule(selector, node('view', {}, ['x', 'dark'])), true, 'the element is dark');
+    assert.equal(
+      anyRule(selector, node('view', {}, ['x'], node('view', {}, ['dark']))),
+      true,
+      'inside',
+    );
+    assert.equal(anyRule(selector, node('view', {}, ['x'])), false, 'neither');
+  });
+
+  it('matches inside either of two ancestors, not only inside both', () => {
+    const selector = '.x:is(.a *, .b *)';
+    assert.equal(anyRule(selector, node('view', {}, ['x'], node('view', {}, ['a']))), true);
+    assert.equal(anyRule(selector, node('view', {}, ['x'], node('view', {}, ['b']))), true);
+    assert.equal(anyRule(selector, node('view', {}, ['x'], node('view', {}, ['c']))), false);
+  });
+
+  it('keeps the specificity of the most specific alternative, as :is() has', () => {
+    const [first, second] = compileCss('.x:is(#id *, .a) { color: red }').rules as StyleRule[];
+    assert.equal(first!.specificity, second!.specificity);
+  });
+});
+
 describe('html, the document element', () => {
   // Open Props defines every one of its tokens under `:where(html)`, and on native no element is
   // called `html`: the rule compiled, matched nothing, and said nothing. The document element is

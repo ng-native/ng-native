@@ -54,6 +54,8 @@ const LENGTH = new Set([
   'flex-basis',
   'border-inline-start-width',
   'border-inline-end-width',
+  'border-block-start-width',
+  'border-block-end-width',
 ]);
 
 const COLOR = new Set([
@@ -85,6 +87,9 @@ const RN_NAME = {
   'border-inline-end-color': 'borderEndColor',
   'border-inline-start-width': 'borderStartWidth',
   'border-inline-end-width': 'borderEndWidth',
+  // The block axis is top and bottom in the only writing mode native lays out.
+  'border-block-start-width': 'borderTopWidth',
+  'border-block-end-width': 'borderBottomWidth',
   // RN's own spellings of these are aliases some views never read: see `LOGICAL` in
   // shorthands.cjs. The inline edges are Yoga's Start and End; the block axis is top and bottom.
   'inset-inline-start': 'start',
@@ -172,6 +177,48 @@ const KEYWORD_VALUES = {
     allowed: new Set(['solid', 'double', 'dotted', 'dashed']),
     hint: 'Native draws solid, double, dotted and dashed decorations.',
   },
+  // React Native's own list. Fabric drops anything else without a word, so each of these would
+  // compile cleanly and do nothing on device.
+  'mix-blend-mode': {
+    allowed: new Set([
+      'normal',
+      'multiply',
+      'screen',
+      'overlay',
+      'darken',
+      'lighten',
+      'color-dodge',
+      'color-burn',
+      'hard-light',
+      'soft-light',
+      'difference',
+      'exclusion',
+      'hue',
+      'saturation',
+      'color',
+      'luminosity',
+      'plus-lighter',
+    ]),
+    hint: 'Native draws the separable and non-separable blend modes and plus-lighter.',
+  },
+  cursor: {
+    allowed: new Set(['auto', 'pointer']),
+    hint: 'Native has two cursors, auto and pointer, for an iPad with a pointer attached.',
+  },
+  overflow: {
+    allowed: new Set(['visible', 'hidden', 'scroll']),
+    hint: 'Native has visible, hidden and scroll.',
+  },
+};
+
+/**
+ * CSS keywords that are another one on native. `default` is the arrow a pointer draws when it is
+ * not over a link, which native calls auto. `auto` overflow is a scroll container on the web, and
+ * scroll is how Yoga lays one out; `clip` hides what overflows as `hidden` does.
+ */
+const SAME_AS = {
+  cursor: { default: 'auto' },
+  overflow: { auto: 'scroll', clip: 'hidden' },
 };
 
 /** The border and outline styles native draws. `none` and `hidden` are no line, not a style. */
@@ -188,7 +235,8 @@ function drawnLine(style, context) {
 }
 
 /** A keyword checked against what its property honours, where that is known. */
-function honoured(property, found) {
+function honoured(property, written) {
+  const found = SAME_AS[property]?.[written] ?? written;
   const allowed = KEYWORD_VALUES[property];
   if (allowed && !allowed.allowed.has(found)) {
     throw new CssUnsupported(`${property}: ${found} is not supported. ${allowed.hint}`);
@@ -217,9 +265,11 @@ const ALIGNMENT = {
     means: { ...POSITIONS, normal: 'stretch' },
   },
   'align-self': { reads: new Set(YOGA_ALIGN), means: { ...POSITIONS, normal: 'stretch' } },
+  // No baseline for the lines of a wrapping box, in either engine: CSS falls back to start, and
+  // React Native does not take the word, so a baseline is the start it comes to.
   'align-content': {
-    reads: new Set([...YOGA_ALIGN.filter((v) => v !== 'auto'), ...CONTENT]),
-    means: { ...POSITIONS, normal: 'stretch' },
+    reads: new Set([...YOGA_ALIGN.filter((v) => v !== 'auto' && v !== 'baseline'), ...CONTENT]),
+    means: { ...POSITIONS, normal: 'stretch', first: 'flex-start', baseline: 'flex-start' },
   },
   'justify-content': {
     reads: new Set(['flex-start', 'center', 'flex-end', ...CONTENT]),
@@ -599,6 +649,9 @@ function line(value, prefix, out, context, { style: withStyle = true } = {}) {
   };
   if (NO_LINE.has(style)) {
     set('Width', 0);
+    // Cascades as the style does, so the engine can zero a width a later rule sets: see
+    // `NO_BORDER` in css.ts.
+    if (prefix === 'border') out.borderStyle = 'none';
     return style;
   }
   const width = length(value.width, context);
@@ -770,16 +823,15 @@ const cycle = (list, index) => (list?.length ? list[index % list.length] : undef
  * Called once per rule rather than per declaration, because a list is only meaningful against
  * `transition-property`'s length and that may be declared after the durations it sizes.
  *
- * A rule with durations and no properties transitions nothing, which is what a browser does too:
- * the initial `transition-property` is `all` only as part of the shorthand's own reset, and a
- * bare `transition-duration` moves nothing on its own. A property list that names nothing, as
- * `transition: none` does, is still kept, so it can stop a weaker rule's transition.
+ * A rule with timing and no properties is kept for the rule that names them: see `finishTiming`.
+ * A property list that names nothing, as `transition: none` does, is still kept, so it can stop a
+ * weaker rule's transition.
  */
 function finishTransition(out, context) {
   const parts = out[LONGHANDS];
   if (!parts) return;
   delete out[LONGHANDS];
-  if (!parts['property']) return;
+  if (!parts['property']) return finishTiming(parts, out, context);
 
   const spec = {};
   for (const [index, entry] of parts['property'].entries()) {
@@ -796,6 +848,36 @@ function finishTransition(out, context) {
   }
   // Not `transition`: that is also a prop some native views take, `expo-image`'s among them.
   out['$transition'] = spec;
+  // The parts this rule wrote replace any a weaker rule set on its own.
+  for (const [part, key] of Object.entries(TIMING_KEYS)) if (parts[part]) out[key] = null;
+}
+
+/** The timing parts, and the key each cascades under when a rule sets it with no property list. */
+const TIMING_KEYS = {
+  duration: '$transitionDuration',
+  'timing-function': '$transitionEasing',
+  delay: '$transitionDelay',
+};
+
+/**
+ * Timing with no property list: `.duration-700` beside `.transition`, which names the properties.
+ *
+ * On the web each longhand cascades on its own, so this is kept for the engine to lay over the
+ * spec a matching rule builds, rather than dropped for having nothing to apply to.
+ */
+function finishTiming(parts, out, context) {
+  for (const [part, key] of Object.entries(TIMING_KEYS)) {
+    const list = parts[part];
+    if (!list) continue;
+    // Which entry goes with which property depends on the property list in some other rule.
+    if (list.length > 1) {
+      throw new CssUnsupported(
+        `${context}: a transition-${part} list needs the transition-property it pairs with in ` +
+          `the same rule. Write a single value, or the property list beside it.`,
+      );
+    }
+    out[key] = part === 'timing-function' ? easing(list[0], context) : milliseconds(list[0]);
+  }
 }
 
 /**
@@ -1008,15 +1090,20 @@ function checkAnimation(part, list, context) {
   }
 }
 
+/** Whether two compiled values are the same one: a number, a string, or a deferred marker. */
+const sameValue = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+
 /**
- * The sides the logical border shorthands draw, as native names them: the inline axis by Start
- * and End, which Yoga lays out by the direction, and the block axis, vertical on native, by Top
- * and Bottom.
+ * The sides the logical border shorthands draw, as native names them: an inline side by Start or
+ * End, which Yoga lays out by the direction, both inline sides by Left and Right, and the block
+ * axis, vertical on native, by Top and Bottom.
  */
 const BORDER_SIDES = {
   'border-inline-start': ['Start'],
   'border-inline-end': ['End'],
-  'border-inline': ['Start', 'End'],
+  // One value for both sides, so left and right, which a later `border-left` can override as it
+  // would on the web, where a start or end edge outranks a left one in Yoga whatever the order.
+  'border-inline': ['Left', 'Right'],
   'border-block-start': ['Top'],
   'border-block-end': ['Bottom'],
   'border-block': ['Top', 'Bottom'],
@@ -1040,6 +1127,19 @@ function sideBorder(property, sides, value, out) {
  * browser; a name of `none` is kept as null, so a stronger rule can stop a weaker one's animation.
  * Every other list is read at the first entry, the one that pairs with the single name.
  */
+/**
+ * A keyframe's `animation-timing-function`, which eases from that keyframe to the next, as the
+ * curve the engine reads; undefined when it has none. The other animation longhands mean nothing
+ * inside a keyframe, and CSS ignores them there too.
+ */
+function frameEasing(out, context) {
+  const parts = out[ANIMATION_PARTS];
+  if (!parts) return undefined;
+  delete out[ANIMATION_PARTS];
+  const timing = parts['timing-function']?.[0];
+  return timing === undefined ? undefined : easing(timing, context);
+}
+
 function finishAnimation(out, context) {
   const parts = out[ANIMATION_PARTS];
   if (!parts) return;
@@ -1218,9 +1318,17 @@ function translate(property, value, out, context = property) {
       // RN's own reading: every value but `none` leaves the text selectable.
       out.selectable = keyword(value, property) !== 'none';
       return;
-    case 'border-inline-width':
-      out.borderStartWidth = length(value.start, property);
-      out.borderEndWidth = length(value.end, property);
+    case 'border-inline-width': {
+      // One width for both is left and right, as `margin-inline` is: see `LOGICAL` in
+      // shorthands.cjs.
+      const [start, end] = [length(value.start, property), length(value.end, property)];
+      if (sameValue(start, end)) out.borderLeftWidth = out.borderRightWidth = start;
+      else [out.borderStartWidth, out.borderEndWidth] = [start, end];
+      return;
+    }
+    case 'border-block-width':
+      out.borderTopWidth = length(value.start, property);
+      out.borderBottomWidth = length(value.end, property);
       return;
     case 'transition':
       return transition(value, out);
@@ -1285,8 +1393,11 @@ function translate(property, value, out, context = property) {
     case 'border-style': {
       const style = uniform(value, property, 'border-style');
       // CSS computes the width of a line styled none as 0, as the shorthand already reads it.
-      if (NO_LINE.has(style)) for (const side of lineSides('border')) out[`${side}Width`] = 0;
-      else out.borderStyle = drawnLine(style, property);
+      if (NO_LINE.has(style)) {
+        for (const side of lineSides('border')) out[`${side}Width`] = 0;
+        // Kept as a style too, so a width a later rule sets is zeroed as well: see css.ts.
+        out.borderStyle = 'none';
+      } else out.borderStyle = drawnLine(style, property);
       return;
     }
     case 'pointer-events': {
@@ -1417,7 +1528,7 @@ function translate(property, value, out, context = property) {
           `${property}: native has one overflow for both axes, so '${x} ${y}' cannot be applied`,
         );
       }
-      out.overflow = keyword(x, property);
+      out.overflow = honoured(property, keyword(x, property));
       return;
     }
     case 'text-decoration':
@@ -1433,14 +1544,17 @@ function translate(property, value, out, context = property) {
           value.color?.type === 'currentcolor' ? null : color(value.color, property);
       }
       return;
-    case 'text-decoration-line':
+    case 'text-decoration-line': {
       // RN spells a combination as one space-separated string, e.g. 'underline line-through'.
-      out.textDecorationLine = Array.isArray(value)
-        ? value.length
-          ? value.join(' ')
-          : 'none'
-        : keyword(value, property);
+      const lines = Array.isArray(value) ? value : [keyword(value, property)];
+      if (lines.includes('overline') || lines.includes('blink')) {
+        throw new CssUnsupported(
+          `${property}: native draws underline and line-through, and no ${lines.includes('blink') ? 'blink' : 'overline'}.`,
+        );
+      }
+      out.textDecorationLine = lines.length ? lines.join(' ') : 'none';
       return;
+    }
     case 'flex-flow':
       if (value.direction !== undefined) out.flexDirection = keyword(value.direction, property);
       if (value.wrap !== undefined) out.flexWrap = keyword(value.wrap, property);
@@ -1503,8 +1617,8 @@ function translate(property, value, out, context = property) {
       // The inline edges are two props in Fabric, `borderStartColor` and `borderEndColor`, and
       // there is no `borderInlineColor` for the pair. The block edges do have a pair prop.
       if (property === 'border-inline-color') {
-        out.borderStartColor = start;
-        out.borderEndColor = end;
+        if (sameValue(start, end)) out.borderLeftColor = out.borderRightColor = start;
+        else [out.borderStartColor, out.borderEndColor] = [start, end];
         return;
       }
       if (start !== end) {
@@ -1536,7 +1650,7 @@ function translate(property, value, out, context = property) {
       return;
     }
     case 'cursor':
-      out.cursor = value.keyword ?? keyword(value, property);
+      out.cursor = honoured(property, value.keyword ?? keyword(value, property));
       return;
     case 'font-weight':
       // Relative to the weight inherited, which native has no way to ask for. Passed through, it
@@ -1545,6 +1659,15 @@ function translate(property, value, out, context = property) {
         throw new CssUnsupported(
           `${property}: '${value.type}' is relative to the inherited weight, and native takes an ` +
             `absolute one. Write the weight: bold, or a number from 100 to 900.`,
+        );
+      }
+      // A weight outside 1 to 1000 is invalid, and a browser drops the declaration.
+      if (
+        typeof value?.value?.value === 'number' &&
+        !(value.value.value >= 1 && value.value.value <= 1000)
+      ) {
+        throw new CssUnsupported(
+          `${property}: ${value.value.value} is not a weight; weights run from 1 to 1000`,
         );
       }
       out.fontWeight =
@@ -1585,7 +1708,14 @@ function translate(property, value, out, context = property) {
     return;
   }
   if (LENGTH.has(property)) {
-    out[rnName(property)] = length(value, property);
+    const settled = length(value, property);
+    // A font size in percent is a share of the inherited one, which is what an em is: native's
+    // fontSize takes points, so it is worked out where the inherited size is known.
+    if (property === 'font-size' && typeof settled === 'string' && settled.endsWith('%')) {
+      out.fontSize = { __defer: { unit: 'em', factor: round(parseFloat(settled) / 100) } };
+      return;
+    }
+    out[rnName(property)] = settled;
     return;
   }
   if (COLOR.has(property)) {
@@ -1601,7 +1731,9 @@ function translate(property, value, out, context = property) {
     return;
   }
   if (NUMBER.has(property)) {
-    out[camel(property)] = number(value, property);
+    const found = number(value, property);
+    // CSS clamps an opacity into 0 to 1 at computed-value time; `opacity-[3]` is opaque.
+    out[camel(property)] = property === 'opacity' ? Math.min(1, Math.max(0, found)) : found;
     return;
   }
 
@@ -1752,10 +1884,12 @@ function kindOf(property) {
 }
 
 module.exports = {
+  FONT_VARIANTS,
   animationTimeWithTokens,
   translate,
   finishTransition,
   finishAnimation,
+  frameEasing,
   finishBox,
   unsupported,
   kindOf,

@@ -80,8 +80,8 @@ nested inside it, only text-inside-text inherits - which would silently break ev
 written with CSS's actual inheritance in mind. So the cascade emulates it for exactly the properties
 where that expectation matters: `color`, `direction`, `fontFamily`, `fontSize`, `fontStyle`,
 `fontWeight`, `fontVariant`, `letterSpacing`, `lineHeight`, `textAlign`, `textTransform`,
-`textDecorationLine` and `writingDirection`. Nothing else cascades down past the element it is set
-on - `padding` on a wrapper never reaches its children, on this platform or in real CSS either.
+`textDecorationLine`, `writingDirection`, the text shadow and `selectable` (`user-select`). Nothing
+else cascades down past the element it is set on - `padding` on a wrapper never reaches its children, on this platform or in real CSS either.
 
 A paragraph's `text-align` is resolved against the `direction` it inherits, from a stylesheet or
 an inline style above it: with none written it starts at the start edge, `start` and `end` follow

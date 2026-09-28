@@ -126,11 +126,38 @@ describe('compiling a transition', () => {
     assert.deepEqual(spec['opacity']!.easing, [0.25, 0.1, 0.25, 1], 'ease, as CSS says');
   });
 
-  it('ignores durations with nothing to apply them to', () => {
-    // `transition-duration` alone transitions nothing, because the initial `transition-property`
-    // is `all` only as part of the shorthand's reset - a bare duration is inert on the web too.
-    // The rule then translates to nothing at all, and a rule that cannot affect a node is dropped.
-    assert.equal(compileCss('view { transition-duration: 200ms }').rules.length, 0);
+  it('keeps timing written without a property, for the rule that names one', () => {
+    // On the web `.transition` and `.duration-700` on one element run for 700ms: the longhands
+    // cascade one at a time, so a rule can set a duration for a property list another rule
+    // names. Tailwind's `duration-*`, `ease-*` and `delay-*` are all written this way.
+    assert.deepEqual(
+      declarationsOf(
+        'transition-duration: 200ms; transition-timing-function: linear; transition-delay: 1s;',
+      ),
+      { $transitionDuration: 200, $transitionEasing: [0, 0, 1, 1], $transitionDelay: 1000 },
+    );
+  });
+
+  it('resets the timing a weaker rule set, for each part a transition rule writes', () => {
+    // A shorthand writes all four longhands, so a duration from a weaker rule no longer applies.
+    assert.deepEqual(
+      Object.entries(declarationsOf('transition: opacity 1s;')).filter(
+        ([key]) => key.startsWith('$transition') && key !== '$transition',
+      ),
+      [
+        ['$transitionDuration', null],
+        ['$transitionEasing', null],
+        ['$transitionDelay', null],
+      ],
+    );
+    // `transition-property` alone writes only itself, and leaves the others to the cascade.
+    assert.deepEqual(Object.keys(declarationsOf('transition-property: opacity;')), ['$transition']);
+  });
+
+  it('refuses a timing list written without a property list to size it', () => {
+    // Which entry of the list goes with which property depends on a property list in another
+    // rule, and the compiled spec no longer knows the order. Tailwind never writes one.
+    assert.throws(() => declarationsOf('transition-duration: 100ms, 200ms;'), /list/);
   });
 
   it('lets the longhands and the shorthand share a rule, last one winning', () => {
@@ -445,6 +472,43 @@ describe('running a transition', () => {
     assert.equal(s.painted('opacity'), 0);
   });
 
+  it('takes its timing from another rule that sets only the timing', () => {
+    // `transition duration-200 ease-linear delay-50`: four classes, one transition.
+    const s = scene(
+      `view { opacity: 1; transition: opacity 1s ease; }
+       view.timed { transition-duration: 200ms; transition-timing-function: linear; transition-delay: 50ms; }
+       view.faded { opacity: 0; }`,
+    );
+    s.classes('timed');
+    s.classes('timed faded');
+    s.tick(50);
+    assert.equal(s.tick(100), true);
+    assert.equal(s.painted('opacity'), 0.5, 'halfway through 200ms, linear, after the delay');
+    assert.equal(s.tick(100), false);
+    assert.equal(s.painted('opacity'), 0);
+  });
+
+  it('lets a stronger transition rule reset timing a weaker rule set', () => {
+    const s = scene(
+      `view { opacity: 1; }
+       view.timed { transition-duration: 200ms; }
+       view.timed.own { transition: opacity 400ms linear; }
+       view.own.faded { opacity: 0; }`,
+    );
+    s.classes('timed own');
+    s.classes('timed own faded');
+    s.tick(200);
+    assert.equal(s.painted('opacity'), 0.5, 'its own 400ms, not the 200ms beneath it');
+  });
+
+  it('never sends the separate timing to native', () => {
+    const s = scene(
+      `view { opacity: 1; transition: opacity 1s; } view.timed { transition-duration: 2s; }`,
+    );
+    s.classes('timed');
+    assert.equal(s.painted('$transitionDuration'), undefined);
+  });
+
   it('jumps straight to the new value when the duration is zero', () => {
     const s = scene(`view { opacity: 1; transition: opacity 0s; } view.faded { opacity: 0; }`);
     s.classes('faded');
@@ -565,6 +629,17 @@ describe('transitioning a transform', () => {
 });
 
 describe('interpolating a transform', () => {
+  it('eases toward none, an empty list, as it does toward no transform at all', () => {
+    // `animate-bounce`'s 50% keyframe is `transform: none`. Read as a list of another length, the
+    // bounce held its top frame and jumped to the bottom, where it should fall.
+    assert.deepEqual(interpolate([{ translateY: 20 }], [], 0.5), [{ translateY: 10 }]);
+  });
+
+  it('eases a percentage toward none in its own unit', () => {
+    assert.deepEqual(interpolate([{ translateY: '-25%' }], [], 0.5), [{ translateY: '-12.5%' }]);
+    assert.deepEqual(interpolate([], [{ rotate: '1turn' }], 0.5), [{ rotate: '0.5turn' }]);
+  });
+
   it('moves each operation, matched by position and name', () => {
     assert.deepEqual(interpolate([{ translateX: 0 }], [{ translateX: 180 }], 0.5), [
       { translateX: 90 },

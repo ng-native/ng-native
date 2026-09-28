@@ -6,6 +6,7 @@
   "scripts": {
     "test": "node --import ./register-linker.mjs --test \"**/*.test.ts\"",
     "css-oracle": "node scripts/generate-css-oracle.mjs",
+    "tailwind-oracle": "node scripts/generate-tailwind-oracle.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "bench": "node --no-opt --no-sparkplug --no-maglev --import ./bench/release.mjs --import @ng-native/testing/register bench/renderer.bench.ts",
     "bench:screens": "node --no-opt --no-sparkplug --no-maglev --import ./bench/release.mjs --import ./register-linker.mjs bench/screens.bench.ts"
@@ -67,6 +68,7 @@
     "tailwindcss": "^4.3.3",
     "typescript": "~6.0.3",
     "vite": "^8.3.1",
-    "vitest": "^5.0.2"
+    "vitest": "^5.0.2",
+    "yoga-layout": "3.2.1"
   }
 }

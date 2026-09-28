@@ -723,3 +723,49 @@ describe('a keyframe with a declaration it cannot compile', () => {
     assert.match(dropped[0]!, /dropped 'padding-top'/);
   });
 });
+
+describe("a keyframe's own timing function", () => {
+  // CSS eases each keyframe to the next by the `animation-timing-function` written in it, which
+  // is how Tailwind's `animate-bounce` falls fast and rises slow. It was kept under a key that
+  // does not survive being written into a module, and eased by nothing on device.
+  const css = `
+    @keyframes drop {
+      from { width: 0px; animation-timing-function: cubic-bezier(0.8, 0, 1, 1); }
+      50% { width: 100px; animation-timing-function: linear; }
+      to { width: 0px; }
+    }
+    view { animation: drop 200ms ease; }
+  `;
+
+  it('compiles the timing function onto the frame it is written in', () => {
+    const frames = sheet(css).keyframes!['drop']!;
+    assert.deepEqual(
+      frames.map((frame) => (frame as Frame & { easing?: number[] }).easing),
+      [[0.8, 0, 1, 1], [0, 0, 1, 1], undefined],
+    );
+    assert.equal(JSON.stringify(sheet(css)).includes('timing'), false, 'nothing left unfinished');
+    assert.deepEqual(Object.getOwnPropertySymbols(frames[0]!.declarations), []);
+  });
+
+  it('eases each stretch by the frame it starts at', () => {
+    let now = 1000;
+    const fabric = createFakeFabric();
+    const engine = new Engine(fabric, 1, {
+      globalStyles: compileCss(css) as never,
+      now: () => now,
+    });
+    const view = engine.createElement('view');
+    engine.appendChild(engine.root, view);
+    engine.commit();
+    const width = () => flatten(fabric.committed)[0]?.props['width'] as number;
+    now += 50;
+    engine.advanceAnimations();
+    engine.commit();
+    // Halfway through the first stretch, on a curve that starts slow: well short of 50.
+    assert.ok(width() < 25, `the first frame's curve, not the animation's ease: ${width()}`);
+    now += 100;
+    engine.advanceAnimations();
+    engine.commit();
+    assert.equal(Math.round(width()), 50, 'halfway down the linear stretch');
+  });
+});
