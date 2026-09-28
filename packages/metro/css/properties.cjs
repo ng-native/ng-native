@@ -1837,6 +1837,10 @@ const SIDE_SHORTHANDS = {
   margin: ['marginTop', 'marginRight', 'marginBottom', 'marginLeft'],
   inset: ['top', 'right', 'bottom', 'left'],
   'border-width': ['borderTopWidth', 'borderRightWidth', 'borderBottomWidth', 'borderLeftWidth'],
+  // One value on both sides of an axis, as a written one compiles: left and right, so a later
+  // `border-left` still overrides it, and top and bottom.
+  'border-inline-width': ['borderLeftWidth', 'borderRightWidth'],
+  'border-block-width': ['borderTopWidth', 'borderBottomWidth'],
   'border-radius': [
     'borderTopLeftRadius',
     'borderTopRightRadius',
@@ -1863,6 +1867,8 @@ function propsFor(property) {
 const SPELLED_OUT = {
   gap: ['rowGap', 'columnGap'],
   'border-color': ['borderTopColor', 'borderRightColor', 'borderBottomColor', 'borderLeftColor'],
+  'border-inline-color': ['borderLeftColor', 'borderRightColor'],
+  'border-block-color': ['borderTopColor', 'borderBottomColor'],
 };
 
 /** Properties whose kind is not the set they are in, or that are in none. */
@@ -1874,6 +1880,9 @@ const KINDS = {
   'font-family': 'family',
   // A length, or a bare number that multiplies the font size: the token knows which it is.
   'line-height': 'lineHeight',
+  // Two sides of one axis, and a token holds one colour for both.
+  'border-inline-color': 'color',
+  'border-block-color': 'color',
   // A shorthand in CSS, but one that only ever lands in the one native prop.
   'box-shadow': 'shadow',
   'font-weight': 'weight',

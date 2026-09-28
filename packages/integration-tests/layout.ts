@@ -107,7 +107,10 @@ const value = (v: unknown): Value =>
     ? (v as Value)
     : undefined;
 
-/** Each edge prop React Native reads, most specific first, and the Yoga edge it sets. */
+/**
+ * Each edge prop React Native reads, and the Yoga edge it sets: the broadest first, so a more
+ * specific one, applied after it, wins as it does in React Native.
+ */
 const EDGES: readonly (readonly [string, Edge])[] = [
   ['', Edge.All],
   ['Horizontal', Edge.Horizontal],

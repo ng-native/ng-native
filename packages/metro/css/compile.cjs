@@ -1546,6 +1546,23 @@ function assertVariantsKnown(tokens, deferred, from) {
   }
 }
 
+/**
+ * Take the props a declaration just wrote out of what an earlier declaration in the same rule
+ * left to the device: `flex: var(--g); flex-shrink: 0` shrinks by 0, as the web's source order
+ * says. A rule's deferred values are applied after its written ones, so without this the earlier
+ * one won.
+ */
+function supersede(deferred, before, written) {
+  if (!written.size) return;
+  for (let i = before - 1; i >= 0; i--) {
+    const one = deferred[i];
+    if (!one.props?.some((prop) => written.has(prop))) continue;
+    const props = one.props.filter((prop) => !written.has(prop));
+    if (props.length) deferred[i] = { ...one, props };
+    else deferred.splice(i, 1);
+  }
+}
+
 /** Refuse what one of the platforms a rule applies on would not draw: see the checks below. */
 function assertDrawnEverywhere(declaration, out, tokens, deferred, from, platforms, context) {
   const name = declaration.value?.name;
@@ -1651,10 +1668,20 @@ function compileCss(source, context = 'styles', options = {}) {
     platforms = targets,
   ) {
     const before = deferred.length;
+    const written = new Set();
+    const tracked = new Proxy(out, {
+      set(target, key, value) {
+        written.add(key);
+        target[key] = value;
+        return true;
+      },
+    });
     try {
-      add(declaration, out, tokens, deferred, context);
+      add(declaration, tracked, tokens, deferred, context);
       assertDrawnEverywhere(declaration, out, tokens, deferred, before, platforms, context);
-      assertVariantsKnown(tokens, deferred, before);
+      // The whole rule: a slot can be set after the declaration that reads it.
+      assertVariantsKnown(tokens, deferred, 0);
+      supersede(deferred, before, written);
     } catch (error) {
       if (!onUnsupported || !(error instanceof CssUnsupported)) throw error;
       // A var() arrives as `unparsed`, which names the parser's shape rather than the property.
@@ -2077,6 +2104,18 @@ const UNIT_SHORTHANDS = new Set([
   'padding-inline',
   'padding-block',
   'border-width',
+  'border',
+  'border-top',
+  'border-right',
+  'border-bottom',
+  'border-left',
+  'border-inline',
+  'border-inline-start',
+  'border-inline-end',
+  'border-block',
+  'border-block-start',
+  'border-block-end',
+  'outline',
   'border-inline-width',
   'border-block-width',
   'border-radius',

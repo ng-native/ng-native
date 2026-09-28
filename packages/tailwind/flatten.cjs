@@ -290,19 +290,30 @@ function substituteVariables(css, values, runtime) {
  */
 function selectorList(selectors) {
   const list = [''];
-  let depth = 0;
+  const at = { depth: 0, quote: null };
   for (let i = 0; i < selectors.length; i++) {
     const c = selectors[i];
     if (c === '\\') {
       list[list.length - 1] += c + (selectors[++i] ?? '');
       continue;
     }
-    if (c === '(') depth++;
-    else if (c === ')') depth--;
-    if (c === ',' && depth === 0) list.push('');
+    nest(at, c);
+    if (c === ',' && at.depth === 0 && !at.quote) list.push('');
     else list[list.length - 1] += c;
   }
   return list;
+}
+
+/**
+ * How deep a selector is at a character: inside brackets or parentheses, or a quoted attribute
+ * value, where a comma is part of the value (`[data-x="1,2"]`) rather than between selectors.
+ */
+function nest(at, c) {
+  if (at.quote) {
+    if (c === at.quote) at.quote = null;
+  } else if (c === '"' || c === "'") at.quote = c;
+  else if (c === '(' || c === '[') at.depth++;
+  else if (c === ')' || c === ']') at.depth--;
 }
 
 /**
@@ -415,10 +426,23 @@ function added(sum) {
     for (const term of sum)
       if (term.unit === 'rem') Object.assign(term, { n: term.n * REM, unit: 'px' });
   }
+  // Two kinds of value do not add up, zero or not: `calc(0deg + 4px)` is dropped by a browser.
+  // A length beside a percentage is one kind, where a zero of either drops out below.
+  const kinds = new Set(sum.map((term) => kindOfUnit(term.unit)));
+  if (kinds.size > 1 && !(kinds.size === 2 && kinds.has('length') && kinds.has('%'))) return null;
   const units = new Set(sum.filter((term) => term.n !== 0).map((term) => term.unit));
   if (units.size > 1) return null;
   const total = sum.reduce((acc, term) => acc + term.sign * term.n, 0);
   return `${round(total)}${[...units][0] ?? sum[0]?.unit ?? ''}`;
+}
+
+/** The kind of value a unit makes: a number, an angle, a time, a percentage or a length. */
+function kindOfUnit(unit) {
+  if (unit === '') return 'number';
+  if (unit === '%') return '%';
+  if (['deg', 'rad', 'grad', 'turn'].includes(unit)) return 'angle';
+  if (['s', 'ms'].includes(unit)) return 'time';
+  return 'length';
 }
 
 /** `a * b` or `a / b`, keeping the one unit a product may have; null when that is not so. */

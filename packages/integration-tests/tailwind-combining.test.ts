@@ -292,6 +292,15 @@ describe('Tailwind utilities that combine on one node', () => {
     assert.equal(paint('border-x-4 border-s-2')['borderStartWidth'], 2);
   });
 
+  it('refuses a numeric variant native lacks, wherever the rule sets its slot', () => {
+    const refusals: string[] = [];
+    compileCss('.z { font-variant-numeric: var(--z,); --z: slashed-zero }', 'order', {
+      onUnsupported: (message: string) => refusals.push(message),
+    });
+    assert.equal(refusals.length, 1);
+    assert.match(refusals[0]!, /'slashed-zero' is not a font variant/);
+  });
+
   it('keeps every numeric variant a node has, not only the last class', () => {
     // Tailwind composes font-variant-numeric out of five slots, as it does a filter.
     assert.deepEqual(paint('tabular-nums oldstyle-nums')['fontVariant'], [

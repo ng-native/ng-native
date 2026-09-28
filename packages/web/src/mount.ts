@@ -92,7 +92,10 @@ function injectStyle(document: Document, id: string, css: string): void {
   // specific as a class and later, so it beat `border-2`, `flex-row` and `hidden` alike. With no
   // Tailwind on the page, a layered rule still loses to every unlayered one, as a reset should.
   style.textContent = `@layer base {\n${css}\n}`;
-  document.head.appendChild(style);
+  // First in the head: a layer is ordered by where it is first declared, and the documented entry
+  // (theme.css and utilities.css) declares no `base`. Declared after it, `base` came after
+  // `utilities` and beat every utility again.
+  document.head.insertBefore(style, document.head.firstChild);
 }
 
 export interface MountOptions {

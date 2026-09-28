@@ -54,7 +54,7 @@ const LISTS: Record<'common' | 'composed', Card> = {
       'dark:bg-zinc-900 dark:ring-zinc-700',
     avatar: 'size-10 rounded-full bg-blue-500 translate-x-1 -translate-y-1 scale-95',
     title: 'text-base font-semibold text-zinc-900 text-shadow-xs text-shadow-zinc-300',
-    detail: 'text-sm text-zinc-500 tabular-nums slashed-zero',
+    detail: 'text-sm text-zinc-500 tabular-nums oldstyle-nums',
     badge: 'rounded-md px-2 py-0.5 text-xs shadow-xs shadow-emerald-200 ring-1 ring-emerald-300',
   },
 };
@@ -64,9 +64,13 @@ const median = (xs: number[]) => [...xs].sort((a, b) => a - b)[Math.floor(xs.len
 function bench(name: keyof typeof LISTS): void {
   const card = LISTS[name];
   const classes = Object.values(card).join(' ');
+  // Every class has to compile: a refused one would time a smaller sheet than it claims to.
+  const refused: string[] = [];
   const sheet = compileCss(flattenTailwind(build('native', classes)), 'tailwind', {
-    onUnsupported: () => {},
+    onUnsupported: (message: string) => refused.push(message),
   });
+  if (refused.length)
+    throw new Error(`the ${name} list has refused classes:\n${refused.join('\n')}`);
 
   const first: number[] = [];
   const restyle: number[] = [];

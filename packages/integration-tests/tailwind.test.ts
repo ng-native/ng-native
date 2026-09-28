@@ -38,6 +38,24 @@ function stylesFor(css: string, className: string): Record<string, unknown> {
 }
 
 describe('flattening Tailwind for the engine', () => {
+  it('does not fold a calc() of two kinds of value, even when one is zero', () => {
+    // Chrome drops `calc(0deg + 4px)` and `calc(0 + 4px)`: an angle, or a number, beside a length.
+    for (const value of ['calc(0deg + 4px)', 'calc(0 + 4px)', 'calc(4px - 0ms)']) {
+      assert.doesNotMatch(flattenTailwind(`.a { margin-top: ${value} }`), /margin-top: 4px/, value);
+    }
+    // A zero length beside a percentage is still the percentage.
+    assert.match(flattenTailwind('.a { width: calc(0px + 50%) }'), /width: 50%/);
+  });
+
+  it('keeps a comma inside an attribute value when it splits a selector list', () => {
+    // An arbitrary variant can match an attribute holding a comma: `[&[data-x="1,2"]]:p-4`.
+    const out = flattenTailwind(
+      `.a[data-x="1,2"], .b[data-y='3,4'], .c::placeholder { color: red }`,
+    );
+    assert.match(out, /\.a\[data-x="1,2"\]/);
+    assert.match(out, /\.b\[data-y=["']3,4["']\]/);
+  });
+
   it('unwraps cascade layers and drops the statement that orders them', () => {
     const out = flattenTailwind('@layer theme, utilities;\n@layer utilities { .a { flex: 1 } }');
     assert.doesNotMatch(out, /@layer/);
@@ -95,8 +113,9 @@ describe('flattening Tailwind for the engine', () => {
   });
 
   it('drops an important per-side border style of solid too', () => {
-    // `border-t-2!` and the important divide utilities mark the side style important. It is still only solid, and
-    // kept, the compiler refuses it with a warning on every important border.
+    // `border-t-2!` and the important divide utilities mark the side style important. It is still
+    // only solid, so the flattener drops the declaration, importance and all; kept, the compiler
+    // would refuse it with a warning on every important border.
     const refused: string[] = [];
     compileCss(
       flattenTailwind(

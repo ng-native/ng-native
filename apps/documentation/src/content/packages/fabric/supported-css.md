@@ -176,10 +176,11 @@ because a column of flex children cannot pretend to flow them side by side.
 that gives them different values is dropped with a warning rather than silently picking one.
 `overflow: auto` is read as `scroll`, which is how Yoga lays out a scroll container, and `clip` as
 `hidden`. `cursor` takes `auto` and `pointer`, the two a pointer on an iPad draws, with `default`
-read as `auto`; any other cursor is dropped with a warning, as is a `mix-blend-mode` native does not
-draw (`plus-darker`) and an `overline`. `align-content: baseline` is the start it comes to in both
-engines. `border-style: none` and `hidden` draw no border whichever rule set the width, as on the
-web, so `border-hidden border-x` draws no side.
+read as `auto`; any other cursor is dropped with a warning. So is a `mix-blend-mode` native does not
+draw, `plus-darker`, and a `text-decoration-line` of `overline`, which native has no line for.
+`align-content: baseline` is the start it comes to in both engines. `border-style: none` and
+`hidden` draw no border whichever rule set the width, as on the web, so `border-hidden border-x`
+draws no side.
 
 The logical properties all work: `inset-inline`, `inset-block`, `margin-inline`, `margin-block`,
 `padding-inline` and `padding-block`, with their `-start` and `-end` longhands, and the border

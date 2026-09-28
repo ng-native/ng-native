@@ -110,6 +110,26 @@ describe('flex with a token', () => {
     assert.equal(over['flexGrow'], 0);
   });
 
+  it('lets a longhand written after flex: var() win, as the cascade does', () => {
+    // The shrink the shorthand stands for is settled on device; a later static flex-shrink in the
+    // same rule, or a stronger rule, still has the last word, as on the web.
+    assert.equal(
+      resolvedStyle('.a { --g: 2; flex: var(--g); flex-shrink: 0; }')['flexShrink'],
+      0,
+      'later in the same rule',
+    );
+    assert.equal(
+      resolvedStyle('.a { --g: 2; flex: var(--g); } .a.a { flex-shrink: 0; }')['flexShrink'],
+      0,
+      'a stronger rule',
+    );
+    assert.equal(
+      resolvedStyle('.a { flex-shrink: 0; flex: var(--g, 2); }')['flexShrink'],
+      1,
+      'the shorthand written after it',
+    );
+  });
+
   it('gives each flex longhand its initial value when its token is not set', () => {
     assert.equal(resolvedStyle('.a { flex-shrink: var(--missing); }')['flexShrink'], 1);
     assert.equal(resolvedStyle('.a { flex-grow: var(--missing); }')['flexGrow'], 0);

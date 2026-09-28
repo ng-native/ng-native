@@ -474,6 +474,33 @@ describe('names Fabric actually reads', () => {
     });
   });
 
+  it('refuses a unitless width in a border or outline shorthand, as a browser drops it', () => {
+    for (const property of [
+      'border',
+      'border-top',
+      'border-left',
+      'border-inline',
+      'border-inline-start',
+      'border-block',
+      'border-block-end',
+      'outline',
+    ]) {
+      assert.throws(() => declarationsOf(`${property}: 3 solid red`), /needs a unit/, property);
+    }
+    assert.deepEqual(declarationsOf('border: 0 solid red').borderTopWidth, 0, 'only 0 may go bare');
+  });
+
+  it('puts a border-inline colour from a token on left and right, as a written one', () => {
+    const sheet = compileCss('.a { --c: red; border-inline-color: var(--c) }', 'test');
+    assert.deepEqual(sheet.rules[0].deferred[0].props, ['borderLeftColor', 'borderRightColor']);
+  });
+
+  it('puts a border-inline width from a token on left and right, as a written one', () => {
+    // So a later border-left overrides it on native as it does on the web, whichever it is.
+    const sheet = compileCss('.a { --w: 3px; border-inline-width: var(--w) }', 'test');
+    assert.deepEqual(sheet.rules[0].deferred[0].props, ['borderLeftWidth', 'borderRightWidth']);
+  });
+
   it('takes the inline border widths, which were not mapped at all', () => {
     assert.deepEqual(declarationsOf('border-inline-start-width: 2px'), { borderStartWidth: 2 });
     assert.deepEqual(declarationsOf('border-inline-end-width: 2px'), { borderEndWidth: 2 });

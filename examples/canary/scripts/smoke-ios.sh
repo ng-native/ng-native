@@ -20,6 +20,10 @@ mkdir -p "$out"
 read -r runtime type < <(xcrun simctl list devices available -j | jq -r '
   .devices | to_entries | map(select(.key | test("iOS"))) | sort_by(.key) | last
   | "\(.key) \(.value | map(select(.name | startswith("iPhone"))) | first | .deviceTypeIdentifier)"')
+if [ -z "${runtime:-}" ] || [ -z "${type:-}" ] || [ "$type" = null ]; then
+  echo "No iOS runtime with an iPhone simulator found (or jq is missing): see xcrun simctl list" >&2
+  exit 1
+fi
 udid=$(xcrun simctl create canary-smoke "$type" "$runtime") || exit 1
 trap 'xcrun simctl shutdown "$udid" 2>/dev/null; xcrun simctl delete "$udid"' EXIT
 

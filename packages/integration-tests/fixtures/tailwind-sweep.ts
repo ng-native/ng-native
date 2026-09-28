@@ -314,6 +314,12 @@ async function build() {
   // sweep's sheet is every utility Tailwind has, where the sweep samples them.
   const everything = (await tailwind.compile(ENTRY, options)).build(named);
   const pairs = [...slotPairs(everything, new Set(named)), ...overlaps];
+  // The pairs are read out of Tailwind's CSS by its layout, so a release that writes it another
+  // way would find fewer of them, and the sweep would narrow without a word.
+  const missing = PAIR_FAMILIES.filter(
+    (family) => !pairs.some((pair) => pair.every((c) => family.test(c))),
+  );
+  if (missing.length) throw new Error(`no pairs found for ${missing.join(', ')}: see slotsIn`);
   const css = compiler.build([...singles, ...important, ...variants, ...pairs.flat()]);
 
   const cases: SweepCase[] = [
@@ -361,6 +367,19 @@ const OVERLAPS = [
   ['gap-4', 'gap-x-2'],
   ['size-10', 'w-4'],
   ['text-lg', 'leading-6'],
+];
+
+/** Families that compose one value out of several classes, each of which must have a pair. */
+const PAIR_FAMILIES = [
+  /^-?translate-/,
+  /^-?scale-/,
+  /^(shadow|ring|inset-shadow|inset-ring)/,
+  /^(android:)?drop-shadow-/,
+  /^text-shadow-/,
+  /^-?space-[xy]-/,
+  /^divide-/,
+  /^(tabular|oldstyle|lining|proportional)-nums|^(ordinal|slashed-zero|diagonal-fractions)$/,
+  /^(android:)?(blur|brightness|contrast|grayscale|hue-rotate|invert|saturate|sepia)/,
 ];
 
 /** A slot's value that says nothing about what reads it. */

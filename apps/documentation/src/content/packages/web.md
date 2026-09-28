@@ -194,15 +194,15 @@ else, so `BrowserEngine` satisfies the same interface Fabric's `Engine` does, wi
 differences are the whole of what a browser page does not need: a real `Element` instead of a
 numeric root tag, the real `document`, and no Fabric UI manager at all.
 
-`mount` also wires `Screen`, `ColorScheme` and `Direction` from `@ng-native/device` to real
-browser sources - window resize events, `matchMedia('(prefers-color-scheme: dark)')`,
-`document.dir` - so a component that reads `inject(Screen).compact()` or reacts to dark mode
-behaves the same whether it is running on a phone or in this browser tab. It also injects
-`reset.css` into `document.head` on first use, in Tailwind's `base` layer so every utility wins
-over it, which closes the gap between Yoga's flex defaults
-and a browser's: an unstyled native view starts at `display: flex; flex-direction: column;
-align-items: stretch; flex-shrink: 0`, and an unstyled DOM element does not, so a shared class
-string would otherwise disagree between the two hosts.
+`mount` also wires `Screen`, `ColorScheme` and `Direction` from `@ng-native/device` to real browser
+sources - window resize events, `matchMedia('(prefers-color-scheme: dark)')`, `document.dir` - so a
+component that reads `inject(Screen).compact()` or reacts to dark mode behaves the same whether it
+is running on a phone or in this browser tab. It also injects `reset.css` into `document.head` on
+first use, in Tailwind's `base` layer and first in the head, so that layer comes before any the page
+declares and every utility wins over it, which closes the gap between Yoga's flex defaults and a
+browser's: an unstyled native view starts at `display: flex; flex-direction: column; align-items:
+stretch; flex-shrink: 0`, and an unstyled DOM element does not, so a shared class string would
+otherwise disagree between the two hosts.
 
 ## Inside an app you already have
 

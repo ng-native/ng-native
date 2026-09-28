@@ -140,11 +140,12 @@ real startup time.
 
 This repository's native build workflow launches the canary's release build, on an iOS simulator and
 on an Android emulator, and runs `examples/canary/.maestro/release/smoke.yaml` against each, on
-every pull request. It is a smoke test, not a feature test: the first screen renders, a screen
-pushes and pops on the native stack, a screen inside `<safe-area-view>` draws, and so does a screen
-of Tailwind utilities that combine on one element. A release build that throws at startup closes, so
-nothing it waits for appears and the flow fails; it also fails on React Native's error screen and on
-an `Unimplemented component` placeholder, the two things drawn in place of an app. Against a release
+every pull request that is ready for review and changes more than Markdown and the documentation
+site. It is a smoke test, not a feature test: the first screen renders, a screen pushes and pops on
+the native stack, a screen inside `<safe-area-view>` draws, and so does a screen of Tailwind
+utilities that combine on one element. A release build that throws at startup closes, so nothing it
+waits for appears and the flow fails; it also fails on React Native's error screen and on an
+`Unimplemented component` placeholder, the two things drawn in place of an app. Against a release
 build, on a simulator the script creates, or on a booted emulator:
 
 ```sh

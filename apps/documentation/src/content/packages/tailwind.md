@@ -124,8 +124,9 @@ device](/packages/fabric/supported-css)). Use `ms-*` and `me-*` on those childre
 is dropped with a warning, as a native border has no double style.
 
 Variants and utilities that style a pseudo-element, `placeholder:`, `before:`, `file:` and the rest,
-are refused with a build warning: native has no element for a pseudo-element to be, so there is
-nothing for them to style.
+style nothing: native has no element for a pseudo-element to be. A rule that is only for one is
+refused with a build warning; where a pseudo-element shares a selector list with real elements, as
+in Tailwind's own resets, it is taken out of the list and the rest of the rule is kept.
 
 A unitless `line-height`, the ratio form CSS defines and the one Tailwind's `leading-*` utilities
 write, works with or without a `font-size` beside it. When the rule also sets a `font-size`, as

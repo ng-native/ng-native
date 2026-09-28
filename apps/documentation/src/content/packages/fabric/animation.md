@@ -57,10 +57,11 @@ A duration or delay can be a token, or `calc()` with tokens in it, which is how 
 its rows: `animation-delay: calc(var(--i) * 60ms)` with `[style.--i]="$index"` on each. A token of
 time is read in milliseconds whatever unit it was written in.
 
-An `animation-timing-function` written inside a keyframe eases from that keyframe to the next, as
-in CSS, over the animation's own: Tailwind's `animate-bounce` falls on one curve and rises on
-another. A keyframe that sets `transform: none` eases to the identity of the transforms beside it,
-so a translate in percent eases back to `0%`.
+An `animation-timing-function` written inside a keyframe eases from that keyframe to the next, as in
+CSS, over the animation's own: Tailwind's `animate-bounce` falls on one curve and rises on another.
+A keyframe that sets `transform: none` eases to the identity of the translate, scale, rotate and
+skew functions beside it, so a translate in percent eases back to `0%`; a `perspective()` has no
+identity here, and is kept rather than eased away.
 
 `animation-direction` plays every iteration forwards (`normal`), backwards (`reverse`), or there
 and back (`alternate`, and `alternate-reverse` starting backwards); with a fill, the frame held at

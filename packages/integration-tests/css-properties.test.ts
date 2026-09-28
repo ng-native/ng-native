@@ -291,6 +291,7 @@ describe('properties React Native supports that we were rejecting', () => {
     assert.deepEqual(declarationsOf('mix-blend-mode: multiply'), { mixBlendMode: 'multiply' });
     assert.deepEqual(declarationsOf('isolation: isolate'), { isolation: 'isolate' });
     assert.deepEqual(declarationsOf('box-sizing: border-box'), { boxSizing: 'border-box' });
+    assert.deepEqual(declarationsOf('cursor: auto'), { cursor: 'auto' });
     assert.deepEqual(declarationsOf('cursor: pointer'), { cursor: 'pointer' });
   });
 

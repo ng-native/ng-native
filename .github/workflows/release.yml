@@ -21,8 +21,8 @@ permissions:
   id-token: write
 
 jobs:
-  # Both native builds, iOS included, on the commit being released. iOS runs nowhere else
-  # automatically: see native.yml.
+  # Both native builds, on the commit being released, as every ready pull request and main has
+  # them: see native.yml.
   native:
     if: github.ref == 'refs/heads/main'
     uses: ./.github/workflows/native.yml

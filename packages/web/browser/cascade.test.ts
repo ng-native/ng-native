@@ -14,6 +14,7 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { commands, page, userEvent } from 'vitest/browser';
 import { CascadeApp } from '../src/cascade-app.ts';
+import { injectResetStylesheet } from '../src/mount.ts';
 import { boot, settle, waitFor, type Booted } from './boot.ts';
 
 async function scene(options: { asAnAppMounts?: boolean } = {}): Promise<Booted> {
@@ -223,5 +224,28 @@ describe('the reset mount injects by default', () => {
     expect(framed.borderTopWidth).toBe('2px');
     expect(framed.borderTopColor).toBe('rgb(255, 0, 0)');
     expect(computed(byId('column').parentElement!).flexDirection).toBe('row');
+  });
+});
+
+describe('the reset, beside utilities that declare no base layer', () => {
+  // The documented Tailwind entry imports theme.css and utilities.css, which declare `theme` and
+  // `utilities` and no `base`. A layer is ordered by where it is first declared, so a reset
+  // declaring `base` after the app's styles came after `utilities` and beat every utility. In a
+  // frame of its own, since this page's stylesheet declares every layer before anything runs.
+  it('stays below the utilities, whichever loaded first', () => {
+    const frame = document.createElement('iframe');
+    document.body.appendChild(frame);
+    const doc = frame.contentDocument!;
+    const utilities = doc.createElement('style');
+    utilities.textContent = '@layer utilities { .u-row { flex-direction: row } }';
+    doc.head.appendChild(utilities);
+    injectResetStylesheet(doc);
+    const probe = doc.createElement('div');
+    probe.setAttribute('data-rn', 'view');
+    probe.className = 'u-row';
+    doc.body.appendChild(probe);
+    const direction = frame.contentWindow!.getComputedStyle(probe).flexDirection;
+    frame.remove();
+    expect(direction).toBe('row');
   });
 });
