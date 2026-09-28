@@ -3570,7 +3570,6 @@
     "contain-style!"
   ],
   "dropped 'container-name': '…' is not a value native can take": [
-    "@container-[#1a2b3c]",
     "@container-[#1a2b3c]/[0.3]",
     "@container-[#1a2b3c]/[0.3]!"
   ],

@@ -134,6 +134,11 @@ export interface TokenValue {
   /** Bare colour channels, `13, 110, 253`, for an `rgba(var(--x), <alpha>)` to finish. */
   readonly channels?: readonly number[];
   /**
+   * Defined as `rgba(var(--channels), <alpha>)`: a colour made of a channels token and an alpha
+   * written or tokened. Settled on the node that defines it, as an `hsl` one is.
+   */
+  readonly deferredColour?: Extract<ColourExpression, { channels: unknown }>;
+  /**
    * Defined as another token, `var(--name)`. Resolved on the node that defines it, against the
    * tokens in scope there, and passed down resolved - which is what a browser does.
    */
@@ -1454,7 +1459,7 @@ function settlingOrder(deferred: readonly DeferredDeclaration[]): readonly Defer
 }
 
 /**
- * The aliases and hsl() colours among a node's own definitions, resolved against everything in
+ * The aliases, hsl() colours and channel colours among a node's own definitions, resolved against everything in
  * scope on it. Done once, where they are defined, so a descendant only ever sees values. A name
  * that resolves to nothing - undefined, part of a cycle, or an hsl() missing a channel - is
  * dropped, as a browser treats it as unset.
@@ -1489,6 +1494,13 @@ function resolveAliases(
     const hsl = own[name]!.hsl;
     if (!hsl) continue;
     const color = resolveHsl(hsl, merged);
+    if (color !== undefined) merged[name] = { color };
+    else delete merged[name];
+  }
+  for (const name of Object.keys(own)) {
+    const deferred = own[name]!.deferredColour;
+    if (!deferred) continue;
+    const color = channelsColour(deferred, merged);
     if (color !== undefined) merged[name] = { color };
     else delete merged[name];
   }
@@ -1730,7 +1742,7 @@ function resolveCalc(
 ): number | string | undefined {
   const percentage = wholePercentage(marker, tokens);
   if (percentage !== undefined) return percentage;
-  if (bareNumberAsLength(marker, tokens)) return undefined;
+  if (bareNumberAsLength(marker, tokens) || notAnAngle(marker, tokens)) return undefined;
   const value = calculated(marker.expression, marker.kind, tokens);
   if (value === undefined || !Number.isFinite(value)) return undefined;
   const rounded = Math.round(value * 1000) / 1000;
@@ -1754,6 +1766,17 @@ function bareNumberAsLength(
     token.number !== undefined &&
     token.number !== 0
   );
+}
+
+/**
+ * Whether an angle is one token that holds no angle: `--tw-rotate: 3` or `37%`, from
+ * `rotate-[3]`, which a browser drops, taking the whole transform with it. A bare 0 is an angle.
+ */
+function notAnAngle(marker: CalcMarker, tokens: Readonly<Record<string, TokenValue>>): boolean {
+  if (marker.kind !== 'angle' || typeof marker.expression !== 'object') return false;
+  if (Array.isArray(marker.expression)) return false;
+  const token = tokens[(marker.expression as { reference: string }).reference];
+  return token !== undefined && token.angle === undefined && token.number !== 0;
 }
 
 /**

@@ -170,24 +170,14 @@ no `@tailwindcss/cli` to install.
 
 The preset turns preflight off, so `@tailwind base` brings only the reset that gives each `--tw-*`
 property its default on every element. That reset is what lets utilities combine: `transform
-rotate-45 translate-x-2`, `shadow ring-2`, `bg-blue-500 bg-opacity-50` and `bg-gradient-to-r
-from-rose-500 via-white to-blue-500` are settled per element on the device, the way a browser
-settles them, rather than once for the whole sheet at build time. It supplies the same variants
-and utilities as `native.css`: the platform variants, `dark:` following a `.dark` class, the touch
-meanings of `hover:` and `focus-visible:` (for `group-*:` and `peer-*:` as well), and the safe-area
-and hairline utilities.
+rotate-45 translate-x-2`, `shadow ring-2 ring-offset-2`, `bg-blue-500 bg-opacity-50`,
+`android:blur android:grayscale` and `bg-gradient-to-r from-rose-500 via-white to-blue-500` are
+settled per element on the device, the way a browser settles them, rather than once for the whole
+sheet at build time. It supplies the same variants and utilities as `native.css`: the platform
+variants, `dark:` following a `.dark` class, the touch meanings of `hover:` and `focus-visible:`
+(for `group-*:` and `peer-*:` as well), and the safe-area and hairline utilities.
 
-Two limits:
-
-- A declaration that mixes a percentage with a combined value, such as `-translate-x-1/2`, is
-  settled at build time, because resolving a percentage needs layout the device does not do
-  there. `-translate-x-1/2` centers, but a `translate-y-*` on the same element does not combine
-  with it.
-- Filter utilities are settled at build time too, because the device takes no tokens in a
-  `filter` list. Each draws its own filter, and `android:blur android:grayscale` on one element
-  draws only one of the two.
-
-- `ring-inset` works written plainly beside a ring. Behind a variant, as `focus:ring-inset`, the
-  ring stays outset.
+Every Tailwind 3 utility is held to the same sweep as Tailwind 4's: each one either takes effect or
+is refused with a build warning, and what it draws is compared with Chrome.
 
 The web host is Tailwind 4 only.

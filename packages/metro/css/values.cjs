@@ -41,7 +41,8 @@ const round = (value) => {
   if (!Number.isFinite(value) || Math.abs(value) >= F32_CEILING) {
     return value < 0 ? -HUGE : HUGE;
   }
-  return Math.round(value * 1e5) / 1e5;
+  // `+ 0` makes a negative zero zero, which JSON would anyway, and the module Metro writes is JSON.
+  return Math.round(value * 1e5) / 1e5 + 0;
 };
 
 const camel = (property) => property.replace(/-([a-z])/g, (_, c) => c.toUpperCase());
@@ -494,8 +495,44 @@ function listValue(parts) {
   if (channels !== null) return { channels };
   const family = firstFamily(parts);
   if (family !== null) return { family };
+  const filter = filterListForm(parts);
+  if (filter !== undefined) return { filter };
   const shadow = shadowForm(parts) ?? shadowWithTokens(parts);
   return shadow === undefined ? null : { shadow };
+}
+
+/**
+ * A slot holding several filter functions, as Tailwind 3's `drop-shadow` puts two `drop-shadow()`s
+ * in `--tw-drop-shadow`: the list `filter` takes, spliced whole where the slot is read.
+ */
+function filterListForm(parts) {
+  const functions = parts.filter((part) => part?.value?.type !== 'white-space');
+  if (functions.length < 2) return undefined;
+  if (
+    !functions.every((part) => part?.type === 'function' && FILTER_FUNCTIONS.has(part.value?.name))
+  ) {
+    return undefined;
+  }
+  const text = cssText(functions);
+  if (text === null) return undefined;
+  let parsed;
+  try {
+    require('lightningcss').transform({
+      filename: 'token.css',
+      code: Buffer.from(`a{filter:${text}}`),
+      visitor: {
+        Declaration(declaration) {
+          if (declaration.property === 'filter') parsed = declaration.value;
+        },
+      },
+    });
+    if (!parsed) return undefined;
+    const out = {};
+    require('./properties.cjs').translate('filter', parsed, out);
+    return out.filter;
+  } catch {
+    return undefined;
+  }
 }
 
 /**

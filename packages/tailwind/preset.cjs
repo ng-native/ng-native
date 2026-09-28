@@ -72,7 +72,8 @@ function nativePreset({ addBase, addUtilities, addVariant, matchUtilities, theme
   addUtilities(safe);
 
   // The inset plus a step off the spacing scale, and whichever of the two is larger.
-  const spacing = { values: theme('spacing') };
+  // Lengths only: a bare number after the inset is no length, and a browser drops it.
+  const spacing = { values: theme('spacing'), type: ['length', 'percentage'] };
   for (const [letter, edge] of [
     ['t', 'top'],
     ['b', 'bottom'],

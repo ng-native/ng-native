@@ -156,10 +156,10 @@ async function loadStylesheet(id: string, base: string) {
 const options = { base: HERE, loadStylesheet };
 
 /** How many of a functional utility's named values to take: first, last, and some between. */
-const SPREAD = 4;
+export const SPREAD = 4;
 
 /** Up to how many values a utility has all of them taken, rather than a spread. */
-const WHOLE = 12;
+export const WHOLE = 12;
 
 /**
  * The arbitrary values tried against every functional utility. Tailwind decides which it takes
@@ -183,7 +183,7 @@ const ARBITRARY = [
  * The names `tailwind-sweep-theme.css` gives its values, tried against every functional utility as
  * the arbitrary values are: sampling a spread of each utility's values would pass over them.
  */
-const THEME_VALUES = [
+export const THEME_VALUES = [
   'brand',
   'brand-soft',
   'gutter',
@@ -199,10 +199,15 @@ const THEME_VALUES = [
  * The utilities a variant is tried on: a length, a colour, a plain number, and an arbitrary
  * value with commas in it, which a selector has to escape.
  */
-const VARIANT_PROBES = ['p-4', 'bg-red-500', 'opacity-50', 'bg-[rgb(1,2,3)]'];
+export const VARIANT_PROBES = ['p-4', 'bg-red-500', 'opacity-50', 'bg-[rgb(1,2,3)]'];
 
 /** Variants stacked, which Tailwind writes as one selector nested in another. */
-const STACKED_VARIANTS = ['dark:android', 'ios:dark', 'dark:ios:active', 'android:dark:disabled'];
+export const STACKED_VARIANTS = [
+  'dark:android',
+  'ios:dark',
+  'dark:ios:active',
+  'android:dark:disabled',
+];
 
 /** Arbitrary variants, which have no name to list. */
 const ARBITRARY_VARIANTS = [
@@ -219,13 +224,13 @@ const ARBITRARY_VARIANTS = [
 ];
 
 /** The root a listed class belongs to: the longest utility name it starts with. */
-function rootOf(name: string, roots: readonly string[]): string {
+export function rootOf(name: string, roots: readonly string[]): string {
   const bare = name.replace(/^-/, '');
   return roots.find((root) => bare === root || bare.startsWith(`${root}-`)) ?? bare;
 }
 
 /** A spread of a list: its first and last, and evenly between. */
-function spread<T>(list: readonly T[], count: number): T[] {
+export function spread<T>(list: readonly T[], count: number): T[] {
   if (list.length <= count) return [...list];
   if (count === 1) return [list[Math.floor(list.length / 2)]!];
   return Array.from(
@@ -342,7 +347,7 @@ const one = (name: string, kind: SweepCase['kind']): SweepCase => ({
  * A shorthand beside one of its sides, where the web's answer is source order and native's is the
  * more specific edge: the two agree only because Tailwind writes the side after the shorthand.
  */
-const OVERLAPS = [
+export const OVERLAPS = [
   ['p-4', 'pt-2'],
   ['p-4', 'px-2'],
   ['px-4', 'pl-2'],
@@ -401,7 +406,7 @@ const ANDROID_ONLY = /^--tw-(blur|contrast|grayscale|hue-rotate|invert|saturate|
  *
  * A pair of filter slots is written for Android too, where a filter is drawn.
  */
-function slotPairs(css: string, singles: Set<string>): string[][] {
+export function slotPairs(css: string, singles: Set<string>): string[][] {
   const { setters, readers, overriders, owners } = slotsIn(css, singles);
   const pairs = new Map<string, string[]>();
   const add = (slot: string, pair: string[]) => {
@@ -458,8 +463,9 @@ function slotsIn(css: string, singles: Set<string>) {
     map.set(key, [...(map.get(key) ?? []), name]);
   // A colour's `@supports` fallback nests a block in the rule: its declarations are the rule's.
   const flat = css.replace(/@supports[^{]*\{([^{}]*)\}/g, '$1');
+  // Tailwind 3 writes the children as `.space-x-2 > :not([hidden]) ~ :not([hidden])`.
   const rules = flat.matchAll(
-    /\n(?:\.((?:\\.|[\w-])+)|:where\(\.((?:\\.|[\w-])+) > [^{]*\))\s*\{([^{}]*)\}/g,
+    /\n(?:\.((?:\\.|[\w-])+)(?: > :not\(\[hidden\]\) ~ :not\(\[hidden\]\))?|:where\(\.((?:\\.|[\w-])+) > [^{]*\))\s*\{([^{}]*)\}/g,
   );
   for (const [, plain, children, body] of rules) {
     const name = (plain ?? children)!.replace(/\\(.)/g, '$1');

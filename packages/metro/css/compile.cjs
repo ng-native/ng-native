@@ -315,6 +315,28 @@ function deferHslToken(parts) {
 }
 
 /**
+ * `--x: rgba(var(--channels), <alpha>)`: a colour token made of a channels token and an alpha
+ * written beside it or taken from a token of its own. Bootstrap's colours as a token, and how
+ * Tailwind 3's `ring-opacity-50` fades a ring, whose colour is a token the ring reads.
+ *
+ * Settled on the node that defines it, as an hsl() token is: see `resolveAliases` in css.ts.
+ *
+ * @returns `{ deferredColour }`, or null if this is not that shape
+ */
+function deferChannelsToken(parts, context) {
+  if (parts.length !== 1) return null;
+  const deferred = deferChannels(parts[0], 'color', context);
+  if (!deferred) return null;
+  const alpha = deferred.alpha ?? deferred.adjust?.alpha;
+  return {
+    deferredColour: {
+      channels: { reference: deferred.reference },
+      ...(alpha === undefined ? {} : { alpha }),
+    },
+  };
+}
+
+/**
  * One channel of an hsl() token: a `var()` naming another token, with its fallback read the same
  * way a literal channel is; a value settled here; or undefined, when it is neither.
  */
@@ -1209,7 +1231,10 @@ function addAliased(name, parts, out, deferred, context) {
 
 /** A `--x` definition's value, in every form it can be read as. */
 function customToken(name, parts, context) {
-  const value = deferHslToken(parts) ?? tokenValue(parts, `${context} (${name})`);
+  const value =
+    deferHslToken(parts) ??
+    deferChannelsToken(parts, context) ??
+    tokenValue(parts, `${context} (${name})`);
   if (value === null) {
     throw new CssUnsupported(`${context}: '${name}' has a value native cannot express in any form`);
   }

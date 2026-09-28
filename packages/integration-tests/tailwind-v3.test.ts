@@ -116,6 +116,27 @@ describe('Tailwind 3', () => {
     assert.equal(transformOf(child)['rotate'] ?? '0deg', '0deg');
   });
 
+  it("draws both of a drop shadow's shadows on Android, and says iOS does not draw one", () => {
+    // Tailwind 3 puts two `drop-shadow()`s in the one slot, which the compiler took for a single
+    // function and dropped, leaving an empty filter.
+    const refused: string[] = [];
+    const sheet = compileCss(
+      flattenTailwind(build('android:drop-shadow-md drop-shadow')),
+      'tailwind',
+      {
+        onUnsupported: (message: string) => refused.push(message),
+      },
+    );
+    const { child } = render(sheet, 'platform-android', 'android:drop-shadow-md');
+    const filter = child['filter'] as { dropShadow: object }[];
+    assert.equal(filter?.length, 2, JSON.stringify(filter));
+    assert.ok(filter.every((one) => 'dropShadow' in one));
+    assert.ok(
+      refused.some((m) => /drop-shadow\(\) is not drawn on iOS/.test(m)),
+      refused.join('\n'),
+    );
+  });
+
   it('filters by the filter utility a node wears, and not by one another class set', () => {
     // Filters are settled at build time, since the device refuses a filter list of tokens; a slot
     // the rule does not set has to come from the reset, not from the last utility in the file.
@@ -132,6 +153,17 @@ describe('Tailwind 3', () => {
       shadows.every((shadow) => shadow.spreadDistance <= 0),
       `no ring in ${JSON.stringify(shadows)}`,
     );
+  });
+
+  it('colours a shadow by the shadow colour it wears, and no other', () => {
+    // `.shadow-orange-950` sets `--tw-shadow-color`, which `.shadow` reads inside
+    // `--tw-shadow-colored`: settled at build time, every coloured shadow took the colour written
+    // last in the file.
+    const sheet = sheetFor('shadow shadow-orange-950 shadow-zinc-950');
+    const colours = (classes: string) =>
+      (render(sheet, classes).parent['boxShadow'] as { color: string }[]).map((s) => s.color);
+    assert.deepEqual(colours('shadow shadow-orange-950'), ['rgb(67, 20, 7)', 'rgb(67, 20, 7)']);
+    assert.deepEqual(colours('shadow'), ['rgba(0, 0, 0, 0.1)', 'rgba(0, 0, 0, 0.1)']);
   });
 
   it('paints a ring in the colour and width the node asks for', () => {
@@ -187,6 +219,16 @@ describe('Tailwind 3', () => {
     assert.equal(committedProps(fabric, first)['borderTopWidth'], undefined);
     assert.equal(committedProps(fabric, second)['borderTopWidth'], 1);
     assert.equal(committedProps(fabric, second)['borderTopColor'], 'rgba(228, 228, 231, 0.5)');
+  });
+
+  it('keeps a side colour to its side, beside a colour for all four', () => {
+    // Both are faded by the same `--tw-border-opacity`, so each needs channels of its own: shared,
+    // the side's colour painted all four sides.
+    const sheet = sheetFor('border-2 border-red-500 border-t-blue-500 border-opacity-50');
+    const { parent } = render(sheet, 'border-2 border-red-500 border-t-blue-500');
+    assert.equal(parent['borderTopColor'], 'rgb(59, 130, 246)');
+    assert.equal(parent['borderRightColor'], 'rgb(239, 68, 68)');
+    assert.equal(parent['borderLeftColor'], 'rgb(239, 68, 68)');
   });
 
   it('spaces the children after the first', () => {
@@ -245,6 +287,38 @@ describe('Tailwind 3', () => {
     assert.doesNotMatch(reset, /--tw-pan-x|--tw-ordinal|--tw-scroll-snap/, 'read by nothing here');
   });
 
+  it("spaces a long list without walking each child's earlier siblings", () => {
+    // Tailwind 3 writes `space-x-2` as `.space-x-2 > :not([hidden]) ~ :not([hidden])`: matched on
+    // every element, and answered by walking back through every earlier sibling. Native has no
+    // `hidden`, so it is "not the first child", which is answered at once.
+    const flat = flattenTailwind(build('space-x-2 divide-y'));
+    assert.doesNotMatch(flat, /~ :not\(\[hidden\]\)/);
+    const sheet = compileCss(flat, 'tailwind', { onUnsupported: () => {} });
+    const fabric = createFakeFabric();
+    const engine = new Engine(fabric, 1, { globalStyles: sheet });
+    const list = engine.createElement('view');
+    engine.setClasses(list, 'space-x-2');
+    engine.appendChild(engine.root, list);
+    const rows = Array.from({ length: 3000 }, () => engine.createElement('view'));
+    for (const row of rows) engine.appendChild(list, row);
+    const started = performance.now();
+    engine.commit();
+    const ms = performance.now() - started;
+    assert.equal(committedProps(fabric, rows[0])['marginLeft'], undefined);
+    assert.equal(committedProps(fabric, rows[2999])['marginLeft'], 8);
+    assert.ok(ms < 1500, `3000 rows took ${Math.round(ms)}ms`);
+  });
+
+  it('turns by an angle, and drops a turn by a bare number or a percentage as a browser does', () => {
+    // `rotate-[3]` is `rotate(3)`, which is no angle: a browser drops the whole transform, where
+    // native read the number as degrees.
+    const sheet = sheetFor('transform rotate-[3] rotate-[37%] rotate-[30deg] rotate-0');
+    assert.equal(transformOf(render(sheet, 'transform rotate-[30deg]').parent)['rotate'], '30deg');
+    assert.equal(render(sheet, 'transform rotate-[3]').parent['transform'], undefined);
+    assert.equal(render(sheet, 'transform rotate-[37%]').parent['transform'], undefined);
+    assert.equal(transformOf(render(sheet, 'transform rotate-0').parent)['rotate'], '0deg');
+  });
+
   it('takes arbitrary values', () => {
     const sheet = sheetFor('bg-[#123456] w-[37px] transform translate-x-[10px] rotate-45');
     const { parent } = render(sheet, 'bg-[#123456] w-[37px] transform translate-x-[10px]');
@@ -252,6 +326,23 @@ describe('Tailwind 3', () => {
     assert.equal(parent['width'], 37);
     assert.equal(transformOf(parent)['translateX'], 10);
     assert.equal(transformOf(parent)['rotate'] ?? '0deg', '0deg');
+  });
+
+  it('fades a ring by ring-opacity', () => {
+    const sheet = sheetFor('ring-2 ring-blue-500 ring-opacity-50 ring-rose-500');
+    const shadows = render(sheet, 'ring-2 ring-blue-500 ring-opacity-50').parent['boxShadow'] as {
+      spreadDistance: number;
+      color: string;
+    }[];
+    assert.ok(
+      shadows?.some((s) => s.spreadDistance === 2 && s.color === 'rgba(59, 130, 246, 0.5)'),
+      JSON.stringify(shadows),
+    );
+    const solid = render(sheet, 'ring-2 ring-blue-500').parent['boxShadow'] as { color: string }[];
+    assert.ok(
+      solid?.some((s) => s.color === 'rgb(59, 130, 246)'),
+      JSON.stringify(solid),
+    );
   });
 
   it("draws a ring in Tailwind's default colour, and inset when asked", () => {
@@ -271,6 +362,20 @@ describe('Tailwind 3', () => {
       spreadDistance: number;
       inset: boolean;
     }[];
+    // Behind a variant too: the ring's shadow reads the slot on device.
+    const focusSheet = sheetFor('ring-2 focus:ring-inset');
+    const fabric = createFakeFabric();
+    const engine = new Engine(fabric, 1, { globalStyles: focusSheet });
+    const node = engine.createElement('view');
+    engine.setClasses(node, 'ring-2 focus:ring-inset');
+    engine.setProp(node, 'data-focus', '');
+    engine.appendChild(engine.root, node);
+    engine.commit();
+    const focused = committedProps(fabric, node)['boxShadow'] as { inset: boolean }[];
+    assert.ok(
+      focused?.every((s) => s.inset),
+      JSON.stringify(focused),
+    );
     assert.ok(
       inset.some((s) => s.spreadDistance === 3 && s.inset),
       JSON.stringify(inset),
@@ -478,6 +583,16 @@ describe('the Tailwind 3 preset', () => {
       declarationsOf('min-pb-safe-4'),
       /padding-bottom: max\(var\(--safe-area-inset-bottom, 0px\), 1rem\)/,
     );
+  });
+
+  it('takes only a length after the safe area', () => {
+    // A bare number is dropped by a browser, `calc(inset + 3)` being no length, where native would
+    // read it as points.
+    const built = build('pt-safe-[13px] pt-safe-[3] min-pb-safe-[0.35] mb-safe-[1.25rem]');
+    assert.match(built, /pt-safe-\\\[13px\\\]/);
+    assert.match(built, /mb-safe-\\\[1\\\.25rem\\\]/);
+    assert.doesNotMatch(built, /pt-safe-\\\[3\\\]/);
+    assert.doesNotMatch(built, /min-pb-safe-\\\[0\\\.35\\\]/);
   });
 
   it('draws a hairline from the device token', () => {

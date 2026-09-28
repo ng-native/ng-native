@@ -649,6 +649,57 @@ describe('colours nested inside a style value', () => {
   });
 });
 
+describe('a colour token made of channel tokens', () => {
+  // `--ring: rgba(var(--ring-rgb), var(--ring-alpha))`: Bootstrap writes its colours this way, and
+  // Tailwind 3's `ring-opacity-50` needs it, since a ring's colour is a token the ring reads. The
+  // colour is settled where the token is defined, from the tokens in scope there.
+  const resolve = (css: string, parentClasses: string[], classes: string[]) => {
+    const target = (parent: StyleTarget | null, own: string[]): StyleTarget => ({
+      name: 'view',
+      parent,
+      classes: new Set(own),
+      props: {},
+      sheet: null,
+      hostSheet: null,
+      styleCache: null,
+      styleDirty: true,
+    });
+    const resolver = new StyleResolver(compileCss(css), {
+      width: 400,
+      height: 800,
+      colorScheme: 'light',
+    });
+    const parent = target(null, parentClasses);
+    resolver.resolve(parent, 1);
+    return resolver.resolve(target(parent, classes), 1).style;
+  };
+  const css = `
+    .blue { --ring-rgb: 59, 130, 246; --ring-alpha: 1; --ring: rgba(var(--ring-rgb), var(--ring-alpha, 1)) }
+    .faded { --ring-alpha: 0.5 }
+    .fixed { --ring-rgb: 1, 2, 3; --ring: rgba(var(--ring-rgb), 0.25) }
+    .paint { background-color: var(--ring) }
+  `;
+
+  it('takes its alpha from a token', () => {
+    assert.equal(resolve(css, [], ['blue', 'paint'])['backgroundColor'], 'rgb(59, 130, 246)');
+    assert.equal(
+      resolve(css, [], ['blue', 'faded', 'paint'])['backgroundColor'],
+      'rgba(59, 130, 246, 0.5)',
+    );
+  });
+
+  it('takes an alpha written beside the channels', () => {
+    assert.equal(resolve(css, [], ['fixed', 'paint'])['backgroundColor'], 'rgba(1, 2, 3, 0.25)');
+  });
+
+  it('is inherited as the colour it was settled to', () => {
+    assert.equal(
+      resolve(css, ['blue', 'faded'], ['paint'])['backgroundColor'],
+      'rgba(59, 130, 246, 0.5)',
+    );
+  });
+});
+
 describe('unsupported CSS, through the build', () => {
   /** What the build prints while `run` transforms, and what it returns. */
   function warned<T>(run: () => T): { result: T; warnings: string[] } {
@@ -809,6 +860,15 @@ describe('messages for things that are refused', () => {
 });
 
 describe('the rest of the selector and unit surface', () => {
+  it('writes a negative zero as zero', () => {
+    // `-translate-x-0` is `-0px`. JSON has no negative zero, so the module Metro writes held 0
+    // where the sheet compiled in memory held -0, and the two were not the same sheet.
+    const [rule] = compileCss('.a { margin-left: -0px; --x: -0rem; --y: -0px }').rules;
+    assert.ok(Object.is(rule!.declarations['marginLeft'], 0));
+    assert.ok(Object.is((rule!.tokens!['--x'] as { length: number }).length, 0));
+    assert.ok(Object.is((rule!.tokens!['--y'] as { length: number }).length, 0));
+  });
+
   it('supports the remaining attribute operators', () => {
     const rule = (s: string) => compileCss(`${s} { color: red }`).rules[0];
     assert.equal(rule('view[data-x~="b"]').compounds[0].attributes[0].operator, 'includes');

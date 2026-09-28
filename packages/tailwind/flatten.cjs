@@ -224,7 +224,9 @@ const RESOLVED_PER_NODE =
  * `ring-offset-2` the width it is pushed out by, `ring-inset` whether it is inset. A drop shadow
  * keeps its shape in `--tw-drop-shadow-size`, which `drop-shadow-red-500` colours.
  */
-const SHADOW_SLOT = /^--tw-[\w-]*shadow(-size)?$/;
+// Tailwind 3's `--tw-shadow-colored` too: the coloured copy of a shadow, which `shadow-red-500`
+// swaps in and whose colour is a slot of its own.
+const SHADOW_SLOT = /^--tw-[\w-]*shadow(-size|-colored)?$/;
 
 /**
  * Replace `var()` with what it resolves to, repeatedly, because theme values reference each other.
@@ -630,40 +632,15 @@ function opacityChannels(css) {
     for (const [, name] of body.matchAll(/(--tw-[\w-]+-opacity)\s*:/g)) setters.add(name);
   }
   const runtime = new Set();
-  const out = css.replace(OPACITY_COLOUR, (whole, property, r, g, b, alpha, kind) => {
-    if (property.startsWith('--') || !setters.has(alpha)) return whole;
-    const channels = `--tw-${kind}-rgb`;
+  const out = css.replace(OPACITY_COLOUR, (whole, property, r, g, b, alpha) => {
+    if (!setters.has(alpha)) return whole;
+    // One per property: `border-color` and `border-top-color` are both faded by
+    // `--tw-border-opacity`, and sharing channels would paint one's colour on the other's sides.
+    const channels = `--tw-rgb-${property.replace(/^--tw-/, '')}`;
     runtime.add(alpha).add(channels);
     return `${channels}: ${r}, ${g}, ${b}; ${property}: rgba(var(${channels}), var(${alpha}, 1))`;
   });
   return { css: out, runtime };
-}
-
-/**
- * Tailwind 3's `ring-inset`, written out on each ring it can combine with.
- *
- * `.ring-inset` sets `--tw-ring-inset: inset`, a keyword the ring reads at the front of its shadow,
- * and the reset leaves it empty. The compiler drops a token with no value, so the device cannot
- * settle it; instead each rule that reads it gets a twin for an element that also wears
- * `.ring-inset`, with the keyword in place. Only a plain `.ring-inset`: one behind a variant
- * (`focus:ring-inset`) keeps its ring outset.
- */
-function expandRingInset(css) {
-  const setters = [
-    ...css.matchAll(/(?:^|\})\s*(\.[\w-]+)\s*\{\s*--tw-ring-inset\s*:\s*inset\s*;?\s*\}/g),
-  ];
-  if (!setters.length) return css;
-  const classes = setters.map((m) => m[1]);
-  return css.replace(
-    /([^{}]+)\{([^{}]*var\(--tw-ring-inset\)[^{}]*)\}/g,
-    (whole, selectors, body) => {
-      if (/--tw-ring-inset\s*:/.test(body)) return whole;
-      const twins = classes.flatMap((cls) =>
-        selectors.split(',').map((one) => `${one.trim()}${cls}`),
-      );
-      return `${whole}\n${twins.join(', ')} {${body.replaceAll('var(--tw-ring-inset)', 'inset')}}`;
-    },
-  );
 }
 
 /**
@@ -781,7 +758,11 @@ function flattenTailwind(css) {
   out = rewriteAtRule(out, '@supports', true);
   out = resetWithoutReverseSlots(out);
   out = normalizeV3Gradients(out);
-  out = expandRingInset(out);
+  // Tailwind 3's `space-*` and `divide-*` children: every child after a shown one. Native has no
+  // `hidden`, so that is every child but the first, which the engine answers at once; the sibling
+  // test is matched on every element and walks back through all its earlier siblings, so a long
+  // list paid for it squared on every commit.
+  out = out.replace(/>\s*:not\(\[hidden\]\)\s*~\s*:not\(\[hidden\]\)/g, '> :not(:first-child)');
   out = emptySlotFallbacks(out);
   // Tailwind 3's `transform-gpu`: a third dimension that is only a hint to a browser's compositor.
   out = out.replace(

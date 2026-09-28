@@ -16,6 +16,7 @@
  * off a rendered twin of each case, because an unrendered element reports none whatever it has.
  *
  * Re-run it when the sweep's cases change: a Tailwind upgrade, or a case added to the sweep.
+ * `TAILWIND_SWEEP=v3` records Tailwind 3's sweep (`tailwind-v3-sweep.test.ts`) instead.
  */
 import { execFileSync } from 'node:child_process';
 import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
@@ -25,8 +26,6 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { SCENE } from '../layout.ts';
 import {
-  buildFor,
-  sweep,
   ROOT_CLASSES,
   ROOT_CSS,
   MOTION_POINTS,
@@ -34,9 +33,13 @@ import {
   STATE_CLASSES,
   TRANSFORM_BOX,
   VIEWPORT,
-  WORLDS,
-  measuredIn,
 } from '../fixtures/tailwind-sweep.ts';
+
+const V3 = process.env.TAILWIND_SWEEP === 'v3';
+const source = await import(
+  V3 ? '../fixtures/tailwind-v3-sweep.ts' : '../fixtures/tailwind-sweep.ts'
+);
+const { buildFor, sweep, WORLDS, measuredIn } = source;
 
 const CHROME = [
   '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
@@ -58,10 +61,9 @@ const { css, cases } = await sweep();
 // A web app's Tailwind has its preflight, which gives every element the defaults native starts
 // from: no margin, a zero-width solid border. Without it, `border-dashed` alone would be a 3px
 // border here, where it is none in any real app.
-const preflight = readFileSync(
-  createRequire(import.meta.url).resolve('tailwindcss/preflight.css'),
-  'utf8',
-);
+const preflight = V3
+  ? await source.preflight()
+  : readFileSync(createRequire(import.meta.url).resolve('tailwindcss/preflight.css'), 'utf8');
 /** The rendered twins' box: fixed, so a percentage in a translate is the same pixels on both sides. */
 const BOX = `position: absolute; width: ${TRANSFORM_BOX}px; height: ${TRANSFORM_BOX}px`;
 const escape = (text) => text.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
@@ -92,7 +94,7 @@ const reset = readFileSync(
   fileURLToPath(new URL('../../web/src/reset.css', import.meta.url)),
   'utf8',
 );
-const webCss = await buildFor(cases, 'web');
+const webCss = WORLDS.some((world) => world.name === 'web') ? await buildFor(cases, 'web') : '';
 
 function page(world, inWorld) {
   const shown = (test) => element(world, test, ` data-shown="${escape(test.name)}" style="${BOX}"`);
@@ -317,6 +319,11 @@ for (const world of WORLDS) {
 recorded.layout = layoutWorld();
 recorded.motion = motionWorld();
 
-const target = fileURLToPath(new URL('../fixtures/tailwind-sweep-oracle.json', import.meta.url));
+const target = fileURLToPath(
+  new URL(
+    `../fixtures/${V3 ? 'tailwind-v3-sweep' : 'tailwind-sweep'}-oracle.json`,
+    import.meta.url,
+  ),
+);
 writeFileSync(target, `${JSON.stringify(recorded)}\n`);
 console.log(`recorded from ${chrome.split('/').pop()}`);
