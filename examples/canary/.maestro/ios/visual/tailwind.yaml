@@ -1,4 +1,8 @@
 # Tailwind, as it draws: a screenshot compared with the one taken when it was last right.
+#
+# Stricter than the other screens: nothing here moves, so a run matches its baseline pixel for pixel,
+# and what it guards is small. A ring in the wrong colour is 0.09% of the screen and a lost text
+# shadow 0.03%, both of which a 97% threshold lets through.
 appId: dev.angularnative.canary
 ---
 - runFlow:
@@ -8,4 +12,4 @@ appId: dev.angularnative.canary
 - waitForAnimationToEnd
 - assertScreenshot:
     path: ../baselines/visual-tailwind.png
-    thresholdPercentage: 97
+    thresholdPercentage: 99.99
