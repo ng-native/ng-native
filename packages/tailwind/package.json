@@ -1,7 +1,7 @@
 {
   "name": "@ng-native/tailwind",
   "version": "0.0.0",
-  "description": "Tailwind CSS preset for Angular Native, for native and web.",
+  "description": "Tailwind CSS preset for Angular Native, for native and web, on Tailwind 4 or 3.",
   "keywords": [
     "angular",
     "react-native",
@@ -34,7 +34,7 @@
   "peerDependencies": {
     "@ng-native/metro": "workspace:*",
     "@tailwindcss/cli": "^4.3.3",
-    "tailwindcss": "^4.3.3"
+    "tailwindcss": "^3.4.1 || ^4.3.3"
   },
   "peerDependenciesMeta": {
     "@tailwindcss/cli": {

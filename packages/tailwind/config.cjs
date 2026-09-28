@@ -214,14 +214,23 @@ function watch(input, css, output, cwd) {
   process.once('SIGTERM', stop);
 }
 
-/** `@tailwindcss/cli`, resolved from the app rather than from here: it is the app's dependency. */
+/**
+ * The app's Tailwind CLI, resolved from the app rather than from here: it is the app's dependency.
+ *
+ * Tailwind 3 ships its CLI inside `tailwindcss` itself; Tailwind 4 moved it to `@tailwindcss/cli`.
+ * The app's `tailwindcss` says which it is on.
+ */
 function cliPath(cwd) {
-  const from = require.resolve('@tailwindcss/cli/package.json', { paths: [cwd, __dirname] });
-  const { bin } = require(from);
+  const paths = { paths: [cwd, __dirname] };
+  const tailwind = require.resolve('tailwindcss/package.json', paths);
+  const from = require(tailwind).version.startsWith('3.')
+    ? tailwind
+    : require.resolve('@tailwindcss/cli/package.json', paths);
+  const { bin, name } = require(from);
   const entry = typeof bin === 'string' ? bin : bin[Object.keys(bin)[0]];
   const resolved = path.join(path.dirname(from), entry);
   if (!existsSync(resolved)) {
-    throw new Error(`[angular-native] found @tailwindcss/cli but not its binary at ${resolved}`);
+    throw new Error(`[angular-native] found ${name} but not its binary at ${resolved}`);
   }
   return resolved;
 }

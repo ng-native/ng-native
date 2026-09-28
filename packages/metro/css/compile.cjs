@@ -1753,25 +1753,48 @@ function compileCss(source, context = 'styles', options = {}) {
 
   /** A style rule's selectors and declarations as rules, each at the place `orderOf` gives it. */
   function styleVariant(rule, orderOf, context) {
-    const selectors = rule.value.selectors;
     const groups = new Map();
-    for (const parts of selectors) {
+    for (const parts of rule.value.selectors) {
+      // One selector the engine cannot match is dropped on its own, not with the list it is in:
+      // lightningcss merges neighbouring rules with the same declarations, so a list is often
+      // several unrelated utilities that happen to share a colour.
+      const compiled = selectorOrDropped(parts, context, rule.value.selectors.length === 1);
+      if (!compiled) continue;
       const platforms = rulePlatforms([parts], targets);
       const key = platforms.join();
       if (!groups.has(key)) groups.set(key, { platforms, selectors: [] });
-      groups.get(key).selectors.push(parts);
+      groups.get(key).selectors.push({ parts, compiled });
     }
     for (const { platforms, selectors: group } of groups.values()) {
       const built = buildRule(rule, platforms, context);
       if (!built) continue;
-      for (const parts of group) {
+      for (const { parts, compiled } of group) {
         // One rule per alternative an ancestor test is among; each as specific as the selector
         // written, which is what `:is()` makes all of them.
-        const { specificity } = selector(parts, context);
         for (const one of alternatives(parts)) {
-          rules.push({ ...selector(one, context), specificity, order: orderOf(parts), ...built });
+          const alternative = one === parts ? compiled : selector(one, context);
+          rules.push({
+            ...alternative,
+            specificity: compiled.specificity,
+            order: orderOf(parts),
+            ...built,
+          });
         }
       }
+    }
+  }
+
+  /** One selector compiled, or null and reported when the engine cannot match it. */
+  function selectorOrDropped(parts, context, alone) {
+    if (!onUnsupported) return selector(parts, context);
+    try {
+      return selector(parts, context);
+    } catch (error) {
+      if (!(error instanceof CssUnsupported)) throw error;
+      onUnsupported(
+        reported(context, alone ? 'dropped a rule' : 'dropped a selector', error.message),
+      );
+      return null;
     }
   }
 

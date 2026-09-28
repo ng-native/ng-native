@@ -72,7 +72,7 @@ const compiled = new Map<LibraryName, Compiled>();
 function compile(library: LibraryName): Compiled {
   const cached = compiled.get(library);
   if (cached) return cached;
-  const css = library === 'tailwind' ? flattenTailwind(source(library)) : source(library);
+  const css = library.startsWith('tailwind') ? flattenTailwind(source(library)) : source(library);
   const messages: string[] = [];
   const started = performance.now();
   const sheet = compileCss(css, library, { onUnsupported: (message) => messages.push(message) });
@@ -100,8 +100,11 @@ describe('the corpus compiles', () => {
  * context may carry a keyframes name: `bootstrap:5235 (@keyframes spin)`.
  */
 const DECLARATION = /^[^']*?: dropped '([^']+)': ([\s\S]*)$/;
-/** `<context>:<line>: dropped a rule: <reason>`, the form a whole rule is reported in. */
-const RULE = /^[^']*?: dropped a rule: ([\s\S]*)$/;
+/**
+ * `<context>:<line>: dropped a rule: <reason>`, the form a whole rule is reported in, or `dropped
+ * a selector` for one selector out of a list whose others were kept.
+ */
+const RULE = /^[^']*?: dropped a (rule|selector): ([\s\S]*)$/;
 
 /**
  * A reason with the parts that say where rather than why taken out, so the same refusal on two
@@ -115,15 +118,18 @@ function reasonOf(message: string, library: string): string {
     .trim();
 }
 
-/** Every drop, as `{ property: { reason: count } }`. A whole rule files under `(rule)`. */
+/**
+ * Every drop, as `{ property: { reason: count } }`. A whole rule files under `(rule)`, and one
+ * selector out of a list under `(selector)`.
+ */
 function groupDrops(messages: string[], library: string) {
   const groups: Record<string, Record<string, number>> = {};
   for (const message of messages) {
     const declaration = DECLARATION.exec(message);
     const rule = declaration ? null : RULE.exec(message);
     assert.ok(declaration || rule, `a drop that does not say what it dropped: ${message}`);
-    const property = declaration ? declaration[1]!.replace(/^--.*/, '--*') : '(rule)';
-    const reason = reasonOf(declaration ? declaration[2]! : rule![1]!, library);
+    const property = declaration ? declaration[1]!.replace(/^--.*/, '--*') : `(${rule![1]})`;
+    const reason = reasonOf(declaration ? declaration[2]! : rule![2]!, library);
     assert.ok(reason.length > 0, `a drop with no reason: ${message}`);
     const byReason = (groups[property] ??= {});
     byReason[reason] = (byReason[reason] ?? 0) + 1;

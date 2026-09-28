@@ -10,7 +10,7 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { spawnSync } from 'node:child_process';
 import { createRequire } from 'node:module';
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import { Engine, type StyleSheet } from '@ng-native/fabric';
@@ -317,6 +317,46 @@ describe('wiring Tailwind into Metro', () => {
       { translateY: 0 },
       { rotate: '45deg' },
     ]);
+  });
+
+  it("runs Tailwind 3's own CLI for an app on Tailwind 3", () => {
+    // Tailwind 3 ships its CLI inside `tailwindcss`, reads `tailwind.config.js` from the app, and
+    // has no `@tailwindcss/cli`. Which one runs is the app's `tailwindcss`, not this package's.
+    const dir = scratch({
+      'styles.css': '@tailwind base;\n@tailwind components;\n@tailwind utilities;\n',
+      'tailwind.config.js': `module.exports = {
+        presets: [require(${JSON.stringify(require.resolve('@ng-native/tailwind/preset.cjs'))})],
+        content: ['./*.html'],
+      };`,
+      'screen.html': '<view class="transform rotate-45 translate-x-4 bg-blue-500 ios:p-4"></view>',
+    });
+    mkdirSync(path.join(dir, 'node_modules'));
+    symlinkSync(
+      path.dirname(require.resolve('tailwindcss-v3/package.json')),
+      path.join(dir, 'node_modules', 'tailwindcss'),
+    );
+    const output = path.join(dir, 'app.tailwind.js');
+    withTailwind(
+      { projectRoot: dir, transformer: {}, resolver: { sourceExts: ['ts'] } },
+      { input: path.join(dir, 'styles.css'), output, watch: false },
+    );
+    const sheet = evaluate(readFileSync(output, 'utf8'));
+    rmSync(dir, { recursive: true, force: true });
+
+    assert.equal(
+      ruleFor(sheet, 'bg-blue-500')?.declarations['backgroundColor'],
+      'rgb(59, 130, 246)',
+    );
+    assert.ok(ruleFor(sheet, 'ios:p-4'), 'the preset reached the build');
+    const fabric = createFakeFabric();
+    const engine = new Engine(fabric, 1, { globalStyles: sheet as unknown as StyleSheet });
+    const view = engine.createElement('view');
+    engine.setClasses(view, 'transform rotate-45 translate-x-4');
+    engine.appendChild(engine.root, view);
+    engine.commit();
+    const transform = Object.assign({}, ...(fabric.committed[0]!.props['transform'] as object[]));
+    assert.equal(transform.translateX, 16);
+    assert.equal(transform.rotate, '45deg');
   });
 
   it('refuses an output name that is not a module', () => {

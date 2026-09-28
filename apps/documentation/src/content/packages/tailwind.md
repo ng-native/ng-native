@@ -139,3 +139,55 @@ would apply the ratio to the descendant's size, so set `leading-*` on the text i
 `focus-visible:` variants the preset adds and why native gives them different meanings than the
 web. [Safe area and hairlines](/packages/tailwind/utilities) covers the two utility families this
 package adds that Tailwind has no reason to ship on its own.
+
+## Tailwind 3
+
+An app on Tailwind 3.4.1 or later uses the same package on native. Tailwind 3 takes its preset
+from `tailwind.config.js` rather than from a stylesheet, so the preset is `preset.cjs`:
+
+```sh
+npm install @ng-native/tailwind tailwindcss@3
+```
+
+```js
+// tailwind.config.js
+module.exports = {
+  presets: [require('@ng-native/tailwind/preset.cjs')],
+  content: ['./src/**/*.{ts,html}'],
+};
+```
+
+```css
+/* src/styles.css */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+```
+
+`metro.config.js` and `main.ts` are the same as above. `withTailwind` reads the app's
+`tailwindcss` version and runs Tailwind 3's own CLI, which ships inside `tailwindcss`, so there is
+no `@tailwindcss/cli` to install.
+
+The preset turns preflight off, so `@tailwind base` brings only the reset that gives each `--tw-*`
+property its default on every element. That reset is what lets utilities combine: `transform
+rotate-45 translate-x-2`, `shadow ring-2`, `bg-blue-500 bg-opacity-50` and `bg-gradient-to-r
+from-rose-500 via-white to-blue-500` are settled per element on the device, the way a browser
+settles them, rather than once for the whole sheet at build time. It supplies the same variants
+and utilities as `native.css`: the platform variants, `dark:` following a `.dark` class, the touch
+meanings of `hover:` and `focus-visible:` (for `group-*:` and `peer-*:` as well), and the safe-area
+and hairline utilities.
+
+Two limits:
+
+- A declaration that mixes a percentage with a combined value, such as `-translate-x-1/2`, is
+  settled at build time, because resolving a percentage needs layout the device does not do
+  there. `-translate-x-1/2` centers, but a `translate-y-*` on the same element does not combine
+  with it.
+- Filter utilities are settled at build time too, because the device takes no tokens in a
+  `filter` list. Each draws its own filter, and `android:blur android:grayscale` on one element
+  draws only one of the two.
+
+- `ring-inset` works written plainly beside a ring. Behind a variant, as `focus:ring-inset`, the
+  ring stays outset.
+
+The web host is Tailwind 4 only.

@@ -12,7 +12,7 @@
  * `package.json`. Tailwind is built by its real CLI from a fixed class list.
  */
 import { execFileSync } from 'node:child_process';
-import { mkdtempSync, readFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -22,7 +22,8 @@ import type { CaseNode } from './css-oracle-cases.ts';
 const require = createRequire(import.meta.url);
 const HERE = fileURLToPath(new URL('.', import.meta.url));
 
-export type LibraryName = 'bootstrap' | 'bulma' | 'pico' | 'open-props' | 'tailwind';
+export type LibraryName =
+  'bootstrap' | 'bulma' | 'pico' | 'open-props' | 'tailwind' | 'tailwind-v3';
 
 const read = (specifier: string) => readFileSync(require.resolve(specifier), 'utf8');
 
@@ -42,6 +43,65 @@ function tailwind(): string {
   return readFileSync(out, 'utf8');
 }
 
+/** `a{b,c}d` as `abd acd`, nested, which is how the corpus entry names its classes. */
+function expandBraces(pattern: string): string[] {
+  const open = pattern.indexOf('{');
+  if (open === -1) return [pattern];
+  let depth = 0;
+  let close = open;
+  const parts: string[] = [];
+  let start = open + 1;
+  for (let i = open; i < pattern.length; i++) {
+    if (pattern[i] === '{') depth++;
+    else if (pattern[i] === '}' && --depth === 0) {
+      close = i;
+      parts.push(pattern.slice(start, i));
+      break;
+    } else if (pattern[i] === ',' && depth === 1) {
+      parts.push(pattern.slice(start, i));
+      start = i + 1;
+    }
+  }
+  const head = pattern.slice(0, open);
+  const tails = expandBraces(pattern.slice(close + 1));
+  return parts.flatMap((part) => expandBraces(head + part).flatMap((a) => tails.map((t) => a + t)));
+}
+
+/** Names only Tailwind 3 has, for the utilities it composes differently. */
+const V3_ONLY =
+  'transform filter backdrop-filter bg-gradient-to-r bg-gradient-to-br ring-inset ring-offset-2 ring-2 ' +
+  'ring-offset-white {bg,text,border,divide,ring,placeholder}-opacity-{0,50,100} ' +
+  '{space-x,space-y}-{2,4} {space-x,space-y}-reverse divide-y divide-x divide-{zinc-200,red-500} ' +
+  'transform-gpu origin-center rotate-12 -rotate-12 skew-y-3 scale-x-50 scale-y-75 ' +
+  'group-focus-visible:p-4 peer-hover:p-4 ios:p-4 android:p-4 native:p-4 ios:dark:p-4 pb-safe-4';
+
+/** Tailwind 3's CLI output for the same class set, through the Tailwind 3 preset. */
+function tailwindV3(): string {
+  const entry = readFileSync(join(HERE, 'css-corpus-tailwind.css'), 'utf8');
+  const patterns = [...entry.matchAll(/@source inline\("([^"]+)"\)/g)].map((m) => m[1]!);
+  const classes = [...patterns, ...V3_ONLY.split(' ')].flatMap(expandBraces).join(' ');
+  const dir = mkdtempSync(join(tmpdir(), 'css-corpus-v3-'));
+  const preset = require.resolve('@ng-native/tailwind/preset.cjs');
+  writeFileSync(
+    join(dir, 'tailwind.config.js'),
+    `module.exports = { presets: [require(${JSON.stringify(preset)})], content: [{ raw: ${JSON.stringify(classes)} }] };`,
+  );
+  writeFileSync(
+    join(dir, 'in.css'),
+    '@tailwind base;\n@tailwind components;\n@tailwind utilities;\n',
+  );
+  const cli = require.resolve('tailwindcss-v3/lib/cli.js');
+  execFileSync(
+    process.execPath,
+    [cli, '-c', 'tailwind.config.js', '-i', 'in.css', '-o', 'out.css'],
+    {
+      cwd: dir,
+      stdio: 'pipe',
+    },
+  );
+  return readFileSync(join(dir, 'out.css'), 'utf8');
+}
+
 /**
  * What each library is, as a browser would load it.
  *
@@ -59,6 +119,7 @@ export const LIBRARIES: Record<LibraryName, () => string> = {
       readFileSync(join(HERE, 'css-corpus-open-props.css'), 'utf8'),
     ].join('\n'),
   tailwind,
+  'tailwind-v3': tailwindV3,
 };
 
 const cache = new Map<LibraryName, string>();
@@ -238,4 +299,35 @@ export const CORPUS_CASES: CorpusCase[] = [
   at('tailwind', 'md:p-4 at 1280', probe(['md:p-4']), 1280),
   at('tailwind', 'container at 500', probe(['container'])),
   at('tailwind', 'container at 1280', probe(['container']), 1280),
+
+  // Tailwind 3: the same utilities, and the ones it builds out of several classes on one element.
+  at('tailwind-v3', 'p-4', probe(['p-4'])),
+  at(
+    'tailwind-v3',
+    'bg-blue-500 text-slate-50 rounded-lg',
+    probe(['bg-blue-500', 'text-slate-50', 'rounded-lg']),
+  ),
+  at('tailwind-v3', 'flex items-center gap-2', probe(['flex', 'items-center', 'gap-2'])),
+  at(
+    'tailwind-v3',
+    'text-2xl font-bold leading-tight tracking-wide',
+    probe(['text-2xl', 'font-bold', 'leading-tight', 'tracking-wide']),
+  ),
+  at('tailwind-v3', 'md:p-4 at 500', probe(['md:p-4'])),
+  at('tailwind-v3', 'md:p-4 at 1280', probe(['md:p-4']), 1280),
+  at('tailwind-v3', 'shadow-lg', probe(['shadow-lg'])),
+  at('tailwind-v3', 'shadow ring-2 ring-red-500', probe(['shadow', 'ring-2', 'ring-red-500'])),
+  at(
+    'tailwind-v3',
+    'ring-2 ring-offset-2 ring-blue-500',
+    probe(['ring-2', 'ring-offset-2', 'ring-blue-500']),
+  ),
+  at('tailwind-v3', 'bg-blue-500 bg-opacity-50', probe(['bg-blue-500', 'bg-opacity-50'])),
+  at('tailwind-v3', 'text-red-500 text-opacity-50', probe(['text-red-500', 'text-opacity-50'])),
+  at(
+    'tailwind-v3',
+    'border-2 border-red-500 border-opacity-50',
+    probe(['border-2', 'border-red-500', 'border-opacity-50']),
+  ),
+  at('tailwind-v3', 'bg-red-500/50', probe(['bg-red-500/50'])),
 ];
