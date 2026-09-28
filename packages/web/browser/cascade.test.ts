@@ -232,20 +232,32 @@ describe('the reset, beside utilities that declare no base layer', () => {
   // `utilities` and no `base`. A layer is ordered by where it is first declared, so a reset
   // declaring `base` after the app's styles came after `utilities` and beat every utility. In a
   // frame of its own, since this page's stylesheet declares every layer before anything runs.
-  it('stays below the utilities, whichever loaded first', () => {
-    const frame = document.createElement('iframe');
-    document.body.appendChild(frame);
-    const doc = frame.contentDocument!;
-    const utilities = doc.createElement('style');
-    utilities.textContent = '@layer utilities { .u-row { flex-direction: row } }';
-    doc.head.appendChild(utilities);
-    injectResetStylesheet(doc);
-    const probe = doc.createElement('div');
-    probe.setAttribute('data-rn', 'view');
-    probe.className = 'u-row';
-    doc.body.appendChild(probe);
-    const direction = frame.contentWindow!.getComputedStyle(probe).flexDirection;
-    frame.remove();
-    expect(direction).toBe('row');
-  });
+  for (const order of ['utilities first', 'reset first'] as const) {
+    it(`stays below the utilities, with the ${order}`, () => {
+      const frame = document.createElement('iframe');
+      document.body.appendChild(frame);
+      try {
+        const doc = frame.contentDocument!;
+        const utilities = doc.createElement('style');
+        utilities.textContent = '@layer utilities { .u-row { flex-direction: row } }';
+        if (order === 'reset first') injectResetStylesheet(doc);
+        doc.head.appendChild(utilities);
+        if (order === 'utilities first') injectResetStylesheet(doc);
+        const probe = (className: string) => {
+          const view = doc.createElement('div');
+          view.setAttribute('data-rn', 'view');
+          view.className = className;
+          doc.body.appendChild(view);
+          return frame.contentWindow!.getComputedStyle(view).flexDirection;
+        };
+        // The reset is there and applies: a view with no utility is a column, as Yoga's is.
+        expect(doc.getElementById('angular-native-web-reset')).not.toBeNull();
+        expect(probe('')).toBe('column');
+        // And a utility beats it.
+        expect(probe('u-row')).toBe('row');
+      } finally {
+        frame.remove();
+      }
+    });
+  }
 });

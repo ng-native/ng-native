@@ -316,9 +316,9 @@ async function build() {
   const pairs = [...slotPairs(everything, new Set(named)), ...overlaps];
   // The pairs are read out of Tailwind's CSS by its layout, so a release that writes it another
   // way would find fewer of them, and the sweep would narrow without a word.
-  const missing = PAIR_FAMILIES.filter(
-    (family) => !pairs.some((pair) => pair.every((c) => family.test(c))),
-  );
+  const missing = Object.entries(PAIR_FAMILIES)
+    .filter(([, family]) => !pairs.some((pair) => pair.every((c) => family.test(c))))
+    .map(([name]) => name);
   if (missing.length) throw new Error(`no pairs found for ${missing.join(', ')}: see slotsIn`);
   const css = compiler.build([...singles, ...important, ...variants, ...pairs.flat()]);
 
@@ -370,17 +370,18 @@ const OVERLAPS = [
 ];
 
 /** Families that compose one value out of several classes, each of which must have a pair. */
-const PAIR_FAMILIES = [
-  /^-?translate-/,
-  /^-?scale-/,
-  /^(shadow|ring|inset-shadow|inset-ring)/,
-  /^(android:)?drop-shadow-/,
-  /^text-shadow-/,
-  /^-?space-[xy]-/,
-  /^divide-/,
-  /^(tabular|oldstyle|lining|proportional)-nums|^(ordinal|slashed-zero|diagonal-fractions)$/,
-  /^(android:)?(blur|brightness|contrast|grayscale|hue-rotate|invert|saturate|sepia)/,
-];
+const PAIR_FAMILIES: Record<string, RegExp> = {
+  translate: /^-?translate-/,
+  scale: /^-?scale-/,
+  'shadows and rings': /^(shadow|ring|inset-shadow|inset-ring)/,
+  'drop shadow': /^(android:)?drop-shadow-/,
+  'text shadow': /^text-shadow-/,
+  space: /^-?space-[xy]-/,
+  divide: /^divide-/,
+  'numeric variants':
+    /^(tabular|oldstyle|lining|proportional)-nums|^(ordinal|slashed-zero|diagonal-fractions)$/,
+  filters: /^(android:)?(blur|brightness|contrast|grayscale|hue-rotate|invert|saturate|sepia)/,
+};
 
 /** A slot's value that says nothing about what reads it. */
 const NOTHING = /^(initial|inherit|unset|currentcolor|transparent|none|0[a-z%]*|0 0 #0000)$/i;
