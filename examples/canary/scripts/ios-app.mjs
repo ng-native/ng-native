@@ -23,18 +23,21 @@ const BUNDLE = 'main.jsbundle';
 
 function rebundle(cached, output) {
   const built = bundle('ios', BUNDLE);
-  rmSync(output, { recursive: true, force: true });
-  cpSync(cached, output, { recursive: true, verbatimSymlinks: true });
-  // What the old bundle brought with it, which today's replaces: the images it required, and the
-  // web bundle Expo's DOM components are served from.
-  for (const stale of ['assets', 'www.bundle']) {
-    rmSync(path.join(output, stale), { recursive: true, force: true });
+  try {
+    rmSync(output, { recursive: true, force: true });
+    cpSync(cached, output, { recursive: true, verbatimSymlinks: true });
+    // What the old bundle brought with it, which today's replaces: the images it required, and the
+    // web bundle Expo's DOM components are served from.
+    for (const stale of ['assets', 'www.bundle']) {
+      rmSync(path.join(output, stale), { recursive: true, force: true });
+    }
+    cpSync(built.assets, output, { recursive: true });
+    hermes(built.bundle, path.join(output, BUNDLE));
+    // The compiler writes a source map beside the bytecode, which a built app does not carry.
+    rmSync(path.join(output, `${BUNDLE}.map`), { force: true });
+  } finally {
+    rmSync(built.out, { recursive: true, force: true });
   }
-  cpSync(built.assets, output, { recursive: true });
-  hermes(built.bundle, path.join(output, BUNDLE));
-  // The compiler writes a source map beside the bytecode, which a built app does not carry.
-  rmSync(path.join(output, `${BUNDLE}.map`), { force: true });
-  rmSync(built.out, { recursive: true, force: true });
   console.log(`[ios-app] ${output}: today's bundle`);
 }
 
