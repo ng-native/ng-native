@@ -21,7 +21,10 @@ appId: ${APP_ID || 'dev.angularnative.canary'}
 
 # The native stack, from react-native-screens: push a screen and pop it with its header item.
 # By deep link: the home list is longer than a scroll reliably reaches.
-- openLink: canary://navigation
+- runFlow:
+    file: ../subflows/open-link.yaml
+    env:
+      LINK: canary://navigation
 - waitForAnimationToEnd
 - tapOn: 'push.*'
 - assertVisible: 'Detail'
@@ -33,7 +36,10 @@ appId: ${APP_ID || 'dev.angularnative.canary'}
 
 # <safe-area-view>, from react-native-safe-area-context: a native module an app has to depend on
 # itself, and the one a generated app once crashed on. The search tab's content sits inside one.
-- openLink: canary://tabs
+- runFlow:
+    file: ../subflows/open-link.yaml
+    env:
+      LINK: canary://tabs
 - waitForAnimationToEnd
 - tapOn: 'Search'
 - assertVisible: 'Type something, then switch tabs'
@@ -41,7 +47,12 @@ appId: ${APP_ID || 'dev.angularnative.canary'}
 
 # Tailwind utilities that combine on one element, among them an Android-only drop shadow with a
 # colour class: a value native refuses closes a release build here, and the hint is never shown.
-- openLink: canary://tailwind
+# The first hint, which is on screen on the smallest phone: the whole screen renders at once, so a
+# refused value further down closes the app just the same.
+- runFlow:
+    file: ../subflows/open-link.yaml
+    env:
+      LINK: canary://tailwind
 - waitForAnimationToEnd
-- assertVisible: 'Filters, three of them on Android only.*'
+- assertVisible: 'Rings: a colour.*'
 - runFlow: ../subflows/no-error-screen.yaml

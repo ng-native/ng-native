@@ -1,0 +1,14 @@
+# Opens a canary link, as `openLink` does, and confirms it on iOS: a simulator asks before it hands
+# a custom scheme to an app ("Open in canary?"), and waits there until something answers. Android
+# opens it straight away, so nothing is tapped there.
+#
+# `LINK` is the link, `canary://navigation` say.
+appId: ${APP_ID || 'dev.angularnative.canary'}
+---
+- openLink: ${LINK}
+- waitForAnimationToEnd
+- runFlow:
+    when:
+      visible: 'Open in .canary.\?'
+    commands:
+      - tapOn: 'Open'

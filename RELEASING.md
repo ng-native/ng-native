@@ -40,11 +40,10 @@ version (`0.1.0` for the first) or a bump. Releases are plain `0.x` versions on 
 which is what `create-expo-app --template @ng-native/template` resolves: `minor` for a release with
 a breaking change, since under `0.x` a minor is the breaking bump, and `patch` otherwise.
 
-The workflow first builds the canary natively for iOS and Android (`native.yml`). The Android
-release build is then launched on an emulator and driven through a short Maestro flow
-(`examples/canary/.maestro/release`), so an app that builds but crashes at launch fails there, as
-it does on every pull request. This is the only automatic iOS build: pull requests and `main`
-build Android only, because a macOS runner minute bills as ten Linux ones. Run **Native builds** by hand to check iOS before then. Beside it, the
+The workflow first builds the canary natively for iOS and Android (`native.yml`). Each release build
+is then launched, iOS on a simulator and Android on an emulator, and driven through a short Maestro
+flow (`examples/canary/.maestro/release`), so an app that builds but crashes at launch fails there,
+as it does on every pull request. Beside it, the
 `generators` job adds a native app to a fresh `ng new` workspace with `ng add @ng-native/schematics`,
 and to a fresh Nx `angular-monorepo` workspace with `nx add @ng-native/nx`, and tests and bundles
 each, installing with npm. Once all of those pass, it runs the same gate CI does, then:
