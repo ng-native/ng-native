@@ -19,7 +19,6 @@
  *
  * Run from examples/canary.
  */
-import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import {
   copyFileSync,
@@ -31,69 +30,11 @@ import {
   statSync,
   writeFileSync,
 } from 'node:fs';
-import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-
-const require = createRequire(import.meta.url);
-const run = (command, args, options = {}) =>
-  execFileSync(command, args, {
-    stdio: ['ignore', 'pipe', 'inherit'],
-    encoding: 'utf8',
-    ...options,
-  });
+import { bundle, fingerprint, hermes, run } from './native-bundle.mjs';
 
 const BUNDLE = 'index.android.bundle';
-
-/** The entry the Gradle build resolves, as an absolute path, which is what ends up in the bytecode. */
-function entry() {
-  return run(process.execPath, [
-    '-e',
-    "require('expo/scripts/resolveAppEntry')",
-    process.cwd(),
-    'android',
-    'absolute',
-  ]).trim();
-}
-
-function fingerprint() {
-  const cli = require.resolve('@expo/fingerprint/bin/cli.js', {
-    paths: [path.dirname(require.resolve('expo/package.json'))],
-  });
-  return JSON.parse(run(process.execPath, [cli, 'fingerprint:generate', '--platform', 'android']))
-    .hash;
-}
-
-/** The bundle and its assets, as `export:embed` writes them for a release build. */
-function bundle() {
-  const out = mkdtempSync(path.join(tmpdir(), 'canary-bundle-'));
-  const assets = path.join(out, 'res');
-  mkdirSync(assets);
-  run(
-    'npx',
-    [
-      'expo',
-      'export:embed',
-      '--platform',
-      'android',
-      '--dev',
-      'false',
-      '--reset-cache',
-      '--entry-file',
-      entry(),
-      '--bundle-output',
-      path.join(out, BUNDLE),
-      '--assets-dest',
-      assets,
-      '--sourcemap-output',
-      path.join(out, `${BUNDLE}.packager.map`),
-      '--minify',
-      'false',
-    ],
-    { stdio: 'inherit' },
-  );
-  return { out, bundle: path.join(out, BUNDLE), assets };
-}
 
 /** Every file under a directory, by its path from there, with a hash of what is in it. */
 function manifest(directory) {
@@ -112,30 +53,6 @@ function manifest(directory) {
   return Object.fromEntries(Object.entries(files).sort(([a], [b]) => a.localeCompare(b)));
 }
 
-/** The JavaScript as Hermes bytecode, with the flags the Gradle plugin passes by default. */
-function hermes(source, target) {
-  const compiler = path.join(
-    path.dirname(
-      require.resolve('hermes-compiler/package.json', {
-        paths: [path.dirname(require.resolve('react-native/package.json'))],
-      }),
-    ),
-    'hermesc',
-    process.platform === 'darwin' ? 'osx-bin' : 'linux64-bin',
-    'hermesc',
-  );
-  run(compiler, [
-    '-w',
-    '-emit-binary',
-    '-max-diagnostic-width=80',
-    '-out',
-    target,
-    source,
-    '-O',
-    '-output-source-map',
-  ]);
-}
-
 /** The newest build tools the SDK has, for zipalign and apksigner. */
 function buildTools() {
   const sdk =
@@ -149,7 +66,7 @@ function buildTools() {
 }
 
 function rebundle(cached, assetsFile, keystore, output) {
-  const built = bundle();
+  const built = bundle('android', BUNDLE);
   const now = manifest(built.assets);
   const then = JSON.parse(readFileSync(assetsFile, 'utf8'));
   if (JSON.stringify(now) !== JSON.stringify(then)) {
@@ -190,9 +107,9 @@ function rebundle(cached, assetsFile, keystore, output) {
 
 const [command, ...args] = process.argv.slice(2);
 if (command === 'fingerprint') {
-  console.log(fingerprint());
+  console.log(fingerprint('android'));
 } else if (command === 'assets') {
-  const built = bundle();
+  const built = bundle('android', BUNDLE);
   writeFileSync(args[0], JSON.stringify(manifest(built.assets), null, 2));
   rmSync(built.out, { recursive: true, force: true });
 } else if (command === 'rebundle') {
