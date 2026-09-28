@@ -9,7 +9,7 @@
     "release:ios": "expo run:ios --configuration Release",
     "release:android": "expo run:android --variant release",
     "check-bundle": "node scripts/check-release-bundle.mjs",
-    "typecheck": "ngc -p tsconfig.json --noEmit",
+    "typecheck": "node metro.config.js && ngc -p tsconfig.json --noEmit",
     "export": "expo export --platform ios --platform android --output-dir dist",
     "test": "vitest run",
     "e2e:ios": "xcrun simctl status_bar booted override --time 9:41 --batteryState charged --batteryLevel 100 --wifiBars 3 && JAVA_HOME=${JAVA_HOME:-/opt/homebrew/opt/openjdk@21} maestro test .maestro/ios",
@@ -67,8 +67,11 @@
   "devDependencies": {
     "@babel/core": "^7.29.7",
     "@ng-native/metro": "workspace:*",
+    "@ng-native/tailwind": "workspace:*",
     "@ng-native/testing": "workspace:*",
+    "@tailwindcss/cli": "^4.3.3",
     "@types/react": "~19.2.4",
+    "tailwindcss": "^4.3.3",
     "vitest": "^5.0.2"
   },
   "expo": {

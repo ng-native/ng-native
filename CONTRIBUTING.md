@@ -72,8 +72,10 @@ catches a regression this engine would otherwise hide.
 
 Every Tailwind utility is checked too. `tailwind-sweep.test.ts` builds a stylesheet from every
 utility Tailwind lists (a spread of the values of a scale, all of a handful), arbitrary values, the
-values of an app's own theme (`fixtures/tailwind-sweep-theme.css`), `!`, every variant and the pairs
-of utilities that build one value together, and holds each case to:
+values of an app's own theme (`fixtures/tailwind-sweep-theme.css`), `!`, every variant, the pairs
+of utilities that build one value together (found from the CSS: one sets a `--tw-*` property the
+other reads, or sets again one the other sets and reads) and a shorthand beside each of its sides,
+and holds each case to:
 
 - the build does not throw, and the case either takes effect or is refused with a warning;
 - what it commits is a prop React Native declares, with a keyword it takes;
@@ -98,6 +100,12 @@ TAILWIND_SWEEP_UPDATE=1 node --import ./register-linker.mjs --test tailwind-swee
 
 Read the diff of the second before committing it: each line is a utility that is refused
 differently.
+
+What the sweep reads as props, the canary's Tailwind screen draws.
+`examples/canary/.maestro/ios/visual/tailwind.yaml` compares it with a screenshot (`pnpm e2e:ios` in
+`examples/canary`, against a release build; `pnpm e2e:ios:record` takes a new one), and the Android
+release smoke opens it in CI. `pnpm bench:tailwind` in `packages/integration-tests` times a screen
+of Tailwind cards through the engine.
 
 ## Architecture rules
 

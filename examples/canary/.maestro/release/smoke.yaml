@@ -38,3 +38,10 @@ appId: ${APP_ID || 'dev.angularnative.canary'}
 - tapOn: 'Search'
 - assertVisible: 'Type something, then switch tabs'
 - runFlow: ../subflows/no-error-screen.yaml
+
+# Tailwind utilities that combine on one element, among them an Android-only drop shadow with a
+# colour class: a value native refuses closes a release build here, and the hint is never shown.
+- openLink: canary://tailwind
+- waitForAnimationToEnd
+- assertVisible: 'Filters, three of them on Android only.*'
+- runFlow: ../subflows/no-error-screen.yaml

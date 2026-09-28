@@ -211,6 +211,7 @@ export class Home {
     },
     { path: '/text', title: 'Text nesting', blurb: 'spans, inheritance, baselines' },
     { path: '/css', title: 'CSS', blurb: 'selectors, specificity, cascade, inheritance' },
+    { path: '/tailwind', title: 'Tailwind', blurb: 'utilities that combine, as Chrome draws them' },
     { path: '/layout', title: 'Layout', blurb: 'flexbox through Yoga, and its native defaults' },
     { path: '/typography', title: 'Typography', blurb: 'real text nodes, nesting, truncation' },
     { path: '/surfaces', title: 'Surfaces', blurb: 'borders, corners, shadows, transforms' },

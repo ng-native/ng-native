@@ -189,6 +189,10 @@ export const routes: Routes = [
   },
   { path: 'text', loadComponent: () => import('./css/text.ts').then((m) => m.TextNesting) },
   { path: 'css', loadComponent: () => import('./css/css.ts').then((m) => m.CssPage) },
+  {
+    path: 'tailwind',
+    loadComponent: () => import('./tailwind/tailwind-page.ts').then((m) => m.TailwindPage),
+  },
   { path: 'layout', loadComponent: () => import('./css/layout.ts').then((m) => m.LayoutPage) },
   {
     path: 'typography',
