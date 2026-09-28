@@ -319,6 +319,25 @@ describe('Tailwind 3', () => {
     assert.equal(transformOf(render(sheet, 'transform rotate-0').parent)['rotate'], '0deg');
   });
 
+  it('refuses a skew where Android could apply it, and nothing else in the transform', () => {
+    // Android draws no skew. Every Tailwind 3 transform reads the skew slots, set to 0 by the
+    // reset, so only a rule that sets one to something else is refused.
+    const refused: string[] = [];
+    const sheet = compileCss(
+      flattenTailwind(build('transform rotate-45 skew-x-12 ios:skew-x-12')),
+      'tailwind',
+      { onUnsupported: (message: string) => refused.push(message) },
+    );
+    assert.equal(
+      refused.filter((m) => /skewX\(\) is not drawn on Android/.test(m)).length,
+      1,
+      refused.join('\n'),
+    );
+    assert.equal(transformOf(render(sheet, 'transform rotate-45').parent)['rotate'], '45deg');
+    const skewed = transformOf(render(sheet, 'platform-ios', 'transform ios:skew-x-12').child);
+    assert.equal(skewed['skewX'], '12deg');
+  });
+
   it('takes arbitrary values', () => {
     const sheet = sheetFor('bg-[#123456] w-[37px] transform translate-x-[10px] rotate-45');
     const { parent } = render(sheet, 'bg-[#123456] w-[37px] transform translate-x-[10px]');

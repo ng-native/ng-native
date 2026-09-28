@@ -1601,12 +1601,25 @@ function assertDrawnEverywhere(declaration, out, tokens, deferred, from, platfor
  * down into the rotation, scale and translation an Android view has, and a view has no skew:
  * `skewX()` is left out, and `skewY()` comes out as a rotation. A skew of 0 draws the same there.
  */
-function skewIn(list) {
+function skewIn(list, tokens = {}) {
   if (!Array.isArray(list)) return null;
   const entry = list.find(
-    (one) => one && ['skewX', 'skewY'].some((key) => key in one && parseFloat(one[key]) !== 0),
+    (one) => one && ['skewX', 'skewY'].some((key) => key in one && skews(one[key], tokens)),
   );
   return entry ? Object.keys(entry)[0] : null;
+}
+
+/**
+ * Whether one skew angle is a skew: a written angle other than 0, or a token the same rule sets to
+ * one. Tailwind 3's every transform reads `var(--tw-skew-x)`, which the reset sets to 0, so a slot
+ * the rule does not set is no skew; `skew-x-12`, which sets it to 12deg, is.
+ */
+function skews(angle, tokens) {
+  const reference = angle?.__calc?.expression?.reference;
+  if (reference === undefined) return typeof angle !== 'object' && parseFloat(angle) !== 0;
+  const token = tokens[reference];
+  const value = token?.angle ?? token?.number;
+  return value !== undefined && value !== 0;
 }
 
 /**
@@ -1617,10 +1630,10 @@ function assertSkewDrawn(out, tokens, deferred, from, name, platforms, context) 
   if (!platforms.includes('android')) return;
   const pending = deferred
     .slice(from)
-    .filter((one) => one.props?.includes('transform') && skewIn(one.within));
+    .filter((one) => one.props?.includes('transform') && skewIn(one.within, tokens));
   const token = typeof name === 'string' ? skewIn(tokens[name]?.transform) : null;
   const skew =
-    skewIn(out.transform) ?? token ?? (pending.length ? skewIn(pending[0].within) : null);
+    skewIn(out.transform) ?? token ?? (pending.length ? skewIn(pending[0].within, tokens) : null);
   if (!skew) return;
   if (skewIn(out.transform)) delete out.transform;
   if (token) delete tokens[name];

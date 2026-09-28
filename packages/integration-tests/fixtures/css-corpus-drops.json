@@ -1,7 +1,7 @@
 {
   "bootstrap": {
-    "rules": 2432,
-    "dropped": 752,
+    "rules": 2496,
+    "dropped": 748,
     "emitted": [
       "$animation",
       "$transition",
@@ -49,6 +49,7 @@
       "fontStyle",
       "fontWeight",
       "height",
+      "isolation",
       "justifyContent",
       "left",
       "letterSpacing",
@@ -95,28 +96,34 @@
         "':checked' has no state on native to read: whether a control is checked is an input of its component, not a prop a selector can see. Bind an attribute from the same signal, such as [attr.data-checked], and select on that.": 5,
         "':first-of-type' is not supported yet. It counts the siblings of one element type, which the matcher does not track; ':nth-child()' it does.": 3,
         "':focus-visible' is not supported. Native has no hover or focus cascade: use ':active' or ':focus', which the engine tracks, or a bound attribute such as [attr.data-hover].": 5,
-        "':focus-within' is not supported. Native has no hover or focus cascade: use ':active' or ':focus', which the engine tracks, or a bound attribute such as [attr.data-hover].": 4,
-        "':hover' is not supported. Native has no hover or focus cascade: use ':active' or ':focus', which the engine tracks, or a bound attribute such as [attr.data-hover].": 31,
+        "':hover' is not supported. Native has no hover or focus cascade: use ':active' or ':focus', which the engine tracks, or a bound attribute such as [attr.data-hover].": 11,
         "':indeterminate' has no state on native to read: whether a control is checked is an input of its component, not a prop a selector can see. Bind an attribute from the same signal, such as [attr.data-checked], and select on that.": 1,
-        "':invalid' is not supported. Nothing on native answers it; bind a class or an attribute from the state it stands for, and select on that.": 13,
         "':last-of-type' is not supported yet. It counts the siblings of one element type, which the matcher does not track; ':nth-child()' it does.": 3,
-        "':nth-of-type' is not supported yet. It counts the siblings of one element type, which the matcher does not track; ':nth-child()' it does.": 1,
-        "':placeholder-shown' is not supported. Nothing on native answers it; bind a class or an attribute from the state it stands for, and select on that.": 3,
-        "':valid' is not supported. Nothing on native answers it; bind a class or an attribute from the state it stands for, and select on that.": 13,
-        "pseudo-elements like ::before are never supported. They would mean synthesising nodes no template declares, which puts the style engine in the business of creating view hierarchy.": 78,
+        "pseudo-elements like ::before are never supported. They would mean synthesising nodes no template declares, which puts the style engine in the business of creating view hierarchy.": 64,
         "the 'print' media type has no meaning on a device": 1
       },
+      "(selector)": {
+        "':any' is not supported. Nothing on native answers it; bind a class or an attribute from the state it stands for, and select on that.": 1,
+        "':checked' has no state on native to read: whether a control is checked is an input of its component, not a prop a selector can see. Bind an attribute from the same signal, such as [attr.data-checked], and select on that.": 7,
+        "':focus-visible' is not supported. Native has no hover or focus cascade: use ':active' or ':focus', which the engine tracks, or a bound attribute such as [attr.data-hover].": 5,
+        "':focus-within' is not supported. Native has no hover or focus cascade: use ':active' or ':focus', which the engine tracks, or a bound attribute such as [attr.data-hover].": 8,
+        "':hover' is not supported. Native has no hover or focus cascade: use ':active' or ':focus', which the engine tracks, or a bound attribute such as [attr.data-hover].": 36,
+        "':invalid' is not supported. Nothing on native answers it; bind a class or an attribute from the state it stands for, and select on that.": 16,
+        "':is()' cannot contain a combinator, only a compound selector, '<compound> *', which is an ancestor test, or '<compound> ~ *', a sibling test.": 1,
+        "':nth-of-type' is not supported yet. It counts the siblings of one element type, which the matcher does not track; ':nth-child()' it does.": 1,
+        "':placeholder-shown' is not supported. Nothing on native answers it; bind a class or an attribute from the state it stands for, and select on that.": 6,
+        "':valid' is not supported. Nothing on native answers it; bind a class or an attribute from the state it stands for, and select on that.": 16,
+        "pseudo-elements like ::before are never supported. They would mean synthesising nodes no template declares, which puts the style engine in the business of creating view hierarchy.": 52
+      },
       "--*": {
-        "'--*' has a value native cannot express in any form": 56
+        "'--*' has a value native cannot express in any form": 24,
+        "filter: invert() is not drawn on iOS. React Native draws brightness() and opacity() on both platforms and every other filter function on Android only, so this would leave the view unchanged on an iPhone. Scope the rule to Android with a .platform-android ancestor (Tailwind's android: variant), or use brightness() or opacity().": 4
       },
       "-moz-column-gap": {
         "'-moz-column-gap' is vendor-prefixed, for one browser engine. Native reads the standard property, which a stylesheet that writes this usually has beside it.": 36
       },
       "-o-object-fit": {
         "'-o-object-fit' is vendor-prefixed, for one browser engine. Native reads the standard property, which a stylesheet that writes this usually has beside it.": 30
-      },
-      "-webkit-margin-end": {
-        "'-webkit-margin-end' is vendor-prefixed, for one browser engine. Native reads the standard property, which a stylesheet that writes this usually has beside it.": 4
       },
       "-webkit-overflow-scrolling": {
         "'-webkit-overflow-scrolling' is vendor-prefixed, for one browser engine. Native reads the standard property, which a stylesheet that writes this usually has beside it.": 6
@@ -128,7 +135,7 @@
         "'animation' mixes var() with other values, which needs a parser on device. calc() of tokens, numbers and points, max(var(--x), <length>), colours and transforms are understood; anything else has to be worked out at build time.": 1
       },
       "appearance": {
-        "'appearance' has no React Native equivalent: no style prop of a native view does what it does.": 20
+        "'appearance' has no React Native equivalent: no style prop of a native view does what it does.": 14
       },
       "background": {
         "'background' mixes var() with other values, which needs a parser on device. calc() of tokens, numbers and points, max(var(--x), <length>), colours and transforms are understood; anything else has to be worked out at build time.": 1
@@ -142,14 +149,13 @@
       "background-image": {
         "'background-image' mixes var() with other values, which needs a parser on device. calc() of tokens, numbers and points, max(var(--x), <length>), colours and transforms are understood; anything else has to be worked out at build time.": 1,
         "background-image: a url() is not something native can paint as a background. Only linear-gradient() and radial-gradient() are, and an image belongs in an <image>.": 4,
-        "var() cannot be used in the 'background-image' shorthand, because which native property the value lands in depends on the value, and there is no CSS parser on device. Use the longhand.": 6
+        "var() cannot be used in the 'background-image' shorthand, because which native property the value lands in depends on the value, and there is no CSS parser on device. Use the longhand.": 4
       },
       "background-position-x": {
         "var() cannot be used in the 'background-position-x' shorthand, because which native property the value lands in depends on the value, and there is no CSS parser on device. Use the longhand.": 1
       },
       "background-size": {
-        "'background-size' mixes var() with other values, which needs a parser on device. calc() of tokens, numbers and points, max(var(--x), <length>), colours and transforms are understood; anything else has to be worked out at build time.": 1,
-        "var() cannot be used in the 'background-size' shorthand, because which native property the value lands in depends on the value, and there is no CSS parser on device. Use the longhand.": 1
+        "'background-size' mixes var() with other values, which needs a parser on device. calc() of tokens, numbers and points, max(var(--x), <length>), colours and transforms are understood; anything else has to be worked out at build time.": 1
       },
       "border": {
         "'{\"type\":\"ident\",\"value\":\"currentcolor\"}' in 'border'": 1,
@@ -159,7 +165,7 @@
         "'border-bottom: inherit' is a CSS-wide keyword, which this cascade does not implement. Write the value it stands for.": 1
       },
       "border-bottom-color": {
-        "border-bottom-color: currentColor has no equivalent without a cascade root": 3
+        "border-bottom-color: currentColor has no equivalent without a cascade root": 2
       },
       "border-bottom-left-radius": {
         "'border-bottom-left-radius: inherit' is a CSS-wide keyword, which this cascade does not implement. Write the value it stands for.": 1
@@ -171,20 +177,11 @@
         "'border-collapse' has no React Native equivalent: no style prop of a native view does what it does.": 1
       },
       "border-color": {
-        "'border-color: inherit' is a CSS-wide keyword, which this cascade does not implement. Write the value it stands for.": 3
-      },
-      "border-left-color": {
-        "border-left-color: currentColor has no equivalent without a cascade root": 1
-      },
-      "border-right": {
-        "border-right: currentColor has no equivalent without a cascade root": 1
+        "'border-color: inherit' is a CSS-wide keyword, which this cascade does not implement. Write the value it stands for.": 1
       },
       "border-top": {
         "'border-top: inherit' is a CSS-wide keyword, which this cascade does not implement. Write the value it stands for.": 1,
         "'{\"name\":\"calc\",\"arguments\":[{\"type\":\"var' in 'border-top'": 1
-      },
-      "border-top-color": {
-        "border-top-color: currentColor has no equivalent without a cascade root": 1
       },
       "border-top-left-radius": {
         "'border-top-left-radius: inherit' is a CSS-wide keyword, which this cascade does not implement. Write the value it stands for.": 1
@@ -196,7 +193,7 @@
         "'caption-side' has no React Native equivalent: no style prop of a native view does what it does.": 2
       },
       "clear": {
-        "'clear' has no React Native equivalent: no style prop of a native view does what it does. Lay the row out with flexbox: flex-direction: row on the parent.": 4
+        "'clear' has no React Native equivalent: no style prop of a native view does what it does. Lay the row out with flexbox: flex-direction: row on the parent.": 2
       },
       "clip": {
         "'clip' has no React Native equivalent: no style prop of a native view does what it does.": 2
@@ -211,12 +208,6 @@
       "color-scheme": {
         "'color-scheme' is not mapped yet. React Native may well support it; nothing here translates it. Check RN's style types, then add it to css/properties.cjs.": 1
       },
-      "content": {
-        "'content' has no React Native equivalent: no style prop of a native view does what it does.": 18
-      },
-      "counter-increment": {
-        "'counter-increment' has no React Native equivalent: no style prop of a native view does what it does.": 1
-      },
       "counter-reset": {
         "'counter-reset' has no React Native equivalent: no style prop of a native view does what it does.": 1
       },
@@ -227,7 +218,7 @@
       "display": {
         "display: grid does not exist on native; only flex, block (read as flex), contents and none do": 6,
         "display: inline does not exist on native; only flex, block (read as flex), contents and none do": 6,
-        "display: inline-block does not exist on native; only flex, block (read as flex), contents and none do": 23,
+        "display: inline-block does not exist on native; only flex, block (read as flex), contents and none do": 18,
         "display: inline-grid does not exist on native; only flex, block (read as flex), contents and none do": 6,
         "display: list-item does not exist on native; only flex, block (read as flex), contents and none do": 1,
         "display: table does not exist on native; only flex, block (read as flex), contents and none do": 6,
@@ -237,17 +228,11 @@
       "fill": {
         "'fill' is not mapped yet. React Native may well support it; nothing here translates it. Check RN's style types, then add it to css/properties.cjs.": 1
       },
-      "filter": {
-        "filter: grayscale() is not drawn on iOS. React Native draws brightness() and opacity() on both platforms and every other filter function on Android only, so this would leave the view unchanged on an iPhone. Scope the rule to Android with a .platform-android ancestor (Tailwind's android: variant), or use brightness() or opacity().": 1
-      },
       "flex-wrap": {
         "'flex-wrap: inherit' is a CSS-wide keyword, which this cascade does not implement. Write the value it stands for.": 1
       },
       "float": {
-        "'float' has no React Native equivalent: no style prop of a native view does what it does. Lay the row out with flexbox: flex-direction: row on the parent.": 23
-      },
-      "font": {
-        "'font: inherit' is a CSS-wide keyword, which this cascade does not implement. Write the value it stands for.": 1
+        "'float' has no React Native equivalent: no style prop of a native view does what it does. Lay the row out with flexbox: flex-direction: row on the parent.": 22
       },
       "font-size": {
         "'font-size: inherit' is a CSS-wide keyword, which this cascade does not implement. Write the value it stands for.": 3
@@ -338,19 +323,15 @@
       "touch-action": {
         "'touch-action' is not mapped yet. React Native may well support it; nothing here translates it. Check RN's style types, then add it to css/properties.cjs.": 1
       },
-      "transform": {
-        "a slot's fallback in a list of tokens can only be empty, as in 'var(--x,)'. Put the function in the token instead.": 1
-      },
       "transition": {
-        "var() cannot be used in the 'transition' shorthand, because which native property the value lands in depends on the value, and there is no CSS parser on device. Use the longhand.": 10
+        "var() cannot be used in the 'transition' shorthand, because which native property the value lands in depends on the value, and there is no CSS parser on device. Use the longhand.": 9
       },
       "vertical-align": {
         "'vertical-align: inherit' is a CSS-wide keyword, which this cascade does not implement. Write the value it stands for.": 1,
         "var() cannot be used in the 'vertical-align' shorthand, because which native property the value lands in depends on the value, and there is no CSS parser on device. Use the longhand.": 1,
         "vertical-align: 'baseline' has no native equivalent (auto, top, bottom, middle do)": 4,
         "vertical-align: 'text-bottom' has no native equivalent (auto, top, bottom, middle do)": 1,
-        "vertical-align: 'text-top' has no native equivalent (auto, top, bottom, middle do)": 1,
-        "vertical-align: native takes a keyword here, not a length": 7
+        "vertical-align: 'text-top' has no native equivalent (auto, top, bottom, middle do)": 1
       },
       "visibility": {
         "'visibility' has no React Native equivalent: no style prop of a native view does what it does. Use opacity: 0 to hide a box and keep its space, or display: none to remove it.": 20
@@ -370,8 +351,8 @@
     }
   },
   "bulma": {
-    "rules": 2883,
-    "dropped": 1781,
+    "rules": 2945,
+    "dropped": 1948,
     "emitted": [
       "$animation",
       "$transition",
@@ -463,18 +444,22 @@
       "(rule)": {
         "':-moz-placeholder-shown' is not supported. Nothing on native answers it; bind a class or an attribute from the state it stands for, and select on that.": 10,
         "':-ms-placeholder-shown' is not supported. Nothing on native answers it; bind a class or an attribute from the state it stands for, and select on that.": 10,
-        "':focus-visible' is not supported. Native has no hover or focus cascade: use ':active' or ':focus', which the engine tracks, or a bound attribute such as [attr.data-hover].": 15,
-        "':focus-within' is not supported. Native has no hover or focus cascade: use ':active' or ':focus', which the engine tracks, or a bound attribute such as [attr.data-hover].": 3,
         "':has()' is not supported. It styles a node by its descendants or later siblings, so any change beneath it would mean matching it again. Put a class on the node from the state it depends on.": 2,
-        "':hover' is not supported. Native has no hover or focus cascade: use ':active' or ':focus', which the engine tracks, or a bound attribute such as [attr.data-hover].": 29,
+        "':hover' is not supported. Native has no hover or focus cascade: use ':active' or ':focus', which the engine tracks, or a bound attribute such as [attr.data-hover].": 9,
         "':indeterminate' has no state on native to read: whether a control is checked is an input of its component, not a prop a selector can see. Bind an attribute from the same signal, such as [attr.data-checked], and select on that.": 4,
         "':placeholder-shown' is not supported. Nothing on native answers it; bind a class or an attribute from the state it stands for, and select on that.": 2,
         "'@container' is not supported. Media queries and keyframes are the only at-rules with a runtime meaning here.": 10,
-        "pseudo-elements like ::before are never supported. They would mean synthesising nodes no template declares, which puts the style engine in the business of creating view hierarchy.": 58,
+        "pseudo-elements like ::before are never supported. They would mean synthesising nodes no template declares, which puts the style engine in the business of creating view hierarchy.": 56,
         "the 'print' media type has no meaning on a device": 35
       },
+      "(selector)": {
+        "':focus-visible' is not supported. Native has no hover or focus cascade: use ':active' or ':focus', which the engine tracks, or a bound attribute such as [attr.data-hover].": 92,
+        "':focus-within' is not supported. Native has no hover or focus cascade: use ':active' or ':focus', which the engine tracks, or a bound attribute such as [attr.data-hover].": 18,
+        "':hover' is not supported. Native has no hover or focus cascade: use ':active' or ':focus', which the engine tracks, or a bound attribute such as [attr.data-hover].": 124,
+        "pseudo-elements like ::before are never supported. They would mean synthesising nodes no template declares, which puts the style engine in the business of creating view hierarchy.": 16
+      },
       "--*": {
-        "'--*' has a value native cannot express in any form": 36
+        "'--*' has a value native cannot express in any form": 35
       },
       "-moz-osx-font-smoothing": {
         "'-moz-osx-font-smoothing' is vendor-prefixed, for one browser engine. Native reads the standard property, which a stylesheet that writes this usually has beside it.": 2
@@ -495,9 +480,9 @@
         "var() cannot be used in the 'background' shorthand, because which native property the value lands in depends on the value, and there is no CSS parser on device. Use the longhand.": 2
       },
       "background-color": {
-        "'background-color' mixes var() with other values, which needs a parser on device. calc() of tokens, numbers and points, max(var(--x), <length>), colours and transforms are understood; anything else has to be worked out at build time.": 638,
+        "'background-color' mixes var() with other values, which needs a parser on device. calc() of tokens, numbers and points, max(var(--x), <length>), colours and transforms are understood; anything else has to be worked out at build time.": 626,
         "'background-color: inherit' is a CSS-wide keyword, which this cascade does not implement. Write the value it stands for.": 1,
-        "background-color: currentColor has no equivalent without a cascade root": 3
+        "background-color: currentColor has no equivalent without a cascade root": 2
       },
       "background-image": {
         "hsl() with a var() in it is only understood as a whole colour token, inside color-mix(), as rgba(var(--channels), <alpha>) or as an hsl() of tokens. Put the whole colour in the variable instead.": 22
@@ -555,13 +540,13 @@
         "'box-sizing: inherit' is a CSS-wide keyword, which this cascade does not implement. Write the value it stands for.": 1
       },
       "clear": {
-        "'clear' has no React Native equivalent: no style prop of a native view does what it does. Lay the row out with flexbox: flex-direction: row on the parent.": 6
+        "'clear' has no React Native equivalent: no style prop of a native view does what it does. Lay the row out with flexbox: flex-direction: row on the parent.": 5
       },
       "clip": {
         "'clip' has no React Native equivalent: no style prop of a native view does what it does.": 1
       },
       "color": {
-        "'color' mixes var() with other values, which needs a parser on device. calc() of tokens, numbers and points, max(var(--x), <length>), colours and transforms are understood; anything else has to be worked out at build time.": 648,
+        "'color' mixes var() with other values, which needs a parser on device. calc() of tokens, numbers and points, max(var(--x), <length>), colours and transforms are understood; anything else has to be worked out at build time.": 637,
         "'color: inherit' is a CSS-wide keyword, which this cascade does not implement. Write the value it stands for.": 7,
         "color: currentColor has no equivalent without a cascade root": 11
       },
@@ -569,7 +554,7 @@
         "'container' is not mapped yet. React Native may well support it; nothing here translates it. Check RN's style types, then add it to css/properties.cjs.": 1
       },
       "content": {
-        "'content' has no React Native equivalent: no style prop of a native view does what it does.": 13
+        "'content' has no React Native equivalent: no style prop of a native view does what it does.": 1
       },
       "cursor": {
         "cursor: not-allowed is not supported. Native has two cursors, auto and pointer, for an iPad with a pointer attached.": 2
@@ -577,8 +562,7 @@
       "display": {
         "display: grid does not exist on native; only flex, block (read as flex), contents and none do": 10,
         "display: inline does not exist on native; only flex, block (read as flex), contents and none do": 10,
-        "display: inline-block does not exist on native; only flex, block (read as flex), contents and none do": 14,
-        "display: table does not exist on native; only flex, block (read as flex), contents and none do": 1
+        "display: inline-block does not exist on native; only flex, block (read as flex), contents and none do": 14
       },
       "float": {
         "'float' has no React Native equivalent: no style prop of a native view does what it does. Lay the row out with flexbox: flex-direction: row on the parent.": 3
@@ -618,8 +602,7 @@
         "justify-content: expected a keyword, got {\"type\":\"right\",\"overflow\":null}": 1
       },
       "left": {
-        "arithmetic with tokens in it cannot take 'percentage' here. What the device works out is numbers, points, degrees and var(), with + - * / and brackets; a percentage, an em or a viewport unit beside a token needs layout the device does not do here.": 1,
-        "left: calc() can only combine absolute lengths here. A percentage is resolved during native layout, and there is no expression evaluator on device to finish it.": 1
+        "arithmetic with tokens in it cannot take 'percentage' here. What the device works out is numbers, points, degrees and var(), with + - * / and brackets; a percentage, an em or a viewport unit beside a token needs layout the device does not do here.": 1
       },
       "line-height": {
         "'line-height: inherit' is a CSS-wide keyword, which this cascade does not implement. Write the value it stands for.": 1
@@ -641,9 +624,6 @@
       },
       "order": {
         "'order' has no React Native equivalent: no style prop of a native view does what it does. Yoga lays children out in the order they are written: change the order in the template.": 1
-      },
-      "outline-color": {
-        "'outline-color' mixes var() with other values, which needs a parser on device. calc() of tokens, numbers and points, max(var(--x), <length>), colours and transforms are understood; anything else has to be worked out at build time.": 1
       },
       "overflow": {
         "overflow: native has one overflow for both axes, so 'auto hidden' cannot be applied": 3,
@@ -686,14 +666,13 @@
         "'text-size-adjust' has no React Native equivalent: no style prop of a native view does what it does.": 1
       },
       "top": {
-        "arithmetic with tokens in it cannot take 'percentage' here. What the device works out is numbers, points, degrees and var(), with + - * / and brackets; a percentage, an em or a viewport unit beside a token needs layout the device does not do here.": 3,
-        "top: calc() can only combine absolute lengths here. A percentage is resolved during native layout, and there is no expression evaluator on device to finish it.": 1
+        "arithmetic with tokens in it cannot take 'percentage' here. What the device works out is numbers, points, degrees and var(), with + - * / and brackets; a percentage, an em or a viewport unit beside a token needs layout the device does not do here.": 3
       },
       "transform": {
         "transform: the 'translate3d()' transform is not mapped yet": 1
       },
       "transition-duration": {
-        "var() cannot be used in the 'transition-duration' shorthand, because which native property the value lands in depends on the value, and there is no CSS parser on device. Use the longhand.": 9
+        "var() cannot be used in the 'transition-duration' shorthand, because which native property the value lands in depends on the value, and there is no CSS parser on device. Use the longhand.": 8
       },
       "transition-timing-function": {
         "var() cannot be used in the 'transition-timing-function' shorthand, because which native property the value lands in depends on the value, and there is no CSS parser on device. Use the longhand.": 1
@@ -719,8 +698,8 @@
     }
   },
   "pico": {
-    "rules": 417,
-    "dropped": 310,
+    "rules": 424,
+    "dropped": 334,
     "emitted": [
       "$animation",
       "$transitionDelay",
@@ -807,18 +786,29 @@
       "(rule)": {
         "':-moz-focusring' is not supported. Nothing on native answers it; bind a class or an attribute from the state it stands for, and select on that.": 1,
         "':-moz-ui-invalid' is not supported. Nothing on native answers it; bind a class or an attribute from the state it stands for, and select on that.": 1,
-        "':checked' has no state on native to read: whether a control is checked is an input of its component, not a prop a selector can see. Bind an attribute from the same signal, such as [attr.data-checked], and select on that.": 9,
-        "':first-of-type' is not supported yet. It counts the siblings of one element type, which the matcher does not track; ':nth-child()' it does.": 3,
-        "':focus-visible' is not supported. Native has no hover or focus cascade: use ':active' or ':focus', which the engine tracks, or a bound attribute such as [attr.data-hover].": 5,
-        "':focus-within' is not supported. Native has no hover or focus cascade: use ':active' or ':focus', which the engine tracks, or a bound attribute such as [attr.data-hover].": 1,
-        "':has()' is not supported. It styles a node by its descendants or later siblings, so any change beneath it would mean matching it again. Put a class on the node from the state it depends on.": 4,
-        "':hover' is not supported. Native has no hover or focus cascade: use ':active' or ':focus', which the engine tracks, or a bound attribute such as [attr.data-hover].": 13,
-        "':indeterminate' has no state on native to read: whether a control is checked is an input of its component, not a prop a selector can see. Bind an attribute from the same signal, such as [attr.data-checked], and select on that.": 4,
-        "':last-of-type' is not supported yet. It counts the siblings of one element type, which the matcher does not track; ':nth-child()' it does.": 3,
+        "':checked' has no state on native to read: whether a control is checked is an input of its component, not a prop a selector can see. Bind an attribute from the same signal, such as [attr.data-checked], and select on that.": 3,
+        "':first-of-type' is not supported yet. It counts the siblings of one element type, which the matcher does not track; ':nth-child()' it does.": 1,
+        "':focus-visible' is not supported. Native has no hover or focus cascade: use ':active' or ':focus', which the engine tracks, or a bound attribute such as [attr.data-hover].": 4,
+        "':has()' is not supported. It styles a node by its descendants or later siblings, so any change beneath it would mean matching it again. Put a class on the node from the state it depends on.": 2,
+        "':hover' is not supported. Native has no hover or focus cascade: use ':active' or ':focus', which the engine tracks, or a bound attribute such as [attr.data-hover].": 4,
+        "':indeterminate' has no state on native to read: whether a control is checked is an input of its component, not a prop a selector can see. Bind an attribute from the same signal, such as [attr.data-checked], and select on that.": 5,
+        "':last-of-type' is not supported yet. It counts the siblings of one element type, which the matcher does not track; ':nth-child()' it does.": 1,
+        "':where()' cannot contain a combinator, only a compound selector, '<compound> *', which is an ancestor test, or '<compound> ~ *', a sibling test.": 1,
         "'@moz-document' is not supported. Media queries and keyframes are the only at-rules with a runtime meaning here.": 1,
         "'@supports' is not supported. Media queries and keyframes are the only at-rules with a runtime meaning here.": 1,
         "'hover' is not a media feature a device can answer (width, height, orientation, prefers-color-scheme and prefers-reduced-motion are)": 1,
-        "pseudo-elements like ::before are never supported. They would mean synthesising nodes no template declares, which puts the style engine in the business of creating view hierarchy.": 69
+        "pseudo-elements like ::before are never supported. They would mean synthesising nodes no template declares, which puts the style engine in the business of creating view hierarchy.": 61
+      },
+      "(selector)": {
+        "':checked' has no state on native to read: whether a control is checked is an input of its component, not a prop a selector can see. Bind an attribute from the same signal, such as [attr.data-checked], and select on that.": 39,
+        "':first-of-type' is not supported yet. It counts the siblings of one element type, which the matcher does not track; ':nth-child()' it does.": 4,
+        "':focus-visible' is not supported. Native has no hover or focus cascade: use ':active' or ':focus', which the engine tracks, or a bound attribute such as [attr.data-hover].": 3,
+        "':focus-within' is not supported. Native has no hover or focus cascade: use ':active' or ':focus', which the engine tracks, or a bound attribute such as [attr.data-hover].": 1,
+        "':has()' is not supported. It styles a node by its descendants or later siblings, so any change beneath it would mean matching it again. Put a class on the node from the state it depends on.": 4,
+        "':hover' is not supported. Native has no hover or focus cascade: use ':active' or ':focus', which the engine tracks, or a bound attribute such as [attr.data-hover].": 22,
+        "':invalid' is not supported. Nothing on native answers it; bind a class or an attribute from the state it stands for, and select on that.": 1,
+        "':last-of-type' is not supported yet. It counts the siblings of one element type, which the matcher does not track; ':nth-child()' it does.": 4,
+        "pseudo-elements like ::before are never supported. They would mean synthesising nodes no template declares, which puts the style engine in the business of creating view hierarchy.": 33
       },
       "--*": {
         "'--*' has a value native cannot express in any form": 16,
@@ -837,22 +827,21 @@
         "var() cannot be used in the 'accent-color' shorthand, because which native property the value lands in depends on the value, and there is no CSS parser on device. Use the longhand.": 1
       },
       "appearance": {
-        "'appearance' has no React Native equivalent: no style prop of a native view does what it does.": 19
+        "'appearance' has no React Native equivalent: no style prop of a native view does what it does.": 14
       },
       "backdrop-filter": {
         "'backdrop-filter' is not mapped yet. React Native may well support it; nothing here translates it. Check RN's style types, then add it to css/properties.cjs.": 1,
         "var() cannot be used in the 'backdrop-filter' shorthand, because which native property the value lands in depends on the value, and there is no CSS parser on device. Use the longhand.": 1
       },
       "background": {
-        "'background' mixes var() with other values, which needs a parser on device. calc() of tokens, numbers and points, max(var(--x), <length>), colours and transforms are understood; anything else has to be worked out at build time.": 1,
-        "var() cannot be used in the 'background' shorthand, because which native property the value lands in depends on the value, and there is no CSS parser on device. Use the longhand.": 4
+        "var() cannot be used in the 'background' shorthand, because which native property the value lands in depends on the value, and there is no CSS parser on device. Use the longhand.": 2
       },
       "background-attachment": {
         "'background-attachment: initial' is a CSS-wide keyword, which this cascade does not implement. Write the value it stands for.": 1
       },
       "background-image": {
         "'background-image' mixes var() with other values, which needs a parser on device. calc() of tokens, numbers and points, max(var(--x), <length>), colours and transforms are understood; anything else has to be worked out at build time.": 2,
-        "var() cannot be used in the 'background-image' shorthand, because which native property the value lands in depends on the value, and there is no CSS parser on device. Use the longhand.": 12
+        "var() cannot be used in the 'background-image' shorthand, because which native property the value lands in depends on the value, and there is no CSS parser on device. Use the longhand.": 7
       },
       "background-position": {
         "'background-position' mixes var() with other values, which needs a parser on device. calc() of tokens, numbers and points, max(var(--x), <length>), colours and transforms are understood; anything else has to be worked out at build time.": 2
@@ -863,23 +852,11 @@
       "border-bottom": {
         "border-bottom: currentColor has no equivalent without a cascade root": 2
       },
-      "border-bottom-color": {
-        "border-bottom-color: currentColor has no equivalent without a cascade root": 1
-      },
       "border-collapse": {
         "'border-collapse' has no React Native equivalent: no style prop of a native view does what it does.": 1
       },
-      "border-left-color": {
-        "border-left-color: currentColor has no equivalent without a cascade root": 1
-      },
-      "border-right-color": {
-        "border-right-color: currentColor has no equivalent without a cascade root": 1
-      },
       "border-spacing": {
         "'border-spacing' has no React Native equivalent: no style prop of a native view does what it does.": 1
-      },
-      "border-top": {
-        "border-top: currentColor has no equivalent without a cascade root": 1
       },
       "clip": {
         "'clip' has no React Native equivalent: no style prop of a native view does what it does.": 1
@@ -890,9 +867,6 @@
       "color-scheme": {
         "'color-scheme' is not mapped yet. React Native may well support it; nothing here translates it. Check RN's style types, then add it to css/properties.cjs.": 3
       },
-      "content": {
-        "'content' has no React Native equivalent: no style prop of a native view does what it does.": 10
-      },
       "cursor": {
         "cursor: help is not supported. Native has two cursors, auto and pointer, for an iPad with a pointer attached.": 2,
         "cursor: not-allowed is not supported. Native has two cursors, auto and pointer, for an iPad with a pointer attached.": 1
@@ -901,19 +875,13 @@
         "'display: initial' is a CSS-wide keyword, which this cascade does not implement. Write the value it stands for.": 1,
         "display: grid does not exist on native; only flex, block (read as flex), contents and none do": 1,
         "display: inline does not exist on native; only flex, block (read as flex), contents and none do": 1,
-        "display: inline-block does not exist on native; only flex, block (read as flex), contents and none do": 10
+        "display: inline-block does not exist on native; only flex, block (read as flex), contents and none do": 8
       },
       "fill": {
         "'fill' is not mapped yet. React Native may well support it; nothing here translates it. Check RN's style types, then add it to css/properties.cjs.": 1
       },
-      "filter": {
-        "filter: invert() is not drawn on iOS. React Native draws brightness() and opacity() on both platforms and every other filter function on Android only, so this would leave the view unchanged on an iPhone. Scope the rule to Android with a .platform-android ancestor (Tailwind's android: variant), or use brightness() or opacity().": 1
-      },
       "float": {
-        "'float' has no React Native equivalent: no style prop of a native view does what it does. Lay the row out with flexbox: flex-direction: row on the parent.": 5
-      },
-      "font": {
-        "'font: inherit' is a CSS-wide keyword, which this cascade does not implement. Write the value it stands for.": 1
+        "'float' has no React Native equivalent: no style prop of a native view does what it does. Lay the row out with flexbox: flex-direction: row on the parent.": 1
       },
       "font-size": {
         "'font-size: inherit' is a CSS-wide keyword, which this cascade does not implement. Write the value it stands for.": 1
@@ -938,7 +906,7 @@
         "'list-style' has no React Native equivalent: no style prop of a native view does what it does.": 3
       },
       "list-style-type": {
-        "'list-style-type' has no React Native equivalent: no style prop of a native view does what it does.": 2
+        "'list-style-type' has no React Native equivalent: no style prop of a native view does what it does.": 1
       },
       "margin": {
         "'margin: inherit' is a CSS-wide keyword, which this cascade does not implement. Write the value it stands for.": 1
@@ -955,9 +923,6 @@
       "min-width": {
         "min-width: expected a length, and 'fit-content' is not one": 1
       },
-      "outline-offset": {
-        "'outline-offset' is not mapped yet. React Native may well support it; nothing here translates it. Check RN's style types, then add it to css/properties.cjs.": 1
-      },
       "overflow-wrap": {
         "'overflow-wrap' has no React Native equivalent: no style prop of a native view does what it does.": 1
       },
@@ -968,7 +933,7 @@
         "'calc()' is not arithmetic on one var() that can be settled here, so it needs evaluating on device": 2
       },
       "position": {
-        "position: fixed is not supported. Yoga has no viewport to fix to and no scroll container to stick within. Use `position: absolute` inside the element you meant to pin to; for a header that should stay put, put it outside the scroll view rather than inside it.": 2
+        "position: fixed is not supported. Yoga has no viewport to fix to and no scroll container to stick within. Use `position: absolute` inside the element you meant to pin to; for a header that should stay put, put it outside the scroll view rather than inside it.": 1
       },
       "resize": {
         "'resize' has no React Native equivalent: no style prop of a native view does what it does.": 1
@@ -980,7 +945,6 @@
         "'tab-size' has no React Native equivalent: no style prop of a native view does what it does.": 3
       },
       "text-decoration": {
-        "'text-decoration: inherit' is a CSS-wide keyword, which this cascade does not implement. Write the value it stands for.": 1,
         "var() cannot be used in the 'text-decoration' shorthand, because which native property the value lands in depends on the value, and there is no CSS parser on device. Use the longhand.": 2
       },
       "text-indent": {
@@ -1002,22 +966,19 @@
         "a keyframe's values are settled at build time, so var(), em and the viewport units cannot be used in one. Write the value in px, rem or %.": 2
       },
       "transition": {
-        "'transition' mixes var() with other values, which needs a parser on device. calc() of tokens, numbers and points, max(var(--x), <length>), colours and transforms are understood; anything else has to be worked out at build time.": 27
+        "'transition' mixes var() with other values, which needs a parser on device. calc() of tokens, numbers and points, max(var(--x), <length>), colours and transforms are understood; anything else has to be worked out at build time.": 11
       },
       "vertical-align": {
-        "'vertical-align: inherit' is a CSS-wide keyword, which this cascade does not implement. Write the value it stands for.": 1,
-        "vertical-align: 'baseline' has no native equivalent (auto, top, bottom, middle do)": 4,
-        "vertical-align: native takes a keyword here, not a length": 1
+        "vertical-align: 'baseline' has no native equivalent (auto, top, bottom, middle do)": 4
       },
       "width": {
-        "'width: inherit' is a CSS-wide keyword, which this cascade does not implement. Write the value it stands for.": 1,
-        "width: expected a length, and 'fit-content' is not one": 1
+        "'width: inherit' is a CSS-wide keyword, which this cascade does not implement. Write the value it stands for.": 1
       }
     }
   },
   "open-props": {
     "rules": 67,
-    "dropped": 291,
+    "dropped": 292,
     "emitted": [
       "aspectRatio",
       "backgroundColor",
@@ -1070,16 +1031,22 @@
     "drops": {
       "(rule)": {
         "':first-of-type' is not supported yet. It counts the siblings of one element type, which the matcher does not track; ':nth-child()' it does.": 1,
-        "':focus-visible' is not supported. Native has no hover or focus cascade: use ':active' or ':focus', which the engine tracks, or a bound attribute such as [attr.data-hover].": 3,
+        "':focus-visible' is not supported. Native has no hover or focus cascade: use ':active' or ':focus', which the engine tracks, or a bound attribute such as [attr.data-hover].": 4,
+        "':hover' is not supported. Native has no hover or focus cascade: use ':active' or ':focus', which the engine tracks, or a bound attribute such as [attr.data-hover].": 1,
         "':visited' is not supported. Nothing on native answers it; bind a class or an attribute from the state it stands for, and select on that.": 2,
-        "':where()' cannot contain a combinator, only a compound selector, '<compound> *', which is an ancestor test, or '<compound> ~ *', a sibling test.": 15,
+        "':where()' cannot contain a combinator, only a compound selector, '<compound> *', which is an ancestor test, or '<compound> ~ *', a sibling test.": 11,
         "'@supports' is not supported. Media queries and keyframes are the only at-rules with a runtime meaning here.": 2,
         "'dynamic-range' is not a media feature a device can answer (width, height, orientation, prefers-color-scheme and prefers-reduced-motion are)": 1,
         "a @keyframes inside @media is not supported. Keyframes are global here, so there is nothing for the condition to attach to; write it at the top level.": 2,
         "pseudo-elements like ::before are never supported. They would mean synthesising nodes no template declares, which puts the style engine in the business of creating view hierarchy.": 3
       },
+      "(selector)": {
+        "':where()' cannot contain a combinator, only a compound selector, '<compound> *', which is an ancestor test, or '<compound> ~ *', a sibling test.": 9,
+        "pseudo-elements like ::before are never supported. They would mean synthesising nodes no template declares, which puts the style engine in the business of creating view hierarchy.": 2
+      },
       "--*": {
-        "'--*' has a value native cannot express in any form": 207
+        "'--*' has a value native cannot express in any form": 202,
+        "filter: contrast() is not drawn on iOS. React Native draws brightness() and opacity() on both platforms and every other filter function on Android only, so this would leave the view unchanged on an iPhone. Scope the rule to Android with a .platform-android ancestor (Tailwind's android: variant), or use brightness() or opacity().": 5
       },
       "-webkit-tap-highlight-color": {
         "'-webkit-tap-highlight-color' is vendor-prefixed, for one browser engine. Native reads the standard property, which a stylesheet that writes this usually has beside it.": 1
@@ -1088,7 +1055,7 @@
         "var() cannot be used in the 'accent-color' shorthand, because which native property the value lands in depends on the value, and there is no CSS parser on device. Use the longhand.": 1
       },
       "background": {
-        "var() cannot be used in the 'background' shorthand, because which native property the value lands in depends on the value, and there is no CSS parser on device. Use the longhand.": 7
+        "var() cannot be used in the 'background' shorthand, because which native property the value lands in depends on the value, and there is no CSS parser on device. Use the longhand.": 6
       },
       "background-origin": {
         "'background-origin' is not mapped yet. React Native may well support it; nothing here translates it. Check RN's style types, then add it to css/properties.cjs.": 1
@@ -1100,7 +1067,7 @@
         "var() cannot be used in the 'caret-color' shorthand, because which native property the value lands in depends on the value, and there is no CSS parser on device. Use the longhand.": 1
       },
       "color": {
-        "'color: inherit' is a CSS-wide keyword, which this cascade does not implement. Write the value it stands for.": 3
+        "'color: inherit' is a CSS-wide keyword, which this cascade does not implement. Write the value it stands for.": 2
       },
       "color-scheme": {
         "'color-scheme' is not mapped yet. React Native may well support it; nothing here translates it. Check RN's style types, then add it to css/properties.cjs.": 2
@@ -1115,17 +1082,17 @@
         "filter: blur() is not drawn on iOS. React Native draws brightness() and opacity() on both platforms and every other filter function on Android only, so this would leave the view unchanged on an iPhone. Scope the rule to Android with a .platform-android ancestor (Tailwind's android: variant), or use brightness() or opacity().": 6
       },
       "font": {
-        "'font: inherit' is a CSS-wide keyword, which this cascade does not implement. Write the value it stands for.": 2
+        "'font: inherit' is a CSS-wide keyword, which this cascade does not implement. Write the value it stands for.": 1
       },
       "font-family": {
         "'font-family' mixes var() with other values, which needs a parser on device. calc() of tokens, numbers and points, max(var(--x), <length>), colours and transforms are understood; anything else has to be worked out at build time.": 1
       },
       "font-size": {
         "'font-size' mixes var() with other values, which needs a parser on device. calc() of tokens, numbers and points, max(var(--x), <length>), colours and transforms are understood; anything else has to be worked out at build time.": 1,
-        "'font-size: inherit' is a CSS-wide keyword, which this cascade does not implement. Write the value it stands for.": 2
+        "'font-size: inherit' is a CSS-wide keyword, which this cascade does not implement. Write the value it stands for.": 1
       },
       "letter-spacing": {
-        "'letter-spacing: inherit' is a CSS-wide keyword, which this cascade does not implement. Write the value it stands for.": 2
+        "'letter-spacing: inherit' is a CSS-wide keyword, which this cascade does not implement. Write the value it stands for.": 1
       },
       "max-inline-size": {
         "max-width: expected a length, and 'max-content' is not one": 1
@@ -1148,9 +1115,6 @@
       "scrollbar-color": {
         "'scrollbar-color' is not mapped yet. React Native may well support it; nothing here translates it. Check RN's style types, then add it to css/properties.cjs.": 1
       },
-      "text-decoration": {
-        "'text-decoration: inherit' is a CSS-wide keyword, which this cascade does not implement. Write the value it stands for.": 1
-      },
       "text-size-adjust": {
         "'text-size-adjust' has no React Native equivalent: no style prop of a native view does what it does.": 1
       },
@@ -1163,9 +1127,6 @@
       "touch-action": {
         "'touch-action' is not mapped yet. React Native may well support it; nothing here translates it. Check RN's style types, then add it to css/properties.cjs.": 1
       },
-      "transition": {
-        "'transition' mixes var() with other values, which needs a parser on device. calc() of tokens, numbers and points, max(var(--x), <length>), colours and transforms are understood; anything else has to be worked out at build time.": 1
-      },
       "white-space": {
         "white-space: pre is not supported: native text has no switch for how spaces and line breaks are kept. nowrap, read as one line, and normal are.": 1
       },
@@ -1173,12 +1134,12 @@
         "width: expected a length, and 'fit-content' is not one": 1
       },
       "writing-mode": {
-        "'writing-mode' is not mapped yet. React Native may well support it; nothing here translates it. Check RN's style types, then add it to css/properties.cjs.": 2
+        "'writing-mode' is not mapped yet. React Native may well support it; nothing here translates it. Check RN's style types, then add it to css/properties.cjs.": 1
       }
     }
   },
   "tailwind": {
-    "rules": 1055,
+    "rules": 1040,
     "dropped": 108,
     "emitted": [
       "$animation",
@@ -1305,6 +1266,133 @@
       },
       "transform": {
         "transform: skewX() is not drawn on Android. React Native breaks a transform down into the rotation, scale and translation an Android view has, and a view has no skew, so this would leave the view unskewed, or turned, on an Android phone. Scope the rule to iOS with a .platform-ios ancestor (Tailwind's ios: variant).": 9
+      }
+    }
+  },
+  "tailwind-v3": {
+    "rules": 1039,
+    "dropped": 83,
+    "emitted": [
+      "$animation",
+      "$transition",
+      "$transitionDelay",
+      "$transitionDuration",
+      "$transitionEasing",
+      "alignItems",
+      "alignSelf",
+      "aspectRatio",
+      "backgroundColor",
+      "borderBottomColor",
+      "borderBottomLeftRadius",
+      "borderBottomRightRadius",
+      "borderBottomWidth",
+      "borderLeftColor",
+      "borderLeftWidth",
+      "borderRightColor",
+      "borderRightWidth",
+      "borderStyle",
+      "borderTopColor",
+      "borderTopLeftRadius",
+      "borderTopRightRadius",
+      "borderTopWidth",
+      "bottom",
+      "boxShadow",
+      "color",
+      "columnGap",
+      "cursor",
+      "display",
+      "ellipsizeMode",
+      "experimental_backgroundImage",
+      "filter",
+      "flexBasis",
+      "flexDirection",
+      "flexGrow",
+      "flexShrink",
+      "flexWrap",
+      "fontFamily",
+      "fontSize",
+      "fontStyle",
+      "fontWeight",
+      "height",
+      "justifyContent",
+      "left",
+      "letterSpacing",
+      "lineHeight",
+      "marginBottom",
+      "marginLeft",
+      "marginRight",
+      "marginTop",
+      "maxWidth",
+      "minHeight",
+      "minWidth",
+      "mixBlendMode",
+      "numberOfLines",
+      "opacity",
+      "outlineColor",
+      "overflow",
+      "paddingBottom",
+      "paddingLeft",
+      "paddingRight",
+      "paddingTop",
+      "pointerEvents",
+      "position",
+      "resizeMode",
+      "right",
+      "rowGap",
+      "selectable",
+      "textAlign",
+      "textDecorationColor",
+      "textDecorationLine",
+      "textTransform",
+      "top",
+      "transform",
+      "transformOrigin",
+      "width",
+      "zIndex"
+    ],
+    "drops": {
+      "(rule)": {
+        "':checked' has no state on native to read: whether a control is checked is an input of its component, not a prop a selector can see. Bind an attribute from the same signal, such as [attr.data-checked], and select on that.": 3
+      },
+      "--*": {
+        "filter: blur() is not drawn on iOS. React Native draws brightness() and opacity() on both platforms and every other filter function on Android only, so this would leave the view unchanged on an iPhone. Scope the rule to Android with a .platform-android ancestor (Tailwind's android: variant), or use brightness() or opacity().": 6,
+        "filter: drop-shadow() is not drawn on iOS. React Native draws brightness() and opacity() on both platforms and every other filter function on Android only, so this would leave the view unchanged on an iPhone. Scope the rule to Android with a .platform-android ancestor (Tailwind's android: variant), or use brightness() or opacity().": 1,
+        "filter: grayscale() is not drawn on iOS. React Native draws brightness() and opacity() on both platforms and every other filter function on Android only, so this would leave the view unchanged on an iPhone. Scope the rule to Android with a .platform-android ancestor (Tailwind's android: variant), or use brightness() or opacity().": 1
+      },
+      "accent-color": {
+        "'accent-color' has no React Native equivalent: no style prop of a native view does what it does.": 30
+      },
+      "backdrop-filter": {
+        "'backdrop-filter' is not mapped yet. React Native may well support it; nothing here translates it. Check RN's style types, then add it to css/properties.cjs.": 1
+      },
+      "clip": {
+        "'clip' has no React Native equivalent: no style prop of a native view does what it does.": 1
+      },
+      "columns": {
+        "'columns' has no React Native equivalent: no style prop of a native view does what it does.": 1
+      },
+      "display": {
+        "display: grid does not exist on native; only flex, block (read as flex), contents and none do": 1
+      },
+      "fill": {
+        "'fill' is not mapped yet. React Native may well support it; nothing here translates it. Check RN's style types, then add it to css/properties.cjs.": 30
+      },
+      "order": {
+        "'order' has no React Native equivalent: no style prop of a native view does what it does. Yoga lays children out in the order they are written: change the order in the template.": 1
+      },
+      "overflow-wrap": {
+        "'overflow-wrap' has no React Native equivalent: no style prop of a native view does what it does.": 1
+      },
+      "overflow-x": {
+        "'overflow-x': native has one overflow for both axes. Write 'overflow'.": 1
+      },
+      "position": {
+        "position: fixed is not supported. Yoga has no viewport to fix to and no scroll container to stick within. Use `position: absolute` inside the element you meant to pin to; for a header that should stay put, put it outside the scroll view rather than inside it.": 1,
+        "position: sticky is not supported. Yoga has no viewport to fix to and no scroll container to stick within. Use `position: absolute` inside the element you meant to pin to; for a header that should stay put, put it outside the scroll view rather than inside it.": 1
+      },
+      "transform": {
+        "transform: skewX() is not drawn on Android. React Native breaks a transform down into the rotation, scale and translation an Android view has, and a view has no skew, so this would leave the view unskewed, or turned, on an Android phone. Scope the rule to iOS with a .platform-ios ancestor (Tailwind's ios: variant).": 2,
+        "transform: skewY() is not drawn on Android. React Native breaks a transform down into the rotation, scale and translation an Android view has, and a view has no skew, so this would leave the view unskewed, or turned, on an Android phone. Scope the rule to iOS with a .platform-ios ancestor (Tailwind's ios: variant).": 1
       }
     }
   }
