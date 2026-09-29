@@ -294,6 +294,13 @@ describe('the file system', () => {
     system.write(present.file, 'hello');
     assert.equal(present.creations(), 0, 'create() throws on a file that is already there');
   });
+
+  it('says the module is missing, rather than failing on a directory it does not have', () => {
+    const system = serviceWith(FileSystem.SOURCE, null, () => new FileSystem());
+    const missing = { message: '[angular-native] expo-file-system is not installed' };
+    assert.throws(() => system.cache('canary.txt'), missing);
+    assert.throws(() => system.document('canary.txt'), missing);
+  });
 });
 
 describe('the views worth knowing the names of', () => {
