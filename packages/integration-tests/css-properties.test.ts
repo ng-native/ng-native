@@ -692,6 +692,36 @@ describe('a colour token made of channel tokens', () => {
     assert.equal(resolve(css, [], ['fixed', 'paint'])['backgroundColor'], 'rgba(1, 2, 3, 0.25)');
   });
 
+  it('is what an alias to it resolves to, as an hsl() token is', () => {
+    const aliased = `
+      .a { --rgb: 1, 2, 3; --base: rgba(var(--rgb), 0.5); --semantic: var(--base) }
+      .h { --hue: 0; --base: hsl(var(--hue), 100%, 50%); --semantic: var(--base) }
+      .paint { background-color: var(--semantic) }
+    `;
+    assert.equal(resolve(aliased, [], ['a', 'paint'])['backgroundColor'], 'rgba(1, 2, 3, 0.5)');
+    assert.equal(resolve(aliased, [], ['h', 'paint'])['backgroundColor'], 'rgb(255, 0, 0)');
+  });
+
+  it("takes its channels' fallback when the channels token is unset", () => {
+    const fallback = `
+      .t { --c: rgba(var(--rgb, 1, 2, 3), 0.5) }
+      .paint { background-color: var(--c) }
+      .direct { background-color: rgba(var(--rgb, 4, 5, 6), 0.25) }
+    `;
+    assert.equal(resolve(fallback, [], ['t', 'paint'])['backgroundColor'], 'rgba(1, 2, 3, 0.5)');
+    assert.equal(resolve(fallback, [], ['direct'])['backgroundColor'], 'rgba(4, 5, 6, 0.25)');
+  });
+
+  it('leaves the colour unset when its alpha names a token nothing set, as CSS does', () => {
+    const missing = `
+      .t { --rgb: 1, 2, 3; --c: rgba(var(--rgb), var(--missing)) }
+      .paint { background-color: var(--c) }
+      .direct { --rgb: 1, 2, 3; background-color: rgba(var(--rgb), var(--missing)) }
+    `;
+    assert.equal(resolve(missing, [], ['t', 'paint'])['backgroundColor'], undefined);
+    assert.equal(resolve(missing, [], ['direct'])['backgroundColor'], undefined);
+  });
+
   it('is inherited as the colour it was settled to', () => {
     assert.equal(
       resolve(css, ['blue', 'faded'], ['paint'])['backgroundColor'],

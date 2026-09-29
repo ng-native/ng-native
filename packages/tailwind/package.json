@@ -1,7 +1,7 @@
 {
   "name": "@ng-native/tailwind",
   "version": "0.0.0",
-  "description": "Tailwind CSS preset for Angular Native, for native and web, on Tailwind 4 or 3.",
+  "description": "Tailwind CSS preset for Angular Native: Tailwind 4 on native and web, Tailwind 3 on native.",
   "keywords": [
     "angular",
     "react-native",

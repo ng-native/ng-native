@@ -907,7 +907,7 @@ function sweepSuite(config: SweepConfig) {
       const root = engine.createElement('view');
       engine.setClasses(root, ROOT_CLASSES);
       const node = engine.createElement('view');
-      engine.setClasses(node, name.replace(/!$/, '') + (name.endsWith('!') ? '!' : ''));
+      engine.setClasses(node, name);
       engine.appendChild(root, node);
       engine.appendChild(engine.root, root);
       engine.commit();

@@ -218,9 +218,15 @@ async function build() {
   const singles = [...new Set([...utilities, ...arbitrary])];
   const important = valid(singles.map((name) => `!${name}`));
 
-  const overlaps = OVERLAPS.filter((pair) => valid(pair).length === pair.length);
+  const overlaps = [...OVERLAPS, ...AXES].filter((pair) => valid(pair).length === pair.length);
   const everything = await css(named);
   const pairs = [...slotPairs(everything, new Set(named)), ...overlaps];
+  // Read out of Tailwind 3's CSS by its layout, as Tailwind 4's are: a release that writes it
+  // another way would find fewer, and the sweep would narrow without a word.
+  const missing = Object.entries(PAIR_FAMILIES)
+    .filter(([, family]) => !pairs.some((pair) => pair.every((c) => family.test(c))))
+    .map(([name]) => name);
+  if (missing.length) throw new Error(`no pairs found for ${missing.join(', ')}: see slotsIn`);
   const all = await css([...singles, ...important, ...variants, ...pairs.flat()]);
 
   const cases: SweepCase[] = [
@@ -232,6 +238,35 @@ async function build() {
   ];
   return { css: all, cases };
 }
+
+/**
+ * The two axes of a transform utility, together. Tailwind 3 reads every transform slot in one
+ * `transform`, so the readers `slotPairs` samples for `--tw-scale-x` are dozens of transform
+ * utilities, and a sample of three held no `scale-y-*`.
+ */
+const AXES = [
+  ['scale-x-50', 'scale-y-75'],
+  ['translate-x-2', 'translate-y-4'],
+  ['ios:skew-x-3', 'ios:skew-y-6'],
+];
+
+/**
+ * Families that compose one value out of several classes in Tailwind 3, each of which must have a
+ * pair. Tailwind 4's list without text shadows and drop shadow colours, which Tailwind 3 does not
+ * have, and with the two it composes that Tailwind 4 does not: opacity utilities and gradients.
+ */
+const PAIR_FAMILIES: Record<string, RegExp> = {
+  translate: /^-?translate-/,
+  scale: /^-?scale-/,
+  'shadows and rings': /^(shadow|ring)/,
+  space: /^-?space-[xy]-/,
+  divide: /^divide-/,
+  'numeric variants':
+    /^(tabular|oldstyle|lining|proportional)-nums|^(ordinal|slashed-zero|diagonal-fractions)$/,
+  filters: /^(android:)?(blur|brightness|contrast|grayscale|hue-rotate|invert|saturate|sepia)/,
+  opacity: /^(bg|text|border|ring|divide|placeholder)-/,
+  gradients: /^(bg-gradient-to|from|via|to)-/,
+};
 
 const one = (name: string, kind: SweepCase['kind']): SweepCase => ({
   name,

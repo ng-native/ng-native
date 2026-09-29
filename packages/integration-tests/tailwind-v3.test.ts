@@ -8,14 +8,15 @@
  * rather than inspecting the compiled sheet.
  */
 import assert from 'node:assert/strict';
-import { describe, it } from 'node:test';
+import { before, describe, it } from 'node:test';
 import { execFileSync } from 'node:child_process';
-import { mkdtempSync, writeFileSync, readFileSync } from 'node:fs';
+import { mkdtempSync, writeFileSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createRequire } from 'node:module';
 import { Engine, type StyleSheet } from '@ng-native/fabric';
-import { createFakeFabric, type FakeFabric, type FakeFabricNode } from '@ng-native/testing';
+import { createFakeFabric } from '@ng-native/testing';
+import { committedProps } from './tailwind-cli.ts';
 
 const require = createRequire(import.meta.url);
 const { flattenTailwind } = require('@ng-native/tailwind') as {
@@ -26,31 +27,36 @@ const { compileCss } = require('@ng-native/metro/css/compile.cjs') as {
 };
 
 /** Tailwind 3's CLI output for exactly these classes, through the preset as the setup guide says. */
-function build(classes: string): string {
+function build(classes: string, app: object = {}): string {
   const dir = mkdtempSync(join(tmpdir(), 'tailwind-v3-'));
   const preset = require.resolve('@ng-native/tailwind/preset.cjs');
+  const config = { ...app, content: [{ raw: classes }] };
   writeFileSync(
     join(dir, 'tailwind.config.js'),
-    `module.exports = { presets: [require(${JSON.stringify(preset)})], content: [{ raw: ${JSON.stringify(classes)} }] };`,
+    `module.exports = { presets: [require(${JSON.stringify(preset)})], ...${JSON.stringify(config)} };`,
   );
   writeFileSync(
     join(dir, 'in.css'),
     '@tailwind base;\n@tailwind components;\n@tailwind utilities;\n',
   );
-  execFileSync(
-    process.execPath,
-    [
-      require.resolve('tailwindcss-v3/lib/cli.js'),
-      '-c',
-      'tailwind.config.js',
-      '-i',
-      'in.css',
-      '-o',
-      'out.css',
-    ],
-    { cwd: dir, stdio: 'pipe' },
-  );
-  return readFileSync(join(dir, 'out.css'), 'utf8');
+  try {
+    execFileSync(
+      process.execPath,
+      [
+        require.resolve('tailwindcss-v3/lib/cli.js'),
+        '-c',
+        'tailwind.config.js',
+        '-i',
+        'in.css',
+        '-o',
+        'out.css',
+      ],
+      { cwd: dir, stdio: 'pipe' },
+    );
+    return readFileSync(join(dir, 'out.css'), 'utf8');
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 }
 
 /**
@@ -58,8 +64,8 @@ function build(classes: string): string {
  * utilities a node does not wear. That is the failure this file exists for: `.translate-x-2`
  * picking up `.rotate-45`'s angle because both are in the sheet.
  */
-function sheetFor(classes: string): StyleSheet {
-  return compileCss(flattenTailwind(build(classes)), 'tailwind', { onUnsupported: () => {} });
+function sheetFor(classes: string, app: object = {}): StyleSheet {
+  return compileCss(flattenTailwind(build(classes, app)), 'tailwind', { onUnsupported: () => {} });
 }
 
 /** Renders a parent wearing `outer` around a child wearing `inner`, and returns both's props. */
@@ -184,6 +190,25 @@ describe('Tailwind 3', () => {
     assert.equal(
       render(sheet, 'bg-blue-500 bg-opacity-50').parent['backgroundColor'],
       'rgba(59, 130, 246, 0.5)',
+    );
+  });
+
+  it("fades an app's own hsl() and decimal rgb() colours by their opacity utilities", () => {
+    // Tailwind 3 writes a theme colour in the space it was given: `hsl(210 40% 50% / var(...))`,
+    // `rgb(10.5 20 30 / var(...))`. Only whole-number rgb() was turned into channels, so these kept
+    // a token alpha inside a colour function, which the compiler refuses.
+    const app = {
+      theme: { extend: { colors: { hue: 'hsl(0 100% 50%)', dec: 'rgb(10.5 20 30)' } } },
+    };
+    const sheet = sheetFor('bg-hue bg-dec bg-opacity-50', app);
+    assert.equal(render(sheet, 'bg-hue').parent['backgroundColor'], 'rgb(255, 0, 0)');
+    assert.equal(
+      render(sheet, 'bg-hue bg-opacity-50').parent['backgroundColor'],
+      'rgba(255, 0, 0, 0.5)',
+    );
+    assert.equal(
+      render(sheet, 'bg-dec bg-opacity-50').parent['backgroundColor'],
+      'rgba(10.5, 20, 30, 0.5)',
     );
   });
 
@@ -317,6 +342,9 @@ describe('Tailwind 3', () => {
     assert.equal(render(sheet, 'transform rotate-[3]').parent['transform'], undefined);
     assert.equal(render(sheet, 'transform rotate-[37%]').parent['transform'], undefined);
     assert.equal(transformOf(render(sheet, 'transform rotate-0').parent)['rotate'], '0deg');
+    // A zero percentage is still no angle: `rotate(0%)` is dropped as `rotate(3)` is.
+    const zero = sheetFor('transform rotate-[0%]');
+    assert.equal(render(zero, 'transform rotate-[0%]').parent['transform'], undefined);
   });
 
   it('refuses a skew where Android could apply it, and nothing else in the transform', () => {
@@ -336,6 +364,17 @@ describe('Tailwind 3', () => {
     assert.equal(transformOf(render(sheet, 'transform rotate-45').parent)['rotate'], '45deg');
     const skewed = transformOf(render(sheet, 'platform-ios', 'transform ios:skew-x-12').child);
     assert.equal(skewed['skewX'], '12deg');
+  });
+
+  it('refuses a skew for Android by its fallback, when the token it names is unset', () => {
+    const refused: string[] = [];
+    compileCss('.a { transform: skewX(var(--skew, 12deg)) }', 'tailwind', {
+      onUnsupported: (message: string) => refused.push(message),
+    });
+    assert.ok(
+      refused.some((m) => /skewX\(\) is not drawn on Android/.test(m)),
+      refused.join('\n'),
+    );
   });
 
   it('takes arbitrary values', () => {
@@ -449,8 +488,11 @@ describe('the Tailwind 3 preset', () => {
     return at === -1 ? '' : css.slice(at, css.indexOf('}', at));
   };
 
-  it('builds, and leaves preflight out', () => {
+  before(() => {
     css = build(PRESET);
+  });
+
+  it('builds, and leaves preflight out', () => {
     assert.doesNotMatch(css, /box-sizing: border-box/, 'no preflight');
   });
 
@@ -622,17 +664,19 @@ describe('the Tailwind 3 preset', () => {
     );
   });
 
+  it("keeps each platform's monospace font in an app that makes every utility important", () => {
+    // With `important: true`, `.font-mono` is `Courier New !important`, which beat the platform
+    // rules' plain Menlo and monospace on every phone.
+    const sheet = sheetFor('font-mono', { important: true });
+    const font = (platform: string) => render(sheet, platform, 'font-mono').child['fontFamily'];
+    assert.equal(font('platform-ios'), 'Menlo');
+    assert.equal(font('platform-android'), 'monospace');
+    assert.equal(font(''), 'Courier New');
+  });
+
   it('names a monospace font both platforms have', () => {
     assert.match(declarationsOf('font-mono'), /font-family: Courier New/);
     assert.match(css, /\.platform-ios \.font-mono\s*\{\s*font-family: Menlo/);
     assert.match(css, /\.platform-android \.font-mono\s*\{\s*font-family: monospace/);
   });
 });
-
-/** The props a node was last committed with. */
-function committedProps(fabric: FakeFabric, node: unknown): Record<string, unknown> {
-  const all = (n: FakeFabricNode): FakeFabricNode[] => [n, ...n.children.flatMap(all)];
-  const found = fabric.committed.flatMap(all).find((n) => n.instanceHandle === node);
-  assert.ok(found, 'committed');
-  return found.props;
-}

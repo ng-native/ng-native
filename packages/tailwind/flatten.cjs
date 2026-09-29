@@ -609,9 +609,27 @@ function normalizeV3Gradients(css) {
     });
 }
 
-/** Tailwind 3's colour with a token alpha: `rgb(59 130 246 / var(--tw-bg-opacity, 1))`. */
+/** Tailwind 3's colour with a token alpha: `rgb(59 130 246 / var(--tw-bg-opacity, 1))`, or an `hsl()` one. */
 const OPACITY_COLOUR =
-  /([\w-]+)\s*:\s*rgb\(\s*(\d+)\s+(\d+)\s+(\d+)\s*\/\s*var\(\s*(--tw-([\w-]+)-opacity)\s*,\s*1\s*\)\s*\)/g;
+  /([\w-]+)\s*:\s*(rgb|hsl)a?\(\s*([\d.]+)(?:deg)?[\s,]+([\d.]+)%?[\s,]+([\d.]+)%?\s*\/\s*var\(\s*(--tw-[\w-]+-opacity)\s*,\s*1\s*\)\s*\)/g;
+
+/**
+ * An `hsl()` colour's channels in sRGB, as a browser gives them when it prints the colour: whole
+ * numbers, since the channels token that carries them is read as an `rgb()`.
+ */
+function hslChannels(h, s, l) {
+  const [hue, sat, light] = [(((h % 360) + 360) % 360) / 360, s / 100, l / 100];
+  const q = light < 0.5 ? light * (1 + sat) : light + sat - light * sat;
+  const p = 2 * light - q;
+  const channel = (t) => {
+    const u = t < 0 ? t + 1 : t > 1 ? t - 1 : t;
+    if (u < 1 / 6) return p + (q - p) * 6 * u;
+    if (u < 1 / 2) return q;
+    if (u < 2 / 3) return p + (q - p) * (2 / 3 - u) * 6;
+    return p;
+  };
+  return [hue + 1 / 3, hue, hue - 1 / 3].map((t) => Math.round(channel(t) * 255));
+}
 
 /**
  * Tailwind 3's `bg-opacity-50` and friends, as the channels-and-alpha colour the engine resolves.
@@ -628,12 +646,13 @@ function opacityChannels(css) {
   const setters = new Set();
   for (const [, selector, body] of css.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
     if (RESET.test(selector.trim())) continue;
-    if (/rgb\([^)]*var\(--tw-[\w-]+-opacity/.test(body)) continue;
+    if (/(rgb|hsl)a?\([^)]*var\(--tw-[\w-]+-opacity/.test(body)) continue;
     for (const [, name] of body.matchAll(/(--tw-[\w-]+-opacity)\s*:/g)) setters.add(name);
   }
   const runtime = new Set();
-  const out = css.replace(OPACITY_COLOUR, (whole, property, r, g, b, alpha) => {
+  const out = css.replace(OPACITY_COLOUR, (whole, property, space, a, b2, c, alpha) => {
     if (!setters.has(alpha)) return whole;
+    const [r, g, b] = space === 'hsl' ? hslChannels(+a, +b2, +c) : [a, b2, c];
     // One per property: `border-color` and `border-top-color` are both faded by
     // `--tw-border-opacity`, and sharing channels would paint one's colour on the other's sides.
     const channels = `--tw-rgb-${property.replace(/^--tw-/, '')}`;

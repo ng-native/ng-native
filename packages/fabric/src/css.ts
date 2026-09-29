@@ -272,7 +272,7 @@ export type ColourExpression =
     }
   | {
       /** A token of bare channels, as `rgba(var(--channels), <alpha>)` reads it. */
-      readonly channels: { readonly reference: string };
+      readonly channels: { readonly reference: string; readonly fallback?: readonly number[] };
       readonly alpha?: number | { readonly reference: string; readonly fallback?: number };
     }
   | { readonly hsl: NonNullable<TokenValue['hsl']> }
@@ -1484,28 +1484,36 @@ function resolveAliases(
   own: Readonly<Record<string, TokenValue>>,
   merged: Record<string, TokenValue>,
 ): Record<string, TokenValue> {
-  for (const name of Object.keys(own)) {
-    if (!own[name]!.alias) continue;
-    const value = followAlias(name, merged, new Set());
-    if (value) merged[name] = value;
-    else delete merged[name];
+  const names = Object.keys(own);
+  for (const name of names) {
+    if (own[name]!.alias) settle(merged, name, followAlias(name, merged, new Set()));
   }
-  for (const name of Object.keys(own)) {
-    const hsl = own[name]!.hsl;
-    if (!hsl) continue;
-    const color = resolveHsl(hsl, merged);
-    if (color !== undefined) merged[name] = { color };
-    else delete merged[name];
+  for (const name of names) {
+    const { hsl, deferredColour } = own[name]!;
+    if (hsl) settle(merged, name, colourToken(resolveHsl(hsl, merged)));
+    if (deferredColour) settle(merged, name, colourToken(channelsColour(deferredColour, merged)));
   }
-  for (const name of Object.keys(own)) {
-    const deferred = own[name]!.deferredColour;
-    if (!deferred) continue;
-    const color = channelsColour(deferred, merged);
-    if (color !== undefined) merged[name] = { color };
-    else delete merged[name];
+  // An alias to one of those copied it unsettled above: follow it again, now it is a colour.
+  for (const name of names) {
+    const target = own[name]!.alias;
+    if (!target || !(own[target]?.hsl || own[target]?.deferredColour)) continue;
+    settle(merged, name, followAlias(name, { ...merged, [name]: own[name]! }, new Set()));
   }
   return merged;
 }
+
+/** A token set to what it resolved to, or removed when it resolved to nothing, as CSS unsets it. */
+function settle(
+  merged: Record<string, TokenValue>,
+  name: string,
+  value: TokenValue | undefined,
+): void {
+  if (value) merged[name] = value;
+  else delete merged[name];
+}
+
+const colourToken = (color: string | undefined): TokenValue | undefined =>
+  color === undefined ? undefined : { color };
 
 /** An `hsl()` token's channels, read from the tokens in scope, as the colour they make. */
 function resolveHsl(
@@ -1604,7 +1612,9 @@ function fromChannels(
   tokens: Readonly<Record<string, TokenValue>>,
 ): string | undefined {
   if (!Array.isArray(value) || value.length !== 3) return undefined;
-  const opacity = alpha ? (tokens[alpha.reference]?.number ?? alpha.fallback ?? 1) : 1;
+  // An alpha naming a token nothing set, with no fallback, is no colour: CSS drops it.
+  const opacity = alpha ? (tokens[alpha.reference]?.number ?? alpha.fallback) : 1;
+  if (opacity === undefined) return undefined;
   const [r, g, b] = value as number[];
   return opacity >= 1
     ? `rgb(${r}, ${g}, ${b})`
@@ -1770,13 +1780,16 @@ function bareNumberAsLength(
 
 /**
  * Whether an angle is one token that holds no angle: `--tw-rotate: 3` or `37%`, from
- * `rotate-[3]`, which a browser drops, taking the whole transform with it. A bare 0 is an angle.
+ * `rotate-[3]`, which a browser drops, taking the whole transform with it. A bare 0 is an angle;
+ * `0%` is not.
  */
 function notAnAngle(marker: CalcMarker, tokens: Readonly<Record<string, TokenValue>>): boolean {
   if (marker.kind !== 'angle' || typeof marker.expression !== 'object') return false;
   if (Array.isArray(marker.expression)) return false;
   const token = tokens[(marker.expression as { reference: string }).reference];
-  return token !== undefined && token.angle === undefined && token.number !== 0;
+  if (token === undefined || token.angle !== undefined) return false;
+  // `0%` has a number 0 as well, and is still a percentage, which no angle is.
+  return token.number !== 0 || typeof token.length === 'string';
 }
 
 /**
@@ -1926,7 +1939,8 @@ function channelsColour(
   expression: Extract<ColourExpression, { channels: unknown }>,
   tokens: Readonly<Record<string, TokenValue>>,
 ): string | undefined {
-  const value = formOf(tokens[expression.channels.reference], 'channels');
+  const value =
+    formOf(tokens[expression.channels.reference], 'channels') ?? expression.channels.fallback;
   const { alpha } = expression;
   if (typeof alpha !== 'number') return fromChannels(value, alpha, tokens);
   const opaque = fromChannels(value, undefined, tokens);

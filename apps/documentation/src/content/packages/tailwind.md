@@ -177,7 +177,10 @@ sheet at build time. It supplies the same variants and utilities as `native.css`
 variants, `dark:` following a `.dark` class, the touch meanings of `hover:` and `focus-visible:`
 (for `group-*:` and `peer-*:` as well), and the safe-area and hairline utilities.
 
-Every Tailwind 3 utility is held to the same sweep as Tailwind 4's: each one either takes effect or
-is refused with a build warning, and what it draws is compared with Chrome.
+Every Tailwind 3 utility is held to the same sweep as Tailwind 4's, and what it draws is compared
+with Chrome. Each one takes effect or is refused with a build warning, except a few that only set a
+value another utility reads, where that utility is the one refused: `snap-mandatory` and
+`snap-proximity`, read by `snap-x` and `snap-y`, and `placeholder-opacity-*`, read by a
+`placeholder-*` colour. Those do nothing, as the utility they feed does nothing.
 
 The web host is Tailwind 4 only.

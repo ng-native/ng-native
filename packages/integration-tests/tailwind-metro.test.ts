@@ -334,6 +334,8 @@ describe('wiring Tailwind into Metro', () => {
     symlinkSync(
       path.dirname(require.resolve('tailwindcss-v3/package.json')),
       path.join(dir, 'node_modules', 'tailwindcss'),
+      // A junction on Windows, which needs no privileges; ignored elsewhere.
+      'junction',
     );
     const output = path.join(dir, 'app.tailwind.js');
     withTailwind(

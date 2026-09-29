@@ -23,7 +23,7 @@ const inset = (edge) => `var(--safe-area-inset-${edge}, 0px)`;
 
 const HAIRLINE = 'var(--hairline, 1px)';
 
-function nativePreset({ addBase, addUtilities, addVariant, matchUtilities, theme }) {
+function nativePreset({ addUtilities, addVariant, matchUtilities, theme }) {
   // `hover:` is the pressed state, or a real hover where there is a pointer.
   addVariant('hover', ['&:active', '&[data-hover]']);
   addVariant('press', '&:active');
@@ -104,8 +104,9 @@ function nativePreset({ addBase, addUtilities, addVariant, matchUtilities, theme
   }
   addUtilities(hairlines);
 
-  // `font-mono`, upgraded to the font each platform uses for code.
-  addBase({
+  // `font-mono`, upgraded to the font each platform uses for code. Utilities rather than base
+  // rules, so an app's `important: true` makes them important too, and they still win.
+  addUtilities({
     '.platform-ios .font-mono': { 'font-family': 'Menlo' },
     '.platform-android .font-mono': { 'font-family': 'monospace' },
   });

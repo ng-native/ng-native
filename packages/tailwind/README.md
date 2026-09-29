@@ -7,13 +7,13 @@ a real cascade, and `class` already matches against it.
 
 Alpha: APIs may change before 1.0.
 
-## Install
+## Install (Tailwind 4)
 
 ```sh
 npm install @ng-native/tailwind @ng-native/metro @tailwindcss/cli tailwindcss
 ```
 
-## Example
+## Example (Tailwind 4)
 
 ```css
 /* styles.css */
@@ -43,6 +43,30 @@ mount(rootTag, App, fabric, { globalStyles: tailwind });
 
 Import `theme.css` and `utilities.css`, not the plain `tailwindcss` entry point - that also pulls
 in preflight, a browser reset that means nothing on a phone.
+
+## Tailwind 3 (native only)
+
+```sh
+npm install @ng-native/tailwind @ng-native/metro tailwindcss@3
+```
+
+```js
+// tailwind.config.js
+module.exports = {
+  presets: [require('@ng-native/tailwind/preset.cjs')],
+  content: ['./src/**/*.{ts,html}'],
+};
+```
+
+```css
+/* styles.css */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+```
+
+`metro.config.js` and `index.ts` are the same as above: `withTailwind` sees Tailwind 3 and runs its
+own CLI, so there is no `@tailwindcss/cli` to install. The preset turns preflight off.
 
 ## What's in the package
 

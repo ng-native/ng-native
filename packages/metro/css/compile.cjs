@@ -259,10 +259,12 @@ function deferChannels(part, property, context) {
   const [channels, alpha, ...rest] = args;
   if (channels?.type !== 'var' || rest.length || kindOf(property) !== 'color') return null;
 
+  const fallback = varFallback(channels, 'channels', context);
   return {
     props: propsFor(property),
     kind: 'channels',
     reference: channels.value.name.ident,
+    ...(fallback === undefined ? {} : { fallback }),
     ...opacityOf(alpha, context),
   };
 }
@@ -330,7 +332,10 @@ function deferChannelsToken(parts, context) {
   const alpha = deferred.alpha ?? deferred.adjust?.alpha;
   return {
     deferredColour: {
-      channels: { reference: deferred.reference },
+      channels: {
+        reference: deferred.reference,
+        ...(deferred.fallback === undefined ? {} : { fallback: deferred.fallback }),
+      },
       ...(alpha === undefined ? {} : { alpha }),
     },
   };
@@ -1611,14 +1616,18 @@ function skewIn(list, tokens = {}) {
 
 /**
  * Whether one skew angle is a skew: a written angle other than 0, or a token the same rule sets to
- * one. Tailwind 3's every transform reads `var(--tw-skew-x)`, which the reset sets to 0, so a slot
+ * one, or a fallback that is one. Tailwind 3's every transform reads `var(--tw-skew-x)`, which the reset sets to 0, so a slot
  * the rule does not set is no skew; `skew-x-12`, which sets it to 12deg, is.
  */
 function skews(angle, tokens) {
-  const reference = angle?.__calc?.expression?.reference;
-  if (reference === undefined) return typeof angle !== 'object' && parseFloat(angle) !== 0;
-  const token = tokens[reference];
-  const value = token?.angle ?? token?.number;
+  const expression = angle?.__calc?.expression;
+  if (expression?.reference === undefined) {
+    return typeof angle !== 'object' && parseFloat(angle) !== 0;
+  }
+  // The rule's own token, or the fallback written beside it, which is what draws where the token
+  // is set nowhere.
+  const token = tokens[expression.reference];
+  const value = token ? (token.angle ?? token.number) : expression.fallback;
   return value !== undefined && value !== 0;
 }
 
