@@ -8,7 +8,7 @@
  * item across an insert, and with `maintainVisibleContentPosition` what is on screen stays put.
  */
 import assert from 'node:assert/strict';
-import { before, describe, it } from 'node:test';
+import { before, describe, it, mock } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import type { Type } from '@angular/core';
 import {
@@ -329,8 +329,18 @@ describe('virtual list sticky rows moved on the native side', () => {
     instance.sticky!.set([0, 20]);
     await settle();
     await measureAll(() => ESTIMATE);
-    await scroll(10 * ESTIMATE);
-    await measureAll(() => ESTIMATE);
+    // The list commits the settled translate 64 ms after the last scroll event, and on a slow
+    // runner measuring alone takes that long. Delayed timers are held until the assertion;
+    // Angular's own zero-delay scheduling still runs.
+    const setTimeout_ = globalThis.setTimeout;
+    const held = mock.method(globalThis, 'setTimeout', ((callback: () => void, delay?: number) =>
+      delay ? undefined : setTimeout_(callback, delay)) as typeof setTimeout);
+    try {
+      await scroll(10 * ESTIMATE);
+      await measureAll(() => ESTIMATE);
+    } finally {
+      held.mock.restore();
+    }
 
     const pinned = row(0)!;
     assert.equal(pinned.props['transform'], undefined, 'no translate from JavaScript mid-scroll');
