@@ -243,6 +243,24 @@ describe('deep links', () => {
     assert.deepEqual(errors, [failure], 'the error is reported, not swallowed');
   });
 
+  it("does not need the app's ErrorHandler until a listener throws", () => {
+    // An app's handler that injects the router reaches DeepLinks through the location, so
+    // DeepLinks asking for the handler as it is made would be a cycle at boot.
+    const platform = source(null);
+    const injector = Injector.create({
+      providers: [
+        { provide: DeepLinks.SOURCE, useValue: platform.value },
+        { provide: DeepLinks, useClass: DeepLinks, deps: [] },
+        {
+          provide: ErrorHandler,
+          useFactory: (links: DeepLinks) => ({ links, handleError: () => {} }),
+          deps: [DeepLinks],
+        },
+      ],
+    });
+    assert.doesNotThrow(() => injector.get(ErrorHandler));
+  });
+
   it('passes a link that arrives later through as a path', async () => {
     const platform = source(null);
     const links = build(DeepLinks, [{ provide: DeepLinks.SOURCE, useValue: platform.value }]);

@@ -1,7 +1,7 @@
 /**
  * Links that arrive from outside the app: a `canary://` url, a universal link, a notification.
  */
-import { ErrorHandler, InjectionToken, Service, inject } from '@angular/core';
+import { ErrorHandler, InjectionToken, Injector, Service, inject } from '@angular/core';
 import { reactNative } from './react-native.ts';
 
 export interface DeepLinkSource {
@@ -90,7 +90,7 @@ export class DeepLinks {
   });
 
   private readonly source = inject(DeepLinks.SOURCE);
-  private readonly errors = inject(ErrorHandler, { optional: true });
+  private readonly injector = inject(Injector);
   private launch: string | null = null;
   private readonly listeners = new Set<(path: string) => void>();
 
@@ -123,12 +123,17 @@ export class DeepLinks {
     };
   }
 
-  /** One listener throwing is reported, and does not keep the launch url from the rest. */
+  /**
+   * One listener throwing is reported, and does not keep the launch url from the rest. The
+   * `ErrorHandler` is looked up when that happens rather than when this is made: an app's handler
+   * that injects the router reaches `DeepLinks` through the location, and would be a cycle at boot.
+   */
   private deliver(listener: (path: string) => void, path: string): void {
     try {
       listener(path);
     } catch (error) {
-      if (this.errors) this.errors.handleError(error);
+      const errors = this.injector.get(ErrorHandler, null);
+      if (errors) errors.handleError(error);
       else console.error(error);
     }
   }
