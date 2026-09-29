@@ -284,6 +284,19 @@ describe('a store that fails', () => {
     assert.equal((store.error() as Error).message, 'disk full');
   });
 
+  it('keeps the default when a synchronous read throws, as when an asynchronous one does', () => {
+    const store = new Store({
+      ...failing(),
+      getSync: () => {
+        throw new Error('missing entitlement');
+      },
+    });
+
+    const value = store.signal('x', 'initial');
+    assert.equal(value(), 'initial');
+    assert.equal((store.error() as Error).message, 'missing entitlement');
+  });
+
   it('rejects flush() with a write that failed, and resolves it once writes succeed', async () => {
     const store = new Store(failing());
     store.signal('x', 'initial').set('new');

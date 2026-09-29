@@ -153,7 +153,13 @@ export class Store {
   }
 
   private readSync(key: string): unknown {
-    const raw = this.native?.getSync?.(key);
+    let raw: string | null | undefined;
+    try {
+      raw = this.native?.getSync?.(key);
+    } catch (error) {
+      this.fail(error);
+      return ABSENT;
+    }
     return raw == null ? ABSENT : decode(raw);
   }
 
