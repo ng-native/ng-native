@@ -6,12 +6,14 @@
 appId: ${APP_ID || 'dev.angularnative.canary'}
 ---
 - openLink: ${LINK}
-# The dialog can take a while to appear on a loaded machine, so its button is waited for rather
-# than checked for once; only on iOS, where there is one.
+# The dialog can take a while to appear on a loaded machine, so its button is waited for, for as
+# long as a slow start takes, and a dialog that never comes fails here rather than a step later.
+# Only on iOS, which always asks.
 - runFlow:
     when:
       platform: iOS
     commands:
-      - tapOn:
-          text: 'Open'
-          optional: true
+      - extendedWaitUntil:
+          visible: 'Open'
+          timeout: 30000
+      - tapOn: 'Open'
