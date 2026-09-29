@@ -10,7 +10,10 @@
     }
   ],
   "namedInputs": {
-    "default": ["{projectRoot}/**/*", "sharedGlobals"],
+    "default": [
+      "{projectRoot}/**/*",
+      "sharedGlobals"
+    ],
     "sharedGlobals": [
       "{workspaceRoot}/eslint.config.mjs",
       "{workspaceRoot}/tsconfig.base.json",
@@ -27,26 +30,47 @@
   "targetDefaults": {
     "build": {
       "cache": true,
-      "dependsOn": ["^build"],
-      "inputs": ["production", "^production"],
-      "outputs": ["{projectRoot}/dist"]
+      "dependsOn": [
+        "^build"
+      ],
+      "inputs": [
+        "production",
+        "^production"
+      ],
+      "outputs": [
+        "{projectRoot}/dist"
+      ]
     },
     "lint": {
       "cache": true,
-      "inputs": ["default", "sharedGlobals"]
+      "inputs": [
+        "default",
+        "sharedGlobals"
+      ]
     },
     "typecheck": {
       "cache": true,
-      "inputs": ["default", "^production"],
-      "dependsOn": ["^typecheck"]
+      "inputs": [
+        "default",
+        "^production"
+      ],
+      "dependsOn": [
+        "^typecheck"
+      ]
     },
     "test": {
       "cache": true,
-      "inputs": ["default", "^production"]
+      "inputs": [
+        "default",
+        "^production"
+      ]
     },
     "check-bundle": {
       "cache": true,
-      "inputs": ["production", "^production"]
+      "inputs": [
+        "production",
+        "^production"
+      ]
     }
   },
   "release": {
@@ -92,5 +116,6 @@
       }
     },
     "versionPlans": true
-  }
+  },
+  "nxCloudId": "6abb5fba2c583b288bd24377"
 }
