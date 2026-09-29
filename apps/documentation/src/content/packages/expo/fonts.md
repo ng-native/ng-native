@@ -55,10 +55,11 @@ nothing at all when none of them declare a face, so bootstrap can call it uncond
 ## There is no font matching on a device
 
 Native looks a family up by name and that is all, so a bold cut is a family of its own. The second
-face above is registered as `Inter-700` as well as `Inter`, and a rule that wants it asks for
-`font-family: Inter-700`. Writing `font-weight: 700` against a family with one registered face
-gets whatever the platform synthesizes - exactly as it would in a plain React Native app. A face
-that declares a `style` is registered the same way, under `<family>-<style>`.
+face above is registered only as `Inter-700`: the bare `Inter` stays with the first face declared
+for the family, and a rule that wants the bold cut asks for `font-family: Inter-700`. Writing
+`font-weight: 700` against a family with one registered face gets whatever the platform
+synthesizes, exactly as it would in a plain React Native app. A face that declares a `style` is registered the
+same way, under `<family>-<style>`.
 
 ## Reading what loaded: `Fonts`
 

@@ -127,10 +127,12 @@ protected readonly name = nativeState('');
 ```
 
 ```html
-<ui-text-field [text]="name?.id" (textChange)="typed.set($event.nativeEvent.value)" />
+<ui-text-field [text]="name" (textChange)="typed.set($event.nativeEvent.value)" />
 ```
 
-Bind `name?.id`, not `name`. The state lives on the native side and both sides hold a reference,
+The typed `UiTextField` takes the state itself and sends its id down the prop. An element with no
+typed component, such as `<secure-field>`, takes the id directly: bind `[text]="name?.id"` there,
+not `name`. The state lives on the native side and both sides hold a reference,
 so writing to it moves the caret in a field that is already on screen, where a signal and a
 re-render would not - that is the whole reason the prop is shaped this way. `get()` reads the
 current value (a write is scheduled onto the UI thread, so it is not readable back until that has
@@ -139,7 +141,7 @@ from the native object; worth calling from `DestroyRef` for a field inside a lis
 goes, since a state that lives as long as the app does not need one.
 
 `nativeState()` returns **null** off a device, where there is no native module to hold the state -
-bind `name?.id` and the prop is simply absent, which is the field's own unmanaged behavior rather
+either binding then leaves the prop absent, which is the field's own unmanaged behavior rather
 than a crash.
 
 ## Without the module

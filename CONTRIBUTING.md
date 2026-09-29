@@ -60,7 +60,8 @@ pnpm --filter documentation dev  # the documentation site, on http://localhost:5
 - `packages/testing` has tests of its own, for the fake Fabric and the Testing Library layer it
   ships to everyone else.
 
-Most other packages carry `*.test.ts` files next to the source they test.
+`packages/nx` and `packages/schematics` carry `*.test.ts` files next to the source they test. Every
+package not named here has no tests of its own: `packages/integration-tests` covers it.
 
 ## CSS engine changes are test-first
 

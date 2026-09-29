@@ -2,8 +2,8 @@
 
 ## Supported versions
 
-Angular Native is in alpha. Only the latest published alpha of each `@ng-native/*` package is
-supported; there are no older release lines to backport a fix to.
+Angular Native is in alpha. Only the latest published `0.x` release of each `@ng-native/*` package
+is supported; there are no older release lines to backport a fix to.
 
 ## Reporting a vulnerability
 
@@ -19,5 +19,5 @@ the issue, and, if you have one, a minimal reproduction.
 
 This is a small, alpha-stage project maintained outside of working hours, so there's no formal SLA.
 Expect an acknowledgement within a few days, and a fix or a public response once the report has
-been triaged. If the issue is confirmed, a fix will go out in the next alpha release and the
+been triaged. If the issue is confirmed, a fix will go out in the next release and the
 advisory will be credited to you unless you ask otherwise.

@@ -93,13 +93,12 @@ JavaScript errors.
 **Workaround:** if a crash report shows a native stack with no JavaScript frames, check whether
 anything required `react-native/Libraries/Renderer` after mount.
 
-## Section lists have no section separators, and sticky headers trail by a frame
+## Section lists have no section separators
 
 `<virtual-list>` supports separators (`<ng-template virtualListSeparator>`), sticky rows and a
 sticky header. `<section-list>` covers `SectionList` but lacks `SectionSeparatorComponent`,
-horizontal and inverted layouts, and viewability events. Separators lack `highlighted` state. Sticky
-headers follow JavaScript scroll events rather than the native animation driver, so they can trail
-fast flings by a frame. A `<section-list>`'s row heights are fixed and include separators, as with
+horizontal and inverted layouts, and viewability events. Separators lack `highlighted` state. A
+`<section-list>`'s row heights are fixed and include separators, as with
 `getItemLayout`; a `<virtual-list>`'s can be measured instead. A virtual list holds its position with
 a `scrollTo` after the commit rather than inside the native mount, so a correction made mid-fling
 lands where the last scroll event said the list was.

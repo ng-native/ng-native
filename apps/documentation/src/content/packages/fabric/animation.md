@@ -18,8 +18,8 @@ old value, and interpolates toward the new one on a `requestAnimationFrame` loop
 frame at a time until nothing is left running. Numbers interpolate directly; colors interpolate
 channel by channel; a length or an angle interpolates as long as both ends share the same unit
 (`translateY(10%)` to `translateY(100%)` works, `10%` to `20px` does not, because converting between
-them would be a guess). A named color (`'red'`) does not interpolate - the compiler emits `rgb()`,
-so write colors that way if you want them to.
+them would be a guess). A named color (`'red'`) interpolates as well: the compiler emits `rgb()` for
+one in a stylesheet, and one bound straight into a style is looked up by name.
 
 ## `animate.enter` and `animate.leave`
 

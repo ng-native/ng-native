@@ -77,8 +77,9 @@ defaults below are already in effect.
 - Bootstrap the application in a file named `main.ts` directly inside `src`.
 - A component's TypeScript, template, and style files share the same base name with different
   extensions (e.g. `user-profile.ts`, `user-profile.html`, `user-profile.css`).
-- Unit tests end in `.test.ts` and live next to the code under test, not in a separate `tests`
-  directory. `packages/integration-tests` is the exception: it exercises the whole seam.
+- Tests end in `.test.ts`. Most live in `packages/integration-tests`, which exercises the whole
+  seam; the packages with tests of their own (`web`, `testing`, `nx`, `schematics`) keep them next
+  to the code under test, not in a separate `tests` directory.
 - Organize the project by feature area, not by code type - avoid directories named
   `components`, `directives`, or `services`.
 - Prefer one concept (usually one component, directive, or service) per file; split further if a

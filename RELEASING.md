@@ -73,7 +73,8 @@ npm at that version are skipped, and the rest are published.
 browser app on `@ng-native/web` as its documentation page does, builds it with Vite and checks it in
 Chromium. CI runs both on every push. With `--generators` it also runs the two workspace checks
 above, which take several minutes, so only the release workflow does. `--scenario=web` runs the
-browser check alone. The README has the local steps.
+browser check alone. [CONTRIBUTING.md](./CONTRIBUTING.md#checking-distribution-locally) has the
+local steps.
 
 ## The weekly check against the newest versions
 

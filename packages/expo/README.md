@@ -18,10 +18,12 @@ optional peer dependency: install only the ones the app actually uses.
 
 One entry point per module, so importing haptics does not bundle the file system. Every source
 file lives in `src/`, as in every other package here; the entry points an app writes do not say so,
-because the `exports` map takes `@ng-native/expo/haptics` to `src/haptics.ts`. Each is an
-`InjectionToken` carrying its own factory, so there is nothing to provide and nothing to register -
-injecting it is the whole setup, and a service nobody injects is never constructed. Each name is a
-type as well as a token, so `inject(Clipboard)` and `private clipboard: Clipboard` both work.
+because the `exports` map takes `@ng-native/expo/haptics` to `src/haptics.ts`. Most are
+`@Service()` classes that reach their native module through a static `SOURCE` token; `Fonts`,
+`SplashScreen`, `Storage`, `SecureStorage` and the sensors are `InjectionToken`s carrying their own
+factory. Either way there is nothing to provide and nothing to register - injecting it is the whole
+setup, and a service nobody injects is never constructed. Each token name is a type as well, so
+`inject(Storage)` and `private store: Storage` both work, as `inject(Clipboard)` does for a class.
 
 ```ts
 import { Clipboard } from '@ng-native/expo/clipboard';
@@ -345,8 +347,8 @@ plain promise, and what the hook adds is a _lifecycle_.
   has learned something it cannot act on. `apply()` **restarts the app**, which is why nothing here
   does it automatically: the moment is one the app knows and this does not. In Expo Go it reports
   itself disabled rather than offering a banner that can never resolve.
-- **`Assets`** preloads the images a screen should not pop in with, and resolves even when one
-  fails - a picture that will not appear is not a reason for the screen behind it to fail too.
+- **`assets(modules)`** preloads the images a screen should not pop in with, and resolves even when
+  one fails - a picture that will not appear is not a reason for the screen behind it to fail too.
 - **`KeepAwake.hold()`** returns the release, and is never a bare activate: a screen that holds the
   display on and never lets go is a phone that never sleeps, which the user experiences as a
   battery fault and never attributes to the app that caused it.

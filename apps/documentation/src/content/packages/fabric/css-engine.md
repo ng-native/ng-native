@@ -106,8 +106,8 @@ no inspector to show the declaration struck out.
 `@media` conditions are evaluated against whatever [`mount()`'s `conditions`
 option](/packages/platform/bootstrapping) carried in: `width`, `height`, `orientation`,
 `prefers-color-scheme` and `prefers-reduced-motion`. Those are the only features a device can
-actually answer, so `hover`, `pointer`, the `print` media type and a `not` qualifier are all build
-errors rather than a query that silently never matches. Nothing re-evaluates a media query on its
-own - a rotation or a system theme change dirties no component and no binding - which is why
-`@ng-native/device`'s `watchConditions(engine)` exists; see
+actually answer, so a query using `hover`, `pointer`, the `print` media type or a `not` qualifier
+drops its whole `@media` block with a build warning rather than silently never matching. Nothing
+re-evaluates a media query on its own - a rotation or a system theme change dirties no component
+and no binding - which is why `@ng-native/device`'s `watchConditions(engine)` exists; see
 [Bootstrapping](/packages/platform/bootstrapping).

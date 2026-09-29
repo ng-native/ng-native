@@ -8,7 +8,7 @@ The whole documentation, for reading before a change: https://ng-native.com/llms
 outline with a line per page: https://ng-native.com/llms.txt.
 
 Angular's own rules apply as well: https://angular.dev/assets/context/best-practices.md. Its
-browser-only parts do not: there is no `NgOptimizedImage` (use `<image>`), and no AXE or ARIA
+browser-only parts do not: there is no `NgOptimizedImage` (use `<image>`), and no AXE
 (accessibility is the props below). Where the two disagree, this file wins.
 
 ## Commands
@@ -41,7 +41,9 @@ change; both are fast.
 - **No backticks inside an inline template**, even in an HTML comment: they end the template string
   and the build fails with a misleading parse error.
 - **Accessibility is props:** `accessibilityRole="button"`, `accessibilityLabel`,
-  `[accessibilityState]`. Screen readers and the testing library's `getByRole` both read them.
+  `[accessibilityState]`. The web spellings work too, as aliases: `role`, and the `aria-*` names
+  React Native maps (`aria-label`, `aria-checked`, `aria-hidden` and so on). Screen readers and
+  the testing library's `getByRole` both read them.
 
 ## Styling
 

@@ -12,8 +12,8 @@ body:
     id: versions
     attributes:
       label: '@ng-native/* versions'
-      description: The package(s) affected and their versions, e.g. `@ng-native/platform@0.1.0-alpha.3`
-      placeholder: '@ng-native/platform@0.1.0-alpha.3, @ng-native/router@0.1.0-alpha.3'
+      description: The package(s) affected and their versions, e.g. `@ng-native/platform@0.1.1`
+      placeholder: '@ng-native/platform@0.1.1, @ng-native/router@0.1.1'
     validations:
       required: true
 

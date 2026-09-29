@@ -9,7 +9,7 @@ Alpha: APIs may change before 1.0.
 ## Install
 
 Most apps start from `npx create-expo-app@latest my-app --template @ng-native/template`, which
-already calls `mount()` in `index.ts`. Otherwise:
+already calls `mount()` in `src/main.ts`. Otherwise:
 
 ```sh
 npm install @ng-native/platform
@@ -21,11 +21,11 @@ npm install @angular/core react-native
 ## Example
 
 ```ts
-// index.ts
+// src/main.ts
 import { AppRegistry, Image, Platform, processColor } from 'react-native';
 import { mount } from '@ng-native/platform';
 import { getFabricUIManager, registerPlatformComponents } from '@ng-native/fabric';
-import { App } from './app.ts';
+import { App } from './app/app.ts';
 
 registerPlatformComponents(Platform.OS);
 
@@ -39,7 +39,7 @@ AppRegistry.registerRunnable('main', ({ rootTag }) => {
 
 ## What's in the package
 
-- `.` - `mount()`, `NativeRendererFactory`, `NativeRenderer`.
+- `.` - `mount()`, `NativeRendererFactory`, `PLATFORM_NATIVE_ID`, `isPlatformNative()`.
 - `./http` - `provideNativeHttpClient()`, an `HttpClient` backend over React Native's
   `XMLHttpRequest` (Angular's default `fetch` backend cannot read a React Native `fetch` response
   body). Use it in place of `provideHttpClient()`.

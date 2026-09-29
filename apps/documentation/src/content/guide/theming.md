@@ -43,7 +43,7 @@ bg-blue-500      -> { backgroundColor: 'rgb(43, 127, 255)' }
 Unsupported styles produce diagnostics with line numbers:
 
 ```
-[angular-native] app.tailwind.css:153: dropped 'appearance': 'appearance' is not mapped yet.
+[angular-native] app.tailwind.css:153: dropped 'appearance': 'appearance' has no React Native equivalent: no style prop of a native view does what it does.
 ```
 
 Diagnostics prevent unsupported styles from silently doing nothing.

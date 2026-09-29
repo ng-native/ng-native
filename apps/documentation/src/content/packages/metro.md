@@ -33,7 +33,7 @@ wiring.
 
 `withAngularNative` points Metro's transformer at a compiler that AOT-compiles every
 `@Component`/`@Directive`/`@Pipe`/`@Injectable`/`@NgModule`/`@Service` file it finds, compiles each
-component's CSS with lightningcss into the rule set Fabric matches at runtime, and installs two
+component's CSS with lightningcss into the rule set Fabric matches at runtime, and installs three
 polyfills every app needs before `@angular/core` first runs. It also patches Metro's own cache key
 and dev-server watching so an edit to the compiler itself is never served stale, and embeds a hot
 -reload path that can patch a live component's template without a full bundle reload.

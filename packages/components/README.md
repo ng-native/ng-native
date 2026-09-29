@@ -47,10 +47,10 @@ renders as a plain, unstyled view and logs a console warning in development.
 - `.` - `View`, `Text`, `ScrollView`, `TextInput`, `Pressable`, `Image`, `Switch`,
   `ActivityIndicator`, `Modal`, `VirtualList`, `SafeAreaProvider`, `SafeAreaView`, and the event
   payload types (`LayoutEvent`, `TouchEvent`, `ScrollEvent`, and more).
-- `./gestures.ts` - React Native Gesture Handler bindings.
-- `./animations.ts` - `AnimatedStyle`, `Animated` and `Easing`: React Native's graph on a device,
+- `./gestures` - React Native Gesture Handler bindings.
+- `./animations` - `AnimatedStyle`, `Animated` and `Easing`: React Native's graph on a device,
   a React-free one with the same API in a browser build.
-- `./reanimated.ts` - Reanimated worklet bindings.
+- `./reanimated` - Reanimated worklet bindings.
 
 These three are separate entry points because each reaches into React Native's own uncompiled
 source, which Node cannot parse; importing them from the main entry point would break loading this

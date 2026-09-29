@@ -29,13 +29,16 @@ module.exports = withAngularNative(getDefaultConfig(__dirname));
   into an empty module before any transformer sees it, which would leave an edited `styleUrl`
   nothing to carry its update in. Web stylesheets, CSS modules and release builds are left to Expo.
   A transform worker you configured yourself is left alone, and an edited stylesheet then reloads.
-- Adds two polyfills to `config.serializer.getPolyfills`, which run before `@angular/core` is first
-  evaluated: one clears `ngDevMode` in a production build (Angular's CLI does this at build time
-  normally; nothing in a Metro pipeline does it for you, so without this a release bundle runs every
-  dev-mode assertion Angular has), and one defines the globals `animate.enter` and `animate.leave`
-  read to decide whether they do anything at all - `document.documentElement.getAnimations`,
-  `Node.ELEMENT_NODE`, and stand-ins for `AnimationEvent`/`TransitionEvent` that make every animation
-  this environment reports read as a transition. See [Animation](/packages/fabric/animation).
+- Adds three polyfills to `config.serializer.getPolyfills`, which run before `@angular/core` is
+  first evaluated: one clears `ngDevMode` in a production build (Angular's CLI does this at build
+  time normally and Metro does not, so without this a release bundle runs every dev-mode assertion
+  Angular has; the preset also folds it in Terser so the dead branches are stripped), and one
+  defines the globals `animate.enter` and `animate.leave` read to decide whether they do anything at
+  all - `document.documentElement.getAnimations`, `Node.ELEMENT_NODE`, and stand-ins for
+  `AnimationEvent`/`TransitionEvent` that make every animation this environment reports read as a
+  transition (see [Animation](/packages/fabric/animation)), and one defines `FinalizationRegistry`,
+  which Hermes lacks and Angular's signal debug graph constructs while `@angular/core` is first
+  evaluated.
 - Bumps `config.transformer.cacheVersion` with a hash of the compiler's own `.cjs` sources, found by
   walking the package directory rather than a hand-kept list. In a dev server, it also watches those
   same sources and logs a warning if they change, because Metro loads the transformer into a worker

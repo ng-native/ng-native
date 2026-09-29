@@ -75,12 +75,14 @@ export class FileSystem {
 
   /** A file the system may delete when the device runs low on storage. */
   cache(name: string): NativeFile {
-    return this.file(this.native!.cacheDirectory, name);
+    const native = this.installed();
+    return native.file(native.cacheDirectory, name);
   }
 
   /** A file that survives, and is included in backups. */
   document(name: string): NativeFile {
-    return this.file(this.native!.documentDirectory, name);
+    const native = this.installed();
+    return native.file(native.documentDirectory, name);
   }
 
   /**
@@ -93,8 +95,8 @@ export class FileSystem {
     file.write(content);
   }
 
-  private file(directory: NativeDirectory, name: string): NativeFile {
+  private installed(): NativeFiles {
     if (!this.native) throw new Error('[angular-native] expo-file-system is not installed');
-    return this.native.file(directory, name);
+    return this.native;
   }
 }

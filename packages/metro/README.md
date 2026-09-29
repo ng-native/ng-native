@@ -43,8 +43,8 @@ module.exports = withAngularNative(getDefaultConfig(__dirname), {
 - `angular-transform.cjs` (the package's `main`) - the Babel/Metro transformer itself, wired in by
   the preset.
 - `css/*.cjs` - the build-time CSS compiler, also used by `@ng-native/tailwind`.
-- `polyfills/*.js` - the `ng-dev-mode` and `animation-globals` polyfills the preset installs before
-  `@angular/core` first runs.
+- `polyfills/*.js` - the `ng-dev-mode`, `animation-globals` and `finalization-registry` polyfills
+  the preset installs before `@angular/core` first runs.
 
 ## Docs
 

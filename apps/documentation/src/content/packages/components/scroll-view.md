@@ -38,9 +38,9 @@ if nothing did, and `'always'` never dismisses at all.
 
 `stickyHeaderIndices` pins children of the content to the top while the rest scroll under them,
 each until the next sticky child pushes it off. React Native does this in JavaScript rather than
-natively, by translating the child against the scroll offset, and so does this; the one difference
-is that RN's translation runs on the native animation driver, where this one is written from the
-scroll event, so a pinned header can trail a fast fling by a frame.
+natively, by translating the child against the scroll offset, and so does this. As in RN, the
+translation runs on the native animation driver, so a pinned header keeps up with a fast fling; the
+translate is written as a prop only once scrolling pauses.
 
 ## Methods
 

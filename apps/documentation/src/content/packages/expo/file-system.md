@@ -70,9 +70,9 @@ message names the module and the commands that fix it; see
 [Using a module](/packages/expo/using-a-module#what-happens-without-the-module-installed).
 
 On the web, and in a test that provides no fake, `FileSystem` still does not fall back to reporting
-nothing, unlike most services in this package: `cache()`, `document()` and `write()` throw
-`[angular-native] expo-file-system is not installed`. A file that silently failed to write is
-worse than an error that says why.
+nothing, unlike most services in this package: `cache()` and `document()` throw
+`[angular-native] expo-file-system is not installed`, so there is no file to `write()` to. A file
+that silently failed to write is worse than an error that says why.
 
 ## Reference
 

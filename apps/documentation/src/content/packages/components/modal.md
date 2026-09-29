@@ -36,10 +36,10 @@ while hidden, and destroys that content with it.
 
 `transparent` (default `false`) shows through to the screen behind the modal, and the container
 gets no backdrop; `backdropColor` sets the container's background otherwise, defaulting to white.
-On iOS, a transparent modal also needs `presentationStyle="overFullScreen"` to actually look
-transparent - setting a different presentation style while transparent logs a warning rather than
-failing silently. `presentationStyle` otherwise chooses `'fullScreen'`, `'pageSheet'` or
-`'formSheet'` on iOS.
+On iOS, a transparent modal presents as `presentationStyle="overFullScreen"` unless you set another,
+since that is the only style that actually looks transparent - setting a different presentation
+style while transparent logs a warning rather than failing silently. `presentationStyle` otherwise
+chooses `'fullScreen'`, `'pageSheet'` or `'formSheet'` on iOS.
 
 ## Other props
 

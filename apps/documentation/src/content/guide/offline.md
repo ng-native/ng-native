@@ -58,7 +58,7 @@ oldest first; database row order is not guaranteed.
 
 The service reads the cache, refreshes online, and queues and flushes writes. It keeps the queue in
 memory and in `pending_write`. Unlike `Storage` and `Network`, `Database` throws without
-`expo-sqlite` (see [Without the module installed](/packages/expo/database#without-the-module-installed)).
+`expo-sqlite` (see [Without the module](/packages/expo/database#without-the-module)).
 Each `notesDb` call therefore has its own `try`/`catch`. The running app reads and flushes the
 in-memory `queue`; SQLite persists it across restarts. Node tests and browser previews without
 `expo-sqlite` lose persistence, but the queue still works.
@@ -262,10 +262,12 @@ The component only reads signals and calls methods; it needs no offline-specific
 ```ts
 // note-feed.ts
 import { Component, inject, signal } from '@angular/core';
+import { Pressable, Text, TextInput } from '@ng-native/components';
 import { Notes } from './notes.ts';
 
 @Component({
   selector: 'app-note-feed',
+  imports: [Pressable, Text, TextInput],
   template: `
     @if (notes.isRefreshing()) {
       <text>Refreshing…</text>
@@ -372,7 +374,7 @@ notes absent from the response because the server has not confirmed them.
 Without native modules, `Network.connected()` returns `false` and `Storage` signals retain their
 `initial` values. `Database` instead rejects `notesDb.ready()` on purpose: pretending to hold rows
 it does not have would be worse than saying so. See
-[Without the module installed](/packages/expo/database#without-the-module-installed).
+[Without the module](/packages/expo/database#without-the-module).
 
 A SQLite-only cache and queue therefore fail entirely without the module. If `loadFromCache()` or
 `add()` awaits `notesDb.ready()` without `try`/`catch`, it rejects before queuing writes. These

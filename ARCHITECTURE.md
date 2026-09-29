@@ -36,9 +36,13 @@ Each of these is load-bearing. Breaking one does not degrade the architecture, i
 
 **AOT only, and `ngDevMode` is false in a release build.** Release bundles are Hermes bytecode,
 Hermes has no local-mode `eval()`, and shipping `@angular/compiler` for JIT would be large and
-useless. `initNgDevMode()` treats an _undefined_ `ngDevMode` as dev, and nothing in a Metro
-pipeline replaces the identifier the way the Angular CLI does, so the `ng-dev-mode` polyfill sets it
-before `@angular/core` evaluates. `examples/canary/scripts/check-release-bundle.mjs` asserts both.
+useless. `initNgDevMode()` treats an _undefined_ `ngDevMode` as dev, and Metro does not replace
+the identifier the way the Angular CLI does, so `withAngularNative()` does: it folds `ngDevMode` to
+`false` in Terser's `global_defs`, which strips the dev-mode branches from a minified bundle, and
+its `ng-dev-mode` polyfill sets it `false` before `@angular/core` evaluates in any bundle that is
+not dev, which covers a release not minified by Terser.
+`examples/canary/scripts/check-release-bundle.mjs` asserts the AOT half: no compiler-only symbol in
+the bundle.
 
 **Zoneless only.** zone.js fights Hermes. Signals are the grain of the whole project, which is also
 why forms are Signal Forms rather than Reactive Forms.

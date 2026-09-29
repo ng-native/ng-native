@@ -57,10 +57,11 @@ export class App {
 
 - `provideNativeRouter(routes, ...features)` - Angular's `provideRouter`, with a native
   `PlatformLocation`, a `RouteReuseStrategy` that detaches rather than destroys a popped screen,
-  and `NativeNavigation` on top. `withLinkParent` is its one native feature.
+  and `NativeNavigation` on top. Its native features are `withLinkParent`, `withHeaderDefaults` and
+  `withTabDefaults`.
 - `NativeStackOutlet`, `NativeTabsOutlet`, `NativeTab` - the outlets, as elements.
-- `NativeHeader`, `NativeHeaderItem`, `NativeHeaderPalette`, `NativeSearchBar` - the native header
-  and its slots.
+- `NativeHeader`, `NativeHeaderItem`, `NATIVE_HEADER_PALETTE`, `NativeSearchBar` - the native
+  header and its slots.
 - `nativeRouterLink` - the native equivalent of `routerLink`.
 - `NativeNavigation` - replacing a screen, presenting a modal or sheet, resetting the stack: what a
   URL alone cannot express.

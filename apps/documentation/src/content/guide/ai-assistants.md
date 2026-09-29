@@ -16,7 +16,7 @@ element names and their imports, the absence of a DOM, styling and device-suppor
 navigation, and commands to run the app and tests. Claude Code, Cursor, GitHub Copilot, Codex and
 most other agents read one of these files automatically.
 
-`ng add @ng-native/schematics` and `nx add @ng-native/nx` write the same two files into the new
+`ng add @ng-native/schematics` and `nx g @ng-native/nx:app` write the same two files into the new
 app's directory, with that workspace's `ng` or `nx` commands, and leave the workspace's own
 agent files alone.
 

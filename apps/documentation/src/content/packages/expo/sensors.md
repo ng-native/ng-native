@@ -78,9 +78,12 @@ Each is read the same way regardless of the shape:
   truthy on the first frame and every frame after: exactly the failure this project keeps guarding
   against.
 - **`start(intervalMs = 100)`** - starts the listener at that interval and returns the function
-  that stops it. Calling it again restarts at the new interval.
-- **`stop()`** - what the returned function calls. Call `stop()` or the returned cleanup function
-  when you no longer need readings.
+  that stops it. One sensor serves the whole app, so each call adds a claim of its own rather than
+  restarting: the sensor reads while any claim is live, at the fastest interval among them, and the
+  returned function gives back only its own claim.
+- **`stop()`** - stops the sensor for everyone who started it, dropping every claim. Call the
+  returned cleanup function when one caller no longer needs readings, and `stop()` only to end all
+  of them.
 
 ## Without the module
 

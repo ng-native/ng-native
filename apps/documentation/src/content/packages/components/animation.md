@@ -45,9 +45,10 @@ import { View } from '@ng-native/components';
 export class PulsingDot {}
 ```
 
-The CSS compiler accepts only the default animation direction - `alternate`, `reverse` and
-`alternate-reverse` are dropped with a build warning - so a pulse that needs to ease back down goes
-in the keyframes themselves, as the `0%, 100%` and `50%` steps above do.
+A pulse that eases back down can also say so with `animation-direction`: `alternate`, `reverse`
+and `alternate-reverse` compile and play as in CSS. Keyframes of just `from` and `to`, played with
+`animation: pulse 450ms ease-in-out infinite alternate`, do what the `0%, 100%` and `50%` steps
+above do.
 
 ## AnimatedStyle
 
