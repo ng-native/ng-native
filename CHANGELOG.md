@@ -12,10 +12,11 @@
   also add a `start` target running `expo start` in the app's directory and `@babel/runtime@^7.20.0`
   to the root `devDependencies`.
 
-- The template targets iOS and Android only: its `app.json` names both as its `platforms`, and the ([#5](https://github.com/ng-native/ng-native/pull/5))
-  web favicon, its `web` settings and `web-build/` in `.gitignore` are gone. The Angular CLI and Nx
-  generators name the same platforms. Angular Native components render in a browser through
-  `@ng-native/web`, which is set up separately.
+- The template targets iOS and Android only. ([#5](https://github.com/ng-native/ng-native/pull/5))
+  Its `app.json` names both as its `platforms`, and the web favicon, its `web` settings and
+  `web-build/` in `.gitignore` are gone. The Angular CLI and Nx generators name the same platforms.
+  Angular Native components render in a browser through `@ng-native/web`, which is set up
+  separately.
 
 ### ❤️ Thank You
 
