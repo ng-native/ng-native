@@ -29,16 +29,22 @@ trap 'xcrun simctl shutdown "$udid" 2>/dev/null; xcrun simctl delete "$udid"' EX
 
 xcrun simctl boot "$udid" && xcrun simctl bootstatus "$udid" -b >/dev/null || exit 1
 xcrun simctl install "$udid" "$app" || exit 1
+# Maestro drives the simulator through an XCTest runner of its own, which a loaded CI Mac has
+# been slow to start and has lost mid-flow. Both say nothing about the app, which a crash would
+# fail by what it no longer shows: so the runner gets longer to start, and when it did not start
+# or was lost, the flow is walked once more from the start. Its console is kept, since the
+# startup failure is reported there and not in maestro.log.
+export MAESTRO_DRIVER_STARTUP_TIMEOUT=${MAESTRO_DRIVER_STARTUP_TIMEOUT:-180000}
 walk() {
+  mkdir -p "$1"
   maestro --device "$udid" test "$flows" --test-output-dir "$1" --debug-output "$1" \
-    --flatten-debug-output
+    --flatten-debug-output 2>&1 | tee "$1/console.log"
+  return "${PIPESTATUS[0]}"
 }
 walk "$out"
 status=$?
-# Maestro drives the simulator through an XCTest runner of its own, which a loaded CI Mac has lost
-# mid-flow ("Device became unreachable"). That says nothing about the app, which a crash would
-# fail by what it no longer shows, so only then is the flow walked once more, from the start.
-if [ "$status" -ne 0 ] && grep -q DeviceUnreachableException "$out/maestro.log" 2>/dev/null; then
+lost='DeviceUnreachableException|IOSDriverTimeoutException'
+if [ "$status" -ne 0 ] && grep -qE "$lost" "$out/console.log" "$out/maestro.log" 2>/dev/null; then
   echo "Maestro lost its driver, not the app: walking the flow again" >&2
   walk "$out/retry"
   status=$?
