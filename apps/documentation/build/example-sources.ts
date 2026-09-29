@@ -42,16 +42,6 @@ const LANGUAGE: Record<string, string> = {
   '.md': 'md',
 };
 
-/**
- * A component's decorator, at the start of a line so a comment mentioning one does not count.
- *
- * `angular-ts` only differs from `ts` inside a decorator's `template` and `styles`, and only a
- * component has those, so a service or a plain module is highlighted as TypeScript.
- */
-const COMPONENT = /^\s*@Component\s*\(/m;
-/** A `templateUrl` as written, with whichever quotes. */
-const TEMPLATE_URL = /\btemplateUrl\s*:\s*(['"`])([^'"`]+)\1/g;
-
 /** An app's source files, as paths relative to its folder with forward slashes, sorted. */
 export function sourceFiles(root: string): string[] {
   const files: string[] = [];
@@ -75,37 +65,10 @@ export function sourceFiles(root: string): string[] {
   return files.sort();
 }
 
-/**
- * The `.html` files an app's `.ts` files name as a `templateUrl`, as paths relative to its folder.
- *
- * A template is known by what points at it rather than by its contents: HTML that happens to have
- * no Angular syntax in it yet is still a template, and an `index.html` is not one.
- */
-function templates(root: string): Set<string> {
-  const found = new Set<string>();
-  for (const file of sourceFiles(root)) {
-    if (path.extname(file) !== '.ts') continue;
-    for (const [, , url] of readFileSync(path.join(root, file), 'utf8').matchAll(TEMPLATE_URL)) {
-      found.add(path.posix.join(path.posix.dirname(file), url!));
-    }
-  }
-  return found;
-}
-
-/** The Shiki language a file is highlighted as: Angular's, for a component and its template. */
-export function languageOf(root: string, file: string): string {
-  const extension = path.extname(file);
-  if (extension === '.ts' && COMPONENT.test(readFileSync(path.join(root, file), 'utf8'))) {
-    return 'angular-ts';
-  }
-  if (extension === '.html' && templates(root).has(file)) return 'angular-html';
-  return LANGUAGE[extension] ?? 'text';
-}
-
 /** One file, highlighted. */
 export function highlightFile(root: string, file: string): Promise<string> {
   const text = readFileSync(path.join(root, file), 'utf8');
-  return highlight(text.trimEnd() + '\n', languageOf(root, file));
+  return highlight(text.trimEnd() + '\n', LANGUAGE[path.extname(file)] ?? 'text');
 }
 
 export function exampleSources(workspaceRoot: string): Plugin {

@@ -54,10 +54,6 @@ export interface DocHeading {
  */
 const BLOCK_MARKER = /^[ \t]*<!--\s*(example|api):\s*([@a-zA-Z0-9/#-]+)\s*-->[ \t]*$/gm;
 
-/**
- * `angular-ts` and `angular-html` are TypeScript and HTML with Angular's template syntax on top:
- * the code browser picks them for a component and its template (see `example-sources.ts`).
- */
 const LANGUAGES = [
   'ts',
   'tsx',
@@ -72,6 +68,17 @@ const LANGUAGES = [
   'angular-ts',
   'angular-html',
 ];
+
+/**
+ * `ts` and `html`, highlighted with Angular's grammars wherever they are: a code block in a page,
+ * an example's `?source`, a file in the code browser.
+ *
+ * `angular-ts` and `angular-html` are TypeScript and HTML with Angular's template syntax on top.
+ * They highlight a component's inline template and styles and a template's blocks and bindings,
+ * and anything else exactly as `ts` and `html` do, so there is no telling Angular code from plain
+ * code to get wrong. A fence still says `ts` or `html`, which GitHub and an editor's preview know.
+ */
+const ANGULAR: Record<string, string> = { ts: 'angular-ts', html: 'angular-html' };
 
 /**
  * `github-light`'s own comment colour, `#6e7781` on this page's `--surface-code`, is a 4.40:1
@@ -174,16 +181,18 @@ async function render(source: string, headings: DocHeading[]): Promise<string> {
 let ready: Highlighter | undefined;
 function highlightSync(code: string, lang: string): string {
   if (!ready) return `<pre class="shiki"><code>${escapeHtml(code)}</code></pre>`;
+  const grammar = ANGULAR[lang] ?? lang;
   return ready.codeToHtml(code, {
-    lang: ready.getLoadedLanguages().includes(lang) ? lang : 'text',
+    lang: ready.getLoadedLanguages().includes(grammar) ? grammar : 'text',
     themes: { light: 'docs-light', dark: 'github-dark-default' },
     defaultColor: false,
   });
 }
 
 /**
- * A whole file, highlighted as a docs code block is: the example apps' code browser shows their
- * source with this, so a file there and a fence in a guide are the same kind of block.
+ * A whole file, highlighted as a docs code block is: the example apps' code browser and an
+ * example's `?source` show their code with this, so a file there and a fence in a guide are the
+ * same kind of block.
  */
 export async function highlight(code: string, lang: string): Promise<string> {
   ready = await shiki();
