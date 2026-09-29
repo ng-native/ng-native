@@ -24,6 +24,15 @@
       "contributions": [
         "code"
       ]
+    },
+    {
+      "login": "stavthal",
+      "name": "Stavros Thalassinos",
+      "avatar_url": "https://avatars.githubusercontent.com/u/40219645?v=4",
+      "profile": "https://sthlabs.net",
+      "contributions": [
+        "code"
+      ]
     }
   ],
   "contributorsPerLine": 7,
