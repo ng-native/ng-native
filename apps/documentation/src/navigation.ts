@@ -76,6 +76,7 @@ export const GUIDE: NavSection = {
     { path: 'guide/theming', title: 'Theming and Tailwind' },
     { path: 'guide/forms', title: 'Build a form' },
     { path: 'guide/offline', title: 'Working offline' },
+    { path: 'guide/native-modules', title: 'Write a native module' },
     {
       path: 'guide/localization',
       title: 'Localization',
