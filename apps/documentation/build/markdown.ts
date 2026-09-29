@@ -54,7 +54,24 @@ export interface DocHeading {
  */
 const BLOCK_MARKER = /^[ \t]*<!--\s*(example|api):\s*([@a-zA-Z0-9/#-]+)\s*-->[ \t]*$/gm;
 
-const LANGUAGES = ['ts', 'tsx', 'js', 'html', 'css', 'json', 'bash', 'sh', 'diff', 'md'];
+/**
+ * `angular-ts` and `angular-html` are TypeScript and HTML with Angular's template syntax on top:
+ * the code browser picks them for a component and its template (see `example-sources.ts`).
+ */
+const LANGUAGES = [
+  'ts',
+  'tsx',
+  'js',
+  'html',
+  'css',
+  'json',
+  'bash',
+  'sh',
+  'diff',
+  'md',
+  'angular-ts',
+  'angular-html',
+];
 
 /**
  * `github-light`'s own comment colour, `#6e7781` on this page's `--surface-code`, is a 4.40:1
