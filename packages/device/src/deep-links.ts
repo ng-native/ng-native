@@ -132,9 +132,15 @@ export class DeepLinks {
     try {
       listener(path);
     } catch (error) {
-      const errors = this.injector.get(ErrorHandler, null);
-      if (errors) errors.handleError(error);
-      else console.error(error);
+      // A handler that rethrows, as some apps' do, would otherwise stop the listeners after this.
+      try {
+        const errors = this.injector.get(ErrorHandler, null);
+        if (errors) errors.handleError(error);
+        else console.error(error);
+      } catch (reporting) {
+        if (reporting === error) console.error(error);
+        else console.error(error, reporting);
+      }
     }
   }
 

@@ -243,6 +243,34 @@ describe('deep links', () => {
     assert.deepEqual(errors, [failure], 'the error is reported, not swallowed');
   });
 
+  it('delivers the launch url to every listener when the ErrorHandler rethrows', async (t) => {
+    const logged = t.mock.method(console, 'error', () => {});
+    const platform = source('canary://users/7');
+    const links = build(DeepLinks, [
+      { provide: DeepLinks.SOURCE, useValue: platform.value },
+      {
+        provide: ErrorHandler,
+        useValue: {
+          handleError: (error: unknown) => {
+            throw error;
+          },
+        },
+      },
+    ]);
+
+    const failure = new Error('the app could not handle it');
+    const router: string[] = [];
+    links.subscribe(() => {
+      throw failure;
+    });
+    links.subscribe((path) => router.push(path));
+    await settle();
+
+    assert.deepEqual(router, ['/users/7'], 'the router was listening too');
+    assert.equal(logged.mock.callCount(), 1, 'the error is still reported');
+    assert.equal(logged.mock.calls[0]?.arguments[0], failure);
+  });
+
   it("does not need the app's ErrorHandler until a listener throws", () => {
     // An app's handler that injects the router reaches DeepLinks through the location, so
     // DeepLinks asking for the handler as it is made would be a cycle at boot.
