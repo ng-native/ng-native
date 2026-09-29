@@ -22,7 +22,7 @@ appId: ${APP_ID || 'dev.angularnative.canary'}
 # The native stack, from react-native-screens: push a screen and pop it with its header item.
 # By deep link: the home list is longer than a scroll reliably reaches.
 - runFlow:
-    file: ../subflows/open-link.yaml
+    file: ../subflows/follow-link.yaml
     env:
       LINK: canary://navigation
       SHOWS: 'push.*'
@@ -52,7 +52,7 @@ appId: ${APP_ID || 'dev.angularnative.canary'}
 # <safe-area-view>, from react-native-safe-area-context: a native module an app has to depend on
 # itself, and the one a generated app once crashed on. The search tab's content sits inside one.
 - runFlow:
-    file: ../subflows/open-link.yaml
+    file: ../subflows/follow-link.yaml
     env:
       LINK: canary://tabs
       SHOWS: 'Library'
@@ -75,7 +75,7 @@ appId: ${APP_ID || 'dev.angularnative.canary'}
 # The first hint, which is on screen on the smallest phone: the whole screen renders at once, so a
 # refused value further down closes the app just the same.
 - runFlow:
-    file: ../subflows/open-link.yaml
+    file: ../subflows/follow-link.yaml
     env:
       LINK: canary://tailwind
       SHOWS: 'Rings: a colour.*'
