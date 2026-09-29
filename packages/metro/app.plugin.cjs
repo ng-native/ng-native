@@ -1,3 +1,4 @@
+const fs = require('node:fs');
 const path = require('node:path');
 
 const WINDOW_START = `#if os(iOS) || os(tvOS)
@@ -75,9 +76,27 @@ function adoptScenes(contents) {
   return contents.replace(WINDOW_START, '') + SCENE_DELEGATE;
 }
 
+function projectRoot(config) {
+  return path.resolve(config._internal?.projectRoot ?? process.cwd());
+}
+
 function configPlugins(config) {
-  const root = config._internal?.projectRoot ?? process.cwd();
-  return require(require.resolve('expo/config-plugins', { paths: [path.resolve(root)] }));
+  return require(require.resolve('expo/config-plugins', { paths: [projectRoot(config)] }));
+}
+
+function usesNativeRouter(manifest) {
+  return Boolean(
+    manifest?.dependencies?.['@ng-native/router'] ??
+    manifest?.devDependencies?.['@ng-native/router'],
+  );
+}
+
+function readManifest(config) {
+  try {
+    return JSON.parse(fs.readFileSync(path.join(projectRoot(config), 'package.json'), 'utf8'));
+  } catch {
+    return null;
+  }
 }
 
 function withAngularNative(config) {
@@ -90,9 +109,13 @@ function withAngularNative(config) {
   });
   return withInfoPlist(config, (mod) => {
     mod.modResults.UIApplicationSceneManifest = SCENE_MANIFEST;
+    if (usesNativeRouter(readManifest(config))) {
+      mod.modResults.UIViewControllerBasedStatusBarAppearance = true;
+    }
     return mod;
   });
 }
 
 module.exports = withAngularNative;
 module.exports.adoptScenes = adoptScenes;
+module.exports.usesNativeRouter = usesNativeRouter;

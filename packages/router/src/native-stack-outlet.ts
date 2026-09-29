@@ -28,8 +28,10 @@ import {
   Renderer2,
   computed,
   createComponent,
+  effect,
   inject,
   signal,
+  untracked,
   type ComponentRef,
   type EnvironmentInjector,
   type Type,
@@ -48,7 +50,7 @@ import {
   type RouterOutletContract,
 } from '@angular/router';
 import { Location, PlatformLocation } from '@angular/common';
-import { SCREEN_IN_FRONT } from '@ng-native/device';
+import { SCREEN_IN_FRONT, StatusBar } from '@ng-native/device';
 import { bindRouteInputs } from './bind-route-inputs.ts';
 import { NativeBack, isShowing } from './native-back.ts';
 import { intentOf, type NativeIntent } from './native-navigation.ts';
@@ -57,6 +59,7 @@ import { markScreenRoute } from './tab-routes.ts';
 import { ownHost } from './own-host.ts';
 import type { ScreenPresentation } from './screen-presentation.ts';
 import { ActivityState } from './screens.ts';
+import { SCREEN_STATUS_BAR, screenStatusBarProps } from './screen-status-bar.ts';
 
 interface StackEntry {
   route: ActivatedRoute;
@@ -121,6 +124,8 @@ export class NativeStackOutlet implements RouterOutletContract {
 
   private readonly errors = inject(ErrorHandler);
 
+  private readonly statusBar = inject(SCREEN_STATUS_BAR) ? inject(StatusBar) : null;
+
   private readonly entries: StackEntry[] = [];
   /**
    * The screens a replace or a reset supersedes, kept until the navigation that supersedes them
@@ -154,6 +159,16 @@ export class NativeStackOutlet implements RouterOutletContract {
         return index !== -1 && index < this.entries.length - 1 ? this.popToEntry(index) : null;
       },
     });
+    const statusBar = this.statusBar;
+    if (statusBar) {
+      effect(() => {
+        const props = screenStatusBarProps(statusBar.state());
+        untracked(() => {
+          for (const entry of this.entries) this.setProps(entry.screen, props);
+        });
+      });
+    }
+
     // Optional for the same reason as the router: the outlet's own tests stand one in without it.
     const navigations = this.router?.events?.subscribe((event) => {
       if (event instanceof NavigationEnd) this.settle(event.id);
@@ -485,6 +500,11 @@ export class NativeStackOutlet implements RouterOutletContract {
    * so each key merges into whatever style is already on the screen instead of replacing it -
    * the same merge a page's own host style gets, just asserted last so the stack's layout wins.
    */
+  private setProps(screen: unknown, props: Record<string, unknown>): void {
+    for (const [prop, value] of Object.entries(props))
+      this.renderer.setProperty(screen, prop, value);
+  }
+
   private fillScreen(screen: unknown): void {
     for (const [key, value] of Object.entries(FILL)) {
       this.renderer.setStyle(screen as Element, key, value);
@@ -511,6 +531,8 @@ export class NativeStackOutlet implements RouterOutletContract {
     for (const [prop, value] of Object.entries(presentation ?? {})) {
       if (value !== undefined) this.renderer.setProperty(screen, prop, value);
     }
+    if (this.statusBar)
+      this.setProps(screen, screenStatusBarProps(untracked(this.statusBar.state)));
 
     this.renderer.appendChild(this.host.nativeElement, screen);
     return screen;

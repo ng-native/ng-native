@@ -46,6 +46,7 @@ import { NativeNavigation } from './native-navigation.ts';
 import { NativePlatformLocation } from './native-platform-location.ts';
 import { NativeStackReuseStrategy } from './native-stack-reuse-strategy.ts';
 import { registerScreenComponents } from './screens.ts';
+import { provideScreenStatusBar } from './screen-status-bar.ts';
 
 /** A native-only router option, passed to `provideNativeRouter` beside Angular's own features. */
 export interface NativeRouterFeature {
@@ -131,6 +132,7 @@ function nativeProviders(parentOf: LinkParent | undefined): (Provider | Environm
     // Without this the router never detaches, so a pushed-away screen is destroyed and rebuilt.
     { provide: RouteReuseStrategy, useClass: NativeStackReuseStrategy },
     NativeNavigation,
+    ...provideScreenStatusBar(),
   ];
   if (!parentOf) {
     return [

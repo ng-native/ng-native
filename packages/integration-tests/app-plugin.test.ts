@@ -4,8 +4,9 @@ import { createRequire } from 'node:module';
 import { readFileSync } from 'node:fs';
 
 const require = createRequire(import.meta.url);
-const { adoptScenes } = require('@ng-native/metro/app.plugin.cjs') as {
+const { adoptScenes, usesNativeRouter } = require('@ng-native/metro/app.plugin.cjs') as {
   adoptScenes(contents: string): string;
+  usesNativeRouter(manifest: unknown): boolean;
 };
 
 const expoAppDelegate = readFileSync(
@@ -46,5 +47,12 @@ describe('the config plugin', () => {
       () => adoptScenes('class AppDelegate: ExpoAppDelegate {}'),
       /scene life cycle was not adopted/,
     );
+  });
+
+  it('hands the status bar to view controllers only in an app whose screens can take it', () => {
+    assert.equal(usesNativeRouter({ dependencies: { '@ng-native/router': '^0.1.0' } }), true);
+    assert.equal(usesNativeRouter({ devDependencies: { '@ng-native/router': '^0.1.0' } }), true);
+    assert.equal(usesNativeRouter({ dependencies: { '@ng-native/platform': '^0.1.0' } }), false);
+    assert.equal(usesNativeRouter(null), false);
   });
 });
