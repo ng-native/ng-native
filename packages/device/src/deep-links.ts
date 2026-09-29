@@ -91,13 +91,13 @@ export class DeepLinks {
 
   private readonly source = inject(DeepLinks.SOURCE);
   private launch: string | null = null;
-  private listener: ((path: string) => void) | null = null;
+  private readonly listeners = new Set<(path: string) => void>();
 
   constructor() {
     void this.source.launchUrl().then((url) => {
       const path = pathOf(url);
       if (!path || path === '/') return;
-      if (this.listener) this.listener(path);
+      if (this.listeners.size) this.listeners.forEach((listener) => listener(path));
       else this.launch = path;
     });
   }
@@ -109,13 +109,13 @@ export class DeepLinks {
 
   /** Links that arrive while the app is running, as paths. Returns an unsubscribe. */
   subscribe(listener: (path: string) => void): () => void {
-    this.listener = listener;
+    this.listeners.add(listener);
     const unsubscribe = this.source.subscribe((url) => {
       const path = pathOf(url);
       if (path) listener(path);
     });
     return () => {
-      this.listener = null;
+      this.listeners.delete(listener);
       unsubscribe();
     };
   }

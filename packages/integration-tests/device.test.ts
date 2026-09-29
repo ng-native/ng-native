@@ -181,6 +181,34 @@ describe('deep links', () => {
     assert.equal(links.initialUrl(), null);
   });
 
+  it('delivers the launch url to every listener, not only the last to subscribe', async () => {
+    const platform = source('canary://users/7');
+    const links = build(DeepLinks, [{ provide: DeepLinks.SOURCE, useValue: platform.value }]);
+
+    const router: string[] = [];
+    const app: string[] = [];
+    links.subscribe((path) => router.push(path));
+    links.subscribe((path) => app.push(path));
+    await settle();
+
+    assert.deepEqual(router, ['/users/7']);
+    assert.deepEqual(app, ['/users/7']);
+  });
+
+  it('still delivers the launch url to a listener after another one stops', async () => {
+    const platform = source('canary://users/7');
+    const links = build(DeepLinks, [{ provide: DeepLinks.SOURCE, useValue: platform.value }]);
+
+    const router: string[] = [];
+    links.subscribe((path) => router.push(path));
+    const stop = links.subscribe(() => {});
+    stop();
+    await settle();
+
+    assert.deepEqual(router, ['/users/7'], 'the router was still listening');
+    assert.equal(links.initialUrl(), null);
+  });
+
   it('passes a link that arrives later through as a path', async () => {
     const platform = source(null);
     const links = build(DeepLinks, [{ provide: DeepLinks.SOURCE, useValue: platform.value }]);
