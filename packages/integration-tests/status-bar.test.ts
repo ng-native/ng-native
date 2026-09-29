@@ -69,6 +69,20 @@ describe('the status bar', () => {
     assert.deepEqual(bar.state(), { style: 'light', hidden: true });
   });
 
+  it('keeps a claim pushed before the base was set, and restores the base when it drops', () => {
+    // A screen can mount and push before the app gets round to its startup `set`.
+    const { calls, source } = recorder();
+    const bar = build(source);
+
+    const claim = bar.push({ style: 'light' });
+    bar.set({ style: 'dark' });
+    assert.deepEqual(bar.state(), { style: 'light' });
+
+    calls.length = 0;
+    claim();
+    assert.deepEqual(calls, [['style', ['dark', undefined]]]);
+  });
+
   it('reports its height, which a layout under a translucent bar needs', () => {
     const { source } = recorder();
     assert.equal(build(source).height(), 47);

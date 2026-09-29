@@ -79,7 +79,7 @@ export class StatusBar {
   });
 
   private readonly source = inject(StatusBar.SOURCE);
-  private readonly stack = signal<readonly StatusBarState[]>([]);
+  private readonly stack = signal<readonly StatusBarState[]>([{}]);
 
   /** What is actually showing: every claim in order, later ones winning per property. */
   readonly state: Signal<StatusBarState> = computed(() =>
