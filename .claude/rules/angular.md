@@ -77,8 +77,8 @@ defaults below are already in effect.
 - Bootstrap the application in a file named `main.ts` directly inside `src`.
 - A component's TypeScript, template, and style files share the same base name with different
   extensions (e.g. `user-profile.ts`, `user-profile.html`, `user-profile.css`).
-- Unit tests end in `.spec.ts` and live next to the code under test, not in a separate `tests`
-  directory.
+- Unit tests end in `.test.ts` and live next to the code under test, not in a separate `tests`
+  directory. `packages/integration-tests` is the exception: it exercises the whole seam.
 - Organize the project by feature area, not by code type - avoid directories named
   `components`, `directives`, or `services`.
 - Prefer one concept (usually one component, directive, or service) per file; split further if a
@@ -94,7 +94,8 @@ defaults below are already in effect.
 
 - `NgOptimizedImage` (browser image loading).
 - `DomSanitizer` and other DOM-sanitization guidance.
-- `HttpClient` specifics (this project is not making browser HTTP calls in the same way).
+- `provideHttpClient()` on its own: it returns null bodies on a device. Use
+  `provideNativeHttpClient()` from `@ng-native/platform/http`.
 - SSR/hydration guidance.
 - Reactive Forms guidance (this project standardizes on Signal Forms; Reactive Forms are not used).
 - AXE/browser accessibility-checker guidance (no DOM to run browser a11y tooling against).
