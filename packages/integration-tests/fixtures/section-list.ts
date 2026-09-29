@@ -4,6 +4,7 @@ import {
   SectionHeader,
   SectionItem,
   SectionList,
+  SectionListSeparator,
   SectionSeparator,
 } from '../../components/src/section-list.ts';
 import { Text } from '../../components/src/text.ts';
@@ -19,7 +20,16 @@ interface Section {
 /** Twenty sections of five items: a 30pt header, 40pt items and a 10pt footer each. */
 @Component({
   selector: 'x-sections-list',
-  imports: [SectionList, SectionHeader, SectionItem, SectionFooter, SectionSeparator, Text, View],
+  imports: [
+    SectionList,
+    SectionHeader,
+    SectionItem,
+    SectionFooter,
+    SectionSeparator,
+    SectionListSeparator,
+    Text,
+    View,
+  ],
   template: `
     <section-list
       #list
@@ -50,6 +60,22 @@ interface Section {
       <ng-template sectionSeparator let-leading let-trailing="trailingItem">
         <view nativeID="separator"
           ><text>{{ leading }}|{{ trailing }}</text></view
+        >
+      </ng-template>
+      <ng-template
+        sectionListSeparator
+        let-section
+        let-before="leadingSection"
+        let-after="trailingSection"
+        let-leading="leadingItem"
+        let-trailing="trailingItem"
+      >
+        <view nativeID="edge"
+          ><text
+            >{{ before?.title ?? '' }}[{{ section.title }}]{{ after?.title ?? '' }}:{{
+              leading ?? ''
+            }}|{{ trailing ?? '' }}</text
+          ></view
         >
       </ng-template>
     </section-list>

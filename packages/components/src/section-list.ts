@@ -47,6 +47,19 @@ export interface SectionSeparatorContext<T, S> {
   readonly section: S;
 }
 
+/**
+ * What a section separator template is given: the section, and what is either side of the edge
+ * it sits at. At a section's start `leadingItem` is undefined, and at its end `trailingItem` is.
+ */
+export interface SectionListSeparatorContext<T, S> {
+  readonly $implicit: S;
+  readonly section: S;
+  readonly leadingItem: T | undefined;
+  readonly leadingSection: S | undefined;
+  readonly trailingItem: T | undefined;
+  readonly trailingSection: S | undefined;
+}
+
 /** `<ng-template sectionHeader let-section>`: RN's `renderSectionHeader`. */
 @Directive({ selector: 'ng-template[sectionHeader]' })
 export class SectionHeader<S = unknown> {
@@ -99,45 +112,82 @@ export class SectionSeparator<T = unknown, S = unknown> {
   }
 }
 
+/**
+ * `<ng-template sectionListSeparator let-section>`: RN's `SectionSeparatorComponent`, drawn at
+ * both edges of a section that has items, between its header and first item and between its
+ * last item and footer.
+ */
+@Directive({ selector: 'ng-template[sectionListSeparator]' })
+export class SectionListSeparator<T = unknown, S = unknown> {
+  readonly template = inject<TemplateRef<SectionListSeparatorContext<T, S>>>(TemplateRef);
+
+  static ngTemplateContextGuard<T, S>(
+    _directive: SectionListSeparator<T, S>,
+    context: unknown,
+  ): context is SectionListSeparatorContext<T, S> {
+    return true;
+  }
+}
+
 /** One row of the flattened list. */
 export type SectionRow<T, S> =
   | {
       readonly kind: 'header' | 'footer';
       readonly context: SectionContext<S>;
       readonly separator: null;
+      readonly leading: null;
+      readonly trailing: null;
     }
   | {
       readonly kind: 'item';
       readonly context: SectionItemContext<T, S>;
       /** Null for a section's last item, which RN draws no separator after. */
       readonly separator: SectionSeparatorContext<T, S> | null;
+      /** The section separator before a section's first item, and null on every other. */
+      readonly leading: SectionListSeparatorContext<T, S> | null;
+      /** The section separator after a section's last item, and null on every other. */
+      readonly trailing: SectionListSeparatorContext<T, S> | null;
     };
 
 /**
  * Flatten sections into the rows RN's `VirtualizedSectionList` gives its list: for each section a
  * header, its items, then a footer. The header and footer rows are there whether or not anything
  * is drawn in them, as in RN, which is what keeps `scrollToLocation`'s arithmetic the same.
+ *
+ * The section separators ride on the first and last item, as RN's do: `SectionSeparatorComponent`
+ * is the first item's leading separator and the last item's trailing one, so an empty section has
+ * none, and a last item has it in place of the item separator.
  */
 export function flattenSections<T, S extends SectionListSection<T>>(
   sections: readonly S[],
 ): SectionRow<T, S>[] {
   const rows: SectionRow<T, S>[] = [];
+  const edges = { leading: null, trailing: null };
   sections.forEach((section, sectionIndex) => {
     const context = { $implicit: section, section, sectionIndex };
-    rows.push({ kind: 'header', context, separator: null });
+    rows.push({ kind: 'header', context, separator: null, ...edges });
     const data = section.data;
+    const last = data.length - 1;
+    const around = {
+      $implicit: section,
+      section,
+      leadingSection: sections[sectionIndex - 1],
+      trailingSection: sections[sectionIndex + 1],
+    };
     data.forEach((item, index) => {
       const trailingItem = data[index + 1];
       rows.push({
         kind: 'item',
         context: { $implicit: item, item, index, section, sectionIndex },
         separator:
-          index < data.length - 1
+          index < last
             ? { $implicit: item, leadingItem: item, trailingItem: trailingItem!, section }
             : null,
+        leading: index === 0 ? { ...around, leadingItem: undefined, trailingItem: item } : null,
+        trailing: index === last ? { ...around, leadingItem: item, trailingItem: undefined } : null,
       });
     });
-    rows.push({ kind: 'footer', context, separator: null });
+    rows.push({ kind: 'footer', context, separator: null, ...edges });
   });
   return rows;
 }
@@ -159,19 +209,22 @@ const measure = <A extends unknown[]>(height: Height<A>, ...args: A): number =>
  *   <ng-template sectionHeader let-section><text>{{ section.title }}</text></ng-template>
  *   <ng-template sectionItem let-item><text>{{ item }}</text></ng-template>
  *   <ng-template sectionSeparator><view [style]="line"></view></ng-template>
+ *   <ng-template sectionListSeparator><view [style]="rule"></view></ng-template>
  * </section-list>
  * ```
  *
  * Rows are fixed height, as `getItemLayout` makes them in RN: `itemHeight`, `sectionHeaderHeight`
- * and `sectionFooterHeight` are numbers or functions. An item's height includes its separator,
- * which is drawn at the bottom of the item's slot and only between items of the same section.
+ * and `sectionFooterHeight` are numbers or functions. An item's height includes its separators,
+ * which are drawn in the item's slot: the item separator at its bottom, only between items of the
+ * same section, and the section separator at the top of a section's first item and the bottom of
+ * its last, as RN's `SectionSeparatorComponent` is.
  *
  * `stickySectionHeadersEnabled` pins the current section's header until the next pushes it off.
  * It defaults to on for iOS and off for Android, as RN's does. `listHeader` and `listFooter`
  * content and a `<refresh-control>` pass through to the list.
  *
- * ponytail: no `SectionSeparatorComponent`, no `horizontal` or `inverted`, and no viewability
- * events. The host is a plain view with the list filling it, where RN's host is the scroll view.
+ * ponytail: no `horizontal` or `inverted`, no viewability events, and no `highlighted` on a
+ * separator. The host is a plain view with the list filling it, where RN's host is the scroll view.
  */
 @Component({
   selector: 'section-list',
@@ -211,6 +264,11 @@ const measure = <A extends unknown[]>(height: Height<A>, ...args: A): number =>
               }
             }
             @case ('item') {
+              @if (edge(); as edge) {
+                @if (row.item.leading; as start) {
+                  <ng-container [templateSlot]="edge.template" [templateSlotContext]="start" />
+                }
+              }
               <view [style]="cell">
                 @if (item(); as item) {
                   <ng-container
@@ -222,6 +280,11 @@ const measure = <A extends unknown[]>(height: Height<A>, ...args: A): number =>
               @if (separator(); as separator) {
                 @if (row.item.separator; as gap) {
                   <ng-container [templateSlot]="separator.template" [templateSlotContext]="gap" />
+                }
+              }
+              @if (edge(); as edge) {
+                @if (row.item.trailing; as end) {
+                  <ng-container [templateSlot]="edge.template" [templateSlotContext]="end" />
                 }
               }
             }
@@ -250,6 +313,7 @@ export class SectionList<T, S extends SectionListSection<T> = SectionListSection
   protected readonly footer = contentChild<SectionFooter<S>>(SectionFooter);
   protected readonly item = contentChild<SectionItem<T, S>>(SectionItem);
   protected readonly separator = contentChild<SectionSeparator<T, S>>(SectionSeparator);
+  protected readonly edge = contentChild<SectionListSeparator<T, S>>(SectionListSeparator);
   private readonly list = viewChild.required<VirtualList<SectionRow<T, S>>>('list');
 
   protected readonly fill = { flex: 1 };

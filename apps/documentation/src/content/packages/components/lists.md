@@ -144,7 +144,8 @@ away from the end and back fires it again, so a page that failed to load is retr
 ## Section list
 
 `<section-list>` is `SectionList`: `sections` of `{ title, data }`, drawn from templates for the
-section header, each item, the section footer and the separator between items of one section.
+section header, each item, the section footer, the separator between items of one section and the
+separator at each edge of a section.
 Like React Native's, it is the windowed list over flattened rows - a header, the items, then a
 footer for each section - so it windows exactly as `<virtual-list>` does.
 
@@ -159,17 +160,24 @@ footer for each section - so it windows exactly as `<virtual-list>` does.
   <ng-template sectionHeader let-section><text>{{ section.title }}</text></ng-template>
   <ng-template sectionItem let-item let-index="index"><text>{{ item.name }}</text></ng-template>
   <ng-template sectionSeparator><view [style]="line"></view></ng-template>
+  <ng-template sectionListSeparator><view [style]="rule"></view></ng-template>
 </section-list>
 ```
 
+`sectionSeparator` is `ItemSeparatorComponent`, drawn between two items of one section and told
+`leadingItem` and `trailingItem`. `sectionListSeparator` is `SectionSeparatorComponent`, drawn
+between a section's header and its first item and between its last item and its footer, and told
+the `section`, `leadingSection` and `trailingSection`, plus whichever of `leadingItem` and
+`trailingItem` is there. A section with no items draws neither.
+
 Heights are fixed per row, as `getItemLayout` makes them: `itemHeight`, `sectionHeaderHeight` and
-`sectionFooterHeight` are numbers or functions, and an item's height includes its separator.
+`sectionFooterHeight` are numbers or functions, and an item's height includes its separators.
 `stickySectionHeadersEnabled` defaults to on for iOS and off for Android, as in React Native.
 `scrollToLocation({ sectionIndex, itemIndex })` counts the header as item 0, as React Native does,
 and allows for a pinned header. `listHeader` and `listFooter` content and a `<refresh-control>`
 pass through.
 
-It has no `SectionSeparatorComponent`, no `horizontal` or `inverted`, and no viewability events,
-and its host is a plain view with the list filling it.
+It has no `horizontal` or `inverted` and no viewability events, a separator is not told
+`highlighted`, and its host is a plain view with the list filling it.
 
 <!-- api: SectionList -->

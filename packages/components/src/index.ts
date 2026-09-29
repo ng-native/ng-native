@@ -82,10 +82,12 @@ export {
   SectionHeader,
   SectionItem,
   SectionList,
+  SectionListSeparator,
   SectionSeparator,
   type SectionContext,
   type SectionItemContext,
   type SectionListSection,
+  type SectionListSeparatorContext,
   type SectionRow,
   type SectionSeparatorContext,
 } from './section-list.ts';

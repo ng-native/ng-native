@@ -93,11 +93,11 @@ JavaScript errors.
 **Workaround:** if a crash report shows a native stack with no JavaScript frames, check whether
 anything required `react-native/Libraries/Renderer` after mount.
 
-## Section lists have no section separators
+## Section lists are vertical and upright
 
 `<virtual-list>` supports separators (`<ng-template virtualListSeparator>`), sticky rows and a
-sticky header. `<section-list>` covers `SectionList` but lacks `SectionSeparatorComponent`,
-horizontal and inverted layouts, and viewability events. Separators lack `highlighted` state. A
+sticky header. `<section-list>` covers `SectionList`, item and section separators included, but
+lacks horizontal and inverted layouts and viewability events. Separators lack `highlighted` state. A
 `<section-list>`'s row heights are fixed and include separators, as with
 `getItemLayout`; a `<virtual-list>`'s can be measured instead. A virtual list holds its position with
 a `scrollTo` after the commit rather than inside the native mount, so a correction made mid-fling
@@ -105,8 +105,6 @@ lands where the last scroll event said the list was.
 
 On Android, `<refresh-control>` becomes the scroll view's parent, as in React Native. The scroll
 view's inline layout style moves with it; class-based layout stays on the inner scroll view.
-
-**Workaround:** draw a section separator as part of the section's header or footer template.
 
 ## Hot reload has a few full-reload cases
 

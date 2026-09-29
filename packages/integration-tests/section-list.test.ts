@@ -27,6 +27,13 @@ const slotOf = (fabric: FakeFabric, text: string) =>
   flatten(fabric.committed).find(
     (node) => node.props['position'] === 'absolute' && textOf(node) === text,
   );
+/** The row slot whose text includes this text, read as one string in draw order. */
+const slotTextAround = (fabric: FakeFabric, text: string) =>
+  textOf(
+    flatten(fabric.committed).find(
+      (node) => node.props['position'] === 'absolute' && textOf(node).includes(text),
+    )!,
+  );
 
 // Each section is a 30 header, five 40 items and a 10 footer.
 const SECTION = 30 + 5 * 40 + 10;
@@ -77,6 +84,53 @@ describe('flattening sections', () => {
     assert.ok(rows[1]!.separator, 'the first item is followed by a separator');
     assert.equal(rows[2]!.separator, null, 'the last item of a section is not');
   });
+
+  it('puts a section separator before the first item and after the last, as RN does', () => {
+    const flattenSections = mod['flattenSections'] as (
+      sections: { title: string; data: string[] }[],
+    ) => {
+      kind: string;
+      leading: Record<string, unknown> | null;
+      trailing: Record<string, unknown> | null;
+    }[];
+    const [a, b, c] = [
+      { title: 'A', data: ['a0', 'a1', 'a2'] },
+      { title: 'B', data: [] },
+      { title: 'C', data: ['c0'] },
+    ];
+    const rows = flattenSections([a, b, c]);
+    const items = rows.filter((row) => row.kind === 'item');
+    assert.deepEqual(items[0]!.leading, {
+      $implicit: a,
+      section: a,
+      leadingItem: undefined,
+      leadingSection: undefined,
+      trailingItem: 'a0',
+      trailingSection: b,
+    });
+    assert.equal(items[0]!.trailing, null, 'not after the first item');
+    assert.equal(items[1]!.leading, null, 'nothing around a middle item');
+    assert.equal(items[1]!.trailing, null);
+    assert.equal(items[2]!.leading, null);
+    assert.deepEqual(items[2]!.trailing, {
+      $implicit: a,
+      section: a,
+      leadingItem: 'a2',
+      leadingSection: undefined,
+      trailingItem: undefined,
+      trailingSection: b,
+    });
+    // An empty section has no item to draw one around, so it draws none, as RN's does not.
+    assert.deepEqual(
+      rows.filter((row) => row.kind !== 'item').map((row) => [row.leading, row.trailing]),
+      Array.from({ length: 6 }, () => [null, null]),
+    );
+    // A single item is both first and last, so it gets both.
+    assert.equal(items[3]!.leading?.['leadingSection'], b);
+    assert.equal(items[3]!.leading?.['trailingItem'], 'c0');
+    assert.equal(items[3]!.trailing?.['leadingItem'], 'c0');
+    assert.equal(items[3]!.trailing?.['trailingSection'], undefined);
+  });
 });
 
 describe('section list', () => {
@@ -102,6 +156,27 @@ describe('section list', () => {
     const separators = all(fabric, 'separator');
     assert.deepEqual(separators.slice(0, 4), ['i0-0|i0-1', 'i0-1|i0-2', 'i0-2|i0-3', 'i0-3|i0-4']);
     assert.ok(!separators.some((text) => text.startsWith('i0-4|')), 'none after the last item');
+    app.unmount();
+  });
+
+  it('draws the section separator at each edge of a section, told both neighbours', async () => {
+    const { fabric, app } = await boot();
+    // The window ends inside the second section, so its trailing edge is not drawn yet.
+    assert.deepEqual(all(fabric, 'edge').slice(0, 3), [
+      '[S0]S1:|i0-0',
+      '[S0]S1:i0-4|',
+      'S0[S1]S2:|i1-0',
+    ]);
+    app.unmount();
+  });
+
+  it('draws it inside the first and last item slots, where RN draws its cell separators', async () => {
+    const { fabric, app } = await boot();
+    // The leading one draws before the item, and the item separator still follows the item.
+    assert.equal(slotTextAround(fabric, 'S0.0=i0-0'), '[S0]S1:|i0-0' + 'S0.0=i0-0' + 'i0-0|i0-1');
+    // The trailing one takes the place of the item separator after the last item.
+    assert.equal(slotTextAround(fabric, 'S0.4=i0-4'), 'S0.4=i0-4' + '[S0]S1:i0-4|');
+    assert.equal(slotTextAround(fabric, 'S0.2=i0-2'), 'S0.2=i0-2' + 'i0-2|i0-3');
     app.unmount();
   });
 
