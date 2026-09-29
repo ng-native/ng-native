@@ -46,6 +46,26 @@ close gaps a browser never had:
   [Metro](/packages/metro) and [Tailwind](/packages/tailwind).
 - **`providers`** are extra `Provider`/`EnvironmentProviders` merged into the environment injector
   `mount` creates, the same shape you would pass to `bootstrapApplication`.
+- **`inputs`** sets the root component's inputs, by their public names, before its first change
+  detection. That is the only moment an `input.required()` can be given one: `mount` runs the
+  first pass itself, so there is no later point to set it before the template reads it. The
+  object is a plain `Record<string, unknown>`, not checked against the component's inputs.
+- **`onError`** receives an error thrown while a native event is being dispatched, with the
+  event's name: a responder handler, a listener registered on the engine directly, or a commit a
+  focus change started. Angular already catches what a template listener throws, so those never
+  reach it. Without `onError`, `mount` points these errors at the app's `ErrorHandler`; with it,
+  they go to your function instead and the `ErrorHandler` never sees them. Either way nothing
+  thrown there is rethrown into native.
+
+```ts
+const app = mount(Number(rootTag), App, getFabricUIManager(), {
+  processColor,
+  inputs: { accountId: 'acc_42' },
+  onError: (error, topLevelType) => console.error(`[${topLevelType}]`, error),
+});
+```
+
+To change an input once the app is running, call `app.componentRef.setInput(name, value)`.
 
 ## Return value and watching conditions
 

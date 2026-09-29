@@ -1,6 +1,6 @@
 ---
 title: The native header
-summary: NativeHeader and NativeHeaderItem, where their default colors come from, and withHeaderDefaults.
+summary: NativeHeader, NativeHeaderItem, NativeSearchBar, their default colors and withHeaderDefaults.
 ---
 
 # The native header
@@ -62,6 +62,79 @@ slots: `left`, `center`/`title`, `right`, `back` (replaces the chevron; needs
 system, so a `pressable` inside one works like anywhere else.
 
 <!-- api: NativeHeaderItem -->
+
+## Search
+
+`<native-search-bar>` is the navigation bar's own search field: react-native-screens'
+`RNSSearchBar`, the `UISearchController` iOS puts under a large title. Use it for a list that
+filters from the bar, as the notes, wallet and music examples do, rather than a text field at the
+top of the page. It goes in the `searchBar` slot:
+
+<!-- api: NativeSearchBar -->
+
+```ts
+import { Component, computed, signal } from '@angular/core';
+import { ScrollView, Text } from '@ng-native/components';
+import { NativeHeader, NativeHeaderItem, NativeSearchBar } from '@ng-native/router';
+
+@Component({
+  selector: 'x-notes',
+  imports: [NativeHeader, NativeHeaderItem, NativeSearchBar, ScrollView, Text],
+  template: `
+    <native-header title="Notes" [largeTitle]="true">
+      <native-header-item type="searchBar">
+        <native-search-bar placeholder="Search notes" [(query)]="query" (search)="save($event)" />
+      </native-header-item>
+    </native-header>
+    <scroll-view contentInsetAdjustmentBehavior="automatic">
+      @for (note of shown(); track note) {
+        <text>{{ note }}</text>
+      }
+    </scroll-view>
+  `,
+})
+export class Notes {
+  protected readonly query = signal('');
+  protected readonly recent = signal<string[]>([]);
+  private readonly notes = ['Groceries', 'Garden plan', 'Trip to Lisbon'];
+  protected readonly shown = computed(() =>
+    this.notes.filter((note) => note.toLowerCase().includes(this.query().toLowerCase())),
+  );
+
+  protected save(text: string): void {
+    this.recent.update((recent) => [text, ...recent]);
+  }
+}
+```
+
+The text is a two-way `query`. Typing updates it, and a query set from code, such as a recent
+search tapped or a suggestion taken, is put in the field the way a controlled text input's value
+is. That write happens after the render, so a query the page starts with, as a screen restored
+with its search would have, reaches a field that has already been committed. What the user typed
+is not sent back to the field.
+
+`(search)` is the keyboard's search key, with the text in the field; `(cancel)` is the Cancel
+button; `(searchFocus)` and `(searchBlur)` are the field taking and leaving the keyboard, which is
+when a suggestions list should come and go. From code, `focus()`, `blur()`, `clear()` and
+`cancelSearch()` do the same, through a `viewChild(NativeSearchBar)`. `clear()` empties the query
+along with the field.
+
+Every other input is left unset unless bound, so the platform's own default applies:
+`placeholder`, `cancelButtonText`, `hideWhenScrolling` (scroll the field away with the content, as
+iOS lists do by default), `autoCapitalize`, `obscureBackground` (dim the content while typing),
+`hideNavigationBar` (hide the bar while typing), `tintColor` and `textColor`.
+
+`placement` and `allowToolbarIntegration` decide where iOS puts the field. The default,
+`automatic`, lets iOS 26 fold it into a toolbar, and a presented sheet has none, so there the
+field shows nowhere; `placement="stacked"` keeps it under the title. react-native-screens
+declares `tintColor` and `textColor` but has not implemented them on iOS yet, and its Android-only
+search bar props (`autoFocus`, `inputType`, `hintTextColor` and the rest) are not inputs here.
+There is no scope bar and there are no search tokens, because react-native-screens has neither:
+a scope is a segmented control under the header, and a token is text.
+
+In a test, the field is found by its view name, `fabric.find('RNSSearchBar')`, and takes typing
+from `fireEvent.changeText` or `userEvent.type` like a text field. The commands it sends, such as
+`setText` for a query set from code, are on `fabric.commands`.
 
 ## Colors
 

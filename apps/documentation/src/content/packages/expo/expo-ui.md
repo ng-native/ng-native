@@ -95,8 +95,14 @@ error. `expo-ui-components.ts` has thin typed components for the views an app re
 - **`UiForm`**, **`UiSection`** and **`UiLabeledContent`** - settings-style grouped rows.
 - **`UiImage`** - an SF Symbol by `systemName`, or a picture by `uiImage` URL.
 - **`UiText`** - a SwiftUI `Text`.
-- **`UiDatePicker`** - a SwiftUI `DatePicker`. `selection` is an ISO string; `dateChange` reports
-  the new one, also as an ISO string.
+- **`UiDatePicker`** - SwiftUI's `DatePicker` on iOS, Compose's on Android, and a Signal Forms
+  field: its `value` model is a `Date` or null, whichever way each platform takes and reports one.
+  A pick is when it emits `touch`. SwiftUI's picker always shows a date, today when the field is
+  empty, and the report it makes as it appears is not taken as the user's choice, so an optional
+  date is best asked for behind a button that shows the picker. Without a form, `selection` still
+  takes ISO text on iOS.
+- **`UiPicker`** - a SwiftUI `Picker`, iOS only, and a Signal Forms field. `options` draws the
+  choices; see [Choices: `UiPicker`](#choices-uipicker) below.
 
 Each input goes straight through to the node as a prop, `modifiers` included -
 `UiModifier` is one SwiftUI modifier, shaped exactly as `@expo/ui`'s own modifier functions build
@@ -144,6 +150,64 @@ goes, since a state that lives as long as the app does not need one.
 either binding then leaves the prop absent, which is the field's own unmanaged behavior rather
 than a crash.
 
+## Choices: `UiPicker`
+
+**`UiPicker`** is a SwiftUI `Picker`: one choice out of a short, fixed list, drawn as a menu, a
+segmented control, a wheel or inline rows. It is a Signal Forms field as it stands, through its
+`value` model, so `[formField]` binds it like any other control:
+
+```ts
+import { Component, signal } from '@angular/core';
+import { FormField, form, required } from '@angular/forms/signals';
+import { UiHost, UiPicker, type UiPickerOption } from '@ng-native/expo/expo-ui-components';
+
+@Component({
+  selector: 'app-booking',
+  imports: [FormField, UiHost, UiPicker],
+  template: `
+    <ui-host [matchContents]="true">
+      <ui-picker label="Room" pickerStyle="menu" [options]="rooms" [formField]="f.room" />
+    </ui-host>
+  `,
+})
+export class Booking {
+  protected readonly rooms: readonly UiPickerOption[] = [
+    { value: 'single', label: 'Single' },
+    { value: 'double', label: 'Double' },
+    { value: 'suite', label: 'Suite' },
+  ];
+  private readonly booking = signal({ room: 'double' });
+  protected readonly f = form(this.booking, (path) => required(path.room));
+}
+```
+
+`options` is a list of `UiPickerOption`s, each a `value` (a string or a number) and the `label`
+the user reads. The picker draws one `ui-text` per option in its `content` slot, tagged with the
+option's value: the slot and the `tag` modifiers `@expo/ui` otherwise wants written out by hand.
+What the field holds is the chosen option's `value`, never its position in the list, and values
+should be distinct, since the value is what tells one option from another. Children still work
+alongside or instead of `options`, for anything richer than a label.
+
+- **`value`** - the chosen option's value, or null: what `[formField]` binds. Outside a form,
+  `[(value)]` binds it to a signal.
+- **`label`** and **`systemImage`** - the picker's own title, and an SF Symbol name beside it.
+- **`pickerStyle`** - SwiftUI's picker style: `'automatic'`, `'menu'`, `'segmented'`, `'wheel'`,
+  `'inline'` or `'palette'`. It becomes a `pickerStyle` modifier ahead of any in `modifiers`.
+- **`disabled`** - adds SwiftUI's `disabled` modifier. A form's `disabled()` rule sets it, and so
+  does a bare `disabled` attribute outside a form.
+- **`touch`** - the user picked. A picker has no blur, so a pick is when the field counts as
+  touched and a form shows its errors.
+- **`selectionChange`** - the native event, typed as `{ selection }`. Like every event here, it
+  arrives through a template binding only: `(selectionChange)="$event.nativeEvent.selection"`.
+
+A pick writes the new value into the model, and so into the form, before `touch`; a report
+whose `selection` is neither a string nor a number is ignored.
+
+**The picker is iOS only.** `registerExpoUiViews('android')` registers no `ui-picker`, because
+`@expo/ui` has no Compose picker of that shape, so on Android the element commits as nothing. An
+app that runs on both needs another control for the choice there. Like every `ui-*` view, it
+sits inside a `<ui-host>`.
+
 ## Without the module
 
 An element registered for `@expo/ui` when it is not installed commits as nothing
@@ -174,3 +238,4 @@ An element registered for `@expo/ui` when it is not installed commits as nothing
 <!-- api: UiImage -->
 <!-- api: UiText -->
 <!-- api: UiDatePicker -->
+<!-- api: UiPicker -->
