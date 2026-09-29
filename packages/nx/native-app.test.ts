@@ -93,8 +93,8 @@ describe('the generated app', () => {
     const theirs = JSON.parse(templateFile('app.json')).expo;
     assert.equal(expo.slug, 'field-notes');
     assert.equal(expo.scheme, 'fieldnotes');
-    for (const key of ['orientation', 'userInterfaceStyle', 'version']) {
-      assert.equal(expo[key], theirs[key], key);
+    for (const key of ['orientation', 'userInterfaceStyle', 'version', 'platforms', 'extra']) {
+      assert.deepEqual(expo[key], theirs[key], key);
     }
   });
 

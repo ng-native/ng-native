@@ -7,12 +7,13 @@
  * no Expo Router, because it guesses a router root from the folder the template's app lives in.
  */
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { describe, it } from 'node:test';
 import { fileURLToPath } from 'node:url';
 
-const template = (file: string) =>
-  readFileSync(fileURLToPath(new URL(`../../template/${file}`, import.meta.url)), 'utf8');
+const templatePath = (file: string) =>
+  fileURLToPath(new URL(`../../template/${file}`, import.meta.url));
+const template = (file: string) => readFileSync(templatePath(file), 'utf8');
 
 describe('the template', () => {
   it('names only functions its packages export, from the entry that exports them', async () => {
@@ -31,5 +32,15 @@ describe('the template', () => {
       expo: { extra?: { router?: { root?: string } } };
     };
     assert.equal(config.expo.extra?.router?.root, 'src/app');
+  });
+
+  it('targets iOS and Android only, with nothing configured for a web build it cannot make', () => {
+    const { expo } = JSON.parse(template('app.json')) as {
+      expo: { platforms?: string[]; web?: unknown };
+    };
+    assert.deepEqual(expo.platforms, ['ios', 'android']);
+    assert.equal(expo.web, undefined);
+    assert.doesNotMatch(template('gitignore'), /web-build/);
+    assert.equal(existsSync(templatePath('assets/favicon.png')), false);
   });
 });

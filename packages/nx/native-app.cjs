@@ -47,9 +47,14 @@ const dependencies = {
 
 /**
  * What `nx add` puts beside `@nx/expo`, in place of the `@nx/expo:init` it does not run: see
- * `init/index.cjs`. `@expo/cli` is the range the template's `expo` depends on.
+ * `init/index.cjs`. `@expo/cli` and `@babel/runtime` are the ranges the template's `expo` depends
+ * on.
  */
-const expoCompanions = { 'react-dom': dependencies.react, '@expo/cli': '^57.0.22' };
+const expoCompanions = {
+  'react-dom': dependencies.react,
+  '@expo/cli': '^57.0.22',
+  '@babel/runtime': '^7.20.0',
+};
 
 /** @type {Record<string, string>} */
 const devDependencies = {
@@ -104,6 +109,8 @@ function appJson(name) {
     ios: { supportsTablet: true },
     android: { predictiveBackGestureEnabled: false },
     scheme: slug.replace(/[^a-z0-9]/gi, '').toLowerCase(),
+    // The template's: Expo otherwise guesses a router root from src/app and says so on every start.
+    extra: { router: { root: 'src/app' } },
   };
   return JSON.stringify({ expo }, null, 2) + '\n';
 }

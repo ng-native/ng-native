@@ -14,6 +14,10 @@
  * because `@nx/expo` depends on `@nx/react`, whose `react-dom` peer npm otherwise takes at the
  * newest React and then refuses every later install beside React 19.2.3. And `@expo/cli`, which
  * `@nx/expo`'s prebuild executor loads from the root, where npm does not put it on its own.
+ *
+ * It also adds Babel 7's `@babel/runtime`, the one Expo's Babel preset writes imports of. In an
+ * Angular workspace `@angular-devkit/build-angular` hoists Babel 8's to the root, which has no
+ * `regenerator`, and every `nx start` warned that Metro fell back to file-based resolution.
  */
 const {
   addDependenciesToPackageJson,

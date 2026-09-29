@@ -70,8 +70,8 @@ describe('the generated app', () => {
     assert.equal(expo.name, 'field-notes');
     assert.equal(expo.slug, 'field-notes');
     assert.equal(expo.scheme, 'fieldnotes');
-    for (const key of ['orientation', 'userInterfaceStyle', 'version']) {
-      assert.equal(expo[key], theirs[key], key);
+    for (const key of ['orientation', 'userInterfaceStyle', 'version', 'platforms', 'extra']) {
+      assert.deepEqual(expo[key], theirs[key], key);
     }
     assert.equal(expo.android.predictiveBackGestureEnabled, false);
   });

@@ -84,6 +84,18 @@ describe('in an integrated workspace', () => {
     assert.equal(project.targets?.test?.options.cwd, 'apps/mobile');
   });
 
+  it('runs expo start itself, since @nx/expo infers start with an executor it deprecates', async () => {
+    // @nx/expo 23.2's plugin infers `start` as `@nx/expo:start`, and every `nx start` printed that
+    // the executor would be removed in Nx 24 and to run convert-to-inferred, which changes nothing.
+    const tree = integrated();
+    await generate(tree, { directory: 'apps/mobile' });
+    const { start } = readProjectConfiguration(tree, 'mobile').targets ?? {};
+    assert.equal(start?.executor, 'nx:run-commands');
+    assert.equal(start?.options.command, 'expo start');
+    assert.equal(start?.options.cwd, 'apps/mobile');
+    assert.equal(start?.continuous, true);
+  });
+
   it("registers @nx/expo's plugin for the rest", async () => {
     const tree = integrated();
     await generate(tree, { directory: 'apps/mobile' });

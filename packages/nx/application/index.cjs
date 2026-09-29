@@ -4,7 +4,10 @@
  * The app is an Expo project, built by Metro. `@nx/expo`'s plugin, which `init` registers, infers
  * its Expo targets from the files written here; `project.json` adds the two it cannot infer:
  * `typecheck`, since Expo's `tsconfig` sets `noEmit` and `@nx/js` disables its own for that, and
- * `test`, which runs Vitest once rather than watching.
+ * `test`, which runs Vitest once rather than watching. It also replaces the inferred `start`,
+ * which is `@nx/expo:start`, an executor Nx deprecates and warns about on every run, with the
+ * `expo start` that executor runs, as the plugin already infers `run-ios` and `export`. Once the
+ * plugin infers `start` as a command too, this one can go.
  *
  * Where the dependencies go depends on the workspace. With package-manager workspaces, the Nx
  * default since 20, the app is a workspace package and lists them itself, which pnpm needs in
@@ -45,6 +48,7 @@ function targets(directory) {
       inputs: ['default', '^production'],
     },
     test: { ...run('vitest run'), cache: true, inputs: ['default', '^production'] },
+    start: { ...run('expo start'), continuous: true },
   };
 }
 

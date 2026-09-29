@@ -93,11 +93,14 @@ function appJson(name) {
     name,
     slug: name,
     version: '1.0.0',
+    platforms: ['ios', 'android'],
     orientation: 'portrait',
     userInterfaceStyle: 'dark',
     ios: { supportsTablet: true },
     android: { predictiveBackGestureEnabled: false },
     scheme: name.replace(/[^a-z0-9]/gi, '').toLowerCase(),
+    // The template's: Expo otherwise guesses a router root from src/app and says so on every start.
+    extra: { router: { root: 'src/app' } },
   };
   return JSON.stringify({ expo }, null, 2) + '\n';
 }

@@ -33,11 +33,16 @@ app's React, because `@nx/expo` depends on `@nx/react` and npm would otherwise t
 `react-dom` peer at 19.3 and refuse every later install, and `@expo/cli`, which `nx prebuild` loads
 from the workspace root.
 
+It also adds Babel 7's `@babel/runtime` at the workspace root, the copy Expo's Babel preset imports.
+In an `@nx/angular` workspace, `@angular-devkit/build-angular` otherwise puts Babel 8's there,
+which has no `regenerator`, and Metro warns on every `nx start` that it fell back to another copy.
+Angular's build keeps its own Babel 8.
+
 ## The targets
 
 | Command                 | From           | What runs                                                       |
 | ----------------------- | -------------- | --------------------------------------------------------------- |
-| `nx start mobile`       | `@nx/expo`     | `expo start`                                                    |
+| `nx start mobile`       | `project.json` | `expo start`                                                    |
 | `nx run mobile:run-ios` | `@nx/expo`     | `expo run:ios`, and `run-android` likewise                      |
 | `nx export mobile`      | `@nx/expo`     | `expo export`; `--platform ios` for one platform                |
 | `nx prebuild mobile`    | `@nx/expo`     | `expo prebuild`                                                 |
@@ -47,7 +52,10 @@ from the workspace root.
 
 `typecheck` and `test` are the two `@nx/expo` does not provide. Expo's `tsconfig` sets `noEmit`, and
 `@nx/js` disables its own inferred `typecheck` for a project that does, so the generator writes one.
-`test` runs Vitest once, where the target `@nx/vitest` would infer watches.
+`test` runs Vitest once, where the target `@nx/vitest` would infer watches. `start` is written too:
+`@nx/expo` infers it as its `@nx/expo:start` executor, which Nx 23 deprecates and warns about on
+every run, so the generator runs the same `expo start` directly. `nx prebuild` and `nx build` still
+use `@nx/expo`'s executors, and print the same deprecation notice.
 
 ## The files
 

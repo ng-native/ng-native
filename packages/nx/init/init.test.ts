@@ -32,6 +32,7 @@ describe('init', () => {
     await init(tree, { skipFormat: true });
     const manifest = readJson(tree, 'package.json');
     assert.deepEqual(Object.keys(manifest.devDependencies).sort(), [
+      '@babel/runtime',
       '@expo/cli',
       '@nx/expo',
       'nx',
@@ -40,6 +41,14 @@ describe('init', () => {
     assert.equal(manifest.devDependencies['react-dom'], '19.2.3');
     assert.match(manifest.devDependencies['@expo/cli'], /^\^57\./);
     assert.deepEqual(manifest.dependencies, {});
+  });
+
+  it("puts Babel 7's runtime at the root, where Expo's Babel preset imports it from", async () => {
+    // @angular-devkit/build-angular hoists Babel 8's runtime there, which has no `regenerator`, and
+    // every `nx start` warned that Metro had to fall back to file-based resolution to find it.
+    const tree = workspace();
+    await init(tree, { skipFormat: true });
+    assert.match(readJson(tree, 'package.json').devDependencies['@babel/runtime'], /^\^7\./);
   });
 
   it("registers @nx/expo's plugin, with the target names Nx documents", async () => {
