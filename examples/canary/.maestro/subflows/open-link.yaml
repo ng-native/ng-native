@@ -6,9 +6,12 @@
 appId: ${APP_ID || 'dev.angularnative.canary'}
 ---
 - openLink: ${LINK}
-- waitForAnimationToEnd
+# The dialog can take a while to appear on a loaded machine, so its button is waited for rather
+# than checked for once; only on iOS, where there is one.
 - runFlow:
     when:
-      visible: 'Open in .canary.\?'
+      platform: iOS
     commands:
-      - tapOn: 'Open'
+      - tapOn:
+          text: 'Open'
+          optional: true

@@ -25,13 +25,27 @@ appId: ${APP_ID || 'dev.angularnative.canary'}
     file: ../subflows/open-link.yaml
     env:
       LINK: canary://navigation
-- waitForAnimationToEnd
-- tapOn: 'push.*'
-- assertVisible: 'Detail'
-- tapOn: 'Done'
-- assertVisible: 'reset to home.*'
-- tapOn: 'reset to home.*'
-- assertVisible: 'Angular Native'
+- extendedWaitUntil:
+    visible: 'push.*'
+    timeout: 30000
+- tapOn:
+    text: 'push.*'
+    retryTapIfNoChange: true
+- extendedWaitUntil:
+    visible: 'Detail'
+    timeout: 15000
+- tapOn:
+    text: 'Done'
+    retryTapIfNoChange: true
+- extendedWaitUntil:
+    visible: 'reset to home.*'
+    timeout: 15000
+- tapOn:
+    text: 'reset to home.*'
+    retryTapIfNoChange: true
+- extendedWaitUntil:
+    visible: 'Angular Native'
+    timeout: 15000
 - runFlow: ../subflows/no-error-screen.yaml
 
 # <safe-area-view>, from react-native-safe-area-context: a native module an app has to depend on
@@ -40,9 +54,18 @@ appId: ${APP_ID || 'dev.angularnative.canary'}
     file: ../subflows/open-link.yaml
     env:
       LINK: canary://tabs
-- waitForAnimationToEnd
-- tapOn: 'Search'
-- assertVisible: 'Type something, then switch tabs'
+# Each step waits for what it acts on, and a tap that changed nothing is tried again: a CI
+# simulator under load has taken half a minute to open a link, and a tap on a tab bar that was
+# still settling switched nothing.
+- extendedWaitUntil:
+    visible: 'Library'
+    timeout: 30000
+- tapOn:
+    text: 'Search'
+    retryTapIfNoChange: true
+- extendedWaitUntil:
+    visible: 'Type something, then switch tabs'
+    timeout: 15000
 - runFlow: ../subflows/no-error-screen.yaml
 
 # Tailwind utilities that combine on one element, among them an Android-only drop shadow with a
@@ -53,6 +76,7 @@ appId: ${APP_ID || 'dev.angularnative.canary'}
     file: ../subflows/open-link.yaml
     env:
       LINK: canary://tailwind
-- waitForAnimationToEnd
-- assertVisible: 'Rings: a colour.*'
+- extendedWaitUntil:
+    visible: 'Rings: a colour.*'
+    timeout: 30000
 - runFlow: ../subflows/no-error-screen.yaml
