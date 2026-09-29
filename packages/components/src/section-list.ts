@@ -51,7 +51,7 @@ export interface SectionSeparatorContext<T, S> {
  * What a section separator template is given: the section, and what is either side of the edge
  * it sits at. At a section's start `leadingItem` is undefined, and at its end `trailingItem` is.
  */
-export interface SectionListSeparatorContext<T, S> {
+export interface SectionEdgeSeparatorContext<T, S> {
   readonly $implicit: S;
   readonly section: S;
   readonly leadingItem: T | undefined;
@@ -113,18 +113,18 @@ export class SectionSeparator<T = unknown, S = unknown> {
 }
 
 /**
- * `<ng-template sectionListSeparator let-section>`: RN's `SectionSeparatorComponent`, drawn at
+ * `<ng-template sectionEdgeSeparator let-section>`: RN's `SectionSeparatorComponent`, drawn at
  * both edges of a section that has items, between its header and first item and between its
  * last item and footer.
  */
-@Directive({ selector: 'ng-template[sectionListSeparator]' })
-export class SectionListSeparator<T = unknown, S = unknown> {
-  readonly template = inject<TemplateRef<SectionListSeparatorContext<T, S>>>(TemplateRef);
+@Directive({ selector: 'ng-template[sectionEdgeSeparator]' })
+export class SectionEdgeSeparator<T = unknown, S = unknown> {
+  readonly template = inject<TemplateRef<SectionEdgeSeparatorContext<T, S>>>(TemplateRef);
 
   static ngTemplateContextGuard<T, S>(
-    _directive: SectionListSeparator<T, S>,
+    _directive: SectionEdgeSeparator<T, S>,
     context: unknown,
-  ): context is SectionListSeparatorContext<T, S> {
+  ): context is SectionEdgeSeparatorContext<T, S> {
     return true;
   }
 }
@@ -141,12 +141,12 @@ export type SectionRow<T, S> =
   | {
       readonly kind: 'item';
       readonly context: SectionItemContext<T, S>;
-      /** Null for a section's last item, which RN draws no separator after. */
+      /** Null for a section's last item, where the section separator takes its place, as in RN. */
       readonly separator: SectionSeparatorContext<T, S> | null;
       /** The section separator before a section's first item, and null on every other. */
-      readonly leading: SectionListSeparatorContext<T, S> | null;
+      readonly leading: SectionEdgeSeparatorContext<T, S> | null;
       /** The section separator after a section's last item, and null on every other. */
-      readonly trailing: SectionListSeparatorContext<T, S> | null;
+      readonly trailing: SectionEdgeSeparatorContext<T, S> | null;
     };
 
 /**
@@ -209,7 +209,7 @@ const measure = <A extends unknown[]>(height: Height<A>, ...args: A): number =>
  *   <ng-template sectionHeader let-section><text>{{ section.title }}</text></ng-template>
  *   <ng-template sectionItem let-item><text>{{ item }}</text></ng-template>
  *   <ng-template sectionSeparator><view [style]="line"></view></ng-template>
- *   <ng-template sectionListSeparator><view [style]="rule"></view></ng-template>
+ *   <ng-template sectionEdgeSeparator><view [style]="rule"></view></ng-template>
  * </section-list>
  * ```
  *
@@ -264,8 +264,8 @@ const measure = <A extends unknown[]>(height: Height<A>, ...args: A): number =>
               }
             }
             @case ('item') {
-              @if (edge(); as edge) {
-                @if (row.item.leading; as start) {
+              @if (row.item.leading; as start) {
+                @if (edge(); as edge) {
                   <ng-container [templateSlot]="edge.template" [templateSlotContext]="start" />
                 }
               }
@@ -282,8 +282,8 @@ const measure = <A extends unknown[]>(height: Height<A>, ...args: A): number =>
                   <ng-container [templateSlot]="separator.template" [templateSlotContext]="gap" />
                 }
               }
-              @if (edge(); as edge) {
-                @if (row.item.trailing; as end) {
+              @if (row.item.trailing; as end) {
+                @if (edge(); as edge) {
                   <ng-container [templateSlot]="edge.template" [templateSlotContext]="end" />
                 }
               }
@@ -297,7 +297,7 @@ const measure = <A extends unknown[]>(height: Height<A>, ...args: A): number =>
 })
 export class SectionList<T, S extends SectionListSection<T> = SectionListSection<T>> {
   readonly sections = input.required<readonly S[]>();
-  /** Each item's height, separator included. */
+  /** Each item's height, including every separator drawn in its slot. */
   readonly itemHeight = input.required<Height<[item: T, index: number, section: S]>>();
   readonly sectionHeaderHeight = input<Height<[section: S]>>(0);
   readonly sectionFooterHeight = input<Height<[section: S]>>(0);
@@ -313,11 +313,11 @@ export class SectionList<T, S extends SectionListSection<T> = SectionListSection
   protected readonly footer = contentChild<SectionFooter<S>>(SectionFooter);
   protected readonly item = contentChild<SectionItem<T, S>>(SectionItem);
   protected readonly separator = contentChild<SectionSeparator<T, S>>(SectionSeparator);
-  protected readonly edge = contentChild<SectionListSeparator<T, S>>(SectionListSeparator);
+  protected readonly edge = contentChild<SectionEdgeSeparator<T, S>>(SectionEdgeSeparator);
   private readonly list = viewChild.required<VirtualList<SectionRow<T, S>>>('list');
 
   protected readonly fill = { flex: 1 };
-  /** The item fills its slot above the separator, as RN's cell puts the separator after it. */
+  /** The item fills its slot between its separators, as RN's cell draws them around it. */
   protected readonly cell = { flex: 1 };
 
   protected readonly rows = computed(() => flattenSections<T, S>(this.sections()));

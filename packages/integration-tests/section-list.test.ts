@@ -39,6 +39,9 @@ const slotTextAround = (fabric: FakeFabric, text: string) =>
 const SECTION = 30 + 5 * 40 + 10;
 
 interface SectionsList {
+  sections: {
+    update(fn: (sections: { title: string; data: string[] }[]) => unknown[]): void;
+  };
   sticky: { set(value: boolean | undefined): void };
   list(): {
     scrollToLocation(options: {
@@ -162,11 +165,7 @@ describe('section list', () => {
   it('draws the section separator at each edge of a section, told both neighbours', async () => {
     const { fabric, app } = await boot();
     // The window ends inside the second section, so its trailing edge is not drawn yet.
-    assert.deepEqual(all(fabric, 'edge').slice(0, 3), [
-      '[S0]S1:|i0-0',
-      '[S0]S1:i0-4|',
-      'S0[S1]S2:|i1-0',
-    ]);
+    assert.deepEqual(all(fabric, 'edge'), ['[S0]S1:|i0-0', '[S0]S1:i0-4|', 'S0[S1]S2:|i1-0']);
     app.unmount();
   });
 
@@ -177,6 +176,18 @@ describe('section list', () => {
     // The trailing one takes the place of the item separator after the last item.
     assert.equal(slotTextAround(fabric, 'S0.4=i0-4'), 'S0.4=i0-4' + '[S0]S1:i0-4|');
     assert.equal(slotTextAround(fabric, 'S0.2=i0-2'), 'S0.2=i0-2' + 'i0-2|i0-3');
+    app.unmount();
+  });
+
+  it('moves the trailing section separator to an item added at the end of a section', async () => {
+    const { fabric, app, instance } = await boot();
+    instance.sections.update(([first, ...rest]) => [
+      { ...first!, data: [...first!.data, 'i0-5'] },
+      ...rest,
+    ]);
+    await settle();
+    assert.equal(slotTextAround(fabric, 'S0.4=i0-4'), 'S0.4=i0-4' + 'i0-4|i0-5');
+    assert.equal(slotTextAround(fabric, 'S0.5=i0-5'), 'S0.5=i0-5' + '[S0]S1:i0-5|');
     app.unmount();
   });
 

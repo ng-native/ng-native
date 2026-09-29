@@ -4,7 +4,7 @@ import {
   SectionHeader,
   SectionItem,
   SectionList,
-  SectionListSeparator,
+  SectionEdgeSeparator,
   SectionSeparator,
 } from '../../components/src/section-list.ts';
 import { Text } from '../../components/src/text.ts';
@@ -26,7 +26,7 @@ interface Section {
     SectionItem,
     SectionFooter,
     SectionSeparator,
-    SectionListSeparator,
+    SectionEdgeSeparator,
     Text,
     View,
   ],
@@ -63,7 +63,7 @@ interface Section {
         >
       </ng-template>
       <ng-template
-        sectionListSeparator
+        sectionEdgeSeparator
         let-section
         let-before="leadingSection"
         let-after="trailingSection"

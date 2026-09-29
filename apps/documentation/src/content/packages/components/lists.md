@@ -153,25 +153,34 @@ footer for each section - so it windows exactly as `<virtual-list>` does.
 <section-list
   #contacts="sectionList"
   [sections]="sections()"
-  [itemHeight]="44"
+  [itemHeight]="itemHeight"
   [sectionHeaderHeight]="28"
   (endReached)="loadMore()"
 >
   <ng-template sectionHeader let-section><text>{{ section.title }}</text></ng-template>
   <ng-template sectionItem let-item let-index="index"><text>{{ item.name }}</text></ng-template>
   <ng-template sectionSeparator><view [style]="line"></view></ng-template>
-  <ng-template sectionListSeparator><view [style]="rule"></view></ng-template>
+  <ng-template sectionEdgeSeparator><view [style]="rule"></view></ng-template>
 </section-list>
 ```
 
 `sectionSeparator` is `ItemSeparatorComponent`, drawn between two items of one section and told
-`leadingItem` and `trailingItem`. `sectionListSeparator` is `SectionSeparatorComponent`, drawn
+`leadingItem` and `trailingItem`. `sectionEdgeSeparator` is `SectionSeparatorComponent`, drawn
 between a section's header and its first item and between its last item and its footer, and told
 the `section`, `leadingSection` and `trailingSection`, plus whichever of `leadingItem` and
 `trailingItem` is there. A section with no items draws neither.
 
 Heights are fixed per row, as `getItemLayout` makes them: `itemHeight`, `sectionHeaderHeight` and
 `sectionFooterHeight` are numbers or functions, and an item's height includes its separators.
+A section separator is drawn in the first and last item's slots, so a section's first and last
+items are taller by its height, which a number cannot express:
+
+```ts
+// 44pt items, a 1pt item separator and an 8pt section separator.
+protected readonly itemHeight = (_item: Contact, index: number, section: ContactSection) =>
+  44 + (index === 0 ? 8 : 0) + (index === section.data.length - 1 ? 8 : 1);
+```
+
 `stickySectionHeadersEnabled` defaults to on for iOS and off for Android, as in React Native.
 `scrollToLocation({ sectionIndex, itemIndex })` counts the header as item 0, as React Native does,
 and allows for a pinned header. `listHeader` and `listFooter` content and a `<refresh-control>`
