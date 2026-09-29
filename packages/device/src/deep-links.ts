@@ -1,7 +1,7 @@
 /**
  * Links that arrive from outside the app: a `canary://` url, a universal link, a notification.
  */
-import { InjectionToken, Service, inject } from '@angular/core';
+import { ErrorHandler, InjectionToken, Service, inject } from '@angular/core';
 import { reactNative } from './react-native.ts';
 
 export interface DeepLinkSource {
@@ -90,6 +90,7 @@ export class DeepLinks {
   });
 
   private readonly source = inject(DeepLinks.SOURCE);
+  private readonly errors = inject(ErrorHandler, { optional: true });
   private launch: string | null = null;
   private readonly listeners = new Set<(path: string) => void>();
 
@@ -97,7 +98,7 @@ export class DeepLinks {
     void this.source.launchUrl().then((url) => {
       const path = pathOf(url);
       if (!path || path === '/') return;
-      if (this.listeners.size) this.listeners.forEach((listener) => listener(path));
+      if (this.listeners.size) this.listeners.forEach((listener) => this.deliver(listener, path));
       else this.launch = path;
     });
   }
@@ -109,15 +110,27 @@ export class DeepLinks {
 
   /** Links that arrive while the app is running, as paths. Returns an unsubscribe. */
   subscribe(listener: (path: string) => void): () => void {
-    this.listeners.add(listener);
+    // Each subscription is its own entry, so the same function subscribed twice stops once.
+    const subscription = (path: string) => listener(path);
+    this.listeners.add(subscription);
     const unsubscribe = this.source.subscribe((url) => {
       const path = pathOf(url);
       if (path) listener(path);
     });
     return () => {
-      this.listeners.delete(listener);
+      this.listeners.delete(subscription);
       unsubscribe();
     };
+  }
+
+  /** One listener throwing is reported, and does not keep the launch url from the rest. */
+  private deliver(listener: (path: string) => void, path: string): void {
+    try {
+      listener(path);
+    } catch (error) {
+      if (this.errors) this.errors.handleError(error);
+      else console.error(error);
+    }
   }
 
   /** Hand a url to whatever else on the device handles it: a browser, Maps, another app. */

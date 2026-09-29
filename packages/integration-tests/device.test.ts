@@ -8,7 +8,7 @@
  */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { Injector, type Provider, type Type } from '@angular/core';
+import { ErrorHandler, Injector, type Provider, type Type } from '@angular/core';
 import {
   COMPACT_WIDTH,
   Accessibility,
@@ -207,6 +207,40 @@ describe('deep links', () => {
 
     assert.deepEqual(router, ['/users/7'], 'the router was still listening');
     assert.equal(links.initialUrl(), null);
+  });
+
+  it('delivers the launch url to a function subscribed twice after one of them stops', async () => {
+    const platform = source('canary://users/7');
+    const links = build(DeepLinks, [{ provide: DeepLinks.SOURCE, useValue: platform.value }]);
+
+    const seen: string[] = [];
+    const follow = (path: string) => seen.push(path);
+    links.subscribe(follow);
+    const stop = links.subscribe(follow);
+    stop();
+    await settle();
+
+    assert.deepEqual(seen, ['/users/7'], 'the first subscription was still listening');
+  });
+
+  it('delivers the launch url to every listener when one of them throws', async () => {
+    const platform = source('canary://users/7');
+    const errors: unknown[] = [];
+    const links = build(DeepLinks, [
+      { provide: DeepLinks.SOURCE, useValue: platform.value },
+      { provide: ErrorHandler, useValue: { handleError: (error: unknown) => errors.push(error) } },
+    ]);
+
+    const failure = new Error('the app could not handle it');
+    const router: string[] = [];
+    links.subscribe(() => {
+      throw failure;
+    });
+    links.subscribe((path) => router.push(path));
+    await settle();
+
+    assert.deepEqual(router, ['/users/7'], 'the router was listening too');
+    assert.deepEqual(errors, [failure], 'the error is reported, not swallowed');
   });
 
   it('passes a link that arrives later through as a path', async () => {
