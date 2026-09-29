@@ -19,3 +19,5 @@ packages/integration-tests/fixtures/tailwind-v3-sweep-oracle.json
 packages/integration-tests/fixtures/tailwind-utilities.css
 # Generated from an app's Tailwind entry by its Metro config.
 examples/*/.angular-native/
+# Rewritten by the all-contributors bot in its own JSON style each time it adds someone.
+.all-contributorsrc
