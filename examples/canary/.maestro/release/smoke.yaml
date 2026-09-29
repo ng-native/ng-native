@@ -25,6 +25,7 @@ appId: ${APP_ID || 'dev.angularnative.canary'}
     file: ../subflows/open-link.yaml
     env:
       LINK: canary://navigation
+      SHOWS: 'push.*'
 - extendedWaitUntil:
     visible: 'push.*'
     timeout: 30000
@@ -54,6 +55,7 @@ appId: ${APP_ID || 'dev.angularnative.canary'}
     file: ../subflows/open-link.yaml
     env:
       LINK: canary://tabs
+      SHOWS: 'Library'
 # Each step waits for what it acts on, and a tap that changed nothing is tried again: a CI
 # simulator under load has taken half a minute to open a link, and a tap on a tab bar that was
 # still settling switched nothing.
@@ -76,6 +78,7 @@ appId: ${APP_ID || 'dev.angularnative.canary'}
     file: ../subflows/open-link.yaml
     env:
       LINK: canary://tailwind
+      SHOWS: 'Rings: a colour.*'
 - extendedWaitUntil:
     visible: 'Rings: a colour.*'
     timeout: 30000

@@ -1,19 +1,23 @@
 # Opens a canary link, as `openLink` does, and confirms it on iOS: a simulator asks before it hands
-# a custom scheme to an app ("Open in canary?"), and waits there until something answers. Android
-# opens it straight away, so nothing is tapped there.
+# a custom scheme to an app ("Open in canary?"), the first time and not after, and waits there until
+# something answers. Android opens it straight away, so nothing is tapped there.
 #
-# `LINK` is the link, `canary://navigation` say.
+# `LINK` is the link, `canary://navigation` say; `SHOWS` is text on the screen it opens.
 appId: ${APP_ID || 'dev.angularnative.canary'}
 ---
 - openLink: ${LINK}
-# The dialog can take a while to appear on a loaded machine, so its button is waited for, for as
-# long as a slow start takes, and a dialog that never comes fails here rather than a step later.
-# Only on iOS, which always asks.
+# On iOS the dialog or the screen comes first, and either can take a while on a loaded machine, so
+# the subflow waits for whichever it is, and answers the dialog if that is what came. A link that
+# opens neither fails here rather than a step later.
 - runFlow:
     when:
       platform: iOS
     commands:
       - extendedWaitUntil:
-          visible: 'Open'
+          visible: 'Open|${SHOWS}'
           timeout: 30000
-      - tapOn: 'Open'
+      - runFlow:
+          when:
+            visible: 'Open'
+          commands:
+            - tapOn: 'Open'
