@@ -5,7 +5,12 @@
     "scheme": "notes",
     "newArchEnabled": true,
     "userInterfaceStyle": "automatic",
-    "ios": { "bundleIdentifier": "dev.angularnative.notes" },
-    "android": { "package": "dev.angularnative.notes" }
+    "ios": {
+      "bundleIdentifier": "dev.angularnative.notes"
+    },
+    "android": {
+      "package": "dev.angularnative.notes"
+    },
+    "plugins": ["@ng-native/metro"]
   }
 }

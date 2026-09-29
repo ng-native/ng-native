@@ -25,6 +25,18 @@ const { withAngularNative } = require('@ng-native/metro/config.cjs');
 module.exports = withAngularNative(getDefaultConfig(__dirname));
 ```
 
+```json
+// app.json
+{
+  "expo": {
+    "plugins": ["@ng-native/metro"]
+  }
+}
+```
+
+The config plugin adopts the UIKit scene life cycle in the `AppDelegate.swift` that `expo prebuild`
+writes, which an app built with the iOS 27 SDK needs to launch at all.
+
 One preset, no options in the common case, because every part of it is built to fail quietly on its
 own if you leave it out - which is exactly why it exists as a preset rather than a page of manual
 wiring.

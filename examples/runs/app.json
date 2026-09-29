@@ -15,6 +15,7 @@
       "package": "dev.angularnative.runs"
     },
     "plugins": [
+      "@ng-native/metro",
       [
         "expo-maps",
         {

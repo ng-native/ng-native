@@ -5,7 +5,12 @@
     "scheme": "music",
     "newArchEnabled": true,
     "userInterfaceStyle": "automatic",
-    "ios": { "bundleIdentifier": "dev.angularnative.music" },
-    "android": { "package": "dev.angularnative.music" }
+    "ios": {
+      "bundleIdentifier": "dev.angularnative.music"
+    },
+    "android": {
+      "package": "dev.angularnative.music"
+    },
+    "plugins": ["@ng-native/metro"]
   }
 }

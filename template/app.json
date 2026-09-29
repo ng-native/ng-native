@@ -24,6 +24,7 @@
       "router": {
         "root": "src/app"
       }
-    }
+    },
+    "plugins": ["@ng-native/metro"]
   }
 }

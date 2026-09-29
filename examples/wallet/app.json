@@ -5,7 +5,12 @@
     "scheme": "wallet",
     "newArchEnabled": true,
     "userInterfaceStyle": "automatic",
-    "ios": { "bundleIdentifier": "dev.angularnative.wallet" },
-    "android": { "package": "dev.angularnative.wallet" }
+    "ios": {
+      "bundleIdentifier": "dev.angularnative.wallet"
+    },
+    "android": {
+      "package": "dev.angularnative.wallet"
+    },
+    "plugins": ["@ng-native/metro"]
   }
 }

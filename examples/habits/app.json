@@ -5,7 +5,12 @@
     "scheme": "habits",
     "newArchEnabled": true,
     "userInterfaceStyle": "automatic",
-    "ios": { "bundleIdentifier": "dev.angularnative.habits" },
-    "android": { "package": "dev.angularnative.habits" }
+    "ios": {
+      "bundleIdentifier": "dev.angularnative.habits"
+    },
+    "android": {
+      "package": "dev.angularnative.habits"
+    },
+    "plugins": ["@ng-native/metro"]
   }
 }

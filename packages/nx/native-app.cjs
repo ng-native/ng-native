@@ -112,6 +112,7 @@ function appJson(name) {
     scheme: slug.replace(/[^a-z0-9]/gi, '').toLowerCase(),
     // The template's: Expo otherwise guesses a router root from src/app and says so on every start.
     extra: { router: { root: 'src/app' } },
+    plugins: ['@ng-native/metro'],
   };
   return JSON.stringify({ expo }, null, 2) + '\n';
 }

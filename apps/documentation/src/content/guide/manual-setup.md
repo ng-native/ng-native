@@ -65,6 +65,20 @@ engine sheets, and adds source extensions to invalidate external templates. It i
 and `animate.enter`/`animate.leave` polyfills before `@angular/core` loads. Pass `{ workspaceRoot }`
 in a monorepo where framework packages sit outside the app's `node_modules`.
 
+Add the package's config plugin to `app.json` as well:
+
+```json
+{
+  "expo": {
+    "plugins": ["@ng-native/metro"]
+  }
+}
+```
+
+An app built with the iOS 27 SDK has to adopt the UIKit scene life cycle or it exits at launch, and
+the `AppDelegate.swift` that `expo prebuild` writes does not. The plugin starts React Native from a
+scene delegate instead, passing on the links the app is opened with.
+
 ## Configure TypeScript
 
 ```json
