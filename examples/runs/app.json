@@ -23,6 +23,11 @@
           "locationPermission": "Allow $(PRODUCT_NAME) to show where you are on the map"
         }
       ]
-    ]
+    ],
+    "extra": {
+      "router": {
+        "root": "src/app"
+      }
+    }
   }
 }

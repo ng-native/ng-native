@@ -11,6 +11,11 @@
     "android": {
       "package": "dev.angularnative.music"
     },
-    "plugins": ["@ng-native/metro"]
+    "plugins": ["@ng-native/metro"],
+    "extra": {
+      "router": {
+        "root": "src/app"
+      }
+    }
   }
 }

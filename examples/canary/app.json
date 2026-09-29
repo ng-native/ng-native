@@ -13,6 +13,11 @@
       "package": "dev.angularnative.canary"
     },
     "userInterfaceStyle": "automatic",
-    "plugins": ["@ng-native/metro", "expo-localization", "expo-secure-store"]
+    "plugins": ["@ng-native/metro", "expo-localization", "expo-secure-store"],
+    "extra": {
+      "router": {
+        "root": "src/app"
+      }
+    }
   }
 }
