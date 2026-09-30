@@ -66,19 +66,24 @@
  * silent failure in a new shape.
  *
  * The two platform rules then upgrade it to the font each platform actually uses for code -
- * Menlo on iOS, and Android's own `monospace` alias, which maps to Roboto Mono. They win on
- * specificity, two classes against one.
+ * Menlo on iOS, and Android's own `monospace` alias, which maps to Roboto Mono. They set a custom
+ * property on the root rather than `font-family` on `.font-mono`, so an app's own
+ * `@theme { --font-mono: ... }` replaces the whole chain and keeps its font on every platform, and
+ * a `prefix()` on Tailwind's imports leaves them working.
  *
  * The web keeps Tailwind's full stack: `web.css` does not import this, and a browser resolves
  * `ui-monospace` correctly on its own.
  */
 @theme {
-  --font-mono: 'Courier New';
+  --font-mono: var(--platform-font-mono);
 }
 
-.platform-ios .font-mono {
-  font-family: Menlo;
+:root {
+  --platform-font-mono: 'Courier New';
 }
-.platform-android .font-mono {
-  font-family: monospace;
+.platform-ios {
+  --platform-font-mono: Menlo;
+}
+.platform-android {
+  --platform-font-mono: monospace;
 }

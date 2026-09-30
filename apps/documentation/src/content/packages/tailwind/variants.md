@@ -110,11 +110,16 @@ it. Publish it as an attribute and use the data variant instead:
 Tailwind's `--font-mono` is a browser font stack starting `ui-monospace`, and native's `fontFamily`
 takes a single name, not a fallback list - the compiler keeps only the first family from any stack,
 silently. `ui-monospace` exists on neither iOS nor Android, so `font-mono` would silently fall back
-to the system font everywhere without help. `native.css` sets `--font-mono: 'Courier New'` (a real
+to the system font everywhere without help. `native.css` gives `font-mono` `Courier New` (a real
 font on both, so it means something even with no platform class on the root) and then upgrades it
 per platform - Menlo on iOS, the `monospace` alias (Roboto Mono) on Android - once
 `.platform-ios`/`.platform-android` is present. `web.css` does not need this: it does not import it,
 and a browser resolves `ui-monospace` on its own.
+
+An app's own monospace font replaces all of that, on every platform: `@theme { --font-mono:
+'JetBrains Mono'; }` after the preset's import on Tailwind 4, or `fontFamily.mono` in the config or
+a preset on Tailwind 3. The Tailwind 3 preset upgrades `font-mono` only while it is still
+Tailwind's own `ui-monospace` stack.
 
 The same silent first-family-only rule applies to any font stack you write yourself, Tailwind's or
 not: give native a single, real family, the way `native.css` does for `font-mono`.

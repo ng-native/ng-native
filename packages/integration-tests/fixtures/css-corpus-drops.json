@@ -1139,7 +1139,7 @@
     }
   },
   "tailwind": {
-    "rules": 1040,
+    "rules": 1041,
     "dropped": 108,
     "emitted": [
       "$animation",

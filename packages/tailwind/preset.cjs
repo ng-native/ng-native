@@ -23,6 +23,12 @@ const inset = (edge) => `var(--safe-area-inset-${edge}, 0px)`;
 
 const HAIRLINE = 'var(--hairline, 1px)';
 
+/** The first family a `fontFamily` theme value names, in any of the forms Tailwind 3 takes. */
+const firstFamily = (value) =>
+  String([value].flat(2)[0] ?? '')
+    .split(',')[0]
+    .trim();
+
 function nativePreset({ addUtilities, addVariant, matchUtilities, theme }) {
   // `hover:` is the pressed state, or a real hover where there is a pointer.
   addVariant('hover', ['&:active', '&[data-hover]']);
@@ -104,12 +110,17 @@ function nativePreset({ addUtilities, addVariant, matchUtilities, theme }) {
   }
   addUtilities(hairlines);
 
-  // `font-mono`, upgraded to the font each platform uses for code. Utilities rather than base
-  // rules, so an app's `important: true` makes them important too, and they still win.
-  addUtilities({
-    '.platform-ios .font-mono': { 'font-family': 'Menlo' },
-    '.platform-android .font-mono': { 'font-family': 'monospace' },
-  });
+  // `font-mono`, when it is still Tailwind's own stack, whose first family, `ui-monospace`, is on
+  // neither platform: `Courier New` on both, upgraded to the font each platform uses for code. An
+  // app that names its own monospace font keeps it. Utilities rather than base rules, so an app's
+  // `important: true` makes them important too, and the platform rules still win.
+  if (firstFamily(theme('fontFamily.mono')) === 'ui-monospace') {
+    addUtilities({
+      '.font-mono': { 'font-family': 'Courier New' },
+      '.platform-ios .font-mono': { 'font-family': 'Menlo' },
+      '.platform-android .font-mono': { 'font-family': 'monospace' },
+    });
+  }
 }
 
 module.exports = {
@@ -117,6 +128,5 @@ module.exports = {
   darkMode: ['variant', '.dark &'],
   // A browser reset in terms of `html` and `::before`, none of which means anything on a phone.
   corePlugins: { preflight: false },
-  theme: { extend: { fontFamily: { mono: ['Courier New'] } } },
   plugins: [nativePreset],
 };

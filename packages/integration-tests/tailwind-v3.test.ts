@@ -675,8 +675,40 @@ describe('the Tailwind 3 preset', () => {
   });
 
   it('names a monospace font both platforms have', () => {
-    assert.match(declarationsOf('font-mono'), /font-family: Courier New/);
-    assert.match(css, /\.platform-ios \.font-mono\s*\{\s*font-family: Menlo/);
-    assert.match(css, /\.platform-android \.font-mono\s*\{\s*font-family: monospace/);
+    const sheet = compileCss(flattenTailwind(css), 'tailwind', { onUnsupported: () => {} });
+    const font = (platform: string) => render(sheet, platform, 'font-mono').child['fontFamily'];
+    assert.equal(font('platform-ios'), 'Menlo');
+    assert.equal(font('platform-android'), 'monospace');
+    assert.equal(font(''), 'Courier New');
+  });
+
+  it("uses an app's own monospace font on every platform", () => {
+    const own = { fontFamily: { mono: ['JetBrains Mono'] } };
+    const withFeatures = [['JetBrains Mono', 'monospace'], { fontFeatureSettings: '"calt"' }];
+    for (const app of [
+      { theme: { extend: own } },
+      { theme: own },
+      { theme: { extend: { fontFamily: { mono: 'JetBrains Mono, monospace' } } } },
+      { theme: { extend: { fontFamily: { mono: withFeatures } } } },
+    ]) {
+      const sheet = sheetFor('font-mono', app);
+      const font = (platform: string) => render(sheet, platform, 'font-mono').child['fontFamily'];
+      for (const platform of ['platform-ios', 'platform-android', '']) {
+        assert.equal(font(platform), 'JetBrains Mono', `${JSON.stringify(app)} on ${platform}`);
+      }
+    }
+  });
+
+  it("leaves an earlier preset's monospace font in place", () => {
+    const resolveConfig = require('tailwindcss-v3/resolveConfig') as (config: object) => {
+      theme: { fontFamily: Record<string, unknown> };
+    };
+    const nativePreset = require('@ng-native/tailwind/preset.cjs') as object;
+    const designSystem = { theme: { extend: { fontFamily: { mono: ['JetBrains Mono'] } } } };
+    const { theme } = resolveConfig({
+      presets: [designSystem, { ...nativePreset, presets: [] }],
+      content: ['x'],
+    });
+    assert.deepEqual(theme.fontFamily['mono'], ['JetBrains Mono']);
   });
 });

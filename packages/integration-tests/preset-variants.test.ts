@@ -107,13 +107,43 @@ describe('the two Tailwind presets', () => {
      * app that puts `platform-ios` or `platform-android` on its root, and a rule that works only
      * when the app remembered something is the same silent failure in a new shape.
      */
-    assert.match(native, /--font-mono:\s*['"]?Courier New/);
+    assert.match(native, /--platform-font-mono:\s*['"]?Courier New/);
     assert.doesNotMatch(native, /--font-mono:\s*ui-monospace/);
-    assert.match(native, /\.platform-ios \.font-mono/);
-    assert.match(native, /\.platform-android \.font-mono/);
 
     // The web keeps Tailwind's own stack: a browser resolves `ui-monospace` perfectly well.
     assert.match(web, /--font-mono:\s*ui-monospace/);
+  });
+
+  /** The font a text wearing `classes` is committed with, under a root with `platform` on it. */
+  const fontOn = (css: string, platform: string, classes = 'font-mono') => {
+    const { flattenTailwind } = createRequire(import.meta.url)('@ng-native/tailwind') as {
+      flattenTailwind(css: string): string;
+    };
+    const { compileCss } = createRequire(import.meta.url)('@ng-native/metro/css/compile.cjs') as {
+      compileCss(css: string, context: string, options: object): StyleSheet;
+    };
+    const sheet = compileCss(flattenTailwind(css), 'tailwind', { onUnsupported: () => {} });
+    const fabric = createFakeFabric();
+    const engine = new Engine(fabric, 1, { globalStyles: sheet });
+    if (platform) engine.addClass(engine.root, platform);
+    const text = engine.createElement('view');
+    engine.setClasses(text, classes);
+    engine.appendChild(engine.root, text);
+    engine.commit();
+    return committedProps(fabric, text)['fontFamily'];
+  };
+
+  it("draws font-mono in each platform's monospace font", () => {
+    assert.equal(fontOn(native, 'platform-ios'), 'Menlo');
+    assert.equal(fontOn(native, 'platform-android'), 'monospace');
+    assert.equal(fontOn(native, ''), 'Courier New');
+  });
+
+  it("uses an app's own monospace font on every platform", () => {
+    const own = build('native', 'font-mono', `@theme { --font-mono: 'JetBrains Mono'; }`);
+    for (const platform of ['platform-ios', 'platform-android', '']) {
+      assert.equal(fontOn(own, platform), 'JetBrains Mono', platform);
+    }
   });
 
   it('wires the safe area to env() on the web, and leaves native to its own provider', () => {

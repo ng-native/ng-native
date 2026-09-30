@@ -23,13 +23,14 @@ const CLI = join(
 const HERE = fileURLToPath(new URL('.', import.meta.url));
 
 /**
- * Builds one preset with the real CLI and hands back its output.
+ * Builds one preset with the real CLI and hands back its output, with `app` as the app's own CSS
+ * after the preset.
  *
  * Run from this package, which has the workspace dependency installed - the CLI resolves imports
  * from the entry file's own directory, so a temp directory somewhere else cannot see
  * `@ng-native/tailwind` at all.
  */
-export function build(preset: 'native' | 'web', classes: string): string {
+export function build(preset: 'native' | 'web', classes: string, app = ''): string {
   const dir = HERE;
   const entry = join(dir, `.preset-test-${preset}-${process.pid}.css`);
   const outDir = mkdtempSync(join(tmpdir(), 'preset-'));
@@ -43,6 +44,7 @@ export function build(preset: 'native' | 'web', classes: string): string {
       `@import 'tailwindcss/utilities.css' source(none);`,
       `@import '@ng-native/tailwind/${preset}.css';`,
       `@source inline("${classes}");`,
+      app,
     ].join('\n'),
   );
   try {
