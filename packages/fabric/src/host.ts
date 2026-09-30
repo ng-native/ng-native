@@ -124,6 +124,13 @@ export abstract class HostEngine {
   remeasure(_node: HostNode): void {}
 
   /**
+   * Style `node` as an element of the template `like` is written in, rather than of the one that
+   * created it: the content view a scroll view makes for its children, which the app styles
+   * through a class of its own and so from its own component styles.
+   */
+  adoptScope(_node: HostNode, _like: HostNode): void {}
+
+  /**
    * Take the user to a node: a text input gets the cursor, and anything else is brought on
    * screen. What a DOM element's own `focus()` does, for code that calls it on an element.
    */

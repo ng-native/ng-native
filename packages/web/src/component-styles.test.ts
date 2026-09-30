@@ -24,6 +24,7 @@ describe("a component's own styles, on the web", () => {
   let ViewEncapsulation: typeof import('@angular/core').ViewEncapsulation;
   let View: Type<unknown>;
   let Text: Type<unknown>;
+  let ScrollView: Type<unknown>;
 
   before(async () => {
     ({ document, window } = installJsdomEnvironment());
@@ -32,7 +33,7 @@ describe("a component's own styles, on the web", () => {
     Component = core.Component;
     ViewEncapsulation = core.ViewEncapsulation;
     ({ mount } = await import('./mount.ts'));
-    ({ View, Text } = await import('./component-styles-app.ts'));
+    ({ View, Text, ScrollView } = await import('./component-styles-app.ts'));
   });
 
   function root(): HTMLElement {
@@ -153,6 +154,26 @@ describe("a component's own styles, on the web", () => {
     assert.equal(bound.style.getPropertyValue('--columns'), '3');
     const hostElement = host.querySelector('app-bound') ?? host;
     assert.equal((hostElement as HTMLElement).style.getPropertyValue('--gap'), '4px');
+  });
+
+  it("reach a scroll view's content container through contentContainerClass", () => {
+    const Screen = Component({
+      selector: 'app-screen',
+      imports: [ScrollView, Text, View],
+      template: `
+        <scroll-view id="classed" contentContainerClass="card"><text>Row</text></scroll-view>
+        <scroll-view id="plain"><view class="inner"></view></scroll-view>
+      `,
+      styles: `.card { background-color: rgb(1, 2, 3); } view { color: rgb(4, 5, 6); }`,
+    })(class {});
+    const host = root();
+    mount(host, Screen);
+    const text = (element: Element | null) =>
+      element ? window.getComputedStyle(element).color : '(missing)';
+    assert.equal(colour(host.querySelector('#classed > view')), 'rgb(1, 2, 3)');
+    // Without a class the content view stays the scroll view's own, out of this component's reach.
+    assert.notEqual(text(host.querySelector('#plain > view')), 'rgb(4, 5, 6)');
+    assert.equal(text(host.querySelector('.inner')), 'rgb(4, 5, 6)');
   });
 
   it('applies them unscoped when encapsulation is None', () => {

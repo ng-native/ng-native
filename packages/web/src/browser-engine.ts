@@ -287,6 +287,14 @@ export class BrowserEngine extends HostEngine {
     COMMANDS[name]?.(node.el as HTMLElement, args);
   }
 
+  /** The scoping attribute Angular's emulated encapsulation stamps on `like`, stamped on `node`. */
+  override adoptScope(node: BrowserNode, like: BrowserNode): void {
+    const el = node.el as Element;
+    for (const { name } of (like.el as Element).attributes) {
+      if (name.startsWith('_ngcontent-')) el.setAttribute(name, '');
+    }
+  }
+
   commit(): boolean {
     // Every write above already reached the DOM synchronously; there is nothing batched to flush.
     return false;

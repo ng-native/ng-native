@@ -1639,6 +1639,14 @@ export class Engine implements HostEngine {
     this.commit();
   }
 
+  /** A node's component rules are its creating sheet's, so this matches it against `like`'s. */
+  adoptScope(node: EngineNode, like: EngineNode): void {
+    if (node.sheet === like.sheet) return;
+    node.sheet = like.sheet;
+    if (like.sheet?.structural) this.structuralSheets = true;
+    this.markProps(node);
+  }
+
   /** The window's size, from the conditions media queries use. Zero until the platform says. */
   get viewport(): { readonly width: number; readonly height: number } {
     return this.viewportSize;

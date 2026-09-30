@@ -62,7 +62,13 @@ import { View } from './view.ts';
   // scroll view, and never attach.
   template: `
     <ng-content select="refresh-control" />
-    <view #content [style]="contentStyle()" collapsable="false" (layout)="onContentLayout($event)">
+    <view
+      #content
+      [class]="contentContainerClass()"
+      [style]="contentStyle()"
+      collapsable="false"
+      (layout)="onContentLayout($event)"
+    >
       <ng-content />
     </view>
   `,
@@ -80,6 +86,12 @@ import { View } from './view.ts';
 export class ScrollView extends ScrollViewProps {
   /** Styles for the view that holds the children, e.g. padding and gap. */
   readonly contentContainerStyle = input<Record<string, unknown>>();
+  /**
+   * Classes for the view that holds the children. Matched as if the view were written in the
+   * template the scroll view is, so the global sheet and that component's own styles both reach
+   * it. `contentContainerStyle` wins over it, as an inline style does over a class.
+   */
+  readonly contentContainerClass = input<string>();
 
   /**
    * The content view's style, with the row direction a horizontal scroll view needs.
@@ -140,6 +152,32 @@ export class ScrollView extends ScrollViewProps {
     inject(DestroyRef).onDestroy(stop);
     this.trackStickyHeaders();
   }
+
+  override ngOnChanges(): void {
+    super.ngOnChanges();
+    if (this.viewReady) this.scopeContent();
+  }
+
+  ngAfterViewInit(): void {
+    this.viewReady = true;
+    this.scopeContent();
+  }
+
+  /**
+   * The content view is created by this component's template, so on its own it matches only this
+   * component's rules and the global sheet. A class the app gives it is the app's, so once there
+   * is one the view is matched against the rules of the template the scroll view is written in.
+   * Not before: a type selector in that component's styles would otherwise start reaching a view
+   * that nobody there wrote.
+   */
+  private scopeContent(): void {
+    if (this.contentScoped || !this.contentContainerClass()) return;
+    this.contentScoped = true;
+    this.engine.adoptScope(this.content().nativeElement as HostNode, this.node);
+  }
+
+  private viewReady = false;
+  private contentScoped = false;
 
   /**
    * Sticky children are found again after each pass, because a pass can add or move them, and the
