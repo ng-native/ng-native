@@ -141,21 +141,34 @@ function babelPluginVersions(projectRoot) {
  * against one copy then ask the other's injector, and the device shows NG0203 at mount with no
  * sign of the cause; a Metro cache kept from before an Angular upgrade is the usual one.
  *
+ * The same for each `@ng-native/*` package, which a workspace library can bring at a version of
+ * its own: a second `@ng-native/components` is a second component registry.
+ *
  * @param {unknown} resolution what Metro resolved a request to
  */
-const angularRoots = new Set();
-function noteAngular(resolution) {
+const singletonRoots = new Map();
+function noteSecondCopy(resolution) {
   const file = /** @type {{ filePath?: string }} */ (resolution)?.filePath;
-  const root = file?.match(/^(.*[\\/]node_modules[\\/]@angular[\\/]core)[\\/]/)?.[1];
-  if (!root || angularRoots.has(root)) return;
-  angularRoots.add(root);
-  if (angularRoots.size === 2) {
-    console.warn(
-      `[angular-native] Two copies of @angular/core are in this bundle:\n  ${[...angularRoots].join('\n  ')}\n` +
-        'Components compiled against one fail against the other (NG0203 at mount). If Angular was ' +
-        'just upgraded, start Metro again with --clear; otherwise make every package resolve one copy.',
-    );
-  }
+  const match = file?.match(
+    /^(.*[\\/]node_modules[\\/](@angular[\\/]core|@ng-native[\\/][^\\/]+))[\\/]/,
+  );
+  if (!match) return;
+  const [, root, name] = match;
+  const roots = singletonRoots.get(name) ?? new Set();
+  singletonRoots.set(name, roots);
+  if (roots.has(root)) return;
+  roots.add(root);
+  if (roots.size !== 2) return;
+  const copies = `Two copies of ${name.replace('\\', '/')} are in this bundle:\n  ${[...roots].join('\n  ')}\n`;
+  console.warn(
+    name.startsWith('@angular')
+      ? `[angular-native] ${copies}` +
+          'Components compiled against one fail against the other (NG0203 at mount). If Angular was ' +
+          'just upgraded, start Metro again with --clear; otherwise make every package resolve one copy.'
+      : `[angular-native] ${copies}` +
+          'Each keeps its own state, so the app and a library see different ones. Give every ' +
+          'package that lists it the version the app lists.',
+  );
 }
 
 /**
@@ -174,6 +187,39 @@ function foldDevMode(config) {
       global_defs: { ...minifier.compress?.global_defs, ngDevMode: false },
     },
   };
+}
+
+/** The directory of the `name` package a resolved file is in, or nothing. */
+function packageRoot(file, name) {
+  const marker = `${path.sep}node_modules${path.sep}${name.split('/').join(path.sep)}${path.sep}`;
+  const at = file?.lastIndexOf(marker) ?? -1;
+  return at === -1 ? undefined : file.slice(0, at + marker.length - 1);
+}
+
+/**
+ * The app's copy of a package, when a bare import resolved to another copy at the same version.
+ *
+ * pnpm installs a package once per set of peers it resolves, so a workspace library that lists
+ * `@ng-native/components` but not the app's `@babel/core` gets its own react-native, and its own
+ * components beside it, both at the app's versions. Bundled from the library, those are a second
+ * component registry and a second React Native. A copy at another version is the library's own
+ * choice, and stays.
+ */
+function appCopy(resolve, context, name, platform, resolution, projectRoot) {
+  const pkg = /^(?![./])(@[^/]+\/[^/]+|[^/]+)/.exec(name)?.[1];
+  const own = pkg && packageRoot(resolution?.filePath, pkg);
+  if (!own || !projectRoot) return resolution;
+  try {
+    const fromApp = { ...context, originModulePath: path.join(projectRoot, 'package.json') };
+    const app = resolve(fromApp, name, platform);
+    const root = packageRoot(app?.filePath, pkg);
+    const version = (dir) => context.getPackage?.(path.join(dir, 'package.json'))?.version;
+    return root && root !== own && version(root) && version(root) === version(own)
+      ? app
+      : resolution;
+  } catch {
+    return resolution;
+  }
 }
 
 /** Marks a resolver this preset already wrapped, so applying the preset twice wraps it once. */
@@ -213,8 +259,15 @@ function withTypeScriptJsImports(next, projectRoot) {
       }
     }
     try {
-      const resolution = resolve(context, name, platform);
-      noteAngular(resolution);
+      const resolution = appCopy(
+        resolve,
+        context,
+        name,
+        platform,
+        resolve(context, name, platform),
+        projectRoot,
+      );
+      noteSecondCopy(resolution);
       return resolution;
     } catch (error) {
       if (!/^\.{1,2}\/.*\.[mc]?js$/.test(name)) throw error;
