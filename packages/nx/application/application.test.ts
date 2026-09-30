@@ -14,8 +14,15 @@ const require = createRequire(import.meta.url);
 const { createTreeWithEmptyWorkspace } = require('@nx/devkit/testing') as {
   createTreeWithEmptyWorkspace: () => Tree;
 };
-const { readJson, readProjectConfiguration, readNxJson, updateJson, logger, NX_VERSION } =
-  require('@nx/devkit') as typeof import('@nx/devkit');
+const {
+  addProjectConfiguration,
+  readJson,
+  readProjectConfiguration,
+  readNxJson,
+  updateJson,
+  logger,
+  NX_VERSION,
+} = require('@nx/devkit') as typeof import('@nx/devkit');
 const { application } = require('./index.cjs');
 const { pnpmGlobs } = require('./workspaces.cjs');
 const native = require('../native-app.cjs');
@@ -125,6 +132,49 @@ describe('in an integrated workspace', () => {
     assert.equal(serve?.options.command, 'expo start');
     assert.equal(serve?.options.cwd, 'apps/mobile');
     assert.equal(serve?.continuous, true);
+  });
+
+  it('gives each app its own Metro port, so nx run-many -t start can run them together', async () => {
+    // Both apps ran a bare expo start, and the second died with EADDRINUSE :::8081.
+    const tree = integrated();
+    await generate(tree, { directory: 'apps/mobile' });
+    await generate(tree, { directory: 'apps/admin' });
+    await generate(tree, { directory: 'apps/kiosk' });
+    const commands = (name: string) => {
+      const { start, serve } = readProjectConfiguration(tree, name).targets ?? {};
+      return [start?.options.command, serve?.options.command];
+    };
+    assert.deepEqual(commands('mobile'), ['expo start', 'expo start']);
+    assert.deepEqual(commands('admin'), ['expo start --port 8082', 'expo start --port 8082']);
+    assert.deepEqual(commands('kiosk'), ['expo start --port 8083', 'expo start --port 8083']);
+  });
+
+  it("counts an Expo app with no start command of its own as on Expo's default port", async () => {
+    // One made by @nx/expo, whose start its plugin infers.
+    const tree = integrated();
+    addProjectConfiguration(tree, 'legacy', { root: 'apps/legacy', targets: {} });
+    tree.write('apps/legacy/app.json', '{ "expo": {} }\n');
+    await generate(tree, { directory: 'apps/mobile' });
+    const { start } = readProjectConfiguration(tree, 'mobile').targets ?? {};
+    assert.equal(start?.options.command, 'expo start --port 8082');
+  });
+
+  it('takes the lowest port no other app uses, reading --port=N too', async () => {
+    const tree = integrated();
+    const start = (command: string) => ({
+      start: { executor: 'nx:run-commands', options: { command } },
+    });
+    addProjectConfiguration(tree, 'one', {
+      root: 'apps/one',
+      targets: start('expo start --port=8081'),
+    });
+    addProjectConfiguration(tree, 'two', {
+      root: 'apps/two',
+      targets: start('expo start --port 8083'),
+    });
+    await generate(tree, { directory: 'apps/mobile' });
+    const { targets } = readProjectConfiguration(tree, 'mobile');
+    assert.equal(targets?.start?.options.command, 'expo start --port 8082');
   });
 
   it("registers @nx/expo's plugin for the rest", async () => {

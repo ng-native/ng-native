@@ -18,6 +18,7 @@
 const path = require('node:path').posix;
 const {
   formatFiles,
+  getProjects,
   joinPathFragments,
   logger,
   offsetFromRoot,
@@ -85,8 +86,34 @@ function extendedFile(tree, directory, parent) {
   }
 }
 
-function targets(directory) {
+/** Expo's own, which `expo start` listens on unless given `--port`. */
+const DEFAULT_PORT = 8081;
+
+/**
+ * The lowest Metro port no other Expo app in the workspace listens on, so that
+ * `nx run-many -t start` can run them together: two on Expo's default raced for it, and the second
+ * died with `EADDRINUSE`. An app's port is the `--port` its `start` or `serve` passes, or Expo's
+ * default when it has an `app.json` and passes none.
+ */
+function metroPort(tree) {
+  const taken = new Set();
+  for (const [, project] of getProjects(tree)) {
+    const commands = Object.values(project.targets ?? {})
+      .map((target) => target.options?.command)
+      .filter((command) => typeof command === 'string' && /\bexpo start\b/.test(command));
+    const ports = commands.map((command) => Number(command.match(/--port[= ](\d+)/)?.[1]));
+    for (const port of ports) if (port) taken.add(port);
+    const expoApp = commands.length > 0 || tree.exists(joinPathFragments(project.root, 'app.json'));
+    if (expoApp && ports.every((port) => !port)) taken.add(DEFAULT_PORT);
+  }
+  let port = DEFAULT_PORT;
+  while (taken.has(port)) port++;
+  return port;
+}
+
+function targets(directory, port) {
   const run = (command) => ({ executor: 'nx:run-commands', options: { cwd: directory, command } });
+  const start = port === DEFAULT_PORT ? 'expo start' : `expo start --port ${port}`;
   return {
     typecheck: {
       ...run('ngc -p tsconfig.json --noEmit'),
@@ -94,8 +121,8 @@ function targets(directory) {
       inputs: ['default', '^production'],
     },
     test: { ...run('vitest run'), cache: true, inputs: ['default', '^production'] },
-    start: { ...run('expo start'), continuous: true },
-    serve: { ...run('expo start'), continuous: true },
+    start: { ...run(start), continuous: true },
+    serve: { ...run(start), continuous: true },
   };
 }
 
@@ -191,6 +218,7 @@ async function application(tree, options) {
     throw new Error(`${directory} already has a package.json. Choose another directory.`);
   }
   const initTask = await init(tree, { skipInstall: true, skipFormat: true });
+  const port = metroPort(tree);
 
   if (workspaces) {
     includeInWorkspaces(tree, directory);
@@ -221,7 +249,7 @@ async function application(tree, options) {
       .split(',')
       .map((tag) => tag.trim())
       .filter(Boolean),
-    targets: targets(directory),
+    targets: targets(directory, port),
   });
 
   ignoreExpo(tree);
