@@ -21,7 +21,8 @@
  * ```
  *
  * Mounting does not wait for the fonts; the splash screen does. Text laid out before they arrive
- * is behind the splash, so nothing is ever seen in the fallback face and nothing reflows.
+ * is laid out again as each face registers, behind the splash, so nothing is ever seen in the
+ * fallback face.
  *
  * `hideWhenReady` is that shape as one call, which is the only thing worth wrapping here: every
  * function underneath is already a plain promise with no React in it. The class takes its

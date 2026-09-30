@@ -687,6 +687,41 @@ function registeredViewName(elementName: string): string | undefined {
  */
 const MEASURED_VIEWS = new Set(['Paragraph', 'TextInput', 'AndroidTextInput']);
 
+/** What each mounted app does when faces register. See `fontsRegistered`. */
+const fontListeners = new Set<(families: ReadonlySet<string>) => void>();
+
+/** Hear about faces registering with the platform, until the returned function is called. */
+export function onFontsRegistered(listener: (families: ReadonlySet<string>) => void): () => void {
+  fontListeners.add(listener);
+  return () => fontListeners.delete(listener);
+}
+
+/**
+ * Faces just registered with the platform, by the family names text asks for them by. Every
+ * mounted app lays out again the paragraphs that name one: see `Engine.fontsRegistered`.
+ */
+export function fontsRegistered(families: Iterable<string>): void {
+  const names = new Set(families);
+  if (!names.size) return;
+  for (const listener of [...fontListeners]) listener(names);
+}
+
+/** Whether a paragraph, or a span in it, was committed asking for one of these families. */
+function namesFamily(node: EngineNode, families: ReadonlySet<string>): boolean {
+  const family = node.committed?.props['fontFamily'];
+  if (typeof family === 'string' && families.has(family)) return true;
+  return node.children.some((child) => namesFamily(child, families));
+}
+
+/** A text size cap far above any a platform offers, so it caps nothing. See `fontsRegistered`. */
+const UNCAPPED = 1000;
+/**
+ * How far a paragraph's cap moves each time a face it names registers: just past the 0.005 React
+ * Native compares text attributes to, so the layout it cached is not found, and too little for
+ * an app's own cap to cap anything visibly differently.
+ */
+const FONT_REFRESH_STEP = 0.006;
+
 /** The views that take a cursor, on either platform. */
 const TEXT_INPUTS = new Set(['TextInput', 'AndroidTextInput']);
 
@@ -1495,6 +1530,40 @@ export class Engine implements HostEngine {
     this.commit();
   }
 
+  /** Whether any paragraph has been laid out again for a face. See `fontsRegistered`. */
+  private fontsRefreshed = false;
+  /** How many times each paragraph has been laid out again for a face. */
+  private readonly fontRefreshes = new WeakMap<EngineNode, number>();
+
+  /**
+   * Faces registered after text naming them was laid out: lay that text out again, and commit.
+   *
+   * Native keeps a paragraph's text layout, face included, keyed by what the paragraph asks for.
+   * iOS caches the attributed string it built and the size it measured, so text laid out before
+   * its face registered stays in the fallback face, and committing it again unchanged hits the
+   * same cache. What it asks for has to change, and nothing visible can: each paragraph naming
+   * one of the families is committed with its text size cap raised by a step too small to see, or
+   * set far above any size the platform offers where it had none. Its view, and everything native
+   * holds for it, stays where it is. Android keys its text layout the same way and applies the
+   * cap the same way, so the same change works there.
+   */
+  fontsRegistered(families: ReadonlySet<string>): void {
+    const visit = (node: EngineNode): void => {
+      for (const child of node.children) {
+        if (child.kind !== 'element') continue;
+        if (child.committed && viewNameOf(child) === PARAGRAPH && namesFamily(child, families)) {
+          this.fontRefreshes.set(child, (this.fontRefreshes.get(child) ?? 0) + 1);
+          this.fontsRefreshed = true;
+          this.markProps(child, false);
+        } else {
+          visit(child);
+        }
+      }
+    };
+    visit(this.root);
+    this.commit();
+  }
+
   /**
    * Put the cursor in a text input; bring anything else on screen, in the scroll view it is in.
    * A form sends the user to the first field that needs fixing this way, and a toggle or a picker
@@ -2041,8 +2110,25 @@ export class Engine implements HostEngine {
     const intrinsic = node.props[INTRINSIC_SIZE] as IntrinsicSize | undefined;
     if (intrinsic) applyIntrinsicSize(style, intrinsic);
     flattenStyle(node.props[STYLE_OVERRIDE], style);
-    if (viewName === PARAGRAPH) alignText(style, this.directionOf(node, style));
+    if (viewName === PARAGRAPH) {
+      alignText(style, this.directionOf(node, style));
+      if (this.fontsRefreshed) this.capForFonts(node, style);
+    }
     return composeTransform(node, this.animated(node, this.transitioned(node, style)));
+  }
+
+  /**
+   * The text size cap that lays a paragraph out again once a face it names has registered: a
+   * step per face above the app's own cap where it set one (below 1 is none, on both platforms),
+   * or above any text size there is. Counted per paragraph, so an app's cap moves by a step for
+   * each face its text names and no further. See `fontsRegistered`.
+   */
+  private capForFonts(node: EngineNode, props: Record<string, unknown>): void {
+    const refreshes = this.fontRefreshes.get(node);
+    if (refreshes === undefined) return;
+    const own = props['maxFontSizeMultiplier'];
+    props['maxFontSizeMultiplier'] =
+      (typeof own === 'number' && own >= 1 ? own : UNCAPPED) + refreshes * FONT_REFRESH_STEP;
   }
 
   /** Set once any node has had a `direction` in its inline style. See `directionOf`. */

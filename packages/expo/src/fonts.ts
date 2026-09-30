@@ -21,6 +21,7 @@
  * here would be copying out its internals rather than using it.
  */
 import { InjectionToken, computed, signal, type Signal } from '@angular/core';
+import { fontsRegistered } from '@ng-native/fabric';
 import { expoModule } from './native.ts';
 
 /** A face a stylesheet declared, as the compiler collected it. */
@@ -109,9 +110,9 @@ export class FontRegistry {
   /**
    * Register every `@font-face` a compiled sheet declares.
    *
-   * Awaited before `mount` in an app that uses one: text laid out before this resolves is laid
-   * out in the fallback face. Sheets with no faces resolve immediately, so calling it
-   * unconditionally at bootstrap costs nothing.
+   * Called before `mount` in an app that uses one. Text laid out before a face registers is in
+   * the fallback face until it does, and is laid out again then. Sheets with no faces resolve
+   * immediately, so calling it unconditionally at bootstrap costs nothing.
    */
   async loadSheet(...sheets: readonly (SheetWithFonts | null | undefined)[]): Promise<void> {
     const faces = sheets.flatMap((sheet) => [...(sheet?.fonts ?? [])]);
@@ -121,8 +122,15 @@ export class FontRegistry {
 
   /** Register faces by name, for a font that did not come from a stylesheet. */
   async load(map: Record<string, unknown>): Promise<void> {
-    if (!this.native) return;
-    await this.native.loadAsync(map);
+    const native = this.native;
+    if (!native) return;
+    try {
+      await native.loadAsync(map);
+    } finally {
+      // Text already laid out in the fallback face keeps it until it is laid out again. Only the
+      // faces that registered: one failing fails the whole load, not the others in it.
+      fontsRegistered(Object.keys(map).filter((family) => native.isLoaded(family)));
+    }
     this.generation.update((n) => n + 1);
   }
 }

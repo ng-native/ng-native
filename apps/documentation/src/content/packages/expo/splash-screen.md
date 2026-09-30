@@ -40,7 +40,8 @@ AppRegistry.registerRunnable('main', ({ rootTag }) => {
 ```
 
 Mounting does not wait for the fonts; the splash screen does. Text laid out before they arrive is
-behind the splash, so nothing is ever seen in the fallback face and nothing reflows.
+laid out again as each face registers, behind the splash, so nothing is ever seen in the fallback
+face.
 
 ## `hold()`
 

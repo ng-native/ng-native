@@ -35,6 +35,7 @@ import {
   installDeferTriggers,
   markComponentHost,
   nativePlatform,
+  onFontsRegistered,
   reportUnboundFormsInput,
   styleSheetOf,
   type EngineNode,
@@ -669,7 +670,11 @@ export function mount(
   // ref it is handed is `ApplicationRef.components[0]`, so with an empty array the initial
   // navigation never runs and a routed app renders nothing but its outlet's host.
   applicationRef.components.push(componentRef);
+  // Text laid out before its face registered is laid out again when it does: `loadFonts` is not
+  // awaited before `mount` behind a splash screen.
+  const stopFonts = onFontsRegistered((families) => engine.fontsRegistered(families));
   componentRef.onDestroy(() => {
+    stopFonts();
     applicationRef.detachView(componentRef.hostView);
     const at = applicationRef.components.indexOf(componentRef);
     if (at !== -1) applicationRef.components.splice(at, 1);
