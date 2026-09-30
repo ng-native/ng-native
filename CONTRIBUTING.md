@@ -108,9 +108,14 @@ What the sweep reads as props, the canary's Tailwind screen draws.
 release smoke opens it in CI. `pnpm bench:tailwind` in `packages/integration-tests` times a screen
 of Tailwind cards through the engine.
 
+## Writing Markdown
+
+[`docs/README.md`](./docs/README.md) says where a Markdown file goes (`docs/`, the documentation site
+or a package README) and what a page needs: front matter, headings, links and code fences.
+
 ## Architecture rules
 
-[`ARCHITECTURE.md`](./ARCHITECTURE.md) lists the rules the design depends on (AOT only, zoneless
+[`ARCHITECTURE.md`](./docs/ARCHITECTURE.md) lists the rules the design depends on (AOT only, zoneless
 only, no `@angular/platform-browser` bootstrap, the engine never importing Angular or React Native,
 and more). Each one is load-bearing - breaking it does not degrade the architecture, it invalidates
 it - so a change that would cross one of these needs a different approach, not an exception.
@@ -132,7 +137,7 @@ find each other **by version** rather than through workspace links, then typeche
 result. Nothing reaches npmjs, and the registry has no uplink for `@ng-native/*` so a package
 that failed to publish cannot be quietly satisfied by the real one.
 
-See [RELEASING.md](./RELEASING.md) for how an actual release goes out.
+See [RELEASING.md](./docs/RELEASING.md) for how an actual release goes out.
 
 ## Pull requests
 
@@ -140,9 +145,9 @@ See [RELEASING.md](./RELEASING.md) for how an actual release goes out.
 - Describe why the change is needed, not just what changed - the diff already says what.
 - A change someone using the packages would notice comes with a version plan in
   `.nx/version-plans/` - `npx nx release plan` writes one. The release's `CHANGELOG.md` entry is
-  made from them; see [RELEASING.md](./RELEASING.md#describing-changes).
+  made from them; see [RELEASING.md](./docs/RELEASING.md#describing-changes).
 - Commit messages here are sentence-case summaries of the change, often followed by a body
   explaining why (see `git log --oneline -20` for the style); there is no conventional-commits
   prefix convention (`feat:`, `fix:`, and so on) in use.
 
-For maintainers cutting a release, see [RELEASING.md](./RELEASING.md).
+For maintainers cutting a release, see [RELEASING.md](./docs/RELEASING.md).

@@ -1,6 +1,6 @@
 name: Release
 
-# Run by hand from the Actions tab, on main, once CI is green there. See RELEASING.md.
+# Run by hand from the Actions tab, on main, once CI is green there. See docs/RELEASING.md.
 on:
   workflow_dispatch:
     inputs:

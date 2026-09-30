@@ -74,7 +74,7 @@ Or from code, `mount(element, Wallet, { injector })` with an injector from the a
 - [Islands](https://ng-native.com/packages/web/islands):
   Angular Native components inside an existing Angular web app
 - [Root README](https://github.com/ng-native/ng-native/blob/main/README.md) and
-  [ARCHITECTURE.md](https://github.com/ng-native/ng-native/blob/main/ARCHITECTURE.md)
+  [ARCHITECTURE.md](https://github.com/ng-native/ng-native/blob/main/docs/ARCHITECTURE.md)
 
 ## License
 

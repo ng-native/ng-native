@@ -2,7 +2,7 @@
  * The engine's public surface.
  *
  * Nothing here imports Angular, and nothing here may start to: the engine stays
- * framework-agnostic (see ARCHITECTURE.md), which is what keeps the commit logic testable without Angular in
+ * framework-agnostic (see docs/ARCHITECTURE.md), which is what keeps the commit logic testable without Angular in
  * the loop and a second adapter possible later.
  *
  * The CSS runtime lives here rather than in a package of its own because the cascade is driven

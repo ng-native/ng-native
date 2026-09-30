@@ -1,6 +1,6 @@
 /**
  * Framework-agnostic retained tree + incremental Fabric commit.
- * Nothing Angular-specific may enter this file; lint bans the import (see ARCHITECTURE.md).
+ * Nothing Angular-specific may enter this file; lint bans the import (see docs/ARCHITECTURE.md).
  *
  * Angular mutates; Fabric is persistent. A committed node is never mutated, it is cloned with
  * new props and/or a new child set. Cloning a leaf therefore forces every ancestor to re-clone,

@@ -43,7 +43,7 @@ underneath `NgIcon` changes.
 
 - [Icons](https://ng-native.com/packages/icons)
 - [Root README](https://github.com/ng-native/ng-native/blob/main/README.md) and
-  [ARCHITECTURE.md](https://github.com/ng-native/ng-native/blob/main/ARCHITECTURE.md)
+  [ARCHITECTURE.md](https://github.com/ng-native/ng-native/blob/main/docs/ARCHITECTURE.md)
 
 ## License
 

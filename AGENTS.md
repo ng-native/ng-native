@@ -10,11 +10,13 @@ describes using the packages, not working on them.
 
 ## Read before a change
 
-- [ARCHITECTURE.md](ARCHITECTURE.md): the rules the design depends on. A change that would break
+- [ARCHITECTURE.md](docs/ARCHITECTURE.md): the rules the design depends on. A change that would break
   one needs a different approach, not an exception.
-- [CONTEXT.md](CONTEXT.md): the project's vocabulary. Use its terms (engine, platform, node,
+- [CONTEXT.md](docs/CONTEXT.md): the project's vocabulary. Use its terms (engine, platform, node,
   commit, sheet, screen, primitive) and avoid the words it lists against each.
 - [CONTRIBUTING.md](CONTRIBUTING.md): setup, where tests live, and what a pull request needs.
+- [docs/README.md](docs/README.md): where a Markdown file goes and what a documentation page
+  needs. Read it before adding or moving one.
 - [.claude/rules/angular.md](.claude/rules/angular.md): the Angular style this repo follows.
 
 ## Commands

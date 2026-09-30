@@ -3,7 +3,7 @@ name: Latest versions
 # Users install the newest versions our ranges allow, and this repository pins older ones: Angular
 # 22.2 crashed every new app on Hermes while the tests here still ran 22.1.5. Each week this makes
 # fresh workspaces the way users do, on whatever those ranges resolve to that day, and tests, builds
-# and bundles each one, so drift shows up within a week instead of at release. See RELEASING.md.
+# and bundles each one, so drift shows up within a week instead of at release. See docs/RELEASING.md.
 on:
   schedule:
     # Mondays at 06:00 UTC.

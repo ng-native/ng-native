@@ -73,7 +73,7 @@ package under Node (tests, tooling).
   [modal](https://ng-native.com/packages/components/modal) and
   [animation](https://ng-native.com/packages/components/animation)
 - [Root README](https://github.com/ng-native/ng-native/blob/main/README.md) and
-  [ARCHITECTURE.md](https://github.com/ng-native/ng-native/blob/main/ARCHITECTURE.md)
+  [ARCHITECTURE.md](https://github.com/ng-native/ng-native/blob/main/docs/ARCHITECTURE.md)
 
 ## License
 

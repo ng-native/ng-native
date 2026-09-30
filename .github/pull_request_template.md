@@ -9,7 +9,7 @@
 ## Checklist
 
 - [ ] Tests added or updated
-- [ ] Docs updated (`apps/documentation`, package README, or both)
+- [ ] Docs updated (`apps/documentation`, package README, or both), following [docs/README.md](../docs/README.md)
 - [ ] A version plan in `.nx/version-plans/`, if someone using the packages would notice the change
 - [ ] `pnpm lint typecheck test` is green locally
-- [ ] Respects the rules in [ARCHITECTURE.md](../ARCHITECTURE.md)
+- [ ] Respects the rules in [ARCHITECTURE.md](../docs/ARCHITECTURE.md)

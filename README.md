@@ -102,7 +102,7 @@ to native styles at build time.
 - [Deployment](https://ng-native.com/guide/deployment)
 - [How it compares](https://ng-native.com/guide/comparison)
 - [Known limitations](https://ng-native.com/guide/limitations)
-- [Architecture](ARCHITECTURE.md)
+- [Architecture](docs/ARCHITECTURE.md)
 
 The [examples](examples) are complete apps: a bank (`wallet`), a habit tracker (`habits`), a music
 player (`music`), a run tracker with maps (`runs`) and a notes app (`notes`).

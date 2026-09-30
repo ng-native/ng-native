@@ -1,6 +1,6 @@
 /**
  * Release gate: a production bundle must be Hermes bytecode with no Angular JIT compiler in it.
- * Release builds are AOT-only (see ARCHITECTURE.md), and Hermes excludes local-mode eval, so a compiler in the
+ * Release builds are AOT-only (see docs/ARCHITECTURE.md), and Hermes excludes local-mode eval, so a compiler in the
  * bundle is both dead weight and a sign that something fell back to JIT.
  */
 import { execFileSync } from 'node:child_process';

@@ -3,7 +3,7 @@
  * and the report both `Renderer2` adapters make when one reaches them unclaimed.
  *
  * The names and package paths below are the one piece of Angular-specific knowledge in this
- * package - everything else here stays framework-agnostic, per `ARCHITECTURE.md`. It lives here
+ * package - everything else here stays framework-agnostic, per `docs/ARCHITECTURE.md`. It lives here
  * anyway, rather than duplicated in `@ng-native/platform` and `@ng-native/web`, because both of
  * their `Renderer2`s hit exactly the same failure for exactly the same reason and neither imports
  * the other: a binding reaches `setProperty` only when no directive on the element took it, and

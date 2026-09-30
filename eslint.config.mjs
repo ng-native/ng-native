@@ -5,7 +5,7 @@ import tseslint from 'typescript-eslint';
  * Three rules earn their place here. The rest is deliberately absent: formatting is not enforced,
  * and stylistic rules are left to review.
  *
- * `@nx/enforce-module-boundaries` turns the layering in ARCHITECTURE.md into something checkable.
+ * `@nx/enforce-module-boundaries` turns the layering in docs/ARCHITECTURE.md into something checkable.
  * The engine is framework-agnostic, and without this nothing would say so but a comment: one
  * `import '@angular/core'` in `packages/fabric` would pass every test we have.
  *
