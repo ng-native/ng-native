@@ -305,3 +305,17 @@ describe('pnpmGlobs', () => {
     assert.deepEqual(pnpmGlobs(yaml), ['apps/*', 'packages/*', 'tools']);
   });
 });
+
+describe('generators.json', () => {
+  it("gives each schema the generator's description, which nx g --help prints", () => {
+    // Nx reads the description for --help from the schema, not from generators.json, and printed
+    // `undefined` under the generator's name.
+    const { generators } = require('../generators.json');
+    for (const [name, { schema, description }] of Object.entries<{
+      schema: string;
+      description: string;
+    }>(generators)) {
+      assert.equal(require(`../${schema}`).description, description, name);
+    }
+  });
+});

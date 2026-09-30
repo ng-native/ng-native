@@ -98,4 +98,4 @@ usual; the app imports it like any other.
 ## Options
 
 `nx g @ng-native/nx:app <directory>` takes `--name` (the directory's last segment by default),
-`--tags` and `--skipInstall`.
+`--tags`, `--skipInstall` and `--skipFormat`, which leaves the generated files unformatted.

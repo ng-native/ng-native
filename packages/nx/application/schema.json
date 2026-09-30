@@ -2,6 +2,7 @@
   "$schema": "https://json-schema.org/schema",
   "$id": "NgNativeNxApplication",
   "title": "Angular Native application",
+  "description": "An Angular Native app: an Expo project with start, run-ios, run-android, export, test and typecheck targets.",
   "type": "object",
   "properties": {
     "directory": {
