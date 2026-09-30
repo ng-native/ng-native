@@ -98,7 +98,8 @@ have no heading. Say plainly when output, announcements, query results or types 
 
 ## 9. Open the PR
 
-- Branch from the latest main: `git fetch origin && git switch -c fix/<slug> origin/main`.
+- Branch from the latest main: `git fetch origin && git switch -c fix/<slug> origin/main`. A stacked PR
+  branches from the branch it depends on instead (`origin/<that branch>`), so it carries those commits.
 - Commit with a sentence-case summary: no `feat:`/`fix:` prefix, no co-author trailer.
 - Before pushing, check that no release is running. A merge while a release runs breaks its push.
   `gh api 'repos/ng-native/ng-native/actions/workflows/release.yml/runs?per_page=1' --jq '.workflow_runs[0].status'`
@@ -109,8 +110,8 @@ have no heading. Say plainly when output, announcements, query results or types 
   `Closes #<n>`. No AI attribution anywhere.
 - Never merge your own PR.
 
-Two issues that share one fix can share a PR. A PR that needs another merged first is stacked (`--base`
-on that branch) and says so.
+Two issues that share one fix can share a PR. A PR that needs another merged first is stacked: branched
+from that PR's branch, opened with `--base` on it, and saying so in its body.
 
 ## Review comments and CI failures
 

@@ -15,10 +15,11 @@ while (( ${#queue} )); do
     if [[ $state != open ]]; then echo "#$n is $state, done"; queue=(${queue:#$n}); continue; fi
     # A stacked PR waits until its base has merged and GitHub has moved it to main.
     [[ $(jq -r .base.ref <<<$pr) == main ]] || continue
-    review=$(gh api "$R/pulls/$n/reviews?per_page=100" \
-      --jq '[.[]|select(.user.login=="coderabbitai[bot]" and .state!="COMMENTED")]|last|.state' 2>/dev/null)
-    [[ $review == APPROVED ]] || continue
     sha=$(jq -r .head.sha <<<$pr)
+    # Only an approval of the current head counts: commits pushed after it are unreviewed.
+    review=$(gh api "$R/pulls/$n/reviews?per_page=100" \
+      --jq "[.[]|select(.user.login==\"coderabbitai[bot]\" and .state!=\"COMMENTED\" and .commit_id==\"$sha\")]|last|.state" 2>/dev/null)
+    [[ $review == APPROVED ]] || continue
     runs=$(gh api "$R/commits/$sha/check-runs?per_page=100" \
       --jq '[.check_runs[]|(.conclusion // "pending")]|unique|join(",")' 2>/dev/null)
     if [[ $runs == *failure* || $runs == *cancelled* || $runs == *timed_out* ]]; then
@@ -31,9 +32,12 @@ while (( ${#queue} )); do
     # A merge while a release runs moves main under it and breaks its push.
     [[ -z $(gh api "$R/actions/workflows/release.yml/runs?per_page=3" \
       --jq '.workflow_runs[]|select(.status!="completed")|.id' 2>/dev/null) ]] || continue
-    if gh api -X PUT $R/pulls/$n/merge -f merge_method=squash >/dev/null 2>&1; then echo "#$n merged"
-    else echo "#$n merge failed"; fi
-    queue=(${queue:#$n})
+    # A failed merge (main moved, a check re-ran) stays queued and shows GitHub's reason.
+    if err=$(gh api -X PUT $R/pulls/$n/merge -f merge_method=squash 2>&1 >/dev/null); then
+      echo "#$n merged"; queue=(${queue:#$n})
+    else
+      echo "#$n merge failed, retrying: ${err//$'\n'/ }"
+    fi
   done
   (( ${#queue} )) && sleep 180
 done
