@@ -39,8 +39,20 @@ jobs:
       # Read by the generated Podfile: pods are built through ccache, so a run recompiles only the
       # C++ whose inputs changed since the cache was saved.
       USE_CCACHE: '1'
+      # Where ccache keeps what it compiled, which is the directory ccache-action restores and
+      # saves. The action also writes it into ccache's own config file, but React Native's compiler
+      # wrapper (ccache-clang.sh) points ccache at a config file of its own, so without these every
+      # compile goes to a default directory that nothing saves, and each run starts from nothing.
+      CCACHE_DIR: ${{ github.workspace }}/.ccache
+      CCACHE_MAXSIZE: 2G
     steps:
       - uses: actions/checkout@v7
+
+      # A fresh simulator takes minutes to boot here, so it starts now and boots while the app is
+      # set up and built; smoke-ios.sh waits for whatever is left.
+      - name: Start a simulator booting
+        run: echo "CANARY_SIMULATOR=$(examples/canary/scripts/boot-ios-simulator.sh)" >> "$GITHUB_ENV"
+
       - uses: ./.github/actions/setup
 
       # The app's native half is most of the job's time; its JavaScript is a minute. So the app is
@@ -68,6 +80,12 @@ jobs:
           key: ios-${{ hashFiles('pnpm-lock.yaml') }}
           restore-keys: ios-
           max-size: 2G
+
+      # React Native's compiler wrapper runs `$CCACHE_BINARY clang` with CCACHE_BINARY read from the
+      # environment. The Podfile sets it only as an Xcode build setting, which a compiler never
+      # sees, so without this the wrapper runs clang on its own and nothing is cached.
+      - if: steps.cached.outputs.cache-hit != 'true'
+        run: echo "CCACHE_BINARY=$(command -v ccache)" >> "$GITHUB_ENV"
 
       # `ios/` and `android/` are generated, not committed. Prebuild also installs the pods.
       - if: steps.cached.outputs.cache-hit != 'true'
