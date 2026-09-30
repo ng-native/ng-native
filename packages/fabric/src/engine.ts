@@ -1959,6 +1959,8 @@ export class Engine implements HostEngine {
     // One epoch per commit. Node props do not change while a commit runs, so every node can be
     // resolved once and shared with each of its descendants for the length of this walk.
     this.styleEpoch++;
+    // Faces registered before the walk, the global sheet's among them, reach every node in it.
+    this.facesAdded = false;
     const set = this.fabric.createChildSet(this.rootTag);
     for (const child of this.visibleChildren(this.root)) {
       this.fabric.appendChildToSet(set, this.reconcileUnder(this.root, child));
@@ -1978,6 +1980,7 @@ export class Engine implements HostEngine {
 
     this.flushTransitionEvents();
     this.scrollDriver?.afterCommit();
+    if (this.facesAdded) this.rematchFonts();
     return true;
   }
 
@@ -2177,11 +2180,30 @@ export class Engine implements HostEngine {
     for (const name of Object.keys(sheet.keyframes ?? {})) {
       this.keyframes.set(name, sheet.keyframes![name]!);
     }
-    if (sheet.fonts) this.fontFaces.add(sheet.fonts);
+    if (sheet.fonts && this.fontFaces.add(sheet.fonts)) this.facesAdded = true;
   }
 
   /** Every `@font-face` seen, global as on the web: a face declared in one sheet serves all. */
   private readonly fontFaces = new FontFaces();
+  /** Whether a sheet first used in this commit declared a face. See `rematchFonts`. */
+  private facesAdded = false;
+
+  /**
+   * Faces a sheet declared partway through a commit: text resolved before it, in this commit or
+   * an earlier one, matched without them. Resolve every text naming a family again, and commit.
+   * Once per sheet that declares faces, so walking the tree costs nothing that matters.
+   */
+  private rematchFonts(): void {
+    const visit = (node: EngineNode): void => {
+      for (const child of node.children) {
+        if (child.kind !== 'element') continue;
+        if (typeof child.committed?.props['fontFamily'] === 'string') this.markProps(child, false);
+        visit(child);
+      }
+    };
+    visit(this.root);
+    this.commit();
+  }
 
   private readonly knownSheets = new WeakSet<StyleSheet>();
 

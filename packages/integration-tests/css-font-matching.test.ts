@@ -98,6 +98,31 @@ describe('matching a weight to a declared face', () => {
     assert.equal(props['fontFamily'], 'Inter-700');
   });
 
+  it('matches text laid out before the sheet declaring its face was used', () => {
+    // The text comes first, in the same commit and in one before it: both were resolved against
+    // a registry that did not have the face yet.
+    const fabric = createFakeFabric();
+    const engine = new Engine(fabric, 1);
+    const consumer = compileCss('.a { font-family: Inter; font-weight: 700 }', 'consumer');
+    const declaring = compileCss(faces([], [700]), 'declaring');
+    const early = engine.createElement('text', consumer);
+    engine.setClasses(early, 'a');
+    engine.appendChild(early, engine.createText('Early'));
+    engine.appendChild(engine.root, early);
+    engine.commit();
+    const first = engine.createElement('text', consumer);
+    engine.setClasses(first, 'a');
+    engine.appendChild(first, engine.createText('First'));
+    engine.appendChild(engine.root, first);
+    const second = engine.createElement('text', declaring);
+    engine.appendChild(second, engine.createText('Second'));
+    engine.appendChild(engine.root, second);
+    engine.commit();
+    const [earlyProps, firstProps] = fabric.committed.map((node) => node.props);
+    assert.equal(earlyProps!['fontFamily'], 'Inter-700', 'text from an earlier commit');
+    assert.equal(firstProps!['fontFamily'], 'Inter-700', 'text earlier in the same commit');
+  });
+
   it('finds a face another sheet declared', () => {
     // Faces in the global sheet, the rule in a component's: `@font-face` is global, as on the web.
     const fabric = createFakeFabric();
@@ -198,6 +223,19 @@ describe("CSS's nearest-weight rules", () => {
 });
 
 describe('matching a style', () => {
+  it('keeps an italic no face covers, whether the upright face says normal or nothing', () => {
+    // The compiler reads `font-style: normal` as no style given, so both faces are the same.
+    for (const descriptor of ['', ' font-style: normal;']) {
+      const css =
+        `@font-face { font-family: Inter; src: url('./Inter.ttf'); }` +
+        `@font-face { font-family: Inter; src: url('./Inter-700.ttf'); font-weight: 700;${descriptor} }` +
+        ` .a { font-family: Inter; font-weight: 700; font-style: italic }`;
+      const props = text(css, 'a');
+      assert.equal(props['fontFamily'], 'Inter-700');
+      assert.equal(props['fontStyle'], 'italic');
+    }
+  });
+
   const all = faces([], [700], [undefined, 'italic'], [700, 'italic']);
 
   it('picks the italic face, and the bold italic one', () => {

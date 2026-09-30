@@ -83,12 +83,17 @@ const familyKey = (family: string) => family.toLowerCase();
 export class FontFaces {
   private readonly byFamily = new Map<string, FontFace[]>();
 
-  add(faces: readonly FontFace[]): void {
+  /** Take faces in; whether any was new, which changes what text already matched may match. */
+  add(faces: readonly FontFace[]): boolean {
+    let added = false;
     for (const face of faces) {
       const known = this.byFamily.get(familyKey(face.family));
-      if (!known) this.byFamily.set(familyKey(face.family), [face]);
-      else if (!known.some((one) => faceName(one) === faceName(face))) known.push(face);
+      if (known?.some((one) => faceName(one) === faceName(face))) continue;
+      if (known) known.push(face);
+      else this.byFamily.set(familyKey(face.family), [face]);
+      added = true;
     }
+    return added;
   }
 
   /**
