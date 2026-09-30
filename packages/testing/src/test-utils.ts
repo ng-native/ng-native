@@ -125,8 +125,45 @@ export function createFakeFabric(): FakeFabric {
     }
   };
 
+  /*
+   * iOS animates a presented modal out when it is committed with `visible: false`, then reports
+   * `topDismiss` once, and React Native's Modal.js keeps it in the tree until then. The fake
+   * reports it as soon as that commit is done, and lets one dismissal through per close, so a test
+   * that also sends it by hand does not see `(dismiss)` twice.
+   */
+  const dismissing = new Set<number>();
+  const dismissed = new Set<number>();
+  const dismissAfterCommit = (): void => {
+    if (dismissing.size === 0 || !handler) return;
+    const tags = [...dismissing];
+    dismissing.clear();
+    queueMicrotask(() => {
+      for (const tag of tags) {
+        const host = findByTag(committed, tag);
+        if (host && host.props['visible'] === false) fake.emit(host, 'topDismiss');
+      }
+    });
+  };
+  const findByTag = (nodes: FakeFabricNode[], tag: number): FakeFabricNode | undefined => {
+    for (const n of nodes) {
+      const hit = n.reactTag === tag ? n : findByTag(n.children, tag);
+      if (hit) return hit;
+    }
+    return undefined;
+  };
+  /** A modal host committed as closing, or that left the tree closing. */
+  const closing = (target: FakeFabricNode): boolean =>
+    (findByTag(committed, target.reactTag) ?? target).props['visible'] === false;
+  /** A modal host's props are changing: a close owes one dismissal, and a show resets it. */
+  const noteModal = (source: FakeFabricNode, props: Record<string, unknown> | undefined): void => {
+    if (source.viewName !== 'ModalHostView' || !props || !('visible' in props)) return;
+    if (props['visible'] !== false) dismissed.delete(source.reactTag);
+    else if (source.props['visible'] !== false) dismissing.add(source.reactTag);
+  };
+
   const clone = (n: FabricNode, props?: object, keepChildren = false): FabricNode => {
     const source = n as unknown as FakeFabricNode;
+    noteModal(source, props as Record<string, unknown> | undefined);
     return withHandle(
       {
         ...source,
@@ -205,6 +242,7 @@ export function createFakeFabric(): FakeFabric {
       calls.completeRoot++;
       diff(committed, set as FakeFabricNode[]);
       committed = set as FakeFabricNode[];
+      dismissAfterCommit();
     },
     registerEventHandler(fn) {
       handler = fn;
@@ -253,6 +291,10 @@ export function createFakeFabric(): FakeFabric {
     },
     emit(target, type, nativeEvent = {}) {
       if (!handler) throw new Error('no Fabric event handler registered');
+      if (type === 'topDismiss' && target.viewName === 'ModalHostView') {
+        if (dismissed.has(target.reactTag)) return;
+        if (closing(target)) dismissed.add(target.reactTag);
+      }
       handler(unmounted.has(target.reactTag) ? null : target.instanceHandle, type, nativeEvent);
     },
     reset() {

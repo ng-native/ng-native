@@ -14,7 +14,7 @@ import {
   type Provider,
   type Type,
 } from '@angular/core';
-import type { EngineOptions } from '@ng-native/fabric';
+import type { Engine, EngineOptions } from '@ng-native/fabric';
 import { mount } from '@ng-native/platform';
 import { bindQueries, describeTree, flatten, type BoundQueries } from './queries.ts';
 import { createFakeFabric, type FakeFabric, type FakeFabricNode } from './test-utils.ts';
@@ -68,6 +68,7 @@ export interface RenderResult<T> extends BoundQueries {
 
 interface Mounted {
   fabric: FakeFabric;
+  engine: Engine;
   applicationRef: ApplicationRef;
   componentRef: ComponentRef<unknown>;
 }
@@ -76,13 +77,23 @@ const mounted: Mounted[] = [];
 /** Which render a node a query returned belongs to, so an event on it reaches the right fake. */
 const owners = new WeakMap<FakeFabricNode, Mounted>();
 
+const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
+
 /**
  * Let zoneless change detection run and commit.
  *
- * One macrotask is enough: Angular schedules its pass on `setTimeout(0)` (racing an animation
- * frame) when something changes, so a timeout queued after the change runs after the pass.
+ * One macrotask is enough for a change Angular sees: it schedules its pass on `setTimeout(0)`
+ * (racing an animation frame), so a timeout queued after the change runs after the pass. A change
+ * the engine sees outside change detection, such as a modal's reported dismissal with no
+ * `(dismiss)` listener, commits on the platform's next frame instead, 16ms away in Node, so this
+ * waits for that frame while a commit is owed.
  */
-export const settle = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 0));
+export async function settle(): Promise<void> {
+  await sleep(0);
+  for (let frames = 0; frames < 3 && mounted.some((m) => m.engine.pending); frames++) {
+    await sleep(16);
+  }
+}
 
 function latest(): Mounted {
   const current = mounted.at(-1);
@@ -156,6 +167,7 @@ export async function render<T>(
   });
   const self: Mounted = {
     fabric,
+    engine: app.engine,
     applicationRef: app.applicationRef,
     componentRef: app.componentRef,
   };

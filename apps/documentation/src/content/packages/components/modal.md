@@ -30,7 +30,8 @@ While `visible` is false the native host is not in the tree at all, as React Nat
 renders nothing while hidden, so the screen underneath takes touches as usual. On iOS a modal that
 was showing leaves once its dismissal has finished animating, which is also when `(dismiss)` fires;
 on Android it leaves straight away. `@if` does the same for a modal whose content should not exist
-while hidden, and destroys that content with it.
+while hidden, and destroys that content with it. Under `@ng-native/testing` the fake reports the
+dismissal as iOS does, so a modal a test closes has left the tree once the interaction resolves.
 
 ## Transparency
 

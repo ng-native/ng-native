@@ -63,3 +63,19 @@ export class TopLevelModals {
   dismissed = 0;
   presses = 0;
 }
+
+@Component({
+  selector: 'x-closing-modal',
+  imports: [Modal, Pressable, Text, View],
+  template: `
+    <view>
+      <modal [visible]="open()" transparent>
+        <pressable accessibilityLabel="Close" (press)="open.set(false)" />
+        <text>Delete?</text>
+      </modal>
+    </view>
+  `,
+})
+export class ClosingModal {
+  open = signal(true);
+}

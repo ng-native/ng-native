@@ -282,8 +282,10 @@ already absent passes for the wrong reason.
 function settle(): Promise<void>;
 ```
 
-One task: long enough for zoneless change detection to run and commit whatever is pending. Every
-interaction above ends with it. It is exported for a test that changes state some other way, a
+One task: long enough for zoneless change detection to run and commit whatever is pending. A change
+the engine sees outside change detection, such as a modal's dismissal with no `(dismiss)` listener,
+commits on the next frame instead, and `settle` waits for that frame too. Every interaction above
+ends with it. It is exported for a test that changes state some other way, a
 signal set on `instance` for example, and then wants to read the tree.
 
 ### `cleanup`
@@ -316,6 +318,12 @@ through `render()`. It records every call instead of drawing, and adds what a te
 | `responderCalls`                 | Every `setIsJSResponder` call, in order.                                                                                                                |
 | `commands`                       | Every `dispatchCommand`, in order: `focus`, `blur`, `setTextAndSelection` and the rest.                                                                 |
 | `calls`                          | How many of each node operation the renderer made. `reset()` zeroes them.                                                                               |
+
+It also does what native does that a test would otherwise have to stand in for. A `ModalHostView`
+committed with `visible: false` reports `topDismiss` as soon as that commit is done, as iOS does once
+the dismissal has animated, so a modal a test closes leaves the tree and `(dismiss)` fires. One
+dismissal gets through per close, so a test that also sends `fireEvent(host, 'dismiss')` does not
+see `(dismiss)` twice.
 
 ## `@ng-native/testing/vitest`
 

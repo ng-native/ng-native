@@ -13,6 +13,7 @@ import {
   render,
   screen,
   settle,
+  userEvent,
   type FakeFabric,
   type FakeFabricNode,
 } from '@ng-native/testing';
@@ -388,12 +389,16 @@ describe('modal and assets', () => {
       instance.open.set(true);
       await settle();
 
+      // What each commit held, since the fake reports the dismissal as soon as one is done.
+      const visible: unknown[] = [];
+      const completeRoot = fabric.completeRoot.bind(fabric);
+      fabric.completeRoot = (tag, set) => {
+        completeRoot(tag, set);
+        visible.push(modalHosts(fabric)[0]?.props['visible']);
+      };
       instance.open.set(false);
       await settle();
-      const [host] = modalHosts(fabric);
-      assert.equal(host?.props['visible'], false, 'native is told to dismiss, animated');
-
-      await fireEvent(host!, 'dismiss');
+      assert.deepEqual(visible, [false, undefined], 'told to dismiss, animated, then removed');
       assert.equal(instance.dismissed, 1, '(dismiss) still fires');
       assert.equal(modalHosts(fabric).length, 0);
 
@@ -422,6 +427,41 @@ describe('modal and assets', () => {
       });
     }
 
+    it('fires (dismiss) once when a test also reports the dismissal by hand', async () => {
+      const { fabric, instance } = await renderOn('ios');
+      instance.open.set(true);
+      await settle();
+      const [host] = modalHosts(fabric);
+
+      instance.open.set(false);
+      await settle();
+      await fireEvent(host!, 'dismiss');
+      assert.equal(instance.dismissed, 1);
+      assert.equal(modalHosts(fabric).length, 0);
+
+      instance.open.set(true);
+      await settle();
+      instance.open.set(false);
+      await settle();
+      assert.equal(instance.dismissed, 2, 'the next close is reported again');
+    });
+
+    // The fake reports the dismissal as iOS does once it has animated, so a test that closes a
+    // modal sees it go, and the event helpers wait for the commit that removes it.
+    for (const platform of ['ios', 'android']) {
+      it(`is gone once a press closes it on ${platform}`, async () => {
+        const { registerPlatformComponents } = await import('@ng-native/fabric');
+        registerPlatformComponents(platform);
+        const mod = await compileFixture(fixture('modal.ts'));
+        const { instance } = await render<{ open(): boolean }>(
+          mod['ClosingModal'] as Type<{ open(): boolean }>,
+        );
+        await userEvent.setup().press(screen.getByLabelText('Close'));
+        assert.equal(instance.open(), false);
+        assert.equal(screen.queryByText('Delete?'), null);
+      });
+    }
+
     it('leaves the tree at once on Android, as Modal.js does there', async () => {
       const { fabric, instance } = await renderOn('android');
       instance.open.set(true);
@@ -431,6 +471,7 @@ describe('modal and assets', () => {
       instance.open.set(false);
       await settle();
       assert.equal(modalHosts(fabric).length, 0);
+      assert.equal(instance.dismissed, 0, 'no topDismiss on Android');
     });
   });
 
