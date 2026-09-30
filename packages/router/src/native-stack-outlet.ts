@@ -90,6 +90,9 @@ const presented = new WeakMap<object, number>();
 /** What every screen needs to fill the stack, the same five keys RNSScreen itself expects. */
 const FILL = { position: 'absolute', left: 0, right: 0, top: 0, bottom: 0 } as const;
 
+/** A swipe-back area with no limit on any edge. */
+const UNLIMITED_SWIPE = { start: -1, end: -1, top: -1, bottom: -1 } as const;
+
 @Component({
   selector: 'native-stack-outlet',
   template: '',
@@ -511,6 +514,13 @@ export class NativeStackOutlet implements RouterOutletContract {
     for (const [prop, value] of Object.entries(presentation ?? {})) {
       if (value !== undefined) this.renderer.setProperty(screen, prop, value);
     }
+    // Except this one, which is a struct with no default: an edge left out is 0 natively, and
+    // `RNSScreenStack` refuses a swipe-back that starts beyond 0 points. -1 is no limit, which is
+    // what `Screen.tsx` sends for every edge not given.
+    this.renderer.setProperty(screen, 'gestureResponseDistance', {
+      ...UNLIMITED_SWIPE,
+      ...presentation?.gestureResponseDistance,
+    });
 
     this.renderer.appendChild(this.host.nativeElement, screen);
     return screen;

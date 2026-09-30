@@ -103,6 +103,41 @@ describe('a native stack driven by the router', () => {
     });
   });
 
+  /**
+   * `RNSScreenStack` refuses a swipe that starts outside the screen's `gestureResponseDistance`,
+   * where -1 means no limit. The prop is a struct with no default, so a screen that never sets it
+   * gets 0 on every side, and no swipe starts inside that. `Screen.tsx` always sends -1 for an
+   * edge not given; the stack does the same.
+   */
+  describe('the swipe-back area', () => {
+    const top = () =>
+      flatten(fabric.committed)
+        .filter((n) => n.viewName === 'RNSScreen')
+        .at(-1)!;
+
+    it('is unlimited on every edge of a pushed screen, as react-native-screens sends it', async () => {
+      await nav.push('/user/1');
+      await idle();
+      assert.deepEqual(top().props['gestureResponseDistance'], {
+        start: -1,
+        end: -1,
+        top: -1,
+        bottom: -1,
+      });
+    });
+
+    it('keeps an edge a screen limits, and leaves the others unlimited', async () => {
+      await nav.push('/user/1', { presentation: { gestureResponseDistance: { start: 40 } } });
+      await idle();
+      assert.deepEqual(top().props['gestureResponseDistance'], {
+        start: 40,
+        end: -1,
+        top: -1,
+        bottom: -1,
+      });
+    });
+  });
+
   describe('the same route with a different parameter', () => {
     it('stacks a second screen, and back returns to the first', async () => {
       await nav.push('/user/1');
