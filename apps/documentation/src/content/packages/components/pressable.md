@@ -21,9 +21,9 @@ listens to `(longPress)`. Without a listener there is no long press, so a slow t
 
 On Android, a keyboard's Enter or D-pad centre and TalkBack's double-tap activate the focused
 control with a click rather than a touch. That fires `press` alone, with no `pressIn` or
-`pressOut`, as React Native's `Pressability` does. It presses the nearest control at or around
-the focused view, so focus on a focusable view inside a pressable presses that pressable, where
-React Native presses nothing.
+`pressOut`, and only on the control that has focus, as React Native's `Pressability` does. A
+pressable the click passes on its way up stops it, so a `(click)` on a view around a pressable does
+not hear a click aimed at something inside that pressable.
 
 ## Pressable
 
