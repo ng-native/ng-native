@@ -1,24 +1,26 @@
 import { Component, signal } from '@angular/core';
-import { Pressable, SafeAreaView, Text, View } from '@ng-native/components';
+import { Pressable, SafeAreaProvider, SafeAreaView, Text, View } from '@ng-native/components';
 
 /**
  * Element names are lowercase, and that is load-bearing rather than style: an uppercase name is
  * read as an unknown Angular component and commits as a plain view with nothing in it.
  */
 @Component({
-  imports: [Pressable, SafeAreaView, Text, View],
+  imports: [Pressable, SafeAreaProvider, SafeAreaView, Text, View],
   selector: 'app-root',
   template: `
-    <safe-area-view class="screen">
-      <view class="body">
-        <text class="title">Angular, natively</text>
-        <text class="hint">Real native views. React is never in the render path.</text>
+    <safe-area-provider>
+      <safe-area-view class="screen">
+        <view class="body">
+          <text class="title">Angular, natively</text>
+          <text class="hint">Real native views. React is never in the render path.</text>
 
-        <pressable accessibilityRole="button" class="button" (press)="count.set(count() + 1)">
-          <text class="label">Tapped {{ count() }} times</text>
-        </pressable>
-      </view>
-    </safe-area-view>
+          <pressable accessibilityRole="button" class="button" (press)="count.set(count() + 1)">
+            <text class="label">Tapped {{ count() }} times</text>
+          </pressable>
+        </view>
+      </safe-area-view>
+    </safe-area-provider>
   `,
   styles: `
     :host {

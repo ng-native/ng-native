@@ -267,27 +267,29 @@ lines of thermal state added:
 
 ```ts
 import { Component, inject, resource, signal } from '@angular/core';
-import { Pressable, SafeAreaView, Text, View } from '@ng-native/components';
+import { Pressable, SafeAreaProvider, SafeAreaView, Text, View } from '@ng-native/components';
 import { Thermal } from '../thermal/thermal.ts';
 
 @Component({
-  imports: [Pressable, SafeAreaView, Text, View],
+  imports: [Pressable, SafeAreaProvider, SafeAreaView, Text, View],
   selector: 'app-root',
   template: `
-    <safe-area-view class="screen">
-      <view class="body">
-        <text class="title">Angular, natively</text>
-        <text class="hint">Real native views. React is never in the render path.</text>
+    <safe-area-provider>
+      <safe-area-view class="screen">
+        <view class="body">
+          <text class="title">Angular, natively</text>
+          <text class="hint">Real native views. React is never in the render path.</text>
 
-        <pressable accessibilityRole="button" class="button" (press)="count.set(count() + 1)">
-          <text class="label">Tapped {{ count() }} times</text>
-        </pressable>
+          <pressable accessibilityRole="button" class="button" (press)="count.set(count() + 1)">
+            <text class="label">Tapped {{ count() }} times</text>
+          </pressable>
 
-        <text class="hint">Thermal state: {{ thermal.state() }}</text>
-        <text class="hint">Supported: {{ thermal.supported }}</text>
-        <text class="hint">Headroom: {{ headroom.value() ?? 'unknown' }}</text>
-      </view>
-    </safe-area-view>
+          <text class="hint">Thermal state: {{ thermal.state() }}</text>
+          <text class="hint">Supported: {{ thermal.supported }}</text>
+          <text class="hint">Headroom: {{ headroom.value() ?? 'unknown' }}</text>
+        </view>
+      </safe-area-view>
+    </safe-area-provider>
   `,
   styles: `
     /* unchanged from the template */

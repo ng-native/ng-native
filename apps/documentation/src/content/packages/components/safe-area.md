@@ -18,7 +18,9 @@ because a missing provider does not fail loudly: a `<safe-area-view>` walks up l
 provider exactly once, as it first enters the window and before it has been laid out, and falls
 back to reading its own insets if it does not find one - which reads as zero insets and looks
 indistinguishable from "it is working, there is just nothing to inset here" until the app is run
-on a device with a notch or a home indicator.
+on a device with a notch or a home indicator. On iOS it reads them again only when a later update
+reaches that view, such as an appearance change, so the content can jump into place well after
+launch.
 
 ```html
 <safe-area-provider>

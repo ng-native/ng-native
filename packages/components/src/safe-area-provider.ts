@@ -13,8 +13,9 @@
  *
  * **A `<safe-area-view>` needs one above it**, which is less obvious than it sounds. The native
  * view walks its superviews for a provider and falls back to reading its own insets - but only
- * once, as it enters the window, before it has been laid out, and nothing tells it again. With no
- * provider it therefore insets by zero and looks like it is working.
+ * once, as it enters the window, before it has been laid out, and nothing notifies it when they
+ * change. With no provider it therefore insets by zero and looks like it is working, until a later
+ * update to that view happens to re-read them and the content jumps.
  *
  * That is also why a presented screen needs its own: it is outside the stack's view tree, which
  * is the same reason it has no header. Give a modal a provider of its own with

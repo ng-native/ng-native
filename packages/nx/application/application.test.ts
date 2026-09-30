@@ -64,6 +64,16 @@ describe('in an integrated workspace', () => {
     );
   });
 
+  it('puts a safe-area-provider above its safe-area-view, which has no insets without one', async () => {
+    const tree = integrated();
+    await generate(tree, { directory: 'apps/mobile' });
+    const app = tree.read('apps/mobile/src/app/app.ts', 'utf-8')!;
+    const template = app.slice(app.indexOf('template: `'), app.indexOf('styles: `'));
+    assert.match(template, /^\s*template: `\s*<safe-area-provider>/);
+    assert.match(template, /<\/safe-area-provider>\s*`,\s*$/);
+    assert.match(app, /imports: \[[^\]]*\bSafeAreaProvider\b/);
+  });
+
   it('writes an AGENTS.md with the commands this workspace runs, and a CLAUDE.md that reads it', async () => {
     const tree = integrated();
     await generate(tree, { directory: 'apps/mobile' });

@@ -24,18 +24,20 @@ Scan the QR code with Expo Go, or press `i` or `a` for a simulator.
 
 ```ts
 import { Component, signal } from '@angular/core';
-import { Pressable, SafeAreaView, Text } from '@ng-native/components';
+import { Pressable, SafeAreaProvider, SafeAreaView, Text } from '@ng-native/components';
 
 @Component({
   selector: 'app-root',
-  imports: [Pressable, SafeAreaView, Text],
+  imports: [Pressable, SafeAreaProvider, SafeAreaView, Text],
   template: `
-    <safe-area-view class="screen">
-      <text class="title">Angular, natively</text>
-      <pressable accessibilityRole="button" class="button" (press)="count.set(count() + 1)">
-        <text class="label">Tapped {{ count() }} times</text>
-      </pressable>
-    </safe-area-view>
+    <safe-area-provider>
+      <safe-area-view class="screen">
+        <text class="title">Angular, natively</text>
+        <pressable accessibilityRole="button" class="button" (press)="count.set(count() + 1)">
+          <text class="label">Tapped {{ count() }} times</text>
+        </pressable>
+      </safe-area-view>
+    </safe-area-provider>
   `,
   styles: `
     :host {
