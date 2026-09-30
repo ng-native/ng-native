@@ -189,12 +189,29 @@ const WRAPPED = Symbol.for('ng-native.resolveRequest');
  *
  * Wraps whatever resolver is there already, `withNxMetro`'s included, rather than replacing it.
  *
+ * `@babel/runtime` resolves from the app's project first. babel-preset-expo writes imports of it
+ * into files whose packages never declared it, for the version Expo read from the project. Under
+ * pnpm those files find `node_modules/.pnpm/node_modules` before the project's copy, and an install
+ * from before the app's pin can leave Babel 8's runtime there, which has no `regenerator`.
+ *
  * @param {Function | undefined} next
+ * @param {string | undefined} projectRoot
  */
-function withTypeScriptJsImports(next) {
+function withTypeScriptJsImports(next, projectRoot) {
   if (next?.[WRAPPED]) return next;
   const resolveRequest = (context, name, platform) => {
     const resolve = next ?? context.resolveRequest;
+    if (projectRoot && /^@babel\/runtime(\/|$)/.test(name)) {
+      try {
+        const fromProject = {
+          ...context,
+          originModulePath: path.join(projectRoot, 'package.json'),
+        };
+        return resolve(fromProject, name, platform);
+      } catch {
+        // No copy the project reaches: the import's own lookup, below.
+      }
+    }
     try {
       const resolution = resolve(context, name, platform);
       noteAngular(resolution);
@@ -341,7 +358,10 @@ function withAngularNative(config, options = {}) {
     );
   }
 
-  config.resolver.resolveRequest = withTypeScriptJsImports(config.resolver.resolveRequest);
+  config.resolver.resolveRequest = withTypeScriptJsImports(
+    config.resolver.resolveRequest,
+    projectRoot,
+  );
 
   foldDevMode(config);
 

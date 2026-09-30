@@ -200,6 +200,63 @@ describe('the Metro preset', () => {
   });
 
   /**
+   * babel-preset-expo writes `@babel/runtime` imports into every file it transforms, those in
+   * packages that never declared it included, for the version Expo read from the app's project.
+   * Looked up from such a file under pnpm, the first copy found is the one in
+   * `node_modules/.pnpm/node_modules`, which an install before the app's pin can leave on Babel 8.
+   */
+  describe("an @babel/runtime import Expo's Babel preset wrote", () => {
+    type Context = { resolveRequest: Resolve; originModulePath?: string };
+    const origin = '/ws/node_modules/.pnpm/react-native@0.86.3/node_modules/react-native/index.js';
+    /** Metro's resolver, in a workspace whose hidden hoist holds Babel 8's runtime. */
+    const metro: Resolve = (context, name) => {
+      const from = (context as Context).originModulePath!;
+      if (!name.startsWith('@babel/runtime')) throw new Error(`Unable to resolve ${name}`);
+      const copy = from.includes('/.pnpm/') ? '@babel+runtime@8.0.0' : '@babel+runtime@7.29.7';
+      return { type: 'sourceFile', filePath: `/ws/node_modules/.pnpm/${copy}/${name}.js` };
+    };
+    const resolve = (name: string, resolveRequest = metro) => {
+      const config = withAngularNative({ ...base(), projectRoot: '/ws/apps/mobile' });
+      return (config as MetroConfig).resolver.resolveRequest!(
+        { resolveRequest, originModulePath: origin } as Context,
+        name,
+        'ios',
+      );
+    };
+
+    it("resolves to the copy the app's project resolves, wherever the import is", () => {
+      assert.deepEqual(resolve('@babel/runtime/helpers/interopRequireDefault'), {
+        type: 'sourceFile',
+        filePath:
+          '/ws/node_modules/.pnpm/@babel+runtime@7.29.7/@babel/runtime/helpers/interopRequireDefault.js',
+      });
+    });
+
+    it('falls back to where the import is when the project resolves no copy', () => {
+      const onlyFromNodeModules: Resolve = (context, name) => {
+        if (!(context as Context).originModulePath!.includes('/node_modules/'))
+          throw new Error(`Unable to resolve ${name}`);
+        return metro(context, name, 'ios');
+      };
+      assert.deepEqual(resolve('@babel/runtime/regenerator', onlyFromNodeModules), {
+        type: 'sourceFile',
+        filePath: '/ws/node_modules/.pnpm/@babel+runtime@8.0.0/@babel/runtime/regenerator.js',
+      });
+    });
+
+    it('leaves every other package resolving from where the import is', () => {
+      const origins: string[] = [];
+      const record: Resolve = (context) => {
+        origins.push((context as Context).originModulePath!);
+        return { type: 'sourceFile', filePath: '/x.js' };
+      };
+      resolve('@babel/runtime-corejs3/helpers/x', record);
+      resolve('react', record);
+      assert.deepEqual(origins, [origin, origin]);
+    });
+  });
+
+  /**
    * Two copies of Angular in one bundle fail far from their cause: a component compiled against
    * one asks the other's injector, and the device shows NG0203 at mount. A Metro cache left from
    * before an upgrade did exactly that. The preset says so where the developer is looking.
