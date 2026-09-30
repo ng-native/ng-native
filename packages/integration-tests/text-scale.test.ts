@@ -10,7 +10,7 @@
 import assert from 'node:assert/strict';
 import { afterEach, beforeEach, describe, it } from 'node:test';
 import { Engine } from '@ng-native/fabric';
-import { watchConditions } from '@ng-native/device';
+import { currentConditions, watchConditions } from '@ng-native/device';
 import { createFakeFabric, type FakeFabric, type FakeFabricNode } from '@ng-native/testing';
 
 function flatten(nodes: FakeFabricNode[]): FakeFabricNode[] {
@@ -154,6 +154,33 @@ describe('watchConditions and the text size', () => {
     resize(1.5);
     assert.equal(remeasured, 1);
     stop();
+  });
+
+  it('hands the engine the text size, before it re-measures', () => {
+    const order: string[] = [];
+    let conditions: { fontScale?: number } = {};
+    const stop = watchConditions({
+      ...engine(),
+      updateConditions: (next: { fontScale?: number }) => {
+        conditions = next;
+        order.push(`conditions ${next.fontScale}`);
+      },
+      remeasureText: () => order.push(`remeasure at ${conditions.fontScale}`),
+    });
+    resize(1.5);
+    assert.equal(conditions.fontScale, 1.5);
+    assert.deepEqual(order, ['conditions 1.5', 'remeasure at 1.5']);
+
+    order.length = 0;
+    fontScale = 2;
+    for (const listener of appState) listener('active');
+    assert.deepEqual(order, ['conditions 2', 'remeasure at 2']);
+    stop();
+  });
+
+  it('starts with the text size in the conditions', () => {
+    fontScale = 1.25;
+    assert.equal(currentConditions().fontScale, 1.25);
   });
 
   it('re-measures when the app comes back at a different text size', () => {

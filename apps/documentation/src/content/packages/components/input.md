@@ -101,7 +101,9 @@ A single-line field's `line-height` sets its height, as it sets an `<input>`'s i
 height, padding and border, with the text centred in it. That holds on iOS as on Android, and a
 Tailwind font-size utility, which brings a line height with it, sizes a field the same way on both.
 An explicit `height`, or a larger `min-height`, still wins, and the text is centred in it on both.
-In a `multiline` field the line height spaces the lines, as in a `<textarea>`.
+The line box grows with the system text size, as the text in it does, unless `allowFontScaling` is
+false, and no further than `maxFontSizeMultiplier`. In a `multiline` field the line height spaces
+the lines, as in a `<textarea>`.
 
 ## Props a browser has no name for
 

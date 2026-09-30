@@ -38,7 +38,8 @@ close gaps a browser never had:
   `{uri, width, height, scale}`. Without it a local image is blank; a remote `{uri}` object happens
   to pass through unresolved and hides the gap until someone reaches for a bundled asset.
 - **`conditions`** is what `@media` resolves against: viewport width and height, color scheme, and
-  the reduced-motion preference. Without it every media query evaluates false.
+  the reduced-motion preference. Without it every media query evaluates false. It also carries the
+  system text size (`fontScale`), which the line box of a single-line iOS text input scales by.
 - **`tokens`** seeds device-level custom properties - the hairline width, mainly - below `:root`, so
   an app's own stylesheet still wins if it sets the same name.
 - **`globalStyles`** is the one stylesheet allowed to match a node regardless of which component

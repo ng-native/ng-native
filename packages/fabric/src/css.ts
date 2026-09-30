@@ -102,6 +102,13 @@ export interface Conditions {
    * platform that cannot answer means anyway.
    */
   readonly reducedMotion?: boolean;
+  /**
+   * The system text size, as a multiplier: `PixelRatio.getFontScale()`. What native text scales
+   * by; the engine scales the line box it keeps for a single-line iOS text input by it too.
+   * Optional, and 1 when absent. A change reaches that line box when text is measured again
+   * (`Engine.remeasureText`), which `watchConditions` does after it.
+   */
+  readonly fontScale?: number;
 }
 
 /** A custom property's value, in each form it can legally take. Absent forms are unusable. */

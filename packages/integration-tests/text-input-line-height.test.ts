@@ -43,9 +43,14 @@ const sheet: StyleSheet = {
   ],
 };
 
-function commitInput(setUp: (engine: Engine, input: ReturnType<Engine['createElement']>) => void) {
+function commitInput(
+  setUp: (engine: Engine, input: ReturnType<Engine['createElement']>) => void,
+  fontScale?: number,
+) {
   const fabric = createFakeFabric();
-  const engine = new Engine(fabric, 1);
+  const engine = new Engine(fabric, 1, {
+    conditions: { width: 390, height: 844, colorScheme: 'light', fontScale },
+  });
   const input = engine.createElement('text-input', sheet);
   setUp(engine, input);
   engine.appendChild(engine.root, input);
@@ -230,5 +235,47 @@ describe('a single-line text input with a line height', () => {
       engine.setProp(input, 'multiline', true);
     });
     assert.equal(props()['lineHeight'], 24);
+  });
+});
+
+/**
+ * The system text size. React Native scales an iOS field's `lineHeight` by it natively
+ * (`RCTEffectiveFontSizeMultiplierFromTextAttributes`), so the line box kept as a `minHeight` is
+ * scaled the same way: capped by `maxFontSizeMultiplier`, and not at all without font scaling.
+ */
+describe('a single-line iOS text input with a line height, at a larger text size', () => {
+  // 24 of line, scaled, and 17 of padding and border, which are not.
+  it('scales the line box by the text size', () => {
+    const { props } = commitInput((engine, input) => engine.addClass(input, 'field'), 1.5);
+    assert.equal(props()['minHeight'], 24 * 1.5 + 17);
+  });
+
+  it('caps the scale at maxFontSizeMultiplier', () => {
+    const { props } = commitInput((engine, input) => {
+      engine.addClass(input, 'field');
+      engine.setProp(input, 'maxFontSizeMultiplier', 1.25);
+    }, 2);
+    assert.equal(props()['minHeight'], 24 * 1.25 + 17);
+  });
+
+  it('does not scale when font scaling is off', () => {
+    const { props } = commitInput((engine, input) => {
+      engine.addClass(input, 'field');
+      engine.setProp(input, 'allowFontScaling', false);
+    }, 2);
+    assert.equal(props()['minHeight'], 41);
+  });
+
+  it('does not scale when no text size is known', () => {
+    const { props } = commitInput((engine, input) => engine.addClass(input, 'field'));
+    assert.equal(props()['minHeight'], 41);
+  });
+
+  it('follows a text size change', () => {
+    const { engine, props } = commitInput((engine, input) => engine.addClass(input, 'field'), 1);
+    assert.equal(props()['minHeight'], 41);
+    engine.updateConditions({ width: 390, height: 844, colorScheme: 'light', fontScale: 2 });
+    engine.remeasureText();
+    assert.equal(props()['minHeight'], 24 * 2 + 17);
   });
 });

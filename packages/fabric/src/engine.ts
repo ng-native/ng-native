@@ -646,6 +646,17 @@ const textDirection = (value: unknown): TextDirection | undefined =>
   value === 'ltr' || value === 'rtl' ? value : undefined;
 
 /**
+ * What iOS scales a text's `lineHeight` by: the system text size, capped by the text's own
+ * `maxFontSizeMultiplier` where it is at least 1, and 1 without font scaling
+ * (`RCTEffectiveFontSizeMultiplierFromTextAttributes`).
+ */
+function textScale(props: Record<string, unknown>, fontScale = 1): number {
+  if (props['allowFontScaling'] === false) return 1;
+  const cap = props['maxFontSizeMultiplier'];
+  return typeof cap === 'number' && cap >= 1 ? Math.min(fontScale, cap) : fontScale;
+}
+
+/**
  * Centre the text of a single-line text field that has a line height, as Chrome centres an
  * input's, keeping the height the line height gives it.
  *
@@ -665,7 +676,11 @@ const textDirection = (value: unknown): TextDirection | undefined =>
  * height alone for a content-box one. A null `height` is no height. A value that is not a number
  * cannot be added up, and leaves the field as it was.
  */
-function centreSingleLine(viewName: string, props: Record<string, unknown>): void {
+function centreSingleLine(
+  viewName: string,
+  props: Record<string, unknown>,
+  fontScale: number | undefined,
+): void {
   const lineHeight = props['lineHeight'];
   if (!TEXT_INPUTS.has(viewName) || typeof lineHeight !== 'number') return;
   if (props['multiline'] === true) return;
@@ -687,7 +702,8 @@ function centreSingleLine(viewName: string, props: Record<string, unknown>): voi
       0,
     props[`border${side}Width`] ?? props['borderWidth'] ?? 0,
   ];
-  const box = [lineHeight, ...edge('Top', 'Start'), ...edge('Bottom', 'End')];
+  const line = lineHeight * textScale(props, fontScale);
+  const box = [line, ...edge('Top', 'Start'), ...edge('Bottom', 'End')];
   const own = props['minHeight'] ?? 0;
   const max = props['maxHeight'] ?? Infinity;
   if (![...box, own, max].every((part) => typeof part === 'number')) return;
@@ -695,7 +711,7 @@ function centreSingleLine(viewName: string, props: Record<string, unknown>): voi
   // A content-box field's minHeight is its content's: Yoga adds the padding and border itself.
   const content =
     props['boxSizing'] === 'content-box'
-      ? lineHeight
+      ? line
       : (box as number[]).reduce((sum, part) => sum + part, 0);
   props['minHeight'] = Math.max(own as number, Math.min(content, max as number));
 }
@@ -1529,6 +1545,7 @@ export class Engine implements HostEngine {
     const conditions = options.conditions ?? { width: 0, height: 0, colorScheme: 'light' };
     this.styles = new StyleResolver(options.globalStyles ?? null, conditions);
     this.viewportSize = { width: conditions.width, height: conditions.height };
+    this.fontScale = conditions.fontScale;
     if (options.tokens) this.styles.setRootTokens(options.tokens);
     this.structuralSheets = options.globalStyles?.structural === true;
     this.dev = options.dev ?? (globalThis as { __DEV__?: boolean }).__DEV__ === true;
@@ -1766,9 +1783,12 @@ export class Engine implements HostEngine {
   }
 
   private viewportSize: { readonly width: number; readonly height: number };
+  /** The system text size, from the conditions. See `Conditions.fontScale`. */
+  private fontScale: number | undefined;
 
   updateConditions(next: Conditions): void {
     this.viewportSize = { width: next.width, height: next.height };
+    this.fontScale = next.fontScale;
     this.styles.setConditions(next);
     this.root.subtreeDirty = true;
     // Committed here rather than left to the next change-detection pass, because there may not
@@ -2275,7 +2295,7 @@ export class Engine implements HostEngine {
     if (this.fontsRefreshed) this.capForFonts(node, style);
     alignMultiline(viewName, style);
     const merged = composeTransform(node, this.animated(node, this.transitioned(node, style)));
-    centreSingleLine(viewName, merged);
+    centreSingleLine(viewName, merged, this.fontScale);
     return merged;
   }
 

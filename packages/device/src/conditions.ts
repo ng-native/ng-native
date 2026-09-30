@@ -48,6 +48,7 @@ export function currentConditions(): Conditions {
     // corrects it. Reduced motion is a preference about what happens next, not about the frame
     // already on screen, so nothing is lost by learning it a tick late.
     reducedMotion: false,
+    fontScale: fontScale(),
   };
 }
 
@@ -94,23 +95,23 @@ export function watchConditions<Node>(
   if (options.darkClass !== false && conditions.colorScheme === 'dark') push({});
 
   // The system text size. Every text on screen was measured at the old one, and keeps that box
-  // until it is measured again, so a change re-measures them all before anything else commits.
-  // A change arrives as a `Dimensions` change on both platforms; the app coming back to the
+  // until it is measured again, so a change goes into the conditions and then re-measures them
+  // all. A change arrives as a `Dimensions` change on both platforms; the app coming back to the
   // foreground is checked as well, and the same change reported by both is re-measured once.
-  let scale = fontScale();
-  const rescale = (next: number) => {
-    if (next === scale) return;
+  let scale = conditions.fontScale ?? 1;
+  const resize = (change: Partial<Conditions>, next: number) => {
+    const rescaled = next !== scale;
     scale = next;
-    engine.remeasureText?.();
+    push({ ...change, fontScale: next });
+    if (rescaled) engine.remeasureText?.();
   };
 
-  const sizes = screen.subscribe(({ window }) => {
-    rescale(fontScale());
-    push({ width: window.width, height: window.height });
-  });
+  const sizes = screen.subscribe(({ window }) =>
+    resize({ width: window.width, height: window.height }, fontScale()),
+  );
   const scheme = colors.subscribe((colorScheme) => push({ colorScheme }));
   const settings = accessibility.subscribe((change) => {
-    if (change.fontScale !== undefined) rescale(change.fontScale);
+    if (change.fontScale !== undefined && change.fontScale !== scale) resize({}, change.fontScale);
     if (change.reduceMotion !== undefined) push({ reducedMotion: change.reduceMotion });
   });
   void accessibility

@@ -507,6 +507,7 @@ describe('the engine conditions', () => {
       height: 0,
       colorScheme: 'light',
       reducedMotion: false,
+      fontScale: 1,
     });
 
     const stop = watchConditions(engine);
