@@ -1592,14 +1592,13 @@ function resolveAliases(
   merged: Record<string, TokenValue>,
 ): Record<string, TokenValue> {
   const names = Object.keys(own);
-  followAliases(
-    names.filter((name) => own[name]!.alias),
-    merged,
-  );
+  const aliases = names.filter((name) => own[name]!.alias);
+  followAliases(aliases, merged);
   // Until a pass settles nothing more: one made of another defined after it, or of one not yet
   // settled, cannot be worked out until that one is. What is left then is a cycle, or reads a
   // token that is not there, and is unset.
-  let pending = names.filter((name) => isDerived(own[name]));
+  const derivedNames = names.filter((name) => isDerived(own[name]));
+  let pending = derivedNames;
   for (let settled = true; settled && pending.length;) {
     settled = false;
     pending = pending.filter((name) => {
@@ -1611,11 +1610,11 @@ function resolveAliases(
     });
   }
   for (const name of pending) delete merged[name];
-  // An alias to one of those copied it unsettled above: follow it again, now it is settled.
-  for (const name of names) {
-    const target = own[name]!.alias;
-    if (!target || !isDerived(own[target])) continue;
-    settle(merged, name, followAlias(name, { ...merged, [name]: own[name]! }));
+  // A chain that ends at one of those, by a link or a fallback, copied it unsettled above into
+  // every alias on the way: follow them all again, from what they were defined as, now it is.
+  if (derivedNames.length && aliases.length) {
+    for (const name of aliases) merged[name] = own[name]!;
+    followAliases(aliases, merged);
   }
   return merged;
 }
@@ -1727,11 +1726,6 @@ function hslToRgb(h: number, s: number, l: number, alpha: number): string {
   return alpha >= 1
     ? `rgb(${r}, ${g}, ${b})`
     : `rgba(${r}, ${g}, ${b}, ${Math.round(alpha * 1000) / 1000})`;
-}
-
-function followAlias(name: string, tokens: Record<string, TokenValue>): TokenValue | undefined {
-  const value = follow(name, tokens, []);
-  return typeof value === 'number' ? undefined : value;
 }
 
 /**

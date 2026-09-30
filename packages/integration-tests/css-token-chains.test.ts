@@ -172,6 +172,20 @@ describe('a chain of var() in a stylesheet', () => {
     assert.equal(color(self), GREEN);
   });
 
+  it('resolves a chain that ends at a token made of others, defined alongside it', () => {
+    // An hsl() of tokens, a colour of channels or a calc() is worked out after the aliases are
+    // followed, so every link on the way to one has to be followed again, not only the last.
+    const hsl = ':root { --hue: 0; --c: hsl(var(--hue), 100%, 50%); --b: var(--c); --a: var(--b) }';
+    assert.equal(color(`${hsl} .x { color: var(--a) }`), RED);
+    assert.equal(color(`${hsl} .x { color: var(--b) }`), RED, 'the link next to it');
+    const channels =
+      ':root { --rgb: 255, 0, 0; --c: rgba(var(--rgb), 1); --b: var(--c); --a: var(--b) }';
+    assert.equal(color(`${channels} .x { color: var(--a) }`), 'rgba(255, 0, 0, 1)');
+    const fallback =
+      ':root { --hue: 0; --c: hsl(var(--hue), 100%, 50%); --a: var(--none, var(--c)) }';
+    assert.equal(color(`${fallback} .x { color: var(--a) }`), RED, 'through a fallback');
+  });
+
   it('takes the fallback of a property outside a cycle that names one', () => {
     const css =
       ':root { --a: var(--b); --b: var(--a); --c: var(--a, rgb(0, 128, 0)) } .x { color: var(--c) }';
