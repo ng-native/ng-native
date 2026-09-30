@@ -2,6 +2,10 @@
  * Fixture for `browser/events.test.ts`: one of each control, every event it has logged in the
  * order it arrived. See `button-app.ts`'s doc comment for why a real `@Component` has to live in
  * its own file rather than inside a test.
+ *
+ * The pressable's long press is ten seconds off, past any hold a test makes. A long press cancels
+ * the press, and at the default 500ms a runner slow enough to stretch a 200ms Space hold past it
+ * fails a test that is about something else.
  */
 import { Component, signal } from '@angular/core';
 import { Pressable, ScrollView, Text, TextInput, View } from '@ng-native/components';
@@ -17,6 +21,7 @@ import { Pressable, ScrollView, Text, TextInput, View } from '@ng-native/compone
       (press)="log('press')"
       (pressOut)="log('pressOut')"
       (longPress)="log('longPress')"
+      delayLongPress="10000"
     >
       <text>Save</text>
     </pressable>
