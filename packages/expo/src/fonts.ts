@@ -22,7 +22,7 @@
  */
 import { InjectionToken, computed, signal, type Signal } from '@angular/core';
 import { faceName, fontsRegistered } from '@ng-native/fabric';
-import { expoModule } from './native.ts';
+import { currentPlatform, expoModule, optional } from './native.ts';
 
 /** A face a stylesheet declared, as the compiler collected it. */
 export interface FontFace {
@@ -70,8 +70,21 @@ export function registrationsFor(faces: readonly FontFace[]): Record<string, unk
   return map;
 }
 
+/**
+ * `expo-font`, when its native module is in the build.
+ *
+ * The native module is asked for first because `expo-font`'s JavaScript throws while it is being
+ * evaluated when the module is not there, and Metro reports that as fatal, before any `catch`
+ * here, whenever it is not inside another module's load: in a promise callback, say. Not on the
+ * web, where `expo-font` registers its module only once it is evaluated.
+ */
 export function expoFonts(): NativeFonts | null {
-  const expo = expoModule('expo-font', () => require('expo-font') as typeof import('expo-font'));
+  const expo = expoModule('expo-font', () => {
+    const core = optional(() => require('expo-modules-core') as typeof import('expo-modules-core'));
+    const native = currentPlatform() !== 'web';
+    if (core && native && !core.requireOptionalNativeModule('ExpoFontLoader')) return null;
+    return require('expo-font') as typeof import('expo-font');
+  });
   if (!expo) return null;
   return {
     loadAsync: (map) => expo.loadAsync(map as Parameters<typeof expo.loadAsync>[0]),
@@ -151,9 +164,13 @@ export type Fonts = FontRegistry;
  * Register every face the given sheets declare, before the app mounts.
  *
  * A function rather than a service because that is when it is needed: there is no injector yet.
+ *
+ * A missing `expo-font` rejects the promise rather than throwing, so a caller's `.catch` can mount
+ * the app in the fallback face. Sheets that declare no face resolve without reaching for it.
  */
-export function loadFonts(
+export async function loadFonts(
   ...sheets: readonly (SheetWithFonts | null | undefined)[]
 ): Promise<void> {
-  return new FontRegistry(expoFonts()).loadSheet(...sheets);
+  if (!sheets.some((sheet) => sheet?.fonts?.length)) return;
+  await new FontRegistry(expoFonts()).loadSheet(...sheets);
 }

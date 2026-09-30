@@ -48,7 +48,7 @@ export class MissingModuleError extends Error {
 }
 
 /** The platform the app is running on, or null in Node, where there is none to ask. */
-function currentPlatform(): ModulePlatform | null {
+export function currentPlatform(): ModulePlatform | null {
   return optional(
     () => (require('react-native') as { Platform: { OS: string } }).Platform.OS as ModulePlatform,
   );

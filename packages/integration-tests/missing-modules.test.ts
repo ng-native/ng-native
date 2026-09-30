@@ -37,7 +37,7 @@ import { Crypto } from '@ng-native/expo/crypto';
 import { database } from '@ng-native/expo/database';
 import { DocumentPicker } from '@ng-native/expo/document-picker';
 import { FileSystem } from '@ng-native/expo/file-system';
-import { Fonts } from '@ng-native/expo/fonts';
+import { Fonts, loadFonts } from '@ng-native/expo/fonts';
 import { Haptics } from '@ng-native/expo/haptics';
 import { ImageEditor } from '@ng-native/expo/image-editor';
 import { ImagePicker } from '@ng-native/expo/image-picker';
@@ -192,5 +192,75 @@ describe('a service whose module is missing', () => {
       if (name === 'database' || name === 'videoPlayer' || name === 'audioPlayer') continue;
       assert.doesNotThrow(reach, name);
     }
+  });
+});
+
+/**
+ * `loadFonts()` is called from bootstrap code such as `registerRunnable`'s synchronous callback,
+ * where a throw skips the caller's `.catch` and nothing mounts.
+ */
+describe('loadFonts without expo-font', () => {
+  const sheet = { fonts: [{ family: 'Inter', source: 1 }] };
+
+  it('rejects rather than throwing, so the caller can mount in the fallback face', async () => {
+    let loading: Promise<void> | undefined;
+    assert.doesNotThrow(() => {
+      loading = on('ios', () => loadFonts(sheet));
+    });
+    await assert.rejects(loading!, fixes('expo-font', 'ios'));
+  });
+
+  it('never evaluates expo-font when its native module is not in the build', async () => {
+    // Expo Go without the module: expo-font's JavaScript is there and throws while it is being
+    // evaluated, which Metro reports as fatal whenever that is not inside another module's load.
+    const evaluated: string[] = [];
+    const host = globalThis as Record<string, unknown>;
+    host['require'] = (id: string) => {
+      evaluated.push(id);
+      if (id === 'react-native') return { Platform: { OS: 'ios' } };
+      if (id === 'expo-modules-core') return { requireOptionalNativeModule: () => null };
+      throw new Error(`Cannot find native module 'ExpoFontLoader'`);
+    };
+    let loading: Promise<void> | undefined;
+    try {
+      assert.doesNotThrow(() => {
+        loading = loadFonts(sheet);
+      });
+    } finally {
+      delete host['require'];
+    }
+    await assert.rejects(loading!, fixes('expo-font', 'ios'));
+    assert.ok(!evaluated.includes('expo-font'), `expo-font was evaluated: ${evaluated.join(', ')}`);
+  });
+
+  it('loads through expo-font on the web, which registers its module only once evaluated', async () => {
+    const loaded: unknown[] = [];
+    const host = globalThis as Record<string, unknown>;
+    host['require'] = (id: string) => {
+      if (id === 'react-native') return { Platform: { OS: 'web' } };
+      if (id === 'expo-modules-core') return { requireOptionalNativeModule: () => null };
+      if (id === 'expo-font') {
+        return {
+          loadAsync: async (map: unknown) => void loaded.push(map),
+          isLoaded: () => true,
+          getLoadedFonts: () => [],
+        };
+      }
+      throw new Error(`Cannot find module '${id}'`);
+    };
+    try {
+      await loadFonts(sheet);
+    } finally {
+      delete host['require'];
+    }
+    assert.deepEqual(loaded, [{ Inter: 1 }]);
+  });
+
+  it('resolves when no sheet declares a face, as bootstrap calls it unconditionally', async () => {
+    let loading: Promise<void> | undefined;
+    assert.doesNotThrow(() => {
+      loading = on('ios', () => loadFonts({}, null));
+    });
+    await assert.doesNotReject(loading!);
   });
 });

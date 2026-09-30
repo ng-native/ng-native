@@ -111,9 +111,22 @@ export class FamilyPicker {
 ## Without the module
 
 On iOS and Android, a missing `expo-font` - never installed, or installed without the app
-being rebuilt since - throws a `MissingModuleError` when `Fonts` first reaches for it. Its
-message names the module and the commands that fix it; see
+being rebuilt since - is a `MissingModuleError`. Its message names the module and the commands
+that fix it; see
 [Using a module](/packages/expo/using-a-module#what-happens-without-the-module-installed).
+`loadFonts()` rejects with it rather than throwing, and only when a sheet declares a face, so an
+app that should still start mounts after the promise settles either way and draws its text in
+the fallback face:
+
+```ts
+AppRegistry.registerRunnable('main', ({ rootTag }) => {
+  void loadFonts(styleSheetOf(GlobalStyles))
+    .catch((error: unknown) => console.error(error))
+    .then(() => mount(rootTag, App, getFabricUIManager()));
+});
+```
+
+`inject(Fonts)` throws it when `Fonts` is first injected.
 
 On the web, and in a test that provides no fake, `loadFonts()` resolves without registering anything, so text renders in the platform's fallback
 face rather than failing to mount. `Fonts.available` is `false`, `families()` is empty, and
