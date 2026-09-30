@@ -16,6 +16,10 @@
       "description": "The project name. Defaults to the directory's last segment.",
       "pattern": "^[a-z][a-z0-9-]*$"
     },
+    "bundleIdentifier": {
+      "type": "string",
+      "description": "The iOS bundle identifier and Android package: com.acme.mobile. Defaults to com.<workspace scope>.<name>."
+    },
     "tags": {
       "type": "string",
       "description": "Comma-separated tags for the project."

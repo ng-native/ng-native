@@ -196,6 +196,42 @@ describe('in an integrated workspace', () => {
     assert.match(tree.read('.gitignore', 'utf-8')!, /^\.expo\/$/m);
   });
 
+  it("sets the bundle identifier, from the workspace's scope and the app's name", async () => {
+    // Without one, prebuild made every app com.anonymous.<name>.
+    const tree = integrated();
+    await generate(tree, { directory: 'apps/field-notes' });
+    const { expo } = JSON.parse(tree.read('apps/field-notes/app.json', 'utf-8')!);
+    assert.equal(expo.ios.bundleIdentifier, 'com.proj.fieldnotes');
+    assert.equal(expo.android.package, 'com.proj.fieldnotes');
+    assert.equal(expo.ios.supportsTablet, true);
+    assert.equal(expo.android.predictiveBackGestureEnabled, false);
+  });
+
+  it('takes the bundle identifier from --bundleIdentifier', async () => {
+    const tree = integrated();
+    await generate(tree, { directory: 'apps/mobile', bundleIdentifier: 'dev.acme.Mobile2' });
+    const { expo } = JSON.parse(tree.read('apps/mobile/app.json', 'utf-8')!);
+    assert.equal(expo.ios.bundleIdentifier, 'dev.acme.Mobile2');
+    assert.equal(expo.android.package, 'dev.acme.Mobile2');
+  });
+
+  it('refuses a bundle identifier iOS or Android would', async () => {
+    for (const id of [
+      'mobile',
+      'com.acme.field-notes',
+      'com.acme.field_notes',
+      'com.2acme.app',
+      'com.acme.native',
+      'com..app',
+    ]) {
+      await assert.rejects(
+        generate(integrated(), { directory: 'apps/mobile', bundleIdentifier: id }),
+        /is not a bundle identifier both iOS and Android accept/,
+        id,
+      );
+    }
+  });
+
   it('ignores it once, however many apps are added', async () => {
     const tree = integrated();
     await generate(tree, { directory: 'apps/mobile' });

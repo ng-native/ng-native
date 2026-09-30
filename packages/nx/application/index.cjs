@@ -36,7 +36,8 @@ function names(tree, options) {
   const workspaces = usesWorkspaces(tree);
   // A workspace package is named for the workspace's scope, as Nx names its own.
   const projectName = workspaces && scope ? `${scope}/${name}` : name;
-  return { directory, name, projectName, workspaces };
+  const bundleIdentifier = options.bundleIdentifier ?? native.bundleIdentifier(name, scope);
+  return { directory, name, projectName, workspaces, bundleIdentifier };
 }
 
 function targets(directory) {
@@ -72,10 +73,10 @@ function commands(name) {
   ].join('\n');
 }
 
-function writeFiles(tree, { directory, projectName, workspaces }) {
+function writeFiles(tree, { directory, projectName, workspaces, bundleIdentifier }) {
   const file = (name, content) => tree.write(joinPathFragments(directory, name), content);
   for (const name of native.SOURCE_FILES) file(name, native.sourceFile(name));
-  file('app.json', native.appJson(projectName));
+  file('app.json', native.appJson(projectName, bundleIdentifier));
   file('AGENTS.md', native.agentsFile(commands(projectName)));
   file('CLAUDE.md', '@AGENTS.md\n');
   file('metro.config.js', native.METRO_CONFIG);
@@ -111,11 +112,17 @@ function ignoreExpo(tree) {
 
 /**
  * @param {import('@nx/devkit').Tree} tree
- * @param {{ directory: string, name?: string, tags?: string, skipInstall?: boolean, skipFormat?: boolean }} options
+ * @param {{ directory: string, name?: string, bundleIdentifier?: string, tags?: string, skipInstall?: boolean, skipFormat?: boolean }} options
  */
 async function application(tree, options) {
   const resolved = names(tree, options);
   const { directory, projectName, workspaces } = resolved;
+  if (!native.isBundleIdentifier(resolved.bundleIdentifier)) {
+    throw new Error(
+      `${resolved.bundleIdentifier} is not a bundle identifier both iOS and Android accept: ` +
+        'two or more dot-separated segments, each a letter and then letters or digits, none a Java keyword.',
+    );
+  }
   if (tree.exists(joinPathFragments(directory, 'package.json'))) {
     throw new Error(`${directory} already has a package.json. Choose another directory.`);
   }

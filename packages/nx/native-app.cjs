@@ -91,14 +91,56 @@ function agentsFile(commands) {
   );
 }
 
+/** Java's reserved words, which Android refuses as a segment of a package name. */
+const JAVA_KEYWORDS = new Set(
+  (
+    'abstract assert boolean break byte case catch char class const continue default do double ' +
+    'else enum extends false final finally float for goto if implements import instanceof int ' +
+    'interface long native new null package private protected public return short static ' +
+    'strictfp super switch synchronized this throw throws transient true try void volatile while'
+  ).split(' '),
+);
+
+/**
+ * Whether iOS takes `id` as a bundle identifier and Android as a package name: two or more
+ * segments, each a letter and then letters or digits (iOS refuses `_`, Android `-`), none of them
+ * a Java keyword.
+ *
+ * @param {string} id
+ */
+function isBundleIdentifier(id) {
+  const segments = id.split('.');
+  return (
+    segments.length > 1 &&
+    segments.every((s) => /^[a-z][a-z0-9]*$/i.test(s) && !JAVA_KEYWORDS.has(s))
+  );
+}
+
+/**
+ * `com.<scope>.<name>`, for an app given no `--bundleIdentifier`, where prebuild would otherwise
+ * make it `com.anonymous.<name>`. The scope is left out when it cannot be made a segment.
+ *
+ * @param {string} name the app's name, without a scope
+ * @param {string | undefined} scope the workspace's npm scope, `@acme`
+ */
+function bundleIdentifier(name, scope) {
+  const clean = (text) => text.toLowerCase().replace(/[^a-z0-9]/g, '');
+  const valid = (segment) => /^[a-z]/.test(segment) && !JAVA_KEYWORDS.has(segment);
+  const org = clean(scope ?? '');
+  const app = clean(name);
+  return ['com', ...(valid(org) ? [org] : []), valid(app) ? app : `app${app}`].join('.');
+}
+
 /**
  * The template's `app.json`, named for this app, without the template's icons: they are the
  * template's branding, and Expo draws its own default until `icon` is set.
  *
  * @param {string} name the project name, which is also the Expo slug
+ * @param {string} [id] the iOS bundle identifier and Android package, by default one from `name`
  */
-function appJson(name) {
+function appJson(name, id) {
   const slug = name.replace(/^@[^/]+\//, '');
+  const bundle = id ?? bundleIdentifier(slug, name.match(/^@[^/]+/)?.[0]);
   const expo = {
     name: slug,
     slug,
@@ -107,8 +149,8 @@ function appJson(name) {
     platforms: ['ios', 'android'],
     orientation: 'portrait',
     userInterfaceStyle: 'dark',
-    ios: { supportsTablet: true },
-    android: { predictiveBackGestureEnabled: false },
+    ios: { supportsTablet: true, bundleIdentifier: bundle },
+    android: { package: bundle, predictiveBackGestureEnabled: false },
     scheme: slug.replace(/[^a-z0-9]/gi, '').toLowerCase(),
     // The template's: Expo otherwise guesses a router root from src/app and says so on every start.
     extra: { router: { root: 'src/app' } },
@@ -269,6 +311,8 @@ module.exports = {
   sourceFile,
   agentsFile,
   appJson,
+  bundleIdentifier,
+  isBundleIdentifier,
   METRO_CONFIG,
   tsconfig,
   vitestConfig,

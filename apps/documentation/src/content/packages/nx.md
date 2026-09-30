@@ -98,4 +98,8 @@ usual; the app imports it like any other.
 ## Options
 
 `nx g @ng-native/nx:app <directory>` takes `--name` (the directory's last segment by default),
-`--tags`, `--skipInstall` and `--skipFormat`, which leaves the generated files unformatted.
+`--bundleIdentifier`, `--tags`, `--skipInstall` and `--skipFormat`, which leaves the generated files
+unformatted. `--bundleIdentifier` is the iOS bundle identifier and Android package in `app.json`;
+it defaults to `com.<scope>.<name>`, from the workspace's npm scope and the app's name with
+anything but letters and digits removed, where `expo prebuild` would otherwise use
+`com.anonymous.<name>`.

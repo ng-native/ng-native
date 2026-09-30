@@ -88,6 +88,18 @@ describe('the generated app', () => {
     assert.equal(native.devDependencies['@ng-native/testing'], version);
   });
 
+  it('derives a bundle identifier iOS and Android both accept', () => {
+    assert.equal(native.bundleIdentifier('field-notes', '@acme'), 'com.acme.fieldnotes');
+    assert.equal(native.bundleIdentifier('mobile', undefined), 'com.mobile');
+    // Android refuses a segment that is a Java keyword or starts with a digit.
+    assert.equal(native.bundleIdentifier('native', '@ng-native'), 'com.ngnative.appnative');
+    assert.equal(native.bundleIdentifier('mobile', '@1password'), 'com.mobile');
+    assert.equal(native.bundleIdentifier('Mobile_App', '@new'), 'com.mobileapp');
+    for (const id of ['com.acme.fieldnotes', 'com.ngnative.appnative', 'com.mobileapp']) {
+      assert.ok(native.isBundleIdentifier(id), id);
+    }
+  });
+
   it("names app.json for the project without its scope, keeping the template's settings", () => {
     const { expo } = JSON.parse(native.appJson('@org/field-notes'));
     const theirs = JSON.parse(templateFile('app.json')).expo;
