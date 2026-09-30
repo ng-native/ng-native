@@ -134,6 +134,26 @@ describe('in an integrated workspace', () => {
     assert.equal(serve?.continuous, true);
   });
 
+  it('builds each later app against its own Metro port, in run-ios and run-android too', async () => {
+    // @nx/expo infers a plain expo run:ios, which bakes 8081 into the build: the second app
+    // prompted for another port, or attached to the first app's Metro.
+    const tree = integrated();
+    await generate(tree, { directory: 'apps/mobile' });
+    await generate(tree, { directory: 'apps/admin' });
+    const first = readProjectConfiguration(tree, 'mobile').targets ?? {};
+    assert.equal(first['run-ios'], undefined, "the first app keeps @nx/expo's inferred targets");
+    assert.equal(first['run-android'], undefined);
+    const { 'run-ios': ios, 'run-android': android } =
+      readProjectConfiguration(tree, 'admin').targets ?? {};
+    assert.equal(ios?.options.command, 'expo run:ios --port 8082');
+    assert.equal(android?.options.command, 'expo run:android --port 8082');
+    for (const target of [ios, android]) {
+      assert.equal(target?.executor, 'nx:run-commands');
+      assert.equal(target?.options.cwd, 'apps/admin');
+      assert.equal(target?.continuous, true);
+    }
+  });
+
   it('gives each app its own Metro port, so nx run-many -t start can run them together', async () => {
     // Both apps ran a bare expo start, and the second died with EADDRINUSE :::8081.
     const tree = integrated();

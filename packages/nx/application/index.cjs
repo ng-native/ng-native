@@ -117,7 +117,13 @@ function metroPort(tree) {
 
 function targets(directory, port) {
   const run = (command) => ({ executor: 'nx:run-commands', options: { cwd: directory, command } });
-  const start = port === DEFAULT_PORT ? 'expo start' : `expo start --port ${port}`;
+  const own = port === DEFAULT_PORT ? '' : ` --port ${port}`;
+  // `expo run:ios` and `expo run:android` build the port into the app, so a later app's has to be
+  // its own too. The first app's are @nx/expo's inferred ones, on Expo's default.
+  const runs = own && {
+    'run-ios': { ...run(`expo run:ios${own}`), continuous: true },
+    'run-android': { ...run(`expo run:android${own}`), continuous: true },
+  };
   return {
     typecheck: {
       ...run('ngc -p tsconfig.json --noEmit'),
@@ -125,8 +131,9 @@ function targets(directory, port) {
       inputs: ['default', '^production'],
     },
     test: { ...run('vitest run'), cache: true, inputs: ['default', '^production'] },
-    start: { ...run(start), continuous: true },
-    serve: { ...run(start), continuous: true },
+    start: { ...run(`expo start${own}`), continuous: true },
+    serve: { ...run(`expo start${own}`), continuous: true },
+    ...runs,
   };
 }
 

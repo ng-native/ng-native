@@ -69,8 +69,9 @@ notice.
 Each app gets a Metro port of its own, so `nx run-many -t start` runs several side by side. The
 first Expo app in the workspace uses Expo's default, 8081, with a plain `expo start`. Each later one
 takes the lowest port no other app's `start` or `serve` uses (`expo start --port 8082`, and so on),
-and Expo Go opens it at `exp://127.0.0.1:8082`. An Expo app whose `start` is inferred counts as
-on 8081.
+and Expo Go opens it at `exp://127.0.0.1:8082`. A later app's `run-ios` and `run-android` pass
+the same port (`expo run:ios --port 8082`), since the build bakes in the port its app loads from.
+The first app keeps the ones `@nx/expo` infers. An Expo app whose `start` is inferred counts as on 8081.
 
 ## The files
 
