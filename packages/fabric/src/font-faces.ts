@@ -64,17 +64,20 @@ export function matchFace(
     candidates
       .filter((face) => weightOfFace(face) >= from && weightOfFace(face) <= to)
       .sort((a, b) => weightOfFace(a) - weightOfFace(b))[0];
-  const lighter = (below: number) =>
+  const lighter = (upTo: number) =>
     candidates
-      .filter((face) => weightOfFace(face) < below)
+      .filter((face) => weightOfFace(face) <= upTo)
       .sort((a, b) => weightOfFace(b) - weightOfFace(a))[0];
 
   if (weight >= 400 && weight <= 500) {
     return heavier(weight, 500) ?? lighter(weight) ?? heavier(500, Infinity);
   }
-  if (weight < 400) return lighter(weight + 1) ?? heavier(weight, Infinity);
+  if (weight < 400) return lighter(weight) ?? heavier(weight, Infinity);
   return heavier(weight, Infinity) ?? lighter(weight);
 }
+
+/** A family as CSS compares it: without regard to case. */
+const familyKey = (family: string) => family.toLowerCase();
 
 /** Every face the engine has seen a sheet declare, by family. */
 export class FontFaces {
@@ -82,8 +85,8 @@ export class FontFaces {
 
   add(faces: readonly FontFace[]): void {
     for (const face of faces) {
-      const known = this.byFamily.get(face.family);
-      if (!known) this.byFamily.set(face.family, [face]);
+      const known = this.byFamily.get(familyKey(face.family));
+      if (!known) this.byFamily.set(familyKey(face.family), [face]);
       else if (!known.some((one) => faceName(one) === faceName(face))) known.push(face);
     }
   }
@@ -96,7 +99,7 @@ export class FontFaces {
     if (this.byFamily.size === 0) return;
     const family = style['fontFamily'];
     if (typeof family !== 'string') return;
-    const faces = this.byFamily.get(family);
+    const faces = this.byFamily.get(familyKey(family));
     if (!faces) return;
 
     const weight = weightOf(style['fontWeight']);

@@ -142,6 +142,14 @@ describe('matching a weight to a declared face', () => {
     assert.equal(props['fontWeight'], '700', 'the platform makes it bold, as before');
   });
 
+  it('matches a family whatever its case, as CSS does', () => {
+    const css = `${faces([], [700])} .a { font-family: inter; font-weight: 700 } .b { font-family: INTER }`;
+    assert.equal(familyOf(css, 'a'), 'Inter-700');
+    assert.equal(familyOf(css, 'b'), 'Inter', 'the name the regular face is registered under');
+    const props = text(faces([], [700]), '', { fontFamily: 'inter', fontWeight: '700' });
+    assert.equal(props['fontFamily'], 'Inter-700');
+  });
+
   it("leaves a face's own name alone", () => {
     // `Inter-700` is a registered name, not a declared family, so nothing matches against it.
     const props = text(faces([], [700]), '', { fontFamily: 'Inter-700' });
@@ -167,6 +175,10 @@ describe("CSS's nearest-weight rules", () => {
     assert.equal(nearest([100, 400], 300), 'Inter-100');
     assert.equal(nearest([200, 300, 400], 300), 'Inter-300');
     assert.equal(nearest([400, 700], 300), 'Inter-400');
+  });
+
+  it('takes the weight itself first under 400, over a fractionally heavier face', () => {
+    assert.equal(nearest([300, 300.5], 300), 'Inter-300');
   });
 
   it('looks up first for a weight over 500, then down', () => {
