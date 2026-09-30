@@ -156,7 +156,10 @@ function factor(cursor: Cursor, kind: Marker['kind']): Expression {
     return value === undefined ? { reference: name } : { reference: name, fallback: value };
   }
   const fn = match(cursor, FUNCTION)?.[1];
-  return fn ? math(cursor, fn, kind) : literal(cursor, unitsOf(kind));
+  if (fn) return math(cursor, fn, kind);
+  const value = literal(cursor, unitsOf(kind));
+  // A percentage, kept apart from a bare number, as `literal` in the compiler keeps it.
+  return cursor.text[cursor.at - 1] === '%' ? { percentage: value } : value;
 }
 
 /**
@@ -169,10 +172,20 @@ function leafFallback(text: string | undefined, kind: Marker['kind']): Expressio
     return whole(text.trim(), (cursor) => factor(cursor, kind)) ?? fail();
   }
   const token = fallbackToken(text);
-  if (kind !== 'length') return token?.number;
+  if (kind !== 'length') return numberFallback(token, kind);
   if (typeof token?.length === 'number') return token.length;
   const rem = text === undefined ? undefined : /^\s*(-?\d*\.?\d+)rem\s*$/i.exec(text);
   return rem ? Number(rem[1]) * PER_UNIT['rem']! : undefined;
+}
+
+/** A fallback where a number is wanted: a percentage kept apart from a bare number. */
+function numberFallback(
+  token: TokenValue | undefined,
+  kind: Marker['kind'],
+): Expression | undefined {
+  const percentage =
+    kind === 'number' && typeof token?.length === 'string' && token.number !== undefined;
+  return percentage ? { percentage: token.number! } : token?.number;
 }
 
 /** The rest of a `calc()`, or of a `min()` or `max()` of sums, once its name is read. */

@@ -56,16 +56,23 @@ function leaf(term, kind, context) {
     return { reference: term.value.name.ident, fallback: tree(nested, kind, context) };
   }
   const { fallback } = fallbacks(term, kind, context);
+  if (typeof fallback !== 'number') return { reference: term.value.name.ident };
+  // A percentage stays one, as a percentage written in the arithmetic does.
+  const percentage = kind === 'number' && fractionOf(nested) !== undefined;
   return {
     reference: term.value.name.ident,
-    ...(typeof fallback === 'number' ? { fallback } : {}),
+    fallback: percentage ? { percentage: fallback } : fallback,
   };
 }
 
-/** A written number, length or angle, as the number its slot counts in. */
+/**
+ * A written number, length or angle, as the number its slot counts in; or, where the slot is a
+ * number, a percentage, as `{ percentage }`, the fraction it is kept apart from a bare number.
+ */
 function literal(term, kind, context) {
-  const readers = kind === 'number' ? [...READERS, fractionOf] : READERS;
-  for (const read of readers) {
+  const fraction = kind === 'number' ? fractionOf(term) : undefined;
+  if (fraction !== undefined) return { percentage: fraction };
+  for (const read of READERS) {
     const value = read(term, context);
     if (value !== undefined) return value;
   }
@@ -152,7 +159,8 @@ function factor(terms, start, kind, context) {
 
 /** A slot's value for the device: settled if it has no token in it, a `__calc` marker if it has. */
 function slot(term, kind, context) {
-  const value = tree(term, kind, context);
+  const written = tree(term, kind, context);
+  const value = written?.percentage ?? written;
   if (typeof value !== 'number') return { __calc: { expression: value, kind } };
   return kind === 'angle' ? `${value}deg` : value;
 }

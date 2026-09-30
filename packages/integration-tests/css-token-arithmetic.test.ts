@@ -408,10 +408,19 @@ describe('an hsl() of tokens reads a token holding a bare saturation or lightnes
   });
 
   it('reads a calc() token as the percentage or the number it makes', () => {
-    // calc(50% * 2) is a percentage and calc(2 * 50) a bare number, both 100% to Chrome here.
+    // calc(50% * 2) is a percentage and calc(2 * 50) a bare number, both 100% to Chrome here,
+    // whether the percentage is a token, a fallback or written in the calc().
     const read = '.x { color: var(--c, rgb(1, 2, 3)) }';
     const hsl = 'hsl(200 var(--s) 50%)';
-    for (const s of ['calc(var(--half) * 2)', 'calc(var(--two) * 50)']) {
+    for (const s of [
+      'calc(var(--half) * 2)',
+      'calc(var(--two) * 50)',
+      'calc(var(--missing, 50%) * 2)',
+      'calc(var(--m1, var(--m2, 50%)) * 2)',
+      'calc(var(--two) * 50%)',
+      'calc(var(--missing, 50) * 2)',
+      'calc(var(--two, 50%) * 50)',
+    ]) {
       const sheet = `:root { --half: 50%; --two: 2; --s: ${s}; --c: ${hsl} } ${read}`;
       assert.equal(innermost(sheet, [{}])['color'], 'rgb(0, 170, 255)', `${s} in a stylesheet`);
       const customs = [{ '--half': '50%', '--two': '2', '--s': s, '--c': hsl }];

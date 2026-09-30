@@ -1754,9 +1754,7 @@ function calcType(
   tokens: Readonly<Record<string, TokenValue>>,
 ): '' | '%' | undefined {
   if (typeof expression === 'number') return '';
-  if (!Array.isArray(expression)) {
-    return leafType(expression as { reference: string; fallback?: CalcExpression }, tokens);
-  }
+  if (!Array.isArray(expression)) return leafType(expression as CalcLeaf, tokens);
   const [op, a, b] = expression as readonly [string, CalcExpression, CalcExpression];
   const left = calcType(a, tokens);
   const right = calcType(b, tokens);
@@ -1768,9 +1766,10 @@ function calcType(
 
 /** What one token in a calc() is, as `calcType` reads it: its fallback's type when it is unset. */
 function leafType(
-  leaf: { reference: string; fallback?: CalcExpression },
+  leaf: CalcLeaf,
   tokens: Readonly<Record<string, TokenValue>>,
 ): '' | '%' | undefined {
+  if ('percentage' in leaf) return '%';
   const token = tokens[leaf.reference];
   if (!token) return leaf.fallback === undefined ? undefined : calcType(leaf.fallback, tokens);
   return typeof token.length === 'string' && token.length.endsWith('%') ? '%' : '';
@@ -2056,12 +2055,18 @@ interface LengthMarker {
 
 /**
  * Arithmetic with tokens in it, as the compiler leaves it: numbers, token references and
- * `[op, a, b]`, in points, degrees or plain numbers as the slot it fills counts.
+ * `[op, a, b]`, in points, degrees or plain numbers as the slot it fills counts. A percentage
+ * written where a number is wanted is its fraction, kept apart from a bare number so that what
+ * the arithmetic makes is still a percentage (see `calcType`).
  */
 type CalcExpression =
   | number
+  | { readonly percentage: number }
   | { readonly reference: string; readonly fallback?: CalcExpression }
   | readonly ['+' | '-' | '*' | '/' | 'max' | 'min', CalcExpression, CalcExpression];
+
+/** A calc() tree's leaf that is not a bare number. */
+type CalcLeaf = Exclude<CalcExpression, number | readonly unknown[]>;
 
 interface CalcMarker {
   readonly expression: CalcExpression;
@@ -2136,13 +2141,7 @@ function calculated(
   tokens: Readonly<Record<string, TokenValue>>,
 ): number | undefined {
   if (typeof expression === 'number') return expression;
-  if (!Array.isArray(expression)) {
-    const leaf = expression as Exclude<CalcExpression, number | readonly unknown[]>;
-    const own = tokenNumber(tokens[leaf.reference], kind);
-    return (
-      own ?? (leaf.fallback === undefined ? undefined : calculated(leaf.fallback, kind, tokens))
-    );
-  }
+  if (!Array.isArray(expression)) return leafValue(expression as CalcLeaf, kind, tokens);
   const [op, a, b] = expression as readonly [string, CalcExpression, CalcExpression];
   const left = calculated(a, kind, tokens);
   const right = calculated(b, kind, tokens);
@@ -2153,6 +2152,17 @@ function calculated(
   if (op === 'max') return Math.max(left, right);
   if (op === 'min') return Math.min(left, right);
   return left / right;
+}
+
+/** A written percentage, or a token, as `calculated` reads it: its fallback when it is unset. */
+function leafValue(
+  leaf: CalcLeaf,
+  kind: CalcMarker['kind'],
+  tokens: Readonly<Record<string, TokenValue>>,
+): number | undefined {
+  if ('percentage' in leaf) return leaf.percentage;
+  const own = tokenNumber(tokens[leaf.reference], kind);
+  return own ?? (leaf.fallback === undefined ? undefined : calculated(leaf.fallback, kind, tokens));
 }
 
 /** Where each kind of slot reads a token from, before its bare number. */
