@@ -83,10 +83,16 @@ function collectVariables(css) {
   // on the same node, and every one of them also has a reset value, so they all look themed and
   // none of them is. They stay substituted, which is what they have always been.
   for (const name of conflicting) {
-    if (!name.startsWith('--tw-')) values.delete(name);
+    if (!name.startsWith('--tw-')) values.set(name, THEMED);
   }
   return values;
 }
+
+/**
+ * What `collectVariables` holds for a themed property: known to be declared, so a `var()` of it is
+ * left whole, fallback and all, rather than collapsed to the fallback as an undeclared one is.
+ */
+const THEMED = Symbol('themed');
 
 /**
  * Find the next `var(` and return the whole call, its name and its fallback.
@@ -275,6 +281,10 @@ function substituteVariables(css, values, runtime) {
       // "nobody asked for a shadow colour" - and substituting the word itself produced a shadow
       // painted the colour `initial`, which is to say no shadow at all.
       const declared = values.get(found.name);
+      if (declared === THEMED) {
+        from = found.end;
+        continue;
+      }
       const value = declared === undefined || declared === 'initial' ? found.fallback : declared;
       if (value === undefined || selfReferential(value, found.name)) {
         from = found.end;

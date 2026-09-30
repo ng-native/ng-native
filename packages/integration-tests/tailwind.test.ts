@@ -15,6 +15,9 @@ import { createRequire } from 'node:module';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import type { StyleSheet } from '../fabric/src/css.ts';
+import { Engine } from '@ng-native/fabric';
+import { createFakeFabric } from '@ng-native/testing';
+import { committedProps } from './tailwind-cli.ts';
 
 const require = createRequire(import.meta.url);
 const { flattenTailwind } = require('@ng-native/tailwind') as {
@@ -230,6 +233,65 @@ describe('flattening Tailwind for the engine', () => {
         '.bg { background-color: var(--primary) }',
     );
     assert.match(out, /background-color: var\(--primary\)/);
+  });
+
+  describe('a themed token read with a fallback', () => {
+    /** The background a `.bg` view is committed with, under a root wearing `root`. */
+    const background = (css: string, root: string, classes = 'bg') => {
+      const sheet = compileCss(flattenTailwind(css), 'tailwind', { onUnsupported: () => {} });
+      const fabric = createFakeFabric();
+      const engine = new Engine(fabric, 1, { globalStyles: sheet });
+      for (const one of root.split(' ').filter(Boolean)) engine.addClass(engine.root, one);
+      const view = engine.createElement('view');
+      engine.setClasses(view, classes);
+      engine.appendChild(engine.root, view);
+      engine.commit();
+      return committedProps(fabric, view)['backgroundColor'];
+    };
+    const THEMED = ':root { --brand: rgb(1, 1, 1) }\n.dark { --brand: rgb(9, 9, 9) }\n';
+
+    it('resolves the token in each theme rather than taking the fallback', () => {
+      const css = `${THEMED}.bg { background-color: var(--brand, rgb(255, 0, 0)) }`;
+      assert.match(flattenTailwind(css), /var\(--brand, /);
+      assert.equal(background(css, ''), 'rgb(1, 1, 1)');
+      assert.equal(background(css, 'dark'), 'rgb(9, 9, 9)');
+    });
+
+    it('resolves a themed token nested in a fallback', () => {
+      const css = `${THEMED}.bg { background-color: var(--unset, var(--brand, rgb(255, 0, 0))) }`;
+      assert.equal(background(css, ''), 'rgb(1, 1, 1)');
+      assert.equal(background(css, 'dark'), 'rgb(9, 9, 9)');
+    });
+
+    it('uses the fallback where no rule on the root declares the token', () => {
+      const css =
+        '.dark { --brand: rgb(9, 9, 9) }\n.dim { --brand: rgb(5, 5, 5) }\n' +
+        '.bg { background-color: var(--brand, rgb(255, 0, 0)) }';
+      assert.equal(background(css, ''), 'rgb(255, 0, 0)');
+      assert.equal(background(css, 'dark'), 'rgb(9, 9, 9)');
+    });
+
+    it('resolves a token scoped to a platform class', () => {
+      const css =
+        '.platform-ios { --brand: rgb(1, 1, 1) }\n.platform-android { --brand: rgb(9, 9, 9) }\n' +
+        '.bg { background-color: var(--brand, rgb(255, 0, 0)) }';
+      assert.equal(background(css, 'platform-ios'), 'rgb(1, 1, 1)');
+      assert.equal(background(css, 'platform-android'), 'rgb(9, 9, 9)');
+      assert.equal(background(css, ''), 'rgb(255, 0, 0)');
+    });
+
+    it('resolves a fallback that is itself a themed token', () => {
+      const css = `${THEMED}.bg { background-color: var(--unset, var(--brand)) }`;
+      assert.equal(background(css, 'dark'), 'rgb(9, 9, 9)');
+    });
+
+    it('still substitutes a token declared once, fallback or not', () => {
+      const out = flattenTailwind(
+        ':root { --one: rgb(1, 1, 1) }\n.bg { background-color: var(--one, rgb(255, 0, 0)) }',
+      );
+      assert.doesNotMatch(out, /var\(--one/);
+      assert.doesNotMatch(out, /255, 0, 0|#f00/);
+    });
   });
 
   it('still substitutes a token that only ever has one value', () => {
