@@ -615,15 +615,17 @@ const textDirection = (value: unknown): TextDirection | undefined =>
  * and, unlike a paragraph (`RCTApplyBaselineOffset`), never offsets the baseline, so the glyphs
  * sit at the bottom of a line box taller than the font. One line has nothing to space, so the line
  * height is left out. What it does in Chrome, and on Android, is set the field's height: line
- * height, padding and border. That is kept as a `minHeight` (border-box, as Yoga's is), the larger
- * of it and the field's own, within its `maxHeight`. A `height` sizes the field on its own, as it
- * does there. A value that is not a number cannot be added up, and leaves the field as it was.
+ * height, padding and border. That is kept as a `minHeight`, the larger of it and the field's own,
+ * within its `maxHeight`: the whole sum for a border-box field, Yoga's default, and the line height
+ * alone for a content-box one. A `height` sizes the field on its own, as it does there, and a null
+ * one is no height. A value that is not a number cannot be added up, and leaves the field as it
+ * was.
  */
 function centreSingleLine(props: Record<string, unknown>): void {
   const lineHeight = props['lineHeight'];
   if (typeof lineHeight !== 'number' || props['multiline'] === true) return;
   const height = props['height'];
-  if (height !== undefined && height !== 'auto') {
+  if (isSet(height) && height !== 'auto') {
     delete props['lineHeight'];
     return;
   }
@@ -641,7 +643,11 @@ function centreSingleLine(props: Record<string, unknown>): void {
   const max = props['maxHeight'] ?? Infinity;
   if (![...box, own, max].every((part) => typeof part === 'number')) return;
   delete props['lineHeight'];
-  const content = (box as number[]).reduce((sum, part) => sum + part, 0);
+  // A content-box field's minHeight is its content's: Yoga adds the padding and border itself.
+  const content =
+    props['boxSizing'] === 'content-box'
+      ? lineHeight
+      : (box as number[]).reduce((sum, part) => sum + part, 0);
   props['minHeight'] = Math.max(own as number, Math.min(content, max as number));
 }
 

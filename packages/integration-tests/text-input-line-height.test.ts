@@ -120,6 +120,25 @@ describe('a single-line text input with a line height', () => {
     }
   });
 
+  it('reads a null height as no height, as React Native does', () => {
+    const { props } = commitInput((engine, input) => {
+      engine.addClass(input, 'field');
+      engine.setProp(input, 'style', { height: null });
+    });
+    assert.equal(props()['lineHeight'], undefined);
+    assert.equal(props()['minHeight'], 41);
+  });
+
+  it('keeps the line alone as the minHeight of a content-box field', () => {
+    // Yoga adds a content-box field's padding and border to its minHeight itself.
+    const { props } = commitInput((engine, input) => {
+      engine.addClass(input, 'field');
+      engine.setProp(input, 'style', { boxSizing: 'content-box' });
+    });
+    assert.equal(props()['lineHeight'], undefined);
+    assert.equal(props()['minHeight'], 24);
+  });
+
   it('keeps the line box within a maxHeight', () => {
     const { props } = commitInput((engine, input) => {
       engine.addClass(input, 'field');
