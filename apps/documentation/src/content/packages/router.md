@@ -116,6 +116,49 @@ working exactly as it does on the web, because it is still the same `Router`. Fo
 <pressable [nativeRouterLink]="['/detail', item.id]"><text>Open</text></pressable>
 ```
 
+## When a page fails to load
+
+A lazy route whose code cannot be loaded fails its navigation the way it does on the web: the
+router emits a `NavigationError` and stays on the page it was on. A lazily loaded chunk the dev
+server cannot serve is one cause, and a release build, which puts every lazy route in the one
+bundle, has none of these. Whichever way the navigation started, the app hears it in one place:
+Angular's `withNavigationErrorHandler`, passed to `provideNativeRouter` beside the other router
+features. It runs in an injection context, so it can tell the rest of the app:
+
+```ts
+import { Service, inject, signal } from '@angular/core';
+import { withNavigationErrorHandler, type Routes } from '@angular/router';
+import { provideNativeRouter } from '@ng-native/router';
+
+const routes: Routes = [
+  // The app's routes, lazy ones among them.
+];
+
+/** The page that did not load, for a banner that says so and offers to try again. */
+@Service()
+export class FailedPage {
+  readonly url = signal<string | null>(null);
+}
+
+const router = provideNativeRouter(
+  routes,
+  withNavigationErrorHandler((error) => inject(FailedPage).url.set(error.url)),
+);
+```
+
+A banner bound to `FailedPage.url` can show the message and call `Router.navigateByUrl(url)` to
+try again. `router.events` carries the same `NavigationError` for code that watches every
+navigation instead.
+
+Around that one handler, each way into a page does what its caller expects:
+
+- `NativeNavigation.push()` and `present()`, and `Router.navigate()`, reject their promise, so the
+  code that asked can react as well.
+- A tab tap that fails leaves the tab bar on the tab the router is still on, and the error also
+  reaches the app's `ErrorHandler`.
+- A deep link that fails, at launch or while the app runs, reaches the `ErrorHandler` too, rather
+  than going unhandled.
+
 From here, **Screens and navigation** covers everything a URL alone cannot express - replacing a
 screen, presenting a modal or sheet, resetting the stack - through `NativeNavigation`. **The
 native header** covers `<native-header>` and the slots `<native-header-item>` places content in.

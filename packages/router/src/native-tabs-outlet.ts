@@ -28,6 +28,7 @@
 import {
   ApplicationRef,
   ChangeDetectionStrategy,
+  ChangeDetectorRef,
   Component,
   DestroyRef,
   ElementRef,
@@ -108,6 +109,7 @@ export class NativeTabsOutlet implements RouterOutletContract, AfterContentInit 
   private readonly parentContexts = inject(ChildrenOutletContexts);
   private readonly renderer = inject(Renderer2);
   private readonly applicationRef = inject(ApplicationRef);
+  private readonly changeDetector = inject(ChangeDetectorRef);
   private readonly injector = inject(Injector);
   private readonly host = inject(ElementRef);
   private readonly route = inject(ActivatedRoute);
@@ -459,6 +461,10 @@ export class NativeTabsOutlet implements RouterOutletContract, AfterContentInit 
   private revertUnless(arrived: boolean): void {
     if (arrived || !this.selected || this.router?.getCurrentNavigation()) return;
     this.request(this.selected);
+    // A failed navigation ends in a promise callback, which schedules no change detection, and a
+    // prop reaches native only with the commit at the end of a pass. Without one the bar stayed
+    // on the tab that failed until something else happened to render.
+    this.changeDetector.markForCheck();
   }
 
   /** A tab's own url, from the outlet's route down. */

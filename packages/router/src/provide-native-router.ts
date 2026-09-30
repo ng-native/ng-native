@@ -24,6 +24,7 @@ import {
   type Routes,
 } from '@angular/router';
 import {
+  ErrorHandler,
   computed,
   inject,
   makeEnvironmentProviders,
@@ -158,12 +159,17 @@ function nativeProviders(parentOf: LinkParent | undefined): (Provider | Environm
     provideEnvironmentInitializer(() => {
       const router = inject(Router);
       const links = inject(DeepLinks);
+      const errors = inject(ErrorHandler);
+      // A link nobody awaits: a page that fails to load is reported, as a tab tap's is, rather
+      // than left as an unhandled rejection. The app's navigation error handler hears it too.
+      const follow = (url: string) =>
+        followLink(router, url, parentOf).catch((error: unknown) => errors.handleError(error));
       const initial = links.initialUrl();
       if (initial && parentOf(initial)) {
         const first = router.events.subscribe((event) => {
           if (!(event instanceof NavigationEnd)) return;
           first.unsubscribe();
-          void followLink(router, initial, parentOf);
+          void follow(initial);
         });
       }
       // A launch link arrives the way any other does, once `getInitialURL()` settles, which is
@@ -177,7 +183,7 @@ function nativeProviders(parentOf: LinkParent | undefined): (Provider | Environm
           resolve();
         });
       });
-      links.subscribe((url) => void settled.then(() => followLink(router, url, parentOf)));
+      links.subscribe((url) => void settled.then(() => follow(url)));
     }),
     ...shared,
   ];
