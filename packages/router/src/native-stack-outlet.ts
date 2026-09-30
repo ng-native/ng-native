@@ -55,6 +55,7 @@ import { intentOf, type NativeIntent } from './native-navigation.ts';
 import { NativePlatformLocation } from './native-platform-location.ts';
 import { markScreenRoute } from './tab-routes.ts';
 import { ownHost } from './own-host.ts';
+import { HostEngine, type EngineNode } from '@ng-native/fabric';
 import type { ScreenPresentation } from './screen-presentation.ts';
 import { ActivityState } from './screens.ts';
 
@@ -93,6 +94,9 @@ const FILL = { position: 'absolute', left: 0, right: 0, top: 0, bottom: 0 } as c
 /** A swipe-back area with no limit on any edge. */
 const UNLIMITED_SWIPE = { start: -1, end: -1, top: -1, bottom: -1 } as const;
 
+/** The native engine's `dispatchEvent`, as Fabric calls it. */
+type NativeDispatch = (node: unknown, topLevelType: string, nativeEvent: unknown) => void;
+
 @Component({
   selector: 'native-stack-outlet',
   template: '',
@@ -121,6 +125,8 @@ export class NativeStackOutlet implements RouterOutletContract {
    * `RouterOutletContract` directly, which is how its own tests drive it.
    */
   private readonly router = inject(Router, { optional: true });
+  /** For a refused back to reach the screen as native's own report would. */
+  private readonly engine = inject(HostEngine, { optional: true });
 
   private readonly errors = inject(ErrorHandler);
 
@@ -148,7 +154,9 @@ export class NativeStackOutlet implements RouterOutletContract {
     // (`nativeBackButtonDismissalEnabled`) also pops the screen, which would make one press pop
     // twice. If a back press ever skips a screen on Android, look here first.
     const back = inject(NativeBack);
-    const unsubscribeBack = back.handle(() => this.goBack());
+    const unsubscribeBack = back.handle((from) =>
+      from === 'button' && this.refusesButton() ? true : this.goBack(),
+    );
     const unsubscribeStack = back.addStack({
       showing: () => this.isShowing(),
       popToRoot: () => (this.entries.length > 1 ? this.popToEntry(0) : null),
@@ -547,6 +555,23 @@ export class NativeStackOutlet implements RouterOutletContract {
    * a screen pushed over the tab bar, is still subscribed, and the newest one would otherwise
    * answer for the stack in front.
    */
+  /**
+   * Android's Back button is the platform's own dismissal there, and react-native-screens leaves
+   * it to JS: its Android screen ignores `preventNativeDismiss`. So a top screen that sets it
+   * refuses the press here, as iOS refuses a swipe, and hears `nativeDismissCancelled` the same
+   * way, through the engine, as if native had sent it.
+   */
+  private refusesButton(): boolean {
+    if (this.entries.length < 2 || !this.isShowing()) return false;
+    const screen = this.top!.screen as EngineNode;
+    if (screen.props['preventNativeDismiss'] !== true) return false;
+    // The native engine's own entry point for an event, the one Fabric calls. Not on
+    // `HostEngine`, because only a native host has a screen to refuse with.
+    const native = this.engine as { dispatchEvent?: NativeDispatch } | null;
+    native?.dispatchEvent?.(screen, 'topNativeDismissCancelled', { dismissCount: 1 });
+    return true;
+  }
+
   private goBack(): boolean {
     if (this.entries.length < 2 || !this.isShowing()) return false;
     this.popBy(1);

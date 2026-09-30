@@ -29,7 +29,7 @@ export interface PoppableStack {
 export class NativeBack {
   private readonly hardwareBack = inject(HardwareBack);
   /** Oldest first, as `HardwareBack` holds them. */
-  private readonly answers: (() => boolean)[] = [];
+  private readonly answers: BackAnswer[] = [];
   /** Oldest first, and so outermost first, as the answers are. */
   private readonly stacks: PoppableStack[] = [];
 
@@ -63,12 +63,12 @@ export class NativeBack {
   }
 
   /**
-   * Offer an outlet's answer to a back. It returns whether it went back, and false lets the next
-   * one out try. Returns an unsubscribe.
+   * Offer an outlet's answer to a back. It returns whether it took the back, and false lets the
+   * next one out try. Returns an unsubscribe.
    */
-  handle(answer: () => boolean): () => void {
+  handle(answer: BackAnswer): () => void {
     this.answers.push(answer);
-    const stop = this.hardwareBack.handle(answer);
+    const stop = this.hardwareBack.handle(() => answer('button'));
     return () => {
       stop();
       const index = this.answers.indexOf(answer);
@@ -78,9 +78,15 @@ export class NativeBack {
 
   /** Go back as the button would, innermost outlet first. False when none had anywhere to go. */
   back(): boolean {
-    return [...this.answers].reverse().some((answer) => answer());
+    return [...this.answers].reverse().some((answer) => answer('app'));
   }
 }
+
+/**
+ * An outlet's answer to a back, told where it came from: Android's button, which is the platform's
+ * own dismissal and a screen may refuse, or the app's `NativeNavigation.back()`, which it may not.
+ */
+export type BackAnswer = (from: 'button' | 'app') => boolean;
 
 /**
  * Whether a route is part of what the router shows now, rather than a subtree the reuse strategy

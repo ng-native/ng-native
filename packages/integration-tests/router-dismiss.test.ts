@@ -3,13 +3,14 @@
  * the attempt to ask about them. The page's host element is its screen, so it says so itself.
  */
 import assert from 'node:assert/strict';
-import { afterEach, before, it } from 'node:test';
+import { afterEach, before, describe, it } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import type { Type } from '@angular/core';
 import type { Routes } from '@angular/router';
 import { cleanup, fireEvent, render, settle, type FakeFabricNode } from '@ng-native/testing';
 import { NativeNavigation } from '../router/src/native-navigation.ts';
 import { provideNativeRouter } from '../router/src/provide-native-router.ts';
+import { HardwareBack } from '@ng-native/device';
 import { compileFixture } from './compile.ts';
 
 afterEach(cleanup);
@@ -48,6 +49,69 @@ it('refuses a swipe down while dirty, and hears it', async () => {
 
   await fireEvent(editor(), 'nativeDismissCancelled', { dismissCount: 1 });
   assert.equal(page.attempts(), 1, 'the page heard the attempt');
+});
+
+/**
+ * Android's Back button is the platform's own dismissal there, and react-native-screens leaves it
+ * to JS: its Android screen ignores `preventNativeDismiss`. So the stack refuses it, as iOS
+ * refuses a swipe, and says so the same way. `NativeNavigation.back()` is how the page leaves
+ * once it has asked, so that still goes.
+ */
+describe("Android's Back on a screen that refuses a native dismissal", () => {
+  async function presentEditor() {
+    const handlers: (() => boolean)[] = [];
+    const app = await render(mod['GuardShell'] as Type<unknown>, {
+      providers: [
+        provideNativeRouter(mod['guardRoutes'] as Routes),
+        {
+          provide: HardwareBack.SOURCE,
+          useValue: {
+            subscribe: (handler: () => boolean) => {
+              handlers.push(handler);
+              return () => handlers.splice(handlers.indexOf(handler), 1);
+            },
+          },
+        },
+      ],
+    });
+    const nav = app.componentRef.injector.get(NativeNavigation);
+    await nav.present('/editor', { as: 'formSheet' });
+    await settle();
+    const screens = () =>
+      flatten(app.fabric.committed).filter((node) => node.viewName === 'RNSScreen');
+    const pressBack = async () => {
+      const taken = [...handlers].reverse().some((handler) => handler());
+      for (let turn = 0; turn < 5; turn++) await settle();
+      return taken;
+    };
+    return { nav, screens, pressBack, page: (mod['editors'] as Editor[]).at(-1)! };
+  }
+
+  it('keeps the screen and reports the attempt while it refuses', async () => {
+    const { screens, pressBack, page } = await presentEditor();
+    page.dirty.set(true);
+    await settle();
+    assert.equal(await pressBack(), true, 'the press is taken, not passed to the platform');
+    assert.equal(screens().length, 2, 'the sheet is still there');
+    assert.equal(page.attempts(), 1, 'the page heard the attempt');
+  });
+
+  it('goes back as usual once the screen stops refusing', async () => {
+    const { screens, pressBack, page } = await presentEditor();
+    assert.equal(await pressBack(), true);
+    assert.equal(screens().length, 1);
+    assert.equal(page.attempts(), 0);
+  });
+
+  it('still lets the page leave through NativeNavigation.back()', async () => {
+    const { nav, screens, page } = await presentEditor();
+    page.dirty.set(true);
+    await settle();
+    nav.back();
+    for (let turn = 0; turn < 5; turn++) await settle();
+    assert.equal(screens().length, 1);
+    assert.equal(page.attempts(), 0);
+  });
 });
 
 interface Editor {
