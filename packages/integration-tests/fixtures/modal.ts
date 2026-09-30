@@ -45,3 +45,21 @@ export class HiddenModal {
     this.dismissed++;
   }
 }
+
+@Component({
+  selector: 'x-top-level-modals',
+  imports: [Modal, Pressable, Text],
+  template: `
+    <modal [visible]="first()" (dismiss)="dismissed = dismissed + 1">
+      <pressable (press)="presses = presses + 1"><text>first</text></pressable>
+    </modal>
+    <modal [visible]="second()"><text>second</text></modal>
+    <text>screen</text>
+  `,
+})
+export class TopLevelModals {
+  first = signal(false);
+  second = signal(false);
+  dismissed = 0;
+  presses = 0;
+}

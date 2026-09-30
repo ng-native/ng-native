@@ -1973,6 +1973,7 @@ export class Engine implements HostEngine {
     this.facesAdded = false;
     const set = this.fabric.createChildSet(this.rootTag);
     for (const child of this.visibleChildren(this.root)) {
+      if (this.withheld(child)) continue;
       this.fabric.appendChildToSet(set, this.reconcileUnder(this.root, child));
     }
     this.clearFlags(this.root);

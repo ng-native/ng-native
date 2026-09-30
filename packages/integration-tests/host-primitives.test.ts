@@ -434,6 +434,68 @@ describe('modal and assets', () => {
     });
   });
 
+  // The root component's own nodes are the engine root's children, committed by `commit()` itself
+  // rather than by a parent's reconcile.
+  describe('a hidden modal at the top level of the root component', () => {
+    interface TopLevel {
+      first: { set(value: boolean): void };
+      second: { set(value: boolean): void };
+      dismissed: number;
+      presses: number;
+    }
+    const modalTexts = (fabric: FakeFabric) =>
+      flatten(fabric.committed)
+        .filter((n) => n.viewName === 'ModalHostView')
+        .map((host) => flatten([host]).find((n) => typeof n.props['text'] === 'string'));
+
+    afterEach(async () => {
+      cleanup();
+      const { registerPlatformComponents } = await import('@ng-native/fabric');
+      registerPlatformComponents('ios');
+    });
+
+    for (const platform of ['ios', 'android']) {
+      it(`is left out of the commit, shown and hidden again on ${platform}`, async () => {
+        const { registerPlatformComponents } = await import('@ng-native/fabric');
+        registerPlatformComponents(platform);
+        const mod = await compileFixture(fixture('modal.ts'));
+        const { fabric, instance } = await render<TopLevel>(
+          mod['TopLevelModals'] as Type<TopLevel>,
+        );
+        assert.equal(modalTexts(fabric).length, 0, 'no native host while visible is false');
+        assert.ok(screen.getByText('screen'));
+
+        instance.second.set(true);
+        await settle();
+        assert.deepEqual(
+          modalTexts(fabric).map((n) => n?.props['text']),
+          ['second'],
+          'only the modal shown',
+        );
+
+        for (let shown = 1; shown <= 2; shown++) {
+          instance.first.set(true);
+          await settle();
+          await fireEvent.press(screen.getByText('first'));
+          assert.equal(instance.presses, shown, `presentation ${shown} takes the press`);
+
+          instance.first.set(false);
+          await settle();
+          const host = flatten(fabric.committed).find(
+            (n) => n.viewName === 'ModalHostView' && n.props['visible'] === false,
+          );
+          if (host) await fireEvent(host, 'dismiss');
+          assert.deepEqual(
+            modalTexts(fabric).map((n) => n?.props['text']),
+            ['second'],
+            'the hidden one leaves, the other stays',
+          );
+        }
+        assert.equal(instance.dismissed, platform === 'ios' ? 2 : 0);
+      });
+    }
+  });
+
   it('runs image sources through resolveAssetSource', async () => {
     const mod = await compileFixture(
       fileURLToPath(new URL('./fixtures/modal.ts', import.meta.url)),
