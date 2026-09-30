@@ -71,6 +71,8 @@ because of something Nx does:
   and the preset resolves that to the `.ts` file, as TypeScript does.
 - **`tsconfig.json`**, in a workspace with a `tsconfig.base.json`, extends it after Expo's, which
   is where the path aliases are, and puts back the Expo settings the workspace's base overrides.
+  With package-manager workspaces it does so only when that file has a `paths` list: the
+  TypeScript preset's has none, and its libraries are linked as packages instead.
 - **`vitest.config.mts`** adds `nxViteTsPaths()` in a workspace with path aliases, since Vitest
   does not read them from tsconfig either, and adds `@nx/vite` for it if the workspace has none.
   The `angular-monorepo` preset does not, and a library generated after the app is the usual case.

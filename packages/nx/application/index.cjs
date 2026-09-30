@@ -39,6 +39,16 @@ function names(tree, options) {
   return { directory, name, projectName, workspaces };
 }
 
+/**
+ * Whether the workspace's `tsconfig.base.json` is where its libraries' path aliases live, or will.
+ * With package-manager workspaces, only when it has a `paths` list, as the `angular-monorepo`
+ * preset's does: the TypeScript preset's has none, and its libraries are packages linked instead.
+ */
+function hasPathAliases(tree, workspaces) {
+  if (!tree.exists('tsconfig.base.json')) return false;
+  return !workspaces || 'paths' in (readJson(tree, 'tsconfig.base.json').compilerOptions ?? {});
+}
+
 function targets(directory) {
   const run = (command) => ({ executor: 'nx:run-commands', options: { cwd: directory, command } });
   return {
@@ -80,7 +90,7 @@ function writeFiles(tree, { directory, projectName, workspaces }) {
   file('CLAUDE.md', '@AGENTS.md\n');
   file('metro.config.js', native.METRO_CONFIG);
 
-  const base = !workspaces && tree.exists('tsconfig.base.json');
+  const base = hasPathAliases(tree, workspaces);
   const workspaceBase = base ? `${offsetFromRoot(directory)}tsconfig.base.json` : undefined;
   const conditions = tree.exists('tsconfig.base.json')
     ? (readJson(tree, 'tsconfig.base.json').compilerOptions?.customConditions ?? [])
@@ -125,19 +135,20 @@ async function application(tree, options) {
     includeInWorkspaces(tree, directory);
   } else {
     for (const problem of native.conflicts(readJson(tree, 'package.json'))) logger.warn(problem);
-    // `nxViteTsPaths()`, which the app's Vitest config uses to reach the workspace's libraries.
-    // Added now rather than only when present, because a library generated later is the ordinary
-    // case and nothing would come back to add it then.
-    const aliases = tree.exists('tsconfig.base.json')
-      ? { '@nx/vite': workspaceNxVersion(tree) }
-      : {};
     addDependenciesToPackageJson(
       tree,
       native.dependencies,
-      { ...native.devDependencies, ...aliases },
+      native.devDependencies,
       'package.json',
       true,
     );
+  }
+  // `nxViteTsPaths()`, which the app's Vitest config uses to reach the workspace's libraries.
+  // Added now rather than only when present, because a library generated later is the ordinary
+  // case and nothing would come back to add it then.
+  if (hasPathAliases(tree, workspaces)) {
+    const vite = { '@nx/vite': workspaceNxVersion(tree) };
+    addDependenciesToPackageJson(tree, {}, vite, 'package.json', true);
   }
   writeFiles(tree, resolved);
   addProjectConfiguration(tree, projectName, {

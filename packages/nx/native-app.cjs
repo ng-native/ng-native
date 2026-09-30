@@ -142,12 +142,12 @@ function tsconfig(workspaceBase, conditions = []) {
     typeCheckHostBindings: false,
     strictDomEventTypes: false,
   };
+  // The workspace's custom conditions, which a library in Nx's TypeScript preset exports its
+  // source under; the Metro preset and the Vitest plugin read them from here too. Beside
+  // Expo's own `react-native`, which setting the option would otherwise replace.
+  const customConditions = ['react-native', ...conditions.filter((c) => c !== 'react-native')];
   if (!workspaceBase) {
-    // The workspace's custom conditions, which a library in Nx's TypeScript preset exports its
-    // source under; the Metro preset and the Vitest plugin read them from here too. Beside
-    // Expo's own `react-native`, which setting the option would otherwise replace.
-    const extra = conditions.filter((c) => c !== 'react-native');
-    if (extra.length) compilerOptions.customConditions = ['react-native', ...extra];
+    if (customConditions.length > 1) compilerOptions.customConditions = customConditions;
     return { extends: 'expo/tsconfig.base', compilerOptions, angularCompilerOptions };
   }
   // The workspace's base is written for a web build or for emitting declarations, and wins over
@@ -162,7 +162,7 @@ function tsconfig(workspaceBase, conditions = []) {
       target: 'ESNext',
       module: 'preserve',
       moduleResolution: 'bundler',
-      customConditions: ['react-native'],
+      customConditions,
       composite: false,
       declaration: false,
       emitDeclarationOnly: false,

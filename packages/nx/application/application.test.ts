@@ -289,6 +289,58 @@ describe('in a pnpm workspace', () => {
     assert.equal(readJson(tree, 'apps/mobile/tsconfig.json').extends, 'expo/tsconfig.base');
   });
 
+  it('extends a tsconfig.base.json that holds path aliases, and resolves them in tests too', async () => {
+    // A pnpm workspace can still import its libraries through tsconfig paths, as the
+    // angular-monorepo preset does, and nx typecheck, nx test and Metro all failed to find one.
+    const tree = pnpmWorkspace();
+    tree.write(
+      'tsconfig.base.json',
+      JSON.stringify({ compilerOptions: { paths: { '@proj/ui': ['libs/ui/src/index.ts'] } } }),
+    );
+    await generate(tree, { directory: 'apps/mobile' });
+    assert.deepEqual(readJson(tree, 'apps/mobile/tsconfig.json').extends, [
+      'expo/tsconfig.base',
+      '../../tsconfig.base.json',
+    ]);
+    assert.match(tree.read('apps/mobile/vitest.config.mts', 'utf-8')!, /nxViteTsPaths\(\)/);
+    assert.equal(readJson(tree, 'package.json').devDependencies['@nx/vite'], '23.2.0');
+  });
+
+  it("keeps its custom conditions beside Expo's when it extends it", async () => {
+    const tree = pnpmWorkspace();
+    tree.write(
+      'tsconfig.base.json',
+      JSON.stringify({ compilerOptions: { paths: {}, customConditions: ['@proj/source'] } }),
+    );
+    await generate(tree, { directory: 'apps/mobile' });
+    assert.deepEqual(readJson(tree, 'apps/mobile/tsconfig.json').compilerOptions.customConditions, [
+      'react-native',
+      '@proj/source',
+    ]);
+  });
+
+  it('extends one with no aliases yet, since a library generated later adds them', async () => {
+    const tree = pnpmWorkspace();
+    tree.write('tsconfig.base.json', JSON.stringify({ compilerOptions: { paths: {} } }));
+    await generate(tree, { directory: 'apps/mobile' });
+    assert.deepEqual(readJson(tree, 'apps/mobile/tsconfig.json').extends, [
+      'expo/tsconfig.base',
+      '../../tsconfig.base.json',
+    ]);
+  });
+
+  it("leaves out the TypeScript preset's base, whose libraries are workspace packages", async () => {
+    const tree = pnpmWorkspace();
+    tree.write(
+      'tsconfig.base.json',
+      JSON.stringify({ compilerOptions: { composite: true, customConditions: ['@proj/source'] } }),
+    );
+    await generate(tree, { directory: 'apps/mobile' });
+    assert.equal(readJson(tree, 'apps/mobile/tsconfig.json').extends, 'expo/tsconfig.base');
+    assert.doesNotMatch(tree.read('apps/mobile/vitest.config.mts', 'utf-8')!, /nxViteTsPaths/);
+    assert.equal(readJson(tree, 'package.json').devDependencies['@nx/vite'], undefined);
+  });
+
   it("carries the workspace's custom conditions, which its libraries export their source under", async () => {
     // The TypeScript preset's @nx/js:library points every condition but one at an unbuilt dist,
     // so without it tsc, Vitest and Metro all failed to import the library.
