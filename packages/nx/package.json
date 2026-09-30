@@ -17,6 +17,22 @@
   ],
   "type": "module",
   "generators": "./generators.json",
+  "nx-migrations": {
+    "packageGroup": [
+      "@ng-native/components",
+      "@ng-native/device",
+      "@ng-native/expo",
+      "@ng-native/fabric",
+      "@ng-native/icons",
+      "@ng-native/metro",
+      "@ng-native/platform",
+      "@ng-native/router",
+      "@ng-native/schematics",
+      "@ng-native/tailwind",
+      "@ng-native/testing",
+      "@ng-native/web"
+    ]
+  },
   "dependencies": {
     "@nx/devkit": "^23.0.0",
     "minimatch": "^10.0.0",

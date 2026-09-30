@@ -124,3 +124,12 @@ unformatted. `--bundleIdentifier` is the iOS bundle identifier and Android packa
 it defaults to `com.<scope>.<name>`, from the workspace's npm scope and the app's name with
 anything but letters and digits removed, where `expo prebuild` would otherwise use
 `com.anonymous.<name>`.
+
+## Upgrading
+
+`nx migrate @ng-native/nx@latest` moves every `@ng-native/*` package the root `package.json` lists
+to the new version with it, since they are released together. `nx migrate` only updates the root
+`package.json`. In a workspace with package-manager workspaces, move the `@ng-native/*` versions in
+the app's own `package.json` to the same version. In an integrated workspace, the app's
+`package.json` lists them at the root's old ranges, and nothing installs from it, so it only needs
+to be kept in step.

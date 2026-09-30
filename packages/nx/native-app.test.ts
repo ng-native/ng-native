@@ -6,7 +6,7 @@
  * app nobody has verified.
  */
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import path from 'node:path';
 import { describe, it } from 'node:test';
@@ -151,5 +151,23 @@ describe('conflicts', () => {
       problem,
       /vitest is \^3\.2\.0 here, and Angular Native needs \^4\.0\.8 \|\| \^5\.0\.0/,
     );
+  });
+});
+
+describe('nx migrate', () => {
+  const packages = path.resolve(import.meta.dirname, '..');
+  const published = readdirSync(packages)
+    .map((dir) => path.join(packages, dir, 'package.json'))
+    .filter((file) => existsSync(file))
+    .map((file) => JSON.parse(readFileSync(file, 'utf8')) as { name: string; private?: boolean })
+    .filter((pkg) => !pkg.private)
+    .map((pkg) => pkg.name);
+
+  it('moves every published @ng-native package with this one, since they are released together', () => {
+    // `nx migrate @ng-native/nx@latest` moved only @ng-native/nx, and the other packages stayed on
+    // the old version beside it. Nx moves a package's packageGroup to the version it migrates to.
+    const own = require('./package.json');
+    const group = own['nx-migrations'].packageGroup as string[];
+    assert.deepEqual([...group].sort(), published.filter((name) => name !== own.name).sort());
   });
 });
