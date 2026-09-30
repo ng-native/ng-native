@@ -295,6 +295,11 @@ export type ColourExpression =
       readonly fallback?: string;
       /** A fallback made of other tokens, worked out from the tokens where it is used. */
       readonly fallbackToken?: TokenValue;
+      /**
+       * A shadow's `var(--x,)` with no colour beside it, which holds the colour or the word
+       * `inset`: currentcolor when it is `inset` or unset.
+       */
+      readonly orInset?: true;
     }
   | {
       /** A token of bare channels, as `rgba(var(--channels), <alpha>)` reads it. */
@@ -2457,14 +2462,21 @@ function tokenColour(
   expression: Extract<ColourExpression, { reference: string }>,
   tokens: Readonly<Record<string, TokenValue>>,
 ): string | undefined {
-  let value = formOf(tokens[expression.reference], 'color');
-  for (const alternative of expression.alternatives ?? []) {
-    if (value !== undefined) break;
-    value = formOf(tokens[alternative], 'color');
-  }
-  if (value !== undefined) return value as string;
+  // The first token set is substituted, whatever it holds, as `referenced` reads one.
+  const set = firstSet([expression.reference, ...(expression.alternatives ?? [])], tokens);
+  if (expression.orInset) return insetOrColour(set);
+  if (set) return formOf(set, 'color') as string | undefined;
   const token = expression.fallbackToken;
   return expression.fallback ?? (token && (formOf(derived(token, tokens), 'color') as string));
+}
+
+/**
+ * A shadow's colour from a token that is the colour or the word `inset`: currentcolor, which the
+ * node fills in, when it is `inset` or unset, and nothing, so no shadow, when it is anything else.
+ */
+function insetOrColour(token: TokenValue | undefined): string | undefined {
+  if (!token || token.keyword === 'inset') return 'currentcolor';
+  return formOf(token, 'color') as string | undefined;
 }
 
 /** A marker the compiler leaves in a structured value for a colour only the device can settle. */

@@ -243,5 +243,12 @@
       "color": "rgb(1, 0, 0)",
       "background-color": "rgb(2, 0, 0)"
     }
+  },
+  {
+    "name": "a color-mix() of a set token of the wrong kind takes no fallback for it",
+    "expected": {
+      "color": "rgb(9, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)"
+    }
   }
 ]

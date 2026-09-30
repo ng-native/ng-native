@@ -331,6 +331,37 @@ describe('the shadows design systems write, with tokens in them', () => {
     assert.equal(inset(['ring']), false);
   });
 
+  it('colours a shadow by its empty-fallback token as Chrome does', () => {
+    // Checked in Chrome: the word inset, or nothing, leaves the colour to currentcolor; a colour is
+    // the colour; anything else makes the shadow invalid, and there is none.
+    const css =
+      '.s { color: rgb(0, 0, 255); box-shadow: var(--k,) 0 0 4px 2px } ' +
+      '.in { --k: inset } .red { --k: red } .px { --k: 10px }';
+    const shadow = (classes: string[]) =>
+      (resolvedStyle(css, classes)['boxShadow'] as Record<string, unknown>[] | undefined)?.[0];
+    assert.deepEqual(
+      [shadow(['s'])?.['color'], shadow(['s'])?.['inset']],
+      ['rgb(0, 0, 255)', false],
+    );
+    assert.deepEqual(
+      [shadow(['s', 'in'])?.['color'], shadow(['s', 'in'])?.['inset']],
+      ['rgb(0, 0, 255)', true],
+    );
+    assert.equal(shadow(['s', 'red'])?.['color'], 'rgb(255, 0, 0)');
+    assert.equal(shadow(['s', 'px']), undefined);
+  });
+
+  it("takes no fallback for a shadow's colour token that is set but no colour", () => {
+    // A set token is substituted, so a fallback is only for one that is not: Chrome draws no text
+    // shadow for `1px 1px 2px var(--c, red)` with `--c: 10px`, and a red one with `--c` unset.
+    const css = '.t { text-shadow: 1px 1px 2px var(--c, rgb(255, 0, 0)) } .px { --c: 10px }';
+    assert.equal(resolvedStyle(css, ['t'])['textShadowColor'], 'rgb(255, 0, 0)');
+    assert.equal(resolvedStyle(css, ['t', 'px'])['textShadowColor'], undefined);
+    const ring =
+      '.r { box-shadow: 0 0 0 2px var(--c, var(--d, red)) } .px { --c: 10px; --d: blue }';
+    assert.equal(resolvedStyle(ring, ['r', 'px'])['boxShadow'], undefined);
+  });
+
   it('takes an empty-fallback token as the colour when the shadow has no other', () => {
     // `var(--x,)` is inset-or-nothing in Tailwind's ring, which has a colour of its own. A shadow
     // with no other colour term is coloured by it, as a browser reads it: read as inset, a red

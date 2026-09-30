@@ -231,12 +231,12 @@ function oneShadow(shadow, context) {
 /**
  * A shadow's colour: its colour terms; or with none, the empty-fallback token, which is the colour
  * or the word inset, and what the token holds says which (Tailwind's ring, which has a colour of
- * its own, is the other kind); or black.
+ * its own, is the other kind); or currentcolor, which is a shadow's colour when none is written.
  */
 function shadowColour(colour, slot, context) {
   if (colour.length) return colourExpression(colour, context);
-  if (slot) return { reference: slot.value.name.ident, fallback: 'black' };
-  return { color: 'black' };
+  if (slot) return { reference: slot.value.name.ident, orInset: true };
+  return { color: 'currentcolor' };
 }
 
 /** A `var()` with an empty fallback, which in a shadow can only stand for `inset` or nothing. */
@@ -331,8 +331,8 @@ function isLengthSlot(shadow, term) {
   return lengthsBefore.length < 2;
 }
 
-/** Whether an expression needs the device: anything but a literal. */
-const isDeferred = (expression) => !('color' in expression);
+/** Whether an expression needs the device: anything but a literal, or the node's own colour. */
+const isDeferred = (expression) => !('color' in expression) || expression.color === 'currentcolor';
 
 /**
  * Each relative colour function: the space it works in, its channel keywords, and what 100% of

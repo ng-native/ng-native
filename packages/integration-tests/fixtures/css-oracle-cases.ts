@@ -280,4 +280,13 @@ export const CASES: OracleCase[] = [
       children: [{ name: 'view', classes: ['inner'], children: [probe()] }],
     },
   },
+  {
+    name: 'a color-mix() of a set token of the wrong kind takes no fallback for it',
+    css:
+      ':root { --c: 10px; --m: color-mix(in srgb, var(--c, red) 50%, white) } ' +
+      '.outer { color: rgb(9, 0, 0) } ' +
+      '#probe { color: var(--m, rgb(1, 0, 0)); ' +
+      'background-color: color-mix(in srgb, var(--c, red) 50%, white) }',
+    tree: { name: 'view', classes: ['outer'], children: [probe()] },
+  },
 ];
