@@ -32,6 +32,7 @@ export {
   type TokenValue,
 } from './css.ts';
 export { EngineIntersectionObserver, installDeferTriggers } from './defer-triggers.ts';
+export { faceName } from './font-faces.ts';
 export {
   Engine,
   SyntheticEvent,

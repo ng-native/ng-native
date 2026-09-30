@@ -49,6 +49,7 @@ export type FabricNode = { readonly __fabricNode: unique symbol } | object;
 /** Where a node is, in the window's coordinates. What `Engine.measure` reports. */
 import type { HostEngine, HostNode, Settling } from './host.ts';
 import { firstFrame, rangeOf, scrollChannels } from './scroll-animation.ts';
+import { FontFaces } from './font-faces.ts';
 
 /**
  * The animation a node's style asks for, with a play state from a rule of its own applied. Both
@@ -1430,7 +1431,7 @@ export class Engine implements HostEngine {
     this.now = options.now ?? (() => globalThis.performance?.now?.() ?? Date.now());
     this.onDirty = options.onDirty;
     this.onError = options.onError;
-    this.registerKeyframes(options.globalStyles);
+    this.registerSheet(options.globalStyles);
     this.processColor = options.processColor ?? ((value) => value);
     this.resolveAssetSource = options.resolveAssetSource ?? ((value) => value);
     this.scrollDriver = options.nativeAnimated
@@ -2090,8 +2091,8 @@ export class Engine implements HostEngine {
   private mergeProps(node: EngineNode, viewName: string): Record<string, unknown> {
     if (node.kind === 'text') return { text: paragraphText(node) };
     if (this.dev) this.checkProps(node);
-    this.registerKeyframes(node.sheet);
-    this.registerKeyframes(node.hostSheet);
+    this.registerSheet(node.sheet);
+    this.registerSheet(node.hostSheet);
     const props: Record<string, unknown> = { ...DEFAULT_PROPS[viewName] };
     Object.assign(props, this.styles.resolve(node, this.styleEpoch).style);
     for (const key of Object.keys(node.props)) {
@@ -2110,6 +2111,7 @@ export class Engine implements HostEngine {
     const intrinsic = node.props[INTRINSIC_SIZE] as IntrinsicSize | undefined;
     if (intrinsic) applyIntrinsicSize(style, intrinsic);
     flattenStyle(node.props[STYLE_OVERRIDE], style);
+    this.fontFaces.apply(style);
     if (viewName === PARAGRAPH) {
       alignText(style, this.directionOf(node, style));
       if (this.fontsRefreshed) this.capForFonts(node, style);
@@ -2165,14 +2167,21 @@ export class Engine implements HostEngine {
    * A property seen for the first time is recorded and left alone. That is CSS's own rule, and
    * without it every element would fade in from whatever the previous value happened to be.
    */
-  /** Take a sheet's `@keyframes` into the registry. Cheap and idempotent; sheets are few. */
-  private registerKeyframes(sheet: StyleSheet | null | undefined): void {
-    if (!sheet?.keyframes || this.knownSheets.has(sheet)) return;
+  /**
+   * Take a sheet's `@keyframes` and `@font-face` rules into the registries. Cheap and idempotent;
+   * sheets are few.
+   */
+  private registerSheet(sheet: StyleSheet | null | undefined): void {
+    if (!sheet || this.knownSheets.has(sheet)) return;
     this.knownSheets.add(sheet);
-    for (const name of Object.keys(sheet.keyframes)) {
-      this.keyframes.set(name, sheet.keyframes[name]!);
+    for (const name of Object.keys(sheet.keyframes ?? {})) {
+      this.keyframes.set(name, sheet.keyframes![name]!);
     }
+    if (sheet.fonts) this.fontFaces.add(sheet.fonts);
   }
+
+  /** Every `@font-face` seen, global as on the web: a face declared in one sheet serves all. */
+  private readonly fontFaces = new FontFaces();
 
   private readonly knownSheets = new WeakSet<StyleSheet>();
 

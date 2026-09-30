@@ -55,6 +55,17 @@ describe('declaring a face', () => {
     ]);
   });
 
+  it('reads bold in a face as 700, and normal as no weight', () => {
+    // Dropped, a bold face was registered as the regular one and matched as weight 400.
+    const weight = (value: string) =>
+      compileCss(
+        `@font-face { font-family: Inter; src: url('./a.ttf'); font-weight: ${value} }`,
+        'test',
+      ).fonts[0].weight;
+    assert.equal(weight('bold'), 700);
+    assert.equal(weight('normal'), undefined);
+  });
+
   it('keeps the style of an italic face', () => {
     const { fonts } = compileCss(
       "@font-face { font-family: Inter; font-style: italic; src: url('./Inter-Italic.ttf') }",

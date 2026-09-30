@@ -130,11 +130,10 @@ mount(rootTag, App, getFabricUIManager(), { globalStyles: styleSheetOf(GlobalSty
 the bundler ships the file - a plain path would be a font that is simply missing on the device
 with nothing anywhere to say why.
 
-**There is no font matching on a device.** Native looks a family up by name and that is all, so a
-bold cut is a family of its own: the second face above is registered as `Inter-700` as well, and
-a rule that wants it asks for `font-family: Inter-700`. Writing `font-weight: 700` against a
-family with one registered face gets whatever the platform synthesizes, exactly as it would in a
-React Native app.
+**Weights and styles match as on the web.** Native looks a family up by name and that is all, so
+the second face above is registered as `Inter-700` as well, and the engine points a text with
+`font-family: Inter; font-weight: 700` at it, by CSS's matching rules, wherever the family and
+weight were set.
 
 `loadFonts` takes any number of sheets and does nothing at all when none of them declare a face,
 so bootstrap can call it unconditionally. Injecting `Fonts` afterwards answers what is loaded.

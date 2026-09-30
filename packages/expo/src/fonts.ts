@@ -21,7 +21,7 @@
  * here would be copying out its internals rather than using it.
  */
 import { InjectionToken, computed, signal, type Signal } from '@angular/core';
-import { fontsRegistered } from '@ng-native/fabric';
+import { faceName, fontsRegistered } from '@ng-native/fabric';
 import { expoModule } from './native.ts';
 
 /** A face a stylesheet declared, as the compiler collected it. */
@@ -49,17 +49,23 @@ export interface NativeFonts {
  * Loading is by family name, which is also all native matches on.
  *
  * There is no weight matching on a device: `font-family: Inter` finds the face registered under
- * exactly that name, and a bold cut is a family of its own. A face that declares a weight is
- * therefore registered under a composed name as well as its own, so a stylesheet can say
- * `font-family: Inter-700` and get the file it declared - and a sheet that only ever registers
- * one weight per family needs to know none of this.
+ * exactly that name, and a bold cut is a family of its own. A face that declares a weight or a
+ * style is therefore registered under a composed name as well (`Inter-700`, `Inter-italic`,
+ * `Inter-700-italic`), which is the name the engine points a matching text at.
+ *
+ * A face with both a weight and a style also answers to each alone, as it did before it had a
+ * name of its own, but only where no face declared exactly that.
  */
 export function registrationsFor(faces: readonly FontFace[]): Record<string, unknown> {
   const map: Record<string, unknown> = {};
   for (const face of faces) {
     map[face.family] ??= face.source;
-    if (face.weight !== undefined) map[`${face.family}-${face.weight}`] = face.source;
-    if (face.style) map[`${face.family}-${face.style}`] = face.source;
+    map[faceName(face)] = face.source;
+  }
+  for (const face of faces) {
+    if (face.weight === undefined || !face.style) continue;
+    map[`${face.family}-${face.weight}`] ??= face.source;
+    map[`${face.family}-${face.style}`] ??= face.source;
   }
   return map;
 }

@@ -2000,7 +2000,7 @@ function fontFace(value, context) {
     throw new CssUnsupported(`${context}: an @font-face needs a font-family to be known by`);
   }
 
-  const weight = read('font-weight')?.[0]?.value?.value;
+  const weight = faceWeight(read('font-weight'));
   const style = read('font-style')?.type;
   return {
     family,
@@ -2010,6 +2010,12 @@ function fontFace(value, context) {
     ...(typeof weight === 'number' ? { weight } : {}),
     ...(style && style !== 'normal' ? { style } : {}),
   };
+}
+
+/** A face's weight: the first of a range, `bold` as 700, `normal` as none given. */
+function faceWeight(value) {
+  const first = value?.[0]?.value;
+  return first?.type === 'bold' ? 700 : first?.value;
 }
 
 /** The file a face comes from. Anything but a `url()` is a font the bundle would not contain. */

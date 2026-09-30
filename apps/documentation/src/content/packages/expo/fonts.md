@@ -56,14 +56,26 @@ A face declared in the Tailwind entry works the same way: pass the generated she
 `loadFonts()`. Its `url()` is relative to the entry file, including in a stylesheet the entry
 imports, because the Tailwind CLI inlines imports without rewriting their URLs.
 
-## There is no font matching on a device
+## Matching a weight and a style
 
-Native looks a family up by name and that is all, so a bold cut is a family of its own. The second
-face above is registered only as `Inter-700`: the bare `Inter` stays with the first face declared
-for the family, and a rule that wants the bold cut asks for `font-family: Inter-700`. Writing
-`font-weight: 700` against a family with one registered face gets whatever the platform
-synthesizes, exactly as it would in a plain React Native app. A face that declares a `style` is registered the
-same way, under `<family>-<style>`.
+Native looks a family up by name and that is all, so each face is registered under a name of its
+own: `Inter` for the first face declared for the family, and `<family>-<weight>`,
+`<family>-<style>` or `<family>-<weight>-<style>` for a face that declares them (`Inter-700`,
+`Inter-italic`, `Inter-700-italic`).
+
+The engine does the matching a browser does. Once a text's style is resolved, a `font-family` that
+names a declared family is pointed at the face CSS's matching rules pick for its `font-weight` and
+`font-style`: the closest style first, then the nearest weight. So `font-family: Inter;
+font-weight: 700`, or `class="font-sans font-bold"` with Inter as the sans family, draws the file
+declared for 700, wherever the family and the weight were set. The weight and style that picked
+the face are then left out of what reaches native, which would otherwise draw the platform's own
+font on Android in place of the face.
+
+A weight or style no declared face covers is left to the platform: iOS draws the family's face as
+it is, and Android draws its system font in that weight or style.
+
+A face is found once the sheet declaring it has been used, so declare faces in the global
+stylesheet, or in the component whose styles use them.
 
 ## Reading what loaded: `Fonts`
 
