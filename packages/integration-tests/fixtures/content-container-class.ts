@@ -1,4 +1,5 @@
 import { Component, signal } from '@angular/core';
+import { KeyboardAvoidingView } from '../../components/src/keyboard-avoiding-view.ts';
 import { ScrollView } from '../../components/src/scroll-view.ts';
 import { Text } from '../../components/src/text.ts';
 
@@ -8,7 +9,7 @@ import { Text } from '../../components/src/text.ts';
  */
 @Component({
   selector: 'x-content-container-class',
-  imports: [ScrollView, Text],
+  imports: [KeyboardAvoidingView, ScrollView, Text],
   template: `
     <scroll-view testID="scroll" [contentContainerClass]="classes()">
       <text>Row</text>
@@ -22,6 +23,14 @@ import { Text } from '../../components/src/text.ts';
       <text>Row</text>
     </scroll-view>
     <scroll-view testID="late" [contentContainerClass]="late()"><text>Row</text></scroll-view>
+    <keyboard-avoiding-view
+      testID="avoiding"
+      [behavior]="behavior()"
+      [contentContainerClass]="late()"
+      [contentContainerStyle]="{ paddingTop: 1 }"
+    >
+      <text>Field</text>
+    </keyboard-avoiding-view>
   `,
   styles: `
     .own {
@@ -36,4 +45,5 @@ import { Text } from '../../components/src/text.ts';
 export class ContentContainerClass {
   readonly classes = signal('own global');
   readonly late = signal<string | undefined>(undefined);
+  readonly behavior = signal<'position' | 'padding'>('position');
 }

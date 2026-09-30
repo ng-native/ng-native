@@ -102,7 +102,9 @@ in `padding` mode, `height` and `flex: 0` in `height` mode, and the inner view's
 you wrote applies throughout. When the keyboard goes, your own values come back.
 
 `enabled` (default `true`) stops avoiding without removing the view. With `behavior="position"`,
-`contentContainerStyle` styles the inner view that gets shifted.
+`contentContainerStyle` styles the inner view that gets shifted, and `contentContainerClass` gives
+it classes, matched as if the view were written in your own template, as on
+[`<scroll-view>`](/packages/components/scroll-view).
 
 ## Animation
 

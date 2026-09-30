@@ -287,13 +287,24 @@ export class BrowserEngine extends HostEngine {
     COMMANDS[name]?.(node.el as HTMLElement, args);
   }
 
-  /** The scoping attribute Angular's emulated encapsulation stamps on `like`, stamped on `node`. */
-  override adoptScope(node: BrowserNode, like: BrowserNode): void {
+  /**
+   * The scoping attribute Angular's emulated encapsulation stamps on `like`, stamped on `node`,
+   * or taken off again when `like` is null.
+   */
+  override adoptScope(node: BrowserNode, like: BrowserNode | null): void {
     const el = node.el as Element;
-    for (const { name } of (like.el as Element).attributes) {
-      if (name.startsWith('_ngcontent-')) el.setAttribute(name, '');
-    }
+    for (const name of this.adopted.get(node) ?? []) el.removeAttribute(name);
+    const names = like
+      ? [...(like.el as Element).attributes]
+          .map((attribute) => attribute.name)
+          .filter((name) => name.startsWith('_ngcontent-') && !el.hasAttribute(name))
+      : [];
+    for (const name of names) el.setAttribute(name, '');
+    this.adopted.set(node, names);
   }
+
+  /** The scoping attributes `adoptScope` added to each node, which it alone takes off. */
+  private readonly adopted = new WeakMap<BrowserNode, string[]>();
 
   commit(): boolean {
     // Every write above already reached the DOM synchronously; there is nothing batched to flush.

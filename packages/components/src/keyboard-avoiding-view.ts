@@ -11,6 +11,7 @@ import {
 import { Keyboard, LayoutAnimation, type LayoutEasing } from '@ng-native/device';
 import type { NativeSyntheticEvent } from '@ng-native/fabric';
 import type { Rect } from './events.ts';
+import { ContentContainer } from './content-container.ts';
 import { View } from './view.ts';
 import { ViewBase } from './view-base.ts';
 
@@ -58,10 +59,15 @@ function layoutEasingOf(easing: string | undefined): LayoutEasing | undefined {
  */
 @Component({
   selector: 'keyboard-avoiding-view',
-  imports: [View],
+  imports: [ContentContainer, View],
   template: `
     @if (behavior() === 'position') {
-      <view [style]="positioned()"><ng-content /></view>
+      <view
+        [contentContainerOf]="node"
+        [contentContainerClass]="contentContainerClass()"
+        [style]="positioned()"
+        ><ng-content
+      /></view>
     } @else {
       <ng-content />
     }
@@ -79,6 +85,11 @@ export class KeyboardAvoidingView extends ViewBase {
   readonly behavior = input<KeyboardAvoidingBehavior>('padding');
   /** Styles for the inner view that `position` moves. */
   readonly contentContainerStyle = input<Record<string, unknown>>();
+  /**
+   * Classes for the inner view that `position` moves, matched as if it were written in the
+   * template this view is. See `ContentContainer`.
+   */
+  readonly contentContainerClass = input<string>();
   /** Set to false to stop avoiding without removing the view. */
   readonly enabled = input(true, { transform: booleanAttribute });
   /**

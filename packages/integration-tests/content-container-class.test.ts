@@ -20,6 +20,7 @@ const { compileCss } = require('@ng-native/metro/css/compile.cjs') as {
 type Fixture = {
   classes: { set(value: string): void };
   late: { set(value: string | undefined): void };
+  behavior: { set(value: 'position' | 'padding'): void };
 };
 
 let ContentContainerClass: Type<Fixture>;
@@ -74,6 +75,12 @@ describe('contentContainerClass on a scroll view', () => {
     const props = content(getByTestId('late')).props;
     assert.equal(props['paddingLeft'], 24, 'a class set later');
     assert.equal(props['opacity'], 0.5, 'and from then on it is styled as written there');
+
+    instance.late.set(undefined);
+    await rerender();
+    const cleared = content(getByTestId('late')).props;
+    assert.equal(cleared['paddingLeft'] ?? null, null, 'the class removed');
+    assert.equal(cleared['opacity'] ?? null, null, 'and the component styles with it');
     cleanup();
   });
 
@@ -83,6 +90,41 @@ describe('contentContainerClass on a scroll view', () => {
     assert.equal(props['paddingLeft'], 1, 'the style wins over the class');
     assert.equal(props['columnGap'], 8);
     assert.equal(props['flexDirection'], 'row');
+    cleanup();
+  });
+});
+
+describe('contentContainerClass on a keyboard-avoiding view', () => {
+  /** The view `position` moves, the only child the component adds. */
+  const inner = (avoiding: FakeFabricNode) => avoiding.children[0]!;
+
+  it('styles the view position moves, and only while it has a class', async () => {
+    const { instance, getByTestId, rerender } = await render(ContentContainerClass, {
+      globalStyles: globalStyles(),
+    });
+    assert.equal(inner(getByTestId('avoiding')).props['opacity'] ?? null, null, 'no class yet');
+
+    instance.late.set('own global');
+    await rerender();
+    let props = inner(getByTestId('avoiding')).props;
+    assert.equal(props['paddingLeft'], 24, "the writing component's own styles");
+    assert.equal(props['opacity'], 0.5);
+    assert.equal(props['rowGap'], 4, 'the global sheet');
+    assert.equal(props['paddingTop'], 1, 'contentContainerStyle wins over the class');
+
+    instance.behavior.set('padding');
+    await rerender();
+    instance.behavior.set('position');
+    await rerender();
+    props = inner(getByTestId('avoiding')).props;
+    assert.equal(props['paddingLeft'], 24, 'a container made again takes it too');
+    assert.equal(props['opacity'], 0.5);
+
+    instance.late.set(undefined);
+    await rerender();
+    props = inner(getByTestId('avoiding')).props;
+    assert.equal(props['paddingLeft'] ?? null, null, 'the class removed');
+    assert.equal(props['opacity'] ?? null, null, 'and the component styles with it');
     cleanup();
   });
 });

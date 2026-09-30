@@ -25,6 +25,7 @@ describe("a component's own styles, on the web", () => {
   let View: Type<unknown>;
   let Text: Type<unknown>;
   let ScrollView: Type<unknown>;
+  let KeyboardAvoidingView: Type<unknown>;
 
   before(async () => {
     ({ document, window } = installJsdomEnvironment());
@@ -33,7 +34,7 @@ describe("a component's own styles, on the web", () => {
     Component = core.Component;
     ViewEncapsulation = core.ViewEncapsulation;
     ({ mount } = await import('./mount.ts'));
-    ({ View, Text, ScrollView } = await import('./component-styles-app.ts'));
+    ({ View, Text, ScrollView, KeyboardAvoidingView } = await import('./component-styles-app.ts'));
   });
 
   function root(): HTMLElement {
@@ -156,24 +157,42 @@ describe("a component's own styles, on the web", () => {
     assert.equal((hostElement as HTMLElement).style.getPropertyValue('--gap'), '4px');
   });
 
-  it("reach a scroll view's content container through contentContainerClass", () => {
+  it('reach a content container through contentContainerClass, and let go when it goes', async () => {
+    const { signal } = await import('@angular/core');
+    const classes = signal<string | undefined>('card');
     const Screen = Component({
       selector: 'app-screen',
-      imports: [ScrollView, Text, View],
+      imports: [KeyboardAvoidingView, ScrollView, Text, View],
       template: `
-        <scroll-view id="classed" contentContainerClass="card"><text>Row</text></scroll-view>
+        <scroll-view id="classed" [contentContainerClass]="classes()"><text>Row</text></scroll-view>
+        <keyboard-avoiding-view id="avoiding" behavior="position" [contentContainerClass]="classes()"
+          ><text>Field</text></keyboard-avoiding-view
+        >
         <scroll-view id="plain"><view class="inner"></view></scroll-view>
       `,
       styles: `.card { background-color: rgb(1, 2, 3); } view { color: rgb(4, 5, 6); }`,
-    })(class {});
+    })(
+      class {
+        classes = classes;
+      },
+    );
     const host = root();
-    mount(host, Screen);
+    const { applicationRef } = mount(host, Screen);
     const text = (element: Element | null) =>
       element ? window.getComputedStyle(element).color : '(missing)';
-    assert.equal(colour(host.querySelector('#classed > view')), 'rgb(1, 2, 3)');
-    // Without a class the content view stays the scroll view's own, out of this component's reach.
+    for (const id of ['#classed > view', '#avoiding > view']) {
+      assert.equal(colour(host.querySelector(id)), 'rgb(1, 2, 3)', id);
+      assert.equal(text(host.querySelector(id)), 'rgb(4, 5, 6)', id);
+    }
+    // Without a class the content view stays the component's own, out of this component's reach.
     assert.notEqual(text(host.querySelector('#plain > view')), 'rgb(4, 5, 6)');
     assert.equal(text(host.querySelector('.inner')), 'rgb(4, 5, 6)');
+
+    classes.set(undefined);
+    applicationRef.tick();
+    for (const id of ['#classed > view', '#avoiding > view']) {
+      assert.notEqual(text(host.querySelector(id)), 'rgb(4, 5, 6)', `${id} let go`);
+    }
   });
 
   it('applies them unscoped when encapsulation is None', () => {

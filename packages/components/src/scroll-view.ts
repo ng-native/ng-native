@@ -13,6 +13,7 @@ import {
 import { type HostNode, type NativeSyntheticEvent, nativePlatform } from '@ng-native/fabric';
 import type { Point, Rect, Size } from './events.ts';
 import { type KeyboardShouldPersistTaps, dismissKeyboardOnTap } from './keyboard-taps.ts';
+import { ContentContainer } from './content-container.ts';
 import { RefreshControl } from './refresh-control.ts';
 import { StickyHeaders } from './sticky-headers.ts';
 import { optionalBoolean } from './transforms.ts';
@@ -49,7 +50,7 @@ import { View } from './view.ts';
 @Component({
   selector: 'scroll-view',
   exportAs: 'scrollView',
-  imports: [View],
+  imports: [ContentContainer, View],
   // `collapsable: false` is load-bearing, not a hint. Fabric flattens views whose props are
   // layout-only, and a content container with just padding qualifies: it gets no UIView at all.
   // Touches in its empty areas then land on the scroll view itself, which does not scroll from a
@@ -64,7 +65,8 @@ import { View } from './view.ts';
     <ng-content select="refresh-control" />
     <view
       #content
-      [class]="contentContainerClass()"
+      [contentContainerOf]="node"
+      [contentContainerClass]="contentContainerClass()"
       [style]="contentStyle()"
       collapsable="false"
       (layout)="onContentLayout($event)"
@@ -87,9 +89,9 @@ export class ScrollView extends ScrollViewProps {
   /** Styles for the view that holds the children, e.g. padding and gap. */
   readonly contentContainerStyle = input<Record<string, unknown>>();
   /**
-   * Classes for the view that holds the children. Matched as if the view were written in the
-   * template the scroll view is, so the global sheet and that component's own styles both reach
-   * it. `contentContainerStyle` wins over it, as an inline style does over a class.
+   * Classes for the view that holds the children, matched as if the view were written in the
+   * template the scroll view is. See `ContentContainer`. `contentContainerStyle` wins over it, as
+   * an inline style does over a class.
    */
   readonly contentContainerClass = input<string>();
 
@@ -152,32 +154,6 @@ export class ScrollView extends ScrollViewProps {
     inject(DestroyRef).onDestroy(stop);
     this.trackStickyHeaders();
   }
-
-  override ngOnChanges(): void {
-    super.ngOnChanges();
-    if (this.viewReady) this.scopeContent();
-  }
-
-  ngAfterViewInit(): void {
-    this.viewReady = true;
-    this.scopeContent();
-  }
-
-  /**
-   * The content view is created by this component's template, so on its own it matches only this
-   * component's rules and the global sheet. A class the app gives it is the app's, so once there
-   * is one the view is matched against the rules of the template the scroll view is written in.
-   * Not before: a type selector in that component's styles would otherwise start reaching a view
-   * that nobody there wrote.
-   */
-  private scopeContent(): void {
-    if (this.contentScoped || !this.contentContainerClass()) return;
-    this.contentScoped = true;
-    this.engine.adoptScope(this.content().nativeElement as HostNode, this.node);
-  }
-
-  private viewReady = false;
-  private contentScoped = false;
 
   /**
    * Sticky children are found again after each pass, because a pass can add or move them, and the

@@ -125,10 +125,11 @@ export abstract class HostEngine {
 
   /**
    * Style `node` as an element of the template `like` is written in, rather than of the one that
-   * created it: the content view a scroll view makes for its children, which the app styles
-   * through a class of its own and so from its own component styles.
+   * created it, or as its own again when `like` is null: the content view a scroll view makes for
+   * its children, which the app styles through a class of its own and so from its own component
+   * styles.
    */
-  adoptScope(_node: HostNode, _like: HostNode): void {}
+  adoptScope(_node: HostNode, _like: HostNode | null): void {}
 
   /**
    * Take the user to a node: a text input gets the cursor, and anything else is brought on

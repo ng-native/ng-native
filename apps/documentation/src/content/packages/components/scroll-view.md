@@ -22,7 +22,8 @@ scrollable content go there, not on `[style]`, which styles the scroll view's ow
 `contentContainerClass` gives the same container classes instead, as NativeWind's
 `contentContainerClassName` does. The container is matched as if it were written in your own
 template, so Tailwind utilities and your component's own styles both reach it.
-`contentContainerStyle` wins over a class, as an inline style does.
+`contentContainerStyle` wins over a class, as an inline style does. Without a class the container
+is the scroll view's own again, and your styles no longer reach it.
 
 ```html
 <scroll-view contentContainerClass="gap-3 p-4">
