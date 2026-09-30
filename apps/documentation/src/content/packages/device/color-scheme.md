@@ -66,6 +66,11 @@ native chrome follows along with the app's CSS: `@media (prefers-color-scheme: d
 
 A few things to know:
 
+- `app.json` has to leave the appearance to the system, with `"userInterfaceStyle": "automatic"`,
+  as the template and the generators write it. A fixed `"light"` or `"dark"` locks the app to that
+  style. In Expo Go on iOS `set()` then changes nothing, and `set(null)` returns to the fixed style
+  rather than the system's.
+
 - `set()` does not write `current()` itself. `current()` changes when `Appearance` reports the new
   scheme, the same path a system change takes, so read it afterwards rather than assuming it
   updated synchronously.

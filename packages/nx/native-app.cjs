@@ -148,7 +148,7 @@ function appJson(name, id) {
     // Not left to Expo, which adds `web` whenever `react-dom` resolves, and @nx/react puts one there.
     platforms: ['ios', 'android'],
     orientation: 'portrait',
-    userInterfaceStyle: 'dark',
+    userInterfaceStyle: 'automatic',
     ios: { supportsTablet: true, bundleIdentifier: bundle },
     android: { package: bundle, predictiveBackGestureEnabled: false },
     scheme: slug.replace(/[^a-z0-9]/gi, '').toLowerCase(),

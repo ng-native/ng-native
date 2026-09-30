@@ -48,6 +48,7 @@ export { COMPACT_WIDTH, Screen, type ScreenSource, type Size, type Sizes } from 
 export {
   StatusBar,
   statusBarSource,
+  type PlatformStatusBarStyle,
   type StatusBarSource,
   type StatusBarState,
   type StatusBarStyle,

@@ -9,9 +9,15 @@
  */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { Injector, runInInjectionContext } from '@angular/core';
+import { Injector } from '@angular/core';
 import { createWatch } from '@angular/core/primitives/signals';
-import { StatusBar, type StatusBarSource } from '@ng-native/device';
+import {
+  ColorScheme,
+  StatusBar,
+  type ColorSchemeSource,
+  type Scheme,
+  type StatusBarSource,
+} from '@ng-native/device';
 
 /** What the platform was told, in order. */
 function recorder() {
@@ -26,11 +32,34 @@ function recorder() {
   return { calls, source };
 }
 
-function build(source: StatusBarSource) {
+/** A colour scheme the test switches, as the system or `ColorScheme.set()` would. */
+function scheme(initial: Scheme = 'light') {
+  let current = initial;
+  const listeners = new Set<(scheme: Scheme) => void>();
+  const source: ColorSchemeSource = {
+    current: () => current,
+    subscribe: (listener) => {
+      listeners.add(listener);
+      return () => listeners.delete(listener);
+    },
+  };
+  const change = (next: Scheme) => {
+    current = next;
+    for (const listener of listeners) listener(next);
+  };
+  return { source, change, listeners };
+}
+
+function build(source: StatusBarSource, colors = scheme().source) {
   const injector = Injector.create({
-    providers: [{ provide: StatusBar.SOURCE, useValue: source }],
+    providers: [
+      { provide: StatusBar.SOURCE, useValue: source },
+      { provide: ColorScheme.SOURCE, useValue: colors },
+      { provide: ColorScheme, useClass: ColorScheme },
+      { provide: StatusBar, useClass: StatusBar },
+    ],
   });
-  return runInInjectionContext(injector, () => new StatusBar());
+  return injector.get(StatusBar);
 }
 
 describe('the status bar', () => {
@@ -122,6 +151,91 @@ describe('the status bar', () => {
     });
     bar.set({ style: 'light' });
     assert.equal(bar.height(), 0);
+  });
+});
+
+describe("an 'auto' status bar", () => {
+  it('asks for dark content on a light scheme and light content on a dark one', () => {
+    // Android's unclaimed bar is light content, white icons on a light app.
+    const light = recorder();
+    build(light.source, scheme('light').source).set({ style: 'auto' });
+    assert.deepEqual(light.calls, [['style', ['dark', undefined]]]);
+
+    const dark = recorder();
+    build(dark.source, scheme('dark').source).set({ style: 'auto' });
+    assert.deepEqual(dark.calls, [['style', ['light', undefined]]]);
+  });
+
+  it('follows the scheme when it changes, as a ColorScheme.set() theme switch does', () => {
+    const { calls, source } = recorder();
+    const colors = scheme('light');
+    build(source, colors.source).set({ style: 'auto', animated: true });
+    calls.length = 0;
+
+    colors.change('dark');
+    colors.change('light');
+    assert.deepEqual(calls, [
+      ['style', ['light', true]],
+      ['style', ['dark', true]],
+    ]);
+  });
+
+  it('reports auto as the state, not the style it resolved to', () => {
+    const { source } = recorder();
+    const bar = build(source, scheme('dark').source);
+    bar.set({ style: 'auto' });
+    assert.deepEqual(bar.state(), { style: 'auto' });
+  });
+
+  it('leaves a fixed style alone when the scheme changes', () => {
+    const { calls, source } = recorder();
+    const colors = scheme('light');
+    build(source, colors.source).set({ style: 'light' });
+    calls.length = 0;
+
+    colors.change('dark');
+    assert.deepEqual(calls, []);
+  });
+
+  it('keeps a fixed claim above an auto base, and resolves the base again once it drops', () => {
+    const { calls, source } = recorder();
+    const colors = scheme('light');
+    const bar = build(source, colors.source);
+    bar.set({ style: 'auto' });
+    const claim = bar.push({ style: 'light' });
+    calls.length = 0;
+
+    colors.change('dark');
+    assert.deepEqual(calls, []);
+    colors.change('light');
+    claim();
+    assert.deepEqual(calls, [['style', ['dark', undefined]]]);
+  });
+
+  it('asks for nothing when no claim sets a style, whatever the scheme does', () => {
+    const { calls, source } = recorder();
+    const colors = scheme('light');
+    build(source, colors.source).set({ hidden: false });
+    calls.length = 0;
+    colors.change('dark');
+    assert.deepEqual(calls, []);
+  });
+
+  it('stops following the scheme when its injector is destroyed', () => {
+    const { source } = recorder();
+    const colors = scheme('light');
+    const injector = Injector.create({
+      providers: [
+        { provide: StatusBar.SOURCE, useValue: source },
+        { provide: ColorScheme.SOURCE, useValue: colors.source },
+        { provide: ColorScheme, useClass: ColorScheme },
+        { provide: StatusBar, useClass: StatusBar },
+      ],
+    }) as Injector & { destroy(): void };
+    injector.get(StatusBar);
+    assert.notEqual(colors.listeners.size, 0);
+    injector.destroy();
+    assert.equal(colors.listeners.size, 0);
   });
 });
 

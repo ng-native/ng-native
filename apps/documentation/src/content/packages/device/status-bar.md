@@ -28,9 +28,27 @@ claim on top of whatever is there and returns the function that drops it, ready 
 order, later ones winning per property. Anything a claim leaves unset falls through to the claim
 underneath it.
 
-`StatusBarState` takes `style` (`'default' | 'light' | 'dark'`, `'light'` meaning light _content_
-for a dark bar, as CSS would), `hidden`, `animated`, and two Android-only properties: `backgroundColor`
+`StatusBarState` takes `style` (`'default' | 'light' | 'dark' | 'auto'`, `'light'` meaning light
+_content_ for a dark bar, as CSS would), `hidden`, `animated`, and two Android-only properties: `backgroundColor`
 (iOS has no such thing) and `translucent` (whether content draws underneath the bar).
+
+## Following the color scheme
+
+`'auto'` is dark content while [`ColorScheme`](/packages/device/color-scheme) reports light, and
+light content while it reports dark. It changes with the scheme, whether the system switches or the
+app calls `ColorScheme.set()`, for as long as it is the style the stack resolves to. `state` still
+reports `'auto'`. An app from the template or a generator claims it at startup:
+
+```ts
+inject(StatusBar).set({ style: 'auto' });
+```
+
+A claim with a fixed style keeps that style whatever the scheme does, and once it drops, an `'auto'`
+claim underneath resolves against the scheme at that moment.
+
+Until something claims a style, Android shows light content, white icons that vanish on a light
+screen, and `'default'` asks for the same. iOS picks dark or light content from the window's
+appearance on its own.
 
 `height` is only ever non-zero on Android; on iOS the number a layout wants instead is the safe-area
 top inset, from [`SafeArea`](/packages/device/safe-area).

@@ -1,5 +1,6 @@
-import { Component, signal } from '@angular/core';
+import { Component, inject, signal } from '@angular/core';
 import { Pressable, SafeAreaProvider, SafeAreaView, Text, View } from '@ng-native/components';
+import { StatusBar } from '@ng-native/device';
 
 /**
  * Element names are lowercase, and that is load-bearing rather than style: an uppercase name is
@@ -28,7 +29,7 @@ import { Pressable, SafeAreaProvider, SafeAreaView, Text, View } from '@ng-nativ
     }
     .screen {
       flex: 1;
-      background-color: #101014;
+      background-color: #f5f5f7;
     }
     .body {
       flex: 1;
@@ -37,12 +38,12 @@ import { Pressable, SafeAreaProvider, SafeAreaView, Text, View } from '@ng-nativ
       padding: 24px;
     }
     .title {
-      color: #ffffff;
+      color: #101014;
       font-size: 28px;
       font-weight: 700;
     }
     .hint {
-      color: #8b8b96;
+      color: #5f5f6b;
       font-size: 15px;
     }
     .button {
@@ -57,8 +58,25 @@ import { Pressable, SafeAreaProvider, SafeAreaView, Text, View } from '@ng-nativ
       font-size: 16px;
       font-weight: 600;
     }
+    @media (prefers-color-scheme: dark) {
+      .screen {
+        background-color: #101014;
+      }
+      .title {
+        color: #ffffff;
+      }
+      .hint {
+        color: #8b8b96;
+      }
+    }
   `,
 })
 export class App {
   protected readonly count = signal(0);
+
+  constructor() {
+    // Dark status bar icons in light mode and light ones in dark mode. Unclaimed, Android keeps
+    // light icons whatever the scheme.
+    inject(StatusBar).set({ style: 'auto' });
+  }
 }

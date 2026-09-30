@@ -11,6 +11,7 @@
  * that package installed.
  */
 import {
+  DestroyRef,
   InjectionToken,
   Service,
   computed,
@@ -19,10 +20,18 @@ import {
   untracked,
   type Signal,
 } from '@angular/core';
+import { ColorScheme, type Scheme } from './color-scheme.ts';
 import { reactNative } from './react-native.ts';
 
-/** Dark text for a light bar, light text for a dark one. `default` is whatever the OS picks. */
-export type StatusBarStyle = 'default' | 'light' | 'dark';
+/**
+ * Dark text for a light bar, light text for a dark one. `default` is whatever the OS picks, which on
+ * Android is light text whatever the scheme. `auto` is dark text in the light color scheme and
+ * light text in the dark one, and follows `ColorScheme`, an in-app theme switch included.
+ */
+export type StatusBarStyle = 'default' | 'light' | 'dark' | 'auto';
+
+/** A style the platform takes: `auto` is resolved against the color scheme before it gets there. */
+export type PlatformStatusBarStyle = Exclude<StatusBarStyle, 'auto'>;
 
 /** What a claim asks for. Anything absent is left as whatever the claim underneath said. */
 export interface StatusBarState {
@@ -37,7 +46,7 @@ export interface StatusBarState {
 
 /** Where the bar actually is. A fake stands in for the platform in tests. */
 export interface StatusBarSource {
-  setStyle(style: StatusBarStyle, animated?: boolean): void;
+  setStyle(style: PlatformStatusBarStyle, animated?: boolean): void;
   setHidden(hidden: boolean, animation?: 'none' | 'fade' | 'slide'): void;
   setBackgroundColor(color: string, animated?: boolean): void;
   setTranslucent(translucent: boolean): void;
@@ -87,6 +96,7 @@ export class StatusBar {
   });
 
   private readonly source = inject(StatusBar.SOURCE);
+  private readonly scheme = inject(ColorScheme);
   private readonly stack = signal<readonly StatusBarState[]>([{}]);
 
   /** What is actually showing: every claim in order, later ones winning per property. */
@@ -99,6 +109,17 @@ export class StatusBar {
    * wants is the safe-area top inset, which `SafeArea` has.
    */
   readonly height: Signal<number> = signal(this.source.height ?? 0).asReadonly();
+
+  constructor() {
+    // Straight from the source rather than through an effect, so an `auto` bar changes in the same
+    // turn as the scheme. The scheme is the listener's own: `ColorScheme.current` may not have
+    // heard yet.
+    const stop = inject(ColorScheme.SOURCE).subscribe((scheme) => {
+      const { style, animated } = untracked(this.state);
+      if (style === 'auto') this.source.setStyle(resolve(style, scheme), animated);
+    });
+    inject(DestroyRef).onDestroy(stop);
+  }
 
   /** The base claim, for an app that sets the bar once at startup. */
   set(state: StatusBarState): void {
@@ -127,9 +148,17 @@ export class StatusBar {
    */
   private apply(): void {
     const { style, hidden, animated, backgroundColor, translucent } = untracked(this.state);
-    if (style !== undefined) this.source.setStyle(style, animated);
+    if (style !== undefined) {
+      this.source.setStyle(resolve(style, untracked(this.scheme.current)), animated);
+    }
     if (hidden !== undefined) this.source.setHidden(hidden, animated ? 'fade' : undefined);
     if (backgroundColor !== undefined) this.source.setBackgroundColor(backgroundColor, animated);
     if (translucent !== undefined) this.source.setTranslucent(translucent);
   }
+}
+
+/** Dark text on the light scheme's light background, light text on the dark one's. */
+function resolve(style: StatusBarStyle, scheme: Scheme): PlatformStatusBarStyle {
+  if (style !== 'auto') return style;
+  return scheme === 'dark' ? 'light' : 'dark';
 }

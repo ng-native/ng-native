@@ -96,7 +96,7 @@ function appJson(name) {
     version: '1.0.0',
     platforms: ['ios', 'android'],
     orientation: 'portrait',
-    userInterfaceStyle: 'dark',
+    userInterfaceStyle: 'automatic',
     ios: { supportsTablet: true },
     android: { predictiveBackGestureEnabled: false },
     scheme: name.replace(/[^a-z0-9]/gi, '').toLowerCase(),

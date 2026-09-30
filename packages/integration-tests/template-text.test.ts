@@ -34,6 +34,19 @@ describe('the template', () => {
     assert.equal(config.expo.extra?.router?.root, 'src/app');
   });
 
+  it('follows the system appearance, which a fixed one would lock ColorScheme.set() out of', () => {
+    // With "dark", iOS stayed dark whatever the app set, and Expo Go on Android drew light.
+    const { expo } = JSON.parse(template('app.json')) as { expo: { userInterfaceStyle?: string } };
+    assert.equal(expo.userInterfaceStyle, 'automatic');
+  });
+
+  it('claims a status bar style that follows the color scheme, and styles both schemes', () => {
+    // Unclaimed, Android keeps white icons, which vanish on a light screen.
+    const app = template('src/app/app.ts');
+    assert.match(app, /inject\(StatusBar\)\.set\(\{ style: 'auto' \}\)/);
+    assert.match(app, /@media \(prefers-color-scheme: dark\)/);
+  });
+
   it('targets iOS and Android only, with nothing configured for a web build it cannot make', () => {
     const { expo } = JSON.parse(template('app.json')) as {
       expo: { platforms?: string[]; web?: unknown };
