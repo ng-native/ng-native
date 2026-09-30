@@ -93,10 +93,28 @@ there is nothing to pop to: a push is the way to a screen that is not on the sta
 
 ## Deep links into nested screens
 
+Without `withLinkParent`, a link that launches the app opens its page alone: no Back, no tab bar,
+and nothing beneath it to return to until the app is relaunched. A link that arrives while the app
+is running is pushed over whatever is showing.
+
 `withLinkParent(parentOf)` says which page a deep link belongs under, and that page's own parent is
-asked in turn, so a link to a screen five levels deep opens on all five and Back retraces them. A
-link that arrives as the app launches waits for the router's first navigation to finish, so the
-root screen is always there beneath it.
+asked in turn, so a link to a screen five levels deep opens on all five and Back retraces them.
+Return null for a link that should open alone:
+
+```ts
+import { provideNativeRouter, withLinkParent } from '@ng-native/router';
+import { routes } from './app/app.routes.ts';
+
+const router = provideNativeRouter(
+  routes,
+  // A person opens above the people list, which opens above the tabs.
+  withLinkParent((url) => (url.startsWith('/person/') ? '/people' : null)),
+);
+```
+
+A link that arrives as the app launches waits for the router's first navigation to finish, so the
+root screen is always there beneath it. [Testing the router](/packages/testing/testing-navigation)
+shows how to follow a link in a test.
 
 ## A page that fails to render
 

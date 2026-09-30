@@ -18,6 +18,7 @@ import {
 import { NativeNavigation } from '../router/src/native-navigation.ts';
 import { provideNativeRouter, withLinkParent } from '../router/src/provide-native-router.ts';
 import { DeepLinks } from '@ng-native/device';
+import { followLink } from '../router/src/native-links.ts';
 import { compileFixture } from './compile.ts';
 
 function flatten(nodes: FakeFabricNode[]): FakeFabricNode[] {
@@ -327,7 +328,7 @@ describe('a deep link opened beneath its parent screen', () => {
     mod = await compileFixture(fileURLToPath(new URL('./fixtures/stack-app.ts', import.meta.url)));
   });
 
-  async function launch(initial: string | null) {
+  async function launch(initial: string | null, parented = true) {
     const links = {
       initialUrl: () => initial,
       subscribe: (listener: (url: string) => void) => ((arrive = listener), () => {}),
@@ -337,7 +338,7 @@ describe('a deep link opened beneath its parent screen', () => {
         provideNativeRouter(
           mod['routes'] as Routes,
           withComponentInputBinding(),
-          withLinkParent((url) => (url.startsWith('/user/') ? '/' : null)),
+          ...(parented ? [withLinkParent((url) => (url.startsWith('/user/') ? '/' : null))] : []),
         ),
         { provide: DeepLinks, useValue: links },
       ],
@@ -361,6 +362,20 @@ describe('a deep link opened beneath its parent screen', () => {
     await nav.push('/modal');
     await idle();
     assert.equal(router.url, '/modal');
+  });
+
+  it('launches on the linked screen alone without withLinkParent, as the Screens page says', async () => {
+    await launch('/user/7', false);
+    assert.equal(router.url, '/user/7');
+    assert.deepEqual(stack(fabric), ['user 7'], 'no screen under it to go back to');
+  });
+
+  it('follows a link called directly, as the Testing the router page shows', async () => {
+    await launch(null);
+    await followLink(router, '/user/7', (url) => (url.startsWith('/user/') ? '/' : null));
+    await idle();
+    assert.equal(router.url, '/user/7');
+    assert.deepEqual(stack(fabric), ['home', 'user 7']);
   });
 
   it('follows a link that arrives while the app is running', async () => {

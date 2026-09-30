@@ -117,6 +117,43 @@ it('takes its native option as a feature beside Angular ones, and still routes',
 });
 ```
 
+## Following a deep link
+
+`followLink(router, url, parentOf)` opens a link the way a deep link does, on top of the pages
+`parentOf` puts beneath it. Pass the same function the app gives `withLinkParent`, then check the
+parent is underneath as well as the page:
+
+```ts
+import { Router } from '@angular/router';
+import { followLink, type LinkParent } from '@ng-native/router';
+
+@Component({ selector: 'app-team', imports: [Text], template: '<text>Our team</text>' })
+class Team {}
+
+const linkParent: LinkParent = (url) => (url.startsWith('/about/') ? '/about' : null);
+
+it('opens a link above the page it belongs under', async () => {
+  const { componentRef } = await render(App, {
+    providers: [
+      provideNativeRouter(
+        [
+          { path: '', component: Home },
+          { path: 'about', component: About },
+          { path: 'about/team', component: Team },
+        ],
+        withLinkParent(linkParent),
+      ),
+    ],
+  });
+
+  await followLink(componentRef.injector.get(Router), '/about/team', linkParent);
+
+  expect(await screen.findByText('Our team')).toBeTruthy();
+  // The page it belongs under is on the stack beneath it, so Back has somewhere to go.
+  expect(screen.getByText('We make apps')).toBeTruthy();
+});
+```
+
 Give `provideNativeRouter` the same router features the app does - a test whose providers are
 missing one the app declares will pass for routes that do not need it and fail, confusingly, only
 on the ones that do.
