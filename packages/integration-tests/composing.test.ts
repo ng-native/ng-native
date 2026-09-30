@@ -47,4 +47,10 @@ describe('a control composed from the host behaviours', () => {
     assert.equal(instance.on(), false, 'a disabled control does not claim the touch');
     cleanup();
   });
+
+  it('takes a contributed role over the link a pressable text defaults to', async () => {
+    await render(Composing);
+    assert.ok(screen.getByRole('togglebutton', { name: 'Bluetooth' }));
+    cleanup();
+  });
 });

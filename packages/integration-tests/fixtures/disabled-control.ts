@@ -2,13 +2,14 @@ import { Component, signal } from '@angular/core';
 import { Pressable } from '../../components/src/pressable.ts';
 import { Switch } from '../../components/src/switch.ts';
 import { Text } from '../../components/src/text.ts';
+import { TextInput } from '../../components/src/text-input.ts';
 import { TouchableOpacity } from '../../components/src/touchable-opacity.ts';
 import { View } from '../../components/src/view.ts';
 
 /** A disabled control in every way a template can say so, and one that changes at runtime. */
 @Component({
   selector: 'x-disabled-control',
-  imports: [Pressable, Switch, Text, TouchableOpacity, View],
+  imports: [Pressable, Switch, Text, TextInput, TouchableOpacity, View],
   template: `
     <view>
       <pressable testID="bound" accessibilityRole="button" class="p" [disabled]="true">
@@ -61,6 +62,29 @@ import { View } from '../../components/src/view.ts';
         aria-selected="true"
         aria-hidden="true"
       ></view>
+      <pressable
+        testID="own-wins"
+        accessibilityRole="button"
+        accessibilityLabel="Own wins"
+        [disabled]="off()"
+        [aria-disabled]="!off()"
+      ></pressable>
+      <pressable testID="own-wins-static" disabled aria-disabled="false"></pressable>
+      <touchable-opacity testID="fade-wins" [disabled]="off()" [aria-disabled]="!off()" />
+      <switch testID="switch-wins" [disabled]="off()" [aria-disabled]="!off()" />
+      <text-input testID="input-wins" [disabled]="off()" [aria-disabled]="!off()" />
+      <text testID="text-wins" pressable [disabled]="off()" [aria-disabled]="!off()">Wins</text>
+      <pressable
+        testID="own-over-state"
+        [disabled]="off()"
+        [accessibilityState]="{ disabled: !off(), selected: true }"
+      ></pressable>
+      <pressable testID="aria-only" [aria-disabled]="off()"></pressable>
+      <text testID="link" pressable>Read more</text>
+      <text testID="link-role" pressable role="button">Go on</text>
+      <text testID="link-a11y-role" pressable accessibilityRole="header">Title</text>
+      <text testID="link-toggle" [pressable]="!off()">Toggle</text>
+      <text testID="link-state" pressable [accessibilityState]="{ disabled: off() }">State</text>
     </view>
   `,
 })

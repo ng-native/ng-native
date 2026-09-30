@@ -399,17 +399,22 @@ export abstract class ViewBase {
     return false;
   }
 
-  /** A role the component itself implies. `Switch.js`: `accessibilityRole ?? 'switch'`. */
+  /**
+   * A role the component itself implies. `Switch.js`: `accessibilityRole ?? 'switch'`. Below an
+   * explicit role and a contributed one, which is what a wrapper passing `accessibilityRole` is.
+   */
   protected roleByDefault(): AccessibilityRole | undefined {
     return undefined;
   }
 
   /**
-   * The component's own `disabled`, for the state a screen reader announces.
+   * The component's own `disabled`, for the state a screen reader announces: undefined when not
+   * passed.
    *
-   * React Native merges this whenever the prop was passed, even as false. An input here always
-   * has a value, so there is no telling "passed false" from "not passed"; only true is merged,
-   * and a control that is not disabled says nothing rather than saying so on every node.
+   * It wins over `aria-disabled` and `accessibilityState.disabled`, as it does in `Pressable.js`,
+   * `TouchableOpacity.js`, `Switch.js` and `Text.js`. True is always merged; false only overrides
+   * something else that says disabled, so a control that is not disabled says nothing rather than
+   * saying so on every node.
    */
   protected disabledForAccessibility(): boolean | undefined {
     return undefined;
@@ -459,10 +464,7 @@ export abstract class ViewBase {
     );
     write('accessibilityLabelledBy', this.accessibilityLabelledBy() ?? this.ariaLabelledBy());
     write('accessibilityHint', this.accessibilityHint());
-    write(
-      'accessibilityRole',
-      this.accessibilityRole() ?? this.role() ?? this.roleByDefault() ?? this.contributedRole(),
-    );
+    write('accessibilityRole', this.accessibilityRole() ?? this.role() ?? this.impliedRole());
     write('accessibilityState', this.mergedAccessibilityState());
     write('accessibilityValue', this.mergedAccessibilityValue());
     write('accessibilityActions', this.accessibilityActions());
@@ -585,13 +587,18 @@ export abstract class ViewBase {
       this.engine.setProp(this.node, 'focusable', true);
     }
     if (this.accessibilityRole() === undefined && this.role() === undefined) {
-      const role = this.roleByDefault();
+      const role = this.impliedRole();
       if (role) this.engine.setProp(this.node, 'accessibilityRole', role);
     }
     if (this.accessibilityLabel() === undefined && this.ariaLabel() === undefined) {
       const label = this.labelByDefault();
       if (label !== undefined) this.engine.setProp(this.node, 'accessibilityLabel', label);
     }
+  }
+
+  /** The role when none is set: one a directive contributes, or else the component's own. */
+  private impliedRole(): AccessibilityRole | undefined {
+    return this.contributedRole() ?? this.roleByDefault();
   }
 
   /** The first role any directive on this node claims. Two claiming different ones is a bug. */
@@ -644,11 +651,11 @@ export abstract class ViewBase {
     const set = (key: keyof AccessibilityState, value: unknown) => {
       if (value !== undefined) merged[key] = value;
     };
-    set('disabled', this.disabledForAccessibility() || undefined);
     set('checked', this.checkedForAccessibility());
     set('busy', this.ariaBusy());
     set('checked', this.ariaChecked());
     set('disabled', this.ariaDisabled());
+    set('disabled', this.disabledOver(merged['disabled']));
     set('expanded', this.ariaExpanded());
     set('selected', this.ariaSelected());
     for (const contribution of this.contributions) {
@@ -661,6 +668,12 @@ export abstract class ViewBase {
     const last = this.lastAccessibilityState;
     if (last && state && sameState(last, state)) return last;
     return (this.lastAccessibilityState = state);
+  }
+
+  /** `disabled` over what else said: true always, false only when something said otherwise. */
+  private disabledOver(other: unknown): boolean | undefined {
+    const own = this.disabledForAccessibility();
+    return own || (own === false && other !== undefined) ? own : undefined;
   }
 
   private mergedAccessibilityValue(): AccessibilityValue | undefined {

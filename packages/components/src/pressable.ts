@@ -16,6 +16,7 @@ import {
 } from '@angular/core';
 import type { NativeSyntheticEvent } from '@ng-native/fabric';
 import type { Insets, TouchEvent } from './events.ts';
+import { optionalBoolean } from './transforms.ts';
 import { ViewBase } from './view-base.ts';
 
 /** What a press handler receives: RN's `{nativeEvent}` shape, passed straight through. */
@@ -92,8 +93,11 @@ const now = (): number => globalThis.performance?.now?.() ?? Date.now();
  */
 @Directive()
 export abstract class TouchableBase extends ViewBase {
-  /** Ignore touches entirely. */
-  readonly disabled = input(false, { transform: booleanAttribute });
+  /**
+   * Ignore touches entirely. Undefined until set, because React Native tells "not passed" from
+   * "passed false": only a passed `disabled` wins over `aria-disabled` in what is announced.
+   */
+  readonly disabled = input(undefined, { transform: optionalBoolean });
 
   /**
    * How far outside the hit area a touch may wander before the press is cancelled. Native's
@@ -488,7 +492,7 @@ export class PressBehavior extends ControlBase {
     return true;
   }
 
-  protected override disabledForAccessibility(): boolean {
+  protected override disabledForAccessibility(): boolean | undefined {
     return this.disabled();
   }
 }
@@ -515,7 +519,7 @@ export class Pressable extends ControlBase {
     return true;
   }
 
-  protected override disabledForAccessibility(): boolean {
+  protected override disabledForAccessibility(): boolean | undefined {
     return this.disabled();
   }
 }

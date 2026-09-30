@@ -133,6 +133,44 @@ describe('a disabled <text pressable>', () => {
   });
 });
 
+describe('disabled and aria-disabled disagreeing', () => {
+  it('writes the aria-disabled that disabled says, both ways', async () => {
+    const { document, componentRef, applicationRef: appRef, app } = await bootstrapControls();
+    const nodes = ['wins', 'own'].map(
+      (id) => document.querySelector(`[data-testid="${id}"]`) as HTMLElement,
+    );
+    for (const node of nodes) assert.equal(node.getAttribute('aria-disabled'), 'true');
+
+    app.off.set(false);
+    appRef.tick();
+    for (const node of nodes) assert.equal(node.getAttribute('aria-disabled'), null);
+
+    app.off.set(true);
+    appRef.tick();
+    for (const node of nodes) assert.equal(node.getAttribute('aria-disabled'), 'true');
+
+    componentRef.destroy();
+  });
+});
+
+describe('a <text pressable> is a link', () => {
+  it('has role="link" while it can be pressed, and none while disabled', async () => {
+    const { document, componentRef, applicationRef: appRef, app } = await bootstrapControls();
+    const text = document.querySelector('[data-testid="wins"]') as HTMLElement;
+    assert.equal(text.getAttribute('role'), null);
+
+    app.off.set(false);
+    appRef.tick();
+    assert.equal(text.getAttribute('role'), 'link');
+
+    app.off.set(true);
+    appRef.tick();
+    assert.equal(text.getAttribute('role'), null);
+
+    componentRef.destroy();
+  });
+});
+
 describe("image-background's node.props['style'] mirror", () => {
   it("copies the outer view's width/height onto the absolutely-filled inner image", async () => {
     const { document, componentRef } = await bootstrapControls();

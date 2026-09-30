@@ -38,12 +38,13 @@ export class Toggle {}
 
 @Component({
   selector: 'x-composing',
-  imports: [Text, Toggle, View],
+  imports: [Text, Toggle, ToggleRole, View],
   template: `
     <view>
       <x-toggle accessibilityLabel="Wi-Fi" [on]="on()" [disabled]="locked()" (press)="on.set(!on())"
         ><text>Wi-Fi</text></x-toggle
       >
+      <text pressable xToggleRole>Bluetooth</text>
     </view>
   `,
 })

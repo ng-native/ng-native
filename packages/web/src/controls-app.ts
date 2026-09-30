@@ -3,11 +3,11 @@
  * has to live in its own file rather than inside a `.test.ts` one.
  */
 import { Component, signal } from '@angular/core';
-import { ImageBackground, Switch, Text, TextInput } from '@ng-native/components';
+import { ImageBackground, Pressable, Switch, Text, TextInput } from '@ng-native/components';
 
 @Component({
   selector: 'app-root',
-  imports: [ImageBackground, Switch, Text, TextInput],
+  imports: [ImageBackground, Pressable, Switch, Text, TextInput],
   template: `
     <text-input #field [(value)]="text" placeholder="Say something" />
     <switch #toggle [(checked)]="on" />
@@ -18,6 +18,8 @@ import { ImageBackground, Switch, Text, TextInput } from '@ng-native/components'
       [style.height.px]="80"
     />
     <text testID="terms" pressable [disabled]="off()">Terms</text>
+    <text testID="wins" pressable [disabled]="off()" [aria-disabled]="!off()">Wins</text>
+    <pressable testID="own" [disabled]="off()" [aria-disabled]="!off()" />
   `,
 })
 export class ControlsApp {

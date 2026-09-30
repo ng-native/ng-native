@@ -312,3 +312,75 @@ describe("Tailwind's aria-disabled: and disabled: variants on a text and a contr
     });
   }
 });
+
+describe('disabled wins over aria-disabled, as in React Native', () => {
+  /**
+   * `Pressable.js`, `TouchableOpacity.js` and `Switch.js` put `disabled` over what `aria-disabled`
+   * or `accessibilityState` said whenever it is passed, and `Text.js` does the same whenever either
+   * side says disabled. So a disabled control is announced as disabled, and one whose `disabled`
+   * is false as enabled.
+   */
+  const ids = ['own-wins', 'fade-wins', 'switch-wins', 'input-wins', 'text-wins'];
+
+  it('announces what disabled says, both ways, and a role query reads the same', async () => {
+    const { instance, getByRole, getByTestId, rerender } = await render(Control);
+    const state = (id: string) =>
+      (getByTestId(id).props['accessibilityState'] ?? {}) as { disabled?: boolean };
+    const button = () => getByRole('button', { name: 'Own wins' }).props['accessibilityState'];
+    for (const id of [...ids, 'own-wins-static']) assert.equal(state(id).disabled, true, id);
+    assert.deepEqual(state('own-over-state'), { disabled: true, selected: true });
+    assert.deepEqual(button(), { disabled: true });
+
+    instance.off.set(false);
+    await rerender();
+    for (const id of ids) assert.equal(state(id).disabled, false, `${id} enabled`);
+    assert.deepEqual(state('own-over-state'), { disabled: false, selected: true });
+    assert.deepEqual(button(), { disabled: false });
+    assert.deepEqual(state('aria-only'), { disabled: false }, 'aria-disabled alone still counts');
+
+    instance.off.set(true);
+    await rerender();
+    for (const id of ids) assert.equal(state(id).disabled, true, `${id} disabled again`);
+    assert.deepEqual(state('own-over-state'), { disabled: true, selected: true });
+    assert.deepEqual(state('aria-only'), { disabled: true });
+    cleanup();
+  });
+});
+
+describe('a pressable text is a link, as in React Native', () => {
+  /**
+   * `Text.js` gives a text with a press handler the `link` role when neither `role` nor
+   * `accessibilityRole` is set, unless it is disabled: by `disabled`, or failing that by
+   * `aria-disabled` or `accessibilityState.disabled`. A nested text follows the same rule.
+   */
+  const role = (getByTestId: (id: string) => { props: Record<string, unknown> }, id: string) =>
+    getByTestId(id).props['accessibilityRole'] ?? null;
+
+  it('takes the link role by default, and an explicit role still wins', async () => {
+    const { getByRole, getByTestId } = await render(Control);
+    assert.equal(role(getByTestId, 'link'), 'link');
+    assert.equal(getByRole('link', { name: 'Read more' }), getByTestId('link'));
+    assert.equal(role(getByTestId, 'link-role'), 'button', 'role wins');
+    assert.equal(role(getByTestId, 'link-a11y-role'), 'header', 'accessibilityRole wins');
+    assert.equal(role(getByTestId, 'static-text'), null, 'a text that is not pressable');
+    cleanup();
+  });
+
+  it('is no link while disabled, and follows pressable and disabled both ways', async () => {
+    const { instance, getByTestId, rerender } = await render(Control);
+    // `text-wins` is disabled with aria-disabled false, then enabled with aria-disabled true:
+    // `disabled` decides both times.
+    const ids = ['pressable-text', 'text-both', 'text-wins', 'link-state', 'nested-text'];
+    for (const id of [...ids, 'link-toggle']) assert.equal(role(getByTestId, id), null, id);
+
+    instance.off.set(false);
+    await rerender();
+    for (const id of [...ids, 'link-toggle']) assert.equal(role(getByTestId, id), 'link', id);
+
+    instance.off.set(true);
+    await rerender();
+    for (const id of [...ids, 'link-toggle']) assert.equal(role(getByTestId, id), null, id);
+    assert.equal(role(getByTestId, 'link'), 'link', 'an enabled one stays a link');
+    cleanup();
+  });
+});

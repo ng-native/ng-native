@@ -58,7 +58,7 @@ export class TouchableOpacity extends ControlBase {
     return true;
   }
 
-  protected override disabledForAccessibility(): boolean {
+  protected override disabledForAccessibility(): boolean | undefined {
     return this.disabled();
   }
 
