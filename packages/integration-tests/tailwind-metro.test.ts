@@ -96,6 +96,29 @@ describe('the generated stylesheet module', () => {
     assert.deepEqual(styleOf(sheet, 'start-4'), { start: 16 });
   });
 
+  it('names the rule a dropped declaration is in, not a line of the generated sheet', (t) => {
+    // The sheet is generated, so its line numbers move as classes are added and nobody can open
+    // them; the selector is what to search the app for.
+    const warn = t.mock.method(console, 'warn', () => {});
+    compileSheetModule(
+      '.p-1 { padding: 4px }\n.grid { display: grid }\n' +
+        '@media (width >= 48rem) {\n  .md\\:grid { display: grid }\n}\n' +
+        '.\\32 xl\\:grid { display: grid }\n.a,\n.b {\n  display: grid;\n  opacity: 0.5;\n}\n',
+      '/app/.angular-native/app.tailwind.css',
+    );
+    const warnings = warn.mock.calls.map((call) => String(call.arguments[0]));
+    assert.deepEqual(
+      warnings.map((warning) => warning.slice(0, warning.indexOf(': dropped'))),
+      [
+        '[angular-native] .grid (Tailwind)',
+        '[angular-native] .md:grid (Tailwind)',
+        '[angular-native] .2xl:grid (Tailwind)',
+        '[angular-native] .a, .b (Tailwind)',
+      ],
+    );
+    assert.match(warnings[0]!, /: dropped 'display': display: grid does not exist on native/);
+  });
+
   it('is a module a bundler can read, not a string of CSS', () => {
     const code = compileSheetModule('.a { flex: 1 }');
     assert.match(code, /export default/);

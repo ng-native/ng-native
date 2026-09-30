@@ -41,10 +41,11 @@ rounded-lg       -> { borderTopLeftRadius: 8, ... }
 bg-blue-500      -> { backgroundColor: 'rgb(43, 127, 255)' }
 ```
 
-Unsupported styles produce diagnostics with line numbers:
+Unsupported styles produce diagnostics that name the rule's selector, which is what to search the
+app for:
 
 ```
-[angular-native] app.tailwind.css:153: dropped 'appearance': 'appearance' has no React Native equivalent: no style prop of a native view does what it does.
+[angular-native] .appearance-none (Tailwind): dropped 'appearance': 'appearance' has no React Native equivalent: no style prop of a native view does what it does.
 ```
 
 Diagnostics prevent unsupported styles from silently doing nothing.

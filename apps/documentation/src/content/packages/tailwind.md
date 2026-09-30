@@ -84,10 +84,11 @@ Tailwind 4 emits CSS aimed at a browser: cascade layers, `@property` declaration
 colors, and a spacing scale expressed with `calc()`. None of that is a cascade question - it never
 depends on what element it lands on - so it is all resolved once at build time, before the result
 ever reaches the same CSS compiler your own component styles go through. Whatever is left that
-native genuinely cannot express is reported on the line it was found:
+native genuinely cannot express is reported with the selector of the rule it was found in, which
+is the class to search the app for, since the generated sheet's lines move as classes are added:
 
 ```
-[angular-native] app.tailwind.css:153: dropped 'appearance': 'appearance' is not mapped yet.
+[angular-native] .appearance-none (Tailwind): dropped 'appearance': 'appearance' has no React Native equivalent: no style prop of a native view does what it does.
 ```
 
 That is deliberate, not a rough edge - see [what CSS reaches a
