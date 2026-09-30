@@ -6,7 +6,8 @@
  * parser (`@ng-native/metro/css/values.cjs`). A bound one only exists here, where there is not,
  * so this takes the shapes a binding actually holds and nothing more: a length in `px` or `%`, a
  * number, a colour as React Native writes one, a colour's three channels, a word, another token,
- * `var(--brand)`, and one made of others, `calc(var(--gap) * 2)` (see inline-derived-token.ts).
+ * `var(--brand)`, and one made of others, `calc(var(--gap) * 2)` or a `color-mix()` (see
+ * inline-derived-token.ts).
  * Anything else is kept as a word, which a use site that wants a length or a colour ignores, as
  * it ignores an undefined token.
  */
@@ -26,6 +27,11 @@ const CHANNEL = /^(-?(?:\d+\.?\d*|\.\d+))(%|deg|grad|rad|turn)?$/;
 const HUE_UNITS: Record<string, number> = { deg: 1, grad: 0.9, rad: 180 / Math.PI, turn: 360 };
 /** `var(--name)` or `var(--name, <fallback>)`, the whole value. */
 const VAR = /^var\(\s*(--[\w-]+)\s*(?:,([\s\S]*))?\)$/i;
+/**
+ * A value worked out where it is set: one with a `var()` in it, or a `color-mix()`, of tokens or of
+ * colours written out.
+ */
+const DERIVED = /var\(|^color-mix\(/i;
 const WEIGHTS: Record<string, string> = { normal: '400', bold: '700' };
 
 /**
@@ -148,7 +154,7 @@ export function tokenFromValue(value: unknown): TokenValue | undefined {
     return { angle: Number(value) * HUE_UNITS[unit!.toLowerCase()]!, number: Number(value) };
   }
   if (NUMBER.test(text)) return fromNumber(Number(text));
-  if (text.includes('var(')) return withTokens(text);
+  if (DERIVED.test(text)) return withTokens(text);
   if (COLOR_FUNCTION.test(text)) return { color: text };
   return fromChannels(text) ?? (WORD.test(text) ? fromWord(text) : { keyword: text });
 }

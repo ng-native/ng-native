@@ -4,13 +4,15 @@
  * compiled to, which the cascade then works out where it is set, as it does that one
  * (`resolveAliases` in css.ts).
  *
- * The shapes are the build-time conversion's and no more (`deferCalcToken`, `deferHslToken` and
- * `deferChannelsToken` in `@ng-native/metro/css/compile.cjs`): `calc()`, `min()` or `max()` of
- * numbers, lengths in `px` or `rem`, angles, times and `var()`, with + - * / and brackets; an
- * `hsl()` with a `var()` for a channel; and `rgb()` or `hsl()` of one channels token, with an
- * alpha written or tokened. Anything else is undefined, as a stylesheet refuses it.
+ * The shapes are the build-time conversion's and no more (`deferCalcToken`, `deferHslToken`,
+ * `deferChannelsToken` and `deferMixToken` in `@ng-native/metro/css/compile.cjs`): `calc()`,
+ * `min()` or `max()` of numbers, lengths in `px` or `rem`, angles, times and `var()`, with + - * /
+ * and brackets; an `hsl()` with a `var()` for a channel; `rgb()` or `hsl()` of one channels token,
+ * with an alpha written or tokened; and a `color-mix()` of any of these colours, tokens and
+ * colours written out. Anything else is undefined, as a stylesheet refuses it.
  */
-import type { HslChannel, TokenValue } from './css.ts';
+import { MIX_SPACES, type HueMethod, type MixSpace } from './color-mix.ts';
+import type { ColourExpression, HslChannel, TokenValue } from './css.ts';
 import { tokenFromValue } from './inline-token.ts';
 
 type Marker = NonNullable<TokenValue['deferredCalc']>[number];
@@ -29,7 +31,7 @@ interface Reference {
 }
 
 const SPACE = /\s*/y;
-const FUNCTION = /([a-z]+)\(\s*/iy;
+const FUNCTION = /([a-z][a-z-]*)\(\s*/iy;
 const VAR = /var\(\s*(--[\w-]+)\s*/iy;
 const LITERAL = /([+-]?(?:\d+\.?\d*|\.\d+)(?:e[+-]?\d+)?)(%|[a-z]+)?/iy;
 const WORD = /[^\s,/()]+/y;
@@ -47,7 +49,9 @@ const PER_UNIT: Readonly<Record<string, number>> = {
   ms: 1,
   s: 1000,
 };
+const PERCENTAGE = /([+-]?(?:\d+\.?\d*|\.\d+))%/y;
 const HUE_UNITS: ReadonlySet<string> = new Set(['', 'deg', 'grad', 'rad', 'turn']);
+const HUE_METHODS: ReadonlySet<string> = new Set(['shorter', 'longer', 'increasing', 'decreasing']);
 const MATH: ReadonlySet<string> = new Set(['calc', 'min', 'max']);
 const SPACES: Readonly<Record<string, 'rgb' | 'hsl'>> = {
   rgb: 'rgb',
@@ -313,7 +317,122 @@ function colourToken(text: string): TokenValue | undefined {
   });
 }
 
-/** A value with a `var()` inside it as a token made of others; undefined if it is no such shape. */
+/** The index just past the bracket that closes the function the cursor is inside. */
+function closing(cursor: Cursor): number {
+  for (let at = cursor.at, depth = 0; at < cursor.text.length; at++) {
+    const char = cursor.text[at];
+    if (char === '(') depth++;
+    else if (char === ')' && depth-- === 0) return at + 1;
+  }
+  return fail();
+}
+
+/**
+ * A `var()` in a colour, as `reference` in the compiler's colour-expression.cjs reads it: the
+ * tokens its `var()` fallbacks name, tried in turn, then a colour, or one made of other tokens.
+ */
+function referenceColour({ reference: name, fallback }: Reference): ColourExpression {
+  const alternatives: string[] = [];
+  let rest = fallback?.trim();
+  for (let next; rest && (next = whole(rest, nextReference)); rest = next.fallback?.trim()) {
+    alternatives.push(next.reference);
+  }
+  return {
+    reference: name,
+    ...(alternatives.length ? { alternatives } : {}),
+    ...(rest ? colourFallback(rest) : {}),
+  };
+}
+
+/** The colour a `var()` falls back to, or one made of other tokens; refused when it is neither. */
+function colourFallback(text: string): { fallback: string } | { fallbackToken: TokenValue } {
+  const token = tokenFromValue(text);
+  if (token?.hsl || token?.deferredColour) return { fallbackToken: token };
+  return { fallback: token?.color ?? fail() };
+}
+
+const nextReference = (cursor: Cursor): Reference =>
+  reference(cursor, (match(cursor, VAR) ?? fail())[1]!);
+
+/**
+ * One colour in a `color-mix()`: a `var()`, another mix, an `rgb()` or `hsl()` of tokens, or a
+ * colour written out, which is kept as written for the mix to read.
+ */
+function mixColour(cursor: Cursor): ColourExpression {
+  const name = match(cursor, VAR)?.[1];
+  if (name) return referenceColour(reference(cursor, name));
+  const start = cursor.at;
+  const fn = match(cursor, FUNCTION)?.[1]?.toLowerCase();
+  if (fn === 'color-mix') return mixExpression(cursor);
+  if (!fn) return { color: (match(cursor, WORD) ?? fail())[0] };
+  cursor.at = closing(cursor);
+  return functionColour(cursor.text.slice(start, cursor.at));
+}
+
+/** A colour function in a mix: of tokens, as a token of it is read, or written out, as it is. */
+function functionColour(text: string): ColourExpression {
+  if (!text.includes('var(')) return { color: text };
+  const token = colourToken(text);
+  return token?.hsl ? { hsl: token.hsl } : (token?.deferredColour ?? fail());
+}
+
+/** One side of a mix: its colour, and the percentage written before or after it, if one is. */
+function mixSide(cursor: Cursor): { colour: ColourExpression; percentage?: number } {
+  const percentage = () => {
+    const found = match(cursor, PERCENTAGE);
+    match(cursor, SPACE);
+    return found ? Number(found[1]) : undefined;
+  };
+  const before = percentage();
+  const colour = mixColour(cursor);
+  match(cursor, SPACE);
+  const after = before === undefined ? percentage() : undefined;
+  const written = before ?? after;
+  return written === undefined ? { colour } : { colour, percentage: written };
+}
+
+/**
+ * The rest of a `color-mix(in <space> [<method> hue], <colour> [p%], <colour> [q%])` once its name
+ * is read, as `mixExpression` in the compiler reads it.
+ */
+function mixExpression(cursor: Cursor): ColourExpression {
+  const words: string[] = [];
+  while (!take(cursor, ',')) {
+    words.push((match(cursor, WORD) ?? fail())[0].toLowerCase());
+    match(cursor, SPACE);
+  }
+  const [keyword, space, method, hue, ...rest] = words;
+  if (keyword !== 'in' || !MIX_SPACES.has(space!) || rest.length) fail();
+  if (method !== undefined && (hue !== 'hue' || !HUE_METHODS.has(method))) fail();
+  const a = mixSide(cursor);
+  expect(cursor, ',');
+  const b = mixSide(cursor);
+  expect(cursor, ')');
+  return {
+    mix: {
+      space: space as MixSpace,
+      ...(method ? { hue: method as HueMethod } : {}),
+      a: a.colour,
+      ...(a.percentage === undefined ? {} : { aPercentage: a.percentage }),
+      b: b.colour,
+      ...(b.percentage === undefined ? {} : { bPercentage: b.percentage }),
+    },
+  };
+}
+
+/** A whole `color-mix()`, worked out where it is set, as `deferMixToken` in the compiler reads it. */
+function mixToken(text: string): TokenValue | undefined {
+  const deferredColour = whole(text, (cursor) => {
+    if ((match(cursor, FUNCTION) ?? fail())[1]!.toLowerCase() !== 'color-mix') fail();
+    return mixExpression(cursor);
+  });
+  return deferredColour && { deferredColour };
+}
+
+/**
+ * A value with a `var()` inside it, or a `color-mix()`, as a token made of others; undefined if it
+ * is no such shape.
+ */
 export function derivedToken(text: string): TokenValue | undefined {
-  return calcToken(text) ?? colourToken(text);
+  return calcToken(text) ?? colourToken(text) ?? mixToken(text);
 }

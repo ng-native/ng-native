@@ -177,6 +177,68 @@ describe('a value with a var() inside it resolves as the same text in a styleshe
     ['hsl(var(--hue) 100 50 / -1)', 'color: var(--x)', 'color', 'rgba(0, 255, 0, 0)'],
     // A hue token in turns is the angle it is, not the bare number in front of its unit.
     ['hsl(var(--turn) 100 50)', 'color: var(--x)', 'color', 'rgb(0, 255, 255)'],
+    // A color-mix() of tokens, each checked against Chrome.
+    [
+      'color-mix(in srgb, var(--word) 50%, white)',
+      'color: var(--x)',
+      'color',
+      'rgb(255, 128, 128)',
+    ],
+    ['color-mix(in srgb, 30% var(--word), #00f)', 'color: var(--x)', 'color', 'rgb(77, 0, 179)'],
+    [
+      'color-mix(in oklab, var(--word) 90%, transparent)',
+      'color: var(--x)',
+      'color',
+      'rgba(255, 0, 0, 0.9)',
+    ],
+    [
+      'color-mix(in hsl, var(--word), rgb(0, 0, 255) 20%)',
+      'color: var(--x)',
+      'color',
+      'rgb(255, 0, 102)',
+    ],
+    [
+      'color-mix(in oklch longer hue, var(--word), blue)',
+      'color: var(--x)',
+      'color',
+      'rgb(0, 138, 14)',
+    ],
+    [
+      'color-mix(in srgb, var(--missing, blue) 50%, white)',
+      'color: var(--x)',
+      'color',
+      'rgb(128, 128, 255)',
+    ],
+    [
+      'color-mix(in srgb, var(--m1, var(--word)) 50%, white)',
+      'color: var(--x)',
+      'color',
+      'rgb(255, 128, 128)',
+    ],
+    [
+      'color-mix(in srgb, var(--missing, hsl(var(--hue) 100% 50%)), white)',
+      'color: var(--x)',
+      'color',
+      'rgb(128, 255, 128)',
+    ],
+    [
+      'color-mix(in srgb, rgb(var(--rgb)) 25%, white)',
+      'color: var(--x)',
+      'color',
+      'rgb(255, 191, 191)',
+    ],
+    [
+      'color-mix(in srgb, hsl(var(--hue) 100% 50%), black)',
+      'color: var(--x)',
+      'color',
+      'rgb(0, 128, 0)',
+    ],
+    [
+      'color-mix(in srgb, color-mix(in srgb, var(--word), var(--word)), white)',
+      'color: var(--x)',
+      'color',
+      'rgb(255, 128, 128)',
+    ],
   ];
 
   for (const [value, read, prop, expected] of cases) {
@@ -199,7 +261,11 @@ describe('a value with a var() inside it resolves as the same text in a styleshe
       assert.equal(written(TOKENS, value, read)['width'], 7, `${value} in a stylesheet`);
       assert.equal(set(TOKENS, value, read)['width'], 7, `${value} set on the element`);
     }
-    for (const value of ['hsl(var(--word) 100% 50%)', 'rgba(var(--missing), 0.5)']) {
+    for (const value of [
+      'hsl(var(--word) 100% 50%)',
+      'rgba(var(--missing), 0.5)',
+      'color-mix(in srgb, var(--missing) 50%, white)',
+    ]) {
       const read = 'color: var(--x, rgb(1, 2, 3))';
       assert.equal(
         written(TOKENS, value, read)['color'],
@@ -211,6 +277,18 @@ describe('a value with a var() inside it resolves as the same text in a styleshe
         'rgb(1, 2, 3)',
         `${value} set on the element`,
       );
+    }
+  });
+
+  it('mixes a color-mix() of colours written out, set on an element, as a stylesheet does', () => {
+    // A stylesheet folds it at build time; set on an element it is mixed where it is set.
+    const read = 'color: var(--x, rgb(1, 2, 3))';
+    for (const [value, expected] of [
+      ['color-mix(in srgb, red 50%, white)', 'rgb(255, 128, 128)'],
+      ['color-mix(in srgb, #00f, rgb(255, 0, 0) 30%)', 'rgb(77, 0, 179)'],
+    ]) {
+      assert.equal(written(TOKENS, value!, read)['color'], expected, `${value} in a stylesheet`);
+      assert.equal(set(TOKENS, value!, read)['color'], expected, `${value} set on the element`);
     }
   });
 
@@ -322,6 +400,15 @@ describe('a value with a var() inside it among others set on elements', () => {
       width([{ '--gap': '4px', '--g': 'var(--gap)', '--size': 'calc(var(--g) * 2)' }]),
       8,
     );
+  });
+
+  it('mixes a color-mix() with the token an ancestor sets', () => {
+    const read = '.x { color: var(--c, rgb(1, 2, 3)) }';
+    const mix = { '--c': 'color-mix(in srgb, var(--b) 50%, white)' };
+    assert.equal(innermost(read, [{ '--b': 'red' }, mix])['color'], 'rgb(255, 128, 128)');
+    assert.equal(innermost(read, [{ '--b': 'blue' }, mix])['color'], 'rgb(128, 128, 255)');
+    const cycle = { '--c': 'color-mix(in srgb, var(--c) 50%, white)' };
+    assert.equal(innermost(read, [cycle])['color'], 'rgb(1, 2, 3)');
   });
 
   it('treats a cycle through arithmetic as invalid and never loops', () => {
