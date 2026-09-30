@@ -209,3 +209,72 @@ value another utility reads, where that utility is the one refused: `snap-mandat
 `placeholder-*` colour. Those do nothing, as the utility they feed does nothing.
 
 The web host is Tailwind 4 only.
+
+## A shared library in an Nx workspace
+
+Tailwind builds only the classes it finds in the files it scans, and an app's setup scans the
+app's own directory. A class used only in a library elsewhere in the workspace is left out of the sheet with
+no warning, and the library's components render unstyled. Keep the library's theme in the library,
+along with where its classes are, and have each app that uses the library load both.
+
+With Tailwind 4, the library ships a stylesheet that names its own sources:
+
+```css
+/* packages/ui/theme.css */
+@source './src';
+
+@theme {
+  --color-brand: #e11d48;
+}
+```
+
+The app imports it after the preset:
+
+```css
+/* apps/mobile/src/styles.css */
+@import 'tailwindcss/theme.css';
+@import 'tailwindcss/utilities.css';
+@import '@ng-native/tailwind/native.css';
+@import '../../../packages/ui/theme.css';
+```
+
+`@source` is relative to the file it is in, so the same line serves every app that imports it.
+
+With Tailwind 3, the library's preset lists its sources:
+
+```js
+// packages/ui/tailwind.preset.cjs
+const { join } = require('path');
+
+module.exports = {
+  content: [join(__dirname, 'src/**/*.{ts,html}')],
+  theme: { extend: { colors: { brand: '#e11d48' } } },
+};
+```
+
+```js
+// apps/mobile/tailwind.config.js
+const ui = require('../../packages/ui/tailwind.preset.cjs');
+
+module.exports = {
+  presets: [ui, { ...require('@ng-native/tailwind/preset.cjs'), presets: [] }],
+  content: ['./src/**/*.{ts,html}', ...ui.content],
+};
+```
+
+Tailwind 3 takes `content` from the app's configuration and ignores a preset's, so the app spreads
+the library's list into its own. The library's paths start from `__dirname` because Tailwind 3
+resolves a relative content path against the directory it runs in, which is the app's.
+`createGlobPatternsForDependencies(__dirname)` from `@nx/angular/tailwind` finds the same globs
+from Nx's project graph, for every library the app depends on, but in Nx 23 it prints a warning
+each time it loads that it is deprecated and will be removed in Nx 24.
+
+`@nx/enforce-module-boundaries` reports the relative `require` of the preset: "Projects cannot be
+imported by a relative or absolute path". The workspace's path alias is no help, since Node's
+`require` does not read tsconfig. Add the preset's file name to the rule's `allow` list in the
+root `eslint.config.mjs`, beside the pattern Nx puts there for the ESLint configurations it
+requires the same way:
+
+```js
+allow: ['^.*/eslint(\\.base)?\\.config\\.[cm]?[jt]s$', '^.*/tailwind\\.preset\\.cjs$'],
+```
