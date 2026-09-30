@@ -114,8 +114,8 @@ describe('the two Tailwind presets', () => {
     assert.match(web, /--font-mono:\s*ui-monospace/);
   });
 
-  /** The font a text wearing `classes` is committed with, under a root with `platform` on it. */
-  const fontOn = (css: string, platform: string, classes = 'font-mono') => {
+  /** The props a view wearing `classes` is committed with, under a root with `root` on it. */
+  const propsOn = (css: string, root: string, classes: string) => {
     const { flattenTailwind } = createRequire(import.meta.url)('@ng-native/tailwind') as {
       flattenTailwind(css: string): string;
     };
@@ -125,13 +125,15 @@ describe('the two Tailwind presets', () => {
     const sheet = compileCss(flattenTailwind(css), 'tailwind', { onUnsupported: () => {} });
     const fabric = createFakeFabric();
     const engine = new Engine(fabric, 1, { globalStyles: sheet });
-    if (platform) engine.addClass(engine.root, platform);
+    for (const one of root.split(' ').filter(Boolean)) engine.addClass(engine.root, one);
     const text = engine.createElement('view');
     engine.setClasses(text, classes);
     engine.appendChild(engine.root, text);
     engine.commit();
-    return committedProps(fabric, text)['fontFamily'];
+    return committedProps(fabric, text);
   };
+  const fontOn = (css: string, platform: string) =>
+    propsOn(css, platform, 'font-mono')['fontFamily'];
 
   it("draws font-mono in each platform's monospace font", () => {
     assert.equal(fontOn(native, 'platform-ios'), 'Menlo');
@@ -144,6 +146,25 @@ describe('the two Tailwind presets', () => {
     for (const platform of ['platform-ios', 'platform-android', '']) {
       assert.equal(fontOn(own, platform), 'JetBrains Mono', platform);
     }
+  });
+
+  it('matches the platform and dark variants and font-mono under a prefix', () => {
+    // Tailwind 4 puts a `prefix()` on the utility and its variants, `tw:ios:pt-2`, and leaves the
+    // variant's own selector, `.platform-ios &`, as the preset wrote it.
+    const css = build(
+      'native',
+      'tw:ios:pt-2 tw:android:pt-3 tw:dark:pt-5 tw:dark:ios:pt-6 tw:font-mono',
+      '',
+      'tw',
+    );
+    assert.equal(propsOn(css, 'platform-ios', 'tw:ios:pt-2')['paddingTop'], 8);
+    assert.equal(propsOn(css, 'platform-android', 'tw:ios:pt-2')['paddingTop'], undefined);
+    assert.equal(propsOn(css, 'platform-android', 'tw:android:pt-3')['paddingTop'], 12);
+    assert.equal(propsOn(css, 'dark', 'tw:dark:pt-5')['paddingTop'], 20);
+    assert.equal(propsOn(css, 'platform-ios dark', 'tw:dark:ios:pt-6')['paddingTop'], 24);
+    assert.equal(propsOn(css, 'platform-ios', 'tw:font-mono')['fontFamily'], 'Menlo');
+    assert.equal(propsOn(css, 'platform-android', 'tw:font-mono')['fontFamily'], 'monospace');
+    assert.equal(propsOn(css, '', 'tw:font-mono')['fontFamily'], 'Courier New');
   });
 
   it('wires the safe area to env() on the web, and leaves native to its own provider', () => {

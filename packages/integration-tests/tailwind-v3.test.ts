@@ -682,6 +682,41 @@ describe('the Tailwind 3 preset', () => {
     assert.equal(font(''), 'Courier New');
   });
 
+  it('matches the platform and dark variants against the root classes under a prefix', () => {
+    // Tailwind 3 prefixes every class in a variant's selector, `.tw-platform-ios &`, and the root
+    // wears `platform-ios` and `dark`, which `mount` and `watchConditions` set unprefixed.
+    const classes =
+      'ios:tw-pt-2 android:tw-pt-3 native:tw-pt-4 web:tw-pt-1 dark:tw-pt-5 dark:ios:tw-pt-6 ' +
+      'tw-font-mono tw-group group-hover:tw-pt-7';
+    const refused: string[] = [];
+    const sheet = compileCss(flattenTailwind(build(classes, { prefix: 'tw-' })), 'tailwind', {
+      onUnsupported: (message: string) => refused.push(message),
+    });
+    assert.deepEqual(
+      refused.filter((m) => !m.includes("dropped '--")),
+      [],
+    );
+    const on = (root: string, cls: string) => render(sheet, root, cls).child;
+    assert.equal(on('platform-ios', 'ios:tw-pt-2')['paddingTop'], 8);
+    assert.equal(on('platform-android', 'ios:tw-pt-2')['paddingTop'], undefined);
+    assert.equal(on('platform-android', 'android:tw-pt-3')['paddingTop'], 12);
+    assert.equal(on('platform-android', 'native:tw-pt-4')['paddingTop'], 16);
+    assert.equal(on('platform-web', 'web:tw-pt-1')['paddingTop'], 4);
+    assert.equal(on('dark', 'dark:tw-pt-5')['paddingTop'], 20);
+    assert.equal(on('', 'dark:tw-pt-5')['paddingTop'], undefined);
+    assert.equal(on('platform-ios dark', 'dark:ios:tw-pt-6')['paddingTop'], 24);
+    assert.equal(on('platform-ios', 'tw-font-mono')['fontFamily'], 'Menlo');
+    assert.equal(on('platform-android', 'tw-font-mono')['fontFamily'], 'monospace');
+    assert.equal(on('', 'tw-font-mono')['fontFamily'], 'Courier New');
+    // A class of the app's own that the prefix applies to keeps it.
+    assert.equal(on('tw-group', 'group-hover:tw-pt-7')['paddingTop'], undefined);
+    assert.ok(
+      sheet.rules.some((rule) => rule.compounds.some((c) => c.classes?.includes('tw-group'))),
+      'group-hover: still reads .tw-group',
+    );
+    assert.doesNotMatch(JSON.stringify(sheet), /ng-native-tailwind-prefix/);
+  });
+
   it("uses an app's own monospace font on every platform", () => {
     const own = { fontFamily: { mono: ['JetBrains Mono'] } };
     const withFeatures = [['JetBrains Mono', 'monospace'], { fontFeatureSettings: '"calt"' }];

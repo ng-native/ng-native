@@ -712,6 +712,27 @@ const STACKED_PLAIN_ONE = new RegExp(
 );
 const STACKED_PLAIN = new RegExp(String.raw`(^|,)\s*${ANCESTOR}\s+${ANCESTOR}\s`);
 
+/** Where the Tailwind 3 preset records an app's `prefix`: `--ng-native-tailwind-prefix: "tw-"`. */
+const PREFIX_RECORD = /--ng-native-tailwind-prefix\s*:\s*"((?:\\.|[^"\\])*)"\s*;?/;
+
+/**
+ * The preset's ancestor classes with an app's Tailwind 3 `prefix` taken back off.
+ *
+ * Tailwind 3 prefixes every class in a variant's selector, so `ios:` and `dark:` come out as
+ * `.tw-platform-ios .x` and `.tw-dark .x`, and the root wears `platform-ios` and `dark`. Only
+ * those classes, only in a sheet the preset recorded a prefix in: `.tw-group` is the app's own.
+ */
+function unprefixAncestors(css) {
+  const recorded = PREFIX_RECORD.exec(css);
+  if (!recorded) return css;
+  const prefix = JSON.parse(`"${recorded[1]}"`).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const prefixed = new RegExp(
+    String.raw`\.${prefix}(dark|platform-(?:ios|android|web))(?![\w-]|\\)`,
+    'g',
+  );
+  return css.replace(PREFIX_RECORD, '').replace(prefixed, '.$1');
+}
+
 /**
  * A stacked variant, rewritten as the ancestor tests it means.
  *
@@ -782,7 +803,9 @@ function resetWithoutReverseSlots(css) {
 function flattenTailwind(css) {
   // Before any pass of lightningcss here, which reads `m-[3]`'s bare 3 as 3px and hides it from
   // the compiler: see `markUnitless`.
-  let out = childrenOfWhere(markUnitlessReverse(markUnitless(css)).replace(LAYER_STATEMENT, ''));
+  let out = childrenOfWhere(
+    markUnitlessReverse(markUnitless(unprefixAncestors(css))).replace(LAYER_STATEMENT, ''),
+  );
   out = rewriteAtRule(out, '@layer', true);
   out = rewriteAtRule(out, '@supports', true);
   out = resetWithoutReverseSlots(out);

@@ -24,13 +24,14 @@ const HERE = fileURLToPath(new URL('.', import.meta.url));
 
 /**
  * Builds one preset with the real CLI and hands back its output, with `app` as the app's own CSS
- * after the preset.
+ * after the preset and `prefix` on Tailwind's imports.
  *
  * Run from this package, which has the workspace dependency installed - the CLI resolves imports
  * from the entry file's own directory, so a temp directory somewhere else cannot see
  * `@ng-native/tailwind` at all.
  */
-export function build(preset: 'native' | 'web', classes: string, app = ''): string {
+export function build(preset: 'native' | 'web', classes: string, app = '', prefix = ''): string {
+  const prefixed = prefix ? ` prefix(${prefix})` : '';
   const dir = HERE;
   const entry = join(dir, `.preset-test-${preset}-${process.pid}.css`);
   const outDir = mkdtempSync(join(tmpdir(), 'preset-'));
@@ -38,10 +39,10 @@ export function build(preset: 'native' | 'web', classes: string, app = ''): stri
   writeFileSync(
     entry,
     [
-      `@import 'tailwindcss/theme.css';`,
+      `@import 'tailwindcss/theme.css'${prefixed};`,
       // Only the classes asked for: scanning this package would pick up every class named in
       // any test or fixture here, and make each test's sheet depend on all the others.
-      `@import 'tailwindcss/utilities.css' source(none);`,
+      `@import 'tailwindcss/utilities.css' source(none)${prefixed};`,
       `@import '@ng-native/tailwind/${preset}.css';`,
       `@source inline("${classes}");`,
       app,

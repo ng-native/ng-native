@@ -34,7 +34,7 @@ const firstFamily = (value) =>
     .split(',')[0]
     .trim();
 
-function nativePreset({ addUtilities, addVariant, matchUtilities, theme }) {
+function nativePreset({ addBase, addUtilities, addVariant, config, matchUtilities, theme }) {
   // `hover:` is the pressed state, or a real hover where there is a pointer.
   addVariant('hover', ['&:active', '&[data-hover]']);
   addVariant('press', '&:active');
@@ -68,6 +68,12 @@ function nativePreset({ addUtilities, addVariant, matchUtilities, theme }) {
   addVariant('android', '.platform-android &');
   addVariant('web', '.platform-web &');
   addVariant('native', ['.platform-ios &', '.platform-android &']);
+  // Tailwind 3 puts an app's `prefix` on every class in these, `.tw-platform-ios &` and `.tw-dark &`,
+  // and nothing sets those on the root. The prefix is recorded for `flattenTailwind`, which takes
+  // it back off the root classes.
+  if (config('prefix')) {
+    addBase({ ':root': { '--ng-native-tailwind-prefix': JSON.stringify(config('prefix')) } });
+  }
 
   const safe = {
     '.p-safe': Object.fromEntries(
