@@ -136,6 +136,25 @@ function babelPluginVersions(projectRoot) {
   });
 }
 
+const SINGLETON = /^(@angular\/core|@ng-native\/[^/]+)(\/|$)/;
+
+/**
+ * The name and root of the `@angular/core` or `@ng-native/*` package a resolved file is in:
+ * installed, or a linked workspace package, whose real path has no `node_modules` in it, so Metro
+ * names its package.
+ */
+function singletonPackage(resolution, request, context) {
+  const file = /** @type {{ filePath?: string }} */ (resolution)?.filePath;
+  const match = file?.match(
+    /^(.*[\\/]node_modules[\\/](@angular[\\/]core|@ng-native[\\/][^\\/]+))[\\/]/,
+  );
+  if (match) return { name: match[2].replace('\\', '/'), root: match[1] };
+  if (!file || !SINGLETON.test(request)) return undefined;
+  const found = context.getPackageForModule?.(file);
+  const name = found?.packageJson?.name;
+  return name && SINGLETON.test(name) ? { name, root: found.rootPath } : undefined;
+}
+
 /**
  * Warns, once, when `@angular/core` resolves from a second package root. Components compiled
  * against one copy then ask the other's injector, and the device shows NG0203 at mount with no
@@ -145,21 +164,19 @@ function babelPluginVersions(projectRoot) {
  * its own: a second `@ng-native/components` is a second component registry.
  *
  * @param {unknown} resolution what Metro resolved a request to
+ * @param {string} request the import resolved
+ * @param {object} context Metro's resolution context
  */
 const singletonRoots = new Map();
-function noteSecondCopy(resolution) {
-  const file = /** @type {{ filePath?: string }} */ (resolution)?.filePath;
-  const match = file?.match(
-    /^(.*[\\/]node_modules[\\/](@angular[\\/]core|@ng-native[\\/][^\\/]+))[\\/]/,
-  );
-  if (!match) return;
-  const [, root, name] = match;
+function noteSecondCopy(resolution, request, context) {
+  const { name, root } = singletonPackage(resolution, request, context) ?? {};
+  if (!name || !root) return;
   const roots = singletonRoots.get(name) ?? new Set();
   singletonRoots.set(name, roots);
   if (roots.has(root)) return;
   roots.add(root);
   if (roots.size !== 2) return;
-  const copies = `Two copies of ${name.replace('\\', '/')} are in this bundle:\n  ${[...roots].join('\n  ')}\n`;
+  const copies = `Two copies of ${name} are in this bundle:\n  ${[...roots].join('\n  ')}\n`;
   console.warn(
     name.startsWith('@angular')
       ? `[angular-native] ${copies}` +
@@ -272,7 +289,7 @@ function withTypeScriptJsImports(next, projectRoot) {
         resolve(context, name, platform),
         projectRoot,
       );
-      noteSecondCopy(resolution);
+      noteSecondCopy(resolution, name, context);
       return resolution;
     } catch (error) {
       if (!/^\.{1,2}\/.*\.[mc]?js$/.test(name)) throw error;

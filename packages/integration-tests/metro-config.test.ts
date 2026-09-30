@@ -389,6 +389,53 @@ describe('the Metro preset', () => {
       assert.match(warnings[0]!, /@ng-native\/device.*\n.*device@0\.1\.2.*\n.*device@0\.1\.1/s);
     });
 
+    it("warns once when the app's linked workspace package and a library's copy differ in version", () => {
+      // The app links @ng-native/router from its source folder, whose real path has no
+      // node_modules in it, and the library installed 0.1.1 from the registry.
+      const source = '/ws/packages/router';
+      const installed = `${store}/@ng-native+router@0.1.1/node_modules/@ng-native/router`;
+      const manifests: Record<string, { name: string; version: string }> = {
+        [source]: { name: '@ng-native/router', version: '0.2.0' },
+        [installed]: { name: '@ng-native/router', version: '0.1.1' },
+      };
+      const router: Resolve = (context) => ({
+        type: 'sourceFile',
+        filePath: `${(context as Context).originModulePath.startsWith('/ws/apps/mobile/') ? source : installed}/src/index.ts`,
+      });
+      const config = withAngularNative({
+        ...base(),
+        projectRoot: '/ws/apps/mobile',
+      }) as MetroConfig;
+      const from = (originModulePath: string) =>
+        config.resolver.resolveRequest!(
+          {
+            resolveRequest: router,
+            originModulePath,
+            getPackage: (file: string) => manifests[path.dirname(file)] ?? null,
+            getPackageForModule: (file: string) => {
+              const root = Object.keys(manifests).find((dir) => file.startsWith(`${dir}/`));
+              return root ? { packageJson: manifests[root]!, rootPath: root } : null;
+            },
+          } as Context,
+          '@ng-native/router',
+          'ios',
+        );
+      const warnings: string[] = [];
+      const warn = console.warn;
+      console.warn = (message: string) => void warnings.push(message);
+      try {
+        from('/ws/apps/mobile/src/main.ts');
+        from('/ws/apps/mobile/src/main.ts');
+        assert.deepEqual(warnings, []);
+        from(library);
+        from(library);
+      } finally {
+        console.warn = warn;
+      }
+      assert.equal(warnings.length, 1);
+      assert.match(warnings[0]!, /@ng-native\/router.*\n.*packages\/router\n.*router@0\.1\.1/s);
+    });
+
     it('keeps the copy a library resolves when the app has none', () => {
       const appHasNone: Resolve = (context, name, platform) => {
         if ((context as Context).originModulePath.startsWith('/ws/apps/mobile/'))
