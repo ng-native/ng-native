@@ -91,13 +91,14 @@ function withConditions(conditions) {
  * a `require` regardless. A module that probes for one then requires React Native's Flow source.
  * A `var` of the same name shadows the one Vitest passes in, and is harmless where there is none.
  * On the first line, so every other line keeps its number. ES modules only: a CommonJS file needs
- * the real thing.
+ * the real thing. A `.js` file is one when its package says `"type": "module"`, as every published
+ * `@ng-native/*` package does.
  *
  * @param {string} code
  * @param {string} file
  */
 function hideRequire(code, file) {
-  if (!/\.(ts|mts|mjs)$/.test(file) || !/\brequire\b/.test(code)) return code;
+  if (!/\brequire\b/.test(code) || !isModule(file)) return code;
   // A module that makes its own, with `createRequire`, already sees the one it means.
   if (/\b(?:const|let|var|function|class)\s+require\b/.test(code)) return code;
   return `var require = undefined; ${code}`;
@@ -110,6 +111,33 @@ function manifest(dir) {
   } catch {
     return undefined;
   }
+}
+
+/** @type {Map<string, boolean>} */
+const moduleDirs = new Map();
+
+/**
+ * Whether `.js` files in a directory are ES modules: the `type` of the nearest `package.json`, as
+ * Node decides it. A package's dist can hold a `package.json` of its own with only a `type` in it.
+ *
+ * @param {string} dir
+ * @returns {boolean}
+ */
+function jsIsModule(dir) {
+  let found = moduleDirs.get(dir);
+  if (found === undefined) {
+    const own = manifest(dir);
+    const parent = path.dirname(dir);
+    found = own ? own.type === 'module' : parent !== dir && jsIsModule(parent);
+    moduleDirs.set(dir, found);
+  }
+  return found;
+}
+
+/** @param {string} file */
+function isModule(file) {
+  if (/\.(ts|mts|mjs)$/.test(file)) return true;
+  return file.endsWith('.js') && jsIsModule(path.dirname(file));
 }
 
 /**

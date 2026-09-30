@@ -125,10 +125,11 @@ and the Vitest plugin and the Node hook each fix all three the same way:
 Both also install the globals the Metro preset installs as polyfills, before `@angular/core` is
 first evaluated: the animation globals Angular looks for to decide whether `animate.enter` and
 `animate.leave` do anything. `ngDevMode` is left undefined, which Angular reads as development, the
-same as a Metro development build. The Vitest plugin also turns off Vitest's `injectCjsGlobals`, so
-a module sees no `require` in Vitest just as it sees none under Node. The packages read a
-`require` as the sign they are running in a Metro bundle, and would otherwise try to load React
-Native itself.
+same as a Metro development build. The Vitest plugin also turns off Vitest's `injectCjsGlobals`, and
+on Vitest 4, which passes a `require` regardless, shadows it in every ES module it processes,
+installed `@ng-native/*` packages included, so a module sees no `require` in Vitest just as it sees
+none under Node. The packages read a `require` as the sign they are running in a Metro bundle, and
+would otherwise try to load React Native itself.
 
 Without a `require`, an image referenced the React Native way, `require('./logo.png')`, would throw
 as its module is evaluated, and a lazily loaded screen that uses one would never appear. The Vitest

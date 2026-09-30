@@ -38,6 +38,44 @@ it('shadows an injected require in a module that probes for one', () => {
   assert.equal(exports.found, null);
 });
 
+/**
+ * A published `@ng-native/*` package is built `.js` in a `"type": "module"` package, and one a
+ * test imports from `node_modules` went unshadowed, so `<text-input>`, which injects a device
+ * service, failed with "Unexpected token 'typeof'" under Vitest 4.
+ */
+describe('a built .js file', () => {
+  const dir = realpathSync(mkdtempSync(path.join(tmpdir(), 'ng-native-built-')));
+  const probe =
+    "export const found = typeof require === 'function' ? require('react-native') : null;";
+  const install = (name: string, manifest: object): string => {
+    const at = path.join(dir, 'node_modules', name);
+    mkdirSync(path.join(at, 'dist'), { recursive: true });
+    writeFileSync(path.join(at, 'package.json'), JSON.stringify({ name, ...manifest }));
+    const file = path.join(at, 'dist/react-native.js');
+    writeFileSync(file, probe);
+    return file;
+  };
+  const evaluate = (file: string): unknown => {
+    const transform = ngNative().transform as unknown as Transform;
+    const result = transform(probe, file);
+    const code = typeof result === 'string' ? result : (result?.code ?? probe);
+    const exports: { found?: unknown } = {};
+    const body = code.replace('export const found', 'exports.found');
+    new Function('require', 'exports', body)(() => 'react-native loaded', exports);
+    return exports.found;
+  };
+
+  after(() => rmSync(dir, { recursive: true, force: true }));
+
+  it('shadows require in an ES module package, as the published @ng-native ones are', () => {
+    assert.equal(evaluate(install('@ng-native/device', { type: 'module' })), null);
+  });
+
+  it('leaves require to a CommonJS package, which needs the real one', () => {
+    assert.equal(evaluate(install('commonjs-lib', {})), 'react-native loaded');
+  });
+});
+
 it('fails a component whose template the compiler would cut short, rather than rendering half', () => {
   // `@if (on() {` compiled to the elements before it and nothing after, and the render passed.
   const transform = ngNative().transform as unknown as Transform;
