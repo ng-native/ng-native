@@ -72,6 +72,7 @@
     },
     "version": {
       "currentVersionResolver": "disk",
+      "adjustSemverBumpsForZeroMajorVersion": false,
       "preserveLocalDependencyProtocols": true,
       "git": {
         "commit": false,
