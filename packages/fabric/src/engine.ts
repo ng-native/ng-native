@@ -608,6 +608,44 @@ const textDirection = (value: unknown): TextDirection | undefined =>
   value === 'ltr' || value === 'rtl' ? value : undefined;
 
 /**
+ * Centre the text of a single-line iOS text field that has a line height, as Chrome centres an
+ * input's, keeping the height the line height gives it.
+ *
+ * React Native's iOS field sets `lineHeight` as the paragraph's minimum and maximum line height
+ * and, unlike a paragraph (`RCTApplyBaselineOffset`), never offsets the baseline, so the glyphs
+ * sit at the bottom of a line box taller than the font. One line has nothing to space, so the line
+ * height is left out. What it does in Chrome, and on Android, is set the field's height: line
+ * height, padding and border. That is kept as a `minHeight` (border-box, as Yoga's is), the larger
+ * of it and the field's own, within its `maxHeight`. A `height` sizes the field on its own, as it
+ * does there. A value that is not a number cannot be added up, and leaves the field as it was.
+ */
+function centreSingleLine(props: Record<string, unknown>): void {
+  const lineHeight = props['lineHeight'];
+  if (typeof lineHeight !== 'number' || props['multiline'] === true) return;
+  const height = props['height'];
+  if (height !== undefined && height !== 'auto') {
+    delete props['lineHeight'];
+    return;
+  }
+  const edge = (side: 'Top' | 'Bottom', logical: 'Start' | 'End'): unknown[] => [
+    props[`padding${side}`] ??
+      props[`paddingBlock${logical}`] ??
+      props['paddingBlock'] ??
+      props['paddingVertical'] ??
+      props['padding'] ??
+      0,
+    props[`border${side}Width`] ?? props['borderWidth'] ?? 0,
+  ];
+  const box = [lineHeight, ...edge('Top', 'Start'), ...edge('Bottom', 'End')];
+  const own = props['minHeight'] ?? 0;
+  const max = props['maxHeight'] ?? Infinity;
+  if (![...box, own, max].every((part) => typeof part === 'number')) return;
+  delete props['lineHeight'];
+  const content = (box as number[]).reduce((sum, part) => sum + part, 0);
+  props['minHeight'] = Math.max(own as number, Math.min(content, max as number));
+}
+
+/**
  * Resolve a paragraph's `text-align` against its direction, as CSS does.
  *
  * React Native reads `left` and `right` relative to the layout direction: in a right-to-left
@@ -2128,7 +2166,9 @@ export class Engine implements HostEngine {
     this.fontFaces.apply(style);
     if (viewName === PARAGRAPH) alignText(style, this.directionOf(node, style));
     if (this.fontsRefreshed) this.capForFonts(node, style);
-    return composeTransform(node, this.animated(node, this.transitioned(node, style)));
+    const merged = composeTransform(node, this.animated(node, this.transitioned(node, style)));
+    if (viewName === 'TextInput') centreSingleLine(merged);
+    return merged;
   }
 
   /**
