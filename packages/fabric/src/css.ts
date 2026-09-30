@@ -1592,9 +1592,10 @@ function resolveAliases(
   merged: Record<string, TokenValue>,
 ): Record<string, TokenValue> {
   const names = Object.keys(own);
-  for (const name of names) {
-    if (own[name]!.alias) settle(merged, name, followAlias(name, merged, new Set()));
-  }
+  followAliases(
+    names.filter((name) => own[name]!.alias),
+    merged,
+  );
   // Until a pass settles nothing more: one made of another defined after it, or of one not yet
   // settled, cannot be worked out until that one is. What is left then is a cycle, or reads a
   // token that is not there, and is unset.
@@ -1614,7 +1615,7 @@ function resolveAliases(
   for (const name of names) {
     const target = own[name]!.alias;
     if (!target || !isDerived(own[target])) continue;
-    settle(merged, name, followAlias(name, { ...merged, [name]: own[name]! }, new Set()));
+    settle(merged, name, followAlias(name, { ...merged, [name]: own[name]! }));
   }
   return merged;
 }
@@ -1632,6 +1633,16 @@ function derived(
   if (token.hsl) return colourToken(resolveHsl(token.hsl, tokens));
   if (token.deferredColour) return colourToken(resolveColour(token.deferredColour, tokens));
   return calcToken(token.deferredCalc!, tokens);
+}
+
+/**
+ * Each alias settled to what it names. `follow` writes back every one that resolves; one in a
+ * cycle is removed only once all are followed, as removed any sooner, the next one round the
+ * cycle would find it unset and take its own fallback.
+ */
+function followAliases(aliases: readonly string[], merged: Record<string, TokenValue>): void {
+  const cyclic = aliases.filter((name) => typeof follow(name, merged, []) === 'number');
+  for (const name of cyclic) delete merged[name];
 }
 
 /** A token set to what it resolved to, or removed when it resolved to nothing, as CSS unsets it. */
@@ -1718,16 +1729,47 @@ function hslToRgb(h: number, s: number, l: number, alpha: number): string {
     : `rgba(${r}, ${g}, ${b}, ${Math.round(alpha * 1000) / 1000})`;
 }
 
-function followAlias(
+function followAlias(name: string, tokens: Record<string, TokenValue>): TokenValue | undefined {
+  const value = follow(name, tokens, []);
+  return typeof value === 'number' ? undefined : value;
+}
+
+/**
+ * A token with its `var()` substituted, through as many aliases and fallbacks as it takes.
+ *
+ * `path` is the aliases being followed on the way here. A number is a cycle, and the index in
+ * `path` where it starts: every property from there on is in it and invalid at computed-value
+ * time, so none of them takes its fallback, while one before it names an invalid property and
+ * does. Anything else is final wherever the chain started, so it is written back to `tokens`, and
+ * no alias is followed twice.
+ */
+function follow(
   name: string,
-  tokens: Readonly<Record<string, TokenValue>>,
-  seen: Set<string>,
-): TokenValue | undefined {
+  tokens: Record<string, TokenValue>,
+  path: string[],
+): TokenValue | undefined | number {
   const value = tokens[name];
   if (!value?.alias) return value;
-  if (seen.has(name)) return undefined;
-  seen.add(name);
-  return followAlias(value.alias, tokens, seen) ?? value.fallback;
+  const start = path.indexOf(name);
+  if (start >= 0) return start;
+  const depth = path.push(name) - 1;
+  const result = substituted(value, tokens, path, depth);
+  path.pop();
+  if (typeof result !== 'number') settle(tokens, name, result);
+  return result;
+}
+
+/** An alias's target, or its fallback, which may be another `var()`, when the target is unset. */
+function substituted(
+  value: TokenValue,
+  tokens: Record<string, TokenValue>,
+  path: string[],
+  depth: number,
+): TokenValue | undefined | number {
+  const target = follow(value.alias!, tokens, path);
+  if (typeof target === 'object' || (typeof target === 'number' && target <= depth)) return target;
+  const { fallback } = value;
+  return fallback?.alias ? substituted(fallback, tokens, path, depth) : fallback;
 }
 
 /** What a `var()` resolves to: a gradient's stops, or one value with its arithmetic applied. */

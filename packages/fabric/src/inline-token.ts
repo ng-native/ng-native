@@ -5,8 +5,9 @@
  * A stylesheet's custom properties are converted when the app is built, where there is a CSS
  * parser (`@ng-native/metro/css/values.cjs`). A bound one only exists here, where there is not,
  * so this takes the shapes a binding actually holds and nothing more: a length in `px` or `%`, a
- * number, a colour as React Native writes one, a colour's three channels, and a word. Anything else is kept as a word, which
- * a use site that wants a length or a colour ignores, as it ignores an undefined token.
+ * number, a colour as React Native writes one, a colour's three channels, a word, and another
+ * token, `var(--brand)`. Anything else is kept as a word, which a use site that wants a length or
+ * a colour ignores, as it ignores an undefined token.
  */
 import type { TokenValue } from './css.ts';
 import { isNamedColor } from './transition.ts';
@@ -20,6 +21,8 @@ const WORD = /^-?[a-z][\w-]*$/i;
 /** One colour channel: a number, a percentage, or a hue with its unit. */
 const CHANNEL = /^(-?(?:\d+\.?\d*|\.\d+))(%|deg|grad|rad|turn)?$/;
 const HUE_UNITS: Record<string, number> = { deg: 1, grad: 0.9, rad: 180 / Math.PI, turn: 360 };
+/** `var(--name)` or `var(--name, <fallback>)`, the whole value. */
+const VAR = /^var\(\s*(--[\w-]+)\s*(?:,([\s\S]*))?\)$/i;
 const WEIGHTS: Record<string, string> = { normal: '400', bold: '700' };
 
 /**
@@ -93,6 +96,30 @@ function hslOf([hue, ...rest]: readonly Channel[], spaced: boolean): number[] | 
   return hsl.every(Number.isFinite) ? hsl : undefined;
 }
 
+/**
+ * Another token, kept as an alias and resolved where it is set, as a stylesheet's `--x: var(--y)`
+ * is. Undefined when the parentheses do not close where the value ends: `var(--a, 1px) var(--b)`.
+ */
+function fromVar(text: string): TokenValue | undefined {
+  const match = VAR.exec(text);
+  if (!match) return undefined;
+  const alias = match[1]!;
+  const rest = match[2];
+  if (rest === undefined) return { alias };
+  if (!balanced(rest)) return undefined;
+  const fallback = tokenFromValue(rest);
+  return fallback ? { alias, fallback } : { alias };
+}
+
+function balanced(text: string): boolean {
+  let depth = 0;
+  for (const char of text) {
+    if (char === '(') depth++;
+    else if (char === ')' && --depth < 0) return false;
+  }
+  return depth === 0;
+}
+
 export function tokenFromValue(value: unknown): TokenValue | undefined {
   if (typeof value === 'number') return fromNumber(value);
   if (typeof value !== 'string') return undefined;
@@ -103,5 +130,7 @@ export function tokenFromValue(value: unknown): TokenValue | undefined {
   if (PERCENT.test(text)) return { length: text };
   if (NUMBER.test(text)) return fromNumber(Number(text));
   if (COLOR_FUNCTION.test(text)) return { color: text };
+  const reference = fromVar(text);
+  if (reference) return reference;
   return fromChannels(text) ?? (WORD.test(text) ? fromWord(text) : { keyword: text });
 }
