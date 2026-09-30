@@ -147,7 +147,7 @@ import { Pressable, Text, TextInput, View } from '@ng-native/components';
       .off {
         color: var(--text-muted);
       }
-      .off:disabled {
+      .off[data-disabled] {
         color: var(--danger);
       }
       .input {
@@ -273,7 +273,7 @@ import { Pressable, Text, TextInput, View } from '@ng-native/components';
     <view class="section">
       <text class="section-title">Pseudo-state</text>
       <pressable class="press"><text>press and hold me: turns green</text></pressable>
-      <text class="off" [disabled]="true">:disabled reads a prop: red</text>
+      <text class="off" [disabled]="true">[data-disabled] a disabled text publishes: red</text>
       <text-input
         class="input"
         placeholder="focus me: border turns green"

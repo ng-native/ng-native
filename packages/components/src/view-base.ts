@@ -467,6 +467,22 @@ export abstract class ViewBase {
     write('accessibilityValue', this.mergedAccessibilityValue());
     write('accessibilityActions', this.accessibilityActions());
     this.writeVisibility();
+    this.publishAriaState(write);
+  }
+
+  /**
+   * The aria states Tailwind has variants for, put back on the node as the attributes they came
+   * in as. The inputs consume them, so `[aria-disabled="true"]` and every `aria-*:` utility had
+   * nothing to match. Hyphenated, so the engine keeps them for selectors and never sends them.
+   */
+  private publishAriaState(write: (key: string, value: unknown) => void): void {
+    const attribute = (value: unknown) => (value === undefined ? undefined : String(value));
+    write('aria-busy', attribute(this.ariaBusy()));
+    write('aria-checked', attribute(this.ariaChecked()));
+    write('aria-disabled', attribute(this.ariaDisabled()));
+    write('aria-expanded', attribute(this.ariaExpanded()));
+    write('aria-hidden', attribute(this.ariaHidden()));
+    write('aria-selected', attribute(this.ariaSelected()));
   }
 
   /** The half of accessibility that is about what assistive technology may see, and in which language. */

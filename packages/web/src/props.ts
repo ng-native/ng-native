@@ -121,6 +121,24 @@ function applyChecked(node: BrowserNode, checked: unknown): void {
   setOrRemove(node, 'aria-checked', checked, checked === undefined || pressed);
 }
 
+/**
+ * An aria state `ViewBase` puts back on the node for a native stylesheet, where nothing else
+ * carries it. Here the accessibility state, or for `aria-hidden` the hidden props, already writes
+ * the real attribute whenever the input is set, so the copy defers to it rather than fight it:
+ * `aria-checked` beside the `aria-pressed` a button takes, or `aria-disabled` removed while a
+ * disabled pressable still is. With nothing behind it, a raw `[attr.aria-*]` is written as before.
+ */
+function publishedAria(attr: string, governed: (props: Record<string, unknown>) => boolean) {
+  return (node: BrowserNode, value: unknown, clear: boolean) => {
+    if (!governed(node.props)) setOrRemove(node, attr, value, clear);
+  };
+}
+
+function inState(key: string): (props: Record<string, unknown>) => boolean {
+  return (props) =>
+    (props['accessibilityState'] as Record<string, unknown> | undefined)?.[key] !== undefined;
+}
+
 function applyAccessibilityValue(node: BrowserNode, value: unknown, clear: boolean): void {
   const v = clear ? undefined : (value as Record<string, unknown> | undefined);
   setOrRemove(node, 'aria-valuemin', v?.['min'], v?.['min'] === undefined);
@@ -187,6 +205,17 @@ const VIEW_BASE_HANDLERS: Record<string, Handler> = {
   role: applyRole,
   accessibilityState: applyAccessibilityState,
   accessibilityValue: applyAccessibilityValue,
+  'aria-busy': publishedAria('aria-busy', inState('busy')),
+  'aria-checked': publishedAria('aria-checked', inState('checked')),
+  'aria-disabled': publishedAria('aria-disabled', inState('disabled')),
+  'aria-expanded': publishedAria('aria-expanded', inState('expanded')),
+  'aria-selected': publishedAria('aria-selected', inState('selected')),
+  'aria-hidden': publishedAria(
+    'aria-hidden',
+    (props) =>
+      props['accessibilityElementsHidden'] !== undefined ||
+      props['importantForAccessibility'] !== undefined,
+  ),
   accessibilityLiveRegion: (n, v, c) => setOrRemove(n, 'aria-live', v === 'none' ? 'off' : v, c),
   accessibilityElementsHidden: (n, v, c) => setOrRemove(n, 'aria-hidden', v, c || v !== true),
   // `no` and `no-hide-descendants` both hide the subtree on the web: ARIA has no way to hide a

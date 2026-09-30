@@ -29,6 +29,26 @@ import { View } from '../../components/src/view.ts';
       </view>
       <touchable-opacity testID="fade" class="p" [disabled]="true"></touchable-opacity>
       <switch testID="switch" class="p" [disabled]="true" />
+      <text testID="text" class="p disabled:bg-gray-300" [disabled]="off()">Off</text>
+      <text testID="pressable-text" class="p" pressable [disabled]="off()">Link</text>
+      <pressable testID="aria" class="a group aria-disabled:bg-gray-300" [aria-disabled]="off()">
+        <text testID="aria-label" class="a-label group-aria-disabled:text-red-500">Aria</text>
+      </pressable>
+      <text testID="aria-text" class="a aria-disabled:bg-gray-300" [aria-disabled]="off()">
+        Aria text
+      </text>
+      <view testID="aria-static" class="a aria-disabled:bg-gray-300" aria-disabled="true"></view>
+      <view testID="aria-false" class="a aria-disabled:bg-gray-300" aria-disabled="false"></view>
+      <pressable testID="both" class="a p" [disabled]="off()" [aria-disabled]="off()"></pressable>
+      <view
+        testID="aria-states"
+        class="s"
+        aria-busy="true"
+        aria-checked="mixed"
+        aria-expanded="true"
+        aria-selected="true"
+        aria-hidden="true"
+      ></view>
     </view>
   `,
 })

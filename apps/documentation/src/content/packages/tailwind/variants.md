@@ -24,7 +24,13 @@ sit on one ancestor, as they do on the root, or on two.
 
 `disabled:` matches `[data-disabled]` as well as `:disabled`, because a control's `disabled` input
 is consumed by the behavior composed onto it and never left as a prop `:disabled` could read;
-`data-disabled` is what that behavior publishes instead.
+`data-disabled` is what that behavior publishes instead. A `<text>` publishes it too.
+
+`aria-busy:`, `aria-checked:`, `aria-disabled:`, `aria-expanded:`, `aria-hidden:` and
+`aria-selected:` match as on the web. Each of those attributes is an input that sets the
+accessibility state, and the component puts it back on the node as the attribute it came in as, so
+`aria-disabled="true"` matches `aria-disabled:` and `aria-disabled="false"` does not. The attribute
+stays on the node for selectors and never reaches native.
 
 `dark:` matches a `.dark` class. `watchConditions(app.engine)` - which the template's
 `src/main.ts` already calls - keeps `dark` on the root in step with the system scheme, so `dark:`
@@ -94,7 +100,8 @@ behavior composed onto the control told it.
 sibling with the `peer` class, exactly as on the web. The state a variant reads has to be one the
 engine can see on the peer: `peer-focus:` (focus, or `data-focus`), `peer-active:` and `peer-hover:`
 (a press), `peer-disabled:` (a `disabled` prop, or the `data-disabled` a control publishes),
-`peer-data-[...]:`, `peer-aria-[...]:` on an attribute the peer really carries, and the arbitrary
+`peer-aria-disabled:` and the other aria states above, `peer-data-[...]:`, `peer-aria-[...]:` on an
+attribute the peer really carries, and the arbitrary
 `peer-[.is-on]:`. A class or a state arriving on the peer restyles the siblings after it.
 
 ```html

@@ -108,6 +108,9 @@ export class Text extends TouchableBase {
     write('dataDetectorType', this.dataDetectorType());
     write('android_hyphenationFrequency', this.hyphenationFrequency());
     write('isPressable', this.pressable() || undefined);
+    // `disabled` is consumed as an input, so this is what `[data-disabled]` and `disabled:` match,
+    // as on a control. Written here rather than bound from the host; see `pressedChanged`.
+    write('data-disabled', this.disabled() ? '' : undefined);
   }
 
   protected override claims(): boolean {

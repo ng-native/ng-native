@@ -95,8 +95,8 @@ _Avoid_: headless component, behaviour, host primitive
 
 **State attribute**:
 A `data-*` attribute a primitive writes on its host to say what it is currently doing:
-`data-disabled` on `<pressable>`, `<touchable-opacity>`, `<switch>`, `<text-input>` and a
-`PressBehavior` host, and `data-invalid` and `data-touched` on `<text-input>`. Not a prop native
+`data-disabled` on `<pressable>`, `<touchable-opacity>`, `<switch>`, `<text-input>`, `<text>` and
+a `PressBehavior` host, and `data-invalid` and `data-touched` on `<text-input>`. Not a prop native
 reads - the engine keeps hyphenated attributes on the node for selectors alone - so it is how a
 stylesheet sees a control's state without the control knowing anything about styling.
 _Avoid_: data attribute, flag, marker

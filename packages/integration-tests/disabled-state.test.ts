@@ -14,7 +14,7 @@ import type { Type } from '@angular/core';
 import type { StyleSheet } from '@ng-native/fabric';
 import { cleanup, render } from '@ng-native/testing';
 import { compileFixture } from './compile.ts';
-import { build } from './tailwind-cli.ts';
+import { build, buildV3 } from './tailwind-cli.ts';
 
 const require = createRequire(import.meta.url);
 const { compileCss } = require('@ng-native/metro/css/compile.cjs') as {
@@ -137,4 +137,138 @@ describe('the printed tree and the queried props', () => {
     );
     cleanup();
   });
+});
+
+describe('a disabled text publishes data-disabled', () => {
+  /**
+   * `<text>` takes `disabled` from the same base as a pressable, and consumes it the same way, so
+   * `:disabled` has nothing to read on it either.
+   */
+  it('matches [data-disabled] while disabled, and not once enabled again', async () => {
+    const sheet = compileCss(
+      `.p { background-color: ${GREEN} } .p[data-disabled] { background-color: ${RED} }`,
+      'global',
+    );
+    const { instance, getByTestId, rerender } = await render(Control, { globalStyles: sheet });
+    const ids = ['text', 'pressable-text'];
+    for (const id of ids) {
+      assert.equal(getByTestId(id).props['backgroundColor'], RED, id);
+      assert.equal(getByTestId(id).props['accessibilityState'] ?? null, null, `${id} announces`);
+    }
+
+    instance.off.set(false);
+    await rerender();
+    for (const id of ids) assert.equal(getByTestId(id).props['backgroundColor'], GREEN, id);
+
+    instance.off.set(true);
+    await rerender();
+    for (const id of ids) assert.equal(getByTestId(id).props['backgroundColor'], RED, id);
+    cleanup();
+  });
+});
+
+describe('aria-disabled publishes the attribute its selector reads', () => {
+  const sheet = () =>
+    compileCss(
+      `
+      .a { background-color: ${GREEN} }
+      .a[aria-disabled="true"] { background-color: ${RED} }
+      .a[aria-disabled="true"] .a-label { color: ${BLUE} }
+      .s[aria-busy="true"] { opacity: 0.5 }
+      .s[aria-checked="mixed"] { width: 1px }
+      .s[aria-expanded="true"] { height: 2px }
+      .s[aria-selected="true"] { margin-top: 3px }
+      .s[aria-hidden="true"] { margin-left: 4px }
+      `,
+      'global',
+    );
+
+  it('matches [aria-disabled="true"] bound or static, on a control, a text and a view', async () => {
+    const { getByTestId } = await render(Control, { globalStyles: sheet() });
+    for (const id of ['aria', 'aria-text', 'aria-static', 'both']) {
+      assert.equal(getByTestId(id).props['backgroundColor'], RED, id);
+    }
+    assert.equal(getByTestId('aria-false').props['backgroundColor'], GREEN, 'not when "false"');
+    assert.equal(getByTestId('aria-label').props['color'], BLUE, 'a descendant rule applies');
+    cleanup();
+  });
+
+  it('follows a change both ways, and announces the same state as before', async () => {
+    const { instance, getByTestId, rerender } = await render(Control, { globalStyles: sheet() });
+    const props = (id: string) => getByTestId(id).props;
+    for (const id of ['aria', 'aria-text', 'both']) {
+      assert.deepEqual(props(id)['accessibilityState'], { disabled: true }, id);
+    }
+
+    instance.off.set(false);
+    await rerender();
+    for (const id of ['aria', 'aria-text', 'both']) {
+      assert.equal(props(id)['backgroundColor'], GREEN, `${id} enabled`);
+      assert.deepEqual(props(id)['accessibilityState'], { disabled: false }, id);
+    }
+    assert.equal(props('aria-label')['color'] ?? null, null, 'the descendant rule lets go');
+
+    instance.off.set(true);
+    await rerender();
+    for (const id of ['aria', 'aria-text', 'both']) {
+      assert.equal(props(id)['backgroundColor'], RED, `${id} disabled again`);
+      assert.deepEqual(props(id)['accessibilityState'], { disabled: true }, id);
+    }
+    cleanup();
+  });
+
+  it('publishes the other aria states Tailwind has variants for, and sends none to native', async () => {
+    const { getByTestId } = await render(Control, { globalStyles: sheet() });
+    const props = getByTestId('aria-states', { includeHiddenElements: true }).props;
+    assert.equal(props['opacity'], 0.5, 'aria-busy');
+    assert.equal(props['width'], 1, 'aria-checked');
+    assert.equal(props['height'], 2, 'aria-expanded');
+    assert.equal(props['marginTop'], 3, 'aria-selected');
+    assert.equal(props['marginLeft'], 4, 'aria-hidden');
+    assert.deepEqual(props['accessibilityState'], {
+      busy: true,
+      checked: 'mixed',
+      expanded: true,
+      selected: true,
+    });
+    assert.equal(props['accessibilityElementsHidden'], true);
+    assert.deepEqual(
+      Object.keys(props).filter((key) => key.includes('-')),
+      [],
+      'no attribute reaches native',
+    );
+    cleanup();
+  });
+});
+
+describe("Tailwind's aria-disabled: and disabled: variants on a text and a control", () => {
+  const classes =
+    'group aria-disabled:bg-gray-300 group-aria-disabled:text-red-500 disabled:bg-gray-300 ' +
+    'bg-gray-300 text-red-500';
+  const builds: [string, () => string][] = [
+    ['Tailwind 4', () => build('native', classes)],
+    ['Tailwind 3', () => buildV3(classes)],
+  ];
+
+  for (const [name, css] of builds) {
+    it(`${name}: applies while disabled, and drops when not`, async () => {
+      const sheet = compileCss(flattenTailwind(css()), 'tailwind', { onUnsupported: () => {} });
+      const { instance, getByTestId, rerender } = await render(Control, { globalStyles: sheet });
+      const background = (id: string) => getByTestId(id).props['backgroundColor'] ?? null;
+      const gray = getByTestId('reference').props['backgroundColor'];
+      const red = getByTestId('reference-label').props['color'];
+      assert.ok(gray && red, 'the plain utilities resolve');
+      for (const id of ['aria', 'aria-text', 'aria-static', 'text']) {
+        assert.equal(background(id), gray, id);
+      }
+      assert.equal(background('aria-false'), null, 'aria-disabled="false"');
+      assert.equal(getByTestId('aria-label').props['color'], red, 'group-aria-disabled:');
+
+      instance.off.set(false);
+      await rerender();
+      for (const id of ['aria', 'aria-text', 'text']) assert.equal(background(id), null, id);
+      assert.equal(getByTestId('aria-label').props['color'] ?? null, null);
+      cleanup();
+    });
+  }
 });
