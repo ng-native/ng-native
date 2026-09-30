@@ -142,9 +142,12 @@ A native build or simulator is heavy.
 
 - Run one at a time, machine-wide, under a shared lock: `mkdir /tmp/ngn-device.lock` fails while another
   agent holds it, so retry every minute. `rmdir` it when done, even on failure.
+- Other sessions on the Mac use simulators, emulators and Metro too. Create your own device
+  (`xcrun simctl create`, or your own AVD) rather than booting or reusing one that already exists, and never
+  close, uninstall or restart an app you didn't launch. Leave Metro on 8081 alone.
 - Prefer Expo Go on the simulator to a native build when it covers the case.
 - Gradle needs `--no-daemon`.
-- Shut the simulator, emulator and Metro down afterwards.
+- Afterwards, shut down and delete the device you created, and stop your Metro.
 - Screenshots go in the PR. `gh` cannot attach images, so give their paths or the measured values.
 
 ## Writing
