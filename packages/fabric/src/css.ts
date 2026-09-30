@@ -1769,6 +1769,14 @@ function colourSubstitutable(
       tokens[one.reference] !== undefined || one.fallback !== undefined;
     return set(channels) && (typeof alpha !== 'object' || set(alpha));
   }
+  return referenceSubstitutable(expression, tokens);
+}
+
+/** A colour's `var()`: a token or alternative that is set, or a fallback that can be worked out. */
+function referenceSubstitutable(
+  expression: Extract<ColourExpression, { reference: string }>,
+  tokens: Readonly<Record<string, TokenValue>>,
+): boolean {
   const names = [expression.reference, ...(expression.alternatives ?? [])];
   if (names.some((name) => tokens[name] !== undefined)) return true;
   if (expression.fallback !== undefined) return true;
