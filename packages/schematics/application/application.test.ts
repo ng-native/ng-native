@@ -121,7 +121,7 @@ describe('ng add', () => {
 
   it("adds the app's dependencies and keeps every version the workspace already had", async () => {
     const manifest = json(tree, 'package.json');
-    assert.equal(manifest.dependencies.expo, '~57.0.20');
+    assert.equal(manifest.dependencies.expo, '~57.0.26');
     assert.equal(manifest.dependencies['react-native'], '0.86.3');
     assert.equal(manifest.dependencies['@ng-native/platform'], version);
     assert.equal(manifest.devDependencies['@ng-native/testing'], version);

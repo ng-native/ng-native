@@ -38,7 +38,7 @@ const dependencies = {
   ...Object.fromEntries(FRAMEWORK.map((name) => [name, version])),
   '@angular/common': '^22.0.0',
   '@angular/core': '^22.0.0',
-  expo: '~57.0.20',
+  expo: '~57.0.26',
   'expo-status-bar': '~57.0.1',
   'expo-system-ui': '~57.0.4',
   react: '19.2.3',
@@ -53,7 +53,7 @@ const dependencies = {
  */
 const expoCompanions = {
   'react-dom': dependencies.react,
-  '@expo/cli': '^57.0.22',
+  '@expo/cli': '^57.0.27',
   '@babel/runtime': '^7.20.0',
 };
 

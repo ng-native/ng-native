@@ -226,7 +226,7 @@ describe('in a pnpm workspace', () => {
     await generate(tree, { directory: 'apps/mobile' });
     const app = readJson(tree, 'apps/mobile/package.json');
     assert.equal(app.main, 'src/main.ts');
-    assert.equal(app.dependencies.expo, '~57.0.20');
+    assert.equal(app.dependencies.expo, '~57.0.26');
     assert.equal(app.devDependencies.vitest, '^5.0.0');
     const root = readJson(tree, 'package.json');
     assert.equal(root.dependencies?.expo, undefined);
