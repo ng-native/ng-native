@@ -1,7 +1,7 @@
 /**
  * `ngNative()`: the Vite plugin that lets Vitest run Angular Native code in Node, with no DOM.
  *
- * Four things, each of which Vitest would otherwise get wrong on its own:
+ * Five things, each of which Vitest would otherwise get wrong on its own:
  *
  * - It compiles. Every decorated `.ts` goes through `@ng-native/metro`'s AOT transform and every
  *   partial-compiled package through the linker (see `compile.mjs`), before Vite strips types.
@@ -13,6 +13,9 @@
  * - It stubs assets. With no `require`, an app's `require('./logo.png')` would throw; it becomes
  *   `{ testUri }` instead. And it stands in for the gesture and animation entry points, whose
  *   React Native source Node cannot load (`STAND_INS`).
+ * - It resolves as Metro does. A workspace library's copy of a package at the app's version
+ *   resolves to the app's copy (`appCopy`), so a test has one `@ng-native/components`, as the
+ *   bundle does.
  *
  * The environment is Vitest's default, `node`. There is no DOM to emulate: the renderer talks to
  * a fake Fabric, and jsdom would only give Angular a `document` to misread.
@@ -100,11 +103,73 @@ function hideRequire(code, file) {
   return `var require = undefined; ${code}`;
 }
 
+/** @param {string} dir */
+function manifest(dir) {
+  try {
+    return JSON.parse(readFileSync(path.join(dir, 'package.json'), 'utf8'));
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * The directory of the `name` package a resolved file is in, or nothing: installed, or a linked
+ * workspace package, whose real path has no `node_modules` in it.
+ *
+ * @param {string} id
+ * @param {string} name
+ */
+function packageRoot(id, name) {
+  const file = id.split('?')[0];
+  const marker = `/node_modules/${name}/`;
+  const at = file.lastIndexOf(marker);
+  if (at !== -1) return file.slice(0, at + marker.length - 1);
+  if (!path.isAbsolute(file)) return undefined;
+  for (let dir = path.dirname(file); dir !== path.dirname(dir); dir = path.dirname(dir)) {
+    // A package's dist can hold a package.json of its own with only a `type` in it.
+    const found = manifest(dir)?.name;
+    if (found) return found === name ? dir : undefined;
+  }
+  return undefined;
+}
+
+/**
+ * The app's copy of a package, when a bare import resolved to another copy at the same version:
+ * the rule the Metro preset applies to a bundle, so a test loads what the device does.
+ *
+ * pnpm installs a package once per set of peers it resolves, so a workspace library that lists
+ * `@ng-native/components` gets a copy of its own at the app's version when it was installed after
+ * the app. Loaded from the library, that is a second component registry. A copy at another
+ * version is the library's own choice, and stays.
+ *
+ * @param {import('vite').Rollup.PluginContext} context
+ * @param {string} source
+ * @param {string} importer
+ * @param {object} options what Vite passed to `resolveId`
+ * @param {string} root the app's directory
+ */
+async function appCopy(context, source, importer, options, root) {
+  const resolution = await context.resolve(source, importer, { ...options, skipSelf: true });
+  const pkg = /^(?![./\0])(@[^/]+\/[^/]+|[^/]+)/.exec(source)?.[1];
+  const own = pkg && resolution && !resolution.external && packageRoot(resolution.id, pkg);
+  if (!own) return resolution;
+  const app = await context.resolve(source, path.join(root, 'package.json'), {
+    ...options,
+    skipSelf: true,
+  });
+  const appRoot = app && !app.external && packageRoot(app.id, pkg);
+  const version = (/** @type {string} */ dir) => manifest(dir)?.version;
+  return appRoot && appRoot !== own && version(appRoot) && version(appRoot) === version(own)
+    ? app
+    : resolution;
+}
+
 /**
  * @param {{ inline?: (string | RegExp)[] }} [options]
  * @returns {import('vitest/config').Plugin}
  */
 export function ngNative(options = {}) {
+  let root = process.cwd();
   return {
     name: 'ng-native',
     enforce: 'pre',
@@ -123,8 +188,12 @@ export function ngNative(options = {}) {
         server: { deps: { inline: [...INLINE, ...(options.inline ?? [])] } },
       },
     }),
-    resolveId(source) {
-      return Object.hasOwn(STAND_INS, source) ? STAND_INS[source] : null;
+    configResolved(config) {
+      root = config.root;
+    },
+    resolveId(source, importer, resolveOptions) {
+      if (Object.hasOwn(STAND_INS, source)) return STAND_INS[source];
+      return importer ? appCopy(this, source, importer, resolveOptions, root) : null;
     },
     transform(source, id) {
       const file = id.split('?')[0];
