@@ -47,9 +47,12 @@ lost='DeviceUnreachableException|IOSDriverTimeoutException'
 if [ "$status" -ne 0 ] && grep -qE "$lost" "$out/console.log" "$out/maestro.log" 2>/dev/null; then
   echo "Maestro lost its driver, not the app: walking the flow again" >&2
   # A reboot clears what the lost walk left on screen: a link's "Open in canary?" dialog stays up
-  # over the relaunched app and hides it.
-  xcrun simctl shutdown "$udid" && xcrun simctl boot "$udid" &&
-    xcrun simctl bootstatus "$udid" -b >/dev/null || exit 1
+  # over the relaunched app and hides it. Shutdown fails on a simulator already shut down, so it
+  # runs only on a booted one.
+  if xcrun simctl list devices "$udid" | grep -q '(Booted)'; then
+    xcrun simctl shutdown "$udid" || exit 1
+  fi
+  xcrun simctl boot "$udid" && xcrun simctl bootstatus "$udid" -b >/dev/null || exit 1
   walk "$out/retry"
   status=$?
 fi
