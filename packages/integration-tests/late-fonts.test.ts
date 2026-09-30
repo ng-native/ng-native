@@ -169,6 +169,81 @@ describe('a face registered after its text was laid out', () => {
   });
 });
 
+/** The text input showing a placeholder, as it stands in the latest commit. */
+function field(fabric: FakeFabric, placeholder: string): FakeFabricNode {
+  const found = flatten(fabric.committed).find((node) => node.props['placeholder'] === placeholder);
+  assert.ok(found, `a text input with placeholder "${placeholder}"`);
+  return found;
+}
+
+/**
+ * Every prop payload the engine clones a view with from here on, by tag. Android applies a text
+ * input's props from that payload alone, so a prop left out of it is not applied again.
+ */
+function payloads(fabric: FakeFabric): Map<number, Record<string, unknown>> {
+  const sent = new Map<number, Record<string, unknown>>();
+  const record = (node: unknown, props: object) =>
+    sent.set((node as FakeFabricNode).reactTag, props as Record<string, unknown>);
+  const withProps = fabric.cloneNodeWithNewProps.bind(fabric);
+  const withBoth = fabric.cloneNodeWithNewChildrenAndProps.bind(fabric);
+  fabric.cloneNodeWithNewProps = (node, props) => {
+    record(node, props);
+    return withProps(node, props);
+  };
+  fabric.cloneNodeWithNewChildrenAndProps = (node, props) => {
+    record(node, props);
+    return withBoth(node, props);
+  };
+  return sent;
+}
+
+describe('a face registered after a text input naming it was laid out', () => {
+  it('sets the font again on the same view, keeping its focus and typed text', async () => {
+    const { fabric } = await render(LateFonts);
+    fabric.emit(field(fabric, 'Name'), 'topFocus', {});
+    fabric.emit(field(fabric, 'Name'), 'topChange', { text: 'Ada', eventCount: 3 });
+    await new Promise((resolve) => setTimeout(resolve));
+    const before = field(fabric, 'Name');
+    const beforeProps = { ...before.props };
+    const commands = fabric.commands.length;
+    const sent = payloads(fabric);
+
+    await new FontRegistry(nativeFonts()).load({ 'Inter-600': 1 });
+
+    const after = field(fabric, 'Name');
+    assert.ok(
+      laidOutAgain(beforeProps, after),
+      'iOS rebuilds its font when its text attributes move',
+    );
+    assert.equal(after.reactTag, before.reactTag, 'the view is kept, not created again');
+    assert.deepEqual(
+      { ...after.props, maxFontSizeMultiplier: undefined },
+      { ...beforeProps, maxFontSizeMultiplier: undefined },
+      'and nothing else it asks for moved',
+    );
+    assert.equal(after.props['text'], 'Ada');
+    assert.deepEqual(fabric.commands.slice(commands), [], 'no command moves its focus or its text');
+    assert.equal(
+      sent.get(after.reactTag)?.['fontFamily'],
+      'Inter-600',
+      'Android sets a font only when it is sent',
+    );
+  });
+
+  it('reaches a multiline input and leaves inputs in other families alone', async () => {
+    const { fabric } = await render(LateFonts);
+    const notes = { ...field(fabric, 'Notes').props };
+    const name = { ...field(fabric, 'Name').props };
+    const plain = { ...field(fabric, 'Plain field').props };
+
+    await new FontRegistry(nativeFonts()).load({ 'JetBrains Mono': 1 });
+
+    assert.ok(laidOutAgain(notes, field(fabric, 'Notes')));
+    assert.deepEqual(field(fabric, 'Name').props, name);
+    assert.deepEqual(field(fabric, 'Plain field').props, plain);
+  });
+});
+
 describe('the engine laying text out again for a face', () => {
   function engineWithText(props: Record<string, unknown>) {
     const fabric = createFakeFabric();
@@ -219,6 +294,37 @@ describe('the engine laying text out again for a face', () => {
       assert.equal(committed().viewName, 'Paragraph');
       engine.fontsRegistered(new Set(['Inter']));
       assert.ok((committed().props['maxFontSizeMultiplier'] as number) >= 1000);
+    } finally {
+      registerPlatformComponents('ios');
+      for (const [element, viewName] of Object.entries(IOS_VIEW_NAMES)) {
+        registerViewName(element, viewName);
+      }
+    }
+  });
+
+  it("sends an Android text input's font once, with its cap, and not on its next commit", () => {
+    registerPlatformComponents('android');
+    try {
+      const fabric = createFakeFabric();
+      const engine = new Engine(fabric, 1);
+      const input = engine.createElement('text-input');
+      engine.setProp(input, 'style', { fontFamily: 'Inter' });
+      engine.setProp(input, 'text', 'Ada');
+      engine.appendChild(engine.root, input);
+      engine.commit();
+      const tag = fabric.committed[0]!.reactTag;
+      assert.equal(fabric.committed[0]!.viewName, 'AndroidTextInput');
+      const sent = payloads(fabric);
+
+      engine.fontsRegistered(new Set(['Inter']));
+      const refresh = sent.get(tag);
+      engine.setProp(input, 'text', 'Adam');
+      engine.commit();
+
+      assert.equal(refresh?.['fontFamily'], 'Inter', 'ReactEditText sets a typeface when sent one');
+      assert.ok((refresh?.['maxFontSizeMultiplier'] as number) >= 1000);
+      assert.deepEqual(sent.get(tag), { text: 'Adam' }, 'a keystroke later sends only itself');
+      assert.equal(fabric.committed[0]!.reactTag, tag);
     } finally {
       registerPlatformComponents('ios');
       for (const [element, viewName] of Object.entries(IOS_VIEW_NAMES)) {

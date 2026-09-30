@@ -699,7 +699,8 @@ export function onFontsRegistered(listener: (families: ReadonlySet<string>) => v
 
 /**
  * Faces just registered with the platform, by the family names text asks for them by. Every
- * mounted app lays out again the paragraphs that name one: see `Engine.fontsRegistered`.
+ * mounted app lays out again the paragraphs and text inputs that name one: see
+ * `Engine.fontsRegistered`.
  */
 export function fontsRegistered(families: Iterable<string>): void {
   const names = new Set(families);
@@ -1531,10 +1532,12 @@ export class Engine implements HostEngine {
     this.commit();
   }
 
-  /** Whether any paragraph has been laid out again for a face. See `fontsRegistered`. */
+  /** Whether any text has been laid out again for a face. See `fontsRegistered`. */
   private fontsRefreshed = false;
-  /** How many times each paragraph has been laid out again for a face. */
+  /** How many times each paragraph or text input has been laid out again for a face. */
   private readonly fontRefreshes = new WeakMap<EngineNode, number>();
+  /** The text inputs whose `fontFamily` the next commit sends again. See `fontsRegistered`. */
+  private readonly fontResends = new WeakSet<EngineNode>();
 
   /**
    * Faces registered after text naming them was laid out: lay that text out again, and commit.
@@ -1547,13 +1550,20 @@ export class Engine implements HostEngine {
    * set far above any size the platform offers where it had none. Its view, and everything native
    * holds for it, stays where it is. Android keys its text layout the same way and applies the
    * cap the same way, so the same change works there.
+   *
+   * A text input takes its font another way. iOS sets it on the field again only when the input's
+   * text attributes change, which the same cap does. Android sets it only when `fontFamily` is in
+   * the props it is sent, and the engine sends only what changed, so it is sent again once.
    */
   fontsRegistered(families: ReadonlySet<string>): void {
     const visit = (node: EngineNode): void => {
       for (const child of node.children) {
         if (child.kind !== 'element') continue;
-        if (child.committed && viewNameOf(child) === PARAGRAPH && namesFamily(child, families)) {
+        const viewName = viewNameOf(child);
+        const input = TEXT_INPUTS.has(viewName);
+        if (child.committed && (viewName === PARAGRAPH || input) && namesFamily(child, families)) {
           this.fontRefreshes.set(child, (this.fontRefreshes.get(child) ?? 0) + 1);
+          if (input) this.fontResends.add(child);
           this.fontsRefreshed = true;
           this.markProps(child, false);
         } else {
@@ -2115,18 +2125,16 @@ export class Engine implements HostEngine {
     if (intrinsic) applyIntrinsicSize(style, intrinsic);
     flattenStyle(node.props[STYLE_OVERRIDE], style);
     this.fontFaces.apply(style);
-    if (viewName === PARAGRAPH) {
-      alignText(style, this.directionOf(node, style));
-      if (this.fontsRefreshed) this.capForFonts(node, style);
-    }
+    if (viewName === PARAGRAPH) alignText(style, this.directionOf(node, style));
+    if (this.fontsRefreshed) this.capForFonts(node, style);
     return composeTransform(node, this.animated(node, this.transitioned(node, style)));
   }
 
   /**
-   * The text size cap that lays a paragraph out again once a face it names has registered: a
-   * step per face above the app's own cap where it set one (below 1 is none, on both platforms),
-   * or above any text size there is. Counted per paragraph, so an app's cap moves by a step for
-   * each face its text names and no further. See `fontsRegistered`.
+   * The text size cap that lays a paragraph or text input out again once a face it names has
+   * registered: a step per face above the app's own cap where it set one (below 1 is none, on
+   * both platforms), or above any text size there is. Counted per view, so an app's cap moves by
+   * a step for each face its text names and no further. See `fontsRegistered`.
    */
   private capForFonts(node: EngineNode, props: Record<string, unknown>): void {
     const refreshes = this.fontRefreshes.get(node);
@@ -2637,7 +2645,7 @@ export class Engine implements HostEngine {
     // is here only because something beneath it moved has the props it had.
     const propsMoved = node.propsDirty || styleChanged;
     const props = propsMoved ? this.mergeProps(node, viewName) : previous.props;
-    const propsPayload = propsMoved ? diffProps(previous.props, props) : null;
+    const propsPayload = propsMoved ? this.propsPayload(node, previous.props, props) : null;
 
     const childrenChanged = this.childrenMoved(node, childHandles, previous.childHandles);
 
@@ -2654,6 +2662,19 @@ export class Engine implements HostEngine {
     }
     this.clearFlags(node);
     return handle;
+  }
+
+  /** What a clone sends: the props that changed, and a text input's font once it registered. */
+  private propsPayload(
+    node: EngineNode,
+    previous: Record<string, unknown>,
+    props: Record<string, unknown>,
+  ): Record<string, unknown> | null {
+    const payload = diffProps(previous, props);
+    if (payload && this.fontsRefreshed && this.fontResends.delete(node)) {
+      payload['fontFamily'] = props['fontFamily'];
+    }
+    return payload;
   }
 
   /**
