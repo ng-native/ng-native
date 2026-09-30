@@ -28,6 +28,7 @@ const {
   NX_VERSION,
 } = require('@nx/devkit');
 const native = require('../native-app.cjs');
+const { usesWorkspaces } = require('../application/workspaces.cjs');
 
 /** The plugin entry `@nx/expo:init` itself writes, so the target names are the ones Nx documents. */
 const EXPO_PLUGIN = {
@@ -64,6 +65,22 @@ function registerExpoPlugin(tree) {
 }
 
 /**
+ * What goes beside `@nx/expo` at the root. With package-manager workspaces the app's own
+ * `package.json` lists Expo, React and React Native, and the root lists none of them, so pnpm
+ * resolves `@nx/expo`'s `expo` peer, and that Expo's own peers, in the root's context at the
+ * newest versions there are: a second React Native and React in the lockfile. Pinning them here
+ * at the app's versions makes the root's copies the app's. `react-dom` stays for `@nx/react`'s
+ * peer, which needs a React beside it. `@expo/cli` is left out: `@nx/expo` runs the CLI through
+ * `expo/bin/cli`, and `@expo/cli` peers on Expo and React Native too.
+ */
+function rootDependencies(tree) {
+  if (!usesWorkspaces(tree)) return native.expoCompanions;
+  const { '@expo/cli': _cli, ...companions } = native.expoCompanions;
+  const { expo, react, 'react-native': reactNative } = native.dependencies;
+  return { ...companions, expo, react, 'react-native': reactNative };
+}
+
+/**
  * @param {import('@nx/devkit').Tree} tree
  * @param {{ skipInstall?: boolean, skipFormat?: boolean }} options
  */
@@ -72,7 +89,7 @@ async function init(tree, options = {}) {
   const install = addDependenciesToPackageJson(
     tree,
     {},
-    { '@nx/expo': workspaceNxVersion(tree), ...native.expoCompanions },
+    { '@nx/expo': workspaceNxVersion(tree), ...rootDependencies(tree) },
     'package.json',
     true,
   );

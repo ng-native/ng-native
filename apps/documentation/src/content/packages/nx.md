@@ -33,6 +33,12 @@ app's React, because `@nx/expo` depends on `@nx/react` and npm would otherwise t
 `react-dom` peer at 19.3 and refuse every later install, and `@expo/cli`, which `nx prebuild` loads
 from the workspace root.
 
+With package-manager workspaces it adds `expo`, `react` and `react-native` at the root as well,
+at the app's versions, in place of `@expo/cli`. The package manager resolves `@nx/expo`'s `expo`
+peer in the root's context, and with nothing there to match, pnpm took that Expo's React Native and
+React at the newest versions there were, a second copy of each beside the app's. Keep these root
+versions in step with the app's when upgrading it.
+
 It also adds Babel 7's `@babel/runtime` at the workspace root, the copy Expo's Babel preset imports.
 In an `@nx/angular` workspace, `@angular-devkit/build-angular` otherwise puts Babel 8's there,
 which has no `regenerator`, and Metro warns on every `nx start` that it fell back to another copy.

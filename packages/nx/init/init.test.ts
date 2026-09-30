@@ -51,6 +51,42 @@ describe('init', () => {
     assert.match(readJson(tree, 'package.json').devDependencies['@babel/runtime'], /^\^7\./);
   });
 
+  it("pins the root's Expo peers to the app's versions in a package-manager workspace", async () => {
+    // pnpm installs @nx/expo's `expo` peer in the root's context, before any app exists, and
+    // took that Expo's own peers at the newest there were: React Native 0.87.1 and React 19.3.0
+    // stayed in the lockfile beside the app's 0.86.3 and 19.2.3.
+    const tree = workspace();
+    tree.write('pnpm-workspace.yaml', "packages:\n  - 'packages/*'\n");
+    await init(tree, { skipFormat: true });
+    const { devDependencies } = readJson(tree, 'package.json');
+    assert.deepEqual(Object.keys(devDependencies).sort(), [
+      '@babel/runtime',
+      '@nx/expo',
+      'expo',
+      'nx',
+      'react',
+      'react-dom',
+      'react-native',
+    ]);
+    assert.equal(devDependencies.expo, '~57.0.26');
+    assert.equal(devDependencies.react, '19.2.3');
+    assert.equal(devDependencies['react-dom'], '19.2.3');
+    assert.equal(devDependencies['react-native'], '0.86.3');
+  });
+
+  it('keeps a React the root of a package-manager workspace already has', async () => {
+    const tree = workspace();
+    updateJson(tree, 'package.json', (manifest) => ({
+      ...manifest,
+      workspaces: ['packages/*'],
+      dependencies: { react: '19.2.3' },
+    }));
+    await init(tree, { skipFormat: true });
+    const manifest = readJson(tree, 'package.json');
+    assert.equal(manifest.dependencies.react, '19.2.3');
+    assert.equal(manifest.devDependencies.react, undefined);
+  });
+
   it("registers @nx/expo's plugin, with the target names Nx documents", async () => {
     const tree = workspace();
     await init(tree, { skipFormat: true });
