@@ -1600,30 +1600,88 @@ function resolveAliases(
   const names = Object.keys(own);
   const aliases = names.filter((name) => own[name]!.alias);
   followAliases(aliases, merged);
-  // What each token made of others is made of: its own definition or, for an alias, what it was
-  // substituted with, which is such a token when its chain ends at one, by a link or a fallback,
-  // `var(--missing, calc(var(--gap) * 2))`. That is worked out here, as the token it names is.
-  const forms = new Map<string, TokenValue>();
-  for (const name of names) {
-    const form = own[name]!.alias ? merged[name] : own[name];
-    if (isDerived(form)) forms.set(name, form!);
-  }
-  // Until a pass settles nothing more: one made of another defined after it, or of one not yet
-  // settled, cannot be worked out until that one is. What is left then is a cycle, or reads a
-  // token that is not there, and is unset.
-  let pending = [...forms.keys()];
-  for (let settled = true; settled && pending.length;) {
-    settled = false;
-    pending = pending.filter((name) => {
-      const value = derived(forms.get(name)!, merged);
-      if (!value) return true;
-      merged[name] = value;
-      settled = true;
-      return false;
-    });
-  }
-  for (const name of pending) delete merged[name];
+  // Left to work out: each token made of others and each alias that came to one, by a link or a
+  // fallback, `var(--missing, calc(var(--gap) * 2))`, which is worked out here as well.
+  const pending = new Set(names.filter((name) => isDerived(merged[name])));
+  if (pending.size) settleDerived(own, merged, pending);
   return merged;
+}
+
+/** What a token not yet worked out reads as while another is: set, with no form of any kind. */
+const PENDING: TokenValue = Object.freeze({});
+
+/**
+ * The tokens left to work out, each settled once none it reads is still to be, whatever order they
+ * are defined in. One that reads another still to be waits, rather than taking a fallback: a
+ * fallback is for a token that is unset or invalid. When every one left waits for another, those
+ * in a cycle, counting only the references read, are invalid, and the rest go on without them,
+ * taking their fallbacks, as CSS has it.
+ */
+function settleDerived(
+  own: Readonly<Record<string, TokenValue>>,
+  merged: Record<string, TokenValue>,
+  pending: Set<string>,
+): void {
+  const waitingOn = new Map<string, ReadonlySet<string>>();
+  let read = new Set<string>();
+  const view = new Proxy(merged, {
+    get: (tokens, name: string) => {
+      if (!pending.has(name)) return tokens[name];
+      read.add(name);
+      return PENDING;
+    },
+  });
+  while (pending.size) {
+    let settled = false;
+    for (const name of pending) {
+      read = new Set();
+      const token = own[name]!;
+      const value = token.alias ? substitutedIn(token, view) : derived(token, view);
+      if (read.size) {
+        waitingOn.set(name, read);
+        continue;
+      }
+      pending.delete(name);
+      settle(merged, name, value);
+      settled = true;
+    }
+    if (settled) continue;
+    for (const name of inCycles(pending, waitingOn)) {
+      pending.delete(name);
+      delete merged[name];
+    }
+  }
+}
+
+/** An alias's target, or the first of its fallbacks that is set, with one made of others worked out. */
+function substitutedIn(
+  token: TokenValue,
+  tokens: Readonly<Record<string, TokenValue>>,
+): TokenValue | undefined {
+  let link: TokenValue | undefined = token;
+  while (link?.alias) {
+    const target = tokens[link.alias];
+    if (target !== undefined) return target;
+    link = link.fallback;
+  }
+  return link && isDerived(link) ? derived(link, tokens) : link;
+}
+
+/** The names among `names` that reach themselves by what each waits on. */
+function inCycles(
+  names: ReadonlySet<string>,
+  waitingOn: ReadonlyMap<string, ReadonlySet<string>>,
+): string[] {
+  const reaches = (from: string, to: string, seen: Set<string>): boolean => {
+    for (const next of waitingOn.get(from) ?? []) {
+      if (next === to) return true;
+      if (names.has(next) && !seen.has(next) && seen.add(next) && reaches(next, to, seen)) {
+        return true;
+      }
+    }
+    return false;
+  };
+  return [...names].filter((name) => reaches(name, name, new Set()));
 }
 
 /** Whether a token is made of others, and so worked out where it is defined. */

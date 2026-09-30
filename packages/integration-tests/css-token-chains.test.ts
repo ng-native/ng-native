@@ -341,4 +341,61 @@ describe('a var() whose fallback is made of other tokens', () => {
     engine.commit();
     assert.equal(committedProps(fabric, node)['width'], 5);
   });
+
+  it('settles tokens defined together as a browser does, whatever order they are in', () => {
+    // Each checked against Chrome. A fallback is taken only for a token that is unset or invalid,
+    // never for one not yet worked out; a cycle is every token in it and no other, counting only
+    // the references substituted.
+    const cases: readonly [Record<string, string>, number][] = [
+      // A link to an invalid token takes the link's own fallback.
+      [{ '--r': 'var(--b, 7px)', '--b': 'calc(var(--unset) * 2)' }, 7],
+      [
+        { '--t': 'calc(var(--unset) * 2)', '--r': 'calc(var(--a) + 1px)', '--a': 'var(--t, 7px)' },
+        8,
+      ],
+      // A token read inside its own fallback is a cycle, whatever that fallback is.
+      [{ '--r': 'var(--missing, calc(var(--r, 3px) * 2))' }, 9],
+      [{ '--r': 'calc(var(--r, 3px) * 2)' }, 9],
+      // A token worked out later is waited for, not taken as unset.
+      [
+        {
+          '--r': 'var(--missing, calc(var(--b, 1px) * 2))',
+          '--b': 'calc(var(--g) * 3)',
+          '--g': '8px',
+        },
+        48,
+      ],
+      [{ '--r': 'calc(var(--b, 1px) * 2)', '--b': 'calc(var(--g) * 3)', '--g': '8px' }, 48],
+      // A fallback that is not substituted is no reference, and so no cycle.
+      [{ '--c': 'var(--g, 1px)', '--r': 'var(--c, var(--b))', '--b': 'var(--r)' }, 1],
+      // A token outside a cycle that reads one takes its fallback.
+      [
+        {
+          '--a': 'calc(var(--b) + 1px)',
+          '--b': 'calc(var(--a) + 1px)',
+          '--r': 'calc(var(--a, 5px) * 2)',
+        },
+        10,
+      ],
+      [
+        {
+          '--a': 'var(--m, calc(var(--b) + 1px))',
+          '--b': 'calc(var(--a) + 1px)',
+          '--r': 'var(--a, 5px)',
+        },
+        5,
+      ],
+    ];
+    const read = 'width: var(--r, 9px)';
+    for (const [tokens, expected] of cases) {
+      for (const order of [tokens, Object.fromEntries(Object.entries(tokens).reverse())]) {
+        const written = Object.entries(order).map(([name, value]) => `${name}: ${value}`);
+        const sheet = `.x { ${written.join('; ')}; ${read} }`;
+        const what = JSON.stringify(order);
+        assert.equal(innermost(sheet, 'x', [{}])['width'], expected, `${what} in a stylesheet`);
+        const set = innermost(`.x { ${read} }`, 'x', [order])['width'];
+        assert.equal(set, expected, `${what} set on the element`);
+      }
+    }
+  });
 });
