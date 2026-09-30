@@ -18,6 +18,7 @@ const { compileCss } = require('@ng-native/metro/css/compile.cjs');
 const { transformAngular } = require('@ng-native/metro/angular-transform.cjs');
 
 import { expoFonts, FontRegistry, loadFonts, registrationsFor } from '@ng-native/expo/fonts';
+import { styleSheetOf, type StyleSheet } from '@ng-native/fabric';
 
 /** Fakes `require`, the same seam `optional()` reaches through on a device or in Node. */
 function withExpoFont<T>(module: unknown | null, run: () => T): T {
@@ -231,5 +232,13 @@ describe('reaching expo-font itself', () => {
 
   it('does nothing where expo-font is not installed, rather than throwing at bootstrap', async () => {
     await withExpoFont(null, () => loadFonts({ fonts: [{ family: 'Inter', source: 1 }] }));
+  });
+
+  it('takes a sheet typed as the engine types it', async () => {
+    // What a component's `styleSheetOf()` and the generated Tailwind module are declared as. The
+    // test is the typecheck: a `StyleSheet` with no `fonts` shares no property with the sheet
+    // `loadFonts` asks for, so an app following the docs did not compile.
+    const tailwind: StyleSheet = { rules: [], fonts: [{ family: 'Inter', source: 1 }] };
+    await withExpoFont(null, () => loadFonts(tailwind, styleSheetOf(class {})));
   });
 });

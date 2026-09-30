@@ -341,6 +341,17 @@ export interface StyleSheet {
    * has to re-resolve a whole child list when it changes. It only does that where a sheet asks.
    */
   readonly structural?: true;
+  /**
+   * The `@font-face` rules the sheet declares, each `source` the bundler's `require` of the file.
+   * The engine does not read them: `loadFonts()` in `@ng-native/expo/fonts` registers them with
+   * the platform before mount.
+   */
+  readonly fonts?: readonly {
+    readonly family: string;
+    readonly source: unknown;
+    readonly weight?: number;
+    readonly style?: string;
+  }[];
 }
 
 /**
