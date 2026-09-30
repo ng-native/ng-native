@@ -47,12 +47,6 @@ jobs:
       CCACHE_MAXSIZE: 2G
     steps:
       - uses: actions/checkout@v7
-
-      # A fresh simulator takes minutes to boot here, so it starts now and boots while the app is
-      # set up and built; smoke-ios.sh waits for whatever is left.
-      - name: Start a simulator booting
-        run: echo "CANARY_SIMULATOR=$(examples/canary/scripts/boot-ios-simulator.sh)" >> "$GITHUB_ENV"
-
       - uses: ./.github/actions/setup
 
       # The app's native half is most of the job's time; its JavaScript is a minute. So the app is
