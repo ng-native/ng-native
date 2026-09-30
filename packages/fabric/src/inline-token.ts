@@ -8,8 +8,8 @@
  * number, a colour as React Native writes one, a colour's three channels, a word, another token,
  * `var(--brand)`, and one made of others, `calc(var(--gap) * 2)` or a `color-mix()` (see
  * inline-derived-token.ts).
- * Anything else is kept as a word, which a use site that wants a length or a colour ignores, as
- * it ignores an undefined token.
+ * Anything else is kept as a word, which leaves a use site that wants a length or a colour unset,
+ * as a token of the wrong kind does.
  */
 import type { TokenValue } from './css.ts';
 import { derivedToken } from './inline-derived-token.ts';

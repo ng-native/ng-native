@@ -208,5 +208,40 @@
       "color": "rgb(0, 170, 255)",
       "background-color": "rgba(0, 170, 255, 0.5)"
     }
+  },
+  {
+    "name": "a set token that is invalid where it is used unsets the property, and takes no fallback",
+    "expected": {
+      "color": "rgb(9, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)"
+    }
+  },
+  {
+    "name": "a set token of the wrong kind unsets the property, before any alternative",
+    "expected": {
+      "color": "rgb(9, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)"
+    }
+  },
+  {
+    "name": "a token set to initial is unset, and one set to inherit takes its parent value",
+    "expected": {
+      "color": "rgb(1, 0, 0)",
+      "background-color": "rgb(4, 0, 0)"
+    }
+  },
+  {
+    "name": "a token made of an invalid token, or naming one, is invalid where it is used",
+    "expected": {
+      "color": "rgb(9, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)"
+    }
+  },
+  {
+    "name": "a token whose var() cannot be substituted is unset, and neither inherited nor used",
+    "expected": {
+      "color": "rgb(1, 0, 0)",
+      "background-color": "rgb(2, 0, 0)"
+    }
   }
 ]

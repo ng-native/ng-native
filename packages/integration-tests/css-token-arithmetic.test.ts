@@ -268,11 +268,9 @@ describe('a value with a var() inside it resolves as the same text in a styleshe
     });
   }
 
-  it('drops a value its tokens make nothing of, so a use site takes its fallback', () => {
+  it('leaves a value unset when a var() in it has nothing to substitute, so a use site falls back', () => {
     const lengths = [
-      'calc(var(--word) * 2)',
       'calc(var(--missing) * 2)',
-      'calc(var(--gap) / 0)',
       'calc(var(--x) * 2)',
       'var(--missing, calc(var(--none) * 2))',
     ];
@@ -282,22 +280,28 @@ describe('a value with a var() inside it resolves as the same text in a styleshe
       assert.equal(set(TOKENS, value, read)['width'], 7, `${value} set on the element`);
     }
     for (const value of [
-      'hsl(var(--word) 100% 50%)',
       'rgba(var(--missing), 0.5)',
       'color-mix(in srgb, var(--missing) 50%, white)',
     ]) {
       const read = 'color: var(--x, rgb(1, 2, 3))';
-      assert.equal(
-        written(TOKENS, value, read)['color'],
-        'rgb(1, 2, 3)',
-        `${value} in a stylesheet`,
-      );
-      assert.equal(
-        set(TOKENS, value, read)['color'],
-        'rgb(1, 2, 3)',
-        `${value} set on the element`,
-      );
+      const fallback = 'rgb(1, 2, 3)';
+      assert.equal(written(TOKENS, value, read)['color'], fallback, `${value} in a stylesheet`);
+      assert.equal(set(TOKENS, value, read)['color'], fallback, `${value} set on the element`);
     }
+  });
+
+  it('makes a value its tokens make nothing of invalid, so its use site is unset', () => {
+    // Its tokens are set and substituted, so the use site takes no fallback, as in Chrome. Chrome
+    // clamps a division by zero to its largest length, which native has no use for.
+    for (const value of ['calc(var(--word) * 2)', 'calc(var(--gap) / 0)']) {
+      const read = 'width: var(--x, 7px)';
+      assert.equal(written(TOKENS, value, read)['width'], undefined, `${value} in a stylesheet`);
+      assert.equal(set(TOKENS, value, read)['width'], undefined, `${value} set on the element`);
+    }
+    const value = 'hsl(var(--word) 100% 50%)';
+    const read = 'color: var(--x, rgb(1, 2, 3))';
+    assert.equal(written(TOKENS, value, read)['color'], undefined, 'in a stylesheet');
+    assert.equal(set(TOKENS, value, read)['color'], undefined, 'set on the element');
   });
 
   it('mixes a color-mix() of colours written out, set on an element, as a stylesheet does', () => {
@@ -314,13 +318,14 @@ describe('a value with a var() inside it resolves as the same text in a styleshe
   });
 
   it('drops a shape a stylesheet refuses, rather than sending it to native as it is', () => {
-    // A stylesheet stops the build on these; set on an element they are unset, never a colour
-    // string with a var() in it.
+    // A stylesheet stops the build on these. Set on an element, the token is set, so the use site
+    // takes no fallback, and it is not read, so the property is unset: never a colour string with
+    // a var() in it.
     const width = 'width: var(--x, 7px)';
-    assert.equal(set(TOKENS, 'calc(var(--gap) + 1em)', width)['width'], 7);
+    assert.equal(set(TOKENS, 'calc(var(--gap) + 1em)', width)['width'], undefined);
     const color = 'color: var(--x, rgb(1, 2, 3))';
-    assert.equal(set(TOKENS, 'rgb(var(--n) 0 0)', color)['color'], 'rgb(1, 2, 3)');
-    assert.equal(set(TOKENS, 'rgb(var(--rgb)', color)['color'], 'rgb(1, 2, 3)');
+    assert.equal(set(TOKENS, 'rgb(var(--n) 0 0)', color)['color'], undefined);
+    assert.equal(set(TOKENS, 'rgb(var(--rgb)', color)['color'], undefined);
     for (const value of [
       'rgb(from var(--word) r g x)',
       'rgb(from var(--word) calc(r + 10%) g b)',
@@ -330,7 +335,7 @@ describe('a value with a var() inside it resolves as the same text in a styleshe
       'color(from var(--word) srgb r g b)',
     ]) {
       assert.throws(() => written(TOKENS, value, color), /relative|cannot express/, value);
-      assert.equal(set(TOKENS, value, color)['color'], 'rgb(1, 2, 3)', `${value} set on it`);
+      assert.equal(set(TOKENS, value, color)['color'], undefined, `${value} set on it`);
     }
   });
 
@@ -349,18 +354,14 @@ describe('a value with a var() inside it resolves as the same text in a styleshe
         /cannot express/,
         `${value} in a stylesheet`,
       );
-      assert.equal(
-        set(TOKENS, value, color)['color'],
-        'rgb(1, 2, 3)',
-        `${value} set on the element`,
-      );
+      assert.equal(set(TOKENS, value, color)['color'], undefined, `${value} set on the element`);
     }
   });
 
   it('makes nothing of an hsl() channel token of the wrong kind, and takes no fallback for it', () => {
     // A hue is no percentage, and a saturation, a lightness or an alpha no angle. A token that is
     // set is substituted, so its own fallback is not used when it is the wrong kind: the colour
-    // is invalid, and the use site falls back.
+    // is invalid, and so is the use site, which is unset.
     const color = 'color: var(--x, rgb(1, 2, 3))';
     for (const value of [
       'hsl(var(--pct) 100% 50%)',
@@ -369,16 +370,8 @@ describe('a value with a var() inside it resolves as the same text in a styleshe
       'hsl(var(--hue) 100% var(--turn))',
       'hsl(var(--hue) 100% 50% / var(--turn))',
     ]) {
-      assert.equal(
-        written(TOKENS, value, color)['color'],
-        'rgb(1, 2, 3)',
-        `${value} in a stylesheet`,
-      );
-      assert.equal(
-        set(TOKENS, value, color)['color'],
-        'rgb(1, 2, 3)',
-        `${value} set on the element`,
-      );
+      assert.equal(written(TOKENS, value, color)['color'], undefined, `${value} in a stylesheet`);
+      assert.equal(set(TOKENS, value, color)['color'], undefined, `${value} set on the element`);
     }
     // The right kinds still are: an angle for a hue, a percentage for an alpha.
     for (const [value, expected] of [
@@ -399,7 +392,7 @@ describe('a value with a var() inside it resolves as the same text in a styleshe
       ['120', '0.25turn'],
     ]) {
       const customs = [{ '--h': h!, '--s': s!, '--c': hsl }];
-      assert.equal(innermost(read, customs)['color'], 'rgb(1, 2, 3)', `${h} ${s}`);
+      assert.equal(innermost(read, customs)['color'], undefined, `${h} ${s}`);
     }
   });
 });
@@ -499,7 +492,7 @@ describe('an hsl() of tokens reads a token holding a bare saturation or lightnes
   // As Chrome does: it substitutes the token's text, then reads the hsl() as if written so.
   const TOKENS = ':root { --h: 200; --s: 100; --l: 50; --p: 100%; --half: 50% }';
   const color = 'color: var(--x, rgb(1, 2, 3))';
-  const cases: readonly [string, string][] = [
+  const cases: readonly [string, string | undefined][] = [
     ['hsl(var(--h) var(--s) var(--l))', 'rgb(0, 170, 255)'],
     ['hsl(var(--h) var(--p) var(--l))', 'rgb(0, 170, 255)'],
     ['hsl(var(--h) var(--s) var(--half))', 'rgb(0, 170, 255)'],
@@ -507,8 +500,8 @@ describe('an hsl() of tokens reads a token holding a bare saturation or lightnes
     ['hsla(var(--h) var(--l) var(--l) / 0.5)', 'rgba(64, 149, 191, 0.5)'],
     // The legacy comma syntax takes a percentage alone, from a token as written in it.
     ['hsl(var(--h), var(--p), var(--half))', 'rgb(0, 170, 255)'],
-    ['hsl(var(--h), var(--s), var(--l))', 'rgb(1, 2, 3)'],
-    ['hsla(var(--h), var(--p), var(--l), 0.5)', 'rgb(1, 2, 3)'],
+    ['hsl(var(--h), var(--s), var(--l))', undefined],
+    ['hsla(var(--h), var(--p), var(--l), 0.5)', undefined],
   ];
 
   for (const [value, expected] of cases) {
@@ -520,11 +513,11 @@ describe('an hsl() of tokens reads a token holding a bare saturation or lightnes
 
   it('reads the same tokens set on an element as a stylesheet does', () => {
     const read = '.x { color: var(--c, rgb(1, 2, 3)) }';
-    const cases: readonly [string, string, string, string][] = [
+    const cases: readonly [string, string, string, string | undefined][] = [
       ['hsl(var(--h) var(--s) var(--l))', '100', '50', 'rgb(0, 170, 255)'],
       ['hsl(var(--h) var(--s) var(--l))', '50', '25', 'rgb(32, 74, 96)'],
       ['hsl(var(--h) var(--s) var(--l))', '100%', '50', 'rgb(0, 170, 255)'],
-      ['hsl(var(--h), var(--s), var(--l))', '100', '50', 'rgb(1, 2, 3)'],
+      ['hsl(var(--h), var(--s), var(--l))', '100', '50', undefined],
       ['hsl(var(--h), var(--s), var(--l))', '100%', '50%', 'rgb(0, 170, 255)'],
     ];
     for (const [hsl, s, l, expected] of cases) {
@@ -558,24 +551,80 @@ describe('an hsl() of tokens reads a token holding a bare saturation or lightnes
     const width = (s: string) =>
       innermost(`:root { --half: 50%; --s: ${s} } .x { width: var(--s, 7px) }`, [{}])['width'];
     assert.equal(width('calc(var(--half) * 2)'), '100%');
-    assert.equal(width('calc(var(--half) + 10)'), 7);
+    assert.equal(width('calc(var(--half) + 10)'), undefined);
+  });
+});
+
+describe('a set token that is invalid where it is used unsets the property', () => {
+  // As Chrome does: a set token is substituted, and a value it makes invalid unsets the property,
+  // which inherits its parent's colour and has no background, rather than taking the fallback.
+  // Only a token whose var() cannot be substituted at all is unset itself, and falls back.
+  const TOKENS = ':root { --pct: 50%; --red: rgb(4, 0, 0); --bad: hsl(var(--pct) 50% 50%) }';
+  const read =
+    '.outer { color: rgb(9, 0, 0) } ' +
+    '.x { color: var(--c, rgb(1, 0, 0)); background-color: var(--c, rgb(2, 0, 0)) }';
+
+  /** The colours a view commits with inside `.outer`, with `--c` in a stylesheet or set on it. */
+  function colours(value: string, where: 'written' | 'set') {
+    const fabric = createFakeFabric();
+    const own = where === 'written' ? `.x { --c: ${value} }` : '';
+    const engine = new Engine(fabric, 1, {
+      globalStyles: compileCss(`${TOKENS} ${read} ${own}`, 'g'),
+    });
+    const outer = engine.createElement('view', null);
+    engine.addClass(outer, 'outer');
+    engine.appendChild(engine.root, outer);
+    const node = engine.createElement('text', null);
+    if (where === 'set') engine.setCustomProperty(node, '--c', value);
+    engine.addClass(node, 'x');
+    engine.appendChild(outer, node);
+    engine.commit();
+    const props = committedProps(fabric, node);
+    return [props['color'], props['backgroundColor']];
+  }
+
+  const cases: readonly [string, unknown[]][] = [
+    ['hsl(var(--pct) 50% 50%)', ['rgb(9, 0, 0)', undefined]],
+    ['hsl(var(--pct, 120) 50% 50%)', ['rgb(9, 0, 0)', undefined]],
+    ['10px', ['rgb(9, 0, 0)', undefined]],
+    ['var(--bad)', ['rgb(9, 0, 0)', undefined]],
+    ['var(--missing, hsl(var(--pct) 50% 50%))', ['rgb(9, 0, 0)', undefined]],
+    ['rgba(var(--pct), 0.5)', ['rgb(9, 0, 0)', undefined]],
+    // Nothing to substitute: the token is unset, and the use site takes its fallback.
+    ['hsl(var(--missing) 50% 50%)', ['rgb(1, 0, 0)', 'rgb(2, 0, 0)']],
+    ['var(--missing)', ['rgb(1, 0, 0)', 'rgb(2, 0, 0)']],
+    ['initial', ['rgb(1, 0, 0)', 'rgb(2, 0, 0)']],
+    ['var(--red)', ['rgb(4, 0, 0)', 'rgb(4, 0, 0)']],
+  ];
+
+  for (const [value, expected] of cases) {
+    it(value, () => {
+      assert.deepEqual(colours(value, 'written'), expected, 'in a stylesheet');
+      assert.deepEqual(colours(value, 'set'), expected, 'set on the element');
+    });
+  }
+
+  it('takes no alternative after a set token of the wrong kind', () => {
+    const sheet = ':root { --x: 10px; --b: rgb(4, 0, 0) } .x { color: var(--x, var(--b, red)) }';
+    assert.equal(innermost(sheet, [{}])['color'], undefined);
   });
 });
 
 describe('arithmetic mixing a percentage and a number is invalid', () => {
   // Each checked against Chrome: a percentage and a number cannot be added or compared, nor
-  // multiplied or divided the wrong way round, and the calc() is invalid.
+  // multiplied or divided the wrong way round, and the calc() is invalid. The token is still set,
+  // so what reads it is unset rather than taking its fallback.
   const TOKENS = ':root { --n: 0.2; --p: 10%; --z: 0 }';
   const read = 'opacity: var(--x, 0.5)';
-  const cases: readonly [string, number][] = [
-    ['calc(var(--n) + var(--p))', 0.5],
-    ['calc(var(--p) + 1)', 0.5],
-    ['calc(var(--z) + var(--p))', 0.5],
-    ['calc(var(--n) + 10%)', 0.5],
-    ['calc(var(--missing, 10%) + 1)', 0.5],
-    ['calc(var(--p) * var(--p))', 0.5],
-    ['calc(var(--n) / var(--p))', 0.5],
-    ['max(var(--p), 1)', 0.5],
+  const cases: readonly [string, number | undefined][] = [
+    ['calc(var(--n) + var(--p))', undefined],
+    ['calc(var(--p) + 1)', undefined],
+    ['calc(var(--z) + var(--p))', undefined],
+    ['calc(var(--n) + 10%)', undefined],
+    ['calc(var(--missing, 10%) + 1)', undefined],
+    ['calc(var(--p) * var(--p))', undefined],
+    ['calc(var(--n) / var(--p))', undefined],
+    ['max(var(--p), 1)', undefined],
     // Of one type, or a percentage scaled by a number, it is still worked out.
     ['calc(var(--n) * var(--p))', 0.02],
     ['calc(var(--p) - 10%)', 0],
@@ -603,6 +652,6 @@ describe('arithmetic mixing a percentage and a number is invalid', () => {
   it('makes an hsl() that reads it invalid', () => {
     const own = '--x: calc(var(--n) + var(--p)); --c: hsl(200 var(--x) 50%)';
     const sheet = `${TOKENS} .x { ${own}; color: var(--c, rgb(1, 2, 3)) }`;
-    assert.equal(innermost(sheet, [{}])['color'], 'rgb(1, 2, 3)');
+    assert.equal(innermost(sheet, [{}])['color'], undefined);
   });
 });

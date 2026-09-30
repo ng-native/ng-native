@@ -152,7 +152,8 @@ describe('the value a binding holds', () => {
       undefined,
       'not rgb() channels',
     );
-    assert.equal(colour('.a { color: rgb(var(--c, 1 2 3)) }', '1.2.3 4 5'), 'rgb(1, 2, 3)');
+    // Set, so substituted rather than falling back, and no colour, so the property is unset.
+    assert.equal(colour('.a { color: rgb(var(--c, 1 2 3)) }', '1.2.3 4 5'), undefined);
   });
 
   it('keeps apart rows that match alike but sit under different tokens', () => {

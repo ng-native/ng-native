@@ -235,4 +235,49 @@ export const CASES: OracleCase[] = [
       '#probe { color: var(--c); background-color: var(--d) }',
     tree: probe(),
   },
+  {
+    name: 'a set token that is invalid where it is used unsets the property, and takes no fallback',
+    css:
+      ':root { --h: 50%; --c: hsl(var(--h) 50% 50%) } .outer { color: rgb(9, 0, 0) } ' +
+      '#probe { color: var(--c, rgb(1, 0, 0)); background-color: var(--c, rgb(2, 0, 0)) }',
+    tree: { name: 'view', classes: ['outer'], children: [probe()] },
+  },
+  {
+    name: 'a set token of the wrong kind unsets the property, before any alternative',
+    css:
+      ':root { --x: 10px; --b: rgb(4, 0, 0) } .outer { color: rgb(9, 0, 0) } ' +
+      '#probe { color: var(--x, var(--b, rgb(1, 0, 0))); background-color: var(--x, rgb(2, 0, 0)) }',
+    tree: { name: 'view', classes: ['outer'], children: [probe()] },
+  },
+  {
+    name: 'a token set to initial is unset, and one set to inherit takes its parent value',
+    css:
+      '.outer { --c: rgb(3, 0, 0); --d: rgb(4, 0, 0) } .inner { --c: initial; --d: inherit } ' +
+      '#probe { color: var(--c, rgb(1, 0, 0)); background-color: var(--d, rgb(2, 0, 0)) }',
+    tree: {
+      name: 'view',
+      classes: ['outer'],
+      children: [{ name: 'view', classes: ['inner'], children: [probe()] }],
+    },
+  },
+  {
+    name: 'a token made of an invalid token, or naming one, is invalid where it is used',
+    css:
+      ':root { --h: 50%; --c: hsl(var(--h) 50% 50%); --d: var(--c); ' +
+      '--m: color-mix(in srgb, var(--c) 50%, white) } .outer { color: rgb(9, 0, 0) } ' +
+      '#probe { color: var(--d, rgb(1, 0, 0)); background-color: var(--m, rgb(2, 0, 0)) }',
+    tree: { name: 'view', classes: ['outer'], children: [probe()] },
+  },
+  {
+    name: 'a token whose var() cannot be substituted is unset, and neither inherited nor used',
+    css:
+      '.outer { --c: rgb(3, 0, 0); color: rgb(9, 0, 0) } ' +
+      '.inner { --c: hsl(var(--missing) 50% 50%) } ' +
+      '#probe { color: var(--c, rgb(1, 0, 0)); background-color: var(--c, rgb(2, 0, 0)) }',
+    tree: {
+      name: 'view',
+      classes: ['outer'],
+      children: [{ name: 'view', classes: ['inner'], children: [probe()] }],
+    },
+  },
 ];

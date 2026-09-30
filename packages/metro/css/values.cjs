@@ -376,7 +376,8 @@ function weight(value) {
  *
  * The definition does not know how it will be used, and the device has no CSS parser, so the
  * conversion has to happen here and cover every case. Forms that do not apply are simply absent,
- * and a use site asking for one of those falls back exactly as an undefined token would.
+ * and a use site asking for one of those is unset, as the property that reads a token of the
+ * wrong kind is in CSS, rather than taking its fallback.
  */
 function tokenValue(parts, context) {
   if (!Array.isArray(parts)) return null;

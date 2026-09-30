@@ -1528,7 +1528,9 @@ export class StyleResolver {
         parts.push(filled);
         continue;
       }
-      const filled = fill(formOf(tokens[slot.marker.reference], slot.kind) ?? slot.marker.fallback);
+      const filled = fill(
+        substitute(slot.marker, tokens, (token) => slotEntries(token, slot.kind)),
+      );
       if (filled === UNSETTLED || !Array.isArray(filled)) return UNSETTLED;
       parts.push(...filled);
     }
@@ -1594,14 +1596,19 @@ function tokensInScope(
   custom: Readonly<Record<string, TokenValue>> | null | undefined,
 ): Readonly<Record<string, TokenValue>> {
   const own = custom ? { ...ruleTokens, ...custom } : ruleTokens;
-  return own ? resolveAliases(own, { ...parentTokens, ...own }) : parentTokens;
+  return own ? resolveAliases(own, { ...parentTokens, ...own }, parentTokens) : parentTokens;
 }
 
 function resolveAliases(
   own: Readonly<Record<string, TokenValue>>,
   merged: Record<string, TokenValue>,
+  parentTokens: Readonly<Record<string, TokenValue>>,
 ): Record<string, TokenValue> {
   const names = Object.keys(own);
+  for (const name of names) {
+    const word = own[name]!.keyword;
+    if (word !== undefined && CSS_WIDE.has(word)) cssWide(merged, name, word, parentTokens);
+  }
   const aliases = names.filter((name) => own[name]!.alias);
   followAliases(aliases, merged);
   // Left to work out: each token made of others and each alias that came to one, by a link or a
@@ -1609,6 +1616,30 @@ function resolveAliases(
   const pending = new Set(names.filter((name) => isDerived(merged[name])));
   if (pending.size) settleDerived(own, merged, pending);
   return merged;
+}
+
+const CSS_WIDE: ReadonlySet<string> = new Set([
+  'initial',
+  'inherit',
+  'unset',
+  'revert',
+  'revert-layer',
+]);
+
+/**
+ * A token set to a CSS-wide keyword, as CSS has one: its parent's value for `inherit` and `unset`,
+ * since a custom property inherits, and otherwise its initial value, which is to be unset. Tailwind
+ * writes `--tw-blur: initial` for each filter slot a node has not filled.
+ */
+function cssWide(
+  merged: Record<string, TokenValue>,
+  name: string,
+  word: string,
+  parentTokens: Readonly<Record<string, TokenValue>>,
+): void {
+  const inherited = word === 'inherit' || word === 'unset' ? parentTokens[name] : undefined;
+  if (inherited) merged[name] = inherited;
+  else delete merged[name];
 }
 
 /** What a token not yet worked out reads as while another is: set, with no form of any kind. */
@@ -1640,7 +1671,7 @@ function settleDerived(
     for (const name of pending) {
       read = new Set();
       const token = own[name]!;
-      const value = token.alias ? substitutedIn(token, view) : derived(token, view);
+      const value = token.alias ? substitutedIn(token, view) : workedOut(token, view);
       if (read.size) {
         waitingOn.set(name, read);
         continue;
@@ -1668,7 +1699,103 @@ function substitutedIn(
     if (target !== undefined) return target;
     link = link.fallback;
   }
-  return link && isDerived(link) ? derived(link, tokens) : link;
+  return link && isDerived(link) ? workedOut(link, tokens) : link;
+}
+
+/**
+ * A token that is set but makes no valid value. A use site finds it set, so takes no fallback, and
+ * in no form, so its property is unset, as CSS substitutes such a token and then unsets it.
+ */
+const INVALID: TokenValue = Object.freeze({});
+
+/**
+ * A token made of others, worked out: invalid when it makes nothing valid, as `hsl()` of a
+ * percentage hue does, and unset only when a `var()` in it has nothing to be substituted with.
+ */
+function workedOut(
+  token: TokenValue,
+  tokens: Readonly<Record<string, TokenValue>>,
+): TokenValue | undefined {
+  return derived(token, tokens) ?? (substitutable(token, tokens) ? INVALID : undefined);
+}
+
+/** Whether each `var()` in a token made of others names a token that is set, or has a fallback. */
+function substitutable(token: TokenValue, tokens: Readonly<Record<string, TokenValue>>): boolean {
+  if (token.hsl) return hslSubstitutable(token.hsl, tokens);
+  if (token.deferredColour) return colourSubstitutable(token.deferredColour, tokens);
+  // Each marker is one reading of the same text, and a fallback one cannot read is dropped from it.
+  return token.deferredCalc!.some((marker) => calcSubstitutable(marker.expression, tokens));
+}
+
+function hslSubstitutable(
+  hsl: NonNullable<TokenValue['hsl']>,
+  tokens: Readonly<Record<string, TokenValue>>,
+): boolean {
+  return [hsl.h, hsl.s, hsl.l, hsl.alpha].every(
+    (channel) =>
+      typeof channel !== 'object' ||
+      tokens[channel.reference] !== undefined ||
+      channel.fallback !== undefined,
+  );
+}
+
+function calcSubstitutable(
+  expression: CalcExpression,
+  tokens: Readonly<Record<string, TokenValue>>,
+): boolean {
+  if (Array.isArray(expression)) {
+    return expression.slice(1).every((side) => calcSubstitutable(side, tokens));
+  }
+  if (typeof expression !== 'object' || 'percentage' in expression) return true;
+  const leaf = expression as Extract<CalcLeaf, { reference: string }>;
+  if (tokens[leaf.reference] !== undefined) return true;
+  return leaf.fallback !== undefined && calcSubstitutable(leaf.fallback, tokens);
+}
+
+function colourSubstitutable(
+  expression: ColourExpression,
+  tokens: Readonly<Record<string, TokenValue>>,
+): boolean {
+  if ('color' in expression) return true;
+  if ('hsl' in expression) return hslSubstitutable(expression.hsl, tokens);
+  if ('relative' in expression) return colourSubstitutable(expression.relative.from, tokens);
+  if ('mix' in expression) {
+    const { a, b } = expression.mix;
+    return colourSubstitutable(a, tokens) && colourSubstitutable(b, tokens);
+  }
+  if ('channels' in expression) {
+    const { channels, alpha } = expression;
+    const set = (one: { reference: string; fallback?: unknown }) =>
+      tokens[one.reference] !== undefined || one.fallback !== undefined;
+    return set(channels) && (typeof alpha !== 'object' || set(alpha));
+  }
+  const names = [expression.reference, ...(expression.alternatives ?? [])];
+  if (names.some((name) => tokens[name] !== undefined)) return true;
+  if (expression.fallback !== undefined) return true;
+  const token = expression.fallbackToken;
+  return token !== undefined && (!isDerived(token) || substitutable(token, tokens));
+}
+
+/**
+ * A reference read from its token when that is set, in whatever form `read` finds, and its
+ * fallback only when it is not.
+ */
+function substitute(
+  marker: { readonly reference: string; readonly fallback?: unknown },
+  tokens: Readonly<Record<string, TokenValue>>,
+  read: (token: TokenValue) => unknown,
+): unknown {
+  const token = tokens[marker.reference];
+  return token === undefined ? marker.fallback : read(token);
+}
+
+/** The first of the names that is set: the one a `var()` and its `var()` fallbacks substitute. */
+function firstSet(
+  names: readonly string[],
+  tokens: Readonly<Record<string, TokenValue>>,
+): TokenValue | undefined {
+  for (const name of names) if (tokens[name] !== undefined) return tokens[name];
+  return undefined;
 }
 
 /** The names among `names` that reach themselves by what each waits on. */
@@ -1894,17 +2021,16 @@ function referenced(
   tokens: Readonly<Record<string, TokenValue>>,
 ): unknown {
   if (declaration.gradient) return paintLayers(declaration.gradient, tokens);
-  let value = formOf(tokens[declaration.reference!], declaration.kind!);
+  // The first token set is substituted, whatever it holds: one of the wrong kind leaves the
+  // property unset rather than trying the next, or the fallback.
+  const names = [declaration.reference!, ...(declaration.alternatives ?? [])];
+  const token = firstSet(names, tokens);
+  let value = token ? formOf(token, declaration.kind!) : fallbackOf(declaration, tokens);
   // `calc(var(--n) * 1px)`: the arithmetic gives a unitless token its unit, which is the usual
   // way to turn a count into a length. So a length with arithmetic reads the bare number too.
   if (value === undefined && declaration.adjust && declaration.kind === 'length') {
-    value = tokens[declaration.reference!]?.number;
+    value = token?.number;
   }
-  for (const alternative of declaration.alternatives ?? []) {
-    if (value !== undefined) break;
-    value = formOf(tokens[alternative], declaration.kind!);
-  }
-  value ??= fallbackOf(declaration, tokens);
   const base = CHANNEL_KINDS.has(declaration.kind!)
     ? fromChannels(value, declaration.alpha, tokens, declaration.space)
     : value;
@@ -1937,8 +2063,8 @@ function fromChannels(
 ): string | undefined {
   if (!Array.isArray(value) || value.length !== 3) return undefined;
   // An alpha naming a token nothing set, with no fallback, is no colour: CSS drops it.
-  const opacity = alpha ? (tokens[alpha.reference]?.number ?? alpha.fallback) : 1;
-  if (opacity === undefined) return undefined;
+  const opacity = alpha ? substitute(alpha, tokens, (token) => token.number) : 1;
+  if (typeof opacity !== 'number') return undefined;
   if (space === 'hsl') return hslToRgb(value[0], value[1], value[2], opacity);
   const [r, g, b] = value as number[];
   return opacity >= 1
@@ -2012,8 +2138,8 @@ function placed(
       out[edge] = offset;
       continue;
     }
-    const { reference, fallback } = offset as { reference: string; fallback?: string | number };
-    const value = tokens[reference]?.length ?? fallback;
+    const marker = offset as { reference: string; fallback?: string | number };
+    const value = substitute(marker, tokens, (token) => token.length);
     if (value === undefined || typeof value === 'object') return null;
     out[edge] = value;
   }
@@ -2167,8 +2293,9 @@ function leafValue(
   tokens: Readonly<Record<string, TokenValue>>,
 ): number | undefined {
   if ('percentage' in leaf) return leaf.percentage;
-  const own = tokenNumber(tokens[leaf.reference], kind);
-  return own ?? (leaf.fallback === undefined ? undefined : calculated(leaf.fallback, kind, tokens));
+  const token = tokens[leaf.reference];
+  if (token) return tokenNumber(token, kind);
+  return leaf.fallback === undefined ? undefined : calculated(leaf.fallback, kind, tokens);
 }
 
 /** Where each kind of slot reads a token from, before its bare number. */
@@ -2203,6 +2330,11 @@ interface ShadowsMarker {
   readonly fallback?: readonly unknown[];
 }
 
+/** What a token set in a slot stands for: its entries, or none for one set to nothing, `--tw-blur: ;`. */
+function slotEntries(token: TokenValue, kind: TokenKind): unknown {
+  return formOf(token, kind) ?? (token.keyword?.trim() === '' ? [] : undefined);
+}
+
 /** The slot a list entry can be instead of an entry: one per list property that has them. */
 const SLOT_KINDS = {
   __shadows: 'shadow',
@@ -2227,7 +2359,7 @@ function resolveLength(
   marker: LengthMarker,
   tokens: Readonly<Record<string, TokenValue>>,
 ): number | undefined {
-  const value = formOf(tokens[marker.reference], 'length') ?? marker.fallback;
+  const value = substitute(marker, tokens, (token) => formOf(token, 'length'));
   if (typeof value !== 'number') return undefined;
   return marker.adjust ? (adjusted(value, marker.adjust) as number) : value;
 }
@@ -2305,7 +2437,7 @@ function channelsColour(
 ): string | undefined {
   const { space } = expression.channels;
   const kind = space === 'hsl' ? 'hslChannels' : 'channels';
-  const value = formOf(tokens[expression.channels.reference], kind) ?? expression.channels.fallback;
+  const value = substitute(expression.channels, tokens, (token) => formOf(token, kind));
   const { alpha } = expression;
   if (typeof alpha !== 'number') return fromChannels(value, alpha, tokens, space);
   const opaque = fromChannels(value, undefined, tokens, space);
