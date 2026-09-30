@@ -10,7 +10,15 @@
  * `expo-status-bar` is the same statics with a React component around them, so nothing here needs
  * that package installed.
  */
-import { InjectionToken, Service, computed, inject, signal, type Signal } from '@angular/core';
+import {
+  InjectionToken,
+  Service,
+  computed,
+  inject,
+  signal,
+  untracked,
+  type Signal,
+} from '@angular/core';
 import { reactNative } from './react-native.ts';
 
 /** Dark text for a light bar, light text for a dark one. `default` is whatever the OS picks. */
@@ -114,10 +122,11 @@ export class StatusBar {
    * Push the merged state at the platform.
    *
    * Written whole rather than diffed: the platform's own setters are the cheap part, and a diff
-   * would have to know which properties a *dropped* claim had been holding.
+   * would have to know which properties a *dropped* claim had been holding. Read untracked, so an
+   * effect that sets the bar does not also subscribe to it and run again on every later claim.
    */
   private apply(): void {
-    const { style, hidden, animated, backgroundColor, translucent } = this.state();
+    const { style, hidden, animated, backgroundColor, translucent } = untracked(this.state);
     if (style !== undefined) this.source.setStyle(style, animated);
     if (hidden !== undefined) this.source.setHidden(hidden, animated ? 'fade' : undefined);
     if (backgroundColor !== undefined) this.source.setBackgroundColor(backgroundColor, animated);

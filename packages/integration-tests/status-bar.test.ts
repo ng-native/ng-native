@@ -10,6 +10,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { Injector, runInInjectionContext } from '@angular/core';
+import { createWatch } from '@angular/core/primitives/signals';
 import { StatusBar, type StatusBarSource } from '@ng-native/device';
 
 /** What the platform was told, in order. */
@@ -81,6 +82,29 @@ describe('the status bar', () => {
     calls.length = 0;
     claim();
     assert.deepEqual(calls, [['style', ['dark', undefined]]]);
+  });
+
+  it("leaves an effect that sets the bar unsubscribed from the bar's own state", () => {
+    // An app shell sets the base style in an effect, from the color scheme. If setting the bar
+    // read its state inside that effect, every later set or push would run the effect again and
+    // write the base back over what was just set.
+    const { calls, source } = recorder();
+    const bar = build(source);
+    let reruns = 0;
+    // What `effect()` is built on, run by hand: the second callback is its reschedule.
+    const shell = createWatch(
+      () => bar.set({ style: 'dark' }),
+      () => reruns++,
+      true,
+    );
+    shell.run();
+
+    bar.set({ style: 'light' });
+    bar.push({ hidden: true });
+    assert.equal(reruns, 0);
+    assert.deepEqual(bar.state(), { style: 'light', hidden: true });
+    assert.deepEqual(calls.at(-2), ['style', ['light', undefined]]);
+    shell.destroy();
   });
 
   it('reports its height, which a layout under a translucent bar needs', () => {
