@@ -625,6 +625,33 @@ describe('in a workspace that saves exact versions', () => {
     assert.ok(!looked.includes('@angular/core') && !looked.includes('typescript'));
   });
 
+  it("writes every Angular package at the root's Angular, whose peers are exact", async () => {
+    const tree = pnpmWorkspace();
+    tree.write('pnpm-workspace.yaml', "packages:\n  - 'apps/*'\nsavePrefix: ''\n");
+    updateJson(tree, 'package.json', (manifest) => ({
+      ...manifest,
+      dependencies: { '@angular/core': '22.1.3' },
+    }));
+    await generate(tree, { directory: 'apps/mobile' });
+    const app = readJson(tree, 'apps/mobile/package.json');
+    assert.equal(app.dependencies['@angular/common'], '22.1.3');
+    assert.equal(app.devDependencies['@angular/compiler-cli'], '22.1.3');
+  });
+
+  it("adds the root's missing Angular packages within its Angular's range", async () => {
+    registry.versions = async () => [...PUBLISHED, '22.1.0', '22.1.4'];
+    const tree = integrated();
+    tree.write('.npmrc', 'save-exact=true\n');
+    updateJson(tree, 'package.json', (manifest) => ({
+      ...manifest,
+      dependencies: { '@angular/core': '~22.1.0' },
+    }));
+    await generate(tree, { directory: 'apps/mobile' });
+    const root = readJson(tree, 'package.json');
+    assert.equal(root.dependencies['@angular/common'], '22.1.4');
+    assert.equal(root.devDependencies['@angular/compiler-cli'], '22.1.4');
+  });
+
   it("keeps its own version where the root's range reaches below the app's", async () => {
     const tree = pnpmWorkspace();
     tree.write('pnpm-workspace.yaml', "packages:\n  - 'apps/*'\nsavePrefix: ''\n");

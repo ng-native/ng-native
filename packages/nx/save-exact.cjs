@@ -74,6 +74,22 @@ async function newest(tree, name, range) {
 }
 
 /**
+ * The range an Angular package resolves within: also the root's `@angular/core`, where the two
+ * overlap, since every Angular package peers on the others at exactly its own version.
+ *
+ * @param {import('@nx/devkit').Tree} tree
+ * @param {string} name
+ * @param {string} range
+ */
+function withinAngular(tree, name, range) {
+  if (!name.startsWith('@angular/') || !tree.exists('package.json')) return range;
+  const { dependencies, devDependencies } = JSON.parse(tree.read('package.json', 'utf-8') ?? '{}');
+  const core = { ...devDependencies, ...dependencies }['@angular/core'];
+  const overlaps = core && semver.validRange(core) && semver.intersects(core, range);
+  return overlaps ? `${range} ${core}` : range;
+}
+
+/**
  * Each range as the exact version it resolves to when the workspace saves exact versions, and as
  * it is otherwise. The packages in `settled`, which take a version the workspace already has, are
  * left as they are.
@@ -90,7 +106,7 @@ async function asSaved(tree, dependencies, settled = []) {
     await Promise.all(
       Object.entries(dependencies).map(async ([name, range]) => [
         name,
-        skip.has(name) ? range : await newest(tree, name, range),
+        skip.has(name) ? range : await newest(tree, name, withinAngular(tree, name, range)),
       ]),
     ),
   );
