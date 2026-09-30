@@ -82,6 +82,11 @@ allows more than one line, `secureTextEntry` hides what is typed, `autoCapitaliz
 `autoCorrect` control the usual typing assists, and `maxLength` is enforced natively so nothing
 flickers past the limit before being trimmed back.
 
+A multiline field's text starts at the top, as in a `<textarea>`, on both platforms. Android's own
+default centres it, so there a multiline field commits `textAlignVertical: 'top'` unless the
+`textAlignVertical` input or a CSS `vertical-align` says otherwise. Both are Android-only: iOS
+always starts a multiline field at the top and centres a single-line one.
+
 `<text-input>` exposes `focus()`, `blur()`, `clear()`, `setSelection(start, end?)` and
 `isFocused()` as methods, reachable through a template reference or `nativeRef`. `(changeText)`
 carries just the new string, matching React Native's `onChangeText`; `(change)`, `(focus)`,
