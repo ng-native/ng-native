@@ -38,7 +38,9 @@ function usesWorkspaces(tree) {
 }
 
 /**
- * Adds `<parent>/*` for the app's directory when no glob already covers it.
+ * Adds the app's directory when no glob already covers it: as `<parent>/*` when that takes in
+ * nothing else, as Nx adds its own projects, and as the directory itself when a sibling already
+ * has a `package.json`, which the workspace either lists one by one or has left out.
  *
  * @param {import('@nx/devkit').Tree} tree
  * @param {string} directory
@@ -48,7 +50,9 @@ function includeInWorkspaces(tree, directory) {
   const including = globs(tree).filter((glob) => !glob.startsWith('!'));
   if (including.some((glob) => minimatch(directory, glob))) return;
   const parent = directory.includes('/') ? directory.slice(0, directory.lastIndexOf('/')) : '';
-  const glob = parent ? `${parent}/*` : directory;
+  const siblings = parent ? tree.children(parent).map((child) => `${parent}/${child}`) : [];
+  const alone = !siblings.some((dir) => dir !== directory && tree.exists(`${dir}/package.json`));
+  const glob = parent && alone ? `${parent}/*` : directory;
 
   if (tree.exists(PNPM)) {
     const yaml = tree.read(PNPM, 'utf-8') ?? '';

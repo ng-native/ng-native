@@ -79,7 +79,9 @@ because of something Nx does:
 
 In a workspace with package-manager workspaces, which is Nx's default since 20, the app is a
 workspace package and lists its own dependencies, so pnpm links them. If no workspace glob covers
-its directory, the generator adds one: Nx's TypeScript preset starts with `packages/*` only. In an
+its directory, the generator adds one: Nx's TypeScript preset starts with `packages/*` only. That
+is `apps/*` for `apps/mobile`, or `apps/mobile` itself when another directory in `apps` already
+has a `package.json`, so the glob takes in no package the workspace has not listed. In an
 integrated workspace, with one root `package.json` and path aliases, which is what the `@nx/angular`
 preset makes, they go in the root `package.json`. A version already there is left alone. The
 app's own `package.json` still names them all, at the root's ranges, though nothing installs from

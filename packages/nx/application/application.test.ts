@@ -241,6 +241,41 @@ describe('in a pnpm workspace', () => {
     ]);
   });
 
+  it('adds the directory alone when its parent holds packages the workspace lists one by one', async () => {
+    const tree = pnpmWorkspace();
+    tree.write('pnpm-workspace.yaml', "packages:\n  - 'apps/web'\n  - 'apps/docs'\n");
+    tree.write('apps/web/package.json', '{}');
+    tree.write('apps/docs/package.json', '{}');
+    await generate(tree, { directory: 'apps/mobile' });
+    assert.deepEqual(pnpmGlobs(tree.read('pnpm-workspace.yaml', 'utf-8')!), [
+      'apps/mobile',
+      'apps/web',
+      'apps/docs',
+    ]);
+  });
+
+  it('adds the directory alone when a glob of its parent would take in another package', async () => {
+    const tree = pnpmWorkspace();
+    tree.write('apps/legacy/package.json', '{}');
+    await generate(tree, { directory: 'apps/mobile' });
+    assert.deepEqual(pnpmGlobs(tree.read('pnpm-workspace.yaml', 'utf-8')!), [
+      'apps/mobile',
+      'packages/*',
+    ]);
+  });
+
+  it('adds the next app beside it alone too, once the first is listed that way', async () => {
+    const tree = pnpmWorkspace();
+    tree.write('apps/legacy/package.json', '{}');
+    await generate(tree, { directory: 'apps/mobile' });
+    await generate(tree, { directory: 'apps/tablet' });
+    assert.deepEqual(pnpmGlobs(tree.read('pnpm-workspace.yaml', 'utf-8')!), [
+      'apps/tablet',
+      'apps/mobile',
+      'packages/*',
+    ]);
+  });
+
   it('leaves the workspace alone when a glob already does', async () => {
     const tree = pnpmWorkspace();
     await generate(tree, { directory: 'packages/mobile' });
