@@ -1,6 +1,6 @@
 {
   "name": "@ng-native/testing",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Test Angular Native components in Node with no simulator: a fake Fabric, Testing Library queries and events, and Vitest and node:test integration.",
   "keywords": [
     "angular",

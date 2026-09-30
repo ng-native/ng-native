@@ -1,6 +1,6 @@
 {
   "name": "@ng-native/platform",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Angular Native's Renderer2 and bootstrap: mounts an Angular application onto React Native's Fabric.",
   "keywords": [
     "angular",

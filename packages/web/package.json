@@ -1,6 +1,6 @@
 {
   "name": "@ng-native/web",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "A browser host for Angular Native: the same components, rendered into the DOM instead of native views.",
   "keywords": [
     "angular",

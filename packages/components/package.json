@@ -1,6 +1,6 @@
 {
   "name": "@ng-native/components",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Angular Native's core components: view, text, image, pressable, scroll-view, virtual-list, text-input and the rest of React Native's set.",
   "keywords": [
     "angular",

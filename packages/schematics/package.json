@@ -1,6 +1,6 @@
 {
   "name": "@ng-native/schematics",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "ng add and ng generate for Angular Native: an Expo app in an Angular CLI workspace, with builders that run it.",
   "keywords": [
     "angular",

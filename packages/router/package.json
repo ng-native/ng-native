@@ -1,6 +1,6 @@
 {
   "name": "@ng-native/router",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "@angular/router over native navigation for Angular Native: stack and tab outlets, native headers and links.",
   "keywords": [
     "angular",
