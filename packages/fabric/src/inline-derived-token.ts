@@ -193,29 +193,54 @@ function calcToken(text: string): TokenValue | undefined {
 /** An argument of a colour function: a `var()`, or a word read as its slot wants it. */
 type Argument = Reference | { readonly word: string };
 
-/** A colour function's arguments, with the commas and the slash between them gone. */
-function colourArguments(cursor: Cursor): { space: 'rgb' | 'hsl'; args: Argument[] } {
+/**
+ * A colour function's arguments, with the commas and the slash between them gone, and whether
+ * commas were what separated them.
+ */
+function colourArguments(cursor: Cursor): {
+  space: 'rgb' | 'hsl';
+  args: Argument[];
+  legacy: boolean;
+} {
   const space = SPACES[(match(cursor, FUNCTION) ?? fail())[1]!.toLowerCase()] ?? fail();
   const args: Argument[] = [];
+  let legacy = false;
   while (!take(cursor, ')')) {
-    if (take(cursor, ',') || take(cursor, '/')) continue;
-    const name = match(cursor, VAR)?.[1];
-    args.push(name ? reference(cursor, name) : { word: (match(cursor, WORD) ?? fail())[0] });
+    if (take(cursor, ',')) legacy = true;
+    else if (!take(cursor, '/')) {
+      const name = match(cursor, VAR)?.[1];
+      args.push(name ? reference(cursor, name) : { word: (match(cursor, WORD) ?? fail())[0] });
+    }
   }
-  return { space, args };
+  return { space, args, legacy };
 }
 
-/** A written `hsl()` channel: a hue in degrees, or a percentage as a fraction. */
-const hslLiteral = (text: string): number | undefined =>
-  whole(text, (cursor) =>
-    literal(cursor, (unit) =>
-      unit === '%' ? 0.01 : HUE_UNITS.has(unit) ? PER_UNIT[unit] : undefined,
-    ),
-  );
+/** What each argument of an `hsl()` is: a hue, a saturation and a lightness, then an alpha. */
+const HSL_SLOTS = ['hue', 'percentage', 'percentage', 'alpha'] as const;
 
-function hslChannel(arg: Argument): HslChannel {
-  if ('word' in arg) return hslLiteral(arg.word) ?? fail();
-  const fallback = arg.fallback === undefined ? undefined : hslLiteral(arg.fallback);
+/**
+ * A written `hsl()` channel as its slot reads it, as `hslLiteral` in the compiler does: a hue in
+ * degrees; a saturation or a lightness as a fraction, from a percentage or, in the space syntax
+ * only, a bare number of percent; an alpha as a number or a fraction.
+ */
+function hslLiteral(
+  text: string,
+  slot: (typeof HSL_SLOTS)[number],
+  legacy: boolean,
+): number | undefined {
+  const perUnit = (unit: string): number | undefined => {
+    if (slot === 'hue') return HUE_UNITS.has(unit) ? PER_UNIT[unit] : undefined;
+    if (unit === '%') return 0.01;
+    if (unit !== '') return undefined;
+    return slot === 'alpha' ? 1 : legacy ? undefined : 0.01;
+  };
+  return whole(text, (cursor) => literal(cursor, perUnit));
+}
+
+function hslChannel(arg: Argument, index: number, legacy: boolean): HslChannel {
+  const slot = HSL_SLOTS[index]!;
+  if ('word' in arg) return hslLiteral(arg.word, slot, legacy) ?? fail();
+  const fallback = arg.fallback === undefined ? undefined : hslLiteral(arg.fallback, slot, legacy);
   return fallback === undefined
     ? { reference: arg.reference }
     : { reference: arg.reference, fallback };
@@ -251,20 +276,20 @@ function channelsToken(
 }
 
 /** `hsl(var(--h) 100% 50%)` and the like, as `deferHslToken` reads it. */
-function hslToken(args: readonly Argument[]): TokenValue {
+function hslToken(args: readonly Argument[], legacy: boolean): TokenValue {
   if (args.length !== 3 && args.length !== 4) fail();
-  const [h, s, l, alpha] = args.map(hslChannel);
+  const [h, s, l, alpha] = args.map((arg, index) => hslChannel(arg, index, legacy));
   return { hsl: { h: h!, s: s!, l: l!, ...(alpha === undefined ? {} : { alpha }) } };
 }
 
 function colourToken(text: string): TokenValue | undefined {
   return whole(text, (cursor) => {
-    const { space, args } = colourArguments(cursor);
+    const { space, args, legacy } = colourArguments(cursor);
     const [channels, alpha, ...rest] = args;
     if (channels && 'reference' in channels && !rest.length) {
       return channelsToken(channels, alpha, space);
     }
-    return space === 'hsl' ? hslToken(args) : fail();
+    return space === 'hsl' ? hslToken(args, legacy) : fail();
   });
 }
 

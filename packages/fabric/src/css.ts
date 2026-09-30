@@ -1677,7 +1677,7 @@ function resolveHsl(
   hsl: NonNullable<TokenValue['hsl']>,
   tokens: Readonly<Record<string, TokenValue>>,
 ): string | undefined {
-  const h = hslChannel(hsl.h, tokens);
+  const h = hslChannel(hsl.h, tokens, 'angle');
   const s = hslChannel(hsl.s, tokens);
   const l = hslChannel(hsl.l, tokens);
   const alpha = hsl.alpha === undefined ? 1 : hslChannel(hsl.alpha, tokens);
@@ -1687,13 +1687,15 @@ function resolveHsl(
   return hslToRgb(h, s, l, alpha);
 }
 
+/** A channel's number; a hue reads a token's angle first, as `0.5turn` is 180 and not 0.5. */
 function hslChannel(
   channel: HslChannel,
   tokens: Readonly<Record<string, TokenValue>>,
+  form?: 'angle',
 ): number | undefined {
-  return typeof channel === 'number'
-    ? channel
-    : (tokens[channel.reference]?.number ?? channel.fallback);
+  if (typeof channel === 'number') return channel;
+  const token = tokens[channel.reference];
+  return (form && token?.[form]) ?? token?.number ?? channel.fallback;
 }
 
 /**
@@ -1703,7 +1705,11 @@ function hslChannel(
  * `h` is degrees; `s` and `l` are fractions, which is what a percentage token already reads as
  * (see `formOf`), so nothing here rescales them.
  */
-function hslToRgb(h: number, s: number, l: number, alpha: number): string {
+function hslToRgb(h: number, saturation: number, l: number, opacity: number): string {
+  // Out of range as CSS Color 4 takes it: a saturation below 0 is 0, an alpha is clamped, and
+  // anything else is converted as it is, each channel it makes then clamped into sRGB.
+  const s = Math.max(0, saturation);
+  const alpha = Math.min(1, Math.max(0, opacity));
   const hue = ((h % 360) + 360) % 360;
   const chroma = (1 - Math.abs(2 * l - 1)) * s;
   const x = chroma * (1 - Math.abs(((hue / 60) % 2) - 1));
@@ -1720,9 +1726,7 @@ function hslToRgb(h: number, s: number, l: number, alpha: number): string {
             : hue < 300
               ? [x, 0, chroma]
               : [chroma, 0, x];
-  const r = Math.round((r1 + m) * 255);
-  const g = Math.round((g1 + m) * 255);
-  const b = Math.round((b1 + m) * 255);
+  const [r, g, b] = [r1, g1, b1].map((c) => Math.round(Math.min(1, Math.max(0, c + m)) * 255));
   return alpha >= 1
     ? `rgb(${r}, ${g}, ${b})`
     : `rgba(${r}, ${g}, ${b}, ${Math.round(alpha * 1000) / 1000})`;

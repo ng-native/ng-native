@@ -17,6 +17,7 @@ import { isNamedColor } from './transition.ts';
 const PX = /^(-?\d*\.?\d+)px$/;
 const PERCENT = /^-?\d*\.?\d+%$/;
 const NUMBER = /^-?\d*\.?\d+$/;
+const ANGLE = /^(-?\d*\.?\d+)(deg|grad|rad|turn)$/i;
 /** `#fff`, `rgb()`, `rgba()`, `hsl()`, `hsla()` and `hwb()`: what React Native's `processColor` reads. */
 const COLOR_FUNCTION = /^(#[\da-f]{3,8}|(rgba?|hsla?|hwb)\(.*\))$/i;
 const WORD = /^-?[a-z][\w-]*$/i;
@@ -138,7 +139,14 @@ export function tokenFromValue(value: unknown): TokenValue | undefined {
   if (!text) return undefined;
   const px = PX.exec(text);
   if (px) return { length: Number(px[1]) };
-  if (PERCENT.test(text)) return { length: text };
+  // A percentage is a fraction as well, and an angle its degrees, as the build-time conversion
+  // reads them: an hsl() of tokens takes its saturation and its hue so.
+  if (PERCENT.test(text)) return { length: text, number: Number(text.slice(0, -1)) / 100 };
+  const angle = ANGLE.exec(text);
+  if (angle) {
+    const [, value, unit] = angle;
+    return { angle: Number(value) * HUE_UNITS[unit!.toLowerCase()]!, number: Number(value) };
+  }
   if (NUMBER.test(text)) return fromNumber(Number(text));
   if (text.includes('var(')) return withTokens(text);
   if (COLOR_FUNCTION.test(text)) return { color: text };

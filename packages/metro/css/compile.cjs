@@ -316,13 +316,15 @@ function deferHslToken(parts) {
   const name = part?.type === 'function' ? part.value?.name?.toLowerCase() : null;
   if (name !== 'hsl' && name !== 'hsla') return null;
 
-  const args = terms(part.value.arguments).filter((arg) => {
+  const all = terms(part.value.arguments);
+  const legacy = all.some((arg) => operator(arg) === 'comma');
+  const args = all.filter((arg) => {
     const op = operator(arg);
     return op !== 'comma' && op !== '/';
   });
   if (args.length !== 3 && args.length !== 4) return null;
 
-  const channels = args.map(hslChannel);
+  const channels = args.map((arg, index) => hslChannel(arg, HSL_SLOTS[index], legacy));
   if (channels.some((channel) => channel === undefined)) return null;
 
   const [h, s, l, alpha] = channels;
@@ -389,20 +391,23 @@ function deferCalcToken(parts, context) {
   return markers.length ? { deferredCalc: markers } : null;
 }
 
+/** What each argument of an hsl() is: a hue, a saturation and a lightness, then an alpha. */
+const HSL_SLOTS = ['hue', 'percentage', 'percentage', 'alpha'];
+
 /**
  * One channel of an hsl() token: a `var()` naming another token, with its fallback read the same
  * way a literal channel is; a value settled here; or undefined, when it is neither.
  */
-function hslChannel(term) {
+function hslChannel(term, slot, legacy) {
   if (term?.type === 'var') {
     const literal = terms(term.value?.fallback ?? [])[0];
-    const fallback = literal ? hslLiteral(literal) : undefined;
+    const fallback = literal ? hslLiteral(literal, slot, legacy) : undefined;
     return {
       reference: term.value.name.ident,
       ...(fallback === undefined ? {} : { fallback }),
     };
   }
-  return hslLiteral(term);
+  return hslLiteral(term, slot, legacy);
 }
 
 /** Degrees per unit, so a hue written in any angle unit reads as the degrees hslToRgb expects. */
@@ -424,12 +429,24 @@ function tokenLiteral(term) {
 }
 
 /**
- * A literal hsl() channel: a hue in degrees, or a fraction already scaled the way every other
- * percentage in this compiler is (see `length`'s percentage case). That fraction is exactly what
- * saturation, lightness and alpha want, so nothing here has to know which channel it is reading.
+ * A literal hsl() channel, as CSS Color 4 reads it in its slot: a hue in degrees, never a
+ * percentage; a saturation or a lightness as a fraction, which a percentage already is here (see
+ * `length`'s percentage case) and a bare number is once divided by 100, `hsl(var(--h) 100 50)`,
+ * though only in the space syntax, as the legacy comma one takes a percentage alone; an alpha as a
+ * number or a fraction. Undefined for anything else, which a browser makes nothing of.
  */
-function hslLiteral(term) {
-  return angleLiteral(term) ?? tokenLiteral(term);
+function hslLiteral(term, slot, legacy) {
+  const value = angleLiteral(term) ?? tokenLiteral(term);
+  const type = literalType(term);
+  if (slot === 'hue') return type === 'percentage' ? undefined : value;
+  if (type !== 'number' && type !== 'percentage') return undefined;
+  if (slot === 'alpha' || type === 'percentage') return value;
+  return legacy ? undefined : round(value / 100);
+}
+
+/** What a written value is: `number`, `percentage`, `dimension`, `angle` and so on. */
+function literalType(term) {
+  return term?.type === 'token' ? term.value?.type : term?.type;
 }
 
 /** A written alpha: a number, or a percentage of one. */

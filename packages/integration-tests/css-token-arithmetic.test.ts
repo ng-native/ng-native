@@ -135,7 +135,7 @@ function written(css: string, value: string, read: string): Record<string, unkno
 
 describe('a value with a var() inside it resolves as the same text in a stylesheet does', () => {
   const TOKENS =
-    ':root { --gap: 4px; --n: 3; --hue: 120; --rgb: 255, 0, 0; --spaced: 0 0 255; --hsl: 0 100% 50%; --a: 0.25; --word: red }';
+    ':root { --gap: 4px; --n: 3; --hue: 120; --rgb: 255, 0, 0; --spaced: 0 0 255; --hsl: 0 100% 50%; --a: 0.25; --word: red; --pct: 100%; --turn: 0.5turn }';
   const cases: readonly [string, string, string, unknown][] = [
     ['calc(var(--gap) * 2)', 'width: var(--x)', 'width', 8],
     ['calc(var(--gap) + 1px)', 'width: var(--x)', 'width', 5],
@@ -154,6 +154,27 @@ describe('a value with a var() inside it resolves as the same text in a styleshe
     ['rgba(var(--rgb), 0.5)', 'color: var(--x)', 'color', 'rgba(255, 0, 0, 0.5)'],
     ['rgb(var(--spaced) / var(--a))', 'color: var(--x)', 'color', 'rgba(0, 0, 255, 0.25)'],
     ['hsl(var(--hsl))', 'color: var(--x)', 'color', RED],
+    // Modern hsl() takes a bare number for a saturation or a lightness, as a percentage.
+    ['hsl(var(--hue) 100 50)', 'color: var(--x)', 'color', 'rgb(0, 255, 0)'],
+    ['hsl(var(--hue) 100 25)', 'color: var(--x)', 'color', 'rgb(0, 128, 0)'],
+    ['hsl(var(--hue) 100 50%)', 'color: var(--x)', 'color', 'rgb(0, 255, 0)'],
+    ['hsl(var(--hue) 100% 25)', 'color: var(--x)', 'color', 'rgb(0, 128, 0)'],
+    ['hsl(var(--hue) 100 50 / 0.5)', 'color: var(--x)', 'color', 'rgba(0, 255, 0, 0.5)'],
+    ['hsla(var(--hue) 100 50 / var(--a))', 'color: var(--x)', 'color', 'rgba(0, 255, 0, 0.25)'],
+    ['hsl(0.5turn var(--pct) 50)', 'color: var(--x)', 'color', 'rgb(0, 255, 255)'],
+    ['hsl(240deg var(--pct) 50)', 'color: var(--x)', 'color', BLUE],
+    ['hsl(var(--hue) var(--pct) var(--missing, 25))', 'color: var(--x)', 'color', 'rgb(0, 128, 0)'],
+    // Out of range, as a browser takes it: a negative saturation is none, an alpha is clamped, and
+    // the rest is converted as it is, then clamped into sRGB.
+    ['hsl(var(--hue) 150 50)', 'color: var(--x)', 'color', 'rgb(0, 255, 0)'],
+    ['hsl(200 var(--pct) 25%)', 'color: var(--x)', 'color', 'rgb(0, 85, 128)'],
+    ['hsl(var(--missing, 200) 150 25)', 'color: var(--x)', 'color', 'rgb(0, 96, 159)'],
+    ['hsl(var(--hue) -10 50)', 'color: var(--x)', 'color', 'rgb(128, 128, 128)'],
+    ['hsl(var(--hue) 100 120)', 'color: var(--x)', 'color', 'rgb(255, 255, 255)'],
+    ['hsl(var(--hue) 100 50 / 2)', 'color: var(--x)', 'color', 'rgb(0, 255, 0)'],
+    ['hsl(var(--hue) 100 50 / -1)', 'color: var(--x)', 'color', 'rgba(0, 255, 0, 0)'],
+    // A hue token in turns is the angle it is, not the bare number in front of its unit.
+    ['hsl(var(--turn) 100 50)', 'color: var(--x)', 'color', 'rgb(0, 255, 255)'],
   ];
 
   for (const [value, read, prop, expected] of cases) {
@@ -200,6 +221,29 @@ describe('a value with a var() inside it resolves as the same text in a styleshe
     const color = 'color: var(--x, rgb(1, 2, 3))';
     assert.equal(set(TOKENS, 'rgb(var(--n) 0 0)', color)['color'], 'rgb(1, 2, 3)');
     assert.equal(set(TOKENS, 'rgb(var(--rgb)', color)['color'], 'rgb(1, 2, 3)');
+  });
+
+  it('refuses an hsl() CSS Color 4 does not allow, in a stylesheet and set on an element', () => {
+    // The legacy comma syntax takes a percentage for a saturation and a lightness, never a bare
+    // number, and no hue is a percentage: a browser makes nothing of either.
+    const color = 'color: var(--x, rgb(1, 2, 3))';
+    for (const value of [
+      'hsl(var(--hue), 100, 50)',
+      'hsla(var(--hue), 100%, 50, 0.5)',
+      'hsl(var(--hue), var(--pct), 50)',
+      'hsl(50% var(--pct) 50%)',
+    ]) {
+      assert.throws(
+        () => written(TOKENS, value, color),
+        /cannot express/,
+        `${value} in a stylesheet`,
+      );
+      assert.equal(
+        set(TOKENS, value, color)['color'],
+        'rgb(1, 2, 3)',
+        `${value} set on the element`,
+      );
+    }
   });
 });
 
@@ -257,5 +301,21 @@ describe('a value with a var() inside it among others set on elements', () => {
     engine.setCustomProperty(node, '--size', null);
     engine.commit();
     assert.equal(committedProps(fabric, node)['width'], 7);
+  });
+
+  it("reads an hsl()'s hue and saturation tokens set on an element as a stylesheet's", () => {
+    const hsl = 'hsl(var(--h) var(--s) 50%)';
+    const cases: readonly [string, string, string][] = [
+      ['0.5turn', '100%', 'rgb(0, 255, 255)'],
+      ['90deg', '50%', 'rgb(128, 191, 64)'],
+      ['180', '100%', 'rgb(0, 255, 255)'],
+    ];
+    for (const [h, s, expected] of cases) {
+      const read = '.x { color: var(--c, rgb(1, 2, 3)) }';
+      const sheet = `:root { --h: ${h}; --s: ${s}; --c: ${hsl} } ${read}`;
+      assert.equal(innermost(sheet, [{}])['color'], expected, `${h} ${s} in a stylesheet`);
+      const customs = [{ '--h': h, '--s': s, '--c': hsl }];
+      assert.equal(innermost(read, customs)['color'], expected, `${h} ${s} set on the element`);
+    }
   });
 });

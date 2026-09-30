@@ -206,4 +206,11 @@ export const CASES: OracleCase[] = [
     css: '.a { --c: rgb(1, 0, 0) } .a.b { --c: rgb(2, 0, 0) } #probe { color: var(--c) }',
     tree: probe({ classes: ['a', 'b'] }),
   },
+  {
+    name: 'an hsl() of tokens reads a bare saturation and lightness as percentages',
+    css:
+      ':root { --h: 200; --c: hsl(var(--h) 100 50); --d: hsl(var(--h) 150 25 / 2) } ' +
+      '#probe { color: var(--c); background-color: var(--d) }',
+    tree: probe(),
+  },
 ];
