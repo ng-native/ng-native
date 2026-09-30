@@ -678,6 +678,55 @@ describe('tabs and a header written the less usual ways', () => {
     assert.equal(shared!.props['iconResourceName'], 'person.2');
   });
 
+  describe('a tab with an icon for one platform only', () => {
+    const warnings = async (run: () => Promise<unknown>) => {
+      const seen: string[] = [];
+      const warn = console.warn;
+      console.warn = (message: unknown) => void seen.push(String(message));
+      try {
+        await run();
+      } finally {
+        console.warn = warn;
+      }
+      return seen;
+    };
+
+    it('warns on iOS for a drawable-only tab, naming its path, once, and not for its own icon', async () => {
+      const seen = await warnings(async () => {
+        await show('TabOnePlatform');
+        cleanup();
+        await show('TabOnePlatform');
+      });
+      assert.equal(seen.length, 1, seen.join('\n'));
+      assert.match(seen[0]!, /path="files".*no icon on iOS.*sfSymbol/);
+    });
+
+    it('is quiet for a tab with both, or with an icon of its own', async () => {
+      assert.deepEqual(await warnings(() => show('TabVariants')), []);
+    });
+
+    describe('on Android', () => {
+      before(() => {
+        registerPlatformComponents('android');
+        registerScreenComponents();
+      });
+      after(() => {
+        registerPlatformComponents('ios');
+        registerScreenComponents();
+      });
+
+      it('warns for an sfSymbol-only tab, and not for a drawable-only one', async () => {
+        const seen = await warnings(() => show('TabOnePlatform'));
+        assert.equal(seen.length, 1, seen.join('\n'));
+        assert.match(seen[0]!, /path="people".*no icon on Android.*drawable/);
+      });
+
+      it('is quiet for a tab with both, or with an icon of its own', async () => {
+        assert.deepEqual(await warnings(() => show('TabVariants')), []);
+      });
+    });
+  });
+
   it("processes an icon colour inside an appearance's item states", async () => {
     const [, , image] = tabScreens(await show('TabVariants'));
     const appearance = image!.props['standardAppearance'] as {

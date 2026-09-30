@@ -33,7 +33,8 @@ export class TabsPage {
 `path` names the child route the tab selects - the route config underneath needs one child route
 per `<native-tab>`, matched by that same path. `sfSymbol` (iOS) and `drawable` (Android) are
 shorthand for the fuller `icon`/`selectedIcon` inputs, and a tab that names both draws each on its
-own platform. Each platform reads only its own, so a tab with just one has no icon on the other.
+own platform. Each platform reads only its own, so a tab with just one has no icon on the other,
+and in development that platform logs a warning naming the tab's path.
 The fuller inputs also take a `require()`d image drawn either as-authored or as a tinted template mask; `icon` and `selectedIcon` must be the same kind of
 image, since native carries one icon type for both states.
 

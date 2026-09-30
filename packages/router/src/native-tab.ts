@@ -26,7 +26,7 @@
  * each activated route's component on a child view, so destroying a route cannot remove this
  * tab item from the bar.
  */
-import { Component, ElementRef, computed, inject, input } from '@angular/core';
+import { Component, ElementRef, computed, inject, input, type OnInit } from '@angular/core';
 import { nativePlatform, type EngineNode, HostEngine } from '@ng-native/fabric';
 import { NATIVE_TAB_DEFAULTS } from './native-bar-defaults.ts';
 import { ownHost } from './own-host.ts';
@@ -165,6 +165,35 @@ export function tabIconProps(
   };
 }
 
+declare const ngDevMode: unknown;
+
+/** The paths already warned about, so a tab bar rebuilt by a navigation says it once. */
+const warnedTabs = new Set<string>();
+
+/**
+ * Says, once per path and in development only, that a tab has no icon on the platform running it
+ * because it names only the other platform's shorthand. A tab written against the iOS simulator
+ * with `sfSymbol` shows a title and nothing above it on Android.
+ */
+function warnIfIconOnOnePlatform(tab: NativeTab): void {
+  if (typeof ngDevMode !== 'undefined' && !ngDevMode) return;
+  if (tab.icon() || tab.systemItem()) return;
+  const [own, other, missing, platform] =
+    nativePlatform() === 'android'
+      ? [tab.drawable(), tab.sfSymbol(), 'drawable', 'Android']
+      : nativePlatform() === 'ios'
+        ? [tab.sfSymbol(), tab.drawable(), 'sfSymbol', 'iOS']
+        : [];
+  if (own || !other) return;
+  const path = tab.path();
+  if (warnedTabs.has(path)) return;
+  warnedTabs.add(path);
+  console.warn(
+    `[angular-native] <native-tab path="${path}"> has no icon on ${platform}: ${platform} reads ` +
+      `only ${missing}. Add ${missing}="...", or bind [icon] for a tab meant for one platform.`,
+  );
+}
+
 @Component({
   selector: 'native-tab',
   template: '',
@@ -191,7 +220,7 @@ export function tabIconProps(
     '[scrollEdgeAppearance]': 'scrollEdge()',
   },
 })
-export class NativeTab {
+export class NativeTab implements OnInit {
   private readonly engine = inject(HostEngine);
   /** The app's `withTabDefaults`, for an appearance this tab does not bind itself. */
   private readonly defaults = inject(NATIVE_TAB_DEFAULTS);
@@ -241,6 +270,10 @@ export class NativeTab {
 
   /** The same, for when the scroll view behind the bar is at its edge. */
   readonly scrollEdgeAppearance = input<TabAppearance>();
+
+  ngOnInit(): void {
+    warnIfIconOnOnePlatform(this);
+  }
 
   protected readonly standard = computed(() =>
     this.processAppearance(this.standardAppearance() ?? this.defaults().standardAppearance),

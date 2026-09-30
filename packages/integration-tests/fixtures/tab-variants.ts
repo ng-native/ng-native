@@ -29,6 +29,18 @@ export class TabVariants {
 }
 
 @Component({
+  selector: 'x-tab-one-platform',
+  imports: [NativeTab, NativeTabsOutlet],
+  template: `
+    <native-tabs-outlet>
+      <native-tab path="people" title="People" sfSymbol="person.2" />
+      <native-tab path="files" title="Files" drawable="ic_files" />
+    </native-tabs-outlet>
+  `,
+})
+export class TabOnePlatform {}
+
+@Component({
   selector: 'x-header-alone',
   imports: [NativeHeader],
   template: `<native-header title="Alone" />`,
