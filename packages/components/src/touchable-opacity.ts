@@ -62,6 +62,10 @@ export class TouchableOpacity extends ControlBase {
     return this.disabled();
   }
 
+  protected override pressDisabled(): boolean {
+    return this.disabledByAnyState();
+  }
+
   /** The opacity while pressed. */
   readonly activeOpacity = input(0.2, { transform: numberAttribute });
 

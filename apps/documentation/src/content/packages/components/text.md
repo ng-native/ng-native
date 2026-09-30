@@ -52,6 +52,8 @@ A `pressable` text is announced as a link, as React Native's `Text` is, unless i
 `disabled` stops the presses and tells VoiceOver and TalkBack the text is disabled, as React
 Native's `Text` does. A disabled text says so whether or not it is `pressable`. When `disabled` and
 `aria-disabled` disagree, `disabled` decides what is announced, on a text and on every control.
+When `disabled` is unset, `aria-disabled` or `accessibilityState.disabled` stops the presses as
+well, as it does on React Native's `Text`.
 
 ## Fonts
 

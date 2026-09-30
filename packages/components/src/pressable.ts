@@ -221,7 +221,24 @@ export abstract class TouchableBase extends ViewBase {
 
   /** Whether a touch starting on this node should be claimed. `Text` narrows it. */
   protected claims(): boolean {
-    return !this.disabled();
+    return !this.pressDisabled();
+  }
+
+  /**
+   * Whether presses are refused. `Pressable.js` gives Pressability `disabled` alone, so here
+   * `aria-disabled` and `accessibilityState.disabled` change what is announced and nothing else.
+   * `TouchableOpacity` and `Text` widen it.
+   */
+  protected pressDisabled(): boolean {
+    return !!this.disabled();
+  }
+
+  /**
+   * `TouchableOpacity.js` and `Text.js`: `disabled ?? aria-disabled ?? accessibilityState.disabled`,
+   * which is the merged announced state whenever `disabled` is unset.
+   */
+  protected disabledByAnyState(): boolean {
+    return (this.disabled() ?? this.accessibilityStateProp()?.disabled) === true;
   }
 
   /**

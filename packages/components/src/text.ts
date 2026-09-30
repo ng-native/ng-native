@@ -135,7 +135,11 @@ export class Text extends TouchableBase {
   }
 
   protected override claims(): boolean {
-    return this.pressable() && !this.disabled();
+    return this.pressable() && !this.pressDisabled();
+  }
+
+  protected override pressDisabled(): boolean {
+    return this.disabledByAnyState();
   }
 
   protected override measures(): boolean {

@@ -44,6 +44,11 @@ look is held at least this long even on the quickest tap), `cancelable` (whether
 ancestor may take the gesture away mid-press) and, on Android, `androidRipple` for a native
 ripple.
 
+`disabled` stops the presses. Whether `aria-disabled` and `accessibilityState.disabled` stop them
+too depends on the component, as in React Native: on a `<touchable-opacity>` they do when
+`disabled` is unset, as on `TouchableOpacity`, and on a `<pressable>` or a `PressBehavior` host they
+only change what VoiceOver and TalkBack announce, as on `Pressable`.
+
 ## Nested pressables
 
 A pressable inside a pressable - a row with a delete button in it - needs nothing extra. The
