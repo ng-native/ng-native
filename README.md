@@ -2,7 +2,7 @@
 
 <!-- prettier-ignore-start -->
 <!-- ALL-CONTRIBUTORS-BADGE:START - Do not remove or modify this section -->
-[![All Contributors](https://img.shields.io/badge/all_contributors-3-orange.svg?style=flat-square)](#contributors-)
+[![All Contributors](https://img.shields.io/badge/all_contributors-4-orange.svg?style=flat-square)](#contributors-)
 <!-- ALL-CONTRIBUTORS-BADGE:END -->
 <!-- prettier-ignore-end -->
 
@@ -162,6 +162,7 @@ Thanks goes to these wonderful people:
       <td align="center" valign="top" width="14.28%"><a href="https://erkamyaman.dev"><img src="https://avatars.githubusercontent.com/u/88717125?v=4?s=100" width="100px;" alt="erKam"/><br /><sub><b>erKam</b></sub></a><br /><a href="https://github.com/ng-native/ng-native/commits?author=erkamyaman" title="Code">💻</a></td>
       <td align="center" valign="top" width="14.28%"><a href="https://nartc.me"><img src="https://avatars.githubusercontent.com/u/25516557?v=4?s=100" width="100px;" alt="Chau Tran"/><br /><sub><b>Chau Tran</b></sub></a><br /><a href="https://github.com/ng-native/ng-native/commits?author=nartc" title="Code">💻</a></td>
       <td align="center" valign="top" width="14.28%"><a href="https://sthlabs.net"><img src="https://avatars.githubusercontent.com/u/40219645?v=4?s=100" width="100px;" alt="Stavros Thalassinos"/><br /><sub><b>Stavros Thalassinos</b></sub></a><br /><a href="https://github.com/ng-native/ng-native/commits?author=stavthal" title="Code">💻</a></td>
+      <td align="center" valign="top" width="14.28%"><a href="http://luisdavidlopera.com"><img src="https://avatars.githubusercontent.com/u/89866878?v=4?s=100" width="100px;" alt="Luis David Lopera"/><br /><sub><b>Luis David Lopera</b></sub></a><br /><a href="https://github.com/ng-native/ng-native/commits?author=luisdlopera" title="Code">💻</a></td>
     </tr>
   </tbody>
 </table>
