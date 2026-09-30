@@ -237,10 +237,16 @@ describe('flattening Tailwind for the engine', () => {
 
   describe('a themed token read with a fallback', () => {
     /** The background a `.bg` view is committed with, under a root wearing `root`. */
-    const background = (css: string, root: string, classes = 'bg') => {
+    const background = (
+      css: string,
+      root: string,
+      classes = 'bg',
+      colorScheme: 'light' | 'dark' = 'light',
+    ) => {
       const sheet = compileCss(flattenTailwind(css), 'tailwind', { onUnsupported: () => {} });
       const fabric = createFakeFabric();
-      const engine = new Engine(fabric, 1, { globalStyles: sheet });
+      const conditions = { width: 320, height: 640, colorScheme };
+      const engine = new Engine(fabric, 1, { globalStyles: sheet, conditions });
       for (const one of root.split(' ').filter(Boolean)) engine.addClass(engine.root, one);
       const view = engine.createElement('view');
       engine.setClasses(view, classes);
@@ -291,6 +297,56 @@ describe('flattening Tailwind for the engine', () => {
       );
       assert.doesNotMatch(out, /var\(--one/);
       assert.doesNotMatch(out, /255, 0, 0|#f00/);
+    });
+
+    it('leaves a token declared only under the dark class unset without it', () => {
+      const dark = '.dark { --brand: rgb(9, 9, 9) }\n';
+      const fallback = `${dark}.bg { background-color: var(--brand, rgb(255, 0, 0)) }`;
+      assert.equal(background(fallback, ''), 'rgb(255, 0, 0)');
+      assert.equal(background(fallback, 'dark'), 'rgb(9, 9, 9)');
+      const bare = `${dark}.bg { background-color: var(--brand) }`;
+      assert.equal(background(bare, ''), undefined);
+      assert.equal(background(bare, 'dark'), 'rgb(9, 9, 9)');
+    });
+
+    it('leaves a token declared only under one platform class unset on the other', () => {
+      const css =
+        '.platform-ios { --brand: rgb(1, 1, 1) }\n' +
+        '.bg { background-color: var(--brand, rgb(255, 0, 0)) }';
+      assert.equal(background(css, 'platform-ios'), 'rgb(1, 1, 1)');
+      assert.equal(background(css, 'platform-android'), 'rgb(255, 0, 0)');
+    });
+
+    it('resolves a root token that reads one declared only under the dark class', () => {
+      const css =
+        ':root { --surface: var(--brand, rgb(255, 0, 0)) }\n.dark { --brand: rgb(9, 9, 9) }\n' +
+        '.bg { background-color: var(--surface) }';
+      assert.equal(background(css, ''), 'rgb(255, 0, 0)');
+      assert.equal(background(css, 'dark'), 'rgb(9, 9, 9)');
+    });
+
+    it('leaves a token declared only under a compound selector to the nodes it matches', () => {
+      const css =
+        '.dark .card { --brand: rgb(9, 9, 9) }\n' +
+        '.bg { background-color: var(--brand, rgb(255, 0, 0)) }';
+      assert.equal(background(css, 'dark', 'bg card'), 'rgb(9, 9, 9)');
+      assert.equal(background(css, '', 'bg card'), 'rgb(255, 0, 0)');
+      assert.equal(background(css, 'dark'), 'rgb(255, 0, 0)');
+    });
+
+    it('leaves a token declared by a class for the nodes that wear it', () => {
+      const css =
+        '.brand { --brand: rgb(9, 9, 9) }\n.bg { background-color: var(--brand, rgb(255, 0, 0)) }';
+      assert.equal(background(css, '', 'bg brand'), 'rgb(9, 9, 9)');
+      assert.equal(background(css, ''), 'rgb(255, 0, 0)');
+    });
+
+    it('leaves a root token declared only under a media query to the query', () => {
+      const css =
+        '@media (prefers-color-scheme: dark) { :root { --brand: rgb(9, 9, 9) } }\n' +
+        '.bg { background-color: var(--brand, rgb(255, 0, 0)) }';
+      assert.equal(background(css, '', 'bg', 'dark'), 'rgb(9, 9, 9)');
+      assert.equal(background(css, '', 'bg', 'light'), 'rgb(255, 0, 0)');
     });
   });
 

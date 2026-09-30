@@ -79,13 +79,49 @@ function collectVariables(css) {
   // Substituting picks whichever was written last and paints the dark palette in daylight, so
   // these are left for the engine, which resolves `var()` per node against the tokens in scope.
   //
+  // So is one declared only where a class, a platform or a media query says: `--brand` only under
+  // `.dark` has no value in light mode, and substituting its one value paints it there anyway.
+  //
   // Tailwind's own `--tw-*` plumbing is exempt. Those are set by one utility and read by another
   // on the same node, and every one of them also has a reset value, so they all look themed and
   // none of them is. They stay substituted, which is what they have always been.
+  const everywhere = globalVariables(css);
+  for (const name of values.keys()) {
+    if (!everywhere.has(name)) conflicting.add(name);
+  }
   for (const name of conflicting) {
     if (!name.startsWith('--tw-')) values.set(name, THEMED);
   }
   return values;
+}
+
+/** A selector that applies to the root whatever it wears: `:root`, `:host`, `html` or `*`. */
+const GLOBAL_SELECTOR = /^(:root|:host|html|\*)$/;
+
+/**
+ * The custom properties a sheet declares on the root unconditionally, outside any at-rule, and
+ * those with an `@property` initial value.
+ */
+function globalVariables(css) {
+  const names = new Set();
+  let depth = 0;
+  let last = 0;
+  for (const match of css.matchAll(/([^{}]*)\{([^{}]*)\}/g)) {
+    for (const c of css.slice(last, match.index)) {
+      if (c === '{') depth++;
+      else if (c === '}') depth--;
+    }
+    last = match.index + match[0].length;
+    const [, commented, body] = match;
+    const prelude = commented.replace(/\/\*[\s\S]*?\*\//g, '');
+    const property = /@property\s+(--[\w-]+)/.exec(prelude);
+    if (property && /initial-value\s*:/.test(body)) names.add(property[1]);
+    if (depth !== 0 || !selectorList(prelude).some((one) => GLOBAL_SELECTOR.test(one.trim()))) {
+      continue;
+    }
+    for (const [, name] of body.matchAll(/(--[\w-]+)\s*:/g)) names.add(name);
+  }
+  return names;
 }
 
 /**
