@@ -1,6 +1,6 @@
-import { Component, effect, inject } from '@angular/core';
+import { Component, inject } from '@angular/core';
 import { SafeAreaProvider } from '@ng-native/components';
-import { ColorScheme, StatusBar } from '@ng-native/device';
+import { StatusBar } from '@ng-native/device';
 import { NativeStackOutlet } from '@ng-native/router';
 import { ToastHost } from './overlays/toast-host.ts';
 
@@ -22,13 +22,9 @@ import { ToastHost } from './overlays/toast-host.ts';
   host: { class: 'screen' },
 })
 export class App {
-  private readonly scheme = inject(ColorScheme);
-  private readonly statusBar = inject(StatusBar);
-
   constructor() {
-    // Dark text on the light palette, light text on the dark one. A page can still push its own.
-    effect(() =>
-      this.statusBar.set({ style: this.scheme.current() === 'dark' ? 'light' : 'dark' }),
-    );
+    // Dark text on the light palette, light text on the dark one, following the scheme and the
+    // theme switch. A page can still push its own.
+    inject(StatusBar).set({ style: 'auto' });
   }
 }
