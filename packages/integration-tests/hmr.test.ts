@@ -147,6 +147,55 @@ export class Inline {
     assert.equal(instance.count(), 1);
   });
 
+  it("swaps a component's :host rule as well as its inner rules", async () => {
+    // The host element is the parent's, and is not recreated by the swap, so its style had to be
+    // worked out again for the new sheet: the inner rule changed and the :host rule did not.
+    const source =
+      inline(
+        'template: `<view class="box"><text>count {{ count() }}</text></view>`, ' +
+          'styles: `:host { background-color: rgb(1, 1, 1); } .box { background-color: rgb(2, 2, 2); }`',
+      ) +
+      `
+@Component({ imports: [Inline], selector: 'x-outer', template: '<x-inline /><x-inline />' })
+export class Outer {}
+`;
+    const filename = fixture('host-styles.ts');
+    const mod = await evaluate(source, filename, fixture('host-styles.hmr-a.generated.ts'));
+    const { fabric } = await render(mod['Outer'] as Type<unknown>);
+    const reloads: unknown[] = [];
+    (globalThis as Record<string, unknown>)['__angularNativeReload'] = (id: unknown) =>
+      reloads.push(id);
+    const edit = async (edited: string) => {
+      await evaluate(edited, filename, fixture('host-styles.hmr-b.generated.ts'));
+      await settle();
+      delete (globalThis as Record<string, unknown>)['__angularNativeReload'];
+    };
+    const flatten = (nodes: FakeFabricNode[]): FakeFabricNode[] =>
+      nodes.flatMap((node) => [node, ...flatten(node.children)]);
+    const backgrounds = () =>
+      flatten(fabric.committed)
+        .map((node) => node.props['backgroundColor'])
+        .filter((colour) => colour !== undefined);
+    assert.deepEqual(backgrounds(), [
+      'rgb(1, 1, 1)',
+      'rgb(2, 2, 2)',
+      'rgb(1, 1, 1)',
+      'rgb(2, 2, 2)',
+    ]);
+
+    await edit(
+      source.replace('rgb(1, 1, 1)', 'rgb(3, 3, 3)').replace('rgb(2, 2, 2)', 'rgb(4, 4, 4)'),
+    );
+
+    assert.deepEqual(reloads, [], 'nothing asked for a reload');
+    assert.deepEqual(backgrounds(), [
+      'rgb(3, 3, 3)',
+      'rgb(4, 4, 4)',
+      'rgb(3, 3, 3)',
+      'rgb(4, 4, 4)',
+    ]);
+  });
+
   it('swaps a template that gained elements and bindings, and keeps rendering after', async () => {
     // The compiler's update function spread the old definition and replaced only the template,
     // so the view was rebuilt with the slot and binding counts of the template before the edit.

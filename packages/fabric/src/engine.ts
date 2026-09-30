@@ -1691,6 +1691,17 @@ export class Engine implements HostEngine {
     this.markProps(node);
   }
 
+  /**
+   * The sheet of the component `node` hosts, whose `:host` rules it matches. Set again when a hot
+   * swap replaces the component's sheet, which recreates the views inside but not the host, so the
+   * host is styled afresh here.
+   */
+  setHostSheet(node: EngineNode, sheet: StyleSheet | null): void {
+    if (node.hostSheet === sheet) return;
+    node.hostSheet = sheet;
+    this.markProps(node);
+  }
+
   /** `class="a b"` from a template. Replaces the set rather than adding to it. */
   setClasses(node: EngineNode, value: string): void {
     const names = value.split(/\s+/).filter(Boolean);

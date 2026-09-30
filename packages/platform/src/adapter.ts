@@ -295,7 +295,7 @@ export class NativeRendererFactory implements RendererFactory2 {
     // It is also the one sure sign that an element hosts a component, whatever the selector
     // that put it there, which is what tells an `<x-card>` from a typo.
     if (host && typeof host === 'object') {
-      (host as EngineNode).hostSheet = sheet;
+      this.engine.setHostSheet(host as EngineNode, sheet);
       markComponentHost(host as EngineNode);
     }
     if (type) this.declareElements(type);
