@@ -3,6 +3,7 @@ import { Image } from '../../components/src/image.ts';
 import { Text } from '../../components/src/text.ts';
 import { View } from '../../components/src/view.ts';
 import { Modal } from '../../components/src/modal.ts';
+import { Pressable } from '../../components/src/pressable.ts';
 
 @Component({
   selector: 'x-modal',
@@ -25,10 +26,12 @@ export class ModalHost {
 
 @Component({
   selector: 'x-hidden-modal',
-  imports: [Modal, Text, View],
+  imports: [Modal, Pressable, Text, View],
   template: `
     <view>
-      <modal [visible]="open()" (dismiss)="countDismissal()"><text>sheet</text></modal>
+      <modal [visible]="open()" (dismiss)="countDismissal()">
+        <pressable (press)="presses = presses + 1"><text>sheet</text></pressable>
+      </modal>
       <text>screen</text>
     </view>
   `,
@@ -36,6 +39,7 @@ export class ModalHost {
 export class HiddenModal {
   open = signal(false);
   dismissed = 0;
+  presses = 0;
 
   countDismissal(): void {
     this.dismissed++;

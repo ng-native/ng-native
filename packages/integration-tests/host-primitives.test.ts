@@ -11,6 +11,7 @@ import {
   cleanup,
   fireEvent,
   render,
+  screen,
   settle,
   type FakeFabric,
   type FakeFabricNode,
@@ -348,6 +349,7 @@ describe('modal and assets', () => {
     interface Hidden {
       open: { set(value: boolean): void };
       dismissed: number;
+      presses: number;
     }
     const modalHosts = (fabric: FakeFabric) =>
       flatten(fabric.committed).filter((n) => n.viewName === 'ModalHostView');
@@ -399,6 +401,26 @@ describe('modal and assets', () => {
       await settle();
       assert.equal(modalHosts(fabric)[0]?.props['visible'], true, 'and it can be shown again');
     });
+
+    // Native drops a view's event target when it unmounts, so a host committed again from the
+    // handles it had before would ignore every touch.
+    for (const platform of ['ios', 'android']) {
+      it(`takes touches when shown a second time on ${platform}`, async () => {
+        const { fabric, instance } = await renderOn(platform);
+        for (let shown = 1; shown <= 2; shown++) {
+          instance.open.set(true);
+          await settle();
+          await fireEvent.press(screen.getByText('sheet'));
+          assert.equal(instance.presses, shown, `presentation ${shown} takes the press`);
+
+          instance.open.set(false);
+          await settle();
+          const [host] = modalHosts(fabric);
+          if (host) await fireEvent(host, 'dismiss');
+          assert.equal(modalHosts(fabric).length, 0);
+        }
+      });
+    }
 
     it('leaves the tree at once on Android, as Modal.js does there', async () => {
       const { fabric, instance } = await renderOn('android');

@@ -103,6 +103,28 @@ export function createFakeFabric(): FakeFabric {
     parents.set(child.reactTag, parent);
   };
 
+  /*
+   * The views that have been unmounted, by tag. Fabric drops a view's event target once no
+   * committed tree holds it (`EventEmitter::setEnabled`) and never makes a new one, so a view
+   * committed again after leaving the tree dispatches every event with a null instance handle, as
+   * `emit` does here. A view that comes back has to be created again, as React does.
+   */
+  const unmounted = new Set<number>();
+  const unmount = (n: FakeFabricNode): void => {
+    unmounted.add(n.reactTag);
+    for (const child of n.children) unmount(child);
+  };
+  // Walks only what changed, as `updateMountedFlag` does: a subtree committed as it was is skipped.
+  const diff = (before: FakeFabricNode[], after: FakeFabricNode[]): void => {
+    if (before === after) return;
+    const next = new Map(after.map((n) => [n.reactTag, n]));
+    for (const was of before) {
+      const now = next.get(was.reactTag);
+      if (!now) unmount(was);
+      else if (now !== was) diff(was.children, now.children);
+    }
+  };
+
   const clone = (n: FabricNode, props?: object, keepChildren = false): FabricNode => {
     const source = n as unknown as FakeFabricNode;
     return withHandle(
@@ -181,6 +203,7 @@ export function createFakeFabric(): FakeFabric {
     },
     completeRoot(_rootTag, set) {
       calls.completeRoot++;
+      diff(committed, set as FakeFabricNode[]);
       committed = set as FakeFabricNode[];
     },
     registerEventHandler(fn) {
@@ -230,7 +253,7 @@ export function createFakeFabric(): FakeFabric {
     },
     emit(target, type, nativeEvent = {}) {
       if (!handler) throw new Error('no Fabric event handler registered');
-      handler(target.instanceHandle, type, nativeEvent);
+      handler(unmounted.has(target.reactTag) ? null : target.instanceHandle, type, nativeEvent);
     },
     reset() {
       calls.createNode = 0;

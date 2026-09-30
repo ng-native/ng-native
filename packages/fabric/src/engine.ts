@@ -2712,6 +2712,12 @@ export class Engine implements HostEngine {
     return handles;
   }
 
+  /** Remember an iOS modal host committed as showing, so hiding it waits for `topDismiss`. */
+  private notePresented(node: EngineNode, viewName: string): void {
+    if (viewName !== MODAL_HOST || node.props['visible'] === false) return;
+    if (platformOS === 'ios') node.presented = true;
+  }
+
   /**
    * Whether a child is left out of its parent's commit: a modal host whose `visible` is false.
    *
@@ -2721,16 +2727,16 @@ export class Engine implements HostEngine {
    * committed, with `visible` false, until native reports `topDismiss`: Modal.js keeps it that
    * long so the dismissal animates and `(dismiss)` fires. Android drops it at once, as Modal.js
    * does there.
+   *
+   * A withheld host is unmounted, and Fabric drops an unmounted view's event target for good
+   * (`EventEmitter::setEnabled`), so its committed handles are forgotten and it is created afresh
+   * when it is shown again, as Modal.js creates it afresh. Committed again, it ignores every touch.
    */
-  /** Remember an iOS modal host committed as showing, so hiding it waits for `topDismiss`. */
-  private notePresented(node: EngineNode, viewName: string): void {
-    if (viewName !== MODAL_HOST || node.props['visible'] === false) return;
-    if (platformOS === 'ios') node.presented = true;
-  }
-
   private withheld(child: EngineNode): boolean {
     if (child.props['visible'] !== false || child.presented) return false;
-    return viewNameOf(child) === MODAL_HOST;
+    if (viewNameOf(child) !== MODAL_HOST) return false;
+    if (child.committed) this.forgetCommitted(child);
+    return true;
   }
 
   /**
