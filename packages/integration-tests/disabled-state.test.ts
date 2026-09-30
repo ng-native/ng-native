@@ -88,29 +88,31 @@ describe('a disabled control publishes data-disabled', () => {
 
 describe("Tailwind's disabled: variant on a pressable", () => {
   let sheet: StyleSheet;
-  let colours: Record<string, unknown>;
 
   before(() => {
     sheet = compileCss(
-      flattenTailwind(build('native', 'group disabled:bg-gray-300 group-disabled:text-red-500')),
+      flattenTailwind(
+        build(
+          'native',
+          'group disabled:bg-gray-300 group-disabled:text-red-500 bg-gray-300 text-red-500',
+        ),
+      ),
       'tailwind',
       { onUnsupported: () => {} },
     );
-    const declared = (name: string) =>
-      sheet.rules.find((rule) => rule.compounds.at(-1)!.classes.includes(name))!.declarations;
-    colours = {
-      background: declared('disabled:bg-gray-300')['backgroundColor'],
-      text: declared('group-disabled:text-red-500')['color'],
-    };
   });
 
   it('applies disabled: and group-disabled: while disabled, and drops them when not', async () => {
     const { instance, getByTestId, rerender } = await render(Control, { globalStyles: sheet });
     const background = () => getByTestId('tailwind').props['backgroundColor'];
     const label = () => getByTestId('tailwind-label').props['color'];
-    assert.ok(colours['background'] && colours['text'], 'the utilities compiled');
-    assert.equal(background(), colours['background'], 'disabled:');
-    assert.equal(label(), colours['text'], 'group-disabled:');
+    // What the same utilities resolve to with no variant, so the test says nothing about how the
+    // sheet carries a theme colour, only that the variant applies it.
+    const gray = getByTestId('reference').props['backgroundColor'];
+    const red = getByTestId('reference-label').props['color'];
+    assert.ok(gray && red, 'the plain utilities resolve');
+    assert.equal(background(), gray, 'disabled:');
+    assert.equal(label(), red, 'group-disabled:');
 
     instance.off.set(false);
     await rerender();

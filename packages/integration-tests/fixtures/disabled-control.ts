@@ -24,6 +24,9 @@ import { View } from '../../components/src/view.ts';
       <pressable testID="tailwind" class="group disabled:bg-gray-300" [disabled]="off()">
         <text testID="tailwind-label" class="group-disabled:text-red-500">Tailwind</text>
       </pressable>
+      <view testID="reference" class="bg-gray-300">
+        <text testID="reference-label" class="text-red-500">Reference</text>
+      </view>
       <touchable-opacity testID="fade" class="p" [disabled]="true"></touchable-opacity>
       <switch testID="switch" class="p" [disabled]="true" />
     </view>
