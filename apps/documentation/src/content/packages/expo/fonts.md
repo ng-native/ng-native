@@ -52,6 +52,10 @@ the bundler ships the file - a plain path would be a font that is simply missing
 with nothing anywhere to say why. `loadFonts()` takes any number of compiled sheets and does
 nothing at all when none of them declare a face, so bootstrap can call it unconditionally.
 
+A face declared in the Tailwind entry works the same way: pass the generated sheet to
+`loadFonts()`. Its `url()` is relative to the entry file, including in a stylesheet the entry
+imports, because the Tailwind CLI inlines imports without rewriting their URLs.
+
 ## There is no font matching on a device
 
 Native looks a family up by name and that is all, so a bold cut is a family of its own. The second

@@ -59,7 +59,7 @@ function withTailwind(config, options) {
 
   mkdirSync(path.dirname(output), { recursive: true });
   run([cliPath(projectRoot), '-i', input, '-o', css], projectRoot);
-  generate(css, output);
+  generate(css, output, input);
   // Without it TypeScript infers the sheet from its literal, which is not assignable to the type
   // `globalStyles` takes. `.js` -> `.d.ts`, `.mjs` -> `.d.mts`, `.cjs` -> `.d.cts`.
   writeFileSync(
@@ -91,8 +91,8 @@ function watchesByDefault(argv = process.argv, env = process.env) {
 }
 
 /** The CLI's CSS, compiled into the module the app imports. */
-function generate(css, output) {
-  writeFileSync(output, compileSheetModule(readFileSync(css, 'utf8'), css));
+function generate(css, output, input) {
+  writeFileSync(output, compileSheetModule(readFileSync(css, 'utf8'), css, { input, output }));
 }
 
 /**
@@ -100,8 +100,11 @@ function generate(css, output) {
  *
  * Exported because it is the whole of the build step worth testing: everything else here is
  * process wrangling.
+ *
+ * `paths` is the entry and the module written from it. A relative `url()` in an `@font-face` is
+ * relative to the entry, and the module lives elsewhere, so its `require` is re-pointed from there.
  */
-function compileSheetModule(css, context = 'tailwind') {
+function compileSheetModule(css, context = 'tailwind', paths) {
   const dropped = [];
   const sheet = compileCss(flattenTailwind(css), context, {
     onUnsupported: (message) => dropped.push(message),
@@ -111,7 +114,20 @@ function compileSheetModule(css, context = 'tailwind') {
     // and native cannot express, which is worth saying while it is still being written.
     if (!message.includes("dropped '--")) console.warn(`[angular-native] ${message}`);
   }
-  return `// Generated from ${path.basename(context)}. Edit the Tailwind entry, not this.\nexport default ${JSON.stringify(sheet)};\n`;
+  for (const face of sheet.fonts ?? []) {
+    if (paths && /^\.\.?\//.test(face.source.asset)) {
+      const file = path.resolve(path.dirname(paths.input), face.source.asset);
+      const relative = path.relative(path.dirname(paths.output), file).split(path.sep).join('/');
+      face.source.asset = relative.startsWith('.') ? relative : `./${relative}`;
+    }
+  }
+  // A font file is a module the bundler has to see, so the compiler's marker becomes a `require`:
+  // left as a path, the file is never bundled and the face is missing on the device.
+  const literal = JSON.stringify(sheet).replace(
+    /\{"asset":("(?:[^"\\]|\\.)*")\}/g,
+    (_, file) => `require(${file})`,
+  );
+  return `// Generated from ${path.basename(context)}. Edit the Tailwind entry, not this.\nexport default ${literal};\n`;
 }
 
 /**
@@ -195,7 +211,7 @@ function watch(input, css, output, cwd) {
     );
   });
 
-  watchFile(css, { interval: 200, persistent: false }, () => generate(css, output));
+  watchFile(css, { interval: 200, persistent: false }, () => generate(css, output, input));
 
   // A change inside an imported sheet is invisible to the CLI's cache. Touching the entry is what
   // makes it read them all again.
