@@ -5,11 +5,13 @@
  * A stylesheet's custom properties are converted when the app is built, where there is a CSS
  * parser (`@ng-native/metro/css/values.cjs`). A bound one only exists here, where there is not,
  * so this takes the shapes a binding actually holds and nothing more: a length in `px` or `%`, a
- * number, a colour as React Native writes one, a colour's three channels, a word, and another
- * token, `var(--brand)`. Anything else is kept as a word, which a use site that wants a length or
- * a colour ignores, as it ignores an undefined token.
+ * number, a colour as React Native writes one, a colour's three channels, a word, another token,
+ * `var(--brand)`, and one made of others, `calc(var(--gap) * 2)` (see inline-derived-token.ts).
+ * Anything else is kept as a word, which a use site that wants a length or a colour ignores, as
+ * it ignores an undefined token.
  */
 import type { TokenValue } from './css.ts';
+import { derivedToken } from './inline-derived-token.ts';
 import { isNamedColor } from './transition.ts';
 
 const PX = /^(-?\d*\.?\d+)px$/;
@@ -120,6 +122,15 @@ function balanced(text: string): boolean {
   return depth === 0;
 }
 
+/**
+ * A value with a token in it: another token, or one made of others, worked out where it is set.
+ * Any other shape is a word no use site reads, as a colour function with a `var()` left in it is
+ * not a colour native can draw.
+ */
+function withTokens(text: string): TokenValue {
+  return fromVar(text) ?? derivedToken(text) ?? { keyword: text };
+}
+
 export function tokenFromValue(value: unknown): TokenValue | undefined {
   if (typeof value === 'number') return fromNumber(value);
   if (typeof value !== 'string') return undefined;
@@ -129,8 +140,7 @@ export function tokenFromValue(value: unknown): TokenValue | undefined {
   if (px) return { length: Number(px[1]) };
   if (PERCENT.test(text)) return { length: text };
   if (NUMBER.test(text)) return fromNumber(Number(text));
+  if (text.includes('var(')) return withTokens(text);
   if (COLOR_FUNCTION.test(text)) return { color: text };
-  const reference = fromVar(text);
-  if (reference) return reference;
   return fromChannels(text) ?? (WORD.test(text) ? fromWord(text) : { keyword: text });
 }
