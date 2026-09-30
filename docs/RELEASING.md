@@ -48,9 +48,11 @@ as it does on every pull request. Beside it, the
 and to a fresh Nx `angular-monorepo` workspace with `nx add @ng-native/nx`, and tests and bundles
 each, installing with npm. Once all of those pass, it runs the same gate CI does, then:
 
-- `nx release version` writes the version to every package and the template, and
-  `nx release changelog` turns the version plans into the `CHANGELOG.md` entry, then commits both
-  as `Release <version>` and tags it `v<version>`.
+- `nx release version` writes the version to every package and the template. The `sync-app-versions`
+  migration in `packages/nx/migrations.json` and `packages/schematics/migrations.json` moves to the
+  same version, so `nx migrate` and `ng update` run it on every upgrade. `nx release changelog`
+  turns the version plans into the `CHANGELOG.md` entry, then commits all of it as
+  `Release <version>` and tags it `v<version>`.
 - `nx run-many -t build` compiles each Angular package into its `dist`: partial-compiled
   JavaScript and declarations, which its `publishConfig.exports` point at.
 - `pnpm pack` turns each `workspace:*` dependency into that exact version, and `npm publish`

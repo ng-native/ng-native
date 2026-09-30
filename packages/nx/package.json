@@ -18,6 +18,7 @@
   "type": "module",
   "generators": "./generators.json",
   "nx-migrations": {
+    "migrations": "./migrations.json",
     "packageGroup": [
       "@ng-native/components",
       "@ng-native/device",
@@ -67,6 +68,7 @@
   "files": [
     "*.cjs",
     "generators.json",
+    "migrations.json",
     "*/*.cjs",
     "*/*.json",
     "files"

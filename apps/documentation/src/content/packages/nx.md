@@ -129,8 +129,16 @@ anything but letters and digits removed, where `expo prebuild` would otherwise u
 ## Upgrading
 
 `nx migrate @ng-native/nx@latest` moves every `@ng-native/*` package the root `package.json` lists
-to the new version with it, since they are released together. `nx migrate` only updates the root
-`package.json`. In a workspace with package-manager workspaces, move the `@ng-native/*` versions in
-the app's own `package.json` to the same version. In an integrated workspace, the app's
-`package.json` lists them at the root's old ranges, and nothing installs from it, so it only needs
-to be kept in step.
+to the new version with it, since they are released together. It also queues a migration,
+`sync-app-versions`, which `nx migrate --run-migrations` runs: it moves the `@ng-native/*` versions
+in each project's own `package.json` too, where a workspace with package-manager workspaces
+installs them from, keeping a `^` or `~`. A `workspace:` link and a peer range stay as they are.
+The migration then prints the install to run, since `nx migrate` installs by itself only when the
+root `package.json` changed.
+
+```sh
+nx migrate @ng-native/nx@latest
+pnpm install
+nx migrate --run-migrations
+pnpm install
+```

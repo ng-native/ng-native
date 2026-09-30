@@ -97,3 +97,10 @@ install beside Angular Native:
   `vitest ^4.0.8` that `ng new` 22.1 writes, and the 5 that 22.2 writes, both work as they are.
 
 pnpm reports these as warnings and installs anyway.
+
+## Upgrading
+
+`ng update @ng-native/schematics` moves every `@ng-native/*` package the root `package.json` lists
+to the new version with it, since they are released together. It then runs `sync-app-versions`,
+which moves the same packages in the native project's own `package.json`, the list Expo links
+native modules from, keeping a `^` or `~`.

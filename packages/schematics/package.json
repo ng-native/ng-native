@@ -21,6 +21,24 @@
   "ng-add": {
     "save": "devDependencies"
   },
+  "ng-update": {
+    "migrations": "./migrations.json",
+    "packageGroup": [
+      "@ng-native/components",
+      "@ng-native/device",
+      "@ng-native/expo",
+      "@ng-native/fabric",
+      "@ng-native/icons",
+      "@ng-native/metro",
+      "@ng-native/nx",
+      "@ng-native/platform",
+      "@ng-native/router",
+      "@ng-native/schematics",
+      "@ng-native/tailwind",
+      "@ng-native/testing",
+      "@ng-native/web"
+    ]
+  },
   "dependencies": {
     "@angular-devkit/architect": ">=0.2200.0 <0.2300.0",
     "@angular-devkit/core": "^22.0.0",
@@ -55,6 +73,7 @@
     "*.cjs",
     "collection.json",
     "builders.json",
+    "migrations.json",
     "*/*.cjs",
     "*/*.json",
     "files"

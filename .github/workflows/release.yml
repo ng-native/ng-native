@@ -83,6 +83,14 @@ jobs:
           npx nx release version '${{ inputs.version }}' --preid alpha
           version=$(node -p "require('./packages/fabric/package.json').version")
           echo "version=$version" >> "$GITHUB_OUTPUT"
+          # nx migrate and ng update run a migration when the upgrade crosses its version, so the
+          # one that syncs each app's @ng-native versions moves to every release's. Staged, so it
+          # goes into the release commit below.
+          for file in packages/nx/migrations.json packages/schematics/migrations.json; do
+            jq --arg v "$version" '(.generators // .schematics) |= map_values(.version = $v)' \
+              "$file" > "$file.tmp" && mv "$file.tmp" "$file"
+            git add "$file"
+          done
           # The version plans in .nx/version-plans become this release's CHANGELOG.md entry and are
           # deleted; the versions staged above go into the same `Release <version>` commit and tag.
           npx nx release changelog "$version"
@@ -128,8 +136,8 @@ jobs:
       - name: Push the version commit and tag
         run: |
           # Pull requests can merge while a release runs. Replay the release commit on top of them
-          # and tag where it lands. A rebase conflict (a merge that touched a version or the
-          # changelog) fails the step rather than guessing.
+          # and tag where it lands. A rebase conflict (a merge that touched a version, the
+          # changelog or a migrations.json) fails the step rather than guessing.
           tag='v${{ steps.version.outputs.version }}'
           for attempt in 1 2 3; do
             git fetch origin main
