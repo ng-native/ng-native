@@ -21,3 +21,5 @@ packages/integration-tests/fixtures/tailwind-utilities.css
 examples/*/.angular-native/
 # Rewritten by the all-contributors bot in its own JSON style each time it adds someone.
 .all-contributorsrc
+# Written by nx release changelog, which leaves a double blank line between sections.
+CHANGELOG.md
