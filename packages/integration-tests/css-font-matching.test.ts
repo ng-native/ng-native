@@ -223,7 +223,9 @@ describe("CSS's nearest-weight rules", () => {
 });
 
 describe('matching a style', () => {
-  it('keeps an italic no face covers, whether the upright face says normal or nothing', () => {
+  it('drops an italic no face covers, whether the upright face says normal or nothing', () => {
+    // Kept beside the upright face, Android draws Roboto italic in its place and iOS draws the
+    // face upright anyway, so the face is committed upright on both.
     // The compiler reads `font-style: normal` as no style given, so both faces are the same.
     for (const descriptor of ['', ' font-style: normal;']) {
       const css =
@@ -232,8 +234,18 @@ describe('matching a style', () => {
         ` .a { font-family: Inter; font-weight: 700; font-style: italic }`;
       const props = text(css, 'a');
       assert.equal(props['fontFamily'], 'Inter-700');
-      assert.equal(props['fontStyle'], 'italic');
+      assert.equal(props['fontStyle'], undefined);
     }
+  });
+
+  it('drops an oblique, and an italic matched to the regular face, the same way', () => {
+    const css = `${faces([], [700])} .a { font-family: Inter; font-style: oblique } .b { font-family: Inter; font-style: italic }`;
+    const oblique = text(css, 'a');
+    assert.equal(oblique['fontFamily'], 'Inter');
+    assert.equal(oblique['fontStyle'], undefined);
+    const italic = text(css, 'b');
+    assert.equal(italic['fontFamily'], 'Inter');
+    assert.equal(italic['fontStyle'], undefined);
   });
 
   const all = faces([], [700], [undefined, 'italic'], [700, 'italic']);

@@ -98,7 +98,8 @@ export class FontFaces {
 
   /**
    * Point a resolved style's family at the face its weight and style ask for. A family nothing
-   * declared, or one whose match is the face registered under the family itself, is left alone.
+   * declared is left alone, and so is the family of one whose match is the face registered under
+   * the family itself.
    */
   apply(style: Record<string, unknown>): void {
     if (this.byFamily.size === 0) return;
@@ -112,11 +113,13 @@ export class FontFaces {
     const face = matchFace(faces, weight, String(style['fontStyle'] ?? 'normal'));
     if (!face) return;
     const name = faceName(face);
-    if (name === family) return;
+    if (name !== family) style['fontFamily'] = name;
 
-    style['fontFamily'] = name;
     if (!DROP_MATCHED_WEIGHT_AND_STYLE) return;
+    // The style goes whichever face matched: a slanted face draws its slant, and beside an
+    // upright one Android draws its system font slanted in place of the face, which iOS draws
+    // upright anyway.
+    delete style['fontStyle'];
     if (face.weight !== undefined) delete style['fontWeight'];
-    if (face.style) delete style['fontStyle'];
   }
 }

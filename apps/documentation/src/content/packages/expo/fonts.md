@@ -71,8 +71,10 @@ declared for 700, wherever the family and the weight were set. The weight and st
 the face are then left out of what reaches native, which would otherwise draw the platform's own
 font on Android in place of the face.
 
-A weight or style no declared face covers is left to the platform: iOS draws the family's face as
-it is, and Android draws its system font in that weight or style.
+A weight no declared face covers is left to the platform: iOS draws the family's face as it is,
+and Android draws its system font in that weight. An italic or oblique no declared face covers is
+dropped, so both platforms draw the upright face rather than Android drawing its system font
+slanted.
 
 A face is found once the sheet declaring it has been used, so declare faces in the global
 stylesheet, or in the component whose styles use them.
