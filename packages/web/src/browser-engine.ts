@@ -345,7 +345,7 @@ export class BrowserEngine extends HostEngine {
   // --- event dispatch, mirrors engine.ts's `dispatchEvent` -----------------------------------
 
   dispatchEvent(target: BrowserNode, topLevelType: string, nativeEvent: unknown): void {
-    const event = new SyntheticEvent(nativeEvent) as ResponderEvent & SyntheticEvent;
+    const event = new SyntheticEvent(nativeEvent, target) as ResponderEvent & SyntheticEvent;
     if (topLevelType.startsWith('topTouch'))
       this.responders.runResponder(target, topLevelType, event);
     this.propagate(target, topLevelType, event);

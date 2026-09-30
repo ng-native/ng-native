@@ -83,7 +83,15 @@ describe('a click presses a touchable on Android, as Pressability does', () => {
   it('presses only the control clicked, not a pressable around it', async () => {
     const { instance, getByTestId } = await render(ClickPress);
     await fireEvent(getByTestId('button'), 'click');
-    assert.deepEqual(instance.events, ['button', 'outer click']);
+    // The pressable around it stops the click there, as Pressability does for a click it did not
+    // take, so the view around both never hears it.
+    assert.deepEqual(instance.events, ['button']);
+  });
+
+  it('does not press a pressable when the view clicked is another focusable one inside it', async () => {
+    const { instance, getByTestId } = await render(ClickPress);
+    await fireEvent(getByTestId('focusable'), 'click');
+    assert.deepEqual(instance.events, ['focusable click']);
   });
 
   it('ignores a click that is a pointer event, which the touch already pressed', async () => {

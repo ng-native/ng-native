@@ -241,6 +241,11 @@ const DIRECT_EVENTS = new Set([
  */
 export interface NativeSyntheticEvent<T = unknown> {
   readonly nativeEvent: T;
+  /**
+   * The node the event happened on, which a listener further up can compare with its own: RN's
+   * `event.target`. Null where a host has no node to name.
+   */
+  readonly target?: unknown;
   stopPropagation(): void;
   isPropagationStopped(): boolean;
 }
@@ -252,10 +257,12 @@ export interface NativeSyntheticEvent<T = unknown> {
  */
 export class SyntheticEvent<T = unknown> implements NativeSyntheticEvent<T> {
   readonly nativeEvent: T;
+  readonly target: unknown;
   private stopped = false;
 
-  constructor(nativeEvent: T) {
+  constructor(nativeEvent: T, target: unknown = null) {
     this.nativeEvent = nativeEvent;
+    this.target = target;
   }
 
   stopPropagation(): void {
@@ -3423,7 +3430,7 @@ export class Engine implements HostEngine {
     // Listeners get RN's documented shape, `{nativeEvent}`. Fabric hands us the payload bare;
     // React wraps it in a synthetic event and every RN API is written against `event.nativeEvent`,
     // so handlers ported from RN would silently read undefined otherwise.
-    const event = new SyntheticEvent(nativeEvent);
+    const event = new SyntheticEvent(nativeEvent, target);
 
     try {
       if (topLevelType === 'topDismiss' && target) this.dismissed(target);

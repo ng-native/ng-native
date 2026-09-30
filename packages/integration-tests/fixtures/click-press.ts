@@ -33,6 +33,9 @@ export class ClickButton {}
       <pressable testID="row" (press)="log('row')">
         <pressable testID="button" (press)="log('button')" />
       </pressable>
+      <pressable testID="card" (press)="log('card')">
+        <view testID="focusable" focusable (click)="log('focusable click')" />
+      </pressable>
     </view>
   `,
 })
