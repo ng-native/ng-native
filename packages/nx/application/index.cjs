@@ -92,19 +92,23 @@ const DEFAULT_PORT = 8081;
 /**
  * The lowest Metro port no other Expo app in the workspace listens on, so that
  * `nx run-many -t start` can run them together: two on Expo's default raced for it, and the second
- * died with `EADDRINUSE`. An app's port is the `--port` its `start` or `serve` passes, or Expo's
- * default when it has an `app.json` and passes none.
+ * died with `EADDRINUSE`. Each `expo start` a target runs, as `command` or in `commands`, takes the
+ * port its `--port` names, or Expo's default without one. An app with an `app.json` and no such
+ * command has the default too: its `start` is inferred.
  */
 function metroPort(tree) {
   const taken = new Set();
   for (const [, project] of getProjects(tree)) {
-    const commands = Object.values(project.targets ?? {})
-      .map((target) => target.options?.command)
+    const starts = Object.values(project.targets ?? {})
+      .flatMap(({ options }) => [options?.command, ...(options?.commands ?? [])])
+      .map((entry) => (typeof entry === 'string' ? entry : entry?.command))
       .filter((command) => typeof command === 'string' && /\bexpo start\b/.test(command));
-    const ports = commands.map((command) => Number(command.match(/--port[= ](\d+)/)?.[1]));
-    for (const port of ports) if (port) taken.add(port);
-    const expoApp = commands.length > 0 || tree.exists(joinPathFragments(project.root, 'app.json'));
-    if (expoApp && ports.every((port) => !port)) taken.add(DEFAULT_PORT);
+    for (const command of starts) {
+      taken.add(Number(command.match(/--port[= ](\d+)/)?.[1] ?? DEFAULT_PORT));
+    }
+    if (!starts.length && tree.exists(joinPathFragments(project.root, 'app.json'))) {
+      taken.add(DEFAULT_PORT);
+    }
   }
   let port = DEFAULT_PORT;
   while (taken.has(port)) port++;

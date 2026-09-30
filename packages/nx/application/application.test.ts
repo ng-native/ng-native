@@ -159,6 +159,38 @@ describe('in an integrated workspace', () => {
     assert.equal(start?.options.command, 'expo start --port 8082');
   });
 
+  it('reads the ports in a run-commands commands list, as strings and as objects', async () => {
+    const tree = integrated();
+    const commands = (list: unknown[]) => ({
+      start: { executor: 'nx:run-commands', options: { commands: list } },
+    });
+    addProjectConfiguration(tree, 'one', {
+      root: 'apps/one',
+      targets: commands(['expo start --port 8081']),
+    });
+    addProjectConfiguration(tree, 'two', {
+      root: 'apps/two',
+      targets: commands([{ command: 'expo start --port 8082' }]),
+    });
+    await generate(tree, { directory: 'apps/mobile' });
+    const { targets } = readProjectConfiguration(tree, 'mobile');
+    assert.equal(targets?.start?.options.command, 'expo start --port 8083');
+  });
+
+  it("counts an app on Expo's default port when any of its targets starts without --port", async () => {
+    const tree = integrated();
+    addProjectConfiguration(tree, 'one', {
+      root: 'apps/one',
+      targets: {
+        start: { executor: 'nx:run-commands', options: { command: 'expo start' } },
+        serve: { executor: 'nx:run-commands', options: { command: 'expo start --port 8082' } },
+      },
+    });
+    await generate(tree, { directory: 'apps/mobile' });
+    const { targets } = readProjectConfiguration(tree, 'mobile');
+    assert.equal(targets?.start?.options.command, 'expo start --port 8083');
+  });
+
   it('takes the lowest port no other app uses, reading --port=N too', async () => {
     const tree = integrated();
     const start = (command: string) => ({
