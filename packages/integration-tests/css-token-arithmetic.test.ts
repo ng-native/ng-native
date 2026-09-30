@@ -245,6 +245,52 @@ describe('a value with a var() inside it resolves as the same text in a styleshe
       );
     }
   });
+
+  it('makes nothing of an hsl() channel token of the wrong kind, and takes no fallback for it', () => {
+    // A hue is no percentage, and a saturation, a lightness or an alpha no angle. A token that is
+    // set is substituted, so its own fallback is not used when it is the wrong kind: the colour
+    // is invalid, and the use site falls back.
+    const color = 'color: var(--x, rgb(1, 2, 3))';
+    for (const value of [
+      'hsl(var(--pct) 100% 50%)',
+      'hsl(var(--pct, 120) 100% 50%)',
+      'hsl(var(--hue) var(--turn) 50%)',
+      'hsl(var(--hue) 100% var(--turn))',
+      'hsl(var(--hue) 100% 50% / var(--turn))',
+    ]) {
+      assert.equal(
+        written(TOKENS, value, color)['color'],
+        'rgb(1, 2, 3)',
+        `${value} in a stylesheet`,
+      );
+      assert.equal(
+        set(TOKENS, value, color)['color'],
+        'rgb(1, 2, 3)',
+        `${value} set on the element`,
+      );
+    }
+    // The right kinds still are: an angle for a hue, a percentage for an alpha.
+    for (const [value, expected] of [
+      ['hsl(var(--hue) 100% 50% / var(--pct))', 'rgb(0, 255, 0)'],
+      ['hsl(var(--turn) var(--pct) 50%)', 'rgb(0, 255, 255)'],
+    ]) {
+      assert.equal(written(TOKENS, value!, color)['color'], expected, `${value} in a stylesheet`);
+      assert.equal(set(TOKENS, value!, color)['color'], expected, `${value} set on the element`);
+    }
+  });
+
+  it('makes nothing of an hsl() channel token of the wrong kind set on an element', () => {
+    const read = '.x { color: var(--c, rgb(1, 2, 3)) }';
+    const hsl = 'hsl(var(--h) var(--s) 50%)';
+    for (const [h, s] of [
+      ['50%', '100%'],
+      ['120', '90deg'],
+      ['120', '0.25turn'],
+    ]) {
+      const customs = [{ '--h': h!, '--s': s!, '--c': hsl }];
+      assert.equal(innermost(read, customs)['color'], 'rgb(1, 2, 3)', `${h} ${s}`);
+    }
+  });
 });
 
 /** The props the innermost of a chain of views commits with, each setting custom properties. */

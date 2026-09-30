@@ -1677,7 +1677,7 @@ function resolveHsl(
   hsl: NonNullable<TokenValue['hsl']>,
   tokens: Readonly<Record<string, TokenValue>>,
 ): string | undefined {
-  const h = hslChannel(hsl.h, tokens, 'angle');
+  const h = hslChannel(hsl.h, tokens, true);
   const s = hslChannel(hsl.s, tokens);
   const l = hslChannel(hsl.l, tokens);
   const alpha = hsl.alpha === undefined ? 1 : hslChannel(hsl.alpha, tokens);
@@ -1687,15 +1687,23 @@ function resolveHsl(
   return hslToRgb(h, s, l, alpha);
 }
 
-/** A channel's number; a hue reads a token's angle first, as `0.5turn` is 180 and not 0.5. */
+/**
+ * A channel's number, or undefined when its token is the wrong kind for the slot: a hue is a
+ * number or an angle, read in degrees, as `0.5turn` is 180 and not 0.5, and never a percentage; a
+ * saturation, a lightness or an alpha is never an angle. The fallback is only for a token that is
+ * not set, as a set one is substituted, whatever it holds.
+ */
 function hslChannel(
   channel: HslChannel,
   tokens: Readonly<Record<string, TokenValue>>,
-  form?: 'angle',
+  hue = false,
 ): number | undefined {
   if (typeof channel === 'number') return channel;
   const token = tokens[channel.reference];
-  return (form && token?.[form]) ?? token?.number ?? channel.fallback;
+  if (!token) return channel.fallback;
+  if (!hue) return token.angle === undefined ? token.number : undefined;
+  const percentage = typeof token.length === 'string' && token.length.endsWith('%');
+  return percentage ? undefined : (token.angle ?? token.number);
 }
 
 /**
