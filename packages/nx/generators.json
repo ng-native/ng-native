@@ -13,6 +13,11 @@
       "factory": "./application/index.cjs#application",
       "schema": "./application/schema.json",
       "description": "An Angular Native app: an Expo project with start, run-ios, run-android, export, test and typecheck targets."
+    },
+    "sync-native-modules": {
+      "factory": "./sync/index.cjs#syncNativeModules",
+      "schema": "./sync/schema.json",
+      "description": "Lists the native modules an app's libraries import in the app's package.json, with their config plugins in app.json. A sync generator."
     }
   }
 }

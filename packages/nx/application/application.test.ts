@@ -809,6 +809,24 @@ describe('pnpmGlobs', () => {
   });
 });
 
+describe('the native modules its libraries import', () => {
+  it('are listed by the sync generator Nx runs before start, export and prebuild', async () => {
+    // Expo links only what the app's package.json names, and a library's native module worked in
+    // Expo Go and was missing from a development build.
+    const tree = integrated();
+    await generate(tree, { directory: 'apps/mobile' });
+    const { targets } = readProjectConfiguration(tree, 'mobile');
+    for (const name of ['start', 'export', 'prebuild']) {
+      assert.deepEqual(
+        targets?.[name]?.syncGenerators,
+        ['@ng-native/nx:sync-native-modules'],
+        name,
+      );
+    }
+    assert.equal(targets?.start?.options.command, 'expo start');
+  });
+});
+
 describe('generators.json', () => {
   it("gives each schema the generator's description, which nx g --help prints", () => {
     // Nx reads the description for --help from the schema, not from generators.json, and printed

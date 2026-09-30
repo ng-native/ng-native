@@ -1,0 +1,8 @@
+{
+  "$schema": "https://json-schema.org/schema",
+  "$id": "NgNativeNxSyncNativeModules",
+  "title": "Sync an app's native modules",
+  "description": "Lists the native modules an app's libraries import in the app's package.json, with their config plugins in app.json. A sync generator.",
+  "type": "object",
+  "properties": {}
+}

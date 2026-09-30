@@ -107,6 +107,30 @@ versions where it has none already: the newest each of the app's ranges allows, 
 finds it from the workspace's root, or the lowest when the registry cannot be reached. `@nx/expo`
 and `@nx/vite` take the Nx that is running when the workspace lists Nx at a range.
 
+## Native modules a library imports
+
+Expo links the native modules the app's `package.json` names and no others. Expo Go contains every
+module in the SDK, so an app using a library that imports one the app does not list works in Expo
+Go, and a development or release build of it has no native code for that module.
+
+The generator registers `@ng-native/nx:sync-native-modules`, a sync generator, on the app's
+`start`, `export` and `prebuild` targets. Before any of them runs, it reads from Nx's project graph
+what the app's libraries import, directly or through another library, and adds to the app's
+`package.json` each native module there that the app does not list: a package with an Expo module
+config, a podspec or an Android project. A package a library imports can need one too: it counts
+when that package peers on it without marking the peer optional, as `@ng-native/icons` does on
+`react-native-svg`. The range is the root's, or the library's own in a workspace package, or the
+installed version. A module with a config plugin has it added to the app's `app.json`, unless it is
+one Expo applies without being listed.
+
+`nx sync` applies the same changes by hand, and `nx sync:check` fails when there are any to make,
+for CI. It only adds: a module stays listed when no library imports it any more, since the app may
+use it itself. An `@ng-native/expo` service reaches its module only when it is injected, so the
+graph records `@ng-native/expo` rather than the module: list those in the app, as each module's
+page says. An app generated before the sync generator existed registers it by adding
+`"syncGenerators": ["@ng-native/nx:sync-native-modules"]` to those three targets in its
+`project.json`.
+
 ## An @nx/angular workspace
 
 A workspace from the `angular-monorepo` preset works as it is, web app included. Its Angular and
