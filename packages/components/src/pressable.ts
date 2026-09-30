@@ -14,7 +14,7 @@ import {
   output,
   signal,
 } from '@angular/core';
-import type { NativeSyntheticEvent } from '@ng-native/fabric';
+import { nativePlatform, type NativeSyntheticEvent } from '@ng-native/fabric';
 import type { Insets, TouchEvent } from './events.ts';
 import { optionalBoolean } from './transforms.ts';
 import { ViewBase } from './view-base.ts';
@@ -84,6 +84,9 @@ interface RippleDrawable {
 }
 
 const now = (): number => globalThis.performance?.now?.() ?? Date.now();
+
+/** Clicks a touchable has already answered, so a pressable around it lets them pass. */
+const clicked = new WeakSet<object>();
 
 /**
  * The press machine, and the base of every primitive that takes a touch.
@@ -283,17 +286,20 @@ export abstract class TouchableBase extends ViewBase {
     this.stopResponding?.();
     this.stopLayout?.();
     this.stopHover?.();
+    this.stopClick?.();
   }
 
   private stopResponding: (() => void) | null = null;
   private stopLayout: (() => void) | null = null;
   private stopHover: (() => void) | null = null;
+  private stopClick: (() => void) | null = null;
 
   override ngOnInit(): void {
     super.ngOnInit();
     this.respondIfNeeded();
     this.measureIfNeeded();
     this.hoverIfNeeded();
+    this.clickIfNeeded();
   }
 
   override ngOnChanges(): void {
@@ -301,6 +307,29 @@ export abstract class TouchableBase extends ViewBase {
     this.respondIfNeeded();
     this.measureIfNeeded();
     this.hoverIfNeeded();
+    this.clickIfNeeded();
+  }
+
+  /**
+   * A press with no touch: Android's `performClick()`, which is what Enter, the D-pad centre and
+   * TalkBack's double-tap do to a focused view, and which reaches us as `topClick` alone.
+   *
+   * `Pressability.js` answers it in `onClick`: `onPress` and nothing around it, not while disabled,
+   * and not for a click carrying a `pointerType`, which is the pointer event a touch already
+   * pressed through. It presses only the view that was clicked; the payload names no target, so
+   * the first touchable on the way up answers and marks the event for the ones above it.
+   *
+   * Android only. iOS sends a click only as a pointer event, and the web host binds `topClick` to
+   * the DOM's own click, which a mouse press already reached through the responder.
+   */
+  private clickIfNeeded(): void {
+    if (this.stopClick || !this.measures() || nativePlatform() !== 'android') return;
+    this.stopClick = this.engine.setEventListener(this.node, 'topClick', (event) => {
+      const click = event as PressEvent;
+      if (clicked.has(click) || Object.hasOwn(click.nativeEvent ?? {}, 'pointerType')) return;
+      clicked.add(click);
+      if (this.claims()) this.press.emit(click);
+    });
   }
 
   /**
