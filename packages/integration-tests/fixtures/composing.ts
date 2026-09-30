@@ -22,6 +22,16 @@ export class ToggleRole implements AccessibilityContribution {
   }
 }
 
+/** State with no role, contributed the way a form library marks a field it has locked. */
+@Directive({ selector: '[xLocked]' })
+export class Locked implements AccessibilityContribution {
+  private readonly contribution = contributeAccessibility(this);
+
+  accessibilityState() {
+    return { disabled: true };
+  }
+}
+
 /**
  * A control composed onto its own host rather than wrapped around a `<pressable>`: the press
  * machine from `PressBehavior`, with `disabled` and `(press)` exposed, and a role contributed.
@@ -38,13 +48,14 @@ export class Toggle {}
 
 @Component({
   selector: 'x-composing',
-  imports: [Text, Toggle, ToggleRole, View],
+  imports: [Locked, Text, Toggle, ToggleRole, View],
   template: `
     <view>
       <x-toggle accessibilityLabel="Wi-Fi" [on]="on()" [disabled]="locked()" (press)="on.set(!on())"
         ><text>Wi-Fi</text></x-toggle
       >
       <text pressable xToggleRole>Bluetooth</text>
+      <text testID="locked" pressable xLocked>Locked</text>
     </view>
   `,
 })

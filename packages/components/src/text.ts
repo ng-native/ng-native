@@ -55,15 +55,14 @@ export class Text extends TouchableBase {
   }
 
   /**
-   * `Text.js`: a pressable text is a `link` unless a role is set or it is disabled, where
-   * `disabled` wins and `aria-disabled` or `accessibilityState.disabled` stand in when it is
-   * unset. Nested or not. Every input it reads is this directive's, so `ngOnChanges` keeps it
-   * current without a host binding.
+   * `Text.js`: a pressable text is a `link` unless a role is set or it is disabled, as the
+   * merged state says: `disabled` wins, and `aria-disabled`, `accessibilityState` or a
+   * contributing directive stand in when it is unset. Nested or not. Its inputs are this
+   * directive's, so `ngOnChanges` keeps it current without a host binding.
    */
   protected override roleByDefault(): AccessibilityRole | undefined {
     if (!this.pressable()) return undefined;
-    const disabled = this.disabled() ?? this.ariaDisabled() ?? this.accessibilityState()?.disabled;
-    return disabled === true ? undefined : 'link';
+    return this.accessibilityStateProp()?.disabled === true ? undefined : 'link';
   }
 
   /** Truncate after this many lines, with `ellipsizeMode` deciding where the ellipsis goes. */

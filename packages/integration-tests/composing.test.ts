@@ -53,4 +53,12 @@ describe('a control composed from the host behaviours', () => {
     assert.ok(screen.getByRole('togglebutton', { name: 'Bluetooth' }));
     cleanup();
   });
+
+  it('takes no link role when a directive contributes disabled to a pressable text', async () => {
+    await render(Composing);
+    const props = screen.getByTestId('locked').props;
+    assert.deepEqual(props['accessibilityState'], { disabled: true });
+    assert.equal(props['accessibilityRole'] ?? null, null);
+    cleanup();
+  });
 });
