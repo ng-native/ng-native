@@ -195,6 +195,15 @@ describe('in an integrated workspace', () => {
     assert.match(tree.read('.gitignore', 'utf-8')!, /^\.expo\/$/m);
   });
 
+  it('ignores the native projects expo prebuild writes into the app, as the template does', async () => {
+    // run-ios left apps/mobile/ios/ untracked, with only its Pods/ and build/ ignored.
+    const tree = integrated();
+    await generate(tree, { directory: 'apps/mobile' });
+    const ignore = tree.read('apps/mobile/.gitignore', 'utf-8') ?? '';
+    assert.match(ignore, /^\/ios$/m);
+    assert.match(ignore, /^\/android$/m);
+  });
+
   it('ignores it once, however many apps are added', async () => {
     const tree = integrated();
     await generate(tree, { directory: 'apps/mobile' });

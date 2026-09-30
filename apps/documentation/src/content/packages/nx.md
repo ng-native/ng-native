@@ -61,8 +61,9 @@ use `@nx/expo`'s executors, and print the same deprecation notice.
 
 The app is the template's: `src/app/app.ts`, `src/main.ts` and `src/app/app.test.ts` as they are, and an `app.json`
 named for the project. Its `app.json` names `ios` and `android` as the platforms, because Expo
-adds `web` whenever `react-dom` resolves, and Nx always installs one. Three files differ, each
-because of something Nx does:
+adds `web` whenever `react-dom` resolves, and Nx always installs one. Its `.gitignore` ignores the
+`ios/` and `android/` projects `expo prebuild` writes, as the template's does. Three files
+differ, each because of something Nx does:
 
 - **`metro.config.js`** applies the preset around `withNxMetro`, from `@nx/expo`, which resolves
   the workspace's libraries and watches them. Without it, Metro cannot follow a tsconfig path alias

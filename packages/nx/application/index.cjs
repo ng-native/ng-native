@@ -79,6 +79,8 @@ function writeFiles(tree, { directory, projectName, workspaces }) {
   file('AGENTS.md', native.agentsFile(commands(projectName)));
   file('CLAUDE.md', '@AGENTS.md\n');
   file('metro.config.js', native.METRO_CONFIG);
+  // The template's own, for the native projects `expo prebuild` writes beside app.json.
+  file('.gitignore', '# generated native folders\n/ios\n/android\n');
 
   const base = !workspaces && tree.exists('tsconfig.base.json');
   const workspaceBase = base ? `${offsetFromRoot(directory)}tsconfig.base.json` : undefined;
