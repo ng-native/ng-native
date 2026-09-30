@@ -126,3 +126,67 @@ describe('init', () => {
     assert.equal(skipped(), undefined);
   });
 });
+
+describe('in a pnpm workspace', () => {
+  // pnpm 11 stops the install with ERR_PNPM_IGNORED_BUILDS for any dependency with an install
+  // script the workspace has not decided on. @nx/expo brings two, through @nx/jest: @parcel/watcher
+  // and unrs-resolver. Both ship prebuilt binaries, and their scripts only build from source.
+  const decided = (yaml: string) =>
+    Object.fromEntries(
+      [...yaml.matchAll(/^ {2}'?([@\w/.-]+)'?:\s*(.+)$/gm)].map(([, name, value]) => [name, value]),
+    );
+
+  it('declines the builds @nx/expo brings, beside the ones the workspace decided', async () => {
+    const tree = workspace();
+    tree.write(
+      'pnpm-workspace.yaml',
+      "packages:\n  - 'packages/*'\nallowBuilds:\n  '@swc/core': true\n  nx: true\n",
+    );
+    await init(tree, { skipFormat: true });
+    const yaml = tree.read('pnpm-workspace.yaml', 'utf-8')!;
+    assert.deepEqual(decided(yaml), {
+      '@swc/core': 'true',
+      nx: 'true',
+      '@parcel/watcher': 'false',
+      'unrs-resolver': 'false',
+    });
+    assert.match(yaml, /^packages:\n {2}- 'packages\/\*'\n/);
+  });
+
+  it('keeps a decision already made, and settles the placeholder a refused install leaves', async () => {
+    const tree = workspace();
+    tree.write(
+      'pnpm-workspace.yaml',
+      "allowBuilds:\n  '@parcel/watcher': true\n  unrs-resolver: set this to true or false\n",
+    );
+    await init(tree, { skipFormat: true });
+    assert.deepEqual(decided(tree.read('pnpm-workspace.yaml', 'utf-8')!), {
+      '@parcel/watcher': 'true',
+      'unrs-resolver': 'false',
+    });
+  });
+
+  it('adds the setting to a pnpm-workspace.yaml with none, or writes one beside a pnpm lockfile', async () => {
+    const listed = workspace();
+    listed.write('pnpm-workspace.yaml', "packages:\n  - 'packages/*'\n");
+    await init(listed, { skipFormat: true });
+    assert.equal(
+      listed.read('pnpm-workspace.yaml', 'utf-8'),
+      "packages:\n  - 'packages/*'\n\nallowBuilds:\n  '@parcel/watcher': false\n  unrs-resolver: false\n",
+    );
+
+    const integrated = workspace();
+    integrated.write('pnpm-lock.yaml', "lockfileVersion: '9.0'\n");
+    await init(integrated, { skipFormat: true });
+    assert.equal(
+      integrated.read('pnpm-workspace.yaml', 'utf-8'),
+      "allowBuilds:\n  '@parcel/watcher': false\n  unrs-resolver: false\n",
+    );
+  });
+
+  it('leaves a workspace on another package manager alone', async () => {
+    const tree = workspace();
+    await init(tree, { skipFormat: true });
+    assert.equal(tree.exists('pnpm-workspace.yaml'), false);
+  });
+});

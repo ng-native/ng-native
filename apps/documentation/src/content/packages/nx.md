@@ -45,6 +45,12 @@ workspace, `@angular-devkit/build-angular` otherwise puts Babel 8's copies there
 has no `regenerator`, and Metro warns on every `nx start` that it fell back to another copy, and
 its core leaves each plugin's peer unmet. Angular's build keeps its own Babel 8.
 
+In a pnpm workspace it also decides the two install scripts `@nx/expo` brings in, through
+`@nx/jest`: `@parcel/watcher` and `unrs-resolver`. It sets them to `false` under `allowBuilds` in
+`pnpm-workspace.yaml`, since both ship prebuilt binaries and their scripts only build from source.
+pnpm 11 otherwise stops the install with `ERR_PNPM_IGNORED_BUILDS` until every such script is
+decided. A decision the workspace already made stays.
+
 ## The targets
 
 | Command                 | From           | What runs                                                       |

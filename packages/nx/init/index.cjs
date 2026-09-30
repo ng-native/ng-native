@@ -91,11 +91,53 @@ function rootDependencies(tree) {
 }
 
 /**
+ * The dependencies of `@nx/expo` with an install script, through `@nx/jest`. Both ship prebuilt
+ * binaries for every platform, and the script only builds from source when one is missing, so
+ * they are declined rather than allowed. pnpm 11 refuses to install until each one is decided,
+ * with `ERR_PNPM_IGNORED_BUILDS`.
+ */
+const DECLINED_BUILDS = ['@parcel/watcher', 'unrs-resolver'];
+
+const PNPM = 'pnpm-workspace.yaml';
+
+/**
+ * `allowBuilds`' entries with `name` declined, unless it is already `true` or `false`.
+ *
+ * @param {string} entries
+ * @param {string} name
+ */
+function decline(entries, name) {
+  const key = name.startsWith('@') ? `'${name}'` : name;
+  const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const line = new RegExp(`^([ \\t]+)['"]?${escaped}['"]?:[ \\t]*(.*)$`, 'm');
+  const found = line.exec(entries);
+  if (!found) return `${entries && entries.replace(/\n?$/, '\n')}  ${key}: false\n`;
+  if (/^(true|false)\b/.test(found[2])) return entries;
+  return entries.replace(line, `$1${key}: false`);
+}
+
+/**
+ * Decides the builds above in `pnpm-workspace.yaml`'s `allowBuilds`, which pnpm 10.26 and later
+ * read. A decision the workspace already made stays, and the placeholder pnpm writes after refusing
+ * an install is settled. A workspace without pnpm is left alone.
+ */
+function declineBuilds(tree) {
+  if (!tree.exists(PNPM) && !tree.exists('pnpm-lock.yaml')) return;
+  const yaml = tree.read(PNPM, 'utf-8') ?? '';
+  const block = /^allowBuilds:[ \t]*\n((?:[ \t]+.*(?:\n|$))*)/m.exec(yaml);
+  const entries = DECLINED_BUILDS.reduce(decline, block?.[1] ?? '');
+  const allowBuilds = `allowBuilds:\n${entries}`;
+  if (block) tree.write(PNPM, yaml.replace(block[0], allowBuilds));
+  else tree.write(PNPM, yaml ? `${yaml.replace(/\n*$/, '\n')}\n${allowBuilds}` : allowBuilds);
+}
+
+/**
  * @param {import('@nx/devkit').Tree} tree
  * @param {{ skipInstall?: boolean, skipFormat?: boolean }} options
  */
 async function init(tree, options = {}) {
   registerExpoPlugin(tree);
+  declineBuilds(tree);
   const { dependencies, devDependencies } = readJson(tree, 'package.json');
   const existing = Object.keys({ ...dependencies, ...devDependencies });
   const companions = await asSaved(tree, rootDependencies(tree), existing);

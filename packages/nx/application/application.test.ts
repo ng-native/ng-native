@@ -189,7 +189,11 @@ describe('in an integrated workspace', () => {
     await generate(tree, { directory: 'apps/mobile' });
     assert.equal(readJson(tree, 'package.json').dependencies['react-native'], '0.86.3');
     assert.equal(readJson(tree, 'apps/mobile/package.json').name, 'mobile');
-    assert.equal(tree.read('pnpm-workspace.yaml', 'utf-8'), settings);
+    // Only the builds @nx/expo brings are added, which pnpm 11 refuses to install without.
+    assert.equal(
+      tree.read('pnpm-workspace.yaml', 'utf-8'),
+      `${settings}  '@parcel/watcher': false\n  unrs-resolver: false\n`,
+    );
   });
 
   it('keeps the @nx/vite a workspace already has', async () => {
@@ -387,10 +391,11 @@ describe('in a pnpm workspace', () => {
     ]);
   });
 
-  it('leaves the workspace alone when a glob already does', async () => {
+  it('leaves the workspace globs alone when one already covers the app', async () => {
     const tree = pnpmWorkspace();
     await generate(tree, { directory: 'packages/mobile' });
-    assert.equal(tree.read('pnpm-workspace.yaml', 'utf-8'), "packages:\n  - 'packages/*'\n");
+    const yaml = tree.read('pnpm-workspace.yaml', 'utf-8')!;
+    assert.deepEqual(pnpmGlobs(yaml), ['packages/*']);
   });
 
   it("uses the template's own tsconfig, since there are no path aliases to reach", async () => {
