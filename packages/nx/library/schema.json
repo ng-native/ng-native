@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json-schema.org/schema",
+  "$id": "NgNativeNxLibrary",
+  "title": "Angular Native library",
+  "description": "A library of native components, whose tests render on the fake Fabric as an app's do.",
+  "type": "object",
+  "properties": {
+    "directory": {
+      "type": "string",
+      "description": "Where the library goes, relative to the workspace root: packages/ui.",
+      "$default": { "$source": "argv", "index": 0 },
+      "x-prompt": "Which directory should the library be created in?"
+    },
+    "name": {
+      "type": "string",
+      "description": "The project name. Defaults to the directory's last segment.",
+      "pattern": "^[a-z][a-z0-9-]*$"
+    },
+    "tags": {
+      "type": "string",
+      "description": "Comma-separated tags for the project."
+    },
+    "skipInstall": {
+      "type": "boolean",
+      "description": "Write the files without installing.",
+      "default": false
+    },
+    "skipFormat": {
+      "type": "boolean",
+      "description": "Leave the generated files unformatted.",
+      "default": false,
+      "x-priority": "internal"
+    }
+  },
+  "required": ["directory"]
+}

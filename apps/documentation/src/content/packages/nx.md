@@ -1,6 +1,6 @@
 ---
 title: Nx
-summary: nx add and an app generator for an Nx workspace, with Expo's targets inferred by @nx/expo's plugin.
+summary: nx add, and app, library and component generators for an Nx workspace, with Expo's targets inferred by @nx/expo's plugin.
 ---
 
 # Nx
@@ -152,8 +152,37 @@ its Vitest 4 are both in the ranges Angular Native accepts, so there is nothing 
 
 The TypeScript preset (`--preset=ts`) works too, with one difference: `@nx/angular` cannot be added
 to it, because Angular does not support TypeScript project references, so there is no Angular
-library generator there. Generate a library with `@nx/js:library` and write its components as
-usual; the app imports it like any other.
+library generator there. `nx g @ng-native/nx:library` uses `@nx/js:library` instead, below; the
+app imports the library like any other.
+
+## Libraries
+
+```sh
+nx g @ng-native/nx:library packages/ui
+nx g @ng-native/nx:component profile-card --project ui
+nx test ui
+```
+
+`@nx/angular:library` writes tests that run on jsdom through Analog, with a `TestBed` spec for a
+`<p>`, and none of it can render a native component. `@ng-native/nx:library` runs the workspace's
+own library generator without its tests: `@nx/angular:library`, with the options `nx g` would give
+it, including the defaults in `nx.json`, or `@nx/js:library` with no bundler in the TypeScript
+preset. In place of the tests it writes:
+
+- the app's `vitest.config.mts`, whose `ngNative()` renders on the fake Fabric in Node, and a
+  `test` target that runs it once, as the app's does;
+- a `tsconfig.spec.json` for the tests, referenced from the library's `tsconfig.json`;
+- a component built from `<view>` and `<text>`, where the generator put its own, and a `.test.ts`
+  beside it that renders it.
+
+It adds `@ng-native/components`, `@ng-native/testing` and Vitest where the library's dependencies
+go: its own `package.json` in the TypeScript preset, and the root's otherwise. It takes `--name`,
+`--tags` and `--skipInstall`, as the app generator does.
+
+`@nx/angular:component` writes the same `<p>` and `TestBed` spec. `@ng-native/nx:component` writes
+a native component and its test instead, in a folder of its own under the library's `src/lib`, or
+under an app's `src/app`. It takes `--flat` for no folder of its own, `--skipTests`, and a path in
+the name, such as `settings/profile-card`.
 
 ## Options
 

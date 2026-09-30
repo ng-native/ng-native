@@ -276,4 +276,4 @@ async function application(tree, options) {
   return runTasksInSerial(initTask, () => installPackagesTask(tree, true));
 }
 
-module.exports = { application };
+module.exports = { application, hasPathAliases };

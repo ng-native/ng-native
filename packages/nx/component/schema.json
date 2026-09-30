@@ -1,0 +1,38 @@
+{
+  "$schema": "https://json-schema.org/schema",
+  "$id": "NgNativeNxComponent",
+  "title": "Angular Native component",
+  "description": "A component for an Angular Native app or library, with native elements and a test that runs in Node.",
+  "type": "object",
+  "properties": {
+    "name": {
+      "type": "string",
+      "description": "The component's name, optionally with a path: settings/profile-card.",
+      "$default": { "$source": "argv", "index": 0 },
+      "x-prompt": "What should the component be called?"
+    },
+    "project": {
+      "type": "string",
+      "description": "The app or library it belongs to.",
+      "$default": { "$source": "projectName" },
+      "x-dropdown": "projects"
+    },
+    "flat": {
+      "type": "boolean",
+      "description": "Create the files in the directory itself rather than in a folder of their own.",
+      "default": false
+    },
+    "skipTests": {
+      "type": "boolean",
+      "description": "Leave out the .test.ts file.",
+      "default": false
+    },
+    "skipFormat": {
+      "type": "boolean",
+      "description": "Leave the generated files unformatted.",
+      "default": false,
+      "x-priority": "internal"
+    }
+  },
+  "required": ["name", "project"]
+}

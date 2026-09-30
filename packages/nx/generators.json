@@ -18,6 +18,18 @@
       "factory": "./sync/index.cjs#syncNativeModules",
       "schema": "./sync/schema.json",
       "description": "Lists the native modules an app's libraries import in the app's package.json, with their config plugins in app.json. A sync generator."
+    },
+    "library": {
+      "aliases": ["lib"],
+      "factory": "./library/index.cjs#library",
+      "schema": "./library/schema.json",
+      "description": "A library of native components, whose tests render on the fake Fabric as an app's do."
+    },
+    "component": {
+      "aliases": ["c"],
+      "factory": "./component/index.cjs#component",
+      "schema": "./component/schema.json",
+      "description": "A component for an Angular Native app or library, with native elements and a test that runs in Node."
     }
   }
 }

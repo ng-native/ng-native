@@ -10,36 +10,7 @@
 const path = require('node:path').posix;
 const { SchematicsException } = require('@angular-devkit/schematics');
 const { strings } = require('@angular-devkit/core');
-
-function componentSource(className, selector, label) {
-  return `import { Component } from '@angular/core';
-import { Text, View } from '@ng-native/components';
-
-@Component({
-  selector: '${selector}',
-  imports: [Text, View],
-  template: \`
-    <view>
-      <text>${label}</text>
-    </view>
-  \`,
-})
-export class ${className} {}
-`;
-}
-
-function testSource(className, file, label) {
-  return `import { render, screen } from '@ng-native/testing';
-import { expect, test } from 'vitest';
-import { ${className} } from './${file}.ts';
-
-test('renders', async () => {
-  await render(${className});
-
-  expect(screen.getByText('${label}')).toBeTruthy();
-});
-`;
-}
+const { componentSource, testSource } = require('./sources.cjs');
 
 /**
  * The directory the component goes in: the one `ng generate` was run from if that is inside the

@@ -1,7 +1,7 @@
 {
   "name": "@ng-native/nx",
   "version": "0.2.0",
-  "description": "Nx generators for Angular Native: nx add, and an Expo app project whose targets run it.",
+  "description": "Nx generators for Angular Native: nx add, an Expo app project whose targets run it, and native libraries and components.",
   "keywords": [
     "angular",
     "react-native",
@@ -53,7 +53,7 @@
   },
   "scripts": {
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "node --test \"*.test.ts\" \"{init,application,sync}/*.test.ts\""
+    "test": "node --test \"*.test.ts\" \"{init,application,sync,library,component}/*.test.ts\""
   },
   "license": "MIT",
   "homepage": "https://ng-native.com/packages/nx",
