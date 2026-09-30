@@ -752,8 +752,10 @@ describe('the Metro preset', () => {
 
     it('wraps the rewrite once when applied twice', () => {
       const once = nxConfig('/ws');
+      // The preset changes the config it is given, so the wrapper is read before it runs again.
+      const wrapped = once.server.rewriteRequestUrl;
       const twice = withAngularNative(once) as typeof once;
-      assert.equal(twice.server.rewriteRequestUrl, once.server.rewriteRequestUrl);
+      assert.equal(twice.server.rewriteRequestUrl, wrapped);
     });
   });
 
