@@ -36,6 +36,15 @@ describe('host primitives', () => {
   let fabric: FakeFabric;
   let instance: Primitives;
   let componentRef: Awaited<ReturnType<typeof render<Primitives>>>['componentRef'];
+  // The engine's clock, stepped by `tick` rather than waited on, so a fade is sampled at a known
+  // point however busy the machine is.
+  let now: number;
+  const tick = (ms: number) => {
+    now += ms;
+    const engine = componentRef.injector.get(Engine);
+    engine.advanceAnimations();
+    engine.commit();
+  };
 
   before(async () => {
     const mod = await compileFixture(fixture('primitives.ts'));
@@ -43,13 +52,19 @@ describe('host primitives', () => {
   });
 
   beforeEach(async () => {
-    const rendered = await render<Primitives>(Component as Type<Primitives>);
+    now = 1000;
+    const rendered = await render<Primitives>(Component as Type<Primitives>, { now: () => now });
     fabric = rendered.fabric;
     instance = rendered.instance;
     componentRef = rendered.componentRef;
   });
 
-  afterEach(cleanup);
+  afterEach(() => {
+    // Run out the clock whatever happened: an assertion failing mid-fade would otherwise leave the
+    // frame pump rescheduling on a clock that never moves, and the process would never exit.
+    tick(1e9);
+    cleanup();
+  });
 
   it('commits every native primitive under its canonical Fabric name', () => {
     // Taken from RCTFabricComponentsPlugins.mm, not guessed. Legacy RCT-prefixed names only
@@ -169,11 +184,12 @@ describe('host primitives', () => {
     await fireEvent(fading(), 'touchStart');
     // Halfway through the 150ms fade in. A value at either end here would mean the transition
     // never ran and the component had simply set the target, which is what it used to do.
-    await new Promise((resolve) => setTimeout(resolve, 70));
+    tick(75);
     const midway = fading().props['opacity'] as number;
-    assert.ok(midway > 0.5 && midway < 1, `midway through the fade, not ${midway}`);
+    // ease-in-out is symmetric, so halfway in time is halfway in value, to the solver's precision.
+    assert.ok(Math.abs(midway - 0.75) < 1e-5, `midway through the fade, not ${midway}`);
 
-    await new Promise((resolve) => setTimeout(resolve, 200));
+    tick(75);
     assert.equal(fading().props['opacity'], 0.5, 'and it arrives');
   });
 
@@ -181,16 +197,20 @@ describe('host primitives', () => {
     const fading = () => withLabel(fabric, 'fade me');
 
     await fireEvent(fading(), 'touchStart');
-    await new Promise((resolve) => setTimeout(resolve, 220));
+    tick(150);
+    // Held past the pressable's 130ms minPressDuration, a real timer, so the release is not
+    // deferred. Only a lower bound: a slow machine holds longer, which changes nothing.
+    await new Promise((resolve) => setTimeout(resolve, 140));
     await fireEvent(fading(), 'touchEnd');
 
-    await new Promise((resolve) => setTimeout(resolve, 120));
+    tick(125);
     const returning = fading().props['opacity'] as number;
-    assert.ok(returning > 0.5 && returning < 1, `on the way back, not ${returning}`);
+    assert.ok(Math.abs(returning - 0.75) < 1e-5, `halfway back, not ${returning}`);
 
     // `transitionend` is what hands the opacity back; without it the binding would sit on 1 for
     // ever and a caller changing their own opacity would be overruled.
-    await new Promise((resolve) => setTimeout(resolve, 250));
+    tick(125);
+    await settle();
     assert.equal(fading().props['opacity'], 1, 'back to rest, and the binding let go');
   });
 

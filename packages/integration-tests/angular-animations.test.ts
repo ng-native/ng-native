@@ -7,26 +7,48 @@
  * stays in the tree, fading, until the transition the stylesheet declared has finished.
  */
 import assert from 'node:assert/strict';
-import { after, before, describe, it } from 'node:test';
+import { after, afterEach, before, describe, it } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import type { Type } from '@angular/core';
 import { Engine } from '@ng-native/fabric';
 import { cleanup, render, settle, type FakeFabric, type FakeFabricNode } from '@ng-native/testing';
 import { compileFixture } from './compile.ts';
 
-const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+/**
+ * The engine's clock, stepped by hand rather than waited on. Sleeping for an animation's duration
+ * plus a margin is what makes a suite flaky: the duration is real time and the margin is not, so a
+ * loaded machine spends the margin scheduling other work.
+ */
+function clock() {
+  let time = 1000;
+  let engine: Engine | undefined;
+  const handle = {
+    now: () => time,
+    use(on: Engine) {
+      engine = on;
+    },
+    /** Moves time on and runs the frame it lands on, then lets `transitionend` listeners run. */
+    async tick(ms: number) {
+      time += ms;
+      engine?.advanceAnimations();
+      engine?.commit();
+      await settle();
+    },
+  };
+  clocks.push(handle);
+  return handle;
+}
 
 /**
- * Waits for something to become true, up to a second.
- *
- * For the end of an animation, where the alternative is sleeping for its duration plus a guess.
- * The guess is what makes a suite flaky: the duration is real time and the margin is not, so a
- * loaded machine spends the margin scheduling other work. The cap is there so a genuine
- * regression fails rather than hangs.
+ * Every clock is run out after its test, whatever happened in it: an assertion failing
+ * mid-animation would otherwise leave the frame pump rescheduling on a clock that never moves,
+ * and the process would never exit.
  */
-const until = async (done: () => boolean) => {
-  for (let attempt = 0; attempt < 100 && !done(); attempt++) await wait(10);
-};
+const clocks: { tick(ms: number): Promise<void> }[] = [];
+afterEach(async () => {
+  for (const running of clocks.splice(0)) await running.tick(1e9);
+});
+
 const flatten = (n: FakeFabricNode[]): FakeFabricNode[] =>
   n.flatMap((x) => [x, ...flatten(x.children)]);
 
@@ -40,11 +62,16 @@ after(cleanup);
 describe('animate.leave', () => {
   let fabric: FakeFabric;
   let host: { shown: { set(v: boolean): void } };
+  let time: ReturnType<typeof clock>;
 
   const panel = () => flatten(fabric.committed).find((n) => n.props['opacity'] !== undefined);
 
   async function boot() {
-    const result = await render(mod['Leaving'] as Type<{ shown: { set(v: boolean): void } }>);
+    time = clock();
+    const result = await render(mod['Leaving'] as Type<{ shown: { set(v: boolean): void } }>, {
+      now: time.now,
+    });
+    time.use(result.componentRef.injector.get(Engine));
     fabric = result.fabric;
     host = result.instance;
   }
@@ -59,19 +86,18 @@ describe('animate.leave', () => {
     await boot();
     host.shown.set(false);
     await settle();
+    // The leave class arrives from Angular's animation queue after the render pass, and the first
+    // frame is what commits it and starts the transition.
+    await time.tick(0);
 
     assert.ok(panel(), 'still there: the leave class only started a transition');
     assert.equal(panel()!.props['opacity'], 1, 'and it has not jumped to the end');
 
-    /*
-     * Waited out rather than slept through.
-     *
-     * This was `wait(420)` for a 300ms transition, which is a comfortable-looking margin and is
-     * not one: a hundred test files run at once, and a machine busy enough will not get round to
-     * the timer that ends the transition inside the spare 120ms. It failed roughly one full run
-     * in ten, and a red that only appears in a full run reads as a bug in whatever changed last.
-     */
-    await until(() => panel() === undefined);
+    await time.tick(299);
+    assert.ok(panel(), 'still there a frame before the end');
+    await time.tick(1);
+    // `transitionend` runs after the commit that finished the transition; the removal is the next.
+    await time.tick(0);
     assert.equal(panel(), undefined, 'gone once the transition finished');
   });
 
@@ -79,11 +105,11 @@ describe('animate.leave', () => {
     await boot();
     host.shown.set(false);
     await settle();
-    await wait(150);
+    await time.tick(0);
+    await time.tick(150);
 
-    const opacity = panel()?.props['opacity'];
-    assert.ok(typeof opacity === 'number', 'still rendering while it leaves');
-    assert.ok(opacity > 0 && opacity < 1, `mid-fade, got ${opacity}`);
+    assert.equal(panel()?.props['opacity'], 0.5, 'halfway through the linear fade');
+    await time.tick(150);
   });
 });
 
@@ -97,20 +123,26 @@ describe('animate.leave', () => {
  */
 describe('animate.enter', () => {
   it('plays the keyframes and holds the element until they finish', async () => {
+    const time = clock();
     const { fabric, instance, componentRef } = await render(
       mod['Entering'] as Type<{ shown: { set(v: boolean): void } }>,
+      { now: time.now },
     );
+    time.use(componentRef.injector.get(Engine));
 
     instance.shown.set(true);
     await settle();
     const opacity = () =>
       flatten(fabric.committed).find((n) => n.props['opacity'] !== undefined)?.props['opacity'];
 
-    await wait(60);
-    const early = opacity() as number;
-    assert.ok(early < 1, `playing from the first frame, got ${early}`);
+    // The enter class arrives from Angular's animation queue after the render pass, and the first
+    // frame is what commits it.
+    await time.tick(0);
+    assert.equal(opacity(), 0, 'playing from the first frame');
+    await time.tick(60);
+    assert.equal(opacity(), 0.2, 'a fifth of the way through');
 
-    await until(() => opacity() === 1);
+    await time.tick(240);
     assert.equal(opacity(), 1, 'and settles on its resting style');
 
     const node = componentRef.injector.get(Engine).root.children[0]!;

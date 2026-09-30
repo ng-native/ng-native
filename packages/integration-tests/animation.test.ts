@@ -136,25 +136,37 @@ describe('animated style', () => {
  * class from creation rather than gaining it later.
  */
 describe('a keyframe animation from a component stylesheet', () => {
-  it('runs on an element that had the class from the start', async () => {
+  it('runs on an element that had the class from the start', async (t) => {
     const mod = await compileFixture(
       fileURLToPath(new URL('./fixtures/animation.ts', import.meta.url)),
     );
-    const { getByTestId, componentRef, unmount } = await render(mod['Pulsing'] as Type<unknown>);
-
+    // The engine's clock, stepped by hand, so every frame is sampled at a known time however
+    // slow the machine running the test.
+    let now = 1000;
+    const { getByTestId, componentRef, unmount } = await render(mod['Pulsing'] as Type<unknown>, {
+      now: () => now,
+    });
+    const engine = componentRef.injector.get(Engine);
     const pulse = () => getByTestId('pulse').props['opacity'];
+    const tick = (ms: number) => {
+      now += ms;
+      engine.advanceAnimations();
+      engine.commit();
+    };
+    // Run out the clock whatever happens: an assertion failing mid-animation would otherwise
+    // leave the frame pump rescheduling on a clock that never moves, and the process never exits.
+    t.after(() => tick(1e9));
 
-    // Near enough 0.25 rather than exactly: this runs on the real clock, because a frozen one
-    // never finishes the animation and the frame pump would keep the process alive forever.
-    assert.ok(
-      Math.abs((pulse() as number) - 0.25) < 0.02,
-      `the first frame is painted, not the resting style - got ${String(pulse())}`,
-    );
-    assert.equal(
-      componentRef.injector.get(Engine).animating,
-      true,
-      'and the engine knows it has frames to run',
-    );
+    assert.equal(pulse(), 0.25, 'the first frame is painted, not the resting style');
+    assert.equal(engine.animating, true, 'and the engine knows it has frames to run');
+
+    tick(25);
+    assert.equal(pulse(), 0.4375, 'a quarter of the way through the first iteration');
+    tick(100);
+    assert.equal(pulse(), 0.4375, 'and of the second');
+    tick(100);
+    assert.equal(engine.animating, false, 'done after two iterations');
+    assert.equal(pulse(), null, 'the animated value cleared, back to the resting style');
 
     unmount();
   });
