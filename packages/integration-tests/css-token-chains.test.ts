@@ -462,6 +462,10 @@ describe('a var() fallback made of other tokens inside a colour', () => {
     const cycle = mix('var(--missing, hsl(var(--c) 100% 50%))');
     const cyclic = innermost(`${TOKENS} .x { --c: ${cycle}; ${read} }`, 'x', [{}]);
     assert.equal(cyclic['backgroundColor'], 'rgb(1, 2, 3)');
+    // A fallback that is not substituted is no reference, and so no cycle, as in Chrome.
+    const unused = mix('var(--brand, hsl(var(--c) 100% 50%))');
+    const valid = innermost(`${TOKENS} .x { --c: ${unused}; ${read} }`, 'x', [{}]);
+    assert.equal(valid['backgroundColor'], 'rgb(133, 138, 143)');
     const unset = mix('var(--missing, hsl(var(--nope) 100% 50%))');
     assert.equal(painted('background-color', unset), undefined);
   });
