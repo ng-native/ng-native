@@ -1323,14 +1323,22 @@ function addAliased(name, parts, out, deferred, context) {
   for (const prop of propsFor(name)) out[prop] = value.length;
 }
 
-/** A `--x` definition's value, in every form it can be read as. */
-function customToken(name, parts, context) {
-  const value =
+/**
+ * A value made of other tokens, in the form the device works out where it is defined: an hsl(),
+ * a colour of channels, a mix or arithmetic. Null for anything else.
+ */
+function derivedToken(parts, context) {
+  return (
     deferHslToken(parts) ??
     deferChannelsToken(parts, context) ??
     deferMixToken(parts, context) ??
-    deferCalcToken(parts, context) ??
-    tokenValue(parts, `${context} (${name})`);
+    deferCalcToken(parts, context)
+  );
+}
+
+/** A `--x` definition's value, in every form it can be read as. */
+function customToken(name, parts, context) {
+  const value = derivedToken(parts, context) ?? tokenValue(parts, `${context} (${name})`);
   // Tailwind's own slots never hold an animation, and `--tw-inset-shadow: inset 200ms` parses as
   // one named inset: kept, a shadow that is not one would go unreported.
   if (value?.animation && name.startsWith('--tw-')) delete value.animation;
@@ -2417,6 +2425,7 @@ module.exports = {
   compileCss,
   CssUnsupported,
   deferHslToken,
+  derivedToken,
   linear,
   markUnitless,
   opacityOf,

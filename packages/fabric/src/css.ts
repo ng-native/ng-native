@@ -220,6 +220,11 @@ export interface DeferredDeclaration {
   readonly alternatives?: readonly string[];
   readonly fallback?: unknown;
   /**
+   * A fallback made of other tokens, `var(--missing, calc(var(--gap) * 2))`, worked out from the
+   * tokens in scope where it is used, as a browser substitutes it there.
+   */
+  readonly fallbackToken?: TokenValue;
+  /**
    * What to write when the reference resolves, whatever it resolves to: `flex: var(--grow)` sets a
    * shrink of 1 and a basis of 0%, but only when there is a grow for them to go with.
    */
@@ -1450,7 +1455,8 @@ export class StyleResolver {
     tokens: Readonly<Record<string, TokenValue>>,
   ): void {
     const name = declaration.reference;
-    if (name === undefined || declaration.fallback !== undefined || name in tokens) return;
+    if (name === undefined || name in tokens) return;
+    if (declaration.fallback !== undefined || declaration.fallbackToken) return;
     if (declaration.alternatives?.some((alternative) => alternative in tokens)) return;
     this.onUndefinedToken!(name, declaration.props);
   }
@@ -1594,15 +1600,22 @@ function resolveAliases(
   const names = Object.keys(own);
   const aliases = names.filter((name) => own[name]!.alias);
   followAliases(aliases, merged);
+  // What each token made of others is made of: its own definition or, for an alias, what it was
+  // substituted with, which is such a token when its chain ends at one, by a link or a fallback,
+  // `var(--missing, calc(var(--gap) * 2))`. That is worked out here, as the token it names is.
+  const forms = new Map<string, TokenValue>();
+  for (const name of names) {
+    const form = own[name]!.alias ? merged[name] : own[name];
+    if (isDerived(form)) forms.set(name, form!);
+  }
   // Until a pass settles nothing more: one made of another defined after it, or of one not yet
   // settled, cannot be worked out until that one is. What is left then is a cycle, or reads a
   // token that is not there, and is unset.
-  const derivedNames = names.filter((name) => isDerived(own[name]));
-  let pending = derivedNames;
+  let pending = [...forms.keys()];
   for (let settled = true; settled && pending.length;) {
     settled = false;
     pending = pending.filter((name) => {
-      const value = derived(own[name]!, merged);
+      const value = derived(forms.get(name)!, merged);
       if (!value) return true;
       merged[name] = value;
       settled = true;
@@ -1610,12 +1623,6 @@ function resolveAliases(
     });
   }
   for (const name of pending) delete merged[name];
-  // A chain that ends at one of those, by a link or a fallback, copied it unsettled above into
-  // every alias on the way: follow them all again, from what they were defined as, now it is.
-  if (derivedNames.length && aliases.length) {
-    for (const name of aliases) merged[name] = own[name]!;
-    followAliases(aliases, merged);
-  }
   return merged;
 }
 
@@ -1794,11 +1801,20 @@ function referenced(
     if (value !== undefined) break;
     value = formOf(tokens[alternative], declaration.kind!);
   }
-  value ??= declaration.fallback;
+  value ??= fallbackOf(declaration, tokens);
   const base = CHANNEL_KINDS.has(declaration.kind!)
     ? fromChannels(value, declaration.alpha, tokens, declaration.space)
     : value;
   return declaration.adjust ? adjusted(base, declaration.adjust) : base;
+}
+
+/** The fallback written, or one made of other tokens, worked out from the tokens where it is used. */
+function fallbackOf(
+  declaration: DeferredDeclaration,
+  tokens: Readonly<Record<string, TokenValue>>,
+): unknown {
+  const token = declaration.fallbackToken;
+  return declaration.fallback ?? (token && formOf(derived(token, tokens), declaration.kind!));
 }
 
 const CHANNEL_KINDS: ReadonlySet<TokenKind> = new Set(['channels', 'hslChannels']);
@@ -1943,7 +1959,7 @@ interface LengthMarker {
  */
 type CalcExpression =
   | number
-  | { readonly reference: string; readonly fallback?: number }
+  | { readonly reference: string; readonly fallback?: CalcExpression }
   | readonly ['+' | '-' | '*' | '/' | 'max' | 'min', CalcExpression, CalcExpression];
 
 interface CalcMarker {
@@ -2021,7 +2037,10 @@ function calculated(
   if (typeof expression === 'number') return expression;
   if (!Array.isArray(expression)) {
     const leaf = expression as Exclude<CalcExpression, number | readonly unknown[]>;
-    return tokenNumber(tokens[leaf.reference], kind) ?? leaf.fallback;
+    const own = tokenNumber(tokens[leaf.reference], kind);
+    return (
+      own ?? (leaf.fallback === undefined ? undefined : calculated(leaf.fallback, kind, tokens))
+    );
   }
   const [op, a, b] = expression as readonly [string, CalcExpression, CalcExpression];
   const left = calculated(a, kind, tokens);

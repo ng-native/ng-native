@@ -213,4 +213,18 @@ export const CASES: OracleCase[] = [
       '#probe { color: var(--c); background-color: var(--d) }',
     tree: probe(),
   },
+  {
+    name: 'a var() falls back to a value made of other tokens',
+    css:
+      ':root { --h: 120; --c: var(--missing, hsl(var(--h) 100% 50%)) } ' +
+      '#probe { color: var(--c); background-color: var(--m1, var(--m2, hsl(var(--h) 100% 25%))) }',
+    tree: probe(),
+  },
+  {
+    name: 'a cycle through a var() fallback is invalid',
+    css:
+      ':root { --h: 120; --a: var(--missing, hsl(var(--b) 100% 50%)); --b: var(--a) } ' +
+      '#probe { color: var(--a, rgb(1, 0, 0)) }',
+    tree: probe(),
+  },
 ];

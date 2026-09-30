@@ -144,6 +144,8 @@ describe('a value with a var() inside it resolves as the same text in a styleshe
     ['calc((var(--gap) - 1px) / 2)', 'width: var(--x)', 'width', 1.5],
     ['calc(var(--missing, 5px) * 2)', 'width: var(--x)', 'width', 10],
     ['calc(var(--missing, 1rem) * 2)', 'width: var(--x)', 'width', 32],
+    ['calc(var(--missing, var(--gap)) * 2)', 'width: var(--x)', 'width', 8],
+    ['var(--missing, calc(var(--gap) * 2))', 'width: var(--x)', 'width', 8],
     ['calc(var(--n) / 10)', 'opacity: var(--x)', 'opacity', 0.3],
     ['calc(var(--n) * 10%)', 'opacity: var(--x)', 'opacity', 0.3],
     ['max(var(--gap), 6px)', 'width: var(--x)', 'width', 6],
@@ -190,7 +192,7 @@ describe('a value with a var() inside it resolves as the same text in a styleshe
       'calc(var(--missing) * 2)',
       'calc(var(--gap) / 0)',
       'calc(var(--x) * 2)',
-      'var(--missing, calc(var(--gap) * 2))',
+      'var(--missing, calc(var(--none) * 2))',
     ];
     for (const value of lengths) {
       const read = 'width: var(--x, 7px)';
@@ -216,7 +218,6 @@ describe('a value with a var() inside it resolves as the same text in a styleshe
     // A stylesheet stops the build on these; set on an element they are unset, never a colour
     // string with a var() in it.
     const width = 'width: var(--x, 7px)';
-    assert.equal(set(TOKENS, 'calc(var(--missing, var(--gap)) * 2)', width)['width'], 7);
     assert.equal(set(TOKENS, 'calc(var(--gap) + 1em)', width)['width'], 7);
     const color = 'color: var(--x, rgb(1, 2, 3))';
     assert.equal(set(TOKENS, 'rgb(var(--n) 0 0)', color)['color'], 'rgb(1, 2, 3)');

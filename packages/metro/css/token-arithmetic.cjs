@@ -48,8 +48,14 @@ function arithmetic(terms, kind, context) {
 }
 
 function leaf(term, kind, context) {
-  const { fallback, alternatives } = fallbacks(term, kind, context);
-  if (alternatives) throw unreadable(context, 'has a var() falling back to another var()');
+  // A fallback that is another `var()` or arithmetic of its own is a tree too, worked out if the
+  // token is not set: `var(--a, var(--b, 3px))`, `var(--a, calc(var(--gap) * 2))`.
+  const [nested, ...rest] = meaningful(term.value?.fallback);
+  const name = nested?.type === 'function' ? nested.value?.name : undefined;
+  if (nested && !rest.length && (nested.type === 'var' || MATH.has(name))) {
+    return { reference: term.value.name.ident, fallback: tree(nested, kind, context) };
+  }
+  const { fallback } = fallbacks(term, kind, context);
   return {
     reference: term.value.name.ident,
     ...(typeof fallback === 'number' ? { fallback } : {}),

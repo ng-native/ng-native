@@ -261,3 +261,84 @@ describe('a chain of var() through Tailwind', () => {
     assert.equal(background(true, 'var(--color-brand)'), 'rgb(4, 5, 6)');
   });
 });
+
+describe('a var() whose fallback is made of other tokens', () => {
+  const TOKENS = ':root { --gap: 8px; --n: 3; --hue: 120 }';
+
+  /** A view with `--x: value` set on it, and `own` beside it, reading it through `read`. */
+  const set = (value: string, read: string, own: Record<string, string> = {}) =>
+    innermost(`${TOKENS} .x { ${read} }`, 'x', [{ ...own, '--x': value }]);
+  /** The same, with `--x: value` in the rule that reads it. */
+  const written = (value: string, read: string) =>
+    innermost(`${TOKENS} .x { --x: ${value}; ${read} }`, 'x', [{}]);
+  /** `value` as the declaration itself, not a token. */
+  const declared = (property: string, value: string, own: Record<string, string> = {}) =>
+    innermost(`${TOKENS} .x { ${property}: ${value} }`, 'x', [own]);
+
+  const cases: readonly [string, string, unknown][] = [
+    ['var(--missing, calc(var(--gap) * 2))', 'width', 16],
+    ['var(--m1, var(--m2, calc(var(--gap) * 2)))', 'width', 16],
+    ['var(--missing, max(var(--gap), 10px))', 'width', 10],
+    ['var(--gap, calc(var(--n) * 1px))', 'width', 8],
+    ['calc(var(--missing, calc(var(--gap) * 2)) + 1px)', 'width', 17],
+    ['calc(var(--m1, var(--m2, 3px)) * 2)', 'width', 6],
+    ['calc(var(--m1, var(--gap)) * 2)', 'width', 16],
+    ['var(--missing, calc(var(--n) / 10))', 'opacity', 0.3],
+    ['var(--missing, hsl(var(--hue) 100% 50%))', 'color', 'rgb(0, 255, 0)'],
+  ];
+
+  for (const [value, property, expected] of cases) {
+    it(value, () => {
+      const unset = { width: '99px', opacity: '0.99', color: 'rgb(1, 2, 3)' }[property];
+      const read = `${property}: var(--x, ${unset})`;
+      assert.equal(written(value, read)[property], expected, 'a token in a stylesheet');
+      assert.equal(set(value, read)[property], expected, 'a token set on the element');
+      assert.equal(declared(property, value)[property], expected, 'the declaration itself');
+    });
+  }
+
+  it('works the fallback out from the tokens where it is read', () => {
+    const value = 'var(--missing, calc(var(--gap) * 2))';
+    assert.equal(declared('width', value, { '--gap': '3px' })['width'], 6);
+    assert.equal(set(value, 'width: var(--x)', { '--gap': '3px' })['width'], 6);
+  });
+
+  it('treats a cycle through a fallback as invalid and never loops', () => {
+    const read = 'width: var(--x, 7px)';
+    for (const value of [
+      'var(--missing, calc(var(--x) * 2))',
+      'var(--m1, var(--m2, calc(var(--x) + 1px)))',
+      'calc(var(--missing, calc(var(--x) * 2)) + 1px)',
+    ]) {
+      assert.equal(written(value, read)['width'], 7, `${value} in a stylesheet`);
+      assert.equal(set(value, read)['width'], 7, `${value} set on the element`);
+    }
+    const value = 'var(--missing, calc(var(--y) * 2))';
+    assert.equal(set(value, read, { '--y': 'var(--x)' })['width'], 7, 'set on the element');
+    const sheet = `${TOKENS} .x { --x: ${value}; --y: var(--x); ${read} }`;
+    assert.equal(innermost(sheet, 'x', [{}])['width'], 7, 'in a stylesheet');
+  });
+
+  it('follows a theme and an ancestor that change a token the fallback reads', () => {
+    const fabric = createFakeFabric();
+    const css = `${TOKENS} .dark { --gap: 10px } .x { width: var(--x, 7px) }`;
+    const engine = new Engine(fabric, 1, { globalStyles: compileCss(css, 'global') });
+    const theme = engine.createElement('view', null);
+    const node = engine.createElement('view', null);
+    engine.setCustomProperty(node, '--x', 'var(--missing, calc(var(--gap) * 2))');
+    engine.addClass(node, 'x');
+    engine.appendChild(theme, node);
+    engine.appendChild(engine.root, theme);
+    engine.commit();
+    assert.equal(committedProps(fabric, node)['width'], 16);
+    engine.addClass(theme, 'dark');
+    engine.commit();
+    assert.equal(committedProps(fabric, node)['width'], 20);
+    engine.setCustomProperty(theme, '--gap', '1px');
+    engine.commit();
+    assert.equal(committedProps(fabric, node)['width'], 2);
+    engine.setCustomProperty(theme, '--missing', '5px');
+    engine.commit();
+    assert.equal(committedProps(fabric, node)['width'], 5);
+  });
+});

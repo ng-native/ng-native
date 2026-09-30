@@ -33,6 +33,8 @@ const FUNCTION = /([a-z]+)\(\s*/iy;
 const VAR = /var\(\s*(--[\w-]+)\s*/iy;
 const LITERAL = /([+-]?(?:\d+\.?\d*|\.\d+)(?:e[+-]?\d+)?)(%|[a-z]+)?/iy;
 const WORD = /[^\s,/()]+/y;
+/** A fallback that is a `var()` or arithmetic, rather than a value written out. */
+const NESTED = /^\s*(var|calc|min|max)\(/i;
 /** What one of each unit counts as: points, degrees, milliseconds, or itself. */
 const PER_UNIT: Readonly<Record<string, number>> = {
   '': 1,
@@ -158,10 +160,14 @@ function factor(cursor: Cursor, kind: Marker['kind']): Expression {
 }
 
 /**
- * A `var()` fallback in arithmetic, as its slot reads it: a length in points, `rem` included as
- * the compiler counts it, or a bare number.
+ * A `var()` fallback in arithmetic, as its slot reads it: another `var()` or arithmetic of its
+ * own, read as a tree, `var(--a, calc(var(--gap) * 2))`, as `leaf` in the compiler reads it; a
+ * length in points, `rem` included as the compiler counts it; or a bare number.
  */
-function leafFallback(text: string | undefined, kind: Marker['kind']): number | undefined {
+function leafFallback(text: string | undefined, kind: Marker['kind']): Expression | undefined {
+  if (text !== undefined && NESTED.test(text)) {
+    return whole(text.trim(), (cursor) => factor(cursor, kind)) ?? fail();
+  }
   const token = fallbackToken(text);
   if (kind !== 'length') return token?.number;
   if (typeof token?.length === 'number') return token.length;

@@ -467,8 +467,17 @@ function unitForms(part) {
 function aliasValue(part, context) {
   const alias = part.value?.name?.ident;
   if (!alias) return null;
-  const fallback = part.value?.fallback ? tokenValue(part.value.fallback, context) : null;
+  const fallback = part.value?.fallback ? fallbackToken(part.value.fallback, context) : null;
   return fallback ? { alias, fallback } : { alias };
+}
+
+/**
+ * A `var()`'s fallback as a token: `var(--missing, calc(var(--gap) * 2))` falls back to one made
+ * of others, which the device works out where it is substituted. Required here rather than at
+ * the top: compile.cjs requires this module.
+ */
+function fallbackToken(parts, context) {
+  return require('./compile.cjs').derivedToken(parts, context) ?? tokenValue(parts, context);
 }
 
 /**
@@ -862,25 +871,32 @@ function firstFamily(parts) {
 /** The tokens a family name is made of. */
 const WORDS = new Set(['ident', 'string']);
 
+/** The forms of a token made of others. */
+const DERIVED = ['hsl', 'deferredColour', 'deferredCalc'];
+
 /**
  * A `var()`'s fallback, as the fields of the deferred declaration it belongs to.
  *
  * A fallback can itself be a `var()`, with a fallback of its own: `var(--a, var(--b, green))`.
  * Those tokens are looked up on device, in turn, so they are listed as `alternatives`, and what is
- * left at the end of the chain is the written `fallback`, in the form the use site needs.
+ * left at the end of the chain is the written `fallback`, in the form the use site needs, or a
+ * `fallbackToken` made of other tokens, `calc(var(--gap) * 2)`, which the device works out there.
  */
 function fallbacks(varPart, kind, context) {
   const raw = varPart.value?.fallback;
-  let converted = raw ? tokenValue(raw, `${context} (fallback)`) : null;
+  let converted = raw ? fallbackToken(raw, `${context} (fallback)`) : null;
   const alternatives = [];
   while (converted?.alias) {
     alternatives.push(converted.alias);
     converted = converted.fallback;
   }
   const fallback = formOf(converted, kind);
+  // One made of other tokens is worked out where it is used, from the tokens in scope there.
+  const derived = converted && DERIVED.some((form) => form in converted);
   return {
     ...(alternatives.length ? { alternatives } : {}),
     ...(fallback === undefined ? {} : { fallback }),
+    ...(derived ? { fallbackToken: converted } : {}),
   };
 }
 

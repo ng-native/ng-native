@@ -187,5 +187,19 @@
       "color": "rgb(0, 170, 255)",
       "background-color": "rgb(0, 96, 159)"
     }
+  },
+  {
+    "name": "a var() falls back to a value made of other tokens",
+    "expected": {
+      "color": "rgb(0, 255, 0)",
+      "background-color": "rgb(0, 128, 0)"
+    }
+  },
+  {
+    "name": "a cycle through a var() fallback is invalid",
+    "expected": {
+      "color": "rgb(1, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)"
+    }
   }
 ]
