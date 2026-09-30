@@ -164,6 +164,10 @@ module.exports = {
 @tailwind utilities;
 ```
 
+A `tailwind.config.ts` imports the preset the same way, as
+`import nativePreset from '@ng-native/tailwind/preset.cjs'`: the package ships its type
+declarations.
+
 `metro.config.js` and `main.ts` are the same as above. `withTailwind` reads the app's
 `tailwindcss` version and runs Tailwind 3's own CLI, which ships inside `tailwindcss`, so there is
 no `@tailwindcss/cli` to install.
