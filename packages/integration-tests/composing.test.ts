@@ -10,6 +10,14 @@ import type { Type } from '@angular/core';
 import { cleanup, fireEvent, render, screen } from '@ng-native/testing';
 import { compileFixture } from './compile.ts';
 
+type Checked = () => { checked(): boolean };
+type ComposingCheckboxes = {
+  checkbox: Checked;
+  unforwarded: Checked;
+  injected: Checked;
+  presses(): number;
+};
+
 describe('a control composed from the host behaviours', () => {
   let Composing: Type<{ on: { (): boolean }; locked: { set(v: boolean): void } }>;
 
@@ -45,6 +53,25 @@ describe('a control composed from the host behaviours', () => {
     assert.deepEqual(toggle().props['accessibilityState'], { checked: false, disabled: true });
     await fireEvent.press(toggle());
     assert.equal(instance.on(), false, 'a disabled control does not claim the touch');
+    cleanup();
+  });
+
+  it('reacts to its own press through a host listener once press is forwarded', async () => {
+    const { instance } = await render(Composing);
+    const host = instance as unknown as ComposingCheckboxes;
+    await fireEvent.press(screen.getByTestId('checkbox'));
+    assert.equal(host.checkbox().checked(), true, 'the host listener ran');
+    assert.equal(host.presses(), 1, 'and a listener outside still hears it');
+
+    await fireEvent.press(screen.getByTestId('unforwarded'));
+    assert.equal(
+      host.unforwarded().checked(),
+      false,
+      'unforwarded, the host listener hears nothing',
+    );
+
+    await fireEvent.press(screen.getByTestId('injected'));
+    assert.equal(host.injected().checked(), true, 'the injected behaviour needs nothing forwarded');
     cleanup();
   });
 

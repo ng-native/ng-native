@@ -60,6 +60,35 @@ button, say - composes `PressBehavior` through `hostDirectives` instead of wrapp
 cost of one native view rather than two, and the component calls `contributeAccessibility` to tell
 the view primitive on that same host what role and state it should announce.
 
+A component that reacts to its own press, such as a checkbox toggling itself, forwards `press` in
+its `hostDirectives` entry and listens for it in `host`:
+
+```ts
+import { Component, signal } from '@angular/core';
+import { PressBehavior } from '@ng-native/components';
+
+@Component({
+  selector: 'ui-checkbox',
+  template: '<ng-content />',
+  hostDirectives: [{ directive: PressBehavior, inputs: ['disabled'], outputs: ['press'] }],
+  host: { '(press)': 'toggle()' },
+})
+export class Checkbox {
+  readonly checked = signal(false);
+
+  toggle(): void {
+    this.checked.update((checked) => !checked);
+  }
+}
+```
+
+The forwarding is Angular's rule rather than this package's: a host listener hears only the
+outputs the host exposes. Without `outputs: ['press']` the `(press)` listener never runs, and
+nothing reports it. Forwarded, `press` also reaches a `(press)` the app binds on `<ui-checkbox>`.
+A component that keeps `press` to itself can subscribe to the behavior instead, which needs
+nothing forwarded: `inject(PressBehavior).press.subscribe(() => this.toggle())` in the
+constructor.
+
 <!-- api: Pressable -->
 
 <!-- api: TouchableOpacity -->
