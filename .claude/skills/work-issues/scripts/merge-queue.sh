@@ -32,8 +32,9 @@ while (( ${#queue} )); do
     # A merge while a release runs moves main under it and breaks its push.
     [[ -z $(gh api "$R/actions/workflows/release.yml/runs?per_page=3" \
       --jq '.workflow_runs[]|select(.status!="completed")|.id' 2>/dev/null) ]] || continue
-    # A failed merge (main moved, a check re-ran) stays queued and shows GitHub's reason.
-    if err=$(gh api -X PUT $R/pulls/$n/merge -f merge_method=squash 2>&1 >/dev/null); then
+    # Merge exactly the head that was checked; if a commit landed since, GitHub refuses and the PR stays
+    # queued for the next pass. Any failure shows GitHub's reason.
+    if err=$(gh api -X PUT $R/pulls/$n/merge -f merge_method=squash -f sha="$sha" 2>&1 >/dev/null); then
       echo "#$n merged"; queue=(${queue:#$n})
     else
       echo "#$n merge failed, retrying: ${err//$'\n'/ }"

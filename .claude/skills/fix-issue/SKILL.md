@@ -105,7 +105,7 @@ have no heading. Say plainly when output, announcements, query results or types 
   `gh api 'repos/ng-native/ng-native/actions/workflows/release.yml/runs?per_page=1' --jq '.workflow_runs[0].status'`
   must print `completed`.
 - Push, then open the PR. `gh pr create` uses GraphQL. When that limit is spent, use REST:
-  `gh api repos/ng-native/ng-native/pulls -f title=... -f head=... -f base=main -f body=...`.
+  `gh api repos/ng-native/ng-native/pulls -f title=... -f head=... -f base=<main, or the branch a stacked PR depends on> -f body=...`.
 - The body covers the cause, the fix, how it was verified, and anything left as a follow-up. It says
   `Closes #<n>`. No AI attribution anywhere.
 - Never merge your own PR.
