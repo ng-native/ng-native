@@ -16,7 +16,7 @@
  */
 const path = require('node:path');
 const { createHash } = require('node:crypto');
-const { readdirSync, readFileSync, watch } = require('node:fs');
+const { existsSync, readdirSync, readFileSync, watch } = require('node:fs');
 
 const SOURCE_EXTS = ['html', 'css', 'scss'];
 
@@ -305,6 +305,67 @@ function withTypeScriptJsImports(next, projectRoot) {
 }
 
 /**
+ * The request for a lazy chunk from outside Metro's server root, with its path from the server
+ * root put back, or nothing for any other request.
+ *
+ * Expo addresses a chunk by its path from the server root, so a library beside the app is
+ * `/../../libs/settings/src/index.bundle`. The URL drops the `..`, and Metro looks for
+ * `libs/settings/src/index` inside the app. The server root is the app's own directory wherever
+ * the app is not a package-manager workspace, as in an integrated Nx workspace. So a chunk that
+ * names no file under the server root is looked for in each directory above it, nearest first,
+ * and the path to the one that has it goes in `bundleEntry`, which Metro reads in place of the
+ * URL's path.
+ *
+ * A chunk's own lazy imports copy its query, so a `bundleEntry` that climbs out of the server
+ * root came from the chunk that imported this one, and is worked out again.
+ *
+ * @param {string} url
+ * @param {{ serverRoot: string, sourceExts: readonly string[] }} roots
+ */
+function chunkOutsideServerRoot(url, { serverRoot, sourceExts }) {
+  const request = new URL(url, 'http://localhost');
+  const [, file, kind] = /^\/(.+)\.(bundle|map)$/.exec(request.pathname) ?? [];
+  if (!file || request.searchParams.get('modulesOnly') !== 'true') return undefined;
+  const inherited = request.searchParams.get('bundleEntry')?.startsWith('../');
+  if (inherited) request.searchParams.delete('bundleEntry');
+  const written = () =>
+    url.startsWith('/') ? request.pathname + request.search + request.hash : request.href;
+
+  const name = decodeURIComponent(file);
+  const has = (dir) => sourceExts.some((ext) => existsSync(path.join(dir, `${name}.${ext}`)));
+  if (!has(serverRoot)) {
+    for (let dir = path.dirname(serverRoot); dir !== path.dirname(dir); dir = path.dirname(dir)) {
+      if (!has(dir)) continue;
+      const entry = path.relative(serverRoot, path.join(dir, name)).split(path.sep).join('/');
+      request.searchParams.set('bundleEntry', `${entry}.${kind}`);
+      return written();
+    }
+  }
+  return inherited ? written() : undefined;
+}
+
+/**
+ * Wraps the server's `rewriteRequestUrl`, Expo's included, so a lazy chunk from a library outside
+ * the server root is served: see `chunkOutsideServerRoot`.
+ */
+function withChunksOutsideServerRoot(config) {
+  const next = config.server?.rewriteRequestUrl;
+  if (next?.[WRAPPED]) return;
+  const rewriteRequestUrl = (url) => {
+    const rewritten = next ? next(url) : url;
+    const roots = {
+      serverRoot: path.resolve(
+        config.server?.unstable_serverRoot ?? config.projectRoot ?? process.cwd(),
+      ),
+      sourceExts: config.resolver.sourceExts,
+    };
+    return chunkOutsideServerRoot(rewritten, roots) ?? rewritten;
+  };
+  rewriteRequestUrl[WRAPPED] = true;
+  config.server = { ...config.server, rewriteRequestUrl };
+}
+
+/**
  * @param {object} config a Metro config, usually from `getDefaultConfig(__dirname)`
  * @param {{ workspaceRoot?: string, projectRoot?: string }} [options]
  *   `workspaceRoot` for a monorepo, where the framework packages live outside the app's own
@@ -437,6 +498,8 @@ function withAngularNative(config, options = {}) {
     config.resolver.resolveRequest,
     projectRoot,
   );
+
+  withChunksOutsideServerRoot(config);
 
   foldDevMode(config);
 

@@ -617,6 +617,147 @@ describe('the Metro preset', () => {
   });
 
   /**
+   * An integrated Nx workspace has no package-manager workspaces, so Expo's server root is the
+   * app's directory, and a lazy route into a library beside it asked for a chunk Metro could not
+   * find: "Could not load bundle" on the device.
+   */
+  describe('a lazy chunk from outside the server root', () => {
+    const query = 'platform=ios&dev=true&lazy=true&modulesOnly=true&runModule=false';
+    const workspace = () => {
+      const root = mkdtempSync(path.join(tmpdir(), 'ng-native-chunks-'));
+      for (const file of [
+        'apps/mobile/src/main.ts',
+        'apps/mobile/src/lazy.ts',
+        'packages/settings/src/index.ts',
+        'packages/settings/src/page.ios.ts',
+      ]) {
+        mkdirSync(path.dirname(path.join(root, file)), { recursive: true });
+        writeFileSync(path.join(root, file), 'export {};\n');
+      }
+      return root;
+    };
+    /** The config `withNxMetro(getDefaultConfig(app))` hands over in such a workspace. */
+    const nxConfig = (root: string, serverRoot = path.join(root, 'apps/mobile')) => {
+      const config = {
+        ...base(),
+        projectRoot: path.join(root, 'apps/mobile'),
+        watchFolders: [path.join(root, 'apps'), path.join(root, 'packages')],
+        server: {
+          unstable_serverRoot: serverRoot,
+          rewriteRequestUrl: (url: string) =>
+            url.replace('/.expo/.virtual-metro-entry', '/src/main'),
+        },
+      };
+      return withAngularNative(config) as MetroConfig & {
+        server: { rewriteRequestUrl(url: string): string };
+      };
+    };
+    /**
+     * What the device asks for: the path Expo's serializer writes into the dependency map, from
+     * the server root, which the URL normalizes.
+     */
+    const requestFor = (serverRoot: string, file: string) => {
+      const relative = path.relative(serverRoot, file).replace(/\.ts$/, '');
+      const url = new URL(`/${relative}.bundle?${query}`, 'http://localhost:8081');
+      return url.pathname + url.search;
+    };
+
+    /** The file Metro bundles for a request, read as Metro reads it: `bundleEntry` first. */
+    const entryOf = (serverRoot: string, url: string) => {
+      const request = new URL(url, 'http://localhost:8081');
+      const entry = request.searchParams.get('bundleEntry') ?? request.pathname.slice(1);
+      return path.resolve(serverRoot, entry.replace(/\.(bundle|map)$/, ''));
+    };
+
+    it("is asked for by its path from the server root, which the URL's normalizing lost", () => {
+      const root = workspace();
+      try {
+        const app = path.join(root, 'apps/mobile');
+        const { rewriteRequestUrl } = nxConfig(root).server;
+        const request = requestFor(app, path.join(root, 'packages/settings/src/index.ts'));
+        assert.equal(request, `/packages/settings/src/index.bundle?${query}`, 'the ".." is gone');
+        const rewritten = rewriteRequestUrl(request);
+        assert.equal(
+          entryOf(app, rewritten),
+          path.join(root, 'packages/settings/src/index'),
+          `Metro bundles the library's file for ${rewritten}`,
+        );
+
+        const page = rewriteRequestUrl(
+          requestFor(app, path.join(root, 'packages/settings/src/page.ios.ts')),
+        );
+        assert.equal(
+          entryOf(app, page),
+          path.join(root, 'packages/settings/src/page.ios'),
+          'a platform file keeps its platform',
+        );
+        const whole = rewriteRequestUrl(`http://localhost:8081${request}`);
+        assert.ok(whole.startsWith('http://localhost:8081/'), 'a whole URL stays one');
+        assert.equal(entryOf(app, whole), path.join(root, 'packages/settings/src/index'));
+      } finally {
+        rmSync(root, { recursive: true, force: true });
+      }
+    });
+
+    it("works out again the path a chunk's own lazy import copied from its query", () => {
+      const root = workspace();
+      try {
+        const app = path.join(root, 'apps/mobile');
+        const { rewriteRequestUrl } = nxConfig(root).server;
+        const parent = new URL(
+          rewriteRequestUrl(requestFor(app, path.join(root, 'packages/settings/src/index.ts'))),
+          'http://localhost:8081',
+        ).search;
+        const nested = `/packages/settings/src/page.ios.bundle${parent}`;
+        assert.equal(
+          entryOf(app, rewriteRequestUrl(nested)),
+          path.join(root, 'packages/settings/src/page.ios'),
+        );
+        const back = `/src/lazy.bundle${parent}`;
+        assert.equal(
+          entryOf(app, rewriteRequestUrl(back)),
+          path.join(app, 'src/lazy'),
+          "a chunk back in the app, imported from the library's",
+        );
+      } finally {
+        rmSync(root, { recursive: true, force: true });
+      }
+    });
+
+    it('leaves a chunk under the server root, a missing one, the entry and the rewrite before it alone', () => {
+      const root = workspace();
+      try {
+        const { rewriteRequestUrl } = nxConfig(root).server;
+        const lazy = requestFor(
+          path.join(root, 'apps/mobile'),
+          path.join(root, 'apps/mobile/src/lazy.ts'),
+        );
+        assert.equal(rewriteRequestUrl(lazy), lazy);
+        const missing = `/packages/settings/src/gone.bundle?${query}`;
+        assert.equal(rewriteRequestUrl(missing), missing, 'Metro reports it as it always has');
+        assert.equal(
+          rewriteRequestUrl('/.expo/.virtual-metro-entry.bundle?platform=ios&dev=true'),
+          '/src/main.bundle?platform=ios&dev=true',
+        );
+        const library = requestFor(root, path.join(root, 'packages/settings/src/index.ts'));
+        assert.equal(
+          nxConfig(root, root).server.rewriteRequestUrl(library),
+          library,
+          'with the workspace as the server root, as in a pnpm or npm workspace',
+        );
+      } finally {
+        rmSync(root, { recursive: true, force: true });
+      }
+    });
+
+    it('wraps the rewrite once when applied twice', () => {
+      const once = nxConfig('/ws');
+      const twice = withAngularNative(once) as typeof once;
+      assert.equal(twice.server.rewriteRequestUrl, once.server.rewriteRequestUrl);
+    });
+  });
+
+  /**
    * Expo's worker empties every native stylesheet before any babel transformer sees it, so an
    * edited `styleUrl` would have nothing to carry its update to the device in.
    */
