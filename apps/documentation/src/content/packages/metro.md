@@ -35,7 +35,9 @@ module.exports = withAngularNative(getDefaultConfig(__dirname));
 ```
 
 The config plugin adopts the UIKit scene life cycle in the `AppDelegate.swift` that `expo prebuild`
-writes, which an app built with the iOS 27 SDK needs to launch at all.
+writes, which an app built with the iOS 27 SDK needs to launch at all. It also hands the status bar
+to view controllers: that SDK ignores the app-wide setters React Native's status bar module calls, so
+without it [`StatusBar`](/packages/device/status-bar) changes nothing on iOS 27.
 
 One preset, no options in the common case, because every part of it is built to fail quietly on its
 own if you leave it out - which is exactly why it exists as a preset rather than a page of manual

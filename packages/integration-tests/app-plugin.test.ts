@@ -4,8 +4,9 @@ import { createRequire } from 'node:module';
 import { readFileSync } from 'node:fs';
 
 const require = createRequire(import.meta.url);
-const { adoptScenes } = require('@ng-native/metro/app.plugin.cjs') as {
+const { adoptScenes, adoptInfoPlist } = require('@ng-native/metro/app.plugin.cjs') as {
   adoptScenes(contents: string): string;
+  adoptInfoPlist(plist: Record<string, unknown>): Record<string, unknown>;
 };
 
 const expoAppDelegate = readFileSync(
@@ -105,5 +106,33 @@ describe('the config plugin', () => {
       () => adoptScenes('class AppDelegate: ExpoAppDelegate {}'),
       /scene life cycle was not adopted/,
     );
+  });
+
+  it("hands the status bar to view controllers, since iOS 27 ignores UIApplication's", () => {
+    // What `expo prebuild` writes, and what React Native's own status bar module requires.
+    const plist = adoptInfoPlist({ UIViewControllerBasedStatusBarAppearance: false });
+    assert.equal(plist['UIViewControllerBasedStatusBarAppearance'], true);
+  });
+
+  it("answers React Native's status bar calls itself, installed before React Native starts", () => {
+    const adopted = adoptScenes(expoAppDelegate);
+    const scene = classBody(adopted, 'class SceneDelegate');
+    assert.match(scene, /AngularNativeStatusBar\.install\(\)[\s\S]*factory\.startReactNative/);
+    // RCTStatusBarManager's two setters, which call the APIs iOS 27 made no-ops.
+    assert.match(adopted, /"setStyle:animated:"/);
+    assert.match(adopted, /"setHidden:withAnimation:"/);
+  });
+
+  it('has every view controller iOS asks about the bar answer with what the app set', () => {
+    const adopted = adoptScenes(expoAppDelegate);
+    // A screen and React Native's own modal are asked directly when presented full screen, rather
+    // than through the root, and each overrides the methods itself.
+    assert.match(adopted, /answer\(NSClassFromString\("RNSScreen"\)\)/);
+    assert.match(adopted, /answer\(NSClassFromString\("RCTFabricModalHostViewController"\)\)/);
+    // The root gets a subclass of its own: UIKit never asks a controller that only inherits
+    // prefersStatusBarHidden, so changing UIViewController's own method hides nothing.
+    assert.match(adopted, /adopt\(window\.rootViewController\)/);
+    assert.match(adopted, /objc_allocateClassPair/);
+    assert.doesNotMatch(adopted, /answer\(UIViewController\.self/);
   });
 });

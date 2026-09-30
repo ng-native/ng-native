@@ -77,7 +77,8 @@ Add the package's config plugin to `app.json` as well:
 
 An app built with the iOS 27 SDK has to adopt the UIKit scene life cycle or it exits at launch, and
 the `AppDelegate.swift` that `expo prebuild` writes does not. The plugin starts React Native from a
-scene delegate instead, passing on the links the app is opened with.
+scene delegate instead, passing on the links the app is opened with, and answers the status bar
+from view controllers, which is the only way that SDK still lets an app change it.
 
 ## Configure TypeScript
 

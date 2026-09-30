@@ -39,6 +39,7 @@ class SceneDelegate: UIResponder, UIWindowSceneDelegate {
       ]
     }
 
+    AngularNativeStatusBar.install()
     let window = UIWindow(windowScene: windowScene)
     factory.startReactNative(withModuleName: "main", in: window, launchOptions: launchOptions)
     self.window = window
@@ -80,6 +81,138 @@ class SceneDelegate: UIResponder, UIWindowSceneDelegate {
     appDelegate?.applicationDidEnterBackground(app)
   }
 }
+
+// iOS 27 makes UIApplication's status bar setters no-ops for an app built with its SDK, and React
+// Native's status bar module, where every status bar call in JavaScript ends up, calls nothing else.
+// So the bar is left to view controllers: the module's two setters are answered here, and each view
+// controller iOS can ask about the bar answers with what was set. Until something is set, each
+// answers as it would have, so a screen's own status bar props still count.
+enum AngularNativeStatusBar {
+  nonisolated(unsafe) private static var style: UIStatusBarStyle?
+  nonisolated(unsafe) private static var hidden: Bool?
+  nonisolated(unsafe) private static var animation = UIStatusBarAnimation.fade
+  nonisolated(unsafe) private static var installed = false
+
+  private typealias GetStyle = @convention(c) (UIViewController, Selector) -> Int
+  private typealias GetHidden = @convention(c) (UIViewController, Selector) -> Bool
+  private typealias GetChild = @convention(c) (UIViewController, Selector) -> UIViewController?
+
+  static func install() {
+    guard !installed else { return }
+    installed = true
+
+    let manager: AnyClass? = NSClassFromString("RCTStatusBarManager")
+    replace(manager, NSSelectorFromString("setStyle:animated:")) { _ in
+      let setStyle: @convention(block) (AnyObject, NSString?, Bool) -> Void = { _, name, animated in
+        update(animated: animated) {
+          style = ["light-content": .lightContent, "dark-content": .darkContent][name as String? ?? ""] ?? .default
+        }
+      }
+      return imp_implementationWithBlock(setStyle)
+    }
+    replace(manager, NSSelectorFromString("setHidden:withAnimation:")) { _ in
+      let setHidden: @convention(block) (AnyObject, Bool, NSString?) -> Void = { _, isHidden, name in
+        let change = ["fade": UIStatusBarAnimation.fade, "slide": .slide][name as String? ?? ""] ?? .none
+        update(animated: change != .none) {
+          animation = change
+          hidden = isHidden
+        }
+      }
+      return imp_implementationWithBlock(setHidden)
+    }
+
+    // A screen and React Native's own modal are asked directly when presented full screen, not
+    // through the root, and each overrides these methods itself.
+    answer(NSClassFromString("RNSScreen"))
+    answer(NSClassFromString("RCTFabricModalHostViewController"))
+  }
+
+  private static func update(animated: Bool, _ change: @escaping () -> Void) {
+    DispatchQueue.main.async {
+      change()
+      let refresh = {
+        for case let scene as UIWindowScene in UIApplication.shared.connectedScenes {
+          for window in scene.windows {
+            adopt(window.rootViewController)
+            var controller = window.rootViewController
+            while let current = controller {
+              current.setNeedsStatusBarAppearanceUpdate()
+              controller = current.presentedViewController
+            }
+          }
+        }
+      }
+      if animated { UIView.animate(withDuration: 0.3, animations: refresh) } else { refresh() }
+    }
+  }
+
+  /// A window's root answers for everything under it, tab bar controllers included, so it gets
+  /// overrides of its own, in a subclass made for its class the way key-value observing does it:
+  /// UIKit never asks a controller that only inherits prefersStatusBarHidden.
+  private static func adopt(_ controller: UIViewController?) {
+    guard let controller, let type = object_getClass(controller) else { return }
+    let name = NSStringFromClass(type)
+    guard !name.hasPrefix("AngularNativeStatusBar_") else { return }
+    var adopted: AnyClass? = NSClassFromString("AngularNativeStatusBar_" + name)
+    if adopted == nil, let made = objc_allocateClassPair(type, "AngularNativeStatusBar_" + name, 0) {
+      answer(made, asRoot: true)
+      objc_registerClassPair(made)
+      adopted = made
+    }
+    if let adopted { object_setClass(controller, adopted) }
+  }
+
+  private static func answer(_ type: AnyClass?, asRoot: Bool = false) {
+    let styleSelector = #selector(getter: UIViewController.preferredStatusBarStyle)
+    replace(type, styleSelector) { original in
+      let get: @convention(block) (UIViewController) -> Int = { controller in
+        if let style { return style.rawValue }
+        return unsafeBitCast(original, to: GetStyle.self)(controller, styleSelector)
+      }
+      return imp_implementationWithBlock(get)
+    }
+    let hiddenSelector = #selector(getter: UIViewController.prefersStatusBarHidden)
+    replace(type, hiddenSelector) { original in
+      let get: @convention(block) (UIViewController) -> Bool = { controller in
+        if let hidden { return hidden }
+        return unsafeBitCast(original, to: GetHidden.self)(controller, hiddenSelector)
+      }
+      return imp_implementationWithBlock(get)
+    }
+    let animationSelector = #selector(getter: UIViewController.preferredStatusBarUpdateAnimation)
+    replace(type, animationSelector) { original in
+      let get: @convention(block) (UIViewController) -> Int = { controller in
+        if hidden != nil { return animation.rawValue }
+        return unsafeBitCast(original, to: GetStyle.self)(controller, animationSelector)
+      }
+      return imp_implementationWithBlock(get)
+    }
+    guard asRoot else { return }
+    // Otherwise the question goes on to a child that knows nothing of what was set.
+    for (selector, isSet) in [
+      (#selector(getter: UIViewController.childForStatusBarStyle), { style != nil }),
+      (#selector(getter: UIViewController.childForStatusBarHidden), { hidden != nil }),
+    ] {
+      replace(type, selector) { original in
+        let get: @convention(block) (UIViewController) -> UIViewController? = { controller in
+          if isSet() { return nil }
+          return unsafeBitCast(original, to: GetChild.self)(controller, selector)
+        }
+        return imp_implementationWithBlock(get)
+      }
+    }
+  }
+
+  /// Swaps a method's implementation, or overrides it when the class only inherits it, so a
+  /// superclass is never changed through a subclass.
+  private static func replace(_ type: AnyClass?, _ selector: Selector, with make: (IMP) -> IMP) {
+    guard let type, let method = class_getInstanceMethod(type, selector) else { return }
+    let replacement = make(method_getImplementation(method))
+    if !class_addMethod(type, selector, replacement, method_getTypeEncoding(method)) {
+      method_setImplementation(method, replacement)
+    }
+  }
+}
 `;
 
 const SCENE_MANIFEST = {
@@ -109,6 +242,15 @@ function adoptScenes(contents) {
   );
 }
 
+function adoptInfoPlist(plist) {
+  return {
+    ...plist,
+    UIApplicationSceneManifest: SCENE_MANIFEST,
+    // What iOS and react-native-screens need to ask view controllers about the bar.
+    UIViewControllerBasedStatusBarAppearance: true,
+  };
+}
+
 function configPlugins(config) {
   const root = config._internal?.projectRoot ?? process.cwd();
   return require(require.resolve('expo/config-plugins', { paths: [path.resolve(root)] }));
@@ -123,10 +265,11 @@ function withAngularNative(config) {
     return mod;
   });
   return withInfoPlist(config, (mod) => {
-    mod.modResults.UIApplicationSceneManifest = SCENE_MANIFEST;
+    mod.modResults = adoptInfoPlist(mod.modResults);
     return mod;
   });
 }
 
 module.exports = withAngularNative;
 module.exports.adoptScenes = adoptScenes;
+module.exports.adoptInfoPlist = adoptInfoPlist;

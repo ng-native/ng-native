@@ -39,6 +39,17 @@ top inset, from [`SafeArea`](/packages/device/safe-area).
 needs that package installed, and neither does `expo-status-bar` need to be avoided if it is
 already there - both talk to the same platform module.
 
+## On iOS
+
+An app built with the iOS 27 SDK changes the bar only through `@ng-native/metro`'s config plugin
+(`"plugins": ["@ng-native/metro"]` in `app.json`). That SDK ignores the app-wide setters React
+Native's status bar module calls, so the plugin answers them from the view controllers iOS asks
+instead: the window's root, and a screen or modal presented full screen. The same holds for
+`expo-status-bar` and React Native's own `StatusBar`, which end at the same module.
+
+Until the app claims a style, a screen's own `statusBarStyle` presentation applies; once it has, the
+claim applies on every screen. The same goes for `hidden` and `statusBarHidden`.
+
 ## Off a device and on the web
 
 Off a device every setter is a no-op and `height` stays zero, because there is no `StatusBar` module
