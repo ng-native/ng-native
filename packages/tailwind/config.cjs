@@ -121,13 +121,15 @@ function compileSheetModule(css, context = 'tailwind', paths) {
       face.source.asset = relative.startsWith('.') ? relative : `./${relative}`;
     }
   }
-  // A font file is a module the bundler has to see, so the compiler's marker becomes a `require`:
-  // left as a path, the file is never bundled and the face is missing on the device.
-  const literal = JSON.stringify(sheet).replace(
-    /\{"asset":("(?:[^"\\]|\\.)*")\}/g,
-    (_, file) => `require(${file})`,
-  );
-  return `// Generated from ${path.basename(context)}. Edit the Tailwind entry, not this.\nexport default ${literal};\n`;
+  // A font file is a module the bundler has to see, so the compiler's marker becomes an import:
+  // left as a path, the file is never bundled and the face is missing on the device. An import
+  // rather than a `require`, which an app's own lint rules would flag in a file it cannot edit.
+  const imports = [];
+  const literal = JSON.stringify(sheet).replace(/\{"asset":("(?:[^"\\]|\\.)*")\}/g, (_, file) => {
+    imports.push(`import font${imports.length} from ${file};\n`);
+    return `font${imports.length - 1}`;
+  });
+  return `// Generated from ${path.basename(context)}. Edit the Tailwind entry, not this.\n${imports.join('')}export default ${literal};\n`;
 }
 
 /**

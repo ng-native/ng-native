@@ -135,9 +135,10 @@ describe('wiring Tailwind into Metro', () => {
     rmSync(dir, { recursive: true, force: true });
   });
 
-  it('requires the file an @font-face names, from where the generated module lives', () => {
+  it('imports the file an @font-face names, from where the generated module lives', () => {
     // A path left as a string is a file Metro never bundles. And the url is relative to the entry,
-    // while the module is written somewhere else, so it is re-pointed rather than copied.
+    // while the module is written somewhere else, so it is re-pointed rather than copied. An
+    // import, not a `require`, because an app's lint reaches this file and flags `require`.
     const dir = scratch({
       'styles.css':
         "@font-face { font-family: 'Inter Display'; src: url('./fonts/Inter.ttf') }\n" +
@@ -153,12 +154,13 @@ describe('wiring Tailwind into Metro', () => {
 
     const code = readFileSync(output, 'utf8');
     rmSync(dir, { recursive: true, force: true });
+    assert.match(code, /^import font0 from "\.\.\/fonts\/Inter\.ttf";$/m);
+    assert.match(code, /^import font1 from "some-package\/Brand\.otf";$/m);
     assert.match(
       code,
-      /"fonts":\[\{"family":"Inter Display","source":require\("\.\.\/fonts\/Inter\.ttf"\)\},/,
+      /"fonts":\[\{"family":"Inter Display","source":font0\},\{"family":"Brand","source":font1,"weight":600\}\]/,
     );
-    assert.match(code, /"source":require\("some-package\/Brand\.otf"\),"weight":600/);
-    assert.doesNotMatch(code, /"asset"/, 'the marker does not survive into the bundle');
+    assert.doesNotMatch(code, /"asset"|require\(/, 'the marker does not survive into the bundle');
   });
 
   it('turns a platform variant into a selector the engine matches', () => {
