@@ -11,6 +11,9 @@
  * a test defines on the global; see `expo-sources.test.ts`.
  */
 import assert from 'node:assert/strict';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
+import { createRequire } from 'node:module';
+import path from 'node:path';
 import { afterEach, before, describe, it } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import {
@@ -192,6 +195,121 @@ describe('a service whose module is missing', () => {
       if (name === 'database' || name === 'videoPlayer' || name === 'audioPlayer') continue;
       assert.doesNotThrow(reach, name);
     }
+  });
+});
+
+/**
+ * The native modules each Expo package's JavaScript requires as it is evaluated, read from the
+ * copy `@ng-native/expo` resolves. Such a package throws while it is being evaluated when its native
+ * half is not in the build, and Metro reports that as fatal whenever it is not inside another
+ * module's load, as in a service's factory, before any `catch` can turn it into a
+ * `MissingModuleError`.
+ */
+function requiredNativeModules(): Map<string, Set<string>> {
+  const fromExpo = createRequire(fileURLToPath(new URL('../expo/package.json', import.meta.url)));
+  const found = new Map<string, Set<string>>();
+  for (const [, , module] of SERVICES) {
+    let root: string;
+    try {
+      root = path.dirname(fromExpo.resolve(`${module}/package.json`));
+    } catch {
+      continue;
+    }
+    const names = new Set<string>();
+    const walk = (dir: string) => {
+      for (const entry of readdirSync(dir, { withFileTypes: true })) {
+        const file = path.join(dir, entry.name);
+        if (entry.isDirectory()) walk(file);
+        else if (entry.name.endsWith('.js') && !entry.name.endsWith('.web.js')) {
+          const source = readFileSync(file, 'utf8');
+          for (const [, name] of source.matchAll(/requireNativeModule\(\s*['"]([^'"]+)['"]/g)) {
+            names.add(name!);
+          }
+        }
+      }
+    };
+    if (existsSync(path.join(root, 'build'))) walk(path.join(root, 'build'));
+    if (names.size > 0) found.set(module, names);
+  }
+  return found;
+}
+
+/**
+ * A device on `platform` with each package's JavaScript but, where `present` says so, none of its
+ * native half. Records which packages get evaluated.
+ */
+function withoutNativeHalf<T>(
+  platform: Platform,
+  present: (name: string) => boolean,
+  run: () => T,
+): { result: T; evaluated: string[] } {
+  const evaluated: string[] = [];
+  const host = globalThis as Record<string, unknown>;
+  host['require'] = (id: string) => {
+    if (id === 'react-native') return { Platform: { OS: platform } };
+    if (id === 'expo-modules-core') {
+      return { requireOptionalNativeModule: (name: string) => (present(name) ? {} : null) };
+    }
+    evaluated.push(id);
+    throw new Error(`Cannot find native module for '${id}'`);
+  };
+  try {
+    return { result: run(), evaluated };
+  } finally {
+    delete host['require'];
+  }
+}
+
+describe('a service whose native module is not in the build', () => {
+  const native = requiredNativeModules();
+
+  it('finds packages to check, so the checks below are not empty', () => {
+    assert.ok(native.size >= 25, `only ${[...native.keys()].join(', ')}`);
+    assert.ok(native.get('expo-font')?.has('ExpoFontLoader'));
+  });
+
+  /** Reaching the service, as a promise, on a device whose native modules are `present`. */
+  const attempt = (reach: () => unknown, platform: Platform, present: (name: string) => boolean) =>
+    withoutNativeHalf(platform, present, () => {
+      try {
+        return Promise.resolve(reach());
+      } catch (error) {
+        return Promise.reject(error);
+      }
+    });
+
+  for (const [name, reach, module, platforms = ['ios', 'android']] of SERVICES) {
+    if (!native.has(module)) continue;
+    it(`${name}: never evaluates ${module} without its native module, and says what to run`, async (t) => {
+      const device = platforms.includes('ios') ? 'ios' : 'android';
+      const everything = attempt(reach, device, () => true);
+      await everything.result.catch(() => {});
+      if (!everything.evaluated.includes(module)) {
+        t.skip(`${name} reaches its native module without evaluating ${module}`);
+        return;
+      }
+      // With only the package's own native modules answering, it is evaluated: the one asked for
+      // is one the package itself requires.
+      const names = native.get(module)!;
+      const own = attempt(reach, device, (one) => names.has(one));
+      await own.result.catch(() => {});
+      assert.ok(own.evaluated.includes(module), `${module} was not evaluated with its modules`);
+      for (const platform of platforms.filter((one) => one !== 'web') as Platform[]) {
+        const { result, evaluated } = attempt(reach, platform, () => false);
+        await assert.rejects(result, fixes(module, platform));
+        assert.ok(!evaluated.includes(module), `${module} was evaluated on ${platform}`);
+      }
+    });
+  }
+
+  it('evaluates a package on the web, which registers its native module only once evaluated', async () => {
+    const { result, evaluated } = withoutNativeHalf(
+      'web',
+      () => false,
+      () => database('app.db').ready(),
+    );
+    await assert.rejects(result, fixes('expo-sqlite', 'web'));
+    assert.ok(evaluated.includes('expo-sqlite'));
   });
 });
 

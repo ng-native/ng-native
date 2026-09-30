@@ -50,6 +50,10 @@ then rebuild the app ("npx expo run:ios", or a new EAS build): a development bui
 contain only the native modules they were built with.
 ```
 
+On iOS and Android, a service asks Expo whether the module's native half is in the build before it
+evaluates the package's JavaScript. Most Expo packages throw while they are being evaluated when it
+is not, and Metro reports a throw there as a fatal error, in place of the `MissingModuleError`.
+
 `MissingModuleError` is exported from `@ng-native/expo`, with a `module` property naming the
 package, for an app that wants to catch it and show something of its own.
 

@@ -55,6 +55,57 @@ export function currentPlatform(): ModulePlatform | null {
 }
 
 /**
+ * For each Expo package whose JavaScript requires a native module as it is evaluated, and so
+ * throws when its native half is not in the build, one of those native modules. Any one of them
+ * says whether the package's native half is there, and each of these is registered on both iOS and
+ * Android.
+ */
+const NATIVE_MODULES: Readonly<Record<string, string>> = {
+  'expo-application': 'ExpoApplication',
+  'expo-asset': 'ExpoAsset',
+  'expo-audio': 'ExpoAudio',
+  'expo-background-task': 'ExpoBackgroundTask',
+  'expo-battery': 'ExpoBattery',
+  'expo-brightness': 'ExpoBrightness',
+  'expo-clipboard': 'ExpoClipboard',
+  'expo-crypto': 'ExpoCrypto',
+  'expo-device': 'ExpoDevice',
+  'expo-document-picker': 'ExpoDocumentPicker',
+  'expo-font': 'ExpoFontLoader',
+  'expo-local-authentication': 'ExpoLocalAuthentication',
+  'expo-local-llm': 'ExpoLocalLlm',
+  'expo-localization': 'ExpoLocalization',
+  'expo-location': 'ExpoLocation',
+  'expo-media-library': 'ExpoMediaLibrary',
+  'expo-network': 'ExpoNetwork',
+  'expo-notifications': 'ExpoNotificationPresenter',
+  'expo-screen-capture': 'ExpoScreenCapture',
+  'expo-screen-orientation': 'ExpoScreenOrientation',
+  'expo-secure-store': 'ExpoSecureStore',
+  'expo-sensors': 'ExponentAccelerometer',
+  'expo-sqlite': 'ExpoSQLite',
+  'expo-store-review': 'ExpoStoreReview',
+  'expo-tracking-transparency': 'ExpoTrackingTransparency',
+  'expo-updates': 'ExpoUpdates',
+  'expo-video': 'ExpoVideo',
+  'expo-web-browser': 'ExpoWebBrowser',
+};
+
+/**
+ * Whether `module`'s native half is missing from the build on `platform`, asked of Expo before its
+ * JavaScript is evaluated. That JavaScript throws while it is being evaluated when its native module
+ * is not there, and Metro reports that as fatal, before any `catch` here, whenever it is not inside
+ * another module's load: in a service's factory, say. Not on the web, where a package registers its
+ * module only once it is evaluated.
+ */
+function nativeHalfMissing(module: string, platform: ModulePlatform | null): boolean {
+  const name = NATIVE_MODULES[module];
+  if (!name || platform === null || platform === 'web') return false;
+  const core = optional(() => require('expo-modules-core') as typeof import('expo-modules-core'));
+  return core !== null && !core.requireOptionalNativeModule(name);
+}
+
+/**
  * The Expo module a service needs.
  *
  * Where the module exists for the platform the app is on, a module that is missing is a mistake
@@ -64,21 +115,22 @@ export function currentPlatform(): ModulePlatform | null {
  * goes inert, as code shared across platforms needs it to.
  *
  * `load` answering null or undefined counts as missing too: `requireOptionalNativeModule` answers
- * null rather than throwing.
+ * null rather than throwing. So does a package whose native half is not in the build, which `load`
+ * is not called for: see `nativeHalfMissing`.
  */
 export function expoModule<T>(
   module: string,
   load: () => T | null | undefined,
   platforms: readonly ModulePlatform[] = ['ios', 'android'],
 ): T | null {
+  const platform = currentPlatform();
   let failure: unknown;
   try {
-    const loaded = load();
+    const loaded = nativeHalfMissing(module, platform) ? null : load();
     if (loaded != null) return loaded;
   } catch (error) {
     failure = error;
   }
-  const platform = currentPlatform();
   if (platform === null || !platforms.includes(platform)) return null;
   throw new MissingModuleError(module, platform, failure);
 }
