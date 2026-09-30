@@ -22,7 +22,9 @@ a workspace around it, [the template](/guide/getting-started) is still the short
 
 The files are the template's, copied as they are: `src/app/app.ts`, `src/main.ts`,
 `src/app/app.test.ts`, `metro.config.js`, `tsconfig.json` and `vitest.config.mts`, plus an `app.json` named for the
-project and a small `package.json` for Expo. The dependencies go in the workspace's root
+project, a small `package.json` for Expo, and a `.gitignore` that ignores the `ios/` and
+`android/` projects `expo prebuild` writes and the `.angular-native/` Tailwind generates, as the
+template's does. The dependencies go in the workspace's root
 `package.json`, beside Angular's, and `ng add` installs them. A version the workspace already has
 is left alone.
 

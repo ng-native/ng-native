@@ -138,6 +138,15 @@ describe('ng add', () => {
     assert.match(tree.readContent('.gitignore'), /^\.expo\/$/m);
   });
 
+  it('ignores the native projects prebuild writes and the Tailwind sheet, in the app as the template does', () => {
+    // Without an app-level .gitignore, prebuild's ios/ and android/ and withTailwind's
+    // .angular-native/ were offered for commit.
+    const ignore = tree.readContent('projects/native/.gitignore');
+    for (const line of ['/ios', '/android', '.angular-native/']) {
+      assert.match(ignore, new RegExp(`^${line.replace(/[./]/g, '\\$&')}$`, 'm'), line);
+    }
+  });
+
   it('installs what it added', () => {
     assert.deepEqual(
       runner.tasks.map((task) => task.name),

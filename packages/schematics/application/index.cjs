@@ -103,6 +103,7 @@ function writeFiles(tree, root, name) {
   tree.create(path.join(root, 'app.json'), native.appJson(name));
   tree.create(path.join(root, 'AGENTS.md'), native.agentsFile(commands(name)));
   tree.create(path.join(root, 'CLAUDE.md'), '@AGENTS.md\n');
+  tree.create(path.join(root, '.gitignore'), native.GITIGNORE);
   const manifest = native.projectManifest(name, readJson(tree, 'package.json'));
   tree.create(path.join(root, 'package.json'), JSON.stringify(manifest, null, 2) + '\n');
 }
