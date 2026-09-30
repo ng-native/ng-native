@@ -122,7 +122,9 @@ the fallback face:
 AppRegistry.registerRunnable('main', ({ rootTag }) => {
   void loadFonts(styleSheetOf(GlobalStyles))
     .catch((error: unknown) => console.error(error))
-    .then(() => mount(rootTag, App, getFabricUIManager()));
+    .then(() =>
+      mount(rootTag, App, getFabricUIManager(), { globalStyles: styleSheetOf(GlobalStyles) }),
+    );
 });
 ```
 
