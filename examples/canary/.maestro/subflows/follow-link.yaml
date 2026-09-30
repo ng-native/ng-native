@@ -16,7 +16,7 @@ appId: ${APP_ID || 'dev.angularnative.canary'}
     commands:
       - extendedWaitUntil:
           visible: 'Open|${SHOWS}'
-          timeout: 30000
+          timeout: 90000
       - retry:
           maxRetries: 2
           commands:

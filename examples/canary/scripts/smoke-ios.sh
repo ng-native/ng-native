@@ -32,7 +32,9 @@ xcrun simctl install "$udid" "$app" || exit 1
 # Maestro drives the simulator through an XCTest runner of its own, which a loaded CI Mac has
 # been slow to start and has lost mid-flow. Both say nothing about the app, which a crash would
 # fail by what it no longer shows: so the runner gets longer to start, and when it did not start
-# or was lost, the flow is walked once more from the start. Its console is kept, since the
+# or was lost, the flow is walked once more from the start. So is a link that `simctl openurl` gave
+# up on (ETIMEDOUT, NSPOSIX 60): a starved simulator has timed one out that reached the app a second
+# later, and Maestro fails a flow on it outright, past any `retry` or `optional`. Its console is kept, since the
 # startup failure is reported there and not in maestro.log.
 export MAESTRO_DRIVER_STARTUP_TIMEOUT=${MAESTRO_DRIVER_STARTUP_TIMEOUT:-180000}
 walk() {
@@ -43,9 +45,9 @@ walk() {
 }
 walk "$out"
 status=$?
-lost='DeviceUnreachableException|IOSDriverTimeoutException'
+lost='DeviceUnreachableException|IOSDriverTimeoutException|domain=NSPOSIXErrorDomain, code=60'
 if [ "$status" -ne 0 ] && grep -qE "$lost" "$out/console.log" "$out/maestro.log" 2>/dev/null; then
-  echo "Maestro lost its driver, not the app: walking the flow again" >&2
+  echo "Maestro lost its driver or simctl timed out opening a link, not the app: walking the flow again" >&2
   # A reboot clears what the lost walk left on screen: a link's "Open in canary?" dialog stays up
   # over the relaunched app and hides it. Shutdown fails on a simulator already shut down, so it
   # runs only on a booted one.
