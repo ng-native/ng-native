@@ -28,10 +28,10 @@ const HUE_UNITS: Record<string, number> = { deg: 1, grad: 0.9, rad: 180 / Math.P
 /** `var(--name)` or `var(--name, <fallback>)`, the whole value. */
 const VAR = /^var\(\s*(--[\w-]+)\s*(?:,([\s\S]*))?\)$/i;
 /**
- * A value worked out where it is set: one with a `var()` in it, or a `color-mix()`, of tokens or of
- * colours written out.
+ * A value worked out where it is set: one with a `var()` in it, a `color-mix()`, or a relative
+ * colour, of tokens or of colours written out.
  */
-const DERIVED = /var\(|^color-mix\(/i;
+const DERIVED = /var\(|^color-mix\(|^[a-z]+\(\s*from\s/i;
 const WEIGHTS: Record<string, string> = { normal: '400', bold: '700' };
 
 /**

@@ -12,6 +12,7 @@
  * colours written out. Anything else is undefined, as a stylesheet refuses it.
  */
 import { MIX_SPACES, type HueMethod, type MixSpace } from './color-mix.ts';
+import type { Channel } from './relative-colour.ts';
 import type { ColourExpression, HslChannel, TokenValue } from './css.ts';
 import { tokenFromValue } from './inline-token.ts';
 
@@ -365,6 +366,7 @@ function mixColour(cursor: Cursor): ColourExpression {
   const fn = match(cursor, FUNCTION)?.[1]?.toLowerCase();
   if (fn === 'color-mix') return mixExpression(cursor);
   if (!fn) return { color: (match(cursor, WORD) ?? fail())[0] };
+  if (RELATIVE[fn] && takeWord(cursor, 'from')) return relativeExpression(cursor, RELATIVE[fn]);
   cursor.at = closing(cursor);
   return functionColour(cursor.text.slice(start, cursor.at));
 }
@@ -423,10 +425,115 @@ function mixExpression(cursor: Cursor): ColourExpression {
 /** A whole `color-mix()`, worked out where it is set, as `deferMixToken` in the compiler reads it. */
 function mixToken(text: string): TokenValue | undefined {
   const deferredColour = whole(text, (cursor) => {
-    if ((match(cursor, FUNCTION) ?? fail())[1]!.toLowerCase() !== 'color-mix') fail();
-    return mixExpression(cursor);
+    const colour = mixColour(cursor);
+    return 'mix' in colour || 'relative' in colour ? colour : fail();
   });
   return deferredColour && { deferredColour };
+}
+
+interface RelativeSpace {
+  readonly space: MixSpace;
+  readonly keywords: readonly string[];
+  /** What 100% of each channel is; null for a hue, which takes an angle instead. */
+  readonly full: readonly (number | null)[];
+}
+
+/** Each relative colour function, as `RELATIVE` in the compiler's colour-expression.cjs. */
+const RELATIVE: Readonly<Record<string, RelativeSpace>> = {
+  rgb: { space: 'srgb', keywords: ['r', 'g', 'b'], full: [255, 255, 255] },
+  rgba: { space: 'srgb', keywords: ['r', 'g', 'b'], full: [255, 255, 255] },
+  hsl: { space: 'hsl', keywords: ['h', 's', 'l'], full: [null, 100, 100] },
+  hsla: { space: 'hsl', keywords: ['h', 's', 'l'], full: [null, 100, 100] },
+  hwb: { space: 'hwb', keywords: ['h', 'w', 'b'], full: [null, 100, 100] },
+  lab: { space: 'lab', keywords: ['l', 'a', 'b'], full: [100, 125, 125] },
+  lch: { space: 'lch', keywords: ['l', 'c', 'h'], full: [100, 150, null] },
+  oklab: { space: 'oklab', keywords: ['l', 'a', 'b'], full: [1, 0.4, 0.4] },
+  oklch: { space: 'oklch', keywords: ['l', 'c', 'h'], full: [1, 0.4, null] },
+};
+
+/** Whether the next word is `word`, in any case; taken, with the space after it, if so. */
+function takeWord(cursor: Cursor, word: string): boolean {
+  const start = cursor.at;
+  if (match(cursor, WORD)?.[0].toLowerCase() === word) {
+    match(cursor, SPACE);
+    return true;
+  }
+  cursor.at = start;
+  return false;
+}
+
+/**
+ * The rest of `<space>(from <colour> <channel> <channel> <channel> [/ <alpha>])` once `from` is
+ * read, as `relativeExpression` in the compiler reads it.
+ */
+function relativeExpression(cursor: Cursor, { space, keywords, full }: RelativeSpace) {
+  const from = mixColour(cursor);
+  const names = [...keywords, 'alpha'];
+  const channels = [0, 1, 2].map((index) => {
+    match(cursor, SPACE);
+    return relativeChannel(cursor, names, full[index]!);
+  }) as [Channel, Channel, Channel];
+  const alpha = take(cursor, '/') ? relativeChannel(cursor, names, 1) : undefined;
+  expect(cursor, ')');
+  return { relative: { space, from, channels, ...(alpha === undefined ? {} : { alpha }) } };
+}
+
+/**
+ * One channel: a `calc()` of numbers and keywords, a keyword, a number, a percentage of the
+ * channel's range, or an angle for a hue.
+ */
+function relativeChannel(cursor: Cursor, keywords: readonly string[], full: number | null) {
+  const fn = match(cursor, FUNCTION)?.[1]?.toLowerCase();
+  if (fn) {
+    const value = fn === 'calc' ? channelSum(cursor, keywords) : fail();
+    expect(cursor, ')');
+    return value;
+  }
+  const found = match(cursor, LITERAL);
+  if (!found) return channelOperand(cursor, keywords);
+  const value = Number(found[1]) * channelScale((found[2] ?? '').toLowerCase(), full);
+  return Number.isFinite(value) ? value : fail();
+}
+
+/** What one of a written channel's unit is: a share of its range, degrees of a hue, or itself. */
+function channelScale(unit: string, full: number | null): number {
+  if (unit === '%') return full === null ? NaN : full / 100;
+  if (full !== null) return unit ? NaN : 1;
+  return HUE_UNITS.has(unit) ? PER_UNIT[unit]! : NaN;
+}
+
+/** `a + b - c`, each side a product of numbers, keywords and bracketed sums. */
+function channelSum(cursor: Cursor, keywords: readonly string[]): Channel {
+  let value = channelProduct(cursor, keywords);
+  for (let op; (op = (['+', '-'] as const).find((char) => take(cursor, char)));) {
+    value = [op, value, channelProduct(cursor, keywords)];
+  }
+  return value;
+}
+
+function channelProduct(cursor: Cursor, keywords: readonly string[]): Channel {
+  let value = channelFactor(cursor, keywords);
+  for (let op; (op = (['*', '/'] as const).find((char) => take(cursor, char)));) {
+    value = [op, value, channelFactor(cursor, keywords)];
+  }
+  return value;
+}
+
+function channelFactor(cursor: Cursor, keywords: readonly string[]): Channel {
+  if (take(cursor, '(')) {
+    const value = channelSum(cursor, keywords);
+    expect(cursor, ')');
+    return value;
+  }
+  const found = match(cursor, LITERAL);
+  // A percentage or an angle stands alone: inside arithmetic the keywords are numbers.
+  if (found) return found[2] ? fail() : Number(found[1]);
+  return channelOperand(cursor, keywords);
+}
+
+function channelOperand(cursor: Cursor, keywords: readonly string[]): string {
+  const word = (match(cursor, WORD) ?? fail())[0];
+  return keywords.includes(word) ? word : fail();
 }
 
 /**

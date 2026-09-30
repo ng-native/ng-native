@@ -239,6 +239,26 @@ describe('a value with a var() inside it resolves as the same text in a styleshe
       'color',
       'rgb(255, 128, 128)',
     ],
+    // A relative colour of a token, each checked against Chrome.
+    ['oklch(from var(--word) l c h / 50%)', 'color: var(--x)', 'color', 'rgba(255, 0, 0, 0.5)'],
+    ['rgb(from var(--word) r g calc(b + 255))', 'color: var(--x)', 'color', 'rgb(255, 0, 255)'],
+    ['hsl(from var(--word) calc(h + 120) s l)', 'color: var(--x)', 'color', 'rgb(0, 255, 0)'],
+    ['hsl(from var(--word) h 50% l)', 'color: var(--x)', 'color', 'rgb(191, 64, 64)'],
+    ['lab(from var(--word) l a b)', 'color: var(--x)', 'color', 'rgb(255, 0, 0)'],
+    ['hwb(from var(--word) h w b / alpha)', 'color: var(--x)', 'color', 'rgb(255, 0, 0)'],
+    ['rgb(from var(--word) calc((r + g) / 2) g b)', 'color: var(--x)', 'color', 'rgb(128, 0, 0)'],
+    [
+      'rgb(from var(--missing, blue) r g b / 0.5)',
+      'color: var(--x)',
+      'color',
+      'rgba(0, 0, 255, 0.5)',
+    ],
+    [
+      'color-mix(in srgb, rgb(from var(--word) r g b / 50%), white)',
+      'color: var(--x)',
+      'color',
+      'rgba(255, 170, 170, 0.75)',
+    ],
   ];
 
   for (const [value, read, prop, expected] of cases) {
@@ -286,6 +306,7 @@ describe('a value with a var() inside it resolves as the same text in a styleshe
     for (const [value, expected] of [
       ['color-mix(in srgb, red 50%, white)', 'rgb(255, 128, 128)'],
       ['color-mix(in srgb, #00f, rgb(255, 0, 0) 30%)', 'rgb(77, 0, 179)'],
+      ['rgb(from red r g 255)', 'rgb(255, 0, 255)'],
     ]) {
       assert.equal(written(TOKENS, value!, read)['color'], expected, `${value} in a stylesheet`);
       assert.equal(set(TOKENS, value!, read)['color'], expected, `${value} set on the element`);
@@ -300,6 +321,17 @@ describe('a value with a var() inside it resolves as the same text in a styleshe
     const color = 'color: var(--x, rgb(1, 2, 3))';
     assert.equal(set(TOKENS, 'rgb(var(--n) 0 0)', color)['color'], 'rgb(1, 2, 3)');
     assert.equal(set(TOKENS, 'rgb(var(--rgb)', color)['color'], 'rgb(1, 2, 3)');
+    for (const value of [
+      'rgb(from var(--word) r g x)',
+      'rgb(from var(--word) calc(r + 10%) g b)',
+      'rgb(from var(--word) r g)',
+      'hsl(from var(--word) 10% s l)',
+      'hsl(from var(--word) 10px s l)',
+      'color(from var(--word) srgb r g b)',
+    ]) {
+      assert.throws(() => written(TOKENS, value, color), /relative|cannot express/, value);
+      assert.equal(set(TOKENS, value, color)['color'], 'rgb(1, 2, 3)', `${value} set on it`);
+    }
   });
 
   it('refuses an hsl() CSS Color 4 does not allow, in a stylesheet and set on an element', () => {
@@ -409,6 +441,15 @@ describe('a value with a var() inside it among others set on elements', () => {
     assert.equal(innermost(read, [{ '--b': 'blue' }, mix])['color'], 'rgb(128, 128, 255)');
     const cycle = { '--c': 'color-mix(in srgb, var(--c) 50%, white)' };
     assert.equal(innermost(read, [cycle])['color'], 'rgb(1, 2, 3)');
+  });
+
+  it('works out a relative colour with the token an ancestor sets', () => {
+    const read = '.x { color: var(--c, rgb(1, 2, 3)) }';
+    const faded = { '--c': 'rgb(from var(--b) r g b / 50%)' };
+    assert.equal(innermost(read, [{ '--b': 'red' }, faded])['color'], 'rgba(255, 0, 0, 0.5)');
+    assert.equal(innermost(read, [{ '--b': 'blue' }, faded])['color'], 'rgba(0, 0, 255, 0.5)');
+    const sheet = `${read} .x { --c: rgb(from var(--b) r g b / 50%) }`;
+    assert.equal(innermost(sheet, [{ '--b': 'blue' }])['color'], 'rgba(0, 0, 255, 0.5)');
   });
 
   it('treats a cycle through arithmetic as invalid and never loops', () => {

@@ -74,6 +74,13 @@ function isRelative(part) {
 }
 
 /**
+ * Whether a function is a relative colour the device works out. A `conic-gradient(from ...)` also
+ * starts with `from`, and is no colour.
+ */
+const isRelativeFunction = (part) =>
+  Object.hasOwn(RELATIVE, part.value?.name?.toLowerCase()) && isRelative(part);
+
+/**
  * `rgb(var(--channels))`, `rgba(var(--channels), <alpha>)` or the same through `hsl()`: a colour
  * whose channels are a token, as Bootstrap writes its focus rings, with an alpha written beside
  * them or taken from a token.
@@ -508,6 +515,7 @@ function schemeSide(value, side) {
 module.exports = {
   colourExpression,
   isRelative,
+  isRelativeFunction,
   mentionsLightDark,
   schemeSide,
   commaSeparated,

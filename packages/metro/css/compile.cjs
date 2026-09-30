@@ -9,6 +9,7 @@ const lightning = require('lightningcss');
 const {
   colourExpression,
   isRelative,
+  isRelativeFunction,
   meaningful,
   mentionsLightDark,
   schemeSide,
@@ -361,13 +362,15 @@ function deferChannelsToken(parts, context) {
 /**
  * `--x: color-mix(in oklab, var(--y) 50%, transparent)`: a colour token mixed from another, which
  * is how Tailwind colours a shadow, a text shadow and a drop shadow once the palette colour it
- * names is live. Settled on the node that defines it, as a channels token is.
+ * names is live; or a relative colour of one, `oklch(from var(--y) l c h / 50%)`. Settled on the
+ * node that defines it, as a channels token is.
  *
  * @returns `{ deferredColour }`, or null if this is not that shape
  */
 function deferMixToken(parts, context) {
   const [part, ...rest] = parts;
-  if (rest.length || part?.type !== 'function' || part.value?.name !== 'color-mix') return null;
+  if (rest.length || part?.type !== 'function') return null;
+  if (part.value?.name !== 'color-mix' && !isRelativeFunction(part)) return null;
   if (!mentionsVar(parts)) return null;
   return { deferredColour: colourExpression(parts, context) };
 }
