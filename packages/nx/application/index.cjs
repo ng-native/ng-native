@@ -51,21 +51,34 @@ function hasPathAliases(tree, workspaces) {
 
 /**
  * The compiler options `file` ends up with, those it inherits through `extends` included, as
- * TypeScript merges them: each option from the last config that sets it. Only the workspace's own
- * files are followed; a package's shared config holds no aliases or conditions of this workspace.
+ * TypeScript merges them: each option from the last config that sets it.
  */
 function baseCompilerOptions(tree, file = 'tsconfig.base.json', ancestors = []) {
   if (ancestors.includes(file) || !tree.exists(file)) return {};
   const config = readJson(tree, file);
   const inherited = [config.extends ?? []]
     .flat()
-    .filter((parent) => /^\.\.?\//.test(parent))
-    .map((parent) => {
-      const resolved = path.join(path.dirname(file), parent);
-      return tree.exists(resolved) || resolved.endsWith('.json') ? resolved : `${resolved}.json`;
-    })
+    .map((parent) => extendedFile(tree, path.dirname(file), parent))
+    .filter(Boolean)
     .map((parent) => baseCompilerOptions(tree, parent, [...ancestors, file]));
   return Object.assign({}, ...inherited, config.compilerOptions);
+}
+
+/**
+ * The file an `extends` entry in `directory` names: a path, or a package in a `node_modules` from
+ * `directory` up, where a workspace's own shared-config package is linked. A bare package name
+ * means its `tsconfig.json`.
+ */
+function extendedFile(tree, directory, parent) {
+  const withJson = (file) => (tree.exists(file) || file.endsWith('.json') ? file : `${file}.json`);
+  if (/^\.\.?\//.test(parent)) return withJson(path.join(directory, parent));
+  const bare = /^(@[^/]+\/)?[^/]+$/.test(parent);
+  for (let dir = directory; ; dir = path.dirname(dir)) {
+    const file = path.join(dir, 'node_modules', parent);
+    const found = bare ? path.join(file, 'tsconfig.json') : withJson(file);
+    if (tree.exists(found)) return found;
+    if (dir === '.' || dir === '/') return undefined;
+  }
 }
 
 function targets(directory) {

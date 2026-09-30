@@ -369,6 +369,28 @@ describe('in a pnpm workspace', () => {
     ]);
   });
 
+  it('finds aliases and conditions the base inherits from a shared-config package', async () => {
+    // TypeScript resolves a package `extends` through node_modules, as a workspace's own
+    // shared-config package is linked there.
+    const tree = pnpmWorkspace();
+    tree.write(
+      'tsconfig.base.json',
+      JSON.stringify({ extends: ['@proj/tsconfig', '@proj/tsconfig/paths'] }),
+    );
+    tree.write(
+      'node_modules/@proj/tsconfig/tsconfig.json',
+      JSON.stringify({ compilerOptions: { customConditions: ['@proj/source'] } }),
+    );
+    tree.write(
+      'node_modules/@proj/tsconfig/paths.json',
+      JSON.stringify({ compilerOptions: { paths: { '@proj/ui': ['libs/ui/src/index.ts'] } } }),
+    );
+    await generate(tree, { directory: 'apps/mobile' });
+    const config = readJson(tree, 'apps/mobile/tsconfig.json');
+    assert.deepEqual(config.extends, ['expo/tsconfig.base', '../../tsconfig.base.json']);
+    assert.deepEqual(config.compilerOptions.customConditions, ['react-native', '@proj/source']);
+  });
+
   it('carries conditions the base inherits when there are no aliases to extend it for', async () => {
     const tree = pnpmWorkspace();
     tree.write(
