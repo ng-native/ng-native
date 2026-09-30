@@ -85,8 +85,16 @@ function withinAngular(tree, name, range) {
   if (!name.startsWith('@angular/') || !tree.exists('package.json')) return range;
   const { dependencies, devDependencies } = JSON.parse(tree.read('package.json', 'utf-8') ?? '{}');
   const core = { ...devDependencies, ...dependencies }['@angular/core'];
-  const overlaps = core && semver.validRange(core) && semver.intersects(core, range);
-  return overlaps ? `${range} ${core}` : range;
+  if (!core || !semver.validRange(core) || !semver.validRange(range)) return range;
+  // Alternative by alternative, as joining two ranges with `||` in them would let either side's
+  // other alternatives through on their own.
+  const alternatives = (one) => semver.validRange(one).split('||');
+  const both = alternatives(range).flatMap((ours) =>
+    alternatives(core)
+      .filter((theirs) => semver.intersects(ours, theirs))
+      .map((theirs) => `${ours} ${theirs}`),
+  );
+  return both.length ? both.join(' || ') : range;
 }
 
 /**

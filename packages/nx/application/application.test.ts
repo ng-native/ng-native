@@ -638,6 +638,19 @@ describe('in a workspace that saves exact versions', () => {
     assert.equal(app.devDependencies['@angular/compiler-cli'], '22.1.3');
   });
 
+  it("stays within the app's own range where the root's Angular allows more majors", async () => {
+    const tree = pnpmWorkspace();
+    tree.write('pnpm-workspace.yaml', "packages:\n  - 'apps/*'\nsavePrefix: ''\n");
+    updateJson(tree, 'package.json', (manifest) => ({
+      ...manifest,
+      dependencies: { '@angular/core': '^22.0.0 || ^23.0.0' },
+    }));
+    await generate(tree, { directory: 'apps/mobile' });
+    const app = readJson(tree, 'apps/mobile/package.json');
+    assert.equal(app.dependencies['@angular/common'], '22.2.1');
+    assert.equal(app.devDependencies['@angular/compiler-cli'], '22.2.1');
+  });
+
   it("adds the root's missing Angular packages within its Angular's range", async () => {
     registry.versions = async () => [...PUBLISHED, '22.1.0', '22.1.4'];
     const tree = integrated();
