@@ -5,7 +5,6 @@
 declare const preset: {
   darkMode: ['variant', string];
   corePlugins: { preflight: false };
-  theme: { extend: { fontFamily: { mono: string[] } } };
   plugins: ((api: unknown) => void)[];
 };
 export = preset;
