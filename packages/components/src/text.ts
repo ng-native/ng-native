@@ -44,6 +44,15 @@ export class Text extends TouchableBase {
     return nativePlatform() === 'android' ? this.pressable() : true;
   }
 
+  /**
+   * `Text.js` announces `disabled` on every text, pressable or not, nested or not. Written from
+   * `ngOnChanges` like the rest of the state, since `disabled` is an input of this directive: no
+   * host binding, which `ControlBase` needs and a text cannot afford.
+   */
+  protected override disabledForAccessibility(): boolean {
+    return this.disabled();
+  }
+
   /** Truncate after this many lines, with `ellipsizeMode` deciding where the ellipsis goes. */
   readonly numberOfLines = input<number>(undefined, { transform: optionalNumber });
   /**

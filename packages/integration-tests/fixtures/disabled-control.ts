@@ -31,6 +31,18 @@ import { View } from '../../components/src/view.ts';
       <switch testID="switch" class="p" [disabled]="true" />
       <text testID="text" class="p disabled:bg-gray-300" [disabled]="off()">Off</text>
       <text testID="pressable-text" class="p" pressable [disabled]="off()">Link</text>
+      <text accessibilityRole="link" pressable [disabled]="off()">Terms</text>
+      <text testID="static-text" disabled>Static</text>
+      <text
+        testID="text-with-state"
+        pressable
+        [accessibilityState]="{ selected: true }"
+        [disabled]="off()"
+      >
+        Chosen
+      </text>
+      <text testID="text-both" pressable [disabled]="off()" [aria-disabled]="off()">Both</text>
+      <text>Read the <text testID="nested-text" pressable [disabled]="off()">notes</text></text>
       <pressable testID="aria" class="a group aria-disabled:bg-gray-300" [aria-disabled]="off()">
         <text testID="aria-label" class="a-label group-aria-disabled:text-red-500">Aria</text>
       </pressable>

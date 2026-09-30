@@ -46,6 +46,9 @@ component. So `<text>` needs an explicit `pressable` input before `(press)`, `(p
 <text pressable (press)="onSelect()">Select</text>
 ```
 
+`disabled` stops the presses and tells VoiceOver and TalkBack the text is disabled, as React
+Native's `Text` does. A disabled text says so whether or not it is `pressable`.
+
 ## Fonts
 
 A font is styled the same way as on the web: `font-family`, `font-weight`, `font-size` in a

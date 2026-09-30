@@ -151,10 +151,7 @@ describe('a disabled text publishes data-disabled', () => {
     );
     const { instance, getByTestId, rerender } = await render(Control, { globalStyles: sheet });
     const ids = ['text', 'pressable-text'];
-    for (const id of ids) {
-      assert.equal(getByTestId(id).props['backgroundColor'], RED, id);
-      assert.equal(getByTestId(id).props['accessibilityState'] ?? null, null, `${id} announces`);
-    }
+    for (const id of ids) assert.equal(getByTestId(id).props['backgroundColor'], RED, id);
 
     instance.off.set(false);
     await rerender();
@@ -163,6 +160,49 @@ describe('a disabled text publishes data-disabled', () => {
     instance.off.set(true);
     await rerender();
     for (const id of ids) assert.equal(getByTestId(id).props['backgroundColor'], RED, id);
+    cleanup();
+  });
+});
+
+describe('a disabled text is announced as disabled', () => {
+  /**
+   * React Native's `Text` puts `disabled` into `accessibilityState` whether or not it has a press
+   * handler, nested or not, so VoiceOver and TalkBack say "dimmed" or "disabled" rather than
+   * offering a control that does nothing.
+   */
+  it('commits accessibilityState.disabled, and a role query reads the same', async () => {
+    const { getByRole, getByTestId } = await render(Control);
+    const state = (id: string) => getByTestId(id).props['accessibilityState'];
+    for (const id of ['text', 'pressable-text', 'nested-text', 'static-text']) {
+      assert.deepEqual(state(id), { disabled: true }, id);
+    }
+    assert.deepEqual(getByRole('link', { name: 'Terms' }).props['accessibilityState'], {
+      disabled: true,
+    });
+    cleanup();
+  });
+
+  it('follows a change both ways, merged with the state the app sets', async () => {
+    const { instance, getByRole, getByTestId, rerender } = await render(Control);
+    const state = (id: string) => getByTestId(id).props['accessibilityState'] ?? null;
+    const link = () => getByRole('link', { name: 'Terms' }).props['accessibilityState'] ?? null;
+    assert.deepEqual(state('text-with-state'), { selected: true, disabled: true });
+    assert.deepEqual(state('text-both'), { disabled: true });
+
+    instance.off.set(false);
+    await rerender();
+    for (const id of ['text', 'pressable-text', 'nested-text']) assert.equal(state(id), null, id);
+    assert.equal(link(), null, 'the role query agrees');
+    assert.deepEqual(state('text-with-state'), { selected: true }, 'the app state stays');
+    assert.deepEqual(state('text-both'), { disabled: false }, 'aria-disabled says so');
+
+    instance.off.set(true);
+    await rerender();
+    for (const id of ['text', 'pressable-text', 'nested-text']) {
+      assert.deepEqual(state(id), { disabled: true }, id);
+    }
+    assert.deepEqual(link(), { disabled: true });
+    assert.deepEqual(state('text-with-state'), { selected: true, disabled: true });
     cleanup();
   });
 });

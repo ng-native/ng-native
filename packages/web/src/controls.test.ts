@@ -114,6 +114,25 @@ describe('switch, over a real checkbox', () => {
   });
 });
 
+describe('a disabled <text pressable>', () => {
+  it('writes aria-disabled while disabled, and removes it once enabled', async () => {
+    const { document, componentRef, applicationRef: appRef, app } = await bootstrapControls();
+    const text = document.querySelector('[data-testid="terms"]') as HTMLElement;
+
+    assert.equal(text.getAttribute('aria-disabled'), 'true');
+
+    app.off.set(false);
+    appRef.tick();
+    assert.equal(text.getAttribute('aria-disabled'), null);
+
+    app.off.set(true);
+    appRef.tick();
+    assert.equal(text.getAttribute('aria-disabled'), 'true');
+
+    componentRef.destroy();
+  });
+});
+
 describe("image-background's node.props['style'] mirror", () => {
   it("copies the outer view's width/height onto the absolutely-filled inner image", async () => {
     const { document, componentRef } = await bootstrapControls();
