@@ -486,6 +486,7 @@ function warnIfAnimationsAreOff(): void {
 declare const __DEV__: boolean | undefined;
 
 function installReloadHook(): void {
+  reloadMetroThroughExpo();
   const scope = globalThis as { __angularNativeReload?: () => void };
   if (scope.__angularNativeReload) return;
   scope.__angularNativeReload = () => {
@@ -514,6 +515,29 @@ function installReloadHook(): void {
     ).DevSettings;
     devSettings?.reload('angular-native: more than a template changed');
   };
+}
+
+/**
+ * Metro's own reload, for an edit nothing accepted: a route file, a service, or a component the
+ * hook above has already asked to reload. Metro calls React Native's Fast Refresh runtime, which
+ * calls `DevSettings.reload()`, and in Expo Go that brings the app back without Expo's native
+ * modules (`Cannot find native module 'ExpoFontLoader'`) until Expo Go is relaunched. Expo's
+ * reload works in Expo Go and a development build alike, so in an Expo app Metro's goes through
+ * it too.
+ */
+function reloadMetroThroughExpo(): void {
+  const scope = globalThis as { __METRO_GLOBAL_PREFIX__?: string } & Record<string, unknown>;
+  const refresh = scope[`${scope.__METRO_GLOBAL_PREFIX__ ?? ''}__ReactRefresh`] as
+    { performFullRefresh?: (reason: string) => void } | undefined;
+  if (!refresh?.performFullRefresh) return;
+  try {
+    const { reloadAppAsync } = require('expo') as {
+      reloadAppAsync?: (reason?: string) => Promise<void>;
+    };
+    if (reloadAppAsync) refresh.performFullRefresh = (reason) => void reloadAppAsync(reason);
+  } catch {
+    // Not an Expo app: React Native's own reload re-fetches the bundle there.
+  }
 }
 
 /** Dev only, and required rather than imported: React Native ships Flow, which Node cannot parse. */

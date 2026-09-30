@@ -467,4 +467,58 @@ describe('the reload hook', () => {
     await render(Features);
     assert.equal(hook(), undefined);
   });
+
+  /**
+   * Metro reloads the app itself for an edit nothing accepted, a route file or a service, through
+   * React Native's Fast Refresh runtime, which calls `DevSettings.reload()`. In Expo Go that brings
+   * the app back without Expo's native modules (`Cannot find native module 'ExpoFontLoader'`)
+   * until Expo Go is relaunched.
+   */
+  describe("Metro's own full reload", () => {
+    const scope = globalThis as Record<string, unknown>;
+    let calls: string[];
+    const refresh = () =>
+      scope['__ReactRefresh'] as { performFullRefresh(reason: string): void } | undefined;
+
+    beforeEach(() => {
+      calls = [];
+      scope['__ReactRefresh'] = {
+        performFullRefresh: (reason: string) => calls.push(`DevSettings.reload: ${reason}`),
+      };
+    });
+    afterEach(() => {
+      delete scope['__ReactRefresh'];
+      delete scope['require'];
+    });
+
+    const withExpo = () => {
+      scope['require'] = (id: string) => {
+        if (id === 'expo') {
+          return { reloadAppAsync: async (reason: string) => void calls.push(`expo: ${reason}`) };
+        }
+        throw new Error(`Cannot find module '${id}'`);
+      };
+    };
+
+    it("goes through Expo's reload in an Expo app", async () => {
+      withExpo();
+      await render(Features);
+      refresh()!.performFullRefresh('Fast Refresh - No root boundary');
+      assert.deepEqual(calls, ['expo: Fast Refresh - No root boundary']);
+    });
+
+    it("stays React Native's outside Expo", async () => {
+      await render(Features);
+      refresh()!.performFullRefresh('Fast Refresh - No root boundary');
+      assert.deepEqual(calls, ['DevSettings.reload: Fast Refresh - No root boundary']);
+    });
+
+    it('is left alone in a release build', async () => {
+      withExpo();
+      scope['__DEV__'] = false;
+      await render(Features);
+      refresh()!.performFullRefresh('reason');
+      assert.deepEqual(calls, ['DevSettings.reload: reason']);
+    });
+  });
 });
