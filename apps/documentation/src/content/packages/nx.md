@@ -39,10 +39,11 @@ peer in the root's context, and with nothing there to match, pnpm took that Expo
 React at the newest versions there were, a second copy of each beside the app's. Keep these root
 versions in step with the app's when upgrading it.
 
-It also adds Babel 7's `@babel/runtime` at the workspace root, the copy Expo's Babel preset imports.
-In an `@nx/angular` workspace, `@angular-devkit/build-angular` otherwise puts Babel 8's there,
-which has no `regenerator`, and Metro warns on every `nx start` that it fell back to another copy.
-Angular's build keeps its own Babel 8.
+It also adds Babel 7's `@babel/runtime` and `@babel/core` at the workspace root: the runtime Expo's
+Babel preset imports, and the core every plugin in that preset peers on. In an `@nx/angular`
+workspace, `@angular-devkit/build-angular` otherwise puts Babel 8's copies there. Babel 8's runtime
+has no `regenerator`, and Metro warns on every `nx start` that it fell back to another copy, and
+its core leaves each plugin's peer unmet. Angular's build keeps its own Babel 8.
 
 ## The targets
 

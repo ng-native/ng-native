@@ -17,7 +17,9 @@
  *
  * It also adds Babel 7's `@babel/runtime`, the one Expo's Babel preset writes imports of. In an
  * Angular workspace `@angular-devkit/build-angular` hoists Babel 8's to the root, which has no
- * `regenerator`, and every `nx start` warned that Metro fell back to file-based resolution.
+ * `regenerator`, and every `nx start` warned that Metro fell back to file-based resolution. And
+ * Babel 7's `@babel/core`, which every plugin in that preset peers on, and which the same hoisted
+ * Babel 8 otherwise answers.
  */
 const {
   addDependenciesToPackageJson,

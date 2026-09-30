@@ -13,6 +13,7 @@ const { createTreeWithEmptyWorkspace } = require('@nx/devkit/testing') as {
 const { readJson, readNxJson, updateJson, updateNxJson } =
   require('@nx/devkit') as typeof import('@nx/devkit');
 const { init, EXPO_PLUGIN } = require('./index.cjs');
+const native = require('../native-app.cjs');
 
 function workspace(nx = '23.2.0') {
   const tree = createTreeWithEmptyWorkspace();
@@ -32,6 +33,7 @@ describe('init', () => {
     await init(tree, { skipFormat: true });
     const manifest = readJson(tree, 'package.json');
     assert.deepEqual(Object.keys(manifest.devDependencies).sort(), [
+      '@babel/core',
       '@babel/runtime',
       '@expo/cli',
       '@nx/expo',
@@ -51,6 +53,15 @@ describe('init', () => {
     assert.match(readJson(tree, 'package.json').devDependencies['@babel/runtime'], /^\^7\./);
   });
 
+  it("puts Babel 7's core at the root, which every plugin in Expo's Babel preset peers on", async () => {
+    // The same hoisted Babel 8 answered those plugins' `@babel/core` peer, and pnpm reported it
+    // unmet after nx add until an app generator added Babel 7's core.
+    const tree = workspace();
+    await init(tree, { skipFormat: true });
+    const { devDependencies } = readJson(tree, 'package.json');
+    assert.equal(devDependencies['@babel/core'], native.devDependencies['@babel/core']);
+  });
+
   it("pins the root's Expo peers to the app's versions in a package-manager workspace", async () => {
     // pnpm installs @nx/expo's `expo` peer in the root's context, before any app exists, and
     // took that Expo's own peers at the newest there were: React Native 0.87.1 and React 19.3.0
@@ -60,6 +71,7 @@ describe('init', () => {
     await init(tree, { skipFormat: true });
     const { devDependencies } = readJson(tree, 'package.json');
     assert.deepEqual(Object.keys(devDependencies).sort(), [
+      '@babel/core',
       '@babel/runtime',
       '@nx/expo',
       'expo',

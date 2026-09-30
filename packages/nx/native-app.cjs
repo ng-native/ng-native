@@ -46,17 +46,6 @@ const dependencies = {
   'react-native-safe-area-context': '~5.7.0',
 };
 
-/**
- * What `nx add` puts beside `@nx/expo`, in place of the `@nx/expo:init` it does not run: see
- * `init/index.cjs`. `@expo/cli` and `@babel/runtime` are the ranges the template's `expo` depends
- * on.
- */
-const expoCompanions = {
-  'react-dom': dependencies.react,
-  '@expo/cli': '^57.0.27',
-  '@babel/runtime': '^7.20.0',
-};
-
 /** @type {Record<string, string>} */
 const devDependencies = {
   // An Angular workspace already has Babel 8 through @angular/compiler-cli, and React Native's
@@ -68,6 +57,18 @@ const devDependencies = {
   '@types/react': '~19.2.2',
   typescript: '~6.0.3',
   vitest: '^5.0.0',
+};
+
+/**
+ * What `nx add` puts beside `@nx/expo`, in place of the `@nx/expo:init` it does not run: see
+ * `init/index.cjs`. `@expo/cli` and `@babel/runtime` are the ranges the template's `expo` depends
+ * on, and `@babel/core` is the app's own, which every plugin in Expo's Babel preset peers on.
+ */
+const expoCompanions = {
+  'react-dom': dependencies.react,
+  '@expo/cli': '^57.0.27',
+  '@babel/runtime': '^7.20.0',
+  '@babel/core': devDependencies['@babel/core'],
 };
 
 /** The template's files, copied verbatim into the new app. */
