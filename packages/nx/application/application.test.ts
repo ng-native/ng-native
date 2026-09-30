@@ -696,6 +696,20 @@ describe('in a workspace that saves exact versions', () => {
     assert.equal(root.devDependencies['@nx/vite'], NX_VERSION);
   });
 
+  it('adds @nx/vite at the Nx running in a workspace package with path aliases', async () => {
+    const tree = pnpmWorkspace();
+    tree.write('pnpm-workspace.yaml', "packages:\n  - 'apps/*'\nsavePrefix: ''\n");
+    tree.write('tsconfig.base.json', JSON.stringify({ compilerOptions: { paths: {} } }));
+    updateJson(tree, 'package.json', (manifest) => ({
+      ...manifest,
+      devDependencies: { nx: `^${NX_VERSION.split('.')[0]}.0.0` },
+    }));
+    await generate(tree, { directory: 'apps/mobile' });
+    assert.equal(readJson(tree, 'package.json').devDependencies['@nx/vite'], NX_VERSION);
+    assert.match(tree.read('apps/mobile/vitest.config.mts', 'utf-8')!, /nxViteTsPaths\(\)/);
+    assert.equal(readJson(tree, 'apps/mobile/package.json').dependencies.expo, '57.0.31');
+  });
+
   it("keeps its own version where the root's is one the app cannot use", async () => {
     const tree = pnpmWorkspace();
     updateJson(tree, 'package.json', (manifest) => ({
