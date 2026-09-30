@@ -96,6 +96,13 @@ describe('the generated app', () => {
     assert.ok(ignored(native.GITIGNORE).includes('.angular-native/'));
   });
 
+  it("puts Expo's own ranges of what it depends on at the root", () => {
+    const expo = require(require.resolve('expo/package.json', { paths: [template] }));
+    for (const name of ['@expo/cli', '@expo/metro', '@babel/runtime']) {
+      assert.equal(native.expoCompanions[name], expo.dependencies[name], name);
+    }
+  });
+
   it('pins the framework packages to its own version, since they are released together', () => {
     const { version } = require('./package.json');
     assert.equal(native.dependencies['@ng-native/components'], version);

@@ -45,6 +45,12 @@ workspace, `@angular-devkit/build-angular` otherwise puts Babel 8's copies there
 has no `regenerator`, and Metro warns on every `nx start` that it fell back to another copy, and
 its core leaves each plugin's peer unmet. Angular's build keeps its own Babel 8.
 
+And it adds `@expo/metro` at the root, at the range the app's `expo` depends on. `withNxMetro` in
+the app's `metro.config.js` loads it from the app's directory up, and pnpm keeps a dependency of
+`expo` out of the root's `node_modules`. `expo start` still finds it, through the `NODE_PATH`
+pnpm's `expo` shim sets, but the `typecheck` target loads the config with plain `node`, which
+without it fails with `Unable to load Metro config`.
+
 In a pnpm workspace it also decides the two install scripts `@nx/expo` brings in, through
 `@nx/jest`: `@parcel/watcher` and `unrs-resolver`. It sets them to `false` under `allowBuilds` in
 `pnpm-workspace.yaml`, since both ship prebuilt binaries and their scripts only build from source.

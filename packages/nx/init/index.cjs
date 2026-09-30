@@ -20,6 +20,10 @@
  * `regenerator`, and every `nx start` warned that Metro fell back to file-based resolution. And
  * Babel 7's `@babel/core`, which every plugin in that preset peers on, and which the same hoisted
  * Babel 8 otherwise answers.
+ *
+ * And `@expo/metro`, which `withNxMetro` in the app's `metro.config.js` loads from the app's
+ * directory up. It is a dependency of `expo`, which pnpm keeps out of the root's `node_modules`, and
+ * loading the config threw "Unable to load Metro config" without it.
  */
 const {
   addDependenciesToPackageJson,

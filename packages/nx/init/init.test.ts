@@ -36,6 +36,7 @@ describe('init', () => {
       '@babel/core',
       '@babel/runtime',
       '@expo/cli',
+      '@expo/metro',
       '@nx/expo',
       'nx',
       'react-dom',
@@ -62,6 +63,17 @@ describe('init', () => {
     assert.equal(devDependencies['@babel/core'], native.devDependencies['@babel/core']);
   });
 
+  it("puts Expo's Metro at the root, where withNxMetro loads it from, in both workspace shapes", async () => {
+    // pnpm keeps @expo/metro, a dependency of expo, out of the root's node_modules, and loading
+    // the app's metro.config.js threw "Unable to load Metro config. Install @expo/metro".
+    for (const pnpm of [false, true]) {
+      const tree = workspace();
+      if (pnpm) tree.write('pnpm-workspace.yaml', "packages:\n  - 'apps/*'\n");
+      await init(tree, { skipFormat: true });
+      assert.equal(readJson(tree, 'package.json').devDependencies['@expo/metro'], '~56.0.2');
+    }
+  });
+
   it("pins the root's Expo peers to the app's versions in a package-manager workspace", async () => {
     // pnpm installs @nx/expo's `expo` peer in the root's context, before any app exists, and
     // took that Expo's own peers at the newest there were: React Native 0.87.1 and React 19.3.0
@@ -73,6 +85,7 @@ describe('init', () => {
     assert.deepEqual(Object.keys(devDependencies).sort(), [
       '@babel/core',
       '@babel/runtime',
+      '@expo/metro',
       '@nx/expo',
       'expo',
       'nx',

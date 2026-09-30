@@ -61,14 +61,15 @@ const devDependencies = {
 
 /**
  * What `nx add` puts beside `@nx/expo`, in place of the `@nx/expo:init` it does not run: see
- * `init/index.cjs`. `@expo/cli` and `@babel/runtime` are the ranges the template's `expo` depends
- * on, and `@babel/core` is the app's own, which every plugin in Expo's Babel preset peers on.
+ * `init/index.cjs`. `@expo/cli`, `@babel/runtime` and `@expo/metro` are the ranges the template's
+ * `expo` depends on, and `@babel/core` is the app's own, which every plugin in Expo's Babel preset peers on.
  */
 const expoCompanions = {
   'react-dom': dependencies.react,
   '@expo/cli': '^57.0.27',
   '@babel/runtime': '^7.20.0',
   '@babel/core': devDependencies['@babel/core'],
+  '@expo/metro': '~56.0.2',
 };
 
 /**
