@@ -394,6 +394,18 @@ describe('tokens', () => {
       assert.equal(resolvedStyle(css, ['b'])['flexGrow'], 6);
     });
 
+    it('works out a chain of calc() tokens whatever order they are defined in', () => {
+      const css =
+        '.a { --x: calc(var(--y) * 2); --y: calc(var(--z) * 2); --z: 4px; padding-top: var(--x) }';
+      assert.equal(resolvedStyle(css, ['a'])['paddingTop'], 16);
+    });
+
+    it('leaves calc() tokens that read each other unset', () => {
+      const css =
+        '.a { --x: calc(var(--y) * 2); --y: calc(var(--x) * 2); padding: 1px; padding-top: var(--x) }';
+      assert.equal(resolvedStyle(css, ['a'])['paddingTop'], 1);
+    });
+
     it('adds a percentage to a token of one, as Open Props strengthens a shadow', () => {
       // `--shadow-strength-4: calc(var(--shadow-strength) + 3%)`, read as an alpha: 1% + 3%. Chrome
       // draws the card's shadow in rgba(37, 38, 39, 0.04).

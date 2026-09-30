@@ -1595,9 +1595,21 @@ function resolveAliases(
   for (const name of names) {
     if (own[name]!.alias) settle(merged, name, followAlias(name, merged, new Set()));
   }
-  for (const name of names) {
-    if (isDerived(own[name])) settle(merged, name, derived(own[name]!, merged));
+  // Until a pass settles nothing more: one made of another defined after it, or of one not yet
+  // settled, cannot be worked out until that one is. What is left then is a cycle, or reads a
+  // token that is not there, and is unset.
+  let pending = names.filter((name) => isDerived(own[name]));
+  for (let settled = true; settled && pending.length;) {
+    settled = false;
+    pending = pending.filter((name) => {
+      const value = derived(own[name]!, merged);
+      if (!value) return true;
+      merged[name] = value;
+      settled = true;
+      return false;
+    });
   }
+  for (const name of pending) delete merged[name];
   // An alias to one of those copied it unsettled above: follow it again, now it is settled.
   for (const name of names) {
     const target = own[name]!.alias;
