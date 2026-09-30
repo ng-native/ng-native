@@ -68,6 +68,17 @@ module.exports = {
 `metro.config.js` and `index.ts` are the same as above: `withTailwind` sees Tailwind 3 and runs its
 own CLI, so there is no `@tailwindcss/cli` to install. The preset turns preflight off.
 
+Tailwind 3 adds its default configuration beneath every preset with no `presets` key, and a later
+preset's defaults override an earlier preset's theme. Beside a preset of the app's own, list this
+one after it with `presets: []`, so only the first preset brings the defaults:
+
+```js
+presets: [
+  require('./design-system.preset.js'),
+  { ...require('@ng-native/tailwind/preset.cjs'), presets: [] },
+],
+```
+
 ## What's in the package
 
 - `./native.css` - the preset: platform variants, safe-area and hairline utilities, and

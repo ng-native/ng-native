@@ -680,3 +680,59 @@ describe('the Tailwind 3 preset', () => {
     assert.match(css, /\.platform-android \.font-mono\s*\{\s*font-family: monospace/);
   });
 });
+
+describe('the Tailwind 3 preset beside an app preset', () => {
+  // Tailwind 3 puts its whole default config under every preset with no `presets` key, so of two
+  // such presets the later one's defaults override the earlier one's theme.
+  const resolveConfig = require('tailwindcss-v3/resolveConfig') as (config: object) => {
+    darkMode: unknown;
+    theme: Record<string, Record<string, unknown> | undefined>;
+  };
+  const nativePreset = require('@ng-native/tailwind/preset.cjs') as object;
+  const designSystem = {
+    theme: { spacing: { 0: '0', 2: '8px' }, fontSize: { sm: ['14px', { lineHeight: '1.5' }] } },
+  };
+
+  it("brings Tailwind's default theme when it is the only preset", () => {
+    const { theme, darkMode } = resolveConfig({ presets: [nativePreset], content: ['x'] });
+    assert.equal(theme['spacing']?.['2'], '0.5rem');
+    assert.equal((theme['colors']?.['red'] as Record<string, string>)['500'], '#ef4444');
+    assert.deepEqual(darkMode, ['variant', '.dark &']);
+  });
+
+  it("keeps the app preset's theme when listed after it with presets: []", () => {
+    const { theme, darkMode } = resolveConfig({
+      presets: [designSystem, { ...nativePreset, presets: [] }],
+      content: ['x'],
+    });
+    assert.equal(theme['spacing']?.['2'], '8px');
+    assert.deepEqual(theme['fontSize']?.['sm'], ['14px', { lineHeight: '1.5' }]);
+    assert.equal(theme['spacing']?.['4'], undefined, 'no default step beside the app scale');
+    assert.equal((theme['colors']?.['red'] as Record<string, string>)['500'], '#ef4444');
+    assert.deepEqual(darkMode, ['variant', '.dark &']);
+  });
+
+  it('keeps the app theme and the dark variant through the CLI', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'tailwind-v3-stacked-'));
+    const preset = require.resolve('@ng-native/tailwind/preset.cjs');
+    writeFileSync(
+      join(dir, 'tailwind.config.js'),
+      `module.exports = { presets: [${JSON.stringify(designSystem)}, ` +
+        `{ ...require(${JSON.stringify(preset)}), presets: [] }], ` +
+        `content: [{ raw: 'p-2 dark:p-0 bg-red-500' }] };`,
+    );
+    writeFileSync(join(dir, 'in.css'), '@tailwind utilities;\n');
+    try {
+      const built = execFileSync(
+        process.execPath,
+        [require.resolve('tailwindcss-v3/lib/cli.js'), '-c', 'tailwind.config.js', '-i', 'in.css'],
+        { cwd: dir, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] },
+      );
+      assert.match(built, /\.p-2 \{\s*padding: 8px/);
+      assert.match(built, /\.dark \.dark\\:p-0 \{/);
+      assert.match(built, /\.bg-red-500 \{/);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});

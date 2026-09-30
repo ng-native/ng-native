@@ -177,6 +177,27 @@ sheet at build time. It supplies the same variants and utilities as `native.css`
 variants, `dark:` following a `.dark` class, the touch meanings of `hover:` and `focus-visible:`
 (for `group-*:` and `peer-*:` as well), and the safe-area and hairline utilities.
 
+Beside a preset of the app's own, such as a design system, the order of the two matters. Tailwind 3
+adds its whole default configuration beneath every preset that has no `presets` key, so of two such
+presets the later one's defaults override the earlier one's theme: its `spacing`, `fontSize` and
+`colors` replace the design system's. Only the first preset in the list should bring the defaults,
+so give every preset after it `presets: []`:
+
+```js
+// tailwind.config.js
+module.exports = {
+  presets: [
+    require('./design-system.preset.js'),
+    { ...require('@ng-native/tailwind/preset.cjs'), presets: [] },
+  ],
+  content: ['./src/**/*.{ts,html}'],
+};
+```
+
+Listed after the design system, this preset's `darkMode` and preflight setting win over the design
+system's. Used alone, as in the setup above, it needs no change: it has no `presets` key, so it
+brings Tailwind's defaults itself.
+
 Every Tailwind 3 utility is held to the same sweep as Tailwind 4's, and what it draws is compared
 with Chrome. Each one takes effect or is refused with a build warning, except a few that only set a
 value another utility reads, where that utility is the one refused: `snap-mandatory` and

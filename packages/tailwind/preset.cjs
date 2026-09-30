@@ -7,6 +7,11 @@
  *     content: ['./src/**\/*.{ts,html}'],
  *   };
  *
+ * There is no `presets` key here, so Tailwind 3 adds its default configuration beneath this preset,
+ * which is what an app using it alone needs. Beside another preset that also brings the defaults,
+ * the later one's defaults override the earlier one's theme, so an app lists this one after its own
+ * preset as `{ ...require('@ng-native/tailwind/preset.cjs'), presets: [] }`.
+ *
  * The same vocabulary as `native.css`, which is the Tailwind 4 preset, in the JavaScript form
  * Tailwind 3 takes: read the two side by side, and change them together. Every choice is explained
  * there and in `shared.css`; this file only says how each one is spelt here.
