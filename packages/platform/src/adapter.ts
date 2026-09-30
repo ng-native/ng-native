@@ -525,16 +525,30 @@ function installReloadHook(): void {
  * reload works in Expo Go and a development build alike, so in an Expo app Metro's goes through
  * it too.
  */
+const THROUGH_EXPO = Symbol.for('ng-native.reloadThroughExpo');
+
 function reloadMetroThroughExpo(): void {
   const scope = globalThis as { __METRO_GLOBAL_PREFIX__?: string } & Record<string, unknown>;
   const refresh = scope[`${scope.__METRO_GLOBAL_PREFIX__ ?? ''}__ReactRefresh`] as
-    { performFullRefresh?: (reason: string) => void } | undefined;
-  if (!refresh?.performFullRefresh) return;
+    { performFullRefresh?: ((reason: string) => void) & { [THROUGH_EXPO]?: true } } | undefined;
+  const reactNative = refresh?.performFullRefresh;
+  if (!refresh || !reactNative || reactNative[THROUGH_EXPO]) return;
   try {
     const { reloadAppAsync } = require('expo') as {
       reloadAppAsync?: (reason?: string) => Promise<void>;
     };
-    if (reloadAppAsync) refresh.performFullRefresh = (reason) => void reloadAppAsync(reason);
+    if (!reloadAppAsync) return;
+    // A reload Expo could not do is still a reload the edit needs: React Native's, then.
+    const throughExpo = (reason: string) =>
+      void reloadAppAsync(reason).catch((error: unknown) => {
+        console.error(
+          "[angular-native] Expo's reload failed; reloading through React Native.",
+          error,
+        );
+        reactNative.call(refresh, reason);
+      });
+    throughExpo[THROUGH_EXPO] = true as const;
+    refresh.performFullRefresh = throughExpo;
   } catch {
     // Not an Expo app: React Native's own reload re-fetches the bundle there.
   }

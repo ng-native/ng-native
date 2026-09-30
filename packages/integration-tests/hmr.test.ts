@@ -507,6 +507,27 @@ describe('the reload hook', () => {
       assert.deepEqual(calls, ['expo: Fast Refresh - No root boundary']);
     });
 
+    it("falls back to React Native's reload when Expo's rejects", async () => {
+      scope['require'] = (id: string) => {
+        if (id === 'expo') return { reloadAppAsync: () => Promise.reject(new Error('no reload')) };
+        throw new Error(`Cannot find module '${id}'`);
+      };
+      const errors: unknown[] = [];
+      const error = console.error;
+      console.error = (...args: unknown[]) => void errors.push(args);
+      try {
+        await render(Features);
+        await render(Features);
+        refresh()!.performFullRefresh('reason');
+        await new Promise((resolve) => setTimeout(resolve, 0));
+      } finally {
+        console.error = error;
+      }
+      assert.deepEqual(calls, ['DevSettings.reload: reason'], 'once, after a second mount too');
+      const said = errors.filter((args) => /Expo's reload failed/.test(String(args)));
+      assert.equal(said.length, 1, 'and says why');
+    });
+
     it("stays React Native's outside Expo", async () => {
       await render(Features);
       refresh()!.performFullRefresh('Fast Refresh - No root boundary');
