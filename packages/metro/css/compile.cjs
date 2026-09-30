@@ -328,7 +328,8 @@ function deferHslToken(parts) {
   if (channels.some((channel) => channel === undefined)) return null;
 
   const [h, s, l, alpha] = channels;
-  return { hsl: { h, s, l, ...(alpha === undefined ? {} : { alpha }) } };
+  const hsl = { h, s, l, alpha, legacy: legacy || undefined };
+  return { hsl: Object.fromEntries(Object.entries(hsl).filter(([, v]) => v !== undefined)) };
 }
 
 /**

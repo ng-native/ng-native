@@ -366,3 +366,61 @@ describe('a value with a var() inside it among others set on elements', () => {
     }
   });
 });
+
+describe('an hsl() of tokens reads a token holding a bare saturation or lightness as a percentage', () => {
+  // As Chrome does: it substitutes the token's text, then reads the hsl() as if written so.
+  const TOKENS = ':root { --h: 200; --s: 100; --l: 50; --p: 100%; --half: 50% }';
+  const color = 'color: var(--x, rgb(1, 2, 3))';
+  const cases: readonly [string, string][] = [
+    ['hsl(var(--h) var(--s) var(--l))', 'rgb(0, 170, 255)'],
+    ['hsl(var(--h) var(--p) var(--l))', 'rgb(0, 170, 255)'],
+    ['hsl(var(--h) var(--s) var(--half))', 'rgb(0, 170, 255)'],
+    ['hsl(var(--h) var(--s) var(--l) / var(--s))', 'rgb(0, 170, 255)'],
+    ['hsla(var(--h) var(--l) var(--l) / 0.5)', 'rgba(64, 149, 191, 0.5)'],
+    // The legacy comma syntax takes a percentage alone, from a token as written in it.
+    ['hsl(var(--h), var(--p), var(--half))', 'rgb(0, 170, 255)'],
+    ['hsl(var(--h), var(--s), var(--l))', 'rgb(1, 2, 3)'],
+    ['hsla(var(--h), var(--p), var(--l), 0.5)', 'rgb(1, 2, 3)'],
+  ];
+
+  for (const [value, expected] of cases) {
+    it(value, () => {
+      assert.equal(written(TOKENS, value, color)['color'], expected, 'in a stylesheet');
+      assert.equal(set(TOKENS, value, color)['color'], expected, 'set on the element');
+    });
+  }
+
+  it('reads the same tokens set on an element as a stylesheet does', () => {
+    const read = '.x { color: var(--c, rgb(1, 2, 3)) }';
+    const cases: readonly [string, string, string, string][] = [
+      ['hsl(var(--h) var(--s) var(--l))', '100', '50', 'rgb(0, 170, 255)'],
+      ['hsl(var(--h) var(--s) var(--l))', '50', '25', 'rgb(32, 74, 96)'],
+      ['hsl(var(--h) var(--s) var(--l))', '100%', '50', 'rgb(0, 170, 255)'],
+      ['hsl(var(--h), var(--s), var(--l))', '100', '50', 'rgb(1, 2, 3)'],
+      ['hsl(var(--h), var(--s), var(--l))', '100%', '50%', 'rgb(0, 170, 255)'],
+    ];
+    for (const [hsl, s, l, expected] of cases) {
+      const sheet = `:root { --h: 200; --s: ${s}; --l: ${l}; --c: ${hsl} } ${read}`;
+      assert.equal(innermost(sheet, [{}])['color'], expected, `${hsl} ${s} ${l} in a stylesheet`);
+      const customs = [{ '--h': '200', '--s': s, '--l': l, '--c': hsl }];
+      assert.equal(innermost(read, customs)['color'], expected, `${hsl} ${s} ${l} set on it`);
+    }
+  });
+
+  it('reads a calc() token as the percentage or the number it makes', () => {
+    // calc(50% * 2) is a percentage and calc(2 * 50) a bare number, both 100% to Chrome here.
+    const read = '.x { color: var(--c, rgb(1, 2, 3)) }';
+    const hsl = 'hsl(200 var(--s) 50%)';
+    for (const s of ['calc(var(--half) * 2)', 'calc(var(--two) * 50)']) {
+      const sheet = `:root { --half: 50%; --two: 2; --s: ${s}; --c: ${hsl} } ${read}`;
+      assert.equal(innermost(sheet, [{}])['color'], 'rgb(0, 170, 255)', `${s} in a stylesheet`);
+      const customs = [{ '--half': '50%', '--two': '2', '--s': s, '--c': hsl }];
+      assert.equal(innermost(read, customs)['color'], 'rgb(0, 170, 255)', `${s} set on it`);
+    }
+    // A percentage is a length as well, and a percentage added to a number is neither.
+    const width = (s: string) =>
+      innermost(`:root { --half: 50%; --s: ${s} } .x { width: var(--s, 7px) }`, [{}])['width'];
+    assert.equal(width('calc(var(--half) * 2)'), '100%');
+    assert.equal(width('calc(var(--half) + 10)'), 7);
+  });
+});

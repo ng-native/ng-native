@@ -201,5 +201,12 @@
       "color": "rgb(1, 0, 0)",
       "background-color": "rgba(0, 0, 0, 0)"
     }
+  },
+  {
+    "name": "an hsl() of tokens reads a token holding a bare saturation or lightness as a percentage",
+    "expected": {
+      "color": "rgb(0, 170, 255)",
+      "background-color": "rgba(0, 170, 255, 0.5)"
+    }
   }
 ]

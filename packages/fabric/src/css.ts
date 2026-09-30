@@ -166,6 +166,8 @@ export interface TokenValue {
     readonly s: HslChannel;
     readonly l: HslChannel;
     readonly alpha?: HslChannel;
+    /** Written with commas, whose saturation and lightness are percentages alone. */
+    readonly legacy?: true;
   };
 }
 
@@ -1733,8 +1735,45 @@ function calcToken(
     if (value === undefined) continue;
     if (marker.kind === 'length') token = { ...token, length: value };
     else if (typeof value === 'number') token = { ...token, number: value };
+    // Arithmetic of a percentage, `calc(var(--half) * 2)`, is a percentage, as a token written
+    // `100%` is, so an hsl() does not read it as a bare number of percent.
+    const percentage = marker.kind === 'number' && calcType(marker.expression, tokens) === '%';
+    if (percentage && typeof value === 'number' && token?.length === undefined) {
+      token = { ...token, length: `${Math.round(value * 100000) / 1000}%` };
+    }
   }
   return token;
+}
+
+/**
+ * What a calc() of numbers and percentage tokens makes, as CSS types it: a number, `''`, a
+ * percentage, `'%'`, or neither, as a percentage added to a number or multiplied by one is.
+ */
+function calcType(
+  expression: CalcExpression,
+  tokens: Readonly<Record<string, TokenValue>>,
+): '' | '%' | undefined {
+  if (typeof expression === 'number') return '';
+  if (!Array.isArray(expression)) {
+    return leafType(expression as { reference: string; fallback?: CalcExpression }, tokens);
+  }
+  const [op, a, b] = expression as readonly [string, CalcExpression, CalcExpression];
+  const left = calcType(a, tokens);
+  const right = calcType(b, tokens);
+  if (left === undefined || right === undefined) return undefined;
+  if (op === '*') return left && right ? undefined : left || right;
+  if (op === '/') return right ? undefined : left;
+  return left === right ? left : undefined;
+}
+
+/** What one token in a calc() is, as `calcType` reads it: its fallback's type when it is unset. */
+function leafType(
+  leaf: { reference: string; fallback?: CalcExpression },
+  tokens: Readonly<Record<string, TokenValue>>,
+): '' | '%' | undefined {
+  const token = tokens[leaf.reference];
+  if (!token) return leaf.fallback === undefined ? undefined : calcType(leaf.fallback, tokens);
+  return typeof token.length === 'string' && token.length.endsWith('%') ? '%' : '';
 }
 
 /** An `hsl()` token's channels, read from the tokens in scope, as the colour they make. */
@@ -1742,10 +1781,10 @@ function resolveHsl(
   hsl: NonNullable<TokenValue['hsl']>,
   tokens: Readonly<Record<string, TokenValue>>,
 ): string | undefined {
-  const h = hslChannel(hsl.h, tokens, true);
-  const s = hslChannel(hsl.s, tokens);
-  const l = hslChannel(hsl.l, tokens);
-  const alpha = hsl.alpha === undefined ? 1 : hslChannel(hsl.alpha, tokens);
+  const h = hslChannel(hsl.h, tokens, 'hue');
+  const s = hslChannel(hsl.s, tokens, hsl.legacy ? 'legacy' : 'percentage');
+  const l = hslChannel(hsl.l, tokens, hsl.legacy ? 'legacy' : 'percentage');
+  const alpha = hsl.alpha === undefined ? 1 : hslChannel(hsl.alpha, tokens, 'alpha');
   if (h === undefined || s === undefined || l === undefined || alpha === undefined) {
     return undefined;
   }
@@ -1753,22 +1792,26 @@ function resolveHsl(
 }
 
 /**
- * A channel's number, or undefined when its token is the wrong kind for the slot: a hue is a
- * number or an angle, read in degrees, as `0.5turn` is 180 and not 0.5, and never a percentage; a
- * saturation, a lightness or an alpha is never an angle. The fallback is only for a token that is
- * not set, as a set one is substituted, whatever it holds.
+ * A channel's number, or undefined when its token is the wrong kind for the slot, as the token's
+ * text substituted into the hsl() would read: a hue is a number or an angle, read in degrees, as
+ * `0.5turn` is 180 and not 0.5, and never a percentage; a saturation or a lightness is a
+ * percentage, or a bare number of percent, `--s: 100`, though not in the legacy comma syntax; an
+ * alpha is a number or a percentage. The fallback is only for a token that is not set, as a set
+ * one is substituted, whatever it holds.
  */
 function hslChannel(
   channel: HslChannel,
   tokens: Readonly<Record<string, TokenValue>>,
-  hue = false,
+  slot: 'hue' | 'percentage' | 'legacy' | 'alpha',
 ): number | undefined {
   if (typeof channel === 'number') return channel;
   const token = tokens[channel.reference];
   if (!token) return channel.fallback;
-  if (!hue) return token.angle === undefined ? token.number : undefined;
   const percentage = typeof token.length === 'string' && token.length.endsWith('%');
-  return percentage ? undefined : (token.angle ?? token.number);
+  if (slot === 'hue') return percentage ? undefined : (token.angle ?? token.number);
+  if (token.angle !== undefined || token.number === undefined) return undefined;
+  if (percentage || slot === 'alpha') return token.number;
+  return slot === 'legacy' ? undefined : token.number / 100;
 }
 
 /**

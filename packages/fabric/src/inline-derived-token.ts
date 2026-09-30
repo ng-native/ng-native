@@ -285,7 +285,8 @@ function channelsToken(
 function hslToken(args: readonly Argument[], legacy: boolean): TokenValue {
   if (args.length !== 3 && args.length !== 4) fail();
   const [h, s, l, alpha] = args.map((arg, index) => hslChannel(arg, index, legacy));
-  return { hsl: { h: h!, s: s!, l: l!, ...(alpha === undefined ? {} : { alpha }) } };
+  const legacyFlag = legacy ? { legacy: true as const } : {};
+  return { hsl: { h: h!, s: s!, l: l!, ...(alpha === undefined ? {} : { alpha }), ...legacyFlag } };
 }
 
 function colourToken(text: string): TokenValue | undefined {
