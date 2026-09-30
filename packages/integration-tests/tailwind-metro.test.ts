@@ -128,10 +128,12 @@ describe('wiring Tailwind into Metro', () => {
       { input: path.join(dir, 'styles.css'), output, watch: false },
     );
 
-    assert.match(
-      readFileSync(path.join(dir, 'app.tailwind.d.ts'), 'utf8'),
-      /import\('@ng-native\/fabric'\)\.StyleSheet/,
-    );
+    // A type import rather than an `import()` type: the file sits inside the app, where its lint
+    // reaches it, and typescript-eslint's `consistent-type-imports` forbids `import()` types.
+    const declaration = readFileSync(path.join(dir, 'app.tailwind.d.ts'), 'utf8');
+    assert.match(declaration, /^import type \{ StyleSheet \} from '@ng-native\/fabric';$/m);
+    assert.match(declaration, /^declare const sheet: StyleSheet;$/m);
+    assert.doesNotMatch(declaration, /import\(/);
     rmSync(dir, { recursive: true, force: true });
   });
 

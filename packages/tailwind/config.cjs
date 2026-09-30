@@ -61,10 +61,11 @@ function withTailwind(config, options) {
   run([cliPath(projectRoot), '-i', input, '-o', css], projectRoot);
   generate(css, output);
   // Without it TypeScript infers the sheet from its literal, which is not assignable to the type
-  // `globalStyles` takes. `.js` -> `.d.ts`, `.mjs` -> `.d.mts`, `.cjs` -> `.d.cts`.
+  // `globalStyles` takes. `.js` -> `.d.ts`, `.mjs` -> `.d.mts`, `.cjs` -> `.d.cts`. A type import,
+  // not an `import()` type, which typescript-eslint's `consistent-type-imports` forbids in an app.
   writeFileSync(
     output.replace(/\.([cm]?)js$/, '.d.$1ts'),
-    "declare const sheet: import('@ng-native/fabric').StyleSheet;\nexport default sheet;\n",
+    "import type { StyleSheet } from '@ng-native/fabric';\n\ndeclare const sheet: StyleSheet;\nexport default sheet;\n",
   );
   if (options.watch ?? watchesByDefault()) watch(input, css, output, projectRoot);
 
