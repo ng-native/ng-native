@@ -57,6 +57,23 @@ page's inputs alone, as Angular's `RouterOutlet` does, and the page reads `Activ
 The feature's options are not read, though: query params always bind, and an input with no
 matching key is set to `undefined`, which are its defaults.
 
+Every other router feature is passed through unchanged, preloading included. A lazy route's code
+is otherwise loaded on the first navigation to it, which on the dev server is a request to Metro
+and a pause before the page appears. `withPreloading(PreloadAllModules)` loads every lazy route
+right after start-up instead:
+
+```ts
+import { PreloadAllModules, withComponentInputBinding, withPreloading } from '@angular/router';
+import { provideNativeRouter } from '@ng-native/router';
+import { routes } from './app/app.routes.ts';
+
+const router = provideNativeRouter(
+  routes,
+  withComponentInputBinding(),
+  withPreloading(PreloadAllModules),
+);
+```
+
 ## The shell
 
 A route config is an ordinary `Routes` array - `loadComponent`, `children`, guards, all of it. What

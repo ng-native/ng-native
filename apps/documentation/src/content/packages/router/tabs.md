@@ -36,6 +36,10 @@ shorthand for the fuller `icon`/`selectedIcon` inputs, which also take a `requir
 either as-authored or as a tinted template mask; `icon` and `selectedIcon` must be the same kind of
 image, since native carries one icon type for both states.
 
+Every tab is a route a user reaches in one tap, so a tab whose route is lazy pauses on its first
+visit while its code loads. `withPreloading(PreloadAllModules)` in `provideNativeRouter` loads
+those routes right after start-up; see [the router](/packages/router).
+
 A bar item is not a view - `UITabBarItem` and Android's bottom-navigation item are model objects, a
 title and an image and a badge string, with no way to put a view in their place. That is why
 `<native-tab>` takes no content while `<native-header-item>` does, and why customization beyond the
