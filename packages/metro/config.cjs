@@ -189,11 +189,16 @@ function foldDevMode(config) {
   };
 }
 
-/** The directory of the `name` package a resolved file is in, or nothing. */
-function packageRoot(file, name) {
+/**
+ * The directory of the `name` package a resolved file is in, or nothing: installed, or a linked
+ * workspace package, whose real path has no `node_modules` in it.
+ */
+function packageRoot(context, file, name) {
   const marker = `${path.sep}node_modules${path.sep}${name.split('/').join(path.sep)}${path.sep}`;
   const at = file?.lastIndexOf(marker) ?? -1;
-  return at === -1 ? undefined : file.slice(0, at + marker.length - 1);
+  if (at !== -1) return file.slice(0, at + marker.length - 1);
+  const found = file && context.getPackageForModule?.(file);
+  return found?.packageJson?.name === name ? found.rootPath : undefined;
 }
 
 /**
@@ -207,12 +212,12 @@ function packageRoot(file, name) {
  */
 function appCopy(resolve, context, name, platform, resolution, projectRoot) {
   const pkg = /^(?![./])(@[^/]+\/[^/]+|[^/]+)/.exec(name)?.[1];
-  const own = pkg && packageRoot(resolution?.filePath, pkg);
+  const own = pkg && packageRoot(context, resolution?.filePath, pkg);
   if (!own || !projectRoot) return resolution;
   try {
     const fromApp = { ...context, originModulePath: path.join(projectRoot, 'package.json') };
     const app = resolve(fromApp, name, platform);
-    const root = packageRoot(app?.filePath, pkg);
+    const root = packageRoot(context, app?.filePath, pkg);
     const version = (dir) => context.getPackage?.(path.join(dir, 'package.json'))?.version;
     return root && root !== own && version(root) && version(root) === version(own)
       ? app

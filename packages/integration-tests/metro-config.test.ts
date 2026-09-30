@@ -268,6 +268,10 @@ describe('the Metro preset', () => {
       resolveRequest: Resolve;
       originModulePath: string;
       getPackage(packageJsonPath: string): { name: string; version: string } | null;
+      getPackageForModule(file: string): {
+        packageJson: { name: string; version: string };
+        rootPath: string;
+      } | null;
     };
     const store = '/ws/node_modules/.pnpm';
     const appCopy = `${store}/@ng-native+components@0.1.2_babel7/node_modules/@ng-native/components`;
@@ -290,14 +294,24 @@ describe('the Metro preset', () => {
       const subpath = name.replace(/^(@ng-native\/components|react-native)\/?/, '') || 'index';
       return { type: 'sourceFile', filePath: `${root}/src/${subpath}.ts` };
     };
+    /** A workspace package, linked: its real path has no `node_modules` in it. */
+    const linked = '/ws/packages/components';
+    const packageAt = (root: string) => ({
+      name: root === linked ? '@ng-native/components' : root.split('/node_modules/').pop()!,
+      version: versions[root]!,
+    });
     const getPackage = (file: string) => {
       const root = path.dirname(file);
-      return root in versions ? { name: path.basename(root), version: versions[root]! } : null;
+      return root in versions ? packageAt(root) : null;
+    };
+    const getPackageForModule = (file: string) => {
+      const root = Object.keys(versions).find((dir) => file.startsWith(`${dir}/`));
+      return root ? { packageJson: packageAt(root), rootPath: root } : null;
     };
     const resolve = (name: string, originModulePath = library, resolveRequest = metro) => {
       const config = withAngularNative({ ...base(), projectRoot: '/ws/apps/mobile' });
       return (config as MetroConfig).resolver.resolveRequest!(
-        { resolveRequest, originModulePath, getPackage } as Context,
+        { resolveRequest, originModulePath, getPackage, getPackageForModule } as Context,
         name,
         'ios',
       );
@@ -333,6 +347,22 @@ describe('the Metro preset', () => {
         });
       } finally {
         versions[libCopy] = '0.1.2';
+      }
+    });
+
+    it("resolves to the app's copy when the app's is a linked workspace package", () => {
+      versions[linked] = '0.1.2';
+      const appLinked: Resolve = (context, name, platform) =>
+        (context as Context).originModulePath.startsWith('/ws/apps/mobile/')
+          ? { type: 'sourceFile', filePath: `${linked}/src/index.ts` }
+          : metro(context, name, platform);
+      try {
+        assert.deepEqual(resolve('@ng-native/components', library, appLinked), {
+          type: 'sourceFile',
+          filePath: `${linked}/src/index.ts`,
+        });
+      } finally {
+        delete versions[linked];
       }
     });
 
