@@ -196,6 +196,22 @@ describe('in an integrated workspace', () => {
     assert.match(tree.read('.gitignore', 'utf-8')!, /^\.expo\/$/m);
   });
 
+  it('ignores it once, however many apps are added', async () => {
+    const tree = integrated();
+    await generate(tree, { directory: 'apps/mobile' });
+    await generate(tree, { directory: 'apps/second' });
+    assert.equal(tree.read('.gitignore', 'utf-8')!.match(/^\.expo\/$/gm)?.length, 1);
+  });
+
+  it('refuses a directory that already holds a package', async () => {
+    const tree = integrated();
+    tree.write('apps/mobile/package.json', '{}');
+    await assert.rejects(
+      generate(tree, { directory: 'apps/mobile' }),
+      /already has a package\.json/,
+    );
+  });
+
   it("sets the bundle identifier, from the workspace's scope and the app's name", async () => {
     // Without one, prebuild made every app com.anonymous.<name>.
     const tree = integrated();
@@ -230,22 +246,6 @@ describe('in an integrated workspace', () => {
         id,
       );
     }
-  });
-
-  it('ignores it once, however many apps are added', async () => {
-    const tree = integrated();
-    await generate(tree, { directory: 'apps/mobile' });
-    await generate(tree, { directory: 'apps/second' });
-    assert.equal(tree.read('.gitignore', 'utf-8')!.match(/^\.expo\/$/gm)?.length, 1);
-  });
-
-  it('refuses a directory that already holds a package', async () => {
-    const tree = integrated();
-    tree.write('apps/mobile/package.json', '{}');
-    await assert.rejects(
-      generate(tree, { directory: 'apps/mobile' }),
-      /already has a package\.json/,
-    );
   });
 });
 
