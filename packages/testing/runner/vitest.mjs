@@ -153,10 +153,11 @@ async function appCopy(context, source, importer, options, root) {
   const pkg = /^(?![./\0])(@[^/]+\/[^/]+|[^/]+)/.exec(source)?.[1];
   const own = pkg && resolution && !resolution.external && packageRoot(resolution.id, pkg);
   if (!own) return resolution;
-  const app = await context.resolve(source, path.join(root, 'package.json'), {
-    ...options,
-    skipSelf: true,
-  });
+  // The app's copy can fail where the library's resolved: another version that does not export
+  // the subpath. The library's copy is then its own choice.
+  const app = await context
+    .resolve(source, path.join(root, 'package.json'), { ...options, skipSelf: true })
+    .catch(() => null);
   const appRoot = app && !app.external && packageRoot(app.id, pkg);
   const version = (/** @type {string} */ dir) => manifest(dir)?.version;
   return appRoot && appRoot !== own && version(appRoot) && version(appRoot) === version(own)

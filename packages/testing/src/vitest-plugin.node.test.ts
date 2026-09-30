@@ -7,7 +7,15 @@
  * in, so a routing test failed with "Unexpected token 'typeof'". The plugin now shadows it itself.
  */
 import assert from 'node:assert/strict';
-import { mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import {
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  realpathSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { after, before, describe, it } from 'node:test';
@@ -122,6 +130,19 @@ describe("a package a workspace library installed in a copy of its own, through 
     install(app, '@scope/other', '1.0.0');
     install(library, '@scope/other', '2.0.0');
     install(library, '@scope/lonely', '1.0.0');
+    // A subpath the library's version exports and the app's does not, so the app's lookup throws.
+    install(app, '@scope/exports', '1.0.0');
+    install(library, '@scope/exports', '2.0.0');
+    for (const [at, exports] of [
+      [app, { '.': './index.js' }],
+      [library, { '.': './index.js', './feature': './sub.js' }],
+    ] as const) {
+      const manifest = path.join(at, 'node_modules/@scope/exports/package.json');
+      writeFileSync(
+        manifest,
+        JSON.stringify({ ...JSON.parse(readFileSync(manifest, 'utf8')), exports }),
+      );
+    }
     // A workspace package the app links from its source folder: its real path has no
     // node_modules in it.
     const linked = path.join(ws, 'packages/linked');
@@ -183,6 +204,13 @@ describe("a package a workspace library installed in a copy of its own, through 
     assert.equal(
       await resolve('@scope/lonely'),
       path.join(library, 'node_modules/@scope/lonely/index.js'),
+    );
+  });
+
+  it("keeps the copy a library resolves when the app's version does not export the subpath", async () => {
+    assert.equal(
+      await resolve('@scope/exports/feature'),
+      path.join(library, 'node_modules/@scope/exports/sub.js'),
     );
   });
 });
