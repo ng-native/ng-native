@@ -399,3 +399,90 @@ describe('a var() whose fallback is made of other tokens', () => {
     }
   });
 });
+
+describe('a var() fallback made of other tokens inside a colour', () => {
+  // Each checked against Chrome, which reports the sky mix unrounded, 212.5 green: the same mix
+  // of a token holding rgb(0, 170, 255) paints 212 here.
+  const TOKENS = ':root { --h: 200; --brand: rgb(10, 20, 30); --rgb: 255, 0, 0 }';
+  const mix = (colour: string) => `color-mix(in srgb, ${colour} 50%, white)`;
+  const gradient = (colour: string) => `linear-gradient(${colour}, black)`;
+  const stops = (colour: string) => [
+    { color: colour, position: null },
+    { color: 'black', position: null },
+  ];
+  /** What `property: value` paints, with `own` set on the view and `TOKENS` above it. */
+  const painted = (property: string, value: string, own: Record<string, string> = {}) => {
+    const props = innermost(`${TOKENS} .x { ${property}: ${value} }`, 'x', [own]);
+    if (property === 'background-color') return props['backgroundColor'];
+    const image = props['experimental_backgroundImage'] as { colorStops: unknown }[] | undefined;
+    return image?.[0]?.colorStops;
+  };
+
+  const colours: readonly [string, string][] = [
+    [mix('var(--missing, hsl(var(--h) 100% 50%))'), 'rgb(128, 212, 255)'],
+    [mix('var(--m1, var(--m2, hsl(var(--h) 100% 50%)))'), 'rgb(128, 212, 255)'],
+    [mix('var(--missing, rgba(var(--rgb), 0.5))'), 'rgba(255, 170, 170, 0.75)'],
+    [mix('var(--missing, var(--brand))'), 'rgb(133, 138, 143)'],
+  ];
+
+  for (const [value, expected] of colours) {
+    it(value, () => {
+      assert.equal(painted('background-color', value), expected, 'the declaration itself');
+      const read = 'background-color: var(--c, rgb(1, 2, 3))';
+      const token = innermost(`${TOKENS} .x { --c: ${value}; ${read} }`, 'x', [{}]);
+      assert.equal(token['backgroundColor'], expected, 'a token in a stylesheet');
+    });
+  }
+
+  it('paints a gradient stop from a fallback made of other tokens', () => {
+    const hsl = gradient('var(--missing, hsl(var(--h) 100% 50%))');
+    assert.deepEqual(painted('background-image', hsl), stops('rgb(0, 170, 255)'));
+    const mixed = gradient(`var(--missing, ${mix('var(--brand)')})`);
+    assert.deepEqual(painted('background-image', mixed), stops('rgb(133, 138, 143)'));
+  });
+
+  it('paints a shadow from a fallback made of other tokens', () => {
+    const shadow = '0 0 2px var(--missing, hsl(var(--h) 100% 50%))';
+    const props = innermost(`${TOKENS} .x { box-shadow: ${shadow} }`, 'x', [{ '--h': '120' }]);
+    assert.equal((props['boxShadow'] as { color: string }[])[0]!.color, 'rgb(0, 255, 0)');
+  });
+
+  it('works the fallback out from the tokens set on the element', () => {
+    const hsl = mix('var(--missing, hsl(var(--h) 100% 50%))');
+    assert.equal(painted('background-color', hsl, { '--h': '120' }), 'rgb(128, 255, 128)');
+    const rgba = mix('var(--missing, rgba(var(--rgb), 0.5))');
+    const blue = painted('background-color', rgba, { '--rgb': '0, 0, 255' });
+    assert.equal(blue, 'rgba(170, 170, 255, 0.75)');
+    const stop = gradient('var(--missing, hsl(var(--h) 100% 50%))');
+    assert.deepEqual(painted('background-image', stop, { '--h': '120' }), stops('rgb(0, 255, 0)'));
+  });
+
+  it('is invalid in a cycle, and paints nothing when a token it needs is not set', () => {
+    const read = 'background-color: var(--c, rgb(1, 2, 3))';
+    const cycle = mix('var(--missing, hsl(var(--c) 100% 50%))');
+    const cyclic = innermost(`${TOKENS} .x { --c: ${cycle}; ${read} }`, 'x', [{}]);
+    assert.equal(cyclic['backgroundColor'], 'rgb(1, 2, 3)');
+    const unset = mix('var(--missing, hsl(var(--nope) 100% 50%))');
+    assert.equal(painted('background-color', unset), undefined);
+  });
+
+  it('follows a theme and an ancestor that change what the fallback reads', () => {
+    const fabric = createFakeFabric();
+    const value = mix('var(--missing, hsl(var(--h) 100% 50%))');
+    const css = `${TOKENS} .dark { --h: 120 } .x { background-color: ${value} }`;
+    const engine = new Engine(fabric, 1, { globalStyles: compileCss(css, 'global') });
+    const theme = engine.createElement('view', null);
+    const node = engine.createElement('view', null);
+    engine.addClass(node, 'x');
+    engine.appendChild(theme, node);
+    engine.appendChild(engine.root, theme);
+    engine.commit();
+    assert.equal(committedProps(fabric, node)['backgroundColor'], 'rgb(128, 212, 255)');
+    engine.addClass(theme, 'dark');
+    engine.commit();
+    assert.equal(committedProps(fabric, node)['backgroundColor'], 'rgb(128, 255, 128)');
+    engine.setCustomProperty(theme, '--missing', 'red');
+    engine.commit();
+    assert.equal(committedProps(fabric, node)['backgroundColor'], 'rgb(255, 128, 128)');
+  });
+});

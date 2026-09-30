@@ -106,18 +106,32 @@ function reference(part, context) {
   const name = part.value?.name?.ident;
   const fallback = meaningful(part.value?.fallback);
   const alternatives = [];
-  let literalFallback;
   let next = fallback;
   while (next.length === 1 && next[0].type === 'var') {
     alternatives.push(next[0].value?.name?.ident);
     next = meaningful(next[0].value?.fallback);
   }
-  if (next.length) literalFallback = literal(next[0], `${context} (fallback)`);
   return {
     reference: name,
     ...(alternatives.length ? { alternatives } : {}),
-    ...(literalFallback === undefined ? {} : { fallback: literalFallback }),
+    ...(next.length ? colourFallback(next, `${context} (fallback)`) : {}),
   };
+}
+
+/**
+ * What a `var()` falls back to at the end of its chain: a literal colour, or one made of other
+ * tokens, `hsl(var(--h) 100% 50%)`, worked out where it is used.
+ */
+function colourFallback(terms, context) {
+  const fallbackToken = colourToken(terms, context);
+  return fallbackToken ? { fallbackToken } : { fallback: literal(terms[0], context) };
+}
+
+/** A colour made of other tokens, as a `--x` holding it is: an hsl(), channels or a mix. */
+function colourToken(terms, context) {
+  if (terms.length !== 1 || !mentionsVar(terms[0])) return undefined;
+  const token = require('./compile.cjs').derivedToken(terms, context);
+  return token?.hsl || token?.deferredColour ? token : undefined;
 }
 
 /**

@@ -291,6 +291,8 @@ export type ColourExpression =
       readonly reference: string;
       readonly alternatives?: readonly string[];
       readonly fallback?: string;
+      /** A fallback made of other tokens, worked out from the tokens where it is used. */
+      readonly fallbackToken?: TokenValue;
     }
   | {
       /** A token of bare channels, as `rgba(var(--channels), <alpha>)` reads it. */
@@ -2263,7 +2265,9 @@ function tokenColour(
     if (value !== undefined) break;
     value = formOf(tokens[alternative], 'color');
   }
-  return (value as string | undefined) ?? expression.fallback;
+  if (value !== undefined) return value as string;
+  const token = expression.fallbackToken;
+  return expression.fallback ?? (token && (formOf(derived(token, tokens), 'color') as string));
 }
 
 /** A marker the compiler leaves in a structured value for a colour only the device can settle. */
