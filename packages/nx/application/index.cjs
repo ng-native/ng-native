@@ -46,7 +46,26 @@ function names(tree, options) {
  */
 function hasPathAliases(tree, workspaces) {
   if (!tree.exists('tsconfig.base.json')) return false;
-  return !workspaces || 'paths' in (readJson(tree, 'tsconfig.base.json').compilerOptions ?? {});
+  return !workspaces || 'paths' in baseCompilerOptions(tree);
+}
+
+/**
+ * The compiler options `file` ends up with, those it inherits through `extends` included, as
+ * TypeScript merges them: each option from the last config that sets it. Only the workspace's own
+ * files are followed; a package's shared config holds no aliases or conditions of this workspace.
+ */
+function baseCompilerOptions(tree, file = 'tsconfig.base.json', ancestors = []) {
+  if (ancestors.includes(file) || !tree.exists(file)) return {};
+  const config = readJson(tree, file);
+  const inherited = [config.extends ?? []]
+    .flat()
+    .filter((parent) => /^\.\.?\//.test(parent))
+    .map((parent) => {
+      const resolved = path.join(path.dirname(file), parent);
+      return tree.exists(resolved) || resolved.endsWith('.json') ? resolved : `${resolved}.json`;
+    })
+    .map((parent) => baseCompilerOptions(tree, parent, [...ancestors, file]));
+  return Object.assign({}, ...inherited, config.compilerOptions);
 }
 
 function targets(directory) {
@@ -92,9 +111,7 @@ function writeFiles(tree, { directory, projectName, workspaces }) {
 
   const base = hasPathAliases(tree, workspaces);
   const workspaceBase = base ? `${offsetFromRoot(directory)}tsconfig.base.json` : undefined;
-  const conditions = tree.exists('tsconfig.base.json')
-    ? (readJson(tree, 'tsconfig.base.json').compilerOptions?.customConditions ?? [])
-    : [];
+  const conditions = baseCompilerOptions(tree).customConditions ?? [];
   file('tsconfig.json', JSON.stringify(native.tsconfig(workspaceBase, conditions), null, 2) + '\n');
   file('vitest.config.mts', native.vitestConfig(Boolean(base)));
 

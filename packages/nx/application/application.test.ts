@@ -329,6 +329,65 @@ describe('in a pnpm workspace', () => {
     ]);
   });
 
+  it('finds aliases and conditions the base inherits through its own extends', async () => {
+    // TypeScript reads both through `extends`, and a base that keeps them in a file of their own
+    // got an app with neither: no aliases, and only `react-native` for conditions.
+    const tree = pnpmWorkspace();
+    tree.write('tsconfig.base.json', JSON.stringify({ extends: './tsconfig.paths' }));
+    tree.write(
+      'tsconfig.paths.json',
+      JSON.stringify({
+        extends: ['./tsconfig.conditions.json'],
+        compilerOptions: { paths: { '@proj/ui': ['libs/ui/src/index.ts'] } },
+      }),
+    );
+    tree.write(
+      'tsconfig.conditions.json',
+      JSON.stringify({ compilerOptions: { customConditions: ['@proj/source'] } }),
+    );
+    await generate(tree, { directory: 'apps/mobile' });
+    const config = readJson(tree, 'apps/mobile/tsconfig.json');
+    assert.deepEqual(config.extends, ['expo/tsconfig.base', '../../tsconfig.base.json']);
+    assert.deepEqual(config.compilerOptions.customConditions, ['react-native', '@proj/source']);
+    assert.match(tree.read('apps/mobile/vitest.config.mts', 'utf-8')!, /nxViteTsPaths\(\)/);
+  });
+
+  it('stops at an extends cycle, and skips a package it cannot read', async () => {
+    const tree = pnpmWorkspace();
+    tree.write(
+      'tsconfig.base.json',
+      JSON.stringify({ extends: ['@tsconfig/strictest', './tsconfig.a.json'] }),
+    );
+    tree.write(
+      'tsconfig.a.json',
+      JSON.stringify({ extends: './tsconfig.base.json', compilerOptions: { paths: {} } }),
+    );
+    await generate(tree, { directory: 'apps/mobile' });
+    assert.deepEqual(readJson(tree, 'apps/mobile/tsconfig.json').extends, [
+      'expo/tsconfig.base',
+      '../../tsconfig.base.json',
+    ]);
+  });
+
+  it('carries conditions the base inherits when there are no aliases to extend it for', async () => {
+    const tree = pnpmWorkspace();
+    tree.write(
+      'tsconfig.base.json',
+      JSON.stringify({
+        extends: './tsconfig.conditions.json',
+        compilerOptions: { composite: true },
+      }),
+    );
+    tree.write(
+      'tsconfig.conditions.json',
+      JSON.stringify({ compilerOptions: { customConditions: ['@proj/source'] } }),
+    );
+    await generate(tree, { directory: 'apps/mobile' });
+    const config = readJson(tree, 'apps/mobile/tsconfig.json');
+    assert.equal(config.extends, 'expo/tsconfig.base');
+    assert.deepEqual(config.compilerOptions.customConditions, ['react-native', '@proj/source']);
+  });
+
   it("leaves out the TypeScript preset's base, whose libraries are workspace packages", async () => {
     const tree = pnpmWorkspace();
     tree.write(
