@@ -20,6 +20,7 @@ import { NativeTabsOutlet } from '../../router/src/native-tabs-outlet.ts';
         [icon]="{ image: 7 }"
         [standardAppearance]="appearance"
       />
+      <native-tab path="shared" title="Shared" sfSymbol="person.2" drawable="ic_people" />
     </native-tabs-outlet>
   `,
 })

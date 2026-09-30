@@ -672,6 +672,12 @@ describe('tabs and a header written the less usual ways', () => {
     assert.equal(both!.props['iconResourceName'], 'heart');
   });
 
+  it('draws the SF Symbol of a tab that names a drawable for Android as well', async () => {
+    const [, , , shared] = tabScreens(await show('TabVariants'));
+    assert.equal(shared!.props['iconType'], 'sfSymbol');
+    assert.equal(shared!.props['iconResourceName'], 'person.2');
+  });
+
   it("processes an icon colour inside an appearance's item states", async () => {
     const [, , image] = tabScreens(await show('TabVariants'));
     const appearance = image!.props['standardAppearance'] as {
@@ -697,6 +703,13 @@ describe('tabs and a header written the less usual ways', () => {
         (node) => node.viewName === 'RNSTabsScreenAndroid',
       );
       assert.deepEqual(image!.props['imageIconResource'], { uri: '7' });
+    });
+
+    it('draws the drawable of a tab that names an SF Symbol for iOS as well', async () => {
+      const [, , , shared] = flatten((await show('TabVariants')).committed).filter(
+        (node) => node.viewName === 'RNSTabsScreenAndroid',
+      );
+      assert.equal(shared!.props['drawableIconResourceName'], 'ic_people');
     });
 
     it('lets a header take the top inset by default, as Android lays it out', async () => {

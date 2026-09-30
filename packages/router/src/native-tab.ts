@@ -256,12 +256,17 @@ export class NativeTab {
     ),
   );
 
-  /** `sfSymbol` and `drawable` say the same thing as `icon`, in the form most tabs want. */
+  /**
+   * `sfSymbol` and `drawable` say the same thing as `icon`, in the form most tabs want. A tab
+   * names both to have an icon on both platforms, so the running platform's own comes first:
+   * Android reads only a drawable, and iOS only a symbol.
+   */
   private shorthand(): TabIcon | undefined {
     const symbol = this.sfSymbol();
-    if (symbol) return { sfSymbol: symbol };
     const drawable = this.drawable();
-    return drawable ? { drawable } : undefined;
+    const icons = [symbol && { sfSymbol: symbol }, drawable && { drawable }];
+    if (nativePlatform() === 'android') icons.reverse();
+    return icons.find((icon) => icon) || undefined;
   }
 
   /**
