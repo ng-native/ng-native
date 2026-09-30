@@ -55,12 +55,14 @@ exiting when the build is done. `watch: true` or `watch: false` decides it eithe
 rather than CSS, because Expo's own transform worker claims every `.css` file before this package's
 transform is asked and hands back an empty module on any platform but web. A `.d.ts` beside it
 types the default export as the `StyleSheet` `globalStyles` takes. Both are rebuilt on every start,
-so `.angular-native/` belongs in `.gitignore` - an app from the template ignores it already.
+so `.angular-native/` belongs in `.gitignore`. An app from the template or `nx g @ng-native/nx:app`
+ignores it already.
 
 A fresh clone, or a CI job, has neither file until something loads the Metro config, so a
 typecheck run first fails with `Cannot find module '../.angular-native/app.tailwind.js'`. Loading
 the config builds them once and exits, without watching, so a typecheck script that does it first
-always has them:
+always has them. The template's `typecheck` script and the Nx generator's `typecheck` target
+already do:
 
 ```json
 "typecheck": "node metro.config.js && ngc -p tsconfig.json --noEmit"

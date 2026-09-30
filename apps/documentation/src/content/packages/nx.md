@@ -71,7 +71,9 @@ is left as it is, with a warning naming the two to decide.
 every run, so the generator runs the same `expo start` directly. `serve` runs it as well, in place
 of the `expo start --web` `@nx/expo` infers for every Expo app, since the app has no web platform.
 `nx prebuild` and `nx build` still use `@nx/expo`'s executors, and print the same deprecation
-notice.
+notice. `typecheck` loads `metro.config.js` before `ngc`, as the template's script does, so that
+once [Tailwind](/packages/tailwind) is added, the sheet `src/main.ts` imports exists on a fresh
+checkout.
 
 Each app gets a Metro port of its own, so `nx run-many -t start` runs several side by side. The
 first Expo app in the workspace uses Expo's default, 8081, with a plain `expo start`. Each later one
@@ -85,7 +87,8 @@ The first app keeps the ones `@nx/expo` infers. An Expo app whose `start` is inf
 The app is the template's: `src/app/app.ts`, `src/main.ts` and `src/app/app.test.ts` as they are, and an `app.json`
 named for the project. Its `app.json` names `ios` and `android` as the platforms, because Expo
 adds `web` whenever `react-dom` resolves, and Nx always installs one. Its `.gitignore` ignores the
-`ios/` and `android/` projects `expo prebuild` writes, as the template's does. Three files
+`ios/` and `android/` projects `expo prebuild` writes and the `.angular-native/` Tailwind generates,
+as the template's does. Three files
 differ, each because of something Nx does:
 
 - **`metro.config.js`** applies the preset around `withNxMetro`, from `@nx/expo`, which resolves

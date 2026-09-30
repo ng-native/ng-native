@@ -105,7 +105,10 @@ describe('in an integrated workspace', () => {
     const project = readProjectConfiguration(tree, 'mobile');
     assert.equal(project.root, 'apps/mobile');
     assert.deepEqual(project.tags, ['type:app', 'platform:native']);
-    assert.equal(project.targets?.typecheck?.options.command, 'ngc -p tsconfig.json --noEmit');
+    assert.equal(
+      project.targets?.typecheck?.options.command,
+      'node metro.config.js && ngc -p tsconfig.json --noEmit',
+    );
     assert.equal(project.targets?.test?.options.command, 'vitest run');
     assert.equal(project.targets?.test?.options.cwd, 'apps/mobile');
   });
@@ -346,6 +349,22 @@ describe('in an integrated workspace', () => {
     await generate(tree, { directory: 'apps/mobile' });
     await generate(tree, { directory: 'apps/second' });
     assert.equal(tree.read('.gitignore', 'utf-8')!.match(/^\.expo\/$/gm)?.length, 1);
+  });
+
+  it('ignores the Tailwind sheet Metro generates, as the template does', async () => {
+    const tree = integrated();
+    await generate(tree, { directory: 'apps/mobile' });
+    assert.match(tree.read('apps/mobile/.gitignore', 'utf-8') ?? '', /^\.angular-native\/$/m);
+  });
+
+  it('builds that sheet before it typechecks, since main.ts imports it once Tailwind is added', async () => {
+    // A fresh checkout has no .angular-native/ until Metro loads its config, and ngc failed with
+    // "Cannot find module '../.angular-native/app.tailwind.js'". Loading it builds the sheet and exits.
+    const tree = integrated();
+    await generate(tree, { directory: 'apps/mobile' });
+    const { typecheck } = readProjectConfiguration(tree, 'mobile').targets ?? {};
+    assert.equal(typecheck?.options.command, native.TYPECHECK);
+    assert.equal(typecheck?.options.cwd, 'apps/mobile');
   });
 
   it('refuses a directory that already holds a package', async () => {
