@@ -103,7 +103,9 @@ describe('the generated stylesheet module', () => {
     compileSheetModule(
       '.p-1 { padding: 4px }\n.grid { display: grid }\n' +
         '@media (width >= 48rem) {\n  .md\\:grid { display: grid }\n}\n' +
-        '.\\32 xl\\:grid { display: grid }\n.a,\n.b {\n  display: grid;\n  opacity: 0.5;\n}\n',
+        '.\\32 xl\\:grid { display: grid }\n.a,\n.b {\n  display: grid;\n  opacity: 0.5;\n}\n' +
+        // An arbitrary variant can quote a `;` or a `{`, which ends nothing.
+        '.q[data-x=";{"] { display: grid; opacity: 0.25 }\n',
       '/app/.angular-native/app.tailwind.css',
     );
     const warnings = warn.mock.calls.map((call) => String(call.arguments[0]));
@@ -114,6 +116,7 @@ describe('the generated stylesheet module', () => {
         '[angular-native] .md:grid (Tailwind)',
         '[angular-native] .2xl:grid (Tailwind)',
         '[angular-native] .a, .b (Tailwind)',
+        '[angular-native] .q[data-x=";{"] (Tailwind)',
       ],
     );
     assert.match(warnings[0]!, /: dropped 'display': display: grid does not exist on native/);
