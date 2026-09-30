@@ -109,6 +109,7 @@ function applyAccessibilityState(node: BrowserNode, value: unknown, clear: boole
   setOrRemove(node, 'aria-selected', state?.['selected'], state?.['selected'] === undefined);
   setOrRemove(node, 'aria-expanded', state?.['expanded'], state?.['expanded'] === undefined);
   applyChecked(node, state?.['checked']);
+  restorePublishedAria(node, STATE_ARIA);
 }
 
 /**
@@ -126,18 +127,43 @@ function applyChecked(node: BrowserNode, checked: unknown): void {
  * carries it. Here the accessibility state, or for `aria-hidden` the hidden props, already writes
  * the real attribute whenever the input is set, so the copy defers to it rather than fight it:
  * `aria-checked` beside the `aria-pressed` a button takes, or `aria-disabled` removed while a
- * disabled pressable still is. With nothing behind it, a raw `[attr.aria-*]` is written as before.
+ * disabled pressable still is. With nothing behind it, a raw `[attr.aria-*]` is written as before,
+ * and written again once whatever governed it lets go, since that removed the attribute.
  */
-function publishedAria(attr: string, governed: (props: Record<string, unknown>) => boolean) {
-  return (node: BrowserNode, value: unknown, clear: boolean) => {
-    if (!governed(node.props)) setOrRemove(node, attr, value, clear);
+function publishedAria(attr: string): Handler {
+  return (node, value, clear) => {
+    if (!PUBLISHED_ARIA[attr]!(node.props)) setOrRemove(node, attr, value, clear);
   };
+}
+
+/** Writes each raw published attribute in `attrs` that nothing governs any more. */
+function restorePublishedAria(node: BrowserNode, attrs: readonly string[]): void {
+  for (const attr of attrs) {
+    const value = node.props[attr];
+    if (value !== undefined && value !== null && !PUBLISHED_ARIA[attr]!(node.props)) {
+      el(node).setAttribute(attr, String(value));
+    }
+  }
 }
 
 function inState(key: string): (props: Record<string, unknown>) => boolean {
   return (props) =>
     (props['accessibilityState'] as Record<string, unknown> | undefined)?.[key] !== undefined;
 }
+
+/** Each published aria attribute, and whether something else is writing it at the moment. */
+const PUBLISHED_ARIA: Readonly<Record<string, (props: Record<string, unknown>) => boolean>> = {
+  'aria-busy': inState('busy'),
+  'aria-checked': inState('checked'),
+  'aria-disabled': inState('disabled'),
+  'aria-expanded': inState('expanded'),
+  'aria-selected': inState('selected'),
+  'aria-hidden': (props) =>
+    props['accessibilityElementsHidden'] !== undefined ||
+    props['importantForAccessibility'] !== undefined,
+};
+
+const STATE_ARIA = ['aria-busy', 'aria-checked', 'aria-disabled', 'aria-expanded', 'aria-selected'];
 
 function applyAccessibilityValue(node: BrowserNode, value: unknown, clear: boolean): void {
   const v = clear ? undefined : (value as Record<string, unknown> | undefined);
@@ -205,25 +231,19 @@ const VIEW_BASE_HANDLERS: Record<string, Handler> = {
   role: applyRole,
   accessibilityState: applyAccessibilityState,
   accessibilityValue: applyAccessibilityValue,
-  'aria-busy': publishedAria('aria-busy', inState('busy')),
-  'aria-checked': publishedAria('aria-checked', inState('checked')),
-  'aria-disabled': publishedAria('aria-disabled', inState('disabled')),
-  'aria-expanded': publishedAria('aria-expanded', inState('expanded')),
-  'aria-selected': publishedAria('aria-selected', inState('selected')),
-  'aria-hidden': publishedAria(
-    'aria-hidden',
-    (props) =>
-      props['accessibilityElementsHidden'] !== undefined ||
-      props['importantForAccessibility'] !== undefined,
-  ),
+  ...Object.fromEntries(Object.keys(PUBLISHED_ARIA).map((attr) => [attr, publishedAria(attr)])),
   accessibilityLiveRegion: (n, v, c) => setOrRemove(n, 'aria-live', v === 'none' ? 'off' : v, c),
-  accessibilityElementsHidden: (n, v, c) => setOrRemove(n, 'aria-hidden', v, c || v !== true),
+  accessibilityElementsHidden: (n, v, c) => {
+    setOrRemove(n, 'aria-hidden', v, c || v !== true);
+    restorePublishedAria(n, ['aria-hidden']);
+  },
   // `no` and `no-hide-descendants` both hide the subtree on the web: ARIA has no way to hide a
   // node from the accessibility tree while keeping its descendants individually reachable, which
   // is the one place `no` and `no-hide-descendants` differ on Android.
   importantForAccessibility: (n, v, c) => {
     const hide = v === 'no' || v === 'no-hide-descendants';
     setOrRemove(n, 'aria-hidden', true, c || !hide);
+    restorePublishedAria(n, ['aria-hidden']);
   },
   accessibilityViewIsModal: (n, v, c) => setOrRemove(n, 'aria-modal', v, c || v !== true),
   accessibilityLanguage: (n, v, c) => setOrRemove(n, 'lang', v, c),

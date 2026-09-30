@@ -398,6 +398,26 @@ describe('the aria states ViewBase publishes for a native stylesheet', () => {
     assert.equal(el.getAttribute('aria-hidden'), 'true');
   });
 
+  it('restores a raw aria attribute once the state stops governing it', () => {
+    const { el, set } = scene('view');
+    set('accessibilityState', { expanded: true, disabled: true });
+    set('aria-expanded', 'false');
+    set('aria-disabled', 'true');
+    assert.equal(el.getAttribute('aria-expanded'), 'true');
+    set('accessibilityState', null);
+    assert.equal(el.getAttribute('aria-expanded'), 'false');
+    assert.equal(el.getAttribute('aria-disabled'), 'true');
+  });
+
+  it('restores a raw aria-hidden once the hidden props let go', () => {
+    const { el, set } = scene('view');
+    set('accessibilityElementsHidden', false);
+    set('aria-hidden', 'true');
+    assert.equal(el.getAttribute('aria-hidden'), null);
+    set('accessibilityElementsHidden', null);
+    assert.equal(el.getAttribute('aria-hidden'), 'true');
+  });
+
   it('writes an aria attribute nothing else governs, and removes it', () => {
     const { el, set } = scene('view');
     set('aria-expanded', 'true');
