@@ -10,9 +10,9 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { createRequire } from 'node:module';
-import { Engine, type StyleSheet } from '@ng-native/fabric';
+import { Engine, onFontsRegistered, type StyleSheet } from '@ng-native/fabric';
 import { createFakeFabric } from '@ng-native/testing';
-import { registrationsFor } from '@ng-native/expo/fonts';
+import { FontRegistry, registrationsFor } from '@ng-native/expo/fonts';
 
 const require = createRequire(import.meta.url);
 const { compileCss } = require('@ng-native/metro/css/compile.cjs') as {
@@ -242,5 +242,43 @@ describe('the names a face is registered under', () => {
       registrationsFor([{ family: 'Inter', source: 4, weight: 600, style: 'italic' }]),
       { Inter: 4, 'Inter-600': 4, 'Inter-italic': 4, 'Inter-600-italic': 4 },
     );
+  });
+});
+
+describe('a matched face registering after its text was laid out', () => {
+  it('lays out again the text a face was matched for, by the name the face registers under', async () => {
+    // The text asked for Inter at 700 and was committed as Inter-700; loading the sheet
+    // registers Inter-700, and that is the name the late relayout has to find it by.
+    const fabric = createFakeFabric();
+    const sheet = compileCss(
+      `${faces([], [700])} .bold { font-family: Inter; font-weight: 700 }`,
+      'fonts',
+    );
+    const engine = new Engine(fabric, 1);
+    const stop = onFontsRegistered((families) => engine.fontsRegistered(families));
+    try {
+      const node = engine.createElement('text', sheet);
+      engine.setClasses(node, 'bold');
+      engine.appendChild(node, engine.createText('Aa'));
+      engine.appendChild(engine.root, node);
+      engine.commit();
+      assert.equal(fabric.committed[0]!.props['fontFamily'], 'Inter-700');
+      assert.equal(fabric.committed[0]!.props['maxFontSizeMultiplier'], undefined);
+
+      const registered = new Set<string>();
+      await new FontRegistry({
+        loadAsync: async (map) => {
+          for (const family of Object.keys(map)) registered.add(family);
+        },
+        isLoaded: (family) => registered.has(family),
+        getLoadedFonts: () => [...registered],
+      }).loadSheet(sheet);
+
+      const paragraph = fabric.committed[0]!;
+      assert.equal(paragraph.props['fontFamily'], 'Inter-700');
+      assert.ok((paragraph.props['maxFontSizeMultiplier'] as number) >= 1000, 'laid out again');
+    } finally {
+      stop();
+    }
   });
 });
