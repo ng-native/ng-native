@@ -128,12 +128,20 @@ export function createFakeFabric(): FakeFabric {
       instanceHandle,
     );
 
+  // Keys sorted at every depth, so a golden does not depend on the order props were set in. An
+  // array of keys as the replacer would sort too, but it is an allow-list for nested objects as
+  // well, and printed `accessibilityState: { disabled: true }` as `{}`.
+  const sorted = (_key: string, value: unknown): unknown =>
+    value && typeof value === 'object' && !Array.isArray(value)
+      ? Object.fromEntries(Object.entries(value).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)))
+      : value;
+
   const walk = (nodes: FakeFabricNode[], depth: number, withProps: boolean): string[] =>
     nodes.flatMap((n) => {
       const text = typeof n.props['text'] === 'string' ? ` "${n.props['text']}"` : '';
       const props =
         withProps && Object.keys(n.props).length && !text
-          ? ' ' + JSON.stringify(n.props, Object.keys(n.props).sort())
+          ? ' ' + JSON.stringify(n.props, sorted)
           : '';
       return [
         '  '.repeat(depth) + n.viewName + text + props,

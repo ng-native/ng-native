@@ -36,6 +36,7 @@ import { ViewBase } from './view-base.ts';
     '[accessibilityState]': 'accessibilityStateProp()',
     '[value]': 'checked()',
     '[disabled]': 'disabled()',
+    '[attr.data-disabled]': "disabled() ? '' : null",
     '[enabled]': 'enabled()',
     '[thumbTintColor]': 'thumbColor()',
     '[tintColor]': 'trackColor()?.false',

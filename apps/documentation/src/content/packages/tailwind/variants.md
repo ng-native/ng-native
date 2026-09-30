@@ -93,7 +93,7 @@ behavior composed onto the control told it.
 `group-*` variants match an ancestor with the `group` class, and `peer-*` variants match an earlier
 sibling with the `peer` class, exactly as on the web. The state a variant reads has to be one the
 engine can see on the peer: `peer-focus:` (focus, or `data-focus`), `peer-active:` and `peer-hover:`
-(a press), `peer-disabled:` (a `disabled` prop, or the `data-disabled` a text input publishes),
+(a press), `peer-disabled:` (a `disabled` prop, or the `data-disabled` a control publishes),
 `peer-data-[...]:`, `peer-aria-[...]:` on an attribute the peer really carries, and the arbitrary
 `peer-[.is-on]:`. A class or a state arriving on the peer restyles the siblings after it.
 

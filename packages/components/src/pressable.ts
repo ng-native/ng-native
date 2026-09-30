@@ -447,15 +447,17 @@ export abstract class TouchableBase extends ViewBase {
 /**
  * A touchable that is a control: `Pressable`, `TouchableOpacity` and `PressBehavior`.
  *
- * The three host bindings every control needs live here rather than on `TouchableBase`, which
- * `Text` extends: the state that follows `disabled`, and the Android ripple. Controls are few
- * enough on a screen to pay for a binding on every pass; texts are not.
+ * The host bindings every control needs live here rather than on `TouchableBase`, which `Text`
+ * extends: the state that follows `disabled`, and the Android ripple. Controls are few enough on
+ * a screen to pay for a binding on every pass; texts are not.
  */
 @Directive({
   host: {
     // `disabled` is an input of ours, so it cannot reach `ngOnChanges` on the base; this is
     // the one binding that keeps the announced state in step with it.
     '[accessibilityState]': 'accessibilityStateProp()',
+    // Nor is it left on the node for `:disabled` to read, so this is what a stylesheet matches.
+    '[attr.data-disabled]': "disabled() ? '' : null",
     '[nativeBackgroundAndroid]': 'rippleBackground()',
     '[nativeForegroundAndroid]': 'rippleForeground()',
   },
