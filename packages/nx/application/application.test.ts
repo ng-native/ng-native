@@ -96,6 +96,18 @@ describe('in an integrated workspace', () => {
     assert.equal(start?.continuous, true);
   });
 
+  it('serves with expo start too, since @nx/expo infers serve as expo start --web', async () => {
+    // The app has no web platform, and @nx/expo's plugin infers `serve` for every Expo app whatever
+    // its target names say.
+    const tree = integrated();
+    await generate(tree, { directory: 'apps/mobile' });
+    const { serve } = readProjectConfiguration(tree, 'mobile').targets ?? {};
+    assert.equal(serve?.executor, 'nx:run-commands');
+    assert.equal(serve?.options.command, 'expo start');
+    assert.equal(serve?.options.cwd, 'apps/mobile');
+    assert.equal(serve?.continuous, true);
+  });
+
   it("registers @nx/expo's plugin for the rest", async () => {
     const tree = integrated();
     await generate(tree, { directory: 'apps/mobile' });

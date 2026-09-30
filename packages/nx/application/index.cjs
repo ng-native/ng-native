@@ -7,7 +7,9 @@
  * `test`, which runs Vitest once rather than watching. It also replaces the inferred `start`,
  * which is `@nx/expo:start`, an executor Nx deprecates and warns about on every run, with the
  * `expo start` that executor runs, as the plugin already infers `run-ios` and `export`. Once the
- * plugin infers `start` as a command too, this one can go.
+ * plugin infers `start` as a command too, this one can go. And it replaces the inferred `serve`,
+ * `expo start --web`, which the plugin adds to every Expo app, with `expo start` too: the app has
+ * no web platform.
  *
  * Where the dependencies go depends on the workspace. With package-manager workspaces, the Nx
  * default since 20, the app is a workspace package and lists them itself, which pnpm needs in
@@ -49,6 +51,7 @@ function targets(directory) {
     },
     test: { ...run('vitest run'), cache: true, inputs: ['default', '^production'] },
     start: { ...run('expo start'), continuous: true },
+    serve: { ...run('expo start'), continuous: true },
   };
 }
 

@@ -42,7 +42,7 @@ Angular's build keeps its own Babel 8.
 
 | Command                 | From           | What runs                                                       |
 | ----------------------- | -------------- | --------------------------------------------------------------- |
-| `nx start mobile`       | `project.json` | `expo start`                                                    |
+| `nx start mobile`       | `project.json` | `expo start`, and `serve` likewise                              |
 | `nx run mobile:run-ios` | `@nx/expo`     | `expo run:ios`, and `run-android` likewise                      |
 | `nx export mobile`      | `@nx/expo`     | `expo export`; `--platform ios` for one platform                |
 | `nx prebuild mobile`    | `@nx/expo`     | `expo prebuild`                                                 |
@@ -54,8 +54,10 @@ Angular's build keeps its own Babel 8.
 `@nx/js` disables its own inferred `typecheck` for a project that does, so the generator writes one.
 `test` runs Vitest once, where the target `@nx/vitest` would infer watches. `start` is written too:
 `@nx/expo` infers it as its `@nx/expo:start` executor, which Nx 23 deprecates and warns about on
-every run, so the generator runs the same `expo start` directly. `nx prebuild` and `nx build` still
-use `@nx/expo`'s executors, and print the same deprecation notice.
+every run, so the generator runs the same `expo start` directly. `serve` runs it as well, in place
+of the `expo start --web` `@nx/expo` infers for every Expo app, since the app has no web platform.
+`nx prebuild` and `nx build` still use `@nx/expo`'s executors, and print the same deprecation
+notice.
 
 ## The files
 
