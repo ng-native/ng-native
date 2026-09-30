@@ -125,7 +125,9 @@ function commands(name) {
  */
 async function appDependencies(tree, root, wanted) {
   const pinned = native.reuseRootRanges(wanted, root);
-  const settled = Object.keys(wanted).filter((pkg) => pinned[pkg] !== wanted[pkg]);
+  // By what the root lists, not by what changed: the root's range can be the app's own text.
+  const installed = { ...root.devDependencies, ...root.dependencies };
+  const settled = Object.keys(wanted).filter((pkg) => pinned[pkg] === installed[pkg]);
   return asSaved(tree, pinned, settled);
 }
 

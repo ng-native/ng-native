@@ -665,6 +665,18 @@ describe('in a workspace that saves exact versions', () => {
     assert.equal(root.devDependencies['@angular/compiler-cli'], '22.1.4');
   });
 
+  it("takes the root's range when it is the same text as the app's own", async () => {
+    const tree = pnpmWorkspace();
+    tree.write('pnpm-workspace.yaml', "packages:\n  - 'apps/*'\nsavePrefix: ''\n");
+    updateJson(tree, 'package.json', (manifest) => ({
+      ...manifest,
+      devDependencies: { ...manifest.devDependencies, typescript: '~6.0.3' },
+    }));
+    await generate(tree, { directory: 'apps/mobile' });
+    assert.equal(readJson(tree, 'apps/mobile/package.json').devDependencies.typescript, '~6.0.3');
+    assert.ok(!looked.includes('typescript'));
+  });
+
   it("keeps its own version where the root's range reaches below the app's", async () => {
     const tree = pnpmWorkspace();
     tree.write('pnpm-workspace.yaml', "packages:\n  - 'apps/*'\nsavePrefix: ''\n");
