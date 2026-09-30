@@ -126,7 +126,19 @@ jobs:
           done
 
       - name: Push the version commit and tag
-        run: git push --follow-tags
+        run: |
+          # Pull requests can merge while a release runs. Replay the release commit on top of them
+          # and tag where it lands. A rebase conflict (a merge that touched a version or the
+          # changelog) fails the step rather than guessing.
+          tag='v${{ steps.version.outputs.version }}'
+          for attempt in 1 2 3; do
+            git fetch origin main
+            git rebase origin/main
+            git tag -f -a "$tag" -m "$tag"
+            if git push origin HEAD:main; then break; fi
+            if [ "$attempt" = 3 ]; then exit 1; fi
+          done
+          git push origin "refs/tags/$tag"
 
       - name: GitHub release
         env:
