@@ -1399,8 +1399,8 @@ export class Engine implements HostEngine {
    * for them. Only those in the tree: see `releaseDetached`.
    */
   private readonly hoisted = new Set<EngineNode>();
-  /** Whether a child list has lost a member since the last commit. See `releaseDetached`. */
-  private removedSinceCommit = false;
+  /** The nodes taken out of a child list since the last commit. See `releaseDetached`. */
+  private readonly removedSinceCommit = new Set<EngineNode>();
   /**
    * `@keyframes` by name, across every sheet seen so far. One registry rather than one per sheet,
    * because that is the scope CSS gives them: a name defined in a global stylesheet is usable
@@ -1718,7 +1718,7 @@ export class Engine implements HostEngine {
     if (at < 0) return;
     target.children.splice(at, 1);
     child.parent = null;
-    this.removedSinceCommit = true;
+    this.removedSinceCommit.add(child);
     this.markStructure(target);
   }
 
@@ -1743,12 +1743,17 @@ export class Engine implements HostEngine {
    * whole. So a hoisted node moves to the root of the subtree it left with, which is garbage along
    * with it if the subtree never returns, and is handed back when it does. An animation on a node
    * out of the tree stops rather than running a frame loop for something nobody can see, and
-   * starts again if the node returns.
+   * starts again if the node returns. And a node out of the tree when the commit runs forgets its
+   * committed views, as a withheld modal does: the commit unmounts them, Fabric never re-enables an
+   * unmounted view's events (`EventEmitter::setEnabled`), and committed again they would ignore
+   * every touch. It comes back created afresh, as React creates an element it mounts again. One
+   * put back before the commit never left, and keeps its views.
    *
-   * Once per commit, and only after a removal: the walks are the depth of a handful of nodes.
+   * Once per commit, and only after a removal: the walks are the depth of a handful of nodes, and
+   * forgetting walks each subtree that left once.
    */
   private releaseDetached(): void {
-    this.removedSinceCommit = false;
+    this.forgetDetached();
     for (const node of this.hoisted) {
       const top = this.topOf(node);
       if (top === this.root) continue;
@@ -1769,6 +1774,14 @@ export class Engine implements HostEngine {
       }
     }
     if (this.focusedNode && this.topOf(this.focusedNode) !== this.root) this.focusedNode = null;
+  }
+
+  /** Forget the committed views of each node removed since the last commit that is still out. */
+  private forgetDetached(): void {
+    for (const node of this.removedSinceCommit) {
+      if (node.committed && this.topOf(node) !== this.root) this.forgetCommitted(node);
+    }
+    this.removedSinceCommit.clear();
   }
 
   /** The root of the tree a node is in: the engine's root while it is attached. */
@@ -1957,7 +1970,7 @@ export class Engine implements HostEngine {
    * optimisation.
    */
   commit(): boolean {
-    if (this.removedSinceCommit) this.releaseDetached();
+    if (this.removedSinceCommit.size) this.releaseDetached();
     // The root is never reconciled itself, so it has no `committed` record and `isClean` would
     // always say dirty. Ask the flags directly, or every change-detection pass ends in a
     // completeRoot that changes nothing: during a fling that is one wasted native commit per
