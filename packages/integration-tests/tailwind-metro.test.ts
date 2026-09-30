@@ -163,6 +163,23 @@ describe('wiring Tailwind into Metro', () => {
     assert.doesNotMatch(code, /"asset"|require\(/, 'the marker does not survive into the bundle');
   });
 
+  it('keeps ./ on a font in a dot directory when the module sits beside the entry', () => {
+    // `.fonts/Inter.ttf` is a package name to Metro, which only reads `./` and `../` as relative.
+    const dir = scratch({
+      'styles.css': "@font-face { font-family: Inter; src: url('./.fonts/Inter.ttf') }\n" + ENTRY,
+    });
+    const output = path.join(dir, 'app.tailwind.js');
+
+    withTailwind(
+      { projectRoot: dir, transformer: {}, resolver: { sourceExts: ['ts'] } },
+      { input: path.join(dir, 'styles.css'), output, watch: false },
+    );
+
+    const code = readFileSync(output, 'utf8');
+    rmSync(dir, { recursive: true, force: true });
+    assert.match(code, /^import font0 from "\.\/\.fonts\/Inter\.ttf";$/m);
+  });
+
   it('turns a platform variant into a selector the engine matches', () => {
     // Tailwind's own suggestion, `&:where(.platform-ios *)`, puts a combinator inside `:where()`,
     // which the compiler refuses. A plain descendant does the same job and is a selector this

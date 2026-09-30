@@ -118,7 +118,7 @@ function compileSheetModule(css, context = 'tailwind', paths) {
     if (paths && /^\.\.?\//.test(face.source.asset)) {
       const file = path.resolve(path.dirname(paths.input), face.source.asset);
       const relative = path.relative(path.dirname(paths.output), file).split(path.sep).join('/');
-      face.source.asset = relative.startsWith('.') ? relative : `./${relative}`;
+      face.source.asset = /^\.\.?\//.test(relative) ? relative : `./${relative}`;
     }
   }
   // A font file is a module the bundler has to see, so the compiler's marker becomes an import:
