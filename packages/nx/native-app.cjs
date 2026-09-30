@@ -211,6 +211,30 @@ function prebuildPins(root) {
 const accepted = { vitest: '^4.0.8 || ^5.0.0' };
 
 /**
+ * The ranges a workspace package's `package.json` lists: the root's own where everything it can
+ * resolve to is a version Angular Native accepts, so that pnpm does not install a second Vitest
+ * beside the root's. A wider root range is not reused: React Native needs its exact React, not
+ * whatever `^19.0.0` resolves to.
+ *
+ * @param {Record<string, string>} wanted
+ * @param {{ dependencies?: Record<string, string>, devDependencies?: Record<string, string> }} root
+ */
+function reuseRootRanges(wanted, root) {
+  const installed = { ...root.devDependencies, ...root.dependencies };
+  return Object.fromEntries(
+    Object.entries(wanted).map(([name, range]) => {
+      const existing = installed[name];
+      const reuse =
+        existing &&
+        !name.startsWith('@ng-native/') &&
+        semver.validRange(existing) &&
+        semver.subset(existing, accepted[name] ?? range);
+      return [name, reuse ? existing : range];
+    }),
+  );
+}
+
+/**
  * Why an existing dependency would stop this app installing or running, as a sentence each.
  *
  * Only ranges already in the manifest are judged, and only a range that cannot overlap the one
@@ -249,6 +273,7 @@ module.exports = {
   tsconfig,
   vitestConfig,
   prebuildPins,
+  reuseRootRanges,
   expoCompanions,
   conflicts,
   accepted,

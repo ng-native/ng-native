@@ -90,9 +90,10 @@ function writeFiles(tree, { directory, projectName, workspaces }) {
 
   const manifest = { name: projectName, version: '0.0.1', private: true, main: 'src/main.ts' };
   if (workspaces) {
+    const root = readJson(tree, 'package.json');
     Object.assign(manifest, {
-      dependencies: native.dependencies,
-      devDependencies: native.devDependencies,
+      dependencies: native.reuseRootRanges(native.dependencies, root),
+      devDependencies: native.reuseRootRanges(native.devDependencies, root),
     });
   } else {
     manifest.dependencies = native.prebuildPins(readJson(tree, 'package.json'));

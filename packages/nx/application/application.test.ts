@@ -18,6 +18,7 @@ const { readJson, readProjectConfiguration, readNxJson, updateJson, logger } =
   require('@nx/devkit') as typeof import('@nx/devkit');
 const { application } = require('./index.cjs');
 const { pnpmGlobs } = require('./workspaces.cjs');
+const native = require('../native-app.cjs');
 
 function integrated() {
   const tree = createTreeWithEmptyWorkspace();
@@ -230,6 +231,41 @@ describe('in a pnpm workspace', () => {
     assert.equal(app.devDependencies.vitest, '^5.0.0');
     const root = readJson(tree, 'package.json');
     assert.equal(root.dependencies?.expo, undefined);
+  });
+
+  it("reuses the root's Vitest and Angular when Angular Native accepts them", async () => {
+    // The app asked for Vitest ^5.0.0 beside the root's 4.1, and pnpm installed a second major.
+    const tree = pnpmWorkspace();
+    updateJson(tree, 'package.json', (manifest) => {
+      manifest.dependencies = { '@angular/core': '~22.1.0' };
+      manifest.devDependencies = { ...manifest.devDependencies, vitest: '~4.1.10' };
+      return manifest;
+    });
+    await generate(tree, { directory: 'apps/mobile' });
+    const app = readJson(tree, 'apps/mobile/package.json');
+    assert.equal(app.devDependencies.vitest, '~4.1.10');
+    assert.equal(app.dependencies['@angular/core'], '~22.1.0');
+  });
+
+  it("keeps its own range where the root's can resolve to one Angular Native cannot run on", async () => {
+    const tree = pnpmWorkspace();
+    updateJson(tree, 'package.json', (manifest) => {
+      manifest.dependencies = { react: '^19.0.0' };
+      manifest.devDependencies = {
+        ...manifest.devDependencies,
+        vitest: '^3.2.0',
+        '@ng-native/testing': 'workspace:*',
+      };
+      return manifest;
+    });
+    await generate(tree, { directory: 'apps/mobile' });
+    const app = readJson(tree, 'apps/mobile/package.json');
+    assert.equal(app.devDependencies.vitest, '^5.0.0');
+    assert.equal(app.dependencies.react, '19.2.3');
+    assert.equal(
+      app.devDependencies['@ng-native/testing'],
+      native.devDependencies['@ng-native/testing'],
+    );
   });
 
   it("adds the app's directory to the workspace when no glob covers it", async () => {
