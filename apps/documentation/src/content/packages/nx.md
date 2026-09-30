@@ -98,6 +98,14 @@ preset makes, they go in the root `package.json`. A version already there is lef
 app's own `package.json` still names them all, at the root's ranges, though nothing installs from
 it: Expo links the native modules that file names and no others.
 
+In a workspace package the app takes the root's version of a package the root already lists, when
+every version it allows is one the app accepts. A workspace that saves exact versions
+(`savePrefix: ''` or `saveExact: true` in `pnpm-workspace.yaml`, `save-exact=true` in `.npmrc`,
+`defaultSemverRangePrefix: ""` in `.yarnrc.yml`, or `exact = true` in `bunfig.toml`) gets exact
+versions where it has none already: the newest each of the app's ranges allows, as `npm view`
+finds it from the workspace's root, or the lowest when the registry cannot be reached. `@nx/expo`
+and `@nx/vite` take the Nx that is running when the workspace lists Nx at a range.
+
 ## An @nx/angular workspace
 
 A workspace from the `angular-monorepo` preset works as it is, web app included. Its Angular and

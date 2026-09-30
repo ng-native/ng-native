@@ -27,8 +27,10 @@ const {
   updateNxJson,
   NX_VERSION,
 } = require('@nx/devkit');
+const semver = require('semver');
 const native = require('../native-app.cjs');
 const { usesWorkspaces } = require('../application/workspaces.cjs');
+const { asSaved, savesExact } = require('../save-exact.cjs');
 
 /** The plugin entry `@nx/expo:init` itself writes, so the target names are the ones Nx documents. */
 const EXPO_PLUGIN = {
@@ -48,10 +50,16 @@ const EXPO_PLUGIN = {
   },
 };
 
-/** The Nx this workspace installed, which every `@nx/*` package in it has to match. */
+/**
+ * The Nx this workspace installed, which every `@nx/*` package in it has to match: the version
+ * running now when the workspace saves exact versions and lists Nx at a range, rather than the
+ * newest the range allows, which may not be the one installed.
+ */
 function workspaceNxVersion(tree) {
   const manifest = readJson(tree, 'package.json');
-  return manifest.devDependencies?.nx ?? manifest.dependencies?.nx ?? NX_VERSION;
+  const nx = manifest.devDependencies?.nx ?? manifest.dependencies?.nx ?? NX_VERSION;
+  const running = !semver.valid(nx) && savesExact(tree) && semver.satisfies(NX_VERSION, nx);
+  return running ? NX_VERSION : nx;
 }
 
 function registerExpoPlugin(tree) {
@@ -86,10 +94,13 @@ function rootDependencies(tree) {
  */
 async function init(tree, options = {}) {
   registerExpoPlugin(tree);
+  const { dependencies, devDependencies } = readJson(tree, 'package.json');
+  const existing = Object.keys({ ...dependencies, ...devDependencies });
+  const companions = await asSaved(tree, rootDependencies(tree), existing);
   const install = addDependenciesToPackageJson(
     tree,
     {},
-    { '@nx/expo': workspaceNxVersion(tree), ...rootDependencies(tree) },
+    { '@nx/expo': workspaceNxVersion(tree), ...companions },
     'package.json',
     true,
   );

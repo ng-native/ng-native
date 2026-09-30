@@ -7,18 +7,26 @@
  */
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
-import { describe, it } from 'node:test';
+import { afterEach, beforeEach, describe, it } from 'node:test';
 import type { Tree } from '@nx/devkit';
 
 const require = createRequire(import.meta.url);
 const { createTreeWithEmptyWorkspace } = require('@nx/devkit/testing') as {
   createTreeWithEmptyWorkspace: () => Tree;
 };
-const { readJson, readProjectConfiguration, readNxJson, updateJson, logger } =
+const { readJson, readProjectConfiguration, readNxJson, updateJson, logger, NX_VERSION } =
   require('@nx/devkit') as typeof import('@nx/devkit');
 const { application } = require('./index.cjs');
 const { pnpmGlobs } = require('./workspaces.cjs');
 const native = require('../native-app.cjs');
+const { registry } = require('../save-exact.cjs') as {
+  registry: { versions: (name: string, cwd: string) => Promise<string[]> };
+};
+
+// No test reaches the registry: a lookup that is not stubbed fails, as it does offline.
+registry.versions = async () => {
+  throw new Error('offline');
+};
 
 function integrated() {
   const tree = createTreeWithEmptyWorkspace();
@@ -537,6 +545,164 @@ describe('in a pnpm workspace', () => {
       'react-native',
       '@proj/source',
     ]);
+  });
+});
+
+describe('in a workspace that saves exact versions', () => {
+  // What the stubbed registry publishes of every package: a release past each range's floor, and
+  // a major beyond it.
+  const PUBLISHED = [
+    '5.0.0',
+    '5.0.9',
+    '6.0.3',
+    '6.0.9',
+    '7.20.0',
+    '7.29.9',
+    '8.0.0',
+    '19.2.3',
+    '19.3.0',
+    '22.0.0',
+    '22.2.1',
+    '23.0.0',
+    '57.0.26',
+    '57.0.27',
+    '57.0.31',
+    '58.0.0',
+  ];
+  let looked: string[];
+  const offline = registry.versions;
+  beforeEach(() => {
+    looked = [];
+    registry.versions = async (name: string) => {
+      looked.push(name);
+      return PUBLISHED;
+    };
+  });
+  afterEach(() => {
+    registry.versions = offline;
+  });
+
+  it("writes the newest version each of the app's ranges allows, with savePrefix: ''", async () => {
+    const tree = pnpmWorkspace();
+    tree.write('pnpm-workspace.yaml', "packages:\n  - 'apps/*'\nsavePrefix: ''\n");
+    await generate(tree, { directory: 'apps/mobile' });
+    const app = readJson(tree, 'apps/mobile/package.json');
+    assert.equal(app.dependencies.expo, '57.0.31');
+    assert.equal(app.dependencies['@angular/core'], '22.2.1');
+    assert.equal(app.dependencies.react, '19.2.3');
+    assert.equal(app.devDependencies.typescript, '6.0.9');
+    assert.equal(app.devDependencies.vitest, '5.0.9');
+    const root = readJson(tree, 'package.json');
+    assert.equal(root.devDependencies['@babel/runtime'], '7.29.9');
+    assert.equal(root.devDependencies['react-dom'], '19.2.3');
+    // An exact version is already what a lookup would find.
+    assert.ok(!looked.includes('react') && !looked.includes('@ng-native/platform'));
+  });
+
+  it('falls back to the lowest version a range allows when the registry cannot be reached', async () => {
+    registry.versions = offline;
+    const tree = pnpmWorkspace();
+    tree.write('pnpm-workspace.yaml', "packages:\n  - 'apps/*'\nsavePrefix: ''\n");
+    await generate(tree, { directory: 'apps/mobile' });
+    const app = readJson(tree, 'apps/mobile/package.json');
+    assert.equal(app.dependencies.expo, '57.0.26');
+    assert.equal(app.dependencies['@angular/core'], '22.0.0');
+    assert.equal(app.devDependencies.typescript, '6.0.3');
+  });
+
+  it("takes a version the workspace's root already pins, without looking it up", async () => {
+    const tree = pnpmWorkspace();
+    tree.write('pnpm-workspace.yaml', "packages:\n  - 'apps/*'\nsavePrefix: ''\n");
+    updateJson(tree, 'package.json', (manifest) => ({
+      ...manifest,
+      dependencies: { '@angular/core': '22.1.3' },
+      devDependencies: { ...manifest.devDependencies, typescript: '6.0.4' },
+    }));
+    await generate(tree, { directory: 'apps/mobile' });
+    const app = readJson(tree, 'apps/mobile/package.json');
+    assert.equal(app.dependencies['@angular/core'], '22.1.3');
+    assert.equal(app.devDependencies.typescript, '6.0.4');
+    assert.ok(!looked.includes('@angular/core') && !looked.includes('typescript'));
+  });
+
+  it("keeps its own version where the root's range reaches below the app's", async () => {
+    const tree = pnpmWorkspace();
+    tree.write('pnpm-workspace.yaml', "packages:\n  - 'apps/*'\nsavePrefix: ''\n");
+    updateJson(tree, 'package.json', (manifest) => ({
+      ...manifest,
+      devDependencies: { ...manifest.devDependencies, typescript: '^6.0.0' },
+    }));
+    await generate(tree, { directory: 'apps/mobile' });
+    assert.equal(readJson(tree, 'apps/mobile/package.json').devDependencies.typescript, '6.0.9');
+  });
+
+  it('reads a setting with a comment after it', async () => {
+    const tree = integrated();
+    tree.write('pnpm-workspace.yaml', "savePrefix: '' # pin everything\n");
+    await generate(tree, { directory: 'apps/mobile' });
+    assert.equal(readJson(tree, 'package.json').dependencies.expo, '57.0.31');
+  });
+
+  it('adds @nx/expo at the Nx running, when the workspace lists Nx at a range', async () => {
+    const tree = integrated();
+    tree.write('.npmrc', 'save-exact=true\n');
+    updateJson(tree, 'package.json', (manifest) => ({
+      ...manifest,
+      devDependencies: { nx: `^${NX_VERSION.split('.')[0]}.0.0` },
+    }));
+    await generate(tree, { directory: 'apps/mobile' });
+    const root = readJson(tree, 'package.json');
+    assert.equal(root.devDependencies['@nx/expo'], NX_VERSION);
+    assert.equal(root.devDependencies['@nx/vite'], NX_VERSION);
+  });
+
+  it("keeps its own version where the root's is one the app cannot use", async () => {
+    const tree = pnpmWorkspace();
+    updateJson(tree, 'package.json', (manifest) => ({
+      ...manifest,
+      dependencies: { '@angular/core': '21.2.0' },
+    }));
+    await generate(tree, { directory: 'apps/mobile' });
+    assert.equal(
+      readJson(tree, 'apps/mobile/package.json').dependencies['@angular/core'],
+      '^22.0.0',
+    );
+  });
+
+  it('writes the root dependencies exact with save-exact in .npmrc', async () => {
+    const tree = integrated();
+    tree.write('.npmrc', 'save-exact=true\n');
+    await generate(tree, { directory: 'apps/mobile' });
+    const root = readJson(tree, 'package.json');
+    assert.equal(root.dependencies.expo, '57.0.31');
+    assert.equal(root.dependencies['@angular/core'], '~22.2.0');
+    assert.equal(root.devDependencies.vitest, '5.0.9');
+    assert.equal(root.devDependencies['@expo/cli'], '57.0.31');
+    assert.equal(readJson(tree, 'apps/mobile/package.json').dependencies.expo, '57.0.31');
+    assert.ok(!looked.includes('@angular/core'));
+  });
+
+  for (const [file, content] of [
+    ['.npmrc', "save-prefix=''\n"],
+    ['.yarnrc', 'save-prefix ""\n'],
+    ['.yarnrc.yml', 'defaultSemverRangePrefix: ""\n'],
+    ['bunfig.toml', '[install]\nexact = true\n'],
+    ['pnpm-workspace.yaml', 'saveExact: true\n'],
+  ]) {
+    it(`reads the same setting from ${file}`, async () => {
+      const tree = integrated();
+      tree.write(file!, content!);
+      await generate(tree, { directory: 'apps/mobile' });
+      assert.equal(readJson(tree, 'package.json').dependencies.expo, '57.0.31');
+    });
+  }
+
+  it('keeps ranges in a workspace that saves them, and looks nothing up', async () => {
+    const tree = integrated();
+    tree.write('.npmrc', 'save-exact=false\n');
+    await generate(tree, { directory: 'apps/mobile' });
+    assert.equal(readJson(tree, 'package.json').dependencies.expo, '~57.0.26');
+    assert.deepEqual(looked, []);
   });
 });
 

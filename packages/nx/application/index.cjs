@@ -30,6 +30,7 @@ const {
 const native = require('../native-app.cjs');
 const { init, workspaceNxVersion } = require('../init/index.cjs');
 const { usesWorkspaces, includeInWorkspaces } = require('./workspaces.cjs');
+const { asSaved } = require('../save-exact.cjs');
 
 function names(tree, options) {
   const directory = path.normalize(options.directory).replace(/\/$/, '');
@@ -118,7 +119,22 @@ function commands(name) {
   ].join('\n');
 }
 
-function writeFiles(tree, { directory, projectName, workspaces, bundleIdentifier }) {
+/**
+ * What a workspace package's app lists: the root's version of a package the root already has,
+ * where the app can use it, and its own otherwise, exact if the workspace saves exact versions.
+ */
+async function appDependencies(tree, root, wanted) {
+  const pinned = native.reuseRootRanges(wanted, root);
+  const settled = Object.keys(wanted).filter((pkg) => pinned[pkg] !== wanted[pkg]);
+  return asSaved(tree, pinned, settled);
+}
+
+/** The packages a manifest lists, which adding a dependency leaves at the version they have. */
+function listed(manifest) {
+  return Object.keys({ ...manifest.dependencies, ...manifest.devDependencies });
+}
+
+async function writeFiles(tree, { directory, projectName, workspaces, bundleIdentifier }) {
   const file = (name, content) => tree.write(joinPathFragments(directory, name), content);
   for (const name of native.SOURCE_FILES) file(name, native.sourceFile(name));
   file('app.json', native.appJson(projectName, bundleIdentifier));
@@ -135,14 +151,15 @@ function writeFiles(tree, { directory, projectName, workspaces, bundleIdentifier
   file('vitest.config.mts', native.vitestConfig(Boolean(base)));
 
   const manifest = { name: projectName, version: '0.0.1', private: true, main: 'src/main.ts' };
+  const root = readJson(tree, 'package.json');
   if (workspaces) {
     const root = readJson(tree, 'package.json');
     Object.assign(manifest, {
-      dependencies: native.reuseRootRanges(native.dependencies, root),
-      devDependencies: native.reuseRootRanges(native.devDependencies, root),
+      dependencies: await appDependencies(tree, root, native.dependencies),
+      devDependencies: await appDependencies(tree, root, native.devDependencies),
     });
   } else {
-    manifest.dependencies = native.prebuildPins(readJson(tree, 'package.json'));
+    manifest.dependencies = native.prebuildPins(root);
   }
   file('package.json', JSON.stringify(manifest, null, 2) + '\n');
 }
@@ -177,10 +194,11 @@ async function application(tree, options) {
     includeInWorkspaces(tree, directory);
   } else {
     for (const problem of native.conflicts(readJson(tree, 'package.json'))) logger.warn(problem);
+    const existing = listed(readJson(tree, 'package.json'));
     addDependenciesToPackageJson(
       tree,
-      native.dependencies,
-      native.devDependencies,
+      await asSaved(tree, native.dependencies, existing),
+      await asSaved(tree, native.devDependencies, existing),
       'package.json',
       true,
     );
@@ -192,7 +210,7 @@ async function application(tree, options) {
     const vite = { '@nx/vite': workspaceNxVersion(tree) };
     addDependenciesToPackageJson(tree, {}, vite, 'package.json', true);
   }
-  writeFiles(tree, resolved);
+  await writeFiles(tree, resolved);
   addProjectConfiguration(tree, projectName, {
     root: directory,
     sourceRoot: directory,
