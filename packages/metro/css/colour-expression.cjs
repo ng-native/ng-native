@@ -53,7 +53,8 @@ function colourExpression(terms, context) {
 
 /** A colour function: `color-mix()`, `rgba()` of token channels, an `hsl()` of tokens. */
 function functionColour(part, context) {
-  if (part.value?.name === 'color-mix') return mixExpression(part.value.arguments, context);
+  if (part.value?.name?.toLowerCase() === 'color-mix')
+    return mixExpression(part.value.arguments, context);
   if (isRelative(part)) return relativeExpression(part, context);
   const tokened = channelsColour(part, context) ?? require('./compile.cjs').deferHslToken([part]);
   if (tokened) return tokened;
@@ -149,7 +150,7 @@ function colourToken(terms, context) {
  */
 function mixExpression(args, context) {
   const [method, ...sides] = commaSeparated(meaningful(args));
-  const words = method.map((term) => term.value?.value);
+  const words = method.map((term) => String(term.value?.value).toLowerCase());
   if (words[0] !== 'in' || !MIX_SPACES.has(words[1])) {
     throw new CssUnsupported(
       `${context}: color-mix() with a var() in it is worked out on device in ` +

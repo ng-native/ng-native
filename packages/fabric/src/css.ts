@@ -5,7 +5,14 @@
  * specificity maths, sorting), so this only walks a pre-sorted rule list and merges. It is
  * framework-agnostic and knows nothing about Angular.
  */
-import { type HueMethod, type MixSpace, mixColours } from './color-mix.ts';
+import {
+  type HueMethod,
+  type MixSide,
+  type MixSpace,
+  type Rgba,
+  mixChannels,
+  mixColours,
+} from './color-mix.ts';
 import { type Channel, relativeColour } from './relative-colour.ts';
 import type { Keyframe } from './transition.ts';
 
@@ -2037,16 +2044,31 @@ function resolveColour(
     const origin = resolveColour(from, tokens);
     return origin === undefined ? undefined : relativeColour(space, origin, channels, alpha);
   }
-  const { space, hue, a, aPercentage, b, bPercentage } = expression.mix;
-  const first = resolveColour(a, tokens);
-  const second = resolveColour(b, tokens);
+  const sides = mixSides(expression.mix, tokens);
+  return sides && mixColours(expression.mix.space, ...sides, expression.mix.hue);
+}
+
+type Mix = Extract<ColourExpression, { mix: unknown }>['mix'];
+
+/** A mix's two sides, a mix inside it unrounded, as CSS rounds only the colour at the end. */
+function mixSides(
+  mix: Mix,
+  tokens: Readonly<Record<string, TokenValue>>,
+): [MixSide, MixSide] | undefined {
+  const colour = (side: ColourExpression) =>
+    'mix' in side ? unroundedMix(side.mix, tokens) : resolveColour(side, tokens);
+  const first = colour(mix.a);
+  const second = colour(mix.b);
   if (first === undefined || second === undefined) return undefined;
-  return mixColours(
-    space,
-    { colour: first, percentage: aPercentage },
-    { colour: second, percentage: bPercentage },
-    hue,
-  );
+  return [
+    { colour: first, percentage: mix.aPercentage },
+    { colour: second, percentage: mix.bPercentage },
+  ];
+}
+
+function unroundedMix(mix: Mix, tokens: Readonly<Record<string, TokenValue>>): Rgba | undefined {
+  const sides = mixSides(mix, tokens);
+  return sides && mixChannels(mix.space, ...sides, mix.hue);
 }
 
 /** A length in a structured value that is a token, with the arithmetic around it. */

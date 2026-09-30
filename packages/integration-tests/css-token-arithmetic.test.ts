@@ -259,6 +259,21 @@ describe('a value with a var() inside it resolves as the same text in a styleshe
       'color',
       'rgba(255, 170, 170, 0.75)',
     ],
+    // A nested mix is not rounded to a byte before the outer one mixes it: Chrome's 191, not 192.
+    [
+      'color-mix(in srgb, color-mix(in srgb, var(--word), blue), white)',
+      'color: var(--x)',
+      'color',
+      'rgb(191, 128, 191)',
+    ],
+    // A function's name and a mix's space are any case, as CSS reads them.
+    [
+      'COLOR-MIX(IN SRGB, var(--word) 50%, white)',
+      'color: var(--x)',
+      'color',
+      'rgb(255, 128, 128)',
+    ],
+    ['red', 'color: COLOR-MIX(in srgb, var(--x) 50%, white)', 'color', 'rgb(255, 128, 128)'],
   ];
 
   for (const [value, read, prop, expected] of cases) {

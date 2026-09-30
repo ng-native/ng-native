@@ -264,9 +264,15 @@ const HUE_LIFTS: Record<HueMethod, (delta: number) => 'a' | 'b' | null> = {
   decreasing: (delta) => (delta > 0 ? 'a' : null),
 };
 
-/** One side of a mix: a colour as native paints it, and the percentage written beside it. */
+/** A colour's channels, 0 to 255 and unrounded, and its alpha: what one mix hands another. */
+export type Rgba = readonly [r: number, g: number, b: number, alpha: number];
+
+/**
+ * One side of a mix: a colour as native paints it, or the unrounded channels of another mix, and
+ * the percentage written beside it.
+ */
 export interface MixSide {
-  readonly colour: string;
+  readonly colour: string | Rgba;
   readonly percentage?: number;
 }
 
@@ -281,8 +287,25 @@ export function mixColours(
   b: MixSide,
   hue: HueMethod = 'shorter',
 ): string | undefined {
-  const first = parseColor(a.colour);
-  const second = parseColor(b.colour);
+  const mixed = mixChannels(space, a, b, hue);
+  if (!mixed) return undefined;
+  const [r, g, bl] = mixed.map((c) => Math.round(c));
+  const opacity = Math.round(mixed[3] * 1000) / 1000;
+  return opacity >= 1 ? `rgb(${r}, ${g}, ${bl})` : `rgba(${r}, ${g}, ${bl}, ${opacity})`;
+}
+
+/**
+ * The same mix, unrounded, for a mix around it to take as one of its sides: CSS works a nested
+ * mix out in full and rounds only the colour at the end.
+ */
+export function mixChannels(
+  space: MixSpace,
+  a: MixSide,
+  b: MixSide,
+  hue: HueMethod = 'shorter',
+): Rgba | undefined {
+  const first = typeof a.colour === 'string' ? parseColor(a.colour) : a.colour;
+  const second = typeof b.colour === 'string' ? parseColor(b.colour) : b.colour;
   const weights = weightsOf(a.percentage, b.percentage);
   if (!first || !second || !weights) return undefined;
 
@@ -296,9 +319,8 @@ export function mixColours(
   const { t, alphaScale } = weights;
   const alpha = c1.alpha * (1 - t) + c2.alpha * t;
   const mixed = interpolate(c1, c2, t, alpha, hueAt);
-  const [r, g, bl] = outOf(space, mixed).map((c) => Math.round(c * 255));
-  const opacity = Math.round(alpha * alphaScale * 1000) / 1000;
-  return opacity >= 1 ? `rgb(${r}, ${g}, ${bl})` : `rgba(${r}, ${g}, ${bl}, ${opacity})`;
+  const [r, g, bl] = outOf(space, mixed).map((c) => c * 255);
+  return [r!, g!, bl!, alpha * alphaScale];
 }
 
 interface Side {

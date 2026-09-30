@@ -370,7 +370,7 @@ function deferChannelsToken(parts, context) {
 function deferMixToken(parts, context) {
   const [part, ...rest] = parts;
   if (rest.length || part?.type !== 'function') return null;
-  if (part.value?.name !== 'color-mix' && !isRelativeFunction(part)) return null;
+  if (part.value?.name?.toLowerCase() !== 'color-mix' && !isRelativeFunction(part)) return null;
   if (!mentionsVar(parts)) return null;
   return { deferredColour: colourExpression(parts, context) };
 }
@@ -547,7 +547,11 @@ function deferVar(value, context) {
     return { props: ['experimental_backgroundImage'], gradient: templates };
   }
 
-  if (parts.length === 1 && parts[0]?.type === 'function' && parts[0].value?.name === 'color-mix') {
+  if (
+    parts.length === 1 &&
+    parts[0]?.type === 'function' &&
+    parts[0].value?.name?.toLowerCase() === 'color-mix'
+  ) {
     return deferColorMix(parts[0].value, property, context);
   }
   // A transition's timing from a token, laid over the rule's spec by the engine as `.duration-700`
