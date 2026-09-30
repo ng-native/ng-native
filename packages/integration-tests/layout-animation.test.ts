@@ -4,7 +4,12 @@
  */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { DevMenu, LayoutAnimation, type NativeLayoutAnimation } from '@ng-native/device';
+import {
+  DevMenu,
+  LayoutAnimation,
+  type DevMenuSource,
+  type NativeLayoutAnimation,
+} from '@ng-native/device';
 import { androidPermissionOf } from '../device/src/android-permissions.ts';
 import { Permission } from '@ng-native/expo';
 import { serviceWith } from './injected.ts';
@@ -175,5 +180,78 @@ describe('the developer menu', () => {
     menu.add('Clear cache', () => {});
 
     assert.deepEqual(native.items, ['Clear cache', 'Clear cache']);
+  });
+});
+
+/**
+ * `DevMenu.reload()` on a device. React Native's `DevSettings.reload()` brings an app in Expo Go
+ * back without Expo's native modules (`Cannot find native module 'ExpoFontLoader'`) until Expo Go
+ * is relaunched, so an Expo app reloads through Expo's `reloadAppAsync()`, as Metro's own reload
+ * does.
+ */
+describe("the developer menu's reload", () => {
+  /** The menu's own source on a device whose `react-native` and, when given, `expo` are these. */
+  function device(expo?: (calls: string[]) => object) {
+    const calls: string[] = [];
+    const host = globalThis as Record<string, unknown>;
+    host['require'] = (id: string) => {
+      if (id === 'react-native') {
+        return {
+          DevSettings: {
+            addMenuItem: (title: string) => void calls.push(`menu: ${title}`),
+            reload: (reason?: string) => void calls.push(`react-native: ${reason}`),
+          },
+        };
+      }
+      if (id === 'expo' && expo) return expo(calls);
+      throw new Error(`Cannot find module '${id}'`);
+    };
+    const provider = (DevMenu.SOURCE as unknown as { ɵprov: { factory(): DevMenuSource } }).ɵprov;
+    try {
+      const source = provider.factory();
+      return { calls, source, menu: serviceWith(DevMenu.SOURCE, source, () => new DevMenu()) };
+    } finally {
+      delete host['require'];
+    }
+  }
+
+  const settled = () => new Promise((resolve) => setImmediate(resolve));
+
+  it("reloads through Expo's reloadAppAsync in an Expo app", async () => {
+    const { calls, menu } = device((calls) => ({
+      reloadAppAsync: async (reason: string) => void calls.push(`expo: ${reason}`),
+    }));
+    menu.reload('reset');
+    await settled();
+    assert.deepEqual(calls, ['expo: reset']);
+  });
+
+  it("falls back to React Native's reload when Expo's rejects", async () => {
+    const { calls, menu } = device(() => ({
+      reloadAppAsync: () => Promise.reject(new Error('no reload')),
+    }));
+    const errors: unknown[] = [];
+    const logged = console.error;
+    console.error = (...args: unknown[]) => void errors.push(args);
+    try {
+      menu.reload();
+      await settled();
+    } finally {
+      console.error = logged;
+    }
+    assert.deepEqual(calls, ['react-native: requested by the app']);
+    assert.equal(errors.length, 1);
+  });
+
+  it("reloads through React Native's DevSettings in an app without Expo", () => {
+    const { calls, menu } = device();
+    menu.reload('reset');
+    assert.deepEqual(calls, ['react-native: reset']);
+  });
+
+  it("still adds items to React Native's menu in an Expo app", () => {
+    const { calls, source } = device(() => ({ reloadAppAsync: async () => {} }));
+    source.menu?.addMenuItem('Clear cache', () => {});
+    assert.deepEqual(calls, ['menu: Clear cache']);
   });
 });

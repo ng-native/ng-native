@@ -37,7 +37,9 @@ startup for no reason if `available` is not checked first.
 rather than adding a second entry - React Native's own `DevSettings.addMenuItem` keys on `title` -
 which is what makes it safe for a hot reload to re-run the constructor that calls `add()`: the menu
 keeps one entry, wired to whichever handler registered most recently. `reload(reason?)` reloads the
-bundle, as the menu's own item does.
+bundle. In an Expo app it goes through Expo's `reloadAppAsync()`, since React Native's
+`DevSettings.reload()` brings an app in Expo Go back without Expo's native modules; a reload Expo
+cannot do falls back to React Native's, with the error logged. Elsewhere it is React Native's.
 
 ## Off a device
 

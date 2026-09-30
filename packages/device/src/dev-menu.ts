@@ -29,14 +29,48 @@ export interface DevMenuSource {
   readonly development: boolean;
 }
 
+/**
+ * React Native's menu, reloading through Expo in an Expo app.
+ *
+ * `DevSettings.reload()` brings an app in Expo Go back without Expo's native modules (`Cannot find
+ * native module 'ExpoFontLoader'`) until Expo Go is relaunched. Expo's `reloadAppAsync()` works in
+ * Expo Go and a development build alike, and a reload it cannot do falls back to React Native's.
+ */
+function throughExpo(settings: NativeDevMenu): NativeDevMenu {
+  let reloadAppAsync: ((reason?: string) => Promise<void>) | undefined;
+  try {
+    // Required rather than imported, as `react-native` is: an app without Expo has none.
+    // @ts-ignore
+    reloadAppAsync = (require('expo') as { reloadAppAsync?: typeof reloadAppAsync }).reloadAppAsync;
+  } catch {
+    // Not an Expo app: React Native's own reload re-fetches the bundle there.
+  }
+  const expoReload = reloadAppAsync;
+  if (!expoReload) return settings;
+  return {
+    addMenuItem: (title, handler) => settings.addMenuItem(title, handler),
+    reload: (reason) =>
+      void expoReload(reason).catch((error: unknown) => {
+        console.error(
+          "[angular-native] Expo's reload failed; reloading through React Native.",
+          error,
+        );
+        settings.reload(reason);
+      }),
+  };
+}
+
 @Service()
 export class DevMenu {
   /** Overridden in a test to register items without a shake menu. */
   static readonly SOURCE = new InjectionToken<DevMenuSource>('angular-native.devMenuSource', {
-    factory: () => ({
-      menu: reactNative()?.DevSettings ?? null,
-      development: (globalThis as { __DEV__?: boolean }).__DEV__ === true,
-    }),
+    factory: () => {
+      const settings = reactNative()?.DevSettings;
+      return {
+        menu: settings ? throughExpo(settings) : null,
+        development: (globalThis as { __DEV__?: boolean }).__DEV__ === true,
+      };
+    },
   });
 
   private readonly source = inject(DevMenu.SOURCE);
