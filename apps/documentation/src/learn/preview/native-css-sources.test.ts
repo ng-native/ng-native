@@ -7,6 +7,7 @@ import { readdirSync, readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { cssSourceKey } from './native-css.ts';
 import { SOURCES } from './native-css-sources.ts';
 
 const require = createRequire(import.meta.url);
@@ -23,10 +24,10 @@ describe('the native CSS compiler in the page', () => {
     ];
     const required = new Set<string>();
     for (const file of files) {
-      for (const [, sibling] of readFileSync(file, 'utf8').matchAll(
-        /require\('(\.\/[\w-]+\.cjs)'\)/g,
+      for (const [, id] of readFileSync(file, 'utf8').matchAll(
+        /require\(\s*['"](\.\/[\w-]+\.cjs|@ng-native\/metro\/css\/[\w-]+\.cjs)['"]\s*\)/g,
       )) {
-        required.add(sibling!);
+        required.add(cssSourceKey(id!));
       }
     }
     const missing = [...required].filter((sibling) => !(sibling in SOURCES));

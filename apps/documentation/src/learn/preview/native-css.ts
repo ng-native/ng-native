@@ -10,7 +10,9 @@
  *
  * The CommonJS files arrive as text, in a chunk of their own (`native-css-sources.ts`) fetched
  * with the WebAssembly, and run with a `require` that answers `lightningcss` with the WebAssembly
- * build and each sibling with its own exports. The one Node global they touch is `Buffer.from`,
+ * build and each sibling with its own exports. A cross-package require of
+ * `@ng-native/metro/css/*.cjs` aliases to its sibling, as `@ng-native/tailwind/flatten.cjs`
+ * requires the compiler that way under Node. The one Node global they touch is `Buffer.from`,
  * for the source handed to lightningcss.
  */
 const BufferShim = { from: (text: string) => new TextEncoder().encode(text) };
@@ -33,6 +35,17 @@ interface Compiler {
 
 let compiler: Promise<Compiler> | undefined;
 
+/**
+ * The `SOURCES` key a `require` id answers with. Siblings require each other by `./name.cjs`,
+ * but `@ng-native/tailwind/flatten.cjs` requires the compiler as
+ * `@ng-native/metro/css/compile.cjs`, as under Node, so that specifier aliases to its sibling.
+ * Canonicalizing before the cache lookup also keeps one module instance, as Node does.
+ */
+export function cssSourceKey(id: string): string {
+  const match = /^@ng-native\/metro\/css\/([\w-]+\.cjs)$/.exec(id);
+  return match ? `./${match[1]}` : id;
+}
+
 async function load(): Promise<Compiler> {
   const [lightning, { default: wasm }, { SOURCES }] = await Promise.all([
     import('lightningcss-wasm'),
@@ -49,20 +62,21 @@ async function load(): Promise<Compiler> {
   };
   const cache: Record<string, unknown> = {};
   const require = (id: string): unknown => {
-    if (id === 'lightningcss') return { ...lightning, transform };
-    if (id in cache) return cache[id];
-    const source = SOURCES[id];
+    const key = cssSourceKey(id);
+    if (key === 'lightningcss') return { ...lightning, transform };
+    if (key in cache) return cache[key];
+    const source = SOURCES[key];
     if (!source) throw new Error(`The native CSS compiler asked for ${id}, which is not here.`);
     const module = { exports: {} as unknown };
-    cache[id] = module.exports;
+    cache[key] = module.exports;
     new Function(
       'require',
       'module',
       'exports',
       'Buffer',
-      `${source}\n//# sourceURL=native-css/${id}`,
+      `${source}\n//# sourceURL=native-css/${key}`,
     )(require, module, module.exports, BufferShim);
-    cache[id] = module.exports;
+    cache[key] = module.exports;
     return module.exports;
   };
   return {
