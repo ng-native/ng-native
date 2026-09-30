@@ -15,6 +15,7 @@ import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import { Engine, type StyleSheet } from '@ng-native/fabric';
 import { createFakeFabric } from '@ng-native/testing';
+import { resolvedClasses } from './tailwind-cli.ts';
 
 const require = createRequire(import.meta.url);
 const { withTailwind, compileSheetModule, localImports, watchesByDefault } =
@@ -29,7 +30,11 @@ const { withTailwind, compileSheetModule, localImports, watchesByDefault } =
   };
 
 interface Sheet {
-  rules: { declarations: Record<string, unknown>; compounds: { classes: string[] }[] }[];
+  rules: {
+    declarations: Record<string, unknown>;
+    deferred?: unknown[];
+    compounds: { classes: string[] }[];
+  }[];
 }
 
 /**
@@ -42,6 +47,10 @@ function evaluate(code: string): Sheet {
   const start = code.indexOf('export default ') + 'export default '.length;
   return JSON.parse(code.slice(start, code.lastIndexOf(';')));
 }
+
+/** What an element wearing a class resolves to: a theme token is resolved where it is read. */
+const styleOf = (sheet: Sheet, className: string) =>
+  resolvedClasses(sheet as unknown as StyleSheet, className);
 
 const ruleFor = (sheet: Sheet, className: string) =>
   sheet.rules.find((rule) => rule.compounds.some((c) => c.classes.includes(className)));
@@ -63,7 +72,7 @@ describe('the generated stylesheet module', () => {
     const sheet = evaluate(
       compileSheetModule(':root { --spacing: 0.25rem } .p-4 { padding: calc(var(--spacing) * 4) }'),
     );
-    assert.deepEqual(ruleFor(sheet, 'p-4')?.declarations, {
+    assert.deepEqual(styleOf(sheet, 'p-4'), {
       paddingTop: 16,
       paddingRight: 16,
       paddingBottom: 16,
@@ -82,9 +91,9 @@ describe('the generated stylesheet module', () => {
           '.start-4 { inset-inline-start: calc(var(--spacing) * 4) }',
       ),
     );
-    assert.deepEqual(ruleFor(sheet, 'inset-x-0')?.declarations, { left: 0, right: 0 });
-    assert.deepEqual(ruleFor(sheet, 'inset-y-2')?.declarations, { top: 8, bottom: 8 });
-    assert.deepEqual(ruleFor(sheet, 'start-4')?.declarations, { start: 16 });
+    assert.deepEqual(styleOf(sheet, 'inset-x-0'), { left: 0, right: 0 });
+    assert.deepEqual(styleOf(sheet, 'inset-y-2'), { top: 8, bottom: 8 });
+    assert.deepEqual(styleOf(sheet, 'start-4'), { start: 16 });
   });
 
   it('is a module a bundler can read, not a string of CSS', () => {
@@ -109,10 +118,7 @@ describe('wiring Tailwind into Metro', () => {
 
     const sheet = evaluate(readFileSync(output, 'utf8'));
     assert.ok(ruleFor(sheet, 'p-4'), 'the classes the sources use were scanned and compiled');
-    assert.equal(
-      ruleFor(sheet, 'bg-blue-500')?.declarations['backgroundColor'],
-      'rgb(43, 127, 255)',
-    );
+    assert.equal(styleOf(sheet, 'bg-blue-500')['backgroundColor'], 'rgb(43, 127, 255)');
     rmSync(dir, { recursive: true, force: true });
   });
 
@@ -234,20 +240,9 @@ describe('wiring Tailwind into Metro', () => {
       reference: '--safe-area-inset-bottom',
       fallback: 0,
     });
-    assert.deepEqual(deferred('pb-safe-4'), {
-      props: ['paddingBottom'],
-      kind: 'length',
-      reference: '--safe-area-inset-bottom',
-      adjust: { offset: 16 },
-      fallback: 0,
-    });
-    assert.deepEqual(deferred('min-pb-safe-6'), {
-      props: ['paddingBottom'],
-      kind: 'length',
-      reference: '--safe-area-inset-bottom',
-      adjust: { floor: 24 },
-      fallback: 0,
-    });
+    // With the spacing scale live too, the sums are two tokens each: what they draw is the check.
+    assert.equal(styleOf(sheet, 'pb-safe-4')['paddingBottom'], 16, 'no inset, plus 16');
+    assert.equal(styleOf(sheet, 'min-pb-safe-6')['paddingBottom'], 24, 'at least 24');
     // `1px` is a browser's idea of a thin line; a native divider is one physical pixel.
     assert.deepEqual(deferred('border-b-hairline'), {
       props: ['borderBottomWidth'],
@@ -299,8 +294,11 @@ describe('wiring Tailwind into Metro', () => {
       ],
     });
 
-    const from = ruleFor(sheet, 'from-blue-500') as { tokens?: Record<string, unknown> };
-    assert.deepEqual(from.tokens, { '--tw-gradient-from': { color: 'rgb(43, 127, 255)' } });
+    const drawn = styleOf(sheet, 'bg-linear-to-r from-blue-500 via-purple-500 to-pink-500');
+    const stops = (
+      drawn['experimental_backgroundImage'] as { colorStops: { color: string }[] }[]
+    )[0]!.colorStops;
+    assert.equal(stops[0]!.color, 'rgb(43, 127, 255)', 'the colour from-blue-500 names');
     rmSync(dir, { recursive: true, force: true });
   });
 
@@ -392,10 +390,7 @@ describe('wiring Tailwind into Metro', () => {
     const sheet = evaluate(readFileSync(output, 'utf8'));
     rmSync(dir, { recursive: true, force: true });
 
-    assert.equal(
-      ruleFor(sheet, 'bg-blue-500')?.declarations['backgroundColor'],
-      'rgb(59, 130, 246)',
-    );
+    assert.equal(styleOf(sheet, 'bg-blue-500')['backgroundColor'], 'rgb(59, 130, 246)');
     assert.ok(ruleFor(sheet, 'ios:p-4'), 'the preset reached the build');
     const fabric = createFakeFabric();
     const engine = new Engine(fabric, 1, { globalStyles: sheet as unknown as StyleSheet });

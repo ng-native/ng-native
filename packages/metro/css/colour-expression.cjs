@@ -74,20 +74,19 @@ function isRelative(part) {
 }
 
 /**
- * `rgb(var(--channels))` or `rgba(var(--channels), <alpha>)`: a colour whose channels are a token,
- * as Bootstrap writes its focus rings, with an alpha written beside them or taken from a token.
+ * `rgb(var(--channels))`, `rgba(var(--channels), <alpha>)` or the same through `hsl()`: a colour
+ * whose channels are a token, as Bootstrap writes its focus rings, with an alpha written beside
+ * them or taken from a token.
  */
 function channelsColour(part, context) {
-  const name = part.value?.name?.toLowerCase();
-  if (name !== 'rgb' && name !== 'rgba') return null;
-  const args = meaningful(part.value.arguments).filter(
-    (term) => !(term.type === 'token' && term.value?.type === 'comma'),
-  );
-  const [channels, alpha, ...rest] = args;
+  const { CHANNEL_SPACES, channelArguments, opacityOf } = require('./compile.cjs');
+  const space = CHANNEL_SPACES[part.value?.name?.toLowerCase()];
+  if (!space) return null;
+  const [channels, alpha, ...rest] = channelArguments(part);
   if (channels?.type !== 'var' || rest.length) return null;
-  const opacity = require('./compile.cjs').opacityOf(alpha, context);
+  const opacity = opacityOf(alpha, context);
   return {
-    channels: { reference: channels.value.name.ident },
+    channels: { reference: channels.value.name.ident, space },
     ...(opacity.adjust ? { alpha: opacity.adjust.alpha } : {}),
     ...(opacity.alpha ? { alpha: opacity.alpha } : {}),
   };

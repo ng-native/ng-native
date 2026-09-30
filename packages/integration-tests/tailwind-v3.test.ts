@@ -10,13 +10,13 @@
 import assert from 'node:assert/strict';
 import { before, describe, it } from 'node:test';
 import { execFileSync } from 'node:child_process';
-import { mkdtempSync, writeFileSync, readFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createRequire } from 'node:module';
 import { Engine, type StyleSheet } from '@ng-native/fabric';
 import { createFakeFabric } from '@ng-native/testing';
-import { committedProps } from './tailwind-cli.ts';
+import { buildV3 as build, committedProps } from './tailwind-cli.ts';
 
 const require = createRequire(import.meta.url);
 const { flattenTailwind } = require('@ng-native/tailwind') as {
@@ -25,39 +25,6 @@ const { flattenTailwind } = require('@ng-native/tailwind') as {
 const { compileCss } = require('@ng-native/metro/css/compile.cjs') as {
   compileCss(css: string, context: string, options: object): StyleSheet;
 };
-
-/** Tailwind 3's CLI output for exactly these classes, through the preset as the setup guide says. */
-function build(classes: string, app: object = {}): string {
-  const dir = mkdtempSync(join(tmpdir(), 'tailwind-v3-'));
-  const preset = require.resolve('@ng-native/tailwind/preset.cjs');
-  const config = { ...app, content: [{ raw: classes }] };
-  writeFileSync(
-    join(dir, 'tailwind.config.js'),
-    `module.exports = { presets: [require(${JSON.stringify(preset)})], ...${JSON.stringify(config)} };`,
-  );
-  writeFileSync(
-    join(dir, 'in.css'),
-    '@tailwind base;\n@tailwind components;\n@tailwind utilities;\n',
-  );
-  try {
-    execFileSync(
-      process.execPath,
-      [
-        require.resolve('tailwindcss-v3/lib/cli.js'),
-        '-c',
-        'tailwind.config.js',
-        '-i',
-        'in.css',
-        '-o',
-        'out.css',
-      ],
-      { cwd: dir, stdio: 'pipe' },
-    );
-    return readFileSync(join(dir, 'out.css'), 'utf8');
-  } finally {
-    rmSync(dir, { recursive: true, force: true });
-  }
-}
 
 /**
  * One sheet built from every class a test mentions, so a rule can only be right if it ignores the

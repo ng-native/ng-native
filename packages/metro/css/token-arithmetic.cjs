@@ -29,13 +29,22 @@ function mentionsVar(term) {
  */
 function tree(term, kind, context) {
   if (term?.type === 'var') return leaf(term, kind, context);
-  if (term?.type === 'function' && term.value?.name === 'calc') {
-    const terms = meaningful(term.value.arguments);
-    const parsed = sum(terms, 0, kind, context);
-    if (parsed.next !== terms.length) throw unreadable(context, 'is not arithmetic');
-    return parsed.value;
+  const name = term?.type === 'function' ? term.value?.name : undefined;
+  if (name === 'calc') return arithmetic(meaningful(term.value.arguments), kind, context);
+  // `max(var(--safe-area-inset-top, 0px), calc(var(--spacing) * 4))`, which is `pt-safe-or-4`.
+  if (name === 'max' || name === 'min') {
+    const sides = commaSeparated(term.value.arguments).map((side) =>
+      arithmetic(side, kind, context),
+    );
+    return sides.reduce((a, b) => [name, a, b]);
   }
   return literal(term, kind, context);
+}
+
+function arithmetic(terms, kind, context) {
+  const parsed = sum(terms, 0, kind, context);
+  if (parsed.next !== terms.length) throw unreadable(context, 'is not arithmetic');
+  return parsed.value;
 }
 
 function leaf(term, kind, context) {
@@ -49,15 +58,33 @@ function leaf(term, kind, context) {
 
 /** A written number, length or angle, as the number its slot counts in. */
 function literal(term, kind, context) {
-  const value =
-    numberOf(term) ?? degreesOf(term) ?? millisecondsOf(term) ?? pointsOf(term, context);
-  if (value !== undefined) return value;
+  const readers = kind === 'number' ? [...READERS, fractionOf] : READERS;
+  for (const read of readers) {
+    const value = read(term, context);
+    if (value !== undefined) return value;
+  }
   const what = term?.value?.unit ?? term?.value?.type ?? term?.type;
   throw unreadable(context, `cannot take '${what}' here`);
 }
 
 const numberOf = (term) =>
   term?.type === 'token' && term.value?.type === 'number' ? round(term.value.value) : undefined;
+
+/** How a written value is read, in turn: a number, then an angle, a time and a length. */
+const READERS = [
+  (term) => numberOf(term),
+  (term) => degreesOf(term),
+  (term) => millisecondsOf(term),
+  (term, context) => pointsOf(term, context),
+];
+
+/**
+ * A percentage, as the fraction it is where the slot is a number: an alpha or an opacity, which is
+ * how Open Props adds `3%` to a shadow's strength. A length's percentage needs layout, and stays
+ * refused.
+ */
+const fractionOf = (term) =>
+  term?.type === 'token' && term.value?.type === 'percentage' ? round(term.value.value) : undefined;
 
 const degreesOf = (term) =>
   term?.type === 'angle' && PER_TURN[term.value?.type]
@@ -130,12 +157,14 @@ function slot(term, kind, context) {
  */
 function calcWithTokens(parts, kind, context) {
   const written = meaningful(parts);
-  if (written.length !== 1 || written[0].type !== 'function' || written[0].value?.name !== 'calc') {
+  if (written.length !== 1 || !MATH.has(written[0].type === 'function' && written[0].value?.name)) {
     return null;
   }
   if (kind !== 'length' && kind !== 'number') return null;
   return slot(written[0], kind, context);
 }
+
+const MATH = new Set(['calc', 'max', 'min']);
 
 /** Split a list of terms on commas. */
 function commaSeparated(terms) {

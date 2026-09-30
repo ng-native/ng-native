@@ -15,7 +15,7 @@
  * if it does arrive, by dropping what it cannot express, but the warnings are noise nobody needs.
  */
 const { transform, Features } = require('lightningcss');
-const { markUnitless } = require('@ng-native/metro/css/compile.cjs');
+const { compileCss, markUnitless } = require('@ng-native/metro/css/compile.cjs');
 
 /** `@layer a, b;` - the statement that orders layers, which is meaningless once they are gone. */
 const LAYER_STATEMENT = /@layer\s+[^;{]+;/g;
@@ -58,9 +58,7 @@ function withoutImportant(value) {
  * The custom properties a sheet declares, and what they resolve to.
  *
  * Two sources: ordinary declarations, wherever they appear, and `@property`'s `initial-value`,
- * which is how Tailwind gives `--tw-border-style` a default of `solid` on the web. Both are
- * static by the time this runs; a custom property that changes at runtime is the app's business
- * and is left alone, because it is never one of these.
+ * which is how Tailwind gives `--tw-border-style` a default of `solid` on the web.
  */
 function collectVariables(css) {
   const values = new Map();
@@ -525,14 +523,23 @@ function resolveUnitlessLineHeight(css) {
     if (!ratio) return whole;
     const size = /(^|;)\s*font-size\s*:\s*([0-9]*\.?[0-9]+)(rem|px)\s*(?=;|$)/.exec(body);
     if (!size) return whole;
-    const height = Number(size[2]) * Number(ratio[2]);
-    return whole.replace(ratio[0], `${ratio[1]} line-height: ${round(height)}${size[3]}`);
+    // In points, rounded there: a ratio rounded at build time and then multiplied by 16 again,
+    // as a height in rem is, came out at 31.99984 where a browser draws 32.
+    const points = Number(size[2]) * Number(ratio[2]) * (size[3] === 'rem' ? REM : 1);
+    return whole.replace(
+      ratio[0],
+      `${ratio[1]} line-height: ${Math.round(points * 1000) / 1000}px`,
+    );
   });
 }
 
-/** Three decimal places is finer than a point on any screen, and keeps the output readable. */
+/**
+ * Five decimal places, as the compiler keeps. Three is finer than a point on any screen, but not
+ * for a line height that is a factor a font size multiplies back up: `calc(1.25 / .875)` at three
+ * made `text-sm` 20.006 points tall rather than 20.
+ */
 function round(value) {
-  return Math.round(value * 1000) / 1000;
+  return Math.round(value * 1e5) / 1e5;
 }
 
 /**
@@ -659,6 +666,9 @@ function normalizeV3Gradients(css) {
 const OPACITY_COLOUR =
   /([\w-]+)\s*:\s*(rgb|hsl)a?\(\s*([\d.]+)(?:deg)?[\s,]+([\d.]+)%?[\s,]+([\d.]+)%?\s*\/\s*var\(\s*(--tw-[\w-]+-opacity)\s*,\s*1\s*\)\s*\)/g;
 
+const TOKEN_CHANNELS_OPACITY =
+  /(?:rgb|hsl)a?\(\s*var\(\s*--[\w-]+\s*\)\s*\/\s*var\(\s*(--tw-[\w-]+-opacity)\s*,\s*1\s*\)\s*\)/g;
+
 /**
  * An `hsl()` colour's channels in sRGB, as a browser gives them when it prints the colour: whole
  * numbers, since the channels token that carries them is read as an `rgb()`.
@@ -696,6 +706,11 @@ function opacityChannels(css) {
     for (const [, name] of body.matchAll(/(--tw-[\w-]+-opacity)\s*:/g)) setters.add(name);
   }
   const runtime = new Set();
+  // Channels from a token, `hsl(var(--primary) / <alpha-value>)`: the alpha stays for the engine,
+  // and the channels are rewritten on the pass after substitution, or read on device if live.
+  for (const [, alpha] of css.matchAll(TOKEN_CHANNELS_OPACITY)) {
+    if (setters.has(alpha)) runtime.add(alpha);
+  }
   const out = css.replace(OPACITY_COLOUR, (whole, property, space, a, b2, c, alpha) => {
     if (!setters.has(alpha)) return whole;
     const [r, g, b] = space === 'hsl' ? hslChannels(+a, +b2, +c) : [a, b2, c];
@@ -836,7 +851,71 @@ function resetWithoutReverseSlots(css) {
   );
 }
 
-function flattenTailwind(css) {
+/**
+ * A declaration that reads a theme token, where the compiler cannot defer it, with the token's theme
+ * value in its place: `drop-shadow(var(--drop-shadow-xs))`, or a token defined as
+ * `calc(var(--spacing) * 24)`. Left live, it would be dropped and the utility would draw nothing;
+ * settled, it draws at its theme value, and only that declaration stops following the override.
+ */
+function settleWhereRefused(css, theme, settled, runtime, onSettled) {
+  const names = [...theme].filter((name) => settled.has(name));
+  if (names.length === 0) return css;
+  const reads = new RegExp(`var\\(\\s*(${names.join('|')})\\s*[,)]`);
+  return css.replace(/([^{}]*)\{([^{}]*)\}/g, (_, selector, body) => {
+    // In its own rule's selector, which can decide what the compiler takes: a platform's.
+    const where = /^\s*(from|to|[\d.]+%)\s*$/i.test(selector) ? 'a' : selector;
+    const declarations = declarationsOf(body).map((declaration) => {
+      if (!reads.test(declaration) || compiles(where, declaration)) return declaration;
+      const settledDeclaration = foldSimpleCalc(substituteVariables(declaration, settled, runtime));
+      // Refused settled as well, it is a property the compiler reports on its own.
+      if (compiles(where, settledDeclaration)) onSettled(declaration.trim());
+      return settledDeclaration;
+    });
+    return `${selector}{${declarations.join(';')}}`;
+  });
+}
+
+/** A block's declarations, split on the semicolons between them and not those in a string. */
+function declarationsOf(body) {
+  const declarations = [];
+  let depth = 0;
+  let quote = null;
+  let start = 0;
+  for (let i = 0; i < body.length; i++) {
+    const c = body[i];
+    if (quote) {
+      if (c === '\\') i++;
+      else if (c === quote) quote = null;
+    } else if (c === '"' || c === "'") quote = c;
+    else if (c === '(') depth++;
+    else if (c === ')') depth--;
+    else if (c === ';' && depth === 0) {
+      declarations.push(body.slice(start, i));
+      start = i + 1;
+    }
+  }
+  declarations.push(body.slice(start));
+  return declarations;
+}
+
+/** Whether the compiler takes one declaration as written, in a rule of `selector`. */
+function compiles(selector, declaration) {
+  let taken = true;
+  try {
+    compileCss(`${selector}{${declaration}}`, 'live', { onUnsupported: () => (taken = false) });
+  } catch {
+    taken = false;
+  }
+  return taken;
+}
+
+/**
+ * @param {string} css the Tailwind CLI's output
+ * @param {{ onSettled?: (declaration: string) => void }} options `onSettled` hears of each
+ *   declaration that reads a theme token and was given the token's value anyway, the compiler not
+ *   taking it as written
+ */
+function flattenTailwind(css, { onSettled = () => {} } = {}) {
   // Before any pass of lightningcss here, which reads `m-[3]`'s bare 3 as 3px and hides it from
   // the compiler: see `markUnitless`.
   let out = childrenOfWhere(
@@ -863,7 +942,13 @@ function flattenTailwind(css) {
   out = out.replace(/(^|[;{])\s*-(?:moz|ms|o)-[\w-]+\s*:[^;{}]*;?/gm, '$1');
   const opacity = opacityChannels(out);
   out = opacity.css;
-  const values = collectVariables(out);
+  // The theme is left for the engine, which resolves `var()` per node against the tokens in scope,
+  // so an element that sets `--color-brand` recolours what is inside it, as on the web. Only
+  // Tailwind's own `--tw-*` plumbing is substituted: set by one utility and read by another on the
+  // same node, it is no one's to set from outside.
+  const settled = collectVariables(out);
+  const theme = new Set([...settled.keys()].filter((name) => !name.startsWith('--tw-')));
+  const values = new Map([...settled].filter(([name]) => !theme.has(name)));
   const runtime = new Set([...crossRuleVariables(out), ...opacity.runtime]);
   out = rewriteAtRule(out, '@property', false);
   out = expandGradients(out, values);
@@ -886,14 +971,25 @@ function flattenTailwind(css) {
   out = out.replace(/--tw-gradient-via\s*:\s*(#0000|transparent|initial)\s*;?/g, '');
   // Rule-local first: a property a rule declares and reads is that rule's business, and the
   // file-wide map holds the `*` reset that would otherwise win.
-  out = substituteInRules(out, values, runtime);
-  out = substituteVariables(out, values, runtime);
+  // A theme token is left exactly as written, as a runtime one is: not in `values`, a var() of it
+  // with a fallback would otherwise be substituted by the fallback.
+  const kept = new Set([...runtime, ...theme]);
+  out = substituteInRules(out, values, kept);
+  out = substituteVariables(out, values, kept);
+  // Again, for the colours whose channels were a token until now.
+  out = opacityChannels(out).css;
   out = dropUnreadSlots(out);
   out = dropPseudoElementRules(out);
   out = expandStackedVariants(out);
   out = dropRedundantBorderStyles(out);
   out = dropEmptyDeclarations(out);
-  return resolveUnitlessLineHeight(fold(out));
+  return settleWhereRefused(
+    resolveUnitlessLineHeight(fold(out)),
+    theme,
+    settled,
+    runtime,
+    onSettled,
+  );
 }
 
 module.exports = { flattenTailwind };

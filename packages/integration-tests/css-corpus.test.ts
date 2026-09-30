@@ -364,8 +364,8 @@ const BODY_LINE_HEIGHT =
 const HSL_TOKENS =
   'An hsl() this engine still cannot read: written straight into a declaration rather than ' +
   "defined as a token first - only a token's hsl() is resolved, and it is a plain one (see " +
-  'css-tokens.test.ts) - with calc() between two tokens for a shade, or with one inside a ' +
-  "box-shadow list's colour. Each still needs a parser or a calc engine on device.";
+  'css-tokens.test.ts) - with calc() between two tokens for a shade. It still needs a parser ' +
+  'or a calc engine on device.';
 const SHORTHAND_TOKEN =
   'A token holding a whole shorthand with var()s inside it, `--bs-alert-border: ' +
   'var(--bs-border-width) solid var(--bs-alert-border-color)`, would need substituting and ' +
@@ -395,7 +395,6 @@ const DELIBERATE: Record<string, Partial<Record<CorpusProperty, string>>> = {
   'bulma .is-size-3': { 'line-height': BODY_LINE_HEIGHT },
   'bulma .tag': { 'background-color': HSL_TOKENS, display: FLEX_ONLY },
   'pico .grid': { display: FLEX_ONLY },
-  'open-props .op-card': { 'box-shadow': HSL_TOKENS },
 };
 
 describe('what a browser does with the corpus', () => {

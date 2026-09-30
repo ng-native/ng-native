@@ -74,6 +74,7 @@ function bench(name: keyof typeof LISTS): void {
 
   const first: number[] = [];
   const restyle: number[] = [];
+  const retheme: number[] = [];
   for (let run = 0; run < RUNS; run++) {
     const engine = new Engine(createFakeFabric(), 1, { globalStyles: sheet });
     const root = engine.createElement('view');
@@ -105,10 +106,19 @@ function bench(name: keyof typeof LISTS): void {
     engine.setClasses(root, 'platform-ios dark');
     engine.commit();
     restyle.push(performance.now() - started);
+
+    // The palette and spacing set on the root, as an app rethemes a screen through its tokens.
+    started = performance.now();
+    engine.setCustomProperty(root, '--color-zinc-900', 'rgb(40, 0, 60)');
+    engine.setCustomProperty(root, '--spacing', '3px');
+    engine.commit();
+    retheme.push(performance.now() - started);
   }
   console.log(
     `${name.padEnd(9)} first commit ${median(first).toFixed(1).padStart(7)}ms   ` +
-      `dark restyle ${median(restyle).toFixed(1).padStart(7)}ms   (${ROWS} rows, ${RUNS} runs)`,
+      `dark restyle ${median(restyle).toFixed(1).padStart(7)}ms   ` +
+      `token retheme ${median(retheme).toFixed(1).padStart(7)}ms   ` +
+      `(${ROWS} rows, ${RUNS} runs)`,
   );
 }
 

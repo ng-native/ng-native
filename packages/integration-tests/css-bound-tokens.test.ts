@@ -21,6 +21,7 @@ import {
   type FakeFabricNode,
 } from '@ng-native/testing';
 import { compileFixture } from './compile.ts';
+import { committedProps } from './tailwind-cli.ts';
 
 const require = createRequire(import.meta.url);
 const { compileCss } = require('@ng-native/metro/css/compile.cjs');
@@ -137,6 +138,47 @@ describe('the value a binding holds', () => {
     assert.equal(weight(600), '600');
     assert.equal(weight('600'), '600');
     assert.equal(weight(550), '600', 'at a weight native draws');
+  });
+
+  it('takes three channels as the channels a colour is built from', () => {
+    const colour = (css: string, value: string) => committed(css, { '--c': value })['color'];
+    assert.equal(colour('.a { color: hsl(var(--c, 0 0% 0%)) }', '240 100% 50%'), 'rgb(0, 0, 255)');
+    assert.equal(colour('.a { color: rgb(var(--c, 0 0 0)) }', '13 110 253'), 'rgb(13, 110, 253)');
+    assert.equal(colour('.a { color: rgb(var(--c, 0 0 0)) }', '13, 110, 253'), 'rgb(13, 110, 253)');
+    assert.equal(colour('.a { color: rgb(var(--c, 0 0 0)) }', '100% 0% 0%'), 'rgb(255, 0, 0)');
+    assert.equal(colour('.a { color: hsl(var(--c, 0 0% 0%)) }', '240 100 50'), 'rgb(0, 0, 255)');
+    assert.equal(
+      colour('.a { color: rgb(var(--c)) }', '0 100% 50%'),
+      undefined,
+      'not rgb() channels',
+    );
+    assert.equal(colour('.a { color: rgb(var(--c, 1 2 3)) }', '1.2.3 4 5'), 'rgb(1, 2, 3)');
+  });
+
+  it('keeps apart rows that match alike but sit under different tokens', () => {
+    // Nodes that match the same rules under the same parent share one worked-out style; a row that
+    // sets a token of its own must not hand its colour to the rows beside it, or they theirs to it.
+    const fabric = createFakeFabric();
+    const engine = new Engine(fabric, 1);
+    const sheet = compileCss('.row { gap: 1px } .dot { color: var(--c, red) }', 'rows');
+    const rows = [0, 1, 2].map(() => {
+      const row = engine.createElement('view', sheet);
+      const dot = engine.createElement('view', sheet);
+      engine.addClass(row, 'row');
+      engine.addClass(dot, 'dot');
+      engine.appendChild(row, dot);
+      engine.appendChild(engine.root, row);
+      return { row, dot };
+    });
+    engine.setCustomProperty(rows[1]!.row, '--c', 'blue');
+    engine.commit();
+    const RED = 'rgb(255, 0, 0)';
+    const colours = () => rows.map(({ dot }) => committedProps(fabric, dot)['color']);
+    assert.deepEqual(colours(), [RED, 'blue', RED]);
+    engine.setCustomProperty(rows[1]!.row, '--c', '');
+    engine.setCustomProperty(rows[2]!.row, '--c', 'green');
+    engine.commit();
+    assert.deepEqual(colours(), [RED, RED, 'green']);
   });
 
   it("treats an empty value as unset, leaving the element's rule to define it", () => {

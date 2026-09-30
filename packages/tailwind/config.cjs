@@ -96,6 +96,8 @@ function generate(css, output, input) {
   writeFileSync(output, compileSheetModule(readFileSync(css, 'utf8'), css, { input, output }));
 }
 
+const warnedSettled = new Set();
+
 /**
  * Tailwind's CSS as a module exporting the compiled stylesheet.
  *
@@ -107,7 +109,18 @@ function generate(css, output, input) {
  */
 function compileSheetModule(css, context = 'tailwind', paths) {
   const dropped = [];
-  const sheet = compileCss(flattenTailwind(css), context, {
+  const settled = new Set();
+  const flat = flattenTailwind(css, { onSettled: (declaration) => settled.add(declaration) });
+  for (const declaration of settled) {
+    // Once a process: the sheet is rebuilt on every class written, and the warning would be too.
+    if (warnedSettled.has(declaration)) continue;
+    warnedSettled.add(declaration);
+    console.warn(
+      `[angular-native] '${declaration}' keeps its theme value: native cannot read the token in ` +
+        `it on device, so it does not follow where the app sets it.`,
+    );
+  }
+  const sheet = compileCss(flat, context, {
     onUnsupported: (message) => dropped.push(message),
   });
   for (const message of dropped) {
@@ -167,6 +180,29 @@ function localImports(css, cwd) {
   return found;
 }
 
+/**
+ * The entry's local imports, and theirs: every sheet of the app's own that Tailwind reads. Empty
+ * when the entry cannot be read, as mid-save, rather than throwing out of Metro.
+ */
+function themeFiles(input) {
+  const found = new Set();
+  const visit = (file) => {
+    let css;
+    try {
+      css = readFileSync(file, 'utf8');
+    } catch {
+      return;
+    }
+    for (const imported of localImports(css, path.dirname(file))) {
+      if (found.has(imported)) continue;
+      found.add(imported);
+      visit(imported);
+    }
+  };
+  visit(input);
+  return [...found];
+}
+
 /** Build once, synchronously, so the module exists before Metro resolves the first import. */
 function run(args, cwd) {
   execFileSync(process.execPath, args, { cwd, stdio: 'pipe' });
@@ -214,11 +250,19 @@ function watch(input, css, output, cwd) {
     );
   });
 
-  watchFile(css, { interval: 200, persistent: false }, () => generate(css, output, input));
+  watchFile(css, { interval: 200, persistent: false }, () => {
+    // Off a file event, where a throw would take Metro down: the sheet on disk stays the last good
+    // one, and the next change tries again.
+    try {
+      generate(css, output, input);
+    } catch (error) {
+      console.error(`[angular-native] could not rebuild the Tailwind sheet: ${error.message}`);
+    }
+  });
 
   // A change inside an imported sheet is invisible to the CLI's cache. Touching the entry is what
   // makes it read them all again.
-  for (const file of localImports(readFileSync(input, 'utf8'), path.dirname(input))) {
+  for (const file of themeFiles(input)) {
     watchFile(file, { interval: 200, persistent: false }, () => {
       const now = new Date();
       utimesSync(input, now, now);

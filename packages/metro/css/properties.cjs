@@ -1908,6 +1908,7 @@ function kindOf(property) {
 
 module.exports = {
   FONT_VARIANTS,
+  easing,
   animationTimeWithTokens,
   translate,
   finishTransition,

@@ -1,9 +1,9 @@
 /**
- * Real screens rather than a synthetic list: the primitives' dialog opening and closing, a Signal
- * Forms field being typed into, and a CSS transition's frames among a thousand rows.
+ * Real screens rather than a synthetic list: a Signal Forms field being typed into, and a CSS
+ * transition's frames among a thousand rows.
  *
  *     node --no-opt --no-sparkplug --no-maglev --import ./bench/release.mjs \
- *       --import ./register-linker.mjs bench/screens.bench.ts [dialog|typing|animation|scroll|feed]
+ *       --import ./register-linker.mjs bench/screens.bench.ts [typing|animation|scroll|feed]
  *     ROWS=200 ANIMATED=1,10 ...         the animation's size
  *     PROFILE=/tmp/p ...                 a .cpuprofile of the measured steps
  *
@@ -59,33 +59,6 @@ const report = (name: string, xs: number[]) =>
   console.log(
     `${name.padEnd(14)} median ${median(xs).toFixed(2).padStart(7)}ms  (${xs.length} runs)`,
   );
-
-async function dialog(): Promise<void> {
-  const mod = await fixture('dialog');
-  const fabric = createFakeFabric();
-  const app = mount(1, mod['DialogHost'] as Type<unknown>, fabric, {
-    globalStyles: compileCss('.x {}', 'global'),
-  });
-  const host = app.componentRef.instance as { open: { set(v: boolean): void } };
-  const opens: number[] = [];
-  const closes: number[] = [];
-  for (let i = 0; i < 30; i++) {
-    const open = timed('dialog-open', () => {
-      host.open.set(true);
-      app.applicationRef.tick();
-    });
-    const close = timed('dialog-close', () => {
-      host.open.set(false);
-      app.applicationRef.tick();
-    });
-    if (i >= 5) {
-      opens.push(open);
-      closes.push(close);
-    }
-  }
-  report('dialog open', opens);
-  report('dialog close', closes);
-}
 
 async function typing(): Promise<void> {
   const mod = await fixture('text-input-form');
@@ -537,7 +510,6 @@ async function scrollEventsOn(name: string, type: Type<unknown>): Promise<void> 
 }
 
 const SCREENS: Record<string, () => Promise<void>> = {
-  dialog,
   typing,
   animation,
   scroll,

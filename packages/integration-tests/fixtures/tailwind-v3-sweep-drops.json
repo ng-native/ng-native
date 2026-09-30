@@ -5,13 +5,11 @@
     "!blur-[30deg]",
     "!blur-[37%]",
     "!blur-[rgb(10,20,30)]",
-    "!blur-[var(--x)]",
     "blur-[#1a2b3c]",
     "blur-[200ms]",
     "blur-[30deg]",
     "blur-[37%]",
-    "blur-[rgb(10,20,30)]",
-    "blur-[var(--x)]"
+    "blur-[rgb(10,20,30)]"
   ],
   "dropped '--tw-blur': filter: blur() is not drawn on iOS. React Native draws brightness() and opacity() on both platforms and every other filter function on Android only, so this would leave the view unchanged on an iPhone. Scope the rule to Android with a .platform-android ancestor (Tailwind's android: variant), or use brightness() or opacity().": [
     "!blur",
@@ -23,6 +21,7 @@
     "!blur-[13px]",
     "!blur-[3]",
     "!blur-[calc(1rem+2px)]",
+    "!blur-[var(--x)]",
     "!blur-lg",
     "!blur-md",
     "!blur-sm",
@@ -44,6 +43,7 @@
     "blur-[13px]",
     "blur-[3]",
     "blur-[calc(1rem+2px)]",
+    "blur-[var(--x)]",
     "blur-lg",
     "blur-md",
     "blur-sm",
@@ -127,7 +127,6 @@
     "!drop-shadow-[3]",
     "!drop-shadow-[calc(1rem+2px)]",
     "!drop-shadow-[rgb(10,20,30)]",
-    "!drop-shadow-[var(--x)]",
     "drop-shadow-[#1a2b3c]",
     "drop-shadow-[0.35]",
     "drop-shadow-[1.25rem]",
@@ -137,12 +136,12 @@
     "drop-shadow-[37%]",
     "drop-shadow-[3]",
     "drop-shadow-[calc(1rem+2px)]",
-    "drop-shadow-[rgb(10,20,30)]",
-    "drop-shadow-[var(--x)]"
+    "drop-shadow-[rgb(10,20,30)]"
   ],
   "dropped '--tw-drop-shadow': filter: drop-shadow() is not drawn on iOS. React Native draws brightness() and opacity() on both platforms and every other filter function on Android only, so this would leave the view unchanged on an iPhone. Scope the rule to Android with a .platform-android ancestor (Tailwind's android: variant), or use brightness() or opacity().": [
     "!drop-shadow",
     "!drop-shadow-2xl",
+    "!drop-shadow-[var(--x)]",
     "!drop-shadow-lg",
     "!drop-shadow-md",
     "!drop-shadow-none",
@@ -155,6 +154,7 @@
     "drop-shadow-2xl grayscale-0",
     "drop-shadow-2xl invert-0",
     "drop-shadow-2xl sepia-0",
+    "drop-shadow-[var(--x)]",
     "drop-shadow-lg",
     "drop-shadow-md",
     "drop-shadow-none",
@@ -445,10 +445,6 @@
     "animate-[37%]",
     "animate-[calc(1rem+2px)]",
     "animate-[rgb(10,20,30)]"
-  ],
-  "dropped 'animation': var() cannot be used in the '…' shorthand, because which native property the value lands in depends on the value, and there is no CSS parser on device. Use the longhand.": [
-    "!animate-[var(--x)]",
-    "animate-[var(--x)]"
   ],
   "dropped 'appearance': '…' has no React Native equivalent: no style prop of a native view does what it does.": [
     "!appearance-auto",
@@ -3282,10 +3278,6 @@
     "py-[30deg]",
     "py-[rgb(10,20,30)]"
   ],
-  "dropped 'padding-bottom': '…' mixes var() with other values, which needs a parser on device. calc() of tokens, numbers and points, max(var(--x), <length>), colours and transforms are understood; anything else has to be worked out at build time.": [
-    "!min-pb-safe-[37%]",
-    "min-pb-safe-[37%]"
-  ],
   "dropped 'padding-bottom': a length needs a unit: '…' is a bare number, which a browser drops. Write Npx, or N for none.": [
     "!pb-[0.35]",
     "!pb-[3]",
@@ -3297,7 +3289,9 @@
     "py-[3]"
   ],
   "dropped 'padding-bottom': arithmetic with tokens in it cannot take '…' here. What the device works out is numbers, points, degrees and var(), with + - * / and brackets; a percentage, an em or a viewport unit beside a token needs layout the device does not do here.": [
+    "!min-pb-safe-[37%]",
     "!pb-safe-[37%]",
+    "min-pb-safe-[37%]",
     "pb-safe-[37%]"
   ],
   "dropped 'padding-inline-end': '…' is not a value native can take": [
@@ -3422,10 +3416,6 @@
     "py-[30deg]",
     "py-[rgb(10,20,30)]"
   ],
-  "dropped 'padding-top': '…' mixes var() with other values, which needs a parser on device. calc() of tokens, numbers and points, max(var(--x), <length>), colours and transforms are understood; anything else has to be worked out at build time.": [
-    "!min-pt-safe-[37%]",
-    "min-pt-safe-[37%]"
-  ],
   "dropped 'padding-top': a length needs a unit: '…' is a bare number, which a browser drops. Write Npx, or N for none.": [
     "!pt-[0.35]",
     "!pt-[3]",
@@ -3437,7 +3427,9 @@
     "py-[3]"
   ],
   "dropped 'padding-top': arithmetic with tokens in it cannot take '…' here. What the device works out is numbers, points, degrees and var(), with + - * / and brackets; a percentage, an em or a viewport unit beside a token needs layout the device does not do here.": [
+    "!min-pt-safe-[37%]",
     "!pt-safe-[37%]",
+    "min-pt-safe-[37%]",
     "pt-safe-[37%]"
   ],
   "dropped 'padding': '…' is not a value native can take": [
@@ -4704,10 +4696,6 @@
     "delay-[calc(1rem+2px)]",
     "delay-[rgb(10,20,30)]"
   ],
-  "dropped 'transition-delay': var() cannot be used in the '…' shorthand, because which native property the value lands in depends on the value, and there is no CSS parser on device. Use the longhand.": [
-    "!delay-[var(--x)]",
-    "delay-[var(--x)]"
-  ],
   "dropped 'transition-duration': '…' is not a value native can take": [
     "!duration-[#1a2b3c]",
     "!duration-[0.35]",
@@ -4727,10 +4715,6 @@
     "duration-[3]",
     "duration-[calc(1rem+2px)]",
     "duration-[rgb(10,20,30)]"
-  ],
-  "dropped 'transition-duration': var() cannot be used in the '…' shorthand, because which native property the value lands in depends on the value, and there is no CSS parser on device. Use the longhand.": [
-    "!duration-[var(--x)]",
-    "duration-[var(--x)]"
   ],
   "dropped 'transition-property': '…' is not a value native can take": [
     "!transition-[#1a2b3c]",
@@ -4779,10 +4763,6 @@
     "ease-[3]",
     "ease-[calc(1rem+2px)]",
     "ease-[rgb(10,20,30)]"
-  ],
-  "dropped 'transition-timing-function': var() cannot be used in the '…' shorthand, because which native property the value lands in depends on the value, and there is no CSS parser on device. Use the longhand.": [
-    "!ease-[var(--x)]",
-    "ease-[var(--x)]"
   ],
   "dropped 'vertical-align': '…' is not a value native can take": [
     "!align-[#1a2b3c]",

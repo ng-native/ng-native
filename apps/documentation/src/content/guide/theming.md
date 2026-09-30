@@ -26,7 +26,8 @@ reset (`html`, `::before`, `-webkit-*`). This documentation site imports preflig
 since its own chrome is a real document even though the components in it are not.
 
 The compiler unwraps `@layer` and `@supports`, drops `@property`, substitutes static theme
-variables, and folds `calc()` through lightningcss. For example, `calc(var(--spacing) * 4)` is
+variables, and folds `calc()` through lightningcss. A theme variable the app sets itself stays a
+`var()` instead (see [Tokens cross component boundaries](#tokens-cross-component-boundaries)). For example, `calc(var(--spacing) * 4)` is
 constant but cannot resolve on a device. The compiler converts `oklch()` to sRGB as in component
 stylesheets.
 
@@ -143,6 +144,30 @@ their component's nodes because sheets attach to component classes, providing em
 without per-element markers.
 
 A parent can retheme child internals through `--primary`, but cannot select them directly.
+
+This includes Tailwind's theme. An element that sets `--color-brand` or `--spacing` recolours or
+respaces every utility inside it that reads that token, as on the web, however the token is set:
+in a component stylesheet, a `style` attribute, a `[style.--color-brand]` binding or from code.
+
+```html
+<view [style.--color-brand]="accent()">
+  <view class="bg-brand p-4"></view>
+</view>
+```
+
+Every theme token is resolved on device, where it is read: colours, including the `color-mix()`
+behind shadow colours and opacity modifiers, bare channels such as `--primary: 0 100% 50%` read
+through `hsl(var(--primary))`, lengths and the spacing scale's `calc()`s and `max()`s, transition
+durations and curves, `animate-*` animations, and the `blur-*` and `drop-shadow-*` filters. Where a
+utility reads one in a form native cannot resolve on device, that declaration takes the theme
+value at build time instead, and Metro prints a warning naming it.
+
+A theme token defined as another, `--color-primary: var(--color-blue-500)`, is worked out where the
+theme defines it, as on the web: setting `--color-blue-500` on an element does not change
+`bg-primary` inside it. Set `--color-primary` itself to do that.
+
+Resolving tokens on device costs little. Nodes that match the same rules under the same parent share
+one resolved style, so a list of identical rows resolves its tokens once.
 
 ## Unsupported values and font fallbacks
 

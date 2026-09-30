@@ -8,6 +8,7 @@ import { tmpdir } from 'node:os';
 import { createRequire } from 'node:module';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { StyleResolver, type StyleSheet, type StyleTarget } from '@ng-native/fabric';
 import type { FakeFabric, FakeFabricNode } from '@ng-native/testing';
 
 /**
@@ -57,10 +58,64 @@ export function build(preset: 'native' | 'web', classes: string, app = '', prefi
   }
 }
 
+/** Tailwind 3's CLI output for exactly these classes, through the preset as the setup guide says. */
+export function buildV3(classes: string, app: object = {}, css = ''): string {
+  const dir = mkdtempSync(join(tmpdir(), 'tailwind-v3-'));
+  const preset = createRequire(import.meta.url).resolve('@ng-native/tailwind/preset.cjs');
+  const config = { ...app, content: [{ raw: classes }] };
+  writeFileSync(
+    join(dir, 'tailwind.config.js'),
+    `module.exports = { presets: [require(${JSON.stringify(preset)})], ...${JSON.stringify(config)} };`,
+  );
+  writeFileSync(
+    join(dir, 'in.css'),
+    '@tailwind base;\n@tailwind components;\n@tailwind utilities;\n' + css,
+  );
+  try {
+    execFileSync(
+      process.execPath,
+      [
+        createRequire(import.meta.url).resolve('tailwindcss-v3/lib/cli.js'),
+        '-c',
+        'tailwind.config.js',
+        '-i',
+        'in.css',
+        '-o',
+        'out.css',
+      ],
+      { cwd: dir, stdio: 'pipe' },
+    );
+    return readFileSync(join(dir, 'out.css'), 'utf8');
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+}
+
 /** The props a node was last committed with. */
 export function committedProps(fabric: FakeFabric, node: unknown): Record<string, unknown> {
   const all = (n: FakeFabricNode): FakeFabricNode[] => [n, ...n.children.flatMap(all)];
   const found = fabric.committed.flatMap(all).find((n) => n.instanceHandle === node);
   assert.ok(found, 'committed');
   return found.props;
+}
+
+/**
+ * What an element wearing `classes` resolves to under a root, with the sheet as the global one: a
+ * theme token is resolved where it is read, so this, not a rule's own declarations, is what a
+ * utility comes to.
+ */
+export function resolvedClasses(sheet: StyleSheet, classes: string): Record<string, unknown> {
+  const target = (parent: StyleTarget | null, own: string): StyleTarget => ({
+    name: 'view',
+    parent,
+    classes: new Set(own.split(/\s+/).filter(Boolean)),
+    props: {},
+    sheet: null,
+    hostSheet: null,
+    styleCache: null,
+    styleDirty: true,
+  });
+  const node = target(target(null, ''), classes);
+  const resolver = new StyleResolver(sheet, { width: 400, height: 800, colorScheme: 'light' });
+  return resolver.resolve(node, 1).style;
 }

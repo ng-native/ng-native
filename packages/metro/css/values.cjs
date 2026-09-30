@@ -405,13 +405,22 @@ function tokenValue(parts, context) {
   attempt('weight', () => weight(part.value ?? part));
   Object.assign(out, unitForms(part));
   if (part.value?.type === 'number') Object.assign(out, bareNumber(part.value.value));
-  const filter = functionForm(part, 'filter', FILTER_FUNCTIONS) ?? dropShadowWithTokens(part);
-  if (filter !== undefined) out.filter = filter;
-  const transform = functionForm(part, 'transform', TRANSFORM_FUNCTIONS);
-  if (transform !== undefined) out.transform = transform;
-  Object.assign(out, variantForm(out.keyword));
+  Object.assign(out, functionForms(part), variantForm(out.keyword));
 
   return Object.keys(out).length ? out : null;
+}
+
+/** The forms a function, or a timing word, can be read as: a filter, a transform or a curve. */
+function functionForms(part) {
+  const forms = {
+    filter:
+      functionForm(part, 'filter', FILTER_FUNCTIONS) ??
+      dropShadowWithTokens(part) ??
+      filterOfToken(part),
+    transform: functionForm(part, 'transform', TRANSFORM_FUNCTIONS),
+    easing: easingForm(part),
+  };
+  return Object.fromEntries(Object.entries(forms).filter(([, form]) => form !== undefined));
 }
 
 /**
@@ -439,7 +448,10 @@ function hasUnit(part) {
  */
 function unitForms(part) {
   if (part.type === 'time') {
-    return { time: round(part.value.value * (part.value.type === 'seconds' ? 1000 : 1)) };
+    // To the microsecond: lightningcss keeps `.15s` as a single-precision 0.15000000596, which
+    // came out as 150.00001 milliseconds.
+    const ms = part.value.value * (part.value.type === 'seconds' ? 1000 : 1);
+    return { time: Math.round(ms * 1000) / 1000 };
   }
   if (part.type === 'angle' && part.value?.type in PER_TURN) {
     return { angle: round(part.value.value * PER_TURN[part.value.type]) };
@@ -491,8 +503,15 @@ function listValue(parts) {
   const values = parts.map((part) => part?.value).filter((value) => value?.type !== 'white-space');
   const ratio = ratioOf(values);
   if (ratio !== null) return { number: ratio };
-  const channels = channelsOf(values);
-  if (channels !== null) return { channels };
+  // Alongside what else the same words are: `0 0 0` is black's channels and an empty shadow.
+  const channels = channelForms(values);
+  const other = otherListValue(parts);
+  return channels || other ? { ...channels, ...other } : null;
+}
+
+function otherListValue(parts) {
+  const animation = animationForm(parts);
+  if (animation !== undefined) return { animation };
   const family = firstFamily(parts);
   if (family !== null) return { family };
   const filter = filterListForm(parts);
@@ -571,6 +590,21 @@ function dropShadowWithTokens(part) {
   }
 }
 
+/**
+ * A filter function whose one argument is a token, `blur(var(--blur-sm))` or
+ * `drop-shadow(var(--drop-shadow-xs))`, how Tailwind reads its theme's blurs and drop shadows: the
+ * one-entry filter list, with a marker the device fills in from the token where the slot is read.
+ */
+function filterOfToken(part) {
+  if (part?.type !== 'function') return undefined;
+  const args = (part.value.arguments ?? []).filter((arg) => arg?.value?.type !== 'white-space');
+  if (args.length !== 1 || args[0].type !== 'var') return undefined;
+  const reference = args[0].value.name.ident;
+  if (part.value.name === 'blur') return [{ blur: { __length: { reference } } }];
+  if (part.value.name === 'drop-shadow') return [{ dropShadow: { __dropShadow: { reference } } }];
+  return undefined;
+}
+
 const isNumber = (value) => value?.type === 'number';
 
 /** `16 / 9`, as the one number aspect-ratio takes. */
@@ -581,13 +615,108 @@ function ratioOf(values) {
 }
 
 /**
- * Bare colour channels, `13, 110, 253`: how Bootstrap stores every colour so that an opacity token
- * can be put beside it with `rgba(var(--bs-primary-rgb), var(--bs-bg-opacity))`.
+ * Bare colour channels, in each form a colour function can read them in: `13, 110, 253`, how
+ * Bootstrap stores every colour so that an opacity token can be put beside it with
+ * `rgba(var(--bs-primary-rgb), var(--bs-bg-opacity))`, and `255 115 179` or `0 100% 50%`, how
+ * Tailwind 3's docs and shadcn do for `rgb()` and `hsl()`.
+ *
+ * `channels` is what `rgb()` takes, 0 to 255: three numbers, or three percentages of 255.
+ * `hslChannels` is what `hsl()` takes: a hue in degrees, then saturation and lightness as fractions,
+ * written as percentages, or as plain numbers in the space syntax. Each is clamped as CSS clamps it,
+ * and a form the channels are not valid in is left out, so that use site reads nothing.
  */
-function channelsOf(values) {
-  const numbers = values.filter((value) => value?.type !== 'comma');
-  if (numbers.length !== 3 || values.length !== 5 || !numbers.every(isNumber)) return null;
-  return numbers.map((value) => round(value.value));
+function channelForms(values) {
+  const channels = values.filter((value) => value?.type !== 'comma');
+  const spaced = values.length === 3;
+  const commas = values.length === 5 && values[1]?.type === 'comma' && values[3]?.type === 'comma';
+  if (channels.length !== 3 || !(spaced || commas)) return null;
+  const rgb = rgbChannels(channels);
+  const hsl = hslChannels(channels, spaced);
+  if (!rgb && !hsl) return null;
+  return { ...(rgb ? { channels: rgb } : {}), ...(hsl ? { hslChannels: hsl } : {}) };
+}
+
+const isPercentage = (value) => value?.type === 'percentage';
+const clamp = (value, low, high) => Math.min(high, Math.max(low, value));
+
+function rgbChannels(channels) {
+  const scale = channels.every(isNumber) ? 1 : channels.every(isPercentage) ? 255 : null;
+  return scale === null ? null : channels.map((value) => round(clamp(value.value * scale, 0, 255)));
+}
+
+/** Degrees per unit of a hue, as lightningcss types an angle inside a custom property. */
+const HUE_UNITS = { deg: 1, grad: 0.9, rad: 180 / Math.PI, turn: 360 };
+
+function hslChannels([hue, saturation, lightness], spaced) {
+  const degrees = isNumber(hue) ? hue.value : hue?.value * HUE_UNITS[hue?.type];
+  const fraction = (value) =>
+    isPercentage(value) ? value.value : spaced && isNumber(value) ? value.value / 100 : NaN;
+  const s = fraction(saturation);
+  const l = fraction(lightness);
+  if (![degrees, s, l].every(Number.isFinite)) return null;
+  return [round(degrees), round(clamp(s, 0, 1)), round(clamp(l, 0, 1))];
+}
+
+/** The words and function a transition's timing takes: only these are worth parsing as one. */
+const CURVES = new Set(['linear', 'ease', 'ease-in', 'ease-out', 'ease-in-out', 'cubic-bezier']);
+
+/**
+ * A token holding a curve, `--ease-out: cubic-bezier(0, 0, 0.2, 1)` or `linear`, as the timing a
+ * transition reads it in: written back out and parsed as one, as a shadow token is.
+ */
+function easingForm(part) {
+  const name = part?.type === 'function' ? part.value?.name : part?.value?.value;
+  if (!CURVES.has(name)) return undefined;
+  const text = cssText([part]);
+  if (text === null) return undefined;
+  try {
+    let parsed;
+    require('lightningcss').transform({
+      filename: 'token.css',
+      code: Buffer.from(`a{transition-timing-function:${text}}`),
+      visitor: {
+        Declaration(declaration) {
+          if (declaration.property === 'transition-timing-function') parsed = declaration.value;
+        },
+      },
+    });
+    if (parsed?.length !== 1) return undefined;
+    // Required here rather than at the top: properties.cjs requires this module.
+    return require('./properties.cjs').easing(parsed[0], 'token');
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * A token holding a whole animation, `--animate-spin: spin 1s linear infinite`, as the spec the
+ * engine plays: written back out and compiled as an `animation`. Only a list with a time in it is
+ * tried, which every animation that plays has and few other tokens do.
+ */
+function animationForm(parts) {
+  const text = cssText(parts);
+  if (text === null || !/\d(ms|s)\b/.test(text)) return undefined;
+  try {
+    let parsed;
+    require('lightningcss').transform({
+      filename: 'token.css',
+      code: Buffer.from(`a{animation:${text}}`),
+      visitor: {
+        Declaration(declaration) {
+          if (declaration.property === 'animation') parsed = declaration.value;
+        },
+      },
+    });
+    if (!parsed) return undefined;
+    // Required here rather than at the top: properties.cjs requires this module.
+    const { translate, finishAnimation } = require('./properties.cjs');
+    const out = {};
+    translate('animation', parsed, out, 'token');
+    finishAnimation(out, 'token');
+    return out['$animation'] ?? undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 /**
@@ -684,6 +813,7 @@ function partText(part) {
   const value = part?.value;
   if (part?.type === 'length') return `${value.value}${value.unit}`;
   if (part?.type === 'angle') return `${value.value}${value.type}`;
+  if (part?.type === 'time') return `${value.value}${value.type === 'seconds' ? 's' : 'ms'}`;
   if (part?.type === 'function') {
     const inner = cssText(value.arguments ?? []);
     return inner === null ? null : `${value.name}(${inner})`;

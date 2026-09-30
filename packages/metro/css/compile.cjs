@@ -254,20 +254,33 @@ function deferColorMix(fn, property, context) {
  */
 function deferChannels(part, property, context) {
   const name = part?.type === 'function' ? part.value?.name?.toLowerCase() : null;
-  if (name !== 'rgb' && name !== 'rgba') return null;
-  const args = terms(part.value.arguments).filter((arg) => operator(arg) !== 'comma');
-  const [channels, alpha, ...rest] = args;
+  const space = CHANNEL_SPACES[name];
+  if (!space) return null;
+  const [channels, alpha, ...rest] = channelArguments(part);
   if (channels?.type !== 'var' || rest.length || kindOf(property) !== 'color') return null;
 
-  const fallback = varFallback(channels, 'channels', context);
+  const kind = space === 'hsl' ? 'hslChannels' : 'channels';
+  const fallback = varFallback(channels, kind, context);
   return {
     props: propsFor(property),
-    kind: 'channels',
+    kind,
     reference: channels.value.name.ident,
+    space,
     ...(fallback === undefined ? {} : { fallback }),
     ...opacityOf(alpha, context),
   };
 }
+
+/** A colour function's channels and alpha, with the commas and the slash between them gone. */
+function channelArguments(part) {
+  return terms(part.value.arguments).filter((arg) => {
+    const op = operator(arg);
+    return op !== 'comma' && op !== '/';
+  });
+}
+
+/** The colour functions a channels token can be read through, and the space each reads it in. */
+const CHANNEL_SPACES = { rgb: 'rgb', rgba: 'rgb', hsl: 'hsl', hsla: 'hsl' };
 
 /** The alpha of a channels colour: none, written, or a token of its own. */
 function opacityOf(alpha, context) {
@@ -335,10 +348,45 @@ function deferChannelsToken(parts, context) {
       channels: {
         reference: deferred.reference,
         ...(deferred.fallback === undefined ? {} : { fallback: deferred.fallback }),
+        space: deferred.space,
       },
       ...(alpha === undefined ? {} : { alpha }),
     },
   };
+}
+
+/**
+ * `--x: color-mix(in oklab, var(--y) 50%, transparent)`: a colour token mixed from another, which
+ * is how Tailwind colours a shadow, a text shadow and a drop shadow once the palette colour it
+ * names is live. Settled on the node that defines it, as a channels token is.
+ *
+ * @returns `{ deferredColour }`, or null if this is not that shape
+ */
+function deferMixToken(parts, context) {
+  const [part, ...rest] = parts;
+  if (rest.length || part?.type !== 'function' || part.value?.name !== 'color-mix') return null;
+  if (!mentionsVar(parts)) return null;
+  return { deferredColour: colourExpression(parts, context) };
+}
+
+/**
+ * `--x: calc(var(--spacing) * 4)`: a token worked out from another, which is how Tailwind builds a
+ * translate or a line height from the spacing scale. Read as a length and as a number, whichever
+ * its tokens make, and settled on the node that defines it, as the web computes it there.
+ *
+ * @returns `{ deferredCalc }`, or null if this is not arithmetic of tokens
+ */
+function deferCalcToken(parts, context) {
+  const markers = [];
+  for (const kind of ['length', 'number']) {
+    try {
+      const slot = calcWithTokens(parts, kind, context);
+      if (slot?.__calc) markers.push(slot.__calc);
+    } catch (error) {
+      if (!(error instanceof CssUnsupported)) throw error;
+    }
+  }
+  return markers.length ? { deferredCalc: markers } : null;
 }
 
 /**
@@ -481,6 +529,19 @@ function deferVar(value, context) {
   if (parts.length === 1 && parts[0]?.type === 'function' && parts[0].value?.name === 'color-mix') {
     return deferColorMix(parts[0].value, property, context);
   }
+  // A transition's timing from a token, laid over the rule's spec by the engine as `.duration-700`
+  // is, which is how `.transition` reads Tailwind's `--default-transition-duration`; or a whole
+  // animation, as `.animate-spin` reads `--animate-spin`.
+  const timing = MOTION_FROM_TOKEN[property];
+  if (timing && parts.length === 1 && parts[0]?.type === 'var') {
+    const [key, kind] = timing;
+    return {
+      props: [key],
+      kind,
+      reference: parts[0].value.name.ident,
+      ...fallbacks(parts[0], kind, context),
+    };
+  }
   // A relative colour from a token, `oklch(from var(--brand) l c h / 0.2)`, worked out on device;
   // or one colour with no token in it at all, a light-dark() side beside one that has.
   if (kindOf(property) === 'color' && (isRelativeColour(parts) || isLoneLiteral(parts))) {
@@ -523,7 +584,10 @@ function deferVar(value, context) {
     );
   }
 
-  const kind = kindOf(property);
+  // Arithmetic on a length is a length, which a line height takes as it is: `leading-6` is
+  // `calc(var(--spacing) * 6)`.
+  const declared = kindOf(property);
+  const kind = arithmetic && declared === 'lineHeight' ? 'length' : declared;
   if (kind === null) {
     throw new CssUnsupported(
       `${context}: var() cannot be used in the '${property}' shorthand, because which native ` +
@@ -550,6 +614,14 @@ function deferVar(value, context) {
     ...(property in UNSET ? { unset: UNSET[property] } : {}),
   };
 }
+
+/** The motion a token can be read into whole, and the key and token form each reads it as. */
+const MOTION_FROM_TOKEN = {
+  'transition-duration': ['$transitionDuration', 'time'],
+  'transition-delay': ['$transitionDelay', 'time'],
+  'transition-timing-function': ['$transitionEasing', 'easing'],
+  animation: ['$animation', 'animation'],
+};
 
 /**
  * A property's initial value, where it differs from leaving the property out on native: what a
@@ -1239,8 +1311,13 @@ function customToken(name, parts, context) {
   const value =
     deferHslToken(parts) ??
     deferChannelsToken(parts, context) ??
+    deferMixToken(parts, context) ??
+    deferCalcToken(parts, context) ??
     tokenValue(parts, `${context} (${name})`);
-  if (value === null) {
+  // Tailwind's own slots never hold an animation, and `--tw-inset-shadow: inset 200ms` parses as
+  // one named inset: kept, a shadow that is not one would go unreported.
+  if (value?.animation && name.startsWith('--tw-')) delete value.animation;
+  if (value === null || Object.keys(value).length === 0) {
     throw new CssUnsupported(`${context}: '${name}' has a value native cannot express in any form`);
   }
   return value;
@@ -2317,4 +2394,13 @@ const NESTED_BLOCK = /\{[^{}]*\{/;
 const INDIVIDUAL_TRANSFORM = /([{;\s])(translate|rotate|scale)(\s*:)/g;
 const HIDDEN_TRANSFORM = '--ng-native-individual-';
 
-module.exports = { compileCss, CssUnsupported, deferHslToken, linear, markUnitless, opacityOf };
+module.exports = {
+  CHANNEL_SPACES,
+  channelArguments,
+  compileCss,
+  CssUnsupported,
+  deferHslToken,
+  linear,
+  markUnitless,
+  opacityOf,
+};

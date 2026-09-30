@@ -225,10 +225,9 @@ describe('the two Tailwind presets', () => {
     engine.appendChild(row, label);
     engine.commit();
     const background = () => committedProps(fabric, label)['backgroundColor'];
-    const colour = (name: string) =>
-      sheet.rules.find((rule) => rule.compounds.at(-1)!.classes.includes(name))!.declarations[
-        'backgroundColor'
-      ];
+    // The theme's own colour for each, which the variant's rule reads on device.
+    const theme = Object.assign({}, ...sheet.rules.map((rule) => rule.tokens ?? {}));
+    const colour = (name: string) => theme[`--color-${name.split(':bg-')[1]}`]?.color;
     assert.equal(background(), undefined, 'the peer is in no state yet');
 
     engine.dispatchEvent(peer, 'topFocus', {});

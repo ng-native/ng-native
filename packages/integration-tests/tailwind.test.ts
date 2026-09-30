@@ -17,7 +17,7 @@ import { fileURLToPath } from 'node:url';
 import type { StyleSheet } from '../fabric/src/css.ts';
 import { Engine } from '@ng-native/fabric';
 import { createFakeFabric } from '@ng-native/testing';
-import { committedProps } from './tailwind-cli.ts';
+import { committedProps, resolvedClasses } from './tailwind-cli.ts';
 
 const require = createRequire(import.meta.url);
 const { flattenTailwind } = require('@ng-native/tailwind') as {
@@ -31,13 +31,10 @@ const { compileCss } = require('@ng-native/metro/css/compile.cjs') as {
   ): StyleSheet;
 };
 
-/** The declarations a class ends up with, as the engine would apply them. */
+/** What an element wearing a class resolves to, as the engine would apply it. */
 function stylesFor(css: string, className: string): Record<string, unknown> {
   const sheet = compileCss(flattenTailwind(css), 'tailwind', { onUnsupported: () => {} });
-  const rule = sheet.rules.find((r) =>
-    r.compounds.some((compound) => compound.classes.includes(className)),
-  );
-  return (rule?.declarations ?? {}) as Record<string, unknown>;
+  return resolvedClasses(sheet, className);
 }
 
 describe('flattening Tailwind for the engine', () => {
@@ -291,12 +288,11 @@ describe('flattening Tailwind for the engine', () => {
       assert.equal(background(css, 'dark'), 'rgb(9, 9, 9)');
     });
 
-    it('still substitutes a token declared once, fallback or not', () => {
-      const out = flattenTailwind(
-        ':root { --one: rgb(1, 1, 1) }\n.bg { background-color: var(--one, rgb(255, 0, 0)) }',
-      );
-      assert.doesNotMatch(out, /var\(--one/);
-      assert.doesNotMatch(out, /255, 0, 0|#f00/);
+    it('resolves a token declared once to its root value, not the fallback', () => {
+      const css =
+        ':root { --one: rgb(1, 1, 1) }\n.bg { background-color: var(--one, rgb(255, 0, 0)) }';
+      assert.match(flattenTailwind(css), /var\(--one, /);
+      assert.equal(background(css, ''), 'rgb(1, 1, 1)');
     });
 
     it('leaves a token declared only under the dark class unset without it', () => {
@@ -350,11 +346,13 @@ describe('flattening Tailwind for the engine', () => {
     });
   });
 
-  it('still substitutes a token that only ever has one value', () => {
+  it('leaves a token with one value for the cascade too, since an element may set it', () => {
+    // On the web `<view style="--brand: red">` recolours every `bg-brand` inside it. Substituted
+    // at build time, nothing inside would follow.
     const out = flattenTailwind(
       ':root { --brand: rgb(1, 1, 1) }\n.bg { background-color: var(--brand) }',
     );
-    assert.doesNotMatch(out, /var\(--brand\)/);
+    assert.match(out, /background-color: var\(--brand\)/);
   });
 
   it('leaves a value the device supplies for the device to resolve', () => {
@@ -365,23 +363,14 @@ describe('flattening Tailwind for the engine', () => {
     assert.match(out, /var\(--safe-area-inset-bottom, 0px\)/);
   });
 
-  it('keeps the arithmetic around one, folding everything but the unknown', () => {
-    // `pb-safe-4` is `the inset, plus the padding this design wanted`. The spacing half folds at
-    // build time; the inset half cannot, and the compiler understands the sum that is left.
-    const css =
-      ':root { --spacing: 0.25rem }\n' +
+  it('keeps the arithmetic around one, for the device to finish', () => {
+    // `pb-safe-4` is `the inset, plus the padding this design wanted`. The inset is known only
+    // on device, and so, now the theme is left live, is the spacing it is added to.
+    const rule =
       '.pb { padding-bottom: calc(var(--safe-area-inset-bottom, 0px) + calc(var(--spacing) * 4)) }';
-    const sheet = compileCss(flattenTailwind(css), 'tailwind', { onUnsupported: () => {} });
-    const rule = sheet.rules.find((r) => r.compounds.some((c) => c.classes.includes('pb')));
-    assert.deepEqual(rule?.deferred, [
-      {
-        props: ['paddingBottom'],
-        kind: 'length',
-        reference: '--safe-area-inset-bottom',
-        adjust: { offset: 16 },
-        fallback: 0,
-      },
-    ]);
+    assert.equal(stylesFor(`:root { --spacing: 0.25rem }\n${rule}`, 'pb')['paddingBottom'], 16);
+    const inset = ':root { --spacing: 0.25rem; --safe-area-inset-bottom: 20px }\n';
+    assert.equal(stylesFor(inset + rule, 'pb')['paddingBottom'], 36);
   });
 
   it('reads an important gradient direction without its importance', () => {
@@ -574,9 +563,11 @@ describe('real Tailwind output, end to end', () => {
     assert.equal(stylesFor(css, 'duration-700')['$transitionDuration'], 700);
     assert.deepEqual(stylesFor(css, 'ease-linear')['$transitionEasing'], [0, 0, 1, 1]);
     assert.equal(stylesFor(css, 'delay-150')['$transitionDelay'], 150);
-    // Not baked into `.transition` itself, which every other element with it shares.
-    const own = stylesFor(css, 'transition')['$transition'] as Record<string, { duration: number }>;
-    assert.equal(own['opacity']!.duration, 150);
+    // Not baked into `.transition` itself, which every other element with it shares: its own is
+    // the theme's default, laid over its spec as `.duration-700`'s is.
+    const own = stylesFor(css, 'transition');
+    assert.ok((own['$transition'] as Record<string, unknown>)['opacity']);
+    assert.equal(own['$transitionDuration'], 150);
   });
 
   it('drops a utility it cannot express instead of failing the build', () => {

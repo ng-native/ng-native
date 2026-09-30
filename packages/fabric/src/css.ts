@@ -131,13 +131,24 @@ export interface TokenValue {
   readonly transform?: readonly unknown[];
   /** One font variant, as the one-entry list `fontVariant` takes: a numeric variant's slot. */
   readonly fontVariant?: readonly string[];
-  /** Bare colour channels, `13, 110, 253`, for an `rgba(var(--x), <alpha>)` to finish. */
+  /** Bare colour channels as `rgb()` reads them, 0 to 255: `13, 110, 253` or `100% 0% 0%`. */
   readonly channels?: readonly number[];
+  /** The same as `hsl()` reads them: degrees, then saturation and lightness as fractions. */
+  readonly hslChannels?: readonly number[];
+  /** A transition's curve, as the cubic-bezier control points a timing keyword stands for. */
+  readonly easing?: readonly number[];
+  /** A whole animation, as the spec the engine plays: `--animate-spin`. */
+  readonly animation?: Readonly<Record<string, unknown>>;
   /**
-   * Defined as `rgba(var(--channels), <alpha>)`: a colour made of a channels token and an alpha
-   * written or tokened. Settled on the node that defines it, as an `hsl` one is.
+   * Defined as a colour made of other tokens: `rgba(var(--channels), <alpha>)`, or a `color-mix()`
+   * of one. Settled on the node that defines it, as an `hsl` one is.
    */
-  readonly deferredColour?: Extract<ColourExpression, { channels: unknown }>;
+  readonly deferredColour?: ColourExpression;
+  /**
+   * Defined as arithmetic of other tokens, `calc(var(--spacing) * 4)`, read as a length and as a
+   * number. Settled on the node that defines it, as an `hsl` one is.
+   */
+  readonly deferredCalc?: readonly CalcMarker[];
   /**
    * Defined as another token, `var(--name)`. Resolved on the node that defines it, against the
    * tokens in scope there, and passed down resolved - which is what a browser does.
@@ -174,7 +185,11 @@ export type TokenKind =
   | 'filter'
   | 'transform'
   | 'fontVariant'
-  | 'channels';
+  | 'channels'
+  | 'hslChannels'
+  | 'easing'
+  | 'time'
+  | 'animation';
 
 /**
  * Where a form a token does not have can be read from instead. A length is already a
@@ -220,6 +235,8 @@ export interface DeferredDeclaration {
    * `rgba(var(--bs-primary-rgb), var(--bs-bg-opacity))`. A written alpha is an `adjust` instead.
    */
   readonly alpha?: { readonly reference: string; readonly fallback?: number };
+  /** For a colour built from `channels`, read through `hsl()` rather than `rgb()`. */
+  readonly space?: ChannelSpace;
   /**
    * A gradient whose stops are custom properties, filled in once a node's tokens are known. What
    * a utility framework's `from-*` and `to-*` classes compile to, since the class that paints the
@@ -272,7 +289,11 @@ export type ColourExpression =
     }
   | {
       /** A token of bare channels, as `rgba(var(--channels), <alpha>)` reads it. */
-      readonly channels: { readonly reference: string; readonly fallback?: readonly number[] };
+      readonly channels: {
+        readonly reference: string;
+        readonly fallback?: readonly number[];
+        readonly space?: ChannelSpace;
+      };
       readonly alpha?: number | { readonly reference: string; readonly fallback?: number };
     }
   | { readonly hsl: NonNullable<TokenValue['hsl']> }
@@ -359,6 +380,9 @@ export interface StyleSheet {
  * start from, which is the parent's own `inherited` plus whatever inheritable values this node
  * set. Keeping the two apart is what lets resolution go downwards.
  */
+/** What a node's matched rules come to: shared between nodes that match the same way. */
+type Styled = Pick<StyleCache, 'style' | 'inherited' | 'tokens'>;
+
 export interface StyleCache {
   epoch: number;
   /**
@@ -1079,27 +1103,16 @@ export class StyleResolver {
 
     styleStats.nodesResolved++;
 
-    const result = this.cascade(node, this.rulesFor(node));
-
-    // Tokens are in scope for this node's own declarations as well as its descendants', so they
-    // are merged before any `var()` here is resolved.
+    const matched = this.matched(node, this.rulesFor(node));
     const parentTokens = parent ? parent.tokens : this.tokensOnRoot;
-    const tokens = tokensInScope(parentTokens, result.tokens, node.customProperties);
-
-    const own = result.declarations;
-    if (result.deferred) {
-      this.applyDeferred(result.deferred, own, tokens, parentInherited, result.important);
-    }
-    if (own['borderStyle'] === 'none') drawNoBorder(own);
+    const styled = this.styled(node, matched, parentTokens, parentInherited);
 
     const cache: StyleCache = {
       epoch,
       generation: this.generation,
       context: {},
       parentContext,
-      style: { ...parentInherited, ...own },
-      inherited: inheritFrom(parentInherited, own),
-      tokens,
+      ...styled,
     };
     node.styleCache = cache;
     node.styleDirty = false;
@@ -1220,16 +1233,96 @@ export class StyleResolver {
     return entries.sort((a, b) => a.weight - b.weight);
   }
 
-  /** The declarations that apply to a node. The list is sorted, so later simply wins. */
-  private cascade(node: StyleTarget, entries: readonly RuleEntry[]): CascadeResult {
+  /**
+   * A node's style from the rules it matched, shared with every other node that matched the same
+   * rules under the same inherited values and tokens: a list's rows, and what is inside each.
+   *
+   * Everything past matching depends on those alone, and it is most of the work where a sheet
+   * leaves values to the device: settling each `var()`, mixing colours, filling a shadow's slots.
+   * A node that sets custom properties of its own is worked out alone. What is shared is never
+   * written to after, so sharing it is safe; each node still has a cache and a context of its own.
+   */
+  private styled(
+    node: StyleTarget,
+    matched: readonly StyleRule[],
+    parentTokens: Readonly<Record<string, TokenValue>>,
+    parentInherited: Record<string, unknown>,
+  ): Styled {
+    if (node.customProperties) return this.style(node, matched, parentTokens, parentInherited);
+    if (this.sharedGeneration !== this.generation) {
+      this.shared.clear();
+      this.sharedGeneration = this.generation;
+    }
+    const key = matched.map((rule) => this.ruleId(rule)).join(',');
+    let byTokens = this.shared.get(key);
+    if (!byTokens) this.shared.set(key, (byTokens = new WeakMap()));
+    let byInherited = byTokens.get(parentTokens);
+    if (!byInherited) byTokens.set(parentTokens, (byInherited = new WeakMap()));
+    let styled = byInherited.get(parentInherited);
+    if (!styled) {
+      styled = this.style(node, matched, parentTokens, parentInherited);
+      byInherited.set(parentInherited, styled);
+    }
+    return styled;
+  }
+
+  private readonly shared = new Map<
+    string,
+    WeakMap<object, WeakMap<Record<string, unknown>, Styled>>
+  >();
+  private sharedGeneration = 0;
+  private readonly ruleIds = new WeakMap<StyleRule, number>();
+  private nextRuleId = 0;
+
+  private ruleId(rule: StyleRule): number {
+    let id = this.ruleIds.get(rule);
+    if (id === undefined) this.ruleIds.set(rule, (id = this.nextRuleId++));
+    return id;
+  }
+
+  /** A node's style from the rules it matched, worked out. */
+  private style(
+    node: StyleTarget,
+    matched: readonly StyleRule[],
+    parentTokens: Readonly<Record<string, TokenValue>>,
+    parentInherited: Record<string, unknown>,
+  ): Styled {
+    const result = this.cascade(matched);
+
+    // Tokens are in scope for this node's own declarations as well as its descendants', so they
+    // are merged before any `var()` here is resolved.
+    const tokens = tokensInScope(parentTokens, result.tokens, node.customProperties);
+
+    const own = result.declarations;
+    if (result.deferred) {
+      this.applyDeferred(result.deferred, own, tokens, parentInherited, result.important);
+    }
+    if (own['borderStyle'] === 'none') drawNoBorder(own);
+    return {
+      style: { ...parentInherited, ...own },
+      inherited: inheritFrom(parentInherited, own),
+      tokens,
+    };
+  }
+
+  /** The rules that apply to a node, weakest first. */
+  private matched(node: StyleTarget, entries: readonly RuleEntry[]): StyleRule[] {
+    const out: StyleRule[] = [];
+    for (const { rule, sheet } of entries) {
+      if (this.conditionHolds(rule) && matches(node, rule, sheet)) out.push(rule);
+    }
+    return out;
+  }
+
+  /** The declarations of the rules a node matched. The list is sorted, so later simply wins. */
+  private cascade(matched: readonly StyleRule[]): CascadeResult {
     const normal: Record<string, unknown> = {};
     const important: Record<string, unknown> = {};
     let hasImportant = false;
     let tokens: Record<string, TokenValue> | null = null;
     let deferred: DeferredDeclaration[] | null = null;
 
-    for (const { rule, sheet } of entries) {
-      if (!this.conditionHolds(rule) || !matches(node, rule, sheet)) continue;
+    for (const rule of matched) {
       Object.assign(normal, rule.declarations);
       if (rule.important) {
         Object.assign(important, rule.important);
@@ -1445,7 +1538,10 @@ export class StyleResolver {
     const base = declaration.props.includes('fontSize')
       ? parentInherited['fontSize']
       : (own['fontSize'] ?? parentInherited['fontSize']);
-    return factor * (typeof base === 'number' ? base : DEFAULT_FONT_SIZE) + offset;
+    // To a thousandth of a point: a factor rounded at build time, times a font size, is otherwise
+    // 19.99998 where the web draws 20.
+    const points = factor * (typeof base === 'number' ? base : DEFAULT_FONT_SIZE) + offset;
+    return Math.round(points * 1000) / 1000;
   }
 }
 
@@ -1500,17 +1596,30 @@ function resolveAliases(
     if (own[name]!.alias) settle(merged, name, followAlias(name, merged, new Set()));
   }
   for (const name of names) {
-    const { hsl, deferredColour } = own[name]!;
-    if (hsl) settle(merged, name, colourToken(resolveHsl(hsl, merged)));
-    if (deferredColour) settle(merged, name, colourToken(channelsColour(deferredColour, merged)));
+    if (isDerived(own[name])) settle(merged, name, derived(own[name]!, merged));
   }
-  // An alias to one of those copied it unsettled above: follow it again, now it is a colour.
+  // An alias to one of those copied it unsettled above: follow it again, now it is settled.
   for (const name of names) {
     const target = own[name]!.alias;
-    if (!target || !(own[target]?.hsl || own[target]?.deferredColour)) continue;
+    if (!target || !isDerived(own[target])) continue;
     settle(merged, name, followAlias(name, { ...merged, [name]: own[name]! }, new Set()));
   }
   return merged;
+}
+
+/** Whether a token is made of others, and so worked out where it is defined. */
+function isDerived(token: TokenValue | undefined): boolean {
+  return Boolean(token?.hsl || token?.deferredColour || token?.deferredCalc);
+}
+
+/** A token made of others, worked out from the tokens in scope. */
+function derived(
+  token: TokenValue,
+  tokens: Readonly<Record<string, TokenValue>>,
+): TokenValue | undefined {
+  if (token.hsl) return colourToken(resolveHsl(token.hsl, tokens));
+  if (token.deferredColour) return colourToken(resolveColour(token.deferredColour, tokens));
+  return calcToken(token.deferredCalc!, tokens);
 }
 
 /** A token set to what it resolved to, or removed when it resolved to nothing, as CSS unsets it. */
@@ -1525,6 +1634,21 @@ function settle(
 
 const colourToken = (color: string | undefined): TokenValue | undefined =>
   color === undefined ? undefined : { color };
+
+/** A `calc()` token's forms, from the tokens in scope: undefined when it makes neither. */
+function calcToken(
+  markers: readonly CalcMarker[],
+  tokens: Readonly<Record<string, TokenValue>>,
+): TokenValue | undefined {
+  let token: TokenValue | undefined;
+  for (const marker of markers) {
+    const value = resolveCalc(marker, tokens);
+    if (value === undefined) continue;
+    if (marker.kind === 'length') token = { ...token, length: value };
+    else if (typeof value === 'number') token = { ...token, number: value };
+  }
+  return token;
+}
 
 /** An `hsl()` token's channels, read from the tokens in scope, as the colour they make. */
 function resolveHsl(
@@ -1611,21 +1735,32 @@ function referenced(
     value = formOf(tokens[alternative], declaration.kind!);
   }
   value ??= declaration.fallback;
-  const base =
-    declaration.kind === 'channels' ? fromChannels(value, declaration.alpha, tokens) : value;
+  const base = CHANNEL_KINDS.has(declaration.kind!)
+    ? fromChannels(value, declaration.alpha, tokens, declaration.space)
+    : value;
   return declaration.adjust ? adjusted(base, declaration.adjust) : base;
 }
 
-/** `13, 110, 253` as the colour it is, at the alpha the token beside it says, if one does. */
+const CHANNEL_KINDS: ReadonlySet<TokenKind> = new Set(['channels', 'hslChannels']);
+
+/** `hsl()` reads a channels token as hue, saturation and lightness; `rgb()` as sRGB. */
+type ChannelSpace = 'rgb' | 'hsl';
+
+/**
+ * `13, 110, 253` as the colour it is, at the alpha the token beside it says, if one does: the
+ * channels form for `rgb()`, the hslChannels form for `hsl()`.
+ */
 function fromChannels(
   value: unknown,
   alpha: DeferredDeclaration['alpha'],
   tokens: Readonly<Record<string, TokenValue>>,
+  space?: ChannelSpace,
 ): string | undefined {
   if (!Array.isArray(value) || value.length !== 3) return undefined;
   // An alpha naming a token nothing set, with no fallback, is no colour: CSS drops it.
   const opacity = alpha ? (tokens[alpha.reference]?.number ?? alpha.fallback) : 1;
   if (opacity === undefined) return undefined;
+  if (space === 'hsl') return hslToRgb(value[0], value[1], value[2], opacity);
   const [r, g, b] = value as number[];
   return opacity >= 1
     ? `rgb(${r}, ${g}, ${b})`
@@ -1749,7 +1884,7 @@ interface LengthMarker {
 type CalcExpression =
   | number
   | { readonly reference: string; readonly fallback?: number }
-  | readonly ['+' | '-' | '*' | '/', CalcExpression, CalcExpression];
+  | readonly ['+' | '-' | '*' | '/' | 'max' | 'min', CalcExpression, CalcExpression];
 
 interface CalcMarker {
   readonly expression: CalcExpression;
@@ -1835,6 +1970,8 @@ function calculated(
   if (op === '+') return left + right;
   if (op === '-') return left - right;
   if (op === '*') return left * right;
+  if (op === 'max') return Math.max(left, right);
+  if (op === 'min') return Math.min(left, right);
   return left / right;
 }
 
@@ -1939,7 +2076,27 @@ function settledMarker(value: object, tokens: Readonly<Record<string, TokenValue
   if (token) return resolveLength(token, tokens);
   const sum = (value as { __calc?: CalcMarker }).__calc;
   if (sum) return resolveCalc(sum, tokens);
+  const shadow = (value as { __dropShadow?: { reference: string } }).__dropShadow;
+  if (shadow) return dropShadowOf(tokens[shadow.reference]?.shadow);
   return NOT_A_MARKER;
+}
+
+/**
+ * A shadow token as the drop shadow a filter draws: `drop-shadow(var(--drop-shadow-xs))`. One
+ * shadow, never inset and with no spread, which is all a drop shadow can be; nothing otherwise.
+ */
+function dropShadowOf(shadow: unknown): unknown {
+  if (!Array.isArray(shadow) || shadow.length !== 1) return undefined;
+  const [{ offsetX, offsetY, blurRadius, spreadDistance, color, inset }] = shadow as {
+    offsetX: number;
+    offsetY: number;
+    blurRadius: number;
+    spreadDistance: number;
+    color: unknown;
+    inset: boolean;
+  }[];
+  if (spreadDistance !== 0 || inset || typeof color !== 'string') return undefined;
+  return { offsetX, offsetY, standardDeviation: blurRadius, color };
 }
 
 /** What a colour that cannot be settled makes of the whole value it is in. */
@@ -1950,11 +2107,12 @@ function channelsColour(
   expression: Extract<ColourExpression, { channels: unknown }>,
   tokens: Readonly<Record<string, TokenValue>>,
 ): string | undefined {
-  const value =
-    formOf(tokens[expression.channels.reference], 'channels') ?? expression.channels.fallback;
+  const { space } = expression.channels;
+  const kind = space === 'hsl' ? 'hslChannels' : 'channels';
+  const value = formOf(tokens[expression.channels.reference], kind) ?? expression.channels.fallback;
   const { alpha } = expression;
-  if (typeof alpha !== 'number') return fromChannels(value, alpha, tokens);
-  const opaque = fromChannels(value, undefined, tokens);
+  if (typeof alpha !== 'number') return fromChannels(value, alpha, tokens, space);
+  const opaque = fromChannels(value, undefined, tokens, space);
   return opaque === undefined ? undefined : (faded(opaque, alpha) as string);
 }
 
@@ -1984,9 +2142,27 @@ function colourMarker(value: unknown): ColourExpression | undefined {
  */
 function adjusted(value: unknown, adjust: NonNullable<DeferredDeclaration['adjust']>): unknown {
   if (adjust.alpha !== undefined) return faded(value, adjust.alpha);
+  const em = (value as { __defer?: DeferredEm } | null)?.__defer;
+  if (em && adjust.floor === undefined) return adjustedEm(em, adjust);
   if (typeof value !== 'number') return value;
   const scaled = value * (adjust.scale ?? 1) + (adjust.offset ?? 0);
   return adjust.floor === undefined ? scaled : Math.max(scaled, adjust.floor);
+}
+
+interface DeferredEm {
+  readonly unit: string;
+  readonly factor: number;
+  readonly offset?: number;
+}
+
+/** A length in em, worked out against the font size later, with the arithmetic moved inside it. */
+function adjustedEm(
+  em: DeferredEm,
+  adjust: NonNullable<DeferredDeclaration['adjust']>,
+): { __defer: DeferredEm } {
+  const scale = adjust.scale ?? 1;
+  const offset = (em.offset ?? 0) * scale + (adjust.offset ?? 0);
+  return { __defer: { ...em, factor: em.factor * scale, ...(offset ? { offset } : {}) } };
 }
 
 /** `rgb(r, g, b)` and `rgba(r, g, b, a)`, which is every colour the compiler emits. */

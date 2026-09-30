@@ -11,9 +11,10 @@ import { after, before, describe, it } from 'node:test';
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import type { Type } from '@angular/core';
-import { StyleResolver, type StyleTarget } from '@ng-native/fabric';
-import { cleanup, render, type BoundQueries } from '@ng-native/testing';
+import { Engine, StyleResolver, type StyleTarget } from '@ng-native/fabric';
+import { cleanup, createFakeFabric, render, type BoundQueries } from '@ng-native/testing';
 import { compileFixture } from './compile.ts';
+import { committedProps } from './tailwind-cli.ts';
 
 const require = createRequire(import.meta.url);
 const { compileCss } = require('@ng-native/metro/css/compile.cjs');
@@ -101,6 +102,14 @@ describe('tokens', () => {
     assert.equal(all('inner-text')[0]!.props['fontWeight'], '600');
     await boot(':root { --pad: 1px; --weight: bold }');
     assert.equal(all('inner-text')[0]!.props['fontWeight'], '700');
+  });
+
+  it('keeps the arithmetic around a token in em, as -tracking-wide negates one', () => {
+    const css =
+      ':root { --t: .025em } .a { font-size: 16px; letter-spacing: calc(var(--t) * -1) }' +
+      '.b { font-size: 16px; letter-spacing: calc(var(--t) * 2 + 1px) }';
+    assert.equal(resolvedStyle(css, ['a'])['letterSpacing'], -0.4);
+    assert.equal(resolvedStyle(css, ['b'])['letterSpacing'], 1.8);
   });
 
   it('works out a token in em where it is used, against the font size there', async () => {
@@ -334,6 +343,159 @@ describe('tokens', () => {
       assert.equal(resolvedStyle(css, ['b'])['backgroundColor'], 'rgba(13, 110, 253, 0.25)');
       assert.equal(resolvedStyle(css, ['c'])['color'], 'rgba(13, 110, 253, 0.3)');
       assert.equal(resolvedStyle(css, ['d'])['color'], 'rgb(13, 110, 253)');
+    });
+
+    it('builds a colour from a token of space-separated channels, as Tailwind 3 and shadcn do', () => {
+      // Tailwind 3's docs write `--primary: 255 115 179` and `rgb(var(--primary) / <alpha-value>)`;
+      // shadcn writes `--primary: 0 100% 50%` and `hsl(var(--primary))`.
+      const css =
+        ':root { --rgb: 13 110 253; --hsl: 0 100% 50% }' +
+        '.a { color: rgb(var(--rgb)) } .b { color: rgb(var(--rgb) / .5) }' +
+        '.c { color: hsl(var(--hsl)) } .d { --op: .25; color: hsla(var(--hsl) / var(--op)) }';
+      assert.equal(resolvedStyle(css, ['a'])['color'], 'rgb(13, 110, 253)');
+      assert.equal(resolvedStyle(css, ['b'])['color'], 'rgba(13, 110, 253, 0.5)');
+      assert.equal(resolvedStyle(css, ['c'])['color'], 'rgb(255, 0, 0)');
+      assert.equal(resolvedStyle(css, ['d'])['color'], 'rgba(255, 0, 0, 0.25)');
+    });
+
+    it('reads channels only through the function CSS takes them in, clamped as CSS clamps', () => {
+      const css =
+        ':root { --pct: 100% 0% 0%; --num: 240 100 50; --hsl: 0 100% 50%; --bs: 13, 110, 253;' +
+        '--over: 0 200% 50%; --deg: 240deg 100% 50%; --big: 300 0 0 }' +
+        '.a { color: rgb(var(--pct)) } .b { color: hsl(var(--num)) }' +
+        '.c { color: rgb(var(--hsl)) } .d { color: hsl(var(--bs)) }' +
+        '.e { color: hsl(var(--over)) } .f { color: rgb(var(--num)) }' +
+        '.g { color: hsl(var(--deg)) } .h { color: rgb(var(--big)) }';
+      const colour = (name: string) => resolvedStyle(css, [name])['color'];
+      assert.equal(colour('a'), 'rgb(255, 0, 0)', 'percentages are of 255 in rgb()');
+      assert.equal(colour('b'), 'rgb(0, 0, 255)', 'numbers are percentages in a space hsl()');
+      assert.equal(colour('c'), undefined, 'rgb() takes no mix of numbers and percentages');
+      assert.equal(colour('d'), undefined, "a comma hsl()'s saturation has to be a percentage");
+      assert.equal(colour('e'), 'rgb(255, 0, 0)', 'saturation clamps at 100%');
+      assert.equal(colour('f'), 'rgb(240, 100, 50)');
+      assert.equal(colour('g'), 'rgb(0, 0, 255)', 'a hue in degrees');
+      assert.equal(colour('h'), 'rgb(255, 0, 0)', 'a channel clamps at 255');
+    });
+
+    it('keeps a list of numbers every other form it has, such as a shadow', () => {
+      // Read as channels first, `--s: 0 0 0` lost the shadow form it had always had.
+      const css = ':root { --s: 0 0 0 } .a { box-shadow: var(--s) }';
+      assert.deepEqual(resolvedStyle(css, ['a'])['boxShadow'], [
+        { offsetX: 0, offsetY: 0, blurRadius: 0, spreadDistance: 0, color: 'black', inset: false },
+      ]);
+    });
+
+    it('works out a token defined as calc() of another where it is defined', () => {
+      // `translate-x-4` sets `--tw-translate-x: calc(var(--spacing) * 4)` for `translate` to read.
+      const css =
+        ':root { --s: 4px; --n: 2 } .a { --t: calc(var(--s) * 6); padding-top: var(--t) }' +
+        '.b { --m: calc(var(--n) * 3); flex-grow: var(--m) }';
+      assert.equal(resolvedStyle(css, ['a'])['paddingTop'], 24);
+      assert.equal(resolvedStyle(css, ['b'])['flexGrow'], 6);
+    });
+
+    it('adds a percentage to a token of one, as Open Props strengthens a shadow', () => {
+      // `--shadow-strength-4: calc(var(--shadow-strength) + 3%)`, read as an alpha: 1% + 3%. Chrome
+      // draws the card's shadow in rgba(37, 38, 39, 0.04).
+      const css =
+        ':root { --strength: 1%; --strength-4: calc(var(--strength) + 3%); --c: 220 3% 15% }' +
+        '.a { background-color: hsl(var(--c) / var(--strength-4)) }';
+      assert.equal(resolvedStyle(css, ['a'])['backgroundColor'], 'rgba(37, 38, 39, 0.04)');
+      const refused: string[] = [];
+      compileCss(':root { --s: 4px } .b { padding-top: calc(var(--s) + 3%) }', 'length', {
+        onUnsupported: (message: string) => refused.push(message),
+      });
+      assert.equal(refused.length, 1, "a length's percentage needs layout, and stays refused");
+    });
+
+    it('takes the larger or smaller of two values that are both tokens', () => {
+      // `pt-safe-or-4`: the safe-area inset, or the spacing scale's 4, whichever is larger.
+      const rule =
+        '.a { padding-top: max(var(--inset, 0px), calc(var(--s) * 4));' +
+        'padding-bottom: min(var(--inset, 0px), calc(var(--s) * 4)) }';
+      const without = resolvedStyle(`:root { --s: 4px } ${rule}`, ['a']);
+      const inset = resolvedStyle(`:root { --s: 4px; --inset: 20px } ${rule}`, ['a']);
+      assert.deepEqual([without['paddingTop'], without['paddingBottom']], [16, 0]);
+      assert.deepEqual([inset['paddingTop'], inset['paddingBottom']], [20, 16]);
+    });
+
+    it("reads a transition's timing from tokens, as Tailwind's default duration and easing", () => {
+      const css =
+        ':root { --d: 300ms; --e: cubic-bezier(0.4, 0, 0.2, 1); --l: linear; --w: .05s }' +
+        '.a { transition-property: opacity; transition-duration: var(--d);' +
+        'transition-timing-function: var(--e); transition-delay: var(--w) }' +
+        '.b { transition-timing-function: var(--l) } .c { transition-duration: var(--none, 20ms) }';
+      const a = resolvedStyle(css, ['a']);
+      assert.equal(a['$transitionDuration'], 300);
+      assert.deepEqual(a['$transitionEasing'], [0.4, 0, 0.2, 1]);
+      assert.equal(a['$transitionDelay'], 50);
+      assert.ok((a['$transition'] as Record<string, unknown>)['opacity'], 'the property list');
+      assert.deepEqual(resolvedStyle(css, ['b'])['$transitionEasing'], [0, 0, 1, 1]);
+      assert.equal(resolvedStyle(css, ['c'])['$transitionDuration'], 20);
+    });
+
+    it('plays an animation a token holds, as Tailwind writes animate-spin', () => {
+      const css =
+        ':root { --an: spin 1s linear infinite } @keyframes spin { to { rotate: 360deg } }' +
+        '.a { animation: var(--an) } .b { animation: spin 1s linear infinite }' +
+        '.c { animation: var(--missing, spin 2s) }';
+      const b = resolvedStyle(css, ['b'])['$animation'];
+      assert.ok(b);
+      assert.deepEqual(resolvedStyle(css, ['a'])['$animation'], b);
+      assert.equal(
+        (resolvedStyle(css, ['c'])['$animation'] as { duration: number }).duration,
+        2000,
+      );
+    });
+
+    it("does not read one of Tailwind's own slots as an animation, which none of them holds", () => {
+      // `inset-shadow-[200ms]` is `--tw-inset-shadow: inset 200ms`: an animation named inset, to a
+      // parser, and a shadow that is not one, which has to be reported rather than kept.
+      const refused: string[] = [];
+      compileCss('.a { --tw-inset-shadow: inset 200ms }', 'slot', {
+        onUnsupported: (message: string) => refused.push(message),
+      });
+      assert.equal(refused.length, 1);
+    });
+
+    it('draws a blur and a drop shadow a filter slot takes from the theme', () => {
+      // `blur-sm` is `--tw-blur: blur(var(--blur-sm))`; `drop-shadow-xs` is
+      // `--tw-drop-shadow: drop-shadow(var(--drop-shadow-xs))`. Both draw on Android only.
+      const css =
+        ':root { --b: 8px; --ds: 0 1px 1px rgb(0 0 0 / 0.05) }' +
+        '.platform-android .a { --tw-blur: blur(var(--b)); ' +
+        '--tw-drop-shadow: drop-shadow(var(--ds)); filter: var(--tw-blur,) var(--tw-drop-shadow,) }';
+      const fabric = createFakeFabric();
+      const engine = new Engine(fabric, 1, { globalStyles: compileCss(css, 'filters') });
+      const phone = engine.createElement('view');
+      const node = engine.createElement('view');
+      engine.setClasses(phone, 'platform-android');
+      engine.setClasses(node, 'a');
+      engine.appendChild(phone, node);
+      engine.appendChild(engine.root, phone);
+      engine.commit();
+      assert.deepEqual(committedProps(fabric, node)['filter'], [
+        { blur: 8 },
+        {
+          dropShadow: {
+            offsetX: 0,
+            offsetY: 1,
+            standardDeviation: 1,
+            color: 'rgba(0, 0, 0, 0.05)',
+          },
+        },
+      ]);
+    });
+
+    it('builds a colour token from a color-mix() of another, as Tailwind colours a shadow', () => {
+      // `shadow-red-500` is `--tw-shadow-color: color-mix(in oklab, var(--color-red-500) 100%,
+      // transparent)`, read by the shadow; the same mix written where it is used is the oracle.
+      const css =
+        ':root { --brand: rgb(255, 0, 0) }' +
+        '.a { --c: color-mix(in oklab, var(--brand) 50%, transparent); color: var(--c) }' +
+        '.b { color: color-mix(in oklab, var(--brand) 50%, transparent) }';
+      assert.equal(resolvedStyle(css, ['a'])['color'], resolvedStyle(css, ['b'])['color']);
+      assert.ok(resolvedStyle(css, ['b'])['color'], 'the oracle is a colour');
     });
 
     it('builds a colour from hsl() whose channels are tokens, as Bulma writes every colour', () => {
