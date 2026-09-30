@@ -2107,29 +2107,48 @@ function paintGradient(
   tokens: Readonly<Record<string, TokenValue>>,
 ): unknown {
   const colorStops = paintedStops(template, tokens);
-  if (colorStops.length < 2) return undefined;
+  if (!colorStops || colorStops.length < 2) return undefined;
   const position = template.position && placed(template.position, tokens);
   if (position === null) return undefined;
   return [{ ...template, colorStops, ...(position ? { position } : {}) }];
 }
 
-/** A template's stops with their tokens read, leaving out any whose colour is not set. */
+/**
+ * A template's stops with their tokens read, leaving out any whose colour is not set. Undefined
+ * when a stop's colour or position token is set but no such thing, which makes the gradient
+ * invalid, as CSS substitutes a set token rather than falling back.
+ */
 function paintedStops(
   template: GradientTemplate,
   tokens: Readonly<Record<string, TokenValue>>,
-): { color: string; position: string | number | null }[] {
+): { color: string; position: string | number | null }[] | undefined {
   const colorStops = [];
   for (const stop of template.colorStops) {
-    const color = stop.colour ? resolveColour(stop.colour, tokens) : tokens[stop.reference!]?.color;
+    const token = stop.colour ? undefined : tokens[stop.reference!];
+    const color = stop.colour ? resolveColour(stop.colour, tokens) : token?.color;
+    // `none` is how the Tailwind flattening writes `via-none`: the stop left out, not invalid.
+    if (color === undefined && token && token.keyword !== 'none') return undefined;
     if (color === undefined) continue;
-    const position = stop.positionReference
-      ? (tokens[stop.positionReference]?.length ?? stop.position)
-      : stop.position;
+    const position = stopPosition(stop, tokens);
+    if (position === INVALID_POSITION) return undefined;
     // Written even when there is none: Fabric looks the key up before it looks at the value, and
     // silently skips a stop that has not got one.
     colorStops.push({ color, position: (position as string | number | undefined) ?? null });
   }
   return colorStops;
+}
+
+const INVALID_POSITION = Symbol('invalid position');
+
+/** A stop's position: its token's when that is set, the one written otherwise. */
+function stopPosition(
+  stop: GradientTemplate['colorStops'][number],
+  tokens: Readonly<Record<string, TokenValue>>,
+): unknown {
+  if (!stop.positionReference) return stop.position;
+  const token = tokens[stop.positionReference];
+  if (!token) return stop.position;
+  return token.length ?? INVALID_POSITION;
 }
 
 /**

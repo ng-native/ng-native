@@ -15,6 +15,7 @@ import { after, describe, it } from 'node:test';
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import type { Type } from '@angular/core';
+import { StyleResolver, type StyleTarget } from '@ng-native/fabric';
 import { cleanup, render } from '@ng-native/testing';
 import { compileFixture } from './compile.ts';
 
@@ -272,6 +273,49 @@ describe('resolving a gradient template', () => {
   it('paints nothing when there are not two colours to run between', async () => {
     const node = await paint(':root { --start: red }');
     assert.equal(node.props['experimental_backgroundImage'], undefined);
+  });
+});
+
+describe('a gradient stop token that is set but of the wrong kind', () => {
+  /** The gradient a view under `:root { tokens }` paints with `background-image`. */
+  const painted = (tokens: string, image: string) => {
+    const sheet = compileCss(`:root { ${tokens} } .g { background-image: ${image} }`, 'g');
+    const resolver = new StyleResolver(sheet, { width: 400, height: 800, colorScheme: 'light' });
+    const node: StyleTarget = {
+      name: 'view',
+      parent: null,
+      classes: new Set(['g']),
+      props: {},
+      sheet: null,
+      hostSheet: null,
+      styleCache: null,
+      styleDirty: true,
+    };
+    const background = resolver.resolve(node, 1).style['experimental_backgroundImage'];
+    return (background as { colorStops: { position: unknown }[] }[] | undefined)?.[0]?.colorStops;
+  };
+
+  // Each checked in Chrome: a set token is substituted, so its fallback is not used, and a
+  // position or a colour that is no such thing makes the whole gradient invalid.
+  it('paints no gradient for a position token holding a colour', () => {
+    const image = 'linear-gradient(to right, var(--f) var(--fp, 10%), var(--t))';
+    const stops = (tokens: string) => painted(`--f: red; --t: blue; ${tokens}`, image);
+    assert.deepEqual(
+      stops('')?.map((stop) => stop.position),
+      ['10%', null],
+    );
+    assert.deepEqual(
+      stops('--fp: 30%')?.map((stop) => stop.position),
+      ['30%', null],
+    );
+    assert.equal(stops('--fp: red'), undefined);
+  });
+
+  it('paints no gradient for a colour token holding a word that is no colour', () => {
+    // An unset one is left out, which is how Tailwind's optional middle colour disappears.
+    const image = 'linear-gradient(to right, var(--f), var(--v), var(--t))';
+    assert.equal(painted('--f: red; --t: blue', image)?.length, 2);
+    assert.equal(painted('--f: red; --v: foo; --t: blue', image), undefined);
   });
 });
 
