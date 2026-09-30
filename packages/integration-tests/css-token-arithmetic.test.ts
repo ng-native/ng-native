@@ -433,3 +433,48 @@ describe('an hsl() of tokens reads a token holding a bare saturation or lightnes
     assert.equal(width('calc(var(--half) + 10)'), 7);
   });
 });
+
+describe('arithmetic mixing a percentage and a number is invalid', () => {
+  // Each checked against Chrome: a percentage and a number cannot be added or compared, nor
+  // multiplied or divided the wrong way round, and the calc() is invalid.
+  const TOKENS = ':root { --n: 0.2; --p: 10%; --z: 0 }';
+  const read = 'opacity: var(--x, 0.5)';
+  const cases: readonly [string, number][] = [
+    ['calc(var(--n) + var(--p))', 0.5],
+    ['calc(var(--p) + 1)', 0.5],
+    ['calc(var(--z) + var(--p))', 0.5],
+    ['calc(var(--n) + 10%)', 0.5],
+    ['calc(var(--missing, 10%) + 1)', 0.5],
+    ['calc(var(--p) * var(--p))', 0.5],
+    ['calc(var(--n) / var(--p))', 0.5],
+    ['max(var(--p), 1)', 0.5],
+    // Of one type, or a percentage scaled by a number, it is still worked out.
+    ['calc(var(--n) * var(--p))', 0.02],
+    ['calc(var(--p) - 10%)', 0],
+    ['calc(var(--n) * 0.2)', 0.04],
+    ['calc(var(--p) * 0.2)', 0.02],
+  ];
+
+  for (const [value, expected] of cases) {
+    it(value, () => {
+      assert.equal(written(TOKENS, value, read)['opacity'], expected, 'in a stylesheet');
+      assert.equal(set(TOKENS, value, read)['opacity'], expected, 'set on the element');
+      const customs = [{ '--n': '0.2', '--p': '10%', '--z': '0', '--x': value }];
+      const own = innermost(`.x { ${read} }`, customs)['opacity'];
+      assert.equal(own, expected, 'with its tokens set on the element');
+    });
+  }
+
+  it('leaves a declaration of it unset', () => {
+    const opacity = (value: string) =>
+      innermost(`${TOKENS} .x { opacity: ${value} }`, [{}])['opacity'];
+    assert.equal(opacity('calc(var(--n) + 10%)'), undefined);
+    assert.equal(opacity('calc(var(--n) * var(--p))'), 0.02);
+  });
+
+  it('makes an hsl() that reads it invalid', () => {
+    const own = '--x: calc(var(--n) + var(--p)); --c: hsl(200 var(--x) 50%)';
+    const sheet = `${TOKENS} .x { ${own}; color: var(--c, rgb(1, 2, 3)) }`;
+    assert.equal(innermost(sheet, [{}])['color'], 'rgb(1, 2, 3)');
+  });
+});

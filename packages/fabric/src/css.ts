@@ -1749,7 +1749,8 @@ function calcToken(
 
 /**
  * What a calc() of numbers and percentage tokens makes, as CSS types it: a number, `''`, a
- * percentage, `'%'`, or neither, as a percentage added to a number or multiplied by one is.
+ * percentage, `'%'`, or neither, as a percentage added to a number is, or one percentage
+ * multiplied by another.
  */
 function calcType(
   expression: CalcExpression,
@@ -2083,6 +2084,9 @@ function resolveCalc(
   const percentage = wholePercentage(marker, tokens);
   if (percentage !== undefined) return percentage;
   if (bareNumberAsLength(marker, tokens) || notAnAngle(marker, tokens)) return undefined;
+  // A percentage and a number added together, `calc(var(--n) + 10%)`, are neither, and invalid.
+  if (marker.kind === 'number' && calcType(marker.expression, tokens) === undefined)
+    return undefined;
   const value = calculated(marker.expression, marker.kind, tokens);
   if (value === undefined || !Number.isFinite(value)) return undefined;
   const rounded = Math.round(value * 1000) / 1000;
