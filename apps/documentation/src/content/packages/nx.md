@@ -49,7 +49,8 @@ In a pnpm workspace it also decides the two install scripts `@nx/expo` brings in
 `@nx/jest`: `@parcel/watcher` and `unrs-resolver`. It sets them to `false` under `allowBuilds` in
 `pnpm-workspace.yaml`, since both ship prebuilt binaries and their scripts only build from source.
 pnpm 11 otherwise stops the install with `ERR_PNPM_IGNORED_BUILDS` until every such script is
-decided. A decision the workspace already made stays.
+decided. A decision the workspace already made stays, and an `allowBuilds` written as a flow mapping
+is left as it is, with a warning naming the two to decide.
 
 ## The targets
 
