@@ -77,10 +77,13 @@ mount(rootTag, App, getFabricUIManager(), {
 `provideNativeHttpClient(...features)` takes the same `HttpFeature`s `provideHttpClient()` does -
 `withInterceptors()` among them - and configures `HttpClient` with `withXhr()` instead of the
 default `fetch` backend. That is not a style preference. Angular 22's default backend reads a
-response body only through `response.body`'s stream, and React Native's `fetch` is `whatwg-fetch`
-over XHR, whose `Response` has no `body` - so every request resolves with a null body and nothing
-reports why. React Native's `XMLHttpRequest` is native and complete, upload progress included,
-which is what the XHR backend actually uses.
+response body only through `response.body`'s stream. A debug build has Expo's `fetch`, whose
+`Response` streams one, but a release build has React Native's own `fetch` unless something in the
+bundle imports `expo`, and that is `whatwg-fetch` over XHR, whose `Response` has no `body`. There every
+request resolves with a null body and nothing reports why, so an app that works in debug fails in
+release. React Native's `XMLHttpRequest` is native and complete, upload progress included, and
+the XHR backend uses it in every build. See
+[Known limitations](/guide/limitations#httpclient-needs-providenativehttpclient).
 
 A separate entry point, `@ng-native/platform/http`, so an app that never makes a request does not
 pull in `@angular/common`.

@@ -71,11 +71,19 @@ build prose statically and mount live examples on the client.
 
 ## `HttpClient` needs `provideNativeHttpClient()`
 
-Plain `provideHttpClient()` silently returns null bodies on a device. Angular 22's default
-`fetch` backend reads only `response.body` streams, but React Native's `fetch` uses `whatwg-fetch`
-over XHR, whose `Response` has no `body`. Use `provideNativeHttpClient()` from
-`@ng-native/platform/http`: it configures `HttpClient` with `withXhr()` to use React Native's
-complete native `XMLHttpRequest`, including upload progress. See
+Plain `provideHttpClient()` can silently return null bodies on a device, in a release build
+only. Angular 22's default `fetch` backend reads a response body only through `response.body`'s
+stream, and which `fetch` is global depends on the build:
+
+- A debug build loads Expo's runtime, because `mount()` reaches `expo` for its reload hook in
+  development. Expo replaces the global `fetch` with its own, whose `Response` streams a `body`.
+- A release build loads Expo's runtime only when something in the bundle imports `expo`. Without
+  that, the global `fetch` is React Native's, `whatwg-fetch` over XHR, whose `Response` has no
+  `body`, so every request resolves with a null body and no error.
+
+The same app can work in debug and fail in release. Use `provideNativeHttpClient()` from
+`@ng-native/platform/http`: it configures `HttpClient` with `withXhr()`, which uses React Native's
+native `XMLHttpRequest`, upload progress included, in every build. See
 [HTTP requests](/packages/platform#http-requests) for the signature and an interceptor example.
 
 **Workaround:** `provideNativeHttpClient(...features)` in `mount()`'s `providers`, never

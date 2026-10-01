@@ -41,8 +41,8 @@ AppRegistry.registerRunnable('main', ({ rootTag }) => {
 
 - `.` - `mount()`, `NativeRendererFactory`, `PLATFORM_NATIVE_ID`, `isPlatformNative()`.
 - `./http` - `provideNativeHttpClient()`, an `HttpClient` backend over React Native's
-  `XMLHttpRequest` (Angular's default `fetch` backend cannot read a React Native `fetch` response
-  body). Use it in place of `provideHttpClient()`.
+  `XMLHttpRequest` (in a release build, Angular's default `fetch` backend cannot read the body of
+  React Native's own `fetch` response). Use it in place of `provideHttpClient()`.
 
 ## Docs
 
