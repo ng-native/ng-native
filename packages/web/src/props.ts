@@ -284,10 +284,10 @@ const VIEW_BASE_HANDLERS: Record<string, Handler> = {
   accessibilityRespondsToUserInteraction: noop,
 };
 
-/** `text-input.ts`'s own props, applied to the `<textarea>` `elements.ts` creates for it. */
+/** `text-input.ts`'s own props, applied to the `<input>` or `<textarea>` it commits as. */
 const TEXT_INPUT_HANDLERS: Record<string, Handler> = {
   text: (n, v, c) => {
-    const textarea = el(n) as HTMLTextAreaElement;
+    const textarea = el(n) as HTMLInputElement | HTMLTextAreaElement;
     const next = c ? '' : String(v);
     // Only when it actually differs: the caret and scroll position reset on every write, even
     // one that sets the value to what it already was, and `TextInput`'s own echo write does
@@ -315,7 +315,13 @@ const TEXT_INPUT_HANDLERS: Record<string, Handler> = {
     const hint = typeof v === 'string' && known.has(v) ? v : undefined;
     setOrRemove(n, 'enterkeyhint', hint, c || hint === undefined);
   },
-  secureTextEntry: (n, v, c) => setStyleProp(n, '-webkit-text-security', v ? 'disc' : '', c || !v),
+  // A password field where there can be one. A textarea has no password type, so a multiline
+  // field masks with the non-standard property, which Firefox does not have.
+  secureTextEntry: (n, v, c) => {
+    const field = el(n);
+    if (field.tagName === 'INPUT') (field as HTMLInputElement).type = !c && v ? 'password' : 'text';
+    else setStyleProp(n, '-webkit-text-security', v ? 'disc' : '', c || !v);
+  },
   autoCapitalize: (n, v, c) => setOrRemove(n, 'autocapitalize', v === 'none' ? 'off' : v, c),
   autoCorrect: (n, v, c) => setOrRemove(n, 'autocorrect', v ? 'on' : 'off', c),
   autoFocus: (n, v, c) => {

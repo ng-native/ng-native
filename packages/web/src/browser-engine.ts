@@ -27,9 +27,10 @@ import {
   makeTextNode,
   nearestNodeOf,
   nodeOf,
+  rebindElement,
   type BrowserNode,
 } from './dom-node.ts';
-import { createDomElement } from './elements.ts';
+import { createDomElement, textFieldLike } from './elements.ts';
 import { applyProp } from './props.ts';
 import { ResponderSystem } from './responder.ts';
 
@@ -233,8 +234,37 @@ export class BrowserEngine extends HostEngine {
       if (node.props[key] === value) return;
       node.props[key] = value;
     }
+    if (key === 'multiline' && node.name === 'text-input') this.fieldFor(node, value === true);
     applyProp(node, key, value, clear);
   }
+
+  /**
+   * A `<textarea>` for a multiline field and an `<input>` for a one-line one, swapped in place when
+   * `multiline` arrives, which is after the element was made (see `elements.ts`).
+   *
+   * The new element takes the old one's attributes (inline style and scoping attributes among
+   * them), its value and its focus, and the engine's own listeners are installed on it again.
+   */
+  private fieldFor(node: BrowserNode, multiline: boolean): void {
+    const old = node.el as HTMLInputElement | HTMLTextAreaElement;
+    if ((old.tagName === 'TEXTAREA') === multiline) return;
+    const field = textFieldLike(old, multiline);
+    const focused = this.document.activeElement === old;
+    this.layoutObservers.get(node)?.disconnect();
+    old.replaceWith(field);
+    rebindElement(node, field);
+    this.wireAlwaysOnListeners(node);
+    const optedIn = node.optedIn;
+    node.optedIn = null;
+    for (const type of optedIn ?? []) this.wireOptIn(node, type);
+    for (const key of ['secureTextEntry', 'numberOfLines']) {
+      if (key in node.props) applyProp(node, key, node.props[key], false);
+    }
+    if (focused) field.focus();
+  }
+
+  /** Each node's `topLayout` observer, so a field swapped for another stops watching the old one. */
+  private readonly layoutObservers = new WeakMap<BrowserNode, ResizeObserver>();
 
   setEventListener(
     node: BrowserNode,
@@ -501,6 +531,7 @@ export class BrowserEngine extends HostEngine {
         });
       });
       observer.observe(node.el as Element);
+      this.layoutObservers.set(node, observer);
       return;
     }
     if (topLevelType === 'topPointerEnter' || topLevelType === 'topPointerLeave') {

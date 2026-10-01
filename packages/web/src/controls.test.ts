@@ -22,12 +22,12 @@ async function bootstrapControls() {
   return { document, componentRef, applicationRef, app: componentRef.instance as ControlsApp };
 }
 
-describe('text-input, over a real <textarea>', () => {
-  it('commits as a textarea and carries the placeholder', async () => {
+describe('text-input, over a real <input>', () => {
+  it('commits as an input and carries the placeholder', async () => {
     const { document, componentRef } = await bootstrapControls();
-    const field = document.querySelector('[data-rn="text-input"]') as HTMLTextAreaElement;
+    const field = document.querySelector('[data-rn="text-input"]') as HTMLInputElement;
 
-    assert.equal(field.tagName, 'TEXTAREA');
+    assert.equal(field.tagName, 'INPUT');
     assert.equal(field.placeholder, 'Say something');
 
     componentRef.destroy();
@@ -35,7 +35,7 @@ describe('text-input, over a real <textarea>', () => {
 
   it('reflects a real keystroke back into the value model', async () => {
     const { document, componentRef, applicationRef: appRef, app } = await bootstrapControls();
-    const field = document.querySelector('[data-rn="text-input"]') as HTMLTextAreaElement;
+    const field = document.querySelector('[data-rn="text-input"]') as HTMLInputElement;
 
     field.value = 'hello';
     field.dispatchEvent(new (globalThis as any).Event('input', { bubbles: true }));
@@ -48,7 +48,7 @@ describe('text-input, over a real <textarea>', () => {
 
   it('reflects a model change back into the field, through the same engine.setProp path', async () => {
     const { document, componentRef, applicationRef: appRef, app } = await bootstrapControls();
-    const field = document.querySelector('[data-rn="text-input"]') as HTMLTextAreaElement;
+    const field = document.querySelector('[data-rn="text-input"]') as HTMLInputElement;
 
     app.text.set('set from code');
     appRef.tick();

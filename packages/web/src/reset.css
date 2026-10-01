@@ -17,7 +17,7 @@
  * one does), but this is written from this project's own assumptions rather than copied from it:
  * it targets `[data-rn]`, the marker `elements.ts` puts on every node this package creates
  * (`data-rn="<template name>"`) rather than the tag itself, because two elements - `text-input`
- * and `switch` - commit as a real `<textarea>`/`<input>` rather than their own tag (see
+ * and `switch` - commit as a real `<input>` (or `<textarea>`) rather than their own tag (see
  * `elements.ts`'s doc comment for why), and a tag selector would miss them.
  *
  * `box-sizing: border-box` matches Yoga, where a node's `width`/`height` already includes its
@@ -259,10 +259,10 @@ body {
  * cascade - meaning near-white theme text on a white ground, i.e. an invisible value in an
  * apparently blank field. Transparent is both the faithful behaviour and the fix.
  *
- * The rest of a browser's field chrome goes for the same reason. A `<textarea>` sets its own font,
- * which is monospace at 13.33px in Chromium, where a device's field takes the text styles around
- * it, as `<text>` does, and a platform font at 14 when there are none. It also adds padding and a
- * resize handle that a device's field does not have.
+ * The rest of a browser's field chrome goes for the same reason. A field sets its own font, at
+ * 13.33px in Chromium and monospace in a `<textarea>`, where a device's field takes the text
+ * styles around it, as `<text>` does, and a platform font at 14 when there are none. It also adds
+ * padding, and a textarea a resize handle, that a device's field does not have.
  */
 [data-rn='text-input'] {
   background-color: transparent;

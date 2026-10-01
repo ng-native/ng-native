@@ -29,7 +29,8 @@ async function bootTextField() {
   await settle();
   const app = componentRef.instance as TextFieldApp;
 
-  const field = (id: string) => document.getElementById(id)!.querySelector('textarea')!;
+  const field = (id: string) =>
+    document.getElementById(id)!.querySelector<HTMLInputElement>('[data-rn="text-input"]')!;
   const type = async (id: string, text: string) => {
     const el = field(id);
     el.value = text;
@@ -61,11 +62,13 @@ async function bootOtp() {
   const hiddenField = () =>
     document
       .getElementById('otp')!
-      .querySelector('[data-slot="input-otp-field"]') as HTMLTextAreaElement;
+      .querySelector('[data-slot="input-otp-field"]') as HTMLInputElement;
   const glyphs = () =>
-    [...document.getElementById('otp')!.querySelectorAll('textarea')].filter(
-      (el) => el !== hiddenField(),
-    );
+    [
+      ...document
+        .getElementById('otp')!
+        .querySelectorAll<HTMLInputElement>('[data-rn="text-input"]'),
+    ].filter((el) => el !== hiddenField());
   const type = async (text: string) => {
     const el = hiddenField();
     el.value = text;
@@ -133,7 +136,9 @@ describe('Input and Textarea, mounted through mount', () => {
   });
 
   it('reflects a real keystroke into a textarea the same way', async () => {
-    const { componentRef, app, type } = await bootTextField();
+    const { componentRef, app, type, field } = await bootTextField();
+    assert.equal(field('notes').tagName, 'TEXTAREA', 'multiline, so a textarea');
+    assert.equal(field('notes').getAttribute('rows'), '3');
     await type('notes', 'a couple of lines');
     assert.equal(app.notes(), 'a couple of lines');
     componentRef.destroy();

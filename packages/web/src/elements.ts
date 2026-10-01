@@ -18,14 +18,12 @@
  * `<view>` accept a text cursor or a space-bar toggle, though, because those are behaviours the
  * browser's own form controls implement in C++, not CSS or JavaScript this package could add. So:
  *
- * - `text-input` commits as a real `<textarea>`. A `<textarea>` rather than an `<input>` because
- *   `multiline` is a prop set *after* creation (an Angular host binding, run on the first change
- *   detection pass, not known at `createElement`), and a `<textarea>` can stand in for a
- *   single-line field by intercepting `Enter` (see `browser-engine.ts`) in a way an `<input>`
- *   cannot stand in for a multi-line one. `secureTextEntry` is approximated with the
- *   non-standard `-webkit-text-security` (see `props.ts`); Firefox has no equivalent and shows
- *   the text in the clear, which is the one place this package's accessibility parity is
- *   actually worse than a wrong guess would be quieter about.
+ * - `text-input` commits as a real `<input>`, and as a `<textarea>` while `multiline` is on. The
+ *   tag a field needs is not known here: `multiline` is a prop set *after* creation (an Angular
+ *   host binding, run on the first change detection pass), so `browser-engine.ts` swaps the
+ *   element when it arrives. Only an `<input>` centres its line in a taller box, as a device's
+ *   one-line field does, and only an `<input>` can be `type="password"` for `secureTextEntry`. A
+ *   multiline field masks with the non-standard `-webkit-text-security` instead (see `props.ts`).
  * - `switch` commits as a real `<input type="checkbox">`. Its accessible role still comes from
  *   `ViewBase`'s normal prop pipeline (`Switch.roleByDefault()` returns `'switch'`, which
  *   `props.ts`'s `ROLE_MAP` turns into `role="switch"`) - this file only has to make the element
@@ -62,7 +60,7 @@ export interface ElementSpec {
 export const SVG_NAMESPACE = 'http://www.w3.org/2000/svg';
 
 const SPECS: Record<string, ElementSpec> = {
-  'text-input': { tag: 'textarea', attrs: { rows: '1' } },
+  'text-input': { tag: 'input', attrs: { type: 'text' } },
   switch: { tag: 'input', attrs: { type: 'checkbox' } },
   'activity-indicator': { tag: 'activity-indicator', attrs: { role: 'progressbar' } },
   // The shapes `@ng-native/icons`' `svg-elements.ts` registers. Real SVG tag names, not the prefixed
@@ -112,4 +110,24 @@ export function createDomElement(document: Document, name: string): Element {
   el.setAttribute('data-rn', name);
   for (const [attr, value] of Object.entries(spec.attrs ?? {})) el.setAttribute(attr, value);
   return el;
+}
+
+/**
+ * A `<textarea>` for a multiline `text-input`, or an `<input>` for a one-line one, standing in for
+ * `old`: its attributes (inline style and scoping attributes among them) and its value. What the
+ * two tags do differently (`type`, `rows` and a textarea's masking) is left for the caller to
+ * write again.
+ */
+export function textFieldLike(
+  old: HTMLInputElement | HTMLTextAreaElement,
+  multiline: boolean,
+): HTMLInputElement | HTMLTextAreaElement {
+  const field = old.ownerDocument.createElement(multiline ? 'textarea' : 'input');
+  for (const { name, value } of old.attributes) {
+    if (name !== 'type' && name !== 'rows') field.setAttribute(name, value);
+  }
+  field.style.removeProperty('-webkit-text-security');
+  if (multiline) field.setAttribute('rows', '1');
+  field.value = old.value;
+  return field;
 }

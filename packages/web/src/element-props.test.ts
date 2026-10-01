@@ -260,12 +260,81 @@ describe('text-input', () => {
     );
   });
 
-  it('masks the text while secureTextEntry is on, and shows it again when it goes off', () => {
-    const { style, set } = scene('text-input');
+  it('is a one-line input, so the browser centres its text as a device does', () => {
+    const { el } = scene('text-input');
+    assert.equal(el.tagName, 'INPUT');
+    assert.equal((el as HTMLInputElement).type, 'text');
+  });
+
+  it('is a password field while secureTextEntry is on, and a text field again when it goes off', () => {
+    const { node, set } = scene('text-input');
     set('secureTextEntry', true);
-    assert.equal(style.getPropertyValue('-webkit-text-security'), 'disc');
+    assert.equal((node.el as HTMLInputElement).type, 'password');
     set('secureTextEntry', false);
-    assert.equal(style.getPropertyValue('-webkit-text-security'), '');
+    assert.equal((node.el as HTMLInputElement).type, 'text');
+  });
+
+  it('becomes a textarea when multiline turns on after creation, and an input when it turns off', () => {
+    const { engine, node, set } = scene('text-input');
+    const parent = document.createElement('div');
+    parent.append(node.el);
+    set('placeholder', 'Notes');
+    set('text', 'one');
+    set('multiline', true);
+    const area = node.el as HTMLTextAreaElement;
+    assert.equal(area.tagName, 'TEXTAREA');
+    assert.equal(area.parentElement, parent, 'in the place the input had');
+    assert.equal(area.getAttribute('data-rn'), 'text-input');
+    assert.equal(area.getAttribute('placeholder'), 'Notes');
+    assert.equal(area.value, 'one');
+
+    // Still the field the engine listens to: a keystroke reaches the app.
+    const changes: unknown[] = [];
+    engine.setEventListener(node, 'topChange', (event) => changes.push(event));
+    area.value = 'one two';
+    area.dispatchEvent(new (window as unknown as typeof globalThis).Event('input'));
+    assert.equal(changes.length, 1);
+
+    set('multiline', false);
+    assert.equal(node.el.nodeName, 'INPUT');
+    assert.equal((node.el as HTMLInputElement).value, 'one two');
+  });
+
+  it('keeps listening on the new element for what was opted into before multiline', () => {
+    const { engine, node, set } = scene('text-input');
+    document.body.append(node.el);
+    const keys: unknown[] = [];
+    engine.setEventListener(node, 'topKeyDown', (event) => keys.push(event));
+    set('multiline', true);
+    node.el.dispatchEvent(
+      new (window as unknown as typeof globalThis).KeyboardEvent('keydown', { key: 'a' }),
+    );
+    assert.equal(keys.length, 1);
+    (node.el as Element).remove();
+  });
+
+  it('masks a multiline field while secureTextEntry is on, as a textarea has no password type', () => {
+    const { set, node } = scene('text-input');
+    set('multiline', true);
+    set('secureTextEntry', true);
+    assert.equal((node.el as HTMLElement).style.getPropertyValue('-webkit-text-security'), 'disc');
+    set('secureTextEntry', false);
+    assert.equal((node.el as HTMLElement).style.getPropertyValue('-webkit-text-security'), '');
+  });
+
+  it('carries secureTextEntry and numberOfLines across the swap, whichever arrives first', () => {
+    const { set, node } = scene('text-input');
+    set('secureTextEntry', true);
+    set('numberOfLines', 4);
+    set('multiline', true);
+    const area = node.el as HTMLTextAreaElement;
+    assert.equal(area.style.getPropertyValue('-webkit-text-security'), 'disc');
+    assert.equal(area.getAttribute('rows'), '4');
+    set('multiline', false);
+    const input = node.el as HTMLInputElement;
+    assert.equal(input.type, 'password');
+    assert.equal(input.style.getPropertyValue('-webkit-text-security'), '');
+    assert.equal(input.hasAttribute('rows'), false);
   });
 
   it('gives each keyboardType the inputmode for that keyboard, and the default none', () => {

@@ -26,7 +26,8 @@ async function boot() {
   const app = componentRef.instance as FieldFormsApp;
 
   const view = document.defaultView as unknown as Window & typeof globalThis;
-  const field = (id: string) => document.getElementById(id)!.querySelector('textarea')!;
+  const field = (id: string) =>
+    document.getElementById(id)!.querySelector<HTMLInputElement>('[data-rn="text-input"]')!;
   const messagesOf = (errorId: string) =>
     [...document.getElementById(errorId)!.querySelectorAll('text')].map((n) => n.textContent);
   const type = async (id: string, text: string) => {

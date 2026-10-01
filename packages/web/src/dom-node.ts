@@ -125,6 +125,13 @@ export function makeAnchorNode(comment: Comment): BrowserNode {
   return node;
 }
 
+/** Puts `el` in place of the element `node` wraps, so `nodeOf` finds the node from either. */
+export function rebindElement(node: BrowserNode, el: Element): void {
+  registry.delete(node.el);
+  (node as { el: Element | Text | Comment }).el = el;
+  registry.set(el, node);
+}
+
 /** The `BrowserNode` a real DOM node was created with, or `null` for one this package did not make. */
 export function nodeOf(el: Element | Text | Comment | null): BrowserNode | null {
   return el ? (registry.get(el) ?? null) : null;

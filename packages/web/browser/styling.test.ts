@@ -34,14 +34,14 @@ describe('resolved styles', () => {
     expect(parseFloat(style.borderTopWidth)).toBeLessThanOrEqual(2);
   });
 
-  it("draws a text field in the page's text styles, with none of a textarea's chrome", async () => {
+  it("draws a text field in the page's text styles, with none of a browser field's chrome", async () => {
     await page.viewport(1200, 800);
     const { root } = boot(TextFieldApp);
     await settle();
 
-    const field = getComputedStyle(root.querySelector('#plain textarea')!);
+    const field = getComputedStyle(root.querySelector('#plain [data-rn="text-input"]')!);
     const body = getComputedStyle(document.body);
-    // Not the monospace 13.33px Chromium gives a bare `<textarea>`.
+    // Not the 13.33px Chromium gives a bare `<input>`, or the monospace a `<textarea>` gets.
     expect(field.fontFamily).toBe(body.fontFamily);
     expect(field.fontSize).toBe('14px');
     expect(field.paddingTop).toBe('0px');
@@ -57,7 +57,7 @@ describe('resolved styles', () => {
     const { root } = boot(TextFieldApp);
     await settle();
 
-    const field = root.querySelector('#plain textarea')!;
+    const field = root.querySelector('#plain [data-rn="text-input"]')!;
     const text = getComputedStyle(field).color;
     const placeholder = getComputedStyle(field, '::placeholder').color;
     expect(placeholder).not.toBe(text);
@@ -71,12 +71,11 @@ describe('resolved styles', () => {
     const host = byId('plain');
     const resting = getComputedStyle(host).borderTopColor;
 
-    // The real field inside, focused for real. It is a `<textarea>` rather than an `<input>`
-    // even here - `elements.ts` explains why every `text-input` commits as one - and a text
-    // field always matches `:focus-visible` in Chromium regardless of how focus arrived, which
-    // is the browser heuristic `@ng-native/tailwind/web.css` points the variant at rather
-    // than reimplementing. Native cannot make that distinction at all.
-    (root.querySelector('#plain textarea') as HTMLTextAreaElement).focus();
+    // The real field inside, focused for real. A text field always matches `:focus-visible` in
+    // Chromium regardless of how focus arrived, which is the browser heuristic
+    // `@ng-native/tailwind/web.css` points the variant at rather than reimplementing. Native
+    // cannot make that distinction at all.
+    (root.querySelector('#plain [data-rn="text-input"]') as HTMLInputElement).focus();
     await settle();
 
     const focused = await waitFor(() => {

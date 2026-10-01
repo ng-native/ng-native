@@ -195,8 +195,8 @@ when your own build already imports `reset.css` through a bundler (into a Tailwi
 because an unlayered rule beats a layered one regardless of specificity, and a bare injected copy
 would then win against the very utility class meant to override it. Every node from this framework
 carries a `[data-rn]` attribute, which is what `reset.css` targets rather than the tag name - two
-elements (`<text-input>`, `<switch>`) commit as a real `<textarea>` and `<input>`, so matching by
-tag would miss them. `<text>` is deliberately excluded from the flex reset, since React Native's
+elements (`<text-input>`, `<switch>`) commit as a real `<input>` (a `<textarea>` for a multiline
+`<text-input>`), so matching by tag would miss them. `<text>` is deliberately excluded from the flex reset, since React Native's
 `Text` lays its content out as wrapping text rather than as a flex container; a `<text>` that needs
 an explicit size on the web needs `class="block"` from its caller, the one place a native layout
 and its web rendering can visibly diverge.
