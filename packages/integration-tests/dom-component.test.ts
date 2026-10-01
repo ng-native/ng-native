@@ -29,7 +29,7 @@ describe('a DOM component in the app', () => {
   let fixture: Fixture;
   let injected: { tag: number; script: string }[];
   let errors: unknown[];
-  const view = (): FakeFabricNode => fabric.committed[0]!;
+  const view = (): FakeFabricNode => fabric.committed[0]!.children[0]!;
   const settle = async () => {
     app.applicationRef.tick();
     await new Promise((resolve) => setTimeout(resolve, 0));

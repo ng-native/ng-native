@@ -88,8 +88,10 @@ export class Cases {}
 parent's styles, not the component's own, so a class only works on the host when it comes from
 there, as Tailwind's utilities do.
 
-The root component is the exception: it is mounted into the screen's root view rather than into
-a host of its own, so its elements fill the screen with `flex: 1` alone.
+The root component's host is a view too, but it fills the screen by default, as the web's mount
+point does, so its elements fill the screen with `flex: 1` alone. Its `:host` styles it like any
+other host: a background or padding there reaches that view, and a `height` there replaces the
+default.
 
 ## Safe area
 

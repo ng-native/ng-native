@@ -112,10 +112,10 @@ describe('errors thrown during event dispatch, in an app', () => {
   };
 
   it('reach the ErrorHandler from a listener outside Angular', async () => {
-    // The root component's host is the engine's root, which is never committed and so has no
-    // Fabric node to aim at; the Fabric handler is this call, so dispatch to it directly.
-    const { handler, engine } = await start();
-    assert.doesNotThrow(() => engine.dispatchEvent(engine.root, 'topWillAppear', {}));
+    // Sent to the root component's host as Fabric sends a native event, outside every Angular
+    // listener wrapper.
+    const { handler, fabric } = await start();
+    assert.doesNotThrow(() => fabric.emit(fabric.committed[0]!, 'topWillAppear', {}));
     assert.deepEqual(handler.errors.map(message), ['willAppear failed']);
   });
 

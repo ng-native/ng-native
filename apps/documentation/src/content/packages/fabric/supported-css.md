@@ -181,7 +181,8 @@ container stacking its children in a column, which is what a block does with its
 is read as `flex`: that is what lets `.d-none` followed by `.d-md-block` show an element again at a
 breakpoint. `inline-flex` is read as `flex` for the same reason. `inline` and `inline-block` are
 read as `flex` too, because every native view sits in a flex container, and a browser lays out a
-flex container's inline children as blocks. `contents` is Yoga's own: the element draws no box of
+flex container's inline children as blocks. `flow-root` is read as `flex` as well: it is a block
+that contains its floats, which a flex item already does. `contents` is Yoga's own: the element draws no box of
 its own (no background, border or padding) and its children are laid out as if they were its
 parent's. `grid` and the table values are dropped, because a column of flex children cannot pretend
 to lay them out in a grid.
@@ -214,8 +215,12 @@ per-side style that disagrees with the others is dropped for the same reason. `b
 the other per-side shorthands set that side's width and color, and take `solid` (native's
 default) or `none` as their style. A border shorthand with no color, such as `border: 2px solid`,
 is drawn in the element's text color, its own or inherited, as on the web, and so is a border color
-of `currentColor`, which is what Tailwind's `border-current` writes. Both follow the text color
-when it changes. A `border-width` with no color anywhere is drawn black, native's default, and the
+of `currentColor`, which is what Tailwind's `border-current` writes. An outline with no color, an
+`outline-color` and a `background-color` of `currentColor`, a `var()` that falls back to
+`currentColor` and a custom property that holds it take the text color the same way, where they
+are used. All of them follow the text color when it changes. A border shorthand's width may be a
+`calc()` of one token, as in Bootstrap's `border-top: calc(var(--bs-border-width) * 2) solid`. A
+`border-width` with no color anywhere is drawn black, native's default, and the
 web host draws it black too.
 
 A custom property can hold a font stack (read as its first family, as `font-family` is), a

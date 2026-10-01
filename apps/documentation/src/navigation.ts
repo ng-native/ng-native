@@ -185,6 +185,7 @@ export const PACKAGES: NavSection = {
         { path: 'packages/expo/brightness', title: 'Brightness' },
         { path: 'packages/expo/network', title: 'Network' },
         { path: 'packages/expo/orientation', title: 'Device orientation' },
+        { path: 'packages/expo/foldable', title: 'Foldables' },
         { path: 'packages/expo/locale', title: 'Locale' },
         { path: 'packages/expo/sensors', title: 'Sensors' },
         { path: 'packages/expo/keep-awake', title: 'Keep awake' },

@@ -658,22 +658,21 @@ function line(value, prefix, out, context, { style: withStyle = true } = {}) {
   const width = length(value.width, context);
   if (width !== undefined) set('Width', width);
   if (withStyle && style !== undefined) out[`${prefix}Style`] = drawnLine(style, context);
-  if (drawnColor(value.color, width)) {
-    set(
-      'Color',
-      prefix === 'outline' ? color(value.color, context) : borderColour(value.color, context),
-    );
-  }
+  if (drawnColor(value.color, width)) set('Color', paintColour(value.color, context));
   return style;
 }
 
 /**
- * A border's colour. `currentColor`, which a border left without a colour also is, is the
- * element's text colour, own or inherited, so it is a marker the engine fills in on device.
+ * A border, outline or background colour. `currentColor`, which a line left without a colour also
+ * is, is the element's text colour, own or inherited, so it is a marker the engine fills in on
+ * device.
  */
-function borderColour(value, context) {
+function paintColour(value, context) {
   return value?.type === 'currentcolor' ? CURRENT_COLOUR : color(value, context);
 }
+
+/** The colour properties `currentColor` is filled in for on device. */
+const PAINT_COLOUR = /^(border-|outline-color$|background-color$)/;
 
 /** The styles that draw no line at all. */
 const NO_LINE = new Set(['none', 'hidden']);
@@ -1430,7 +1429,7 @@ function translate(property, value, out, context = property) {
     case 'border-color':
       for (const [side, suffix] of Object.entries(SIDES)) {
         if (value[side] !== undefined) {
-          out[`border${suffix}Color`] = borderColour(value[side], property);
+          out[`border${suffix}Color`] = paintColour(value[side], property);
         }
       }
       return;
@@ -1499,8 +1498,9 @@ function translate(property, value, out, context = property) {
       // A native view stacks its children in a column, which is what a block does with its own.
       // Reading block as flex is what lets `.d-none` then `.d-md-block` show an element again.
       // Every native view is a flex item, and a browser computes an inline or inline-block flex
-      // item as block, so those are read the same way.
-      if (['block', 'inline', 'inline-block'].includes(displayName(value, word))) {
+      // item as block, so those are read the same way. A flow-root is a block that contains its
+      // floats, which a flex item already does.
+      if (['block', 'inline', 'inline-block', 'flow-root'].includes(displayName(value, word))) {
         out.display = 'flex';
         return;
       }
@@ -1550,7 +1550,7 @@ function translate(property, value, out, context = property) {
         }
       }
       const last = layers[layers.length - 1];
-      if (last?.color !== undefined) out.backgroundColor = color(last.color, property);
+      if (last?.color !== undefined) out.backgroundColor = paintColour(last.color, property);
       return;
     }
     case 'border':
@@ -1675,8 +1675,8 @@ function translate(property, value, out, context = property) {
     case 'border-inline-color': {
       // One CSS property, two edges, and RN has a single prop for the pair. Edges that disagree
       // cannot be honoured, and picking one silently is the failure this compiler exists to stop.
-      const start = borderColour(value.start, property);
-      const end = borderColour(value.end, property);
+      const start = paintColour(value.start, property);
+      const end = paintColour(value.end, property);
       // The inline edges are two props in Fabric, `borderStartColor` and `borderEndColor`, and
       // there is no `borderInlineColor` for the pair. The block edges do have a pair prop.
       if (property === 'border-inline-color') {
@@ -1782,8 +1782,8 @@ function translate(property, value, out, context = property) {
     return;
   }
   if (COLOR.has(property)) {
-    out[rnName(property)] = property.startsWith('border-')
-      ? borderColour(value, property)
+    out[rnName(property)] = PAINT_COLOUR.test(property)
+      ? paintColour(value, property)
       : color(value, property);
     return;
   }

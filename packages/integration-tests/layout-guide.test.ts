@@ -85,7 +85,7 @@ describe("the Layout and views page's component host example, compiled and laid 
 
   it('commits the host as a plain view between the parent and the scroll view', async () => {
     const { fabric } = await render(await compile(source));
-    const screen = fabric.committed[0]!;
+    const screen = fabric.committed[0]!.children[0]!;
     const host = screen.children[1]!;
     assert.equal(host.viewName, 'View');
     assert.equal(host.props['flex'], 1);
@@ -127,6 +127,6 @@ describe("the Layout and views page's component host example, compiled and laid 
     const sizes = layOutTree(fabric.committed, SCREEN, (node) =>
       node.viewName === 'Paragraph' ? { height: LINE } : undefined,
     );
-    assert.equal(sizes.get(fabric.committed[0]!)!.height, SCREEN.height);
+    assert.equal(sizes.get(fabric.committed[0]!.children[0]!)!.height, SCREEN.height);
   });
 });

@@ -1,0 +1,16 @@
+{
+  "expo": {
+    "name": "Foldbook",
+    "slug": "foldbook-example",
+    "scheme": "foldbook",
+    "newArchEnabled": true,
+    "userInterfaceStyle": "light",
+    "ios": {
+      "bundleIdentifier": "dev.angularnative.foldbook"
+    },
+    "android": {
+      "package": "dev.angularnative.foldbook"
+    },
+    "plugins": ["@ng-native/metro"]
+  }
+}

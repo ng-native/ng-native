@@ -204,7 +204,7 @@ describe('a native stack driven by the router', () => {
   describe('a push from a presented screen', () => {
     /** The app stack's own screens, bottom first: what each says, and how it is presented. */
     const appStack = () =>
-      fabric.committed[0]!.children.map((screen) => [
+      fabric.committed[0]!.children[0]!.children.map((screen) => [
         flatten(screen.children)
           .map((node) => node.props['text'])
           .filter((text) => typeof text === 'string')
@@ -245,7 +245,7 @@ describe('a native stack driven by the router', () => {
       await nav.present('/modal', { as: 'formSheet' });
       await nav.push('/user/1', { presentation: { stackAnimation: 'fade' } });
       await idle();
-      const top = fabric.committed[0]!.children.at(-1)!;
+      const top = fabric.committed[0]!.children[0]!.children.at(-1)!;
       assert.equal(top.props['stackPresentation'], 'formSheet');
       assert.equal(top.props['stackAnimation'], 'fade');
     });
@@ -258,7 +258,7 @@ describe('a native stack driven by the router', () => {
         ['home', 'push'],
         ['start step', 'modal'],
       ]);
-      const inner = flatten(fabric.committed[0]!.children[1]!.children).filter(
+      const inner = flatten(fabric.committed[0]!.children[0]!.children[1]!.children).filter(
         (node) => node.viewName === 'RNSScreen',
       );
       assert.deepEqual(

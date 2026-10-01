@@ -40,6 +40,7 @@ import { Crypto } from '@ng-native/expo/crypto';
 import { database } from '@ng-native/expo/database';
 import { DocumentPicker } from '@ng-native/expo/document-picker';
 import { FileSystem } from '@ng-native/expo/file-system';
+import { Foldable } from '@ng-native/expo/foldable';
 import { Fonts, loadFonts } from '@ng-native/expo/fonts';
 import { Haptics } from '@ng-native/expo/haptics';
 import { ImageEditor } from '@ng-native/expo/image-editor';
@@ -124,6 +125,7 @@ const SERVICES: readonly [string, () => unknown, string, (readonly Platform[])?]
   ['database', () => database('app.db').ready(), 'expo-sqlite', ['ios', 'android', 'web']],
   ['DocumentPicker', factoryOf(DocumentPicker.SOURCE), 'expo-document-picker'],
   ['FileSystem', factoryOf(FileSystem.SOURCE), 'expo-file-system'],
+  ['Foldable', factoryOf(Foldable.SOURCE), 'expo-foldables'],
   ['Fonts', factoryOf(Fonts), 'expo-font'],
   ['Haptics', factoryOf(Haptics.SOURCE), 'expo-haptics'],
   ['ImageEditor', factoryOf(ImageEditor.SOURCE), 'expo-image-manipulator'],

@@ -1,5 +1,5 @@
 /**
- * Typed components for the `@expo/ui` SwiftUI views an app reaches for most.
+ * Typed components for the `@expo/ui` views an app reaches for most, named and shaped as SwiftUI's.
  *
  * `EXPO_UI_VIEWS` makes every view reachable by name, and a name is all the renderer needs. What a
  * name cannot give is a type: under strict templates an unknown element is an error, and so is
@@ -7,17 +7,21 @@
  * props' types and whose host bindings pass each one straight to the node, so nothing changes at
  * runtime. An unset input stays `undefined` and never reaches native.
  *
- * Events are declared as outputs so that `$event` is typed, and are never emitted. Angular binds a
- * template's `(dateChange)` to the output *and* to the element, and it is the element's own event
- * that arrives, once. Emitting from a host listener as well would deliver it twice; a host listener
- * of the same name as the output listens to the output itself and recurses. So subscribe in a
- * template, not to the output in code.
+ * Events are declared as outputs so that `$event` is typed. SwiftUI's events are never emitted:
+ * Angular binds a template's `(dateChange)` to the output *and* to the element, and it is the
+ * element's own event that arrives, once. Emitting from a host listener as well would deliver it
+ * twice; a host listener of the same name as the output listens to the output itself and recurses.
+ * So subscribe in a template, not to the output in code.
+ *
+ * Where Compose names a prop or an event differently, a component sends Android its own names and
+ * emits the output from a host listener for Compose's event, which SwiftUI never sends. Only a few
+ * do: the toggle, slider, button, progress, stacks and slot, and the date picker.
  *
  * Only the views and props an app has needed are here; the rest stay names, as before. Add a view
  * when a template wants it typed, from `@expo/ui`'s own props for it.
  *
  * Still register the names with `registerExpoUiViews`: the component types the element, the
- * registration is what makes it commit as the SwiftUI view.
+ * registration is what makes it commit as the SwiftUI or Compose view.
  */
 import {
   Component,
@@ -30,6 +34,7 @@ import {
   input,
   model,
   output,
+  signal,
 } from '@angular/core';
 import type { NativeState } from './native-state.ts';
 import {
@@ -98,7 +103,10 @@ export class UiMenu {
   readonly modifiers = input<readonly UiModifier[]>();
 }
 
-/** A SwiftUI `Button`, as a menu item or on its own. */
+/**
+ * A SwiftUI `Button`, as a menu item or on its own, or Compose's on Android, which draws `label` as
+ * text inside it. `systemImage` and `role` are SwiftUI's alone.
+ */
 @Component({
   selector: 'ui-button',
   imports: [forwardRef(() => UiText)],
@@ -124,7 +132,7 @@ export class UiButton {
   readonly buttonPress = output<NativeSyntheticEvent<Record<string, never>>>();
 }
 
-/** A SwiftUI `Divider`: a separator between groups of menu items. */
+/** A SwiftUI `Divider`, or Compose's `HorizontalDivider`: a separator between groups of items. */
 @Component({
   selector: 'ui-divider',
   template: '',
@@ -185,8 +193,8 @@ export class UiSwipeActions {
 export type UiSliderChangeEvent = NativeSyntheticEvent<{ readonly value: number }>;
 
 /**
- * A SwiftUI `Slider`, iOS only. `valueChanged` reports each new value as the thumb moves; note the
- * d, which the native event has and `@expo/ui`'s React prop does not.
+ * A SwiftUI `Slider`, or Compose's on Android. `valueChanged` reports each new value as the thumb
+ * moves; note the d, which SwiftUI's event has and `@expo/ui`'s React prop does not.
  */
 @Component({
   selector: 'ui-slider',
@@ -211,17 +219,30 @@ export class UiSlider {
   readonly valueChanged = output<UiSliderChangeEvent>();
 
   protected readonly android = nativePlatform() === 'android';
-  protected readonly stepSize = computed(() => {
-    const steps = this.steps();
-    return steps ? ((this.max() ?? 1) - (this.min() ?? 0)) / steps : undefined;
+  /** A whole number of steps, which is all Compose can draw. */
+  private readonly wholeSteps = computed(() => {
+    const steps = Math.round(this.steps() ?? 0);
+    return steps > 0 ? steps : undefined;
   });
+  /** SwiftUI takes a step size, and draws 0 to 1 unless it has both ends. */
+  protected readonly stepSize = computed(() => {
+    const steps = this.wholeSteps();
+    const min = this.min();
+    const max = this.max();
+    return steps && (min !== undefined && max !== undefined ? max - min : 1) / steps;
+  });
+  /** Compose takes the number of points between the ends. */
   protected readonly stepsBetween = computed(() => {
-    const steps = this.steps();
-    return steps ? steps - 1 : undefined;
+    const steps = this.wholeSteps();
+    return steps && steps - 1;
   });
 }
 
-/** A SwiftUI `VStack`. */
+/**
+ * A SwiftUI `VStack`, or Compose's `Column` on Android, centred, as SwiftUI's is, unless `alignment`
+ * says otherwise. Without `spacing`, SwiftUI puts its own default spacing between children and Compose
+ * puts none.
+ */
 @Component({
   selector: 'ui-vstack',
   template: '<ng-content />',
@@ -241,7 +262,7 @@ export class UiVStack {
   protected readonly android = nativePlatform() === 'android';
   protected readonly spacedBy = spacedBy;
   protected composeAlignment(alignment: 'leading' | 'center' | 'trailing' | undefined) {
-    return alignment === 'leading' ? 'start' : alignment === 'trailing' ? 'end' : alignment;
+    return alignment === 'leading' ? 'start' : alignment === 'trailing' ? 'end' : 'center';
   }
 }
 
@@ -294,6 +315,19 @@ function listen(event: string, handle: (payload: Record<string, unknown>) => voi
     handle((raw as NativeSyntheticEvent<Record<string, unknown>>)?.nativeEvent ?? {}),
   );
   inject(DestroyRef).onDestroy(stop);
+}
+
+/**
+ * A Compose event as the SwiftUI one it stands in for: its payload renamed, and stopping it stops the
+ * event it came from.
+ */
+function withNativeEvent<T>(event: NativeSyntheticEvent, nativeEvent: T): NativeSyntheticEvent<T> {
+  return {
+    nativeEvent,
+    target: event.target,
+    stopPropagation: () => event.stopPropagation(),
+    isPropagationStopped: () => event.isPropagationStopped(),
+  };
 }
 
 /** The caller's modifiers, with SwiftUI's `disabled` added while the field is. */
@@ -462,13 +496,16 @@ export class UiPicker {
 /** What `ui-toggle` sends when it is switched: whether it is now on. */
 export type UiToggleChangeEvent = NativeSyntheticEvent<{ readonly isOn: boolean }>;
 
-/** A SwiftUI `Toggle`. `isOnChange` reports each flip. */
+/**
+ * A SwiftUI `Toggle`, or Compose's `Switch` on Android. `isOnChange` reports each flip. Bound to
+ * `isOn`, it shows what `isOn` says; without it, it switches itself. `label` is SwiftUI's alone.
+ */
 @Component({
   selector: 'ui-toggle',
   template: '<ng-content />',
   host: {
     '[isOn]': 'android ? undefined : isOn()',
-    '[value]': 'android ? isOn() : undefined',
+    '[value]': 'android ? (isOn() ?? switchedOn()) : undefined',
     '[label]': 'label()',
     '[modifiers]': 'modifiers()',
     '(checkedChange)': 'android && checked($event)',
@@ -481,11 +518,11 @@ export class UiToggle {
   readonly isOnChange = output<UiToggleChangeEvent>();
 
   protected readonly android = nativePlatform() === 'android';
+  /** What Compose's switch shows without `isOn`: SwiftUI's keeps this itself, Compose's does not. */
+  protected readonly switchedOn = signal(false);
   protected checked(event: NativeSyntheticEvent<{ readonly value: boolean }>): void {
-    this.isOnChange.emit({
-      ...event,
-      nativeEvent: { isOn: event.nativeEvent.value },
-    } as UiToggleChangeEvent);
+    this.switchedOn.set(event.nativeEvent.value);
+    this.isOnChange.emit(withNativeEvent(event, { isOn: event.nativeEvent.value }));
   }
 }
 
@@ -586,7 +623,10 @@ export class UiGauge {
   readonly modifiers = input<readonly UiModifier[]>();
 }
 
-/** A SwiftUI `ProgressView`: a bar filled to `value`, from 0 to 1, or a spinner without one. */
+/**
+ * A SwiftUI `ProgressView`: a bar filled to `value`, from 0 to 1, or a spinner without one. On
+ * Android, Compose's `LinearProgressIndicator`, a moving bar rather than a spinner without a value.
+ */
 @Component({
   selector: 'ui-progress',
   template: '',
@@ -602,7 +642,11 @@ export class UiProgress {
   readonly modifiers = input<readonly UiModifier[]>();
 }
 
-/** A SwiftUI `HStack`. */
+/**
+ * A SwiftUI `HStack`, or Compose's `Row` on Android, centred, as SwiftUI's is, unless `alignment`
+ * says otherwise. Compose has no `firstTextBaseline`, and centres instead. Without `spacing`, SwiftUI
+ * puts its own default spacing between children and Compose puts none.
+ */
 @Component({
   selector: 'ui-hstack',
   template: '<ng-content />',
@@ -624,7 +668,7 @@ export class UiHStack {
   protected composeAlignment(
     alignment: 'top' | 'center' | 'bottom' | 'firstTextBaseline' | undefined,
   ) {
-    return alignment === 'firstTextBaseline' ? undefined : alignment;
+    return alignment === 'top' || alignment === 'bottom' ? alignment : 'center';
   }
 }
 

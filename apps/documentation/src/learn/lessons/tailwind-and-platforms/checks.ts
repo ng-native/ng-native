@@ -13,13 +13,14 @@ const schemeIs = (scheme: Scheme) => [
 
 /**
  * Restyle a render as if it were on `platform`: swap the class `mount()` puts on the root, which
- * is all that `ios:` and `android:` match, so one run can compare the two. Inside a render pass,
- * so the change commits at its end as any other would.
+ * is all that `ios:` and `android:` match, so one run can compare the two. The root is the parent
+ * of the component's host. Inside a render pass, so the change commits at its end as any other
+ * would.
  */
 function asPlatform(result: RenderResult<unknown>, platform: 'ios' | 'android'): void {
-  const root = result.componentRef.location.nativeElement as unknown;
   const factory = result.componentRef.injector.get(RendererFactory2);
   const renderer = factory.createRenderer(null, null);
+  const root = renderer.parentNode(result.componentRef.location.nativeElement) as unknown;
   factory.begin?.();
   renderer.removeClass(root, 'platform-ios');
   renderer.removeClass(root, 'platform-android');

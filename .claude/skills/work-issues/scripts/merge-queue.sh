@@ -79,6 +79,19 @@ while (( ${#queue} )); do
     ms=$(jq -r .mergeable_state <<<$pr)
     if [[ $ms == dirty ]]; then echo "#$n conflicts with main, skipping"; queue=(${queue:#$n}); continue; fi
     [[ $ms == clean || $ms == unstable || $ms == has_hooks ]] || continue
+    # Two lockfile changes can merge cleanly as text into a lockfile pnpm rejects (#279 after #277), so a
+    # PR that changes pnpm-lock.yaml waits until it's updated with any lockfile change main has since had.
+    # A failed request, or a list GitHub may have cut short (3,000 files for a PR, 300 for a compare),
+    # keeps the PR waiting.
+    (( $(jq .changed_files <<<$pr) < 3000 )) || { note $n "changes too many files to check its lockfile"; continue; }
+    files=$(gh api --paginate "$R/pulls/$n/files?per_page=100" --jq '.[].filename' 2>/dev/null) || continue
+    if grep -qx pnpm-lock.yaml <<<$files; then
+      base=$(gh api "$R/compare/main...$sha" --jq .merge_base_commit.sha 2>/dev/null) || continue
+      moved=$(gh api "$R/compare/$base...main" --jq 'if (.files|length) >= 300 then "pnpm-lock.yaml" else .files[].filename end' 2>/dev/null) || continue
+      if grep -qx pnpm-lock.yaml <<<$moved; then
+        note $n "changes the lockfile and main's lockfile changed since its base; update it from main"; continue
+      fi
+    fi
     # A merge while a release runs moves main under it and breaks its push.
     [[ -z $(gh api "$R/actions/workflows/release.yml/runs?per_page=3" \
       --jq '.workflow_runs[]|select(.status!="completed")|.id' 2>/dev/null) ]] || continue

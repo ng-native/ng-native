@@ -273,6 +273,11 @@ export interface DeferredDeclaration {
     readonly offset?: number;
     readonly floor?: number;
     /**
+     * The reference is multiplied by a length, so it is a number: `calc(var(--n) * 1px)`. Without
+     * this it is a length, and a number token is no such thing, as CSS types a calc().
+     */
+    readonly number?: true;
+    /**
      * A fraction to multiply the resolved colour's alpha by. What
      * `color-mix(in oklab, var(--x) 90%, transparent)` becomes, which is Tailwind's `/90`.
      */
@@ -311,6 +316,8 @@ export interface LineTemplate {
     readonly fallback?: TokenValue;
     /** `var(--x,)`: nothing at all when the token is unset. */
     readonly empty?: true;
+    /** `calc(var(--w) * 2)`: the arithmetic that makes the token the width, and only that. */
+    readonly adjust?: DeferredDeclaration['adjust'];
   }[];
   readonly roles: readonly ('width' | 'style' | 'color')[];
   readonly widths: readonly string[];
@@ -1212,7 +1219,9 @@ export class StyleResolver {
    *
    * It still mints a context, because a rule further down may match on one of *its* classes.
    * When there is nothing to inherit either, one shared cache object serves every such node, so
-   * an application that writes no CSS allocates nothing per node.
+   * an application that writes no CSS allocates nothing per node. Not when there are tokens to
+   * carry: the shared object holds none, and the surface root answering with it dropped every
+   * token the device had seeded.
    */
   private unstyled(
     node: StyleTarget,
@@ -1221,7 +1230,13 @@ export class StyleResolver {
     parentContext: object,
     parentInherited: Record<string, unknown>,
   ): StyleCache {
-    if (parentInherited === EMPTY && parentContext === ROOT_CONTEXT && !node.styleDirty) {
+    const tokens = parent ? parent.tokens : this.tokensOnRoot;
+    if (
+      parentInherited === EMPTY &&
+      parentContext === ROOT_CONTEXT &&
+      tokens === NO_TOKENS &&
+      !node.styleDirty
+    ) {
       if (this.emptyCache.epoch !== epoch || this.emptyCache.generation !== this.generation) {
         this.emptyCache = emptyCacheFor(epoch, this.generation);
       }
@@ -1236,7 +1251,7 @@ export class StyleResolver {
       parentContext,
       style: parentInherited,
       inherited: parentInherited,
-      tokens: parent ? parent.tokens : this.tokensOnRoot,
+      tokens,
     };
     node.styleCache = passthrough;
     node.styleDirty = false;
@@ -1511,8 +1526,9 @@ export class StyleResolver {
     }
     const width = values[line.widths[0]!] as { __defer?: DeferredDeclaration['compute'] };
     if (!width?.__defer) return values;
+    // No less than zero, as CSS clamps a line's width: `calc(var(--w) - 2px)` with an em token.
     const points = this.computed({ ...declaration, compute: width.__defer }, own, parentInherited);
-    for (const prop of line.widths) values[prop] = points;
+    for (const prop of line.widths) values[prop] = Math.max(points as number, 0);
     return values;
   }
 
@@ -1560,7 +1576,11 @@ export class StyleResolver {
     if (Array.isArray(value)) return this.filledList(value, fill, tokens);
     const marked = settledMarker(value, tokens);
     // `currentcolor` is the colour in scope, which only the node knows: Tailwind's ring default.
-    if (marked === 'currentcolor') return own['color'] ?? parentInherited['color'] ?? 'black';
+    // On `color` itself that is the inherited colour, as CSS reads it.
+    if (marked === 'currentcolor') {
+      const ownColour = declaration.props.includes('color') ? undefined : own['color'];
+      return ownColour ?? parentInherited['color'] ?? 'black';
+    }
     if (marked !== NOT_A_MARKER) return marked ?? UNSETTLED;
     const pending = (value as { __defer?: DeferredDeclaration['compute'] }).__defer;
     if (pending) return this.computed({ ...declaration, compute: pending }, own, parentInherited);
@@ -2096,16 +2116,25 @@ function referenced(
   // property unset rather than trying the next, or the fallback.
   const names = [declaration.reference!, ...(declaration.alternatives ?? [])];
   const token = firstSet(names, tokens);
-  let value = token ? formOf(token, declaration.kind!) : fallbackOf(declaration, tokens);
+  let value = token ? tokenForm(token, declaration.kind!) : fallbackOf(declaration, tokens);
   // `calc(var(--n) * 1px)`: the arithmetic gives a unitless token its unit, which is the usual
-  // way to turn a count into a length. So a length with arithmetic reads the bare number too.
-  if (value === undefined && declaration.adjust && declaration.kind === 'length') {
-    value = token?.number;
+  // way to turn a count into a length. So it reads the bare number, and a length is no such thing.
+  if (token && declaration.adjust?.number && declaration.kind === 'length') {
+    value = token.number;
   }
   const base = CHANNEL_KINDS.has(declaration.kind!)
     ? fromChannels(value, declaration.alpha, tokens, declaration.space)
     : value;
   return declaration.adjust ? adjusted(base, declaration.adjust) : base;
+}
+
+/**
+ * A set token's value in the form wanted. A token of `currentColor` is the colour in scope where
+ * it is used, not where it is set, so it is the marker the node fills in.
+ */
+function tokenForm(token: TokenValue, kind: TokenKind): unknown {
+  const value = formOf(token, kind);
+  return value === undefined && kind === 'color' && isCurrentColour(token) ? CURRENT_COLOUR : value;
 }
 
 /** The fallback written, or one made of other tokens, worked out from the tokens where it is used. */
@@ -2163,7 +2192,9 @@ function lineValues(
     const token = lineToken(reference, tokens);
     if (token === undefined) return undefined;
     if (token === NOTHING) continue;
-    const found = lineRole(token, open);
+    const found = reference.adjust
+      ? computedWidth(token, open, reference.adjust)
+      : lineRole(token, open);
     if (!found) return undefined;
     open.delete(found.role);
     fillRole(line, values, found.role, found.value);
@@ -2172,6 +2203,13 @@ function lineValues(
   for (const role of open) fillRole(line, values, role, LINE_INITIAL[role]);
   return values;
 }
+
+/** A token of `currentColor`, in any case. */
+const isCurrentColour = (token: TokenValue | undefined): boolean =>
+  token?.keyword?.toLowerCase() === 'currentcolor';
+
+/** The marker the compiler writes for `currentColor`, which the node fills in. */
+const CURRENT_COLOUR = { __colour: { color: 'currentcolor' } };
 
 /** What a line's width, style and colour are when it leaves them out. */
 const LINE_INITIAL = {
@@ -2212,8 +2250,23 @@ function lineRole(
     return { role: 'width', value: width };
   }
   if (open.has('style') && word && LINE_STYLES.has(word)) return { role: 'style', value: word };
-  const color = formOf(token, 'color');
+  const color = isCurrentColour(token) ? 'currentcolor' : formOf(token, 'color');
   return open.has('color') && color !== undefined ? { role: 'color', value: color } : undefined;
+}
+
+/** A `calc()` of a token, which is a width, and no less than zero, as CSS clamps one. */
+function computedWidth(
+  token: TokenValue,
+  open: ReadonlySet<LineTemplate['roles'][number]>,
+  adjust: NonNullable<DeferredDeclaration['adjust']>,
+): { role: 'width'; value: unknown } | undefined {
+  // A bare number only when the calc() gives it its unit: `calc(var(--n) * 1px)`.
+  const length = adjust.number ? token.number : token.length;
+  if (!open.has('width') || (typeof length !== 'number' && !isDeferredLength(length))) {
+    return undefined;
+  }
+  const value = adjusted(length, adjust);
+  return { role: 'width', value: typeof value === 'number' ? Math.max(value, 0) : value };
 }
 
 const isDeferredLength = (value: unknown): boolean =>
@@ -2566,7 +2619,9 @@ function resolveLength(
   marker: LengthMarker,
   tokens: Readonly<Record<string, TokenValue>>,
 ): number | undefined {
-  const value = substitute(marker, tokens, (token) => formOf(token, 'length'));
+  // A number when the arithmetic gives it its unit, as `referenced` reads one.
+  const form = marker.adjust?.number ? 'number' : 'length';
+  const value = substitute(marker, tokens, (token) => formOf(token, form));
   if (typeof value !== 'number') return undefined;
   return marker.adjust ? (adjusted(value, marker.adjust) as number) : value;
 }

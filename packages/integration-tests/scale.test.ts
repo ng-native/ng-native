@@ -123,8 +123,9 @@ describe('engine at scale', () => {
 
     const stillCommitted = walk(app.engine.root).filter((node) => node.committed !== null);
     const names = stillCommitted.map((node) => node.name).sort();
-    // Only the surviving static subtree holds a Fabric handle. The engine root is never
-    // committed itself: commit() walks its children straight into the root child set.
-    assert.deepEqual(names, ['#text', 'text', 'view', 'view']);
+    // Only the surviving static subtree, and the root component's host above it, hold a Fabric
+    // handle. The engine root is never committed itself: commit() walks its children straight
+    // into the root child set.
+    assert.deepEqual(names, ['#text', 'text', 'view', 'view', 'x-scale']);
   });
 });

@@ -47,19 +47,23 @@ describe('keyboard-avoiding-view', () => {
     });
     await settle();
 
-    const avoider = fabric.committed[0]!;
+    const avoider = fabric.committed[0]!.children[0]!;
     assert.equal(avoider.props['paddingBottom'], undefined, 'no inset while hidden');
 
     emitKeyboard({ height: 300 });
     await settle();
 
-    const raised = fabric.committed[0]!;
+    const raised = fabric.committed[0]!.children[0]!;
     // 300 tall, minus the fixture's keyboardVerticalOffset of 20.
     assert.equal(raised.props['paddingBottom'], 280);
 
     emitKeyboard({ height: 0 });
     await settle();
-    assert.equal(fabric.committed[0]!.props['paddingBottom'], null, 'inset removed, not stale');
+    assert.equal(
+      fabric.committed[0]!.children[0]!.props['paddingBottom'],
+      null,
+      'inset removed, not stale',
+    );
 
     app.applicationRef.destroy();
   });
@@ -73,7 +77,7 @@ describe('keyboard-avoiding-view', () => {
     const native: NativeLayoutAnimation = {
       configureNext(config) {
         state.configured = config;
-        paddingWhenConfigured = fabric.committed[0]?.props['paddingBottom'];
+        paddingWhenConfigured = fabric.committed[0]?.children[0]?.props['paddingBottom'];
       },
     };
 
@@ -103,7 +107,11 @@ describe('keyboard-avoiding-view', () => {
     assert.equal(configured.duration, 250);
     assert.equal(configured.update.type, 'easeOut');
     assert.equal(paddingWhenConfigured, undefined, 'configured before the new inset committed');
-    assert.equal(fabric.committed[0]!.props['paddingBottom'], 280, 'and the inset still lands');
+    assert.equal(
+      fabric.committed[0]!.children[0]!.props['paddingBottom'],
+      280,
+      'and the inset still lands',
+    );
 
     app.applicationRef.destroy();
   });
@@ -174,7 +182,7 @@ describe('keyboard-avoiding-view', () => {
     await settle();
 
     assert.deepEqual(order, []);
-    assert.equal(fabric.committed[0]!.props['paddingBottom'], 280);
+    assert.equal(fabric.committed[0]!.children[0]!.props['paddingBottom'], 280);
 
     app.applicationRef.destroy();
   });
@@ -214,7 +222,7 @@ describe('keyboard-avoiding-view under a navigation bar', () => {
     await settle();
 
     fabric.frames.set('avoider', { x: 0, width: 402, ...frame });
-    const avoider = () => fabric.committed[0]!;
+    const avoider = () => fabric.committed[0]!.children[0]!;
     fabric.emit(avoider(), 'topLayout', {
       layout: { x: 0, y: 0, width: 402, height: frame.height },
     });
@@ -310,7 +318,7 @@ describe('keyboard-avoiding-view over a style of its own', () => {
     await settle();
 
     fabric.frames.set('avoider', { x: 0, y: 0, width: 402, height: 874 });
-    const avoider = () => fabric.committed[0]!;
+    const avoider = () => fabric.committed[0]!.children[0]!;
     fabric.emit(avoider(), 'topLayout', { layout: { x: 0, y: 0, width: 402, height: 874 } });
     await settle();
     return { app, avoider, emit };

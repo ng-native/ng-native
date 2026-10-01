@@ -51,7 +51,7 @@ describe('the map view', () => {
     });
     return { fabric, app, fixture: app.componentRef.instance as Fixture };
   };
-  const view = (fabric: FakeFabric) => fabric.committed[0]!;
+  const view = (fabric: FakeFabric) => fabric.committed[0]!.children[0]!;
 
   it("commits as expo-maps' Apple view on iOS: the default view of ExpoAppleMaps", () => {
     // `requireNativeView('ExpoAppleMaps')`, no view name. `ExpoMaps` is the permissions module

@@ -46,3 +46,24 @@ export class ExpoUiPlatformsFixture {
   readonly level = signal(0);
   readonly presses = signal(0);
 }
+
+@Component({
+  selector: 'expo-ui-platform-defaults',
+  imports: [UiHStack, UiHost, UiSlider, UiToggle, UiVStack],
+  template: `
+    <ui-host>
+      <ui-vstack (checkedChange)="bubbled.set(bubbled() + 1)">
+        <ui-toggle [isOn]="true" (isOnChange)="$event.stopPropagation()" />
+        <ui-toggle (isOnChange)="on.set($event.nativeEvent.isOn)" />
+        <ui-hstack>
+          <ui-slider [min]="0.5" [steps]="2" />
+          <ui-slider [steps]="2.6" />
+        </ui-hstack>
+      </ui-vstack>
+    </ui-host>
+  `,
+})
+export class ExpoUiPlatformDefaultsFixture {
+  readonly bubbled = signal(0);
+  readonly on = signal(false);
+}

@@ -892,7 +892,9 @@ const DERIVED = ['hsl', 'deferredColour', 'deferredCalc'];
  */
 function fallbacks(varPart, kind, context) {
   const { alternatives, token: converted } = fallbackChain(varPart.value?.fallback, context);
-  const fallback = formOf(converted, kind);
+  // `var(--c, currentColor)`: the colour in scope where it is used, which the device fills in.
+  const current = kind === 'color' && converted?.keyword?.toLowerCase() === 'currentcolor';
+  const fallback = current ? CURRENT_COLOUR : formOf(converted, kind);
   // One made of other tokens is worked out where it is used, from the tokens in scope there.
   const derived = converted && DERIVED.some((form) => form in converted);
   return {

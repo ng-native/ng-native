@@ -1849,10 +1849,6 @@
     "!cursor-[var(--x)]",
     "cursor-[var(--x)]"
   ],
-  "dropped 'display': display: flow-root does not exist on native; only flex, block (read as flex), contents and none do": [
-    "!flow-root",
-    "flow-root"
-  ],
   "dropped 'display': display: grid does not exist on native; only flex, block (read as flex), contents and none do": [
     "!grid",
     "grid"

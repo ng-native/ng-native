@@ -310,5 +310,146 @@
       "border-top-color": "rgb(5, 0, 0)",
       "border-left-color": "rgb(5, 0, 0)"
     }
+  },
+  {
+    "name": "a border colour falling back to currentColor is the colour of the text",
+    "expected": {
+      "color": "rgb(4, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "border-top-color": "rgb(4, 0, 0)",
+      "border-left-color": "rgb(4, 0, 0)"
+    }
+  },
+  {
+    "name": "a currentColor token is the colour of the text where it is used, not where it is set",
+    "expected": {
+      "color": "rgb(3, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "border-top-color": "rgb(3, 0, 0)",
+      "border-left-color": "rgb(3, 0, 0)"
+    }
+  },
+  {
+    "name": "a border of a calc() of a token is as wide as the token works out to",
+    "expected": {
+      "color": "rgb(2, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "border-top-width": "2px",
+      "border-top-color": "rgb(2, 0, 0)"
+    }
+  },
+  {
+    "name": "an outline with no colour is drawn in the colour of the text",
+    "expected": {
+      "color": "rgb(7, 1, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "outline-color": "rgb(7, 1, 0)"
+    }
+  },
+  {
+    "name": "outline-color: currentColor is the colour the element inherits",
+    "expected": {
+      "color": "rgb(8, 1, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "outline-color": "rgb(8, 1, 0)"
+    }
+  },
+  {
+    "name": "an outline of a token and currentColor is drawn in the colour of the text",
+    "expected": {
+      "color": "rgb(9, 1, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "outline-color": "rgb(9, 1, 0)"
+    }
+  },
+  {
+    "name": "an outline colour falling back to currentColor is the colour of the text",
+    "expected": {
+      "color": "rgb(6, 1, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "outline-color": "rgb(6, 1, 0)"
+    }
+  },
+  {
+    "name": "background-color: currentColor is the colour of the text",
+    "expected": {
+      "color": "rgb(7, 2, 0)",
+      "background-color": "rgb(7, 2, 0)"
+    }
+  },
+  {
+    "name": "background-color: currentColor is the colour the element inherits",
+    "expected": {
+      "color": "rgb(8, 2, 0)",
+      "background-color": "rgb(8, 2, 0)"
+    }
+  },
+  {
+    "name": "a background of currentColor is the colour of the text",
+    "expected": {
+      "color": "rgb(9, 2, 0)",
+      "background-color": "rgb(9, 2, 0)"
+    }
+  },
+  {
+    "name": "a background colour falling back to currentColor is the colour of the text",
+    "expected": {
+      "color": "rgb(6, 2, 0)",
+      "background-color": "rgb(6, 2, 0)"
+    }
+  },
+  {
+    "name": "a background of a currentColor token is the colour of the text where it is used",
+    "expected": {
+      "color": "rgb(5, 2, 0)",
+      "background-color": "rgb(5, 2, 0)"
+    }
+  },
+  {
+    "name": "a text colour falling back to currentColor is the colour the element inherits",
+    "expected": {
+      "color": "rgb(4, 2, 0)",
+      "background-color": "rgba(0, 0, 0, 0)"
+    }
+  },
+  {
+    "name": "a border of a calc() of a token below zero is no width at all",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "border-top-width": "0px"
+    }
+  },
+  {
+    "name": "a border of a calc() that gives a number token its unit is that many pixels wide",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "border-top-width": "3px"
+    }
+  },
+  {
+    "name": "a border of a calc() that leaves a number token without a unit draws no line",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "border-top-width": "0px"
+    }
+  },
+  {
+    "name": "a border of a calc() that gives a length token a second unit draws no line",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "border-top-width": "0px"
+    }
+  },
+  {
+    "name": "a border of a calc() that gives a number token its unit inside a nested calc()",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "border-top-width": "6px"
+    }
   }
 ]

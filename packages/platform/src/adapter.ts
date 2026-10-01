@@ -585,6 +585,9 @@ function nativeAnimated(): NativeAnimated | null {
   }
 }
 
+/** The root component's host until its `:host` says otherwise. See `Engine.setDefaultStyle`. */
+const ROOT_HOST_STYLE = { height: '100%' } as const;
+
 /**
  * Run the app's initializers, `provideAppInitializer` and `APP_INITIALIZER`, before the root
  * component exists, as `bootstrapApplication` does. `createEnvironmentInjector` runs only
@@ -680,17 +683,22 @@ export function mount(
 
   runInitializers(injector);
 
-  const componentRef = createComponent(component, {
-    environmentInjector: injector,
-    // The engine root doubles as the host node.
-    hostElement: engine.root as unknown as Element,
-  });
-
   // What `@ng-native/tailwind`'s `ios:` and `android:` variants match beneath. On the root so
   // they work with nothing to set up; an app that had to add it itself, and did not, got platform
-  // variants that silently matched nothing. After the component rather than before, because a
-  // root with a static `class` sets the whole list as it is created.
+  // variants that silently matched nothing.
   engine.addClass(engine.root, `platform-${nativePlatform()}`);
+
+  // No `hostElement`, so Angular creates the host from the selector as it does any other
+  // component's, and it goes under the engine root as a view of its own. The engine root is the
+  // surface and is never committed: as the host it took the component's `:host` rules and sent
+  // them nowhere, so a root component's background and padding were dropped without a word.
+  const componentRef = createComponent(component, { environmentInjector: injector });
+  const host = componentRef.location.nativeElement as EngineNode;
+  // The full height of the surface, as the web's mount point is given, so a template's `flex: 1`
+  // still fills the screen. A height rather than `flex: 1`, which a `:host` height would lose to.
+  // The app's own `:host` overrides it.
+  engine.setDefaultStyle(host, ROOT_HOST_STYLE);
+  engine.appendChild(engine.root, host);
 
   for (const [name, value] of Object.entries(inputs)) componentRef.setInput(name, value);
 

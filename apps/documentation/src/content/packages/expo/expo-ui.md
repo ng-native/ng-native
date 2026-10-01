@@ -122,8 +122,21 @@ shape: a toggle's `isOn` reaches Compose's switch as `value`, and its `checkedCh
 `(isOnChange)` with `nativeEvent.isOn`. A button's `label` is drawn as text inside it, since
 Compose's button has no label of its own. A toggle's `label` is SwiftUI's alone: Compose's switch
 draws none, and the switch is the element, so on Android put a `<ui-text>` beside it in a
-`<ui-hstack>`. A slider's `steps` is the number of steps on both, with one exception: Compose has
-no slider that stops only at its two ends, so `steps="1"` slides freely there.
+`<ui-hstack>`. A button's `systemImage` and `role` are SwiftUI's alone too. A slider's `steps` is
+the number of steps on both, rounded to a whole number, with one exception: Compose has no slider
+that stops only at its two ends, so `steps="1"` slides freely there.
+
+A toggle without `isOn` switches itself on both, and one bound to `isOn` shows what `isOn` says, so
+write the new value back from `(isOnChange)`. A stack without an `alignment` is centred on both.
+Without a `spacing`, SwiftUI puts its own default spacing between a stack's children and Compose
+puts none, so give a stack a `spacing` where the gap matters.
+
+`modifiers` go to both platforms as they are written, and the two read different ones. Compose skips
+a modifier it does not know, silently, and knows few of SwiftUI's: `frame`, `font` and
+`foregroundStyle` do nothing on Android. Even a name both know can read different fields: SwiftUI's
+`padding` takes `leading`, `trailing`, `horizontal`, `vertical` and `all`, while Compose's reads
+only `start`, `top`, `end` and `bottom`. Choose the modifiers by platform, with `nativePlatform()`
+from `@ng-native/fabric`, where a view needs them on both.
 
 `UiDatePicker` already takes both platforms, as described above. The rest of the typed components
 are SwiftUI's. On Android a text field, a menu and an image are different controls rather than

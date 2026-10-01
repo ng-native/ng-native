@@ -195,9 +195,11 @@ function arithmetic(part, prop, context, linear) {
  * width and once as the colour, and the token decides on device: a length has no colour form and
  * a colour has no length form, so exactly one of the two resolves. Anything left out takes its
  * initial value as CSS says: no style means no line at all, which native is told as a width of 0.
+ * A `calc()` of one `var()` is offered as the width only, as in Bootstrap's
+ * `calc(var(--bs-border-width) * 2)`, its arithmetic done on device.
  */
 // eslint-disable-next-line complexity -- one flat case per kind of component
-function line(property, list, context) {
+function line(property, list, context, linear) {
   const { prefix, style: withStyle, sides: named } = LINE[property];
   if (list.length < 2) return null;
   // Every side spelled out for `border`, for the reason `lineSides` gives in properties.cjs.
@@ -214,7 +216,11 @@ function line(property, list, context) {
   for (const [part, ...rest] of list) {
     if (rest.length) throw new CssUnsupported(`${context}: could not read '${property}'`);
     if (part.type === 'var') {
-      references.push(part);
+      references.push(lineReference(part, context));
+      continue;
+    }
+    if (part.type === 'function') {
+      references.push(computedWidth(part, context, linear));
       continue;
     }
     const value = tokenValue([part], context);
@@ -231,11 +237,6 @@ function line(property, list, context) {
       else color = value.color;
     } else throw new CssUnsupported(`${context}: '${describe(part)}' in '${property}'`);
   }
-  // Native has no spelling for an outline's currentColor, as `line()` in properties.cjs says.
-  if (current && prefix === 'outline') {
-    throw new CssUnsupported(`${context}: currentColor has no equivalent without a cascade root`);
-  }
-
   const every = (props, to) => Object.fromEntries(props.map((prop) => [prop, to]));
 
   // With no style written, a var() may be the style, and one is offered as that too. A length or a
@@ -271,7 +272,7 @@ function line(property, list, context) {
     {
       props: [...widths, ...styleProp, ...(current ? [] : colors)],
       line: {
-        references: references.map((part) => lineReference(part, context)),
+        references,
         roles,
         widths,
         colors,
@@ -280,6 +281,21 @@ function line(property, list, context) {
     },
   ];
   return { declarations, deferred };
+}
+
+/** `calc(var(--w) * 2)` in a line: the token, and the arithmetic that makes it the width. */
+function computedWidth(part, context, linear) {
+  const found = linear(part, context);
+  if (!found) {
+    throw new CssUnsupported(
+      `${context}: '${part.value?.name}()' is not arithmetic on one var() that can be settled ` +
+        `here, so it needs evaluating on device`,
+    );
+  }
+  return {
+    ...lineReference(found.reference, context),
+    adjust: found.adjust ?? {},
+  };
 }
 
 /**
@@ -311,7 +327,7 @@ function expandShorthand(value, context, linear) {
   if (property === 'text-shadow') return textShadow(parts, context);
   const list = components(parts);
   if (property === 'flex') return flexGrowing(list, context);
-  if (LINE[property]) return line(property, list, context);
+  if (LINE[property]) return line(property, list, context, linear);
   return positional(property, list, context, linear);
 }
 
