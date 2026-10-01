@@ -274,6 +274,12 @@ describe('a value with a var() inside it resolves as the same text in a styleshe
       'rgb(255, 128, 128)',
     ],
     ['red', 'color: COLOR-MIX(in srgb, var(--x) 50%, white)', 'color', 'rgb(255, 128, 128)'],
+    [
+      'color-mix(in OKLCH LoNgEr HuE, var(--word), blue)',
+      'color: var(--x)',
+      'color',
+      'rgb(0, 138, 14)',
+    ],
   ];
 
   for (const [value, read, prop, expected] of cases) {
