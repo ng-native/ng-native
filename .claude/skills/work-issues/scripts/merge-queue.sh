@@ -81,9 +81,12 @@ while (( ${#queue} )); do
     [[ $ms == clean || $ms == unstable || $ms == has_hooks ]] || continue
     # Two lockfile changes can merge cleanly as text into a lockfile pnpm rejects (#279 after #277), so a
     # PR that changes pnpm-lock.yaml waits until it's updated with any lockfile change main has since had.
-    if gh api --paginate "$R/pulls/$n/files?per_page=100" --jq '.[].filename' 2>/dev/null | grep -qx pnpm-lock.yaml; then
+    # A failed request, or a compare too big to list (GitHub stops at 300 files), keeps the PR waiting.
+    files=$(gh api --paginate "$R/pulls/$n/files?per_page=100" --jq '.[].filename' 2>/dev/null) || continue
+    if grep -qx pnpm-lock.yaml <<<$files; then
       base=$(gh api "$R/compare/main...$sha" --jq .merge_base_commit.sha 2>/dev/null) || continue
-      if gh api "$R/compare/$base...main" --jq '.files[].filename' 2>/dev/null | grep -qx pnpm-lock.yaml; then
+      moved=$(gh api "$R/compare/$base...main" --jq 'if (.files|length) >= 300 then "pnpm-lock.yaml" else .files[].filename end' 2>/dev/null) || continue
+      if grep -qx pnpm-lock.yaml <<<$moved; then
         note $n "changes the lockfile and main's lockfile changed since its base; update it from main"; continue
       fi
     fi
