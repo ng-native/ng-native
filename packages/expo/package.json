@@ -281,6 +281,7 @@
   },
   "devDependencies": {
     "@angular/core": "22.2.0",
+    "@babel/core": "^7.29.7",
     "@expo/ui": "^57.0.21",
     "@react-native-async-storage/async-storage": "^3.1.1",
     "expo": "^57.0.26",

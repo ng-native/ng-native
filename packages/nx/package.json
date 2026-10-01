@@ -43,7 +43,8 @@
     "nx": "^23.0.0"
   },
   "devDependencies": {
-    "@types/semver": "^7.7.0"
+    "@types/semver": "^7.7.0",
+    "typescript": "~6.0.3"
   },
   "nx": {
     "tags": [

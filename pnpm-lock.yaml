@@ -915,6 +915,9 @@ importers:
       '@angular/core':
         specifier: 22.2.0
         version: 22.2.0(@angular/compiler@22.2.0)(rxjs@7.8.2)
+      '@babel/core':
+        specifier: ^7.29.7
+        version: 7.29.7
 
   packages/device:
     dependencies:
@@ -928,6 +931,9 @@ importers:
       '@angular/core':
         specifier: 22.2.0
         version: 22.2.0(@angular/compiler@22.2.0)(rxjs@7.8.2)
+      '@babel/core':
+        specifier: ^7.29.7
+        version: 7.29.7
 
   packages/expo:
     dependencies:
@@ -956,6 +962,9 @@ importers:
       '@angular/core':
         specifier: 22.2.0
         version: 22.2.0(@angular/compiler@22.2.0)(rxjs@7.8.2)
+      '@babel/core':
+        specifier: ^7.29.7
+        version: 7.29.7
       '@expo/ui':
         specifier: ^57.0.21
         version: 57.0.21(@babel/core@7.29.7)(@types/react@19.2.18)(expo@57.0.26)(react-dom@19.2.8(react@19.2.3))(react-native-worklets@0.10.1(@babel/core@7.29.7)(@react-native/metro-config@0.86.3(@babel/core@7.29.7))(react-native@0.86.3(@babel/core@7.29.7)(@react-native/metro-config@0.86.3(@babel/core@7.29.7))(@types/react@19.2.18)(react@19.2.3))(react@19.2.3))(react-native@0.86.3(@babel/core@7.29.7)(@react-native/metro-config@0.86.3(@babel/core@7.29.7))(@types/react@19.2.18)(react@19.2.3))(react@19.2.3)
@@ -1082,6 +1091,9 @@ importers:
       '@angular/core':
         specifier: 22.2.0
         version: 22.2.0(@angular/compiler@22.2.0)(rxjs@7.8.2)
+      '@babel/core':
+        specifier: ^7.29.7
+        version: 7.29.7
 
   packages/integration-tests:
     devDependencies:
@@ -1103,6 +1115,9 @@ importers:
       '@angular/router':
         specifier: 22.2.0
         version: 22.2.0(@angular/common@22.2.0(@angular/core@22.2.0(@angular/compiler@22.2.0)(rxjs@7.8.2))(rxjs@7.8.2))(@angular/core@22.2.0(@angular/compiler@22.2.0)(rxjs@7.8.2))(@angular/platform-browser@22.2.0(@angular/common@22.2.0(@angular/core@22.2.0(@angular/compiler@22.2.0)(rxjs@7.8.2))(rxjs@7.8.2))(@angular/core@22.2.0(@angular/compiler@22.2.0)(rxjs@7.8.2)))(rxjs@7.8.2)
+      '@babel/core':
+        specifier: ^7.29.7
+        version: 7.29.7
       '@babel/generator':
         specifier: ^7.29.8
         version: 7.29.8
@@ -1281,6 +1296,9 @@ importers:
       '@types/semver':
         specifier: ^7.7.0
         version: 7.8.0
+      typescript:
+        specifier: ~6.0.3
+        version: 6.0.3
 
   packages/platform:
     dependencies:
@@ -1316,6 +1334,9 @@ importers:
       '@angular/router':
         specifier: 22.2.0
         version: 22.2.0(@angular/common@22.2.0(@angular/core@22.2.0(@angular/compiler@22.2.0)(rxjs@7.8.2))(rxjs@7.8.2))(@angular/core@22.2.0(@angular/compiler@22.2.0)(rxjs@7.8.2))(@angular/platform-browser@22.2.0(@angular/common@22.2.0(@angular/core@22.2.0(@angular/compiler@22.2.0)(rxjs@7.8.2))(rxjs@7.8.2))(@angular/core@22.2.0(@angular/compiler@22.2.0)(rxjs@7.8.2)))(rxjs@7.8.2)
+      '@babel/core':
+        specifier: ^7.29.7
+        version: 7.29.7
 
   packages/schematics:
     dependencies:

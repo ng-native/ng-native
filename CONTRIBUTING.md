@@ -43,6 +43,12 @@ module has to exist exactly once in a build: a second copy of Reanimated is a se
 native side, and it silently does nothing. The versions are the ones Expo SDK 57 bundles, which
 `npx expo install --check` verifies.
 
+A package with React Native among its dependencies declares `@babel/core` 7 as a devDependency,
+and one with Nx declares `typescript`. pnpm installs a peer that a package leaves undeclared at the
+newest version anywhere in the workspace, whatever range the peer asks for, so the next change to
+the lockfile would move React Native onto the Babel 8 that `@angular/compiler-cli` brings, and Nx
+onto TypeScript 7. `workspace-peers.test.ts` checks it.
+
 ## Running the app and the docs site
 
 ```sh
