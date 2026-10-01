@@ -149,18 +149,32 @@ function reached(project: string, dependencies: Map<string, string>, { children 
  * The optional peers a project's packages resolve that neither the project nor a package above
  * them depends on, where the project's packages hold more than one version of the peer.
  */
-function unsettledPeers(project: string, dependencies: Map<string, string>, graph: Graph) {
+function unsettledPeers(
+  project: string,
+  dependencies: Map<string, string>,
+  graph: Graph,
+  declares: Record<string, string> = declared(project),
+) {
   const parents = reached(project, dependencies, graph);
   const versions = new Map<string, Set<string>>();
   for (const key of parents.keys()) add(versions, nameOf(key), base(key));
   const provides = (parent: string, name: string) =>
     (graph.children.get(parent) ?? []).some((child) => nameOf(child) === name);
-  return [...parents].flatMap(([key, above]) =>
+  // Whether every path from the project down to `key` passes a package that depends on `peer`,
+  // which pnpm resolves the peer from. A cycle counts as a path without one.
+  const settled = (key: string, peer: string, path: Set<string> = new Set()): boolean =>
+    [...(parents.get(key) ?? [])].every(
+      (parent) =>
+        parent !== project &&
+        !path.has(parent) &&
+        (provides(parent, peer) || settled(parent, peer, new Set(path).add(key))),
+    );
+  return [...parents.keys()].flatMap((key) =>
     [...(graph.optionalPeers.get(base(key)) ?? [])]
       .filter((peer) => key.includes(`(${peer}@`) && (versions.get(peer)?.size ?? 0) > 1)
       // The project is above every package it reaches, so a peer it declares is provided.
-      .filter((peer) => !(peer in declared(project)))
-      .filter((peer) => ![...above].some((parent) => provides(parent, peer)))
+      .filter((peer) => !(peer in declares))
+      .filter((peer) => !settled(key, peer))
       .map((peer) => `${project} (${peer}, for ${base(key)})`),
   );
 }
@@ -183,4 +197,34 @@ it('declares an optional peer that its dependencies hold more than one version o
     [],
     'these projects leave an optional peer for pnpm to pick',
   );
+});
+
+describe('an optional peer pnpm has to pick', () => {
+  /**
+   * `app` depends on `q` 2 and on `wrapper`, which depends on `uses`, which takes `q` as an
+   * optional peer. `old` brings `q` 1, and `loose` depends on `uses` with nothing that provides `q`.
+   */
+  const lockfile: Graph = {
+    optionalPeers: new Map([['uses@1.0.0', new Set(['q'])]]),
+    children: new Map([
+      ['app@1.0.0', ['q@2.0.0', 'wrapper@1.0.0', 'old@1.0.0']],
+      ['wrapper@1.0.0', ['uses@1.0.0(q@2.0.0)']],
+      ['old@1.0.0', ['q@1.0.0']],
+      ['loose@1.0.0', ['uses@1.0.0(q@2.0.0)']],
+    ]),
+  };
+
+  it('is settled by a package further up than its parent', () => {
+    const found = unsettledPeers('p', new Map([['app', '1.0.0']]), lockfile, {});
+    assert.deepEqual(found, []);
+  });
+
+  it('is unsettled when one path to it has nothing that provides it', () => {
+    const dependencies = new Map([
+      ['app', '1.0.0'],
+      ['loose', '1.0.0'],
+    ]);
+    const found = unsettledPeers('p', dependencies, lockfile, {});
+    assert.deepEqual(found, ['p (q, for uses@1.0.0)']);
+  });
 });
