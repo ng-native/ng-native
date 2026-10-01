@@ -284,6 +284,21 @@ const VIEW_BASE_HANDLERS: Record<string, Handler> = {
   accessibilityRespondsToUserInteraction: noop,
 };
 
+/**
+ * A one-line field's `type`: a password while `secureTextEntry` is on, else the type that matches
+ * the keyboard. An email or number keyboard keeps `text`: `type="email"` trims the value and,
+ * like `type="number"`, has no selection API, so `setSelection` would throw.
+ */
+function setInputType(n: BrowserNode): void {
+  const field = el(n);
+  if (field.tagName !== 'INPUT') return;
+  const types: Record<string, string> = { 'phone-pad': 'tel', url: 'url' };
+  const secure = n.props['secureTextEntry'] === true;
+  (field as HTMLInputElement).type = secure
+    ? 'password'
+    : (types[String(n.props['keyboardType'])] ?? 'text');
+}
+
 /** `text-input.ts`'s own props, applied to the `<input>` or `<textarea>` it commits as. */
 const TEXT_INPUT_HANDLERS: Record<string, Handler> = {
   text: (n, v, c) => {
@@ -309,6 +324,7 @@ const TEXT_INPUT_HANDLERS: Record<string, Handler> = {
     };
     const mode = typeof v === 'string' ? map[v] : undefined;
     setOrRemove(n, 'inputmode', mode, c || mode === undefined);
+    setInputType(n);
   },
   returnKeyType: (n, v, c) => {
     const known = new Set(['done', 'go', 'next', 'search', 'send', 'previous']);
@@ -318,8 +334,7 @@ const TEXT_INPUT_HANDLERS: Record<string, Handler> = {
   // A password field where there can be one. A textarea has no password type, so a multiline
   // field masks with the non-standard property, which Firefox does not have.
   secureTextEntry: (n, v, c) => {
-    const field = el(n);
-    if (field.tagName === 'INPUT') (field as HTMLInputElement).type = !c && v ? 'password' : 'text';
+    if (el(n).tagName === 'INPUT') setInputType(n);
     else setStyleProp(n, '-webkit-text-security', v ? 'disc' : '', c || !v);
   },
   autoCapitalize: (n, v, c) => setOrRemove(n, 'autocapitalize', v === 'none' ? 'off' : v, c),

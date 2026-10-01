@@ -7,6 +7,7 @@ import { describe, expect, it } from 'vitest';
 import { page, userEvent } from 'vitest/browser';
 import { boot, settle, waitFor } from './boot.ts';
 import { EventsApp } from '../src/events-app.ts';
+import { BrowserEngine } from '../src/browser-engine.ts';
 
 async function scene() {
   await page.viewport(1200, 800);
@@ -114,5 +115,27 @@ describe('a scroll view with scrollEnabled off', () => {
     expect(frozen.scrollTop).toBe(0);
     frozen.scrollTo({ top: 25 });
     expect(frozen.scrollTop).toBe(25);
+  });
+});
+
+describe('a text field swapped by multiline', () => {
+  it('keeps the focus and the caret Chromium had, and the keyboard type it goes back to', async () => {
+    const engine = new BrowserEngine(document);
+    const node = engine.createElementNode('text-input');
+    document.body.append(node.el);
+    engine.setProp(node, 'keyboardType', 'url');
+    await userEvent.type(node.el as HTMLInputElement, 'example.com');
+    (node.el as HTMLInputElement).setSelectionRange(2, 5);
+    engine.setProp(node, 'multiline', true);
+    const area = node.el as HTMLTextAreaElement;
+    expect(document.activeElement).toBe(area);
+    expect([area.selectionStart, area.selectionEnd]).toEqual([2, 5]);
+    engine.setProp(node, 'multiline', false);
+    const input = node.el as HTMLInputElement;
+    expect(document.activeElement).toBe(input);
+    expect([input.type, input.selectionStart, input.selectionEnd]).toEqual(['url', 2, 5]);
+    await userEvent.keyboard('x');
+    expect(input.value).toBe('exxle.com');
+    input.remove();
   });
 });
