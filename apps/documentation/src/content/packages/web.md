@@ -47,7 +47,10 @@ components, the same compiler for the decorated `@ng-native/*` source under `nod
 `@oxc-angular/vite` leaves alone, and the resolution a browser build needs. `react-native` and
 `expo`, which the packages only `require` on a device, resolve to an empty module, in the bundle
 and in Vite's dependency pre-bundling alike, including in a workspace that has React Native
-installed for its native app. It sets no `build.rolldownOptions.external`, so it combines with a tool that sets
+installed for its native app. An Expo module that a package `require`s, such as `expo-battery`
+behind `@ng-native/expo/battery`, resolves to a module that throws when it is loaded, so the
+service is inert, as it is anywhere the module is missing, whether or not Expo is installed. An
+`import` of one in the app's own code still fails the build. It sets no `build.rolldownOptions.external`, so it combines with a tool that sets
 its own, such as [Storybook](/packages/web/storybook). It takes
 `@oxc-angular/vite`'s options and passes them on, over `zoneless: true` and
 `emitClassMetadata: false`.

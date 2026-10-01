@@ -6,7 +6,8 @@
  *
  * - `ng-native:config`, the resolution a browser build needs. React Native and Expo are reachable
  *   from the packages behind guards a browser never passes, but a bundler still resolves every
- *   specifier it sees, and React Native's source is Flow. Both resolve to an empty module.
+ *   specifier it sees, and React Native's source is Flow. Both resolve to an empty module, and a
+ *   Expo module a package `require`s, such as `expo-battery`, to one that throws.
  * - `@oxc-angular/vite`'s own plugins, for the app's components and for the linker, which handles
  *   the `@ng-native/*` packages as it handles every partial-compiled Angular library on npm.
  */
@@ -21,8 +22,18 @@ const NATIVE_ONLY = /^(react-native|expo)(\/|$)/;
 const EMPTY = '\0ng-native:native-only';
 
 /**
- * Resolves `react-native` and `expo` to an empty module, in the build and in the dependency
- * pre-bundle alike.
+ * The native modules `@ng-native/expo` reaches through a `require` inside a `catch`:
+ * `expo-battery`, `expo-modules-core`, `@react-native-async-storage/async-storage`. A `require` of
+ * one resolves to a module that throws when it is evaluated, so the `catch` answers as it does
+ * where the module is missing, and the service is inert. An `import` of one still resolves as
+ * usual, and fails the build when it is not installed.
+ */
+const NATIVE_MODULE = /^(expo-|@expo\/|@react-native-async-storage\/)/;
+const MISSING = '\0ng-native:missing:';
+
+/**
+ * Resolves `react-native` and `expo` to an empty module, and a `require` of an Expo module to one
+ * that throws, in the build and in the dependency pre-bundle alike.
  *
  * Not `optimizeDeps.exclude` and `build.rolldownOptions.external`. The pre-bundle turns an
  * excluded package's `require` into a top-level import, so the page loaded React Native's Flow
@@ -34,8 +45,17 @@ const EMPTY = '\0ng-native:native-only';
 function nativeOnly() {
   return {
     name: 'ng-native:native-only',
-    resolveId: (id) => (NATIVE_ONLY.test(id) ? EMPTY : null),
-    load: (id) => (id === EMPTY ? 'export {};' : null),
+    resolveId: (id, _importer, options) => {
+      if (NATIVE_ONLY.test(id)) return EMPTY;
+      if (options?.kind === 'require-call' && NATIVE_MODULE.test(id)) return MISSING + id;
+      return null;
+    },
+    load: (id) => {
+      if (id === EMPTY) return 'export {};';
+      if (!id.startsWith(MISSING)) return null;
+      const message = `${id.slice(MISSING.length)} is native-only, so not in a browser build`;
+      return `throw new Error(${JSON.stringify(message)});`;
+    },
   };
 }
 
