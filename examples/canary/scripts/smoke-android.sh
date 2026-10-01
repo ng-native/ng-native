@@ -13,6 +13,10 @@ out=$2
 flows="$(dirname "$0")/../.maestro/release"
 
 mkdir -p "$out"
+# A slow emulator's own apps go unresponsive, and Android covers the screen with "Pixel Launcher
+# isn't responding", which hides a canary that rendered. With error dialogs hidden, Android closes
+# the app instead. A canary that hangs or crashes still fails the flow, by what it no longer shows.
+adb shell settings put global hide_error_dialogs 1
 adb install -r "$apk" || exit 1
 maestro test "$flows" --test-output-dir "$out" --debug-output "$out" --flatten-debug-output
 status=$?

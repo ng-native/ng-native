@@ -28,6 +28,12 @@ udid=$(xcrun simctl create canary-smoke "$type" "$runtime") || exit 1
 trap 'xcrun simctl shutdown "$udid" 2>/dev/null; xcrun simctl delete "$udid"' EXIT
 
 xcrun simctl boot "$udid" && xcrun simctl bootstatus "$udid" -b >/dev/null || exit 1
+# A fresh simulator posts follow-up notifications of its own, "Ready for Apple Intelligence" among
+# them, at any point after it boots. The banner covers the top of the screen, so
+# a tap on a header button lands on the banner and opens Settings over the app. followupd posts
+# them, so it is stopped here, and stays disabled when the retry below reboots the simulator.
+xcrun simctl spawn "$udid" launchctl disable system/com.apple.followupd 2>/dev/null
+xcrun simctl spawn "$udid" launchctl bootout system/com.apple.followupd 2>/dev/null
 xcrun simctl install "$udid" "$app" || exit 1
 # Maestro drives the simulator through an XCTest runner of its own, which a loaded CI Mac has
 # been slow to start and has lost mid-flow. Both say nothing about the app, which a crash would
