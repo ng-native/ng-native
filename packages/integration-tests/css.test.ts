@@ -87,8 +87,8 @@ describe('CSS at runtime', () => {
   });
 
   it('applies a type selector to every matching element', () => {
-    // `view { flex: 1 }` reaches both views.
-    const views = flatten(fabric.committed).filter((n) => n.viewName === 'View');
+    // `view { flex: 1 }` reaches both views, and not the root component's host, which is no `view`.
+    const views = flatten(fabric.committed[0]!.children).filter((n) => n.viewName === 'View');
     assert.ok(views.length >= 2);
     for (const view of views) assert.equal(view.props['flexGrow'], 1);
   });

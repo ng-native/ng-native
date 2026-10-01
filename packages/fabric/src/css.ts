@@ -1212,7 +1212,9 @@ export class StyleResolver {
    *
    * It still mints a context, because a rule further down may match on one of *its* classes.
    * When there is nothing to inherit either, one shared cache object serves every such node, so
-   * an application that writes no CSS allocates nothing per node.
+   * an application that writes no CSS allocates nothing per node. Not when there are tokens to
+   * carry: the shared object holds none, and the surface root answering with it dropped every
+   * token the device had seeded.
    */
   private unstyled(
     node: StyleTarget,
@@ -1221,7 +1223,13 @@ export class StyleResolver {
     parentContext: object,
     parentInherited: Record<string, unknown>,
   ): StyleCache {
-    if (parentInherited === EMPTY && parentContext === ROOT_CONTEXT && !node.styleDirty) {
+    const tokens = parent ? parent.tokens : this.tokensOnRoot;
+    if (
+      parentInherited === EMPTY &&
+      parentContext === ROOT_CONTEXT &&
+      tokens === NO_TOKENS &&
+      !node.styleDirty
+    ) {
       if (this.emptyCache.epoch !== epoch || this.emptyCache.generation !== this.generation) {
         this.emptyCache = emptyCacheFor(epoch, this.generation);
       }
@@ -1236,7 +1244,7 @@ export class StyleResolver {
       parentContext,
       style: parentInherited,
       inherited: parentInherited,
-      tokens: parent ? parent.tokens : this.tokensOnRoot,
+      tokens,
     };
     node.styleCache = passthrough;
     node.styleDirty = false;

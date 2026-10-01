@@ -22,7 +22,7 @@ describe('style bindings through the renderer', () => {
     mount(1, mod['StyleBindings'] as Type<unknown>, fabric);
     await settle();
 
-    const { nativeID: _id, ...style } = fabric.find('View')!.props;
+    const { nativeID: _id, ...style } = fabric.committed[0]!.children[0]!.props;
     assert.deepEqual(style, { width: 10, fontSize: 12, opacity: 0.5, maxWidth: '50%' });
   });
 });

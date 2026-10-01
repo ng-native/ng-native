@@ -149,15 +149,17 @@ Each of these picks up from here, one task at a time:
 ## Debugging
 
 `screen.debug()` prints the committed tree: view names, text, and the props a query can find a
-node by. For `Counter` above:
+node by. The outer `View` is the rendered component's host, which commits as a view of its own.
+For `Counter` above:
 
 ```text
 View
-  Paragraph
-    RawText "0"
-  View accessibilityRole="button" accessibilityLabel="Count"
+  View
     Paragraph
-      RawText "+1"
+      RawText "0"
+    View accessibilityRole="button" accessibilityLabel="Count"
+      Paragraph
+        RawText "+1"
 ```
 
 A `getBy*` query that finds nothing throws with the same tree in its message, so a failing test
@@ -167,11 +169,12 @@ already says what was there instead:
 Unable to find a node with role "button" and name "Increment".
 
 View
-  Paragraph
-    RawText "0"
-  View accessibilityRole="button" accessibilityLabel="Count"
+  View
     Paragraph
-      RawText "+1"
+      RawText "0"
+    View accessibilityRole="button" accessibilityLabel="Count"
+      Paragraph
+        RawText "+1"
 ```
 
 The names are Fabric's, not the template's: a `<view>` or a `<pressable>` is a `View`, a `<text>`

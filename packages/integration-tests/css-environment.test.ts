@@ -15,8 +15,9 @@ import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import type { Type } from '@angular/core';
 import { Engine } from '@ng-native/fabric';
-import { cleanup, render, settle, type BoundQueries } from '@ng-native/testing';
+import { cleanup, createFakeFabric, render, settle, type BoundQueries } from '@ng-native/testing';
 import { compileFixture } from './compile.ts';
+import { committedProps } from './tailwind-cli.ts';
 
 const require = createRequire(import.meta.url);
 const { compileCss } = require('@ng-native/metro/css/compile.cjs');
@@ -123,6 +124,36 @@ describe('tokens the device supplies', () => {
     engine.updateTokens({ '--safe-area-inset-top': { length: 47 } });
     await settle();
     assert.equal(node('bar').props['paddingTop'], 0);
+  });
+});
+
+describe('tokens the device supplies, with no global sheet', () => {
+  // The surface root matches no rule then, and resolves as a node with nothing to apply. A node
+  // in that state shared one empty answer whatever the root held, so the first push after mount
+  // dropped every seeded token below it and each inset fell back as if never reported.
+  const inset = () => {
+    const sheet = compileCss('.pad { padding-bottom: var(--safe-area-inset-bottom, 16px) }', 'x');
+    const fabric = createFakeFabric();
+    const engine = new Engine(fabric, 1, {});
+    const node = engine.createElement('view', sheet);
+    engine.addClass(node, 'pad');
+    engine.appendChild(engine.root, node);
+    engine.commit();
+    return { engine, read: () => committedProps(fabric, node)['paddingBottom'] };
+  };
+
+  it('resolves what the device pushed in', () => {
+    const { engine, read } = inset();
+    assert.equal(read(), 16, 'the fallback before anything is reported');
+    engine.updateTokens({ '--safe-area-inset-bottom': { length: 34 } });
+    assert.equal(read(), 34);
+  });
+
+  it('keeps the tokens through a second push', () => {
+    const { engine, read } = inset();
+    engine.updateTokens({ '--safe-area-inset-bottom': { length: 34 } });
+    engine.updateTokens({ '--safe-area-inset-top': { length: 47 } });
+    assert.equal(read(), 34);
   });
 });
 

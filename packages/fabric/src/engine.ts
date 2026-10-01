@@ -458,6 +458,12 @@ export interface EngineNode extends HostNode {
    * knows. See `markComponentHost`.
    */
   componentHost?: true;
+  /**
+   * Style weaker than every sheet, where no rule and no inline style says otherwise. What lets the
+   * root component's host fill the surface by default and still give way to its own `:host`. See
+   * `setDefaultStyle`.
+   */
+  defaultStyle?: Readonly<Record<string, unknown>>;
 
   /**
    * Hoisted nodes (`registerHoist`) inside this subtree while it is out of the tree, held here
@@ -1827,6 +1833,16 @@ export class Engine implements HostEngine {
     this.markProps(node);
   }
 
+  /**
+   * Style for `node` that any matched rule or inline style overrides, as a browser's own default
+   * for an element is. `mount` gives the root component's host the surface's height this way, as
+   * the web's mount point has, unless the app's `:host` sizes it otherwise.
+   */
+  setDefaultStyle(node: EngineNode, style: Readonly<Record<string, unknown>> | undefined): void {
+    node.defaultStyle = style;
+    this.markProps(node);
+  }
+
   /** `class="a b"` from a template. Replaces the set rather than adding to it. */
   setClasses(node: EngineNode, value: string): void {
     const names = value.split(/\s+/).filter(Boolean);
@@ -2258,9 +2274,9 @@ export class Engine implements HostEngine {
   }
 
   /**
-   * Everything a node renders with, unprocessed. Precedence, weakest first: native defaults,
-   * matched CSS, explicit props, inline style, a component's `styleOverride`. Inline wins over CSS for the same reason it does
-   * on the web.
+   * Everything a node renders with, unprocessed. Precedence, weakest first: native defaults, the
+   * node's `defaultStyle`, matched CSS, explicit props, inline style, a component's
+   * `styleOverride`. Inline wins over CSS for the same reason it does on the web.
    *
    * Raw, because this is what the next commit diffs against. Colours and asset ids are converted
    * on the way out instead (`processed`), and only for the keys that changed: the converters
@@ -2272,7 +2288,7 @@ export class Engine implements HostEngine {
     if (this.dev) this.checkProps(node);
     this.registerSheet(node.sheet);
     this.registerSheet(node.hostSheet);
-    const props: Record<string, unknown> = { ...DEFAULT_PROPS[viewName] };
+    const props: Record<string, unknown> = { ...DEFAULT_PROPS[viewName], ...node.defaultStyle };
     Object.assign(props, this.styles.resolve(node, this.styleEpoch).style);
     for (const key of Object.keys(node.props)) {
       // No native prop has a hyphen. `data-*` and `aria-*` attributes stay on the node for

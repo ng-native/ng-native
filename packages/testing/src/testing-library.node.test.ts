@@ -160,7 +160,7 @@ describe('queries', () => {
       console.log = log;
     }
     assert.match(String(printed[0]), /^View testID="second" accessibilityRole="listitem"/);
-    assert.match(String(printed[1]), /^View testID="list"/);
+    assert.match(String(printed[1]), /^View\n {2}View testID="list"/);
   });
 });
 

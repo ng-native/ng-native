@@ -145,7 +145,7 @@ describe('animate.enter', () => {
     await time.tick(240);
     assert.equal(opacity(), 1, 'and settles on its resting style');
 
-    const node = componentRef.injector.get(Engine).root.children[0]!;
+    const node = componentRef.injector.get(Engine).root.children[0]!.children[0]!;
     assert.equal(node.classes?.has('arriving'), false, 'with the enter class taken off again');
     cleanup();
   });

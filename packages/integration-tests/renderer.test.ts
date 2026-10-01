@@ -130,27 +130,28 @@ describe('golden parity', () => {
       [
         // Every paragraph is an accessibility element on iOS, and ends truncated text in an
         // ellipsis, as `Text.js` makes it.
-        'Paragraph {"accessible":true,"ellipsizeMode":"tail"}',
-        '  RawText "mode a"',
-        'Paragraph {"accessible":true,"ellipsizeMode":"tail"}',
-        '  RawText "placeholder"',
-        'View',
+        'View {"height":"100%"}',
+        '  Paragraph {"accessible":true,"ellipsizeMode":"tail"}',
+        '    RawText "mode a"',
+        '  Paragraph {"accessible":true,"ellipsizeMode":"tail"}',
+        '    RawText "placeholder"',
         '  View',
-        '    Paragraph {"accessible":true,"ellipsizeMode":"tail","header":""}',
-        '      RawText "slotted header"',
-        '    Paragraph {"accessible":true,"ellipsizeMode":"tail"}',
-        '      RawText "slotted body"',
-        'View',
+        '    View',
+        '      Paragraph {"accessible":true,"ellipsizeMode":"tail","header":""}',
+        '        RawText "slotted header"',
+        '      Paragraph {"accessible":true,"ellipsizeMode":"tail"}',
+        '        RawText "slotted body"',
+        '  View',
         // A pressable is an element and focusable, and measures itself for its press rectangle,
         // so it opts into layout events too. `collapsable: false` is the responder's: Fabric
         // flattens a view whose props say nothing interactive, and a responder is registered in
         // JavaScript where Fabric cannot see it. The two pointer props are hover: a control that
         // can be pressed always wants the hover look on a device that has a cursor, and Fabric
         // will not dispatch a pointer event to a view whose props have not asked for one.
-        'View {"accessible":true,"collapsable":false,"focusable":true,"onLayout":true,' +
+        '  View {"accessible":true,"collapsable":false,"focusable":true,"onLayout":true,' +
           '"onPointerEnter":true,"onPointerLeave":true}',
-        '  Paragraph {"accessible":true,"ellipsizeMode":"tail"}',
-        '    RawText "listener"',
+        '    Paragraph {"accessible":true,"ellipsizeMode":"tail"}',
+        '      RawText "listener"',
       ].join('\n'),
     );
 

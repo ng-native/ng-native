@@ -40,18 +40,18 @@ describe('the seam, end to end', () => {
   it('commits a native tree on mount, with comment anchors elided', () => {
     assert.equal(
       fabric.render(),
-      ['View', '  View', '    Paragraph', '      RawText "tap"'].join('\n'),
+      ['View', '  View', '    View', '      Paragraph', '        RawText "tap"'].join('\n'),
     );
   });
 
   it('maps element names to Fabric view names', () => {
     // `pressable` is a JS composite in RN, not a native view: it commits as an View.
-    assert.equal(fabric.committed[0]?.viewName, 'View');
-    assert.equal(fabric.committed[0]?.children.at(-1)?.viewName, 'View');
+    assert.equal(fabric.committed[0]?.children[0]?.viewName, 'View');
+    assert.equal(fabric.committed[0]?.children[0]?.children.at(-1)?.viewName, 'View');
   });
 
   it('flattens style onto props rather than nesting it', () => {
-    const root = fabric.committed[0]!;
+    const root = fabric.committed[0]!.children[0]!;
     assert.equal(root.props['padding'], 8, 'style keys land at the top level');
     assert.equal(root.props['style'], undefined, 'no nested style object reaches Fabric');
   });
@@ -64,7 +64,7 @@ describe('the seam, end to end', () => {
     const before = app.engine.stats.commits;
     const completeRootsBefore = fabric.calls.completeRoot;
 
-    fabric.emit(fabric.committed[0]!.children.at(-1)!, 'topTouchEnd');
+    fabric.emit(fabric.committed[0]!.children[0]!.children.at(-1)!, 'topTouchEnd');
     await settle();
 
     assert.equal(app.engine.stats.commits - before, 1, 'one renderer flush');
@@ -76,34 +76,36 @@ describe('the seam, end to end', () => {
       fabric.render(),
       [
         'View',
-        '  Paragraph',
-        '    RawText "count is 1"',
-        '  Paragraph',
-        '    RawText "item 0"',
         '  View',
         '    Paragraph',
-        '      RawText "tap"',
+        '      RawText "count is 1"',
+        '    Paragraph',
+        '      RawText "item 0"',
+        '    View',
+        '      Paragraph',
+        '        RawText "tap"',
       ].join('\n'),
     );
   });
 
   it('grows the @for list on repeat events', async () => {
-    fabric.emit(fabric.committed[0]!.children.at(-1)!, 'topTouchEnd');
+    fabric.emit(fabric.committed[0]!.children[0]!.children.at(-1)!, 'topTouchEnd');
     await settle();
 
     assert.equal(
       fabric.render(),
       [
         'View',
-        '  Paragraph',
-        '    RawText "count is 2"',
-        '  Paragraph',
-        '    RawText "item 0"',
-        '  Paragraph',
-        '    RawText "item 1"',
         '  View',
         '    Paragraph',
-        '      RawText "tap"',
+        '      RawText "count is 2"',
+        '    Paragraph',
+        '      RawText "item 0"',
+        '    Paragraph',
+        '      RawText "item 1"',
+        '    View',
+        '      Paragraph',
+        '        RawText "tap"',
       ].join('\n'),
     );
   });

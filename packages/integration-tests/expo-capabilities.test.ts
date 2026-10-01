@@ -339,7 +339,7 @@ describe('the camera view', () => {
     registerExpoViews('expo-camera');
     const fabric = createFakeFabric();
     mount(1, Fixture, fabric);
-    assert.equal(fabric.committed[0]!.viewName, 'ViewManagerAdapter_ExpoCamera');
+    assert.equal(fabric.committed[0]!.children[0]!.viewName, 'ViewManagerAdapter_ExpoCamera');
   });
 
   it('takes a picture from the view on screen, the way a React ref would', async () => {
@@ -364,7 +364,9 @@ describe('the camera view', () => {
     const picture: CameraPicture | null = await camera.takePicture({ quality: 0.5 });
 
     assert.equal(picture?.uri, 'file:///shot.jpg');
-    assert.deepEqual(calls, [{ tag: fabric.committed[0]!.reactTag, options: { quality: 0.5 } }]);
+    assert.deepEqual(calls, [
+      { tag: fabric.committed[0]!.children[0]!.reactTag, options: { quality: 0.5 } },
+    ]);
   });
 
   it('answers null without the module, rather than a picture it never took', async () => {
