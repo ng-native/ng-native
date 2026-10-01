@@ -5,7 +5,7 @@
 import assert from 'node:assert/strict';
 import { afterEach, before, beforeEach, describe, it, mock } from 'node:test';
 import { fileURLToPath } from 'node:url';
-import type { Type } from '@angular/core';
+import { ApplicationRef, type Type } from '@angular/core';
 import { render, type FakeFabric, type FakeFabricNode } from '@ng-native/testing';
 import { compileFixture } from './compile.ts';
 
@@ -102,6 +102,42 @@ describe('a scroll view or virtual list at zero height, in development', () => {
     mock.timers.tick(1000);
     assert.equal(warnings.length, 1);
     assert.match(warnings[0]!, /<virtual-list class="feed">/);
+  });
+
+  it('warns when rows arrive in a list already at zero height, with no new layout', async () => {
+    const { fabric, componentRef } = await rendered(ZeroList);
+    const tick = () => componentRef.injector.get(ApplicationRef).tick();
+    const rows = (componentRef.instance as { rows: { set(value: string[]): void } }).rows;
+    rows.set([]);
+    tick();
+    lay(fabric, scrollOf(fabric), 0);
+    mock.timers.tick(1000);
+    assert.deepEqual(warnings, []);
+    rows.set(['one']);
+    tick();
+    mock.timers.tick(1000);
+    assert.equal(warnings.length, 1);
+  });
+
+  it('says nothing when the rows go within the second, with no new layout', async () => {
+    const { fabric, componentRef } = await rendered(ZeroList);
+    const tick = () => componentRef.injector.get(ApplicationRef).tick();
+    lay(fabric, scrollOf(fabric), 0);
+    mock.timers.tick(500);
+    (componentRef.instance as { rows: { set(value: string[]): void } }).rows.set([]);
+    tick();
+    mock.timers.tick(1000);
+    assert.deepEqual(warnings, []);
+  });
+
+  it('keeps its deadline through more layouts that are still at zero', async () => {
+    const { fabric } = await rendered(ZeroList);
+    const list = scrollOf(fabric);
+    lay(fabric, list, 0);
+    mock.timers.tick(600);
+    fabric.emit(list, 'topLayout', { layout: { x: 0, y: 0, width: 300, height: 0 } });
+    mock.timers.tick(400);
+    assert.equal(warnings.length, 1);
   });
 
   it('says nothing of an empty virtual list', async () => {

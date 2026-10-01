@@ -19,12 +19,18 @@ export class ZeroSizeWarning {
     this.horizontal = horizontal;
   }
 
-  /** A layout: its size along the scroll axis, and whether there is anything to show. */
+  /**
+   * A layout, or new content: its size along the scroll axis, and whether there is anything to
+   * show. Still zero with content keeps the deadline already running rather than starting over.
+   */
   laidOut(size: number, hasContent: boolean): void {
-    clearTimeout(this.timer);
-    this.timer = undefined;
-    if (this.warned || size > 0 || !hasContent) return;
-    this.timer = setTimeout(() => this.warn(), 1000);
+    if (this.warned) return;
+    if (size > 0 || !hasContent) {
+      clearTimeout(this.timer);
+      this.timer = undefined;
+    } else {
+      this.timer ??= setTimeout(() => this.warn(), 1000);
+    }
   }
 
   stop(): void {
