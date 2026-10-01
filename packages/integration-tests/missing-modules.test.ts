@@ -200,7 +200,8 @@ describe('a service whose module is missing', () => {
 
 /**
  * The native modules each Expo package's JavaScript requires as it is evaluated, read from the
- * copy `@ng-native/expo` resolves. Such a package throws while it is being evaluated when its native
+ * copy `@ng-native/expo` resolves: its `build`, and its `src`, which some packages ship as their
+ * entry point in place of a build. Such a package throws while it is being evaluated when its native
  * half is not in the build, and Metro reports that as fatal whenever it is not inside another
  * module's load, as in a service's factory, before any `catch` can turn it into a
  * `MissingModuleError`.
@@ -219,16 +220,21 @@ function requiredNativeModules(): Map<string, Set<string>> {
     const walk = (dir: string) => {
       for (const entry of readdirSync(dir, { withFileTypes: true })) {
         const file = path.join(dir, entry.name);
-        if (entry.isDirectory()) walk(file);
-        else if (entry.name.endsWith('.js') && !entry.name.endsWith('.web.js')) {
+        if (entry.isDirectory()) {
+          if (!['__tests__', '__mocks__'].includes(entry.name)) walk(file);
+        } else if (
+          /\.(js|ts|tsx)$/.test(entry.name) &&
+          !/\.d\.ts$|\.web\.|\.test\./.test(entry.name)
+        ) {
           const source = readFileSync(file, 'utf8');
-          for (const [, name] of source.matchAll(/requireNativeModule\(\s*['"]([^'"]+)['"]/g)) {
-            names.add(name!);
-          }
+          const required = /requireNativeModule(?:<[^>]*>)?\(\s*['"]([^'"]+)['"]/g;
+          for (const [, name] of source.matchAll(required)) names.add(name!);
         }
       }
     };
-    if (existsSync(path.join(root, 'build'))) walk(path.join(root, 'build'));
+    for (const dir of ['build', 'src']) {
+      if (existsSync(path.join(root, dir))) walk(path.join(root, dir));
+    }
     if (names.size > 0) found.set(module, names);
   }
   return found;
@@ -266,6 +272,15 @@ describe('a service whose native module is not in the build', () => {
   it('finds packages to check, so the checks below are not empty', () => {
     assert.ok(native.size >= 25, `only ${[...native.keys()].join(', ')}`);
     assert.ok(native.get('expo-font')?.has('ExpoFontLoader'));
+    // Packages whose entry point is their TypeScript source, with no build to read.
+    for (const module of [
+      'expo-file-system',
+      'expo-image-manipulator',
+      'expo-image-picker',
+      'expo-keep-awake',
+    ]) {
+      assert.ok(native.has(module), `${module} requires no native module`);
+    }
   });
 
   /** Reaching the service, as a promise, on a device whose native modules are `present`. */
