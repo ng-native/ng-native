@@ -58,6 +58,27 @@ export interface VirtualRow<T> {
   readonly parked?: true;
 }
 
+/**
+ * Space around the rows, inside the scrolling content: one number for every side, or a side each,
+ * as FlatList's `contentContainerStyle` padding.
+ */
+export type VirtualListPadding =
+  | number
+  | {
+      readonly top?: number;
+      readonly right?: number;
+      readonly bottom?: number;
+      readonly left?: number;
+    };
+
+/** The padding on each side, in points. */
+interface Edges {
+  readonly top: number;
+  readonly right: number;
+  readonly bottom: number;
+  readonly left: number;
+}
+
 /** A row height: one for every row, or one per item. */
 export type VirtualItemHeight<T> = number | ((item: T, index: number) => number);
 
@@ -256,6 +277,14 @@ export class VirtualList<T> extends ScrollViewProps {
    */
   readonly estimatedItemHeight = input<VirtualItemHeight<T>>(50);
   /**
+   * Space around the rows, inside the scrolling content. The leading side comes before the first
+   * row and the trailing side after the last; the sides across the axis inset every row. The
+   * header and footer sit outside it, as FlatList's do outside `contentContainerStyle`.
+   */
+  readonly contentPadding = input<VirtualListPadding>(0);
+  /** Space between one row and the next, along the axis: not before the first or after the last. */
+  readonly rowGap = input(0, { transform: numberAttribute });
+  /**
    * An item's identity, as FlatList's `keyExtractor`: what a measured height, a slot and a held
    * position follow across an insert. Without it an item is its own key, which is enough for items
    * that are replaced, not copied, when they change.
@@ -348,6 +377,27 @@ export class VirtualList<T> extends ScrollViewProps {
   /** Rows size themselves and are laid out in flow, rather than placed at a known offset. */
   readonly measuring = computed(() => this.itemHeight() === undefined);
 
+  /** The padding on each side. */
+  private readonly edges = computed<Edges>(() => {
+    const padding = this.contentPadding();
+    if (typeof padding === 'number') {
+      return { top: padding, right: padding, bottom: padding, left: padding };
+    }
+    const { top = 0, right = 0, bottom = 0, left = 0 } = padding ?? {};
+    return { top, right, bottom, left };
+  });
+
+  /** The padding before the first row, along the axis. */
+  private readonly lead = computed(() =>
+    this.horizontal() ? this.edges().left : this.edges().top,
+  );
+
+  /** The rows' insets across the axis, as the props that place an absolutely positioned row. */
+  private readonly across = computed((): Record<string, number> => {
+    const { top, right, bottom, left } = this.edges();
+    return this.horizontal() ? { top, bottom } : { left, right };
+  });
+
   /** Heights native has reported, by key. */
   private readonly measured = new Map<unknown, number>();
   /** Bumped when a measurement changes, which is what re-sizes the list. */
@@ -373,18 +423,22 @@ export class VirtualList<T> extends ScrollViewProps {
     const height = this.itemHeight();
     if (typeof height === 'number') return null;
 
+    // Each row's entry is its size and the gap after it, so where a row starts counts the gaps
+    // before it without a second table.
+    const gap = this.rowGap();
     const items = this.items();
     const sizes = new Float64Array(items.length);
     if (height) {
-      for (let i = 0; i < items.length; i++) sizes[i] = height(items[i]!, i);
+      for (let i = 0; i < items.length; i++) sizes[i] = height(items[i]!, i) + gap;
       return new HeightIndex(sizes);
     }
     const estimate = this.estimatedItemHeight();
     const keys = this.keys();
     for (let i = 0; i < items.length; i++) {
-      sizes[i] =
+      const size =
         this.measured.get(keys ? keys[i] : items[i]) ??
         (typeof estimate === 'number' ? estimate : estimate(items[i]!, i));
+      sizes[i] = size + gap;
     }
     return new HeightIndex(sizes);
   });
@@ -404,12 +458,23 @@ export class VirtualList<T> extends ScrollViewProps {
     return table;
   }
 
-  /** The list's own total extent along its axis. */
+  /**
+   * The list's own total extent along its axis: the padding at both ends, the rows, and a gap
+   * between each two of them.
+   */
   private readonly extent = computed(() => {
     const table = this.layout();
-    if (table) return table.total;
-    return this.items().length * (this.itemHeight() as number);
+    const count = this.items().length;
+    const rows = table ? table.total : count * this.stride();
+    const { top, right, bottom, left } = this.edges();
+    const padding = this.horizontal() ? left + right : top + bottom;
+    return padding + (count ? rows - this.rowGap() : 0);
   });
+
+  /** A fixed-height row and the gap after it. */
+  private stride(): number {
+    return (this.itemHeight() as number) + this.rowGap();
+  }
 
   protected readonly canvas = computed(() =>
     this.horizontal() ? { width: this.extent(), flexDirection: 'row' } : { height: this.extent() },
@@ -437,28 +502,45 @@ export class VirtualList<T> extends ScrollViewProps {
     return this.horizontal() ? 'scaleX(-1)' : 'scaleY(-1)';
   });
 
+  /**
+   * What places a row in flow: the gap after it and the padding across the axis, as margins, since
+   * native lays the row out. Empty when there are none, so a plain list commits no margins.
+   */
+  private readonly flowSpacing = computed<Record<string, unknown>>(() => {
+    const gap = this.rowGap();
+    const { top, right, bottom, left } = this.edges();
+    const spacing: Record<string, number> = this.horizontal()
+      ? { marginRight: gap, marginTop: top, marginBottom: bottom }
+      : { marginBottom: gap, marginLeft: left, marginRight: right };
+    return Object.fromEntries(Object.entries(spacing).filter(([, value]) => value !== 0));
+  });
+
   /** A row in flow, flipped back when the list is inverted. One object, so rows never re-clone. */
   private readonly flowStyle = computed(() => {
     const flip = this.flipText();
-    return flip ? { transform: flip } : IN_FLOW;
+    const spacing = this.flowSpacing();
+    if (!flip && Object.keys(spacing).length === 0) return IN_FLOW;
+    return flip ? { ...spacing, transform: flip } : spacing;
   });
 
-  /** Top of a row. */
+  /** Top of a row: the leading padding, and every row and gap before it. */
   private topOf(index: number): number {
     const table = this.layout();
-    return table ? table.topOf(index) : index * (this.itemHeight() as number);
+    return this.lead() + (table ? table.topOf(index) : index * this.stride());
   }
 
+  /** A row's own size, without the gap after it. */
   private heightOf(index: number): number {
     const table = this.layout();
-    return table ? table.heightOf(index) : (this.itemHeight() as number);
+    return table ? table.heightOf(index) - this.rowGap() : (this.itemHeight() as number);
   }
 
-  /** First row whose bottom is past `y`. */
+  /** First row whose bottom, or the gap after it, is past `y`. */
   private indexAt(y: number): number {
     const table = this.layout();
-    if (!table) return Math.max(0, Math.floor(y / (this.itemHeight() as number)));
-    return table.indexAt(y);
+    const along = y - this.lead();
+    if (!table) return Math.max(0, Math.floor(along / this.stride()));
+    return table.indexAt(along);
   }
 
   // --- holding position -------------------------------------------------------------------
@@ -669,7 +751,7 @@ export class VirtualList<T> extends ScrollViewProps {
     let lead = span ? this.topOf(span.first) : 0;
     const pinned = this.pinnedIndex();
     if (span && pinned !== null && pinned < span.first) {
-      lead = this.nativeSticky ? this.topOf(pinned) : lead - this.heightOf(pinned);
+      lead = this.nativeSticky ? this.topOf(pinned) : lead - this.heightOf(pinned) - this.rowGap();
     }
     return this.horizontal() ? { width: Math.max(0, lead) } : { height: Math.max(0, lead) };
   });
@@ -693,7 +775,7 @@ export class VirtualList<T> extends ScrollViewProps {
           style: this.nativeSticky
             ? this.stickyStyle(pinned)
             : this.measuring()
-              ? this.pinnedFlowStyle(this.topOf(first) - this.heightOf(pinned))
+              ? this.pinnedFlowStyle(this.topOf(first) - this.heightOf(pinned) - this.rowGap())
               : this.slotStyle(pinned, this.offset()),
         }),
       );
@@ -721,10 +803,11 @@ export class VirtualList<T> extends ScrollViewProps {
    */
   private leadWindow(rows: VirtualRow<T>[], pinned: number, first: number): void {
     const lead = rows[1];
-    const gap = this.topOf(first) - this.topOf(pinned) - this.heightOf(pinned);
-    if (!lead || gap <= 0) return;
+    // The pinned row's own gap already follows it in flow.
+    const between = this.topOf(first) - this.topOf(pinned) - this.heightOf(pinned) - this.rowGap();
+    if (!lead || between <= 0) return;
     const margin = this.horizontal() ? 'marginLeft' : 'marginTop';
-    rows[1] = this.hold({ ...lead, style: { ...lead.style, [margin]: gap } });
+    rows[1] = this.hold({ ...lead, style: { ...lead.style, [margin]: between } });
   }
 
   private styleFor(index: number, pinned: boolean): Record<string, unknown> {
@@ -740,7 +823,7 @@ export class VirtualList<T> extends ScrollViewProps {
     const shift = Math.max(0, this.offset() - at);
     const move = `${this.horizontal() ? 'translateX' : 'translateY'}(${shift}px)`;
     const flip = this.flipText();
-    return { zIndex: 1, transform: flip ? `${move} ${flip}` : move };
+    return { ...this.flowSpacing(), zIndex: 1, transform: flip ? `${move} ${flip}` : move };
   }
 
   /**
@@ -749,7 +832,9 @@ export class VirtualList<T> extends ScrollViewProps {
    */
   private stickyStyle(index: number): Record<string, unknown> {
     const horizontal = this.horizontal();
-    const style: Record<string, unknown> = this.measuring() ? {} : { ...this.slotStyle(index) };
+    const style: Record<string, unknown> = this.measuring()
+      ? { ...this.flowSpacing() }
+      : { ...this.slotStyle(index) };
     style['zIndex'] = 1;
     const top = this.topOf(index);
     const shift = Math.min(Math.max(0, this.settled() - top), this.stopOf(index) - top);
@@ -892,7 +977,7 @@ export class VirtualList<T> extends ScrollViewProps {
     this.forgetDeparted();
     const index = this.indexOfKey()?.get(row.key);
     if (index === undefined) return;
-    this.table()?.set(index, size);
+    this.table()?.set(index, size + this.rowGap());
     this.measuredVersion.update((version) => version + 1);
   }
 
@@ -953,18 +1038,15 @@ export class VirtualList<T> extends ScrollViewProps {
     const size = this.heightOf(row.index);
     const horizontal = this.horizontal();
     const flip = this.flipText();
+    const across = this.across();
     const cached = this.measuredGaps.get(row.key);
-    if (
-      cached &&
-      cached[horizontal ? 'left' : 'top'] === start &&
-      cached[horizontal ? 'width' : 'height'] === size &&
-      cached['transform'] === flip
-    ) {
-      return cached;
-    }
+    const placed = horizontal
+      ? { ...across, left: start, width: size, transform: flip }
+      : { ...across, top: start, height: size, transform: flip };
+    if (cached && holds(cached, placed)) return cached;
     const style: Record<string, unknown> = horizontal
-      ? { position: 'absolute', top: 0, bottom: 0, left: start, width: size, flexDirection: 'row' }
-      : { position: 'absolute', left: 0, right: 0, top: start, height: size };
+      ? { position: 'absolute', ...across, left: start, width: size, flexDirection: 'row' }
+      : { position: 'absolute', ...across, top: start, height: size };
     style['justifyContent'] = 'flex-end';
     style['pointerEvents'] = 'box-none';
     if (flip) style['transform'] = flip;
@@ -1103,21 +1185,18 @@ export class VirtualList<T> extends ScrollViewProps {
     const extent = horizontal ? 'width' : 'height';
 
     const flip = this.flipText();
+    const across = this.across();
 
     let style = this.slots.get(index);
     // The flip is part of the comparison because turning the list over changes every row, and a
     // cached slot would otherwise keep the orientation it was built with.
-    const stale =
-      !style ||
-      style[extent] !== size ||
-      style[key] !== start ||
-      style['transform'] !== flip ||
-      pinnedAt !== undefined;
+    const placed = { ...across, [extent]: size, [key]: start, transform: flip };
+    const stale = !style || pinnedAt !== undefined || !holds(style, placed);
 
     if (stale) {
       style = horizontal
-        ? { position: 'absolute', top: 0, bottom: 0, left: start, width: size }
-        : { position: 'absolute', left: 0, right: 0, top: start, height: size };
+        ? { position: 'absolute', ...across, left: start, width: size }
+        : { position: 'absolute', ...across, top: start, height: size };
       // A pinned row draws over the ones sliding under it; the transform is the row's half of
       // the inversion.
       if (pinnedAt !== undefined) style['zIndex'] = 1;
@@ -1211,6 +1290,11 @@ export class VirtualList<T> extends ScrollViewProps {
     this.endReachedFor = count;
     this.endReached.emit({ distanceFromEnd });
   }
+}
+
+/** Whether a cached slot style already has every one of these props. */
+function holds(style: Record<string, unknown>, props: Record<string, unknown>): boolean {
+  return Object.entries(props).every(([prop, value]) => style[prop] === value);
 }
 
 /**

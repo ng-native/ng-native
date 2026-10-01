@@ -133,6 +133,30 @@ over its trailing edge once its height is known:
 </virtual-list>
 ```
 
+### Padding and gaps
+
+`contentPadding` puts space around the rows inside the scrolling content, as `FlatList`'s
+`contentContainerStyle` padding does: one number for every side, or `{ top, right, bottom, left }`.
+The leading side comes before the first row and the trailing side after the last, and the sides
+across the axis inset every row. `rowGap` puts space between one row and the next, and not before
+the first or after the last. The list places its rows itself, so these are numbers it counts in
+every offset, rather than classes on a container:
+
+```html
+<virtual-list #list [items]="rows()" [itemHeight]="72" [contentPadding]="24" [rowGap]="12">
+  @for (row of list.window(); track row.slot) {
+  <view [virtualListRow]="row" class="card"><text>{{ row.item.label }}</text></view>
+  }
+</virtual-list>
+```
+
+`itemHeight` stays the row's own size, without the gap. A row that sizes itself is measured
+without it too. `scrollToIndex` puts a row's own top at the start of the viewport, past the
+leading padding, as `FlatList`'s does. Sticky rows, viewability and `endReached` count the padding
+and gaps. The header and footer sit outside the padding. An inverted list turns the padding over
+with everything else, so its `top` is at the bottom of the screen. A separator is still drawn at
+the trailing edge of its row, before the gap.
+
 `endReached` fires once per change in item count, when the scroll position comes within
 `endReachedThreshold` viewport-heights of the end - the hook for loading another page. Scrolling
 away from the end and back fires it again, so a page that failed to load is retried.

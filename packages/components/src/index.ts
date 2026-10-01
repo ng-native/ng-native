@@ -122,6 +122,7 @@ export {
   VirtualListSeparator,
   type VirtualItemHeight,
   type VirtualListSeparatorContext,
+  type VirtualListPadding,
   type VirtualListVisiblePosition,
   type VirtualRow,
 } from './virtual-list.ts';
