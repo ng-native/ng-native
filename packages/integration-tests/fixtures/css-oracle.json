@@ -250,5 +250,12 @@
       "color": "rgb(9, 0, 0)",
       "background-color": "rgba(0, 0, 0, 0)"
     }
+  },
+  {
+    "name": "a declaration invalid once its tokens are known still beats a weaker rule",
+    "expected": {
+      "color": "rgb(9, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)"
+    }
   }
 ]

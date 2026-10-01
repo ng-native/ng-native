@@ -12,7 +12,7 @@
  * is what a `var()` in a `border` *is*, since a width and a colour can come in either order; see
  * `line`.
  */
-const { CssUnsupported, fallbacks, tokenValue } = require('./values.cjs');
+const { CssUnsupported, fallbackChain, fallbacks, tokenValue } = require('./values.cjs');
 
 const SIDES = ['Top', 'Right', 'Bottom', 'Left'];
 
@@ -239,12 +239,46 @@ function line(property, list, context) {
   Object.assign(declarations, color === null ? {} : every(colors, color));
   if (withStyle && style !== null) declarations[`${prefix}Style`] = style;
 
-  const deferred = references.flatMap((part) => [
-    ...(width === null ? [reference(part, widths, 'length', context)] : []),
-    ...(withStyle && styleInToken ? [reference(part, [`${prefix}Style`], 'keyword', context)] : []),
-    ...(color === null ? [reference(part, colors, 'color', context)] : []),
-  ]);
+  if (!references.length) return { declarations, deferred: [] };
+  const styleProp = withStyle ? [`${prefix}Style`] : [];
+  const roles = [
+    ...(width === null ? ['width'] : []),
+    ...(withStyle && styleInToken ? ['style'] : []),
+    ...(color === null ? ['color'] : []),
+  ];
+  // One declaration for the whole line, every longhand it sets: the tokens are given their roles
+  // on device, by what each holds, and a line they make nothing of unsets all of it, as in CSS.
+  const deferred = [
+    {
+      props: [...widths, ...styleProp, ...colors],
+      line: {
+        references: references.map((part) => lineReference(part, context)),
+        roles,
+        widths,
+        colors,
+        ...(withStyle ? { style: `${prefix}Style` } : {}),
+      },
+    },
+  ];
   return { declarations, deferred };
+}
+
+/**
+ * A `var()` in a line: the token, the tokens its `var()` fallbacks name, and its last fallback as
+ * a token of every form, so the device can tell what it is; `empty` for `var(--x,)`, which is
+ * nothing at all when `--x` is unset.
+ */
+function lineReference(part, context) {
+  const raw = part.value?.fallback;
+  if (Array.isArray(raw) && raw.every((term) => term?.value?.type === 'white-space')) {
+    return { reference: part.value.name.ident, empty: true };
+  }
+  const { alternatives, token } = fallbackChain(raw, context);
+  return {
+    reference: part.value.name.ident,
+    ...(alternatives.length ? { alternatives } : {}),
+    ...(token ? { fallback: token } : {}),
+  };
 }
 
 /**

@@ -289,4 +289,12 @@ export const CASES: OracleCase[] = [
       'background-color: color-mix(in srgb, var(--c, red) 50%, white) }',
     tree: { name: 'view', classes: ['outer'], children: [probe()] },
   },
+  {
+    name: 'a declaration invalid once its tokens are known still beats a weaker rule',
+    css:
+      ':root { --x: 10px } .outer { color: rgb(9, 0, 0) } ' +
+      'text { color: rgb(5, 0, 0); background-color: rgb(6, 0, 0) } ' +
+      '#probe { color: var(--x, rgb(1, 0, 0)); background-color: var(--missing) }',
+    tree: { name: 'view', classes: ['outer'], children: [probe()] },
+  },
 ];

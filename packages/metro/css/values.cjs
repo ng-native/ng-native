@@ -884,13 +884,7 @@ const DERIVED = ['hsl', 'deferredColour', 'deferredCalc'];
  * `fallbackToken` made of other tokens, `calc(var(--gap) * 2)`, which the device works out there.
  */
 function fallbacks(varPart, kind, context) {
-  const raw = varPart.value?.fallback;
-  let converted = raw ? fallbackToken(raw, `${context} (fallback)`) : null;
-  const alternatives = [];
-  while (converted?.alias) {
-    alternatives.push(converted.alias);
-    converted = converted.fallback;
-  }
+  const { alternatives, token: converted } = fallbackChain(varPart.value?.fallback, context);
   const fallback = formOf(converted, kind);
   // One made of other tokens is worked out where it is used, from the tokens in scope there.
   const derived = converted && DERIVED.some((form) => form in converted);
@@ -901,8 +895,23 @@ function fallbacks(varPart, kind, context) {
   };
 }
 
+/**
+ * A `var()`'s fallback: the tokens the `var()`s in it name, tried in turn, and the token it ends
+ * in, if it ends in one.
+ */
+function fallbackChain(raw, context) {
+  let token = raw ? fallbackToken(raw, `${context} (fallback)`) : null;
+  const alternatives = [];
+  while (token?.alias) {
+    alternatives.push(token.alias);
+    token = token.fallback;
+  }
+  return { alternatives, token: token ?? null };
+}
+
 module.exports = {
   CssUnsupported,
+  fallbackChain,
   fallbacks,
   camel,
   round,

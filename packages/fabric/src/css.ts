@@ -287,6 +287,28 @@ export interface DeferredDeclaration {
    * somewhere inside it, each marked `{ __defer: compute }`. Filled in where it is used.
    */
   readonly within?: unknown;
+  /** A `border` or a side's line with tokens in it, each given its role where it is used. */
+  readonly line?: LineTemplate;
+}
+
+/**
+ * `border: var(--w) var(--s) var(--c)`: which token is the width, the style or the colour cannot be
+ * told at build time, so each is given the role its form says on device. `roles` are those the
+ * written parts left open; `props` of the declaration are every longhand, which a line its tokens
+ * make nothing of unsets.
+ */
+export interface LineTemplate {
+  readonly references: readonly {
+    readonly reference: string;
+    readonly alternatives?: readonly string[];
+    readonly fallback?: TokenValue;
+    /** `var(--x,)`: nothing at all when the token is unset. */
+    readonly empty?: true;
+  }[];
+  readonly roles: readonly ('width' | 'style' | 'color')[];
+  readonly widths: readonly string[];
+  readonly colors: readonly string[];
+  readonly style?: string;
 }
 
 /**
@@ -1432,10 +1454,9 @@ export class StyleResolver {
         this.reportUndefined(declaration, tokens);
       }
       const value = settled ?? declaration.unset;
-      if (value === undefined) continue;
       for (const prop of declaration.props) {
         if (!declaration.important && important && prop in important) continue;
-        own[prop] = value;
+        write(own, prop, value, declaration.line !== undefined);
       }
     }
   }
@@ -1451,6 +1472,7 @@ export class StyleResolver {
       return this.settledWithin(declaration.within, declaration, own, parentInherited, tokens);
     }
     if (declaration.compute) return this.computed(declaration, own, parentInherited);
+    if (declaration.line) return this.settledLine(declaration, own, parentInherited, tokens);
     const value = referenced(declaration, tokens);
     if (declaration.whenSet !== undefined)
       return value === undefined ? undefined : declaration.whenSet;
@@ -1463,6 +1485,23 @@ export class StyleResolver {
     return typeof value === 'object' && value !== null
       ? this.settledWithin(value, declaration, own, parentInherited, tokens)
       : value;
+  }
+
+  /** A line's longhands from its tokens, with a width in `em` worked out against the font size. */
+  private settledLine(
+    declaration: DeferredDeclaration,
+    own: Record<string, unknown>,
+    parentInherited: Record<string, unknown>,
+    tokens: Readonly<Record<string, TokenValue>>,
+  ): Record<string, unknown> | undefined {
+    const line = declaration.line!;
+    const values = lineValues(line, tokens);
+    const width = values?.[line.widths[0]!] as
+      { __defer?: DeferredDeclaration['compute'] } | undefined;
+    if (!values || !width?.__defer) return values;
+    const points = this.computed({ ...declaration, compute: width.__defer }, own, parentInherited);
+    for (const prop of line.widths) values[prop] = points;
+    return values;
   }
 
   /** A reference with nothing defined for it and nothing to fall back to. */
@@ -2065,6 +2104,90 @@ function fallbackOf(
   const token = declaration.fallbackToken;
   return declaration.fallback ?? (token && formOf(derived(token, tokens), declaration.kind!));
 }
+
+/**
+ * One longhand of a deferred declaration written to the node's own style. Unset when the value is
+ * nothing, as CSS has a declaration invalid once its tokens are known: it still wins the cascade,
+ * so what a weaker rule set goes, and the property inherits or starts over. A line's value is one
+ * per longhand, and leaves the ones it was written with alone.
+ */
+function write(own: Record<string, unknown>, prop: string, value: unknown, perProp: boolean): void {
+  if (value === undefined) delete own[prop];
+  else if (!perProp) own[prop] = value;
+  else if (prop in (value as Record<string, unknown>)) {
+    own[prop] = (value as Record<string, unknown>)[prop];
+  }
+}
+
+/** The styles a line's token can be, as the compiler reads a written one. */
+const LINE_STYLES: ReadonlySet<string> = new Set([
+  'solid',
+  'dashed',
+  'dotted',
+  'double',
+  'groove',
+  'ridge',
+  'inset',
+  'none',
+  'hidden',
+]);
+const LINE_WIDTHS: Readonly<Record<string, number>> = { thin: 1, medium: 3, thick: 5 };
+
+/** What a line's token substitutes to: a token, or nothing at all, `var(--x,)` or `--x: ;`. */
+const NOTHING = Symbol('nothing');
+
+/**
+ * A line's longhands, each token given the one role its form says and the written parts did not
+ * take. Undefined when a token is unset with nothing to fall back to, fits no role left, or would
+ * take a role twice: CSS makes the whole shorthand invalid then.
+ */
+function lineValues(
+  line: LineTemplate,
+  tokens: Readonly<Record<string, TokenValue>>,
+): Record<string, unknown> | undefined {
+  const open = new Set(line.roles);
+  const values: Record<string, unknown> = {};
+  for (const reference of line.references) {
+    const token = lineToken(reference, tokens);
+    if (token === undefined) return undefined;
+    if (token === NOTHING) continue;
+    const found = lineRole(token, open);
+    if (!found) return undefined;
+    open.delete(found.role);
+    const props = { width: line.widths, color: line.colors, style: [line.style!] }[found.role];
+    for (const prop of props) values[prop] = found.value;
+  }
+  return values;
+}
+
+function lineToken(
+  reference: LineTemplate['references'][number],
+  tokens: Readonly<Record<string, TokenValue>>,
+): TokenValue | typeof NOTHING | undefined {
+  const set = firstSet([reference.reference, ...(reference.alternatives ?? [])], tokens);
+  if (set) return set.keyword?.trim() === '' ? NOTHING : set;
+  if (reference.empty) return NOTHING;
+  const { fallback } = reference;
+  return fallback && isDerived(fallback) ? derived(fallback, tokens) : fallback;
+}
+
+/** The role a token's form says it has, among those still open. */
+function lineRole(
+  token: TokenValue,
+  open: ReadonlySet<LineTemplate['roles'][number]>,
+): { role: LineTemplate['roles'][number]; value: unknown } | undefined {
+  const word = token.keyword;
+  const width = word && word in LINE_WIDTHS ? LINE_WIDTHS[word] : token.length;
+  if (open.has('width') && (typeof width === 'number' || isDeferredLength(width))) {
+    return { role: 'width', value: width };
+  }
+  if (open.has('style') && word && LINE_STYLES.has(word)) return { role: 'style', value: word };
+  const color = formOf(token, 'color');
+  return open.has('color') && color !== undefined ? { role: 'color', value: color } : undefined;
+}
+
+const isDeferredLength = (value: unknown): boolean =>
+  typeof value === 'object' && value !== null && '__defer' in value;
 
 const CHANNEL_KINDS: ReadonlySet<TokenKind> = new Set(['channels', 'hslChannels']);
 
