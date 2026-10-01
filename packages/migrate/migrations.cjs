@@ -17,6 +17,7 @@
  * @property {(host: import('./host.cjs').Host) => string[]} run Changes the files, and answers
  *   what is left for the developer to do, one line each.
  */
+const { splitStoreAndPlayer } = require('./split-store-and-player.cjs');
 const { syncAppVersions } = require('./sync-app-versions.cjs');
 const { version } = require('./package.json');
 
@@ -28,6 +29,13 @@ const migrations = [
     description:
       "Move the @ng-native packages each project's own package.json lists to the new version.",
     run: syncAppVersions,
+  },
+  {
+    name: 'split-store-and-player',
+    version: '0.3.0',
+    description:
+      'Import Storage, SecureStorage, audioPlayer and videoPlayer from the entry points that now hold them.',
+    run: splitStoreAndPlayer,
   },
 ];
 

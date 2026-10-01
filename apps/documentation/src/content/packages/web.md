@@ -172,6 +172,48 @@ system's `prefers-color-scheme`, or the scheme `inject(ColorScheme).set()` chose
 that puts `dark` on a view of its own passes `darkClass: false`.
 [Variants](/packages/tailwind/variants) covers the rest.
 
+### With Tailwind 3
+
+A Tailwind 3 app builds its web stylesheet with `web-preset.cjs`, the Tailwind 3 counterpart of
+`web.css`: `hover:` and `focus-visible:` are the browser's own, the safe area and the hairline come
+from the browser, and `font-mono` keeps Tailwind's stack. The device build keeps `preset.cjs`, so
+the web build gets a config of its own that takes everything else from the app's:
+
+```sh
+npm install --save-dev tailwindcss@3 @ng-native/tailwind
+```
+
+```js
+// tailwind.web.config.js
+module.exports = {
+  ...require('./tailwind.config.js'),
+  presets: [require('@ng-native/tailwind/web-preset.cjs')],
+};
+```
+
+An app that lists a preset of its own beside `preset.cjs` lists it here too, in the same order.
+Vite runs Tailwind 3 as a PostCSS plugin, from a PostCSS config beside `vite.config.ts`, which
+needs nothing more than `ngNativeWeb()`:
+
+```js
+// postcss.config.js
+module.exports = {
+  plugins: { tailwindcss: { config: './tailwind.web.config.js' } },
+};
+```
+
+`src/styles.css` is the one the device build reads:
+
+```css
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+```
+
+With a `prefix`, the platform and dark variants still match the `platform-web` and `dark` classes
+`mount` keeps on the root, so `web:tw-p-2` and `dark:tw-bg-black` work with `darkClass` as they do
+on a device.
+
 ### The Angular CLI
 
 The Angular CLI's builders do not build `@ng-native/*`. Their compiler checks every host binding

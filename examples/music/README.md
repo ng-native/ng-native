@@ -16,7 +16,7 @@ The tab bar (`src/app/tabs.ts`) is a real `UITabBarController` on iOS and a bott
 Android. Playback itself is split into two services: `src/app/player/queue.ts` (track order -
 next, previous, shuffle, repeat) and `src/app/player/playback.ts` (pointing a real player at
 whatever the queue is on). `src/app/player/track-player.ts` is the seam between them: the
-production path wraps `audioPlayer()` from `@ng-native/expo/player`, and `app.test.ts` provides
+production path wraps `audioPlayer()` from `@ng-native/expo/audio`, and `app.test.ts` provides
 a fake instead, since `expo-audio` is never installed under Vitest.
 
 ## Run it

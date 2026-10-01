@@ -1,6 +1,6 @@
 import { Component, inject, signal } from '@angular/core';
 import { SafeAreaView, ScrollView, Switch, Text, View } from '@ng-native/components';
-import { SecureStorage } from '@ng-native/expo/store';
+import { SecureStorage } from '@ng-native/expo/secure-store';
 
 /**
  * One template that follows each platform's conventions: an inset grouped list with a large

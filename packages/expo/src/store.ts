@@ -1,6 +1,6 @@
 /**
- * `Storage` and `SecureStorage`, bound to `@react-native-async-storage/async-storage` and
- * `expo-secure-store`.
+ * `Store`, what `Storage` (`@ng-native/expo/async-storage`) and `SecureStorage`
+ * (`@ng-native/expo/secure-store`) both are, over whichever native store each is bound to.
  *
  * ```ts
  * private readonly store = inject(Storage);
@@ -16,13 +16,13 @@
  * that held nothing.
  *
  * Two services rather than one because the difference matters and should be visible at the
- * injection site. `SecureStorage` is the keychain and the Android keystore: small values, an
+ * injection site, and two entry points because each needs its own native module: Metro fails a
+ * build on a `require` it cannot resolve, so one entry point for both made an app install both. `SecureStorage` is the keychain and the Android keystore: small values, an
  * async write, and a size limit that is not documented but is real. `Storage` is a plain
  * key-value file: bigger, faster, and readable by anyone with the device unlocked. Two tokens
  * over one class, for the same reason the sensors are.
  */
-import { InjectionToken, computed, signal, type Signal, type WritableSignal } from '@angular/core';
-import { expoModule } from './native.ts';
+import { computed, signal, type Signal, type WritableSignal } from '@angular/core';
 
 /** What both `AsyncStorage` and `SecureStore` offer, reduced to the three verbs. */
 export interface NativeStore {
@@ -244,47 +244,3 @@ function decode(raw: string): unknown {
     return ABSENT;
   }
 }
-
-const plain = (): NativeStore | null => {
-  const module = expoModule(
-    '@react-native-async-storage/async-storage',
-    () =>
-      require('@react-native-async-storage/async-storage') as {
-        default: typeof import('@react-native-async-storage/async-storage').default;
-      },
-  );
-  const store = module?.default;
-  if (!store) return null;
-  return {
-    get: (key) => store.getItem(key),
-    set: (key, value) => store.setItem(key, value),
-    remove: (key) => store.removeItem(key),
-  };
-};
-
-const secure = (): NativeStore | null => {
-  const expo = expoModule(
-    'expo-secure-store',
-    () => require('expo-secure-store') as typeof import('expo-secure-store'),
-  );
-  if (!expo) return null;
-  return {
-    get: (key) => expo.getItemAsync(key),
-    set: (key, value) => expo.setItemAsync(key, value),
-    remove: (key) => expo.deleteItemAsync(key),
-    // The keychain can answer without waiting, so a token never flashes its default.
-    getSync: (key) => expo.getItem(key),
-  };
-};
-
-/** A plain key-value file. Bigger and faster than the keychain, and not private. */
-export const Storage = new InjectionToken<Store>('angular-native.storage', {
-  factory: () => new Store(plain()),
-});
-export type Storage = Store;
-
-/** The keychain and the Android keystore. Small values, and worth the size limit. */
-export const SecureStorage = new InjectionToken<Store>('angular-native.secureStorage', {
-  factory: () => new Store(secure()),
-});
-export type SecureStorage = Store;

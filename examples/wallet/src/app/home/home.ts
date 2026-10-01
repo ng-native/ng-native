@@ -1,6 +1,6 @@
 import { Component, computed, inject } from '@angular/core';
 import { Pressable, SafeAreaView, ScrollView, Text, View } from '@ng-native/components';
-import { SecureStorage } from '@ng-native/expo/store';
+import { SecureStorage } from '@ng-native/expo/secure-store';
 import { NativeNavigation } from '@ng-native/router';
 import { Ledger, money } from '../payments/ledger.ts';
 import { PaymentRow } from '../payments/payment-row.ts';

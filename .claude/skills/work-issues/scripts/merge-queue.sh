@@ -20,8 +20,12 @@ own_changes() {
 # Unresolved review threads on a PR; "?" when GraphQL fails or there are more than 100 threads, so the
 # PR waits. (ponytail: no pagination; a PR here has never had 100 threads.)
 open_threads() {
-  gh api graphql -f query="{repository(owner:\"ng-native\",name:\"ng-native\"){pullRequest(number:$1){reviewThreads(first:100){pageInfo{hasNextPage} nodes{isResolved}}}}}" \
-    --jq '.data.repository.pullRequest.reviewThreads|if .pageInfo.hasNextPage then "?" else [.nodes[]|select(.isResolved|not)]|length end' 2>/dev/null || echo "?"
+  local n
+  n=$(gh api graphql -f query="{repository(owner:\"ng-native\",name:\"ng-native\"){pullRequest(number:$1){reviewThreads(first:100){pageInfo{hasNextPage} nodes{isResolved}}}}}" \
+    --jq '.data.repository.pullRequest.reviewThreads|if .pageInfo.hasNextPage then "?" else [.nodes[]|select(.isResolved|not)]|length end' 2>/dev/null)
+  # A rate-limited call prints its error JSON on stdout, so only a bare count is an answer. REST can't see
+  # whether a thread is resolved, so while GraphQL is limited the PR waits ("?") rather than guess.
+  [[ $n == <-> ]] && echo $n || echo "?"
 }
 # Says something about a PR once per run rather than on every pass.
 typeset -A noted

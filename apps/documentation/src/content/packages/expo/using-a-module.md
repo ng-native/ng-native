@@ -22,7 +22,8 @@ the package's own root. That is so that importing haptics never pulls in the vid
 ```ts
 import { Battery } from '@ng-native/expo/battery';
 import { Haptics } from '@ng-native/expo/haptics';
-import { Storage, SecureStorage } from '@ng-native/expo/store';
+import { Storage } from '@ng-native/expo/async-storage';
+import { SecureStorage } from '@ng-native/expo/secure-store';
 ```
 
 Each name is a type as well as a token, so `inject(Clipboard)` and `private clipboard: Clipboard`

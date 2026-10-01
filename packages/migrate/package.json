@@ -19,6 +19,12 @@
   "dependencies": {
     "semver": "^7.7.0"
   },
+  "peerDependencies": {
+    "typescript": ">=5.9.0 <7"
+  },
+  "devDependencies": {
+    "typescript": "~6.0.3"
+  },
   "nx": {
     "tags": [
       "scope:migrate",

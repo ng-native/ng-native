@@ -47,9 +47,10 @@ watchConditions(app.engine, { darkClass: false });
 
 The classes are the same with a Tailwind `prefix`: `platform-ios`, `platform-android`,
 `platform-web` and `dark`, never `tw-dark`. Tailwind 4's `prefix()` leaves a variant's selector as
-the preset wrote it. Tailwind 3 prefixes every class in one, and the build takes the prefix back off
-these four, so `ios:tw-pt-2` and `dark:tw-bg-black` match the classes `mount` and `watchConditions`
-set. An app that sets its own dark class sets `dark`.
+the preset wrote it. Tailwind 3 prefixes every class in one, so on native the build takes the prefix
+back off these four, and the web preset matches them as attributes (`[class~="dark"]`), which the
+prefix leaves alone. Either way `ios:tw-pt-2` and `dark:tw-bg-black` match the classes `mount` and
+`watchConditions` set. An app that sets its own dark class sets `dark`.
 
 Tailwind's own `dark:` is `@media (prefers-color-scheme: dark)`, which [the CSS
 engine](/packages/fabric/css-engine) already answers and keeps in sync with the system. A class is

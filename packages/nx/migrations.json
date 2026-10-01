@@ -4,6 +4,11 @@
       "version": "0.2.0",
       "description": "Move the @ng-native packages each project's own package.json lists to the new version.",
       "implementation": "./migrations/run.cjs#sync-app-versions"
+    },
+    "split-store-and-player": {
+      "version": "0.3.0",
+      "description": "Import Storage, SecureStorage, audioPlayer and videoPlayer from the entry points that now hold them.",
+      "implementation": "./migrations/run.cjs#split-store-and-player"
     }
   }
 }
