@@ -31,16 +31,29 @@ while (( ${#queue} )); do
     # A stacked PR waits until its base has merged and GitHub has moved it to main.
     [[ $(jq -r .base.ref <<<$pr) == main ]] || continue
     sha=$(jq -r .head.sha <<<$pr)
-    # CodeRabbit's latest verdict must be an approval. It reviews every pushed commit but won't approve one
-    # it has already reviewed, so after a rebase its approval stays on an older commit. That approval
-    # still counts when the PR's own changes are identical between the two commits (only the base moved)
-    # and every review thread is resolved; any change to the PR's own code needs a fresh approval.
-    approved=$(gh api "$R/pulls/$n/reviews?per_page=100" \
-      --jq '[.[]|select(.user.login=="coderabbitai[bot]" and .state!="COMMENTED")]|last|select(.state=="APPROVED")|.commit_id' 2>/dev/null)
-    [[ -n $approved ]] || continue
+    # CodeRabbit has to have passed the PR's current code. It reviews every pushed commit but won't post a
+    # fresh approval on one it has already reviewed, so any one of these counts, with every review thread
+    # resolved in the last two:
+    #  - its approval is on the current commit;
+    #  - it has reviewed the current commit (with or without a verdict) and left nothing open;
+    #  - its approval is on an older commit and the PR's own changes are identical (only the base moved).
+    reviews=$(gh api "$R/pulls/$n/reviews?per_page=100" 2>/dev/null) || continue
+    approved=$(jq -r '[.[]|select(.user.login=="coderabbitai[bot]" and .state!="COMMENTED")]|last|select(.state=="APPROVED")|.commit_id' <<<$reviews)
+    reviewed_head=$(jq -r --arg sha $sha '[.[]|select(.user.login=="coderabbitai[bot]" and .commit_id==$sha)]|length' <<<$reviews)
+    # A push with nothing new for it to review gets no review object, but CodeRabbit's summary comment
+    # still records the range it covered, ending at the current commit.
+    if (( reviewed_head == 0 )); then
+      reviewed_head=$(gh api --paginate "$R/issues/$n/comments?per_page=100" \
+        --jq ".[]|select(.user.login==\"coderabbitai[bot]\" and (.body|contains(\"and $sha\")))|.id" 2>/dev/null | wc -l | tr -d ' ')
+    fi
     if [[ $approved != $sha ]]; then
-      [[ $(own_changes $approved) == $(own_changes $sha) ]] || { note $n "changed since CodeRabbit approved it"; continue; }
-      [[ $(open_threads $n) == 0 ]] || continue
+      if (( reviewed_head > 0 )); then
+        [[ $(open_threads $n) == 0 ]] || continue
+      elif [[ -n $approved && $(own_changes $approved) == $(own_changes $sha) ]]; then
+        [[ $(open_threads $n) == 0 ]] || continue
+      else
+        note $n "waits for CodeRabbit to review its current commit"; continue
+      fi
     fi
     runs=$(gh api "$R/commits/$sha/check-runs?per_page=100" \
       --jq '[.check_runs[]|(.conclusion // "pending")]|unique|join(",")' 2>/dev/null)
