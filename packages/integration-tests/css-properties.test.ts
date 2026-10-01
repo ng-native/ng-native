@@ -127,12 +127,12 @@ describe('the parts of a shorthand the author left out', () => {
     });
   });
 
-  it('leaves a border in currentColor to the device, and still refuses an outline in it', () => {
-    // A border's currentColor is filled in on device, from the text colour: see
-    // css-current-colour-border.test.ts. Native has no spelling for an outline's.
+  it('leaves a border or an outline in currentColor to the device', () => {
+    // Filled in on device, from the text colour: see css-current-colour-border.test.ts and
+    // css-current-colour.test.ts.
     assert.doesNotThrow(() => declarationsOf('border: 1px solid'));
-    assert.throws(() => declarationsOf('outline: 1px solid'), /currentColor/);
-    assert.throws(() => declarationsOf('outline: var(--w) solid currentColor'), /currentColor/);
+    assert.doesNotThrow(() => declarationsOf('outline: 1px solid'));
+    assert.doesNotThrow(() => declarationsOf('outline: var(--w) solid currentColor'));
   });
 
   it('outline: none and outline: 0', () => {
@@ -498,6 +498,12 @@ describe('what it refuses, and how it says so', () => {
     // refusal warned about a class nobody wrote, and hidden md:inline never showed the element.
     assert.deepEqual(declarationsOf('display: inline'), { display: 'flex' });
     assert.deepEqual(declarationsOf('display: inline-block'), { display: 'flex' });
+  });
+
+  it('reads display: flow-root as flex, as it reads block', () => {
+    // A flow-root box is a block that contains its floats. A flex item already does, so a browser
+    // lays one out as it lays out a block: Bootstrap's .d-flow-root, Tailwind's .flow-root.
+    assert.deepEqual(declarationsOf('display: flow-root'), { display: 'flex' });
   });
 
   it('reads display: block as flex, which is what every native view already is', () => {

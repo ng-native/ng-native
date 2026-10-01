@@ -195,9 +195,10 @@ function arithmetic(part, prop, context, linear) {
  * width and once as the colour, and the token decides on device: a length has no colour form and
  * a colour has no length form, so exactly one of the two resolves. Anything left out takes its
  * initial value as CSS says: no style means no line at all, which native is told as a width of 0.
+ * A `calc()` of one `var()` is a width, as in Bootstrap's `calc(var(--bs-border-width) * 2)`.
  */
 // eslint-disable-next-line complexity -- one flat case per kind of component
-function line(property, list, context) {
+function line(property, list, context, linear) {
   const { prefix, style: withStyle, sides: named } = LINE[property];
   if (list.length < 2) return null;
   // Every side spelled out for `border`, for the reason `lineSides` gives in properties.cjs.
@@ -211,10 +212,15 @@ function line(property, list, context) {
   let color = null;
   let current = false;
   let width = null;
+  let computedWidth = null;
   for (const [part, ...rest] of list) {
     if (rest.length) throw new CssUnsupported(`${context}: could not read '${property}'`);
     if (part.type === 'var') {
       references.push(part);
+      continue;
+    }
+    if (part.type === 'function' && width === null && computedWidth === null) {
+      computedWidth = arithmetic(part, null, context, linear);
       continue;
     }
     const value = tokenValue([part], context);
@@ -231,9 +237,9 @@ function line(property, list, context) {
       else color = value.color;
     } else throw new CssUnsupported(`${context}: '${describe(part)}' in '${property}'`);
   }
-  // Native has no spelling for an outline's currentColor, as `line()` in properties.cjs says.
-  if (current && prefix === 'outline') {
-    throw new CssUnsupported(`${context}: currentColor has no equivalent without a cascade root`);
+  // A width worked out on device, beside other tokens, would need the line to read it as well.
+  if (computedWidth && references.length) {
+    throw new CssUnsupported(`${context}: '${property}' has a calc() beside another var()`);
   }
 
   const every = (props, to) => Object.fromEntries(props.map((prop) => [prop, to]));
@@ -256,6 +262,12 @@ function line(property, list, context) {
   Object.assign(declarations, color === null ? {} : every(colors, color));
   if (withStyle && style !== null) declarations[`${prefix}Style`] = style;
 
+  if (computedWidth) {
+    // No style is no line, and no colour is currentColor, as CSS fills them in.
+    if (style === null) return { declarations: every(widths, 0), deferred: [] };
+    const colour = color === null ? [{ props: colors, within: CURRENT_COLOUR }] : [];
+    return { declarations, deferred: [{ ...computedWidth, props: widths }, ...colour] };
+  }
   if (!references.length) return { declarations, deferred: [] };
   const styleProp = withStyle ? [`${prefix}Style`] : [];
   const roles = [
@@ -311,7 +323,7 @@ function expandShorthand(value, context, linear) {
   if (property === 'text-shadow') return textShadow(parts, context);
   const list = components(parts);
   if (property === 'flex') return flexGrowing(list, context);
-  if (LINE[property]) return line(property, list, context);
+  if (LINE[property]) return line(property, list, context, linear);
   return positional(property, list, context, linear);
 }
 

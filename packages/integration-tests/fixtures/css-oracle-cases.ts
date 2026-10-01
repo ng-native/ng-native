@@ -31,6 +31,8 @@ export interface OracleCase {
 export const EXTRA_KEYS = {
   'border-top-color': 'borderTopColor',
   'border-left-color': 'borderLeftColor',
+  'border-top-width': 'borderTopWidth',
+  'outline-color': 'outlineColor',
 } as const;
 
 export type ExtraProperty = keyof typeof EXTRA_KEYS;
@@ -344,5 +346,83 @@ export const CASES: OracleCase[] = [
     css: '.outer { color: rgb(5, 0, 0) } #probe { --w: 2px; border: var(--w) solid }',
     tree: { name: 'view', classes: ['outer'], children: [probe({ name: 'view' })] },
     extra: ['border-top-color', 'border-left-color'],
+  },
+  {
+    name: 'a border colour falling back to currentColor is the colour of the text',
+    css: '.outer { color: rgb(4, 0, 0) } #probe { border: 2px solid; border-color: var(--c, currentColor) }',
+    tree: { name: 'view', classes: ['outer'], children: [probe({ name: 'view' })] },
+    extra: ['border-top-color', 'border-left-color'],
+  },
+  {
+    name: 'a currentColor token is the colour of the text where it is used, not where it is set',
+    css:
+      '.outer { color: rgb(1, 0, 0); --c: currentColor } ' +
+      '#probe { color: rgb(3, 0, 0); border: 2px solid rgb(9, 9, 9); border-color: var(--c) }',
+    tree: { name: 'view', classes: ['outer'], children: [probe({ name: 'view' })] },
+    extra: ['border-top-color', 'border-left-color'],
+  },
+  {
+    name: 'a border of a calc() of a token is as wide as the token works out to',
+    css:
+      '.outer { color: rgb(2, 0, 0) } ' +
+      '#probe { --w: 1px; border-top: calc(var(--w) * 2) solid currentcolor }',
+    tree: { name: 'view', classes: ['outer'], children: [probe({ name: 'view' })] },
+    extra: ['border-top-width', 'border-top-color'],
+  },
+  {
+    name: 'an outline with no colour is drawn in the colour of the text',
+    css: '#probe { color: rgb(7, 1, 0); outline: 2px solid }',
+    tree: probe({ name: 'view' }),
+    extra: ['outline-color'],
+  },
+  {
+    name: 'outline-color: currentColor is the colour the element inherits',
+    css: '.outer { color: rgb(8, 1, 0) } #probe { outline-style: solid; outline-color: currentColor }',
+    tree: { name: 'view', classes: ['outer'], children: [probe({ name: 'view' })] },
+    extra: ['outline-color'],
+  },
+  {
+    name: 'an outline of a token and currentColor is drawn in the colour of the text',
+    css: '.outer { color: rgb(9, 1, 0) } #probe { --w: 2px; outline: var(--w) solid currentColor }',
+    tree: { name: 'view', classes: ['outer'], children: [probe({ name: 'view' })] },
+    extra: ['outline-color'],
+  },
+  {
+    name: 'an outline colour falling back to currentColor is the colour of the text',
+    css: '.outer { color: rgb(6, 1, 0) } #probe { outline: 2px solid; outline-color: var(--c, currentColor) }',
+    tree: { name: 'view', classes: ['outer'], children: [probe({ name: 'view' })] },
+    extra: ['outline-color'],
+  },
+  {
+    name: 'background-color: currentColor is the colour of the text',
+    css: '#probe { color: rgb(7, 2, 0); background-color: currentColor }',
+    tree: probe({ name: 'view' }),
+  },
+  {
+    name: 'background-color: currentColor is the colour the element inherits',
+    css: '.outer { color: rgb(8, 2, 0) } #probe { background-color: currentColor }',
+    tree: { name: 'view', classes: ['outer'], children: [probe({ name: 'view' })] },
+  },
+  {
+    name: 'a background of currentColor is the colour of the text',
+    css: '.outer { color: rgb(9, 2, 0) } #probe { background: currentColor }',
+    tree: { name: 'view', classes: ['outer'], children: [probe({ name: 'view' })] },
+  },
+  {
+    name: 'a background colour falling back to currentColor is the colour of the text',
+    css: '.outer { color: rgb(6, 2, 0) } #probe { background-color: var(--c, currentColor) }',
+    tree: { name: 'view', classes: ['outer'], children: [probe({ name: 'view' })] },
+  },
+  {
+    name: 'a background of a currentColor token is the colour of the text where it is used',
+    css:
+      '.outer { color: rgb(1, 2, 0); --c: currentColor } ' +
+      '#probe { color: rgb(5, 2, 0); background-color: var(--c) }',
+    tree: { name: 'view', classes: ['outer'], children: [probe({ name: 'view' })] },
+  },
+  {
+    name: 'a text colour falling back to currentColor is the colour the element inherits',
+    css: '.outer { color: rgb(4, 2, 0) } #probe { color: rgb(9, 9, 9); color: var(--c, currentColor) }',
+    tree: { name: 'view', classes: ['outer'], children: [probe({ name: 'view' })] },
   },
 ];

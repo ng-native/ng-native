@@ -1560,7 +1560,11 @@ export class StyleResolver {
     if (Array.isArray(value)) return this.filledList(value, fill, tokens);
     const marked = settledMarker(value, tokens);
     // `currentcolor` is the colour in scope, which only the node knows: Tailwind's ring default.
-    if (marked === 'currentcolor') return own['color'] ?? parentInherited['color'] ?? 'black';
+    // On `color` itself that is the inherited colour, as CSS reads it.
+    if (marked === 'currentcolor') {
+      const ownColour = declaration.props.includes('color') ? undefined : own['color'];
+      return ownColour ?? parentInherited['color'] ?? 'black';
+    }
     if (marked !== NOT_A_MARKER) return marked ?? UNSETTLED;
     const pending = (value as { __defer?: DeferredDeclaration['compute'] }).__defer;
     if (pending) return this.computed({ ...declaration, compute: pending }, own, parentInherited);
@@ -2096,7 +2100,7 @@ function referenced(
   // property unset rather than trying the next, or the fallback.
   const names = [declaration.reference!, ...(declaration.alternatives ?? [])];
   const token = firstSet(names, tokens);
-  let value = token ? formOf(token, declaration.kind!) : fallbackOf(declaration, tokens);
+  let value = token ? tokenForm(token, declaration.kind!) : fallbackOf(declaration, tokens);
   // `calc(var(--n) * 1px)`: the arithmetic gives a unitless token its unit, which is the usual
   // way to turn a count into a length. So a length with arithmetic reads the bare number too.
   if (value === undefined && declaration.adjust && declaration.kind === 'length') {
@@ -2106,6 +2110,15 @@ function referenced(
     ? fromChannels(value, declaration.alpha, tokens, declaration.space)
     : value;
   return declaration.adjust ? adjusted(base, declaration.adjust) : base;
+}
+
+/**
+ * A set token's value in the form wanted. A token of `currentColor` is the colour in scope where
+ * it is used, not where it is set, so it is the marker the node fills in.
+ */
+function tokenForm(token: TokenValue, kind: TokenKind): unknown {
+  const value = formOf(token, kind);
+  return value === undefined && kind === 'color' && isCurrentColour(token) ? CURRENT_COLOUR : value;
 }
 
 /** The fallback written, or one made of other tokens, worked out from the tokens where it is used. */
@@ -2173,6 +2186,13 @@ function lineValues(
   return values;
 }
 
+/** A token of `currentColor`, in any case. */
+const isCurrentColour = (token: TokenValue | undefined): boolean =>
+  token?.keyword?.toLowerCase() === 'currentcolor';
+
+/** The marker the compiler writes for `currentColor`, which the node fills in. */
+const CURRENT_COLOUR = { __colour: { color: 'currentcolor' } };
+
 /** What a line's width, style and colour are when it leaves them out. */
 const LINE_INITIAL = {
   width: LINE_WIDTHS['medium'],
@@ -2212,7 +2232,7 @@ function lineRole(
     return { role: 'width', value: width };
   }
   if (open.has('style') && word && LINE_STYLES.has(word)) return { role: 'style', value: word };
-  const color = formOf(token, 'color');
+  const color = isCurrentColour(token) ? 'currentcolor' : formOf(token, 'color');
   return open.has('color') && color !== undefined ? { role: 'color', value: color } : undefined;
 }
 

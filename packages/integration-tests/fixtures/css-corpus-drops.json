@@ -1,7 +1,7 @@
 {
   "bootstrap": {
-    "rules": 2516,
-    "dropped": 710,
+    "rules": 2517,
+    "dropped": 706,
     "emitted": [
       "$animation",
       "$animationDelay",
@@ -151,9 +151,6 @@
       "background-clip": {
         "'background-clip' is not mapped yet. React Native may well support it; nothing here translates it. Check RN's style types, then add it to css/properties.cjs.": 14
       },
-      "background-color": {
-        "background-color: currentColor has no equivalent without a cascade root": 3
-      },
       "background-image": {
         "'background-image' mixes var() with other values, which needs a parser on device. calc() of tokens, numbers and points, max(var(--x), <length>), colours and transforms are understood; anything else has to be worked out at build time.": 1,
         "background-image: a url() is not something native can paint as a background. Only linear-gradient() and radial-gradient() are, and an image belongs in an <image>.": 4,
@@ -184,8 +181,7 @@
         "'border-color: inherit' is a CSS-wide keyword, which this cascade does not implement. Write the value it stands for.": 1
       },
       "border-top": {
-        "'border-top: inherit' is a CSS-wide keyword, which this cascade does not implement. Write the value it stands for.": 1,
-        "'{\"name\":\"calc\",\"arguments\":[{\"type\":\"var' in 'border-top'": 1
+        "'border-top: inherit' is a CSS-wide keyword, which this cascade does not implement. Write the value it stands for.": 1
       },
       "border-top-left-radius": {
         "'border-top-left-radius: inherit' is a CSS-wide keyword, which this cascade does not implement. Write the value it stands for.": 1
@@ -356,8 +352,8 @@
     }
   },
   "bulma": {
-    "rules": 2994,
-    "dropped": 1878,
+    "rules": 2995,
+    "dropped": 1876,
     "emitted": [
       "$animation",
       "$animationDelay",
@@ -496,8 +492,7 @@
       },
       "background-color": {
         "'background-color' mixes var() with other values, which needs a parser on device. calc() of tokens, numbers and points, max(var(--x), <length>), colours and transforms are understood; anything else has to be worked out at build time.": 626,
-        "'background-color: inherit' is a CSS-wide keyword, which this cascade does not implement. Write the value it stands for.": 1,
-        "background-color: currentColor has no equivalent without a cascade root": 2
+        "'background-color: inherit' is a CSS-wide keyword, which this cascade does not implement. Write the value it stands for.": 1
       },
       "background-image": {
         "hsl() with a var() in it is only understood as a whole colour token, inside color-mix(), as rgba(var(--channels), <alpha>) or as an hsl() of tokens. Put the whole colour in the variable instead.": 22

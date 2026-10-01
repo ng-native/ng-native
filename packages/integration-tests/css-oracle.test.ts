@@ -76,7 +76,10 @@ describe('what a browser does with the same stylesheet', () => {
         }
       }
       for (const property of test.extra ?? []) {
-        assert.equal(style[EXTRA_KEYS[property]], expected.expected[property], property);
+        // A width is a number of points here, and `2px` in the browser.
+        const ours = style[EXTRA_KEYS[property]];
+        const value = typeof ours === 'number' ? `${ours}px` : ours;
+        assert.equal(value, expected.expected[property], property);
       }
     });
   });
