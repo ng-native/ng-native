@@ -1,5 +1,6 @@
 import { Network, type NetworkStatus } from '@ng-native/expo/network';
-import { Storage, Store, type NativeStore } from '@ng-native/expo/store';
+import { Store, type NativeStore } from '@ng-native/expo/store';
+import { Storage } from '@ng-native/expo/async-storage';
 import { cleanup, fireEvent, render, screen, userEvent, waitFor } from '@ng-native/testing';
 import { describe, expect, test } from 'vitest';
 import { FieldNotes } from './field-notes.ts';

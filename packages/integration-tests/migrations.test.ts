@@ -123,6 +123,65 @@ describe('sync-app-versions, through nx migrate, ng update and ng-native-migrate
   });
 });
 
+describe('split-store-and-player, through nx migrate, ng update and ng-native-migrate', () => {
+  const files = {
+    'src/app/settings.ts': [
+      '// Settings, kept on the device.',
+      "import { Injectable, inject } from '@angular/core';",
+      "import { SecureStorage, Storage as Prefs, type NativeStore, Store } from '@ng-native/expo/store';",
+      "import { StoreReview } from '@ng-native/expo/store-review';",
+      "import type { Player } from '@ng-native/expo/player';",
+      'import { audioPlayer, videoPlayer } from "@ng-native/expo/player"',
+      '',
+      "export { Storage } from '@ng-native/expo/store';",
+      '',
+    ].join('\n'),
+    'src/app/all.ts': "import * as store from '@ng-native/expo/store';\n",
+    'src/app/legacy.js': "const { Storage } = require('@ng-native/expo/store');\n",
+    'src/app/player.test.ts':
+      "import { vi } from 'vitest';\nvi.mock('@ng-native/expo/player', () => ({}));\n",
+  };
+
+  it('imports each moved name from its new entry point, and notes what it cannot split', async () => {
+    const { nx, angular, cli } = await acrossAdapters(files, 'split-store-and-player', '0.2.0');
+    assert.equal(
+      nx.files['src/app/settings.ts'],
+      [
+        '// Settings, kept on the device.',
+        "import { Injectable, inject } from '@angular/core';",
+        "import { type NativeStore, Store } from '@ng-native/expo/store';",
+        "import { SecureStorage } from '@ng-native/expo/secure-store';",
+        "import { Storage as Prefs } from '@ng-native/expo/async-storage';",
+        "import { StoreReview } from '@ng-native/expo/store-review';",
+        "import type { Player } from '@ng-native/expo/player';",
+        'import { audioPlayer } from "@ng-native/expo/audio"',
+        'import { videoPlayer } from "@ng-native/expo/video"',
+        '',
+        "export { Storage } from '@ng-native/expo/async-storage';",
+        '',
+      ].join('\n'),
+    );
+    for (const file of ['src/app/all.ts', 'src/app/legacy.js', 'src/app/player.test.ts']) {
+      assert.equal(nx.files[file], files[file as keyof typeof files]);
+    }
+    const store =
+      "Import Storage from '@ng-native/expo/async-storage' and SecureStorage from '@ng-native/expo/secure-store' instead.";
+    assert.deepEqual(nx.notes, [
+      `src/app/all.ts:1: A namespace import cannot be split automatically. ${store}`,
+      `src/app/legacy.js:1: require('@ng-native/expo/store') cannot be split automatically. ${store}`,
+      "src/app/player.test.ts:2: vi.mock('@ng-native/expo/player') cannot be split automatically. Import audioPlayer from '@ng-native/expo/audio' and videoPlayer from '@ng-native/expo/video' instead.",
+    ]);
+    assert.deepEqual(angular, nx);
+    assert.deepEqual(cli, nx);
+  });
+
+  it('changes nothing the second time', async () => {
+    const first = await viaNx(files, 'split-store-and-player');
+    const again = await viaNx(first.files as Record<string, string>, 'split-store-and-player');
+    assert.deepEqual(again.files, first.files);
+  });
+});
+
 describe('ng-native-migrate', () => {
   const app = {
     'package.json': JSON.stringify({ dependencies: { '@ng-native/components': '^0.1.3' } }),

@@ -1,6 +1,6 @@
 import { Service, computed, effect, inject, signal, type Signal } from '@angular/core';
 import { Network } from '@ng-native/expo/network';
-import { Storage } from '@ng-native/expo/store';
+import { Storage } from '@ng-native/expo/async-storage';
 import { NOTES_API, type NoteWrite, type NotesApi } from '../api/notes-api.ts';
 import { nextId, sortNotes, type Note } from '../data/note.ts';
 import { SEED_NOTES } from '../data/seed-notes.ts';

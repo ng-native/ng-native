@@ -1,5 +1,5 @@
 import { Service, inject } from '@angular/core';
-import { Storage } from '@ng-native/expo/store';
+import { Storage } from '@ng-native/expo/async-storage';
 
 declare const __DEV__: boolean | undefined;
 

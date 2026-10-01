@@ -1292,6 +1292,10 @@ importers:
       semver:
         specifier: ^7.7.0
         version: 7.8.5
+    devDependencies:
+      typescript:
+        specifier: ~6.0.3
+        version: 6.0.3
 
   packages/nx:
     dependencies:
