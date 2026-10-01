@@ -17,13 +17,20 @@ interface Fixture {
 const all = (n: readonly FakeFabricNode[]): FakeFabricNode[] =>
   n.flatMap((x) => [x, ...all(x.children)]);
 
+interface DefaultsFixture {
+  bubbled(): number;
+  on(): boolean;
+}
+
 let Platforms: Type<Fixture>;
+let Defaults: Type<DefaultsFixture>;
 
 before(async () => {
   const mod = await compileFixture(
     fileURLToPath(new URL('./fixtures/expo-ui-platforms.ts', import.meta.url)),
   );
   Platforms = mod['ExpoUiPlatformsFixture'] as Type<Fixture>;
+  Defaults = mod['ExpoUiPlatformDefaultsFixture'] as Type<DefaultsFixture>;
 });
 
 after(() => {
@@ -31,15 +38,19 @@ after(() => {
   registerExpoUiViews('ios');
 });
 
-async function boot(platform: 'ios' | 'android') {
+async function boot<T = Fixture>(
+  platform: 'ios' | 'android',
+  fixture: Type<T> = Platforms as Type<T>,
+) {
   registerPlatformComponents(platform);
   registerExpoUiViews(platform);
   const fabric = createFakeFabric();
-  const app = mount(1, Platforms, fabric);
+  const app = mount(1, fixture, fabric);
   await new Promise((resolve) => setTimeout(resolve, 0));
-  const named = (pattern: RegExp) => all(fabric.committed).find((n) => pattern.test(n.viewName))!;
-  const instance = app.componentRef.instance as Fixture;
-  return { fabric, app, named, instance };
+  const every = (pattern: RegExp) => all(fabric.committed).filter((n) => pattern.test(n.viewName));
+  const named = (pattern: RegExp) => every(pattern)[0]!;
+  const instance = app.componentRef.instance as T;
+  return { fabric, app, named, every, instance };
 }
 
 describe('the typed SwiftUI controls on iOS', () => {
@@ -105,5 +116,42 @@ describe('the same controls on Android, as Compose reads them', () => {
     assert.equal(instance.on(), false);
     assert.equal(instance.level(), 0.75);
     assert.equal(instance.presses(), 1);
+  });
+});
+
+describe('what a template leaves unset, the same on both', () => {
+  it('centres a stack without an alignment, as SwiftUI does', async () => {
+    const { named } = await boot('android', Defaults);
+    assert.equal(named(/ExpoUI_ColumnView$/).props['horizontalAlignment'], 'center');
+    assert.equal(named(/ExpoUI_RowView$/).props['verticalAlignment'], 'center');
+  });
+
+  it('switches a toggle with no isOn on Android, as SwiftUI does', async () => {
+    const { fabric, app, every, instance } = await boot('android', Defaults);
+    const toggle = every(/ExpoUI_SwitchView$/)[1]!;
+    fabric.emit(toggle, 'topCheckedChange', { value: true });
+    app.applicationRef.tick();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    assert.equal(instance.on(), true);
+    assert.equal(every(/ExpoUI_SwitchView$/)[1]!.props['value'], true, 'and the switch shows it');
+  });
+
+  it("stops a Compose toggle's change where the template stops it", async () => {
+    const { fabric, app, every, instance } = await boot('android', Defaults);
+    fabric.emit(every(/ExpoUI_SwitchView$/)[0]!, 'topCheckedChange', { value: false });
+    app.applicationRef.tick();
+    assert.equal(instance.bubbled(), 0);
+  });
+
+  it('divides the range SwiftUI draws into the steps asked for', async () => {
+    const { every } = await boot('ios', Defaults);
+    const [minOnly, fractional] = every(/ExpoUI_SliderView$/);
+    assert.equal(minOnly!.props['step'], 0.5, 'SwiftUI draws 0 to 1 without both ends');
+    assert.equal(fractional!.props['step'], 1 / 3);
+  });
+
+  it('sends Compose a whole number of steps', async () => {
+    const { every } = await boot('android', Defaults);
+    assert.equal(every(/ExpoUI_SliderView$/)[1]!.props['steps'], 2);
   });
 });
