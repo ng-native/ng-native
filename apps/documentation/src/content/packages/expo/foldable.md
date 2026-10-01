@@ -70,8 +70,8 @@ export class Reader {
 - **`posture`** - `'closed'`, `'partially-open'`, `'fully-open'`, or `'unknown'` without a hinge.
 - **`fold`** - where the fold crosses the window: `bounds` in points, `orientation`, `isSeparating`
   and `occlusion`. Null when it crosses no window, as on a closed phone's cover display.
-- **`angle`** - the hinge angle in degrees, `0` shut and `180` flat. Null without an angle sensor,
-  and until the first reading.
+- **`angle`** - the hinge angle in degrees, `0` shut and `180` flat. Null without a hinge or an
+  angle sensor, and until the first reading.
 - **`separating`** - whether the fold splits the window, so content should stay off it.
 - **`book`** and **`tabletop`** - half open with the fold running down the middle, or across it.
 

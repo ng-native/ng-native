@@ -81,7 +81,17 @@ export class Foldable {
 
   private update(state: HingeState | undefined): void {
     this.state.set(state);
-    this.followAngle();
+    if (state === undefined) {
+      this.stopFollowingAngle();
+    } else {
+      this.followAngle();
+    }
+  }
+
+  private stopFollowingAngle(): void {
+    this.angleSubscription?.remove();
+    this.angleSubscription = null;
+    this.angleState.set(null);
   }
 
   private followAngle(): void {

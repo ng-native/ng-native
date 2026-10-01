@@ -126,13 +126,23 @@ describe('Foldable, on a foldable', () => {
   });
 
   it('becomes a phone again when the device stops reporting a hinge', () => {
-    const hinge = fakeHinge({ state: BOOK });
+    const hinge = fakeHinge({ state: BOOK, angleFrom: 127 });
     const { foldable } = foldableWith(hinge.native);
     hinge.change(undefined);
     assert.deepEqual(
-      [foldable.available(), foldable.posture(), foldable.fold()],
-      [false, 'unknown', null],
+      [foldable.available(), foldable.posture(), foldable.fold(), foldable.angle()],
+      [false, 'unknown', null, null],
     );
+    assert.equal(hinge.listening(), 1, 'the angle is not followed without a hinge');
+  });
+
+  it('reads the angle afresh when the hinge comes back', () => {
+    const hinge = fakeHinge({ state: BOOK, angleFrom: 127 });
+    const { foldable } = foldableWith(hinge.native);
+    hinge.change(undefined);
+    hinge.change(BOOK);
+    assert.equal(foldable.angle(), 127);
+    assert.equal(hinge.listening(), 2);
   });
 
   it('stops listening when the app is destroyed', () => {
