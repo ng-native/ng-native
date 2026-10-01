@@ -10,6 +10,9 @@ const CHAPTERS = [
   { title: 'Two pages, one app', page: 88 },
 ];
 
+/** The chapter the book is open at. */
+const CURRENT = CHAPTERS[3]!;
+
 @Component({
   imports: [Text, View],
   selector: 'app-root',
@@ -22,7 +25,7 @@ const CHAPTERS = [
             <text class="book">The Folding Book</text>
             <view class="rule"></view>
             @for (chapter of chapters; track chapter.page; let i = $index) {
-              <view class="toc-row" [class.current]="i === 3">
+              <view class="toc-row" [class.current]="chapter === current">
                 <text class="toc-number">{{ i + 1 }}</text>
                 <text class="toc-title">{{ chapter.title }}</text>
                 <text class="toc-page">{{ chapter.page }}</text>
@@ -37,7 +40,7 @@ const CHAPTERS = [
           <view class="gutter" [style.width.px]="fold.bounds.width"></view>
           <view class="page right">
             <text class="chapter-number">Chapter four</text>
-            <text class="chapter-title">Reading the hinge</text>
+            <text class="chapter-title">{{ current.title }}</text>
             <text class="prose">
               The phone is open like a book, and this app knows it. Angular reads the hinge as
               signals: how far it is open, and exactly where the fold crosses the screen.
@@ -47,7 +50,7 @@ const CHAPTERS = [
               fold. Close the phone a little and the angle on the left page follows your hand.
             </text>
             <view class="spacer"></view>
-            <text class="folio">67</text>
+            <text class="folio">{{ current.page }}</text>
           </view>
         </view>
       } @else if (closed()) {
@@ -61,7 +64,7 @@ const CHAPTERS = [
         <view class="page wide">
           <view class="wide-column">
             <text class="chapter-number">Chapter four</text>
-            <text class="chapter-title">Reading the hinge</text>
+            <text class="chapter-title">{{ current.title }}</text>
             <text class="prose">
               Flat, the phone is one wide screen, so the chapter takes all of it. Angular reads the
               hinge as signals, and the fold only splits the page when it really splits the screen.
@@ -233,6 +236,7 @@ const CHAPTERS = [
 export class App {
   private readonly foldable = inject(Foldable);
   protected readonly chapters = CHAPTERS;
+  protected readonly current = CURRENT;
 
   protected readonly split = computed(() => {
     const fold = this.foldable.fold();

@@ -55,13 +55,17 @@ import { Foldable } from '@ng-native/expo/foldable';
 })
 export class Reader {
   private readonly foldable = inject(Foldable);
-  protected readonly split = computed(() =>
-    this.foldable.separating() && this.foldable.fold()?.orientation === 'vertical'
-      ? this.foldable.fold()
-      : null,
-  );
+  protected readonly split = computed(() => {
+    const fold = this.foldable.fold();
+    return this.foldable.separating() && fold?.orientation === 'vertical' ? fold : null;
+  });
 }
 ```
+
+`fold().bounds` is in window coordinates, so `bounds.x` is the width of the left pane only for a
+layout that starts at the window's left edge, as an app's root view does. Inside padding, beside a
+side panel, or in a window that does not start at the screen's edge, subtract the layout's own
+offset from `bounds.x`.
 
 ## What it reports
 
