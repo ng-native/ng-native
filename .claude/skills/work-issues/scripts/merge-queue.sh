@@ -49,6 +49,11 @@ while (( ${#queue} )); do
       reviewed_head=$(gh api --paginate "$R/issues/$n/comments?per_page=100" \
         --jq ".[]|select(.user.login==\"coderabbitai[bot]\" and (.body|contains(\"and $sha\")))|.id" 2>/dev/null | wc -l | tr -d ' ')
     fi
+    # A "changes requested" verdict on the current commit holds the PR, even with its threads resolved:
+    # a rebutted comment waits for a later push to get a review that doesn't request changes.
+    if [[ $(jq -r '[.[]|select(.user.login=="coderabbitai[bot]" and .state!="COMMENTED")]|last|"\(.state) \(.commit_id)"' <<<$reviews) == "CHANGES_REQUESTED $sha" ]]; then
+      note $n "has changes requested on its current commit"; continue
+    fi
     if [[ $approved != $sha ]]; then
       if (( reviewed_head > 0 )); then
         [[ $(open_threads $n) == 0 ]] || continue
