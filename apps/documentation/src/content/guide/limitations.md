@@ -86,8 +86,8 @@ bundle imports `expo`:
   `fetch` in place, so every build gets the one with no `body`.
 
 Use `provideNativeHttpClient()` from `@ng-native/platform/http`: it configures `HttpClient` with
-`withXhr()`, which uses React Native's native `XMLHttpRequest`, upload progress included, whichever
-`fetch` is global. See [HTTP requests](/packages/platform#http-requests) for the signature and an
+`withXhr()`, which uses React Native's native `XMLHttpRequest`, upload progress included, whatever
+the global `fetch` is. See [HTTP requests](/packages/platform#http-requests) for the signature and an
 interceptor example.
 
 **Workaround:** `provideNativeHttpClient(...features)` in `mount()`'s `providers`, never
