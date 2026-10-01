@@ -361,6 +361,7 @@ describe('text-input', () => {
       'email-address': 'email',
       'phone-pad': 'tel',
       url: 'url',
+      'web-search': 'search',
       default: null,
       'ascii-capable': null,
     };
@@ -373,14 +374,28 @@ describe('text-input', () => {
     assert.equal(el.getAttribute('inputmode'), null);
   });
 
+  it('leaves the enter key to returnKeyType, whatever the keyboard', () => {
+    // inputmode="search" already gives a search key; an enterkeyhint of the keyboard's own would
+    // override the one the app asked for.
+    const { el, set } = scene('text-input');
+    set('keyboardType', 'web-search');
+    assert.equal(el.getAttribute('enterkeyhint'), null);
+    set('returnKeyType', 'go');
+    set('keyboardType', 'email-address');
+    set('keyboardType', 'web-search');
+    assert.equal(el.getAttribute('enterkeyhint'), 'go');
+  });
+
   it('is a tel field for a phone keyboard, and a text field for the rest', () => {
     const { node, set } = scene('text-input');
     // An email, url or number field changes the value (trimmed, or a number), and an email or
-    // number field has no selection API, so those keyboards stay inputmode only.
+    // number field has no selection API, so those keyboards stay inputmode only. A search field
+    // draws a clear button of its own and empties itself on Escape.
     const expected: Record<string, string> = {
       'phone-pad': 'tel',
       url: 'text',
       'email-address': 'text',
+      'web-search': 'text',
       numeric: 'text',
       'number-pad': 'text',
       'decimal-pad': 'text',
@@ -398,7 +413,7 @@ describe('text-input', () => {
   it('keeps the spaces around a value whatever the keyboard and secureTextEntry', () => {
     const { node, set } = scene('text-input');
     set('text', ' example.com ');
-    for (const keyboard of ['url', 'email-address', 'phone-pad', 'numeric']) {
+    for (const keyboard of ['url', 'email-address', 'web-search', 'phone-pad', 'numeric']) {
       set('keyboardType', keyboard);
       assert.equal((node.el as HTMLInputElement).value, ' example.com ', keyboard);
     }

@@ -139,3 +139,37 @@ describe('a text field swapped by multiline', () => {
     input.remove();
   });
 });
+
+/*
+ * Why an email, url or search keyboard sets inputmode and leaves the field a text field, in the
+ * browser that would break if it did not. In Chromium a type="email" field throws from
+ * setSelectionRange, reads null for selectionStart, trims what the app sets, and hides the spaces
+ * the user types from its value, so what changeText reports would differ from what is on screen.
+ * A type="url" field trims what the app sets, and a type="search" field empties itself on Escape.
+ */
+describe('a text field with an email, url or search keyboard', () => {
+  for (const [keyboard, mode] of [
+    ['email-address', 'email'],
+    ['url', 'url'],
+    ['web-search', 'search'],
+  ] as const) {
+    it(`keeps the value, the spaces typed and the selection, with ${keyboard}`, async () => {
+      const engine = new BrowserEngine(document);
+      const node = engine.createElementNode('text-input');
+      const input = node.el as HTMLInputElement;
+      document.body.append(input);
+      engine.setProp(node, 'text', ' a@b.c ');
+      engine.setProp(node, 'keyboardType', keyboard);
+      expect([input.inputMode, input.value]).toEqual([mode, ' a@b.c ']);
+      engine.setProp(node, 'selection', { start: 1, end: 4 });
+      expect([input.selectionStart, input.selectionEnd]).toEqual([1, 4]);
+      input.setSelectionRange(input.value.length, input.value.length);
+      await userEvent.type(input, ' x ');
+      expect(input.value).toBe(' a@b.c  x ');
+      await userEvent.keyboard('{Escape}');
+      expect(input.value).toBe(' a@b.c  x ');
+      expect(input.type).toBe('text');
+      input.remove();
+    });
+  }
+});

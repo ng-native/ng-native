@@ -286,9 +286,12 @@ const VIEW_BASE_HANDLERS: Record<string, Handler> = {
 
 /**
  * A one-line field's `type`: a password while `secureTextEntry` is on, `tel` for a phone keyboard,
- * and `text` otherwise. The other keyboards stay `inputmode` only: `type="url"` and `"email"` trim
- * the value the app set, and `"email"` and `"number"` have no selection API, so `setSelection`
- * would throw.
+ * and `text` otherwise. The other keyboards stay `inputmode` only, which is what picks the
+ * on-screen keyboard. In Chromium, `type="email"` throws from `setSelectionRange`, reads null for
+ * `selectionStart`, trims the value the app set, and hides the spaces the user types from its
+ * value, so `changeText` would report something other than what is on screen. `type="url"` trims
+ * the value the app set. `type="number"` has no selection API, and `type="search"` draws a clear
+ * button of its own and empties itself on Escape.
  */
 function setInputType(n: BrowserNode): void {
   const field = el(n);
@@ -320,6 +323,7 @@ const TEXT_INPUT_HANDLERS: Record<string, Handler> = {
       'email-address': 'email',
       'phone-pad': 'tel',
       url: 'url',
+      'web-search': 'search',
     };
     const mode = typeof v === 'string' ? map[v] : undefined;
     setOrRemove(n, 'inputmode', mode, c || mode === undefined);
