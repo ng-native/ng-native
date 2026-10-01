@@ -85,8 +85,9 @@ describe('display: var()', () => {
     }
   });
 
-  it('takes a written fallback through the same reading', () => {
+  it('takes a written fallback and a padded token through the same reading', () => {
     assert.equal(tree('.a { display: var(--missing, block) }').display(), 'flex');
-    assert.equal(tree('.a { display: var(--missing, none) }').display(), 'none');
+    assert.equal(tree('.a { display: var(--missing,  none ) }').display(), 'none');
+    assert.equal(tree('.a { --d:  none ; display: var(--d) }').display(), 'none');
   });
 });

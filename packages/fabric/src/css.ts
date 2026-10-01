@@ -2149,7 +2149,7 @@ const DISPLAYS: ReadonlyMap<string, string> = new Map([
 ]);
 
 const displayOf = (value: unknown): string | undefined =>
-  typeof value === 'string' ? DISPLAYS.get(value.trim().toLowerCase()) : undefined;
+  typeof value === 'string' ? DISPLAYS.get(value.toLowerCase()) : undefined;
 
 /**
  * A set token's value in the form wanted. A token of `currentColor` is the colour in scope where
