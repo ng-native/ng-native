@@ -448,7 +448,7 @@ function setUpWeb(tree, root, vite, version, libraries, besideDevice) {
       tree,
       joinPathFragments(root, config),
       libraries.map((library) => libraryPreset(tree, library)),
-      { preset: 'web-preset.cjs', extend: besideDevice ? './tailwind.config.js' : undefined },
+      { preset: 'web-preset.cjs', extend: besideDevice ? `./tailwind.config.${ext}` : undefined },
     );
     writePostcssConfig(tree, root, config, ext);
     writeV3Stylesheet(tree, root);
@@ -546,7 +546,7 @@ async function tailwind(tree, options) {
       writeV3Stylesheet(tree, app.root);
       writeV3Config(
         tree,
-        joinPathFragments(app.root, 'tailwind.config.js'),
+        joinPathFragments(app.root, `tailwind.config.${commonJsExtension(tree, app.root)}`),
         libraries.map((library) => libraryPreset(tree, library)),
       );
     } else {

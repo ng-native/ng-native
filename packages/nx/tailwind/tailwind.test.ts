@@ -485,6 +485,19 @@ describe('Tailwind 3, in an app that also builds for a browser', () => {
     await generate(tree, { tailwindVersion: 3, library: 'ui,tokens' });
     assert.deepEqual(snapshot(tree), before);
   });
+
+  it('names the device config the web config takes, as .cjs in an ES module package', async () => {
+    const tree = await integrated();
+    web(tree, 'apps/mobile', 'src/main.web.ts');
+    updateJson(tree, 'apps/mobile/package.json', (manifest) => ({ ...manifest, type: 'module' }));
+    await generate(tree, { tailwindVersion: 3 });
+    assert.ok(tree.exists('apps/mobile/tailwind.config.cjs'));
+    assert.ok(!tree.exists('apps/mobile/tailwind.config.js'));
+    assert.match(
+      read(tree, 'apps/mobile/tailwind.web.config.cjs'),
+      /\.\.\.require\('\.\/tailwind\.config\.cjs'\)/,
+    );
+  });
 });
 
 describe('Tailwind 3, in a browser app of its own', () => {
