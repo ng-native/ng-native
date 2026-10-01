@@ -38,7 +38,18 @@ export function injectService<T>(token: ProviderToken<T>, options: InjectService
   return applicationRef.injector.get(token);
 }
 
-/** Destroy every app `injectService` created. Called by `cleanup()`. */
+/**
+ * Destroy every app `injectService` created. Called by `cleanup()`. A teardown that throws does
+ * not stop the rest: each app is destroyed, then the first error is thrown.
+ */
 export function destroyServiceApps(): void {
-  for (const app of apps.splice(0)) app.destroy();
+  const errors: unknown[] = [];
+  for (const app of apps.splice(0)) {
+    try {
+      app.destroy();
+    } catch (error) {
+      errors.push(error);
+    }
+  }
+  if (errors.length > 0) throw errors[0];
 }

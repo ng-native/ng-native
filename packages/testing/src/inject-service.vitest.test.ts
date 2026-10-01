@@ -64,6 +64,29 @@ describe('injectService', () => {
     expect(unsubscribed).toBe(1);
   });
 
+  it('destroys every app on cleanup when one throws, then throws the first error', () => {
+    let unsubscribed = 0;
+    const failure = new Error('teardown failed');
+    injectService(Scheme, {
+      providers: [
+        sourceOf('dark', () => {
+          throw failure;
+        }),
+      ],
+    });
+    injectService(Scheme, {
+      providers: [
+        sourceOf('dark', () => {
+          throw new Error('a later teardown failed');
+        }),
+      ],
+    });
+    injectService(Scheme, { providers: [sourceOf('dark', () => unsubscribed++)] });
+
+    expect(() => cleanup()).toThrow(failure);
+    expect(unsubscribed).toBe(1);
+  });
+
   it('leaves a render as the one screen queries', async () => {
     await render('<text>Shown</text>');
     injectService(Scheme);
