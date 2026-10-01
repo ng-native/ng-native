@@ -36,18 +36,23 @@ export interface DevMenuSource {
  * native module 'ExpoFontLoader'`) until Expo Go is relaunched. In development `@ng-native/platform`
  * routes the refresh runtime's full reload through Expo's `reloadAppAsync()` in an Expo app, falling
  * back to React Native's, so this reloads through it. Neither this package nor the bundle it is in
- * names `expo` for that: an app on the web, or without Expo, has none to resolve. Without the runtime,
- * as in a release build, it is React Native's reload.
+ * names `expo` for that: an app on the web, or without Expo, has none to resolve. Outside
+ * development, or without the runtime, it is React Native's reload, which does nothing in a release
+ * build, where Expo's would restart the app.
  */
 function throughRefreshRuntime(settings: NativeDevMenu): NativeDevMenu {
   return {
     addMenuItem: (title, handler) => settings.addMenuItem(title, handler),
     reload: (reason) => {
-      const scope = globalThis as { __METRO_GLOBAL_PREFIX__?: string } & Record<string, unknown>;
+      const scope = globalThis as {
+        __METRO_GLOBAL_PREFIX__?: string;
+        __DEV__?: boolean;
+      } & Record<string, unknown>;
       const refresh = scope[`${scope.__METRO_GLOBAL_PREFIX__ ?? ''}__ReactRefresh`] as
         { performFullRefresh?: (reason: string) => void } | undefined;
-      if (refresh?.performFullRefresh) refresh.performFullRefresh(reason ?? 'requested by the app');
-      else settings.reload(reason);
+      if (scope.__DEV__ === true && refresh?.performFullRefresh) {
+        refresh.performFullRefresh(reason ?? 'requested by the app');
+      } else settings.reload(reason);
     },
   };
 }

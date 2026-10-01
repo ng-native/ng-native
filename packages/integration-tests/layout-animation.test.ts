@@ -219,11 +219,13 @@ describe("the developer menu's reload", () => {
     scope['__ReactRefresh'] = {
       performFullRefresh: (reason: string) => void calls.push(`refresh: ${reason}`),
     };
+    scope['__DEV__'] = true;
     try {
       device(calls).menu.reload('reset');
       device(calls).menu.reload();
     } finally {
       delete scope['__ReactRefresh'];
+      delete scope['__DEV__'];
     }
     assert.deepEqual(calls, ['refresh: reset', 'refresh: requested by the app']);
   });
@@ -231,6 +233,25 @@ describe("the developer menu's reload", () => {
   it("reloads through React Native's DevSettings without the runtime, as in a release build", () => {
     const calls: string[] = [];
     device(calls).menu.reload('reset');
+    assert.deepEqual(calls, ['DevSettings.reload: reset']);
+  });
+
+  it("never reaches the refresh runtime, and so Expo's reload, in a release build", () => {
+    // React Native's DevSettings.reload() does nothing in a release build, where Expo's
+    // reloadAppAsync() would restart the app.
+    const calls: string[] = [];
+    scope['__ReactRefresh'] = {
+      performFullRefresh: (reason: string) => void calls.push(`refresh: ${reason}`),
+    };
+    const development = scope['__DEV__'];
+    scope['__DEV__'] = false;
+    try {
+      device(calls).menu.reload('reset');
+    } finally {
+      delete scope['__ReactRefresh'];
+      if (development === undefined) delete scope['__DEV__'];
+      else scope['__DEV__'] = development;
+    }
     assert.deepEqual(calls, ['DevSettings.reload: reset']);
   });
 
