@@ -8,7 +8,6 @@
 # drops out of the queue; one still waiting for review or CI stays in it.
 R=repos/ng-native/ng-native
 queue=($@)
-typeset -A asked
 while (( ${#queue} )); do
   for n in $queue; do
     pr=$(gh api $R/pulls/$n 2>/dev/null) || continue
@@ -25,9 +24,14 @@ while (( ${#queue} )); do
       # commit. Ask it once per head commit to review the current one.
       earlier=$(gh api "$R/pulls/$n/reviews?per_page=100" \
         --jq '[.[]|select(.user.login=="coderabbitai[bot]" and .state!="COMMENTED")]|last|.state' 2>/dev/null)
-      if [[ $earlier == APPROVED && -z ${asked[$n:$sha]} ]]; then
-        gh api $R/issues/$n/comments -f body='@coderabbitai review' >/dev/null 2>&1 && echo "#$n asked CodeRabbit to review the current head"
-        asked[$n:$sha]=1
+      if [[ $earlier == APPROVED ]]; then
+        # Ask at most once per head commit, judged from the PR's own comments so a restart doesn't repeat it.
+        pushed=$(gh api $R/commits/$sha --jq .commit.committer.date 2>/dev/null)
+        asked=$(gh api "$R/issues/$n/comments?per_page=100" \
+          --jq '[.[]|select(.body=="@coderabbitai review")|.created_at]|last // ""' 2>/dev/null)
+        if [[ -z $asked || $asked < $pushed ]]; then
+          gh api $R/issues/$n/comments -f body='@coderabbitai review' >/dev/null 2>&1 && echo "#$n asked CodeRabbit to review the current head"
+        fi
       fi
       continue
     fi
