@@ -1,5 +1,5 @@
 import { Component, computed, inject } from '@angular/core';
-import { Text, View } from '@ng-native/components';
+import { ScrollView, Text, View } from '@ng-native/components';
 import { Foldable } from '@ng-native/expo/foldable';
 
 const CHAPTERS = [
@@ -14,13 +14,17 @@ const CHAPTERS = [
 const CURRENT = CHAPTERS[3]!;
 
 @Component({
-  imports: [Text, View],
+  imports: [ScrollView, Text, View],
   selector: 'app-root',
   template: `
     <view class="desk">
       @if (split(); as fold) {
         <view class="spread">
-          <view class="page left" [style.width.px]="fold.bounds.x">
+          <scroll-view
+            class="page before-fold"
+            [style.width.px]="fold.bounds.x"
+            contentContainerClass="page-body left"
+          >
             <text class="kicker">Angular Native</text>
             <text class="book">The Folding Book</text>
             <view class="rule"></view>
@@ -36,9 +40,9 @@ const CURRENT = CHAPTERS[3]!;
               <text class="hinge-angle">{{ angle() }}</text>
               <text class="hinge-label">{{ status() }}</text>
             </view>
-          </view>
+          </scroll-view>
           <view class="gutter" [style.width.px]="fold.bounds.width"></view>
-          <view class="page right">
+          <scroll-view class="page right" contentContainerClass="page-body right-body">
             <text class="chapter-number">Chapter four</text>
             <text class="chapter-title">{{ current.title }}</text>
             <text class="prose">
@@ -51,7 +55,7 @@ const CURRENT = CHAPTERS[3]!;
             </text>
             <view class="spacer"></view>
             <text class="folio">{{ current.page }}</text>
-          </view>
+          </scroll-view>
         </view>
       } @else if (closed()) {
         <view class="cover">
@@ -61,7 +65,7 @@ const CURRENT = CHAPTERS[3]!;
           <text class="cover-hint">Open the phone to read</text>
         </view>
       } @else {
-        <view class="page wide">
+        <scroll-view class="page wide" contentContainerClass="page-body wide-body">
           <view class="wide-column">
             <text class="chapter-number">Chapter four</text>
             <text class="chapter-title">{{ current.title }}</text>
@@ -79,7 +83,7 @@ const CURRENT = CHAPTERS[3]!;
               <text class="hinge-label">{{ status() }}</text>
             </view>
           </view>
-        </view>
+        </scroll-view>
       }
     </view>
   `,
@@ -94,6 +98,13 @@ const CURRENT = CHAPTERS[3]!;
     }
     .page {
       background-color: #f6f0e4;
+    }
+    .before-fold {
+      flex-grow: 0;
+      flex-shrink: 0;
+    }
+    .page-body {
+      flex-grow: 1;
       padding: 72px 36px 36px;
     }
     .left {
@@ -101,10 +112,14 @@ const CURRENT = CHAPTERS[3]!;
     }
     .right {
       flex: 1;
+    }
+    .right-body {
       padding-left: 16px;
     }
     .wide {
       flex: 1;
+    }
+    .wide-body {
       align-items: center;
     }
     .wide-column {
