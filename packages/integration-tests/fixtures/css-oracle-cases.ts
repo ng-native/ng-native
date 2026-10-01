@@ -455,4 +455,35 @@ export const CASES: OracleCase[] = [
     tree: probe({ name: 'view' }),
     extra: ['border-top-width'],
   },
+  {
+    name: 'color: currentColor is the colour the element inherits',
+    css: '.outer { color: rgb(1, 4, 0) } #probe { color: rgb(9, 9, 9); color: currentColor }',
+    tree: { name: 'view', classes: ['outer'], children: [probe()] },
+  },
+  {
+    name: 'color: currentColor beats a weaker rule and inherits the colour',
+    css: '.outer { color: rgb(2, 4, 0) } .c { color: currentColor } text { color: rgb(9, 9, 9) }',
+    tree: { name: 'view', classes: ['outer'], children: [probe({ classes: ['c'] })] },
+  },
+  {
+    name: 'a background in currentColor beside color: currentColor is the inherited colour',
+    css: '.outer { color: rgb(3, 4, 0) } #probe { color: currentColor; background-color: currentColor }',
+    tree: { name: 'view', classes: ['outer'], children: [probe({ name: 'view' })] },
+  },
+  {
+    name: 'a text colour of a currentColor token set on the element is the colour it inherits',
+    css: '.outer { color: rgb(4, 4, 0) } #probe { --c: currentColor; color: rgb(9, 9, 9); color: var(--c) }',
+    tree: { name: 'view', classes: ['outer'], children: [probe()] },
+  },
+  {
+    name: 'a text colour of a currentColor token is inherited where it is used, not where it is set',
+    css:
+      '.outer { color: rgb(9, 9, 9); --c: currentColor } .middle { color: rgb(5, 4, 0) } ' +
+      '#probe { color: var(--c) }',
+    tree: {
+      name: 'view',
+      classes: ['outer'],
+      children: [{ name: 'view', classes: ['middle'], children: [probe()] }],
+    },
+  },
 ];

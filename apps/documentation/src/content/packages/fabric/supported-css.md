@@ -218,7 +218,8 @@ is drawn in the element's text color, its own or inherited, as on the web, and s
 of `currentColor`, which is what Tailwind's `border-current` writes. An outline with no color, an
 `outline-color` and a `background-color` of `currentColor`, a `var()` that falls back to
 `currentColor` and a custom property that holds it take the text color the same way, where they
-are used. All of them follow the text color when it changes. A border shorthand's width may be a
+are used. `color: currentColor` is the color the element inherits, as on the web. All of them
+follow the text color when it changes. A border shorthand's width may be a
 `calc()` of one token, as in Bootstrap's `border-top: calc(var(--bs-border-width) * 2) solid`. A
 `border-width` with no color anywhere is drawn black, native's default, and the
 web host draws it black too.

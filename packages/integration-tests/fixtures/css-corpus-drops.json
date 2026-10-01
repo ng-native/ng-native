@@ -352,8 +352,8 @@
     }
   },
   "bulma": {
-    "rules": 2995,
-    "dropped": 1876,
+    "rules": 3008,
+    "dropped": 1865,
     "emitted": [
       "$animation",
       "$animationDelay",
@@ -557,8 +557,7 @@
       },
       "color": {
         "'color' mixes var() with other values, which needs a parser on device. calc() of tokens, numbers and points, max(var(--x), <length>), colours and transforms are understood; anything else has to be worked out at build time.": 637,
-        "'color: inherit' is a CSS-wide keyword, which this cascade does not implement. Write the value it stands for.": 7,
-        "color: currentColor has no equivalent without a cascade root": 11
+        "'color: inherit' is a CSS-wide keyword, which this cascade does not implement. Write the value it stands for.": 7
       },
       "container": {
         "'container' is not mapped yet. React Native may well support it; nothing here translates it. Check RN's style types, then add it to css/properties.cjs.": 1

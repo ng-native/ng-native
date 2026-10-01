@@ -165,6 +165,54 @@ describe('a var() that is currentColor', () => {
   });
 });
 
+describe('color: currentColor', () => {
+  it('is the colour the element inherits, over its own, with no warning', () => {
+    const { props, warnings } = tree(
+      `.p { color: ${RED} } .a { color: ${BLUE} } .p .a { color: currentColor }`,
+      ['p'],
+    );
+    assert.deepEqual(warnings, []);
+    assert.equal(props()['color'], RED);
+  });
+
+  it('follows the inherited colour when it changes, and passes it on', () => {
+    const warnings: string[] = [];
+    const sheet = compileCss(
+      `.p { color: ${RED} } .q { color: ${BLUE} } .a { color: ${GREY}; color: currentColor }`,
+      'current',
+      { onUnsupported: (m: string) => warnings.push(m) },
+    );
+    const fabric = createFakeFabric();
+    const engine = new Engine(fabric, 1);
+    const outer = engine.createElement('view', sheet);
+    engine.addClass(outer, 'p');
+    const node = engine.createElement('view', sheet);
+    engine.addClass(node, 'a');
+    const label = engine.createElement('text', sheet);
+    engine.appendChild(node, label);
+    engine.appendChild(outer, node);
+    engine.appendChild(engine.root, outer);
+    engine.commit();
+    const text = () => fabric.committed[0]!.children[0]!.children[0]!.props['color'];
+    assert.deepEqual(warnings, []);
+    assert.equal(text(), RED);
+    engine.removeClass(outer, 'p');
+    engine.addClass(outer, 'q');
+    engine.commit();
+    assert.equal(text(), BLUE);
+  });
+
+  it('is the inherited colour through a token set on the element', () => {
+    const { engine, node, props } = tree(
+      `.p { color: ${RED} } .a { color: ${BLUE}; color: var(--c) }`,
+      ['p'],
+    );
+    engine.setCustomProperty(node, '--c', 'currentColor');
+    engine.commit();
+    assert.equal(props()['color'], RED);
+  });
+});
+
 describe("a border whose width is a calc() of a token, as Bootstrap's .table-group-divider", () => {
   const divider = '.a { border-top: calc(var(--w) * 2) solid currentcolor }';
 

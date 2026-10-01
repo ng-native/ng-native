@@ -451,5 +451,40 @@
       "background-color": "rgba(0, 0, 0, 0)",
       "border-top-width": "6px"
     }
+  },
+  {
+    "name": "color: currentColor is the colour the element inherits",
+    "expected": {
+      "color": "rgb(1, 4, 0)",
+      "background-color": "rgba(0, 0, 0, 0)"
+    }
+  },
+  {
+    "name": "color: currentColor beats a weaker rule and inherits the colour",
+    "expected": {
+      "color": "rgb(2, 4, 0)",
+      "background-color": "rgba(0, 0, 0, 0)"
+    }
+  },
+  {
+    "name": "a background in currentColor beside color: currentColor is the inherited colour",
+    "expected": {
+      "color": "rgb(3, 4, 0)",
+      "background-color": "rgb(3, 4, 0)"
+    }
+  },
+  {
+    "name": "a text colour of a currentColor token set on the element is the colour it inherits",
+    "expected": {
+      "color": "rgb(4, 4, 0)",
+      "background-color": "rgba(0, 0, 0, 0)"
+    }
+  },
+  {
+    "name": "a text colour of a currentColor token is inherited where it is used, not where it is set",
+    "expected": {
+      "color": "rgb(5, 4, 0)",
+      "background-color": "rgba(0, 0, 0, 0)"
+    }
   }
 ]
