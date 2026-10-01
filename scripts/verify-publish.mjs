@@ -770,6 +770,8 @@ async function storybookApp(dir) {
   );
   const files = {
     ...storybookFiles(),
+    // The browser app's own config, which Storybook's Vite builder loads beneath `viteFinal`.
+    'vite.config.ts': WEB_FILES['vite.config.ts'],
     'tsconfig.json': WEB_FILES['tsconfig.json'].replace(
       '"include": ["src"]',
       '"include": ["src", ".storybook"]',
