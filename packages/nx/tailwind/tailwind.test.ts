@@ -313,4 +313,30 @@ describe('an app whose files it cannot follow', () => {
       warnings.join('\n'),
     );
   });
+
+  it('warns about a typecheck of its own that does not build the sheet first', async () => {
+    // A fresh checkout has no sheet until Metro's config is loaded, and ngc fails on the import.
+    const tree = await integrated();
+    const project = readProjectConfiguration(tree, 'mobile');
+    const custom = 'ngc -p tsconfig.json --noEmit --extendedDiagnostics';
+    project.targets!.typecheck!.options.command = custom;
+    updateProjectConfiguration(tree, 'mobile', project);
+    const warnings: string[] = [];
+    const { logger } = require('@nx/devkit') as typeof import('@nx/devkit');
+    const warn = logger.warn;
+    logger.warn = (message: unknown) => void warnings.push(String(message));
+    try {
+      await generate(tree, {});
+    } finally {
+      logger.warn = warn;
+    }
+    const { typecheck } = readProjectConfiguration(tree, 'mobile').targets ?? {};
+    assert.equal(typecheck?.options.command, custom, 'left as it is');
+    assert.ok(
+      warnings.some(
+        (message) => /typecheck/.test(message) && /node metro\.config\.js/.test(message),
+      ),
+      warnings.join('\n'),
+    );
+  });
 });

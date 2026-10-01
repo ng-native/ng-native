@@ -143,9 +143,17 @@ function passGlobalStyles(tree, root) {
 /** The `#160` additions an app generated before them lacks: build the sheet first, and ignore it. */
 function prepareForTheSheet(tree, name, app) {
   const typecheck = app.targets?.typecheck;
-  if (typecheck?.options?.command === 'ngc -p tsconfig.json --noEmit') {
+  const command = typecheck?.options?.command;
+  if (command === 'ngc -p tsconfig.json --noEmit') {
     typecheck.options.command = native.TYPECHECK;
     updateProjectConfiguration(tree, name, app);
+  } else if (typeof command === 'string' && !command.includes('metro.config.js')) {
+    // One of the app's own: a fresh checkout has no sheet for main.ts to import until Metro's
+    // config has been loaded once.
+    byHand(
+      `${name}'s typecheck target`,
+      `run "node metro.config.js && " before "${command}", which builds the sheet src/main.ts imports.`,
+    );
   }
   const ignore = joinPathFragments(app.root, '.gitignore');
   const text = tree.read(ignore, 'utf-8') ?? '';
