@@ -83,6 +83,9 @@ Run the merge queue for PRs once they are open:
   running. Then it squash-merges.
 - **When a PR drops out:** a PR that fails CI or conflicts leaves the queue. Find out why before putting it
   back.
+- **Stale approvals:** only an approval of the current head counts. After a rebase, CodeRabbit often
+  re-reviews with comments only, leaving its approval on an older commit, so the queue posts
+  `@coderabbitai review` once per head commit to get one for the current head.
 - **Stale "changes requested":** after its threads are resolved, CodeRabbit can leave "changes requested"
   standing. When a PR is green with every thread resolved and still not approved, ask the user.
 - **Review comments on a PR:** send them back to the agent that wrote it; it has the context.
