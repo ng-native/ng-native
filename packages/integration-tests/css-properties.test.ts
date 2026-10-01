@@ -132,6 +132,7 @@ describe('the parts of a shorthand the author left out', () => {
     // css-current-colour-border.test.ts. Native has no spelling for an outline's.
     assert.doesNotThrow(() => declarationsOf('border: 1px solid'));
     assert.throws(() => declarationsOf('outline: 1px solid'), /currentColor/);
+    assert.throws(() => declarationsOf('outline: var(--w) solid currentColor'), /currentColor/);
   });
 
   it('outline: none and outline: 0', () => {

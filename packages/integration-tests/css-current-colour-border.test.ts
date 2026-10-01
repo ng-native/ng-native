@@ -87,6 +87,20 @@ describe('a border with no colour', () => {
     assert.deepEqual(colours(tokened.props()), [RED, RED, RED, RED]);
   });
 
+  it('refuses a shorthand with currentColor and a second colour, which CSS reads as invalid', () => {
+    for (const line of [
+      `var(--w) solid ${BLUE} currentColor`,
+      `var(--w) solid currentColor ${BLUE}`,
+      'var(--w) solid currentColor currentColor',
+      `var(--w) solid ${BLUE} ${RED}`,
+    ]) {
+      const { props, warnings } = tree(`.a { color: ${RED}; --w: 2px; border: ${line} }`);
+      assert.equal(warnings.length, 1, line);
+      assert.match(warnings[0]!, /colour/, line);
+      assert.deepEqual(colours(props()), [undefined, undefined, undefined, undefined], line);
+    }
+  });
+
   it('cascades in the order written within a rule', () => {
     const after = tree(`.a { color: ${RED}; border: 2px solid; border-color: ${BLUE} }`);
     assert.deepEqual(colours(after.props()), [BLUE, BLUE, BLUE, BLUE]);

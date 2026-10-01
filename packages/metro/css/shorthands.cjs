@@ -222,9 +222,18 @@ function line(property, list, context) {
     if (LINE_STYLES.has(word) || word === 'none' || word === 'hidden') style = word;
     else if (word in LINE_WIDTHS) width = LINE_WIDTHS[word];
     else if (value?.length !== undefined) width = value.length;
-    else if (word?.toLowerCase() === 'currentcolor') current = true;
-    else if (value?.color !== undefined) color = value.color;
-    else throw new CssUnsupported(`${context}: '${describe(part)}' in '${property}'`);
+    else if (word?.toLowerCase() === 'currentcolor' || value?.color !== undefined) {
+      // A line has one colour: CSS reads a second as an invalid declaration.
+      if (current || color !== null) {
+        throw new CssUnsupported(`${context}: '${property}' has more than one colour`);
+      }
+      if (word?.toLowerCase() === 'currentcolor') current = true;
+      else color = value.color;
+    } else throw new CssUnsupported(`${context}: '${describe(part)}' in '${property}'`);
+  }
+  // Native has no spelling for an outline's currentColor, as `line()` in properties.cjs says.
+  if (current && prefix === 'outline') {
+    throw new CssUnsupported(`${context}: currentColor has no equivalent without a cascade root`);
   }
 
   const every = (props, to) => Object.fromEntries(props.map((prop) => [prop, to]));
