@@ -13,6 +13,7 @@ final class Match: NSObject, ObservableObject, WCSessionDelegate {
   @Published var tiebreak = false
   @Published var reachable = false
   @Published var queued = 0
+  private var pending: [[String: Any]] = []
 
   override init() {
     super.init()
@@ -40,8 +41,25 @@ final class Match: NSObject, ObservableObject, WCSessionDelegate {
   }
 
   private func queue(_ message: [String: Any]) {
-    WCSession.default.transferUserInfo(message)
-    refresh(WCSession.default)
+    DispatchQueue.main.async {
+      let session = WCSession.default
+      if session.activationState == .activated {
+        session.transferUserInfo(message)
+      } else {
+        self.pending.append(message)
+      }
+      self.refresh(session)
+    }
+  }
+
+  private func flush(_ session: WCSession) {
+    DispatchQueue.main.async {
+      guard session.activationState == .activated else { return }
+      let messages = self.pending
+      self.pending.removeAll()
+      messages.forEach { session.transferUserInfo($0) }
+      self.refresh(session)
+    }
   }
 
   private func apply(_ score: [String: Any]) {
@@ -57,14 +75,14 @@ final class Match: NSObject, ObservableObject, WCSessionDelegate {
   private func refresh(_ session: WCSession) {
     DispatchQueue.main.async {
       self.reachable = session.isReachable
-      self.queued = session.outstandingUserInfoTransfers.count
+      self.queued = session.outstandingUserInfoTransfers.count + self.pending.count
     }
   }
 
   func session(_ session: WCSession, activationDidCompleteWith state: WCSessionActivationState, error: Error?) {
     let context = session.receivedApplicationContext
     DispatchQueue.main.async { self.apply(context) }
-    refresh(session)
+    flush(session)
   }
 
   #if os(iOS)

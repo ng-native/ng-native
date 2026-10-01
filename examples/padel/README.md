@@ -26,7 +26,7 @@ Apple Watch simulator:
 
 ```sh
 cd examples/padel
-npx expo prebuild -p ios
+pnpm exec expo prebuild -p ios
 pnpm ios       # builds the phone app with the watch app inside it
 pnpm test      # Vitest in Node, no simulator
 ```

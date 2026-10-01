@@ -223,8 +223,20 @@ describe('Watch, with a paired watch', () => {
     stop();
     const heard: WatchPayload[] = [];
     watch.onMessage((message) => void heard.push(message));
+    watch.onMessage(() => {
+      throw new Error('boom');
+    });
+    watch.onMessage(async () => {
+      throw new Error('boom');
+    });
+    watch.onMessage((message) => void heard.push(message));
     fake.emit('message', { tell: 3 }, null);
-    assert.deepEqual(heard, [{ tell: 3 }], 'a handler hears a message that wants no reply too');
+    await settle();
+    assert.deepEqual(
+      heard,
+      [{ tell: 3 }, { tell: 3 }],
+      'every handler hears a message that wants no reply, past one that throws',
+    );
   });
 
   it('sends raw data', async () => {
@@ -256,7 +268,8 @@ describe('Watch, with a paired watch', () => {
       ['complication', { score: 91 }],
     ]);
     fake.emit('user-info', [{ a: 1 }, { b: 2 }]);
-    assert.deepEqual(watch.userInfo(), [{ a: 1 }, { b: 2 }]);
+    fake.emit('user-info', [{ c: 3 }]);
+    assert.deepEqual(watch.userInfo(), [{ a: 1 }, { b: 2 }, { c: 3 }], 'every delivery, in order');
   });
 
   it('starts a file transfer and follows its progress', async () => {

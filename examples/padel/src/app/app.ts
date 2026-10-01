@@ -10,7 +10,7 @@ import {
 } from '@ng-native/components';
 import { Watch } from '@ng-native/expo/watch';
 import { MatchStore, TEAMS } from './match/match-store.ts';
-import { pointLabel, scoreOf, type Score, type Team } from './match/match.ts';
+import { pointLabel, type Score, type Team } from './match/match.ts';
 
 @Component({
   imports: [Pressable, SafeAreaProvider, SafeAreaView, ScrollView, Switch, Text, View],
@@ -313,21 +313,15 @@ export class App {
   });
 
   protected readonly log = computed(() => {
-    const rallies = this.match.rallies();
-    const golden = this.match.goldenPoint();
-    return rallies
-      .map((rally, index) => {
-        const after = scoreOf(
-          rallies.slice(0, index + 1).map((each) => each.team),
-          golden,
-        );
-        return {
-          id: rally.id,
-          who: `${TEAMS[rally.team]} won the point`,
-          from: rally.source === 'watch' ? 'on the watch' : 'on the phone',
-          score: describe(after),
-        };
-      })
+    const scores = this.match.scores();
+    return this.match
+      .rallies()
+      .map((rally, index) => ({
+        id: rally.id,
+        who: `${TEAMS[rally.team]} won the point`,
+        from: rally.source === 'watch' ? 'on the watch' : 'on the phone',
+        score: describe(scores[index]),
+      }))
       .slice(-8)
       .reverse();
   });

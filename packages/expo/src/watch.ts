@@ -137,7 +137,9 @@ export class Watch {
       events.on('installed', (installed) => this.installedState.set(installed)),
       events.on('message', (message, reply) => this.received(message, reply)),
       events.on('application-context', (context) => this.contextState.set(context)),
-      events.on('user-info', (userInfo) => this.userInfoState.set(userInfo)),
+      events.on('user-info', (userInfo) =>
+        this.userInfoState.update((received) => [...received, ...userInfo]),
+      ),
       events.on('file-received', (files) => this.filesState.set(files)),
       events.on('file', (event) =>
         this.transfersState.update((transfers) => new Map(transfers).set(event.id, event)),
@@ -267,7 +269,11 @@ export class Watch {
     this.connected();
     this.messageState.set(message);
     if (!reply) {
-      for (const handler of this.handlers) void handler(message);
+      for (const handler of this.handlers) {
+        void Promise.resolve()
+          .then(() => handler(message))
+          .catch(() => {});
+      }
       return;
     }
     void this.answer(message).then(reply, () => reply({}));

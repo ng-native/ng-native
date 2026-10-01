@@ -2,6 +2,7 @@ import { Watch, type NativeWatch, type WatchPayload } from '@ng-native/expo/watc
 import { render, screen, userEvent } from '@ng-native/testing';
 import { expect, test } from 'vitest';
 import { App } from './app.ts';
+import { MatchStore } from './match/match-store.ts';
 
 function fakeWatch() {
   const listeners = new Map<string, (...args: unknown[]) => void>();
@@ -71,6 +72,28 @@ test('counts points the watch queued while the phone was away', async () => {
   ]);
 
   expect(await screen.findByText('30')).toBeTruthy();
+});
+
+test('counts every batch the watch queued, however quickly they arrive', async () => {
+  const watch = fakeWatch();
+  await start(watch);
+
+  watch.emit('user-info', [{ point: 0, id: 'q1' }]);
+  watch.emit('user-info', [{ point: 0, id: 'q2' }]);
+
+  expect(await screen.findByText('30')).toBeTruthy();
+});
+
+test('keeps points already played under the rule they were played with', async () => {
+  const { componentRef, detectChanges } = await start();
+  const match = componentRef.injector.get(MatchStore);
+  for (const team of [0, 0, 0, 1, 1, 1, 0] as const) match.point(team);
+
+  match.goldenPoint.set(true);
+  await detectChanges();
+
+  expect(match.score().games).toEqual([0, 0]);
+  expect(screen.getByText('AD')).toBeTruthy();
 });
 
 test('undoes the last point', async () => {

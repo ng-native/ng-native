@@ -1,6 +1,6 @@
 import { Service, computed, effect, inject, signal, untracked } from '@angular/core';
 import { Watch, type WatchPayload } from '@ng-native/expo/watch';
-import { pointLabel, scoreOf, setsWon, type Score, type Team } from './match.ts';
+import { NEW_MATCH, addPoint, pointLabel, setsWon, type Score, type Team } from './match.ts';
 
 export type Source = 'phone' | 'watch';
 
@@ -8,6 +8,7 @@ export interface Rally {
   readonly id: string;
   readonly team: Team;
   readonly source: Source;
+  readonly goldenPoint: boolean;
 }
 
 export const TEAMS = ['Us', 'Them'] as const;
@@ -20,12 +21,11 @@ export class MatchStore {
 
   readonly rallies = signal<readonly Rally[]>([]);
   readonly goldenPoint = signal(false);
-  readonly score = computed(() =>
-    scoreOf(
-      this.rallies().map((rally) => rally.team),
-      this.goldenPoint(),
-    ),
-  );
+  readonly scores = computed(() => {
+    let score = NEW_MATCH;
+    return this.rallies().map((rally) => (score = addPoint(score, rally.team, rally.goldenPoint)));
+  });
+  readonly score = computed(() => this.scores().at(-1) ?? NEW_MATCH);
 
   constructor() {
     this.watch.onMessage((message) => this.fromWatch(message));
@@ -38,7 +38,8 @@ export class MatchStore {
 
   point(team: Team, source: Source = 'phone', id = `phone-${this.nextId++}`): void {
     if (this.score().winner !== null) return;
-    this.rallies.update((rallies) => [...rallies, { id, team, source }]);
+    const goldenPoint = this.goldenPoint();
+    this.rallies.update((rallies) => [...rallies, { id, team, source, goldenPoint }]);
   }
 
   undo(): void {

@@ -133,7 +133,8 @@ sends a string as a live message.
   registered, so it is never left waiting.
 - `context` holds the latest application context the watch sent, and starts as the last one
   received before the app launched. `currentContext()` reads the one the phone last sent.
-- `userInfo` holds the last batch of queued user info, and `files` the last files received.
+- `userInfo` holds every user info the watch has queued, oldest first, however many deliveries
+  it came in. `files` holds the last files received.
 - `error` holds the last session error, by kind.
 
 ## Reachability
