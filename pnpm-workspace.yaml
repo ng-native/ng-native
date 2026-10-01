@@ -23,12 +23,14 @@ overrides:
   # is the fix and a compatible minor.
   smol-toml: ^1.7.1
 
-# pnpm 10 blocks postinstall scripts unless a package is named here. Both of these build a native
-# binary and are the reason `nx` is fast; without them it falls back to a slower watcher and says
-# nothing about why.
-onlyBuiltDependencies:
-  - '@parcel/watcher'
-  - nx
+# pnpm runs no install script unless a package is allowed here, and stops the install on one that
+# is not decided either way. Both of these build a native binary and are the reason `nx` is fast;
+# without them it falls back to a slower watcher and says nothing about why.
+allowBuilds:
+  '@parcel/watcher': true
+  nx: true
+  # Its install script only checks the platform binary that its optional dependency installs.
+  esbuild: false
 
 # Nx reads tsconfig files through TypeScript's JavaScript API, and finds `typescript` through
 # pnpm's hidden hoist rather than a dependency of its own. Expo's packages auto-install TypeScript 7

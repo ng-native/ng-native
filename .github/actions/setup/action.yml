@@ -12,7 +12,7 @@ runs:
   steps:
     # Reads the version from the root `packageManager` field, so CI and a laptop resolve the
     # same tree.
-    - uses: pnpm/action-setup@v4
+    - uses: pnpm/action-setup@v6
 
     - uses: actions/setup-node@v4
       with:

@@ -4,7 +4,7 @@
 
 - Node 24 (see `.nvmrc`); the packages require at least the `engines.node` floor in `package.json`,
   `>=22.18`.
-- pnpm, pinned by `packageManager` in `package.json` (currently `pnpm@10.28.1`). Enable it with
+- pnpm, pinned by `packageManager` in `package.json` (currently `pnpm@11.28.2`). Enable it with
   `corepack enable` if you do not already have it. npm is not supported in this workspace - the
   packages resolve through pnpm workspace links.
 

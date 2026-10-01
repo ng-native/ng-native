@@ -59,6 +59,7 @@
     "access": "public"
   },
   "devDependencies": {
+    "@babel/core": "^7.29.7",
     "@expo/metro-config": "~57.0.12",
     "typescript": "~6.0.3"
   }

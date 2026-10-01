@@ -91,6 +91,8 @@ const run = (cmd, args, cwd, quiet = true) =>
     env: {
       ...process.env,
       npm_config_registry: REGISTRY,
+      // pnpm 11 reads its own prefix, not npm's.
+      pnpm_config_registry: REGISTRY,
       npm_config_cache: path.join(caches, 'npm'),
       // pnpm's metadata cache, for the installs `create-nx-workspace` and `nx add` start, which
       // pass no `--cache-dir`. Not `npm_config_cache_dir`, which npm warns about on every command.
@@ -218,7 +220,7 @@ async function serve(cmd, args, cwd, port) {
     cwd,
     detached: true,
     stdio: ['ignore', 'pipe', 'pipe'],
-    env: { ...process.env, npm_config_registry: REGISTRY, CI: '1' },
+    env: { ...process.env, npm_config_registry: REGISTRY, pnpm_config_registry: REGISTRY, CI: '1' },
   });
   let log = '';
   child.stdout.on('data', (chunk) => (log += chunk));
