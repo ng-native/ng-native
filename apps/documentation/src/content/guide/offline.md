@@ -353,8 +353,9 @@ would skip the first cold-start refresh while the estimate is unsettled.
 
 ### `HttpClient` needs `provideNativeHttpClient()`
 
-Plain `provideHttpClient()` silently returns null bodies in a release build, because its default
-`fetch` backend cannot read the body of React Native's own `fetch` response. The feed can appear
+Plain `provideHttpClient()` silently returns null bodies wherever the global `fetch` is React
+Native's own, as in a release build of an app whose `src/main.ts` does not import `expo`, because
+its default `fetch` backend cannot read that response's body. The feed can appear
 offline, and its `catch` blocks do not resolve the ambiguity. Always use `provideNativeHttpClient()`; see
 [Known limitations](/guide/limitations#httpclient-needs-providenativehttpclient).
 

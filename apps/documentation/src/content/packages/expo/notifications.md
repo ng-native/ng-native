@@ -186,9 +186,9 @@ constructor() {
 
 ### Sending the token to your server
 
-Use `HttpClient` with `provideNativeHttpClient()` - plain `provideHttpClient()` fails silently in
-a release build, because its default `fetch` backend cannot read the body of React Native's own
-`fetch` response. See
+Use `HttpClient` with `provideNativeHttpClient()` - plain `provideHttpClient()` fails silently
+wherever the global `fetch` is React Native's own, because its default `fetch` backend cannot read
+that response's body. See
 [Known limitations](/guide/limitations#httpclient-needs-providenativehttpclient) for why.
 
 ```ts

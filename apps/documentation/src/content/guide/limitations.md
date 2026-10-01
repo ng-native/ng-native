@@ -71,20 +71,22 @@ build prose statically and mount live examples on the client.
 
 ## `HttpClient` needs `provideNativeHttpClient()`
 
-Plain `provideHttpClient()` can silently return null bodies on a device, in a release build
-only. Angular 22's default `fetch` backend reads a response body only through `response.body`'s
-stream, and which `fetch` is global depends on the build:
+Angular 22's default `fetch` backend reads a response body only through `response.body`'s
+stream, so plain `provideHttpClient()` works only where the global `fetch` streams one. Expo's
+runtime installs a `fetch` that does, but Metro runs that runtime only when something in the
+bundle imports `expo`:
 
-- A debug build loads Expo's runtime, because `mount()` reaches `expo` for its reload hook in
-  development. Expo replaces the global `fetch` with its own, whose `Response` streams a `body`.
-- A release build loads Expo's runtime only when something in the bundle imports `expo`. Without
-  that, the global `fetch` is React Native's, `whatwg-fetch` over XHR, whose `Response` has no
-  `body`, so every request resolves with a null body and no error.
+- The template, the generators and [manual setup](/guide/manual-setup) write `import 'expo';` at
+  the top of `src/main.ts`, so debug and release builds both get Expo's `fetch`.
+- In an app whose `src/main.ts` does not import `expo`, a debug build still gets Expo's `fetch`,
+  because `mount()` reaches `expo` for its reload hook in development, but a release build gets
+  React Native's: `whatwg-fetch` over XHR, whose `Response` has no `body`. There every request
+  resolves with a null body and no error, so the app works in debug and fails in release.
 
-The same app can work in debug and fail in release. Use `provideNativeHttpClient()` from
-`@ng-native/platform/http`: it configures `HttpClient` with `withXhr()`, which uses React Native's
-native `XMLHttpRequest`, upload progress included, in every build. See
-[HTTP requests](/packages/platform#http-requests) for the signature and an interceptor example.
+Use `provideNativeHttpClient()` from `@ng-native/platform/http`: it configures `HttpClient` with
+`withXhr()`, which uses React Native's native `XMLHttpRequest`, upload progress included, whichever
+`fetch` is global. See [HTTP requests](/packages/platform#http-requests) for the signature and an
+interceptor example.
 
 **Workaround:** `provideNativeHttpClient(...features)` in `mount()`'s `providers`, never
 `provideHttpClient()` on its own.
