@@ -249,6 +249,12 @@ export class BrowserEngine extends HostEngine {
     const old = node.el as HTMLInputElement | HTMLTextAreaElement;
     if ((old.tagName === 'TEXTAREA') === multiline) return;
     const field = textFieldLike(old, multiline);
+    // An input strips line breaks from its value, so text set before `multiline` lost them. Taken
+    // from the prop again unless the user has typed since.
+    const text = node.props['text'];
+    if (multiline && text != null && old.value === String(text).replace(/[\r\n]/g, '')) {
+      field.value = String(text);
+    }
     const focused = this.document.activeElement === old;
     this.layoutObservers.get(node)?.disconnect();
     old.replaceWith(field);

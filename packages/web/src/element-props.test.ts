@@ -322,6 +322,21 @@ describe('text-input', () => {
     assert.equal((node.el as HTMLElement).style.getPropertyValue('-webkit-text-security'), '');
   });
 
+  it('keeps the line breaks of text set before multiline, which an input strips', () => {
+    const { node, set } = scene('text-input');
+    set('text', 'one\ntwo');
+    set('multiline', true);
+    assert.equal((node.el as HTMLTextAreaElement).value, 'one\ntwo');
+  });
+
+  it('keeps what the user typed over the text prop when multiline arrives later', () => {
+    const { node, set } = scene('text-input');
+    set('text', 'one');
+    (node.el as HTMLInputElement).value = 'typed';
+    set('multiline', true);
+    assert.equal((node.el as HTMLTextAreaElement).value, 'typed');
+  });
+
   it('carries secureTextEntry and numberOfLines across the swap, whichever arrives first', () => {
     const { set, node } = scene('text-input');
     set('secureTextEntry', true);
