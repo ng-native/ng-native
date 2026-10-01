@@ -108,6 +108,16 @@ export function viaCli(
   }
 }
 
+/** The version a migration is registered at, which `ng-native-migrate` has to reach to run it. */
+function versionOf(name: string): string {
+  const { migrations } = require('@ng-native/migrate') as {
+    migrations: { name: string; version: string }[];
+  };
+  const migration = migrations.find((entry) => entry.name === name);
+  if (!migration) throw new Error(`No migration named ${name}`);
+  return migration.version;
+}
+
 /**
  * `name` run on `files` through `nx migrate`, `ng update` and `ng-native-migrate`, which has to
  * cross the migration's version: `from` is a version before it.
@@ -120,6 +130,8 @@ export async function acrossAdapters(
   return {
     nx: await viaNx(files, name),
     angular: await viaAngular(files, name),
-    cli: (({ files: changed, notes }) => ({ files: changed, notes }))(viaCli(files, from)),
+    cli: (({ files: changed, notes }) => ({ files: changed, notes }))(
+      viaCli(files, from, ['--to', versionOf(name)]),
+    ),
   };
 }

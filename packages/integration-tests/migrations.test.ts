@@ -13,8 +13,9 @@ import { acrossAdapters, viaCli, viaNx } from './migrations.ts';
 
 const require = createRequire(import.meta.url);
 const { migrations } = require('@ng-native/migrate') as {
-  migrations: { name: string; version: string; description: string }[];
+  migrations: { name: string; version: string; description: string; run: () => string[] }[];
 };
+const { main } = require('@ng-native/migrate/cli.cjs') as { main: (argv: string[]) => number };
 const own = require('@ng-native/migrate/package.json') as { version: string };
 const json = (file: string) => JSON.parse(readFileSync(require.resolve(file), 'utf8'));
 const cli = require.resolve('@ng-native/migrate/cli.cjs');
@@ -101,6 +102,20 @@ describe('sync-app-versions, through nx migrate, ng update and ng-native-migrate
     assert.deepEqual(cli, nx);
   });
 
+  it("keeps each package.json's own indentation and final newline", async () => {
+    const tabs = '{\n\t"dependencies": {\n\t\t"@ng-native/components": "^0.1.3"\n\t}\n}\n';
+    const four = '{\n    "dependencies": {\n        "@ng-native/fabric": "0.1.3"\n    }\n}';
+    const { nx, angular, cli } = await acrossAdapters(
+      { 'tabs/package.json': tabs, 'four/package.json': four },
+      'sync-app-versions',
+      '0.1.3',
+    );
+    assert.equal(nx.files['tabs/package.json'], tabs.replace('0.1.3', own.version));
+    assert.equal(nx.files['four/package.json'], four.replace('0.1.3', own.version));
+    assert.deepEqual(angular, nx);
+    assert.deepEqual(cli, nx);
+  });
+
   it('changes nothing the second time', async () => {
     const first = await viaNx(files, 'sync-app-versions');
     const again = await viaNx(first.files as Record<string, string>, 'sync-app-versions');
@@ -147,6 +162,34 @@ describe('ng-native-migrate', () => {
     const { status, stderr } = run([], { 'package.json': '{"dependencies":{}}' });
     assert.equal(status, 1);
     assert.match(stderr, /--from/);
+  });
+
+  it('stops at its own version, as nx migrate and ng update stop at the one they update to', () => {
+    // A migration a later release brings is in no published copy of this package; one registered
+    // above this package's version is that case.
+    const later = {
+      name: 'from-a-later-release',
+      version: '999.0.0',
+      description: 'Not this release.',
+      run: () => ['ran'],
+    };
+    migrations.push(later);
+    const log = console.log;
+    const lines: string[] = [];
+    console.log = (line: string) => lines.push(line);
+    const dir = mkdtempSync(path.join(tmpdir(), 'ng-native-migrate-'));
+    try {
+      writeFileSync(path.join(dir, 'package.json'), app['package.json']);
+      const status = main(['--from', '0.1.3', '--dry-run', dir]);
+      assert.equal(status, 0);
+      assert.ok(lines.some((line) => line.startsWith('- sync-app-versions')));
+      assert.ok(!lines.some((line) => line.includes('from-a-later-release')));
+      assert.ok(!lines.includes('NOTE ran'));
+    } finally {
+      console.log = log;
+      migrations.splice(migrations.indexOf(later), 1);
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 
   it('does nothing for an app already on this version', () => {

@@ -36,6 +36,17 @@ function parsed(text) {
   }
 }
 
+/**
+ * `manifest` written the way `original` was: its indentation (tabs, or however many spaces), its
+ * line endings, and a final newline only if it had one.
+ */
+function formatted(manifest, original) {
+  const indent = /^[ \t]+(?=")/m.exec(original)?.[0] ?? '  ';
+  const newline = original.includes('\r\n') ? '\r\n' : '\n';
+  const text = JSON.stringify(manifest, null, indent).replace(/\n/g, newline);
+  return /\r?\n$/.test(original) ? text + newline : text;
+}
+
 /** The package manager whose lockfile the workspace has. */
 function packageManager(host) {
   const lockfiles = {
@@ -62,7 +73,7 @@ function syncAppVersions(host) {
       if (manifest[field]) manifest[field] = moved(manifest[field]);
     }
     if (JSON.stringify(manifest) === before) continue;
-    host.write(file, JSON.stringify(manifest, null, 2) + '\n');
+    host.write(file, formatted(manifest, host.read(file) ?? ''));
     changed = true;
   }
   if (!changed) return [];

@@ -44,6 +44,12 @@ the same description; `migrations.test.ts` in `packages/integration-tests` fails
 agree. Test it with `acrossAdapters` from `packages/integration-tests/migrations.ts`, which runs it
 through `nx migrate`, `ng update` and `npx @ng-native/migrate` on the same files.
 
+All three run a migration when an update crosses its version: newer than the version the app is on,
+and no newer than the one it updates to (for `npx @ng-native/migrate`, its own version). So its
+version is the release it ships in. Until that release, it is newer than every package's version,
+and `npx @ng-native/migrate` skips it unless it is told where to stop with `--to`, which is what
+`acrossAdapters` passes.
+
 The version plan for the change names the migration and links
 [Updating an app](https://ng-native.com/guide/updating), which says how to run it, and the
 migration goes into the table on that page.

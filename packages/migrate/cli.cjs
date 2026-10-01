@@ -3,11 +3,13 @@
  * `npx @ng-native/migrate@latest`: updates an app that has neither `nx migrate` nor `ng update`,
  * such as one made from `@ng-native/template`.
  *
- *     ng-native-migrate [--from <version>] [--dry-run] [directory]
+ *     ng-native-migrate [--from <version>] [--to <version>] [--dry-run] [directory]
  *
  * Run it before installing, as `nx migrate` is. It updates the app from the `@ng-native/*` version
  * its `package.json` lists (or `--from`) to this package's own version, by running every migration
- * newer than that version, oldest first. One of them moves the versions in `package.json`,
+ * the update crosses (newer than `from`, and no newer than this version), oldest first, as
+ * `nx migrate` and `ng update` choose them. `--to` sets another version to stop at, which is how a
+ * test runs a migration registered for a release that has not happened yet. One of them moves the versions in `package.json`,
  * so the install comes after. It prints each file it changed and what is left to do by hand;
  * `--dry-run` prints the same and writes nothing.
  */
@@ -72,7 +74,11 @@ function main(argv) {
   const { values, positionals } = parseArgs({
     args: argv,
     allowPositionals: true,
-    options: { from: { type: 'string' }, 'dry-run': { type: 'boolean' } },
+    options: {
+      from: { type: 'string' },
+      to: { type: 'string' },
+      'dry-run': { type: 'boolean' },
+    },
   });
   const root = path.resolve(positionals[0] ?? '.');
   const from = values.from ?? listedVersion(root);
@@ -83,15 +89,19 @@ function main(argv) {
     );
     return 1;
   }
-  // No upper bound: this package holds only the migrations up to its own release.
+  const to = values.to ?? version;
+  if (!semver.valid(to)) {
+    console.error(`--to ${to} is not a version, such as 0.3.0.`);
+    return 1;
+  }
   const due = migrations
-    .filter((migration) => semver.gt(migration.version, from))
+    .filter((migration) => semver.gt(migration.version, from) && semver.lte(migration.version, to))
     .sort((a, b) => semver.compare(a.version, b.version));
   if (!due.length) {
-    console.log(`Nothing to migrate from ${from} to ${version}.`);
+    console.log(`Nothing to migrate from ${from} to ${to}.`);
     return 0;
   }
-  console.log(`Migrating from ${from} to ${version}.`);
+  console.log(`Migrating from ${from} to ${to}.`);
   const host = directoryHost(root);
   const notes = [];
   for (const migration of due) {
