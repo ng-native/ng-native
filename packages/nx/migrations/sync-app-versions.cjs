@@ -12,6 +12,7 @@
  * do peer ranges, which say what a library accepts rather than what it installs.
  */
 const { formatFiles, getProjects, readJson, writeJson } = require('@nx/devkit');
+const semver = require('semver');
 const { version } = require('../package.json');
 
 /** @param {Record<string, string> | undefined} dependencies */
@@ -19,11 +20,11 @@ function moved(dependencies) {
   if (!dependencies) return dependencies;
   return Object.fromEntries(
     Object.entries(dependencies).map(([name, range]) => {
-      const prefix = /^([~^]?)\d+\.\d+\.\d+(?:-[\w.]+)?$/.exec(range)?.[1];
-      return [
-        name,
-        name.startsWith('@ng-native/') && prefix !== undefined ? prefix + version : range,
-      ];
+      // An exact version, or one behind a `^` or `~`, with any prerelease or build suffix SemVer
+      // allows. A compound range, a tag or a link is not a version to move.
+      const [, prefix = '', exact = ''] = /^([~^]?)(.*)$/.exec(range) ?? [];
+      const moves = name.startsWith('@ng-native/') && semver.valid(exact) !== null;
+      return [name, moves ? prefix + version : range];
     }),
   );
 }

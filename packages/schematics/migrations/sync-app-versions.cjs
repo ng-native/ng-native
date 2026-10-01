@@ -11,6 +11,7 @@
  * A range keeps its `^` or `~`. Anything that is not a version, such as `file:`, stays, and so do
  * peer ranges.
  */
+const semver = require('semver');
 const { version } = require('../package.json');
 
 /** @param {Record<string, string> | undefined} dependencies */
@@ -18,18 +19,19 @@ function moved(dependencies) {
   if (!dependencies) return dependencies;
   return Object.fromEntries(
     Object.entries(dependencies).map(([name, range]) => {
-      const prefix = /^([~^]?)\d+\.\d+\.\d+(?:-[\w.]+)?$/.exec(range)?.[1];
-      return [
-        name,
-        name.startsWith('@ng-native/') && prefix !== undefined ? prefix + version : range,
-      ];
+      // An exact version, or one behind a `^` or `~`, with any prerelease or build suffix SemVer
+      // allows. A compound range, a tag or a link is not a version to move.
+      const [, prefix = '', exact = ''] = /^([~^]?)(.*)$/.exec(range) ?? [];
+      const moves = name.startsWith('@ng-native/') && semver.valid(exact) !== null;
+      return [name, moves ? prefix + version : range];
     }),
   );
 }
 
 function syncAppVersions() {
   return (tree) => {
-    const { projects = {} } = JSON.parse(tree.readText('angular.json'));
+    // As the Angular CLI reads it: comments and trailing commas are allowed.
+    const { projects = {} } = tree.readJson('angular.json');
     const roots = Object.values(projects).map(({ root }) => (root ? `${root}/` : ''));
     for (const file of new Set(['package.json', ...roots.map((root) => `${root}package.json`)])) {
       if (!tree.exists(file)) continue;

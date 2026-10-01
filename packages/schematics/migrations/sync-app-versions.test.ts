@@ -62,6 +62,41 @@ describe('the sync-app-versions migration', () => {
     });
   });
 
+  it('reads an angular.json with comments and trailing commas, as the Angular CLI does', async () => {
+    const tree = workspace();
+    tree.overwrite(
+      'angular.json',
+      `{
+        // The native app, beside the web one.
+        "version": 1,
+        "projects": { "native": { "root": "projects/native", }, },
+      }`,
+    );
+    const after = await runner.runSchematic('sync-app-versions', {}, tree);
+    const app = JSON.parse(after.readContent('projects/native/package.json'));
+    assert.equal(app.dependencies['@ng-native/components'], own.version);
+  });
+
+  it('moves a version with a prerelease or build suffix, and leaves a compound range', async () => {
+    const tree = workspace();
+    tree.overwrite(
+      'projects/native/package.json',
+      JSON.stringify({
+        dependencies: {
+          '@ng-native/components': '^0.1.3-alpha-test.1',
+          '@ng-native/platform': '~0.1.3+build.1',
+          '@ng-native/fabric': '>=0.1.0 <0.2.0',
+        },
+      }),
+    );
+    const after = await runner.runSchematic('sync-app-versions', {}, tree);
+    assert.deepEqual(JSON.parse(after.readContent('projects/native/package.json')).dependencies, {
+      '@ng-native/components': `^${own.version}`,
+      '@ng-native/platform': `~${own.version}`,
+      '@ng-native/fabric': '>=0.1.0 <0.2.0',
+    });
+  });
+
   it('leaves a package.json with nothing to move as it was written', async () => {
     const tree = workspace();
     const compact = '{"name":"shop","dependencies":{"@ng-native/platform":"workspace:*"}}';

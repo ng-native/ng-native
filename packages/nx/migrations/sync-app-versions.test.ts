@@ -53,6 +53,23 @@ describe('the sync-app-versions migration', () => {
     });
   });
 
+  it('moves a version with a prerelease or build suffix, and leaves a compound range', async () => {
+    const tree = workspace();
+    writeJson(tree, 'apps/mobile/package.json', {
+      dependencies: {
+        '@ng-native/components': '^0.1.3-alpha-test.1',
+        '@ng-native/platform': '~0.1.3+build.1',
+        '@ng-native/fabric': '>=0.1.0 <0.2.0',
+      },
+    });
+    await syncAppVersions(tree);
+    assert.deepEqual(readJson(tree, 'apps/mobile/package.json').dependencies, {
+      '@ng-native/components': `^${own.version}`,
+      '@ng-native/platform': `~${own.version}`,
+      '@ng-native/fabric': '>=0.1.0 <0.2.0',
+    });
+  });
+
   it('leaves a workspace link, a peer range and a project with no package.json alone', async () => {
     const tree = workspace();
     addProjectConfiguration(tree, 'ui', { root: 'libs/ui' });
