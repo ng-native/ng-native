@@ -1496,9 +1496,14 @@ export class StyleResolver {
   ): Record<string, unknown> | undefined {
     const line = declaration.line!;
     const values = lineValues(line, tokens);
-    const width = values?.[line.widths[0]!] as
-      { __defer?: DeferredDeclaration['compute'] } | undefined;
-    if (!values || !width?.__defer) return values;
+    if (!values) return undefined;
+    // `currentcolor` is the colour in scope, which only the node knows.
+    if (values[line.colors[0]!] === 'currentcolor') {
+      const colour = own['color'] ?? parentInherited['color'] ?? 'black';
+      for (const prop of line.colors) values[prop] = colour;
+    }
+    const width = values[line.widths[0]!] as { __defer?: DeferredDeclaration['compute'] };
+    if (!width?.__defer) return values;
     const points = this.computed({ ...declaration, compute: width.__defer }, own, parentInherited);
     for (const prop of line.widths) values[prop] = points;
     return values;
@@ -2154,10 +2159,28 @@ function lineValues(
     const found = lineRole(token, open);
     if (!found) return undefined;
     open.delete(found.role);
-    const props = { width: line.widths, color: line.colors, style: [line.style!] }[found.role];
-    for (const prop of props) values[prop] = found.value;
+    fillRole(line, values, found.role, found.value);
   }
+  // A part no token filled takes its initial value, as one left out of a written line does.
+  for (const role of open) fillRole(line, values, role, LINE_INITIAL[role]);
   return values;
+}
+
+/** What a line's width, style and colour are when it leaves them out. */
+const LINE_INITIAL = {
+  width: LINE_WIDTHS['medium'],
+  style: 'none',
+  color: 'currentcolor',
+} as const;
+
+function fillRole(
+  line: LineTemplate,
+  values: Record<string, unknown>,
+  role: LineTemplate['roles'][number],
+  value: unknown,
+): void {
+  const props = { width: line.widths, color: line.colors, style: [line.style!] }[role];
+  for (const prop of props) values[prop] = value;
 }
 
 function lineToken(

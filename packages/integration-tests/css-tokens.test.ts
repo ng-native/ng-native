@@ -333,6 +333,22 @@ describe('tokens', () => {
       );
     });
 
+    it('resets the parts of a border of tokens that no token fills, as a written one does', () => {
+      // Each checked in Chrome, over a weaker rule's 7px dotted rgb(9, 9, 9): a width left out is
+      // medium, 3px; a colour left out is the node's colour; a style left out is none, no line.
+      const sheet = (border: string) =>
+        ':root { --w: 2px; --c: rgb(1, 2, 3) } ' +
+        '.w { border-top-width: 7px; border-top-color: rgb(9, 9, 9); border-style: dotted } ' +
+        `.a { color: rgb(4, 4, 4); border: ${border} }`;
+      const line = (border: string) => {
+        const style = resolvedStyle(sheet(border), ['w', 'a']);
+        return [style['borderTopWidth'], style['borderStyle'], style['borderTopColor']];
+      };
+      assert.deepEqual(line('var(--c) solid'), [3, 'solid', 'rgb(1, 2, 3)']);
+      assert.deepEqual(line('var(--w) solid'), [2, 'solid', 'rgb(4, 4, 4)']);
+      assert.deepEqual(line('var(--w) var(--c)'), [0, undefined, 'rgb(1, 2, 3)']);
+    });
+
     it('reads a unitless zero token as the length it is', () => {
       // `--bs-gutter-y: 0`. CSS allows a bare 0 wherever a length goes, and without a length form
       // every `margin-top: var(--bs-gutter-y)` on device resolved to nothing.
