@@ -122,12 +122,14 @@ describe('watchConditions and the text size', () => {
       },
       PixelRatio: { get: () => 3, getFontScale: () => fontScale },
     };
-    // What `reactNative()` reaches for on a device, where the bundle is CommonJS.
+    // What `reactNative()` reaches for on a device, where the bundle is CommonJS and Fabric is there.
     (globalThis as { require?: unknown }).require = () => native;
+    (globalThis as { nativeFabricUIManager?: unknown }).nativeFabricUIManager = {};
   });
 
   afterEach(() => {
     (globalThis as { require?: unknown }).require = original;
+    delete (globalThis as { nativeFabricUIManager?: unknown }).nativeFabricUIManager;
   });
 
   const engine = () => ({

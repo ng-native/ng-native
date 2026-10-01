@@ -38,15 +38,37 @@ type Native = Record<string, unknown>;
 function withNative<T>(native: Native, run: () => T): T {
   const host = globalThis as Record<string, unknown>;
   host['require'] = (id: string) => (id === 'react-native' ? native : undefined);
+  host['nativeFabricUIManager'] = {};
   try {
     return run();
   } finally {
     delete host['require'];
+    delete host['nativeFabricUIManager'];
   }
 }
 
 afterEach(() => {
   delete (globalThis as Record<string, unknown>)['require'];
+});
+
+describe('a bundle with a require of its own and no Fabric', () => {
+  /*
+   * A browser build has one: Rolldown gives a `vite build` a `require` for an external module,
+   * which throws when called. Only the engine says this is a device.
+   */
+  it('reaches for no react-native', () => {
+    const host = globalThis as Record<string, unknown>;
+    host['require'] = (id: string) => {
+      throw new Error(`Calling require for "${id}" in an environment that has none`);
+    };
+    try {
+      assert.doesNotThrow(() => keyboardSource().dismiss());
+      assert.equal(sharingSource(), null);
+      assert.equal(directionSource().current(), 'ltr');
+    } finally {
+      delete host['require'];
+    }
+  });
 });
 
 describe('a source factory with no react-native', () => {

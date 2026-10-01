@@ -205,17 +205,10 @@ function hostProviders(
         ]
       : []),
     // A tab has no hardware back button, so this is the same inert fallback
-    // `hardwareBackSource()`'s own off-device branch answers with - provided directly rather
-    // than left to reach it, because its guard is `typeof require === 'function'`, and a
-    // bundler that externalises `react-native` for the browser (`rollupOptions.external` in a
-    // production build) leaves `require` defined as a stub that throws when called rather than
-    // absent. `HardwareBack` is the one of these five capabilities an anchored overlay actually
-    // constructs - `Overlay`'s dismiss-on-back wiring injects it - so it is the one this had to
-    // stop before reaching that guard at all.
+    // `hardwareBackSource()`'s own off-device branch answers with, provided here so the browser
+    // host says so itself rather than relying on that branch.
     { provide: HardwareBack.SOURCE, useValue: { subscribe: () => () => {} } },
-    // A tab has no status bar either, and for the same reason this cannot be left to
-    // `statusBarSource()`: an app that asks for dark icons over a light screen is ordinary, and
-    // without this its component throws on that stub and never renders.
+    // A tab has no status bar either.
     {
       provide: StatusBar.SOURCE,
       useValue: {

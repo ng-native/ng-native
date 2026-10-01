@@ -45,8 +45,10 @@ export default defineConfig({
 `ngNativeWeb()` is three things: `@oxc-angular/vite`'s Angular compiler for the app's own
 components, the same compiler for the decorated `@ng-native/*` source under `node_modules`, which
 `@oxc-angular/vite` leaves alone, and the resolution a browser build needs. `react-native` and
-`expo`, which the packages only `require` on a device, stay out of the bundle, and `@ng-native/*`
-stay out of Vite's dependency pre-bundling, which would skip the compiler. It takes
+`expo`, which the packages only `require` on a device, resolve to an empty module, in the bundle
+and in Vite's dependency pre-bundling alike, including in a workspace that has React Native
+installed for its native app. It sets no `build.rolldownOptions.external`, so it combines with a tool that sets
+its own, such as Storybook. It takes
 `@oxc-angular/vite`'s options and passes them on, over `zoneless: true` and
 `emitClassMetadata: false`.
 

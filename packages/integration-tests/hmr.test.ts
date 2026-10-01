@@ -593,7 +593,13 @@ describe('the reload hook', () => {
       };
       await render(Features);
       const provider = (DevMenu.SOURCE as unknown as { ɵprov: { factory(): DevMenuSource } }).ɵprov;
-      const source = provider.factory();
+      scope['nativeFabricUIManager'] = {};
+      let source: DevMenuSource;
+      try {
+        source = provider.factory();
+      } finally {
+        delete scope['nativeFabricUIManager'];
+      }
       serviceWith(DevMenu.SOURCE, source, () => new DevMenu()).reload('reset');
       assert.deepEqual(calls, ['expo: reset']);
     });

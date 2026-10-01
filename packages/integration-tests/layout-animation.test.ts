@@ -205,12 +205,14 @@ describe("the developer menu's reload", () => {
       }
       throw new Error(`Cannot find module '${id}'`);
     };
+    scope['nativeFabricUIManager'] = {};
     const provider = (DevMenu.SOURCE as unknown as { ɵprov: { factory(): DevMenuSource } }).ɵprov;
     try {
       const source = provider.factory();
       return { source, menu: serviceWith(DevMenu.SOURCE, source, () => new DevMenu()) };
     } finally {
       delete scope['require'];
+      delete scope['nativeFabricUIManager'];
     }
   }
 

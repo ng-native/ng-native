@@ -159,21 +159,26 @@ export interface NativeKeyboardEvent {
  * `null` off a device, where each capability falls back to doing nothing - the same as an
  * optional injection token nobody provided.
  *
- * The engine's presence is what tells the two apart. In Node there is no `nativeFabricUIManager`
- * and no React Native either, which is the ordinary case for the test suite; on a device there is
- * one, and a missing `require` would mean the bundler stopped emitting CommonJS under us. That is
- * worth saying out loud rather than quietly rendering an app whose keyboard never moves.
+ * The engine's presence is what tells the two apart. In Node and in a browser there is no
+ * `nativeFabricUIManager`; on a device there is one, and a missing `require` would mean the bundler
+ * stopped emitting CommonJS under us. That is worth saying out loud rather than quietly rendering
+ * an app whose keyboard never moves.
+ *
+ * `require` alone cannot tell them apart: a browser bundle can have one. Rolldown gives a `vite
+ * build` its own `require` for an external module, which passes `typeof require === 'function'`
+ * and throws when called.
  */
 export function reactNative(): ReactNative | null {
+  if ((globalThis as { nativeFabricUIManager?: unknown }).nativeFabricUIManager === undefined) {
+    return null;
+  }
   // `require` has a type only where the app's tsconfig loads Node's or React Native's types, and
   // a browser app's loads neither. `@ts-expect-error` would fail where it does.
   // @ts-ignore
   if (typeof require === 'function') return require('react-native') as ReactNative;
-  if ((globalThis as { nativeFabricUIManager?: unknown }).nativeFabricUIManager !== undefined) {
-    console.error(
-      '[angular-native] react-native could not be required, so every platform capability is ' +
-        'inert. The bundle is not CommonJS; check the Metro transform.',
-    );
-  }
+  console.error(
+    '[angular-native] react-native could not be required, so every platform capability is ' +
+      'inert. The bundle is not CommonJS; check the Metro transform.',
+  );
   return null;
 }
