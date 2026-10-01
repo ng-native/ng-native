@@ -1,0 +1,37 @@
+{
+  "$schema": "https://json-schema.org/schema",
+  "$id": "NgNativeNxTailwind",
+  "title": "Tailwind in an Angular Native app",
+  "description": "Sets up Tailwind in an Angular Native app, and the Tailwind-styled workspace libraries it uses.",
+  "type": "object",
+  "properties": {
+    "project": {
+      "type": "string",
+      "description": "The Angular Native app.",
+      "$default": { "$source": "argv", "index": 0 },
+      "x-prompt": "Which app should Tailwind be set up in?",
+      "x-dropdown": "projects"
+    },
+    "tailwindVersion": {
+      "type": "number",
+      "description": "The Tailwind major: 4, or 3. Defaults to the one the workspace has, or 4.",
+      "enum": [3, 4]
+    },
+    "library": {
+      "type": "string",
+      "description": "Comma-separated workspace libraries whose classes the app uses: each gets a Tailwind theme of its own that the app loads."
+    },
+    "skipInstall": {
+      "type": "boolean",
+      "description": "Write the files without installing.",
+      "default": false
+    },
+    "skipFormat": {
+      "type": "boolean",
+      "description": "Leave the generated files unformatted.",
+      "default": false,
+      "x-priority": "internal"
+    }
+  },
+  "required": ["project"]
+}

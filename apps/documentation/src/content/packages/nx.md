@@ -193,6 +193,37 @@ a native component and its test instead, in a folder of its own under the librar
 under an app's `src/app`. It takes `--flat` for no folder of its own, `--skipTests`, and a path in
 the name, such as `settings/profile-card`.
 
+## Tailwind
+
+```sh
+nx g @ng-native/nx:tailwind mobile --library ui
+```
+
+This sets up [Tailwind](/packages/tailwind) in an app, and in the libraries whose classes it uses.
+An app that uses a library's classes without this renders them unstyled, and nothing fails: the
+classes are only missing from the sheet. For the app, it writes `src/styles.css`, wraps the Metro
+config in `withTailwind`, passes the sheet to `mount` as `globalStyles` in `src/main.ts`, and adds
+`@ng-native/tailwind` and Tailwind where the app's dependencies go. It also makes sure the
+`typecheck` target builds the sheet first and `.gitignore` ignores `.angular-native/`, which an app
+generated before either needs.
+
+Tailwind scans the app's directory, so each library named with `--library` (several, separated by
+commas) gets a theme of its own, which the app loads, as
+[a shared library](/packages/tailwind#a-shared-library-in-an-nx-workspace) describes:
+
+- With Tailwind 4, the library's `theme.css` names its sources with `@source` and holds its
+  `@theme`, and the app's `styles.css` imports it.
+- With Tailwind 3, the library's `tailwind.preset.cjs` lists its sources in `content`. The app's
+  `tailwind.config.js` takes each library's preset ahead of Angular Native's and spreads its
+  `content` into its own, and `@nx/enforce-module-boundaries` in the root ESLint config allows the
+  relative `require` of a `tailwind.preset.cjs`.
+
+A library that has the file already keeps it. `--tailwindVersion=3` sets up Tailwind 3; without it
+the generator takes the major the workspace has installed, or 4. (`nx g` reads `--version` as its
+own.) Running it again changes nothing, and running it with another library adds that one. A file
+it cannot follow, such as a Metro config whose export spans several lines, is left as it is, with a
+warning saying what to add by hand.
+
 ## Options
 
 `nx g @ng-native/nx:app <directory>` takes `--name` (the directory's last segment by default),

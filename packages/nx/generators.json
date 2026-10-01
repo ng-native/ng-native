@@ -25,6 +25,11 @@
       "schema": "./library/schema.json",
       "description": "A library of native components, whose tests render on the fake Fabric as an app's do."
     },
+    "tailwind": {
+      "factory": "./tailwind/index.cjs#tailwind",
+      "schema": "./tailwind/schema.json",
+      "description": "Sets up Tailwind in an Angular Native app, and the Tailwind-styled workspace libraries it uses."
+    },
     "component": {
       "aliases": ["c"],
       "factory": "./component/index.cjs#component",

@@ -221,6 +221,8 @@ Tailwind builds only the classes it finds in the files it scans, and an app's se
 app's own directory. A class used only in a library elsewhere in the workspace is left out of the sheet with
 no warning, and the library's components render unstyled. Keep the library's theme in the library,
 along with where its classes are, and have each app that uses the library load both.
+`nx g @ng-native/nx:tailwind <app> --library <library>` sets this up; see
+[the Nx page](/packages/nx#tailwind). By hand:
 
 With Tailwind 4, the library ships a stylesheet that names its own sources:
 

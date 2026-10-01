@@ -33,8 +33,9 @@ In a workspace whose root package is scoped, the project is `@org/mobile`.
 ## What's in the package
 
 - `generators.json` - `init`, which `nx add` runs, `application` (alias `app`), `library` (alias
-  `lib`), `component` (alias `c`), and `sync-native-modules`, the sync generator an app runs before
-  `start`, `export` and `prebuild`.
+  `lib`), `component` (alias `c`), `tailwind`, which sets up Tailwind in an app and the libraries
+  it uses, and `sync-native-modules`, the sync generator an app runs before `start`, `export` and
+  `prebuild`.
 - `files/` - the template's source files, which a test keeps identical to `template/`.
 
 ## Docs
