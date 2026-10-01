@@ -33,6 +33,64 @@ as text - wrapping, breaking, nested runs sitting on a shared baseline - rather 
 `<text>` still participates in its parent's flex layout as a child; it just cannot itself arrange
 children with `flex-direction`.
 
+## A component's host is a flex item
+
+A component used in another template, such as `<app-case-list />`, has a host element, and the
+host commits as a plain view. It is a flex item in its parent like any `<view>`, and starts with
+no `flex`, so it is as tall as its content. Its own elements sit inside it, so a `flex: 1` on
+them fills the host, not the space around it. A `<scroll-view class="flex-1">` in a host with no
+`flex` gets a height of zero, and the list renders nothing, with no error or warning.
+
+A component that fills the space it is given needs `flex: 1` on its host. Set it with the `host`
+object in its decorator:
+
+```ts
+import { Component } from '@angular/core';
+import { ScrollView, Text, View } from '@ng-native/components';
+
+@Component({
+  selector: 'app-case-list',
+  imports: [ScrollView, Text],
+  host: { style: 'flex: 1' },
+  template: `
+    <scroll-view class="list">
+      <text>First case</text>
+    </scroll-view>
+  `,
+  styles: `
+    .list {
+      flex: 1;
+    }
+  `,
+})
+export class CaseList {}
+
+@Component({
+  selector: 'app-cases',
+  imports: [CaseList, Text, View],
+  template: `
+    <view class="screen">
+      <text>Cases</text>
+      <app-case-list />
+    </view>
+  `,
+  styles: `
+    .screen {
+      flex: 1;
+    }
+  `,
+})
+export class Cases {}
+```
+
+`:host { flex: 1; }` in the component's `styles` does the same. With Tailwind, write
+`host: { class: 'flex-1' }`. A class set on the host is matched against the global sheet and the
+parent's styles, not the component's own, so a class only works on the host when it comes from
+there, as Tailwind's utilities do.
+
+The root component is the exception: it is mounted into the screen's root view rather than into
+a host of its own, so its elements fill the screen with `flex: 1` alone.
+
 ## Safe area
 
 Keeping content clear of the notch, the status bar and the home indicator is the job of

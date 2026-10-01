@@ -101,6 +101,45 @@ export function layOut(
   return measured;
 }
 
+/** The part of a committed node `layOutTree` reads. */
+interface TreeNode {
+  readonly props: Readonly<Record<string, unknown>>;
+  readonly children: readonly TreeNode[];
+}
+
+/**
+ * Lay out a committed tree in a screen-sized root view, as React Native's Yoga would, and answer
+ * each node's size. Yoga cannot measure text here, so `fixed` gives a node a size of its own.
+ */
+export function layOutTree<T extends TreeNode>(
+  nodes: readonly T[],
+  screen: { width: number; height: number },
+  fixed: (node: T) => { height: number } | undefined = () => undefined,
+): Map<T, { width: number; height: number }> {
+  const yoga = new Map<T, Node>();
+  const build = (node: T): Node => {
+    const created = Yoga.Node.create(config);
+    apply(created, node.props);
+    const size = fixed(node);
+    if (size) created.setHeight(size.height);
+    else (node.children as T[]).forEach((child, i) => created.insertChild(build(child), i));
+    yoga.set(node, created);
+    return created;
+  };
+  const root = Yoga.Node.create(config);
+  root.setWidth(screen.width);
+  root.setHeight(screen.height);
+  nodes.forEach((node, i) => root.insertChild(build(node), i));
+  root.calculateLayout(undefined, undefined, Direction.LTR);
+  const sizes = new Map<T, { width: number; height: number }>();
+  for (const [node, created] of yoga) {
+    const { width, height } = created.getComputedLayout();
+    sizes.set(node, { width, height });
+  }
+  root.freeRecursive();
+  return sizes;
+}
+
 type Value = number | 'auto' | `${number}%` | undefined;
 const value = (v: unknown): Value =>
   typeof v === 'number' || v === 'auto' || (typeof v === 'string' && /^-?[\d.]+%$/.test(v))
