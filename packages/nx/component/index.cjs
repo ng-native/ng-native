@@ -13,6 +13,18 @@ const { formatFiles, getProjects, joinPathFragments, names } = require('@nx/devk
 const { componentSource, testSource } = require('./sources.cjs');
 
 /**
+ * Whether the project is an app: by its `projectType`, or, where it has none, as `@nx/js:library`
+ * leaves a package.json-only project in the TypeScript preset, by the `app.json` an Expo app has.
+ *
+ * @param {import('@nx/devkit').Tree} tree
+ * @param {import('@nx/devkit').ProjectConfiguration} project
+ */
+function isApp(tree, project) {
+  if (project.projectType) return project.projectType === 'application';
+  return tree.exists(joinPathFragments(project.root, 'app.json'));
+}
+
+/**
  * @param {import('@nx/devkit').Tree} tree
  * @param {{ name: string, project: string, flat?: boolean, skipTests?: boolean, skipFormat?: boolean }} options
  */
@@ -23,7 +35,7 @@ async function component(tree, options) {
   const base = joinPathFragments(
     project.root,
     'src',
-    project.projectType === 'library' ? 'lib' : 'app',
+    isApp(tree, project) ? 'app' : 'lib',
     path.dirname(options.name),
   );
   const folder = options.flat ? base : joinPathFragments(base, file);

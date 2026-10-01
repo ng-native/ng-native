@@ -54,6 +54,19 @@ describe('nx g @ng-native/nx:component', () => {
     );
   });
 
+  it('treats a project with no projectType as a library unless it is an Expo app', async () => {
+    // @nx/js:library in the TypeScript preset leaves projectType out of a package.json-only
+    // project, and the component went under src/app.
+    const tree = workspace();
+    addProjectConfiguration(tree, 'cards', { root: 'packages/cards' });
+    addProjectConfiguration(tree, 'admin', { root: 'apps/admin' });
+    tree.write('apps/admin/app.json', '{ "expo": {} }\n');
+    await generate(tree, { name: 'card', project: 'cards' });
+    await generate(tree, { name: 'card', project: 'admin' });
+    assert.ok(tree.exists('packages/cards/src/lib/card/card.ts'));
+    assert.ok(tree.exists('apps/admin/src/app/card/card.ts'));
+  });
+
   it("puts an app's component under src/app, with no prefix when the project has none", async () => {
     const tree = workspace();
     await generate(tree, { name: 'profile-card', project: 'mobile' });
