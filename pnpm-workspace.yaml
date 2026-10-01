@@ -41,3 +41,9 @@ packageExtensions:
   nx:
     peerDependencies:
       typescript: '*'
+  # debug loads supports-color if it can, and takes it as an optional peer. pnpm resolves that peer
+  # to whichever copy it reaches first, and the workspace has two, so every change to the lockfile
+  # moved Babel and Expo between a variant on each. A dependency of its own gives it one.
+  debug:
+    dependencies:
+      supports-color: ^8.1.1
