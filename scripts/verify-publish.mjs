@@ -657,52 +657,41 @@ function storybookVersions() {
   return { storybook, vite };
 }
 
-/**
- * The Storybook recipe on `storybook.md`, file for file, with Tailwind: its `main.ts` and
- * `preview.ts`, and a story whose args set a component's input.
- */
-const STORYBOOK_FILES = {
-  '.storybook/main.ts': `import type { StorybookConfig } from '@storybook/html-vite';
-import tailwindcss from '@tailwindcss/vite';
-import { ngNativeWeb } from '@ng-native/web/vite';
-import { mergeConfig } from 'vite';
-
-const config: StorybookConfig = {
-  framework: '@storybook/html-vite',
-  stories: ['../src/**/*.stories.ts'],
-  addons: ['@storybook/addon-docs'],
-  viteFinal: (config) => mergeConfig(config, { plugins: [ngNativeWeb(), tailwindcss()] }),
-};
-
-export default config;
-`,
-  '.storybook/preview.ts': `import '../src/styles.css';
-import { mount, type MountResult } from '@ng-native/web';
-import type { Preview } from '@storybook/html-vite';
-
-const mounted = new WeakMap<HTMLElement, MountResult>();
-
-function unmount(canvas: HTMLElement): void {
-  mounted.get(canvas)?.destroy();
-  mounted.delete(canvas);
+/** Every ```ts block on `storybook.md`, in page order. */
+function storybookSamples() {
+  const page = readFileSync(STORYBOOK_PAGE, 'utf8');
+  return [...page.matchAll(/^```ts\n([\s\S]*?)^```$/gm)].map((match) => match[1]);
 }
 
-const preview: Preview = {
-  tags: ['autodocs'],
-  render: (args, { parameters, canvasElement }) => {
-    unmount(canvasElement);
-    const root = document.createElement('div');
-    mounted.set(canvasElement, mount(root, parameters.component, { inputs: args }));
-    return root;
-  },
-  beforeEach: ({ canvasElement }) => {
-    return () => unmount(canvasElement);
-  },
-};
+/** The one block on `storybook.md` that `test` picks out, so the check builds what the page shows. */
+function storybookSample(what, test) {
+  const found = storybookSamples().filter(test);
+  if (found.length !== 1) {
+    throw new Error(`${STORYBOOK_PAGE} has ${found.length} blocks for ${what}, not 1`);
+  }
+  return found[0];
+}
 
-export default preview;
-`,
-  'src/counter.ts': `import { Component, DestroyRef, inject, input, signal } from '@angular/core';
+/**
+ * The Storybook recipe, with Tailwind, read from `storybook.md` itself so the page and the check
+ * cannot drift: its Tailwind `main.ts`, its `preview.ts` with the stylesheet import the Tailwind
+ * section adds, and its Counter story. Only the component is the check's own, since the page does
+ * not show one; it also says when it is destroyed, which is what the check counts.
+ */
+function storybookFiles() {
+  return {
+    '.storybook/main.ts': storybookSample('the Tailwind main.ts', (code) =>
+      code.includes('tailwindcss()'),
+    ),
+    '.storybook/preview.ts':
+      storybookSample(
+        'the stylesheet import',
+        (code) => code.trim() === "import '../src/styles.css';",
+      ) + storybookSample('preview.ts', (code) => code.includes('const preview: Preview')),
+    'src/counter.stories.ts': storybookSample('the Counter story', (code) =>
+      code.includes("title: 'Counter'"),
+    ),
+    'src/counter.ts': `import { Component, DestroyRef, inject, input, signal } from '@angular/core';
 import { Pressable, Text, View } from '@ng-native/components';
 
 @Component({
@@ -746,23 +735,8 @@ export class Counter {
   }
 }
 `,
-  'src/counter.stories.ts': `import type { Meta, StoryObj } from '@storybook/html-vite';
-import { Counter } from './counter.ts';
-
-const meta: Meta = {
-  title: 'Counter',
-  parameters: { component: Counter },
-};
-
-export default meta;
-
-export const Default: StoryObj = {};
-
-export const Labelled: StoryObj = {
-  args: { label: 'Hello from Storybook' },
-};
-`,
-};
+  };
+}
 
 /**
  * The browser app `web.md` sets up, with Storybook added as `storybook.md` says: installed from the
@@ -795,7 +769,7 @@ async function storybookApp(dir) {
     app,
   );
   const files = {
-    ...STORYBOOK_FILES,
+    ...storybookFiles(),
     'tsconfig.json': WEB_FILES['tsconfig.json'].replace(
       '"include": ["src"]',
       '"include": ["src", ".storybook"]',

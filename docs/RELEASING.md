@@ -102,7 +102,9 @@ Chromium. CI runs both on every push. With `--generators` it also runs the two w
 above, which take several minutes, so only the release workflow does. `--scenario=web` runs the
 browser check alone. [CONTRIBUTING.md](../CONTRIBUTING.md#checking-distribution-locally) has the
 local steps. `--storybook` runs only the Storybook check the release workflow runs. A newer
-Storybook or Vite for that check is a change to the versions `storybook.md` states.
+Storybook or Vite for that check is a change to the versions `storybook.md` states, together with
+the `storybook` and `@storybook/html-vite` devDependencies of `packages/integration-tests`, which
+typecheck the page's code on every pull request. `docs-samples.test.ts` fails while the two differ.
 
 ## The weekly check against the newest versions
 

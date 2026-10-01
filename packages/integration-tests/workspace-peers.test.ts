@@ -74,3 +74,15 @@ describe('the peers a workspace project needs', () => {
     });
   }
 });
+
+/**
+ * Vite takes `jiti` as an optional peer, and `packages/integration-tests` also has the `jiti` 1
+ * that Tailwind 3 depends on. Without its own `jiti` 2 its Vite resolves the peer to 1, a second
+ * Vite variant, and Vitest's plugins, whose lockfile keys do not say which Vite they are on, can
+ * swap between the two variants whenever anything re-resolves the lockfile.
+ */
+it('resolves Vite to one variant across the workspace', () => {
+  const lockfile = readFileSync(`${root}pnpm-lock.yaml`, 'utf8');
+  const variants = lockfile.match(/^ {2}vite@[^(:]+\(.*:$/gm) ?? [];
+  assert.equal(variants.length, 1, variants.join('\n'));
+});

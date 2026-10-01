@@ -17,7 +17,7 @@
  * bad argument type.
  */
 import assert from 'node:assert/strict';
-import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { describe, it } from 'node:test';
 import ts from 'typescript';
@@ -96,6 +96,16 @@ function writeFixtures(samples: DocSample[]): Map<string, DocSample> {
   return byPath;
 }
 
+/**
+ * A stylesheet imported for its side effect, as a bundler handles it: `import './styles.css'` is a
+ * module with nothing in it.
+ */
+function writeStylesheetDeclaration(): string {
+  const file = path.join(OUT_DIR, 'stylesheets.d.ts');
+  writeFileSync(file, "declare module '*.css';\n");
+  return file;
+}
+
 function typecheck(files: string[]): ts.Diagnostic[] {
   const program = ts.createProgram(files, {
     target: ts.ScriptTarget.ES2022,
@@ -125,6 +135,29 @@ function byFixture(diagnostics: ts.Diagnostic[]): Map<string, ts.Diagnostic[]> {
   return grouped;
 }
 
+/**
+ * The Storybook page's samples compile against the Storybook this package installs, and the
+ * release's Storybook check installs the version the page states, so all three are one version.
+ */
+it('installs the Storybook version the Storybook page states', () => {
+  const page = readFileSync(
+    path.join(
+      import.meta.dirname,
+      '../../apps/documentation/src/content/packages/web/storybook.md',
+    ),
+    'utf8',
+  );
+  const stated = /checked on Storybook (\d+\.\d+\.\d+) and Vite/.exec(page)?.[1];
+  const manifest = JSON.parse(
+    readFileSync(path.join(import.meta.dirname, 'package.json'), 'utf8'),
+  ) as { devDependencies: Record<string, string> };
+  assert.ok(stated, 'the Storybook page states no version');
+  assert.deepEqual(
+    [manifest.devDependencies['storybook'], manifest.devDependencies['@storybook/html-vite']],
+    [stated, stated],
+  );
+});
+
 describe('docs code samples typecheck against the real packages', () => {
   const samples = extractDocSamples();
   const structurallySkipped = samples.filter((s) => s.skipReason);
@@ -145,7 +178,7 @@ describe('docs code samples typecheck against the real packages', () => {
 
   it('typechecks every block that is not an obvious fragment', () => {
     const byPath = writeFixtures(checkable);
-    const diagnostics = byFixture(typecheck([...byPath.keys()]));
+    const diagnostics = byFixture(typecheck([...byPath.keys(), writeStylesheetDeclaration()]));
 
     const elidedContext: DocSample[] = [];
     const failures: string[] = [];
