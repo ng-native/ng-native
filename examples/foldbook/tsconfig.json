@@ -1,0 +1,10 @@
+{
+  "compilerOptions": {
+    "module": "preserve",
+    "moduleResolution": "bundler",
+    "jsx": "react-jsx"
+  },
+  "extends": "../../tsconfig.base.json",
+  "include": ["."],
+  "exclude": ["**/*.generated.ts", ".expo", "dist"]
+}

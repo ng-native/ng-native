@@ -72,6 +72,7 @@ const NATIVE_MODULES: Readonly<Record<string, string>> = {
   'expo-device': 'ExpoDevice',
   'expo-document-picker': 'ExpoDocumentPicker',
   'expo-file-system': 'FileSystem',
+  'expo-foldables': 'ExpoFoldables',
   'expo-font': 'ExpoFontLoader',
   'expo-image-manipulator': 'ExpoImageManipulator',
   'expo-image-picker': 'ExponentImagePicker',
