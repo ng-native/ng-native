@@ -1,0 +1,44 @@
+{
+  "name": "padel-example",
+  "version": "1.0.0",
+  "private": true,
+  "main": "src/main.ts",
+  "scripts": {
+    "start": "expo start",
+    "ios": "expo run:ios",
+    "android": "expo run:android",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "export": "expo export --platform ios --platform android --output-dir dist"
+  },
+  "dependencies": {
+    "@angular/common": "22.2.0",
+    "@angular/core": "22.2.0",
+    "@bacons/apple-targets": "^5.0.0",
+    "@ng-native/components": "workspace:*",
+    "@ng-native/device": "workspace:*",
+    "@ng-native/expo": "workspace:*",
+    "@ng-native/fabric": "workspace:*",
+    "@ng-native/platform": "workspace:*",
+    "expo": "~57.0.26",
+    "expo-modules-core": "~57.0.20",
+    "react": "19.2.3",
+    "react-native": "0.86.3",
+    "react-native-safe-area-context": "~5.7.0",
+    "react-native-watch-connectivity": "^2.0.0"
+  },
+  "devDependencies": {
+    "@babel/core": "^7.29.7",
+    "@ng-native/metro": "workspace:*",
+    "@ng-native/testing": "workspace:*",
+    "@types/react": "~19.2.4",
+    "typescript": "~6.0.3",
+    "vitest": "^5.0.2"
+  },
+  "nx": {
+    "tags": [
+      "scope:padel-example",
+      "layer:app"
+    ]
+  }
+}

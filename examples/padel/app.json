@@ -1,0 +1,16 @@
+{
+  "expo": {
+    "name": "Padel",
+    "slug": "padel-example",
+    "scheme": "padel",
+    "newArchEnabled": true,
+    "userInterfaceStyle": "dark",
+    "ios": {
+      "bundleIdentifier": "dev.angularnative.padel"
+    },
+    "android": {
+      "package": "dev.angularnative.padel"
+    },
+    "plugins": ["@ng-native/metro", "@bacons/apple-targets"]
+  }
+}

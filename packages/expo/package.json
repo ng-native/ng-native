@@ -59,6 +59,7 @@
     "./tracking": "./src/tracking.ts",
     "./updates": "./src/updates.ts",
     "./video": "./src/video.ts",
+    "./watch": "./src/watch.ts",
     "./package.json": "./package.json"
   },
   "publishConfig": {
@@ -238,6 +239,10 @@
         "types": "./dist/video.d.ts",
         "default": "./dist/video.js"
       },
+      "./watch": {
+        "types": "./dist/watch.d.ts",
+        "default": "./dist/watch.js"
+      },
       "./package.json": "./package.json"
     }
   },
@@ -303,7 +308,8 @@
     "expo-updates": "^57.0.0",
     "expo-video": "^57.0.0",
     "expo-web-browser": "^57.0.0",
-    "react-native": ">=0.86.0"
+    "react-native": ">=0.86.0",
+    "react-native-watch-connectivity": "^2.0.0"
   },
   "devDependencies": {
     "@angular/core": "22.2.0",
@@ -345,6 +351,7 @@
     "expo-updates": "^57.0.24",
     "expo-video": "^57.0.5",
     "expo-web-browser": "^57.0.3",
+    "react-native-watch-connectivity": "^2.0.0",
     "typescript": "~6.0.3"
   },
   "peerDependenciesMeta": {
@@ -466,6 +473,9 @@
       "optional": true
     },
     "expo-web-browser": {
+      "optional": true
+    },
+    "react-native-watch-connectivity": {
       "optional": true
     }
   },
