@@ -16,7 +16,9 @@ const { createTreeWithEmptyWorkspace } = require('@nx/devkit/testing') as {
 };
 const { addProjectConfiguration, readJson, writeJson } =
   require('@nx/devkit') as typeof import('@nx/devkit');
-const { syncAppVersions } = require('./sync-app-versions.cjs');
+const { 'sync-app-versions': syncAppVersions } = require('./run.cjs') as {
+  'sync-app-versions': (tree: Tree) => Promise<string[]>;
+};
 const own = require('../package.json');
 
 const read = (file: string) =>
@@ -103,7 +105,7 @@ describe('the sync-app-versions migration', () => {
     assert.equal(generators['sync-app-versions'].version, own.version);
     assert.equal(
       generators['sync-app-versions'].implementation,
-      './migrations/sync-app-versions.cjs#syncAppVersions',
+      './migrations/run.cjs#sync-app-versions',
     );
     assert.equal(own['nx-migrations'].migrations, './migrations.json');
     assert.ok(own.files.includes('migrations.json'));

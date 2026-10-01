@@ -1151,12 +1151,21 @@ importers:
       '@ng-native/metro':
         specifier: workspace:*
         version: link:../metro
+      '@ng-native/migrate':
+        specifier: workspace:*
+        version: link:../migrate
+      '@ng-native/nx':
+        specifier: workspace:*
+        version: link:../nx
       '@ng-native/platform':
         specifier: workspace:*
         version: link:../platform
       '@ng-native/router':
         specifier: workspace:*
         version: link:../router
+      '@ng-native/schematics':
+        specifier: workspace:*
+        version: link:../schematics
       '@ng-native/tailwind':
         specifier: workspace:*
         version: link:../tailwind
@@ -1278,8 +1287,17 @@ importers:
         specifier: ^1.30.2
         version: 1.33.0
 
+  packages/migrate:
+    dependencies:
+      semver:
+        specifier: ^7.7.0
+        version: 7.8.5
+
   packages/nx:
     dependencies:
+      '@ng-native/migrate':
+        specifier: workspace:*
+        version: link:../migrate
       '@nx/devkit':
         specifier: ^23.0.0
         version: 23.2.1(nx@23.2.1(typescript@6.0.3))
@@ -1349,6 +1367,9 @@ importers:
       '@angular-devkit/schematics':
         specifier: ^22.0.0
         version: 22.1.9(chokidar@5.0.0)
+      '@ng-native/migrate':
+        specifier: workspace:*
+        version: link:../migrate
       semver:
         specifier: ^7.7.0
         version: 7.8.5
@@ -9691,9 +9712,7 @@ snapshots:
       metro-runtime: 0.84.6
     transitivePeerDependencies:
       - '@babel/core'
-      - bufferutil
       - supports-color
-      - utf-8-validate
 
   '@react-native/normalize-colors@0.86.3': {}
 

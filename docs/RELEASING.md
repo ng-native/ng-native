@@ -33,6 +33,21 @@ the bump for a breaking change under `0.x`, and `patch` for anything else. Each 
 plans it finds into its `CHANGELOG.md` entry and deletes them, so the changelog says what the
 plans said, not what the commit messages did. Refactors, tests and docs need no plan.
 
+## Breaking changes and migrations
+
+A change an app has to make too, such as a moved import, ships with a **migration** that makes it.
+Write it once in `packages/migrate`: a function from a host (`read`, `write`, `list`) to the notes it
+leaves for the developer, registered in `packages/migrate/migrations.cjs` at the version of the
+release it ships in. List it in `packages/nx/migrations.json` and
+`packages/schematics/migrations.json` as `./migrations/run.cjs#<name>`, at the same version, with
+the same description; `migrations.test.ts` in `packages/integration-tests` fails until all three
+agree. Test it with `acrossAdapters` from `packages/integration-tests/migrations.ts`, which runs it
+through `nx migrate`, `ng update` and `npx @ng-native/migrate` on the same files.
+
+The version plan for the change names the migration and links
+[Updating an app](https://ng-native.com/guide/updating), which says how to run it, and the
+migration goes into the table on that page.
+
 ## Each release
 
 Run **Release** from the Actions tab, on `main`, once CI is green there. Its input is either an exact
@@ -50,7 +65,8 @@ each, installing with npm. Once all of those pass, it runs the same gate CI does
 
 - `nx release version` writes the version to every package and the template. The `sync-app-versions`
   migration in `packages/nx/migrations.json` and `packages/schematics/migrations.json` moves to the
-  same version, so `nx migrate` and `ng update` run it on every upgrade. `nx release changelog`
+  same version, so `nx migrate` and `ng update` run it on every upgrade. Every other migration keeps
+  the version of the release that brought it. `nx release changelog`
   turns the version plans into the `CHANGELOG.md` entry, then commits all of it as
   `Release <version>` and tags it `v<version>`.
 - `nx run-many -t build` compiles each Angular package into its `dist`: partial-compiled

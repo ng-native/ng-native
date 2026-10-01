@@ -62,7 +62,7 @@ describe('the sync-app-versions migration', () => {
     });
   });
 
-  it('reads an angular.json with comments and trailing commas, as the Angular CLI does', async () => {
+  it('finds the native project whatever angular.json holds, comments and trailing commas too', async () => {
     const tree = workspace();
     tree.overwrite(
       'angular.json',
