@@ -139,7 +139,15 @@ and the packages' source together:
 ### With Tailwind
 
 `@ng-native/tailwind`'s web preset gives a browser the same variants and utilities a phone gets,
-so a class string written for native means the same thing here:
+so a class string written for native means the same thing here.
+
+A browser build is either an app of its own, as above, or sits beside a native app in that app's
+directory: a `vite.config.ts` and an `index.html` whose module script is a web entry of its own,
+such as `src/main.web.ts`, next to the app's `src/main.ts`. The setup is the same for both, except
+where the native build has a file of the same name. In an Nx workspace,
+`nx g @ng-native/nx:tailwind <project>` writes it for either: it takes a project whose Vite config
+runs `ngNativeWeb()` to build for a browser, and sets up the native build too when the project has
+one. [The Nx page](/packages/nx#tailwind) covers it. By hand:
 
 ```sh
 npm install --save-dev tailwindcss @tailwindcss/vite @ng-native/tailwind
@@ -157,7 +165,17 @@ export default defineConfig({
 });
 ```
 
-Then a stylesheet, `src/styles.css`, imported from `src/main.ts` with `import './styles.css';`:
+Then a stylesheet: `src/styles.css` in an app of its own, and `src/styles.web.css` beside a native
+app, since the native build's `src/styles.css` imports `native.css`. A library's `theme.css` is
+imported in both. `index.html` links it, and Vite builds it with the page:
+
+```html
+<link rel="stylesheet" href="/src/styles.css" />
+```
+
+An `import './styles.css';` in the web entry works too where TypeScript knows `.css` modules, as
+`vite/client`'s types declare them. Beside a native app it does not: TypeScript 6 refuses the
+import of a file it has no types for, so the app's typecheck fails on it.
 
 ```css
 @import 'tailwindcss/theme.css';
@@ -176,12 +194,25 @@ that puts `dark` on a view of its own passes `darkClass: false`.
 
 A Tailwind 3 app builds its web stylesheet with `web-preset.cjs`, the Tailwind 3 counterpart of
 `web.css`: `hover:` and `focus-visible:` are the browser's own, the safe area and the hairline come
-from the browser, and `font-mono` keeps Tailwind's stack. The device build keeps `preset.cjs`, so
-the web build gets a config of its own that takes everything else from the app's:
+from the browser, and `font-mono` keeps Tailwind's stack. `nx g @ng-native/nx:tailwind` sets it up
+as it does for Tailwind 4, for an app of its own and beside a native app alike. By hand:
 
 ```sh
 npm install --save-dev tailwindcss@3 @ng-native/tailwind
 ```
+
+An app of its own lists the web preset in its `tailwind.config.js`:
+
+```js
+// tailwind.config.js
+module.exports = {
+  presets: [require('@ng-native/tailwind/web-preset.cjs')],
+  content: ['./src/**/*.{ts,html}'],
+};
+```
+
+Beside a native app, the device build keeps `preset.cjs` in `tailwind.config.js`, so the web build
+gets a config of its own that takes everything else from the app's:
 
 ```js
 // tailwind.web.config.js
@@ -193,7 +224,8 @@ module.exports = {
 
 An app that lists a preset of its own beside `preset.cjs` lists it here too, in the same order.
 Vite runs Tailwind 3 as a PostCSS plugin, from a PostCSS config beside `vite.config.ts`, which
-needs nothing more than `ngNativeWeb()`:
+needs nothing more than `ngNativeWeb()`. It names the web build's config, `./tailwind.config.js` in
+an app of its own:
 
 ```js
 // postcss.config.js
@@ -202,7 +234,11 @@ module.exports = {
 };
 ```
 
-`src/styles.css` is the one the device build reads:
+In a package with `"type": "module"`, as the setup above makes, both configs end in `.cjs`, since
+`module.exports` in a `.js` file is an error there.
+
+`src/styles.css`, linked from `index.html` as above, holds the directives. Beside a native app it
+is the one the device build reads too:
 
 ```css
 @tailwind base;

@@ -7,7 +7,7 @@
   "properties": {
     "project": {
       "type": "string",
-      "description": "The Angular Native app.",
+      "description": "The Angular Native app, or a browser app built with Vite and ngNativeWeb(). An app with both builds gets both set up.",
       "$default": { "$source": "argv", "index": 0 },
       "x-prompt": "Which app should Tailwind be set up in?",
       "x-dropdown": "projects"

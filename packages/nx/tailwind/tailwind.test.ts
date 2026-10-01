@@ -72,6 +72,58 @@ function library(tree: Tree, name: string, root: string) {
   tree.write(`${root}/src/index.ts`, 'export {};\n');
 }
 
+/**
+ * A browser build of `root`, as the web page sets one up: a Vite config with `ngNativeWeb()`, and
+ * an `index.html` whose module script is `entry`.
+ */
+function web(tree: Tree, root: string, entry: string) {
+  tree.write(
+    `${root}/vite.config.ts`,
+    [
+      "import { ngNativeWeb } from '@ng-native/web/vite';",
+      "import { defineConfig } from 'vite';",
+      '',
+      'export default defineConfig({',
+      '  plugins: [ngNativeWeb()],',
+      '});',
+      '',
+    ].join('\n'),
+  );
+  tree.write(
+    `${root}/index.html`,
+    `<!doctype html>\n<html>\n  <head>\n    <meta charset="utf-8" />\n  </head>\n  <body>\n    <div id="root"></div>\n    <script type="module" src="/${entry}"></script>\n  </body>\n</html>\n`,
+  );
+  tree.write(
+    `${root}/${entry}`,
+    "import { mount } from '@ng-native/web';\nimport { App } from './app/app.ts';\n\nmount(document.getElementById('root')!, App);\n",
+  );
+}
+
+/** A browser app of its own, beside the native one: a Vite project with no app.json. */
+function webApp(tree: Tree, root = 'apps/site') {
+  addProjectConfiguration(tree, 'site', {
+    root,
+    sourceRoot: `${root}/src`,
+    projectType: 'application',
+  });
+  web(tree, root, 'src/main.ts');
+  return root;
+}
+
+/** Runs `run`, and returns what it warned. */
+async function warningsOf(run: () => Promise<unknown>) {
+  const warnings: string[] = [];
+  const { logger } = require('@nx/devkit') as typeof import('@nx/devkit');
+  const warn = logger.warn;
+  logger.warn = (message: unknown) => void warnings.push(String(message));
+  try {
+    await run();
+  } finally {
+    logger.warn = warn;
+  }
+  return warnings;
+}
+
 const generate = (tree: Tree, options: object) =>
   tailwind(tree, { project: 'mobile', skipFormat: true, skipInstall: true, ...options });
 
@@ -279,6 +331,225 @@ describe('Tailwind 3', () => {
     assert.ok(tree.exists('apps/mobile/tailwind.config.js'));
     assert.equal(readJson(tree, 'package.json').devDependencies.tailwindcss, '~3.4.17');
     await assert.rejects(generate(tree, { tailwindVersion: 4 }), /Tailwind 3 \(~3\.4\.17\)/);
+  });
+});
+
+const V4_WEB_IMPORTS = [
+  "@import 'tailwindcss/theme.css';",
+  "@import 'tailwindcss/utilities.css';",
+  "@import '@ng-native/tailwind/web.css';",
+];
+
+describe('Tailwind 4, in an app that also builds for a browser', () => {
+  // The web build needs web.css, not native.css: `hover:`, `focus-visible:`, the safe area and
+  // the hairline mean something else in a browser.
+  it('gives the web build a stylesheet of its own, with the web preset', async () => {
+    const tree = await integrated();
+    web(tree, 'apps/mobile', 'src/main.web.ts');
+    await generate(tree, {});
+    assert.equal(
+      read(tree, 'apps/mobile/src/styles.web.css').trim().split('\n').slice(-3).join('\n'),
+      V4_WEB_IMPORTS.join('\n'),
+    );
+    assert.match(read(tree, 'apps/mobile/src/styles.css'), /native\.css/);
+    assert.doesNotMatch(read(tree, 'apps/mobile/src/styles.css'), /web\.css/);
+  });
+
+  it("adds Tailwind's Vite plugin after ngNativeWeb(), and the package", async () => {
+    const tree = await integrated();
+    web(tree, 'apps/mobile', 'src/main.web.ts');
+    await generate(tree, {});
+    const config = read(tree, 'apps/mobile/vite.config.ts');
+    assert.match(config, /^import tailwindcss from '@tailwindcss\/vite';$/m);
+    assert.match(config, /plugins: \[ngNativeWeb\(\), tailwindcss\(\)\]/);
+    assert.equal(readJson(tree, 'package.json').devDependencies['@tailwindcss/vite'], '^4.3.3');
+  });
+
+  it("links the stylesheet from index.html, out of TypeScript's way", async () => {
+    // An import from the entry fails the app's typecheck on TypeScript 6 (TS2882), since a
+    // native app's types declare no .css modules.
+    const tree = await integrated();
+    web(tree, 'apps/mobile', 'src/main.web.ts');
+    const entry = read(tree, 'apps/mobile/src/main.web.ts');
+    await generate(tree, {});
+    assert.match(
+      read(tree, 'apps/mobile/index.html'),
+      /^ {4}<link rel="stylesheet" href="\/src\/styles\.web\.css" \/>\n {2}<\/head>$/m,
+    );
+    assert.equal(read(tree, 'apps/mobile/src/main.web.ts'), entry);
+    assert.doesNotMatch(read(tree, 'apps/mobile/src/main.ts'), /styles/);
+  });
+
+  it('leaves a stylesheet the entry imports already', async () => {
+    const tree = await integrated();
+    web(tree, 'apps/mobile', 'src/main.web.ts');
+    tree.write(
+      'apps/mobile/src/main.web.ts',
+      `import "./styles.web.css";\n${read(tree, 'apps/mobile/src/main.web.ts')}`,
+    );
+    await generate(tree, {});
+    assert.doesNotMatch(read(tree, 'apps/mobile/index.html'), /stylesheet/);
+  });
+
+  it("imports a library's theme in both stylesheets, and changes nothing when run again", async () => {
+    const tree = await integrated();
+    web(tree, 'apps/mobile', 'src/main.web.ts');
+    await generate(tree, { library: 'ui' });
+    await generate(tree, { library: 'tokens' });
+    for (const file of ['src/styles.css', 'src/styles.web.css']) {
+      const styles = read(tree, `apps/mobile/${file}`);
+      assert.match(styles, /^@import '\.\.\/\.\.\/\.\.\/packages\/ui\/theme\.css';$/m, file);
+      assert.match(styles, /^@import '\.\.\/\.\.\/\.\.\/packages\/tokens\/theme\.css';$/m, file);
+    }
+    const before = snapshot(tree);
+    await generate(tree, { library: 'ui,tokens' });
+    assert.deepEqual(snapshot(tree), before);
+  });
+
+  it('writes no web setup for an app without a Vite config using ngNativeWeb()', async () => {
+    const tree = await integrated();
+    tree.write('apps/mobile/vite.config.ts', 'export default { plugins: [] };\n');
+    await generate(tree, {});
+    assert.ok(!tree.exists('apps/mobile/src/styles.web.css'));
+    assert.equal(readJson(tree, 'package.json').devDependencies['@tailwindcss/vite'], undefined);
+  });
+});
+
+describe('Tailwind 4, in a browser app of its own', () => {
+  it('sets up the web build only', async () => {
+    const tree = await integrated();
+    const root = webApp(tree);
+    await generate(tree, { project: 'site', library: 'ui' });
+    const styles = read(tree, `${root}/src/styles.css`);
+    assert.match(styles, new RegExp(V4_WEB_IMPORTS.join('\n').replace(/[.*/()]/g, '\\$&')));
+    assert.match(styles, /^@import '\.\.\/\.\.\/\.\.\/packages\/ui\/theme\.css';$/m);
+    assert.match(read(tree, `${root}/vite.config.ts`), /ngNativeWeb\(\), tailwindcss\(\)/);
+    assert.match(
+      read(tree, `${root}/index.html`),
+      /<link rel="stylesheet" href="\/src\/styles\.css" \/>/,
+    );
+    assert.ok(!tree.exists(`${root}/metro.config.js`));
+    const { devDependencies } = readJson(tree, 'package.json');
+    assert.equal(devDependencies['@tailwindcss/vite'], '^4.3.3');
+    assert.equal(devDependencies['@tailwindcss/cli'], undefined, 'only Metro runs the CLI');
+  });
+
+  it('puts the imports ahead of a stylesheet the app has already', async () => {
+    const tree = await integrated();
+    const root = webApp(tree);
+    tree.write(`${root}/src/styles.css`, 'body {\n  margin: 0;\n}\n');
+    await generate(tree, { project: 'site' });
+    assert.equal(
+      read(tree, `${root}/src/styles.css`),
+      `${V4_WEB_IMPORTS.join('\n')}\n\nbody {\n  margin: 0;\n}\n`,
+    );
+    const before = snapshot(tree);
+    await generate(tree, { project: 'site' });
+    assert.deepEqual(snapshot(tree), before);
+  });
+});
+
+describe('Tailwind 3, in an app that also builds for a browser', () => {
+  it("writes a web config from the app's, with the web preset, and a PostCSS config", async () => {
+    const tree = await integrated();
+    web(tree, 'apps/mobile', 'src/main.web.ts');
+    await generate(tree, { tailwindVersion: 3 });
+    const config = read(tree, 'apps/mobile/tailwind.web.config.js');
+    assert.match(config, /\.\.\.require\('\.\/tailwind\.config\.js'\)/);
+    assert.match(config, /presets: \[require\('@ng-native\/tailwind\/web-preset\.cjs'\)\]/);
+    assert.doesNotMatch(config, /preset\.cjs'\)\s*[,\]].*preset\.cjs/);
+    assert.match(
+      read(tree, 'apps/mobile/postcss.config.js'),
+      /plugins: \{ tailwindcss: \{ config: '\.\/tailwind\.web\.config\.js' \} \}/,
+    );
+    // Vite runs Tailwind 3 through PostCSS, so its config needs nothing more.
+    assert.doesNotMatch(read(tree, 'apps/mobile/vite.config.ts'), /tailwindcss/);
+    assert.match(
+      read(tree, 'apps/mobile/index.html'),
+      /<link rel="stylesheet" href="\/src\/styles\.css" \/>/,
+    );
+  });
+
+  it("lists each library's preset ahead of the web preset, and changes nothing when run again", async () => {
+    const tree = await integrated();
+    web(tree, 'apps/mobile', 'src/main.web.ts');
+    await generate(tree, { tailwindVersion: 3, library: 'ui' });
+    await generate(tree, { tailwindVersion: 3, library: 'tokens' });
+    const config = read(tree, 'apps/mobile/tailwind.web.config.js');
+    assert.match(
+      config,
+      /presets: \[ui, \{ \.\.\.tokens, presets: \[\] \}, \{ \.\.\.require\('@ng-native\/tailwind\/web-preset\.cjs'\), presets: \[\] \}\]/,
+    );
+    assert.doesNotMatch(config, /tailwind\/preset\.cjs/);
+    const before = snapshot(tree);
+    await generate(tree, { tailwindVersion: 3, library: 'ui,tokens' });
+    assert.deepEqual(snapshot(tree), before);
+  });
+});
+
+describe('Tailwind 3, in a browser app of its own', () => {
+  it('writes a config with the web preset, the directives and a PostCSS config', async () => {
+    const tree = await integrated();
+    const root = webApp(tree);
+    await generate(tree, { project: 'site', tailwindVersion: 3 });
+    const config = read(tree, `${root}/tailwind.config.js`);
+    assert.match(config, /presets: \[require\('@ng-native\/tailwind\/web-preset\.cjs'\)\]/);
+    assert.match(config, /content: \['\.\/src\/\*\*\/\*\.\{ts,html\}'\]/);
+    assert.match(read(tree, `${root}/src/styles.css`), /@tailwind utilities;/);
+    assert.match(
+      read(tree, `${root}/postcss.config.js`),
+      /tailwindcss: \{ config: '\.\/tailwind\.config\.js' \}/,
+    );
+    assert.match(
+      read(tree, `${root}/index.html`),
+      /<link rel="stylesheet" href="\/src\/styles\.css" \/>/,
+    );
+    assert.ok(!tree.exists(`${root}/tailwind.web.config.js`));
+  });
+
+  it('writes them as .cjs in an ES module package, where module.exports would throw', async () => {
+    // The web page's own setup starts with npm pkg set type=module.
+    const tree = await integrated();
+    const root = webApp(tree);
+    tree.write(`${root}/package.json`, '{ "name": "site", "type": "module" }\n');
+    await generate(tree, { project: 'site', tailwindVersion: 3 });
+    assert.ok(tree.exists(`${root}/tailwind.config.cjs`));
+    assert.match(read(tree, `${root}/postcss.config.cjs`), /config: '\.\/tailwind\.config\.cjs'/);
+    assert.ok(!tree.exists(`${root}/tailwind.config.js`));
+    assert.ok(!tree.exists(`${root}/postcss.config.js`));
+  });
+});
+
+describe('a web build whose files it cannot follow', () => {
+  it('says what to add by hand rather than guessing', async () => {
+    const tree = await integrated();
+    const root = webApp(tree);
+    tree.write(`${root}/vite.config.ts`, 'export default makeConfig({ ngNativeWeb: true });\n');
+    tree.write(`${root}/index.html`, '<!doctype html>\n<html></html>\n');
+    tree.write(`${root}/postcss.config.js`, 'module.exports = { plugins: {} };\n');
+    const v4 = await warningsOf(() => generate(tree, { project: 'site' }));
+    assert.equal(
+      read(tree, `${root}/vite.config.ts`),
+      'export default makeConfig({ ngNativeWeb: true });\n',
+    );
+    assert.ok(
+      v4.some((message) => /tailwindcss\(\)/.test(message)),
+      v4.join('\n'),
+    );
+    assert.ok(
+      v4.some((message) => /index\.html/.test(message) && /styles\.css/.test(message)),
+      v4.join('\n'),
+    );
+
+    const tree3 = await integrated();
+    webApp(tree3);
+    tree3.write(`${root}/postcss.config.js`, 'module.exports = { plugins: {} };\n');
+    const v3 = await warningsOf(() => generate(tree3, { project: 'site', tailwindVersion: 3 }));
+    assert.equal(read(tree3, `${root}/postcss.config.js`), 'module.exports = { plugins: {} };\n');
+    assert.ok(
+      v3.some((message) => /postcss\.config\.js/.test(message)),
+      v3.join('\n'),
+    );
   });
 });
 

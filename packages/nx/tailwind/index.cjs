@@ -15,6 +15,17 @@
  *   by a relative path, which `@nx/enforce-module-boundaries` reports unless the rule allows it, as
  *   it allows the ESLint configs Nx requires the same way.
  *
+ * A project with a Vite config that runs `ngNativeWeb()` also builds for a browser, beside the
+ * device build or on its own, and the browser takes the web preset in place of the native one:
+ *
+ * - Tailwind 4: a stylesheet importing `@ng-native/tailwind/web.css` (`src/styles.web.css` beside a
+ *   device build, whose `src/styles.css` imports `native.css`), and `@tailwindcss/vite`'s plugin
+ *   after `ngNativeWeb()`.
+ * - Tailwind 3: a config with `web-preset.cjs` (`tailwind.web.config.js` beside a device build,
+ *   taking the rest from its `tailwind.config.js`), and the PostCSS config Vite runs it from.
+ *
+ * `index.html` links the stylesheet.
+ *
  * It only adds, so running it again changes nothing, and running it with another library adds that
  * one. A file it cannot follow is left alone, with a warning saying what to add by hand.
  */
@@ -35,19 +46,38 @@ const { usesWorkspaces } = require('../application/workspaces.cjs');
 const { asSaved } = require('../save-exact.cjs');
 
 const SHEET = '../.angular-native/app.tailwind.js';
-const V4_IMPORTS = [
-  "@import 'tailwindcss/theme.css';",
-  "@import 'tailwindcss/utilities.css';",
-  "@import '@ng-native/tailwind/native.css';",
+const V4_BASE = ["@import 'tailwindcss/theme.css';", "@import 'tailwindcss/utilities.css';"];
+const V4_IMPORTS = [...V4_BASE, "@import '@ng-native/tailwind/native.css';"];
+const V4_WEB_IMPORTS = [...V4_BASE, "@import '@ng-native/tailwind/web.css';"];
+const VITE_CONFIGS = ['ts', 'mts', 'cts', 'js', 'mjs', 'cjs'].map((ext) => `vite.config.${ext}`);
+const POSTCSS_CONFIGS = [
+  ...['js', 'cjs', 'mjs', 'ts', 'cts', 'mts'].map((ext) => `postcss.config.${ext}`),
+  ...['', '.json', '.yaml', '.yml', '.js', '.cjs', '.mjs'].map((ext) => `.postcssrc${ext}`),
 ];
 const V3_DIRECTIVES = ['@tailwind base;', '@tailwind components;', '@tailwind utilities;'];
 const PRESET_ALLOWED = String.raw`'^.*/tailwind\\.preset\\.cjs$'`;
 
-/** The packages each version needs. Tailwind 3 ships its CLI inside `tailwindcss`. */
-function packagesFor(version) {
+/**
+ * The packages each version needs, for a device build, a web build or both. Metro runs Tailwind
+ * 4's CLI and Vite its plugin. Tailwind 3 ships its CLI inside `tailwindcss`, and Vite runs it
+ * through PostCSS.
+ */
+function packagesFor(version, { device, web }) {
   const own = { '@ng-native/tailwind': native.dependencies['@ng-native/components'] };
   if (version === 3) return { ...own, tailwindcss: '^3.4.1' };
-  return { ...own, tailwindcss: '^4.3.3', '@tailwindcss/cli': '^4.3.3' };
+  return {
+    ...own,
+    tailwindcss: '^4.3.3',
+    ...(device ? { '@tailwindcss/cli': '^4.3.3' } : {}),
+    ...(web ? { '@tailwindcss/vite': '^4.3.3' } : {}),
+  };
+}
+
+/** The project's Vite config, when it builds for a browser with `ngNativeWeb()`. */
+function viteConfig(tree, root) {
+  return VITE_CONFIGS.map((name) => joinPathFragments(root, name)).find((file) =>
+    tree.read(file, 'utf-8')?.includes('ngNativeWeb'),
+  );
 }
 
 function projectNamed(tree, name) {
@@ -59,7 +89,7 @@ function projectNamed(tree, name) {
 /** The app's package.json when it is a workspace package, which its dependencies go in. */
 function manifestFor(tree, app) {
   const own = joinPathFragments(app.root, 'package.json');
-  return usesWorkspaces(tree) ? own : 'package.json';
+  return usesWorkspaces(tree) && tree.exists(own) ? own : 'package.json';
 }
 
 /**
@@ -206,20 +236,91 @@ function libraryPreset(tree, library) {
   return file;
 }
 
-function writeV4Stylesheet(tree, root, themes) {
-  const file = joinPathFragments(root, 'src/styles.css');
+/**
+ * A Tailwind 4 entry stylesheet with `base` (the native or the web preset's imports) when it is
+ * new, and an import of each library's theme it lacks, after the imports it has.
+ */
+function writeV4Stylesheet(tree, file, base, themes) {
   const existing = tree.read(file, 'utf-8');
   const lines =
-    existing === null ? ["/* The app's Tailwind entry, without preflight. */", ...V4_IMPORTS] : [];
+    existing === null ? ["/* The app's Tailwind entry, without preflight. */", ...base] : [];
   const text = existing ?? '';
   const imports = themes
-    .map((theme) => `@import '${path.relative(path.join(root, 'src'), theme)}';`)
+    .map((theme) => `@import '${path.relative(path.dirname(file), theme)}';`)
     .filter((line) => !text.includes(line));
   if (existing !== null && imports.length === 0) return;
+  const last = [...text.matchAll(/^@import .+;$/gm)].at(-1);
+  const at = last ? last.index + last[0].length + 1 : text.length;
+  const before = text.slice(0, at).replace(/\n*$/, at ? '\n' : '');
+  tree.write(file, `${before}${[...lines, ...imports].join('\n')}\n${text.slice(at)}`);
+}
+
+/**
+ * The web build's Tailwind 4 stylesheet. One the app has already, without Tailwind, gets the web
+ * preset's imports ahead of its rules, where CSS requires an `@import`.
+ */
+function writeWebV4Stylesheet(tree, file, themes) {
+  const existing = tree.read(file, 'utf-8');
+  if (existing !== null && !existing.includes('@ng-native/tailwind/web.css')) {
+    if (existing.includes('tailwindcss')) {
+      return byHand(
+        file,
+        `import '@ng-native/tailwind/web.css' after Tailwind's theme and utilities.`,
+      );
+    }
+    tree.write(file, `${V4_WEB_IMPORTS.join('\n')}\n\n${existing}`);
+  }
+  writeV4Stylesheet(tree, file, V4_WEB_IMPORTS, themes);
+}
+
+/** Adds `tailwindcss()` from `@tailwindcss/vite` after `ngNativeWeb()` in the Vite config. */
+function addVitePlugin(tree, file) {
+  const config = tree.read(file, 'utf-8') ?? '';
+  if (config.includes('@tailwindcss/vite')) return;
+  const call = /\bngNativeWeb\(/.exec(config);
+  const end = call ? closingBracket(config, call.index + call[0].length, '(', ')') : -1;
+  const last = [...config.matchAll(/^import .+;$/gm)].at(-1);
+  if (end < 0 || !last) {
+    return byHand(
+      file,
+      "import tailwindcss from '@tailwindcss/vite' and add tailwindcss() after ngNativeWeb() in its plugins.",
+    );
+  }
+  const at = last.index + last[0].length;
   tree.write(
     file,
-    `${text.replace(/\n*$/, text ? '\n' : '')}${[...lines, ...imports].join('\n')}\n`,
+    `${config.slice(0, at)}\nimport tailwindcss from '@tailwindcss/vite';` +
+      `${config.slice(at, end + 1)}, tailwindcss()${config.slice(end + 1)}`,
   );
+}
+
+/** Whether `code` names `file` in a string, in either quote. */
+function mentions(code, file) {
+  return code.includes(`'${file}'`) || code.includes(`"${file}"`);
+}
+
+/**
+ * Links `stylesheet` from the `index.html` Vite serves, which builds it with the page. A link
+ * rather than an import from the entry, which TypeScript 6 refuses in an app whose types do not
+ * declare `.css` modules, as a native app's do not. One the entry imports already is left as is.
+ */
+function linkStylesheet(tree, root, stylesheet) {
+  const file = joinPathFragments(root, 'index.html');
+  const html = tree.read(file, 'utf-8') ?? '';
+  const href = `/${path.relative(root, stylesheet)}`;
+  const script = /<script\b[^>]*\btype=["']module["'][^>]*>/.exec(html);
+  const src = script && /\bsrc=["']([^"']+)["']/.exec(script[0]);
+  const entry = src && joinPathFragments(root, src[1].replace(/^\.?\//, ''));
+  const relative = entry && path.relative(path.dirname(entry), stylesheet);
+  const imported = relative && (relative.startsWith('.') ? relative : `./${relative}`);
+  if (mentions(html, href) || (imported && mentions(tree.read(entry, 'utf-8') ?? '', imported))) {
+    return;
+  }
+  const head = /^([ \t]*)<\/head>/m.exec(html);
+  const link = `<link rel="stylesheet" href="${href}" />`;
+  if (!head) return byHand(file, `add ${link} to its head.`);
+  const indent = `${head[1]}  `;
+  tree.write(file, `${html.slice(0, head.index)}${indent}${link}\n${html.slice(head.index)}`);
 }
 
 function writeV3Stylesheet(tree, root) {
@@ -228,13 +329,13 @@ function writeV3Stylesheet(tree, root) {
 }
 
 /**
- * The app's `tailwind.config.js` for Tailwind 3. One this generator wrote is written again with
- * every library it had and the new ones; any other is left alone, with a warning.
+ * A Tailwind 3 config: the app's `tailwind.config.js`, or the web build's. One this generator
+ * wrote is written again with every library it had and the new ones; any other is left alone,
+ * with a warning.
  */
-function writeV3Config(tree, root, presets) {
-  const file = joinPathFragments(root, 'tailwind.config.js');
+function writeV3Config(tree, file, presets, options) {
   const existing = tree.read(file, 'utf-8');
-  const relative = (preset) => path.relative(root, preset);
+  const relative = (preset) => path.relative(path.dirname(file), preset);
   const wanted = presets.map(relative);
   if (existing !== null) {
     if (!existing.includes(GENERATED)) {
@@ -249,12 +350,16 @@ function writeV3Config(tree, root, presets) {
     );
     wanted.unshift(...had.filter((preset) => !wanted.includes(preset)));
   }
-  tree.write(file, v3Config(wanted));
+  tree.write(file, v3Config(wanted, options));
 }
 
 const GENERATED = '// Written by nx g @ng-native/nx:tailwind.';
 
-function v3Config(presets) {
+/**
+ * A config listing `presets` ahead of Angular Native's `preset`. With `extend`, it is the config
+ * that file holds with the presets swapped, and takes its `content` from it.
+ */
+function v3Config(presets, { preset = 'preset.cjs', extend } = {}) {
   const names = [];
   for (const preset of presets) {
     const base = identifier(path.basename(path.dirname(preset)));
@@ -263,14 +368,18 @@ function v3Config(presets) {
     names.push(name);
   }
   const requires = presets.map((preset, i) => `const ${names[i]} = require('${preset}');`);
-  const native = presets.length
-    ? "{ ...require('@ng-native/tailwind/preset.cjs'), presets: [] }"
-    : "require('@ng-native/tailwind/preset.cjs')";
+  const own = `require('@ng-native/tailwind/${preset}')`;
+  const native = presets.length ? `{ ...${own}, presets: [] }` : own;
   const content = ["'./src/**/*.{ts,html}'", ...names.map((name) => `...${name}.content`)];
   // Only the first preset brings Tailwind's defaults: a later one's would override its theme.
   const listed = names.map((name, i) => (i === 0 ? name : `{ ...${name}, presets: [] }`));
   return [
     GENERATED,
+    ...(extend
+      ? [
+          "// The web build's config: the app's own, with the web preset in place of the native one.",
+        ]
+      : []),
     ...(presets.length
       ? [
           '// The first preset brings Tailwind defaults; each after it takes presets: [] so it does not',
@@ -280,11 +389,79 @@ function v3Config(presets) {
     ...requires,
     ...(requires.length ? [''] : []),
     'module.exports = {',
+    ...(extend ? [`  ...require('${extend}'),`] : []),
     `  presets: [${[...listed, native].join(', ')}],`,
-    `  content: [${content.join(', ')}],`,
+    ...(extend ? [] : [`  content: [${content.join(', ')}],`]),
     '};',
     '',
   ].join('\n');
+}
+
+/**
+ * The PostCSS config Vite runs Tailwind 3 from, pointed at `config`. One the app has already is
+ * left alone, with a warning when it does not run Tailwind.
+ */
+function writePostcssConfig(tree, root, config, ext) {
+  const existing = POSTCSS_CONFIGS.map((name) => joinPathFragments(root, name)).find((file) =>
+    tree.exists(file),
+  );
+  if (existing) {
+    if (!tree.read(existing, 'utf-8')?.includes('tailwindcss')) {
+      byHand(existing, `add tailwindcss: { config: './${config}' } to its plugins.`);
+    }
+    return;
+  }
+  tree.write(
+    joinPathFragments(root, `postcss.config.${ext}`),
+    [
+      '// Vite runs Tailwind 3 as a PostCSS plugin.',
+      'module.exports = {',
+      `  plugins: { tailwindcss: { config: './${config}' } },`,
+      '};',
+      '',
+    ].join('\n'),
+  );
+}
+
+/**
+ * `cjs` where a `.js` file would be an ES module, which a `module.exports` config cannot be: in a
+ * package whose nearest `package.json` says `"type": "module"`.
+ */
+function commonJsExtension(tree, root) {
+  for (let dir = root; ; dir = path.dirname(dir)) {
+    const manifest = joinPathFragments(dir, 'package.json');
+    if (tree.exists(manifest)) return readJson(tree, manifest).type === 'module' ? 'cjs' : 'js';
+    if (dir === '.' || dir === '' || dir === '/') return 'js';
+  }
+}
+
+/**
+ * The web build, from the Vite config that runs `ngNativeWeb()`. Beside a device build, Tailwind
+ * 4 takes a stylesheet of its own, since the device's imports `native.css`, and Tailwind 3 a
+ * config of its own that swaps the preset in the device's.
+ */
+function setUpWeb(tree, root, vite, version, libraries, besideDevice) {
+  if (version === 3) {
+    const ext = commonJsExtension(tree, root);
+    const config = besideDevice ? `tailwind.web.config.${ext}` : `tailwind.config.${ext}`;
+    writeV3Config(
+      tree,
+      joinPathFragments(root, config),
+      libraries.map((library) => libraryPreset(tree, library)),
+      { preset: 'web-preset.cjs', extend: besideDevice ? './tailwind.config.js' : undefined },
+    );
+    writePostcssConfig(tree, root, config, ext);
+    writeV3Stylesheet(tree, root);
+    return linkStylesheet(tree, root, joinPathFragments(root, 'src/styles.css'));
+  }
+  const file = joinPathFragments(root, besideDevice ? 'src/styles.web.css' : 'src/styles.css');
+  writeWebV4Stylesheet(
+    tree,
+    file,
+    libraries.map((library) => libraryTheme(tree, library)),
+  );
+  addVitePlugin(tree, vite);
+  linkStylesheet(tree, root, file);
 }
 
 /** A JavaScript name for a library's preset: `ui`, `sharedUi`. */
@@ -303,7 +480,7 @@ function allowPresets(tree) {
   if (!config.includes('enforce-module-boundaries') || config.includes('tailwind\\\\.preset'))
     return;
   const start = /allow:\s*\[/.exec(config);
-  const end = start ? closingBracket(config, start.index + start[0].length) : -1;
+  const end = start ? closingBracket(config, start.index + start[0].length, '[', ']') : -1;
   if (!start || end < 0) {
     return byHand(file, `add ${PRESET_ALLOWED} to @nx/enforce-module-boundaries' allow list.`);
   }
@@ -313,8 +490,8 @@ function allowPresets(tree) {
   tree.write(file, config.slice(0, open) + list + config.slice(end));
 }
 
-/** The index of the `]` closing the array that starts at `from`, skipping strings. */
-function closingBracket(text, from) {
+/** The index of the `close` ending the bracket that starts at `from`, skipping strings. */
+function closingBracket(text, from, open, close) {
   let depth = 0;
   let quote = '';
   for (let i = from; i < text.length; i++) {
@@ -323,14 +500,14 @@ function closingBracket(text, from) {
       if (char === '\\') i++;
       else if (char === quote) quote = '';
     } else if (char === "'" || char === '"' || char === '`') quote = char;
-    else if (char === '[') depth++;
-    else if (char === ']' && depth-- === 0) return i;
+    else if (char === open) depth++;
+    else if (char === close && depth-- === 0) return i;
   }
   return -1;
 }
 
-async function addPackages(tree, manifest, version) {
-  const wanted = packagesFor(version);
+async function addPackages(tree, manifest, version, builds) {
+  const wanted = packagesFor(version, builds);
   const own = manifest === 'package.json' ? readJson(tree, manifest) : readJson(tree, manifest);
   const installed = Object.keys({ ...own.dependencies, ...own.devDependencies });
   const ranges =
@@ -346,12 +523,14 @@ async function addPackages(tree, manifest, version) {
  */
 async function tailwind(tree, options) {
   const app = projectNamed(tree, options.project);
-  const appJson = joinPathFragments(app.root, 'app.json');
-  const metro = joinPathFragments(app.root, 'metro.config.js');
-  if (!tree.exists(appJson) || !tree.exists(metro)) {
+  const device =
+    tree.exists(joinPathFragments(app.root, 'app.json')) &&
+    tree.exists(joinPathFragments(app.root, 'metro.config.js'));
+  const vite = viteConfig(tree, app.root);
+  if (!device && !vite) {
     throw new Error(
-      `${options.project} is not an Angular Native app: it has no app.json and metro.config.js. ` +
-        'Generate one with nx g @ng-native/nx:app.',
+      `${options.project} is not an Angular Native app: it has no app.json and metro.config.js, ` +
+        'and no Vite config with ngNativeWeb(). Generate one with nx g @ng-native/nx:app.',
     );
   }
   const libraries = (options.library ?? '')
@@ -362,25 +541,29 @@ async function tailwind(tree, options) {
   const manifest = manifestFor(tree, app);
   const version = versionFor(tree, manifest, options.tailwindVersion);
 
-  if (version === 3) {
-    writeV3Stylesheet(tree, app.root);
-    writeV3Config(
-      tree,
-      app.root,
-      libraries.map((library) => libraryPreset(tree, library)),
-    );
-    if (libraries.length) allowPresets(tree);
-  } else {
-    writeV4Stylesheet(
-      tree,
-      app.root,
-      libraries.map((library) => libraryTheme(tree, library)),
-    );
+  if (device) {
+    if (version === 3) {
+      writeV3Stylesheet(tree, app.root);
+      writeV3Config(
+        tree,
+        joinPathFragments(app.root, 'tailwind.config.js'),
+        libraries.map((library) => libraryPreset(tree, library)),
+      );
+    } else {
+      writeV4Stylesheet(
+        tree,
+        joinPathFragments(app.root, 'src/styles.css'),
+        V4_IMPORTS,
+        libraries.map((library) => libraryTheme(tree, library)),
+      );
+    }
+    wrapMetroConfig(tree, app.root);
+    passGlobalStyles(tree, app.root);
+    prepareForTheSheet(tree, options.project, app);
   }
-  wrapMetroConfig(tree, app.root);
-  passGlobalStyles(tree, app.root);
-  prepareForTheSheet(tree, options.project, app);
-  await addPackages(tree, manifest, version);
+  if (vite) setUpWeb(tree, app.root, vite, version, libraries, device);
+  if (version === 3 && libraries.length) allowPresets(tree);
+  await addPackages(tree, manifest, version, { device, web: Boolean(vite) });
 
   if (!options.skipFormat) await formatFiles(tree);
   if (options.skipInstall) return () => {};

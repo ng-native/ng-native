@@ -218,6 +218,22 @@ commas) gets a theme of its own, which the app loads, as
   `content` into its own, and `@nx/enforce-module-boundaries` in the root ESLint config allows the
   relative `require` of a `tailwind.preset.cjs`.
 
+A project whose Vite config runs `ngNativeWeb()` also builds for
+[a browser](/packages/web#with-tailwind), which takes the web preset in place of the native one.
+Beside the native build, in the app's own directory, the generator sets up both; a browser app of
+its own gets the web build only. For the web build it writes:
+
+- With Tailwind 4, a stylesheet importing `@ng-native/tailwind/web.css` and each library's
+  `theme.css`: `src/styles.web.css` beside a native build, whose `src/styles.css` imports
+  `native.css`, and `src/styles.css` otherwise. `tailwindcss()` from `@tailwindcss/vite` goes
+  after `ngNativeWeb()` in the Vite config.
+- With Tailwind 3, a config with `web-preset.cjs` and each library's preset:
+  `tailwind.web.config.js`, which takes the rest from the app's `tailwind.config.js`, beside a
+  native build, and `tailwind.config.js` otherwise (`.cjs` in a package with `"type": "module"`).
+  A `postcss.config.js` runs Tailwind with it, on `src/styles.css`.
+
+`index.html` links the stylesheet, unless the module it loads imports it already.
+
 A library that has the file already keeps it. `--tailwindVersion=3` sets up Tailwind 3; without it
 the generator takes the major the workspace has installed, or 4. (`nx g` reads `--version` as its
 own.) Running it again changes nothing, and running it with another library adds that one. A file
