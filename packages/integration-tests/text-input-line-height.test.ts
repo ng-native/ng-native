@@ -117,7 +117,7 @@ describe('a single-line text input with a line height', () => {
   });
 
   it('leaves the size to an explicit height, larger or smaller', () => {
-    for (const height of [30, 80, '50%']) {
+    for (const height of [30, 80]) {
       const { props } = commitInput((engine, input) => {
         engine.addClass(input, 'field');
         engine.setProp(input, 'style', { height });
@@ -125,6 +125,20 @@ describe('a single-line text input with a line height', () => {
       assert.equal(props()['height'], height);
       assert.equal(props()['minHeight'], undefined, `no minHeight beside height ${height}`);
       assert.equal(props()['lineHeight'], undefined);
+    }
+  });
+
+  it('leaves a field whose height is a percentage as it was, on both platforms', () => {
+    // A percentage of a parent with no definite height is auto, in Yoga as in CSS, and then the
+    // line height is what sizes the field. Whether it resolves is known only at layout.
+    for (const platform of ['ios', 'android']) {
+      registerPlatformComponents(platform);
+      const { props } = commitInput((engine, input) => {
+        engine.addClass(input, 'field');
+        engine.setProp(input, 'style', { height: '50%' });
+      });
+      assert.equal(props()['lineHeight'], 24, platform);
+      assert.equal(props()['minHeight'], undefined, platform);
     }
   });
 

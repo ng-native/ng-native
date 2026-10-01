@@ -611,10 +611,12 @@ const textDirection = (value: unknown): TextDirection | undefined =>
  * Centre the text of a single-line text field that has a line height, as Chrome centres an
  * input's, keeping the height the line height gives it.
  *
- * Where a `height` sizes the field, the line height has nothing left to do, and is left out on
- * both platforms: on Android, `EditText` centres a line box taller than the font's own about
- * 1.7pt high of centre in a 44pt field, and centres the font's own exactly. Elsewhere Android
- * sizes the field by the line height and centres the text in it itself, and keeps it.
+ * Where a `height` in points sizes the field, the line height has nothing left to do, and is left
+ * out on both platforms: on Android, `EditText` centres a line box taller than the font's own
+ * about 1.7pt high of centre in a 44pt field, and centres the font's own exactly. A percentage
+ * height sizes the field only where its parent's height is definite, which is known at layout
+ * alone, so such a field is left as it was. Elsewhere Android sizes the field by the line height
+ * and centres the text in it itself, and keeps it.
  *
  * On iOS, React Native's field sets `lineHeight` as the paragraph's minimum and maximum line
  * height and, unlike a paragraph (`RCTApplyBaselineOffset`), never offsets the baseline, so the
@@ -630,10 +632,12 @@ function centreSingleLine(viewName: string, props: Record<string, unknown>): voi
   if (!TEXT_INPUTS.has(viewName) || typeof lineHeight !== 'number') return;
   if (props['multiline'] === true) return;
   const height = props['height'];
-  if (isSet(height) && height !== 'auto') {
+  if (typeof height === 'number') {
     delete props['lineHeight'];
     return;
   }
+  // A percentage is a fixed height only where the parent's is definite, known at layout alone.
+  if (isSet(height) && height !== 'auto') return;
   // Android sizes the field by its line height, and centres the text in it, itself.
   if (viewName !== 'TextInput') return;
   const edge = (side: 'Top' | 'Bottom', logical: 'Start' | 'End'): unknown[] => [
