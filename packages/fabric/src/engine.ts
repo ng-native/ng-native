@@ -2797,11 +2797,15 @@ export class Engine implements HostEngine {
     return handle;
   }
 
-  /** Let a node and everything under it be created again at the next commit. */
+  /**
+   * Let a node and everything under it be created again at the next commit. The views it keeps
+   * for hoisted names go too: they are children of the native view it is losing.
+   */
   private forgetCommitted(node: EngineNode): void {
     node.committed = null;
     node.committedUnder = null;
     node.styleCommitted = null;
+    node.kept = undefined;
     for (const child of node.children) if (child.committed) this.forgetCommitted(child);
   }
 

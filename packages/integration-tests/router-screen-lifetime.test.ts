@@ -252,6 +252,37 @@ describe('hoisting', () => {
     );
   });
 
+  it('leaves a stand-in behind with its host when the host leaves the tree and comes back', () => {
+    // The stand-in is a child of the host's native view. A host out of the tree at a commit is
+    // created afresh when it returns, and a view of the old one cannot be appended to it.
+    const fabric = createFakeFabric();
+    const engine = new Engine(fabric, 1);
+    const container = engine.createElement('view');
+    const host = engine.createElement('config-host');
+    const config = engine.createElement('config-node');
+    engine.appendChild(engine.root, container);
+    engine.appendChild(container, host);
+    engine.appendChild(host, config);
+    engine.commit();
+    engine.removeChild(host, config);
+    engine.commit();
+    const standIn = fabric.committed[0]!.children[0]!.children[0]!;
+    assert.equal(standIn.props['hidden'], true, 'the stand-in holds the slot');
+
+    engine.removeChild(container, host);
+    engine.commit();
+    engine.appendChild(container, host);
+    engine.commit();
+    const back = fabric.committed[0]!.children[0]!;
+    assert.deepEqual(back.children, [], 'no view of the old host');
+
+    const next = engine.createElement('config-node');
+    engine.appendChild(host, next);
+    engine.commit();
+    const adopted = fabric.committed[0]!.children[0]!.children[0]!;
+    assert.notEqual(adopted.reactTag, standIn.reactTag, 'created under the new host');
+  });
+
   it('lets the next element adopt the native view and replace the stand-in props', () => {
     const s = standInScene();
     const tag = s.committedConfig()!.reactTag;
