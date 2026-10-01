@@ -30,33 +30,25 @@ export interface DevMenuSource {
 }
 
 /**
- * React Native's menu, reloading through Expo in an Expo app.
+ * React Native's menu, reloading the way Metro's Fast Refresh runtime does.
  *
  * `DevSettings.reload()` brings an app in Expo Go back without Expo's native modules (`Cannot find
- * native module 'ExpoFontLoader'`) until Expo Go is relaunched. Expo's `reloadAppAsync()` works in
- * Expo Go and a development build alike, and a reload it cannot do falls back to React Native's.
+ * native module 'ExpoFontLoader'`) until Expo Go is relaunched. In development `@ng-native/platform`
+ * routes the refresh runtime's full reload through Expo's `reloadAppAsync()` in an Expo app, falling
+ * back to React Native's, so this reloads through it. Neither this package nor the bundle it is in
+ * names `expo` for that: an app on the web, or without Expo, has none to resolve. Without the runtime,
+ * as in a release build, it is React Native's reload.
  */
-function throughExpo(settings: NativeDevMenu): NativeDevMenu {
-  let reloadAppAsync: ((reason?: string) => Promise<void>) | undefined;
-  try {
-    // Required rather than imported, as `react-native` is: an app without Expo has none.
-    // @ts-ignore
-    reloadAppAsync = (require('expo') as { reloadAppAsync?: typeof reloadAppAsync }).reloadAppAsync;
-  } catch {
-    // Not an Expo app: React Native's own reload re-fetches the bundle there.
-  }
-  const expoReload = reloadAppAsync;
-  if (!expoReload) return settings;
+function throughRefreshRuntime(settings: NativeDevMenu): NativeDevMenu {
   return {
     addMenuItem: (title, handler) => settings.addMenuItem(title, handler),
-    reload: (reason) =>
-      void expoReload(reason).catch((error: unknown) => {
-        console.error(
-          "[angular-native] Expo's reload failed; reloading through React Native.",
-          error,
-        );
-        settings.reload(reason);
-      }),
+    reload: (reason) => {
+      const scope = globalThis as { __METRO_GLOBAL_PREFIX__?: string } & Record<string, unknown>;
+      const refresh = scope[`${scope.__METRO_GLOBAL_PREFIX__ ?? ''}__ReactRefresh`] as
+        { performFullRefresh?: (reason: string) => void } | undefined;
+      if (refresh?.performFullRefresh) refresh.performFullRefresh(reason ?? 'requested by the app');
+      else settings.reload(reason);
+    },
   };
 }
 
@@ -67,7 +59,7 @@ export class DevMenu {
     factory: () => {
       const settings = reactNative()?.DevSettings;
       return {
-        menu: settings ? throughExpo(settings) : null,
+        menu: settings ? throughRefreshRuntime(settings) : null,
         development: (globalThis as { __DEV__?: boolean }).__DEV__ === true,
       };
     },

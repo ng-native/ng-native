@@ -10,6 +10,8 @@ import { createRequire } from 'node:module';
 import type { Type } from '@angular/core';
 import { cleanup, render, type FakeFabric, type FakeFabricNode } from '@ng-native/testing';
 import { compileFixture, compileSource } from './compile.ts';
+import { DevMenu, type DevMenuSource } from '@ng-native/device';
+import { serviceWith } from './injected.ts';
 
 const fixture = (name: string) => fileURLToPath(new URL(`./fixtures/${name}`, import.meta.url));
 
@@ -526,6 +528,25 @@ describe('the reload hook', () => {
       assert.deepEqual(calls, ['DevSettings.reload: reason'], 'once, after a second mount too');
       const said = errors.filter((args) => /Expo's reload failed/.test(String(args)));
       assert.equal(said.length, 1, 'and says why');
+    });
+
+    it("carries DevMenu.reload() through Expo's reload too", async () => {
+      // DevSettings.reload() in Expo Go brought the app back without Expo's native modules.
+      scope['require'] = (id: string) => {
+        if (id === 'expo') {
+          return { reloadAppAsync: async (reason: string) => void calls.push(`expo: ${reason}`) };
+        }
+        if (id === 'react-native') {
+          const reload = (reason?: string) => void calls.push(`DevSettings.reload: ${reason}`);
+          return { DevSettings: { addMenuItem: () => {}, reload } };
+        }
+        throw new Error(`Cannot find module '${id}'`);
+      };
+      await render(Features);
+      const provider = (DevMenu.SOURCE as unknown as { ɵprov: { factory(): DevMenuSource } }).ɵprov;
+      const source = provider.factory();
+      serviceWith(DevMenu.SOURCE, source, () => new DevMenu()).reload('reset');
+      assert.deepEqual(calls, ['expo: reset']);
     });
 
     it("stays React Native's outside Expo", async () => {

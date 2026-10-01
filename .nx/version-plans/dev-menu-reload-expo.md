@@ -2,6 +2,6 @@
 __default__: patch
 ---
 
-`DevMenu.reload()` now reloads an Expo app through Expo's `reloadAppAsync()`, so an app in Expo Go comes back with Expo's native modules rather than failing with `Cannot find native module`.
+`DevMenu.reload()` now reloads an Expo app in development through Expo's `reloadAppAsync()`, so an app in Expo Go comes back with Expo's native modules rather than failing with `Cannot find native module`.
 
-React Native's `DevSettings.reload()` brought an app in Expo Go back without them until Expo Go was relaunched, as Metro's own reload did before. A reload Expo cannot do falls back to React Native's, with the error logged, and an app without Expo reloads through React Native as before.
+It reloads the way Metro's own full reload does, through the Fast Refresh runtime that `@ng-native/platform` routes through Expo in an Expo app, falling back to React Native's reload with the error logged. `@ng-native/device` does not name `expo` for this, so a web build without Expo still resolves it. In a release build, and in an app without Expo, it is React Native's `DevSettings.reload()` as before.
