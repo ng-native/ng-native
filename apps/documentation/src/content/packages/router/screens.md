@@ -112,8 +112,10 @@ const router = provideNativeRouter(
 );
 ```
 
-A link that arrives as the app launches waits for the router's first navigation to finish, so the
-root screen is always there beneath it. [Testing the router](/packages/testing/testing-navigation)
+When `parentOf` names a parent for a link the app launches with, the app opens on the first page of
+that chain and the link waits for that navigation to finish, so every page the chain names is
+beneath it. When `parentOf` returns null, the link opens alone, as it does without
+`withLinkParent`. [Testing the router](/packages/testing/testing-navigation)
 shows how to follow a link in a test.
 
 ## A page that fails to render

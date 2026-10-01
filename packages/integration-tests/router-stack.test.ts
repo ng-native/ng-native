@@ -370,6 +370,12 @@ describe('a deep link opened beneath its parent screen', () => {
     assert.deepEqual(stack(fabric), ['user 7'], 'no screen under it to go back to');
   });
 
+  it('launches on a link alone when withLinkParent names no parent for it', async () => {
+    await launch('/modal');
+    assert.equal(router.url, '/modal');
+    assert.equal(stack(fabric).length, 1, 'no screen under it');
+  });
+
   it('follows a link called directly, as the Testing the router page shows', async () => {
     await launch(null);
     await followLink(router, '/user/7', (url) => (url.startsWith('/user/') ? '/' : null));
