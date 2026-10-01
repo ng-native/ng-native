@@ -19,17 +19,20 @@ npx expo install expo-video expo-audio
 ```
 
 ```ts
-import { videoPlayer, audioPlayer } from '@ng-native/expo/player';
+import { videoPlayer } from '@ng-native/expo/video';
+import { audioPlayer } from '@ng-native/expo/audio';
 ```
 
-Install only the one an app needs.
+Install only the one an app needs: each has its own entry point, so an app bundles with only its
+own module installed. `Player`, `PlayerState` and the watchers both use come from
+`@ng-native/expo/player`.
 
 ## The smallest useful example
 
 ```ts
 import { Component } from '@angular/core';
 import { registerExpoViews } from '@ng-native/expo';
-import { videoPlayer } from '@ng-native/expo/player';
+import { videoPlayer } from '@ng-native/expo/video';
 
 registerExpoViews('expo-video'); // once, before the app mounts
 

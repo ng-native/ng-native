@@ -20,6 +20,8 @@
     "./app-info": "./src/app-info.ts",
     "./apple-sign-in": "./src/apple-sign-in.ts",
     "./assets": "./src/assets.ts",
+    "./async-storage": "./src/async-storage.ts",
+    "./audio": "./src/audio.ts",
     "./background-task": "./src/background-task.ts",
     "./battery": "./src/battery.ts",
     "./biometrics": "./src/biometrics.ts",
@@ -48,12 +50,14 @@
     "./orientation": "./src/orientation.ts",
     "./player": "./src/player.ts",
     "./screen-capture": "./src/screen-capture.ts",
+    "./secure-store": "./src/secure-store.ts",
     "./sensors": "./src/sensors.ts",
     "./splash-screen": "./src/splash-screen.ts",
     "./store": "./src/store.ts",
     "./store-review": "./src/store-review.ts",
     "./tracking": "./src/tracking.ts",
     "./updates": "./src/updates.ts",
+    "./video": "./src/video.ts",
     "./package.json": "./package.json"
   },
   "publishConfig": {
@@ -76,6 +80,14 @@
       "./assets": {
         "types": "./dist/assets.d.ts",
         "default": "./dist/assets.js"
+      },
+      "./async-storage": {
+        "types": "./dist/async-storage.d.ts",
+        "default": "./dist/async-storage.js"
+      },
+      "./audio": {
+        "types": "./dist/audio.d.ts",
+        "default": "./dist/audio.js"
       },
       "./background-task": {
         "types": "./dist/background-task.d.ts",
@@ -189,6 +201,10 @@
         "types": "./dist/screen-capture.d.ts",
         "default": "./dist/screen-capture.js"
       },
+      "./secure-store": {
+        "types": "./dist/secure-store.d.ts",
+        "default": "./dist/secure-store.js"
+      },
       "./sensors": {
         "types": "./dist/sensors.d.ts",
         "default": "./dist/sensors.js"
@@ -212,6 +228,10 @@
       "./updates": {
         "types": "./dist/updates.d.ts",
         "default": "./dist/updates.js"
+      },
+      "./video": {
+        "types": "./dist/video.d.ts",
+        "default": "./dist/video.js"
       },
       "./package.json": "./package.json"
     }
@@ -317,7 +337,8 @@
     "expo-tracking-transparency": "^57.0.2",
     "expo-updates": "^57.0.24",
     "expo-video": "^57.0.5",
-    "expo-web-browser": "^57.0.3"
+    "expo-web-browser": "^57.0.3",
+    "typescript": "~6.0.3"
   },
   "peerDependenciesMeta": {
     "@expo/ui": {

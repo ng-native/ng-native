@@ -16,18 +16,21 @@ npx expo install @react-native-async-storage/async-storage expo-secure-store
 ```
 
 ```ts
-import { Storage, SecureStorage } from '@ng-native/expo/store';
+import { Storage } from '@ng-native/expo/async-storage';
+import { SecureStorage } from '@ng-native/expo/secure-store';
 ```
 
 Install only the one an app needs: `Storage` needs
-`@react-native-async-storage/async-storage`, `SecureStorage` needs `expo-secure-store`.
+`@react-native-async-storage/async-storage`, `SecureStorage` needs `expo-secure-store`. Each has its
+own entry point, so an app bundles with only its own module installed. `Store`, the class both are,
+and `NativeStore` come from `@ng-native/expo/store`.
 
 ## The smallest useful example
 
 ```ts
 import { Component, inject } from '@angular/core';
 import { Pressable, Text } from '@ng-native/components';
-import { Storage } from '@ng-native/expo/store';
+import { Storage } from '@ng-native/expo/async-storage';
 
 @Component({
   selector: 'app-settings',
@@ -109,7 +112,7 @@ None of these become unhandled promise rejections. Instead:
 ```ts
 import { Component, inject } from '@angular/core';
 import { Pressable, Text } from '@ng-native/components';
-import { Storage } from '@ng-native/expo/store';
+import { Storage } from '@ng-native/expo/async-storage';
 
 @Component({
   selector: 'app-draft',

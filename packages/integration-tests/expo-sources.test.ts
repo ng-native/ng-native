@@ -35,7 +35,8 @@ import { Tracking } from '@ng-native/expo/tracking';
 import { StoreReview } from '@ng-native/expo/store-review';
 import { DeviceOrientation } from '@ng-native/expo/orientation';
 import { Locale } from '@ng-native/expo/locale';
-import { SecureStorage, Storage } from '@ng-native/expo/store';
+import { SecureStorage } from '@ng-native/expo/secure-store';
+import { Storage } from '@ng-native/expo/async-storage';
 import { Updates } from '@ng-native/expo/updates';
 import type { InjectionToken } from '@angular/core';
 

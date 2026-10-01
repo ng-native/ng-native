@@ -9,7 +9,8 @@ import { Locale } from '@ng-native/expo/locale';
 import { Network } from '@ng-native/expo/network';
 import { DeviceOrientation } from '@ng-native/expo/orientation';
 import { Accelerometer } from '@ng-native/expo/sensors';
-import { SecureStorage, Storage } from '@ng-native/expo/store';
+import { SecureStorage } from '@ng-native/expo/secure-store';
+import { Storage } from '@ng-native/expo/async-storage';
 import { page } from '../screen-styles.ts';
 
 /**

@@ -1,5 +1,6 @@
 /**
- * Media players, bound to `expo-video` and `expo-audio`.
+ * What `videoPlayer` (`@ng-native/expo/video`) and `audioPlayer` (`@ng-native/expo/audio`) share:
+ * the `Player` each answers, its state, and the watchers that keep that state.
  *
  * ```ts
  * protected readonly player = videoPlayer(this.source, { timeUpdate: 0.5 });
@@ -16,9 +17,11 @@
  *
  * The player itself is passed straight through: it is a shared object with `play()`, `seekBy()`
  * and the rest already on it, and wrapping those would be a second place for each to be wrong.
+ *
+ * Each player has an entry point of its own because each needs its own native module: Metro fails
+ * a build on a `require` it cannot resolve, so one entry point for both made an app install both.
  */
 import { DestroyRef, inject, signal, type Signal } from '@angular/core';
-import { expoModule } from './native.ts';
 
 /** The player's own status, which is the same word in both modules. */
 export type PlayerStatus = 'idle' | 'loading' | 'readyToPlay' | 'error';
@@ -130,7 +133,7 @@ function listen<T>(player: NativePlayer, event: string, handler: (payload: T) =>
  * `watchPlayer`, there is one listener, not several, and nothing to reset on a source change: the
  * next status update carries the new source's own state.
  */
-function watchAudioPlayer(player: NativePlayer | null): {
+export function watchAudioPlayer(player: NativePlayer | null): {
   state: Signal<PlayerState>;
   stop: () => void;
 } {
@@ -167,49 +170,13 @@ export interface Player<T> {
   readonly state: Signal<PlayerState>;
 }
 
-/** A video player owned by the current component, released when it is destroyed. */
-export function videoPlayer(
-  source: import('expo-video').VideoSource,
-  options: { timeUpdate?: number } = {},
-): Player<import('expo-video').VideoPlayer> {
-  const expo = expoModule(
-    'expo-video',
-    () => require('expo-video') as typeof import('expo-video'),
-    ['ios', 'android', 'web'],
-  );
-  if (!expo) throw new Error('[angular-native] expo-video is not installed');
-  const native = expo.createVideoPlayer(source);
-  return own(native, () => watchPlayer(native, options));
-}
-
-/**
- * An audio player owned by the current component, released when it is destroyed.
- *
- * `expo-audio` has no `timeUpdateEventInterval` property to set after the fact - the interval is
- * an option to `createAudioPlayer` itself, in milliseconds rather than `videoPlayer`'s seconds.
- */
-export function audioPlayer(
-  source: import('expo-audio').AudioSource,
-  options: { timeUpdate?: number } = {},
-): Player<import('expo-audio').AudioPlayer> {
-  const expo = expoModule(
-    'expo-audio',
-    () => require('expo-audio') as typeof import('expo-audio'),
-    ['ios', 'android', 'web'],
-  );
-  if (!expo) throw new Error('[angular-native] expo-audio is not installed');
-  const updateInterval = options.timeUpdate === undefined ? undefined : options.timeUpdate * 1000;
-  const native = expo.createAudioPlayer(source, { updateInterval });
-  return own(native, () => watchAudioPlayer(native));
-}
-
 /**
  * Tie a player's life to the component that made it.
  *
  * Called in an injection context, which is the same constraint the hooks have and for the same
  * reason: something has to know when the thing goes away.
  */
-function own<T extends NativePlayer>(
+export function ownPlayer<T extends NativePlayer>(
   native: T,
   watch: () => { state: Signal<PlayerState>; stop: () => void },
 ): Player<T> {

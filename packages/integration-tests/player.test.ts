@@ -9,7 +9,9 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { Injector, runInInjectionContext } from '@angular/core';
-import { audioPlayer, videoPlayer, watchPlayer, type NativePlayer } from '@ng-native/expo/player';
+import { watchPlayer, type NativePlayer } from '@ng-native/expo/player';
+import { audioPlayer } from '@ng-native/expo/audio';
+import { videoPlayer } from '@ng-native/expo/video';
 
 /** Fakes `require`, the same seam `optional()` reaches through on a device or in Node. */
 function withModule<T>(id: string, native: unknown, run: () => T): T {

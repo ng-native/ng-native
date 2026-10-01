@@ -1,5 +1,5 @@
 import { Service, inject } from '@angular/core';
-import { Storage } from '@ng-native/expo/store';
+import { Storage } from '@ng-native/expo/async-storage';
 import type { DistanceUnit } from '../tracking/geo.ts';
 
 /** Kilometres or miles, persisted so the choice survives a restart. */

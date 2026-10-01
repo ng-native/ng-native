@@ -1,6 +1,7 @@
 import { Component } from '@angular/core';
 import { Network, type NetworkStatus } from '@ng-native/expo/network';
-import { Store, Storage } from '@ng-native/expo/store';
+import { Store } from '@ng-native/expo/store';
+import { Storage } from '@ng-native/expo/async-storage';
 import { render } from '@ng-native/testing';
 import { beforeEach, expect, test } from 'vitest';
 import { NOTES_API, type NoteWrite, type NotesApi } from '../api/notes-api.ts';

@@ -19,7 +19,8 @@
 const SKIPPED = new Set(['node_modules', 'dist', 'build', 'Pods']);
 
 /**
- * Every file in the workspace a migration may change, outside the directories above.
+ * Every file in the workspace a migration may change, outside the directories above, in the same
+ * order whichever tool lists them, so the notes come out in the same order too.
  *
  * @param {Host} host
  * @param {string} [dir]
@@ -27,8 +28,8 @@ const SKIPPED = new Set(['node_modules', 'dist', 'build', 'Pods']);
  */
 function* files(host, dir = '') {
   const { files: names, dirs } = host.list(dir);
-  for (const name of names) yield dir ? `${dir}/${name}` : name;
-  for (const name of dirs) {
+  for (const name of [...names].sort()) yield dir ? `${dir}/${name}` : name;
+  for (const name of [...dirs].sort()) {
     if (SKIPPED.has(name) || name.startsWith('.')) continue;
     yield* files(host, dir ? `${dir}/${name}` : name);
   }

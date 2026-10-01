@@ -1,6 +1,6 @@
 import { Service, computed, effect, inject, signal, untracked } from '@angular/core';
 import { Network } from '@ng-native/expo/network';
-import { Storage } from '@ng-native/expo/store';
+import { Storage } from '@ng-native/expo/async-storage';
 import { NotesServer, type Change } from './notes-server.ts';
 
 export interface Note {

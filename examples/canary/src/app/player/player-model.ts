@@ -8,7 +8,8 @@ import {
   type Signal,
   untracked,
 } from '@angular/core';
-import { audioPlayer, type PlayerState } from '@ng-native/expo/player';
+import { type PlayerState } from '@ng-native/expo/player';
+import { audioPlayer } from '@ng-native/expo/audio';
 
 export interface Track {
   readonly id: string;
