@@ -10,15 +10,18 @@
 R=repos/ng-native/ng-native
 queue=($@)
 # The PR's own added and removed lines against the main it branched from, per file. Hunk positions are
-# left out because a rebase shifts them without changing the PR.
+# left out because a rebase shifts them without changing the PR. Prints nothing, so the PR waits, when the
+# lookup fails, a file has no patch (a binary change) or GitHub's 300-file limit is reached.
 own_changes() {
   gh api "$R/compare/main...$1" \
-    --jq '[.files[]|{f:.filename,c:((.patch//"")|split("\n")|map(select(test("^[-+]")))|join("\n"))}]|sort_by(.f)' 2>/dev/null
+    --jq 'if (.files|length) >= 300 or any(.files[]; .patch == null) then empty else
+      [.files[]|{f:.filename,c:(.patch|split("\n")|map(select(test("^[-+]")))|join("\n"))}]|sort_by(.f) end' 2>/dev/null
 }
-# Unresolved review threads on a PR; "?" when GraphQL is unavailable, so the PR waits.
+# Unresolved review threads on a PR; "?" when GraphQL fails or there are more than 100 threads, so the
+# PR waits. (ponytail: no pagination; a PR here has never had 100 threads.)
 open_threads() {
-  gh api graphql -f query="{repository(owner:\"ng-native\",name:\"ng-native\"){pullRequest(number:$1){reviewThreads(first:100){nodes{isResolved}}}}}" \
-    --jq '[.data.repository.pullRequest.reviewThreads.nodes[]|select(.isResolved|not)]|length' 2>/dev/null || echo "?"
+  gh api graphql -f query="{repository(owner:\"ng-native\",name:\"ng-native\"){pullRequest(number:$1){reviewThreads(first:100){pageInfo{hasNextPage} nodes{isResolved}}}}}" \
+    --jq '.data.repository.pullRequest.reviewThreads|if .pageInfo.hasNextPage then "?" else [.nodes[]|select(.isResolved|not)]|length end' 2>/dev/null || echo "?"
 }
 # Says something about a PR once per run rather than on every pass.
 typeset -A noted
@@ -37,7 +40,7 @@ while (( ${#queue} )); do
     #  - its approval is on the current commit;
     #  - it has reviewed the current commit (with or without a verdict) and left nothing open;
     #  - its approval is on an older commit and the PR's own changes are identical (only the base moved).
-    reviews=$(gh api "$R/pulls/$n/reviews?per_page=100" 2>/dev/null) || continue
+    reviews=$(gh api --paginate "$R/pulls/$n/reviews?per_page=100" 2>/dev/null | jq -s 'add') || continue
     approved=$(jq -r '[.[]|select(.user.login=="coderabbitai[bot]" and .state!="COMMENTED")]|last|select(.state=="APPROVED")|.commit_id' <<<$reviews)
     reviewed_head=$(jq -r --arg sha $sha '[.[]|select(.user.login=="coderabbitai[bot]" and .commit_id==$sha)]|length' <<<$reviews)
     # A push with nothing new for it to review gets no review object, but CodeRabbit's summary comment
@@ -49,7 +52,8 @@ while (( ${#queue} )); do
     if [[ $approved != $sha ]]; then
       if (( reviewed_head > 0 )); then
         [[ $(open_threads $n) == 0 ]] || continue
-      elif [[ -n $approved && $(own_changes $approved) == $(own_changes $sha) ]]; then
+      elif [[ -n $approved ]] && then_=$(own_changes $approved) && now=$(own_changes $sha) &&
+        [[ -n $then_ && $then_ == $now ]]; then
         [[ $(open_threads $n) == 0 ]] || continue
       else
         note $n "waits for CodeRabbit to review its current commit"; continue
