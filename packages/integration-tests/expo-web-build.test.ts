@@ -42,11 +42,10 @@ interface WithBattery {
 }
 
 /**
- * An app whose `main.js` imports every entry point of `@ng-native/expo`, compiled with `ngc` as
+ * Writes an app into `root` whose `main.js` imports every entry point of `@ng-native/expo`, compiled with `ngc` as
  * the package publishes it, beside a React Native that throws when it is evaluated.
  */
-function app(withExpo: boolean): string {
-  const root = realpathSync(mkdtempSync(path.join(tmpdir(), 'ng-native-expo-web-')));
+function app(root: string, withExpo: boolean): void {
   const write = (file: string, text: string) => {
     mkdirSync(path.dirname(path.join(root, file)), { recursive: true });
     writeFileSync(path.join(root, file), text);
@@ -80,7 +79,6 @@ function app(withExpo: boolean): string {
     entryPoints.map((entry, i) => `export * as entry${i} from '${entry}';\n`).join('') +
       "export { Battery } from '@ng-native/expo/battery';\n",
   );
-  return root;
 }
 
 /** Imports a module Vite wrote, in Node, which has no `require` in an ES module either. */
@@ -89,8 +87,8 @@ const evaluate = async <T>(file: string): Promise<T> =>
 
 for (const withExpo of [false, true]) {
   describe(`@ng-native/expo through Vite, ${withExpo ? 'with' : 'without'} Expo installed`, () => {
-    let root: string;
-    before(() => (root = app(withExpo)));
+    const root = realpathSync(mkdtempSync(path.join(tmpdir(), 'ng-native-expo-web-')));
+    before(() => app(root, withExpo));
     after(() => rmSync(root, { recursive: true, force: true }));
 
     const shared = () => ({ root, configFile: false as const, logLevel: 'silent' as const });
