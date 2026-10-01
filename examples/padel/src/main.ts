@@ -1,3 +1,4 @@
+import 'expo';
 import { AppRegistry, Image, Platform, processColor } from 'react-native';
 import { mount } from '@ng-native/platform';
 import { currentConditions, deviceTokens, watchConditions } from '@ng-native/device';
