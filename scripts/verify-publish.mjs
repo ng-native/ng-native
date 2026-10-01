@@ -60,6 +60,7 @@ const PUBLISHED = [
   'packages/fabric',
   'packages/icons',
   'packages/metro',
+  'packages/migrate',
   'packages/nx',
   'packages/platform',
   'packages/router',

@@ -57,5 +57,9 @@
   ],
   "publishConfig": {
     "access": "public"
+  },
+  "devDependencies": {
+    "@expo/metro-config": "~57.0.12",
+    "typescript": "~6.0.3"
   }
 }

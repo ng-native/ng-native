@@ -105,4 +105,6 @@ pnpm reports these as warnings and installs anyway.
 `ng update @ng-native/schematics` moves every `@ng-native/*` package the root `package.json` lists
 to the new version with it, since they are released together. It then runs `sync-app-versions`,
 which moves the same packages in the native project's own `package.json`, the list Expo links
-native modules from, keeping a `^` or `~`.
+native modules from, keeping a `^` or `~`. Any other migration the update crosses runs beside it;
+they come from `@ng-native/migrate`, and [Updating an app](/guide/updating) lists what each does
+and what is left to do by hand.

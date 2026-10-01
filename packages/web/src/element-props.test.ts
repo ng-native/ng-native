@@ -372,6 +372,84 @@ describe('text-input', () => {
     set('keyboardType', null);
     assert.equal(el.getAttribute('inputmode'), null);
   });
+
+  it('is a tel field for a phone keyboard, and a text field for the rest', () => {
+    const { node, set } = scene('text-input');
+    // An email, url or number field changes the value (trimmed, or a number), and an email or
+    // number field has no selection API, so those keyboards stay inputmode only.
+    const expected: Record<string, string> = {
+      'phone-pad': 'tel',
+      url: 'text',
+      'email-address': 'text',
+      numeric: 'text',
+      'number-pad': 'text',
+      'decimal-pad': 'text',
+      default: 'text',
+    };
+    for (const [keyboard, type] of Object.entries(expected)) {
+      set('keyboardType', keyboard);
+      assert.equal((node.el as HTMLInputElement).type, type, keyboard);
+    }
+    set('keyboardType', 'phone-pad');
+    set('keyboardType', null);
+    assert.equal((node.el as HTMLInputElement).type, 'text');
+  });
+
+  it('keeps the spaces around a value whatever the keyboard and secureTextEntry', () => {
+    const { node, set } = scene('text-input');
+    set('text', ' example.com ');
+    for (const keyboard of ['url', 'email-address', 'phone-pad', 'numeric']) {
+      set('keyboardType', keyboard);
+      assert.equal((node.el as HTMLInputElement).value, ' example.com ', keyboard);
+    }
+    set('secureTextEntry', true);
+    set('keyboardType', 'url');
+    set('secureTextEntry', false);
+    assert.equal((node.el as HTMLInputElement).value, ' example.com ');
+  });
+
+  it('stays a password field whatever the keyboard, and takes the keyboard type back after', () => {
+    const { node, set } = scene('text-input');
+    set('keyboardType', 'phone-pad');
+    set('secureTextEntry', true);
+    assert.equal((node.el as HTMLInputElement).type, 'password');
+    set('keyboardType', 'numeric');
+    assert.equal((node.el as HTMLInputElement).type, 'password');
+    set('keyboardType', 'phone-pad');
+    set('secureTextEntry', false);
+    assert.equal((node.el as HTMLInputElement).type, 'tel');
+  });
+
+  it('carries the keyboard type back to the input when multiline turns off', () => {
+    const { node, set } = scene('text-input');
+    set('keyboardType', 'phone-pad');
+    set('multiline', true);
+    assert.equal(node.el.nodeName, 'TEXTAREA');
+    set('multiline', false);
+    assert.equal((node.el as HTMLInputElement).type, 'tel');
+  });
+
+  it('carries the focus and the selection across a multiline swap, both ways', () => {
+    const { node, set } = scene('text-input');
+    document.body.append(node.el);
+    set('text', 'hello world');
+    const input = node.el as HTMLInputElement;
+    input.focus();
+    input.setSelectionRange(2, 7, 'backward');
+    set('multiline', true);
+    const area = node.el as HTMLTextAreaElement;
+    assert.equal(document.activeElement, area);
+    assert.deepEqual(
+      [area.selectionStart, area.selectionEnd, area.selectionDirection],
+      [2, 7, 'backward'],
+    );
+    area.setSelectionRange(4, 4);
+    set('multiline', false);
+    const back = node.el as HTMLInputElement;
+    assert.equal(document.activeElement, back);
+    assert.deepEqual([back.selectionStart, back.selectionEnd], [4, 4]);
+    back.remove();
+  });
 });
 
 describe('accessibilityRole', () => {

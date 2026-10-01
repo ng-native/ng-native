@@ -428,6 +428,38 @@ describe('the SwiftUI and Compose views', () => {
     assert.match(fabric.committed[0]!.viewName, /ExpoUI_ListView/);
   });
 
+  it('asks Expo for each view it registers, as Android only sends a view its events once asked', () => {
+    const asked: [string, string | undefined][] = [];
+    const global = globalThis as { require?: (name: string) => unknown };
+    global.require = (name: string) => {
+      if (name !== 'expo') throw new Error(`no ${name}`);
+      return {
+        requireNativeView: (module: string, view?: string) => asked.push([module, view]),
+      };
+    };
+    try {
+      registerExpoView('ui-switch-probe', 'ExpoUI', { viewName: 'SwitchView' });
+      registerExpoViews('expo-image');
+    } finally {
+      delete global.require;
+    }
+    assert.deepEqual(asked, [
+      ['ExpoUI', 'SwitchView'],
+      ['ExpoImage', undefined],
+    ]);
+  });
+
+  it('hosts the controls in the view each platform draws them in', () => {
+    for (const platform of ['ios', 'android'] as const) {
+      const fabric = createFakeFabric();
+      const engine = new Engine(fabric, 1, { processColor: (value) => value });
+      registerExpoUiViews(platform);
+      engine.appendChild(engine.root, engine.createElement('ui-host'));
+      engine.commit();
+      assert.match(fabric.committed[0]!.viewName, /ExpoUI_HostView$/, platform);
+    }
+  });
+
   it('registers the other platform view for the same element', () => {
     const fabric = createFakeFabric();
     const engine = new Engine(fabric, 1, { processColor: (value) => value });

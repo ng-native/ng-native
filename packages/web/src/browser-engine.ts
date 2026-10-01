@@ -73,6 +73,14 @@ function scrollToEnd(el: HTMLElement, args: readonly unknown[]): void {
   );
 }
 
+/** Focuses `field` with the caret or selection `old` had, as a field swapped in for it. */
+function focusLike(field: HTMLInputElement | HTMLTextAreaElement, old: typeof field): void {
+  field.focus();
+  const { selectionStart, selectionEnd, selectionDirection } = old;
+  if (selectionStart === null || selectionEnd === null) return;
+  field.setSelectionRange(selectionStart, selectionEnd, selectionDirection ?? undefined);
+}
+
 function setTextAndSelection(el: HTMLElement, args: readonly unknown[]): void {
   const [, text, start, end] = args as [number, string | null, number, number];
   const textarea = el as HTMLTextAreaElement;
@@ -243,7 +251,7 @@ export class BrowserEngine extends HostEngine {
    * `multiline` arrives, which is after the element was made (see `elements.ts`).
    *
    * The new element takes the old one's attributes (inline style and scoping attributes among
-   * them), its value and its focus, and the engine's own listeners are installed on it again.
+   * them), its value, its focus and its selection, and the engine's own listeners are installed on it again.
    */
   private fieldFor(node: BrowserNode, multiline: boolean): void {
     const old = node.el as HTMLInputElement | HTMLTextAreaElement;
@@ -263,10 +271,10 @@ export class BrowserEngine extends HostEngine {
     const optedIn = node.optedIn;
     node.optedIn = null;
     for (const type of optedIn ?? []) this.wireOptIn(node, type);
-    for (const key of ['secureTextEntry', 'numberOfLines']) {
+    for (const key of ['secureTextEntry', 'keyboardType', 'numberOfLines']) {
       if (key in node.props) applyProp(node, key, node.props[key], false);
     }
-    if (focused) field.focus();
+    if (focused) focusLike(field, old);
   }
 
   /** Each node's `topLayout` observer, so a field swapped for another stops watching the old one. */

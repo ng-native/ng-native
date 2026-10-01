@@ -22,6 +22,7 @@
 import {
   Component,
   DestroyRef,
+  forwardRef,
   ElementRef,
   booleanAttribute,
   computed,
@@ -100,8 +101,13 @@ export class UiMenu {
 /** A SwiftUI `Button`, as a menu item or on its own. */
 @Component({
   selector: 'ui-button',
-  template: '<ng-content />',
+  imports: [forwardRef(() => UiText)],
+  template: `@if (android && label()) {
+      <ui-text [text]="label()" />
+    }
+    <ng-content />`,
   host: {
+    '(buttonPressed)': 'android && buttonPress.emit($event)',
     '[label]': 'label()',
     '[systemImage]': 'systemImage()',
     '[role]': 'role()',
@@ -109,6 +115,7 @@ export class UiMenu {
   },
 })
 export class UiButton {
+  protected readonly android = nativePlatform() === 'android';
   readonly label = input<string>();
   /** An SF Symbol name. */
   readonly systemImage = input<string>();
@@ -135,9 +142,14 @@ export class UiDivider {
 @Component({
   selector: 'ui-slot',
   template: '<ng-content />',
-  host: { '[name]': 'name()', '[extraProps]': 'extraProps()' },
+  host: {
+    '[name]': 'android ? undefined : name()',
+    '[slotName]': 'android ? name() : undefined',
+    '[extraProps]': 'extraProps()',
+  },
 })
 export class UiSlot {
+  protected readonly android = nativePlatform() === 'android';
   readonly name = input.required<string>();
   readonly extraProps = input<Readonly<Record<string, unknown>>>();
 }
@@ -183,8 +195,10 @@ export type UiSliderChangeEvent = NativeSyntheticEvent<{ readonly value: number 
     '[value]': 'value()',
     '[min]': 'min()',
     '[max]': 'max()',
-    '[steps]': 'steps()',
+    '[step]': 'android ? undefined : stepSize()',
+    '[steps]': 'android ? stepsBetween() : undefined',
     '[modifiers]': 'modifiers()',
+    '(valueChange)': 'android && valueChanged.emit($event)',
   },
 })
 export class UiSlider {
@@ -195,6 +209,16 @@ export class UiSlider {
   readonly steps = input<number>(undefined, { transform: optionalNumber });
   readonly modifiers = input<readonly UiModifier[]>();
   readonly valueChanged = output<UiSliderChangeEvent>();
+
+  protected readonly android = nativePlatform() === 'android';
+  protected readonly stepSize = computed(() => {
+    const steps = this.steps();
+    return steps ? ((this.max() ?? 1) - (this.min() ?? 0)) / steps : undefined;
+  });
+  protected readonly stepsBetween = computed(() => {
+    const steps = this.steps();
+    return steps ? steps - 1 : undefined;
+  });
 }
 
 /** A SwiftUI `VStack`. */
@@ -202,8 +226,10 @@ export class UiSlider {
   selector: 'ui-vstack',
   template: '<ng-content />',
   host: {
-    '[alignment]': 'alignment()',
-    '[spacing]': 'spacing()',
+    '[alignment]': 'android ? undefined : alignment()',
+    '[spacing]': 'android ? undefined : spacing()',
+    '[verticalArrangement]': 'android ? spacedBy(spacing()) : undefined',
+    '[horizontalAlignment]': 'android ? composeAlignment(alignment()) : undefined',
     '[modifiers]': 'modifiers()',
   },
 })
@@ -211,6 +237,12 @@ export class UiVStack {
   readonly alignment = input<'leading' | 'center' | 'trailing'>();
   readonly spacing = input<number>(undefined, { transform: optionalNumber });
   readonly modifiers = input<readonly UiModifier[]>();
+
+  protected readonly android = nativePlatform() === 'android';
+  protected readonly spacedBy = spacedBy;
+  protected composeAlignment(alignment: 'leading' | 'center' | 'trailing' | undefined) {
+    return alignment === 'leading' ? 'start' : alignment === 'trailing' ? 'end' : alignment;
+  }
 }
 
 /** A SwiftUI `Image`: an SF Symbol by `systemName`, or a picture by `uiImage` URL. */
@@ -434,13 +466,27 @@ export type UiToggleChangeEvent = NativeSyntheticEvent<{ readonly isOn: boolean 
 @Component({
   selector: 'ui-toggle',
   template: '<ng-content />',
-  host: { '[isOn]': 'isOn()', '[label]': 'label()', '[modifiers]': 'modifiers()' },
+  host: {
+    '[isOn]': 'android ? undefined : isOn()',
+    '[value]': 'android ? isOn() : undefined',
+    '[label]': 'label()',
+    '[modifiers]': 'modifiers()',
+    '(checkedChange)': 'android && checked($event)',
+  },
 })
 export class UiToggle {
   readonly isOn = input<boolean>(undefined, { transform: optionalBoolean });
   readonly label = input<string>();
   readonly modifiers = input<readonly UiModifier[]>();
   readonly isOnChange = output<UiToggleChangeEvent>();
+
+  protected readonly android = nativePlatform() === 'android';
+  protected checked(event: NativeSyntheticEvent<{ readonly value: boolean }>): void {
+    this.isOnChange.emit({
+      ...event,
+      nativeEvent: { isOn: event.nativeEvent.value },
+    } as UiToggleChangeEvent);
+  }
 }
 
 /** What `ui-stepper` sends as it is stepped: its new value. */
@@ -544,9 +590,14 @@ export class UiGauge {
 @Component({
   selector: 'ui-progress',
   template: '',
-  host: { '[value]': 'value()', '[modifiers]': 'modifiers()' },
+  host: {
+    '[value]': 'android ? undefined : value()',
+    '[progress]': 'android ? value() : undefined',
+    '[modifiers]': 'modifiers()',
+  },
 })
 export class UiProgress {
+  protected readonly android = nativePlatform() === 'android';
   readonly value = input<number>(undefined, { transform: optionalNumber });
   readonly modifiers = input<readonly UiModifier[]>();
 }
@@ -556,8 +607,10 @@ export class UiProgress {
   selector: 'ui-hstack',
   template: '<ng-content />',
   host: {
-    '[alignment]': 'alignment()',
-    '[spacing]': 'spacing()',
+    '[alignment]': 'android ? undefined : alignment()',
+    '[spacing]': 'android ? undefined : spacing()',
+    '[horizontalArrangement]': 'android ? spacedBy(spacing()) : undefined',
+    '[verticalAlignment]': 'android ? composeAlignment(alignment()) : undefined',
     '[modifiers]': 'modifiers()',
   },
 })
@@ -565,6 +618,18 @@ export class UiHStack {
   readonly alignment = input<'top' | 'center' | 'bottom' | 'firstTextBaseline'>();
   readonly spacing = input<number>(undefined, { transform: optionalNumber });
   readonly modifiers = input<readonly UiModifier[]>();
+
+  protected readonly android = nativePlatform() === 'android';
+  protected readonly spacedBy = spacedBy;
+  protected composeAlignment(
+    alignment: 'top' | 'center' | 'bottom' | 'firstTextBaseline' | undefined,
+  ) {
+    return alignment === 'firstTextBaseline' ? undefined : alignment;
+  }
+}
+
+function spacedBy(spacing: number | undefined) {
+  return spacing === undefined ? undefined : { spacedBy: Math.round(spacing) };
 }
 
 /** A SwiftUI `Spacer`: the room left over in its stack. */

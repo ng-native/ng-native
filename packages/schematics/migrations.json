@@ -4,7 +4,7 @@
     "sync-app-versions": {
       "version": "0.2.0",
       "description": "Move the @ng-native packages each project's own package.json lists to the new version.",
-      "factory": "./migrations/sync-app-versions.cjs#syncAppVersions"
+      "factory": "./migrations/run.cjs#sync-app-versions"
     }
   }
 }

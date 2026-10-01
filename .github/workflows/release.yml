@@ -112,10 +112,11 @@ jobs:
           version=$(node -p "require('./packages/fabric/package.json').version")
           echo "version=$version" >> "$GITHUB_OUTPUT"
           # nx migrate and ng update run a migration when the upgrade crosses its version, so the
-          # one that syncs each app's @ng-native versions moves to every release's. Staged, so it
-          # goes into the release commit below.
+          # one that syncs each app's @ng-native versions moves to every release's. The others keep
+          # the version of the release that brought them, or every upgrade would run them again.
+          # Staged, so it goes into the release commit below.
           for file in packages/nx/migrations.json packages/schematics/migrations.json; do
-            jq --arg v "$version" '(.generators // .schematics) |= map_values(.version = $v)' \
+            jq --arg v "$version" '(.generators // .schematics)["sync-app-versions"].version = $v' \
               "$file" > "$file.tmp" && mv "$file.tmp" "$file"
             git add "$file"
           done

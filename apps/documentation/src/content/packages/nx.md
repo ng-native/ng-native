@@ -241,7 +241,9 @@ to the new version with it, since they are released together. It also queues a m
 in each project's own `package.json` too, where a workspace with package-manager workspaces
 installs them from, keeping a `^` or `~`. A `workspace:` link and a peer range stay as they are.
 The migration then prints the install to run, since `nx migrate` installs by itself only when the
-root `package.json` changed.
+root `package.json` changed. Any other migration the update crosses runs beside it; they come from
+`@ng-native/migrate`, and [Updating an app](/guide/updating) lists what each does and what is left
+to do by hand.
 
 ```sh
 nx migrate @ng-native/nx@latest

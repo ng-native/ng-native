@@ -44,10 +44,12 @@ native side, and it silently does nothing. The versions are the ones Expo SDK 57
 `npx expo install --check` verifies.
 
 A package with React Native among its dependencies declares `@babel/core` 7 as a devDependency,
-and one with Nx declares `typescript`. pnpm installs a peer that a package leaves undeclared at the
-newest version anywhere in the workspace, whatever range the peer asks for, so the next change to
-the lockfile would move React Native onto the Babel 8 that `@angular/compiler-cli` brings, and Nx
-onto TypeScript 7. `workspace-peers.test.ts` checks it.
+and one with Nx or Expo declares `typescript`. pnpm installs a peer that a package leaves undeclared
+at the newest version anywhere in the workspace, whatever range the peer asks for, so the next
+change to the lockfile would move React Native onto the Babel 8 that `@angular/compiler-cli` brings,
+and Nx and Expo onto TypeScript 7. An optional peer that pulls one of these in, such as
+`@ng-native/metro`'s `@expo/metro-config`, is a devDependency too, since a peer pnpm installs for
+it ignores the package's own devDependencies. `workspace-peers.test.ts` checks it.
 
 ## Running the app and the docs site
 

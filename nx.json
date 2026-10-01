@@ -57,6 +57,7 @@
       "@ng-native/fabric",
       "@ng-native/icons",
       "@ng-native/metro",
+      "@ng-native/migrate",
       "@ng-native/nx",
       "@ng-native/platform",
       "@ng-native/router",

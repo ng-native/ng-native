@@ -30,6 +30,7 @@
       "@ng-native/fabric",
       "@ng-native/icons",
       "@ng-native/metro",
+      "@ng-native/migrate",
       "@ng-native/nx",
       "@ng-native/platform",
       "@ng-native/router",
@@ -43,6 +44,7 @@
     "@angular-devkit/architect": ">=0.2200.0 <0.2300.0",
     "@angular-devkit/core": "^22.0.0",
     "@angular-devkit/schematics": "^22.0.0",
+    "@ng-native/migrate": "workspace:*",
     "semver": "^7.7.0"
   },
   "devDependencies": {
@@ -50,6 +52,7 @@
     "@types/semver": "^7.7.0"
   },
   "nx": {
+    "projectType": "library",
     "tags": [
       "scope:schematics",
       "layer:build"

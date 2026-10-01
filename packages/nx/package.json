@@ -26,6 +26,7 @@
       "@ng-native/fabric",
       "@ng-native/icons",
       "@ng-native/metro",
+      "@ng-native/migrate",
       "@ng-native/platform",
       "@ng-native/router",
       "@ng-native/schematics",
@@ -35,6 +36,7 @@
     ]
   },
   "dependencies": {
+    "@ng-native/migrate": "workspace:*",
     "@nx/devkit": "^23.0.0",
     "minimatch": "^10.0.0",
     "semver": "^7.7.0"
@@ -47,6 +49,7 @@
     "typescript": "~6.0.3"
   },
   "nx": {
+    "projectType": "library",
     "tags": [
       "scope:nx",
       "layer:build"

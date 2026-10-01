@@ -88,6 +88,7 @@ export const GUIDE: NavSection = {
       ],
     },
     { path: 'guide/deployment', title: 'Deployment' },
+    { path: 'guide/updating', title: 'Updating an app' },
   ],
 };
 

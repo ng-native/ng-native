@@ -1,0 +1,47 @@
+{
+  "name": "@ng-native/migrate",
+  "version": "0.2.0",
+  "description": "The migrations that update an Angular Native app to a new release, for nx migrate, ng update and npx.",
+  "keywords": [
+    "angular",
+    "react-native",
+    "angular-native",
+    "expo",
+    "migrations",
+    "codemod",
+    "upgrade"
+  ],
+  "type": "module",
+  "main": "index.cjs",
+  "bin": {
+    "ng-native-migrate": "./cli.cjs"
+  },
+  "dependencies": {
+    "semver": "^7.7.0"
+  },
+  "nx": {
+    "tags": [
+      "scope:migrate",
+      "layer:build"
+    ]
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "license": "MIT",
+  "homepage": "https://ng-native.com/guide/updating",
+  "bugs": {
+    "url": "https://github.com/ng-native/ng-native/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ng-native/ng-native.git",
+    "directory": "packages/migrate"
+  },
+  "files": [
+    "*.cjs"
+  ],
+  "publishConfig": {
+    "access": "public"
+  }
+}
