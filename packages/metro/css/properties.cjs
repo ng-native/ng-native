@@ -1482,7 +1482,9 @@ function translate(property, value, out, context = property) {
       }
       // A native view stacks its children in a column, which is what a block does with its own.
       // Reading block as flex is what lets `.d-none` then `.d-md-block` show an element again.
-      if (displayName(value, word) === 'block') {
+      // Every native view is a flex item, and a browser computes an inline or inline-block flex
+      // item as block, so those are read the same way.
+      if (['block', 'inline', 'inline-block'].includes(displayName(value, word))) {
         out.display = 'flex';
         return;
       }

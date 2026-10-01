@@ -3803,14 +3803,6 @@
     "grid",
     "grid!"
   ],
-  "dropped 'display': display: inline does not exist on native; only flex, block (read as flex), contents and none do": [
-    "inline",
-    "inline!"
-  ],
-  "dropped 'display': display: inline-block does not exist on native; only flex, block (read as flex), contents and none do": [
-    "inline-block",
-    "inline-block!"
-  ],
   "dropped 'display': display: inline-grid does not exist on native; only flex, block (read as flex), contents and none do": [
     "inline-grid",
     "inline-grid!"

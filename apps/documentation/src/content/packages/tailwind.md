@@ -71,9 +71,12 @@ already do:
 ```ts
 // src/main.ts
 import tailwind from '../.angular-native/app.tailwind.js';
-import { mount } from '@ng-native/platform';
 
-const app = mount(rootTag, App, fabric, { globalStyles: tailwind });
+const app = mount(Number(rootTag), App, getFabricUIManager(), {
+  globalStyles: tailwind,
+  processColor,
+  // ...and the rest of the options main.ts already passes.
+});
 ```
 
 Pass the generated module as `globalStyles`, the one stylesheet Fabric matches against every node

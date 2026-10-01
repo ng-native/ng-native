@@ -179,10 +179,12 @@ which keep spaces and line breaks, are dropped. `font-variant-numeric` takes `ta
 `display` takes `flex`, `none`, `block` and `contents`. Every native view is already a flex
 container stacking its children in a column, which is what a block does with its own, so `block`
 is read as `flex`: that is what lets `.d-none` followed by `.d-md-block` show an element again at a
-breakpoint. `inline-flex` is read as `flex` for the same reason. `contents` is Yoga's own: the
-element draws no box of its own (no background, border or padding) and its children are laid out
-as if they were its parent's. `inline`, `inline-block`, `grid` and the table values are dropped,
-because a column of flex children cannot pretend to flow them side by side.
+breakpoint. `inline-flex` is read as `flex` for the same reason. `inline` and `inline-block` are
+read as `flex` too, because every native view sits in a flex container, and a browser lays out a
+flex container's inline children as blocks. `contents` is Yoga's own: the element draws no box of
+its own (no background, border or padding) and its children are laid out as if they were its
+parent's. `grid` and the table values are dropped, because a column of flex children cannot pretend
+to lay them out in a grid.
 
 `overflow` is one value for both axes - Yoga has no separate `overflow-x`/`overflow-y` - so a rule
 that gives them different values is dropped with a warning rather than silently picking one.

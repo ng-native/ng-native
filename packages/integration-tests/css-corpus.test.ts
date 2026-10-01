@@ -355,8 +355,9 @@ function agrees(property: CorpusProperty, browser: string, value: unknown): bool
  * that has gone away, so this list cannot rot.
  */
 const FLEX_ONLY =
-  'Yoga lays out flex boxes and nothing else, so inline-block, inline-flex and grid have no ' +
-  "native equivalent and are refused (ADR 0001). The box keeps native's flex.";
+  'Yoga lays out flex boxes and nothing else. Every native view is a flex item, which a browser ' +
+  'lays out as a block, so inline-block and inline-flex are read as flex, and grid is refused ' +
+  "(ADR 0001). The box keeps native's flex.";
 const BODY_LINE_HEIGHT =
   'Inherited from `body`, which native has no element for, and as a ratio: CSS inherits ' +
   "`line-height: 1.5` as a multiple of each descendant's own font size, native's lineHeight is " +

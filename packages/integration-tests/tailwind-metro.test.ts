@@ -122,6 +122,24 @@ describe('the generated stylesheet module', () => {
     assert.match(warnings[0]!, /: dropped 'display': display: grid does not exist on native/);
   });
 
+  it('reads inline and inline-block as flex, without a warning', (t) => {
+    // Tailwind writes .inline for the word anywhere in a file it scans, such as a README, so the
+    // warning named a class nobody wrote. Chrome lays out an inline flex item as a block.
+    const warn = t.mock.method(console, 'warn', () => {});
+    const sheet = evaluate(
+      compileSheetModule(
+        '.inline { display: inline }\n.inline-block { display: inline-block }\n',
+        '/app/.angular-native/app.tailwind.css',
+      ),
+    );
+    assert.deepEqual(
+      warn.mock.calls.map((call) => String(call.arguments[0])),
+      [],
+    );
+    assert.deepEqual(styleOf(sheet, 'inline'), { display: 'flex' });
+    assert.deepEqual(styleOf(sheet, 'inline-block'), { display: 'flex' });
+  });
+
   it('is a module a bundler can read, not a string of CSS', () => {
     const code = compileSheetModule('.a { flex: 1 }');
     assert.match(code, /export default/);

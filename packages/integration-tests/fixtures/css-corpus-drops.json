@@ -1,7 +1,7 @@
 {
   "bootstrap": {
-    "rules": 2499,
-    "dropped": 737,
+    "rules": 2515,
+    "dropped": 713,
     "emitted": [
       "$animation",
       "$animationDelay",
@@ -225,8 +225,6 @@
       },
       "display": {
         "display: grid does not exist on native; only flex, block (read as flex), contents and none do": 6,
-        "display: inline does not exist on native; only flex, block (read as flex), contents and none do": 6,
-        "display: inline-block does not exist on native; only flex, block (read as flex), contents and none do": 18,
         "display: inline-grid does not exist on native; only flex, block (read as flex), contents and none do": 6,
         "display: list-item does not exist on native; only flex, block (read as flex), contents and none do": 1,
         "display: table does not exist on native; only flex, block (read as flex), contents and none do": 6,
@@ -362,8 +360,8 @@
     }
   },
   "bulma": {
-    "rules": 2957,
-    "dropped": 1902,
+    "rules": 2994,
+    "dropped": 1878,
     "emitted": [
       "$animation",
       "$animationDelay",
@@ -581,9 +579,7 @@
         "cursor: not-allowed is not supported. Native has two cursors, auto and pointer, for an iPad with a pointer attached.": 2
       },
       "display": {
-        "display: grid does not exist on native; only flex, block (read as flex), contents and none do": 10,
-        "display: inline does not exist on native; only flex, block (read as flex), contents and none do": 10,
-        "display: inline-block does not exist on native; only flex, block (read as flex), contents and none do": 14
+        "display: grid does not exist on native; only flex, block (read as flex), contents and none do": 10
       },
       "float": {
         "'float' has no React Native equivalent: no style prop of a native view does what it does. Lay the row out with flexbox: flex-direction: row on the parent.": 3
@@ -713,8 +709,8 @@
     }
   },
   "pico": {
-    "rules": 428,
-    "dropped": 329,
+    "rules": 432,
+    "dropped": 320,
     "emitted": [
       "$animation",
       "$animationDelay",
@@ -894,9 +890,7 @@
       },
       "display": {
         "'display: initial' is a CSS-wide keyword, which this cascade does not implement. Write the value it stands for.": 1,
-        "display: grid does not exist on native; only flex, block (read as flex), contents and none do": 1,
-        "display: inline does not exist on native; only flex, block (read as flex), contents and none do": 1,
-        "display: inline-block does not exist on native; only flex, block (read as flex), contents and none do": 8
+        "display: grid does not exist on native; only flex, block (read as flex), contents and none do": 1
       },
       "fill": {
         "'fill' is not mapped yet. React Native may well support it; nothing here translates it. Check RN's style types, then add it to css/properties.cjs.": 1

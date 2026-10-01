@@ -484,8 +484,16 @@ describe('what it refuses, and how it says so', () => {
 
   it('names the display value that was written, not the one lightningcss reads it as', () => {
     // `display: inline-block` is `inline flow-root` to the parser, and the message named that.
-    assert.throws(() => declarationsOf('display: inline-block'), /display: inline-block\b/);
+    assert.throws(() => declarationsOf('display: inline-grid'), /display: inline-grid\b/);
     assert.throws(() => declarationsOf('display: grid'), /display: grid\b/);
+  });
+
+  it('reads display: inline and inline-block as flex, which Chrome makes of a flex item', () => {
+    // Every native view sits in a flex container, and Chrome computes an inline or inline-block
+    // flex item as block. Tailwind writes .inline for the word anywhere in a scanned file, so the
+    // refusal warned about a class nobody wrote, and hidden md:inline never showed the element.
+    assert.deepEqual(declarationsOf('display: inline'), { display: 'flex' });
+    assert.deepEqual(declarationsOf('display: inline-block'), { display: 'flex' });
   });
 
   it('reads display: block as flex, which is what every native view already is', () => {
