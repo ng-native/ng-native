@@ -66,6 +66,10 @@ describe('ng add', () => {
     assert.equal(json(tree, 'projects/native/app.json').expo.slug, 'native');
   });
 
+  it("imports expo in main.ts, so a release build runs Expo's runtime as debug does", () => {
+    assert.match(tree.readContent('projects/native/src/main.ts'), /^import 'expo';$/m);
+  });
+
   it('writes an AGENTS.md with the commands this workspace runs, and a CLAUDE.md that reads it', () => {
     const agents = tree.readContent('projects/native/AGENTS.md');
     assert.match(agents, /^ng run native:run-ios +# the iOS simulator$/m);

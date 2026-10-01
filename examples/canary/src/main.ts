@@ -1,6 +1,10 @@
 // First, and deliberately: it records when the app started, and an import that follows it is an
 // import it measures.
 import './started.ts';
+// Expo's runtime: its fetch, whose response streams a body, and URL, TextDecoderStream and
+// structuredClone. Metro runs it before this file only when something imports it, and nothing
+// else does in a release build, which would then get React Native's fetch, with no body.
+import 'expo';
 import { AppRegistry, Image, Platform, processColor } from 'react-native';
 import { mount } from '@ng-native/platform';
 import { currentConditions, deviceTokens, watchConditions } from '@ng-native/device';

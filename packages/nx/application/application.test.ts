@@ -79,6 +79,12 @@ describe('in an integrated workspace', () => {
     );
   });
 
+  it("imports expo in main.ts, so a release build runs Expo's runtime as debug does", async () => {
+    const tree = integrated();
+    await generate(tree, { directory: 'apps/mobile' });
+    assert.match(tree.read('apps/mobile/src/main.ts', 'utf-8')!, /^import 'expo';$/m);
+  });
+
   it('puts a safe-area-provider above its safe-area-view, which has no insets without one', async () => {
     const tree = integrated();
     await generate(tree, { directory: 'apps/mobile' });
