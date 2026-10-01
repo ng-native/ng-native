@@ -367,6 +367,15 @@ describe('in an integrated workspace', () => {
     assert.equal(typecheck?.options.cwd, 'apps/mobile');
   });
 
+  it('caches the sheet with the typecheck, so a cache hit restores what it would have built', async () => {
+    // A hit skips the command, and Nx restores only the outputs a target declares: without this,
+    // a fresh checkout that hit the cache had no .angular-native/ for the next thing to import.
+    const tree = integrated();
+    await generate(tree, { directory: 'apps/mobile' });
+    const { typecheck } = readProjectConfiguration(tree, 'mobile').targets ?? {};
+    assert.deepEqual(typecheck?.outputs, ['{projectRoot}/.angular-native']);
+  });
+
   it('refuses a directory that already holds a package', async () => {
     const tree = integrated();
     tree.write('apps/mobile/package.json', '{}');

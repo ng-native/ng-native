@@ -79,7 +79,7 @@ of the `expo start --web` `@nx/expo` infers for every Expo app, since the app ha
 `nx prebuild` and `nx build` still use `@nx/expo`'s executors, and print the same deprecation
 notice. `typecheck` loads `metro.config.js` before `ngc`, as the template's script does, so that
 once [Tailwind](/packages/tailwind) is added, the sheet `src/main.ts` imports exists on a fresh
-checkout.
+checkout. It declares `.angular-native/` as its output, so a cache hit restores the sheet too.
 
 Each app gets a Metro port of its own, so `nx run-many -t start` runs several side by side. The
 first Expo app in the workspace uses Expo's default, 8081, with a plain `expo start`. Each later one

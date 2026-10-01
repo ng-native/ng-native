@@ -130,6 +130,8 @@ function targets(directory, port) {
       ...run(native.TYPECHECK),
       cache: true,
       inputs: ['default', '^production'],
+      // The Tailwind sheet the command builds, which a cache hit restores rather than rebuilds.
+      outputs: ['{projectRoot}/.angular-native'],
     },
     test: { ...run('vitest run'), cache: true, inputs: ['default', '^production'] },
     start: { ...run(`expo start${own}`), continuous: true },
