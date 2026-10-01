@@ -216,7 +216,8 @@ value another utility reads, where that utility is the one refused: `snap-mandat
 `snap-proximity`, read by `snap-x` and `snap-y`. Those do nothing, as the utility they feed does
 nothing.
 
-The web host is Tailwind 4 only.
+A browser build takes `web-preset.cjs` in place of `preset.cjs`, as Tailwind 4 takes `web.css` in
+place of `native.css`; [Tailwind 3 on the web](/packages/web#with-tailwind-3) sets it up.
 
 ## A shared library in an Nx workspace
 

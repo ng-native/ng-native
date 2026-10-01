@@ -57,13 +57,24 @@ describe('the Tailwind 3 preset in a TypeScript config', () => {
     assert.deepEqual(diagnosticsFor(source, 'cts'), []);
   });
 
-  it('publishes the declarations with the preset', () => {
+  it('imports the web preset as it does the native one', () => {
+    const source = [
+      `import webPreset from '@ng-native/tailwind/web-preset.cjs';`,
+      `import type { Config } from 'tailwindcss-v3';`,
+      `export default { presets: [webPreset], content: ['./src/**/*.ts'] } satisfies Config;`,
+    ].join('\n');
+    assert.deepEqual(diagnosticsFor(source, 'ts'), []);
+  });
+
+  it('publishes the declarations with the presets', () => {
     const manifest = JSON.parse(
       readFileSync(path.join(HERE, '../tailwind/package.json'), 'utf8'),
     ) as { files: string[] };
-    assert.ok(
-      manifest.files.some((pattern) => path.matchesGlob('preset.d.cts', pattern)),
-      manifest.files.join(', '),
-    );
+    for (const file of ['preset.d.cts', 'web-preset.d.cts', 'tailwind-3-preset.cjs']) {
+      assert.ok(
+        manifest.files.some((pattern) => path.matchesGlob(file, pattern)),
+        `${file} in ${manifest.files.join(', ')}`,
+      );
+    }
   });
 });

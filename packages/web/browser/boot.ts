@@ -31,6 +31,10 @@ declare module 'vitest/browser' {
     pointerUp(): Promise<void>;
     /** What `prefers-color-scheme` answers, as an OS setting would change it. */
     emulateColorScheme(scheme: 'light' | 'dark'): Promise<void>;
+    /** How many device pixels a CSS pixel is, as a high-density screen would say. */
+    deviceScale(scale: number): Promise<void>;
+    /** The Tailwind 3 web preset's sheet for `classes`, built with `prefix`. */
+    tailwind3(classes: string, prefix: string): Promise<string>;
   }
 }
 

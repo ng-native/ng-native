@@ -1,7 +1,7 @@
 # @ng-native/tailwind
 
-A Tailwind CSS preset for Angular Native, for Tailwind 4 on native and web and Tailwind 3 on
-native: `<view class="flex-1 bg-blue-500 p-4">` works because
+A Tailwind CSS preset for Angular Native, for Tailwind 4 and Tailwind 3, on native and on the
+web: `<view class="flex-1 bg-blue-500 p-4">` works because
 [`@ng-native/fabric`](https://github.com/ng-native/ng-native/blob/main/packages/fabric) already has
 a real cascade, and `class` already matches against it.
 
@@ -44,7 +44,7 @@ mount(rootTag, App, fabric, { globalStyles: tailwind });
 Import `theme.css` and `utilities.css`, not the plain `tailwindcss` entry point - that also pulls
 in preflight, a browser reset that means nothing on a phone.
 
-## Tailwind 3 (native only)
+## Tailwind 3
 
 ```sh
 npm install @ng-native/tailwind @ng-native/metro tailwindcss@3
@@ -79,12 +79,16 @@ presets: [
 ],
 ```
 
+On the web, a Tailwind 3 build uses `web-preset.cjs` in place of `preset.cjs`. See
+[Tailwind 3 on the web](https://ng-native.com/packages/web#with-tailwind-3).
+
 ## What's in the package
 
 - `./native.css` - the preset: platform variants, safe-area and hairline utilities, and
   touch-appropriate `hover:`/`focus-visible:` meanings.
 - `./web.css` - the same preset's web entry point, for `@ng-native/web`.
 - `./preset.cjs` - the native preset for Tailwind 3, used from `tailwind.config.js`.
+- `./web-preset.cjs` - the web preset for Tailwind 3, for `@ng-native/web`.
 - `./config.cjs` - `withTailwind`, the Metro config step that runs the app's Tailwind CLI and
   flattens its output for the CSS compiler.
 
