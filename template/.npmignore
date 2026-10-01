@@ -1,0 +1,2 @@
+# Packed as it is. Without this file pnpm packs the template against the workspace root's
+# .gitignore, whose /tsconfig.json would leave the app without one.
