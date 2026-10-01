@@ -15,6 +15,7 @@
  * registers are ordinary elements in a template.
  */
 import { registerViewName } from '@ng-native/fabric';
+import { optional } from './native.ts';
 
 /**
  * What Expo installs on the global when the app starts. Only the app identifier matters here;
@@ -67,6 +68,11 @@ export function registerExpoView(
   options?: ExpoViewOptions,
 ): void {
   registerViewName(elementName, expoViewName(moduleName, options?.viewName), options?.defaultProps);
+  optional(() =>
+    (
+      require('expo') as { requireNativeView(module: string, view?: string): unknown }
+    ).requireNativeView(moduleName, options?.viewName),
+  );
 }
 
 /**

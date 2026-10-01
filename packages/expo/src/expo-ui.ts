@@ -70,7 +70,7 @@ export const EXPO_UI_VIEWS: Readonly<Record<string, readonly [string | null, str
   'grid-row': ['GridRowView', null],
   group: ['GroupView', null],
   'horizontal-floating-toolbar': [null, 'HorizontalFloatingToolbarView'],
-  host: ['HostView', 'RNHostView'],
+  host: ['HostView', 'HostView'],
   hstack: ['HStackView', 'RowView'],
   icon: [null, 'IconView'],
   image: ['ImageView', 'ImageView'],
