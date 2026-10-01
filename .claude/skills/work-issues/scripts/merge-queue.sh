@@ -68,6 +68,10 @@ while (( ${#queue} )); do
         note $n "waits for CodeRabbit to review its current commit"; continue
       fi
     fi
+    # GitHub runs no CI on a PR that conflicts with main, so this comes before the CI check, which would
+    # otherwise wait on it forever.
+    ms=$(jq -r .mergeable_state <<<$pr)
+    if [[ $ms == dirty ]]; then echo "#$n conflicts with main, skipping"; queue=(${queue:#$n}); continue; fi
     # A run cancelled because a duplicate superseded it (a retarget starts a second set) doesn't count
     # when the same check has another run.
     runs=$(gh api "$R/commits/$sha/check-runs?per_page=100" \
@@ -76,8 +80,6 @@ while (( ${#queue} )); do
       echo "#$n CI failed ($runs), skipping"; queue=(${queue:#$n}); continue
     fi
     [[ -n $runs && $runs != *pending* ]] || continue
-    ms=$(jq -r .mergeable_state <<<$pr)
-    if [[ $ms == dirty ]]; then echo "#$n conflicts with main, skipping"; queue=(${queue:#$n}); continue; fi
     [[ $ms == clean || $ms == unstable || $ms == has_hooks ]] || continue
     # Two lockfile changes can merge cleanly as text into a lockfile pnpm rejects (#279 after #277), so a
     # PR that changes pnpm-lock.yaml waits until it's updated with any lockfile change main has since had.
