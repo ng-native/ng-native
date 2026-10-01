@@ -285,18 +285,17 @@ const VIEW_BASE_HANDLERS: Record<string, Handler> = {
 };
 
 /**
- * A one-line field's `type`: a password while `secureTextEntry` is on, else the type that matches
- * the keyboard. An email or number keyboard keeps `text`: `type="email"` trims the value and,
- * like `type="number"`, has no selection API, so `setSelection` would throw.
+ * A one-line field's `type`: a password while `secureTextEntry` is on, `tel` for a phone keyboard,
+ * and `text` otherwise. The other keyboards stay `inputmode` only: `type="url"` and `"email"` trim
+ * the value the app set, and `"email"` and `"number"` have no selection API, so `setSelection`
+ * would throw.
  */
 function setInputType(n: BrowserNode): void {
   const field = el(n);
   if (field.tagName !== 'INPUT') return;
-  const types: Record<string, string> = { 'phone-pad': 'tel', url: 'url' };
   const secure = n.props['secureTextEntry'] === true;
-  (field as HTMLInputElement).type = secure
-    ? 'password'
-    : (types[String(n.props['keyboardType'])] ?? 'text');
+  const phone = n.props['keyboardType'] === 'phone-pad';
+  (field as HTMLInputElement).type = secure ? 'password' : phone ? 'tel' : 'text';
 }
 
 /** `text-input.ts`'s own props, applied to the `<input>` or `<textarea>` it commits as. */

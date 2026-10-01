@@ -123,8 +123,8 @@ describe('a text field swapped by multiline', () => {
     const engine = new BrowserEngine(document);
     const node = engine.createElementNode('text-input');
     document.body.append(node.el);
-    engine.setProp(node, 'keyboardType', 'url');
-    await userEvent.type(node.el as HTMLInputElement, 'example.com');
+    engine.setProp(node, 'keyboardType', 'phone-pad');
+    await userEvent.type(node.el as HTMLInputElement, '01234 567890');
     (node.el as HTMLInputElement).setSelectionRange(2, 5);
     engine.setProp(node, 'multiline', true);
     const area = node.el as HTMLTextAreaElement;
@@ -133,9 +133,9 @@ describe('a text field swapped by multiline', () => {
     engine.setProp(node, 'multiline', false);
     const input = node.el as HTMLInputElement;
     expect(document.activeElement).toBe(input);
-    expect([input.type, input.selectionStart, input.selectionEnd]).toEqual(['url', 2, 5]);
+    expect([input.type, input.selectionStart, input.selectionEnd]).toEqual(['tel', 2, 5]);
     await userEvent.keyboard('x');
-    expect(input.value).toBe('exxle.com');
+    expect(input.value).toBe('01x 567890');
     input.remove();
   });
 });

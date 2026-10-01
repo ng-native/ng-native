@@ -373,13 +373,13 @@ describe('text-input', () => {
     assert.equal(el.getAttribute('inputmode'), null);
   });
 
-  it('is a tel or url field for those keyboards, and a text field for the rest', () => {
+  it('is a tel field for a phone keyboard, and a text field for the rest', () => {
     const { node, set } = scene('text-input');
-    // An email or number field changes the value (trimmed, or a number) and has no selection API,
-    // so those keyboards stay inputmode only.
+    // An email, url or number field changes the value (trimmed, or a number), and an email or
+    // number field has no selection API, so those keyboards stay inputmode only.
     const expected: Record<string, string> = {
       'phone-pad': 'tel',
-      url: 'url',
+      url: 'text',
       'email-address': 'text',
       numeric: 'text',
       'number-pad': 'text',
@@ -390,9 +390,22 @@ describe('text-input', () => {
       set('keyboardType', keyboard);
       assert.equal((node.el as HTMLInputElement).type, type, keyboard);
     }
-    set('keyboardType', 'url');
+    set('keyboardType', 'phone-pad');
     set('keyboardType', null);
     assert.equal((node.el as HTMLInputElement).type, 'text');
+  });
+
+  it('keeps the spaces around a value whatever the keyboard and secureTextEntry', () => {
+    const { node, set } = scene('text-input');
+    set('text', ' example.com ');
+    for (const keyboard of ['url', 'email-address', 'phone-pad', 'numeric']) {
+      set('keyboardType', keyboard);
+      assert.equal((node.el as HTMLInputElement).value, ' example.com ', keyboard);
+    }
+    set('secureTextEntry', true);
+    set('keyboardType', 'url');
+    set('secureTextEntry', false);
+    assert.equal((node.el as HTMLInputElement).value, ' example.com ');
   });
 
   it('stays a password field whatever the keyboard, and takes the keyboard type back after', () => {
@@ -400,10 +413,11 @@ describe('text-input', () => {
     set('keyboardType', 'phone-pad');
     set('secureTextEntry', true);
     assert.equal((node.el as HTMLInputElement).type, 'password');
-    set('keyboardType', 'url');
+    set('keyboardType', 'numeric');
     assert.equal((node.el as HTMLInputElement).type, 'password');
+    set('keyboardType', 'phone-pad');
     set('secureTextEntry', false);
-    assert.equal((node.el as HTMLInputElement).type, 'url');
+    assert.equal((node.el as HTMLInputElement).type, 'tel');
   });
 
   it('carries the keyboard type back to the input when multiline turns off', () => {
