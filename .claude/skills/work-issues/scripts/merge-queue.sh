@@ -23,16 +23,9 @@ open_threads() {
   local n
   n=$(gh api graphql -f query="{repository(owner:\"ng-native\",name:\"ng-native\"){pullRequest(number:$1){reviewThreads(first:100){pageInfo{hasNextPage} nodes{isResolved}}}}}" \
     --jq '.data.repository.pullRequest.reviewThreads|if .pageInfo.hasNextPage then "?" else [.nodes[]|select(.isResolved|not)]|length end' 2>/dev/null)
-  # A rate-limited call prints its error JSON on stdout, so only a bare count (or "?") is an answer.
-  [[ $n == <-> || $n == '?' ]] && echo $n || unanswered $1
-}
-# REST can't see resolution, so while GraphQL is rate-limited a thread counts as settled once someone
-# other than CodeRabbit has replied to it, which every answered comment here gets before it's resolved.
-unanswered() {
-  gh api --paginate "$R/pulls/$1/comments?per_page=100" 2>/dev/null | jq -s '
-    add|([.[]|select(.in_reply_to_id != null and (.user.login|test("\\[bot\\]$")|not))|.in_reply_to_id]) as $answered
-    |[.[]|select(.in_reply_to_id == null and .user.login == "coderabbitai[bot]" and ((.id as $i|$answered|index($i))|not))]|length' ||
-    echo "?"
+  # A rate-limited call prints its error JSON on stdout, so only a bare count is an answer. REST can't see
+  # whether a thread is resolved, so while GraphQL is limited the PR waits ("?") rather than guess.
+  [[ $n == <-> ]] && echo $n || echo "?"
 }
 # Says something about a PR once per run rather than on every pass.
 typeset -A noted
