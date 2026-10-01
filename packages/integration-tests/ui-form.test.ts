@@ -89,8 +89,8 @@ describe('a date picker in a form', () => {
     assert.equal(props('column')['spacing'], 8);
     assert.equal(props('row')['spacing'], 4);
     assert.deepEqual(
-      ['value', 'min', 'max', 'steps'].map((key) => props('slider')[key]),
-      [2, 0, 10, 5],
+      ['value', 'min', 'max', 'step'].map((key) => props('slider')[key]),
+      [2, 0, 10, 2],
     );
     assert.deepEqual(
       ['value', 'min', 'max', 'step'].map((key) => props('stepper')[key]),

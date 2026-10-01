@@ -112,6 +112,20 @@ binds a template's `(dateChange)` to the element's own native event directly, so
 place it arrives - a programmatic subscription to the output from code never receives anything.
 Subscribe in the template, not to the output in code.
 
+### On Android
+
+One template draws both platforms for `UiHost`, `UiVStack`, `UiHStack`, `UiText`, `UiSpacer`,
+`UiToggle`, `UiSlider`, `UiButton`, `UiDivider`, `UiProgress` and `UiSlot`. Compose names some
+props and events differently, and each of these components sends its inputs under the name the
+platform reads and delivers Compose's events through the same outputs, with the same `$event`
+shape: a toggle's `isOn` reaches Compose's switch as `value`, and its `checkedChange` arrives as
+`(isOnChange)` with `nativeEvent.isOn`. A button's `label` is drawn as text inside it, since
+Compose's button has no label of its own. A slider's `steps` is the number of steps on both.
+
+The rest of the typed components are SwiftUI's. On Android a text field, a menu, a date picker and
+an image are different controls rather than renamed ones, and `UiPicker`, `UiList`, `UiForm`,
+`UiSection` and the others have no Compose view at all; use Compose's own names for those.
+
 Still call `registerExpoUiViews` alongside importing these. The component supplies the types; the
 registration is what makes the element commit as the SwiftUI or Compose view. Add a component here
 when a template wants one of the other views typed, from `@expo/ui`'s own props for it - the rest
