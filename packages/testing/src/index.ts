@@ -17,6 +17,7 @@ export {
   type RenderOptions,
   type RenderResult,
 } from './render.ts';
+export { injectService, type InjectServiceOptions } from './inject-service.ts';
 export type { BoundQueries, ByRoleOptions, Matcher, TextMatchOptions } from './queries.ts';
 export { waitFor, type WaitForOptions } from './wait-for.ts';
 export { gestureOf } from './gesture-of.ts';

@@ -7,7 +7,7 @@
  * makes every capability inert rather than broken.
  */
 import assert from 'node:assert/strict';
-import { describe, it } from 'node:test';
+import { afterEach, describe, it } from 'node:test';
 import { ErrorHandler, Injector, type Provider, type Type } from '@angular/core';
 import {
   COMPACT_WIDTH,
@@ -26,6 +26,7 @@ import {
   reactNative,
   watchConditions,
 } from '@ng-native/device';
+import { cleanup, injectService } from '@ng-native/testing';
 import { appStateSource } from '../device/src/app-state.ts';
 import { colorSchemeSource } from '../device/src/color-scheme.ts';
 import { directionSource } from '../device/src/direction.ts';
@@ -434,6 +435,23 @@ describe('the colour scheme and the app state', () => {
     state('background');
     assert.equal(app.active(), false);
     assert.equal(app.current(), 'background');
+  });
+});
+
+describe("the Device page's test of a service on its own", () => {
+  afterEach(cleanup);
+
+  it('reads the scheme the source reports, through injectService', () => {
+    const scheme = injectService(ColorScheme, {
+      providers: [
+        {
+          provide: ColorScheme.SOURCE,
+          useValue: { current: () => 'dark', subscribe: () => () => {} },
+        },
+      ],
+    });
+
+    assert.equal(scheme.current(), 'dark');
   });
 });
 

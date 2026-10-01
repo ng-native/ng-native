@@ -62,6 +62,19 @@ Every query in the [matrix](#queries), bound to this render, plus:
 
 A render's own queries keep querying that render after a later one; `screen` moves to the latest.
 
+## `injectService()`
+
+```ts
+function injectService<T>(token: ProviderToken<T>, options?: InjectServiceOptions): T;
+```
+
+Mounts an empty component onto a fresh fake Fabric with `mount()`, as `render()` does, and returns
+`token` from that app's root injector. A service with no component gets the same root an app
+gives it, so a `@Service()` and the root services it injects resolve. `InjectServiceOptions` has
+one option, `providers`, which works as it does for `render()`. The app is not what `screen`
+queries, and `cleanup()` destroys it. See
+[A service on its own](/packages/testing/testing-services#a-service-on-its-own).
+
 ## `screen`
 
 ```ts
@@ -294,7 +307,7 @@ signal set on `instance` for example, and then wants to read the tree.
 function cleanup(): void;
 ```
 
-Unmounts everything rendered so far. It runs after every test by itself when `afterEach` is a
+Unmounts everything rendered so far, and destroys every app `injectService()` created. It runs after every test by itself when `afterEach` is a
 global, which it is in Vitest with `globals: true`; with `node:test` or Vitest's default, call it
 from an `afterEach` of your own if a test should not leave its render mounted. Every render has its
 own fake, so a test that skips cleanup still cannot see another test's tree.

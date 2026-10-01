@@ -51,15 +51,26 @@ without a device underneath it (`SafeArea` is the exception - it has no native m
 only `report()`, which `<safe-area-provider>` calls):
 
 ```ts
-import { TestBed } from '@angular/core/testing';
 import { ColorScheme } from '@ng-native/device';
+import { injectService } from '@ng-native/testing';
+import { expect, it } from 'vitest';
 
-TestBed.configureTestingModule({
-  providers: [
-    { provide: ColorScheme.SOURCE, useValue: { current: () => 'dark', subscribe: () => () => {} } },
-  ],
+it('reads the scheme the source reports', () => {
+  const scheme = injectService(ColorScheme, {
+    providers: [
+      {
+        provide: ColorScheme.SOURCE,
+        useValue: { current: () => 'dark', subscribe: () => () => {} },
+      },
+    ],
+  });
+
+  expect(scheme.current()).toBe('dark');
 });
 ```
+
+The same `providers` work in `render()`, for a component that injects the service. See
+[Testing with services](/packages/testing/testing-services).
 
 ## The services
 

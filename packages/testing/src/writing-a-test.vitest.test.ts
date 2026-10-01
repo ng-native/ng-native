@@ -4,7 +4,16 @@
  */
 import { createRequire } from 'node:module';
 import { describe, expect, it, vi } from 'vitest';
-import { Component, Injectable, inject, input, output, resource, signal } from '@angular/core';
+import {
+  Component,
+  Injectable,
+  Service,
+  inject,
+  input,
+  output,
+  resource,
+  signal,
+} from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { FormField, disabled, form, required } from '@angular/forms/signals';
@@ -17,7 +26,7 @@ import {
   provideNativeRouter,
   withLinkParent,
 } from '@ng-native/router';
-import { render, screen, userEvent, waitFor, within } from '@ng-native/testing';
+import { injectService, render, screen, userEvent, waitFor, within } from '@ng-native/testing';
 
 @Component({
   selector: 'app-counter',
@@ -225,6 +234,15 @@ class Forecast {
   protected readonly forecast = resource({ loader: () => this.weather.today() });
 }
 
+@Service()
+class Outlook {
+  private readonly weather = inject(Weather);
+
+  async headline(): Promise<string> {
+    return `Today: ${await this.weather.today()}`;
+  }
+}
+
 describe('services', () => {
   it('replaces a service with a stand-in', async () => {
     await render(Forecast, {
@@ -232,6 +250,14 @@ describe('services', () => {
     });
 
     expect(await screen.findByText('Sunny')).toBeTruthy();
+  });
+
+  it('tests a service on its own', async () => {
+    const outlook = injectService(Outlook, {
+      providers: [{ provide: Weather, useValue: { today: async () => 'Sunny' } }],
+    });
+
+    expect(await outlook.headline()).toBe('Today: Sunny');
   });
 });
 

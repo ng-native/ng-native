@@ -40,3 +40,37 @@ it('replaces a service with a stand-in', async () => {
   expect(await screen.findByText('Sunny')).toBeTruthy();
 });
 ```
+
+## A service on its own
+
+A service with no component to render goes through `injectService()`. It creates the service in a
+fresh app's root injector, built with the `providers` given, so a `@Service()` and every root
+service it injects resolve as they do in the app. There is no `TestBed` to configure, and
+`Injector.create()` does not stand in for one: an injector made that way has no root scope, so it
+finds no `@Service()` or `providedIn: 'root'` class.
+
+```ts
+import { Service, inject } from '@angular/core';
+import { injectService } from '@ng-native/testing';
+import { expect, it } from 'vitest';
+
+@Service()
+class Outlook {
+  private readonly weather = inject(Weather);
+
+  async headline(): Promise<string> {
+    return `Today: ${await this.weather.today()}`;
+  }
+}
+
+it('tests a service on its own', async () => {
+  const outlook = injectService(Outlook, {
+    providers: [{ provide: Weather, useValue: { today: async () => 'Sunny' } }],
+  });
+
+  expect(await outlook.headline()).toBe('Today: Sunny');
+});
+```
+
+`cleanup()` destroys the app, which runs the service's `DestroyRef` callbacks, just as it unmounts
+a render.

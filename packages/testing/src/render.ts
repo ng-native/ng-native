@@ -16,6 +16,7 @@ import {
 } from '@angular/core';
 import type { Engine, EngineOptions } from '@ng-native/fabric';
 import { mount } from '@ng-native/platform';
+import { destroyServiceApps } from './inject-service.ts';
 import { bindQueries, describeTree, flatten, type BoundQueries } from './queries.ts';
 import { createFakeFabric, type FakeFabric, type FakeFabricNode } from './test-utils.ts';
 import { waitFor, type WaitForOptions } from './wait-for.ts';
@@ -220,9 +221,13 @@ function unmount(target: Mounted): void {
   target.applicationRef.destroy();
 }
 
-/** Unmount everything rendered so far. Registered as an `afterEach` where one is global. */
+/**
+ * Unmount everything rendered so far, and destroy every app `injectService` created. Registered
+ * as an `afterEach` where one is global.
+ */
 export function cleanup(): void {
   for (const target of [...mounted]) unmount(target);
+  destroyServiceApps();
 }
 
 /** Queries over whatever was rendered most recently, as Testing Library's `screen` is. */
