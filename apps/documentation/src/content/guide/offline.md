@@ -354,9 +354,9 @@ would skip the first cold-start refresh while the estimate is unsettled.
 ### `HttpClient` needs `provideNativeHttpClient()`
 
 Plain `provideHttpClient()` silently returns null bodies wherever the global `fetch` is React
-Native's own, as in a release build of an app whose `src/main.ts` does not import `expo`, because
-its default `fetch` backend cannot read that response's body. The feed can appear
-offline, and its `catch` blocks do not resolve the ambiguity. Always use `provideNativeHttpClient()`; see
+Native's own, because its default `fetch` backend cannot read that response's body. The feed can
+appear offline, and its `catch` blocks do not resolve the ambiguity. Always use
+`provideNativeHttpClient()`; see
 [Known limitations](/guide/limitations#httpclient-needs-providenativehttpclient).
 
 ### The queue needs an order, a transaction, and a stopping point

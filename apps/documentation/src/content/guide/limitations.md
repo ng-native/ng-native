@@ -82,6 +82,8 @@ bundle imports `expo`:
   because `mount()` reaches `expo` for its reload hook in development, but a release build gets
   React Native's: `whatwg-fetch` over XHR, whose `Response` has no `body`. There every request
   resolves with a null body and no error, so the app works in debug and fails in release.
+- With `EXPO_PUBLIC_USE_RN_FETCH` set to `1` or `true`, Expo's runtime leaves React Native's
+  `fetch` in place, so every build gets the one with no `body`.
 
 Use `provideNativeHttpClient()` from `@ng-native/platform/http`: it configures `HttpClient` with
 `withXhr()`, which uses React Native's native `XMLHttpRequest`, upload progress included, whichever

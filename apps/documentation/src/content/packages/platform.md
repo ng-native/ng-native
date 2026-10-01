@@ -80,8 +80,10 @@ default `fetch` backend. That is not a style preference. Angular 22's default ba
 response body only through `response.body`'s stream. Expo's `fetch` streams one, but a release
 build of an app whose `src/main.ts` does not import `expo` has React Native's own `fetch`, which is
 `whatwg-fetch` over XHR, whose `Response` has no `body`. There every request resolves with a null
-body and nothing reports why. React Native's `XMLHttpRequest` is native and complete, upload
-progress included, and the XHR backend uses it whichever `fetch` is global. See
+body and nothing reports why. So does any build with `EXPO_PUBLIC_USE_RN_FETCH` set to `1` or
+`true`, which tells Expo's runtime to leave React Native's `fetch` in place. React Native's
+`XMLHttpRequest` is native and complete, upload progress included, and the XHR backend uses it
+whichever `fetch` is global. See
 [Known limitations](/guide/limitations#httpclient-needs-providenativehttpclient).
 
 A separate entry point, `@ng-native/platform/http`, so an app that never makes a request does not

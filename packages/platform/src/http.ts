@@ -11,10 +11,10 @@
  * is `fetch`, and it reads a response body only through `response.body`'s stream. Expo's `fetch`
  * streams one, but Metro runs Expo's runtime only when the bundle imports `expo`: a debug build
  * does through `mount()`'s reload hook, and a release build only if the app's `main.ts` does.
- * Without it the global `fetch` is React Native's, `whatwg-fetch` over XHR, whose `Response` has
- * no `body`, so every request resolves with `null` and nothing reports why. RN's `XMLHttpRequest`
- * is native and complete, upload progress included, and the same in every build, so the XHR
- * backend is the one to use.
+ * Without it, or with `EXPO_PUBLIC_USE_RN_FETCH` set, the global `fetch` is React Native's,
+ * `whatwg-fetch` over XHR, whose `Response` has no `body`, so every request resolves with `null`
+ * and nothing reports why. RN's `XMLHttpRequest` is native and complete, upload progress included,
+ * and the same in every build, so the XHR backend is the one to use.
  *
  * A separate entry point so an app that never makes a request does not need `@angular/common`.
  */
