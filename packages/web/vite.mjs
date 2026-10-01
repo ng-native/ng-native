@@ -23,12 +23,15 @@ const EMPTY = '\0ng-native:native-only';
 
 /**
  * The native modules `@ng-native/expo` reaches through a `require` inside a `catch`:
- * `expo-battery`, `expo-modules-core`, `@react-native-async-storage/async-storage`. A `require` of
- * one resolves to a module that throws when it is evaluated, so the `catch` answers as it does
- * where the module is missing, and the service is inert. An `import` of one still resolves as
- * usual, and fails the build when it is not installed.
+ * `expo-battery`, `expo-modules-core`, `@react-native-async-storage/async-storage`,
+ * `react-native-watch-connectivity`. Not every `react-native-*`: `@ng-native/components` requires
+ * Reanimated and gesture-handler outside any `catch`, where a module that throws would fail the
+ * page rather than the build. A `require` of one resolves to a module that throws when it is
+ * evaluated, so the `catch` answers as it does where the module is missing, and the service is
+ * inert. An `import` of one still resolves as usual, and fails the build when it is not installed.
  */
-const NATIVE_MODULE = /^(expo-|@expo\/|@react-native-async-storage\/)/;
+const NATIVE_MODULE =
+  /^(expo-|@expo\/|@react-native-async-storage\/|react-native-watch-connectivity$)/;
 const MISSING = '\0ng-native:missing:';
 
 /**
