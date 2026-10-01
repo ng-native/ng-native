@@ -59,8 +59,10 @@ while (( ${#queue} )); do
         note $n "waits for CodeRabbit to review its current commit"; continue
       fi
     fi
+    # A run cancelled because a duplicate superseded it (a retarget starts a second set) doesn't count
+    # when the same check has another run.
     runs=$(gh api "$R/commits/$sha/check-runs?per_page=100" \
-      --jq '[.check_runs[]|(.conclusion // "pending")]|unique|join(",")' 2>/dev/null)
+      --jq '[.check_runs|group_by(.name)[]|map(.conclusion // "pending")|(map(select(. != "cancelled"))|if length > 0 then . else ["cancelled"] end)[]]|unique|join(",")' 2>/dev/null)
     if [[ $runs == *failure* || $runs == *cancelled* || $runs == *timed_out* ]]; then
       echo "#$n CI failed ($runs), skipping"; queue=(${queue:#$n}); continue
     fi
