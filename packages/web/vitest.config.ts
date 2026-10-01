@@ -17,6 +17,7 @@
  * every directory Tailwind's automatic detection would reach on its own.
  */
 import { playwright } from '@vitest/browser-playwright';
+import type { CDPSession } from 'playwright';
 import { angular } from '@oxc-angular/vite';
 import tailwindcss from '@tailwindcss/vite';
 import { defineConfig } from 'vitest/config';
@@ -47,9 +48,16 @@ const emulateColorScheme: BrowserCommand<[scheme: 'light' | 'dark']> = async (co
   await context.page.emulateMedia({ colorScheme: scheme });
 };
 
+const cdpSessions = new WeakMap<object, CDPSession>();
+
 /** Emulates a screen of `scale` device pixels per CSS pixel, which `min-resolution` reads. */
 const deviceScale: BrowserCommand<[scale: number]> = async (context, scale) => {
-  const cdp = await context.page.context().newCDPSession(context.page);
+  // One session per page, kept open: the override lasts only as long as the session that set it.
+  let cdp = cdpSessions.get(context.page);
+  if (!cdp) {
+    cdp = await context.page.context().newCDPSession(context.page);
+    cdpSessions.set(context.page, cdp);
+  }
   await cdp.send('Emulation.setDeviceMetricsOverride', {
     width: 0,
     height: 0,
