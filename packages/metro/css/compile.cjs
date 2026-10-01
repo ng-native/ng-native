@@ -129,7 +129,11 @@ function evaluateLinear(list, reference, context) {
   const take = () => {
     const value = evaluateProduct(current, reference, context);
     if (!value) return false;
-    total = { scale: total.scale + sign * value.scale, offset: total.offset + sign * value.offset };
+    total = {
+      scale: total.scale + sign * value.scale,
+      offset: total.offset + sign * value.offset,
+      ...(total.number || value.number ? { number: true } : {}),
+    };
     current = [];
     return true;
   };
@@ -168,9 +172,21 @@ function evaluateProduct(list, reference, context) {
     if (value.scale && (op === '/' || total.scale)) return null;
     const [a, b] = op === '*' ? [total, value] : [total, { scale: 0, offset: 1 / value.offset }];
     if (a.scale && b.scale) return null;
-    total = { scale: a.scale * b.offset + b.scale * a.offset, offset: a.offset * b.offset };
+    total = product(a, b);
   }
   return total;
+}
+
+/** Two linear terms multiplied, at most one of them holding the reference. */
+function product(a, b) {
+  // A variable a length multiplies is a number: `var(--n) * 1px`.
+  const number = (a.scale && b.unit) || (b.scale && a.unit) || a.number || b.number;
+  return {
+    scale: a.scale * b.offset + b.scale * a.offset,
+    offset: a.offset * b.offset,
+    ...(a.unit || b.unit ? { unit: true } : {}),
+    ...(number ? { number: true } : {}),
+  };
 }
 
 /** A single term: the reference itself, a nested `calc()`, a length in points, or a number. */
@@ -189,17 +205,18 @@ function leaf(term, reference, context) {
       return term.value?.type === 'number' ? constant(term.value.value) : null;
     default: {
       const points = length(term, context);
-      return typeof points === 'number' ? constant(points) : null;
+      return typeof points === 'number' ? { ...constant(points), unit: true } : null;
     }
   }
 }
 
 /** The adjustment, with the parts that say nothing left out, so a plain `var()` stays plain. */
-function trim({ scale, offset, floor }) {
+function trim({ scale, offset, floor, number }) {
   return {
     ...(scale === 1 ? {} : { scale }),
     ...(offset === 0 ? {} : { offset }),
     ...(floor === undefined ? {} : { floor }),
+    ...(number ? { number: true } : {}),
   };
 }
 

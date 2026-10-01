@@ -273,6 +273,11 @@ export interface DeferredDeclaration {
     readonly offset?: number;
     readonly floor?: number;
     /**
+     * The reference is multiplied by a length, so it is a number: `calc(var(--n) * 1px)`. Without
+     * this it is a length, and a number token is no such thing, as CSS types a calc().
+     */
+    readonly number?: true;
+    /**
      * A fraction to multiply the resolved colour's alpha by. What
      * `color-mix(in oklab, var(--x) 90%, transparent)` becomes, which is Tailwind's `/90`.
      */
@@ -2105,9 +2110,9 @@ function referenced(
   const token = firstSet(names, tokens);
   let value = token ? tokenForm(token, declaration.kind!) : fallbackOf(declaration, tokens);
   // `calc(var(--n) * 1px)`: the arithmetic gives a unitless token its unit, which is the usual
-  // way to turn a count into a length. So a length with arithmetic reads the bare number too.
-  if (value === undefined && declaration.adjust && declaration.kind === 'length') {
-    value = token?.number;
+  // way to turn a count into a length. So it reads the bare number, and a length is no such thing.
+  if (token && declaration.adjust?.number && declaration.kind === 'length') {
+    value = token.number;
   }
   const base = CHANNEL_KINDS.has(declaration.kind!)
     ? fromChannels(value, declaration.alpha, tokens, declaration.space)
@@ -2247,8 +2252,8 @@ function computedWidth(
   open: ReadonlySet<LineTemplate['roles'][number]>,
   adjust: NonNullable<DeferredDeclaration['adjust']>,
 ): { role: 'width'; value: unknown } | undefined {
-  // A bare number too, as `calc(var(--n) * 1px)` gives it its unit.
-  const length = token.length ?? token.number;
+  // A bare number only when the calc() gives it its unit: `calc(var(--n) * 1px)`.
+  const length = adjust.number ? token.number : token.length;
   if (!open.has('width') || (typeof length !== 'number' && !isDeferredLength(length))) {
     return undefined;
   }
@@ -2606,7 +2611,9 @@ function resolveLength(
   marker: LengthMarker,
   tokens: Readonly<Record<string, TokenValue>>,
 ): number | undefined {
-  const value = substitute(marker, tokens, (token) => formOf(token, 'length'));
+  // A number when the arithmetic gives it its unit, as `referenced` reads one.
+  const form = marker.adjust?.number ? 'number' : 'length';
+  const value = substitute(marker, tokens, (token) => formOf(token, form));
   if (typeof value !== 'number') return undefined;
   return marker.adjust ? (adjusted(value, marker.adjust) as number) : value;
 }

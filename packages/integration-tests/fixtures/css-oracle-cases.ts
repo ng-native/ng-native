@@ -431,4 +431,22 @@ export const CASES: OracleCase[] = [
     tree: probe({ name: 'view' }),
     extra: ['border-top-width'],
   },
+  {
+    name: 'a border of a calc() that gives a number token its unit is that many pixels wide',
+    css: '#probe { --n: 3; border-top: calc(var(--n) * 1px) solid rgb(4, 3, 0) }',
+    tree: probe({ name: 'view' }),
+    extra: ['border-top-width'],
+  },
+  {
+    name: 'a border of a calc() that leaves a number token without a unit draws no line',
+    css: '#probe { --n: 2; border-top: calc(var(--n) * 2) solid rgb(5, 3, 0) }',
+    tree: probe({ name: 'view' }),
+    extra: ['border-top-width'],
+  },
+  {
+    name: 'a border of a calc() that gives a length token a second unit draws no line',
+    css: '#probe { --n: 2px; border-top: calc(var(--n) * 1px) solid rgb(6, 3, 0) }',
+    tree: probe({ name: 'view' }),
+    extra: ['border-top-width'],
+  },
 ];

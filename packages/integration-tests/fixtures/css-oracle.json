@@ -419,5 +419,29 @@
       "background-color": "rgba(0, 0, 0, 0)",
       "border-top-width": "0px"
     }
+  },
+  {
+    "name": "a border of a calc() that gives a number token its unit is that many pixels wide",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "border-top-width": "3px"
+    }
+  },
+  {
+    "name": "a border of a calc() that leaves a number token without a unit draws no line",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "border-top-width": "0px"
+    }
+  },
+  {
+    "name": "a border of a calc() that gives a length token a second unit draws no line",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "border-top-width": "0px"
+    }
   }
 ]

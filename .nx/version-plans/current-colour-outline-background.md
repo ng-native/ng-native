@@ -9,4 +9,5 @@ An outline or a background in `currentColor`, a `var()` that falls back to `curr
 - `var(--c, currentColor)`, and a custom property set to `currentColor`, give a border, outline or background the text colour of the element using it, not the one that sets it. These dropped the colour without a warning before. On `color` itself it is the inherited colour.
 - Each of these follows the text colour when it changes, as a border's `currentColor` already does.
 - `border-top: calc(var(--bs-border-width) * 2) solid currentcolor`, Bootstrap's `.table-group-divider`, is drawn at the width the token works out to.
+- A `calc()` of a token is typed as CSS types it: `calc(var(--n) * 1px)` reads a number token, and `calc(var(--n) * 2)` a length. A number token where a length belongs, or a length where a number does, leaves the property unset, as Chrome does, where it was read as points before.
 - `display: flow-root`, Tailwind's `flow-root`, is read as `flex`, as `block` is.

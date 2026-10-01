@@ -76,8 +76,8 @@ describe('what a browser does with the same stylesheet', () => {
         }
       }
       for (const property of test.extra ?? []) {
-        // A width is a number of points here, and `2px` in the browser.
-        const ours = style[EXTRA_KEYS[property]];
+        // A width is a number of points here, and `2px` in the browser. No width is native's 0.
+        const ours = style[EXTRA_KEYS[property]] ?? (property.endsWith('-width') ? 0 : undefined);
         const value = typeof ours === 'number' ? `${ours}px` : ours;
         assert.equal(value, expected.expected[property], property);
       }

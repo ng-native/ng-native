@@ -209,6 +209,36 @@ describe("a border whose width is a calc() of a token, as Bootstrap's .table-gro
     }
   });
 
+  it('is a length only when the calc() makes one, as CSS types it', () => {
+    // A number token needs the calc() to give it a unit, and a length token must not get a second.
+    const width = (token: string, calc: string) =>
+      tree(`.a { --n: ${token}; border-top: ${calc} solid ${BLUE} }`).props()['borderTopWidth'];
+    assert.equal(width('3', 'calc(var(--n) * 1px)'), 3);
+    assert.equal(width('2px', 'calc(var(--n) * 2)'), 4);
+    assert.equal(width('2', 'calc(var(--n) * 2)'), undefined);
+    assert.equal(width('2px', 'calc(var(--n) * 1px)'), undefined);
+  });
+
+  it('types the longhand the same way', () => {
+    const width = (token: string, calc: string) =>
+      tree(`.a { --n: ${token}; border-top-width: ${calc} }`).props()['borderTopWidth'];
+    assert.equal(width('3', 'calc(var(--n) * 1px)'), 3);
+    assert.equal(width('2px', 'calc(var(--n) * 2)'), 4);
+    assert.equal(width('2', 'calc(var(--n) * 2)'), undefined);
+    assert.equal(width('2px', 'calc(var(--n) * 1px)'), undefined);
+  });
+
+  it('types a shadow length the same way', () => {
+    const spread = (token: string) =>
+      (
+        tree(`.a { --n: ${token}; box-shadow: 0 0 0 calc(var(--n) * 1px) ${BLUE} }`).props()[
+          'boxShadow'
+        ] as { spreadDistance?: number }[] | undefined
+      )?.[0]?.spreadDistance;
+    assert.equal(spread('3'), 3);
+    assert.equal(spread('3px'), undefined);
+  });
+
   it('takes a calc() beside another token, which gives the colour', () => {
     const { props, warnings } = tree(
       `.a { --w: 1px; --c: ${BLUE}; border-top: calc(var(--w) * 2) solid var(--c) }`,
