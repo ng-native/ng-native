@@ -379,7 +379,7 @@ function dropPseudoElementRules(css) {
   return css.replace(/([^{}]+)\{([^{}]*)\}/g, (whole, selectors, body) => {
     if (!selectors.includes('::')) return whole;
     const all = selectorList(selectors).map((one) => one.trim());
-    const kept = all.filter((one) => one && !one.includes('::'));
+    const kept = all.filter((one) => one && !/::(?!placeholder\b)/.test(one));
     // Tailwind 3's `::backdrop { --tw-...: ... }`, the reset again for a box native never draws: no
     // author wrote it, so it goes without a word.
     if (!kept.length && /^\s*(--tw-[\w-]+\s*:[^;{}]*;?\s*)*$/.test(body)) return '';

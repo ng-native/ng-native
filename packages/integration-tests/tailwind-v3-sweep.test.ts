@@ -112,10 +112,6 @@ const SILENT_BY_DESIGN: readonly (readonly [RegExp, string])[] = [
     /^!?snap-(mandatory|proximity)$/,
     'Sets only the slot `snap-x` and `snap-y` read, which are refused.',
   ],
-  [
-    /^!?placeholder-opacity-/,
-    "Sets only the slot a `placeholder-*` colour reads, and `::placeholder` is refused: a text field's placeholder colour is its `placeholderTextColor` prop.",
-  ],
 ];
 
 /** Cases that compile to nothing and should not: open issues, as KNOWN is. */

@@ -148,19 +148,19 @@ describe('flattening Tailwind for the engine', () => {
     // `placeholder-[rgb(10,20,30)]` is `.placeholder-\\[rgb\\(10\\,20\\,30\\)\\]::placeholder`.
     // Split at every comma, its halves were invalid selectors, and the whole build threw.
     const refused: string[] = [];
-    const css = '.a-\\[rgb\\(1\\,2\\,3\\)\\]::placeholder { color: red }\n.b { flex: 1 }';
+    const css = '.a-\\[rgb\\(1\\,2\\,3\\)\\]::before { color: red }\n.b { flex: 1 }';
     const sheet = compileCss(flattenTailwind(css), 'tailwind', {
       onUnsupported: (message: string) => refused.push(message),
     });
     assert.equal(sheet.rules.length, 1, '.b');
-    assert.equal(refused.length, 1, 'the placeholder rule, refused as one');
+    assert.equal(refused.length, 1, 'the pseudo-element rule, refused as one');
   });
 
   it('leaves a rule that is only pseudo-elements for the compiler to refuse out loud', () => {
     // `placeholder:text-gray-400` and `before:` are classes an app asked for. Dropped here, they
     // did nothing with nothing to say so; the compiler says why pseudo-elements are not supported.
     const refused: string[] = [];
-    compileCss(flattenTailwind('.x::placeholder { color: red }\n.a { flex: 1 }'), 'tailwind', {
+    compileCss(flattenTailwind('.x::before { color: red }\n.a { flex: 1 }'), 'tailwind', {
       onUnsupported: (message: string) => refused.push(message),
     });
     assert.equal(refused.length, 1);

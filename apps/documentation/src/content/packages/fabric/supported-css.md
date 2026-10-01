@@ -37,6 +37,12 @@ Rendering one would mean synthesizing a node no template declared, which would m
 engine responsible for view hierarchy a template never wrote - so the fix, when a design wants one,
 is to write the element.
 
+`::placeholder` is the exception, because it needs no node: a text input draws its own placeholder,
+and its `placeholderTextColor` is the colour. `.field::placeholder { color: #8b8b96 }`, or
+Tailwind's `placeholder:text-gray-400`, sets that colour on a `<text-input>`, a token in it
+included. A placeholder takes only a colour, so anything else in the rule is dropped with a
+warning, and the rule matches a `<text-input>` only, as a browser's matches an input.
+
 `:hover` and `:focus-visible` are also unsupported, because there is no hover or focus cascade to
 answer them from: a phone has no pointer to hover with, and focus arriving from a keyboard or an
 assistive technology looks identical to focus arriving any other way. Use `:active` and `:focus`,

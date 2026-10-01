@@ -873,6 +873,10 @@
     "bg-[30deg]",
     "bg-[3]"
   ],
+  "dropped 'background-color': a placeholder takes only a colour on native, not '…'": [
+    "placeholder:bg-[rgb(1,2,3)]",
+    "placeholder:bg-red-500"
+  ],
   "dropped 'background-origin': '…' is not mapped yet. React Native may well support it; nothing here translates it. Check RN's style types, then add it to css/properties.cjs.": [
     "!bg-origin-border",
     "!bg-origin-content",
@@ -1669,11 +1673,31 @@
     "not-sr-only",
     "sr-only"
   ],
+  "dropped 'color': '…' is a CSS-wide keyword, which this cascade does not implement. Write the value it stands for.": [
+    "!placeholder-inherit",
+    "placeholder-inherit"
+  ],
   "dropped 'color': '…' is not a value native can take": [
+    "!placeholder-[0.35]",
+    "!placeholder-[1.25rem]",
+    "!placeholder-[13px]",
+    "!placeholder-[200ms]",
+    "!placeholder-[30deg]",
+    "!placeholder-[37%]",
+    "!placeholder-[3]",
+    "!placeholder-[calc(1rem+2px)]",
     "!text-[0.35]",
     "!text-[200ms]",
     "!text-[30deg]",
     "!text-[3]",
+    "placeholder-[0.35]",
+    "placeholder-[1.25rem]",
+    "placeholder-[13px]",
+    "placeholder-[200ms]",
+    "placeholder-[30deg]",
+    "placeholder-[37%]",
+    "placeholder-[3]",
+    "placeholder-[calc(1rem+2px)]",
     "text-[0.35]",
     "text-[200ms]",
     "text-[30deg]",
@@ -3128,6 +3152,9 @@
     "opacity-[calc(1rem+2px)]",
     "opacity-[rgb(10,20,30)]"
   ],
+  "dropped 'opacity': a placeholder takes only a colour on native, not '…'": [
+    "placeholder:opacity-50"
+  ],
   "dropped 'order': '…' has no React Native equivalent: no style prop of a native view does what it does. Yoga lays children out in the order they are written: change the order in the template.": [
     "!-order-8",
     "!order-1",
@@ -3288,6 +3315,9 @@
     "py-[0.35]",
     "py-[3]"
   ],
+  "dropped 'padding-bottom': a placeholder takes only a colour on native, not '…'": [
+    "placeholder:p-4"
+  ],
   "dropped 'padding-bottom': arithmetic with tokens in it cannot take '…' here. What the device works out is numbers, points, degrees and var(), with + - * / and brackets; a percentage, an em or a viewport unit beside a token needs layout the device does not do here.": [
     "!min-pb-safe-[37%]",
     "!pb-safe-[37%]",
@@ -3370,6 +3400,9 @@
     "px-[0.35]",
     "px-[3]"
   ],
+  "dropped 'padding-left': a placeholder takes only a colour on native, not '…'": [
+    "placeholder:p-4"
+  ],
   "dropped 'padding-right': '…' is not a value native can take": [
     "!pr-[#1a2b3c]",
     "!pr-[200ms]",
@@ -3398,6 +3431,9 @@
     "px-[0.35]",
     "px-[3]"
   ],
+  "dropped 'padding-right': a placeholder takes only a colour on native, not '…'": [
+    "placeholder:p-4"
+  ],
   "dropped 'padding-top': '…' is not a value native can take": [
     "!pt-[#1a2b3c]",
     "!pt-[200ms]",
@@ -3425,6 +3461,9 @@
     "pt-[3]",
     "py-[0.35]",
     "py-[3]"
+  ],
+  "dropped 'padding-top': a placeholder takes only a colour on native, not '…'": [
+    "placeholder:p-4"
   ],
   "dropped 'padding-top': arithmetic with tokens in it cannot take '…' here. What the device works out is numbers, points, degrees and var(), with + - * / and brackets; a percentage, an em or a viewport unit beside a token needs layout the device does not do here.": [
     "!min-pt-safe-[37%]",
@@ -5039,24 +5078,6 @@
     "visited:p-4"
   ],
   "dropped a rule: pseudo-elements like ::before are never supported. They would mean synthesising nodes no template declares, which puts the style engine in the business of creating view hierarchy.": [
-    "!placeholder-[#1a2b3c]",
-    "!placeholder-[#1a2b3c]/[0.3]",
-    "!placeholder-[0.35]",
-    "!placeholder-[1.25rem]",
-    "!placeholder-[13px]",
-    "!placeholder-[200ms]",
-    "!placeholder-[30deg]",
-    "!placeholder-[37%]",
-    "!placeholder-[3]",
-    "!placeholder-[calc(1rem+2px)]",
-    "!placeholder-[rgb(10,20,30)]",
-    "!placeholder-[var(--x)]",
-    "!placeholder-amber-100",
-    "!placeholder-brand",
-    "!placeholder-brand-soft",
-    "!placeholder-inherit",
-    "!placeholder-red-500/50",
-    "!placeholder-sky-600",
     "after:bg-[rgb(1,2,3)]",
     "after:bg-red-500",
     "after:opacity-50",
@@ -5085,28 +5106,6 @@
     "marker:bg-red-500",
     "marker:opacity-50",
     "marker:p-4",
-    "placeholder-[#1a2b3c]",
-    "placeholder-[#1a2b3c]/[0.3]",
-    "placeholder-[0.35]",
-    "placeholder-[1.25rem]",
-    "placeholder-[13px]",
-    "placeholder-[200ms]",
-    "placeholder-[30deg]",
-    "placeholder-[37%]",
-    "placeholder-[3]",
-    "placeholder-[calc(1rem+2px)]",
-    "placeholder-[rgb(10,20,30)]",
-    "placeholder-[var(--x)]",
-    "placeholder-amber-100",
-    "placeholder-brand",
-    "placeholder-brand-soft",
-    "placeholder-inherit",
-    "placeholder-red-500/50",
-    "placeholder-sky-600",
-    "placeholder:bg-[rgb(1,2,3)]",
-    "placeholder:bg-red-500",
-    "placeholder:opacity-50",
-    "placeholder:p-4",
     "selection:bg-[rgb(1,2,3)]",
     "selection:bg-red-500",
     "selection:opacity-50",

@@ -1,7 +1,7 @@
 {
   "bootstrap": {
-    "rules": 2496,
-    "dropped": 739,
+    "rules": 2499,
+    "dropped": 737,
     "emitted": [
       "$animation",
       "$animationDelay",
@@ -78,6 +78,7 @@
       "paddingLeft",
       "paddingRight",
       "paddingTop",
+      "placeholderTextColor",
       "pointerEvents",
       "position",
       "resizeMode",
@@ -106,7 +107,7 @@
         "':hover' is not supported. Native has no hover or focus cascade: use ':active' or ':focus', which the engine tracks, or a bound attribute such as [attr.data-hover].": 11,
         "':indeterminate' has no state on native to read: whether a control is checked is an input of its component, not a prop a selector can see. Bind an attribute from the same signal, such as [attr.data-checked], and select on that.": 1,
         "':last-of-type' is not supported yet. It counts the siblings of one element type, which the matcher does not track; ':nth-child()' it does.": 3,
-        "pseudo-elements like ::before are never supported. They would mean synthesising nodes no template declares, which puts the style engine in the business of creating view hierarchy.": 64,
+        "pseudo-elements like ::before are never supported. They would mean synthesising nodes no template declares, which puts the style engine in the business of creating view hierarchy.": 63,
         "the 'print' media type has no meaning on a device": 1
       },
       "(selector)": {
@@ -120,7 +121,7 @@
         "':nth-of-type' is not supported yet. It counts the siblings of one element type, which the matcher does not track; ':nth-child()' it does.": 1,
         "':placeholder-shown' is not supported. Nothing on native answers it; bind a class or an attribute from the state it stands for, and select on that.": 6,
         "':valid' is not supported. Nothing on native answers it; bind a class or an attribute from the state it stands for, and select on that.": 16,
-        "pseudo-elements like ::before are never supported. They would mean synthesising nodes no template declares, which puts the style engine in the business of creating view hierarchy.": 52
+        "pseudo-elements like ::before are never supported. They would mean synthesising nodes no template declares, which puts the style engine in the business of creating view hierarchy.": 50
       },
       "--*": {
         "'--*' has a value native cannot express in any form": 15,
@@ -277,6 +278,9 @@
         "arithmetic with tokens in it cannot take 'em' here. What the device works out is numbers, points, degrees and var(), with + - * / and brackets; a percentage, an em or a viewport unit beside a token needs layout the device does not do here.": 5,
         "arithmetic with tokens in it cannot take 'percentage' here. What the device works out is numbers, points, degrees and var(), with + - * / and brackets; a percentage, an em or a viewport unit beside a token needs layout the device does not do here.": 1
       },
+      "opacity": {
+        "a placeholder takes only a colour on native, not 'opacity'": 1
+      },
       "order": {
         "'order' has no React Native equivalent: no style prop of a native view does what it does. Yoga lays children out in the order they are written: change the order in the template.": 48
       },
@@ -358,8 +362,8 @@
     }
   },
   "bulma": {
-    "rules": 2945,
-    "dropped": 1926,
+    "rules": 2957,
+    "dropped": 1902,
     "emitted": [
       "$animation",
       "$animationDelay",
@@ -438,6 +442,7 @@
       "paddingRight",
       "paddingStart",
       "paddingTop",
+      "placeholderTextColor",
       "pointerEvents",
       "position",
       "right",
@@ -465,7 +470,7 @@
         "':indeterminate' has no state on native to read: whether a control is checked is an input of its component, not a prop a selector can see. Bind an attribute from the same signal, such as [attr.data-checked], and select on that.": 4,
         "':placeholder-shown' is not supported. Nothing on native answers it; bind a class or an attribute from the state it stands for, and select on that.": 2,
         "'@container' is not supported. Media queries and keyframes are the only at-rules with a runtime meaning here.": 10,
-        "pseudo-elements like ::before are never supported. They would mean synthesising nodes no template declares, which puts the style engine in the business of creating view hierarchy.": 56,
+        "pseudo-elements like ::before are never supported. They would mean synthesising nodes no template declares, which puts the style engine in the business of creating view hierarchy.": 32,
         "the 'print' media type has no meaning on a device": 35
       },
       "(selector)": {
@@ -709,7 +714,7 @@
   },
   "pico": {
     "rules": 428,
-    "dropped": 333,
+    "dropped": 329,
     "emitted": [
       "$animation",
       "$animationDelay",
@@ -813,7 +818,7 @@
         "'@moz-document' is not supported. Media queries and keyframes are the only at-rules with a runtime meaning here.": 1,
         "'@supports' is not supported. Media queries and keyframes are the only at-rules with a runtime meaning here.": 1,
         "'hover' is not a media feature a device can answer (width, height, orientation, prefers-color-scheme and prefers-reduced-motion are)": 1,
-        "pseudo-elements like ::before are never supported. They would mean synthesising nodes no template declares, which puts the style engine in the business of creating view hierarchy.": 61
+        "pseudo-elements like ::before are never supported. They would mean synthesising nodes no template declares, which puts the style engine in the business of creating view hierarchy.": 59
       },
       "(selector)": {
         "':checked' has no state on native to read: whether a control is checked is an input of its component, not a prop a selector can see. Bind an attribute from the same signal, such as [attr.data-checked], and select on that.": 39,
@@ -824,7 +829,7 @@
         "':hover' is not supported. Native has no hover or focus cascade: use ':active' or ':focus', which the engine tracks, or a bound attribute such as [attr.data-hover].": 22,
         "':invalid' is not supported. Nothing on native answers it; bind a class or an attribute from the state it stands for, and select on that.": 1,
         "':last-of-type' is not supported yet. It counts the siblings of one element type, which the matcher does not track; ':nth-child()' it does.": 4,
-        "pseudo-elements like ::before are never supported. They would mean synthesising nodes no template declares, which puts the style engine in the business of creating view hierarchy.": 33
+        "pseudo-elements like ::before are never supported. They would mean synthesising nodes no template declares, which puts the style engine in the business of creating view hierarchy.": 31
       },
       "--*": {
         "'--*' has a value native cannot express in any form": 15,
@@ -993,8 +998,8 @@
     }
   },
   "open-props": {
-    "rules": 67,
-    "dropped": 213,
+    "rules": 69,
+    "dropped": 212,
     "emitted": [
       "aspectRatio",
       "backgroundColor",
@@ -1039,6 +1044,7 @@
       "paddingRight",
       "paddingStart",
       "paddingTop",
+      "placeholderTextColor",
       "rowGap",
       "textAlign",
       "textDecorationColor",
@@ -1054,7 +1060,7 @@
         "'@supports' is not supported. Media queries and keyframes are the only at-rules with a runtime meaning here.": 2,
         "'dynamic-range' is not a media feature a device can answer (width, height, orientation, prefers-color-scheme and prefers-reduced-motion are)": 1,
         "a @keyframes inside @media is not supported. Keyframes are global here, so there is nothing for the condition to attach to; write it at the top level.": 2,
-        "pseudo-elements like ::before are never supported. They would mean synthesising nodes no template declares, which puts the style engine in the business of creating view hierarchy.": 3
+        "pseudo-elements like ::before are never supported. They would mean synthesising nodes no template declares, which puts the style engine in the business of creating view hierarchy.": 1
       },
       "(selector)": {
         "':where()' cannot contain a combinator, only a compound selector, '<compound> *', which is an ancestor test, or '<compound> ~ *', a sibling test.": 9,
@@ -1115,6 +1121,9 @@
       },
       "min-block-size": {
         "min-height: unit 'lh' has no meaning on native (px, rem, em, %, vw, vh, vmin and vmax are)": 1
+      },
+      "opacity": {
+        "a placeholder takes only a colour on native, not 'opacity'": 1
       },
       "padding-block": {
         "padding-block: unit 'ch' has no meaning on native (px, rem, em, %, vw, vh, vmin and vmax are)": 1

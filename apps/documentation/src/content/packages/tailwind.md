@@ -124,8 +124,10 @@ end margin beat a left or right one whatever the cascade says (see [what CSS rea
 device](/packages/fabric/supported-css)). Use `ms-*` and `me-*` on those children. `divide-double`
 is dropped with a warning, as a native border has no double style.
 
-Variants and utilities that style a pseudo-element, `placeholder:`, `before:`, `file:` and the rest,
-style nothing: native has no element for a pseudo-element to be. A rule that is only for one is
+Variants and utilities that style a pseudo-element, `before:`, `file:` and the rest, style nothing:
+native has no element for a pseudo-element to be. `placeholder:` is the exception: its text colour
+is a text input's placeholder colour, so `placeholder:text-gray-400` works, and anything else after
+it is dropped with a warning. A rule that is only for one is
 refused with a build warning; where a pseudo-element shares a selector list with real elements, as
 in Tailwind's own resets, it is taken out of the list and the rest of the rule is kept.
 
@@ -206,8 +208,8 @@ brings Tailwind's defaults itself.
 Every Tailwind 3 utility is held to the same sweep as Tailwind 4's, and what it draws is compared
 with Chrome. Each one takes effect or is refused with a build warning, except a few that only set a
 value another utility reads, where that utility is the one refused: `snap-mandatory` and
-`snap-proximity`, read by `snap-x` and `snap-y`, and `placeholder-opacity-*`, read by a
-`placeholder-*` colour. Those do nothing, as the utility they feed does nothing.
+`snap-proximity`, read by `snap-x` and `snap-y`. Those do nothing, as the utility they feed does
+nothing.
 
 The web host is Tailwind 4 only.
 

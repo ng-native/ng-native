@@ -1207,6 +1207,21 @@ function functionalPseudo(part, context) {
   return { compounds, ancestors, ids, classes, types };
 }
 
+const isPlaceholder = (part) => part?.type === 'pseudo-element' && part.kind === 'placeholder';
+
+const placeholderOf = (from) => ('color' in from ? { placeholderTextColor: from.color } : {});
+
+const subject = (compiled, placeholder) => (placeholder ? onTextInput(compiled) : compiled);
+
+function onTextInput(compiled) {
+  const subject = compiled?.compounds.at(-1);
+  if (!subject || (subject.type && subject.type !== 'text-input')) return null;
+  return {
+    ...compiled,
+    compounds: [...compiled.compounds.slice(0, -1), { ...subject, type: 'text-input' }],
+  };
+}
+
 function selector(parts, context) {
   const compounds = [];
   const combinators = [];
@@ -1906,34 +1921,78 @@ function compileCss(source, context = 'styles', options = {}) {
 
   /** A style rule's selectors and declarations as rules, each at the place `orderOf` gives it. */
   function styleVariant(rule, orderOf, context) {
+    for (const { platforms, placeholder, selectors } of groupedSelectors(rule, context)) {
+      const whole = buildRule(rule, platforms, context);
+      const built = whole && placeholder ? placeholderColour(whole, context) : whole;
+      if (built) pushRules(selectors, built, placeholder, orderOf, context);
+    }
+  }
+
+  function groupedSelectors(rule, context) {
     const groups = new Map();
-    for (const parts of rule.value.selectors) {
+    for (const written of rule.value.selectors) {
+      const placeholder = isPlaceholder(written.at(-1));
+      const parts = placeholder ? written.slice(0, -1) : written;
       // One selector the engine cannot match is dropped on its own, not with the list it is in:
       // lightningcss merges neighbouring rules with the same declarations, so a list is often
       // several unrelated utilities that happen to share a colour.
-      const compiled = selectorOrDropped(parts, context, rule.value.selectors.length === 1);
+      const compiled = subject(
+        selectorOrDropped(parts, context, rule.value.selectors.length === 1),
+        placeholder,
+      );
       if (!compiled) continue;
-      const platforms = rulePlatforms([parts], targets);
-      const key = platforms.join();
-      if (!groups.has(key)) groups.set(key, { platforms, selectors: [] });
-      groups.get(key).selectors.push({ parts, compiled });
+      const platforms = rulePlatforms([written], targets);
+      const key = `${platforms.join()}${placeholder ? ' placeholder' : ''}`;
+      if (!groups.has(key)) groups.set(key, { platforms, placeholder, selectors: [] });
+      groups.get(key).selectors.push({ written, parts, compiled });
     }
-    for (const { platforms, selectors: group } of groups.values()) {
-      const built = buildRule(rule, platforms, context);
-      if (!built) continue;
-      for (const { parts, compiled } of group) {
-        // One rule per alternative an ancestor test is among; each as specific as the selector
-        // written, which is what `:is()` makes all of them.
-        for (const one of alternatives(parts)) {
-          const alternative = one === parts ? compiled : selector(one, context);
-          rules.push({
-            ...alternative,
-            specificity: compiled.specificity,
-            order: orderOf(parts),
-            ...built,
-          });
-        }
+    return groups.values();
+  }
+
+  function pushRules(selectors, built, placeholder, orderOf, context) {
+    for (const { written, parts, compiled } of selectors) {
+      // One rule per alternative an ancestor test is among; each as specific as the selector
+      // written, which is what `:is()` makes all of them.
+      for (const one of alternatives(parts)) {
+        const alternative = one === parts ? compiled : subject(selector(one, context), placeholder);
+        if (!alternative) continue;
+        rules.push({
+          ...alternative,
+          specificity: compiled.specificity + (placeholder ? 1 : 0),
+          order: orderOf(written),
+          ...built,
+        });
       }
+    }
+  }
+
+  function placeholderColour(built, context) {
+    reportPlaceholderDrops(built, context);
+    const { declarations, important, tokens, deferred } = built;
+    const kept = (deferred ?? [])
+      .filter((entry) => entry.props?.length === 1 && entry.props[0] === 'color')
+      .map((entry) => ({ ...entry, props: ['placeholderTextColor'] }));
+    const out = {
+      declarations: placeholderOf(declarations),
+      ...(important && 'color' in important ? { important: placeholderOf(important) } : {}),
+      ...(tokens ? { tokens } : {}),
+      ...(kept.length ? { deferred: kept } : {}),
+    };
+    const empty = !Object.keys(out.declarations).length && !out.important && !out.tokens;
+    return empty && !out.deferred ? null : out;
+  }
+
+  function reportPlaceholderDrops({ declarations, important, deferred }, context) {
+    const unsupported = [
+      ...Object.keys(declarations),
+      ...Object.keys(important ?? {}),
+      ...(deferred ?? []).flatMap((entry) => entry.props ?? []),
+    ].filter((prop) => prop !== 'color');
+    for (const prop of new Set(unsupported)) {
+      const name = prop.replace(/[A-Z]/g, (letter) => `-${letter.toLowerCase()}`);
+      const message = `${context}: a placeholder takes only a colour on native, not '${name}'`;
+      if (!onUnsupported) throw new CssUnsupported(message);
+      onUnsupported(reported(context, `dropped '${name}'`, message));
     }
   }
 

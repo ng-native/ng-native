@@ -2419,6 +2419,10 @@
     "bg-[3]",
     "bg-[3]!"
   ],
+  "dropped 'background-color': a placeholder takes only a colour on native, not '…'": [
+    "placeholder:bg-[rgb(1,2,3)]",
+    "placeholder:bg-red-500"
+  ],
   "dropped 'background-image': '…' is not a value native can take": [
     "-bg-conic-[0.35]",
     "-bg-conic-[0.35]!",
@@ -3440,6 +3444,22 @@
     "text-inherit!"
   ],
   "dropped 'color': '…' is not a value native can take": [
+    "placeholder-[0.35]",
+    "placeholder-[0.35]!",
+    "placeholder-[1.25rem]",
+    "placeholder-[1.25rem]!",
+    "placeholder-[13px]",
+    "placeholder-[13px]!",
+    "placeholder-[200ms]",
+    "placeholder-[200ms]!",
+    "placeholder-[30deg]",
+    "placeholder-[30deg]!",
+    "placeholder-[37%]",
+    "placeholder-[37%]!",
+    "placeholder-[3]",
+    "placeholder-[3]!",
+    "placeholder-[calc(1rem+2px)]",
+    "placeholder-[calc(1rem+2px)]!",
     "text-[0.35]",
     "text-[0.35]!",
     "text-[200ms]",
@@ -8019,6 +8039,9 @@
     "opacity-[rgb(10,20,30)]",
     "opacity-[rgb(10,20,30)]!"
   ],
+  "dropped 'opacity': a placeholder takes only a colour on native, not '…'": [
+    "placeholder:opacity-50"
+  ],
   "dropped 'order': '…' has no React Native equivalent: no style prop of a native view does what it does. Yoga lays children out in the order they are written: change the order in the template.": [
     "-order-7",
     "-order-7!",
@@ -8258,6 +8281,9 @@
     "pb-[3]",
     "pb-[3]!"
   ],
+  "dropped 'padding-bottom': a placeholder takes only a colour on native, not '…'": [
+    "placeholder:p-4"
+  ],
   "dropped 'padding-inline-end': '…' is not a value native can take": [
     "pe-[#1a2b3c]",
     "pe-[#1a2b3c]!",
@@ -8322,6 +8348,9 @@
     "pl-[3]",
     "pl-[3]!"
   ],
+  "dropped 'padding-left': a placeholder takes only a colour on native, not '…'": [
+    "placeholder:p-4"
+  ],
   "dropped 'padding-right': '…' is not a value native can take": [
     "pr-[#1a2b3c]",
     "pr-[#1a2b3c]!",
@@ -8338,6 +8367,9 @@
     "pr-[3]",
     "pr-[3]!"
   ],
+  "dropped 'padding-right': a placeholder takes only a colour on native, not '…'": [
+    "placeholder:p-4"
+  ],
   "dropped 'padding-top': '…' is not a value native can take": [
     "pt-[#1a2b3c]",
     "pt-[#1a2b3c]!",
@@ -8353,6 +8385,9 @@
     "pt-[0.35]!",
     "pt-[3]",
     "pt-[3]!"
+  ],
+  "dropped 'padding-top': a placeholder takes only a colour on native, not '…'": [
+    "placeholder:p-4"
   ],
   "dropped 'padding': '…' is not a value native can take": [
     "p-[#1a2b3c]",
@@ -11063,51 +11098,7 @@
     "marker:bg-[rgb(1,2,3)]",
     "marker:bg-red-500",
     "marker:opacity-50",
-    "marker:p-4",
-    "placeholder-(--x)",
-    "placeholder-(--x)!",
-    "placeholder-[#1a2b3c]",
-    "placeholder-[#1a2b3c]!",
-    "placeholder-[#1a2b3c]/[0.3]",
-    "placeholder-[#1a2b3c]/[0.3]!",
-    "placeholder-[0.35]",
-    "placeholder-[0.35]!",
-    "placeholder-[1.25rem]",
-    "placeholder-[1.25rem]!",
-    "placeholder-[13px]",
-    "placeholder-[13px]!",
-    "placeholder-[200ms]",
-    "placeholder-[200ms]!",
-    "placeholder-[30deg]",
-    "placeholder-[30deg]!",
-    "placeholder-[37%]",
-    "placeholder-[37%]!",
-    "placeholder-[3]",
-    "placeholder-[3]!",
-    "placeholder-[calc(1rem+2px)]",
-    "placeholder-[calc(1rem+2px)]!",
-    "placeholder-[rgb(10,20,30)]",
-    "placeholder-[rgb(10,20,30)]!",
-    "placeholder-amber-50",
-    "placeholder-amber-50!",
-    "placeholder-brand",
-    "placeholder-brand!",
-    "placeholder-brand-soft",
-    "placeholder-brand-soft!",
-    "placeholder-brand/50",
-    "placeholder-brand/50!",
-    "placeholder-lime-400",
-    "placeholder-lime-400!",
-    "placeholder-red-500/50",
-    "placeholder-red-500/50!",
-    "placeholder-rose-300",
-    "placeholder-rose-300!",
-    "placeholder-zinc-950",
-    "placeholder-zinc-950!",
-    "placeholder:bg-[rgb(1,2,3)]",
-    "placeholder:bg-red-500",
-    "placeholder:opacity-50",
-    "placeholder:p-4"
+    "marker:p-4"
   ],
   "dropped a rule: tailwind: 'any-pointer' is not a media feature a device can answer (width, height, orientation, prefers-color-scheme and prefers-reduced-motion are)": [
     "any-pointer-coarse:bg-[rgb(1,2,3)]",
