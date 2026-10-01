@@ -6,6 +6,7 @@
  * names it: on native an unrecognised style key is simply dropped, which is invisible.
  */
 const {
+  CURRENT_COLOUR,
   CssUnsupported,
   angle,
   camel,
@@ -657,8 +658,21 @@ function line(value, prefix, out, context, { style: withStyle = true } = {}) {
   const width = length(value.width, context);
   if (width !== undefined) set('Width', width);
   if (withStyle && style !== undefined) out[`${prefix}Style`] = drawnLine(style, context);
-  if (drawnColor(value.color, width)) set('Color', color(value.color, context));
+  if (drawnColor(value.color, width)) {
+    set(
+      'Color',
+      prefix === 'outline' ? color(value.color, context) : borderColour(value.color, context),
+    );
+  }
   return style;
+}
+
+/**
+ * A border's colour. `currentColor`, which a border left without a colour also is, is the
+ * element's text colour, own or inherited, so it is a marker the engine fills in on device.
+ */
+function borderColour(value, context) {
+  return value?.type === 'currentcolor' ? CURRENT_COLOUR : color(value, context);
 }
 
 /** The styles that draw no line at all. */
@@ -1415,7 +1429,9 @@ function translate(property, value, out, context = property) {
       return;
     case 'border-color':
       for (const [side, suffix] of Object.entries(SIDES)) {
-        if (value[side] !== undefined) out[`border${suffix}Color`] = color(value[side], property);
+        if (value[side] !== undefined) {
+          out[`border${suffix}Color`] = borderColour(value[side], property);
+        }
       }
       return;
     case 'border-radius':
@@ -1659,8 +1675,8 @@ function translate(property, value, out, context = property) {
     case 'border-inline-color': {
       // One CSS property, two edges, and RN has a single prop for the pair. Edges that disagree
       // cannot be honoured, and picking one silently is the failure this compiler exists to stop.
-      const start = color(value.start, property);
-      const end = color(value.end, property);
+      const start = borderColour(value.start, property);
+      const end = borderColour(value.end, property);
       // The inline edges are two props in Fabric, `borderStartColor` and `borderEndColor`, and
       // there is no `borderInlineColor` for the pair. The block edges do have a pair prop.
       if (property === 'border-inline-color') {
@@ -1668,7 +1684,7 @@ function translate(property, value, out, context = property) {
         else [out.borderStartColor, out.borderEndColor] = [start, end];
         return;
       }
-      if (start !== end) {
+      if (!sameValue(start, end)) {
         throw new CssUnsupported(
           `${property}: native has one colour for both edges, and these differ. Use the ` +
             `per-edge longhands.`,
@@ -1766,7 +1782,9 @@ function translate(property, value, out, context = property) {
     return;
   }
   if (COLOR.has(property)) {
-    out[rnName(property)] = color(value, property);
+    out[rnName(property)] = property.startsWith('border-')
+      ? borderColour(value, property)
+      : color(value, property);
     return;
   }
   if (property in ALIGNMENT) {

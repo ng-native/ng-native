@@ -259,6 +259,13 @@ function color(value, context) {
 }
 
 /**
+ * `currentColor` where only the device knows it: the element's text colour, own or inherited,
+ * which the engine fills in. One object, so the sides a declaration gives it share one deferred
+ * declaration.
+ */
+const CURRENT_COLOUR = Object.freeze({ __colour: Object.freeze({ color: 'currentcolor' }) });
+
+/**
  * An alpha, printed the way a browser prints it.
  *
  * lightningcss round-trips alpha through eight bits, so `.5` arrives as 128/255, or 0.50196.
@@ -924,4 +931,5 @@ module.exports = {
   formOf,
   nearestWeight,
   REM,
+  CURRENT_COLOUR,
 };

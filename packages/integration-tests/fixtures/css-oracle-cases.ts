@@ -23,7 +23,17 @@ export interface OracleCase {
   name: string;
   css: string;
   tree: CaseNode;
+  /** Properties measured on this case beside `PROPERTIES`, which must match exactly. */
+  extra?: readonly ExtraProperty[];
 }
+
+/** The properties a case can measure beyond `PROPERTIES`, and the style key each lands in. */
+export const EXTRA_KEYS = {
+  'border-top-color': 'borderTopColor',
+  'border-left-color': 'borderLeftColor',
+} as const;
+
+export type ExtraProperty = keyof typeof EXTRA_KEYS;
 
 export const PROPERTIES = ['color', 'background-color'] as const;
 
@@ -296,5 +306,43 @@ export const CASES: OracleCase[] = [
       'text { color: rgb(5, 0, 0); background-color: rgb(6, 0, 0) } ' +
       '#probe { color: var(--x, rgb(1, 0, 0)); background-color: var(--missing) }',
     tree: { name: 'view', classes: ['outer'], children: [probe()] },
+  },
+  {
+    name: 'a border with no colour is drawn in the colour of the text',
+    css: '#probe { color: rgb(7, 0, 0); border: 2px solid }',
+    tree: probe({ name: 'view' }),
+    extra: ['border-top-color', 'border-left-color'],
+  },
+  {
+    name: 'a border with no colour is drawn in the colour the element inherits',
+    css: '.outer { color: rgb(8, 0, 0) } #probe { border-top: 2px solid }',
+    tree: { name: 'view', classes: ['outer'], children: [probe({ name: 'view' })] },
+    extra: ['border-top-color'],
+  },
+  {
+    name: "a border with no colour resets a weaker rule's colour to the colour of the text",
+    css:
+      '.outer { color: rgb(9, 0, 0) } view { border: 2px solid rgb(1, 0, 0) } ' +
+      '#probe { border: 3px solid }',
+    tree: { name: 'view', classes: ['outer'], children: [probe({ name: 'view' })] },
+    extra: ['border-top-color', 'border-left-color'],
+  },
+  {
+    name: 'a stronger border colour beats a weaker border with none',
+    css: '#probe { color: rgb(9, 0, 0); border: 2px solid } #probe.c { border-color: rgb(2, 0, 0) }',
+    tree: probe({ name: 'view', classes: ['c'] }),
+    extra: ['border-top-color', 'border-left-color'],
+  },
+  {
+    name: 'border-color: currentColor is the colour of the text',
+    css: '.outer { color: rgb(6, 0, 0) } #probe { border-width: 2px; border-color: currentColor }',
+    tree: { name: 'view', classes: ['outer'], children: [probe({ name: 'view' })] },
+    extra: ['border-top-color', 'border-left-color'],
+  },
+  {
+    name: 'a border of tokens with no colour is drawn in the colour of the text',
+    css: '.outer { color: rgb(5, 0, 0) } #probe { --w: 2px; border: var(--w) solid }',
+    tree: { name: 'view', classes: ['outer'], children: [probe({ name: 'view' })] },
+    extra: ['border-top-color', 'border-left-color'],
   },
 ];

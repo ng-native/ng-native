@@ -53,7 +53,7 @@ ${render(test.tree)}
   const el = document.getElementById('probe');
   const style = getComputedStyle(el);
   const values = {};
-  for (const property of ${JSON.stringify(PROPERTIES)}) values[property] = style.getPropertyValue(property);
+  for (const property of ${JSON.stringify([...PROPERTIES, ...(test.extra ?? [])])}) values[property] = style.getPropertyValue(property);
   document.body.textContent = 'RESULT:' + JSON.stringify(values);
 </script>`;
 }

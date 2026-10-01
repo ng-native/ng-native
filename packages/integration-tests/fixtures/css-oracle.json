@@ -257,5 +257,58 @@
       "color": "rgb(9, 0, 0)",
       "background-color": "rgba(0, 0, 0, 0)"
     }
+  },
+  {
+    "name": "a border with no colour is drawn in the colour of the text",
+    "expected": {
+      "color": "rgb(7, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "border-top-color": "rgb(7, 0, 0)",
+      "border-left-color": "rgb(7, 0, 0)"
+    }
+  },
+  {
+    "name": "a border with no colour is drawn in the colour the element inherits",
+    "expected": {
+      "color": "rgb(8, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "border-top-color": "rgb(8, 0, 0)"
+    }
+  },
+  {
+    "name": "a border with no colour resets a weaker rule's colour to the colour of the text",
+    "expected": {
+      "color": "rgb(9, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "border-top-color": "rgb(9, 0, 0)",
+      "border-left-color": "rgb(9, 0, 0)"
+    }
+  },
+  {
+    "name": "a stronger border colour beats a weaker border with none",
+    "expected": {
+      "color": "rgb(9, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "border-top-color": "rgb(2, 0, 0)",
+      "border-left-color": "rgb(2, 0, 0)"
+    }
+  },
+  {
+    "name": "border-color: currentColor is the colour of the text",
+    "expected": {
+      "color": "rgb(6, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "border-top-color": "rgb(6, 0, 0)",
+      "border-left-color": "rgb(6, 0, 0)"
+    }
+  },
+  {
+    "name": "a border of tokens with no colour is drawn in the colour of the text",
+    "expected": {
+      "color": "rgb(5, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "border-top-color": "rgb(5, 0, 0)",
+      "border-left-color": "rgb(5, 0, 0)"
+    }
   }
 ]

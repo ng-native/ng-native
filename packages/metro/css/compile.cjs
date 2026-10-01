@@ -1551,16 +1551,23 @@ function addDeclaration(declaration, out, tokens, deferred, context) {
 
   // `length()` marks a unit it cannot settle at build time rather than throwing. Lift those out of
   // the declarations and into the deferred list, whatever property they landed in, so every
-  // shorthand gets them for free.
+  // shorthand gets them for free. A shorthand that gives several props one marker, as a border's
+  // currentColor does its four sides, gets one deferred declaration for them all.
+  const lifted = new Map();
   for (const key of Object.keys(out)) {
     const marker = out[key]?.__defer;
     if (marker) {
       delete out[key];
       deferred.push({ props: [key], compute: marker });
+    } else if (lifted.has(out[key])) {
+      lifted.get(out[key]).props.push(key);
+      delete out[key];
     } else if (holdsMarker(out[key])) {
       // Inside a list or a record: a transform, a shadow, a filter. Fabric drops the whole prop
       // when one part of it is a marker, so the value goes to the device to be filled in.
-      deferred.push({ props: [key], within: out[key] });
+      const one = { props: [key], within: out[key] };
+      lifted.set(out[key], one);
+      deferred.push(one);
       delete out[key];
     }
   }

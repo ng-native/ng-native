@@ -14,7 +14,13 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { createRequire } from 'node:module';
 import { StyleResolver, type StyleSheet, type StyleTarget } from '@ng-native/fabric';
-import { CASES, INITIAL, PROPERTIES, type CaseNode } from './fixtures/css-oracle-cases.ts';
+import {
+  CASES,
+  EXTRA_KEYS,
+  INITIAL,
+  PROPERTIES,
+  type CaseNode,
+} from './fixtures/css-oracle-cases.ts';
 
 const require = createRequire(import.meta.url);
 const { compileCss } = require('@ng-native/metro/css/compile.cjs');
@@ -68,6 +74,9 @@ describe('what a browser does with the same stylesheet', () => {
         } else {
           assert.equal(ours, browser, property);
         }
+      }
+      for (const property of test.extra ?? []) {
+        assert.equal(style[EXTRA_KEYS[property]], expected.expected[property], property);
       }
     });
   });

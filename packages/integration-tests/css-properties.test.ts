@@ -127,8 +127,11 @@ describe('the parts of a shorthand the author left out', () => {
     });
   });
 
-  it('still refuses a visible border in currentColor, which native has no spelling for', () => {
-    assert.throws(() => declarationsOf('border: 1px solid'), /currentColor/);
+  it('leaves a border in currentColor to the device, and still refuses an outline in it', () => {
+    // A border's currentColor is filled in on device, from the text colour: see
+    // css-current-colour-border.test.ts. Native has no spelling for an outline's.
+    assert.doesNotThrow(() => declarationsOf('border: 1px solid'));
+    assert.throws(() => declarationsOf('outline: 1px solid'), /currentColor/);
   });
 
   it('outline: none and outline: 0', () => {
