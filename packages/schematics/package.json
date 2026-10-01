@@ -57,7 +57,7 @@
   },
   "scripts": {
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "node --test \"*.test.ts\" \"{application,component,builders}/*.test.ts\""
+    "test": "node --test \"*.test.ts\" \"{application,component,builders,migrations}/*.test.ts\""
   },
   "license": "MIT",
   "homepage": "https://ng-native.com/packages/schematics",
