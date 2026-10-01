@@ -51,8 +51,8 @@ test('takes a point from the watch, answers with the score, and counts a retry o
   await start(watch);
   const replies: WatchPayload[] = [];
 
-  watch.emit('message', { point: 1, id: 'a' }, (reply: WatchPayload) => replies.push(reply));
-  watch.emit('message', { point: 1, id: 'a' }, (reply: WatchPayload) => replies.push(reply));
+  watch.emit('message', { point: 1, rally: 'a' }, (reply: WatchPayload) => replies.push(reply));
+  watch.emit('message', { point: 1, rally: 'a' }, (reply: WatchPayload) => replies.push(reply));
   await new Promise((resolve) => setTimeout(resolve, 0));
 
   expect(replies).toEqual([
@@ -62,13 +62,30 @@ test('takes a point from the watch, answers with the score, and counts a retry o
   expect(await screen.findByText('on the watch')).toBeTruthy();
 });
 
+test('counts a point once when its reply failed and the watch queued it again', async () => {
+  const watch = fakeWatch();
+  await start(watch);
+
+  // iOS hands over a message that wants a reply with its id replaced by the reply's own, so the
+  // live copy and the one the watch queued after its reply failed carry different ids.
+  watch.emit('message', { point: 0, rally: 'w1', id: 'reply-1' }, () => {});
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  watch.emit('user-info', [
+    { point: 0, rally: 'w1' },
+    { point: 1, rally: 'w2' },
+  ]);
+
+  await screen.findByText('Them won the point');
+  expect(screen.getAllByText('15')).toHaveLength(2);
+});
+
 test('counts points the watch queued while the phone was away', async () => {
   const watch = fakeWatch();
   await start(watch);
 
   watch.emit('user-info', [
-    { point: 0, id: 'q1' },
-    { point: 0, id: 'q2' },
+    { point: 0, rally: 'q1' },
+    { point: 0, rally: 'q2' },
   ]);
 
   expect(await screen.findByText('30')).toBeTruthy();
@@ -78,8 +95,8 @@ test('counts every batch the watch queued, however quickly they arrive', async (
   const watch = fakeWatch();
   await start(watch);
 
-  watch.emit('user-info', [{ point: 0, id: 'q1' }]);
-  watch.emit('user-info', [{ point: 0, id: 'q2' }]);
+  watch.emit('user-info', [{ point: 0, rally: 'q1' }]);
+  watch.emit('user-info', [{ point: 0, rally: 'q2' }]);
 
   expect(await screen.findByText('30')).toBeTruthy();
 });

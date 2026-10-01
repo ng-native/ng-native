@@ -64,6 +64,7 @@ import { Storage } from '@ng-native/expo/async-storage';
 import { StoreReview } from '@ng-native/expo/store-review';
 import { Tracking } from '@ng-native/expo/tracking';
 import { Updates } from '@ng-native/expo/updates';
+import { Watch } from '@ng-native/expo/watch';
 
 type Platform = 'ios' | 'android' | 'web';
 
@@ -159,6 +160,7 @@ const SERVICES: readonly [string, () => unknown, string, (readonly Platform[])?]
   ['StoreReview', factoryOf(StoreReview.SOURCE), 'expo-store-review'],
   ['Tracking', factoryOf(Tracking.SOURCE), 'expo-tracking-transparency'],
   ['Updates', factoryOf(Updates.SOURCE), 'expo-updates'],
+  ['Watch', factoryOf(Watch.SOURCE), 'react-native-watch-connectivity', ['ios']],
 ];
 
 /** What a throw says: the module, and the two commands that fix it. */
@@ -399,5 +401,41 @@ describe('loadFonts without expo-font', () => {
       loading = on('ios', () => loadFonts({}, null));
     });
     await assert.doesNotReject(loading!);
+  });
+});
+
+/**
+ * `react-native-watch-connectivity` is a TurboModule rather than an Expo module, and asks for it with
+ * `TurboModuleRegistry.getEnforcing` as it is evaluated: in Expo Go, or a build made before it was
+ * installed, evaluating it throws an invariant Metro reports as fatal.
+ */
+describe('the watch, without its TurboModule in the build', () => {
+  const device = (registered: boolean) => {
+    const evaluated: string[] = [];
+    const host = globalThis as Record<string, unknown>;
+    host['require'] = (id: string) => {
+      if (id === 'react-native') {
+        return {
+          Platform: { OS: 'ios' },
+          TurboModuleRegistry: { get: (name: string) => (registered ? { name } : null) },
+        };
+      }
+      evaluated.push(id);
+      if (!registered) throw new Error(`'WatchConnectivity' could not be found`);
+      return { watchEvents: {} };
+    };
+    return evaluated;
+  };
+
+  it('never evaluates the package, and says what to run', () => {
+    const evaluated = device(false);
+    assert.throws(factoryOf(Watch.SOURCE), fixes('react-native-watch-connectivity', 'ios'));
+    assert.deepEqual(evaluated, []);
+  });
+
+  it('loads the package once the module is registered', () => {
+    const evaluated = device(true);
+    assert.ok(factoryOf(Watch.SOURCE)());
+    assert.deepEqual(evaluated, ['react-native-watch-connectivity']);
   });
 });

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
-import { describe, it } from 'node:test';
-import { Injector, runInInjectionContext } from '@angular/core';
+import { describe, it, mock } from 'node:test';
+import { ErrorHandler, Injector, runInInjectionContext } from '@angular/core';
 import { Watch, type NativeWatch, type WatchPayload } from '@ng-native/expo/watch';
 
 const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
@@ -60,9 +60,15 @@ function fakeWatch(
 }
 
 function watchWith(native: NativeWatch | null) {
-  const injector = Injector.create({ providers: [{ provide: Watch.SOURCE, useValue: native }] });
+  const errors: unknown[] = [];
+  const injector = Injector.create({
+    providers: [
+      { provide: Watch.SOURCE, useValue: native },
+      { provide: ErrorHandler, useValue: { handleError: (error: unknown) => errors.push(error) } },
+    ],
+  });
   const watch = runInInjectionContext(injector, () => new Watch());
-  return { watch, destroy: () => (injector as unknown as { destroy(): void }).destroy() };
+  return { watch, errors, destroy: () => (injector as unknown as { destroy(): void }).destroy() };
 }
 
 describe('Watch, without a watch', () => {
@@ -129,6 +135,29 @@ describe('Watch, with a paired watch', () => {
     watch.update({ value: 3 });
     assert.deepEqual(fake.calls.at(-1), ['updateApplicationContext', { value: 3 }]);
     destroy();
+  });
+
+  it('sends what it held once the watch pairs, after it has stopped asking', async () => {
+    mock.timers.enable({ apis: ['setTimeout'] });
+    try {
+      const fake = fakeWatch({ pairedFrom: Infinity, reachable: false });
+      const { watch } = watchWith(fake.native);
+      for (let second = 0; second < 30; second++) {
+        mock.timers.tick(1000);
+        for (let turn = 0; turn < 5; turn++) await Promise.resolve();
+      }
+      watch.update({ value: 1 });
+      watch.transfer({ score: 1 });
+      assert.deepEqual(fake.calls, [], 'not paired yet');
+
+      fake.emit('paired', true);
+      assert.deepEqual(fake.calls, [
+        ['updateApplicationContext', { value: 1 }],
+        ['transferUserInfo', { score: 1 }],
+      ]);
+    } finally {
+      mock.timers.reset();
+    }
   });
 
   it('counts a watch that answers as paired and installed, whatever iOS last said', async () => {
@@ -210,7 +239,7 @@ describe('Watch, with a paired watch', () => {
 
   it('still replies when a handler throws or there is none, so the watch is not left waiting', async () => {
     const fake = fakeWatch();
-    const { watch } = watchWith(fake.native);
+    const { watch, errors } = watchWith(fake.native);
     const replies: WatchPayload[] = [];
     fake.emit('message', { ask: 1 }, (response: WatchPayload) => replies.push(response));
     const stop = watch.onMessage(() => {
@@ -219,6 +248,7 @@ describe('Watch, with a paired watch', () => {
     fake.emit('message', { ask: 2 }, (response: WatchPayload) => replies.push(response));
     await settle();
     assert.deepEqual(replies, [{}, {}]);
+    assert.deepEqual(errors.map(String), ['Error: boom'], "and the handler's error is reported");
 
     stop();
     const heard: WatchPayload[] = [];
@@ -237,6 +267,7 @@ describe('Watch, with a paired watch', () => {
       [{ tell: 3 }, { tell: 3 }],
       'every handler hears a message that wants no reply, past one that throws',
     );
+    assert.equal(errors.length, 3, 'each throw reaches the ErrorHandler');
   });
 
   it('sends raw data', async () => {

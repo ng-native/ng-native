@@ -1,5 +1,13 @@
-import { DestroyRef, InjectionToken, Service, inject, signal, type Signal } from '@angular/core';
-import { currentPlatform, optional } from './native.ts';
+import {
+  DestroyRef,
+  ErrorHandler,
+  InjectionToken,
+  Service,
+  inject,
+  signal,
+  type Signal,
+} from '@angular/core';
+import { expoModule } from './native.ts';
 
 export type WatchPayload = Record<string, unknown>;
 
@@ -87,15 +95,29 @@ const SETTLE_DELAYS = [0, 250, 1000, 3000, 10000];
 
 @Service()
 export class Watch {
+  /**
+   * `react-native-watch-connectivity`, iOS only. It is a TurboModule, which it asks for with
+   * `getEnforcing` as it is evaluated, so it is evaluated only once `WatchConnectivity` is
+   * registered: in Expo Go, or a build made before it was installed, it would throw an invariant
+   * Metro reports as fatal rather than the `MissingModuleError` this answers.
+   */
   static readonly SOURCE = new InjectionToken<NativeWatch | null>('angular-native.watchSource', {
     factory: () =>
-      currentPlatform() === 'ios'
-        ? optional(() => require('react-native-watch-connectivity') as NativeWatch)
-        : null,
+      expoModule(
+        'react-native-watch-connectivity',
+        () =>
+          (require('react-native') as typeof import('react-native')).TurboModuleRegistry?.get(
+            'WatchConnectivity',
+          )
+            ? (require('react-native-watch-connectivity') as NativeWatch)
+            : null,
+        ['ios'],
+      ),
   });
 
   private readonly native = inject(Watch.SOURCE);
   private readonly handlers = new Set<WatchMessageHandler>();
+  private readonly errors = inject(ErrorHandler);
   private destroyed = false;
   private ready = false;
   private pendingContext: WatchPayload | null = null;
@@ -133,7 +155,11 @@ export class Watch {
         else this.reachableState.set(false);
         void this.status().catch(() => {});
       }),
-      events.on('paired', (paired) => this.pairedState.set(paired)),
+      events.on('paired', (paired) => {
+        this.pairedState.set(paired);
+        // A watch paired after `settle` stopped asking: the session is active, so send what it held.
+        if (paired) this.activated();
+      }),
       events.on('installed', (installed) => this.installedState.set(installed)),
       events.on('message', (message, reply) => this.received(message, reply)),
       events.on('application-context', (context) => this.contextState.set(context)),
@@ -272,11 +298,14 @@ export class Watch {
       for (const handler of this.handlers) {
         void Promise.resolve()
           .then(() => handler(message))
-          .catch(() => {});
+          .catch((error: unknown) => this.errors.handleError(error));
       }
       return;
     }
-    void this.answer(message).then(reply, () => reply({}));
+    void this.answer(message).then(reply, (error: unknown) => {
+      this.errors.handleError(error);
+      reply({});
+    });
   }
 
   private async answer(message: WatchPayload): Promise<WatchPayload> {

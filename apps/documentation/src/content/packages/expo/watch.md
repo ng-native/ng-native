@@ -9,9 +9,12 @@ summary: Talk to a SwiftUI Apple Watch app from Angular, with messages, shared c
 WatchConnectivity, bound to `react-native-watch-connectivity`. The watch app itself is SwiftUI:
 React Native does not run on watchOS, so the phone side is Angular and the watch side is native.
 
-Only apps that install `react-native-watch-connectivity` get its native code. Without it, on
-Android, or with no paired watch, `Watch` is inert: `available` is false, the signals stay at their
-defaults and sending rejects.
+Only apps that install `react-native-watch-connectivity` get its native code. On Android and the
+web, `Watch` is inert: `available` is false, the signals stay at their defaults and sending
+rejects. With no paired watch it is available, and stays unpaired and unreachable. On iOS, a build
+without the native module, such as Expo Go or one made before the package was installed, throws a
+`MissingModuleError` when `Watch` is injected, saying what to install and that the app needs
+rebuilding.
 
 ## Install
 
@@ -130,21 +133,26 @@ sends a string as a live message.
 - `message` holds the last live message. To answer a message the watch sent with a reply handler,
   register `onMessage(handler)`: what the handler returns, or resolves to, is the reply, merged
   across handlers. The watch always gets a reply, an empty one if a handler throws or none is
-  registered, so it is never left waiting.
+  registered, so it is never left waiting. A handler's error goes to Angular's `ErrorHandler`.
+- iOS gives a message that wants a reply an `id` of its own, replacing any the watch set. To match a
+  live message with the same thing queued again later, as a watch app does when a reply fails, put
+  your own key in it under another name.
 - `context` holds the latest application context the watch sent, and starts as the last one
   received before the app launched. `currentContext()` reads the one the phone last sent.
 - `userInfo` holds every user info the watch has queued, oldest first, however many deliveries
-  it came in. `files` holds the last files received.
+  it came in. It is never emptied, so code that acts on each one keeps track of those it has
+  handled, by a key of its own. `files` holds the last files received.
 - `error` holds the last session error, by kind.
 
 ## Reachability
 
 `reachable` is true only while the watch app is open and its session active: live messages need
-that. iOS reports a change of reachability, but not the state an app starts in, and a session reads as
-unpaired until it has activated, which no event reports. So `Watch` asks again as it starts until
-the watch reads as paired, and also takes the state from `status()`, which reads `paired`, `installed` and `reachable` at once, from any message
-the watch sends, and from whether a live message got through. Prefer `update` or `transfer` for
-anything that should reach a watch that may be asleep.
+that. iOS reports a change of reachability, but not the state an app starts in, and a session reads
+as unpaired until it has activated, which no event reports. So `Watch` asks again as it starts until
+the watch reads as paired, and also takes the state from `status()`, which reads `paired`,
+`installed` and `reachable` at once, from any message the watch sends, and from whether a live
+message got through. Prefer `update` or `transfer` for anything that should reach a watch that may
+be asleep.
 
 ## Testing on simulators
 

@@ -51,7 +51,9 @@ export class MatchStore {
   }
 
   private fromWatch(message: WatchPayload): WatchPayload {
-    const id = typeof message['id'] === 'string' ? message['id'] : null;
+    // Not `id`: iOS replaces that on a message that wants a reply, so the live copy of a point and
+    // the one the watch queued after its reply failed would not match.
+    const id = typeof message['rally'] === 'string' ? message['rally'] : null;
     if (id && !this.seen.has(id)) {
       this.seen.add(id);
       if (message['undo'] === true) this.undo();

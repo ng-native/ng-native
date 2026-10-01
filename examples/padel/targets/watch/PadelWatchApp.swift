@@ -23,9 +23,9 @@ final class Match: NSObject, ObservableObject, WCSessionDelegate {
     }
   }
 
-  func point(_ team: Int) { send(["point": team, "id": UUID().uuidString]) }
+  func point(_ team: Int) { send(["point": team, "rally": UUID().uuidString]) }
 
-  func undo() { send(["undo": true, "id": UUID().uuidString]) }
+  func undo() { send(["undo": true, "rally": UUID().uuidString]) }
 
   private func send(_ message: [String: Any]) {
     #if os(watchOS)

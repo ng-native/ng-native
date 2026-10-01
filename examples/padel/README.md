@@ -17,7 +17,8 @@ watch or the phone, and both always show the same score.
   counts it when it next runs.
 - Every score change goes to the watch as application context, so a watch that was asleep wakes up
   to the right score.
-- Each point carries an id, so a message sent again after a lost reply counts once.
+- Each point carries a key of its own, `rally`, so a point the watch queues again after a lost reply
+  counts once. Not `id`, which iOS replaces on a message that wants a reply.
 
 ## Run it
 
