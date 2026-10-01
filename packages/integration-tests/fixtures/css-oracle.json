@@ -443,5 +443,13 @@
       "background-color": "rgba(0, 0, 0, 0)",
       "border-top-width": "0px"
     }
+  },
+  {
+    "name": "a border of a calc() that gives a number token its unit inside a nested calc()",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "border-top-width": "6px"
+    }
   }
 ]

@@ -449,4 +449,10 @@ export const CASES: OracleCase[] = [
     tree: probe({ name: 'view' }),
     extra: ['border-top-width'],
   },
+  {
+    name: 'a border of a calc() that gives a number token its unit inside a nested calc()',
+    css: '#probe { --n: 3; border-top: calc(var(--n) * calc(2 * 1px)) solid rgb(7, 3, 0) }',
+    tree: probe({ name: 'view' }),
+    extra: ['border-top-width'],
+  },
 ];

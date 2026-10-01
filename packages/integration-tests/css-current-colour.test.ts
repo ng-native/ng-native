@@ -226,6 +226,9 @@ describe("a border whose width is a calc() of a token, as Bootstrap's .table-gro
     assert.equal(width('2px', 'calc(var(--n) * 2)'), 4);
     assert.equal(width('2', 'calc(var(--n) * 2)'), undefined);
     assert.equal(width('2px', 'calc(var(--n) * 1px)'), undefined);
+    // The unit can come from a nested calc().
+    assert.equal(width('3', 'calc(var(--n) * calc(2 * 1px))'), 6);
+    assert.equal(width('3', 'calc(var(--n) * calc(1px + 1px))'), 6);
   });
 
   it('types a shadow length the same way', () => {

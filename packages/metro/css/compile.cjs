@@ -132,6 +132,8 @@ function evaluateLinear(list, reference, context) {
     total = {
       scale: total.scale + sign * value.scale,
       offset: total.offset + sign * value.offset,
+      // A sum of lengths is a length, so a nested `calc(1px + 1px)` still gives a number its unit.
+      ...(total.unit || value.unit ? { unit: true } : {}),
       ...(total.number || value.number ? { number: true } : {}),
     };
     current = [];
