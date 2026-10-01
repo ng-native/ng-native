@@ -19,6 +19,7 @@ import { StickyHeaders } from './sticky-headers.ts';
 import { optionalBoolean } from './transforms.ts';
 import { ScrollViewProps } from './scroll-view-props.ts';
 import { View } from './view.ts';
+import { ZeroSizeWarning, checksZeroSize, written } from './zero-size-warning.ts';
 
 /**
  * A scrolling container. Commits as `RCTScrollView`, with the children inside a content view.
@@ -153,6 +154,37 @@ export class ScrollView extends ScrollViewProps {
     );
     inject(DestroyRef).onDestroy(stop);
     this.trackStickyHeaders();
+    if (checksZeroSize()) this.checkZeroSize();
+  }
+
+  /** The content's extent along the axis, and the scroll view's own, for `checkZeroSize`. */
+  private contentExtent = 0;
+  private ownExtent: number | undefined;
+  private zeroSize: ZeroSizeWarning | null = null;
+
+  /**
+   * In development only, the scroll view's own layout, to say when it stays at zero size with
+   * content in it. A release build listens for nothing, so it commits no `onLayout`.
+   */
+  private checkZeroSize(): void {
+    const warning = (this.zeroSize = new ZeroSizeWarning(
+      () => written(this.node),
+      () => !!this.horizontal(),
+    ));
+    const stop = this.engine.setEventListener(this.node, 'topLayout', (event) => {
+      this.ownExtent = this.extent(
+        (event as NativeSyntheticEvent<{ layout?: Size }>).nativeEvent?.layout,
+      );
+      warning.laidOut(this.ownExtent, this.contentExtent > 0);
+    });
+    inject(DestroyRef).onDestroy(() => {
+      stop();
+      warning.stop();
+    });
+  }
+
+  private extent(size: Size | undefined): number {
+    return (this.horizontal() ? size?.width : size?.height) ?? 0;
   }
 
   /**
@@ -205,5 +237,11 @@ export class ScrollView extends ScrollViewProps {
   protected onContentLayout(event: NativeSyntheticEvent<{ layout?: Size }>): void {
     const layout = event.nativeEvent?.layout;
     if (layout) this.contentSizeChange.emit({ width: layout.width, height: layout.height });
+    if (this.zeroSize) {
+      this.contentExtent = this.extent(layout);
+      if (this.ownExtent !== undefined) {
+        this.zeroSize.laidOut(this.ownExtent, this.contentExtent > 0);
+      }
+    }
   }
 }

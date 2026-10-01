@@ -39,7 +39,9 @@ A component used in another template, such as `<app-case-list />`, has a host el
 host commits as a plain view. It is a flex item in its parent like any `<view>`, and starts with
 no `flex`, so it is as tall as its content. Its own elements sit inside it, so a `flex: 1` on
 them fills the host, not the space around it. A `<scroll-view class="flex-1">` in a host with no
-`flex` gets a height of zero, and the list renders nothing, with no error or warning.
+`flex` gets a height of zero, and the list renders nothing. In development, a `<scroll-view>` or
+`<virtual-list>` with content that is still at zero size a second after it lays out logs a warning
+that names it and links here. A release build doesn't check.
 
 A component that fills the space it is given needs `flex: 1` on its host. Set it with the `host`
 object in its decorator:
