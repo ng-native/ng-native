@@ -253,6 +253,7 @@ export const PACKAGES: NavSection = {
       summary: 'The same components in a browser, for previews and docs',
       children: [
         { path: 'packages/web/islands', title: 'Islands' },
+        { path: 'packages/web/storybook', title: 'Storybook' },
         { path: 'packages/web/limits', title: 'Web limits' },
       ],
     },

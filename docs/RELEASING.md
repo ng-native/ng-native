@@ -46,7 +46,10 @@ flow (`examples/canary/.maestro/release`), so an app that builds but crashes at 
 as it does on every pull request. Beside it, the
 `generators` job adds a native app to a fresh `ng new` workspace with `ng add @ng-native/schematics`,
 and to a fresh Nx `angular-monorepo` workspace with `nx add @ng-native/nx`, and tests and bundles
-each, installing with npm. Once all of those pass, it runs the same gate CI does, then:
+each, installing with npm. The `storybook` job sets up the Storybook recipe from the web docs
+(`packages/web/storybook.md`) on the packages being released, on the Storybook and Vite versions
+that page states, builds it with `storybook build` and checks it in Chromium. Once all of those
+pass, it runs the same gate CI does, then:
 
 - `nx release version` writes the version to every package and the template. The `sync-app-versions`
   migration in `packages/nx/migrations.json` and `packages/schematics/migrations.json` moves to the
@@ -76,7 +79,8 @@ browser app on `@ng-native/web` as its documentation page does, builds it with V
 Chromium. CI runs both on every push. With `--generators` it also runs the two workspace checks
 above, which take several minutes, so only the release workflow does. `--scenario=web` runs the
 browser check alone. [CONTRIBUTING.md](../CONTRIBUTING.md#checking-distribution-locally) has the
-local steps.
+local steps. `--storybook` runs only the Storybook check the release workflow runs. A newer
+Storybook or Vite for that check is a change to the versions `storybook.md` states.
 
 ## The weekly check against the newest versions
 

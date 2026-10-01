@@ -53,8 +53,36 @@ jobs:
       - if: failure()
         run: cat verdaccio.log
 
+  # The Storybook recipe on the web docs, on the packages being released: built with
+  # `storybook build` and checked in Chromium. It installs the Storybook and Vite versions the page
+  # states, so a new Storybook release cannot fail ours.
+  storybook:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: ./.github/actions/setup
+
+      - name: Start a local registry
+        run: |
+          npx --yes verdaccio@6 --config verdaccio.yaml --listen 4873 > verdaccio.log 2>&1 &
+          for _ in $(seq 1 60); do curl -sf localhost:4873/-/ping > /dev/null && break; sleep 1; done
+          token=$(curl -sf -XPUT -H 'Content-Type: application/json' \
+            -d '{"name":"ci","password":"ci-password"}' \
+            http://localhost:4873/-/user/org.couchdb.user:ci | jq -r .token)
+          echo "//localhost:4873/:_authToken=$token" >> ~/.npmrc
+
+      - run: pnpm --filter @ng-native/web exec playwright install --with-deps chromium
+
+      - run: node scripts/verify-publish.mjs --storybook
+
+      - if: failure()
+        run: cat verdaccio.log
+
   release:
-    needs: [native, generators]
+    needs: [native, generators, storybook]
     if: github.ref == 'refs/heads/main'
     runs-on: macos-latest
     outputs:

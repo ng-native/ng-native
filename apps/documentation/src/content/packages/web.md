@@ -48,7 +48,7 @@ components, the same compiler for the decorated `@ng-native/*` source under `nod
 `expo`, which the packages only `require` on a device, resolve to an empty module, in the bundle
 and in Vite's dependency pre-bundling alike, including in a workspace that has React Native
 installed for its native app. It sets no `build.rolldownOptions.external`, so it combines with a tool that sets
-its own, such as Storybook. It takes
+its own, such as [Storybook](/packages/web/storybook). It takes
 `@oxc-angular/vite`'s options and passes them on, over `zoneless: true` and
 `emitClassMetadata: false`.
 
@@ -226,6 +226,7 @@ a native web view loaded, and `<dom-component>` from `@ng-native/expo` shows it.
 [DOM components](/packages/expo/dom-components) covers both halves.
 
 From here, [Islands](/packages/web/islands) covers placing components in an existing app and
-mounting more than one app into one page, and
+mounting more than one app into one page, [Storybook](/packages/web/storybook) covers a catalogue
+of your components, and
 [What does not carry over](/packages/web/limits) covers the native-only pieces - the router, worklet
 animation and gesture handling - that a web build has to route around.

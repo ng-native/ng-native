@@ -27,7 +27,11 @@
  * the registry, builds it with Vite and checks it renders and responds in Chromium. The `web`
  * scenario runs that alone.
  *
- * Usage: node scripts/verify-publish.mjs [--generators] [--web] | --scenario=<name>
+ * `--storybook` runs only the Storybook recipe from the web docs' `storybook.md` page: that browser
+ * app with Storybook added, on the Storybook and Vite versions the page states, built with
+ * `storybook build` and checked in Chromium. The release workflow runs it.
+ *
+ * Usage: node scripts/verify-publish.mjs [--generators] [--web] | --scenario=<name> | --storybook
  *        (with verdaccio listening on 4873, or on $REGISTRY)
  */
 import { execFileSync, spawn } from 'node:child_process';
@@ -560,13 +564,18 @@ async function webApp(dir) {
   return preview(app, 4180);
 }
 
-/** Serves the built app and checks it in a real browser, stopping the server either way. */
-async function preview(app, port) {
+/**
+ * Serves the built app (`dist`, or `outDir`) and checks it in a real browser, stopping the server
+ * either way.
+ */
+async function preview(app, port, { outDir = 'dist', checkPage = checkWebPage } = {}) {
   const child = spawn(
     process.execPath,
     [
       path.join(app, 'node_modules/vite/bin/vite.js'),
       'preview',
+      '--outDir',
+      outDir,
       '--port',
       String(port),
       '--strictPort',
@@ -589,7 +598,7 @@ async function preview(app, port) {
       if (tries === 60 || child.exitCode !== null) throw new Error(`no preview server:\n${log}`);
       await new Promise((resolve) => setTimeout(resolve, 500));
     }
-    return await checkWebPage(await browser.newPage(), url);
+    return await checkPage(await browser.newPage(), url);
   } finally {
     await browser.close();
     child.kill();
@@ -627,6 +636,238 @@ async function checkWebPage(page, url) {
   }
   if (errors.length) throw new Error(`the page logged errors:\n${errors.join('\n')}`);
   return 'with Vite and, in Chromium, renders, counts presses and applies its CSS and Tailwind';
+}
+
+const STORYBOOK_PAGE = path.join(root, 'apps/documentation/src/content/packages/web/storybook.md');
+
+/**
+ * The Storybook and Vite versions the recipe states it is checked on, so the check installs those
+ * and a new Storybook release cannot fail a release of ours. Moving to a newer one is a change to
+ * the page.
+ */
+function storybookVersions() {
+  const page = readFileSync(STORYBOOK_PAGE, 'utf8');
+  const stated = /checked on Storybook (\d+\.\d+\.\d+) and Vite (\d+\.\d+\.\d+)\./.exec(page);
+  if (!stated) throw new Error(`${STORYBOOK_PAGE} states no Storybook and Vite versions`);
+  const [, storybook, vite] = stated;
+  if (!page.includes(`storybook@${storybook} @storybook/html-vite@${storybook}`)) {
+    throw new Error(`${STORYBOOK_PAGE} installs a Storybook other than the ${storybook} it states`);
+  }
+  return { storybook, vite };
+}
+
+/**
+ * The Storybook recipe on `storybook.md`, file for file, with Tailwind: its `main.ts` and
+ * `preview.ts`, and a story whose args set a component's input.
+ */
+const STORYBOOK_FILES = {
+  '.storybook/main.ts': `import type { StorybookConfig } from '@storybook/html-vite';
+import tailwindcss from '@tailwindcss/vite';
+import { ngNativeWeb } from '@ng-native/web/vite';
+import { mergeConfig } from 'vite';
+
+const config: StorybookConfig = {
+  framework: '@storybook/html-vite',
+  stories: ['../src/**/*.stories.ts'],
+  addons: ['@storybook/addon-docs'],
+  viteFinal: (config) => mergeConfig(config, { plugins: [ngNativeWeb(), tailwindcss()] }),
+};
+
+export default config;
+`,
+  '.storybook/preview.ts': `import '../src/styles.css';
+import { mount, type MountResult } from '@ng-native/web';
+import type { Preview } from '@storybook/html-vite';
+
+const mounted = new WeakMap<HTMLElement, MountResult>();
+
+function unmount(canvas: HTMLElement): void {
+  mounted.get(canvas)?.destroy();
+  mounted.delete(canvas);
+}
+
+const preview: Preview = {
+  tags: ['autodocs'],
+  render: (args, { parameters, canvasElement }) => {
+    unmount(canvasElement);
+    const root = document.createElement('div');
+    mounted.set(canvasElement, mount(root, parameters.component, { inputs: args }));
+    return root;
+  },
+  beforeEach: ({ canvasElement }) => {
+    return () => unmount(canvasElement);
+  },
+};
+
+export default preview;
+`,
+  'src/counter.ts': `import { Component, DestroyRef, inject, input, signal } from '@angular/core';
+import { Pressable, Text, View } from '@ng-native/components';
+
+@Component({
+  selector: 'app-counter',
+  imports: [Pressable, Text, View],
+  styles: \`
+    .card {
+      margin: 24px;
+      padding: 16px;
+      gap: 12px;
+      border-radius: 12px;
+      background-color: rgb(238, 242, 255);
+    }
+  \`,
+  template: \`
+    <view class="card" testID="card">
+      <text>{{ label() }}</text>
+      <pressable
+        class="rounded-lg bg-blue-600 px-4 py-2"
+        testID="counter"
+        accessibilityRole="button"
+        (press)="increment()"
+      >
+        <text class="text-white">Pressed {{ count() }} times</text>
+      </pressable>
+    </view>
+  \`,
+})
+export class Counter {
+  readonly label = input('Counter');
+
+  constructor() {
+    // What the check counts: a story's app is torn down, not just taken off the page.
+    inject(DestroyRef).onDestroy(() => console.info('counter destroyed'));
+  }
+
+  protected readonly count = signal(0);
+
+  protected increment(): void {
+    this.count.update((count) => count + 1);
+  }
+}
+`,
+  'src/counter.stories.ts': `import type { Meta, StoryObj } from '@storybook/html-vite';
+import { Counter } from './counter.ts';
+
+const meta: Meta = {
+  title: 'Counter',
+  parameters: { component: Counter },
+};
+
+export default meta;
+
+export const Default: StoryObj = {};
+
+export const Labelled: StoryObj = {
+  args: { label: 'Hello from Storybook' },
+};
+`,
+};
+
+/**
+ * The browser app `web.md` sets up, with Storybook added as `storybook.md` says: installed from the
+ * registry, typechecked, built with `storybook build`, served and driven in Chromium.
+ */
+async function storybookApp(dir) {
+  const { storybook, vite } = storybookVersions();
+  const app = path.join(dir, 'storybook');
+  console.log(`\nsetting up Storybook ${storybook} on Vite ${vite} in ${app}`);
+  mkdirSync(path.join(app, '.storybook'), { recursive: true });
+  mkdirSync(path.join(app, 'src'), { recursive: true });
+  writeFileSync(path.join(app, '.npmrc'), `registry=${REGISTRY}\n`);
+  run('npm', ['init', '-y'], app);
+  run('npm', ['pkg', 'set', 'type=module'], app);
+  run('npm', ['install', '@angular/core', 'rxjs', '@ng-native/components', '@ng-native/web'], app);
+  run(
+    'npm',
+    [
+      'install',
+      '--save-dev',
+      `vite@${vite}`,
+      'typescript',
+      'tailwindcss',
+      '@tailwindcss/vite',
+      '@ng-native/tailwind',
+      `storybook@${storybook}`,
+      `@storybook/html-vite@${storybook}`,
+      `@storybook/addon-docs@${storybook}`,
+    ],
+    app,
+  );
+  const files = {
+    ...STORYBOOK_FILES,
+    'tsconfig.json': WEB_FILES['tsconfig.json'].replace(
+      '"include": ["src"]',
+      '"include": ["src", ".storybook"]',
+    ),
+    'src/styles.css': WEB_FILES['src/styles.css'],
+  };
+  for (const [file, text] of Object.entries(files)) writeFileSync(path.join(app, file), text);
+
+  console.log('typechecking');
+  run('npx', ['tsc', '-p', 'tsconfig.json'], app);
+  console.log('storybook build');
+  run('npx', ['storybook', 'build', '--disable-telemetry'], app);
+  console.log('serving storybook-static, in Chromium');
+  return preview(app, 4181, { outDir: 'storybook-static', checkPage: checkStorybook });
+}
+
+/**
+ * A story renders with its args as inputs, responds to a press, and has its component's CSS and
+ * Tailwind; a control edit leaves one app with the new input; the docs page shows every story.
+ */
+async function checkStorybook(page, url) {
+  const errors = [];
+  page.on('pageerror', (error) => errors.push(error.message));
+  let destroyed = 0;
+  page.on('console', (message) => {
+    if (message.type() === 'error') errors.push(message.text());
+    if (message.text() === 'counter destroyed') destroyed++;
+  });
+  await page.goto(`${url}?path=/story/counter--labelled`);
+  const story = page.frameLocator('#storybook-preview-iframe');
+  const counter = story.getByTestId('counter');
+  try {
+    await story.getByText('Hello from Storybook').waitFor({ timeout: 15_000 });
+  } catch {
+    throw new Error(`the story did not render:\n${errors.join('\n') || (await page.content())}`);
+  }
+  await counter.click();
+  await counter.click();
+  await counter.getByText('Pressed 2 times').waitFor({ timeout: 2_000 });
+
+  const styles = await story.locator('body').evaluate(() => {
+    const read = (id, property) =>
+      getComputedStyle(document.querySelector(`[data-testid="${id}"]`))[property];
+    return { card: read('card', 'backgroundColor'), counter: read('counter', 'backgroundColor') };
+  });
+  if (styles.card !== 'rgb(238, 242, 255)') {
+    throw new Error(`the component's own CSS did not apply: ${styles.card}`);
+  }
+  if (!styles.counter.startsWith('oklch(')) {
+    throw new Error(`the Tailwind class did not apply: ${styles.counter}`);
+  }
+
+  await page.locator('textarea[name="label"], input[name="label"]').first().fill('Edited');
+  await story.getByText('Edited', { exact: true }).waitFor({ timeout: 5_000 });
+  const cards = await story.getByTestId('card').count();
+  if (cards !== 1 || destroyed !== 1) {
+    throw new Error(`after a control edit: ${cards} apps on the page, ${destroyed} destroyed`);
+  }
+  await page.getByRole('link', { name: 'Default' }).click();
+  await story.getByText('Counter', { exact: true }).waitFor({ timeout: 5_000 });
+  if (destroyed !== 2) throw new Error(`leaving a story destroyed ${destroyed - 1} apps, not 1`);
+
+  await page.goto(`${url}?path=/docs/counter--docs`);
+  await story.getByText('Hello from Storybook').first().waitFor({ timeout: 15_000 });
+  // The primary story at the top, then each story: Default and Labelled.
+  const docs = await story.getByTestId('card').count();
+  if (docs !== 3) throw new Error(`the docs page shows ${docs} stories, not 3`);
+
+  if (errors.length) throw new Error(`the page logged errors:\n${errors.join('\n')}`);
+  return (
+    'in Chromium: args set inputs, presses count, CSS and Tailwind apply, a control edit or a ' +
+    'new story tears the last app down, and docs show every story'
+  );
 }
 
 /**
@@ -726,6 +967,12 @@ publishAll();
 
 if (scenario) {
   await runScenario(scenario);
+} else if (process.argv.includes('--storybook')) {
+  const dir = mkdtempSync(path.join(tmpdir(), 'angular-native-storybook-'));
+  const started = Date.now();
+  console.log(`\nok  the Storybook recipe builds and, ${await storybookApp(dir)}`);
+  console.log(`    in ${Math.round((Date.now() - started) / 1000)}s`);
+  rmSync(dir, { recursive: true, force: true });
 } else {
   const app = generateApp();
   const modules = check(app);
