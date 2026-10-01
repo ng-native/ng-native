@@ -131,6 +131,12 @@ Any of them can take tokens, `translate: var(--tw-translate-x) var(--tw-translat
 token is read in degrees whatever unit it was written in, so `--r: 0.25turn` turns 90. With a
 token in it, `transform` takes the translate, scale, rotate and skew functions.
 
+In a `[style]` binding, write a transform as a string, `{ transform: 'rotate(45deg)' }`. React
+Native's array form, `{ transform: [{ rotate: '45deg' }] }`, renders the same, but Angular's dev
+mode checks each style value and logs NG0318 for one that is not a string or a number, every time
+the binding changes. For a transform that follows a signal frame by frame, that is a warning a
+frame.
+
 `skewX()` and `skewY()` are drawn on iOS only. React Native on Android breaks a transform down into
 the rotation, scale and translation an Android view has, and a view has no skew, so `skewX()` is
 left out and `skewY()` comes out as a rotation. A skew is refused the way a filter iOS does not draw
