@@ -25,12 +25,14 @@ while (( ${#queue} )); do
       earlier=$(gh api "$R/pulls/$n/reviews?per_page=100" \
         --jq '[.[]|select(.user.login=="coderabbitai[bot]" and .state!="COMMENTED")]|last|.state' 2>/dev/null)
       if [[ $earlier == APPROVED ]]; then
-        # Ask at most once per head commit, judged from the PR's own comments so a restart doesn't repeat it.
-        pushed=$(gh api $R/commits/$sha --jq .commit.committer.date 2>/dev/null)
-        asked=$(gh api "$R/issues/$n/comments?per_page=100" \
-          --jq '[.[]|select(.body=="@coderabbitai review")|.created_at]|last // ""' 2>/dev/null)
-        if [[ -z $asked || $asked < $pushed ]]; then
-          gh api $R/issues/$n/comments -f body='@coderabbitai review' >/dev/null 2>&1 && echo "#$n asked CodeRabbit to review the current head"
+        # Ask at most once per head commit. Each request carries a marker naming the commit it is for,
+        # and every page of the PR's comments is searched for it, so a restart doesn't repeat it.
+        marker="<!-- merge-queue review request for $sha -->"
+        asked=$(gh api --paginate "$R/issues/$n/comments?per_page=100" \
+          --jq ".[]|select(.body|contains(\"$marker\"))|.id" 2>/dev/null | head -1)
+        if [[ -z $asked ]]; then
+          gh api $R/issues/$n/comments -f body="@coderabbitai review"$'\n\n'"$marker" >/dev/null 2>&1 &&
+            echo "#$n asked CodeRabbit to review the current head"
         fi
       fi
       continue
