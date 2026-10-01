@@ -185,7 +185,9 @@ flex container's inline children as blocks. `flow-root` is read as `flex` as wel
 that contains its floats, which a flex item already does. `contents` is Yoga's own: the element draws no box of
 its own (no background, border or padding) and its children are laid out as if they were its
 parent's. `grid` and the table values are dropped, because a column of flex children cannot pretend
-to lay them out in a grid.
+to lay them out in a grid. `display: var(--d)` reads the token on device the same way, in a
+stylesheet or set on the element. A token that is none of these values unsets `display`, as Chrome
+does, and the element is laid out as a flex column.
 
 `overflow` is one value for both axes - Yoga has no separate `overflow-x`/`overflow-y` - so a rule
 that gives them different values is dropped with a warning rather than silently picking one.

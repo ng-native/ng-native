@@ -205,17 +205,23 @@ export type TokenKind =
   | 'hslChannels'
   | 'easing'
   | 'time'
-  | 'animation';
+  | 'animation'
+  | 'display';
 
 /**
  * Where a form a token does not have can be read from instead. A length is already a
  * line-height and a single word is already a family, so neither is stored twice in every token
  * that happens to be one. The compiler reads fallbacks with the same table.
  */
-const STAND_IN: Partial<Record<TokenKind, TokenKind>> = { lineHeight: 'length', family: 'keyword' };
+const STAND_IN: Partial<Record<TokenKind, keyof TokenValue>> = {
+  lineHeight: 'length',
+  family: 'keyword',
+};
 
 function formOf(token: TokenValue | undefined, kind: TokenKind): unknown {
   if (!token) return undefined;
+  // A display is a word, read as one native has where it is used: see `displayOf`.
+  if (kind === 'display') return token.keyword;
   const stand = STAND_IN[kind];
   return token[kind] ?? (stand ? token[stand] : undefined);
 }
@@ -2122,11 +2128,28 @@ function referenced(
   if (token && declaration.adjust?.number && declaration.kind === 'length') {
     value = token.number;
   }
+  if (declaration.kind === 'display') return displayOf(value);
   const base = CHANNEL_KINDS.has(declaration.kind!)
     ? fromChannels(value, declaration.alpha, tokens, declaration.space)
     : value;
   return declaration.adjust ? adjusted(base, declaration.adjust) : base;
 }
+
+/**
+ * What native displays for a keyword: flex, none or contents. A block, inline, inline-block,
+ * flow-root or inline-flex box is flex, as the compiler reads one written out. Anything else is no
+ * display native has, so the property is unset, as Chrome unsets it for a token that is no display.
+ */
+const DISPLAYS: ReadonlyMap<string, string> = new Map([
+  ...['flex', 'block', 'inline', 'inline-block', 'flow-root', 'inline-flex'].map(
+    (word) => [word, 'flex'] as const,
+  ),
+  ['none', 'none'],
+  ['contents', 'contents'],
+]);
+
+const displayOf = (value: unknown): string | undefined =>
+  typeof value === 'string' ? DISPLAYS.get(value.trim().toLowerCase()) : undefined;
 
 /**
  * A set token's value in the form wanted. A token of `currentColor` is the colour in scope where

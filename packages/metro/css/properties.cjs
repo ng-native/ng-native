@@ -1937,6 +1937,8 @@ const KINDS = {
   // A shorthand in CSS, but one that only ever lands in the one native prop.
   'box-shadow': 'shadow',
   'font-weight': 'weight',
+  // A keyword the engine reads as a display native has, or unsets display for.
+  display: 'display',
 };
 
 function kindOf(property) {

@@ -33,6 +33,7 @@ export const EXTRA_KEYS = {
   'border-left-color': 'borderLeftColor',
   'border-top-width': 'borderTopWidth',
   'outline-color': 'outlineColor',
+  display: 'display',
 } as const;
 
 export type ExtraProperty = keyof typeof EXTRA_KEYS;
@@ -485,5 +486,65 @@ export const CASES: OracleCase[] = [
       classes: ['outer'],
       children: [{ name: 'view', classes: ['middle'], children: [probe()] }],
     },
+  },
+  {
+    name: 'display: var() of a none token hides the element',
+    css: '#probe { --d: none; display: var(--d) }',
+    tree: probe({ name: 'view' }),
+    extra: ['display'],
+  },
+  {
+    name: 'display: var() of a token set on the parent',
+    css: '.outer { --d: none } #probe { display: var(--d) }',
+    tree: { name: 'view', classes: ['outer'], children: [probe({ name: 'view' })] },
+    extra: ['display'],
+  },
+  {
+    name: 'display: var() of a block token shows an element a weaker rule hid',
+    css: '#probe { display: none } #probe.c { --d: block; display: var(--d) }',
+    tree: probe({ name: 'view', classes: ['c'] }),
+    extra: ['display'],
+  },
+  {
+    name: 'display: var() of an inline-block token is shown',
+    css: '#probe { display: none } #probe.c { --d: inline-block; display: var(--d) }',
+    tree: probe({ name: 'view', classes: ['c'] }),
+    extra: ['display'],
+  },
+  {
+    name: 'display: var() of a flow-root token is shown',
+    css: '#probe { display: none } #probe.c { --d: flow-root; display: var(--d) }',
+    tree: probe({ name: 'view', classes: ['c'] }),
+    extra: ['display'],
+  },
+  {
+    name: 'display: var() of a token in capitals is read as the keyword',
+    css: '#probe { --d: NONE; display: var(--d) }',
+    tree: probe({ name: 'view' }),
+    extra: ['display'],
+  },
+  {
+    name: 'display: var() falls back to a written value when the token is unset',
+    css: '#probe { display: var(--missing, none) }',
+    tree: probe({ name: 'view' }),
+    extra: ['display'],
+  },
+  {
+    name: 'display: var() of a token that is no display value unsets display',
+    css: '#probe { display: none } #probe.c { --d: red; display: var(--d) }',
+    tree: probe({ name: 'view', classes: ['c'] }),
+    extra: ['display'],
+  },
+  {
+    name: 'display: var() of an unset token with no fallback unsets display',
+    css: '#probe { display: none } #probe.c { display: var(--missing) }',
+    tree: probe({ name: 'view', classes: ['c'] }),
+    extra: ['display'],
+  },
+  {
+    name: 'display: var() of a contents token',
+    css: '#probe { --d: contents; display: var(--d) }',
+    tree: { name: 'view', children: [probe({ name: 'view' })] },
+    extra: ['display'],
   },
 ];

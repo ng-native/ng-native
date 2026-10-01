@@ -505,7 +505,7 @@ function bareNumber(value) {
  * What a form a token lacks can be read from instead. A length is already a line-height, and a
  * single word is already a family, so neither is stored twice in every token that is one.
  */
-const STAND_IN = { lineHeight: 'length', family: 'keyword' };
+const STAND_IN = { lineHeight: 'length', family: 'keyword', display: 'keyword' };
 
 /** A token's value in one form, allowing for the forms another stands in for. */
 function formOf(token, kind) {

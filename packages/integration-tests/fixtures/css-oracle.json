@@ -486,5 +486,85 @@
       "color": "rgb(5, 4, 0)",
       "background-color": "rgba(0, 0, 0, 0)"
     }
+  },
+  {
+    "name": "display: var() of a none token hides the element",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "display": "none"
+    }
+  },
+  {
+    "name": "display: var() of a token set on the parent",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "display": "none"
+    }
+  },
+  {
+    "name": "display: var() of a block token shows an element a weaker rule hid",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "display": "block"
+    }
+  },
+  {
+    "name": "display: var() of an inline-block token is shown",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "display": "inline-block"
+    }
+  },
+  {
+    "name": "display: var() of a flow-root token is shown",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "display": "flow-root"
+    }
+  },
+  {
+    "name": "display: var() of a token in capitals is read as the keyword",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "display": "none"
+    }
+  },
+  {
+    "name": "display: var() falls back to a written value when the token is unset",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "display": "none"
+    }
+  },
+  {
+    "name": "display: var() of a token that is no display value unsets display",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "display": "inline"
+    }
+  },
+  {
+    "name": "display: var() of an unset token with no fallback unsets display",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "display": "inline"
+    }
+  },
+  {
+    "name": "display: var() of a contents token",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "display": "contents"
+    }
   }
 ]
