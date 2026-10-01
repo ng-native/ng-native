@@ -40,6 +40,9 @@ importers:
       '@babel/core':
         specifier: ^7.29.7
         version: 7.29.7
+      '@babel/traverse':
+        specifier: ^7.29.8
+        version: 7.29.8
       '@ng-icons/core':
         specifier: ^36.0.0
         version: 36.0.0(@angular-devkit/schematics@22.1.9(chokidar@5.0.0))(@angular/common@22.2.0(@angular/core@22.2.0(@angular/compiler@22.2.0)(rxjs@7.8.2))(rxjs@7.8.2))(@angular/core@22.2.0(@angular/compiler@22.2.0)(rxjs@7.8.2))(@schematics/angular@22.1.9(chokidar@5.0.0))(rxjs@7.8.2)
@@ -1333,6 +1336,9 @@ importers:
       bulma:
         specifier: 1.0.4
         version: 1.0.4
+      chokidar:
+        specifier: ^5.0.0
+        version: 5.0.0
       expo:
         specifier: ~57.0.26
         version: 57.0.26(@babel/core@7.29.7)(react-dom@19.2.8(react@19.2.3))(react-native-worklets@0.10.1(@babel/core@7.29.7)(@react-native/metro-config@0.86.3(@babel/core@7.29.7))(react-native@0.86.3(@babel/core@7.29.7)(@react-native/metro-config@0.86.3(@babel/core@7.29.7))(@types/react@19.2.18)(react@19.2.3))(react@19.2.3))(react-native@0.86.3(@babel/core@7.29.7)(@react-native/metro-config@0.86.3(@babel/core@7.29.7))(@types/react@19.2.18)(react@19.2.3))(react@19.2.3)(typescript@6.0.3)
@@ -1647,6 +1653,12 @@ importers:
       '@vitest/coverage-v8':
         specifier: ^5.0.2
         version: 5.0.2(@vitest/browser@5.0.2)(vitest@5.0.2)
+      chokidar:
+        specifier: ^5.0.0
+        version: 5.0.0
+      jiti:
+        specifier: ^2.7.0
+        version: 2.7.0
       jsdom:
         specifier: ^27.0.0
         version: 27.4.0

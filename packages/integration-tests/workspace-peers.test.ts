@@ -86,3 +86,101 @@ it('resolves Vite to one variant across the workspace', () => {
   const variants = lockfile.match(/^ {2}vite@[^(:]+\(.*:$/gm) ?? [];
   assert.equal(variants.length, 1, variants.join('\n'));
 });
+
+type Graph = { optionalPeers: Map<string, Set<string>>; children: Map<string, string[]> };
+
+const add = <T>(map: Map<string, Set<T>>, key: string, value: T) =>
+  map.set(key, (map.get(key) ?? new Set()).add(value));
+
+/** The lockfile's `packages` and `snapshots` sections, as the graph of what depends on what. */
+function graph(): Graph {
+  const lines = readFileSync(`${root}pnpm-lock.yaml`, 'utf8').split('\n');
+  const result: Graph = { optionalPeers: new Map(), children: new Map() };
+  const at = { section: '', key: '', block: '', peer: '' };
+  for (const line of lines) {
+    if (/^\S/.test(line)) at.section = line.replace(/:.*$/, '');
+    const entry = /^ {2}'?([^' ].*?)'?:( \{\})?$/.exec(line);
+    const field = /^ {4}(\w+):$/.exec(line);
+    if (entry) at.key = entry[1]!;
+    if (entry && at.section === 'snapshots') result.children.set(at.key, []);
+    if (field) at.block = field[1]!;
+    if (!entry && !field) readItem(line, at, result);
+  }
+  return result;
+}
+
+/** One line under a `packages` or `snapshots` entry: a peer's meta, or a dependency. */
+function readItem(line: string, at: Record<string, string>, { optionalPeers, children }: Graph) {
+  const item = /^ {6}'?([^': ][^':]*)'?:(?: (.+))?$/.exec(line);
+  if (at.block === 'peerDependenciesMeta') {
+    if (item) at.peer = item[1]!;
+    else if (/^ {8}optional: true$/.test(line)) add(optionalPeers, at.key!, at.peer!);
+  } else if (item?.[2] && at.section === 'snapshots' && /ependencies$/.test(at.block!)) {
+    children.get(at.key!)!.push(childKey(item[1]!, item[2]));
+  }
+}
+
+/** The snapshot a dependency resolves to: `name@version`, or the version itself for an alias. */
+function childKey(name: string, version: string) {
+  return /^@?[^@(]+@\d/.test(version) ? version : `${name}@${version}`;
+}
+
+/** `name@version` without the peers in brackets after it. */
+const base = (key: string) => key.replace(/\(.*$/, '');
+const nameOf = (key: string) => base(key).replace(/(.)@[^@]*$/, '$1');
+
+/** Each package a project reaches, with the packages it is reached through. */
+function reached(project: string, dependencies: Map<string, string>, { children }: Graph) {
+  const direct = [...dependencies]
+    .filter(([, version]) => !version.startsWith('link:'))
+    .map(([name, version]) => childKey(name, version));
+  const parents = new Map<string, Set<string>>(direct.map((key) => [key, new Set([project])]));
+  const queue = [...direct];
+  for (let key = queue.pop(); key !== undefined; key = queue.pop()) {
+    for (const child of children.get(key) ?? []) {
+      if (!parents.has(child)) queue.push(child);
+      add(parents, child, key);
+    }
+  }
+  return parents;
+}
+
+/**
+ * The optional peers a project's packages resolve that neither the project nor a package above
+ * them depends on, where the project's packages hold more than one version of the peer.
+ */
+function unsettledPeers(project: string, dependencies: Map<string, string>, graph: Graph) {
+  const parents = reached(project, dependencies, graph);
+  const versions = new Map<string, Set<string>>();
+  for (const key of parents.keys()) add(versions, nameOf(key), base(key));
+  const provides = (parent: string, name: string) =>
+    (graph.children.get(parent) ?? []).some((child) => nameOf(child) === name);
+  return [...parents].flatMap(([key, above]) =>
+    [...(graph.optionalPeers.get(base(key)) ?? [])]
+      .filter((peer) => key.includes(`(${peer}@`) && (versions.get(peer)?.size ?? 0) > 1)
+      // The project is above every package it reaches, so a peer it declares is provided.
+      .filter((peer) => !(peer in declared(project)))
+      .filter((peer) => ![...above].some((parent) => provides(parent, peer)))
+      .map((peer) => `${project} (${peer}, for ${base(key)})`),
+  );
+}
+
+/**
+ * pnpm resolves an optional peer that no package above it depends on to a copy it finds elsewhere
+ * in the graph. With more than one version there, which one depends on the order it walks the
+ * graph in: adding a dependency to any project can swap it, and every package above it changes
+ * variant in the lockfile with it. `debug`'s `supports-color` (7 and 8) did this to Babel and Expo,
+ * and Vite's `jiti` (1 from Tailwind 3, 2 from Tailwind 4) to Vitest. A project that declares the
+ * peer itself gets that version, as one does that depends on the package with the peer directly.
+ */
+it('declares an optional peer that its dependencies hold more than one version of', () => {
+  const lockfile = graph();
+  const missing = [...importers()].flatMap(([project, dependencies]) =>
+    unsettledPeers(project, dependencies, lockfile),
+  );
+  assert.deepEqual(
+    [...new Set(missing)],
+    [],
+    'these projects leave an optional peer for pnpm to pick',
+  );
+});

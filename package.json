@@ -27,6 +27,7 @@
   "devDependencies": {
     "@angular/compiler-cli": "22.2.0",
     "@babel/core": "^7.29.7",
+    "@babel/traverse": "^7.29.8",
     "@ng-icons/core": "^36.0.0",
     "@nx/eslint": "^23.2.1",
     "@nx/eslint-plugin": "^23.2.1",

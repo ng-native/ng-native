@@ -75,6 +75,8 @@
     "@vitest/browser": "^5.0.2",
     "@vitest/browser-playwright": "^5.0.2",
     "@vitest/coverage-v8": "^5.0.2",
+    "chokidar": "^5.0.0",
+    "jiti": "^2.7.0",
     "jsdom": "^27.0.0",
     "playwright": "^1.63.0",
     "rxjs": "^7.8.2",
