@@ -76,6 +76,7 @@ export class CascadeBadge {}
       <view [class]="scheme.current()">
         <view id="themed" class="h-10 w-10 bg-[#ffffff] dark:bg-[#000000]"></view>
       </view>
+      <view id="rooted" class="h-10 w-10 bg-[#ffffff] dark:bg-[#000000]"></view>
       <view id="notched" class="pt-safe" style="--safe-area-inset-top: 30px"></view>
       <view id="unnotched" class="pt-safe"></view>
     </view>

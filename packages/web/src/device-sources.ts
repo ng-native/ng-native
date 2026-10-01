@@ -19,6 +19,7 @@ import type {
   ColorSchemeSource,
   DirectionSource,
   LayoutDirection,
+  Scheme,
   ScreenSource,
   Sizes,
 } from '@ng-native/device';
@@ -50,20 +51,34 @@ export function browserScreenSource(view: Window): ScreenSource {
 }
 
 /**
- * `ColorScheme`, from `prefers-color-scheme`.
+ * `ColorScheme`, from `prefers-color-scheme`, or the scheme the app chose over it.
  *
  * The same thing the native source reads off the OS, and the reason `Theme` can default to the
- * system scheme on both platforms rather than always starting light.
+ * system scheme on both platforms rather than always starting light. `set` is the browser's
+ * `Appearance.setColorScheme`: it changes what `ColorScheme` and the root's `dark` class say, but
+ * not what a stylesheet's own `@media (prefers-color-scheme)` matches, which only the OS decides.
  */
 export function browserColorSchemeSource(view: Window): ColorSchemeSource {
   const query = view.matchMedia?.('(prefers-color-scheme: dark)');
+  const listeners = new Set<(scheme: Scheme) => void>();
+  let chosen: Scheme | null = null;
+  const current = (): Scheme => chosen ?? (query?.matches ? 'dark' : 'light');
   return {
-    current: () => (query?.matches ? 'dark' : 'light'),
+    current,
     subscribe: (listener) => {
-      if (!query) return () => {};
-      const onChange = (event: MediaQueryListEvent) => listener(event.matches ? 'dark' : 'light');
-      query.addEventListener('change', onChange);
-      return () => query.removeEventListener('change', onChange);
+      listeners.add(listener);
+      const onChange = () => {
+        if (chosen === null) listener(current());
+      };
+      query?.addEventListener('change', onChange);
+      return () => {
+        listeners.delete(listener);
+        query?.removeEventListener('change', onChange);
+      };
+    },
+    set: (scheme) => {
+      chosen = scheme;
+      for (const listener of [...listeners]) listener(current());
     },
   };
 }

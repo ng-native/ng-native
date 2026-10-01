@@ -164,7 +164,10 @@ Then a stylesheet, `src/styles.css`, imported from `src/main.ts` with `import '.
 ```
 
 A class such as `rounded-lg bg-blue-600 px-4 py-2` on a `<pressable>` then styles it. `mount` puts
-`platform-web` on the root, which is what the preset's `web:` variant matches.
+`platform-web` on the root, which is what the preset's `web:` variant matches, and keeps `dark` on
+it while `ColorScheme` is dark, which is what `dark:` and a theme's `.dark` block match: the
+system's `prefers-color-scheme`, or the scheme `inject(ColorScheme).set()` chose over it. An app
+that puts `dark` on a view of its own passes `darkClass: false`.
 [Variants](/packages/tailwind/variants) covers the rest.
 
 ### The Angular CLI

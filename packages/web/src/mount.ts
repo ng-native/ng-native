@@ -42,6 +42,7 @@ import {
   ErrorHandler,
   RendererFactory2,
   createComponent,
+  effect,
   createEnvironmentInjector,
   type ComponentRef,
   type EnvironmentProviders,
@@ -122,6 +123,13 @@ export interface MountOptions {
    * `packages/web/islands.md` in the documentation.
    */
   readonly injector?: Injector;
+  /**
+   * Keeps a `dark` class on `rootElement` in step with `ColorScheme`, which is what
+   * `@ng-native/tailwind`'s `dark:` variant and a theme's `.dark` block match beneath: the system's
+   * `prefers-color-scheme`, or what `ColorScheme.set()` chose over it. Defaults to `true`, as
+   * `watchConditions` does on a device. An app that puts `dark` on its own root view turns it off.
+   */
+  readonly darkClass?: boolean;
 }
 
 export interface MountResult {
@@ -148,6 +156,7 @@ export function mount(
     inputs = {},
     injectReset = true,
     injector: host,
+    darkClass = true,
   } = options;
   const document = rootElement.ownerDocument;
   if (injectReset) {
@@ -177,7 +186,17 @@ export function mount(
   // The engine listens on the whole document, so it has to stop once its app is gone, however
   // the app went: through `destroy()` or straight through the component ref.
   mounted.componentRef.onDestroy(() => engine.dispose());
+  if (darkClass) keepDarkClass(rootElement, mounted.componentRef);
   return mounted;
+}
+
+/** The `darkClass` option: the class now, and again whenever `ColorScheme` changes. */
+function keepDarkClass(rootElement: Element, componentRef: ComponentRef<unknown>): void {
+  const scheme = componentRef.injector.get(ColorScheme);
+  const apply = () => rootElement.classList.toggle('dark', scheme.current() === 'dark');
+  apply();
+  effect(apply, { injector: componentRef.injector });
+  componentRef.onDestroy(() => rootElement.classList.remove('dark'));
 }
 
 /**

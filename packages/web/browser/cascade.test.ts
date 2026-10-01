@@ -200,6 +200,17 @@ describe('the Tailwind web preset', () => {
     await waitFor(() => computed(themed).backgroundColor === 'rgb(0, 0, 0)', 'dark:');
   });
 
+  it('follows the OS into dark: through the class mount keeps on its root, with no binding', async () => {
+    const { byId, root } = await scene();
+    const rooted = byId('rooted');
+    expect(computed(rooted).backgroundColor).toBe('rgb(255, 255, 255)');
+    await commands.emulateColorScheme('dark');
+    await waitFor(() => computed(rooted).backgroundColor === 'rgb(0, 0, 0)', 'dark:');
+    expect(root.classList.contains('dark')).toBe(true);
+    await commands.emulateColorScheme('light');
+    await waitFor(() => computed(rooted).backgroundColor === 'rgb(255, 255, 255)', 'light again');
+  });
+
   it("pads pt-safe by the device's inset, and by nothing without one", async () => {
     const { byId } = await scene();
     // A browser reports no inset outside a notched, viewport-fit page, so the notch is the custom
