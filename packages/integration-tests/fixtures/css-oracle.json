@@ -411,5 +411,13 @@
       "color": "rgb(4, 2, 0)",
       "background-color": "rgba(0, 0, 0, 0)"
     }
+  },
+  {
+    "name": "a border of a calc() of a token below zero is no width at all",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "border-top-width": "0px"
+    }
   }
 ]

@@ -311,6 +311,8 @@ export interface LineTemplate {
     readonly fallback?: TokenValue;
     /** `var(--x,)`: nothing at all when the token is unset. */
     readonly empty?: true;
+    /** `calc(var(--w) * 2)`: the arithmetic that makes the token the width, and only that. */
+    readonly adjust?: DeferredDeclaration['adjust'];
   }[];
   readonly roles: readonly ('width' | 'style' | 'color')[];
   readonly widths: readonly string[];
@@ -1511,8 +1513,9 @@ export class StyleResolver {
     }
     const width = values[line.widths[0]!] as { __defer?: DeferredDeclaration['compute'] };
     if (!width?.__defer) return values;
+    // No less than zero, as CSS clamps a line's width: `calc(var(--w) - 2px)` with an em token.
     const points = this.computed({ ...declaration, compute: width.__defer }, own, parentInherited);
-    for (const prop of line.widths) values[prop] = points;
+    for (const prop of line.widths) values[prop] = Math.max(points as number, 0);
     return values;
   }
 
@@ -2176,7 +2179,9 @@ function lineValues(
     const token = lineToken(reference, tokens);
     if (token === undefined) return undefined;
     if (token === NOTHING) continue;
-    const found = lineRole(token, open);
+    const found = reference.adjust
+      ? computedWidth(token, open, reference.adjust)
+      : lineRole(token, open);
     if (!found) return undefined;
     open.delete(found.role);
     fillRole(line, values, found.role, found.value);
@@ -2234,6 +2239,21 @@ function lineRole(
   if (open.has('style') && word && LINE_STYLES.has(word)) return { role: 'style', value: word };
   const color = isCurrentColour(token) ? 'currentcolor' : formOf(token, 'color');
   return open.has('color') && color !== undefined ? { role: 'color', value: color } : undefined;
+}
+
+/** A `calc()` of a token, which is a width, and no less than zero, as CSS clamps one. */
+function computedWidth(
+  token: TokenValue,
+  open: ReadonlySet<LineTemplate['roles'][number]>,
+  adjust: NonNullable<DeferredDeclaration['adjust']>,
+): { role: 'width'; value: unknown } | undefined {
+  // A bare number too, as `calc(var(--n) * 1px)` gives it its unit.
+  const length = token.length ?? token.number;
+  if (!open.has('width') || (typeof length !== 'number' && !isDeferredLength(length))) {
+    return undefined;
+  }
+  const value = adjusted(length, adjust);
+  return { role: 'width', value: typeof value === 'number' ? Math.max(value, 0) : value };
 }
 
 const isDeferredLength = (value: unknown): boolean =>

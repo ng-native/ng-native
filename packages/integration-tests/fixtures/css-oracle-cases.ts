@@ -425,4 +425,10 @@ export const CASES: OracleCase[] = [
     css: '.outer { color: rgb(4, 2, 0) } #probe { color: rgb(9, 9, 9); color: var(--c, currentColor) }',
     tree: { name: 'view', classes: ['outer'], children: [probe({ name: 'view' })] },
   },
+  {
+    name: 'a border of a calc() of a token below zero is no width at all',
+    css: '#probe { --w: 1px; border-top: calc(var(--w) - 2px) solid rgb(3, 3, 0) }',
+    tree: probe({ name: 'view' }),
+    extra: ['border-top-width'],
+  },
 ];

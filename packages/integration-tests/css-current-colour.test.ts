@@ -192,4 +192,29 @@ describe("a border whose width is a calc() of a token, as Bootstrap's .table-gro
     assert.equal(props()['borderBottomWidth'], 3);
     assert.equal(props()['borderBottomColor'], BLUE);
   });
+
+  it('is no border below zero, as CSS clamps a line width', () => {
+    const { props } = tree(`.a { --w: 1px; border-top: calc(var(--w) - 2px) solid ${BLUE} }`);
+    assert.equal(props()['borderTopWidth'], 0);
+    const em = tree(`.a { font-size: 10px; --w: 0.1em; border-top: calc(var(--w) - 2px) solid }`);
+    assert.equal(em.props()['borderTopWidth'], 0);
+  });
+
+  it('unsets the whole line when its token is unset, as a line of tokens does', () => {
+    // CSS makes the shorthand invalid then: its style and colour go with its width.
+    for (const later of ['', ' border-width: 5px']) {
+      const calc = tree(`.a { border-top: calc(var(--missing) * 2) solid ${BLUE};${later} }`);
+      const token = tree(`.a { border-top: var(--missing) solid ${BLUE};${later} }`);
+      assert.deepEqual(calc.props(), token.props(), later);
+    }
+  });
+
+  it('takes a calc() beside another token, which gives the colour', () => {
+    const { props, warnings } = tree(
+      `.a { --w: 1px; --c: ${BLUE}; border-top: calc(var(--w) * 2) solid var(--c) }`,
+    );
+    assert.deepEqual(warnings, []);
+    assert.equal(props()['borderTopWidth'], 2);
+    assert.equal(props()['borderTopColor'], BLUE);
+  });
 });

@@ -195,7 +195,8 @@ function arithmetic(part, prop, context, linear) {
  * width and once as the colour, and the token decides on device: a length has no colour form and
  * a colour has no length form, so exactly one of the two resolves. Anything left out takes its
  * initial value as CSS says: no style means no line at all, which native is told as a width of 0.
- * A `calc()` of one `var()` is a width, as in Bootstrap's `calc(var(--bs-border-width) * 2)`.
+ * A `calc()` of one `var()` is offered as the width only, as in Bootstrap's
+ * `calc(var(--bs-border-width) * 2)`, its arithmetic done on device.
  */
 // eslint-disable-next-line complexity -- one flat case per kind of component
 function line(property, list, context, linear) {
@@ -212,15 +213,14 @@ function line(property, list, context, linear) {
   let color = null;
   let current = false;
   let width = null;
-  let computedWidth = null;
   for (const [part, ...rest] of list) {
     if (rest.length) throw new CssUnsupported(`${context}: could not read '${property}'`);
     if (part.type === 'var') {
-      references.push(part);
+      references.push(lineReference(part, context));
       continue;
     }
-    if (part.type === 'function' && width === null && computedWidth === null) {
-      computedWidth = arithmetic(part, null, context, linear);
+    if (part.type === 'function') {
+      references.push(computedWidth(part, context, linear));
       continue;
     }
     const value = tokenValue([part], context);
@@ -237,11 +237,6 @@ function line(property, list, context, linear) {
       else color = value.color;
     } else throw new CssUnsupported(`${context}: '${describe(part)}' in '${property}'`);
   }
-  // A width worked out on device, beside other tokens, would need the line to read it as well.
-  if (computedWidth && references.length) {
-    throw new CssUnsupported(`${context}: '${property}' has a calc() beside another var()`);
-  }
-
   const every = (props, to) => Object.fromEntries(props.map((prop) => [prop, to]));
 
   // With no style written, a var() may be the style, and one is offered as that too. A length or a
@@ -262,12 +257,6 @@ function line(property, list, context, linear) {
   Object.assign(declarations, color === null ? {} : every(colors, color));
   if (withStyle && style !== null) declarations[`${prefix}Style`] = style;
 
-  if (computedWidth) {
-    // No style is no line, and no colour is currentColor, as CSS fills them in.
-    if (style === null) return { declarations: every(widths, 0), deferred: [] };
-    const colour = color === null ? [{ props: colors, within: CURRENT_COLOUR }] : [];
-    return { declarations, deferred: [{ ...computedWidth, props: widths }, ...colour] };
-  }
   if (!references.length) return { declarations, deferred: [] };
   const styleProp = withStyle ? [`${prefix}Style`] : [];
   const roles = [
@@ -283,7 +272,7 @@ function line(property, list, context, linear) {
     {
       props: [...widths, ...styleProp, ...(current ? [] : colors)],
       line: {
-        references: references.map((part) => lineReference(part, context)),
+        references,
         roles,
         widths,
         colors,
@@ -292,6 +281,21 @@ function line(property, list, context, linear) {
     },
   ];
   return { declarations, deferred };
+}
+
+/** `calc(var(--w) * 2)` in a line: the token, and the arithmetic that makes it the width. */
+function computedWidth(part, context, linear) {
+  const found = linear(part, context);
+  if (!found) {
+    throw new CssUnsupported(
+      `${context}: '${part.value?.name}()' is not arithmetic on one var() that can be settled ` +
+        `here, so it needs evaluating on device`,
+    );
+  }
+  return {
+    ...lineReference(found.reference, context),
+    adjust: found.adjust ?? {},
+  };
 }
 
 /**
