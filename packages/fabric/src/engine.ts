@@ -821,7 +821,7 @@ function takesTextAsProp(node: EngineNode): boolean {
 /** Sets a view's text prop from its content, unless the prop is set explicitly. */
 function withTextContent(node: EngineNode, viewName: string, props: Record<string, unknown>): void {
   const prop = TEXT_CONTENT_PROPS[viewName];
-  if (!prop || props[prop] !== undefined) return;
+  if (!prop || node.props[prop] !== undefined) return;
   const text = textContent(node);
   if (text) props[prop] = text;
 }
@@ -1966,9 +1966,12 @@ export class Engine implements HostEngine {
     this.markTextContent(target, child);
   }
 
-  /** A run of text came or went under a view that takes its text as a prop: that prop changed. */
+  /**
+   * A child came or went under a view that takes its text as a prop: that prop changed. A span
+   * changes it too, by keeping or dropping the space before it.
+   */
   private markTextContent(parent: EngineNode, child: EngineNode): void {
-    if (child.kind === 'text' && takesTextAsProp(parent)) this.markProps(parent);
+    if (child.kind !== 'anchor' && takesTextAsProp(parent)) this.markProps(parent);
   }
 
   /** A subtree that went out of the tree is back in: its hoisted nodes commit again. */

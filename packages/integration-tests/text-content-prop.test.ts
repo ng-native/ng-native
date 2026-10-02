@@ -10,6 +10,7 @@ import { Engine, registerViewName } from '@ng-native/fabric';
 import { createFakeFabric, type FakeFabricNode } from '@ng-native/testing';
 
 registerViewName('x-label', 'LabelView', undefined, { textContent: 'text' });
+registerViewName('x-titled', 'TitledView', { text: 'Untitled' }, { textContent: 'text' });
 
 /** A root holding one `<x-label>`, committed. */
 function scene() {
@@ -89,6 +90,32 @@ describe('a view registered with textContent', () => {
     assert.equal(committed().props['text'], 'Us ', 'the space before the span is kept');
     assert.equal(committed().children.length, 1);
     assert.equal(committed().children[0]!.props['text'], '30');
+  });
+
+  it('keeps and drops the space before a span as the span comes and goes', () => {
+    const { engine, label, committed } = scene();
+    engine.appendChild(label, engine.createText('Us '));
+    engine.commit();
+    assert.equal(committed().props['text'], 'Us');
+    const span = engine.createElement('x-label');
+    engine.appendChild(label, span);
+    engine.commit();
+    assert.equal(committed().props['text'], 'Us ');
+    engine.removeChild(label, span);
+    engine.commit();
+    assert.equal(committed().props['text'], 'Us');
+  });
+
+  it('lets the content win over a default the view is registered with', () => {
+    const fabric = createFakeFabric();
+    const engine = new Engine(fabric, 1);
+    const titled = engine.createElement('x-titled');
+    engine.appendChild(engine.root, titled);
+    engine.commit();
+    assert.equal(fabric.committed[0]!.props['text'], 'Untitled', 'the default, with no content');
+    engine.appendChild(titled, engine.createText('Match'));
+    engine.commit();
+    assert.equal(fabric.committed[0]!.props['text'], 'Match');
   });
 
   it('leaves text under an ordinary view as children', () => {
