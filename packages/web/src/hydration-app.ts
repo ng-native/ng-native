@@ -3,7 +3,7 @@
  * an island in its template. See `button-app.ts` for why a `@Component` lives out here rather than
  * in the test file.
  *
- * The template has no control flow, so the server-rendered markup the test hand-writes for it
+ * The templates have no control flow, so the server-rendered markup the test hand-writes for them
  * needs no serialized container data: one `ngh` index whose data is empty.
  */
 import { Component, Service, inject, signal } from '@angular/core';

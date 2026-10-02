@@ -352,6 +352,7 @@ function mountInside(
       componentRef.destroy();
       injector.destroy();
       rootElement.removeAttribute('data-rn-root');
+      rootElement.removeAttribute('ngSkipHydration');
       rootElement.classList.remove('platform-web');
     },
   };

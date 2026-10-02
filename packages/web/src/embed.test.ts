@@ -149,6 +149,7 @@ describe('mount() with an injector: an island inside a host app', () => {
     assert.ok(slot, 'the element it was mounted into stays in the page');
     assert.equal(slot!.childNodes.length, 0, 'emptied');
     assert.equal(slot!.hasAttribute('data-rn-root'), false, 'and no longer marked as a root');
+    assert.equal(slot!.hasAttribute('ngSkipHydration'), false, 'nor kept out of hydration');
     assert.equal(appRef.destroyed, false, 'the host is still running');
     shell.tally.increment();
     await appRef.whenStable();

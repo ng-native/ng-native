@@ -5,9 +5,12 @@
  * Hydration installs hooks that are global rather than per app: once it is on, every component
  * Angular creates has its host element asked for `ngSkipHydration` and `ngh`, including the ones
  * an island creates through this package's renderer, whose host is a `BrowserNode`. The markup is
- * what `@angular/platform-server` would write for `HydratedHost`, by hand: the `ngh` index, its
- * entry in the transfer state, and the integrity marker hydration checks for. The island itself is
- * absent from it, because islands render only in the browser.
+ * what `@angular/platform-server` would write for `HydratedHost`, by hand: an `ngh` index on each
+ * component's host, `<ng-native-island>` included, their entry in the transfer state (one, as both
+ * views are empty and the server writes identical entries once), and the integrity marker
+ * hydration checks for. What the island renders is absent from it, because islands render only in
+ * the browser. The page's hydration takes `<ng-native-island>`'s `ngh` before the island mounts,
+ * so the island's own root never reads it.
  */
 import assert from 'node:assert/strict';
 import { afterEach, describe, it } from 'node:test';
@@ -16,7 +19,7 @@ import { installJsdomEnvironment } from './jsdom-env.ts';
 
 const SERVER_RENDERED =
   '<!--nghm-->' +
-  '<app-hydrated-host ngh="0"><p id="host-count">0</p><ng-native-island></ng-native-island>' +
+  '<app-hydrated-host ngh="0"><p id="host-count">0</p><ng-native-island ngh="0"></ng-native-island>' +
   '</app-hydrated-host>' +
   '<script id="ng-state" type="application/json">{"__nghData__":[{}]}</script>';
 
@@ -64,6 +67,8 @@ describe('an island in a hydrated host app', () => {
     assert.equal(document.getElementById('host-count'), serverCount, 'the server-rendered node');
     const host = document.querySelector('app-hydrated-host')!;
     assert.equal(host.hasAttribute('ngh'), false, 'claimed by hydration');
+    const island = document.querySelector('ng-native-island')!;
+    assert.equal(island.hasAttribute('ngh'), false, "and the island element's, by the page");
   });
 
   it('responds to a press, in the island and in the host', async () => {
