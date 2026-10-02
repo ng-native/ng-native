@@ -686,6 +686,9 @@ class ExpressionWriter {
   }
 
   Binary(ast) {
+    if (ng.Binary.isAssignmentOperation(ast.operation)) {
+      return this.compiler.fail(ast, 'An assignment is not something a layout expression can do.');
+    }
     return `(${this.write(ast.left)} ${ast.operation} ${this.write(ast.right)})`;
   }
 

@@ -462,6 +462,13 @@ describe('a layout the compiler refuses', () => {
     fails('<ui-button target="a" (other)="x" />', /\(other\)/);
   });
 
+  it('refuses an assignment, which would change the props in place', () => {
+    fails(
+      `<ui-button target="a" (buttonPress)="props().us = '15'" />`,
+      /^LayoutError: layout\.ts:1:\d+: An assignment is not something a layout expression can do/,
+    );
+  });
+
   it('names an element that is not a ui- view', () => {
     fails('<view />', /<view>.*not a ui- view/s);
   });

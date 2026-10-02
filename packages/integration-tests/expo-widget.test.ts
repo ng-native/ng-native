@@ -22,15 +22,20 @@ interface Score {
 
 const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
 
-function fakeWidget(stored?: WidgetEntry<Score>['props']) {
+/** `failing` counts the reads and writes that throw, as `expo-widgets` does on a bad entry. */
+function fakeWidget(stored?: WidgetEntry<Score>['props'], failing = { reads: 0, writes: 0 }) {
   const snapshots: Score[] = [];
   let timeline: WidgetEntry<Score>[] = stored ? [{ date: new Date(0), props: stored }] : [];
   const native: NativeWidget<Score> = {
     updateSnapshot: (props) => {
+      if (failing.writes-- > 0) throw new Error('write');
       snapshots.push(props);
       timeline = [{ date: new Date(), props }];
     },
-    getTimeline: async () => timeline,
+    getTimeline: async () => {
+      if (failing.reads-- > 0) throw new Error('read');
+      return timeline;
+    },
     reload: () => snapshots.push({ us: 'reload', them: 'reload' }),
   };
   return {
@@ -76,8 +81,12 @@ before(async () => {
   );
 });
 
-function setup(stored?: WidgetEntry<Score>['props'], handled: unknown[] = []) {
-  const fake = fakeWidget(stored);
+function setup(
+  stored?: WidgetEntry<Score>['props'],
+  handled: unknown[] = [],
+  failing = { reads: 0, writes: 0 },
+) {
+  const fake = fakeWidget(stored, failing);
   const events = fakeEvents();
   const received: string[][] = [];
   const injector = createEnvironmentInjector(
@@ -152,7 +161,7 @@ describe('widget', () => {
       ],
       root,
     );
-    runInInjectionContext(injector, () =>
+    const ref = runInInjectionContext(injector, () =>
       widget(fake.native, signal<Score>({ us: '0', them: '0' }), {
         onTaps: () => {
           throw new Error('bad tap');
@@ -163,6 +172,7 @@ describe('widget', () => {
     await settle();
     assert.match(String(handled[0]), /bad tap/);
     assert.equal('taps' in fake.snapshots.at(-1)!, false);
+    assert.equal(ref.error(), null, "the app's handler failing is not the widget's");
     injector.destroy();
   });
 
@@ -186,7 +196,7 @@ describe('widget', () => {
       }),
     );
     for (let i = 0; i < 4; i++) await settle();
-    assert.deepEqual(received, [['point-us'], ['point-them']]);
+    assert.deepEqual(received, [['point-us', 'point-them']], 'handed over together, once written');
     assert.equal('taps' in fake.snapshots.at(-1)!, false);
     injector.destroy();
   });
@@ -206,6 +216,72 @@ describe('widget', () => {
     await flush();
     assert.deepEqual(received, [['point-us']]);
     assert.deepEqual(fake.snapshots.at(-1), { us: '40', them: '0' });
+  });
+
+  it('collects the taps before it writes a change to the signal', async () => {
+    const { fake, events, received, score, flush } = setup();
+    await flush();
+    fake.tapInWidget('point-us');
+    score.set({ us: '15', them: '0' });
+    await flush();
+    assert.deepEqual(received, [['point-us']], 'as the app woken in the background changes it');
+    assert.deepEqual(fake.snapshots.at(-1), { us: '15', them: '0' });
+    events.foreground();
+    await flush();
+    assert.deepEqual(received, [['point-us']]);
+  });
+
+  it('writes nothing while the taps cannot be read, and keeps them for the next sync', async () => {
+    const handled: unknown[] = [];
+    const stored = { us: '0', them: '0', taps: ['point-us'] };
+    const { fake, events, received, score, ref, flush } = setup(stored, handled, {
+      reads: 1,
+      writes: 0,
+    });
+    await flush();
+    assert.deepEqual(fake.snapshots, [], 'nothing is written over the taps');
+    assert.match(String(ref.error()), /read/);
+    assert.equal(handled.length, 1);
+    score.set({ us: '15', them: '0' });
+    await flush();
+    assert.deepEqual(received, [['point-us']]);
+    assert.deepEqual(fake.snapshots, [{ us: '15', them: '0' }]);
+    assert.equal(ref.error(), null, 'a sync that works clears the error');
+    events.foreground();
+    await flush();
+    assert.deepEqual(received, [['point-us']]);
+  });
+
+  it('hands a tap over once, after the write that clears it', async () => {
+    const stored = { us: '0', them: '0', taps: ['point-us'] };
+    const { events, received, ref, flush } = setup(stored, [], { reads: 0, writes: 1 });
+    await flush();
+    assert.deepEqual(received, [], 'not while the taps are still on the widget');
+    assert.match(String(ref.error()), /write/);
+    events.foreground();
+    await flush();
+    events.foreground();
+    await flush();
+    assert.deepEqual(received, [['point-us']]);
+  });
+
+  it('writes the change a tap handler makes, as the app scores the tap', async () => {
+    const fake = fakeWidget({ us: '0', them: '0', taps: ['point-us'] });
+    const injector = createEnvironmentInjector(
+      [{ provide: WIDGET_EVENTS, useValue: fakeEvents().events }],
+      root,
+    );
+    const score = signal<Score>({ us: '0', them: '0' });
+    runInInjectionContext(injector, () =>
+      widget(fake.native, score, { onTaps: () => score.set({ us: '15', them: '0' }) }),
+    );
+    for (let i = 0; i < 3; i++) {
+      await settle();
+      root.get(ApplicationRef).tick();
+    }
+    await settle();
+    assert.deepEqual(fake.snapshots.at(-1), { us: '15', them: '0' });
+    injector.destroy();
   });
 
   it('asks iOS to redraw the widget as the app goes to the background', async () => {

@@ -122,12 +122,13 @@ Call it in an injection context, such as a field of a component or service.
 
 ## What it does
 
-- **The widget follows the signal.** Every change is written to the widget, which replaces the
-  props it holds, `taps` included.
-- **Taps reach `onTaps` once each,** oldest first: at once while the app is running, and when it
-  comes back to the foreground. Taps recorded while it was not running are collected as it starts,
-  before anything is written over them. A handler that throws goes to the `ErrorHandler`, and its
-  taps are still cleared.
+- **The widget follows the signal.** A write replaces the props the widget holds, `taps` included,
+  so each one comes after the taps are read, and nothing is written while they cannot be.
+- **Taps reach `onTaps` once each,** oldest first, after the write that clears them: at once while
+  the app is running, when it comes back to the foreground, and as it starts. A handler that throws
+  goes to the `ErrorHandler`, and its taps are still cleared.
+- **`error`** holds why the last sync did not happen: the taps could not be read, or the widget not
+  written. It also goes to the `ErrorHandler`, and is null again once a sync works.
 - **iOS redraws a widget on its own schedule,** so the home screen can show the last version for a
   moment after the app changed it. Going to the background asks iOS to redraw it.
 - **`sync()`** collects the taps now, and **`reload()`** asks iOS to redraw the widget.
@@ -135,8 +136,13 @@ Call it in an injection context, such as a field of a component or service.
 The app stays the one source of truth: a widget's own change to what it shows lasts until the app
 collects the taps and writes its value back.
 
+## Only on iOS
+
+Home screen widgets need iOS 16.4 or newer, the oldest version `expo-widgets` and Expo build for. On
+Android and the web, `expo-widgets` answers with a stand-in, and `widget()` does nothing.
+
 ## Testing
 
 Pass a stand-in for the widget, an object with `updateSnapshot`, `getTimeline` and `reload`, and
-provide `WIDGET_EVENTS` to tap it. Mock the layout file in a Vitest test, since `createWidget` needs
-the build step that compiles it.
+provide `WIDGET_EVENTS` to tap it. In Node, `createWidget` answers a stand-in that draws nothing,
+so a test can import the layout file as it is.
