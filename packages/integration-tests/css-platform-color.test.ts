@@ -10,7 +10,7 @@
  * redraw it - and it belongs in CSS because a colour does.
  */
 import assert from 'node:assert/strict';
-import { after, describe, it } from 'node:test';
+import { after, afterEach, describe, it } from 'node:test';
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import type { Type } from '@angular/core';
@@ -67,6 +67,9 @@ describe('compiling a platform colour', () => {
 });
 
 describe('resolving one on a device', () => {
+  // Back to iOS whatever a test registered, so a failed assertion leaves no Android behind.
+  afterEach(() => registerPlatformComponents('ios'));
+
   it('becomes the shape the platform reads, and goes through processColor like any colour', async () => {
     const mod = await compileFixture(
       fileURLToPath(new URL('./fixtures/platform-color.ts', import.meta.url)),
@@ -93,6 +96,5 @@ describe('resolving one on a device', () => {
 
     const node = getByTestId('label');
     assert.deepEqual(node.props['color'], { processed: { resource_paths: ['label'] } });
-    registerPlatformComponents('ios');
   });
 });
