@@ -27,17 +27,48 @@ jobs:
     if: github.ref == 'refs/heads/main'
     uses: ./.github/workflows/native.yml
 
-  # CI's distribution check, plus the two generators in fresh workspaces: ng new with ng add, and
-  # Nx's angular-monorepo preset with nx add. Too slow for every push, and exactly what a release
-  # of the schematics or the Nx plugin can break.
+  # The same gate CI runs, on exactly the commit being released. Its own job, so it runs beside
+  # the slow checks rather than after them.
+  verify:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/setup
+      - run: npx nx run-many -t lint typecheck
+      - run: pnpm --filter @ng-native/web exec playwright install --with-deps chromium
+      - run: pnpm coverage
+
+  # CI's distribution check, plus one of the two generators in a fresh workspace: ng new with
+  # ng add, or Nx's angular-monorepo preset with nx add. Too slow for every push, and exactly what
+  # a release of the schematics or the Nx plugin can break. One job each, side by side: the Nx one
+  # alone is about nine minutes.
   generators:
+    name: generators (${{ matrix.generator }})
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    strategy:
+      matrix:
+        generator: [angular, nx]
     steps:
       - uses: actions/checkout@v7
 
       - uses: ./.github/actions/setup
+
+      # What Verdaccio fetched from npmjs for this generator's workspace, kept for a week: the
+      # installs through a cold proxy are most of the job. Newer versions still arrive, since
+      # Verdaccio asks npmjs for a package's versions again once its copy is two minutes old. Our
+      # own scope is deleted, so only this run's publish can serve it.
+      - id: week
+        run: echo "week=$(date +%G-%V)" >> "$GITHUB_OUTPUT"
+      - uses: actions/cache@v6
+        with:
+          path: .verdaccio/storage
+          key: verdaccio-${{ matrix.generator }}-${{ steps.week.outputs.week }}
+          restore-keys: verdaccio-${{ matrix.generator }}-
+      - run: rm -rf .verdaccio/storage/@ng-native .verdaccio/storage/.verdaccio-db.json
 
       - name: Start a local registry
         run: |
@@ -48,7 +79,7 @@ jobs:
             http://localhost:4873/-/user/org.couchdb.user:ci | jq -r .token)
           echo "//localhost:4873/:_authToken=$token" >> ~/.npmrc
 
-      - run: node scripts/verify-publish.mjs --generators
+      - run: node scripts/verify-publish.mjs --generators=${{ matrix.generator }}
 
       - if: failure()
         run: cat verdaccio.log
@@ -82,9 +113,9 @@ jobs:
         run: cat verdaccio.log
 
   release:
-    needs: [native, generators, storybook]
+    needs: [native, verify, generators, storybook]
     if: github.ref == 'refs/heads/main'
-    runs-on: macos-latest
+    runs-on: ubuntu-latest
     outputs:
       version: ${{ steps.version.outputs.version }}
     steps:
@@ -95,11 +126,6 @@ jobs:
       - uses: ./.github/actions/setup
         with:
           registry-url: https://registry.npmjs.org
-
-      # The same gate CI runs, on exactly the commit being released.
-      - run: npx nx run-many -t lint typecheck
-      - run: pnpm --filter @ng-native/web exec playwright install chromium
-      - run: pnpm coverage
 
       - name: Version
         id: version

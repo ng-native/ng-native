@@ -14,9 +14,10 @@ permissions:
   contents: read
   actions: read
 
-# A newer push to the same branch makes the older run pointless.
+# A newer push to a pull request makes the older run pointless. On main each commit gets a run of
+# its own, so a quick second merge cannot leave the first with no result.
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.ref || github.sha }}
   cancel-in-progress: true
 
 jobs:
@@ -45,12 +46,36 @@ jobs:
       # itself with only a warning when there is none, which is silent enforcement of nothing.
       # The template is a project too, so this is also what typechecks the starter.
       - name: Lint and typecheck what changed
-        run: npx nx affected -t lint typecheck --parallel=3
+        run: npx nx affected -t lint typecheck --parallel=4
 
       # What the packages publish, so a change that only the compiler rejects fails here. The
       # documentation is the one build that is not a package, and its own workflow builds it.
       - name: Build the packages that changed
         run: npx nx affected -t build --exclude=documentation
+
+      # Builds a real release bundle and asserts the compiler, the HMR wiring and the component
+      # CSS all stayed out of it. Minutes rather than seconds, so it only runs when something it
+      # depends on actually changed.
+      - name: Check the release bundle
+        run: npx nx affected -t check-bundle
+
+      # Nx's task cache, which the setup action restores in every job. Saved from main only, so a
+      # pull request cannot put an output into a cache that main later trusts.
+      - if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: actions/cache/save@v6
+        with:
+          path: .nx/cache
+          key: nx-${{ runner.os }}-${{ github.sha }}
+
+  # Every suite with the coverage floor: most of CI's time, so a job of its own beside `verify`.
+  coverage:
+    if: github.event.pull_request.draft != true
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: ./.github/actions/setup
 
       # The browser suite (`packages/web/browser`, run by `pnpm coverage` below) drives a real
       # Chromium, and only Chromium is installed. Cached by Playwright's version, which is what
@@ -73,12 +98,6 @@ jobs:
       - name: Test, with the coverage floor
         run: pnpm coverage
 
-      # Builds a real release bundle and asserts the compiler, the HMR wiring and the component
-      # CSS all stayed out of it. Minutes rather than seconds, so it only runs when something it
-      # depends on actually changed.
-      - name: Check the release bundle
-        run: npx nx affected -t check-bundle
-
   # Which parts of the tree a pull request touched, for the jobs that only matter to some of it.
   # A push to main runs everything regardless.
   changes:
@@ -91,7 +110,7 @@ jobs:
     outputs:
       published: ${{ steps.filter.outputs.published }}
     steps:
-      - uses: dorny/paths-filter@v3
+      - uses: dorny/paths-filter@v4
         id: filter
         with:
           filters: |

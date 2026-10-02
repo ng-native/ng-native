@@ -17,15 +17,31 @@ on:
     branches: [main]
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review]
-    # Words alone cannot break a build or a launch.
+    # Words alone cannot break a build or a launch, and nor can what the canary does not use: the
+    # generators, the migrations, tests, and the other workflows. A push to main runs it whatever
+    # changed.
     paths-ignore:
       - '**/*.md'
       - 'apps/documentation/**'
+      - 'packages/integration-tests/**'
+      - 'packages/migrate/**'
+      - 'packages/nx/**'
+      - 'packages/schematics/**'
+      - 'template/**'
+      - 'scripts/**'
+      - '**/*.test.ts'
+      - '.github/workflows/ci.yml'
+      - '.github/workflows/docs.yml'
+      - '.github/workflows/latest.yml'
+      - '.github/workflows/release.yml'
+      - '.github/workflows/triage.yml'
+      - '.nx/version-plans/**'
   workflow_dispatch:
   workflow_call:
 
+# A newer push to a pull request makes the older run pointless; on main each commit gets its own.
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.ref || github.sha }}
   cancel-in-progress: true
 
 jobs:
@@ -58,7 +74,7 @@ jobs:
         run: echo "hash=$(node scripts/ios-app.mjs fingerprint)" >> "$GITHUB_OUTPUT"
 
       - id: cached
-        uses: actions/cache/restore@v5
+        uses: actions/cache/restore@v6
         with:
           path: ${{ runner.temp }}/app-cache
           key: canary-app-${{ runner.os }}-${{ steps.fingerprint.outputs.hash }}
@@ -92,12 +108,16 @@ jobs:
         if: steps.cached.outputs.cache-hit != 'true'
         working-directory: examples/canary/ios
         run: |
+          # xcbeautify (on the runner image) prints one line per compiled file as it goes, so the
+          # log shows progress, and turns errors and warnings into annotations.
+          command -v xcbeautify > /dev/null || brew install xcbeautify
           # One architecture: arm64, the simulator on every current Mac. The generic destination
           # otherwise compiles every pod twice, once more for Intel.
           xcodebuild -workspace canary.xcworkspace -scheme canary -configuration Release \
             -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' \
             -derivedDataPath build \
-            ARCHS=arm64 ONLY_ACTIVE_ARCH=YES CODE_SIGNING_ALLOWED=NO build | tail -n 50
+            ARCHS=arm64 ONLY_ACTIVE_ARCH=YES CODE_SIGNING_ALLOWED=NO build \
+            | xcbeautify --renderer github-actions
           exit "${PIPESTATUS[0]}"
 
       - if: steps.cached.outputs.cache-hit != 'true'
@@ -111,7 +131,7 @@ jobs:
           cp -R "$RUNNER_TEMP/app-cache/canary.app" "$RUNNER_TEMP/canary.app"
 
       - if: steps.cached.outputs.cache-hit != 'true'
-        uses: actions/cache/save@v5
+        uses: actions/cache/save@v6
         with:
           path: ${{ runner.temp }}/app-cache
           key: canary-app-${{ runner.os }}-${{ steps.fingerprint.outputs.hash }}
@@ -157,7 +177,7 @@ jobs:
         run: echo "hash=$(node scripts/android-apk.mjs fingerprint)" >> "$GITHUB_OUTPUT"
 
       - id: cached
-        uses: actions/cache/restore@v5
+        uses: actions/cache/restore@v6
         with:
           path: ${{ runner.temp }}/apk-cache
           key: canary-apk-${{ runner.os }}-${{ steps.fingerprint.outputs.hash }}
@@ -181,6 +201,13 @@ jobs:
           sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/.ghcup /opt/hostedtoolcache/CodeQL \
             /usr/share/swift /usr/local/share/boost
           df -h "$GITHUB_WORKSPACE"
+
+      # The emulator's system image, which is otherwise a 45-second download on every run. After
+      # the disk is freed, since it adds to what the emulator needs.
+      - uses: actions/cache@v6
+        with:
+          path: /usr/local/lib/android/sdk/system-images/android-34/google_apis/x86_64
+          key: android-system-image-34-google_apis-x86_64
 
       - if: steps.rebundle.outcome != 'success'
         uses: actions/setup-java@v6
@@ -221,7 +248,7 @@ jobs:
           df -h "$GITHUB_WORKSPACE"
 
       - if: steps.rebundle.outcome != 'success'
-        uses: actions/cache/save@v5
+        uses: actions/cache/save@v6
         with:
           path: ${{ runner.temp }}/apk-cache
           key: canary-apk-${{ runner.os }}-${{ steps.fingerprint.outputs.hash }}

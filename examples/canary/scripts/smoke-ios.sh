@@ -8,7 +8,7 @@
 # its bundle and needs no Metro. The simulator is created here, from the newest iPhone and iOS
 # runtime installed, and deleted afterwards, so a run never meets another app's state or a
 # simulator someone else is using. The output dir gets Maestro's screenshots and logs, and the
-# app's log, which is where a release build's crash at startup is written.
+# app's log on a failure, which is where a release build's crash at startup is written.
 set -uo pipefail
 
 app=$1
@@ -24,9 +24,14 @@ if [ -z "${runtime:-}" ] || [ -z "${type:-}" ] || [ "$type" = null ]; then
   echo "No iOS runtime with an iPhone simulator found (or jq is missing): see xcrun simctl list" >&2
   exit 1
 fi
+# Booting and the driver's start are minutes of a run with nothing to print, so each step says
+# when it starts.
+step() { echo "[$(date +%T)] $*"; }
+step "creating a $type on $runtime"
 udid=$(xcrun simctl create canary-smoke "$type" "$runtime") || exit 1
 trap 'xcrun simctl shutdown "$udid" 2>/dev/null; xcrun simctl delete "$udid"' EXIT
 
+step "booting it"
 xcrun simctl boot "$udid" && xcrun simctl bootstatus "$udid" -b >/dev/null || exit 1
 # A fresh simulator posts follow-up notifications of its own, "Ready for Apple Intelligence" among
 # them, at any point after it boots. The banner covers the top of the screen, so
@@ -34,6 +39,7 @@ xcrun simctl boot "$udid" && xcrun simctl bootstatus "$udid" -b >/dev/null || ex
 # them, so it is stopped here, and stays disabled when the retry below reboots the simulator.
 xcrun simctl spawn "$udid" launchctl disable system/com.apple.followupd 2>/dev/null
 xcrun simctl spawn "$udid" launchctl bootout system/com.apple.followupd 2>/dev/null
+step "installing the app"
 xcrun simctl install "$udid" "$app" || exit 1
 # Maestro drives the simulator through an XCTest runner of its own, which a loaded CI Mac has
 # been slow to start and has lost mid-flow. Both say nothing about the app, which a crash would
@@ -44,6 +50,7 @@ xcrun simctl install "$udid" "$app" || exit 1
 # startup failure is reported there and not in maestro.log.
 export MAESTRO_DRIVER_STARTUP_TIMEOUT=${MAESTRO_DRIVER_STARTUP_TIMEOUT:-180000}
 walk() {
+  step "walking the flow; Maestro's driver takes a minute or two to start"
   mkdir -p "$1"
   maestro --device "$udid" test "$flows" --test-output-dir "$1" --debug-output "$1" \
     --flatten-debug-output 2>&1 | tee "$1/console.log"
@@ -64,6 +71,11 @@ if [ "$status" -ne 0 ] && grep -qE "$lost" "$out/console.log" "$out/maestro.log"
   walk "$out/retry"
   status=$?
 fi
-xcrun simctl spawn "$udid" log show --last 15m --style compact \
-  --predicate 'process == "canary"' > "$out/canary.log" 2>&1
+# Only on a failure, which is the only time the output dir is uploaded: reading the log takes
+# over a minute.
+if [ "$status" -ne 0 ]; then
+  step "saving the app's log"
+  xcrun simctl spawn "$udid" log show --last 15m --style compact \
+    --predicate 'process == "canary"' > "$out/canary.log" 2>&1
+fi
 exit "$status"

@@ -15,7 +15,8 @@
  * @ng-native/schematics`, and to a fresh Nx `angular-monorepo` workspace with `nx add
  * @ng-native/nx`, and tests and bundles each. Both install with npm, which refuses a peer range it
  * cannot satisfy where pnpm only warns. They take minutes, so the release workflow runs them and
- * CI does not.
+ * CI does not. `--generators=angular` or `--generators=nx` runs one of the two and skips the
+ * template, which is how the release workflow runs them side by side.
  *
  * `--scenario=<name>` runs one of `SCENARIOS` below instead, for the weekly workflow in
  * `latest.yml`: a workspace made the way a user makes one, on the newest versions its ranges
@@ -31,7 +32,7 @@
  * app with Storybook added, on the Storybook and Vite versions the page states, built with
  * `storybook build` and checked in Chromium. The release workflow runs it.
  *
- * Usage: node scripts/verify-publish.mjs [--generators] [--web] | --scenario=<name> | --storybook
+ * Usage: node scripts/verify-publish.mjs [--generators[=angular|nx]] [--web] | --scenario=<name> | --storybook
  *        (with verdaccio listening on 4873, or on $REGISTRY)
  */
 import { execFileSync, spawn } from 'node:child_process';
@@ -262,10 +263,11 @@ async function serve(cmd, args, cwd, port) {
  */
 async function angularWorkspace(dir, { latest = false } = {}) {
   console.log('\nng new, then ng add @ng-native/schematics');
-  run('npx', ['--yes', '@angular/cli@22', 'new', 'web', '--defaults', '--skip-git'], dir);
+  // Not quiet: these installs are minutes, and the log should show them moving.
+  run('npx', ['--yes', '@angular/cli@22', 'new', 'web', '--defaults', '--skip-git'], dir, false);
   const workspace = path.join(dir, 'web');
   writeFileSync(path.join(workspace, '.npmrc'), `registry=${REGISTRY}\n`);
-  run('npx', ['ng', 'add', '@ng-native/schematics@local', '--skip-confirmation'], workspace);
+  run('npx', ['ng', 'add', '@ng-native/schematics@local', '--skip-confirmation'], workspace, false);
   if (latest) {
     console.log('npm install, again');
     install('npm', workspace);
@@ -323,11 +325,13 @@ async function nxWorkspace(
       '--interactive=false',
     ],
     dir,
+    // Not quiet: this and the two below are installs of minutes, and the log should show them.
+    false,
   );
   const workspace = path.join(dir, 'monorepo');
   writeFileSync(path.join(workspace, '.npmrc'), `registry=${REGISTRY}\n`);
-  run('npx', ['nx', 'add', '@ng-native/nx@local'], workspace);
-  run('npx', ['nx', 'g', '@ng-native/nx:app', 'apps/mobile', '--no-interactive'], workspace);
+  run('npx', ['nx', 'add', '@ng-native/nx@local'], workspace, false);
+  run('npx', ['nx', 'g', '@ng-native/nx:app', 'apps/mobile', '--no-interactive'], workspace, false);
   // `mobile`, or `@monorepo/mobile` where the root package is scoped, as the TypeScript preset's is.
   const project = readJson(path.join(workspace, 'apps/mobile/package.json')).name;
   if (latest) {
@@ -939,6 +943,18 @@ if (scenario !== undefined && !SCENARIOS[scenario]) {
   throw new Error(`No scenario "${scenario}". There are: ${Object.keys(SCENARIOS).join(', ')}.`);
 }
 
+const GENERATORS = {
+  angular: ['ng add @ng-native/schematics', angularWorkspace],
+  nx: ['nx g @ng-native/nx:app', nxWorkspace],
+};
+const generators = process.argv.find((arg) => /^--generators(=|$)/.test(arg));
+const onlyGenerator = generators?.split('=')[1];
+if (onlyGenerator !== undefined && !GENERATORS[onlyGenerator]) {
+  throw new Error(
+    `No generator "${onlyGenerator}". There are: ${Object.keys(GENERATORS).join(', ')}.`,
+  );
+}
+
 // The packages publish their `dist`, so what goes out is what the build makes now.
 run('pnpm', ['nx', 'run-many', '-t', 'build', '-p', '@ng-native/*'], root);
 console.log(`publishing to ${REGISTRY}`);
@@ -953,16 +969,18 @@ if (scenario) {
   console.log(`    in ${Math.round((Date.now() - started) / 1000)}s`);
   rmSync(dir, { recursive: true, force: true });
 } else {
-  const app = generateApp();
-  const modules = check(app);
-  console.log(`\nok  an app generated from the template bundles ${modules} modules`);
-  rmSync(path.dirname(app), { recursive: true, force: true });
+  // One generator alone skips the template, which CI's distribution job checks on every commit:
+  // the release runs each generator in a job of its own, and would otherwise check it twice more.
+  if (!onlyGenerator) {
+    const app = generateApp();
+    const modules = check(app);
+    console.log(`\nok  an app generated from the template bundles ${modules} modules`);
+    rmSync(path.dirname(app), { recursive: true, force: true });
+  }
 
-  if (process.argv.includes('--generators')) {
-    for (const [what, generate] of [
-      ['ng add @ng-native/schematics', angularWorkspace],
-      ['nx g @ng-native/nx:app', nxWorkspace],
-    ]) {
+  if (generators) {
+    for (const [name, [what, generate]] of Object.entries(GENERATORS)) {
+      if (onlyGenerator && onlyGenerator !== name) continue;
       const dir = mkdtempSync(path.join(tmpdir(), 'angular-native-workspace-'));
       console.log(`\nok  ${what}: the native app bundles ${await generate(dir)}`);
       rmSync(dir, { recursive: true, force: true });

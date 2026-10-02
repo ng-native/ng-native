@@ -14,11 +14,23 @@ runs:
     # same tree.
     - uses: pnpm/action-setup@v6
 
-    - uses: actions/setup-node@v4
+    # No `cache: pnpm`: a fresh install is as quick as restoring the store (slower on macOS, which
+    # also spent most of a minute saving it), and 400 MB a lockfile was most of the repository's
+    # 10 GB of Actions cache, evicting the caches that do save time.
+    - uses: actions/setup-node@v7
       with:
         node-version: 24
-        cache: pnpm
         registry-url: ${{ inputs.registry-url }}
+
+    # Nx's task cache, as main's latest CI run left it (ci.yml saves it). Capped, so it carries
+    # what recent commits built rather than growing with every one.
+    - uses: actions/cache/restore@v6
+      with:
+        path: .nx/cache
+        key: nx-${{ runner.os }}-${{ github.sha }}
+        restore-keys: nx-${{ runner.os }}-
+    - run: echo "NX_MAX_CACHE_SIZE=500MB" >> "$GITHUB_ENV"
+      shell: bash
 
     # Frozen: CI fails on a lockfile that does not match the manifests rather than quietly
     # resolving something newer, which is how the Reanimated version drifted off Expo's set.
