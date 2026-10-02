@@ -91,9 +91,10 @@ workspace, and takes `--prefix` for its components' selectors as well.
 `--bundleIdentifier` is the iOS bundle identifier and Android package in `app.json`. It defaults to
 `com.<scope>.<name>`, from the npm scope of the root `package.json`'s name and the app's name with
 anything but letters and digits removed, where `expo prebuild` would otherwise use
-`com.anonymous.<name>`. A segment Android refuses, such as the Java keyword `native` or the Kotlin
-keyword `object`, gets an `app` prefix: `ng add` in a workspace with no scope names the app
-`com.appnative`. A given identifier needs two or more dot-separated segments, each a letter and then
+`com.anonymous.<name>`. An app name Android refuses as a segment, such as the Java keyword `native`
+or the Kotlin keyword `object`, gets an `app` prefix: `ng add` in a workspace with no scope names
+the app `com.appnative`. A scope that cannot be a segment is left out, so `@native` with an app
+named `mobile` gives `com.mobile`. A given identifier needs two or more dot-separated segments, each a letter and then
 letters or digits, none a Java or Kotlin keyword, and the schematic stops with an error on one that
 is not.
 
