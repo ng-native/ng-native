@@ -31,6 +31,7 @@ import { installDateParse } from './date-parse.ts';
 import { PLATFORM_NATIVE_ID } from './platform-id.ts';
 import {
   Engine,
+  firstFamily,
   HostEngine,
   installDeferTriggers,
   markComponentHost,
@@ -76,6 +77,14 @@ const styleKey = (name: string): string =>
  */
 const styleValue = (value: unknown): unknown =>
   typeof value === 'string' && (PX.test(value) || NUMBER.test(value)) ? parseFloat(value) : value;
+/**
+ * A `font-family` is a stack, quoted or not, where native takes one family by name: the first,
+ * unquoted, as a stylesheet rule commits it. Left as written, `'Inter-Bold'` names no font.
+ */
+const declaredValue = (key: string, value: unknown): unknown =>
+  key === 'fontFamily' && typeof value === 'string'
+    ? (firstFamily(value) ?? value)
+    : styleValue(value);
 
 /**
  * `flex: 1; margin-top: 4px` -> `{ flex: 1, marginTop: 4 }`.
@@ -85,9 +94,8 @@ const styleValue = (value: unknown): unknown =>
  * *static* `style="..."` is not a binding at all, so it comes through `setAttribute` whole.
  *
  * Splitting on `;` and `:` rather than parsing properly, because the values that reach here are
- * lengths, numbers, keywords and colours. A `url()` or a quoted font stack containing either
- * character would be cut in the wrong place - neither is expressible on this platform, and the
- * one thing worse than not supporting them would be appearing to.
+ * lengths, numbers, keywords, colours and font families. A `url()` or a family name containing
+ * either character would be cut in the wrong place.
  */
 /**
  * A bound custom property's name, as it was written. Angular 22 compiles `[style.--tint]` to
@@ -104,7 +112,7 @@ function parseStyleAttribute(css: string): Record<string, unknown> {
     const value = declaration.slice(at + 1).trim();
     // A custom property keeps its name, which is case-sensitive, and its text for the engine.
     if (name.startsWith('--')) out[name] = value;
-    else if (name) out[styleKey(name)] = styleValue(value);
+    else if (name) out[styleKey(name)] = declaredValue(styleKey(name), value);
   }
   return out;
 }
@@ -203,7 +211,7 @@ class NativeRenderer implements Renderer2 {
       return;
     }
     const key = styleKey(style);
-    const next = styleValue(value);
+    const next = declaredValue(key, value);
     const current = el.props['style'] as Record<string, unknown> | undefined;
     if (current && current === el.ownStyle) {
       if (current[key] === next) return;

@@ -61,6 +61,7 @@ export const EXTRA_KEYS = {
   opacity: 'opacity',
   'text-decoration-color': 'textDecorationColor',
   display: 'display',
+  'font-family': 'fontFamily',
 } as const;
 
 export type ExtraProperty = keyof typeof EXTRA_KEYS;
@@ -135,6 +136,18 @@ const WHITESPACE_CASES = TOKEN_KINDS.flatMap(([kind, property, value, weaker, ex
     const padded = before + value + after;
     return tokenCases(`whitespace: ${kind} ${how}`, property, padded, weaker, extra, { warns });
   }),
+);
+
+/** A family token, which native takes as the first family of the stack, unquoted. */
+const FAMILY_CASES = (
+  [
+    ['a quoted family', "'Inter-Bold'"],
+    ['a double-quoted family', '"Inter-Bold"'],
+    ['a stack', "'Inter Display', sans-serif"],
+    ['a family of two words', 'Segoe UI'],
+  ] as const
+).flatMap(([kind, value]) =>
+  tokenCases(`font-family: ${kind}`, 'font-family', value, 'monospace', 'font-family'),
 );
 
 /** Colour channels, `rgb(var(--t))`, are split at CSS whitespace and no other. */
@@ -671,6 +684,15 @@ export const CASES: OracleCase[] = [
   },
   ...DISPLAY_CASES,
   ...WHITESPACE_CASES,
+  ...FAMILY_CASES,
+  {
+    // A string is no display, though a family token's quotes come off where a family is read.
+    name: 'display: a quoted none token bound on the element is no display',
+    css: '#probe.c { display: var(--t) }',
+    tree: probe({ name: 'view', classes: ['c'] }),
+    bound: { '--t': '"none"' },
+    extra: ['display'],
+  },
   ...CHANNEL_CASES,
   {
     name: 'background: var() of a colour token is the background colour',

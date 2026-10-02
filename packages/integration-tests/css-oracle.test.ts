@@ -115,6 +115,11 @@ function assertExtra(property: ExtraProperty, style: Record<string, unknown>, br
     assert.equal(style['display'] ?? 'flex', native, property);
     return;
   }
+  // One family by name here, and the whole stack, quoted where it needs to be, in the browser.
+  if (property === 'font-family') {
+    assert.equal(style['fontFamily'], browser.split(',')[0]!.replace(/^"|"$/g, ''), property);
+    return;
+  }
   // A length is a number of points here, and `2px` in the browser. An unset one is native's
   // initial value, as the browser reports its own.
   const ours = style[EXTRA_KEYS[property]] ?? NATIVE_INITIAL[property];

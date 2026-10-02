@@ -39,6 +39,36 @@ const WEIGHTS: Record<string, string> = { normal: '400', bold: '700' };
  */
 const PADDED = new RegExp(`^${CSS_SPACE.source}|${CSS_SPACE.source}$`, 'g');
 const cssTrim = (text: string): string => text.replace(PADDED, '');
+/** A family name's parts: a quoted string, or a bare word. */
+const FAMILY_PART = /^(?:'([^']*)'|"([^"]*)"|(-?[a-z_][\w-]*))/i;
+const LEADING_SPACE = new RegExp(`^${CSS_SPACE.source}`);
+
+/**
+ * The first family of a `font-family` stack, as a stylesheet reads it (`firstFamily` in
+ * values.cjs): `'Inter Display', sans-serif` is `Inter Display`, and `Segoe UI` is one name of two
+ * words. Undefined for anything that is not a stack.
+ */
+export function firstFamily(value: string): string | undefined {
+  let rest = cssTrim(value);
+  const words: string[] = [];
+  while (rest && !rest.startsWith(',')) {
+    const part = FAMILY_PART.exec(rest);
+    if (!part) return undefined;
+    words.push(part[1] ?? part[2] ?? part[3]!);
+    rest = rest.slice(part[0].length).replace(LEADING_SPACE, '');
+  }
+  return words.length ? words.join(' ') : undefined;
+}
+
+/**
+ * A value kept as written, and a family too when it reads as one: `'Inter-Bold'` is the family
+ * `Inter-Bold`, and a stack its first. The written word stays the keyword, so a quoted `"none"` is
+ * still no display.
+ */
+function fromText(text: string): TokenValue {
+  const family = firstFamily(text);
+  return family === undefined || family === text ? { keyword: text } : { keyword: text, family };
+}
 
 /**
  * CSS takes a bare 0 wherever it takes a length, and no other bare number. A number from 1 to 1000
@@ -162,5 +192,5 @@ export function tokenFromValue(value: unknown): TokenValue | undefined {
   if (NUMBER.test(text)) return fromNumber(Number(text));
   if (DERIVED.test(text)) return withTokens(text);
   if (COLOR_FUNCTION.test(text)) return { color: text };
-  return fromChannels(text) ?? (WORD.test(text) ? fromWord(text) : { keyword: text });
+  return fromChannels(text) ?? (WORD.test(text) ? fromWord(text) : fromText(text));
 }
