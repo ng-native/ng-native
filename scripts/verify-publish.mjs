@@ -949,7 +949,7 @@ const GENERATORS = {
 };
 const generators = process.argv.find((arg) => /^--generators(=|$)/.test(arg));
 const onlyGenerator = generators?.split('=')[1];
-if (onlyGenerator !== undefined && !GENERATORS[onlyGenerator]) {
+if (onlyGenerator !== undefined && !Object.hasOwn(GENERATORS, onlyGenerator)) {
   throw new Error(
     `No generator "${onlyGenerator}". There are: ${Object.keys(GENERATORS).join(', ')}.`,
   );
