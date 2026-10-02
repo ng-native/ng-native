@@ -135,7 +135,7 @@ export class ExpoUiListFixture {
           <ui-progress [value]="0.5" />
           <ui-chart
             type="pie"
-            [showLegend]="true"
+            [showGrid]="true"
             [data]="[
               { x: 'Won', y: 3 },
               { x: 'Lost', y: 1, color: '#ff0000' },

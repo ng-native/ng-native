@@ -313,7 +313,7 @@ import { page } from '../screen-styles.ts';
         <x-example
           title="Chart"
           note="Swift Charts, iOS only. The slider above moves the last bar."
-          code='<ui-chart type="bar" [data]="sets" />'
+          code='<ui-chart type="bar" [data]="sets()" />'
         >
           <ui-host ignoreSafeArea="container" [style]="hostChart">
             <ui-chart

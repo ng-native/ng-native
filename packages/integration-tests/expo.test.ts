@@ -631,7 +631,7 @@ describe('the typed SwiftUI controls and expo-image', () => {
     assert.equal(named(/ExpoUI_ProgressView$/).props['value'], 0.5);
     const chart = named(/ExpoUI_ChartView$/).props;
     assert.equal(chart['type'], 'pie');
-    assert.equal(chart['showLegend'], true);
+    assert.equal(chart['showGrid'], true);
     assert.deepEqual(chart['data'], [
       { x: 'Won', y: 3 },
       { x: 'Lost', y: 1, color: '#ff0000' },
