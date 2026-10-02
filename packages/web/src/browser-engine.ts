@@ -15,6 +15,7 @@
  * same two-phase order a real touch would arrive in on native.
  */
 import {
+  DIRECT_EVENTS,
   HostEngine,
   SyntheticEvent,
   type ResponderEvent,
@@ -33,28 +34,6 @@ import {
 import { createDomElement, textFieldLike } from './elements.ts';
 import { applyProp } from './props.ts';
 import { ResponderSystem } from './responder.ts';
-
-/**
- * Events that reach only their target, never its ancestors. Ported from `engine.ts`'s own
- * `DIRECT_EVENTS`: a layout, a load, a scroll offset or a content size is meaningless to
- * anything but the view it happened on, so bubbling it would let an ancestor's same-named
- * listener - a scroll view inside a scroll view - fire for the wrong one.
- */
-const DIRECT_EVENTS = new Set([
-  'topScroll',
-  'topScrollBeginDrag',
-  'topScrollEndDrag',
-  'topMomentumScrollBegin',
-  'topMomentumScrollEnd',
-  'topContentSizeChange',
-  'topLayout',
-  'topLoad',
-  'topLoadStart',
-  'topLoadEnd',
-  'topError',
-  'topProgress',
-  'topRefresh',
-]);
 
 const TOUCH_EVENT_NAMES: Record<string, string> = {
   pointerdown: 'topTouchStart',

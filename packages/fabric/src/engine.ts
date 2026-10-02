@@ -180,15 +180,6 @@ export interface FabricUIManager {
 }
 
 /**
- * RN's `directEventTypes`: delivered to the target only, never up the tree. Everything else
- * bubbles, which matches RN's `bubblingEventTypes` for the touch and input events that matter.
- *
- * ponytail: a hand-kept set rather than real ViewConfigs. It is wrong only for a nested
- * scroll view, where an ancestor listening for the same direct event would not fire (correct)
- * but a third-party component's custom direct event would bubble (harmless in practice).
- * Swap it for per-component ViewConfig metadata if that ever matters.
- */
-/**
  * The scroll events that mean a finger is dragging the list rather than tapping something in it.
  *
  * `topScrollBeginDrag` is the precise one; `topScroll` is here because a scroll view configured
@@ -196,7 +187,17 @@ export interface FabricUIManager {
  */
 const SCROLL_CANCELS_PRESS = new Set(['topScroll', 'topScrollBeginDrag']);
 
-const DIRECT_EVENTS = new Set([
+/**
+ * RN's `directEventTypes`: delivered to the target only, never up the tree. Everything else
+ * bubbles, which matches RN's `bubblingEventTypes` for the touch and input events that matter.
+ * The web host's engine reads this set too, so both hosts deliver an event the same way.
+ *
+ * ponytail: a hand-kept set rather than real ViewConfigs. It is wrong only for a nested
+ * scroll view, where an ancestor listening for the same direct event would not fire (correct)
+ * but a third-party component's custom direct event would bubble (harmless in practice).
+ * Swap it for per-component ViewConfig metadata if that ever matters.
+ */
+export const DIRECT_EVENTS: ReadonlySet<string> = new Set([
   'topScroll',
   'topScrollBeginDrag',
   'topScrollEndDrag',

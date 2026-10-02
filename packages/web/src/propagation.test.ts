@@ -5,6 +5,7 @@
  */
 import assert from 'node:assert/strict';
 import { before, describe, it } from 'node:test';
+import { DIRECT_EVENTS } from '@ng-native/fabric';
 import { installJsdomEnvironment } from './jsdom-env.ts';
 import type { BrowserEngine as Engine } from './browser-engine.ts';
 
@@ -59,5 +60,19 @@ describe('stopPropagation on the web host', () => {
 
     engine.dispatchEvent(child, 'topPress', {});
     assert.deepEqual(heard, ['child', 'parent']);
+  });
+
+  it("delivers each of the Fabric engine's direct events to its target only", () => {
+    const { engine, parent, child } = tree();
+    const heard: string[] = [];
+    for (const name of DIRECT_EVENTS) {
+      engine.setEventListener(child, name, () => heard.push(`child ${name}`));
+      engine.setEventListener(parent, name, () => heard.push(`parent ${name}`));
+      engine.dispatchEvent(child, name, {});
+    }
+    assert.deepEqual(
+      heard,
+      [...DIRECT_EVENTS].map((name) => `child ${name}`),
+    );
   });
 });

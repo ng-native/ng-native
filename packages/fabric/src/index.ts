@@ -34,6 +34,7 @@ export {
 export { EngineIntersectionObserver, installDeferTriggers } from './defer-triggers.ts';
 export { faceName } from './font-faces.ts';
 export {
+  DIRECT_EVENTS,
   Engine,
   SyntheticEvent,
   claimHost,
