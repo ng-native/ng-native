@@ -143,7 +143,7 @@ export function liveActivity<T extends object>(
         const already = running()[0];
         const activity = already ?? factory.start(value, options.url);
         if (!activity.getId()) {
-          error.set(new Error('Live Activities are only on iOS 16.2 and later.'));
+          error.set(new Error('Live Activities are only on iOS.'));
           return false;
         }
         adopt(activity);
