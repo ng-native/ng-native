@@ -1650,6 +1650,16 @@ export class Engine implements HostEngine {
     return true;
   }
 
+  /**
+   * Stop matching a sheet `addGlobalSheet` added, and restyle everything; false, and nothing
+   * done, when it is not one. A hot swap that leaves a None component no rules, or makes it scoped.
+   */
+  removeGlobalSheet(sheet: StyleSheet): boolean {
+    if (!this.styles.removeGlobalSheet(sheet)) return false;
+    this.markPath(this.root);
+    return true;
+  }
+
   updateTokens(next: Readonly<Record<string, TokenValue>>): void {
     this.styles.setRootTokens({ ...this.styles.rootTokens, ...next });
     this.root.subtreeDirty = true;

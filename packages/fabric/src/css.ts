@@ -1150,6 +1150,16 @@ export class StyleResolver {
     return true;
   }
 
+  /** Stop matching a sheet `addGlobalSheet` added; false when it is not one. */
+  removeGlobalSheet(sheet: StyleSheet): boolean {
+    const at = this.addedSheets.indexOf(sheet);
+    if (at === -1) return false;
+    this.addedSheets.splice(at, 1);
+    this.merged = new WeakMap();
+    this.generation = ++generations;
+    return true;
+  }
+
   setConditions(next: Conditions): void {
     this.conditions = next;
     this.generation = ++generations;

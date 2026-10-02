@@ -156,3 +156,45 @@ describe("a ViewEncapsulation.None component's sheet, hot-swapped", () => {
     assert.equal(second!.props['color'], 'rgb(3, 0, 0)');
   });
 });
+
+describe("a ViewEncapsulation.None component's sheet, hot-swapped away", () => {
+  /** A None component registered with `.a`, then hot-swapped to `next`, with a node wearing `.a`. */
+  async function swapTo(next: { sheet?: StyleSheet; encapsulation: number }) {
+    const { NativeRendererFactory } = await import('@ng-native/platform');
+    const { createFakeFabric } = await import('@ng-native/testing');
+    const fabric = createFakeFabric();
+    const engine = new Engine(fabric, 1);
+    const factory = new NativeRendererFactory(engine);
+    class Chip {}
+    const styles = Chip as unknown as Record<string, unknown>;
+    styles['ɵnativeStyles'] = compileCss('.a { color: rgb(1, 0, 0) }', 'chip') as StyleSheet;
+    factory.createRenderer(engine.createElement('view'), {
+      id: 'chip',
+      encapsulation: 2,
+      type: Chip,
+    } as never);
+    // What the hot update leaves on the class: no sheet at all once every rule is gone.
+    styles['ɵnativeStyles'] = next.sheet;
+    factory.componentReplaced('chip');
+    factory.createRenderer(engine.createElement('view'), {
+      id: 'chip',
+      encapsulation: next.encapsulation,
+      type: Chip,
+    } as never);
+
+    const a = engine.createElement('view');
+    engine.addClass(a, 'a');
+    engine.appendChild(engine.root, a);
+    engine.commit();
+    return fabric.committed[0]!.props['color'];
+  }
+
+  it('drops the sheet it registered when the edit leaves no rules', async () => {
+    assert.equal(await swapTo({ encapsulation: 2 }), undefined);
+  });
+
+  it('drops it when the edit makes the component emulated, whose sheet is its own', async () => {
+    const sheet = compileCss('.b { color: rgb(2, 0, 0) }', 'chip') as StyleSheet;
+    assert.equal(await swapTo({ sheet, encapsulation: 0 }), undefined);
+  });
+});

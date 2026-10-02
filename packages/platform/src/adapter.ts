@@ -327,9 +327,15 @@ export class NativeRendererFactory implements RendererFactory2 {
    */
   private scopedSheetOf(type: ComponentDefLike | null): StyleSheet | null {
     const sheet = styleSheetOf(type?.type);
-    if (!sheet || type?.encapsulation !== NONE) return sheet;
-    const id = type.id ?? '';
-    this.engine.addGlobalSheet(sheet, this.globalById.get(id));
+    const id = type?.id ?? '';
+    const registered = this.globalById.get(id);
+    if (!sheet || type?.encapsulation !== NONE) {
+      // A hot swap that left the component no rules, or made it scoped: its old sheet goes.
+      if (registered) this.engine.removeGlobalSheet(registered);
+      this.globalById.delete(id);
+      return sheet;
+    }
+    this.engine.addGlobalSheet(sheet, registered);
     this.globalById.set(id, sheet);
     return null;
   }
