@@ -58,7 +58,7 @@ host injects what the engine needs (`processColor`, for one) rather than the eng
 `eslint.config.mjs` enforces this with `bannedExternalImports` on the `layer:runtime` tag, and the
 rule needs Nx's project graph, so lint through `nx`, never bare `eslint`.
 
-**At most one commit per change-detection pass.** `RendererFactory2.end()` is the flush point, and
+**At most one commit per change-detection pass.** `RendererFactory2.end()` is the commit point, and
 a pass that dirtied nothing must not reach `completeRoot`: any listener marks its view for refresh,
 so a scroll or a keystroke schedules a pass whether or not anything changed, and an unconditional
 commit is a wasted native commit per frame during a fling. The exceptions are frames that advance

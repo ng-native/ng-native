@@ -420,7 +420,7 @@ export class NativeRendererFactory implements RendererFactory2 {
     this.renderStarted = globalThis.performance?.now?.() ?? Date.now();
   }
 
-  /** The single flush point: at most one commit per change-detection pass. */
+  /** The single commit point: at most one commit per change-detection pass. */
   end(): void {
     this.rendering = false;
     this.engine.commit();

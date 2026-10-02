@@ -33,7 +33,7 @@ knowing about, because both fail silently if you write around them instead of th
   and exposes it as a directive `output()`, so `(press)` on a `<pressable>` binds to that output
   rather than an event on the renderer.
 
-## Change detection is zoneless, and a commit is the flush point
+## Change detection is zoneless, and a commit has one point it happens at
 
 There is no zone.js patching timers or touch events to know when to check the tree; Angular's
 zoneless scheduler decides when to run change detection, and `NativeRendererFactory.end()` is the
