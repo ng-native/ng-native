@@ -46,6 +46,7 @@ export {
   markComponentHost,
   nativePlatform,
   onFontsRegistered,
+  onFontsSettled,
   registerHoist,
   registerPlatformComponents,
   registerViewName,

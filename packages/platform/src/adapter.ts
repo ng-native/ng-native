@@ -37,6 +37,7 @@ import {
   markComponentHost,
   nativePlatform,
   onFontsRegistered,
+  onFontsSettled,
   reportUnboundFormsInput,
   styleSheetOf,
   type EngineNode,
@@ -774,8 +775,10 @@ export function mount(
   // Text laid out before its face registered is laid out again when it does: `loadFonts` is not
   // awaited before `mount` behind a splash screen.
   const stopFonts = onFontsRegistered((families) => engine.fontsRegistered(families));
+  const stopSettled = onFontsSettled((families) => engine.fontsSettled(families));
   componentRef.onDestroy(() => {
     stopFonts();
+    stopSettled();
     applicationRef.detachView(componentRef.hostView);
     const at = applicationRef.components.indexOf(componentRef);
     if (at !== -1) applicationRef.components.splice(at, 1);

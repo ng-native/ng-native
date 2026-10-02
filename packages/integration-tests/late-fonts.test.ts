@@ -223,6 +223,31 @@ describe('a face still loading when its text is first laid out', () => {
     await loading;
 
     assert.equal(paragraph(fabric, 'Title').props['fontFamily'], 'Inter-600');
+    const span = flatten(paragraph(fabric, 'Some ').children).find(
+      (node) => node.props['fontFamily'] !== undefined,
+    );
+    assert.equal(span?.props['fontFamily'], 'Inter-600', 'a span inside a paragraph too');
+  });
+
+  it('gives the text its family back when the face fails to load', async () => {
+    // As before the hold: the name is asked for, and native finds whatever it has by it.
+    let fail: () => void = () => {};
+    const native: NativeFonts = {
+      loadAsync: () =>
+        new Promise<void>((_, reject) => {
+          fail = () => reject(new Error('could not load Inter-600'));
+        }),
+      isLoaded: () => false,
+      getLoadedFonts: () => [],
+    };
+    const loading = new FontRegistry(native).load({ 'Inter-600': 1 });
+    const { fabric } = await render(LateFonts);
+    assert.equal(paragraph(fabric, 'Title').props['fontFamily'], undefined, 'held while loading');
+
+    fail();
+    await assert.rejects(loading, /could not load/);
+
+    assert.equal(paragraph(fabric, 'Title').props['fontFamily'], 'Inter-600');
   });
 });
 

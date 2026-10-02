@@ -919,23 +919,37 @@ export function fontsLoading(families: Iterable<string>): void {
     loadingFamilies.set(family, (loadingFamilies.get(family) ?? 0) + 1);
 }
 
-/** Faces a load asked for and has finished with, registered or not, before `fontsRegistered`. */
-export function fontsSettled(families: Iterable<string>): void {
-  for (const family of families) {
-    const left = (loadingFamilies.get(family) ?? 1) - 1;
-    if (left > 0) loadingFamilies.set(family, left);
-    else loadingFamilies.delete(family);
-  }
+/** What each mounted app does when a load settles. See `fontsSettled`. */
+const settleListeners = new Set<(families: ReadonlySet<string>) => void>();
+
+/** Hear about loads settling, until the returned function is called. */
+export function onFontsSettled(listener: (families: ReadonlySet<string>) => void): () => void {
+  settleListeners.add(listener);
+  return () => settleListeners.delete(listener);
 }
 
 /**
- * Whether a paragraph, or a span in it, was committed asking for one of these families, or held
- * one back while it loaded.
+ * Faces a load asked for and has finished with, registered or not, before `fontsRegistered`.
+ * Text held back for one that no load still asks for is laid out with the name again: see
+ * `Engine.fontsSettled`.
  */
+export function fontsSettled(families: Iterable<string>): void {
+  const settled = new Set<string>();
+  for (const family of families) {
+    const left = (loadingFamilies.get(family) ?? 1) - 1;
+    if (left > 0) loadingFamilies.set(family, left);
+    else {
+      loadingFamilies.delete(family);
+      settled.add(family);
+    }
+  }
+  if (settled.size) for (const listener of [...settleListeners]) listener(settled);
+}
+
+/** Whether a paragraph, or a span in it, was committed asking for one of these families. */
 function namesFamily(node: EngineNode, families: ReadonlySet<string>): boolean {
   const family = node.committed?.props['fontFamily'];
   if (typeof family === 'string' && families.has(family)) return true;
-  if (node.heldFamily !== undefined && families.has(node.heldFamily)) return true;
   return node.children.some((child) => namesFamily(child, families));
 }
 
@@ -1830,6 +1844,25 @@ export class Engine implements HostEngine {
    * text attributes change, which the same cap does. Android sets it only when `fontFamily` is in
    * the props it is sent, and the engine sends only what changed, so it is sent again once.
    */
+  /**
+   * Loads have settled for these families: every node held back for one, a span inside a
+   * paragraph included, is laid out with the name again, registered or not. See `loadingFamilies`.
+   */
+  fontsSettled(families: ReadonlySet<string>): void {
+    let held = false;
+    const visit = (node: EngineNode): void => {
+      for (const child of node.children) {
+        if (child.heldFamily !== undefined && families.has(child.heldFamily)) {
+          this.markProps(child, false);
+          held = true;
+        }
+        visit(child);
+      }
+    };
+    visit(this.root);
+    if (held) this.commit();
+  }
+
   fontsRegistered(families: ReadonlySet<string>): void {
     const visit = (node: EngineNode): void => {
       for (const child of node.children) {
