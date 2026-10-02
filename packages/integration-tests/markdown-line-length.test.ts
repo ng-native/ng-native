@@ -23,9 +23,22 @@ describe('findLongLines', () => {
     assert.deepEqual(findLongLines('x.md', line), []);
   });
 
+  // Words, not one long token, so the line is one the single-token rule would not excuse.
+  const words = 'word '.repeat(LIMIT / 4);
+
   it('excludes a fenced code block', () => {
-    const text = ['```ts', 'a'.repeat(LIMIT + 1), '```'].join('\n');
+    const text = ['```ts', words, '```'].join('\n');
     assert.deepEqual(findLongLines('x.md', text), []);
+  });
+
+  it('excludes a block fenced with tildes', () => {
+    const text = ['~~~ts', words, '~~~', 'after'].join('\n');
+    assert.deepEqual(findLongLines('x.md', text), []);
+  });
+
+  it('flags prose after a fence closes', () => {
+    const text = ['```ts', 'code', '```', words].join('\n');
+    assert.equal(findLongLines('x.md', text).length, 1);
   });
 
   it('excludes a table row', () => {
@@ -36,6 +49,13 @@ describe('findLongLines', () => {
   it('excludes a line that is a single unbreakable token', () => {
     const text = `https://example.com/${'a'.repeat(LIMIT)}`;
     assert.deepEqual(findLongLines('x.md', text), []);
+  });
+
+  it('excludes a list item or quote whose content is a single token', () => {
+    const url = `https://example.com/${'a'.repeat(LIMIT)}`;
+    for (const marker of ['- ', '* ', '1. ', '> ']) {
+      assert.deepEqual(findLongLines('x.md', marker + url), [], marker);
+    }
   });
 
   it('excludes front matter other than summary', () => {

@@ -54,15 +54,48 @@ function isTableLine(line: string): boolean {
   return line.trimStart().startsWith('|');
 }
 
-/** A line that is one token end to end - a bare URL, a long path - cannot be wrapped shorter. */
+/**
+ * A line that is one token end to end - a bare URL, a long path - cannot be wrapped shorter, and
+ * neither can a list item or quote whose content is one.
+ */
 function isSingleToken(line: string): boolean {
-  return line.trim().split(/\s+/).length <= 1;
+  const content = line.trim().replace(/^(?:[-*+]|\d+[.)]|>)\s+/, '');
+  return content.split(/\s+/).length <= 1;
 }
 
 /** Where `findLongLines` is as it walks the file, line by line. */
 interface WalkState {
-  inFence: boolean;
+  /** The marker the open code fence began with, ``` or ~~~, which alone closes it. */
+  fence: string | null;
   inFrontMatter: boolean;
+}
+
+/**
+ * Whether the line opens or closes front matter or is inside it, and so takes no prose rule. Only an
+ * over-length `summary:` there is a violation, answered as `summary`.
+ */
+function frontMatter(
+  line: string,
+  number: number,
+  state: WalkState,
+): 'summary' | 'skip' | undefined {
+  const trimmed = line.trim();
+  if (number === 1 && trimmed === '---') {
+    state.inFrontMatter = true;
+    return 'skip';
+  }
+  if (!state.inFrontMatter) return undefined;
+  if (trimmed === '---') state.inFrontMatter = false;
+  else if (trimmed.startsWith('summary:') && line.length > LIMIT) return 'summary';
+  return 'skip';
+}
+
+/** Whether the line opens or closes a code fence; only the marker that opened one closes it. */
+function fenceEdge(trimmed: string, state: WalkState): boolean {
+  const marker = /^(`{3,}|~{3,})/.exec(trimmed)?.[1];
+  if (!marker || (state.fence !== null && !marker.startsWith(state.fence))) return false;
+  state.fence = state.fence === null ? marker.slice(0, 3) : null;
+  return true;
 }
 
 /** The violation on one line, or undefined if the line is exempt or within the limit. */
@@ -71,30 +104,17 @@ function checkLine(
   number: number,
   state: WalkState,
 ): LineLengthViolation['kind'] | undefined {
-  const trimmed = line.trim();
-
-  if (number === 1 && trimmed === '---') {
-    state.inFrontMatter = true;
-    return undefined;
-  }
-  if (state.inFrontMatter) {
-    if (trimmed === '---') state.inFrontMatter = false;
-    else if (trimmed.startsWith('summary:') && line.length > LIMIT) return 'summary';
-    return undefined;
-  }
-  if (trimmed.startsWith('```')) {
-    state.inFence = !state.inFence;
-    return undefined;
-  }
-  if (state.inFence || isTableLine(line) || isSingleToken(line)) return undefined;
-
+  const matter = frontMatter(line, number, state);
+  if (matter) return matter === 'summary' ? 'summary' : undefined;
+  if (fenceEdge(line.trim(), state)) return undefined;
+  if (state.fence !== null || isTableLine(line) || isSingleToken(line)) return undefined;
   return line.length > LIMIT ? 'prose' : undefined;
 }
 
 /** Every line in `text` over the limit, excluding what cannot or need not be rewrapped. */
 export function findLongLines(file: string, text: string): LineLengthViolation[] {
   const violations: LineLengthViolation[] = [];
-  const state: WalkState = { inFence: false, inFrontMatter: false };
+  const state: WalkState = { fence: null, inFrontMatter: false };
 
   text.split('\n').forEach((line, index) => {
     const number = index + 1;
