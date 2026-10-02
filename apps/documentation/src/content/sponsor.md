@@ -1,5 +1,5 @@
 ---
-title: Sponsor
+title: Sponsor Angular Native
 summary: Angular Native is free and MIT licensed. Sponsorship pays for keeping it working on every new iOS, Android, Expo and Angular release.
 ---
 
