@@ -115,7 +115,14 @@ describe('the sync-app-versions migration', () => {
   it('updates every published @ng-native package together', () => {
     const packages = path.resolve(import.meta.dirname, '../..');
     const nx = JSON.parse(readFileSync(path.join(packages, 'nx/package.json'), 'utf8'));
-    const published = [...nx['nx-migrations'].packageGroup, nx.name].sort();
+    const published = [...nx['nx-migrations'].packageGroup].sort();
     assert.deepEqual([...own['ng-update'].packageGroup].sort(), published);
+  });
+
+  it('is what ng update with no package names suggests, not the first package in the group', () => {
+    // Without a packageGroupName the Angular CLI names the group for its first installed member,
+    // and suggested ng update @ng-native/components, which moves that package alone.
+    assert.equal(own['ng-update'].packageGroupName, own.name);
+    assert.ok(own['ng-update'].packageGroup.includes(own.name));
   });
 });

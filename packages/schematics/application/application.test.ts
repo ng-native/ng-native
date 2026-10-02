@@ -151,6 +151,13 @@ describe('ng add', () => {
     }
   });
 
+  it('names the app for iOS and Android, where prebuild would make it com.anonymous', () => {
+    // The workspace `ng new` writes has no npm scope, and Android refuses `native`, a Java keyword.
+    const { expo } = json(tree, 'projects/native/app.json');
+    assert.equal(expo.ios.bundleIdentifier, 'com.appnative');
+    assert.equal(expo.android.package, 'com.appnative');
+  });
+
   it('installs what it added', () => {
     assert.deepEqual(
       runner.tasks.map((task) => task.name),
@@ -231,5 +238,65 @@ describe('ng generate application', () => {
     await runner.runSchematic('application', { name: 'native', skipInstall: true }, workspace);
     assert.equal(warnings.length, 1);
     assert.match(warnings[0]!, /@angular\/core is 21\.2\.0 here/);
+  });
+  it("sets the bundle identifier, from the workspace's scope and the app's name", async () => {
+    const runner = new SchematicTestRunner('@ng-native/schematics', collection);
+    const workspace = await webWorkspace();
+    workspace.overwrite(
+      'package.json',
+      JSON.stringify({ ...json(workspace, 'package.json'), name: '@acme/shop' }),
+    );
+    const tree = await runner.runSchematic(
+      'application',
+      { name: 'field-notes', skipInstall: true },
+      workspace,
+    );
+    const { expo } = json(tree, 'projects/field-notes/app.json');
+    assert.equal(expo.ios.bundleIdentifier, 'com.acme.fieldnotes');
+    assert.equal(expo.android.package, 'com.acme.fieldnotes');
+  });
+
+  it('takes the bundle identifier from --bundleIdentifier', async () => {
+    const runner = new SchematicTestRunner('@ng-native/schematics', collection);
+    const tree = await runner.runSchematic(
+      'application',
+      { name: 'mobile', bundleIdentifier: 'dev.acme.Mobile2', skipInstall: true },
+      await webWorkspace(),
+    );
+    const { expo } = json(tree, 'projects/mobile/app.json');
+    assert.equal(expo.ios.bundleIdentifier, 'dev.acme.Mobile2');
+    assert.equal(expo.android.package, 'dev.acme.Mobile2');
+  });
+
+  it('takes --bundleIdentifier through ng add too', async () => {
+    const runner = new SchematicTestRunner('@ng-native/schematics', collection);
+    const tree = await runner.runSchematic(
+      'ng-add',
+      { bundleIdentifier: 'dev.acme.shop', skipInstall: true },
+      await webWorkspace(),
+    );
+    assert.equal(json(tree, 'projects/native/app.json').expo.android.package, 'dev.acme.shop');
+  });
+
+  it('refuses a bundle identifier iOS or Android would', async () => {
+    const runner = new SchematicTestRunner('@ng-native/schematics', collection);
+    for (const id of [
+      'mobile',
+      'com.acme.field-notes',
+      'com.acme.field_notes',
+      'com.2acme.app',
+      'com.acme.native',
+      'com..app',
+    ]) {
+      await assert.rejects(
+        runner.runSchematic(
+          'application',
+          { name: 'mobile', bundleIdentifier: id, skipInstall: true },
+          await webWorkspace(),
+        ),
+        /is not a bundle identifier both iOS and Android accept/,
+        id,
+      );
+    }
   });
 });

@@ -8,7 +8,7 @@
  */
 const { application } = require('../application/index.cjs');
 
-/** @param {{ name?: string, directory?: string, skipInstall?: boolean }} options */
+/** @param {{ name?: string, directory?: string, bundleIdentifier?: string, skipInstall?: boolean }} options */
 function ngAdd(options) {
   return application({ ...options, name: options.name ?? 'native', prefix: 'app' });
 }

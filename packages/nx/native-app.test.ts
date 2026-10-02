@@ -175,6 +175,13 @@ describe('conflicts', () => {
   });
 });
 
+describe('the app shape both generators share', () => {
+  it("is @ng-native/migrate's, which @ng-native/schematics builds its apps from too", () => {
+    const shared = require('@ng-native/migrate/native-app.cjs');
+    for (const [name, value] of Object.entries(shared)) assert.equal(native[name], value, name);
+  });
+});
+
 describe('nx migrate', () => {
   const packages = path.resolve(import.meta.dirname, '..');
   const published = readdirSync(packages)
@@ -187,8 +194,10 @@ describe('nx migrate', () => {
   it('moves every published @ng-native package with this one, since they are released together', () => {
     // `nx migrate @ng-native/nx@latest` moved only @ng-native/nx, and the other packages stayed on
     // the old version beside it. Nx moves a package's packageGroup to the version it migrates to.
+    // The group names this package too, as @ng-native/schematics' does for ng update, which needs
+    // it there; Nx skips a package it is already moving.
     const own = require('./package.json');
     const group = own['nx-migrations'].packageGroup as string[];
-    assert.deepEqual([...group].sort(), published.filter((name) => name !== own.name).sort());
+    assert.deepEqual([...group].sort(), [...published].sort());
   });
 });

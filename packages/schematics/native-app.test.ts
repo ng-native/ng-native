@@ -85,6 +85,13 @@ describe('the generated app', () => {
   });
 });
 
+describe('the app shape both generators share', () => {
+  it("is @ng-native/migrate's, which @ng-native/nx builds its apps from too", () => {
+    const shared = require('@ng-native/migrate/native-app.cjs');
+    for (const [name, value] of Object.entries(shared)) assert.equal(native[name], value, name);
+  });
+});
+
 describe('conflicts', () => {
   it("says nothing about the workspace's own pins of the framework packages", () => {
     const workspace = { dependencies: { '@ng-native/platform': '0.0.1' } };

@@ -221,12 +221,8 @@ function ignoreExpo(tree) {
 async function application(tree, options) {
   const resolved = names(tree, options);
   const { directory, projectName, workspaces } = resolved;
-  if (!native.isBundleIdentifier(resolved.bundleIdentifier)) {
-    throw new Error(
-      `${resolved.bundleIdentifier} is not a bundle identifier both iOS and Android accept: ` +
-        'two or more dot-separated segments, each a letter and then letters or digits, none a Java keyword.',
-    );
-  }
+  const problem = native.bundleIdentifierProblem(resolved.bundleIdentifier);
+  if (problem) throw new Error(problem);
   if (tree.exists(joinPathFragments(directory, 'package.json'))) {
     throw new Error(`${directory} already has a package.json. Choose another directory.`);
   }

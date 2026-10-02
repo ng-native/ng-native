@@ -27,6 +27,7 @@
       "@ng-native/icons",
       "@ng-native/metro",
       "@ng-native/migrate",
+      "@ng-native/nx",
       "@ng-native/platform",
       "@ng-native/router",
       "@ng-native/schematics",

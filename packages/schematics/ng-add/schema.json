@@ -14,6 +14,10 @@
       "type": "string",
       "description": "Where the project goes. Defaults to newProjectRoot/name, usually projects/native."
     },
+    "bundleIdentifier": {
+      "type": "string",
+      "description": "The iOS bundle identifier and Android package: com.acme.mobile. Defaults to com.<workspace scope>.<name>."
+    },
     "skipInstall": {
       "type": "boolean",
       "description": "Write the files and package.json without installing.",

@@ -21,6 +21,10 @@
       "default": "app",
       "pattern": "^[a-z][a-z0-9-]*$"
     },
+    "bundleIdentifier": {
+      "type": "string",
+      "description": "The iOS bundle identifier and Android package: com.acme.mobile. Defaults to com.<workspace scope>.<name>."
+    },
     "skipInstall": {
       "type": "boolean",
       "description": "Write the files and package.json without installing.",

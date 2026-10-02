@@ -96,11 +96,11 @@ function commands(name) {
   ].join('\n');
 }
 
-function writeFiles(tree, root, name) {
+function writeFiles(tree, root, name, bundleIdentifier) {
   for (const file of native.SOURCE_FILES) {
     tree.create(path.join(root, file), native.sourceFile(file));
   }
-  tree.create(path.join(root, 'app.json'), native.appJson(name));
+  tree.create(path.join(root, 'app.json'), native.appJson(name, bundleIdentifier));
   tree.create(path.join(root, 'AGENTS.md'), native.agentsFile(commands(name)));
   tree.create(path.join(root, 'CLAUDE.md'), '@AGENTS.md\n');
   tree.create(path.join(root, '.gitignore'), native.GITIGNORE);
@@ -131,7 +131,7 @@ function ignoreExpo(tree) {
 }
 
 /**
- * @param {{ name: string, directory?: string, prefix?: string, skipInstall?: boolean }} options
+ * @param {{ name: string, directory?: string, prefix?: string, bundleIdentifier?: string, skipInstall?: boolean }} options
  */
 function application(options) {
   return (tree, context) => {
@@ -147,9 +147,13 @@ function application(options) {
       throw new SchematicsException(`angular.json already has a project called "${name}".`);
     }
     const root = options.directory ?? path.join(workspace.newProjectRoot ?? 'projects', name);
+    const scope = readJson(tree, 'package.json').name?.match(/^@[^/]+/)?.[0];
+    const bundleIdentifier = options.bundleIdentifier ?? native.bundleIdentifier(name, scope);
+    const problem = native.bundleIdentifierProblem(bundleIdentifier);
+    if (problem) throw new SchematicsException(problem);
 
     addDependencies(tree, context);
-    writeFiles(tree, root, name);
+    writeFiles(tree, root, name, bundleIdentifier);
     workspace.projects = { ...workspace.projects, [name]: project(root, name, options.prefix) };
     writeJson(tree, 'angular.json', workspace);
     ignoreExpo(tree);
