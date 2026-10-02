@@ -100,8 +100,9 @@ Call it in an injection context, such as a field of a component or service.
   that ends one and can start the next wants `'immediate'`.
 - **`active`**, **`id`** and **`pushToken`** are signals. The push token is for updating the
   activity from a server through APNs.
-- **`error`** holds why the last start failed, for example Live Activities turned off in Settings.
-  An update that fails also goes to the `ErrorHandler`.
+- **`error`** holds why the last start or update failed, for example Live Activities turned off in
+  Settings. A refused start is only kept there; an update that fails also goes to the
+  `ErrorHandler`.
 
 The activity outlives the app: destroying the component stops the updates but leaves it on the lock
 screen until it is ended or the system removes it.
