@@ -28,20 +28,12 @@ const SVG_VIEW_NAMES: Record<string, string> = {
   'svg-line': 'RNSVGLine',
 };
 
-/**
- * The roots: element name -> Fabric component, same iOS/Android split as the shapes above.
- * `ng-icon` is `NgIcon`'s own host; a list because nothing stops two element names sharing one
- * native view.
- */
-const SVG_ROOT_NAMES = ['ng-icon'];
-
 let registered = false;
 
 /**
- * Teach the engine the shape elements and both roots. Called by `NgIcon` and `ChartSvg`, so
- * importing either component is the whole setup - the same lesson as `AnimatedStyle`, which
- * stopped needing a bootstrap provider for the same reason. Exported for an app driving the
- * shapes directly.
+ * Teach the engine the shape elements and `ng-icon`, `NgIcon`'s own host, as the root. Called by
+ * `NgIcon`, so importing it is the whole setup - the same lesson as `AnimatedStyle`, which stopped
+ * needing a bootstrap provider for the same reason.
  *
  * A name the native side does not know renders as `UnimplementedNativeView` rather than erroring,
  * so an app that has not installed `react-native-svg` sees blank boxes where its icons were.
@@ -49,10 +41,10 @@ let registered = false;
 export function registerSvgComponents(): void {
   if (registered) return;
   registered = true;
-  const rootViewName = nativePlatform() === 'android' ? 'RNSVGSvgViewAndroid' : 'RNSVGSvgView';
-  for (const root of SVG_ROOT_NAMES) {
-    registerViewName(root, rootViewName);
-  }
+  registerViewName(
+    'ng-icon',
+    nativePlatform() === 'android' ? 'RNSVGSvgViewAndroid' : 'RNSVGSvgView',
+  );
   for (const [element, viewName] of Object.entries(SVG_VIEW_NAMES)) {
     registerViewName(element, viewName);
   }

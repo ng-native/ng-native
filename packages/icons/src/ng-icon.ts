@@ -37,7 +37,7 @@ import { claimHost, type EngineNode, HostEngine } from '@ng-native/fabric';
 import { NgIconsToken } from '@ng-icons/core';
 import { parseSvg, type SvgNode } from './parse-svg.ts';
 import { registerSvgComponents } from './svg-elements.ts';
-import { SVG_ELEMENTS, nativeProps, styleAttributes, viewBoxProps } from './svg-props.ts';
+import { SVG_ELEMENTS, nativeProps, own, styleAttributes, viewBoxProps } from './svg-props.ts';
 
 /** ng-icons stores icons under a camel-cased key, so `hero-book-open` finds `heroBookOpen`. */
 function toPropertyName(name: string): string {
@@ -102,7 +102,8 @@ export class NgIcon {
     const key = toPropertyName(name);
     // Reversed, because a nearer `provideIcons` should win over one further up the tree.
     for (const set of [...this.icons].reverse()) {
-      if (set[key]) return set[key];
+      const markup = own(set, key);
+      if (markup) return markup;
     }
     if (typeof ngDevMode !== 'undefined' && ngDevMode) {
       console.warn(
@@ -150,7 +151,7 @@ export class NgIcon {
   }
 
   private append(parent: unknown, node: SvgNode): void {
-    const element = SVG_ELEMENTS[node.tag];
+    const element = own(SVG_ELEMENTS, node.tag);
     if (!element) return;
     const shape = this.create(element, node);
     for (const child of node.children) this.append(shape, child);

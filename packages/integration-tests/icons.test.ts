@@ -94,6 +94,25 @@ describe('translating an icon', () => {
     assert.equal(props['d'], 'M0 0');
   });
 
+  it('reads a name that is only on Object.prototype as unknown', () => {
+    const props = nativeProps(
+      'constructor',
+      {
+        constructor: 'x',
+        'stroke-linecap': 'toString',
+        'stroke-linejoin': 'toString',
+        'fill-rule': 'valueOf',
+      },
+      colour,
+    );
+    assert.deepEqual(props, {
+      strokeLinecap: 0,
+      strokeLinejoin: 0,
+      fillRule: 1,
+      propList: ['strokeLinecap', 'strokeLinejoin', 'fillRule'],
+    });
+  });
+
   it('turns the opacity props into numbers, because Android takes a float', () => {
     const props = nativeProps(
       'path',
@@ -225,18 +244,25 @@ describe('translating an icon', () => {
 describe('an icon in the tree', () => {
   let instance: { size: { set(value: number): void } };
   let mod: Record<string, unknown>;
+  const warnings: string[] = [];
 
   before(async () => {
     registerSvgComponents();
     mod = await compileFixture(fileURLToPath(new URL('./fixtures/icons.ts', import.meta.url)));
-    const rendered = await render<{ size: { set(value: number): void } }>(
-      mod['IconHost'] as Type<{ size: { set(value: number): void } }>,
-      {
-        processColor: (value) => `processed:${String(value)}`,
-        providers: [provideIcons({ heroAcademicCap: mod['heroAcademicCap'] as string })],
-      },
-    );
-    instance = rendered.instance;
+    const warn = console.warn;
+    console.warn = (message: unknown) => warnings.push(String(message));
+    try {
+      const rendered = await render<{ size: { set(value: number): void } }>(
+        mod['IconHost'] as Type<{ size: { set(value: number): void } }>,
+        {
+          processColor: (value) => `processed:${String(value)}`,
+          providers: [provideIcons({ heroAcademicCap: mod['heroAcademicCap'] as string })],
+        },
+      );
+      instance = rendered.instance;
+    } finally {
+      console.warn = warn;
+    }
   });
   after(cleanup);
 
@@ -307,6 +333,14 @@ describe('an icon in the tree', () => {
     );
     assert.equal(labelled.props['accessible'], true);
     assert.equal(labelled.props['accessibilityRole'], 'image');
+  });
+
+  it('reads a name that is only on Object.prototype as no icon', () => {
+    assert.deepEqual(byId('inherited').children, []);
+    assert.ok(
+      warnings.some((warning) => warning.includes('no icon named constructor')),
+      'the lookup fell through rather than finding Object',
+    );
   });
 
   it('takes the old drawing down when the markup changes', async () => {

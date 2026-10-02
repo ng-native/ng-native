@@ -30,6 +30,7 @@ export const lucideTarget =
     <ng-icon nativeID="raw" [svg]="raw" [strokeWidth]="3" />
     <ng-icon nativeID="labelled" [svg]="odd()" accessibilityLabel="Target" />
     <ng-icon nativeID="static" [svg]="raw" size="32" />
+    <ng-icon nativeID="inherited" name="constructor" />
   `,
 })
 export class IconHost {
@@ -37,5 +38,5 @@ export class IconHost {
   readonly size = signal(24);
   readonly color = signal('#ff9f0a');
   /** An element no native view draws, beside one that is drawn. */
-  readonly odd = signal('<svg viewBox="0 0 24 24"><text>x</text><circle r="1"/></svg>');
+  readonly odd = signal('<svg viewBox="0 0 24 24"><text>x</text><toString/><circle r="1"/></svg>');
 }

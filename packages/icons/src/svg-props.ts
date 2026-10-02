@@ -28,6 +28,11 @@ const FILL_RULE: Record<string, number> = { evenodd: 0, nonzero: 1 };
 
 const URL_REFERENCE = /^url\(#(.+)\)$/;
 
+/** `table[key]`, but never off `Object.prototype`: a tag or attribute named `constructor` is unknown. */
+export function own<T>(table: Readonly<Record<string, T>>, key: string): T | undefined {
+  return Object.hasOwn(table, key) ? table[key] : undefined;
+}
+
 /**
  * Which element each SVG tag commits as. `polyline` and `polygon` are paths: react-native-svg has
  * no component for either and converts their points to a `d`, so this does too.
@@ -58,10 +63,10 @@ function geometry(
   attrs: Readonly<Record<string, string>>,
   props: Record<string, unknown>,
 ): void {
-  for (const name of GEOMETRY[tag] ?? []) {
+  for (const name of own(GEOMETRY, tag) ?? []) {
     if (attrs[name] !== undefined) props[name] = attrs[name];
   }
-  for (const name of ZERO_BY_DEFAULT[tag] ?? []) props[name] ??= 0;
+  for (const name of own(ZERO_BY_DEFAULT, tag) ?? []) props[name] ??= 0;
 }
 
 /**
@@ -233,7 +238,7 @@ export function nativeProps(
   const propList: string[] = [];
 
   for (const [name, value] of Object.entries(attrs)) {
-    const prop = PRESENTATION[name];
+    const prop = own(PRESENTATION, name);
     if (!prop) continue;
     props[prop] = presentationValue(prop, value, context);
     propList.push(prop);
@@ -273,9 +278,9 @@ const NUMERIC: Record<string, number> = {
 
 function presentationValue(prop: string, value: string, context: SvgContext): unknown {
   if (prop === 'fill' || prop === 'stroke') return brushOf(value, context);
-  if (prop === 'strokeLinecap') return LINECAP[value] ?? 0;
-  if (prop === 'strokeLinejoin') return LINEJOIN[value] ?? 0;
-  if (prop === 'fillRule' || prop === 'clipRule') return FILL_RULE[value] ?? 1;
+  if (prop === 'strokeLinecap') return own(LINECAP, value) ?? 0;
+  if (prop === 'strokeLinejoin') return own(LINEJOIN, value) ?? 0;
+  if (prop === 'fillRule' || prop === 'clipRule') return own(FILL_RULE, value) ?? 1;
   if (prop === 'strokeDasharray')
     return value
       .trim()
