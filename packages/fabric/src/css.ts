@@ -1533,12 +1533,16 @@ export class StyleResolver {
       if (settled === undefined && this.onUndefinedToken) {
         this.reportUndefined(declaration, tokens);
       }
-      if (settled === undefined && declaration.kind === 'display' && this.onUnreadDisplay) {
+      const outranked = (prop: string) =>
+        !declaration.important && important !== null && prop in important;
+      // Said only of a display that is written: an important one wins over the token's.
+      const unread = settled === undefined && declaration.kind === 'display';
+      if (unread && this.onUnreadDisplay && !outranked('display')) {
         this.reportDisplay(declaration, tokens);
       }
       const value = settled ?? declaration.unset;
       for (const prop of declaration.props) {
-        if (!declaration.important && important && prop in important) continue;
+        if (outranked(prop)) continue;
         write(own, prop, value, declaration.line !== undefined);
       }
     }

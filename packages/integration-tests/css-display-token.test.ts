@@ -192,6 +192,16 @@ describe('display: var() of a value native has no layout for, in development', (
     assert.deepEqual(said(), []);
   });
 
+  it('says nothing when an important display wins over the token', () => {
+    const { display } = tree(
+      '.p { --d: grid } .a { display: none !important } .a { display: var(--d) }',
+      ['p'],
+      true,
+    );
+    assert.equal(display(), 'none');
+    assert.deepEqual(said(), []);
+  });
+
   it('says nothing in a release build', () => {
     const { engine, node } = tree('.a { display: var(--d) }');
     engine.setCustomProperty(node, '--d', 'grid');
