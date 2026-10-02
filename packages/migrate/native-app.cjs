@@ -77,18 +77,29 @@ const JAVA_KEYWORDS = new Set(
 );
 
 /**
+ * Kotlin's hard keywords, which it refuses as a package segment as Java refuses its own: Expo
+ * writes the Android package into `MainActivity.kt` and `MainApplication.kt` without escaping one.
+ */
+const KOTLIN_KEYWORDS = new Set(
+  (
+    'as break class continue do else false for fun if in interface is null object package return ' +
+    'super this throw true try typealias typeof val var when while'
+  ).split(' '),
+);
+
+/** Whether `segment` is a keyword Java or Kotlin refuses as a package segment. */
+const isKeyword = (segment) => JAVA_KEYWORDS.has(segment) || KOTLIN_KEYWORDS.has(segment);
+
+/**
  * Whether iOS takes `id` as a bundle identifier and Android as a package name: two or more
  * segments, each a letter and then letters or digits (iOS refuses `_`, Android `-`), none of them
- * a Java keyword.
+ * a Java or Kotlin keyword.
  *
  * @param {string} id
  */
 function isBundleIdentifier(id) {
   const segments = id.split('.');
-  return (
-    segments.length > 1 &&
-    segments.every((s) => /^[a-z][a-z0-9]*$/i.test(s) && !JAVA_KEYWORDS.has(s))
-  );
+  return segments.length > 1 && segments.every((s) => /^[a-z][a-z0-9]*$/i.test(s) && !isKeyword(s));
 }
 
 /**
@@ -100,7 +111,8 @@ function bundleIdentifierProblem(id) {
   if (isBundleIdentifier(id)) return undefined;
   return (
     `${id} is not a bundle identifier both iOS and Android accept: ` +
-    'two or more dot-separated segments, each a letter and then letters or digits, none a Java keyword.'
+    'two or more dot-separated segments, each a letter and then letters or digits, none a Java or ' +
+    'Kotlin keyword.'
   );
 }
 
@@ -113,7 +125,7 @@ function bundleIdentifierProblem(id) {
  */
 function bundleIdentifier(name, scope) {
   const clean = (text) => text.toLowerCase().replace(/[^a-z0-9]/g, '');
-  const valid = (segment) => /^[a-z]/.test(segment) && !JAVA_KEYWORDS.has(segment);
+  const valid = (segment) => /^[a-z]/.test(segment) && !isKeyword(segment);
   const org = clean(scope ?? '');
   const app = clean(name);
   return ['com', ...(valid(org) ? [org] : []), valid(app) ? app : `app${app}`].join('.');

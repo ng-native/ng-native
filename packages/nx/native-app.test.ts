@@ -121,6 +121,15 @@ describe('the generated app', () => {
     }
   });
 
+  it('refuses a segment that is a Kotlin keyword, which Expo writes into Kotlin packages', () => {
+    for (const id of ['com.acme.object', 'com.fun.notes', 'com.acme.when', 'com.val.app']) {
+      assert.equal(native.isBundleIdentifier(id), false, id);
+      assert.match(native.bundleIdentifierProblem(id), /Kotlin keyword/);
+    }
+    assert.equal(native.bundleIdentifier('object', '@acme'), 'com.acme.appobject');
+    assert.equal(native.bundleIdentifier('notes', '@fun'), 'com.notes');
+  });
+
   it("names app.json for the project without its scope, keeping the template's settings", () => {
     const { expo } = JSON.parse(native.appJson('@org/field-notes'));
     const theirs = JSON.parse(templateFile('app.json')).expo;
