@@ -1,8 +1,9 @@
 # Padel
 
 A padel scorer built with Angular Native and an Apple Watch app. Score each point with a tap on the
-watch or the phone, and both always show the same score. The score can also go on the lock screen and
-into the Dynamic Island as a Live Activity.
+watch or the phone, and both always show the same score. The score can also go on the lock screen
+and into the Dynamic Island as a Live Activity, and on the home screen as a widget you can score
+from.
 
 | Part                                             | What it shows                                                                                                                                                                  |
 | ------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
@@ -10,6 +11,7 @@ into the Dynamic Island as a Live Activity.
 | Scoring (`src/app/match/match.ts`)               | Deuce and advantage or golden point, sets to 6 by two, a tiebreak at 6-6, best of three                                                                                        |
 | Watch link (`src/app/match/match-store.ts`)      | `Watch` from `@ng-native/expo/watch`: the phone keeps the score, and the watch sends it points                                                                                 |
 | Live Activity (`src/app/live/score-activity.ts`) | The lock screen banner and Dynamic Island layout, an Angular template compiled for the widget extension, kept in step by `liveActivity()` from `@ng-native/expo/live-activity` |
+| Widget (`src/app/live/score-widget.ts`)          | A home screen widget with a button for each side, an Angular template compiled for the widget extension, kept in step by `widget()` from `@ng-native/expo/widget`              |
 | Watch app (`targets/watch/PadelWatchApp.swift`)  | A SwiftUI app with a button for each side, a haptic on every tap, and a queue for when the phone is away                                                                       |
 
 ## How the phone and the watch talk

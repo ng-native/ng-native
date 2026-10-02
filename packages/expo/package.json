@@ -61,6 +61,7 @@
     "./updates": "./src/updates.ts",
     "./video": "./src/video.ts",
     "./watch": "./src/watch.ts",
+    "./widget": "./src/widget.ts",
     "./package.json": "./package.json"
   },
   "publishConfig": {
@@ -247,6 +248,10 @@
       "./watch": {
         "types": "./dist/watch.d.ts",
         "default": "./dist/watch.js"
+      },
+      "./widget": {
+        "types": "./dist/widget.d.ts",
+        "default": "./dist/widget.js"
       },
       "./package.json": "./package.json"
     }

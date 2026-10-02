@@ -81,6 +81,25 @@ function extensionRender(source: string, props: unknown, environment: unknown = 
 }
 
 /**
+ * Presses the button `target` names, as the extension's `WidgetUserInteraction` intent does: it
+ * draws the layout again and runs that button's `onPress`, and the props it answers are merged into
+ * the widget's.
+ */
+function extensionPress(source: string, props: unknown, target: string): unknown {
+  const context = vm.createContext({ console, nativePerformanceNow: () => 0 });
+  context['globalThis'] = context;
+  vm.runInContext(bundle, context);
+  vm.runInContext(`globalThis.__expoWidgetLayout = (${source});`, context);
+  context['__props'] = props;
+  context['__target'] = target;
+  return JSON.parse(
+    JSON.stringify(
+      vm.runInContext('__expoWidgetHandlePress(__props, { target: __target })', context),
+    ),
+  );
+}
+
+/**
  * A tree as native reads it. `DynamicView.swift`'s `flattenChildNodes` flattens nested child
  * arrays, drops what is not a view (`false`, `null`, a string) and reads one child as a list of one,
  * so two trees that differ only there draw the same.
@@ -241,6 +260,37 @@ describe('a layout through the widget extension', () => {
         { props: { count: 3 }, environment: { widgetFamily: 'systemMedium' } },
       ],
     );
+  });
+
+  it("draws a widget's buttons as their JSX does, and a press records its target", () => {
+    const template = `<ui-hstack>
+      <ui-button target="us" (buttonPress)="{ us: props().us + 1 }">
+        <ui-text>Us {{ props().us }}</ui-text>
+      </ui-button>
+      <ui-button target="them" label="Them" />
+    </ui-hstack>`;
+    same(
+      template,
+      `(props) => {
+        'widget';
+        const taps = (side) => [...(Array.isArray(props.taps) ? props.taps : []), side];
+        return (
+          <HStack>
+            <Button target="us" onPress={() => ({ ...props, us: props.us + 1, taps: taps('us') })}>
+              <Text>{\`Us \${props.us}\`}</Text>
+            </Button>
+            <Button target="them" label="Them" onPress={() => ({ ...props, taps: taps('them') })} />
+          </HStack>
+        );
+      }`,
+      [{ props: { us: 2 } }],
+    );
+    const angular = compileWidgetLayout(template, { file: 'layout.ts', members: MEMBERS });
+    assert.deepEqual(extensionPress(angular, { us: 2, taps: ['them'] }, 'us'), {
+      us: 3,
+      taps: ['them', 'us'],
+    });
+    assert.deepEqual(extensionPress(angular, { us: 2 }, 'them'), { us: 2, taps: ['them'] });
   });
 
   it('repeats a view by @for as a map does, and draws @empty in its place', () => {

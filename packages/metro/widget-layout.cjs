@@ -21,6 +21,9 @@
  * - `@if`, `@for` (with `@empty` and the contextual names), `@switch` and `@let` are expressions.
  * - `<ng-template #slot>` at the top level is one of a Live Activity's slots; otherwise the layout
  *   is a home-screen widget's one root view.
+ * - A home-screen widget's `ui-button` records its `target` in the props' `taps` when it is
+ *   tapped, since the extension runs the tap while the app may be suspended; `@ng-native/expo/widget`
+ *   hands the taps to the app. Its `(buttonPress)` is the props to change at once, as an object.
  *
  * Anything a layout cannot do is an error naming the file, line and column, rather than a view the
  * extension draws as an error box on the lock screen.
@@ -95,6 +98,16 @@ const VIEWS = {
     inputs: { destination: 'string', label: 'string', modifiers: 'any' },
   },
   divider: { component: 'Divider', inputs: { modifiers: 'any' } },
+  button: {
+    component: 'Button',
+    inputs: {
+      label: 'string',
+      systemImage: 'string',
+      role: 'string',
+      target: 'string',
+      modifiers: 'any',
+    },
+  },
   progress: { component: 'ProgressView', inputs: { value: 'number', modifiers: 'any' } },
   spacer: { component: 'Spacer', inputs: { modifiers: 'any' } },
   gauge: {
@@ -297,7 +310,10 @@ class Compiler {
     }
     this.filled.add(reference.name);
     this.oneView(template.children, false);
-    return `${reference.name}:${this.children(template.children, scope, true)}`;
+    this.inSlot = true;
+    const source = `${reference.name}:${this.children(template.children, scope, true)}`;
+    this.inSlot = false;
+    return source;
   }
 
   letDeclaration(node, scope) {
@@ -344,7 +360,7 @@ class Compiler {
       this.fail(node, `<${node.name}> is not a ui- view, which is all a layout draws.`);
     const view = VIEWS[name];
     if (!view) this.fail(node, `<${node.name}> is not a view the widget extension can draw.`);
-    this.refuseUnsupported(node);
+    this.refuseUnsupported(node, name === 'button' ? 'buttonPress' : null);
     const props = new Map();
     for (const attribute of node.attributes) {
       props.set(attribute.name, this.staticInput(node, view, attribute));
@@ -358,6 +374,7 @@ class Compiler {
     }
     const children = this.content(node, name, props, scope);
     if (children !== null) props.set('children', children);
+    if (name === 'button') props.set('onPress', this.press(node, props, scope));
     const entries = [...props].map(([key, value]) => `${JSON.stringify(key)}:${value}`);
     return `_jsx(${view.component},{${entries.join(',')}})`;
   }
@@ -374,8 +391,40 @@ class Compiler {
     return children === 'undefined' ? null : children;
   }
 
-  refuseUnsupported(node) {
+  /**
+   * A button's tap, as the function the extension runs: the props it answers replace the widget's,
+   * with its target added to `taps`. What `(buttonPress)` answers is merged in first, so the widget
+   * can show the tap at once; the taps it holds are kept whatever that answers.
+   */
+  press(node, props, scope) {
+    if (this.inSlot) {
+      this.fail(
+        node,
+        '<ui-button> records its tap in the props, which only a home-screen widget keeps: a Live Activity cannot.',
+      );
+    }
+    const target = props.get('target');
+    if (target === undefined) {
+      this.fail(node, '<ui-button> needs a target, for the app to tell its taps from the others.');
+    }
+    const [event] = node.outputs;
+    let change = '{}';
+    if (event) {
+      if (event.handler.ast instanceof ng.Chain) {
+        this.fail(
+          event,
+          '(buttonPress) is one expression in a layout: an object of the props to change.',
+        );
+      }
+      change = this.expression(event.handler, scope);
+    }
+    const taps = 'Array.isArray(props.taps)?props.taps:[]';
+    return `function(){return Object.assign({},props,${change},{taps:(${taps}).concat([${target}])});}`;
+  }
+
+  refuseUnsupported(node, event = null) {
     for (const output of node.outputs) {
+      if (output.name === event) continue;
       this.fail(output, `(${output.name}) is an event, which a layout cannot run.`);
     }
     for (const reference of node.references) {

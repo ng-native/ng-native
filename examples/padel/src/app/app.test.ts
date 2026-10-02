@@ -1,4 +1,5 @@
 import { Watch, type NativeWatch, type WatchPayload } from '@ng-native/expo/watch';
+import { WIDGET_EVENTS } from '@ng-native/expo/widget';
 import { render, screen, userEvent } from '@ng-native/testing';
 import { beforeEach, expect, test, vi } from 'vitest';
 import { App } from './app.ts';
@@ -33,7 +34,30 @@ const lockScreen = vi.hoisted(() => {
 
 vi.mock('./live/score-activity.ts', () => ({ scoreActivity: lockScreen.factory }));
 
-beforeEach(() => lockScreen.reset());
+const homeScreen = vi.hoisted(() => {
+  let props: Record<string, unknown> = {};
+  return {
+    shown: () => props,
+    tap: (side: string) => {
+      props = { ...props, taps: [...((props['taps'] as string[]) ?? []), side] };
+    },
+    reset: () => (props = {}),
+    widget: {
+      updateSnapshot: (next: Record<string, unknown>) => (props = next),
+      getTimeline: async () => [{ date: new Date(), props }],
+      reload: () => {},
+    },
+  };
+});
+
+vi.mock('./live/score-widget.ts', () => ({ scoreWidget: homeScreen.widget }));
+
+const widgetEvents = { foreground: () => {} };
+
+beforeEach(() => {
+  lockScreen.reset();
+  homeScreen.reset();
+});
 
 function fakeWatch() {
   const listeners = new Map<string, (...args: unknown[]) => void>();
@@ -64,7 +88,22 @@ function fakeWatch() {
 }
 
 const start = (watch = fakeWatch()) =>
-  render(App, { providers: [{ provide: Watch.SOURCE, useValue: watch.native }] });
+  render(App, {
+    providers: [
+      { provide: Watch.SOURCE, useValue: watch.native },
+      {
+        provide: WIDGET_EVENTS,
+        useValue: {
+          onTap: () => () => {},
+          onForeground: (listener: () => void) => {
+            widgetEvents.foreground = listener;
+            return () => {};
+          },
+          onBackground: () => () => {},
+        },
+      },
+    ],
+  });
 
 test('scores a point from the phone and keeps the watch in step', async () => {
   const watch = fakeWatch();
@@ -151,7 +190,9 @@ test('undoes the last point', async () => {
 
   await userEvent.press(screen.getByRole('button', { name: 'Undo' }));
 
-  expect(await screen.findByText('Tap a point here or on the watch to start.')).toBeTruthy();
+  expect(
+    await screen.findByText('Tap a point here, on the watch or on the widget to start.'),
+  ).toBeTruthy();
 });
 
 test('puts the score on the lock screen and keeps it in step', async () => {
@@ -170,4 +211,19 @@ test('puts the score on the lock screen and keeps it in step', async () => {
   expect(await screen.findByRole('button', { name: 'Show on lock screen' })).toBeTruthy();
   // Gone at once: an ended activity iOS keeps on the lock screen sits over the next one started.
   expect(lockScreen.ended).toEqual(['immediate']);
+});
+
+test('shows the score on the home screen widget, and counts the points tapped on it', async () => {
+  await start();
+  await userEvent.press(screen.getByRole('button', { name: 'Point Us' }));
+  await expect.poll(() => homeScreen.shown()).toMatchObject({ us: '15', them: '0' });
+
+  homeScreen.tap('them');
+  homeScreen.tap('a button this app does not have');
+  homeScreen.tap('them');
+  widgetEvents.foreground();
+
+  expect(await screen.findAllByText('on the widget')).toHaveLength(2);
+  await expect.poll(() => homeScreen.shown()).toMatchObject({ us: '15', them: '30' });
+  expect(homeScreen.shown()['taps']).toBeUndefined();
 });

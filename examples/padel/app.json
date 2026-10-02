@@ -11,6 +11,22 @@
     "android": {
       "package": "dev.angularnative.padel"
     },
-    "plugins": ["@ng-native/metro", "@bacons/apple-targets", ["expo-widgets", {}]]
+    "plugins": [
+      "@ng-native/metro",
+      "@bacons/apple-targets",
+      [
+        "expo-widgets",
+        {
+          "widgets": [
+            {
+              "name": "PadelScoreWidget",
+              "displayName": "Padel score",
+              "description": "The score of the match, with a button for each side.",
+              "supportedFamilies": ["systemSmall", "systemMedium"]
+            }
+          ]
+        }
+      ]
+    ]
   }
 }

@@ -36,7 +36,16 @@ const modifier =
  * Stand-ins for the extension's globals: each component is its name, and the JSX runtime answers
  * the call it was given. `widget-extension.test.ts` runs the real ones.
  */
-const COMPONENTS = ['Text', 'HStack', 'VStack', 'Spacer', 'Divider', 'ProgressView', 'Gauge'];
+const COMPONENTS = [
+  'Text',
+  'HStack',
+  'VStack',
+  'Spacer',
+  'Divider',
+  'ProgressView',
+  'Gauge',
+  'Button',
+];
 const GLOBALS = {
   _jsx: (type: string, props: Record<string, unknown>) => ({ type, props }),
   ...Object.fromEntries(COMPONENTS.map((name) => [name, name])),
@@ -386,6 +395,46 @@ describe('expressions', () => {
   });
 });
 
+type Press = () => Record<string, unknown>;
+
+describe('buttons', () => {
+  it("record their target in the props' taps, for the app to collect", () => {
+    const view = render('<ui-button target="us" label="Us" />', { us: '0', taps: ['them'] });
+    assert.equal(view.type, 'Button');
+    assert.equal(view.props['target'], 'us');
+    assert.equal(view.props['label'], 'Us');
+    assert.deepEqual((view.props['onPress'] as Press)(), { us: '0', taps: ['them', 'us'] });
+  });
+
+  it('start the taps when the props have none', () => {
+    const view = render('<ui-button target="us"><ui-text>Us</ui-text></ui-button>', { us: '0' });
+    assert.deepEqual((view.props['onPress'] as Press)(), { us: '0', taps: ['us'] });
+    assert.deepEqual(view.props['children'], { type: 'Text', props: { children: 'Us' } });
+  });
+
+  it('take a bound target', () => {
+    const view = render('<ui-button [target]="props().side" />', { side: 'them' });
+    assert.deepEqual((view.props['onPress'] as Press)(), { side: 'them', taps: ['them'] });
+  });
+
+  it('change what the widget shows at once by (buttonPress), with the props it answers', () => {
+    const view = render(
+      '<ui-button target="us" (buttonPress)="{ us: next[props().us] }" />',
+      { us: '15', them: '0' },
+      {},
+      { ...MEMBERS, constants: { next: '{"0":"15","15":"30"}' } },
+    );
+    assert.deepEqual((view.props['onPress'] as Press)(), { us: '30', them: '0', taps: ['us'] });
+  });
+
+  it('keep the taps their (buttonPress) did not mean to replace', () => {
+    const view = render('<ui-button target="us" (buttonPress)="{ taps: [] }" />', {
+      taps: ['them'],
+    });
+    assert.deepEqual((view.props['onPress'] as Press)(), { taps: ['them', 'us'] });
+  });
+});
+
 describe('a layout the compiler refuses', () => {
   it('names a view the extension cannot draw, with where it is', () => {
     fails(
@@ -394,8 +443,23 @@ describe('a layout the compiler refuses', () => {
     );
   });
 
-  it('refuses a button, which a layout has no event to run', () => {
-    fails('<ui-button label="Point" />', /<ui-button> is not a view the widget extension can draw/);
+  it('refuses a button in a Live Activity, which has nowhere to record its tap', () => {
+    fails(
+      '<ng-template #banner><ui-button target="a" label="Point" /></ng-template>',
+      /<ui-button> records its tap.*home-screen widget/,
+    );
+  });
+
+  it('refuses a button with no target, which the app could not tell from the others', () => {
+    fails(
+      '<ui-button label="Point" />',
+      /^LayoutError: layout\.ts:1:1: <ui-button> needs a target/,
+    );
+  });
+
+  it('refuses a button event that is not one expression answering the props to change', () => {
+    fails('<ui-button target="a" (buttonPress)="a(); b()" />', /\(buttonPress\).*one expression/);
+    fails('<ui-button target="a" (other)="x" />', /\(other\)/);
   });
 
   it('names an element that is not a ui- view', () => {

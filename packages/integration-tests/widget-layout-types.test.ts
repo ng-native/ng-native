@@ -53,6 +53,7 @@ function check(template: string, extra = ''): string {
     `import { Component, input } from '@angular/core';
 import { font, foregroundStyle } from '@expo/ui/swift-ui/modifiers';
 import {
+  UiButton,
   UiHStack,
   UiLink,
   UiProgress,
@@ -72,7 +73,16 @@ interface Scoreline {
 
 @Component({
   selector: 'score-layout',
-  imports: [UiHStack, UiLink, UiProgress, UiRoundedRectangle, UiSpacer, UiText, UiZStack],
+  imports: [
+    UiButton,
+    UiHStack,
+    UiLink,
+    UiProgress,
+    UiRoundedRectangle,
+    UiSpacer,
+    UiText,
+    UiZStack,
+  ],
   template: \`${template}\`,
 })
 class ScoreLayout {
@@ -121,6 +131,20 @@ describe("a widget layout's template, through ngc", () => {
     );
     assert.match(check('<ui-zstack alignment="middle" />'), /"middle"' is not assignable/);
     assert.match(check('<ui-link />'), /Required input 'destination'/);
+  });
+
+  it("type-checks a widget's buttons: a target, and the props a press changes", () => {
+    assert.equal(
+      check(`<ui-hstack>
+        <ui-button target="us" (buttonPress)="{ us: props().us + '!' }"><ui-text>Us</ui-text></ui-button>
+        <ui-button [target]="props().them" label="Them" />
+      </ui-hstack>`),
+      '',
+    );
+    assert.match(
+      check('<ui-button [target]="props().done" />'),
+      /'number' is not assignable to type 'string/,
+    );
   });
 
   it('fails on a class that is not a layout, with no props input', () => {

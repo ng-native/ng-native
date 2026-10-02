@@ -119,6 +119,7 @@ export class UiMenu {
     '[label]': 'label()',
     '[systemImage]': 'systemImage()',
     '[role]': 'role()',
+    '[target]': 'target()',
     '[modifiers]': 'modifiers()',
   },
 })
@@ -128,6 +129,11 @@ export class UiButton {
   /** An SF Symbol name. */
   readonly systemImage = input<string>();
   readonly role = input<'default' | 'cancel' | 'destructive'>();
+  /**
+   * In a home-screen widget's layout, what a tap on it records for the app: see
+   * `@ng-native/expo/widget`.
+   */
+  readonly target = input<string>();
   readonly modifiers = input<readonly UiModifier[]>();
   readonly buttonPress = output<NativeSyntheticEvent<Record<string, never>>>();
 }

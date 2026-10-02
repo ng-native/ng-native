@@ -3,7 +3,7 @@ import { Watch, type WatchPayload } from '@ng-native/expo/watch';
 import type { Scoreline } from '../live/score-activity.ts';
 import { NEW_MATCH, addPoint, pointLabel, setsWon, type Score, type Team } from './match.ts';
 
-export type Source = 'phone' | 'watch';
+export type Source = 'phone' | 'watch' | 'widget';
 
 export interface Rally {
   readonly id: string;
@@ -37,7 +37,7 @@ export class MatchStore {
     effect(() => this.watch.update(forWatch(this.score())));
   }
 
-  point(team: Team, source: Source = 'phone', id = `phone-${this.nextId++}`): void {
+  point(team: Team, source: Source = 'phone', id = `${source}-${this.nextId++}`): void {
     if (this.score().winner !== null) return;
     const goldenPoint = this.goldenPoint();
     this.rallies.update((rallies) => [...rallies, { id, team, source, goldenPoint }]);

@@ -103,8 +103,12 @@ The extension runs the layout with no Angular and no instance of the class, so:
 - **A `ui-text`'s text** is what is written inside it, with whitespace collapsed as Angular
   collapses it; `&nbsp;` keeps a wider gap. A `ui-text` inside another is a build error: the
   extension drops a view nested in a text.
-- **Events, pipes, references, content projection, and class, style or attribute bindings** are
-  build errors, with the line and column in the file.
+- **A home-screen widget's `ui-button`** records its `target` when tapped, for the app to collect
+  with [`widget()`](/packages/expo/widget#the-layout); its `(buttonPress)` is an object of the props
+  to change at once. A Live Activity has nowhere to record a tap, so a button there is a build
+  error.
+- **Any other event, pipes, references, content projection, and class, style or attribute
+  bindings** are build errors, with the line and column in the file.
 
 ### Home-screen widgets
 

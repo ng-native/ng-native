@@ -10,7 +10,9 @@ import {
 } from '@ng-native/components';
 import { liveActivity } from '@ng-native/expo/live-activity';
 import { Watch } from '@ng-native/expo/watch';
+import { widget } from '@ng-native/expo/widget';
 import { scoreActivity } from './live/score-activity.ts';
+import { scoreWidget } from './live/score-widget.ts';
 import { MatchStore, TEAMS, scoreline } from './match/match-store.ts';
 import { pointLabel, type Score, type Team } from './match/match.ts';
 
@@ -97,7 +99,7 @@ import { pointLabel, type Score, type Team } from './match/match.ts';
               <text class="entry-score">{{ entry.score }}</text>
             </view>
           } @empty {
-            <text class="empty">Tap a point here or on the watch to start.</text>
+            <text class="empty">Tap a point here, on the watch or on the widget to start.</text>
           }
         </scroll-view>
       </safe-area-view>
@@ -311,6 +313,11 @@ export class App {
   protected readonly match = inject(MatchStore);
   protected readonly teams = TEAMS;
   protected readonly golden = this.match.goldenPoint;
+  protected readonly homeScreen = widget(
+    scoreWidget,
+    computed(() => scoreline(this.match.score())),
+    { onTaps: (taps) => taps.forEach((side) => this.scoreFromWidget(side)) },
+  );
   protected readonly lockScreen = liveActivity(
     scoreActivity,
     computed(() => scoreline(this.match.score())),
@@ -349,7 +356,7 @@ export class App {
       .map((rally, index) => ({
         id: rally.id,
         who: `${TEAMS[rally.team]} won the point`,
-        from: rally.source === 'watch' ? 'on the watch' : 'on the phone',
+        from: `on the ${rally.source}`,
         score: describe(scores[index]),
       }))
       .slice(-8)
@@ -369,6 +376,11 @@ export class App {
   protected readonly lockScreenLabel = computed(() =>
     this.lockScreen.active() ? 'On the lock screen' : 'Show on lock screen',
   );
+
+  private scoreFromWidget(side: string): void {
+    if (side === 'us') this.match.point(0, 'widget');
+    else if (side === 'them') this.match.point(1, 'widget');
+  }
 
   protected toggleLockScreen(): void {
     // Gone at once: an ended activity iOS keeps on the lock screen would sit over the next one.
