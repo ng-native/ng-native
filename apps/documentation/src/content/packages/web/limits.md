@@ -25,11 +25,20 @@ renders on both:
   `addListener()` and `removeListener()`.
 - `workletStyle()` and `workletScroll()` return the same spec objects they do on a device.
 
-The libraries themselves are still native-only. `Gesture` from `react-native-gesture-handler`, and
-`withTiming`, `withSpring` and the rest of `react-native-reanimated`, fail a browser build, as any
-other native-only import does (see [The build](#the-build) below). A component that builds a
-gesture or a worklet animation and also renders on the web keeps those imports in a file only the
-native app loads, and takes the result as an input or from a token.
+The libraries themselves resolve to inert stand-ins in a browser build, through `ngNativeWeb()`,
+whether or not they are installed, so a component that builds a gesture or a worklet animation
+builds for the web too:
+
+- `Gesture.Pan()` and every other builder from `react-native-gesture-handler` take any
+  configuration and callbacks and recognise nothing. `State` and `Directions` are the library's
+  numbers.
+- `withTiming`, `withSpring` and the rest of `react-native-reanimated` return where the animation
+  ends and call its callback with `true` at once. `interpolate` and `Extrapolation` are the
+  library's own arithmetic, `Easing` curves are the identity, and `makeMutable` is the same plain
+  holder as `sharedValue`.
+- `scheduleOnRN` and the rest of `react-native-worklets` run the function at once.
+
+The React hooks, such as `useSharedValue` and `useAnimatedStyle`, are not there.
 
 `AnimatedStyle` is not one of them. A browser build resolves `@ng-native/components/animations`
 to a React-free `Animated` with the same API, stepped by `requestAnimationFrame`, so the same

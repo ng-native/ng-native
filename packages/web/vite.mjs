@@ -7,7 +7,9 @@
  * - `ng-native:config`, the resolution a browser build needs. React Native and Expo are reachable
  *   from the packages behind guards a browser never passes, but a bundler still resolves every
  *   specifier it sees, and React Native's source is Flow. Both resolve to an empty module, and a
- *   Expo module a package `require`s, such as `expo-battery`, to one that throws.
+ *   Expo module a package `require`s, such as `expo-battery`, to one that throws. Reanimated,
+ *   worklets and gesture-handler resolve to inert stand-ins, so a component that builds a gesture
+ *   or an animation builds for the browser too.
  * - `@oxc-angular/vite`'s own plugins, for the app's components and for the linker, which handles
  *   the `@ng-native/*` packages as it handles every partial-compiled Angular library on npm.
  */
@@ -35,6 +37,18 @@ const NATIVE_MODULE =
 const MISSING = '\0ng-native:missing:';
 
 /**
+ * The libraries an app imports itself for gestures and worklet animations, and the stand-in each
+ * resolves to in a browser, where there is no native recogniser and no UI-thread runtime: an
+ * animation lands where it ends, a gesture recognises nothing, and work scheduled for either
+ * runtime runs at once. Installed or not, since the libraries reach React Native's source.
+ */
+const STAND_INS = {
+  'react-native-reanimated': '@ng-native/components/stand-ins/reanimated',
+  'react-native-worklets': '@ng-native/components/stand-ins/worklets',
+  'react-native-gesture-handler': '@ng-native/components/stand-ins/gesture-handler',
+};
+
+/**
  * Resolves `react-native` and `expo` to an empty module, and a `require` of an Expo module to one
  * that throws, in the build and in the dependency pre-bundle alike.
  *
@@ -48,7 +62,11 @@ const MISSING = '\0ng-native:missing:';
 function nativeOnly() {
   return {
     name: 'ng-native:native-only',
-    resolveId: (id, _importer, options) => {
+    resolveId(id, importer, options) {
+      // From the importer: `@ng-native/components` is the app's, not this package's.
+      // As resolved, so the dependency scan takes the stand-in as a dependency to pre-bundle.
+      if (Object.hasOwn(STAND_INS, id))
+        return this.resolve(STAND_INS[id], importer, { skipSelf: true });
       if (NATIVE_ONLY.test(id)) return EMPTY;
       if (options?.kind === 'require-call' && NATIVE_MODULE.test(id)) return MISSING + id;
       return null;

@@ -49,7 +49,25 @@ interface Exports {
   WorkletScroll: unknown;
   NativeGesture: unknown;
   GestureRoot: unknown;
+  withTiming<T>(to: T, config?: object, done?: (finished?: boolean) => void): T;
+  interpolate(x: number, input: number[], output: number[]): number;
+  makeMutable<T>(initial: T): { value: T; addListener: unknown };
+  Gesture: { Pan(): { onEnd(fn: () => void): { minDistance(n: number): unknown } } };
+  scheduleOnRN<A extends unknown[]>(fn: (...args: A) => void, ...args: A): void;
 }
+
+/** The libraries an app imports itself, which a browser build resolves to stand-ins. */
+const LIBRARIES = [
+  'react-native-reanimated',
+  'react-native-gesture-handler',
+  'react-native-worklets',
+];
+
+/** What an app imports from the libraries themselves, beside the entry points. */
+const LIBRARY_IMPORTS =
+  "export { withTiming, interpolate, makeMutable } from 'react-native-reanimated';\n" +
+  "export { Gesture } from 'react-native-gesture-handler';\n" +
+  "export { scheduleOnRN } from 'react-native-worklets';\n";
 
 /**
  * Writes an app into `root` whose `main.js` imports both entry points of `@ng-native/components`,
@@ -93,7 +111,10 @@ function app(root: string, withNative: boolean): void {
     JSON.stringify({ name: 'react-native', main: 'index.js' }),
   );
   write('node_modules/react-native/index.js', "throw new Error('React Native in a browser');\n");
-  write('main.js', entryPoints.map((entry) => `export * from '${entry}';\n`).join(''));
+  write(
+    'main.js',
+    entryPoints.map((entry) => `export * from '${entry}';\n`).join('') + LIBRARY_IMPORTS,
+  );
 }
 
 /** Imports a module Vite wrote, in Node, which has no `require` in an ES module either. */
@@ -116,6 +137,28 @@ function assertInert(exports: Exports): void {
   assert.equal(offset.get(), 0);
   assert.deepEqual(heard, [2, 3, 6]);
   assert.deepEqual(exports.workletStyle([offset], () => ({})).values, [offset]);
+
+  // The libraries an app imports itself: an animation settles where it ends, a gesture builds and
+  // recognises nothing, and a call scheduled for the JavaScript thread runs at once.
+  const finished: unknown[] = [];
+  assert.equal(
+    exports.withTiming(5, {}, (done) => finished.push(done)),
+    5,
+  );
+  assert.deepEqual(finished, [true]);
+  assert.equal(exports.interpolate(0.5, [0, 1], [0, 10]), 5);
+  const mutable = exports.makeMutable(1);
+  assert.equal(mutable.value, 1);
+  assert.equal(typeof mutable.addListener, 'function');
+  assert.equal(
+    typeof exports.Gesture.Pan()
+      .onEnd(() => {})
+      .minDistance(2),
+    'object',
+  );
+  const ran: number[] = [];
+  exports.scheduleOnRN((n: number) => ran.push(n), 1);
+  assert.deepEqual(ran, [1]);
 }
 
 for (const withNative of [false, true]) {
@@ -179,15 +222,26 @@ for (const withNative of [false, true]) {
     });
 
     it('pre-bundles for the dev server, and both entry points are inert', async () => {
+      // Scanned from the app's own imports, as the dev server finds them.
       const resolved = await resolveConfig(
-        { ...shared(), plugins: ngNativeWeb(), optimizeDeps: { include: entryPoints } },
+        {
+          ...shared(),
+          plugins: ngNativeWeb(),
+          optimizeDeps: { include: entryPoints, entries: ['main.js'] },
+        },
         'serve',
       );
       const { optimized } = await optimizeDeps(resolved, true);
-      const [reanimated, gestures] = await Promise.all(
-        entryPoints.map((entry) => evaluate<Exports>(optimized[entry]!.file)),
+      // The libraries are pre-bundled as the stand-ins they resolve to.
+      const standIns = LIBRARIES.map((name) => name.replace('react-native-', ''));
+      const include = [
+        ...entryPoints,
+        ...standIns.map((name) => `@ng-native/components/stand-ins/${name}`),
+      ];
+      const modules = await Promise.all(
+        include.map((entry) => evaluate<Exports>(optimized[entry]!.file)),
       );
-      assertInert({ ...reanimated!, ...gestures! });
+      assertInert(Object.assign({}, ...modules) as Exports);
     });
   });
 }

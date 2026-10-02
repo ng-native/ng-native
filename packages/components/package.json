@@ -29,6 +29,9 @@
       "browser": "./src/reanimated-web.ts",
       "default": "./src/reanimated.ts"
     },
+    "./stand-ins/reanimated": "./src/stand-ins/reanimated.ts",
+    "./stand-ins/worklets": "./src/stand-ins/worklets.ts",
+    "./stand-ins/gesture-handler": "./src/stand-ins/gesture-handler.ts",
     "./package.json": "./package.json"
   },
   "publishConfig": {
@@ -54,6 +57,18 @@
         "types": "./dist/reanimated.d.ts",
         "browser": "./dist/reanimated-web.js",
         "default": "./dist/reanimated.js"
+      },
+      "./stand-ins/reanimated": {
+        "types": "./dist/stand-ins/reanimated.d.ts",
+        "default": "./dist/stand-ins/reanimated.js"
+      },
+      "./stand-ins/worklets": {
+        "types": "./dist/stand-ins/worklets.d.ts",
+        "default": "./dist/stand-ins/worklets.js"
+      },
+      "./stand-ins/gesture-handler": {
+        "types": "./dist/stand-ins/gesture-handler.d.ts",
+        "default": "./dist/stand-ins/gesture-handler.js"
       },
       "./package.json": "./package.json"
     }
