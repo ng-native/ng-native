@@ -41,6 +41,9 @@ it('replaces a service with a stand-in', async () => {
 });
 ```
 
+`Weather` is written with `@Injectable({ providedIn: 'root' })` rather than `@Service()` on
+purpose: both forms declare a root-scoped service, and a test resolves either the same way.
+
 ## A service on its own
 
 A service with no component to render goes through `injectService()`. It creates the service in a
