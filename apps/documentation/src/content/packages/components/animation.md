@@ -139,6 +139,9 @@ values in its first argument, and read from the function's own parameters - not 
 so a function that read `this.offset` instead of a passed-in `offset` parameter would try to send
 the entire component along with it.
 
+In a browser build both directives are inert: the template renders and no worklet runs, and
+`sharedValue` is a plain holder. [What does not carry over](/packages/web/limits) has the details.
+
 <!-- api: WorkletStyle -->
 
 <!-- api: WorkletScroll -->

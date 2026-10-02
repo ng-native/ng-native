@@ -309,5 +309,5 @@ mounts a component in the page a native web view loaded, and `<dom-component>` f
 From here, [Islands](/packages/web/islands) covers placing components in an existing app and
 mounting more than one app into one page, [Storybook](/packages/web/storybook) covers a catalogue
 of your components, and
-[What does not carry over](/packages/web/limits) covers the native-only pieces - the router, worklet
-animation and gesture handling - that a web build has to route around.
+[What does not carry over](/packages/web/limits) covers the native-only pieces: the router, which a
+web build has to route around, and worklet animation and gesture handling, which are inert there.

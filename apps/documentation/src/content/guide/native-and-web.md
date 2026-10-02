@@ -39,9 +39,8 @@ The first argument is the target `Element`. Fabric instead uses the numeric root
 React Native's host.
 
 The browser needs no `FabricUIManager`, `processColor` or device tokens. It provides `HostEngine`,
-not `Engine`, so the bases of `worklet-style`, `worklet-scroll` and `native-gesture` throw
-`NullInjectorError` naming `Engine`. Their public directives fail earlier: their Reanimated and
-gesture-handler imports cannot load in a browser.
+not `Engine`. `@ng-native/components/reanimated` and `/gestures` need neither on the web: a browser
+build resolves them to inert directives that need no engine.
 
 `DOCUMENT` is the real document, rather than native `mount`'s `TransferState` stub.
 
@@ -69,8 +68,9 @@ inert, invisible box; no native stack outlet exists. The browser host uses Angul
 `<router-outlet>`, whose DOM-independent `ViewContainerRef` implementation works unchanged over
 `BrowserRenderer`.
 
-Reanimated worklets and react-native-gesture-handler are native-only: their modules fail to load in
-browsers, and their bases fail through the injector.
+Reanimated worklets and react-native-gesture-handler are native-only. Their directives are inert on
+the web, and the libraries' own imports fail a browser build; see
+[What does not carry over](/packages/web/limits).
 
 Other controls work through the host. A self-focusing `<text-input>` and an offset-scrolling
 `<scroll-view>` use `engine.measure()` and `dispatchCommand()`, which `BrowserEngine` implements

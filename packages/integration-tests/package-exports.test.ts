@@ -138,27 +138,23 @@ describe('the entry points Metro has to resolve', () => {
     }
   });
 
-  it('gives a browser build its own animations entry, and a device the native one', () => {
+  it('gives a browser build its own entry where a device needs a native library', () => {
     // One import in an app, two graphs: React Native's on a device, a React-free one in a
     // browser, which could not load React Native's Flow source if it tried.
-    const web = (specifier: string) =>
-      path.relative(root, resolve(context(from), specifier, 'web').filePath);
-    assert.equal(
-      resolved('@ng-native/components/animations'),
-      'packages/components/src/animations.ts',
-    );
-    assert.equal(
-      web('@ng-native/components/animations'),
-      'packages/components/src/animations-web.ts',
-    );
-    // Node has no `browser` condition either, so this suite's own imports see the native entry.
-    assert.equal(
-      path.relative(
-        root,
-        realpathSync(createRequire(from).resolve('@ng-native/components/animations')),
-      ),
-      'packages/components/src/animations.ts',
-    );
+    const on = (platform: string, specifier: string) =>
+      path.relative(root, resolve(context(from), specifier, platform).filePath);
+    for (const name of ['animations', 'gestures', 'reanimated']) {
+      const specifier = `@ng-native/components/${name}`;
+      for (const platform of ['ios', 'android']) {
+        assert.equal(on(platform, specifier), `packages/components/src/${name}.ts`, platform);
+      }
+      assert.equal(on('web', specifier), `packages/components/src/${name}-web.ts`);
+      // Node has no `browser` condition either, so this suite's own imports see the native entry.
+      assert.equal(
+        path.relative(root, realpathSync(createRequire(from).resolve(specifier))),
+        `packages/components/src/${name}.ts`,
+      );
+    }
   });
 
   it('fails a specifier that maps to nothing', () => {

@@ -191,6 +191,16 @@ body {
 }
 
 /*
+ * `<gesture-root>`'s own `flex: 1`, the base style `@ng-native/components/gestures` gives it on a
+ * device, where Yoga reads it as a grow of 1 from a basis of 0 (the shrink stays the 0 above).
+ * `:where` keeps it below any class the app writes, as a default prop is below a style on a device.
+ */
+:where([data-rn='gesture-root']) {
+  flex-grow: 1;
+  flex-basis: 0%;
+}
+
+/*
  * `Modal.js`'s base style is `{position: 'absolute'}`, sized to fill RN's window because that is
  * what an absolutely-positioned view with no other constraint does inside it. A web page has no
  * such guaranteed-full-viewport positioned ancestor, so this uses `fixed` instead - the layout

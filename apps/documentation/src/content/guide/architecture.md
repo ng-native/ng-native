@@ -52,8 +52,8 @@ native path. `@ng-native/web`'s `BrowserEngine` implements both over the DOM wit
 
 `worklet-style`, `worklet-scroll` and `native-gesture` sit outside this interface. They inject the
 concrete `Engine` to access Fabric handles for Reanimated and react-native-gesture-handler, rather
-than answer wrongly through a browser stub. On the web, these native-only dependencies raise
-Angular's `NullInjectorError` naming `Engine`.
+than answer wrongly through a browser stub. A browser build never reaches them: it resolves
+`@ng-native/components/reanimated` and `/gestures` to inert directives that inject nothing.
 
 ## CSS
 

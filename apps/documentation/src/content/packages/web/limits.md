@@ -1,6 +1,6 @@
 ---
 title: What does not carry over
-summary: The router, worklet animation and gesture handling have no browser build.
+summary: The router has no browser build; worklet animation and gesture handling are inert there.
 ---
 
 # What does not carry over
@@ -12,17 +12,24 @@ instead, because it is renderer-agnostic - it drives `ViewContainerRef` and neve
 directly - so a routed app on the web wants Angular's plain outlet and `routerLink`, not the
 native-specific ones.
 
-Reanimated worklets and `react-native-gesture-handler` are native-only too. The directives an app
-imports for them - `WorkletStyle` and `WorkletScroll` from `@ng-native/components/reanimated`,
-`NativeGesture` from `@ng-native/components/gestures` - import React Native's own packages, which a
-browser cannot load, so the module fails as it loads, before anything renders: a parse error out
-of React Native's source where the package is installed, or a failed import where it is not. Keep
-them out of everything a web build imports.
+Reanimated worklets and `react-native-gesture-handler` are native-only too, and inert on the web.
+Through the `browser` condition in the package's `exports`, a browser build resolves
+`@ng-native/components/reanimated` and `@ng-native/components/gestures` to files that reach neither
+library, whether or not either is installed. The names are the same, so a template that uses them
+renders on both:
 
-Underneath, they need `Engine`, the fuller seam, as opposed to the narrower `HostEngine` seam that
-both hosts implement, and `mount` does not provide it. So the directives' bases, reached any other
-way, throw Angular's own `NullInjectorError` naming `Engine` - which names exactly what is missing,
-rather than rendering something silently wrong.
+- `WorkletStyle`, `WorkletScroll` and `NativeGesture` take their input and do nothing with it. No
+  style is applied, no scroll handler runs and no gesture is recognised.
+- `<gesture-root>` is a box that fills its parent, as it is on a device.
+- `sharedValue(initial)` is a plain holder with Reanimated's `value`, `get()`, `set()`, `modify()`,
+  `addListener()` and `removeListener()`.
+- `workletStyle()` and `workletScroll()` return the same spec objects they do on a device.
+
+The libraries themselves are still native-only. `Gesture` from `react-native-gesture-handler`, and
+`withTiming`, `withSpring` and the rest of `react-native-reanimated`, fail a browser build, as any
+other native-only import does (see [The build](#the-build) below). A component that builds a
+gesture or a worklet animation and also renders on the web keeps those imports in a file only the
+native app loads, and takes the result as an input or from a token.
 
 `AnimatedStyle` is not one of them. A browser build resolves `@ng-native/components/animations`
 to a React-free `Animated` with the same API, stepped by `requestAnimationFrame`, so the same

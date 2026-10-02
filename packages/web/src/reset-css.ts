@@ -93,6 +93,11 @@ body {
   height: var(--rn-intrinsic-height, auto);
 }
 
+:where([data-rn='gesture-root']) {
+  flex-grow: 1;
+  flex-basis: 0%;
+}
+
 [data-rn='modal'] {
   position: fixed;
   inset: 0;

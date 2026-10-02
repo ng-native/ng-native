@@ -147,8 +147,9 @@ stylesheet on a device before relying on it.
 
 - **No `<view>` in the host's own templates.** Every Angular Native element has to be inside an
   island, because that is where Angular Native's renderer is.
-- **No native-only packages.** `@ng-native/router`, worklet animation and gesture handling have no
-  web build, inside an app or out; see [What does not carry over](/packages/web/limits).
+- **No native-only packages.** `@ng-native/router` has no web build, and worklet animation and
+  gesture handling are inert, inside an app or out; see
+  [What does not carry over](/packages/web/limits).
 - **One component per island.** Nest as much as you like inside it, but an island's own inputs and
   outputs are the component's, so put a small wrapper component around several if they need to
   share a region.

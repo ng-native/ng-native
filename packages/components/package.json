@@ -21,8 +21,14 @@
       "browser": "./src/animations-web.ts",
       "default": "./src/animations.ts"
     },
-    "./gestures": "./src/gestures.ts",
-    "./reanimated": "./src/reanimated.ts",
+    "./gestures": {
+      "browser": "./src/gestures-web.ts",
+      "default": "./src/gestures.ts"
+    },
+    "./reanimated": {
+      "browser": "./src/reanimated-web.ts",
+      "default": "./src/reanimated.ts"
+    },
     "./package.json": "./package.json"
   },
   "publishConfig": {
@@ -41,10 +47,12 @@
       },
       "./gestures": {
         "types": "./dist/gestures.d.ts",
+        "browser": "./dist/gestures-web.js",
         "default": "./dist/gestures.js"
       },
       "./reanimated": {
         "types": "./dist/reanimated.d.ts",
+        "browser": "./dist/reanimated-web.js",
         "default": "./dist/reanimated.js"
       },
       "./package.json": "./package.json"

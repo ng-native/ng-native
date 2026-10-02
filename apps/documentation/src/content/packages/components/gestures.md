@@ -84,6 +84,10 @@ would break if the main entry point tried to load them. Import these from their 
 `@ng-native/components/reanimated` - covered on the gestures and
 [animation](/packages/components/animation) pages.
 
+In a browser build, `@ng-native/components/gestures` is inert: `<gesture-root>` is a box that fills
+its parent and `[gesture]` attaches nothing. `Gesture` itself, from `react-native-gesture-handler`,
+still fails a browser build; [What does not carry over](/packages/web/limits) covers keeping it out.
+
 ## A gesture inside a scroll view that moves the same way
 
 A vertical `<scroll-view>` or `<virtual-list>` leaves a sideways pan to the gesture inside it. A
