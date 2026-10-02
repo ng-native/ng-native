@@ -1088,6 +1088,22 @@
     }
   },
   {
+    "name": "font-family: a quoted family containing a comma, in the stylesheet",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "font-family": "\"A,B\", monospace"
+    }
+  },
+  {
+    "name": "font-family: a quoted family containing a comma, bound on the element",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "font-family": "\"A,B\", monospace"
+    }
+  },
+  {
     "name": "font-family: a stack, in the stylesheet",
     "expected": {
       "color": "rgb(0, 0, 0)",

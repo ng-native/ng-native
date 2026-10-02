@@ -143,6 +143,7 @@ const FAMILY_CASES = (
   [
     ['a quoted family', "'Inter-Bold'"],
     ['a double-quoted family', '"Inter-Bold"'],
+    ['a quoted family containing a comma', '"A,B", monospace'],
     ['a stack', "'Inter Display', sans-serif"],
     ['a family of two words', 'Segoe UI'],
     ['a family with an escaped quote', "'D\\'Angelo', serif"],
