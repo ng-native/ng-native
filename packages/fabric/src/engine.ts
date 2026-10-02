@@ -2633,6 +2633,7 @@ export class Engine implements HostEngine {
     if (node.scrolled && !spec?.timeline) this.stopScrolled(node);
     if (!spec) {
       if (node.playing) {
+        this.cancelPlaying(node);
         node.playing = undefined;
         this.playing.delete(node);
       }
@@ -2643,6 +2644,7 @@ export class Engine implements HostEngine {
     if (!frames) {
       // Keyframes a hot swap deleted, from under an animation that was playing them, or ones a
       // sheet later in this commit has: see `settleKeyframes`.
+      this.cancelPlaying(node);
       node.playing = undefined;
       this.playing.delete(node);
       this.stopScrolled(node);
@@ -2652,6 +2654,16 @@ export class Engine implements HostEngine {
     if (spec.timeline) return this.scrollAnimated(node, spec, frames, props);
     this.startPlaying(node, spec, frames, props);
     return Object.assign(props, node.playing?.values ?? {});
+  }
+
+  /**
+   * `animationcancel` for an animation stopped before it ended: the element no longer asks for it,
+   * asks for another by name, or its keyframes went, as a browser fires it.
+   */
+  private cancelPlaying(node: EngineNode): void {
+    const running = node.playing;
+    if (running && !running.done)
+      this.emitTransition(node, 'topAnimationcancel', running.spec.name);
   }
 
   /** Start the clock on an animation, unless the node is already playing this one. */
@@ -2664,6 +2676,7 @@ export class Engine implements HostEngine {
     const current = node.playing;
     const inherited = this.inheritedColour(node, frames);
     if (!current || !sameAnimation(current.spec, spec)) {
+      if (current && current.spec.name !== spec.name) this.cancelPlaying(node);
       const started: RunningAnimation = {
         spec,
         tracks: tracksOf(frames, props, inherited),
