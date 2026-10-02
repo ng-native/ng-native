@@ -1,11 +1,12 @@
 /**
- * `widgetLayout(Layout)` calls, replaced with the source of the layout they name.
+ * The layout passed to `createLiveActivity` or `createWidget` from `@ng-native/expo/live-activity`,
+ * replaced with its source.
  *
  * A widget layout is an Angular component, so `ngc` type-checks its template against its `props`
  * input and the typed `ui-*` components it imports, but the app never renders it: the widget
- * extension does, from the source `createLiveActivity` and `createWidget` take (see
- * `widget-layout.cjs`). So the call becomes that source, as a string, and the class is blanked out,
- * so it never reaches Angular's compiler or the app's bundle. An import only the class used is left
+ * extension does, from the source `expo-widgets` takes (see `widget-layout.cjs`). So the class
+ * passed becomes that source, as a string, and the class is blanked out, so it never reaches
+ * Angular's compiler or the app's bundle. An import only the class used is left
  * unused, and the TypeScript transform after this drops it.
  *
  * What a layout's class can hold is what can be put in the extension, which has no instance of it:
@@ -20,30 +21,34 @@ const { compileWidgetLayout, LayoutError } = require('./widget-layout.cjs');
 const RUNTIME = '@ng-native/expo/live-activity';
 const MODIFIERS = '@expo/ui/swift-ui/modifiers';
 const INPUTS = new Set(['props', 'environment']);
+/** The functions that take a layout, as its second argument. */
+const CREATE = new Set(['createLiveActivity', 'createWidget']);
 
 /**
  * @param {string} src
  * @param {string} filename
  */
 function inlineWidgetLayouts(src, filename) {
-  if (!src.includes('widgetLayout') || !src.includes(RUNTIME)) return src;
+  if (!src.includes(RUNTIME) || !/create(LiveActivity|Widget)/.test(src)) return src;
   const program = parse(src, { sourceType: 'module', plugins: pluginsFor(filename) }).program;
 
-  const runtime = importedNames(program, RUNTIME);
-  const callee = [...runtime].find(([, imported]) => imported === 'widgetLayout')?.[0];
+  const callees = new Set(
+    [...importedNames(program, RUNTIME)].filter(([, name]) => CREATE.has(name)).map(([l]) => l),
+  );
   const namespaces = namespaceImports(program, RUNTIME);
-  if (!callee && !namespaces.size) return src;
+  if (!callees.size && !namespaces.size) return src;
   const modifiers = importedNames(program, MODIFIERS);
 
   const edits = [];
   const layouts = new Map();
-  for (const call of calls(program, callee, namespaces)) {
-    const found = layoutOf(filename, program, call);
+  for (const call of calls(program, callees, namespaces)) {
+    const argument = call.arguments[1];
+    const found = layoutOf(filename, program, call, argument);
     if (!layouts.has(found.statement))
       layouts.set(found.statement, compileLayout(filename, found, modifiers));
     edits.push({
-      start: call.start,
-      end: call.end,
+      start: argument.start,
+      end: argument.end,
       text: JSON.stringify(layouts.get(found.statement)),
     });
   }
@@ -62,16 +67,15 @@ function pluginsFor(filename) {
     : ['typescript', 'decorators-legacy'];
 }
 
-/** The layout class a `widgetLayout(...)` call names. */
-function layoutOf(filename, program, call) {
-  const [argument] = call.arguments;
+/** The layout class a `createLiveActivity(name, Layout)` call passes. */
+function layoutOf(filename, program, call, argument) {
   const found = argument?.type === 'Identifier' && layoutClass(program, argument.name);
   if (found) return found;
-  const name = argument?.type === 'Identifier' ? argument.name : 'its argument';
+  const name = argument?.type === 'Identifier' ? argument.name : 'Its layout';
   return fail(
     filename,
-    call,
-    `widgetLayout(${name}): ${name} is not an @Component class in this file.`,
+    argument ?? call,
+    `${name} is not an @Component class in this file, which is the layout this call takes.`,
   );
 }
 
@@ -103,7 +107,7 @@ function compileLayout(filename, { statement, name, decorator, body }, modifiers
 }
 
 /**
- * Refuses a layout class the module names anywhere but in `widgetLayout(...)`: the build removes
+ * Refuses a layout class the module names anywhere but in the call it is passed to: the build removes
  * the class, so any other use would be left reading nothing.
  */
 function refuseOtherUses(filename, program, statements, edits) {
@@ -117,7 +121,7 @@ function refuseOtherUses(filename, program, statements, edits) {
       fail(
         filename,
         node,
-        `${name} is used here, but the build removes a layout class: pass it only to widgetLayout.`,
+        `${name} is used here, but the build removes a layout class: pass it only to createLiveActivity or createWidget.`,
       );
     });
   }
@@ -172,18 +176,18 @@ function importedNames(program, specifier) {
   return names;
 }
 
-/** Every call to `name`, or to `widgetLayout` read from one of `namespaces`, in the module. */
-function calls(program, name, namespaces) {
+/** Every call to one of `names`, or to a `CREATE` function read from one of `namespaces`. */
+function calls(program, names, namespaces) {
   const found = [];
   walk(program, (node) => {
     if (node.type !== 'CallExpression') return;
     const { callee } = node;
-    const named = callee.type === 'Identifier' && callee.name === name;
+    const named = callee.type === 'Identifier' && names.has(callee.name);
     const read =
       callee.type === 'MemberExpression' &&
       !callee.computed &&
       namespaces.has(callee.object.name) &&
-      callee.property.name === 'widgetLayout';
+      CREATE.has(callee.property.name);
     if (named || read) found.push(node);
   });
   return found.sort((a, b) => a.start - b.start);

@@ -6,7 +6,7 @@
  */
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import path from 'node:path';
 import { after, describe, it } from 'node:test';
@@ -17,8 +17,11 @@ const ngc = path.join(
   'bundles/src/bin/ngc.js',
 );
 
-// In this package, so the modules resolve as they do from an app.
-const root = mkdtempSync(path.join(import.meta.dirname, '.widget-layout-types-'));
+// Under this package, so the modules resolve as they do from an app, and in its node_modules, so
+// lint and the type-check running beside the tests never see it.
+const cache = path.join(import.meta.dirname, 'node_modules/.cache');
+mkdirSync(cache, { recursive: true });
+const root = mkdtempSync(path.join(cache, 'widget-layout-types-'));
 after(() => rmSync(root, { recursive: true, force: true }));
 
 writeFileSync(
@@ -44,7 +47,7 @@ writeFileSync(
 );
 
 /** Type-checks a layout written over `template`, and answers ngc's errors, or '' for none. */
-function check(template: string): string {
+function check(template: string, extra = ''): string {
   writeFileSync(
     path.join(root, 'layout.ts'),
     `import { Component, input } from '@angular/core';
@@ -58,7 +61,8 @@ import {
   UiText,
   UiZStack,
 } from '@ng-native/expo/expo-ui-components';
-import { widgetLayout } from '@ng-native/expo/live-activity';
+import { createLiveActivity } from '@ng-native/expo/live-activity';
+import type { LiveActivityFactory } from 'expo-widgets';
 
 interface Scoreline {
   us: string;
@@ -78,8 +82,9 @@ class ScoreLayout {
   protected readonly ball = '#d7f23c';
 }
 
-export const layout: (props: Scoreline, environment: { family: string }) => unknown =
-  widgetLayout(ScoreLayout);
+// The props type comes from the layout's props input.
+export const score: LiveActivityFactory<Scoreline> = createLiveActivity('Score', ScoreLayout);
+${extra}
 `,
   );
   try {
@@ -116,6 +121,16 @@ describe("a widget layout's template, through ngc", () => {
     );
     assert.match(check('<ui-zstack alignment="middle" />'), /"middle"' is not assignable/);
     assert.match(check('<ui-link />'), /Required input 'destination'/);
+  });
+
+  it('fails on a class that is not a layout, with no props input', () => {
+    assert.match(
+      check(
+        '<ui-spacer />',
+        "class Plain {}\nexport const plain = createLiveActivity('Plain', Plain);",
+      ),
+      /Property 'props' is missing/,
+    );
   });
 
   it('fails on a prop the props type does not have', () => {

@@ -4,13 +4,13 @@ A padel scorer built with Angular Native and an Apple Watch app. Score each poin
 watch or the phone, and both always show the same score. The score can also go on the lock screen and
 into the Dynamic Island as a Live Activity.
 
-| Part                                             | What it shows                                                                                                                                                                                 |
-| ------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Scoreboard (`src/app/app.ts`)                    | Sets, games and the point, buttons to score, undo, golden point, and where each point came from                                                                                               |
-| Scoring (`src/app/match/match.ts`)               | Deuce and advantage or golden point, sets to 6 by two, a tiebreak at 6-6, best of three                                                                                                       |
-| Watch link (`src/app/match/match-store.ts`)      | `Watch` from `@ng-native/expo/watch`: the phone keeps the score, and the watch sends it points                                                                                                |
-| Live Activity (`src/app/live/score-activity.ts`) | The lock screen banner and Dynamic Island layout, an Angular template `widgetLayout` compiles for the widget extension, kept in step by `liveActivity()` from `@ng-native/expo/live-activity` |
-| Watch app (`targets/watch/PadelWatchApp.swift`)  | A SwiftUI app with a button for each side, a haptic on every tap, and a queue for when the phone is away                                                                                      |
+| Part                                             | What it shows                                                                                                                                                                  |
+| ------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Scoreboard (`src/app/app.ts`)                    | Sets, games and the point, buttons to score, undo, golden point, and where each point came from                                                                                |
+| Scoring (`src/app/match/match.ts`)               | Deuce and advantage or golden point, sets to 6 by two, a tiebreak at 6-6, best of three                                                                                        |
+| Watch link (`src/app/match/match-store.ts`)      | `Watch` from `@ng-native/expo/watch`: the phone keeps the score, and the watch sends it points                                                                                 |
+| Live Activity (`src/app/live/score-activity.ts`) | The lock screen banner and Dynamic Island layout, an Angular template compiled for the widget extension, kept in step by `liveActivity()` from `@ng-native/expo/live-activity` |
+| Watch app (`targets/watch/PadelWatchApp.swift`)  | A SwiftUI app with a button for each side, a haptic on every tap, and a queue for when the phone is away                                                                       |
 
 ## How the phone and the watch talk
 

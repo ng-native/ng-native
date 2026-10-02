@@ -1,8 +1,7 @@
 import { Component, input } from '@angular/core';
 import { font, foregroundStyle, padding } from '@expo/ui/swift-ui/modifiers';
 import { UiHStack, UiSpacer, UiText, UiVStack } from '@ng-native/expo/expo-ui-components';
-import { widgetLayout } from '@ng-native/expo/live-activity';
-import { createLiveActivity } from 'expo-widgets';
+import { createLiveActivity } from '@ng-native/expo/live-activity';
 
 export interface Scoreline {
   us: string;
@@ -14,7 +13,7 @@ export interface Scoreline {
 
 /**
  * The score on the lock screen and in the Dynamic Island. The widget extension draws it from the
- * source `widgetLayout` compiles it to, so it holds only its props, modifiers and literals.
+ * source `createLiveActivity` has it compiled to, so it holds only its props, modifiers and literals.
  */
 @Component({
   selector: 'score-activity',
@@ -69,4 +68,4 @@ class ScoreLayout {
   protected readonly muted = '#8fa3c9';
 }
 
-export const scoreActivity = createLiveActivity<Scoreline>('PadelScore', widgetLayout(ScoreLayout));
+export const scoreActivity = createLiveActivity('PadelScore', ScoreLayout);

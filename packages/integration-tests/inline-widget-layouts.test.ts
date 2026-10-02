@@ -1,7 +1,8 @@
 /**
  * A widget layout is an Angular component, so `ngc` type-checks its template against its `props`
  * input and the typed `ui-*` components it imports. The app never renders it, though: the widget
- * extension does, from source. The transformer replaces `widgetLayout(Layout)` with the compiled
+ * extension does, from source. The transformer replaces the layout passed to `createLiveActivity` or
+ * `createWidget` with the compiled
  * layout's source, the string `createLiveActivity` and `createWidget` take, and drops the class, so
  * the component never reaches Angular's compiler or the app's bundle.
  */
@@ -20,11 +21,10 @@ const FILE = '/app/src/score-activity.ts';
 const HEADER = `import { Component, input } from '@angular/core';
 import { font, foregroundStyle as tint } from '@expo/ui/swift-ui/modifiers';
 import { UiText } from '@ng-native/expo/expo-ui-components';
-import { widgetLayout } from '@ng-native/expo/live-activity';
-import { createLiveActivity } from 'expo-widgets';
+import { createLiveActivity } from '@ng-native/expo/live-activity';
 `;
 
-/** A module with a layout class of `body`, written over `template`, passed to `widgetLayout`. */
+/** A module with a layout class of `body`, written over `template`, passed to `createLiveActivity`. */
 function module(template: string, body = 'readonly props = input.required<{ us: string }>();') {
   return `${HEADER}
 @Component({
@@ -36,14 +36,14 @@ class ScoreLayout {
   ${body}
 }
 
-export const score = createLiveActivity('Score', widgetLayout(ScoreLayout));
+export const score = createLiveActivity('Score', ScoreLayout);
 `;
 }
 
-/** The layout source the transform put in place of `widgetLayout(...)`. */
+/** The layout source the transform put in place of the class. */
 function layoutOf(out: string): string {
   const call = /createLiveActivity\('Score', ("(?:[^"\\]|\\.)*")\)/.exec(out);
-  assert.ok(call, `widgetLayout(...) was replaced with a string:\n${out}`);
+  assert.ok(call, `the layout was replaced with a string:\n${out}`);
   return JSON.parse(call[1]!) as string;
 }
 
@@ -58,7 +58,7 @@ function run(source: string, props: unknown, globals: Record<string, unknown> = 
 }
 
 describe('inlining a widget layout', () => {
-  it('replaces widgetLayout(Layout) with the compiled layout, and drops the class', () => {
+  it('replaces the layout passed to createLiveActivity with its source, and drops the class', () => {
     const src = module('<ui-text>Us {{ props().us }}</ui-text>');
     const out = inlineWidgetLayouts(src, FILE);
     assert.deepEqual(run(layoutOf(out), { us: '30' }), {
@@ -141,10 +141,10 @@ describe('inlining a widget layout', () => {
     });
   });
 
-  it('compiles one layout passed to widgetLayout twice, and drops its class once', () => {
+  it('compiles one layout passed twice, and drops its class once', () => {
     const src = module('<ui-text>{{ props().us }}</ui-text>').replace(
       'export const score',
-      "export const again = createLiveActivity('Again', widgetLayout(ScoreLayout));\nexport const score",
+      "export const again = createLiveActivity('Again', ScoreLayout);\nexport const score",
     );
     const out = inlineWidgetLayouts(src, FILE);
     assert.match(out, /^import \{ Component, input \}/, 'the imports are intact');
@@ -171,13 +171,13 @@ describe('inlining a widget layout', () => {
     assert.match(layoutOf(inlineWidgetLayouts(src, FILE.replace('.ts', '.tsx'))), /^function/);
   });
 
-  it('rewrites widgetLayout read from a namespace import', () => {
+  it('rewrites createLiveActivity read from a namespace import', () => {
     const src = module('<ui-spacer />')
       .replace(
-        "import { widgetLayout } from '@ng-native/expo/live-activity';",
+        "import { createLiveActivity } from '@ng-native/expo/live-activity';",
         "import * as live from '@ng-native/expo/live-activity';",
       )
-      .replace('widgetLayout(ScoreLayout)', 'live.widgetLayout(ScoreLayout)');
+      .replace("createLiveActivity('Score',", "live.createLiveActivity('Score',");
     assert.match(layoutOf(inlineWidgetLayouts(src, FILE)), /^function/);
   });
 
@@ -185,7 +185,7 @@ describe('inlining a widget layout', () => {
     const used = module('<ui-spacer />') + 'export const name = ScoreLayout.name;\n';
     assert.throws(
       () => inlineWidgetLayouts(used, FILE),
-      /ScoreLayout is used .*only to widgetLayout/,
+      /ScoreLayout is used .*only to createLiveActivity or createWidget/,
     );
     const exported = module('<ui-spacer />').replace(
       'class ScoreLayout',
@@ -202,13 +202,14 @@ describe('inlining a widget layout', () => {
     assert.throws(() => inlineWidgetLayouts(src, FILE), /#secret is private/);
   });
 
-  it('leaves a module with no widgetLayout call as it is', () => {
+  it('leaves a module with no createLiveActivity call as it is', () => {
     const src = "import { Component } from '@angular/core';\nexport const a = 1;\n";
     assert.equal(inlineWidgetLayouts(src, FILE), src);
   });
 
-  it('leaves a widgetLayout that is not the one from @ng-native/expo alone', () => {
-    const src = 'function widgetLayout(x) { return x; }\nexport const a = widgetLayout(1);\n';
+  it("leaves expo-widgets' own createLiveActivity alone", () => {
+    const src =
+      "import { createLiveActivity } from 'expo-widgets';\nexport const a = createLiveActivity('A', layout);\n";
     assert.equal(inlineWidgetLayouts(src, FILE), src);
   });
 
@@ -267,8 +268,8 @@ describe('inlining a widget layout', () => {
     assert.throws(() => inlineWidgetLayouts(src, FILE), /inline template, not a templateUrl/);
   });
 
-  it('refuses a widgetLayout of something that is not a component class in this module', () => {
-    const src = `${HEADER}import { Other } from './other';\nexport const s = createLiveActivity('S', widgetLayout(Other));\n`;
+  it('refuses a layout that is not a component class in this module', () => {
+    const src = `${HEADER}import { Other } from './other';\nexport const s = createLiveActivity('S', Other);\n`;
     assert.throws(() => inlineWidgetLayouts(src, FILE), /Other.*@Component class in this file/);
   });
 });
@@ -295,6 +296,7 @@ it('is what the Metro transformer does, leaving the app nothing of the layout bu
   const { code } = generate(ast) as { code: string };
   assert.match(code, /createLiveActivity\)?\('Score', "function\(props,environment\)/);
   assert.doesNotMatch(code, /ScoreLayout|ɵcmp|defineComponent/, 'the class is not compiled');
+  assert.match(code, /@ng-native\/expo\/live-activity/, 'createLiveActivity is still called');
   for (const unused of [
     '@expo/ui/swift-ui/modifiers',
     '@ng-native/expo/expo-ui',

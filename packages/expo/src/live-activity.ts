@@ -1,11 +1,8 @@
 /**
- * `liveActivity`, which keeps an iOS Live Activity in step with a signal: on the lock screen and in
- * the Dynamic Island, through `expo-widgets`; and `widgetLayout`, which draws one, or a home-screen
- * widget, from an Angular template.
- *
- * It takes the factory `createLiveActivity` makes in the app's layout file, so this package
- * imports nothing of `expo-widgets` itself and adds no peer. Off iOS, `expo-widgets` starts a
- * stand-in with no id, and `start()` answers false.
+ * iOS Live Activities and home-screen widgets, through `expo-widgets`: `createLiveActivity` and
+ * `createWidget` draw one from an Angular component's template, and `liveActivity` keeps an
+ * activity in step with a signal, on the lock screen and in the Dynamic Island. Off iOS,
+ * `expo-widgets` starts a stand-in with no id, and `start()` answers false.
  */
 import {
   DestroyRef,
@@ -18,30 +15,69 @@ import {
   type Signal,
   type Type,
 } from '@angular/core';
+import { expoModule } from './native.ts';
+
+/** A widget layout: an Angular component whose `props` input the layout draws from. */
+export type WidgetLayout<T extends object> = Type<{ readonly props: InputSignal<T> }>;
 
 /**
- * A layout `createLiveActivity` or `createWidget` takes, from an Angular component: its template,
- * written with the `ui-*` views, draws the activity or widget from its `props` input, and, for a
- * widget, its `environment` input.
+ * A Live Activity drawn by `layout`, an Angular component, as `expo-widgets`' `createLiveActivity`
+ * makes one. `name` matches the activity's name in the `expo-widgets` plugin's config.
  *
  * ```ts
- * createLiveActivity('Score', widgetLayout(ScoreLayout));
+ * export const scoreActivity = createLiveActivity('Score', ScoreLayout);
  * ```
  *
- * `@ng-native/metro`'s transformer replaces the call with the layout compiled to the source the
+ * `@ng-native/metro`'s transformer compiles the layout's template, at build time, to the source the
  * widget extension evaluates, and drops the class, so the app never runs it: the extension does,
  * with no Angular. So the class holds only its inputs, members holding a modifier from
  * `@expo/ui/swift-ui/modifiers`, and members holding a literal, and its template is inline.
  */
-export function widgetLayout<T extends object>(
-  layout: Type<{ readonly props: InputSignal<T> }>,
-): (props: T, environment: unknown) => never {
-  return () => {
-    throw new Error(
-      `widgetLayout(${layout.name}) is compiled by @ng-native/metro's transformer, which did not run on this file.`,
-    );
-  };
+export function createLiveActivity<T extends object>(
+  name: string,
+  layout: WidgetLayout<T>,
+): import('expo-widgets').LiveActivityFactory<T> {
+  const expo = widgets();
+  if (!expo) return STAND_IN as never;
+  return expo.createLiveActivity<T>(name, compiled('createLiveActivity', name, layout));
 }
+
+/**
+ * A home-screen widget drawn by `layout`, as `expo-widgets`' `createWidget` makes one. The layout
+ * reads what the widget is drawn in, such as its `widgetFamily`, from an `environment` input beside
+ * `props`. Compiled as `createLiveActivity`'s layout is.
+ */
+export function createWidget<T extends object>(
+  name: string,
+  layout: WidgetLayout<T>,
+): import('expo-widgets').Widget<T> {
+  const expo = widgets();
+  if (!expo) return STAND_IN as never;
+  return expo.createWidget<T>(name, compiled('createWidget', name, layout));
+}
+
+/** `expo-widgets`, which answers with stand-ins itself where there are no widgets; null in Node. */
+function widgets() {
+  return expoModule(
+    'expo-widgets',
+    () => require('expo-widgets') as typeof import('expo-widgets'),
+    ['ios', 'android', 'web'],
+  );
+}
+
+/** The layout's source, which the transformer put in place of the class. */
+function compiled(call: string, name: string, layout: unknown): never {
+  if (typeof layout === 'string') return layout as never;
+  throw new Error(
+    `${call}('${name}', ...) takes a layout @ng-native/metro's transformer compiles, and it did not run on this file.`,
+  );
+}
+
+/** What there is in Node, where no widget can be drawn: an activity that never starts. */
+const STAND_IN = {
+  start: () => ({ getId: () => '' }),
+  getInstances: () => [],
+};
 
 /**
  * How an ended activity leaves the lock screen: `'default'` keeps it, with its final props, for up

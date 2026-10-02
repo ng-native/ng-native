@@ -313,6 +313,7 @@
     "expo-updates": "^57.0.0",
     "expo-video": "^57.0.0",
     "expo-web-browser": "^57.0.0",
+    "expo-widgets": "^57.0.0",
     "react-native": ">=0.86.0",
     "react-native-watch-connectivity": "^2.0.0"
   },
@@ -356,6 +357,7 @@
     "expo-updates": "^57.0.24",
     "expo-video": "^57.0.5",
     "expo-web-browser": "^57.0.3",
+    "expo-widgets": "^57.0.22",
     "react-native-watch-connectivity": "^2.0.0",
     "typescript": "~6.0.3"
   },
@@ -478,6 +480,9 @@
       "optional": true
     },
     "expo-web-browser": {
+      "optional": true
+    },
+    "expo-widgets": {
       "optional": true
     },
     "react-native-watch-connectivity": {

@@ -32,17 +32,18 @@ import { liveActivity } from '@ng-native/expo/live-activity';
 ## The layout
 
 A Live Activity's look is drawn by the widget extension, not by your app, so the layout is a
-component of its own that the app never renders. Pass it to `createLiveActivity` through
-`widgetLayout`: `@ng-native/metro` compiles its template, at build time, to the source the
-extension runs, and drops the class. Each `<ng-template>` names one of the activity's slots.
+component of its own that the app never renders. Pass it to `createLiveActivity` from
+`@ng-native/expo/live-activity`, rather than `expo-widgets`' own: `@ng-native/metro` compiles its
+template, at build time, to the source the extension runs, and drops the class. The activity's
+props type comes from the layout's `props` input. Each `<ng-template>` names one of the activity's
+slots.
 
 ```ts
 // src/app/live/score-activity.ts
 import { Component, input } from '@angular/core';
 import { font, foregroundStyle } from '@expo/ui/swift-ui/modifiers';
 import { UiText } from '@ng-native/expo/expo-ui-components';
-import { widgetLayout } from '@ng-native/expo/live-activity';
-import { createLiveActivity } from 'expo-widgets';
+import { createLiveActivity } from '@ng-native/expo/live-activity';
 
 export interface Scoreline {
   us: string;
@@ -76,7 +77,7 @@ class ScoreLayout {
   protected readonly ball = '#d7f23c';
 }
 
-export const scoreActivity = createLiveActivity<Scoreline>('Score', widgetLayout(ScoreLayout));
+export const scoreActivity = createLiveActivity('Score', ScoreLayout);
 ```
 
 The template is type-checked like any other, so a prop the `props` type does not have or an input
@@ -92,7 +93,7 @@ The extension runs the layout with no Angular and no instance of the class, so:
   `@expo/ui/swift-ui/modifiers`, and members set to a literal: a string, number, boolean, `null`,
   or an array or object of them. A method, another input, or any other value is a build error
   naming the member and its line. The build removes the class, so it is not exported, and nothing
-  but `widgetLayout` names it.
+  but the call it is passed to names it.
 - **The template** is inline, and draws `ui-text`, `ui-hstack`, `ui-vstack`, `ui-zstack`,
   `ui-spacer`, `ui-divider`, `ui-image`, `ui-progress`, `ui-gauge`, `ui-label`, `ui-link`,
   `ui-accessory-widget-background` and the shapes (`ui-rectangle`, `ui-rounded-rectangle`,
@@ -112,7 +113,8 @@ and an `environment` input beside `props` holds what the widget is drawn in, suc
 `widgetFamily`:
 
 ```ts
-import { createWidget, type WidgetEnvironment } from 'expo-widgets';
+import { createWidget } from '@ng-native/expo/live-activity';
+import type { WidgetEnvironment } from 'expo-widgets';
 
 @Component({
   selector: 'habits-widget',
@@ -133,7 +135,7 @@ class HabitsLayout {
   readonly environment = input.required<WidgetEnvironment>();
 }
 
-export const habits = createWidget('Habits', widgetLayout(HabitsLayout));
+export const habits = createWidget('Habits', HabitsLayout);
 ```
 
 ## Keep it in step from Angular
