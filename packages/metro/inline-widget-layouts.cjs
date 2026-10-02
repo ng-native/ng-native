@@ -27,46 +27,135 @@ const INPUTS = new Set(['props', 'environment']);
  */
 function inlineWidgetLayouts(src, filename) {
   if (!src.includes('widgetLayout') || !src.includes(RUNTIME)) return src;
-  const program = parse(src, {
-    sourceType: 'module',
-    plugins: ['typescript', 'decorators-legacy'],
-  }).program;
+  const program = parse(src, { sourceType: 'module', plugins: pluginsFor(filename) }).program;
 
   const runtime = importedNames(program, RUNTIME);
   const callee = [...runtime].find(([, imported]) => imported === 'widgetLayout')?.[0];
-  if (!callee) return src;
+  const namespaces = namespaceImports(program, RUNTIME);
+  if (!callee && !namespaces.size) return src;
   const modifiers = importedNames(program, MODIFIERS);
 
   const edits = [];
-  for (const call of calls(program, callee)) {
-    const [argument] = call.arguments;
-    const found = argument?.type === 'Identifier' && layoutClass(program, argument.name);
-    if (!found) {
-      const name = argument?.type === 'Identifier' ? argument.name : 'its argument';
-      fail(
-        filename,
-        call,
-        `widgetLayout(${name}): ${name} is not an @Component class in this file.`,
-      );
-    }
-    const { statement, decorator, body } = found;
-    const template = templateOf(filename, decorator);
-    const members = membersOf(filename, src, body, modifiers);
-    const source = compileWidgetLayout(template.cooked, {
-      file: filename,
-      at: { line: template.loc.start.line - 1, col: template.loc.start.column },
-      members,
+  const layouts = new Map();
+  for (const call of calls(program, callee, namespaces)) {
+    const found = layoutOf(filename, program, call);
+    if (!layouts.has(found.statement))
+      layouts.set(found.statement, compileLayout(filename, found, modifiers));
+    edits.push({
+      start: call.start,
+      end: call.end,
+      text: JSON.stringify(layouts.get(found.statement)),
     });
-    edits.push({ start: call.start, end: call.end, text: JSON.stringify(source) });
+  }
+  for (const statement of layouts.keys()) {
     edits.push({ start: statement.start, end: statement.end, text: '' });
   }
+  refuseOtherUses(filename, program, layouts.keys(), edits);
 
+  return applyEdits(src, edits);
+}
+
+/** The module has TypeScript syntax, and JSX too in a `.tsx` file. */
+function pluginsFor(filename) {
+  return /\.[cm]?tsx$/.test(filename)
+    ? ['typescript', 'jsx', 'decorators-legacy']
+    : ['typescript', 'decorators-legacy'];
+}
+
+/** The layout class a `widgetLayout(...)` call names. */
+function layoutOf(filename, program, call) {
+  const [argument] = call.arguments;
+  const found = argument?.type === 'Identifier' && layoutClass(program, argument.name);
+  if (found) return found;
+  const name = argument?.type === 'Identifier' ? argument.name : 'its argument';
+  return fail(
+    filename,
+    call,
+    `widgetLayout(${name}): ${name} is not an @Component class in this file.`,
+  );
+}
+
+/** Each edit made, every line it replaces kept, so the source map stays right. */
+function applyEdits(src, edits) {
   let out = src;
   for (const { start, end, text } of edits.sort((a, b) => b.start - a.start)) {
     const lines = src.slice(start, end).split('\n').length - 1;
     out = out.slice(0, start) + text + '\n'.repeat(lines) + out.slice(end);
   }
   return out;
+}
+
+/** The layout's source, with the class checked for what it can hold. */
+function compileLayout(filename, { statement, name, decorator, body }, modifiers) {
+  if (statement.type === 'ExportNamedDeclaration') {
+    fail(
+      filename,
+      statement,
+      `${name} is exported, but the build removes a layout class: keep it to this file.`,
+    );
+  }
+  const template = templateOf(filename, decorator);
+  return compileWidgetLayout(template.cooked, {
+    file: filename,
+    at: { line: template.loc.start.line - 1, col: template.loc.start.column },
+    members: membersOf(filename, body, modifiers),
+  });
+}
+
+/**
+ * Refuses a layout class the module names anywhere but in `widgetLayout(...)`: the build removes
+ * the class, so any other use would be left reading nothing.
+ */
+function refuseOtherUses(filename, program, statements, edits) {
+  for (const statement of statements) {
+    const declaration = statement.declaration ?? statement;
+    const { name } = declaration.id;
+    const within = (node, range) => node.start >= range.start && node.end <= range.end;
+    walk(program, (node, parent, key) => {
+      if (node.type !== 'Identifier' || node.name !== name || within(node, declaration)) return;
+      if (isPropertyName(parent, key) || edits.some((e) => e.text && within(node, e))) return;
+      fail(
+        filename,
+        node,
+        `${name} is used here, but the build removes a layout class: pass it only to widgetLayout.`,
+      );
+    });
+  }
+}
+
+/** Whether an identifier is the name of a property, rather than a reference: `a.name`, `{ name: 1 }`. */
+function isPropertyName(parent, key) {
+  if (parent.computed) return false;
+  if (parent.type === 'MemberExpression') return key === 'property';
+  return (parent.type === 'ObjectProperty' || parent.type === 'ClassProperty') && key === 'key';
+}
+
+/** Calls `visit(node, parent, key)` for every node under `root`, without recursion. */
+function walk(root, visit) {
+  const stack = [[root, null, null]];
+  while (stack.length) {
+    const [node, parent, key] = stack.pop();
+    if (parent) visit(node, parent, key);
+    for (const child of Object.keys(node)) {
+      if (child === 'loc' || child.endsWith('Comments')) continue;
+      const value = node[child];
+      for (const item of Array.isArray(value) ? value : [value]) {
+        if (typeof item?.type === 'string') stack.push([item, node, child]);
+      }
+    }
+  }
+}
+
+/** The local names of each `import * as` from `specifier`. */
+function namespaceImports(program, specifier) {
+  const names = new Set();
+  for (const node of program.body) {
+    if (node.type !== 'ImportDeclaration' || node.source.value !== specifier) continue;
+    for (const s of node.specifiers) {
+      if (s.type === 'ImportNamespaceSpecifier') names.add(s.local.name);
+    }
+  }
+  return names;
 }
 
 /** Local name to imported name, for each named import from `specifier`. */
@@ -83,24 +172,21 @@ function importedNames(program, specifier) {
   return names;
 }
 
-/** Every call to `name` in the module. */
-function calls(program, name) {
+/** Every call to `name`, or to `widgetLayout` read from one of `namespaces`, in the module. */
+function calls(program, name, namespaces) {
   const found = [];
-  const stack = [program];
-  while (stack.length) {
-    const node = stack.pop();
-    if (node.type === 'CallExpression' && node.callee.type === 'Identifier') {
-      if (node.callee.name === name) found.push(node);
-    }
-    for (const key of Object.keys(node)) {
-      if (key === 'loc' || key.endsWith('Comments')) continue;
-      const value = node[key];
-      for (const child of Array.isArray(value) ? value : [value]) {
-        if (typeof child?.type === 'string') stack.push(child);
-      }
-    }
-  }
-  return found;
+  walk(program, (node) => {
+    if (node.type !== 'CallExpression') return;
+    const { callee } = node;
+    const named = callee.type === 'Identifier' && callee.name === name;
+    const read =
+      callee.type === 'MemberExpression' &&
+      !callee.computed &&
+      namespaces.has(callee.object.name) &&
+      callee.property.name === 'widgetLayout';
+    if (named || read) found.push(node);
+  });
+  return found.sort((a, b) => a.start - b.start);
 }
 
 /** The top-level `@Component` class named `name`, with the statement that declares it. */
@@ -113,7 +199,7 @@ function layoutClass(program, name) {
       (d) => d.expression.type === 'CallExpression' && d.expression.callee.name === 'Component',
     );
     if (!decorator) return null;
-    return { statement, decorator, body: declaration.body.body };
+    return { statement, name, decorator, body: declaration.body.body };
   }
   return null;
 }
@@ -139,10 +225,17 @@ function templateOf(filename, decorator) {
 }
 
 /** What the compiler needs of the class's members. */
-function membersOf(filename, src, body, modifiers) {
+function membersOf(filename, body, modifiers) {
   const members = { props: 'props', environment: 'environment', modifiers: {}, constants: {} };
   for (const member of body) {
     const name = member.key?.name;
+    if (member.type === 'ClassPrivateProperty') {
+      fail(
+        filename,
+        member,
+        `#${member.key.id.name} is private, and the widget extension can read only the layout's own members.`,
+      );
+    }
     if (member.type !== 'ClassProperty') {
       fail(
         filename,
@@ -161,8 +254,8 @@ function membersOf(filename, src, body, modifiers) {
       }
     } else if (value?.type === 'Identifier' && modifiers.has(value.name)) {
       members.modifiers[name] = modifiers.get(value.name);
-    } else if (isLiteral(value)) {
-      members.constants[name] = src.slice(value.start, value.end);
+    } else if (literalSource(value) !== null) {
+      members.constants[name] = literalSource(value);
     } else {
       fail(
         filename,
@@ -194,29 +287,41 @@ function isInput(node) {
   );
 }
 
-/** A value written out in full: what the extension can have a copy of. */
-function isLiteral(node) {
+/**
+ * A value written out in full, as JavaScript the extension can run, with any TypeScript in it left
+ * out: what the extension can have a copy of. Null for anything else.
+ */
+function literalSource(node) {
   node = unwrap(node);
-  switch (node?.type) {
-    case 'StringLiteral':
-    case 'NumericLiteral':
-    case 'BooleanLiteral':
-    case 'NullLiteral':
-      return true;
-    case 'TemplateLiteral':
-      return node.expressions.length === 0;
-    case 'UnaryExpression':
-      return node.operator === '-' && node.argument.type === 'NumericLiteral';
-    case 'ArrayExpression':
-      return node.elements.every(isLiteral);
-    case 'ObjectExpression':
-      return node.properties.every(
-        (p) => p.type === 'ObjectProperty' && !p.computed && isLiteral(p.value),
-      );
-    default:
-      return false;
-  }
+  return LITERALS[node?.type]?.(node) ?? null;
 }
+
+/** How each kind of literal is written out, or null for one with something else inside. */
+const LITERALS = {
+  StringLiteral: (node) => JSON.stringify(node.value),
+  NumericLiteral: (node) => JSON.stringify(node.value),
+  BooleanLiteral: (node) => JSON.stringify(node.value),
+  NullLiteral: () => 'null',
+  TemplateLiteral: (node) =>
+    node.expressions.length === 0 ? JSON.stringify(node.quasis[0].value.cooked) : null,
+  UnaryExpression: (node) =>
+    node.operator === '-' && node.argument.type === 'NumericLiteral'
+      ? JSON.stringify(-node.argument.value)
+      : null,
+  ArrayExpression: (node) => joined(node.elements.map(literalSource), '[', ']'),
+  ObjectExpression: (node) => joined(node.properties.map(entrySource), '{', '}'),
+};
+
+/** An object literal's entry as JavaScript, or null when it is not a plain key and literal. */
+function entrySource(property) {
+  if (property.type !== 'ObjectProperty' || property.computed) return null;
+  const value = literalSource(property.value);
+  const key = property.key.name ?? String(property.key.value);
+  return value === null ? null : `${JSON.stringify(key)}:${value}`;
+}
+
+const joined = (parts, open, close) =>
+  parts.includes(null) ? null : `${open}${parts.join(',')}${close}`;
 
 function fail(filename, node, message) {
   throw new LayoutError(

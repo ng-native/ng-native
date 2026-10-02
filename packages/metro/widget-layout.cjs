@@ -37,10 +37,10 @@ const HELPERS =
   'function ɵstr(v){return v===undefined||v===null?"":String(v);}';
 
 /**
- * The views the widget extension draws (`DynamicView.swift`), by element: the `@expo/ui` component
- * that draws it, and the inputs of the typed `ui-*` component of that name with how a static
- * attribute is read for each. A view with no typed component takes any attribute as a string. A
- * `label` input is a string in an app; the extension's component takes a view there, so the string
+ * The views the widget extension draws (`DynamicView.swift`) that have a typed `ui-*` component, by
+ * element: the `@expo/ui` component that draws it, and the inputs of the typed component with how a
+ * static attribute is read for each. A view with no typed component is left out, since `ngc`
+ * refuses its element in the layout's own template. A `label` input is a string in an app; the extension's component takes a view there, so the string
  * is drawn as a `Text`.
  */
 const VIEWS = {
@@ -53,13 +53,6 @@ const VIEWS = {
     component: 'VStack',
     inputs: { alignment: 'string', spacing: 'number', modifiers: 'any' },
   },
-  zstack: { component: 'ZStack' },
-  rectangle: { component: 'Rectangle' },
-  'rounded-rectangle': { component: 'RoundedRectangle' },
-  'uneven-rounded-rectangle': { component: 'UnevenRoundedRectangle' },
-  capsule: { component: 'Capsule' },
-  circle: { component: 'Circle' },
-  ellipse: { component: 'Ellipse' },
   image: {
     component: 'Image',
     inputs: {
@@ -70,9 +63,7 @@ const VIEWS = {
       modifiers: 'any',
     },
   },
-  'accessory-widget-background': { component: 'AccessoryWidgetBackground' },
   divider: { component: 'Divider', inputs: { modifiers: 'any' } },
-  label: { component: 'Label' },
   progress: { component: 'ProgressView', inputs: { value: 'number', modifiers: 'any' } },
   spacer: { component: 'Spacer', inputs: { modifiers: 'any' } },
   gauge: {
@@ -88,8 +79,6 @@ const VIEWS = {
       modifiers: 'any',
     },
   },
-  chart: { component: 'Chart' },
-  link: { component: 'Link' },
 };
 
 /** The slots a Live Activity's layout fills: the lock screen banner and the Dynamic Island. */
@@ -154,13 +143,14 @@ function compileWidgetLayout(template, options = {}) {
     const [first] = parsed.errors;
     throw new LayoutError(file, first.span, first.msg, options.at);
   }
-  const compiler = new Compiler(file, options.at, options.members ?? {});
+  const compiler = new Compiler(file, template, options.at, options.members ?? {});
   return compiler.layout(parsed.nodes);
 }
 
 class Compiler {
-  constructor(file, at, members) {
+  constructor(file, template, at, members) {
     this.file = file;
+    this.template = template;
     this.at = at;
     this.members = {
       props: members.props ?? 'props',
@@ -169,10 +159,27 @@ class Compiler {
       constants: members.constants ?? {},
     };
     this.fresh = 0;
+    /** The temporaries a safe read keeps its receiver in, declared once at the top. */
+    this.temporaries = [];
+    /** Each constant member as a local of its own, so it hides no global and no other member. */
+    this.constants = new Map(
+      Object.entries(this.members.constants).map(([name]) => [name, this.local('c')]),
+    );
   }
 
   fail(node, message) {
-    throw new LayoutError(this.file, node?.sourceSpan ?? node?.span ?? null, message, this.at);
+    throw new LayoutError(this.file, this.spanOf(node), message, this.at);
+  }
+
+  /**
+   * Where `node` is, as a template node's span gives it. An expression's span is an offset into
+   * the template rather than a line and column, so that is worked out from the template's text.
+   */
+  spanOf(node) {
+    const span = node?.sourceSpan ?? node?.span ?? null;
+    if (typeof span?.start !== 'number') return span;
+    const before = this.template.slice(0, span.start).split('\n');
+    return { start: { line: before.length - 1, col: before.at(-1).length } };
   }
 
   /** A name no template can write, for the loop variables the output introduces. */
@@ -183,7 +190,7 @@ class Compiler {
   layout(nodes) {
     const scope = new Map();
     const constants = Object.entries(this.members.constants).map(
-      ([name, value]) => `var ${name}=${value};`,
+      ([name, value]) => `var ${this.constants.get(name)}=${value};`,
     );
     const lets = [];
     const slots = [];
@@ -204,14 +211,41 @@ class Compiler {
       );
     }
     const body = slots.length ? `{${slots.join(',')}}` : this.root(roots, scope);
-    return `function(props,environment){${HELPERS}${constants.join('')}${lets.join('')}return ${body};}`;
+    const temporaries = this.temporaries.length ? `var ${this.temporaries.join(',')};` : '';
+    return `function(props,environment){${HELPERS}${temporaries}${constants.join('')}${lets.join('')}return ${body};}`;
   }
 
   root(nodes, scope) {
     if (nodes.length !== 1) {
       this.fail(nodes[1] ?? null, 'A home-screen widget layout has one root view.');
     }
+    this.oneView(nodes, true);
     return this.node(nodes[0], scope);
+  }
+
+  /**
+   * Refuses what would draw a list of views where the extension draws one: several views, or a
+   * `@for`. With `always`, a widget's root, it refuses what could draw nothing too.
+   */
+  oneView(nodes, always) {
+    const views = significant(nodes).filter((node) => !(node instanceof ng.TmplAstLetDeclaration));
+    if (views.length > 1)
+      this.fail(views[1], 'Draw one view here; put several in a ui-vstack or ui-hstack.');
+    const [node] = views;
+    if (node instanceof ng.TmplAstForLoopBlock) {
+      this.fail(node, '@for draws a list of views here; put it in a ui-vstack or ui-hstack.');
+    } else if (node instanceof ng.TmplAstIfBlock) {
+      if (always && node.branches.at(-1).expression !== null) {
+        this.fail(node, 'A widget always draws a view: give this @if an @else.');
+      }
+      for (const branch of node.branches) this.oneView(branch.children, always);
+    } else if (node instanceof ng.TmplAstSwitchBlock) {
+      const cases = casesOf(node);
+      if (always && !cases.some((c) => c.expression === null)) {
+        this.fail(node, 'A widget always draws a view: give this @switch a @default.');
+      }
+      for (const c of cases) this.oneView(c.children, always);
+    }
   }
 
   slot(template, scope) {
@@ -225,6 +259,7 @@ class Compiler {
         `#${reference.name} is not a Live Activity slot: ${[...SLOTS].join(', ')}.`,
       );
     }
+    this.oneView(template.children, false);
     return `${reference.name}:${this.children(template.children, scope, true)}`;
   }
 
@@ -294,7 +329,7 @@ class Compiler {
   content(node, name, props, scope) {
     if (name === 'text') {
       // `Text` takes its text as children; `text` wins over the content, as in an app.
-      const text = props.get('text') ?? this.text(trimmed(node.children), scope);
+      const text = props.get('text') ?? this.text(node.children, scope);
       props.delete('text');
       return text;
     }
@@ -333,15 +368,23 @@ class Compiler {
     return JSON.stringify(attribute.value);
   }
 
-  /** A `ui-text`'s content as one string expression, or null when it has none. */
-  text(nodes, scope) {
+  /**
+   * A `ui-text`'s content as one string expression, or null when it has none. The whitespace at its
+   * two ends is dropped once it is joined, as the engine drops it from a `ui-text` in an app.
+   */
+  text(nodes, scope, outer = true) {
     const parts = [];
     for (const node of nodes) {
       if (node instanceof ng.TmplAstText) parts.push(JSON.stringify(node.value));
       else if (node instanceof ng.TmplAstBoundText) parts.push(this.expression(node.value, scope));
       else if (node instanceof ng.TmplAstIfBlock) {
         parts.push(
-          this.ifBlock(node, scope, (b, inner) => this.text(trimmed(b.children), inner) ?? '""'),
+          this.ifBlock(
+            node,
+            scope,
+            (b, inner) => this.text(b.children, inner, false) ?? '""',
+            '""',
+          ),
         );
       } else {
         // The extension's `Text` keeps the strings beside a nested `Text` and drops the view.
@@ -351,13 +394,17 @@ class Compiler {
         );
       }
     }
-    return parts.length ? `String(${parts.join('+')})` : null;
+    if (!parts.length) return null;
+    return outer ? `String(${parts.join('+')}).trim()` : `(${parts.join('+')})`;
   }
 
-  /** `@if` as a conditional, each branch drawn by `branch(branch, scope)`. */
-  ifBlock(node, scope, branch) {
+  /**
+   * `@if` as a conditional, each branch drawn by `branch(branch, scope)`, and `otherwise` when no
+   * branch matches.
+   */
+  ifBlock(node, scope, branch, otherwise = 'undefined') {
     const branches = [...node.branches];
-    let fallback = 'undefined';
+    let fallback = otherwise;
     if (branches.length > 1 && branches.at(-1).expression === null) {
       fallback = branch(branches.pop(), scope);
     }
@@ -391,9 +438,7 @@ class Compiler {
 
   switchBlock(node, scope) {
     const subject = this.local('case');
-    const cases =
-      node.cases ??
-      node.groups?.flatMap((g) => g.cases.map((c) => ({ ...c, children: g.children })));
+    const cases = casesOf(node);
     let fallback = 'undefined';
     const tests = [];
     for (const c of cases) {
@@ -421,6 +466,12 @@ class ExpressionWriter {
   }
 
   write(ast) {
+    if (SAFE.has(ast.constructor.name) || (CHAIN.has(ast.constructor.name) && hasSafe(ast))) {
+      // As Angular compiles a safe read: a receiver that is null or undefined stops the whole chain
+      // after it, and the chain answers null.
+      const { guards, expression } = this.chain(ast);
+      return `(${guards.join('||')}?null:${expression})`;
+    }
     const handler = this[ast.constructor.name];
     if (!handler)
       return this.compiler.fail(
@@ -428,6 +479,65 @@ class ExpressionWriter {
         `${ast.constructor.name} is not something a layout expression can do.`,
       );
     return handler.call(this, ast);
+  }
+
+  /** A chain of reads and calls, with the guard each safe link in it adds. */
+  chain(ast) {
+    const kind = ast.constructor.name;
+    if (this.chainStart(ast)) return { guards: [], expression: this.write(ast) };
+    const receiver = this.chain(ast.receiver ?? ast.expression);
+    if (kind === 'NonNullAssert') return receiver;
+    const { guards, target } = this.guard(kind, receiver);
+    const args = () => ast.args.map((a) => this.write(a)).join(',');
+    switch (kind) {
+      case 'PropertyRead':
+      case 'SafePropertyRead':
+        return { guards, expression: `${target}.${ast.name}` };
+      case 'KeyedRead':
+      case 'SafeKeyedRead':
+        return { guards, expression: `${target}[${this.write(ast.key)}]` };
+      default:
+        return { guards, expression: `${target}(${args()})` };
+    }
+  }
+
+  /** Where a chain begins: a name, `props()`, or anything that is not a read or a call. */
+  chainStart(ast) {
+    const kind = ast.constructor.name;
+    if (!CHAIN.has(kind) && !SAFE.has(kind)) return true;
+    if (kind === 'Call') return this.signalRead(ast) !== null;
+    return kind === 'PropertyRead' && isImplicit(ast.receiver);
+  }
+
+  /** The guards a link adds to its receiver's, and what the link reads from. */
+  guard(kind, receiver) {
+    const guards = [...receiver.guards];
+    if (kind === 'SafeCall') {
+      // ponytail: the callee is read twice, so a method keeps its receiver; it is a read, not a call.
+      guards.push(`(${receiver.expression})==null`);
+    } else if (SAFE.has(kind)) {
+      const temporary = this.compiler.local('t');
+      this.compiler.temporaries.push(temporary);
+      guards.push(`(${temporary}=${receiver.expression})==null`);
+      return { guards, target: temporary };
+    }
+    return { guards, target: receiver.expression };
+  }
+
+  /** `props()` or `environment()`: the parameter itself. */
+  signalRead(ast) {
+    const { receiver } = ast;
+    if (
+      !(receiver instanceof ng.PropertyRead) ||
+      !isImplicit(receiver.receiver) ||
+      ast.args.length
+    ) {
+      return null;
+    }
+    const { props, environment } = this.compiler.members;
+    if (receiver.name === props) return 'props';
+    if (receiver.name === environment) return 'environment';
+    return null;
   }
 
   ASTWithSource(ast) {
@@ -472,34 +582,19 @@ class ExpressionWriter {
     return `${this.write(ast.receiver)}.${ast.name}`;
   }
 
-  SafePropertyRead(ast) {
-    return `${this.write(ast.receiver)}?.${ast.name}`;
-  }
-
   KeyedRead(ast) {
     return `${this.write(ast.receiver)}[${this.write(ast.key)}]`;
   }
 
-  SafeKeyedRead(ast) {
-    return `${this.write(ast.receiver)}?.[${this.write(ast.key)}]`;
-  }
-
   Call(ast) {
-    const { receiver } = ast;
-    if (receiver instanceof ng.PropertyRead && isImplicit(receiver.receiver)) {
-      const { props, environment } = this.compiler.members;
-      if (receiver.name === props && !ast.args.length) return 'props';
-      if (receiver.name === environment && !ast.args.length) return 'environment';
-    }
-    return `${this.write(receiver)}(${ast.args.map((a) => this.write(a)).join(',')})`;
-  }
-
-  SafeCall(ast) {
-    return `${this.write(ast.receiver)}?.(${ast.args.map((a) => this.write(a)).join(',')})`;
+    return (
+      this.signalRead(ast) ??
+      `${this.write(ast.receiver)}(${ast.args.map((a) => this.write(a)).join(',')})`
+    );
   }
 
   Binary(ast) {
-    return `(${this.write(ast.left)}${ast.operation}${this.write(ast.right)})`;
+    return `(${this.write(ast.left)} ${ast.operation} ${this.write(ast.right)})`;
   }
 
   Conditional(ast) {
@@ -537,16 +632,16 @@ class ExpressionWriter {
     );
   }
 
-  ThisReceiver() {
-    return this.compiler.fail(null, 'this is not something a layout can read.');
+  ThisReceiver(ast) {
+    return this.compiler.fail(ast, 'this is not something a layout can read.');
   }
 
   name(ast) {
     const { name } = ast;
     if (this.scope.has(name)) return this.scope.get(name);
     const { modifiers, constants, props, environment } = this.compiler.members;
-    if (name in modifiers) return modifiers[name];
-    if (name in constants) return name;
+    if (Object.hasOwn(modifiers, name)) return modifiers[name];
+    if (Object.hasOwn(constants, name)) return this.compiler.constants.get(name);
     if (name === props || name === environment) {
       return this.compiler.fail(ast, `${name} is a signal input: read it as ${name}().`);
     }
@@ -557,6 +652,27 @@ class ExpressionWriter {
   }
 }
 
+/** A `@switch`'s cases, each with what it draws, however this version of Angular groups them. */
+function casesOf(node) {
+  return (
+    node.cases ?? node.groups.flatMap((g) => g.cases.map((c) => ({ ...c, children: g.children })))
+  );
+}
+
+/** The links of a chain of reads and calls, and the safe ones among them. */
+const CHAIN = new Set(['PropertyRead', 'KeyedRead', 'Call', 'NonNullAssert']);
+const SAFE = new Set(['SafePropertyRead', 'SafeKeyedRead', 'SafeCall']);
+
+/** Whether a safe link is anywhere along the chain that ends at `ast`. */
+function hasSafe(ast) {
+  for (let link = ast; link; link = link.receiver ?? link.expression) {
+    const kind = link.constructor.name;
+    if (SAFE.has(kind)) return true;
+    if (!CHAIN.has(kind)) return false;
+  }
+  return false;
+}
+
 const isImplicit = (receiver) =>
   receiver instanceof ng.ImplicitReceiver && !(receiver instanceof ng.ThisReceiver);
 
@@ -564,40 +680,6 @@ const isImplicit = (receiver) =>
 function significant(nodes) {
   return nodes.filter((node) => !(node instanceof ng.TmplAstText && !node.value.trim()));
 }
-
-/**
- * A text view's content with the whitespace at its two ends dropped, as the engine drops it from a
- * `ui-text` in an app, and every space inside kept.
- */
-function trimmed(nodes) {
-  const kids = [...nodes];
-  const edge = (index, trim) => {
-    const node = kids[index];
-    if (node instanceof ng.TmplAstText) {
-      kids[index] = new ng.TmplAstText(trim(node.value), node.sourceSpan);
-    } else if (node instanceof ng.TmplAstBoundText) {
-      const ast = node.value.ast;
-      const strings = [...ast.strings];
-      const at = trim === trimStart ? 0 : strings.length - 1;
-      strings[at] = trim(strings[at]);
-      const interpolation = Object.assign(Object.create(Object.getPrototypeOf(ast)), ast, {
-        strings,
-      });
-      const value = Object.assign(Object.create(Object.getPrototypeOf(node.value)), node.value, {
-        ast: interpolation,
-      });
-      kids[index] = Object.assign(Object.create(Object.getPrototypeOf(node)), node, { value });
-    }
-  };
-  if (kids.length) {
-    edge(0, trimStart);
-    edge(kids.length - 1, trimEnd);
-  }
-  return kids.filter((node) => !(node instanceof ng.TmplAstText && node.value === ''));
-}
-
-const trimStart = (text) => text.replace(/^\s+/, '');
-const trimEnd = (text) => text.replace(/\s+$/, '');
 
 /** What `numberAttribute` makes of an attribute: a number, or NaN for text that is not one. */
 function numberAttribute(value) {

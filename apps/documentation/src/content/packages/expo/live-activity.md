@@ -91,7 +91,8 @@ The extension runs the layout with no Angular and no instance of the class, so:
 - **The class** holds its `props` input, members set to a modifier from
   `@expo/ui/swift-ui/modifiers`, and members set to a literal: a string, number, boolean, `null`,
   or an array or object of them. A method, another input, or any other value is a build error
-  naming the member and its line.
+  naming the member and its line. The build removes the class, so it is not exported, and nothing
+  but `widgetLayout` names it.
 - **The template** is inline, and draws `ui-text`, `ui-hstack`, `ui-vstack`, `ui-spacer`,
   `ui-divider`, `ui-image`, `ui-progress` and `ui-gauge`, imported from
   `@ng-native/expo/expo-ui-components`. It can use `@if`, `@for`, `@switch` and `@let`; a `@let`

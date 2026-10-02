@@ -141,6 +141,67 @@ describe('inlining a widget layout', () => {
     });
   });
 
+  it('compiles one layout passed to widgetLayout twice, and drops its class once', () => {
+    const src = module('<ui-text>{{ props().us }}</ui-text>').replace(
+      'export const score',
+      "export const again = createLiveActivity('Again', widgetLayout(ScoreLayout));\nexport const score",
+    );
+    const out = inlineWidgetLayouts(src, FILE);
+    assert.match(out, /^import \{ Component, input \}/, 'the imports are intact');
+    assert.match(out, /createLiveActivity\('Again', "function/);
+    assert.deepEqual(run(layoutOf(out), { us: '30' }), { type: 'Text', props: { children: '30' } });
+    assert.equal(out.split('\n').length, src.split('\n').length);
+  });
+
+  it('copies a constant without the TypeScript written inside it', () => {
+    const out = inlineWidgetLayouts(
+      module(
+        '<ui-text>{{ sizes[0].s }}{{ sizes.length }}</ui-text>',
+        `readonly props = input.required<object>();
+  protected readonly sizes = [{ s: 'a' } as const, { s: \`b\` } satisfies object];`,
+      ),
+      FILE,
+    );
+    assert.doesNotMatch(layoutOf(out), /as const|satisfies/);
+    assert.deepEqual(run(layoutOf(out), {}), { type: 'Text', props: { children: 'a2' } });
+  });
+
+  it('reads a .tsx module with JSX elsewhere in it', () => {
+    const src = module('<ui-spacer />') + 'export const other = <view />;\n';
+    assert.match(layoutOf(inlineWidgetLayouts(src, FILE.replace('.ts', '.tsx'))), /^function/);
+  });
+
+  it('rewrites widgetLayout read from a namespace import', () => {
+    const src = module('<ui-spacer />')
+      .replace(
+        "import { widgetLayout } from '@ng-native/expo/live-activity';",
+        "import * as live from '@ng-native/expo/live-activity';",
+      )
+      .replace('widgetLayout(ScoreLayout)', 'live.widgetLayout(ScoreLayout)');
+    assert.match(layoutOf(inlineWidgetLayouts(src, FILE)), /^function/);
+  });
+
+  it('refuses a layout class the module uses elsewhere, or exports', () => {
+    const used = module('<ui-spacer />') + 'export const name = ScoreLayout.name;\n';
+    assert.throws(
+      () => inlineWidgetLayouts(used, FILE),
+      /ScoreLayout is used .*only to widgetLayout/,
+    );
+    const exported = module('<ui-spacer />').replace(
+      'class ScoreLayout',
+      'export class ScoreLayout',
+    );
+    assert.throws(() => inlineWidgetLayouts(exported, FILE), /ScoreLayout is exported/);
+  });
+
+  it('names a private field as what it is', () => {
+    const src = module(
+      '<ui-spacer />',
+      'readonly props = input.required<object>();\n  #secret = 1;',
+    );
+    assert.throws(() => inlineWidgetLayouts(src, FILE), /#secret is private/);
+  });
+
   it('leaves a module with no widgetLayout call as it is', () => {
     const src = "import { Component } from '@angular/core';\nexport const a = 1;\n";
     assert.equal(inlineWidgetLayouts(src, FILE), src);

@@ -135,6 +135,16 @@ describe('text', () => {
     );
   });
 
+  it('draws nothing for an @if with no @else that does not match, inside a ui-text', () => {
+    assert.deepEqual(render('<ui-text>Hello @if (props().x) { there }</ui-text>', { x: false }), {
+      type: 'Text',
+      props: { children: 'Hello' },
+    });
+    assert.deepEqual(render('<ui-text>@if (props().x) { hi }</ui-text>', { x: false }).props, {
+      children: '',
+    });
+  });
+
   it('keeps a non-breaking space, which Angular does not collapse', () => {
     assert.deepEqual(render('<ui-text>Sets&nbsp;&nbsp;Games</ui-text>'), {
       type: 'Text',
@@ -219,6 +229,32 @@ describe('inputs', () => {
       ),
       { type: 'Text', props: { children: 'x', modifiers: [{ $type: 'tint', args: ['#d7f23c'] }] } },
     );
+  });
+});
+
+describe('members', () => {
+  it("keeps a constant from hiding the extension's globals or another member's modifier", () => {
+    assert.deepEqual(
+      render(
+        '<ui-text [modifiers]="[pad({ all: padding })]">{{ Text }}</ui-text>',
+        {},
+        {},
+        {
+          ...MEMBERS,
+          modifiers: { pad: 'padding' },
+          constants: { padding: '16', Text: "'x'" },
+        },
+      ),
+      {
+        type: 'Text',
+        props: { children: 'x', modifiers: [{ $type: 'padding', args: [{ all: 16 }] }] },
+      },
+    );
+  });
+
+  it('reads no member Object.prototype has, such as toString', () => {
+    fails('<ui-text>{{ toString }}</ui-text>', /toString is not a member/);
+    fails('<ui-text>{{ constructor }}</ui-text>', /constructor is not a member/);
   });
 });
 
@@ -332,6 +368,19 @@ describe('expressions', () => {
     assert.equal(text("typeof props().n === 'number' ? 'yes' : 'no'", { n: 1 }), 'yes');
   });
 
+  it('takes in, with spaces kept around it', () => {
+    assert.equal(text("'a' in props()", { a: 1 }), true);
+  });
+
+  it('answers null from a safe read that stops, as Angular does, through the whole chain', () => {
+    assert.equal(text('props().a?.b === null', { a: null }), true);
+    assert.equal(text("props().a?.b.c ?? 'none'", { a: null }), 'none');
+    assert.equal(text('props().a?.b.c', { a: { b: { c: 'deep' } } }), 'deep');
+    assert.equal(text('props().a?.b === undefined', { a: {} }), true, 'a missing key is undefined');
+    assert.equal(text("props().f?.() ?? 'none'", { f: null }), 'none');
+    assert.equal(text("props().list?.[0] ?? 'none'", { list: null }), 'none');
+  });
+
   it('takes template literals', () => {
     assert.equal(text('`Us ${props().us}`', { us: 'AD' }), 'Us AD');
   });
@@ -361,8 +410,38 @@ describe('a layout the compiler refuses', () => {
     fails('<ui-text [text]="props().n | number" />', /pipe/);
   });
 
-  it('refuses a member it cannot inline', () => {
-    fails('<ui-text [text]="other" />', /other.*member/s);
+  it('refuses a member it cannot inline, naming where it is read', () => {
+    fails('<ui-text [text]="other" />', /^LayoutError: layout\.ts:1:18: other is not a member/);
+    fails(
+      '<ui-vstack>\n  <ui-text>{{ props().a + nope }}</ui-text>\n</ui-vstack>',
+      /layout\.ts:2:27: nope/,
+    );
+  });
+
+  it('names where a pipe is', () => {
+    fails(
+      '<ui-text [text]="props().n | number" />',
+      /^LayoutError: layout\.ts:1:18: The number pipe/,
+    );
+  });
+
+  it('refuses a widget root that can draw nothing or a list of views', () => {
+    fails('@if (props().on) { <ui-spacer /> }', /@if.*@else/);
+    fails('@switch (props().n) { @case (1) { <ui-spacer /> } }', /@switch.*@default/);
+    fails('@for (n of props().list; track n) { <ui-spacer /> }', /@for.*list/);
+    fails('@if (props().on) { <ui-spacer /><ui-divider /> } @else { <ui-spacer /> }', /one view/);
+  });
+
+  it('refuses a slot that draws a list of views', () => {
+    fails('<ng-template #banner><ui-spacer /><ui-divider /></ng-template>', /one view/);
+    fails(
+      '<ng-template #banner>@for (n of props().list; track n) { <ui-spacer /> }</ng-template>',
+      /@for.*list/,
+    );
+  });
+
+  it('refuses a view with no typed component, which ngc refuses in the app too', () => {
+    fails('<ui-rounded-rectangle cornerRadius="8" />', /<ui-rounded-rectangle> is not a view/);
   });
 
   it('refuses a slot a Live Activity does not have', () => {
