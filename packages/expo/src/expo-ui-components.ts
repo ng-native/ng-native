@@ -689,6 +689,175 @@ export class UiSpacer {
   readonly modifiers = input<readonly UiModifier[]>();
 }
 
+/** Where `ui-zstack` puts its layers, as SwiftUI names it. */
+export type UiZStackAlignment =
+  | 'center'
+  | 'leading'
+  | 'trailing'
+  | 'top'
+  | 'bottom'
+  | 'topLeading'
+  | 'topTrailing'
+  | 'bottomLeading'
+  | 'bottomTrailing';
+
+/** The same place, as Compose's `Box` names it. */
+const CONTENT_ALIGNMENT: Record<UiZStackAlignment, string> = {
+  center: 'center',
+  leading: 'centerStart',
+  trailing: 'centerEnd',
+  top: 'topCenter',
+  bottom: 'bottomCenter',
+  topLeading: 'topStart',
+  topTrailing: 'topEnd',
+  bottomLeading: 'bottomStart',
+  bottomTrailing: 'bottomEnd',
+};
+
+/**
+ * A SwiftUI `ZStack`: its children drawn over one another, the first at the back. On Android,
+ * Compose's `Box`, centred, as SwiftUI's is, unless `alignment` says otherwise.
+ */
+@Component({
+  selector: 'ui-zstack',
+  template: '<ng-content />',
+  host: {
+    '[alignment]': 'android ? undefined : alignment()',
+    '[contentAlignment]': 'android ? contentAlignment[alignment() ?? "center"] : undefined',
+    '[modifiers]': 'modifiers()',
+  },
+})
+export class UiZStack {
+  readonly alignment = input<UiZStackAlignment>();
+  readonly modifiers = input<readonly UiModifier[]>();
+
+  protected readonly android = nativePlatform() === 'android';
+  protected readonly contentAlignment = CONTENT_ALIGNMENT;
+}
+
+/** A SwiftUI `Rectangle`, filling the space it is given. Colour it with `foregroundStyle`. */
+@Component({
+  selector: 'ui-rectangle',
+  template: '',
+  host: { '[modifiers]': 'modifiers()' },
+})
+export class UiRectangle {
+  readonly modifiers = input<readonly UiModifier[]>();
+}
+
+/** A SwiftUI `RoundedRectangle`, its corners rounded by `cornerRadius`. */
+@Component({
+  selector: 'ui-rounded-rectangle',
+  template: '',
+  host: { '[cornerRadius]': 'cornerRadius()', '[modifiers]': 'modifiers()' },
+})
+export class UiRoundedRectangle {
+  readonly cornerRadius = input<number>(undefined, { transform: optionalNumber });
+  readonly modifiers = input<readonly UiModifier[]>();
+}
+
+/** A SwiftUI `UnevenRoundedRectangle`: a rectangle with a radius of its own for each corner. */
+@Component({
+  selector: 'ui-uneven-rounded-rectangle',
+  template: '',
+  host: {
+    '[topLeadingRadius]': 'topLeadingRadius()',
+    '[topTrailingRadius]': 'topTrailingRadius()',
+    '[bottomLeadingRadius]': 'bottomLeadingRadius()',
+    '[bottomTrailingRadius]': 'bottomTrailingRadius()',
+    '[modifiers]': 'modifiers()',
+  },
+})
+export class UiUnevenRoundedRectangle {
+  readonly topLeadingRadius = input<number>(undefined, { transform: optionalNumber });
+  readonly topTrailingRadius = input<number>(undefined, { transform: optionalNumber });
+  readonly bottomLeadingRadius = input<number>(undefined, { transform: optionalNumber });
+  readonly bottomTrailingRadius = input<number>(undefined, { transform: optionalNumber });
+  readonly modifiers = input<readonly UiModifier[]>();
+}
+
+/** A SwiftUI `Capsule`: a rectangle with fully rounded ends. */
+@Component({
+  selector: 'ui-capsule',
+  template: '',
+  host: { '[cornerStyle]': 'cornerStyle()', '[modifiers]': 'modifiers()' },
+})
+export class UiCapsule {
+  readonly cornerStyle = input<'continuous' | 'circular'>();
+  readonly modifiers = input<readonly UiModifier[]>();
+}
+
+/** A SwiftUI `Circle`, as large as fits the space it is given. */
+@Component({
+  selector: 'ui-circle',
+  template: '',
+  host: { '[modifiers]': 'modifiers()' },
+})
+export class UiCircle {
+  readonly modifiers = input<readonly UiModifier[]>();
+}
+
+/** A SwiftUI `Ellipse`, filling the space it is given. */
+@Component({
+  selector: 'ui-ellipse',
+  template: '',
+  host: { '[modifiers]': 'modifiers()' },
+})
+export class UiEllipse {
+  readonly modifiers = input<readonly UiModifier[]>();
+}
+
+/**
+ * WidgetKit's `AccessoryWidgetBackground`: the system's backdrop for a lock screen widget, the
+ * translucent disc or panel behind its content.
+ */
+@Component({
+  selector: 'ui-accessory-widget-background',
+  template: '',
+  host: { '[modifiers]': 'modifiers()' },
+})
+export class UiAccessoryWidgetBackground {
+  readonly modifiers = input<readonly UiModifier[]>();
+}
+
+/** A SwiftUI `Label`: a title beside an SF Symbol. */
+@Component({
+  selector: 'ui-label',
+  template: '',
+  host: {
+    '[title]': 'title()',
+    '[systemImage]': 'systemImage()',
+    '[color]': 'color()',
+    '[modifiers]': 'modifiers()',
+  },
+})
+export class UiLabel {
+  readonly title = input<string>();
+  /** An SF Symbol name. */
+  readonly systemImage = input<string>();
+  readonly color = input<string>();
+  readonly modifiers = input<readonly UiModifier[]>();
+}
+
+/**
+ * A SwiftUI `Link`: opens `destination`, a URL, when tapped. It shows `label`, or the views
+ * written inside it. In a widget, a link is how a tap opens the app at a deep link.
+ */
+@Component({
+  selector: 'ui-link',
+  template: '<ng-content />',
+  host: {
+    '[destination]': 'destination()',
+    '[label]': 'label()',
+    '[modifiers]': 'modifiers()',
+  },
+})
+export class UiLink {
+  readonly destination = input.required<string>();
+  readonly label = input<string>();
+  readonly modifiers = input<readonly UiModifier[]>();
+}
+
 /** A SwiftUI `LabeledContent`: a label, and its content beside it. */
 @Component({
   selector: 'ui-labeled-content',

@@ -63,6 +63,37 @@ const VIEWS = {
       modifiers: 'any',
     },
   },
+  zstack: { component: 'ZStack', inputs: { alignment: 'string', modifiers: 'any' } },
+  rectangle: { component: 'Rectangle', inputs: { modifiers: 'any' } },
+  'rounded-rectangle': {
+    component: 'RoundedRectangle',
+    inputs: { cornerRadius: 'number', modifiers: 'any' },
+  },
+  'uneven-rounded-rectangle': {
+    component: 'UnevenRoundedRectangle',
+    inputs: {
+      topLeadingRadius: 'number',
+      topTrailingRadius: 'number',
+      bottomLeadingRadius: 'number',
+      bottomTrailingRadius: 'number',
+      modifiers: 'any',
+    },
+  },
+  capsule: { component: 'Capsule', inputs: { cornerStyle: 'string', modifiers: 'any' } },
+  circle: { component: 'Circle', inputs: { modifiers: 'any' } },
+  ellipse: { component: 'Ellipse', inputs: { modifiers: 'any' } },
+  'accessory-widget-background': {
+    component: 'AccessoryWidgetBackground',
+    inputs: { modifiers: 'any' },
+  },
+  label: {
+    component: 'Label',
+    inputs: { title: 'string', systemImage: 'string', color: 'string', modifiers: 'any' },
+  },
+  link: {
+    component: 'Link',
+    inputs: { destination: 'string', label: 'string', modifiers: 'any' },
+  },
   divider: { component: 'Divider', inputs: { modifiers: 'any' } },
   progress: { component: 'ProgressView', inputs: { value: 'number', modifiers: 'any' } },
   spacer: { component: 'Spacer', inputs: { modifiers: 'any' } },

@@ -441,7 +441,7 @@ describe('a layout the compiler refuses', () => {
   });
 
   it('refuses a view with no typed component, which ngc refuses in the app too', () => {
-    fails('<ui-rounded-rectangle cornerRadius="8" />', /<ui-rounded-rectangle> is not a view/);
+    fails('<ui-chart />', /<ui-chart> is not a view/);
   });
 
   it('refuses a slot a Live Activity does not have', () => {

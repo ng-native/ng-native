@@ -49,7 +49,15 @@ function check(template: string): string {
     path.join(root, 'layout.ts'),
     `import { Component, input } from '@angular/core';
 import { font, foregroundStyle } from '@expo/ui/swift-ui/modifiers';
-import { UiHStack, UiProgress, UiSpacer, UiText } from '@ng-native/expo/expo-ui-components';
+import {
+  UiHStack,
+  UiLink,
+  UiProgress,
+  UiRoundedRectangle,
+  UiSpacer,
+  UiText,
+  UiZStack,
+} from '@ng-native/expo/expo-ui-components';
 import { widgetLayout } from '@ng-native/expo/live-activity';
 
 interface Scoreline {
@@ -60,7 +68,7 @@ interface Scoreline {
 
 @Component({
   selector: 'score-layout',
-  imports: [UiHStack, UiProgress, UiSpacer, UiText],
+  imports: [UiHStack, UiLink, UiProgress, UiRoundedRectangle, UiSpacer, UiText, UiZStack],
   template: \`${template}\`,
 })
 class ScoreLayout {
@@ -96,6 +104,18 @@ describe("a widget layout's template, through ngc", () => {
       </ui-hstack>`),
       '',
     );
+  });
+
+  it('type-checks the layering, shape and link views', () => {
+    assert.equal(
+      check(`<ui-zstack alignment="topLeading">
+        <ui-rounded-rectangle cornerRadius="16" />
+        <ui-link destination="padel://score"><ui-text>{{ props().us }}</ui-text></ui-link>
+      </ui-zstack>`),
+      '',
+    );
+    assert.match(check('<ui-zstack alignment="middle" />'), /"middle"' is not assignable/);
+    assert.match(check('<ui-link />'), /Required input 'destination'/);
   });
 
   it('fails on a prop the props type does not have', () => {

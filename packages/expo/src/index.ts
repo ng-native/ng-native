@@ -20,7 +20,18 @@ export {
   type ExpoViewOptions,
 } from './register-expo-view.ts';
 export {
+  UiAccessoryWidgetBackground,
   UiButton,
+  UiCapsule,
+  UiCircle,
+  UiEllipse,
+  UiLabel,
+  UiLink,
+  UiRectangle,
+  UiRoundedRectangle,
+  UiUnevenRoundedRectangle,
+  UiZStack,
+  type UiZStackAlignment,
   UiDatePicker,
   UiDivider,
   UiHost,

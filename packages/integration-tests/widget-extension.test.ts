@@ -300,4 +300,39 @@ describe('a layout through the widget extension', () => {
       [{ props: { done: 1 } }],
     );
   });
+
+  it('layers shapes, a label and links in a ui-zstack as its JSX does', () => {
+    same(
+      `<ui-zstack alignment="topLeading">
+        <ui-rounded-rectangle cornerRadius="16" [modifiers]="[foregroundStyle('#0b2a5b')]" />
+        <ui-uneven-rounded-rectangle topLeadingRadius="4" bottomTrailingRadius="12" />
+        <ui-capsule cornerStyle="continuous" />
+        <ui-circle [modifiers]="[frame({ width: 8, height: 8 })]" />
+        <ui-rectangle />
+        <ui-ellipse />
+        <ui-accessory-widget-background />
+        <ui-label title="Padel" systemImage="tennisball.fill" />
+        <ui-link destination="padel://score" [label]="props().us" />
+        <ui-link destination="padel://match"><ui-text>Match</ui-text></ui-link>
+      </ui-zstack>`,
+      `(props) => {
+        'widget';
+        return (
+          <ZStack alignment="topLeading">
+            <RoundedRectangle cornerRadius={16} modifiers={[foregroundStyle('#0b2a5b')]} />
+            <UnevenRoundedRectangle topLeadingRadius={4} bottomTrailingRadius={12} />
+            <Capsule cornerStyle="continuous" />
+            <Circle modifiers={[frame({ width: 8, height: 8 })]} />
+            <Rectangle />
+            <Ellipse />
+            <AccessoryWidgetBackground />
+            <Label title="Padel" systemImage="tennisball.fill" />
+            <Link destination="padel://score" label={props.us} />
+            <Link destination="padel://match"><Text>Match</Text></Link>
+          </ZStack>
+        );
+      }`,
+      [{ props: { us: '30' } }],
+    );
+  });
 });

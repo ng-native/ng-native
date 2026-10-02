@@ -87,6 +87,14 @@ error. `expo-ui-components.ts` has thin typed components for the views an app re
   a scroll view that also scrolls sideways loses its swipes to that scroll view.
 - **`UiVStack`** and **`UiHStack`** - SwiftUI's stacks, with `alignment` and `spacing`, and
   **`UiSpacer`** for the room left over in one.
+- **`UiZStack`** - SwiftUI's `ZStack`: its children drawn over one another, the first at the back,
+  placed by `alignment`.
+- **`UiRectangle`**, **`UiRoundedRectangle`**, **`UiUnevenRoundedRectangle`**, **`UiCapsule`**,
+  **`UiCircle`** and **`UiEllipse`** - SwiftUI's shapes, iOS only, coloured with the
+  `foregroundStyle` modifier. **`UiAccessoryWidgetBackground`** is the system's backdrop for a lock
+  screen widget.
+- **`UiLabel`** - a `title` beside an SF Symbol, iOS only. **`UiLink`** opens its `destination`
+  URL when tapped, showing its `label` or the views written inside it, iOS only.
 - **`UiSlider`**, **`UiStepper`** and **`UiToggle`** - with `valueChanged`, `valueChange` and
   `isOnChange` for what the user did.
 - **`UiTextField`** - its `text` is a `nativeState('')`, which the field writes to on the UI
@@ -117,20 +125,21 @@ Subscribe in the template, not to the output in code.
 
 ### On Android
 
-One template draws both platforms for `UiHost`, `UiVStack`, `UiHStack`, `UiText`, `UiSpacer`,
-`UiToggle`, `UiSlider`, `UiButton`, `UiDivider`, `UiProgress` and `UiSlot`. Compose names some
-props and events differently, and each of these components sends its inputs under the name the
-platform reads and delivers Compose's events through the same outputs, with the same `$event`
-shape: a toggle's `isOn` reaches Compose's switch as `value`, and its `checkedChange` arrives as
-`(isOnChange)` with `nativeEvent.isOn`. A button's `label` is drawn as text inside it, since
-Compose's button has no label of its own. A toggle's `label` is SwiftUI's alone: Compose's switch
-draws none, and the switch is the element, so on Android put a `<ui-text>` beside it in a
+One template draws both platforms for `UiHost`, `UiVStack`, `UiHStack`, `UiZStack`, `UiText`,
+`UiSpacer`, `UiToggle`, `UiSlider`, `UiButton`, `UiDivider`, `UiProgress` and `UiSlot`. Compose
+names some props and events differently, and each of these components sends its inputs under the
+name the platform reads and delivers Compose's events through the same outputs, with the same
+`$event` shape: a toggle's `isOn` reaches Compose's switch as `value`, and its `checkedChange`
+arrives as `(isOnChange)` with `nativeEvent.isOn`. A button's `label` is drawn as text inside it,
+since Compose's button has no label of its own. A toggle's `label` is SwiftUI's alone: Compose's
+switch draws none, and the switch is the element, so on Android put a `<ui-text>` beside it in a
 `<ui-hstack>`. A button's `systemImage` and `role` are SwiftUI's alone too. A slider's `steps` is
 the number of steps on both, rounded to a whole number, with one exception: Compose has no slider
 that stops only at its two ends, so `steps="1"` slides freely there.
 
 A toggle without `isOn` switches itself on both, and one bound to `isOn` shows what `isOn` says, so
-write the new value back from `(isOnChange)`. A stack without an `alignment` is centred on both.
+write the new value back from `(isOnChange)`. A stack without an `alignment` is centred on both; a
+`UiZStack` is Compose's `Box` on Android.
 Without a `spacing`, SwiftUI puts its own default spacing between a stack's children and Compose
 puts none, so give a stack a `spacing` where the gap matters.
 
@@ -259,6 +268,16 @@ An element registered for `@expo/ui` when it is not installed commits as nothing
 <!-- api: UiVStack -->
 <!-- api: UiHStack -->
 <!-- api: UiSpacer -->
+<!-- api: UiZStack -->
+<!-- api: UiRectangle -->
+<!-- api: UiRoundedRectangle -->
+<!-- api: UiUnevenRoundedRectangle -->
+<!-- api: UiCapsule -->
+<!-- api: UiCircle -->
+<!-- api: UiEllipse -->
+<!-- api: UiAccessoryWidgetBackground -->
+<!-- api: UiLabel -->
+<!-- api: UiLink -->
 <!-- api: UiSlider -->
 <!-- api: UiStepper -->
 <!-- api: UiToggle -->
