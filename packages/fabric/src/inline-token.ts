@@ -42,12 +42,16 @@ const cssTrim = (text: string): string => text.replace(PADDED, '');
 /** A family name's parts: a quoted string, which may hold escapes, or a bare word. */
 const FAMILY_PART = /^(?:'((?:[^'\\]|\\[\s\S])*)'|"((?:[^"\\]|\\[\s\S])*)"|(-?[a-z_][\w-]*))/i;
 const LEADING_SPACE = new RegExp(`^${CSS_SPACE.source}`);
-/** A CSS escape: up to six hex digits and one whitespace after them, or any other character. */
-const ESCAPE = /\\([\da-f]{1,6})[ \t\n\r\f]?|\\([\s\S])/gi;
+/**
+ * A CSS escape: up to six hex digits and one whitespace after them, a newline, which only joins
+ * the lines either side, or any other character.
+ */
+const ESCAPE = /\\([\da-f]{1,6})(?:\r\n|[ \t\n\r\f])?|\\(\r\n|[\n\r\f])|\\([\s\S])/gi;
 
 /** A quoted string's text with its escapes decoded. One naming no character is U+FFFD. */
 const decodeEscapes = (text: string): string =>
-  text.replace(ESCAPE, (_, hex: string | undefined, char: string) => {
+  text.replace(ESCAPE, (_, hex: string | undefined, newline: string | undefined, char: string) => {
+    if (newline !== undefined) return '';
     if (hex === undefined) return char;
     const code = parseInt(hex, 16);
     return code && code <= 0x10ffff && (code < 0xd800 || code > 0xdfff)

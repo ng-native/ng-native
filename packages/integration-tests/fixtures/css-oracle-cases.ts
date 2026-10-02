@@ -148,6 +148,7 @@ const FAMILY_CASES = (
     ['a family of two words', 'Segoe UI'],
     ['a family with an escaped quote', "'D\\'Angelo', serif"],
     ['a family with a hex escape', "'\\66 oo'"],
+    ['a family with an escaped newline, which joins it', "'Foo\\\nBar'"],
   ] as const
 ).flatMap(([kind, value]) =>
   tokenCases(`font-family: ${kind}`, 'font-family', value, 'monospace', 'font-family'),
