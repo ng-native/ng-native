@@ -3,7 +3,7 @@ import { PressBehavior } from '../../components/src/pressable.ts';
 import { Text } from '../../components/src/text.ts';
 import { View } from '../../components/src/view.ts';
 
-/** A row whose press behaviour exposes only `disabled`, which is the shape that used to break. */
+/** A row whose press behaviour exposes only `disabled`, not the identity inputs alongside it. */
 @Component({
   selector: 'x-narrow-row',
   template: `<ng-content />`,
@@ -15,10 +15,9 @@ export class NarrowRow {
 }
 
 /**
- * The other route to the same clobber: a host binding on the composing component.
- *
- * `ui-alert` sets `[accessible]` this way and `ui-separator` sets `[accessibilityLabel]`, and both
- * were one input change away from silently losing it.
+ * The other route to the same clobber: a host binding on the composing component, such as a
+ * component setting `[accessible]` or `[accessibilityLabel]` through its own `host` object rather
+ * than through an input of the class it composes in.
  */
 @Component({
   selector: 'x-host-bound-row',
@@ -33,7 +32,7 @@ export class HostBoundRow {
   readonly label = input('');
 }
 
-/** The same, with the identity inputs listed through as `ui-checkbox` does. */
+/** The same, with the identity inputs listed through explicitly alongside `disabled`. */
 @Component({
   selector: 'x-wide-row',
   template: `<ng-content />`,

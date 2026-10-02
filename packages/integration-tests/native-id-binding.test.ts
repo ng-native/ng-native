@@ -2,19 +2,18 @@
  * Binding `[nativeID]` on a component that composes a press behaviour.
  *
  * A property that no directive on the node claims is applied as a plain write on the host
- * element. `ViewBase.ngOnChanges` then rewrote some forty props from its own inputs, and for an
- * input the composing component never exposed that value is `undefined` - so the plain write
- * survived exactly until the first time any other input changed, and then vanished.
+ * element. `ViewBase.ngOnChanges` rewrites some forty props from its own inputs on every change,
+ * so without a guard, a plain write like that would be overwritten the first time any other input
+ * changed, since the composing component never exposes a value for it.
  *
- * Two things reach a node by that route, and both were one input change from breaking:
+ * Two things reach a node by that route:
  *
  * - `[nativeID]` on a component whose `hostDirectives` entry lists `disabled` and not the
- *   identity inputs, which is `ui-select-item` and `ui-dropdown-menu-item`.
- * - A host binding on the composing component, which is how `ui-alert` sets `[accessible]` and
- *   `ui-separator` sets `[accessibilityLabel]`. Both are documented as working and both were
- *   passing their own tests, because nothing in those tests changed an input afterwards.
+ *   identity inputs.
+ * - A host binding on the composing component, such as `[accessible]` or `[accessibilityLabel]`
+ *   set through its own `host` object.
  *
- * `ViewBase` no longer writes a prop it has nothing to say about. This holds that.
+ * `ViewBase` never writes a prop it has nothing to say about. This holds that.
  */
 import assert from 'node:assert/strict';
 import { after, before, describe, it } from 'node:test';
@@ -50,9 +49,8 @@ describe('a prop written by a route that is not an input of ViewBase', () => {
       .filter((id) => id !== undefined);
 
   it('keeps a host binding the composing component made, past an input change', async () => {
-    // The alert and separator pattern. The label is written by a host binding on the component,
-    // and `ViewBase` has no `accessibilityLabel` input of its own here - so before the fix it
-    // wrote undefined over it the moment `disabled` changed.
+    // The label is written by a host binding on the component, and `ViewBase` has no
+    // `accessibilityLabel` input of its own here, so it never overwrites the value.
     const labelled = () => screen.getByTestId('host-bound');
     assert.equal(labelled().props['accessibilityLabel'], 'Close');
 

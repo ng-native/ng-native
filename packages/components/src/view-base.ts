@@ -507,20 +507,18 @@ export abstract class ViewBase {
   /**
    * Writes a prop, and says nothing when it has nothing to say.
    *
-   * The `undefined` guard is the whole of it, and it fixes a silent failure that had already been
-   * hit twice. These two methods rewrite roughly forty props from this class's own inputs on every
-   * `ngOnChanges`, so anything that reached the node by another route was overwritten the first
-   * time any input changed. Two routes get here without going through an input of this class:
+   * The `undefined` guard is the whole of it. These two methods rewrite roughly forty props from
+   * this class's own inputs on every `ngOnChanges`, so without the guard, anything that reached
+   * the node by another route would be overwritten the first time any input changed. Two routes
+   * reach the node without going through an input of this class:
    *
-   * - A host binding on the composing component. `ui-alert` sets `[accessible]` that way and
-   *   `ui-separator` sets `[accessibilityLabel]`; both are documented as working, and both were
-   *   one input change away from stopping.
-   * - An element property binding. A component whose `hostDirectives` entry lists `disabled` but
-   *   not `nativeID` leaves `[nativeID]` to be applied as a plain property, and then a bound
-   *   `[disabled]` beside it clobbered the id on the next change. `ui-checkbox` carries a
-   *   per-component workaround for that, listing the identity inputs through explicitly, and
-   *   `ui-select-item` and `ui-dropdown-menu-item` do not - which is the shape of a bug that gets
-   *   copied rather than fixed.
+   * - A host binding on a component that composes this class in, such as `[accessible]` or
+   *   `[accessibilityLabel]` set from the composing component's own `host` object.
+   * - An element property binding beside a `hostDirectives` entry. A component whose
+   *   `hostDirectives` entry lists one input (say `disabled`) but not another (say `nativeID`)
+   *   leaves `[nativeID]` to be applied as a plain property; a bound `[disabled]` beside it would
+   *   then clobber the id on the next change unless the identity inputs are also listed through
+   *   explicitly.
    *
    * An input that goes back to `undefined` clears the prop only when this is what set it, so a
    * binding such as `[pointerEvents]="busy() ? 'none' : undefined"` still switches off, and a
