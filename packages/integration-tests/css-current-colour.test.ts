@@ -213,6 +213,175 @@ describe('color: currentColor', () => {
   });
 });
 
+describe('color: inherit', () => {
+  it('is the colour the element inherits, over its own, with no warning', () => {
+    const { props, warnings } = tree(
+      `.p { color: ${RED} } .a { color: ${BLUE} } .p .a { color: inherit }`,
+      ['p'],
+    );
+    assert.deepEqual(warnings, []);
+    assert.equal(props()['color'], RED);
+  });
+
+  it('is the same as unset, since color is inherited', () => {
+    const { props, warnings } = tree(`.p { color: ${RED} } .a { color: ${BLUE}; color: unset }`, [
+      'p',
+    ]);
+    assert.deepEqual(warnings, []);
+    assert.equal(props()['color'], RED);
+  });
+
+  it('follows the inherited colour when it changes', () => {
+    const { engine, outer, props } = tree(
+      `.p { color: ${RED} } .q { color: ${BLUE} } .a { color: ${GREY}; color: inherit }`,
+      ['p'],
+    );
+    engine.removeClass(outer, 'p');
+    engine.addClass(outer, 'q');
+    engine.commit();
+    assert.equal(props()['color'], BLUE);
+  });
+
+  it("is the parent's token, not its colour, for a token of inherit set on the element", () => {
+    const { engine, node, props } = tree(
+      `.p { color: ${GREY}; --c: ${RED} } .a { color: ${BLUE}; color: var(--c) }`,
+      ['p'],
+    );
+    engine.setCustomProperty(node, '--c', 'inherit');
+    engine.commit();
+    assert.equal(props()['color'], RED);
+  });
+});
+
+describe('text-decoration-color: currentColor', () => {
+  it('is the colour of the text, over a weaker rule, with no warning', () => {
+    const { props, warnings } = tree(
+      `.a { text-decoration-color: ${GREY} } .p .a { color: ${RED}; ` +
+        'text-decoration-line: underline; text-decoration-color: currentColor }',
+      ['p'],
+    );
+    assert.deepEqual(warnings, []);
+    assert.equal(props()['textDecorationColor'], RED);
+  });
+
+  it('is the colour the element inherits, and follows it when it changes', () => {
+    const { engine, outer, props } = tree(
+      `.p { color: ${RED} } .q { color: ${BLUE} } .a { text-decoration-color: currentColor }`,
+      ['p'],
+    );
+    assert.equal(props()['textDecorationColor'], RED);
+    engine.removeClass(outer, 'p');
+    engine.addClass(outer, 'q');
+    engine.commit();
+    assert.equal(props()['textDecorationColor'], BLUE);
+  });
+
+  it('is the colour color: inherit gives the element, whichever is written first', () => {
+    const { props, warnings } = tree(
+      `.p { color: ${RED} } .a { text-decoration-color: currentColor; color: ${BLUE}; color: inherit }`,
+      ['p'],
+    );
+    assert.deepEqual(warnings, []);
+    assert.equal(props()['textDecorationColor'], RED);
+  });
+
+  it('is the colour of the text through a token set on the element', () => {
+    const { engine, node, props } = tree(
+      `.a { color: ${RED}; text-decoration-color: var(--c, ${GREY}) }`,
+    );
+    engine.setCustomProperty(node, '--c', 'currentColor');
+    engine.commit();
+    assert.equal(props()['textDecorationColor'], RED);
+  });
+});
+
+/**
+ * `color: currentColor` in a frame, which is the colour the element inherits, as `color: inherit`
+ * is. Chrome's values for these stylesheets, under a parent of rgb(10, 20, 30) that turns
+ * rgb(200, 100, 0): rgb(10, 20, 30) at the start, rgb(60, 70, 80) half way, and rgb(155, 110, 65)
+ * half way once the parent's colour has changed.
+ */
+describe('color: currentColor in a keyframe', () => {
+  const css = (from: string) => `
+    .p { color: rgb(10, 20, 30) }
+    .q { color: rgb(200, 100, 0) }
+    @keyframes k { from { color: ${from} } to { color: rgb(110, 120, 130) } }
+    .a { color: ${GREY}; animation: k 1s linear paused }
+    .half { animation-delay: -0.5s }
+    .run { animation-play-state: running }
+  `;
+
+  function scene(from: string, classes: string[] = []) {
+    let now = 1000;
+    const warnings: string[] = [];
+    const sheet = compileCss(css(from), 'frames', {
+      onUnsupported: (m: string) => warnings.push(m),
+    });
+    const fabric = createFakeFabric();
+    const engine = new Engine(fabric, 1, { now: () => now });
+    const outer = engine.createElement('view', sheet);
+    engine.addClass(outer, 'p');
+    const node = engine.createElement('text', sheet);
+    for (const name of ['a', ...classes]) engine.addClass(node, name);
+    engine.appendChild(outer, node);
+    engine.appendChild(engine.root, outer);
+    engine.commit();
+    const recolour = () => {
+      engine.removeClass(outer, 'p');
+      engine.addClass(outer, 'q');
+      engine.commit();
+    };
+    return {
+      warnings,
+      recolour,
+      painted: () => fabric.committed[0]!.children[0]!.props['color'],
+      tick(ms: number) {
+        now += ms;
+        engine.advanceAnimations();
+        engine.commit();
+      },
+    };
+  }
+
+  it('starts at the colour the element inherits, with no warning', () => {
+    const s = scene('currentColor');
+    assert.deepEqual(s.warnings, []);
+    assert.equal(s.painted(), 'rgba(10, 20, 30, 1)');
+  });
+
+  it('runs from the inherited colour to the frame it meets', () => {
+    assert.equal(scene('currentColor', ['half']).painted(), 'rgba(60, 70, 80, 1)');
+  });
+
+  it('follows the inherited colour when it changes while paused', () => {
+    const s = scene('currentColor', ['half']);
+    s.recolour();
+    assert.equal(s.painted(), 'rgba(155, 110, 65, 1)');
+  });
+
+  it('follows it while it runs as well', () => {
+    const s = scene('currentColor', ['run']);
+    s.tick(500);
+    assert.equal(s.painted(), 'rgba(60, 70, 80, 1)');
+    s.recolour();
+    assert.equal(s.painted(), 'rgba(155, 110, 65, 1)');
+  });
+
+  it('reads color: inherit in a frame the same way', () => {
+    const s = scene('inherit', ['half']);
+    assert.deepEqual(s.warnings, []);
+    assert.equal(s.painted(), 'rgba(60, 70, 80, 1)');
+  });
+
+  it('still refuses currentColor on any other property in a frame', () => {
+    // The element's own colour, which the same frames can be animating.
+    assert.throws(
+      () => compileCss('@keyframes k { to { background-color: currentColor } }'),
+      /keyframe/,
+    );
+  });
+});
+
 describe("a border whose width is a calc() of a token, as Bootstrap's .table-group-divider", () => {
   const divider = '.a { border-top: calc(var(--w) * 2) solid currentcolor }';
 

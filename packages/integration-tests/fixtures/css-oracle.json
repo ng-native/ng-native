@@ -1243,5 +1243,72 @@
       "color": "rgb(12, 1, 0)",
       "background-color": "rgba(0, 0, 0, 0)"
     }
+  },
+  {
+    "name": "color: inherit is the colour the element inherits",
+    "expected": {
+      "color": "rgb(1, 5, 0)",
+      "background-color": "rgba(0, 0, 0, 0)"
+    }
+  },
+  {
+    "name": "color: inherit beats a weaker rule and inherits the colour",
+    "expected": {
+      "color": "rgb(2, 5, 0)",
+      "background-color": "rgba(0, 0, 0, 0)"
+    }
+  },
+  {
+    "name": "color: unset is the colour the element inherits, as color is inherited",
+    "expected": {
+      "color": "rgb(3, 5, 0)",
+      "background-color": "rgba(0, 0, 0, 0)"
+    }
+  },
+  {
+    "name": "a background in currentColor beside color: inherit is the inherited colour",
+    "expected": {
+      "color": "rgb(4, 5, 0)",
+      "background-color": "rgb(4, 5, 0)"
+    }
+  },
+  {
+    "name": "a token of inherit set on the element is the parent's token, not the parent's colour",
+    "expected": {
+      "color": "rgb(5, 5, 0)",
+      "background-color": "rgba(0, 0, 0, 0)"
+    }
+  },
+  {
+    "name": "text-decoration-color: currentColor is the colour of the text",
+    "expected": {
+      "color": "rgb(6, 5, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "text-decoration-color": "rgb(6, 5, 0)"
+    }
+  },
+  {
+    "name": "text-decoration-color: currentColor is the colour the text inherits",
+    "expected": {
+      "color": "rgb(7, 5, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "text-decoration-color": "rgb(7, 5, 0)"
+    }
+  },
+  {
+    "name": "a text decoration of a currentColor token set on the element is the colour of the text",
+    "expected": {
+      "color": "rgb(8, 5, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "text-decoration-color": "rgb(8, 5, 0)"
+    }
+  },
+  {
+    "name": "a text decoration of a currentColor token is the colour where it is used",
+    "expected": {
+      "color": "rgb(9, 5, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "text-decoration-color": "rgb(9, 5, 0)"
+    }
   }
 ]

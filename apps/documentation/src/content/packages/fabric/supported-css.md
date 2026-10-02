@@ -222,10 +222,11 @@ the other per-side shorthands set that side's width and color, and take `solid` 
 default) or `none` as their style. A border shorthand with no color, such as `border: 2px solid`,
 is drawn in the element's text color, its own or inherited, as on the web, and so is a border color
 of `currentColor`, which is what Tailwind's `border-current` writes. An outline with no color, an
-`outline-color` and a `background-color` of `currentColor`, a `var()` that falls back to
-`currentColor` and a custom property that holds it take the text color the same way, where they
-are used. `color: currentColor` is the color the element inherits, as on the web. All of them
-follow the text color when it changes. A border shorthand's width may be a
+`outline-color`, a `background-color` and a `text-decoration-color` of `currentColor`, a `var()`
+that falls back to `currentColor` and a custom property that holds it take the text color the same
+way, where they are used. `color: currentColor` and `color: inherit` are the color the element
+inherits, as on the web, in a rule or in a `@keyframes` frame. All of them follow the text color
+when it changes. A border shorthand's width may be a
 `calc()` of one token, as in Bootstrap's `border-top: calc(var(--bs-border-width) * 2) solid`. A
 `border-width` with no color anywhere is drawn black, native's default, and the
 web host draws it black too.
@@ -263,7 +264,8 @@ does not do there.
 The keywords that switch a property off - `max-width: none`, `z-index: auto`,
 `letter-spacing: normal`, `filter: none`, `box-shadow: none` - clear it back to native's default.
 The CSS-wide keywords (`inherit`, `initial`, `unset`, `revert`, `revert-layer`) are dropped, and
-the warning says so.
+the warning says so, except `color: inherit` and `color: unset`, which are the color the element
+inherits.
 
 Layout is Yoga's, which follows CSS flexbox with a few differences worth knowing. An absolutely
 positioned child's percentage size is taken from the width its parent was offered, not the width

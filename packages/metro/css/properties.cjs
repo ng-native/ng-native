@@ -663,16 +663,16 @@ function line(value, prefix, out, context, { style: withStyle = true } = {}) {
 }
 
 /**
- * A border, outline, background or text colour. `currentColor`, which a line left without a colour
- * also is, is the element's text colour, own or inherited, so it is a marker the engine fills in on
- * device. On `color` itself it is the inherited colour, as CSS reads it there.
+ * A border, outline, background, text or text decoration colour. `currentColor`, which a line left
+ * without a colour also is, is the element's text colour, own or inherited, so it is a marker the
+ * engine fills in on device. On `color` itself it is the inherited colour, as CSS reads it there.
  */
 function paintColour(value, context) {
   return value?.type === 'currentcolor' ? CURRENT_COLOUR : color(value, context);
 }
 
 /** The colour properties `currentColor` is filled in for on device. */
-const PAINT_COLOUR = /^(border-|outline-color$|background-color$|color$)/;
+const PAINT_COLOUR = /^(border-|outline-color$|background-color$|color$|text-decoration-color$)/;
 
 /** The styles that draw no line at all. */
 const NO_LINE = new Set(['none', 'hidden']);

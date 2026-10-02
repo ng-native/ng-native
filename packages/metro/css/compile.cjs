@@ -17,6 +17,7 @@ const {
 } = require('./colour-expression.cjs');
 const {
   CssUnsupported,
+  CURRENT_COLOUR,
   fallbacks,
   tokenValue,
   formOf,
@@ -1467,17 +1468,22 @@ const CSS_WIDE = new Set(['inherit', 'initial', 'unset', 'revert', 'revert-layer
 /**
  * A value lightningcss could not parse that has no `var()` in it either.
  *
- * These arrive exactly as a `var()` does, and every one used to be reported as mixing var() with
- * other values: `color: inherit` and `flex-basis: content` included. They get their own message,
- * and the one of them native can say - `box-shadow: none`, which lightningcss leaves unparsed for
- * reasons of its own - is said.
+ * These arrive exactly as a `var()` does: `color: inherit` and `flex-basis: content` included.
+ * They get their own message, and the ones native can say are said: `box-shadow: none`, which
+ * lightningcss leaves unparsed for reasons of its own, and `color: inherit`.
  */
-function unparsedValue(value, out, context) {
+function unparsedValue(value, out, deferred, context) {
   const property = value?.propertyId?.property ?? 'a property';
   const parts = terms(value?.value);
   const word = onlyWord(parts);
   if (property === 'box-shadow' && word === 'none') {
     out.boxShadow = [];
+    return;
+  }
+  // `color: inherit` is the parent's colour, which is what currentColor is on `color` itself, so
+  // it is the same marker the device fills in. `unset` is `inherit` on a property CSS inherits.
+  if (property === 'color' && (word === 'inherit' || word === 'unset')) {
+    deferred.push({ props: ['color'], within: CURRENT_COLOUR });
     return;
   }
   if (CSS_WIDE.has(word)) {
@@ -1541,7 +1547,7 @@ function addUnparsed(declaration, out, deferred, context) {
     return;
   }
   if (settledAsWritten(declaration)) {
-    unparsedValue(declaration.value, out, context);
+    unparsedValue(declaration.value, out, deferred, context);
     return;
   }
   const property = declaration.value?.propertyId?.property;
@@ -1612,11 +1618,17 @@ function holdsMarker(value) {
 /**
  * One declaration in a keyframe. A frame is played as it was compiled, with no node's cascade to
  * settle a value against, so a var(), an em or a viewport unit is refused here: each used to leave
- * the frame empty, and the animation ran without moving.
+ * the frame empty, and the animation ran without moving. `color: currentColor` and `color: inherit`
+ * are the one exception: the colour the node inherits, which the engine fills in as it plays.
  */
 function addFrameDeclaration(declaration, out, tokens, _deferred, context) {
   const deferred = [];
   addDeclaration(declaration, out, tokens, deferred, context);
+  const [only] = deferred;
+  if (deferred.length === 1 && only.props.join() === 'color' && only.within === CURRENT_COLOUR) {
+    out.color = CURRENT_COLOUR;
+    return;
+  }
   if (deferred.length) {
     for (const one of deferred) for (const prop of one.props) delete out[prop];
     throw new CssUnsupported(

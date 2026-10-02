@@ -19,6 +19,7 @@ import {
   animationEvent,
   bezier,
   interpolate,
+  readsInheritedColour,
   sample,
   step,
   tracksOf,
@@ -2586,10 +2587,12 @@ export class Engine implements HostEngine {
     props: Record<string, unknown>,
   ): void {
     const current = node.playing;
+    const inherited = this.inheritedColour(node, frames);
     if (!current || !sameAnimation(current.spec, spec)) {
       const started: RunningAnimation = {
         spec,
-        tracks: tracksOf(frames, props),
+        tracks: tracksOf(frames, props, inherited),
+        inherited,
         start: this.now(),
         values: {},
         done: false,
@@ -2609,21 +2612,36 @@ export class Engine implements HostEngine {
       this.emitTransition(node, 'topAnimationstart', spec.name);
       return;
     }
-    if (this.playedFrames.get(current) !== frames) this.reframe(node, current, frames, props);
+    if (this.playedFrames.get(current) !== frames || inherited !== current.inherited) {
+      this.reframe(node, current, frames, props, inherited);
+    }
     this.playOrPause(node, node.playing!, spec);
   }
 
   /**
+   * The colour `node` inherits, for frames that set `color: currentColor`, which is that colour
+   * wherever the animation has got to, as in CSS. Undefined for frames that do not.
+   */
+  private inheritedColour(node: EngineNode, frames: readonly Keyframe[]): unknown {
+    if (!readsInheritedColour(frames)) return undefined;
+    const parent = node.parent && this.styles.resolve(node.parent, this.styleEpoch);
+    return parent?.inherited['color'] ?? 'black';
+  }
+
+  /**
    * The name an animation plays now has other frames: a hot swap edited them, or took away the
-   * sheet whose copy won. It carries on along the new ones, on its own clock, as a browser does.
+   * sheet whose copy won. Or the colour its `color: currentColor` stands for has changed. It
+   * carries on along the new tracks, on its own clock, as a browser does, paused or not.
    */
   private reframe(
     node: EngineNode,
     current: RunningAnimation,
     frames: readonly Keyframe[],
     props: Record<string, unknown>,
+    inherited: unknown,
   ): void {
-    const reframed: RunningAnimation = { ...current, tracks: tracksOf(frames, props) };
+    const tracks = tracksOf(frames, props, inherited);
+    const reframed: RunningAnimation = { ...current, tracks, inherited };
     const { values, finished } = sample(reframed, current.pausedAt ?? this.now());
     const holds = current.spec.fill === 'forwards' || current.spec.fill === 'both';
     reframed.values = finished && !holds ? {} : values;
@@ -2678,7 +2696,7 @@ export class Engine implements HostEngine {
       this.playing.delete(node);
     }
 
-    const tracks = tracksOf(frames, props);
+    const tracks = tracksOf(frames, props, this.inheritedColour(node, frames));
     const source = this.scrollSourceOf(node);
     const extent = source ? (this.scrollExtents.get(source)?.[spec.timeline!] ?? null) : null;
     const range = rangeOf(spec, extent);

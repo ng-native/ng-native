@@ -1673,10 +1673,6 @@
     "not-sr-only",
     "sr-only"
   ],
-  "dropped 'color': '…' is a CSS-wide keyword, which this cascade does not implement. Write the value it stands for.": [
-    "!placeholder-inherit",
-    "placeholder-inherit"
-  ],
   "dropped 'color': '…' is not a value native can take": [
     "!placeholder-[0.35]",
     "!placeholder-[1.25rem]",

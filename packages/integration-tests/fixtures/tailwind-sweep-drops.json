@@ -3439,10 +3439,6 @@
     "scheme-only-light",
     "scheme-only-light!"
   ],
-  "dropped 'color': '…' is a CSS-wide keyword, which this cascade does not implement. Write the value it stands for.": [
-    "text-inherit",
-    "text-inherit!"
-  ],
   "dropped 'color': '…' is not a value native can take": [
     "placeholder-[0.35]",
     "placeholder-[0.35]!",

@@ -528,8 +528,13 @@ export interface RunningAnimation {
   spec: AnimationSpec;
   /** When it was paused, while it is; the clock it is sampled at stands still there. */
   pausedAt?: number;
-  /** Per property, the offsets that mention it, in order. Built once when the animation starts. */
-  readonly tracks: Map<string, TrackPoint[]>;
+  /**
+   * Per property, the offsets that mention it, in order. Built when the animation starts, and again
+   * when the colour a frame's `color: currentColor` stands for changes.
+   */
+  tracks: Map<string, TrackPoint[]>;
+  /** The colour the node inherits, which the tracks were built with, for frames that read it. */
+  inherited?: unknown;
   start: number;
   /** What the properties read right now. Empty once a finished animation stops filling. */
   values: Record<string, unknown>;
@@ -541,18 +546,22 @@ export interface RunningAnimation {
  *
  * A property that no frame sets at 0% or 100% is anchored to the value the element would
  * otherwise have, which is what CSS means by an implicit keyframe: `to { opacity: 1 }` alone
- * animates from wherever the element already was.
+ * animates from wherever the element already was. A frame's `color: currentColor` is `inherited`,
+ * the colour the element inherits.
  */
 export function tracksOf(
   frames: readonly Keyframe[],
   resting: Record<string, unknown>,
+  inherited?: unknown,
 ): Map<string, TrackPoint[]> {
   const tracks = new Map<string, TrackPoint[]>();
 
   for (const frame of frames) {
     for (const property of Object.keys(frame.declarations)) {
       const track = tracks.get(property) ?? [];
-      const point = { offset: frame.offset, value: frame.declarations[property] };
+      const written = frame.declarations[property];
+      const value = isCurrentColour(written) ? inherited : written;
+      const point = { offset: frame.offset, value };
       track.push(frame.easing ? { ...point, easing: frame.easing } : point);
       tracks.set(property, track);
     }
@@ -567,6 +576,24 @@ export function tracksOf(
   }
   return tracks;
 }
+
+/**
+ * Whether any frame sets `color: currentColor`, which is the colour the element inherits and so
+ * differs from one element to the next. Kept per set of frames, as it is asked on every frame.
+ */
+export function readsInheritedColour(frames: readonly Keyframe[]): boolean {
+  let answer = READS_INHERITED.get(frames);
+  if (answer === undefined) {
+    answer = frames.some((frame) => isCurrentColour(frame.declarations['color']));
+    READS_INHERITED.set(frames, answer);
+  }
+  return answer;
+}
+const READS_INHERITED = new WeakMap<readonly Keyframe[], boolean>();
+
+/** The marker the compiler writes for `currentColor`. */
+const isCurrentColour = (value: unknown): boolean =>
+  (value as { __colour?: { color?: unknown } } | null)?.__colour?.color === 'currentcolor';
 
 /**
  * What a property is worth when the element has not said.

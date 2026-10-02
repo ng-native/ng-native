@@ -59,6 +59,7 @@ export const EXTRA_KEYS = {
   'outline-color': 'outlineColor',
   'padding-top': 'paddingTop',
   opacity: 'opacity',
+  'text-decoration-color': 'textDecorationColor',
   display: 'display',
 } as const;
 
@@ -808,5 +809,60 @@ export const CASES: OracleCase[] = [
       classes: ['none-chip'],
       children: [probe({ scope: 'none', classes: ['inner'] })],
     },
+  },
+  {
+    name: 'color: inherit is the colour the element inherits',
+    css: '.outer { color: rgb(1, 5, 0) } #probe { color: rgb(9, 9, 9); color: inherit }',
+    tree: { name: 'view', classes: ['outer'], children: [probe()] },
+  },
+  {
+    name: 'color: inherit beats a weaker rule and inherits the colour',
+    css: '.outer { color: rgb(2, 5, 0) } .c { color: inherit } text { color: rgb(9, 9, 9) }',
+    tree: { name: 'view', classes: ['outer'], children: [probe({ classes: ['c'] })] },
+  },
+  {
+    name: 'color: unset is the colour the element inherits, as color is inherited',
+    css: '.outer { color: rgb(3, 5, 0) } #probe { color: rgb(9, 9, 9); color: unset }',
+    tree: { name: 'view', classes: ['outer'], children: [probe()] },
+  },
+  {
+    name: 'a background in currentColor beside color: inherit is the inherited colour',
+    css: '.outer { color: rgb(4, 5, 0) } #probe { color: inherit; background-color: currentColor }',
+    tree: { name: 'view', classes: ['outer'], children: [probe({ name: 'view' })] },
+  },
+  {
+    name: "a token of inherit set on the element is the parent's token, not the parent's colour",
+    css:
+      '.outer { color: rgb(9, 9, 9); --c: rgb(5, 5, 0) } ' +
+      '#probe { --c: inherit; color: rgb(9, 9, 8); color: var(--c) }',
+    tree: { name: 'view', classes: ['outer'], children: [probe()] },
+  },
+  {
+    name: 'text-decoration-color: currentColor is the colour of the text',
+    css:
+      '.c { text-decoration-color: rgb(9, 9, 9) } ' +
+      '#probe { color: rgb(6, 5, 0); text-decoration-color: currentColor }',
+    tree: probe({ classes: ['c'] }),
+    extra: ['text-decoration-color'],
+  },
+  {
+    name: 'text-decoration-color: currentColor is the colour the text inherits',
+    css: '.outer { color: rgb(7, 5, 0) } #probe { text-decoration-color: currentColor }',
+    tree: { name: 'view', classes: ['outer'], children: [probe()] },
+    extra: ['text-decoration-color'],
+  },
+  {
+    name: 'a text decoration of a currentColor token set on the element is the colour of the text',
+    css: '#probe { color: rgb(8, 5, 0); --c: currentColor; text-decoration-color: var(--c) }',
+    tree: probe(),
+    extra: ['text-decoration-color'],
+  },
+  {
+    name: 'a text decoration of a currentColor token is the colour where it is used',
+    css:
+      '.outer { color: rgb(9, 9, 9); --c: currentColor } ' +
+      '#probe { color: rgb(9, 5, 0); text-decoration-color: var(--c) }',
+    tree: { name: 'view', classes: ['outer'], children: [probe()] },
+    extra: ['text-decoration-color'],
   },
 ];

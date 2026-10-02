@@ -1,7 +1,7 @@
 {
   "bootstrap": {
-    "rules": 2517,
-    "dropped": 706,
+    "rules": 2520,
+    "dropped": 700,
     "emitted": [
       "$animation",
       "$animationDelay",
@@ -199,8 +199,7 @@
         "'clip' has no React Native equivalent: no style prop of a native view does what it does.": 2
       },
       "color": {
-        "'color' mixes var() with other values, which needs a parser on device. calc() of tokens, numbers and points, max(var(--x), <length>), colours and transforms are understood; anything else has to be worked out at build time.": 8,
-        "'color: inherit' is a CSS-wide keyword, which this cascade does not implement. Write the value it stands for.": 6
+        "'color' mixes var() with other values, which needs a parser on device. calc() of tokens, numbers and points, max(var(--x), <length>), colours and transforms are understood; anything else has to be worked out at build time.": 8
       },
       "color-adjust": {
         "'color-adjust' is not mapped yet. React Native may well support it; nothing here translates it. Check RN's style types, then add it to css/properties.cjs.": 1
@@ -352,8 +351,8 @@
     }
   },
   "bulma": {
-    "rules": 3010,
-    "dropped": 1863,
+    "rules": 3014,
+    "dropped": 1856,
     "emitted": [
       "$animation",
       "$animationDelay",
@@ -553,8 +552,7 @@
         "'clip' has no React Native equivalent: no style prop of a native view does what it does.": 1
       },
       "color": {
-        "'color' mixes var() with other values, which needs a parser on device. calc() of tokens, numbers and points, max(var(--x), <length>), colours and transforms are understood; anything else has to be worked out at build time.": 637,
-        "'color: inherit' is a CSS-wide keyword, which this cascade does not implement. Write the value it stands for.": 7
+        "'color' mixes var() with other values, which needs a parser on device. calc() of tokens, numbers and points, max(var(--x), <length>), colours and transforms are understood; anything else has to be worked out at build time.": 637
       },
       "container": {
         "'container' is not mapped yet. React Native may well support it; nothing here translates it. Check RN's style types, then add it to css/properties.cjs.": 1
@@ -697,7 +695,7 @@
   },
   "pico": {
     "rules": 432,
-    "dropped": 318,
+    "dropped": 315,
     "emitted": [
       "$animation",
       "$animationDelay",
@@ -862,9 +860,6 @@
       "clip": {
         "'clip' has no React Native equivalent: no style prop of a native view does what it does.": 1
       },
-      "color": {
-        "'color: inherit' is a CSS-wide keyword, which this cascade does not implement. Write the value it stands for.": 3
-      },
       "color-scheme": {
         "'color-scheme' is not mapped yet. React Native may well support it; nothing here translates it. Check RN's style types, then add it to css/properties.cjs.": 3
       },
@@ -976,8 +971,8 @@
     }
   },
   "open-props": {
-    "rules": 69,
-    "dropped": 206,
+    "rules": 70,
+    "dropped": 204,
     "emitted": [
       "aspectRatio",
       "backgroundColor",
@@ -1062,9 +1057,6 @@
       },
       "caret-color": {
         "var() cannot be used in the 'caret-color' shorthand, because which native property the value lands in depends on the value, and there is no CSS parser on device. Use the longhand.": 1
-      },
-      "color": {
-        "'color: inherit' is a CSS-wide keyword, which this cascade does not implement. Write the value it stands for.": 2
       },
       "color-scheme": {
         "'color-scheme' is not mapped yet. React Native may well support it; nothing here translates it. Check RN's style types, then add it to css/properties.cjs.": 2
