@@ -15,10 +15,10 @@ permissions:
   actions: read
 
 # A newer push to a pull request makes the older run pointless. On main each commit gets a run of
-# its own, so a quick second merge cannot leave the first with no result.
+# its own and is never cancelled, so a quick second merge cannot leave the first with no result.
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.event_name == 'pull_request' && github.ref || github.sha }}
-  cancel-in-progress: true
+  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   verify:

@@ -39,10 +39,10 @@ on:
   workflow_dispatch:
   workflow_call:
 
-# A newer push to a pull request makes the older run pointless; on main each commit gets its own.
+# A newer push to a pull request makes the older run pointless; any other run is never cancelled.
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.event_name == 'pull_request' && github.ref || github.sha }}
-  cancel-in-progress: true
+  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   ios:
