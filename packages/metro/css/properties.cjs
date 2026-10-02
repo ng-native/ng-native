@@ -1349,108 +1349,146 @@ function finishBox(out, context) {
   out.flexDirection = BOX_AXIS[orient ?? 'horizontal'];
 }
 
-// eslint-disable-next-line complexity -- a dispatch table: one flat case per CSS form
-function translate(property, value, out, context = property) {
-  // Vendor prefixes and custom properties are handled by the caller.
-  if (ALIASES[property]) return translate(ALIASES[property], value, out, context);
-  switch (property) {
-    case 'white-space':
-    case 'text-overflow':
-    case 'line-clamp':
-    case '-webkit-line-clamp':
-      truncation(property, value, out, context);
-      return;
-    case 'box-orient':
+/** `[property, handler]` for each of several properties that one handler reads. */
+const each = (properties, handler) => properties.map((property) => [property, handler]);
+
+/**
+ * The properties with a form of their own, each with the handler that writes it. A handler takes
+ * `(property, value, out, context)`; `translate` tries `FALLBACKS` for a name that is not here.
+ */
+const TRANSLATORS = new Map([
+  ...each(['white-space', 'text-overflow', 'line-clamp', '-webkit-line-clamp'], truncation),
+  [
+    'box-orient',
+    (property, value, out) => {
       out[BOX_ORIENT] = keyword(value, property);
-      return;
-    case 'font-variant-numeric':
+    },
+  ],
+  [
+    'font-variant-numeric',
+    (property, value, out) => {
       out.fontVariant = numericVariants(value, property);
-      return;
-    case 'object-fit':
+    },
+  ],
+  [
+    'object-fit',
+    (property, value, out) => {
       out.resizeMode = renamed(OBJECT_FIT, value, property);
-      return;
-    case 'vertical-align':
+    },
+  ],
+  [
+    'vertical-align',
+    (property, value, out) => {
       out.textAlignVertical = renamed(VERTICAL_ALIGN, value, property);
-      return;
-    case 'user-select':
+    },
+  ],
+  [
+    'user-select',
+    (property, value, out) => {
       // RN's own reading: every value but `none` leaves the text selectable.
       out.selectable = keyword(value, property) !== 'none';
-      return;
-    case 'border-inline-width': {
+    },
+  ],
+  [
+    'border-inline-width',
+    (property, value, out) => {
       // One width for both is left and right, as `margin-inline` is: see `LOGICAL` in
       // shorthands.cjs.
       const [start, end] = [length(value.start, property), length(value.end, property)];
       if (sameValue(start, end)) out.borderLeftWidth = out.borderRightWidth = start;
       else [out.borderStartWidth, out.borderEndWidth] = [start, end];
-      return;
-    }
-    case 'border-block-width':
+    },
+  ],
+  [
+    'border-block-width',
+    (property, value, out) => {
       out.borderTopWidth = length(value.start, property);
       out.borderBottomWidth = length(value.end, property);
-      return;
-    case 'transition':
-      return transition(value, out);
-    case 'transition-property':
-    case 'transition-duration':
-    case 'transition-timing-function':
-    case 'transition-delay':
-      return transitionLonghand(property, value, out);
-    case 'animation':
-      return animation(value, out, context);
-    case 'animation-name':
-    case 'animation-duration':
-    case 'animation-timing-function':
-    case 'animation-delay':
-    case 'animation-iteration-count':
-    case 'animation-direction':
-    case 'animation-fill-mode':
-    case 'animation-play-state':
-      return animationLonghand(property, value, out, context);
-    case 'animation-timeline':
-      return scrollTimeline(value, out, context);
-    case 'animation-range':
-    case 'animation-range-start':
-    case 'animation-range-end':
-      return scrollRange(property, value, out, context);
-    case 'padding':
-      return sides('padding', value, out, property);
-    case 'margin':
-      return sides('margin', value, out, property);
-    case 'inset':
+    },
+  ],
+  ['transition', (property, value, out) => transition(value, out)],
+  ...each(
+    [
+      'transition-property',
+      'transition-duration',
+      'transition-timing-function',
+      'transition-delay',
+    ],
+    transitionLonghand,
+  ),
+  ['animation', (property, value, out, context) => animation(value, out, context)],
+  ...each(
+    [
+      'animation-name',
+      'animation-duration',
+      'animation-timing-function',
+      'animation-delay',
+      'animation-iteration-count',
+      'animation-direction',
+      'animation-fill-mode',
+      'animation-play-state',
+    ],
+    animationLonghand,
+  ),
+  ['animation-timeline', (property, value, out, context) => scrollTimeline(value, out, context)],
+  ...each(['animation-range', 'animation-range-start', 'animation-range-end'], scrollRange),
+  ['padding', (property, value, out) => sides('padding', value, out, property)],
+  ['margin', (property, value, out) => sides('margin', value, out, property)],
+  [
+    'inset',
+    (property, value, out) => {
       for (const [side, suffix] of Object.entries(SIDES)) {
         if (value[side] !== undefined) out[suffix.toLowerCase()] = length(value[side], property);
       }
-      return;
-    case 'border-width':
+    },
+  ],
+  [
+    'border-width',
+    (property, value, out) => {
       for (const [side, suffix] of Object.entries(SIDES)) {
         if (value[side] !== undefined) out[`border${suffix}Width`] = length(value[side], property);
       }
-      return;
-    case 'border-color':
+    },
+  ],
+  [
+    'border-color',
+    (property, value, out) => {
       for (const [side, suffix] of Object.entries(SIDES)) {
         if (value[side] !== undefined) {
           out[`border${suffix}Color`] = paintColour(value[side], property);
         }
       }
-      return;
-    case 'border-radius':
+    },
+  ],
+  [
+    'border-radius',
+    (property, value, out) => {
       for (const [corner, rnName] of Object.entries(CORNERS)) {
         if (value[corner] !== undefined) {
           out[rnName.charAt(0).toLowerCase() + rnName.slice(1)] = radius(value[corner], property);
         }
       }
-      return;
-    case 'gap':
+    },
+  ],
+  [
+    'gap',
+    (property, value, out) => {
       // Both axes, always, as CSS defines the shorthand. Collapsed to RN's own `gap` when they
       // agreed, it lost to a `column-gap` from any weaker rule, which native reads first.
       out.rowGap = length(value.row, property);
       out.columnGap = length(value.column, property);
-      return;
-    case 'font-family':
+    },
+  ],
+  [
+    'font-family',
+    (property, value, out) => {
       // A list on the web, one family on native: the first is the one the author wanted most.
       out.fontFamily = value[0];
-      return;
-    case 'border-style': {
+    },
+  ],
+  [
+    'border-style',
+    (property, value, out) => {
       const style = uniform(value, property, 'border-style');
       // CSS computes the width of a line styled none as 0, as the shorthand already reads it.
       if (NO_LINE.has(style)) {
@@ -1458,35 +1496,47 @@ function translate(property, value, out, context = property) {
         // Kept as a style too, so a width a later rule sets is zeroed as well: see css.ts.
         out.borderStyle = 'none';
       } else out.borderStyle = drawnLine(style, property);
-      return;
-    }
-    case 'pointer-events': {
+    },
+  ],
+  [
+    'pointer-events',
+    (property, value, out) => {
       // The rest of CSS's values are SVG ones, which a browser reads as auto on any other element:
       // Bulma's is-clickable is pointer-events: all. Fabric drops a value it does not know.
       const found = keyword(value, property);
       out.pointerEvents = ['none', 'box-none', 'box-only'].includes(found) ? found : 'auto';
-      return;
-    }
-    case 'outline-style': {
+    },
+  ],
+  [
+    'outline-style',
+    (property, value, out) => {
       const style = keyword(value, property);
       if (NO_LINE.has(style)) out.outlineWidth = 0;
       else out.outlineStyle = drawnLine(style, property);
-      return;
-    }
-    case 'aspect-ratio':
+    },
+  ],
+  [
+    'aspect-ratio',
+    (property, value, out) => {
       if (value.auto || !value.ratio) {
         throw new CssUnsupported(
           `${property}: native has no 'auto'; leave the property out to get the same effect`,
         );
       }
       out.aspectRatio = round(value.ratio[0] / value.ratio[1]);
-      return;
-    case 'flex':
+    },
+  ],
+  [
+    'flex',
+    (property, value, out) => {
       out.flexGrow = round(value.grow);
       out.flexShrink = round(value.shrink);
       if (value.basis !== undefined) out.flexBasis = length(value.basis, property);
-      return;
-    case 'display': {
+    },
+  ],
+  [
+    'display',
+    (property, value, out) => {
       const word = value?.inside?.type ?? keyword(value, property);
       // The old flexbox, which is what `line-clamp` is written with. A flex box, laid out along
       // the axis `box-orient` names; see `finishBox`.
@@ -1510,29 +1560,46 @@ function translate(property, value, out, context = property) {
         );
       }
       out.display = word;
-      return;
-    }
-    case 'background-image':
+    },
+  ],
+  [
+    'background-image',
+    (property, value, out) => {
       // `none` is no image, which native reads from an empty list.
       out.experimental_backgroundImage =
         Array.isArray(value) && value.every((layer) => layer?.type === 'none')
           ? []
           : backgroundImage(value, property);
-      return;
-    case 'background-size':
+    },
+  ],
+  [
+    'background-size',
+    (property, value, out) => {
       out.experimental_backgroundSize = backgroundSize(value, property);
-      return;
-    case 'background-repeat':
+    },
+  ],
+  [
+    'background-repeat',
+    (property, value, out) => {
       out.experimental_backgroundRepeat = backgroundRepeat(value, property);
-      return;
-    case 'background-position':
+    },
+  ],
+  [
+    'background-position',
+    (property, value, out) => {
       out.experimental_backgroundPosition = backgroundPosition(value, property);
-      return;
-    case 'filter':
+    },
+  ],
+  [
+    'filter',
+    (property, value, out) => {
       // `none` is no filters, which native reads from an empty list.
       out.filter = value?.type === 'none' ? [] : filter(value, property);
-      return;
-    case 'background': {
+    },
+  ],
+  [
+    'background',
+    (property, value, out) => {
       // A list of layers, not one object. The colour is the only part native has, and CSS only
       // lets the final layer carry one. `image: none` and the initial position, repeat, size,
       // attachment, origin and clip are no-ops, so they pass silently; a real image is routed to
@@ -1551,28 +1618,30 @@ function translate(property, value, out, context = property) {
       }
       const last = layers[layers.length - 1];
       if (last?.color !== undefined) out.backgroundColor = paintColour(last.color, property);
-      return;
-    }
-    case 'border':
-      // The shorthand is uniform by definition, so the unsided RN props say it in three keys
-      // rather than nine. A per-side longhand still wins: Yoga reads borderLeftWidth over
-      // borderWidth, exactly as CSS does.
-      return line(value, 'border', out, property);
-    case 'border-top':
-    case 'border-right':
-    case 'border-bottom':
-    case 'border-left':
-      return sideBorder(property, [SIDES[property.slice('border-'.length)]], value, out);
-    case 'border-inline-start':
-    case 'border-inline-end':
-    case 'border-block-start':
-    case 'border-block-end':
-    case 'border-inline':
-    case 'border-block':
-      return sideBorder(property, BORDER_SIDES[property], value, out);
-    case 'outline':
-      return line(value, 'outline', out, property);
-    case 'font':
+    },
+  ],
+  // The shorthand is uniform by definition, so the unsided RN props say it in three keys rather
+  // than nine. A per-side longhand still wins: Yoga reads borderLeftWidth over borderWidth,
+  // exactly as CSS does.
+  ['border', (property, value, out) => line(value, 'border', out, property)],
+  ...each(['border-top', 'border-right', 'border-bottom', 'border-left'], (property, value, out) =>
+    sideBorder(property, [SIDES[property.slice('border-'.length)]], value, out),
+  ),
+  ...each(
+    [
+      'border-inline-start',
+      'border-inline-end',
+      'border-block-start',
+      'border-block-end',
+      'border-inline',
+      'border-block',
+    ],
+    (property, value, out) => sideBorder(property, BORDER_SIDES[property], value, out),
+  ),
+  ['outline', (property, value, out) => line(value, 'outline', out, property)],
+  [
+    'font',
+    (property, value, out) => {
       if (value.size !== undefined) out.fontSize = length(value.size, property);
       if (value.family?.length) out.fontFamily = value.family[0];
       if (value.style !== undefined) {
@@ -1581,8 +1650,11 @@ function translate(property, value, out, context = property) {
       }
       if (value.weight !== undefined) translate('font-weight', value.weight, out);
       if (value.lineHeight !== undefined) fontLineHeight(value.lineHeight, out, property);
-      return;
-    case 'overflow': {
+    },
+  ],
+  [
+    'overflow',
+    (property, value, out) => {
       // Native has one overflow, not one per axis, so axes that disagree cannot be honoured and
       // quietly picking one would be exactly the silent failure this compiler exists to prevent.
       const { x, y } = value;
@@ -1592,9 +1664,11 @@ function translate(property, value, out, context = property) {
         );
       }
       out.overflow = honoured(property, keyword(x, property));
-      return;
-    }
-    case 'text-decoration':
+    },
+  ],
+  [
+    'text-decoration',
+    (property, value, out) => {
       if (value.line !== undefined) translate('text-decoration-line', value.line, out);
       if (value.style !== undefined) {
         out.textDecorationStyle = honoured('text-decoration-style', keyword(value.style, property));
@@ -1606,8 +1680,11 @@ function translate(property, value, out, context = property) {
         out.textDecorationColor =
           value.color?.type === 'currentcolor' ? null : color(value.color, property);
       }
-      return;
-    case 'text-decoration-line': {
+    },
+  ],
+  [
+    'text-decoration-line',
+    (property, value, out) => {
       // RN spells a combination as one space-separated string, e.g. 'underline line-through'.
       const lines = Array.isArray(value) ? value : [keyword(value, property)];
       if (lines.includes('overline') || lines.includes('blink')) {
@@ -1616,42 +1693,62 @@ function translate(property, value, out, context = property) {
         );
       }
       out.textDecorationLine = lines.length ? lines.join(' ') : 'none';
-      return;
-    }
-    case 'flex-flow':
+    },
+  ],
+  [
+    'flex-flow',
+    (property, value, out) => {
       if (value.direction !== undefined) out.flexDirection = keyword(value.direction, property);
       if (value.wrap !== undefined) out.flexWrap = keyword(value.wrap, property);
-      return;
-    case 'transform':
+    },
+  ],
+  [
+    'transform',
+    (property, value, out) => {
       out.transform = transformList(value, property);
-      return;
-    // CSS's individual transform properties, which are what Tailwind v4 writes: `translate-x-4`
-    // is `translate: 1rem 0`, not `transform: translateX(1rem)`. They are properties of their own,
-    // so each compiles to a key of its own and cascades on its own: `.rotate-45.translate-x-4`
-    // keeps both. Native has only the list, so the engine builds it at commit time, in the spec's
-    // order (translate, rotate, scale, then `transform`); see `INDIVIDUAL_TRANSFORMS`.
-    //
-    // `none` is null rather than nothing, so that it still overrides a weaker rule's value.
-    case 'translate':
+    },
+  ],
+  // CSS's individual transform properties, which are what Tailwind v4 writes: `translate-x-4`
+  // is `translate: 1rem 0`, not `transform: translateX(1rem)`. They are properties of their own,
+  // so each compiles to a key of its own and cascades on its own: `.rotate-45.translate-x-4`
+  // keeps both. Native has only the list, so the engine builds it at commit time, in the spec's
+  // order (translate, rotate, scale, then `transform`); see `INDIVIDUAL_TRANSFORMS`.
+  //
+  // `none` is null rather than nothing, so that it still overrides a weaker rule's value.
+  [
+    'translate',
+    (property, value, out) => {
       out[INDIVIDUAL_TRANSFORMS.translate] =
         value === 'none'
           ? null
           : [{ translateX: length(value.x, property) }, { translateY: length(value.y, property) }];
-      return;
-    case 'rotate':
+    },
+  ],
+  [
+    'rotate',
+    (property, value, out) => {
       out[INDIVIDUAL_TRANSFORMS.rotate] = value === 'none' ? null : [rotation(value, property)];
-      return;
-    case 'scale':
+    },
+  ],
+  [
+    'scale',
+    (property, value, out) => {
       out[INDIVIDUAL_TRANSFORMS.scale] =
         value === 'none'
           ? null
           : [{ scaleX: number(value.x, property) }, { scaleY: number(value.y, property) }];
-      return;
-    case 'transform-origin':
+    },
+  ],
+  [
+    'transform-origin',
+    (property, value, out) => {
       // Exactly three entries: Fabric discards an origin of any other length, without a word.
       out.transformOrigin = [origin(value.x, 'x', property), origin(value.y, 'y', property), 0];
-      return;
-    case 'text-transform':
+    },
+  ],
+  [
+    'text-transform',
+    (property, value, out) => {
       // lightningcss reads this as a record, because CSS has three independent transforms in one
       // property. Native has only the case, and the other two are Japanese text features it does
       // not offer at all.
@@ -1662,41 +1759,51 @@ function translate(property, value, out, context = property) {
         );
       }
       out.textTransform = value.case ?? 'none';
-      return;
-    case 'font-style':
+    },
+  ],
+  [
+    'font-style',
+    (property, value, out) => {
       out.fontStyle = fontStyle(value);
-      return;
-    case 'font-variant':
+    },
+  ],
+  [
+    'font-variant',
+    (property, value, out) => {
       // RN takes a list, because several variants can apply at once. CSS has no shorthand this
       // simple, so lightningcss hands the word over unparsed and it is checked here.
       out.fontVariant = [fontVariant(value, property)];
-      return;
-    case 'border-block-color':
-    case 'border-inline-color': {
-      // One CSS property, two edges, and RN has a single prop for the pair. Edges that disagree
-      // cannot be honoured, and picking one silently is the failure this compiler exists to stop.
-      const start = paintColour(value.start, property);
-      const end = paintColour(value.end, property);
-      // The inline edges are two props in Fabric, `borderStartColor` and `borderEndColor`, and
-      // there is no `borderInlineColor` for the pair. The block edges do have a pair prop.
-      if (property === 'border-inline-color') {
-        if (sameValue(start, end)) out.borderLeftColor = out.borderRightColor = start;
-        else [out.borderStartColor, out.borderEndColor] = [start, end];
-        return;
-      }
-      if (!sameValue(start, end)) {
-        throw new CssUnsupported(
-          `${property}: native has one colour for both edges, and these differ. Use the ` +
-            `per-edge longhands.`,
-        );
-      }
-      out[camel(property)] = start;
+    },
+  ],
+  ...each(['border-block-color', 'border-inline-color'], (property, value, out) => {
+    // One CSS property, two edges, and RN has a single prop for the pair. Edges that disagree
+    // cannot be honoured, and picking one silently is the failure this compiler exists to stop.
+    const start = paintColour(value.start, property);
+    const end = paintColour(value.end, property);
+    // The inline edges are two props in Fabric, `borderStartColor` and `borderEndColor`, and
+    // there is no `borderInlineColor` for the pair. The block edges do have a pair prop.
+    if (property === 'border-inline-color') {
+      if (sameValue(start, end)) out.borderLeftColor = out.borderRightColor = start;
+      else [out.borderStartColor, out.borderEndColor] = [start, end];
       return;
     }
-    case 'box-shadow':
+    if (!sameValue(start, end)) {
+      throw new CssUnsupported(
+        `${property}: native has one colour for both edges, and these differ. Use the ` +
+          `per-edge longhands.`,
+      );
+    }
+    out[camel(property)] = start;
+  }),
+  [
+    'box-shadow',
+    (property, value, out) => {
       out.boxShadow = shadowList(value, property);
-      return;
-    case 'text-shadow': {
+    },
+  ],
+  [
+    'text-shadow',
+    (property, value, out) => {
       if (value.length > 1) {
         throw new CssUnsupported(
           `${property}: native has room for only one text shadow, not ${value.length}`,
@@ -1710,123 +1817,168 @@ function translate(property, value, out, context = property) {
       };
       out.textShadowRadius = length(shadow.blur, property);
       out.textShadowColor = color(shadow.color, property);
-      return;
-    }
-    case 'cursor':
+    },
+  ],
+  [
+    'cursor',
+    (property, value, out) => {
       out.cursor = honoured(property, value.keyword ?? keyword(value, property));
-      return;
-    case 'font-weight':
-      // Relative to the weight inherited, which native has no way to ask for. Passed through, it
-      // is a weight native does not know, and the text is drawn at the one it already had.
-      if (value?.type === 'bolder' || value?.type === 'lighter') {
-        throw new CssUnsupported(
-          `${property}: '${value.type}' is relative to the inherited weight, and native takes an ` +
-            `absolute one. Write the weight: bold, or a number from 100 to 900.`,
-        );
-      }
-      // A weight outside 1 to 1000 is invalid, and a browser drops the declaration.
-      if (
-        typeof value?.value?.value === 'number' &&
-        !(value.value.value >= 1 && value.value.value <= 1000)
-      ) {
-        throw new CssUnsupported(
-          `${property}: ${value.value.value} is not a weight; weights run from 1 to 1000`,
-        );
-      }
-      out.fontWeight =
-        typeof value?.value?.value === 'number'
-          ? nearestWeight(value.value.value)
-          : String(value?.value?.type === 'bold' ? 700 : keyword(value, property));
-      return;
-    default:
-      break;
-  }
+    },
+  ],
+  ['font-weight', fontWeight],
+]);
 
-  if (property === 'line-height' && value?.type === 'normal') {
-    // The CSS for "whatever the font says", and the reason it is worth supporting: line-height is
-    // inherited, so a `leading-none` on a label reaches a text field inside it that meant to have
-    // none of its own. Native spells "the font's own" as the absence of the prop, and `null` is
-    // how a declaration says to clear one - which beats what the parent handed down.
-    out.lineHeight = null;
-    return;
-  }
-  if (property in RESETS && RESETS[property] === value?.type) {
-    // The keyword that switches the property off, which is how a later rule undoes an earlier
-    // one. Native spells that as the absence of the prop, and `null` is how a declaration clears
-    // one, beating whatever a weaker rule or an ancestor set.
-    out[camel(property)] = null;
-    return;
-  }
-  if (property === 'line-height' && value?.value?.type === 'percentage') {
-    // A percentage is of the element's own font size, as em is. Fabric reads a number only, and
-    // dropped the '150%' string this used to send.
-    out.lineHeight = { __defer: { unit: 'em', factor: round(value.value.value) } };
-    return;
-  }
-  if (property === 'line-height' && value?.type === 'number') {
-    // A unitless line-height is a multiple of the font size, and native wants points. The font
-    // size is not known until the cascade has run - it may be inherited, or set by a class the
-    // node does not wear yet - so it is deferred exactly as `em` is, which means the same thing.
-    out.lineHeight = { __defer: { unit: 'em', factor: round(value.value) } };
-    return;
-  }
-  if (LENGTH.has(property)) {
-    const settled = length(value, property);
-    // A font size in percent is a share of the inherited one, which is what an em is: native's
-    // fontSize takes points, so it is worked out where the inherited size is known.
-    if (property === 'font-size' && typeof settled === 'string' && settled.endsWith('%')) {
-      out.fontSize = { __defer: { unit: 'em', factor: round(parseFloat(settled) / 100) } };
-      return;
-    }
-    out[rnName(property)] = settled;
-    return;
-  }
-  if (COLOR.has(property)) {
-    out[rnName(property)] = PAINT_COLOUR.test(property)
-      ? paintColour(value, property)
-      : color(value, property);
-    return;
-  }
-  if (property in ALIGNMENT) {
-    out[camel(property)] = alignment(property, value);
-    return;
-  }
-  if (KEYWORD.has(property)) {
-    out[camel(property)] = honoured(property, keyword(value, property));
-    return;
-  }
-  if (NUMBER.has(property)) {
-    const found = number(value, property);
-    // CSS clamps an opacity into 0 to 1 at computed-value time; `opacity-[3]` is opaque.
-    out[camel(property)] = property === 'opacity' ? Math.min(1, Math.max(0, found)) : found;
-    return;
-  }
+/** `font-weight`, as the absolute weight native draws. */
+function fontWeight(property, value, out) {
+  absoluteWeight(property, value);
+  out.fontWeight =
+    typeof value?.value?.value === 'number'
+      ? nearestWeight(value.value.value)
+      : String(value?.value?.type === 'bold' ? 700 : keyword(value, property));
+}
 
+/** Throws for a `font-weight` native cannot draw: a relative one, or one out of range. */
+function absoluteWeight(property, value) {
+  // Relative to the weight inherited, which native has no way to ask for. Passed through, it
+  // is a weight native does not know, and the text is drawn at the one it already had.
+  if (value?.type === 'bolder' || value?.type === 'lighter') {
+    throw new CssUnsupported(
+      `${property}: '${value.type}' is relative to the inherited weight, and native takes an ` +
+        `absolute one. Write the weight: bold, or a number from 100 to 900.`,
+    );
+  }
+  // A weight outside 1 to 1000 is invalid, and a browser drops the declaration.
+  if (
+    typeof value?.value?.value === 'number' &&
+    !(value.value.value >= 1 && value.value.value <= 1000)
+  ) {
+    throw new CssUnsupported(
+      `${property}: ${value.value.value} is not a weight; weights run from 1 to 1000`,
+    );
+  }
+}
+
+/**
+ * What `translate` tries, in order, for a property `TRANSLATORS` has no handler for: each entry is
+ * `[matches, handler]`, and the first whose `matches(property, value)` holds writes the value.
+ */
+const FALLBACKS = [
+  [
+    (property, value) => property === 'line-height' && value?.type === 'normal',
+    (property, value, out) => {
+      // The CSS for "whatever the font says", and the reason it is worth supporting: line-height
+      // is inherited, so a `leading-none` on a label reaches a text field inside it that meant to
+      // have none of its own. Native spells "the font's own" as the absence of the prop, and
+      // `null` is how a declaration says to clear one - which beats what the parent handed down.
+      out.lineHeight = null;
+    },
+  ],
+  [
+    (property, value) => property in RESETS && RESETS[property] === value?.type,
+    (property, value, out) => {
+      // The keyword that switches the property off, which is how a later rule undoes an earlier
+      // one. Native spells that as the absence of the prop, and `null` is how a declaration
+      // clears one, beating whatever a weaker rule or an ancestor set.
+      out[camel(property)] = null;
+    },
+  ],
+  [
+    (property, value) => property === 'line-height' && value?.value?.type === 'percentage',
+    (property, value, out) => {
+      // A percentage is of the element's own font size, as em is. Fabric reads a number only.
+      out.lineHeight = { __defer: { unit: 'em', factor: round(value.value.value) } };
+    },
+  ],
+  [
+    (property, value) => property === 'line-height' && value?.type === 'number',
+    (property, value, out) => {
+      // A unitless line-height is a multiple of the font size, and native wants points. The font
+      // size is not known until the cascade has run - it may be inherited, or set by a class the
+      // node does not wear yet - so it is deferred exactly as `em` is, which means the same thing.
+      out.lineHeight = { __defer: { unit: 'em', factor: round(value.value) } };
+    },
+  ],
+  [
+    (property) => LENGTH.has(property),
+    (property, value, out) => {
+      const settled = length(value, property);
+      // A font size in percent is a share of the inherited one, which is what an em is: native's
+      // fontSize takes points, so it is worked out where the inherited size is known.
+      if (property === 'font-size' && typeof settled === 'string' && settled.endsWith('%')) {
+        out.fontSize = { __defer: { unit: 'em', factor: round(parseFloat(settled) / 100) } };
+        return;
+      }
+      out[rnName(property)] = settled;
+    },
+  ],
+  [
+    (property) => COLOR.has(property),
+    (property, value, out) => {
+      out[rnName(property)] = PAINT_COLOUR.test(property)
+        ? paintColour(value, property)
+        : color(value, property);
+    },
+  ],
+  [
+    (property) => property in ALIGNMENT,
+    (property, value, out) => {
+      out[camel(property)] = alignment(property, value);
+    },
+  ],
+  [
+    (property) => KEYWORD.has(property),
+    (property, value, out) => {
+      out[camel(property)] = honoured(property, keyword(value, property));
+    },
+  ],
+  [
+    (property) => NUMBER.has(property),
+    (property, value, out) => {
+      const found = number(value, property);
+      // CSS clamps an opacity into 0 to 1 at computed-value time; `opacity-[3]` is opaque.
+      out[camel(property)] = property === 'opacity' ? Math.min(1, Math.max(0, found)) : found;
+    },
+  ],
   // Side-specific length and colour longhands, e.g. padding-top, border-left-width.
-  if (/^(padding|margin)-(top|right|bottom|left)$/.test(property)) {
-    out[camel(property)] = length(value, property);
-    return;
-  }
-  if (/^border-(top|right|bottom|left)-width$/.test(property)) {
-    out[camel(property)] = length(value, property);
-    return;
-  }
-  if (CORNER_RADIUS.test(property)) {
-    out[camel(property)] = radius(value, property);
-    return;
-  }
+  [
+    (property) =>
+      /^(padding|margin)-(top|right|bottom|left)$/.test(property) ||
+      /^border-(top|right|bottom|left)-width$/.test(property),
+    (property, value, out) => {
+      out[camel(property)] = length(value, property);
+    },
+  ],
+  [
+    (property) => CORNER_RADIUS.test(property),
+    (property, value, out) => {
+      out[camel(property)] = radius(value, property);
+    },
+  ],
+  [
+    (property) => Boolean(LOGICAL_SIDES[property]),
+    (property, value, out) => {
+      const [startKey, endKey] = LOGICAL_SIDES[property];
+      const start = value[startKey] === undefined ? undefined : length(value[startKey], property);
+      const end = value[endKey] === undefined ? undefined : length(value[endKey], property);
+      const [startName, endName] = start === end ? LOGICAL[property].same : LOGICAL[property].split;
+      if (start !== undefined) out[startName] = start;
+      if (end !== undefined) out[endName] = end;
+    },
+  ],
+];
 
-  const logical = LOGICAL_SIDES[property];
-  if (logical) {
-    const [startKey, endKey] = logical;
-    const start = value[startKey] === undefined ? undefined : length(value[startKey], property);
-    const end = value[endKey] === undefined ? undefined : length(value[endKey], property);
-    const [startName, endName] = start === end ? LOGICAL[property].same : LOGICAL[property].split;
-    if (start !== undefined) out[startName] = start;
-    if (end !== undefined) out[endName] = end;
-    return;
-  }
-
+/**
+ * Writes one declaration into `out` as React Native style props: by the property's own handler in
+ * `TRANSLATORS`, or else by the first of `FALLBACKS` that matches. Throws `CssUnsupported` for a
+ * property or value native cannot express.
+ */
+function translate(property, value, out, context = property) {
+  // Vendor prefixes and custom properties are handled by the caller.
+  if (ALIASES[property]) return translate(ALIASES[property], value, out, context);
+  const handler = TRANSLATORS.get(property);
+  if (handler) return handler(property, value, out, context);
+  const fallback = FALLBACKS.find(([matches]) => matches(property, value));
+  if (fallback) return fallback[1](property, value, out, context);
   throw unsupported(property, context);
 }
 
