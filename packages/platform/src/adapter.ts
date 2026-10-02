@@ -259,12 +259,16 @@ class NativeRenderer implements Renderer2 {
 interface ComponentDefLike {
   id?: string;
   type?: unknown;
+  encapsulation?: number;
   tView?: {
     directiveRegistry?:
       readonly { selectors?: readonly (readonly unknown[])[]; inputs?: object }[] | null;
   } | null;
   ngContentSelectors?: readonly string[];
 }
+
+/** `ViewEncapsulation.None`'s value in a component definition. */
+const NONE = 2;
 
 /** The attribute names in a projection selector such as `[listHeader]` or `text[slot=a]`. */
 const PROJECTED_ATTRIBUTE = /\[([^\]=~|^$*\s]+)/g;
@@ -273,6 +277,8 @@ export class NativeRendererFactory implements RendererFactory2 {
   private readonly renderer: NativeRenderer;
   /** One renderer per component type, because each carries its own stylesheet. */
   private readonly byComponent = new Map<string, NativeRenderer>();
+  /** The global sheet each `ViewEncapsulation.None` component registered, which a hot swap replaces. */
+  private readonly globalById = new Map<string, StyleSheet>();
   readonly engine: Engine;
 
   constructor(engine: Engine) {
@@ -286,7 +292,7 @@ export class NativeRendererFactory implements RendererFactory2 {
    * its elements match its rules and nobody else's.
    */
   createRenderer(host: unknown, type: ComponentDefLike | null): Renderer2 {
-    const sheet = styleSheetOf(type?.type);
+    const sheet = this.scopedSheetOf(type);
 
     // `host` is the element this component is mounted on, and Angular created it with the
     // *parent's* renderer, so it carries the parent's sheet. Tagging it here is the only moment
@@ -309,6 +315,23 @@ export class NativeRendererFactory implements RendererFactory2 {
       this.byComponent.set(key, renderer);
     }
     return renderer;
+  }
+
+  /**
+   * The sheet a component's elements are matched against, or null.
+   *
+   * `ViewEncapsulation.None`: a browser adds the component's CSS to the document as written, so
+   * its rules reach any element, its host by class among them, and `:host` matches nothing. Its
+   * sheet is a global one, registered when the component first renders, and it has none of its
+   * own. Shadow DOM stays scoped, as a shadow root scopes it.
+   */
+  private scopedSheetOf(type: ComponentDefLike | null): StyleSheet | null {
+    const sheet = styleSheetOf(type?.type);
+    if (!sheet || type?.encapsulation !== NONE) return sheet;
+    const id = type.id ?? '';
+    this.engine.addGlobalSheet(sheet, this.globalById.get(id));
+    this.globalById.set(id, sheet);
+    return null;
   }
 
   /**

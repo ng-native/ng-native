@@ -16,10 +16,11 @@
  * cases drawn from real libraries (`fixtures/css-corpus.ts`).
  */
 import { execFileSync } from 'node:child_process';
+import { createRequire } from 'node:module';
 import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { CASES, PROPERTIES } from '../fixtures/css-oracle-cases.ts';
 import { CORPUS_CASES, CORPUS_PROPERTIES, HEIGHT, source } from '../fixtures/css-corpus.ts';
 
@@ -30,14 +31,39 @@ const CHROME = [
   '/usr/bin/chromium',
 ];
 
-function render(node) {
+/**
+ * Angular's own emulated-encapsulation shim, from the compiler `@ng-native/metro` depends on, so
+ * a case's component sheet reaches the browser as it would from an Angular app.
+ */
+const metro = createRequire(import.meta.url).resolve('@ng-native/metro/package.json');
+const { encapsulateStyle } = await import(
+  pathToFileURL(createRequire(metro).resolve('@angular/compiler')).href
+);
+
+/** The id the shim names the case's component by, and the attribute it scopes with. */
+const COMPONENT = 'c1';
+
+function render(node, scoped = false) {
   const attrs = [
+    scoped && node.scope !== 'none' ? ` _ngcontent-${COMPONENT}` : '',
     node.id ? ` id="${node.id}"` : '',
     node.classes?.length ? ` class="${node.classes.join(' ')}"` : '',
     ...Object.entries(node.attrs ?? {}).map(([k, v]) => ` ${k}="${v}"`),
   ].join('');
-  const children = (node.children ?? []).map(render).join('');
+  const children = (node.children ?? []).map((child) => render(child, scoped)).join('');
   return `<${node.name}${attrs}>${children}</${node.name}>`;
+}
+
+/**
+ * The sheets in the order a browser has them. With a global or a None sheet, the case is an app's:
+ * the global sheet linked first, then each component's styles as Angular adds them when the
+ * component first renders, the emulated one that created the tree before the None one inside it.
+ */
+function styles(test) {
+  if (test.global === undefined && test.none === undefined) return `<style>${test.css}</style>`;
+  return [test.global ?? '', encapsulateStyle(test.css, COMPONENT), test.none ?? '']
+    .map((css) => `<style>${css}</style>`)
+    .join('\n');
 }
 
 /**
@@ -47,8 +73,8 @@ function render(node) {
  */
 function pageFor(test) {
   return `<!doctype html><meta charset="utf-8">
-<style>${test.css}</style>
-${render(test.tree)}
+${styles(test)}
+${render(test.tree, test.global !== undefined || test.none !== undefined)}
 <script>
   const el = document.getElementById('probe');
   const style = getComputedStyle(el);

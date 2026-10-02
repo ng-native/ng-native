@@ -35,8 +35,9 @@ component class.
 _Avoid_: styles, stylesheet object, CSS
 
 **Global sheet**:
-An application-level sheet matched against every node, whatever component created it. The only
-rules that deliberately cross a component boundary.
+An application-level sheet matched against every node, whatever component created it: the one an
+app passes to `mount()`, and a `ViewEncapsulation.None` component's, added when it first renders.
+The only rules that deliberately cross a component boundary.
 _Avoid_: root styles, app styles
 
 **Host node**:

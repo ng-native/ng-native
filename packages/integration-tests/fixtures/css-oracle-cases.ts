@@ -17,12 +17,29 @@ export interface CaseNode {
   classes?: string[];
   attrs?: Record<string, string>;
   children?: CaseNode[];
+  /**
+   * `'none'` for a node a `ViewEncapsulation.None` component's template created: no sheet of its
+   * own, and in the browser none of the emulated component's attributes. Any other node was created
+   * by the component `css` belongs to.
+   */
+  scope?: 'none';
 }
 
 export interface OracleCase {
   name: string;
   css: string;
   tree: CaseNode;
+  /**
+   * An app's global sheet, applied to every node before any component's, as an app's `styles`
+   * entry is linked in a browser's head before Angular adds a component's styles.
+   */
+  global?: string;
+  /**
+   * A `ViewEncapsulation.None` component's sheet, which Angular adds to the document unscoped when
+   * the component first renders. With this or `global`, `css` is the sheet of the emulated
+   * component that created the tree, and the browser is given it shimmed as Angular shims it.
+   */
+  none?: string;
   /** Properties measured on this case beside `PROPERTIES`, which must match exactly. */
   extra?: readonly ExtraProperty[];
 }
@@ -591,5 +608,98 @@ export const CASES: OracleCase[] = [
     name: "background: var() of a currentColor token from the parent is the element's own colour",
     css: '.outer { color: rgb(11, 0, 0); --bg: currentColor } #probe { color: rgb(12, 0, 0); background: var(--bg) }',
     tree: { name: 'view', classes: ['outer'], children: [probe()] },
+  },
+  // A ViewEncapsulation.None component's sheet, which Angular adds to the document unscoped: an
+  // app's component (`css`) renders the None component's host, `.none-chip`, which renders
+  // `.inner`; `.outside` is the app's own.
+  {
+    name: 'None: a rule on the host class styles the host',
+    css: '',
+    none: '.none-chip { background-color: rgb(1, 1, 0) }',
+    tree: { name: 'view', children: [probe({ name: 'view', classes: ['none-chip'] })] },
+  },
+  {
+    name: "None: a rule reaches the elements of the None component's own template",
+    css: '',
+    none: '.inner { color: rgb(2, 1, 0) }',
+    tree: {
+      name: 'view',
+      classes: ['none-chip'],
+      children: [probe({ scope: 'none', classes: ['inner'] })],
+    },
+  },
+  {
+    name: "None: a rule reaches the app's elements, outside the component",
+    css: '',
+    none: '.outside { color: rgb(3, 1, 0) }',
+    tree: { name: 'view', children: [probe({ classes: ['outside'] })] },
+  },
+  {
+    name: 'None: a type selector reaches every element of that name',
+    css: '',
+    none: 'text { color: rgb(4, 1, 0) }',
+    tree: { name: 'view', children: [probe()] },
+  },
+  {
+    name: 'None: :host and :host-context match nothing',
+    css: '',
+    none: ':host { color: rgb(5, 1, 0) } :host-context(.dark) { background-color: rgb(5, 2, 0) }',
+    tree: {
+      name: 'view',
+      classes: ['dark'],
+      children: [probe({ name: 'view', classes: ['none-chip'] })],
+    },
+  },
+  {
+    name: "None: a rule comes after the app's global sheet and wins a tie",
+    css: '',
+    global: '.k { color: rgb(6, 1, 0) }',
+    none: '.k { color: rgb(6, 2, 0) }',
+    tree: { name: 'view', children: [probe({ classes: ['k'] })] },
+  },
+  {
+    name: 'None: a more specific global rule still wins',
+    css: '',
+    global: 'view .k { color: rgb(7, 1, 0) }',
+    none: '.k { color: rgb(7, 2, 0) }',
+    tree: { name: 'view', children: [probe({ classes: ['k'] })] },
+  },
+  {
+    name: "None: an emulated component's rule of the same selector wins, by its attribute",
+    css: '.k { color: rgb(8, 1, 0) }',
+    none: '.k { color: rgb(8, 2, 0) }',
+    tree: { name: 'view', children: [probe({ classes: ['k'] })] },
+  },
+  {
+    name: "None: a rule as specific as an emulated component's wins the tie, added later",
+    css: '.k { color: rgb(9, 1, 0) }',
+    none: '.j.k { color: rgb(9, 2, 0) }',
+    tree: { name: 'view', children: [probe({ classes: ['j', 'k'] })] },
+  },
+  {
+    name: "None: the app's emulated rule on the host beats the None sheet's",
+    css: '.none-chip { background-color: rgb(10, 1, 0) }',
+    none: '.none-chip { background-color: rgb(10, 2, 0) }',
+    tree: { name: 'view', children: [probe({ name: 'view', classes: ['none-chip'] })] },
+  },
+  {
+    name: "None: the app's emulated sheet does not reach the None component's own elements",
+    css: '.inner { color: rgb(11, 1, 0) }',
+    none: '.inner { background-color: rgb(11, 2, 0) }',
+    tree: {
+      name: 'view',
+      classes: ['none-chip'],
+      children: [probe({ scope: 'none', classes: ['inner'] })],
+    },
+  },
+  {
+    name: 'None: a token set on the host by the None sheet cascades to its elements',
+    css: '',
+    none: '.none-chip { --t: rgb(12, 1, 0) } .inner { color: var(--t) }',
+    tree: {
+      name: 'view',
+      classes: ['none-chip'],
+      children: [probe({ scope: 'none', classes: ['inner'] })],
+    },
   },
 ];

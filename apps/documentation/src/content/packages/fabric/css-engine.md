@@ -74,6 +74,17 @@ extra class of specificity over the global sheet's - the same bump Angular's own
 encapsulation already grants a rule by rewriting it to carry an `[_ngcontent-x]` attribute, kept
 here so the precedence people already have in their fingers just works.
 
+A component with `encapsulation: ViewEncapsulation.None` has no sheet of its own. Angular adds such
+a component's CSS to a browser's document as written when the component first renders, so here its
+sheet becomes a global one at that moment, matched against every node after the application's.
+Its rules reach any element, its own host by class among them and the app's own elements, and
+`:host` in it matches nothing, as in a browser. It counts no extra class, so it loses to a
+component's rule of the same selector and wins a tie with one, having arrived later. It stays
+registered once its last instance is gone, as in a browser with Angular's
+`REMOVE_STYLES_ON_COMPONENT_DESTROY` off, so a component shown and hidden does not restyle every
+node each time. Shadow DOM's sheet stays the component's own, scoped as a shadow root scopes it.
+Angular Material writes every component this way.
+
 ## Inheritance is emulated, not real
 
 React Native's views do not inherit anything - a `color` set on a view has no effect on a `<text>`

@@ -1091,13 +1091,20 @@ export class StyleResolver {
    * selector. Keyed by the creating sheet and then the hosted one, so a component's nodes share a
    * single index.
    */
-  private readonly merged = new WeakMap<StyleSheet, Map<StyleSheet | null, RuleIndex>>();
+  private merged = new WeakMap<StyleSheet, Map<StyleSheet | null, RuleIndex>>();
 
   /**
    * The application-level sheet, if any: the one set of rules allowed to match a node whatever
    * component created it, which is what resets, utility classes and `:root` tokens all need.
    */
   private readonly globalSheet: StyleSheet | null;
+
+  /**
+   * Global sheets added once the engine is running, in the order they came: a
+   * `ViewEncapsulation.None` component's, which a browser adds to the document unscoped when the
+   * component first renders, after the application's own. See `addGlobalSheet`.
+   */
+  private readonly addedSheets: StyleSheet[] = [];
 
   /**
    * Custom properties the host supplies rather than the stylesheet: the safe-area insets, and
@@ -1123,6 +1130,24 @@ export class StyleResolver {
   constructor(globalSheet: StyleSheet | null, conditions: Conditions) {
     this.globalSheet = globalSheet;
     this.conditions = conditions;
+  }
+
+  /**
+   * Match `sheet` against every node from now on, as a global sheet, after the application's;
+   * false when it already is. Every cached result goes, as on a theme switch: rules that were not
+   * there can now match anything. `:host` in it matches nothing, since no node hosts it.
+   *
+   * With `replacing`, a sheet added before, it takes that one's place, and so its order: a hot
+   * swap of the component's CSS edits the sheet where it is.
+   */
+  addGlobalSheet(sheet: StyleSheet, replacing?: StyleSheet): boolean {
+    if (sheet === this.globalSheet || this.addedSheets.includes(sheet)) return false;
+    const at = replacing ? this.addedSheets.indexOf(replacing) : -1;
+    if (at === -1) this.addedSheets.push(sheet);
+    else this.addedSheets[at] = sheet;
+    this.merged = new WeakMap();
+    this.generation = ++generations;
+    return true;
   }
 
   setConditions(next: Conditions): void {
@@ -1216,6 +1241,7 @@ export class StyleResolver {
       node.sheet === null &&
       node.hostSheet === null &&
       this.globalSheet === null &&
+      this.addedSheets.length === 0 &&
       !node.customProperties
     );
   }
@@ -1289,6 +1315,10 @@ export class StyleResolver {
    * created it. Both carry the bump; the creator comes later and so wins a tie, as the outer
    * document does over `:host` on the web. The sort is stable, so within one sheet source order
    * survives and a later sheet wins equal weight.
+   *
+   * A sheet added with `addGlobalSheet` comes last, with no bump: a browser adds a None
+   * component's CSS when the component first renders, after the styles of the components around
+   * it, so it loses to their extra attribute and wins a tie with them.
    */
   private merge(sheet: StyleSheet | null, hostSheet: StyleSheet | null): RuleEntry[] {
     const entries: RuleEntry[] = [];
@@ -1301,6 +1331,7 @@ export class StyleResolver {
     add(this.globalSheet, 0);
     add(hostSheet, COMPONENT_SPECIFICITY_BUMP);
     add(sheet, COMPONENT_SPECIFICITY_BUMP);
+    for (const added of this.addedSheets) add(added, 0);
     return entries.sort((a, b) => a.weight - b.weight);
   }
 

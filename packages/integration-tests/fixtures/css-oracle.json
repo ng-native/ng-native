@@ -629,5 +629,89 @@
       "color": "rgb(12, 0, 0)",
       "background-color": "rgb(12, 0, 0)"
     }
+  },
+  {
+    "name": "None: a rule on the host class styles the host",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgb(1, 1, 0)"
+    }
+  },
+  {
+    "name": "None: a rule reaches the elements of the None component's own template",
+    "expected": {
+      "color": "rgb(2, 1, 0)",
+      "background-color": "rgba(0, 0, 0, 0)"
+    }
+  },
+  {
+    "name": "None: a rule reaches the app's elements, outside the component",
+    "expected": {
+      "color": "rgb(3, 1, 0)",
+      "background-color": "rgba(0, 0, 0, 0)"
+    }
+  },
+  {
+    "name": "None: a type selector reaches every element of that name",
+    "expected": {
+      "color": "rgb(4, 1, 0)",
+      "background-color": "rgba(0, 0, 0, 0)"
+    }
+  },
+  {
+    "name": "None: :host and :host-context match nothing",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)"
+    }
+  },
+  {
+    "name": "None: a rule comes after the app's global sheet and wins a tie",
+    "expected": {
+      "color": "rgb(6, 2, 0)",
+      "background-color": "rgba(0, 0, 0, 0)"
+    }
+  },
+  {
+    "name": "None: a more specific global rule still wins",
+    "expected": {
+      "color": "rgb(7, 1, 0)",
+      "background-color": "rgba(0, 0, 0, 0)"
+    }
+  },
+  {
+    "name": "None: an emulated component's rule of the same selector wins, by its attribute",
+    "expected": {
+      "color": "rgb(8, 1, 0)",
+      "background-color": "rgba(0, 0, 0, 0)"
+    }
+  },
+  {
+    "name": "None: a rule as specific as an emulated component's wins the tie, added later",
+    "expected": {
+      "color": "rgb(9, 2, 0)",
+      "background-color": "rgba(0, 0, 0, 0)"
+    }
+  },
+  {
+    "name": "None: the app's emulated rule on the host beats the None sheet's",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgb(10, 1, 0)"
+    }
+  },
+  {
+    "name": "None: the app's emulated sheet does not reach the None component's own elements",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgb(11, 2, 0)"
+    }
+  },
+  {
+    "name": "None: a token set on the host by the None sheet cascades to its elements",
+    "expected": {
+      "color": "rgb(12, 1, 0)",
+      "background-color": "rgba(0, 0, 0, 0)"
+    }
   }
 ]

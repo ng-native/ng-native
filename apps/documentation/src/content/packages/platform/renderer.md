@@ -12,7 +12,9 @@ once per component type, and the factory looks up that component's compiled styl
 (`styleSheetOf(type.type)`, reading the `ɵnativeStyles` the Metro transform attached to the class)
 and hands back a `Renderer2` bound to it. That binding is what makes emulated encapsulation work
 here: a component's elements are matched only against its own compiled rules, because the renderer
-that created them is the one holding that stylesheet. See [Fabric's CSS
+that created them is the one holding that stylesheet. A component with
+`ViewEncapsulation.None` is the exception: its sheet is registered with the engine as a global one
+the first time it renders, and its elements get none. See [Fabric's CSS
 engine](/packages/fabric/css-engine) for what those rules are matched against.
 
 ## What `Renderer2` calls become

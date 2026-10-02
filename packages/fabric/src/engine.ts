@@ -1636,6 +1636,20 @@ export class Engine implements HostEngine {
    * a caller owns the properties it names and nothing else. Each owner writes all of its own at
    * once - four insets together, never one - so nothing is left over from a previous rotation.
    */
+  /**
+   * Match `sheet` against every node from now on, after the global sheet the engine was made
+   * with, and restyle everything; false, and nothing done, when it already is. How a platform
+   * applies a component whose CSS is not scoped, such as Angular's `ViewEncapsulation.None`.
+   * `replacing` is a sheet added before that this one takes the place of, after a hot swap.
+   */
+  addGlobalSheet(sheet: StyleSheet, replacing?: StyleSheet): boolean {
+    if (!this.styles.addGlobalSheet(sheet, replacing)) return false;
+    this.registerSheet(sheet);
+    if (sheet.structural) this.structuralSheets = true;
+    this.markPath(this.root);
+    return true;
+  }
+
   updateTokens(next: Readonly<Record<string, TokenValue>>): void {
     this.styles.setRootTokens({ ...this.styles.rootTokens, ...next });
     this.root.subtreeDirty = true;

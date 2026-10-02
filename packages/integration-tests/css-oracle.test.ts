@@ -20,6 +20,7 @@ import {
   INITIAL,
   PROPERTIES,
   type CaseNode,
+  type OracleCase,
 } from './fixtures/css-oracle-cases.ts';
 
 const require = createRequire(import.meta.url);
@@ -29,7 +30,10 @@ const recorded = require('./fixtures/css-oracle.json') as {
   expected: Record<string, string>;
 }[];
 
-/** Build the same tree the browser was given, as nodes the resolver understands. */
+/**
+ * Build the same tree the browser was given, as nodes the resolver understands. A node a None
+ * component created has no sheet of its own, as the platform gives it none.
+ */
 function build(spec: CaseNode, sheet: StyleSheet, parent: StyleTarget | null): StyleTarget[] {
   const node: StyleTarget = {
     name: spec.name,
@@ -37,12 +41,23 @@ function build(spec: CaseNode, sheet: StyleSheet, parent: StyleTarget | null): S
     classes: new Set(spec.classes ?? []),
     // An id is `nativeID` here, which is the prop React Native gives a view for the purpose.
     props: { ...(spec.id ? { nativeID: spec.id } : {}), ...(spec.attrs ?? {}) },
-    sheet,
+    sheet: spec.scope === 'none' ? null : sheet,
     hostSheet: null,
     styleCache: null,
     styleDirty: true,
   };
   return [node, ...(spec.children ?? []).flatMap((child) => build(child, sheet, node))];
+}
+
+/**
+ * A resolver with the case's global sheet, and its None component's sheet registered as the
+ * platform registers it when the component renders.
+ */
+function resolverFor(test: OracleCase): StyleResolver {
+  const global = test.global === undefined ? null : (compileCss(test.global) as StyleSheet);
+  const resolver = new StyleResolver(global, { width: 0, height: 0, colorScheme: 'light' });
+  if (test.none !== undefined) resolver.addGlobalSheet(compileCss(test.none) as StyleSheet);
+  return resolver;
 }
 
 /** CSS property name to the React Native style key it lands in. */
@@ -60,7 +75,7 @@ describe('what a browser does with the same stylesheet', () => {
       const nodes = build(test.tree as CaseNode, sheet, null);
       const probe = nodes.find((node) => node.props['nativeID'] === 'probe')!;
       // Resolve every node, as a commit does, so inherited values and tokens flow down.
-      const resolver = new StyleResolver(null, { width: 0, height: 0, colorScheme: 'light' });
+      const resolver = resolverFor(test);
       for (const node of nodes) resolver.resolve(node, 1);
       const style = resolver.resolve(probe, 1).style;
 
