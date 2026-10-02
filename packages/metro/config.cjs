@@ -531,4 +531,6 @@ function withAngularNative(config, options = {}) {
   return config;
 }
 
+// An app reaches this file through `withAngularNative` alone. The other three are exported for the
+// integration tests, which pin what each does on its own.
 module.exports = { withAngularNative, compilerFingerprint, chunkOutsideServerRoot, watchCompiler };
