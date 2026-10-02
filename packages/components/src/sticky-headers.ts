@@ -5,6 +5,13 @@ interface Extent {
   readonly size: number;
 }
 
+/**
+ * How long scrolling has to pause before a natively moved header's translate is written, so the
+ * shadow tree, which a touch is hit-tested against, catches up with where native drew it. RN's
+ * `ScrollViewStickyHeader` debounces the same write, by 64 ms on iOS.
+ */
+export const STICKY_SETTLE_MS = 64;
+
 type LayoutEvent = {
   nativeEvent?: { layout?: { x?: number; y?: number; width?: number; height?: number } };
 };
@@ -68,9 +75,8 @@ export class StickyHeaders {
   scrolled(offset: number): void {
     this.offset = offset;
     if (!this.engine.drivesScroll) return this.apply();
-    // RN's sticky header commits its translate after 64 ms without a scroll event.
     clearTimeout(this.settleTimer);
-    this.settleTimer = setTimeout(() => this.apply(), 64);
+    this.settleTimer = setTimeout(() => this.apply(), STICKY_SETTLE_MS);
   }
 
   destroy(): void {

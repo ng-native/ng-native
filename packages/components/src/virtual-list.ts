@@ -30,6 +30,7 @@ import {
 import { HeightIndex } from './height-index.ts';
 import { type KeyboardShouldPersistTaps, dismissKeyboardOnTap } from './keyboard-taps.ts';
 import { RefreshControl } from './refresh-control.ts';
+import { STICKY_SETTLE_MS } from './sticky-headers.ts';
 import { TemplateSlot } from './template-slot.ts';
 import { ZeroSizeWarning, checksZeroSize, written } from './zero-size-warning.ts';
 import { View } from './view.ts';
@@ -1258,10 +1259,10 @@ export class VirtualList<T> extends ScrollViewProps {
     this.announceViewable(content);
   }
 
-  /** RN's sticky header commits its translate after 64 ms without a scroll event, as this does. */
+  /** A pinned row's translate, settled once scrolling pauses: see `STICKY_SETTLE_MS`. */
   private settleAfterPause(content: number): void {
     clearTimeout(this.settleTimer);
-    this.settleTimer = setTimeout(() => this.settled.set(content), 64);
+    this.settleTimer = setTimeout(() => this.settled.set(content), STICKY_SETTLE_MS);
   }
 
   protected onLayout(

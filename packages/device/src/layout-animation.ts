@@ -39,6 +39,13 @@ export interface NativeLayoutAnimation {
 const DEFAULTS = { duration: 300, easing: 'easeInEaseOut' as LayoutEasing };
 
 /**
+ * How long past its duration an animation is given before `animate` resolves without its
+ * completion, which Android never calls: a few frames of slack, so that on iOS its own completion,
+ * which lands at the end of the duration, is the one that resolves it.
+ */
+const COMPLETION_GRACE_MS = 50;
+
+/**
  * `inject(LayoutAnimation).animate(() => this.rows.update(...))`.
  *
  * The only way to say "animate the layout this change produces": a transition needs a value to
@@ -71,7 +78,7 @@ export class LayoutAnimation {
     const done = new Promise<void>((resolve) => {
       this.native!.configureNext(config(options), resolve);
       // Android does not call the completion, so nothing should wait on it forever.
-      setTimeout(resolve, (options.duration ?? DEFAULTS.duration) + 50);
+      setTimeout(resolve, (options.duration ?? DEFAULTS.duration) + COMPLETION_GRACE_MS);
     });
 
     change();
