@@ -5,7 +5,7 @@
  * does.
  */
 import { describe, expect, it } from 'vitest';
-import { Component, signal } from '@angular/core';
+import { Component, computed, signal } from '@angular/core';
 import { interpolate, withTiming, Extrapolation } from 'react-native-reanimated';
 import { scheduleOnRN } from 'react-native-worklets';
 import { Pressable, ScrollView, Text, View } from '@ng-native/components';
@@ -94,5 +94,23 @@ describe('a shared value', () => {
     offset.set(0);
     expect(offset.get()).toBe(0);
     expect(heard).toEqual([2, 3, 6]);
+  });
+
+  it('passes on a value modified in place, unless the update is not forced', () => {
+    // Reanimated's `modify` forces the write by default, so a modifier that mutates and returns
+    // the same object still reaches what reads the value. A plain write of the same value does not.
+    const box = sharedValue({ x: 1 });
+    const x = computed(() => box.value.x);
+    const heard: number[] = [];
+    box.addListener(1, (value) => heard.push(value.x));
+    expect(x()).toBe(1);
+
+    box.modify((value) => ((value.x = 2), value));
+    expect(x()).toBe(2);
+
+    box.modify((value) => ((value.x = 3), value), false);
+    box.value = box.value;
+    expect(x()).toBe(2);
+    expect(heard).toEqual([2]);
   });
 });
