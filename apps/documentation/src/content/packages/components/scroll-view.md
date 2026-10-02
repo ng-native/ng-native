@@ -65,7 +65,9 @@ translate is written as a prop only once scrolling pauses.
 
 `(scroll)`, `(scrollBeginDrag)`, `(scrollEndDrag)`, `(momentumScrollBegin)` and
 `(momentumScrollEnd)` deliver a `ScrollEvent`, which has the offset, sizes and insets under
-`nativeEvent`, as a React Native scroll handler gets them:
+`nativeEvent`, as a React Native scroll handler gets them. They are element events rather than
+outputs, so `$event` takes this type with `strictDomEventTypes` off, as the generated
+`tsconfig.json` and [Manual setup](/guide/manual-setup) set it:
 
 ```ts
 import { Component, signal } from '@angular/core';
