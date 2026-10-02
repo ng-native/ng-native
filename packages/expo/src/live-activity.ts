@@ -52,7 +52,7 @@ export function createWidget<T extends object>(
   layout: WidgetLayout<T>,
 ): import('expo-widgets').Widget<T> {
   const expo = widgets();
-  if (!expo) return STAND_IN as never;
+  if (!expo) return WIDGET_STAND_IN as never;
   return expo.createWidget<T>(name, compiled('createWidget', name, layout));
 }
 
@@ -77,6 +77,13 @@ function compiled(call: string, name: string, layout: unknown): never {
 const STAND_IN = {
   start: () => ({ getId: () => '' }),
   getInstances: () => [],
+};
+
+/** A widget in Node: it draws nothing and holds no timeline, and `widget()` keeps it in step. */
+const WIDGET_STAND_IN = {
+  updateSnapshot: () => {},
+  getTimeline: async () => [],
+  reload: () => {},
 };
 
 /**

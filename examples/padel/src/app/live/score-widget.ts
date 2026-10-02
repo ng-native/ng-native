@@ -7,7 +7,8 @@ import type { Scoreline } from './score-activity.ts';
 
 /**
  * The score on the home screen, with a button for each side. A tap shows the next point at once
- * and records itself for the app, which applies it with the full rules and writes the score back.
+ * where that is simply the next of 0, 15 and 30, and records itself for the app, which applies it
+ * with the full rules (a game, deuce, a tiebreak) and writes the score back.
  */
 @Component({
   selector: 'score-widget',
@@ -32,11 +33,11 @@ import type { Scoreline } from './score-activity.ts';
         <ui-text [modifiers]="[points]">{{ props().them }}</ui-text>
       </ui-hstack>
       <ui-hstack>
-        <ui-button target="us" (buttonPress)="{ us: next[props().us] ?? '0' }">
+        <ui-button target="us" (buttonPress)="{ us: next[props().us] ?? props().us }">
           <ui-text [modifiers]="[label]">Us</ui-text>
         </ui-button>
         <ui-spacer />
-        <ui-button target="them" (buttonPress)="{ them: next[props().them] ?? '0' }">
+        <ui-button target="them" (buttonPress)="{ them: next[props().them] ?? props().them }">
           <ui-text [modifiers]="[label]">Them</ui-text>
         </ui-button>
       </ui-hstack>

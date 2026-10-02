@@ -232,4 +232,11 @@ describe('createLiveActivity and createWidget', () => {
     assert.equal(factory.start({}).getId(), '');
     assert.deepEqual(factory.getInstances(), []);
   });
+
+  it('answer a widget that draws nothing in Node, which widget() can still keep in step', async () => {
+    const widget = createWidget('Score', 'function(){}' as never);
+    widget.updateSnapshot({});
+    widget.reload();
+    assert.deepEqual(await widget.getTimeline(), []);
+  });
 });
