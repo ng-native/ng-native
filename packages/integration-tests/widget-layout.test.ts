@@ -345,6 +345,10 @@ describe('a layout the compiler refuses', () => {
     );
   });
 
+  it('refuses a button, which a layout has no event to run', () => {
+    fails('<ui-button label="Point" />', /<ui-button> is not a view the widget extension can draw/);
+  });
+
   it('names an element that is not a ui- view', () => {
     fails('<view />', /<view>.*not a ui- view/s);
   });

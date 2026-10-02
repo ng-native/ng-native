@@ -89,10 +89,6 @@ const VIEWS = {
     },
   },
   chart: { component: 'Chart' },
-  button: {
-    component: 'Button',
-    inputs: { label: 'string', systemImage: 'string', role: 'string', modifiers: 'any' },
-  },
   link: { component: 'Link' },
 };
 

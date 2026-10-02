@@ -31,32 +31,106 @@ import { liveActivity } from '@ng-native/expo/live-activity';
 
 ## The layout
 
-A Live Activity's look is drawn by the widget extension, not by your app, so it is written in a
-file of its own with `@expo/ui`'s SwiftUI components. Mark the function `'widget'`: the build turns
-it into a string the extension runs, so the file can only use its props and those components.
-`tsconfig.json` needs `"jsx": "react-jsx"` for it.
+A Live Activity's look is drawn by the widget extension, not by your app, so the layout is a
+component of its own that the app never renders. Pass it to `createLiveActivity` through
+`widgetLayout`: `@ng-native/metro` compiles its template, at build time, to the source the
+extension runs, and drops the class. Each `<ng-template>` names one of the activity's slots.
 
-```tsx
-// src/app/live/score-activity.tsx
-import { Text } from '@expo/ui/swift-ui';
-import { createLiveActivity, type LiveActivityComponent } from 'expo-widgets';
+```ts
+// src/app/live/score-activity.ts
+import { Component, input } from '@angular/core';
+import { font, foregroundStyle } from '@expo/ui/swift-ui/modifiers';
+import { UiText } from '@ng-native/expo/expo-ui-components';
+import { widgetLayout } from '@ng-native/expo/live-activity';
+import { createLiveActivity } from 'expo-widgets';
 
 export interface Scoreline {
   us: string;
   them: string;
 }
 
-const ScoreActivity: LiveActivityComponent<Scoreline> = (score) => {
-  'widget';
-  return {
-    banner: <Text>{`Us ${score.us} - ${score.them} Them`}</Text>,
-    compactLeading: <Text>{score.us}</Text>,
-    compactTrailing: <Text>{score.them}</Text>,
-    minimal: <Text>{score.us}</Text>,
-  };
-};
+@Component({
+  selector: 'score-activity',
+  imports: [UiText],
+  template: `
+    <ng-template #banner>
+      <ui-text [modifiers]="[font({ size: 34, weight: 'heavy' })]">
+        Us {{ props().us }} - {{ props().them }} Them
+      </ui-text>
+    </ng-template>
+    <ng-template #compactLeading>
+      <ui-text [modifiers]="[foregroundStyle(ball)]">{{ props().us }}</ui-text>
+    </ng-template>
+    <ng-template #compactTrailing
+      ><ui-text>{{ props().them }}</ui-text></ng-template
+    >
+    <ng-template #minimal
+      ><ui-text>{{ props().us }}</ui-text></ng-template
+    >
+  `,
+})
+class ScoreLayout {
+  readonly props = input.required<Scoreline>();
+  protected readonly font = font;
+  protected readonly foregroundStyle = foregroundStyle;
+  protected readonly ball = '#d7f23c';
+}
 
-export const scoreActivity = createLiveActivity<Scoreline>('Score', ScoreActivity);
+export const scoreActivity = createLiveActivity<Scoreline>('Score', widgetLayout(ScoreLayout));
+```
+
+The template is type-checked like any other, so a prop the `props` type does not have or an input
+of the wrong type fails `ngc`. The slots are `banner`, for the lock screen, and `compactLeading`,
+`compactTrailing`, `minimal`, `expandedLeading`, `expandedTrailing`, `expandedCenter` and
+`expandedBottom`, for the Dynamic Island.
+
+### What a layout can hold
+
+The extension runs the layout with no Angular and no instance of the class, so:
+
+- **The class** holds its `props` input, members set to a modifier from
+  `@expo/ui/swift-ui/modifiers`, and members set to a literal: a string, number, boolean, `null`,
+  or an array or object of them. A method, another input, or any other value is a build error
+  naming the member and its line.
+- **The template** is inline, and draws `ui-text`, `ui-hstack`, `ui-vstack`, `ui-spacer`,
+  `ui-divider`, `ui-image`, `ui-progress` and `ui-gauge`, imported from
+  `@ng-native/expo/expo-ui-components`. It can use `@if`, `@for`, `@switch` and `@let`; a `@let`
+  before the slots is shared by all of them.
+- **A `ui-text`'s text** is what is written inside it, with whitespace collapsed as Angular
+  collapses it; `&nbsp;` keeps a wider gap. A `ui-text` inside another is a build error: the
+  extension drops a view nested in a text.
+- **Events, pipes, references, content projection, and class, style or attribute bindings** are
+  build errors, with the line and column in the file.
+
+### Home-screen widgets
+
+`createWidget` takes a layout the same way. A widget's template is one root view rather than slots,
+and an `environment` input beside `props` holds what the widget is drawn in, such as its
+`widgetFamily`:
+
+```ts
+import { createWidget, type WidgetEnvironment } from 'expo-widgets';
+
+@Component({
+  selector: 'habits-widget',
+  imports: [UiText],
+  template: `
+    @switch (environment().widgetFamily) {
+      @case ('systemSmall') {
+        <ui-text>{{ props().done }}</ui-text>
+      }
+      @default {
+        <ui-text>{{ props().done }} habits done today</ui-text>
+      }
+    }
+  `,
+})
+class HabitsLayout {
+  readonly props = input.required<{ done: number }>();
+  readonly environment = input.required<WidgetEnvironment>();
+}
+
+export const habits = createWidget('Habits', widgetLayout(HabitsLayout));
 ```
 
 ## Keep it in step from Angular
@@ -65,7 +139,7 @@ export const scoreActivity = createLiveActivity<Scoreline>('Score', ScoreActivit
 import { Component, computed, inject } from '@angular/core';
 import { Pressable, Text } from '@ng-native/components';
 import { liveActivity } from '@ng-native/expo/live-activity';
-import { scoreActivity } from './live/score-activity.tsx';
+import { scoreActivity } from './live/score-activity.ts';
 import { Match } from './match.ts';
 
 @Component({
@@ -115,4 +189,5 @@ Android and the web, `expo-widgets` answers with a stand-in, and `start()` answe
 ## Testing
 
 Pass a stand-in for the factory, an object with `start(props)` and `getInstances()`. Mock the layout
-file in a Vitest test, since `expo-widgets` needs Expo's runtime.
+file in a Vitest test, since `expo-widgets` needs Expo's runtime and the layout needs
+`@ng-native/metro`'s transform.
