@@ -392,6 +392,11 @@ function tokenValue(parts, context) {
   const part = parts[0];
 
   if (part?.type === 'var') return aliasValue(part, context);
+  // A string is text rather than a word: no keyword, colour or display a use site reads, and a
+  // family where one is read, as the device reads one bound on an element (`fromText`).
+  if (part?.value?.type === 'string') {
+    return { keyword: JSON.stringify(part.value.value), family: part.value.value };
+  }
 
   const out = {};
 

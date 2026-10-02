@@ -689,6 +689,20 @@ export const CASES: OracleCase[] = [
   ...DISPLAY_CASES,
   ...WHITESPACE_CASES,
   ...FAMILY_CASES,
+  ...tokenCases('a quoted colour token is no colour', 'color', '"rgb(1, 0, 0)"', 'rgb(2, 0, 0)'),
+  ...tokenCases('a quoted colour name is no colour', 'color', '"red"', 'rgb(2, 0, 0)'),
+  {
+    name: 'display: a quoted none token in the stylesheet is no display',
+    css: '#probe.c { --t: "none"; display: var(--t) }',
+    tree: probe({ name: 'view', classes: ['c'] }),
+    extra: ['display'],
+  },
+  {
+    name: 'display: a single-quoted none token in the stylesheet is no display',
+    css: "#probe.c { --t: 'none'; display: var(--t) }",
+    tree: probe({ name: 'view', classes: ['c'] }),
+    extra: ['display'],
+  },
   {
     // A string is no display, though a family token's quotes come off where a family is read.
     name: 'display: a quoted none token bound on the element is no display',

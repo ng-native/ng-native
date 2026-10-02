@@ -1184,6 +1184,50 @@
     }
   },
   {
+    "name": "a quoted colour token is no colour, in the stylesheet",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)"
+    }
+  },
+  {
+    "name": "a quoted colour token is no colour, bound on the element",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)"
+    }
+  },
+  {
+    "name": "a quoted colour name is no colour, in the stylesheet",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)"
+    }
+  },
+  {
+    "name": "a quoted colour name is no colour, bound on the element",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)"
+    }
+  },
+  {
+    "name": "display: a quoted none token in the stylesheet is no display",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "display": "inline"
+    }
+  },
+  {
+    "name": "display: a single-quoted none token in the stylesheet is no display",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "display": "inline"
+    }
+  },
+  {
     "name": "display: a quoted none token bound on the element is no display",
     "expected": {
       "color": "rgb(0, 0, 0)",
