@@ -1,5 +1,5 @@
 /**
- * The only Angular-aware file: the engine below it never imports Angular. Renderer2 over the
+ * Where the engine meets Angular, which the engine itself never imports: Renderer2 over the
  * engine, plus bootstrap.
  *
  * Bootstrap leans on private `ɵ` exports of `@angular/core`, which can change in any major.
@@ -87,6 +87,12 @@ const declaredValue = (key: string, value: unknown): unknown =>
     : styleValue(value);
 
 /**
+ * A bound custom property's name, as it was written. Angular 22 compiles `[style.--tint]` to
+ * `--%NS%tint`, for a DOM renderer to fill with a namespace; there is none here.
+ */
+const customPropertyName = (style: string): string => style.replace(/%NS%/g, '');
+
+/**
  * `flex: 1; margin-top: 4px` -> `{ flex: 1, marginTop: 4 }`.
  *
  * Only the static-attribute path needs this. Angular compiles `[style]` and `[style.x]` into
@@ -97,12 +103,6 @@ const declaredValue = (key: string, value: unknown): unknown =>
  * lengths, numbers, keywords, colours and font families. A `url()` or a family name containing
  * either character would be cut in the wrong place.
  */
-/**
- * A bound custom property's name, as it was written. Angular 22 compiles `[style.--tint]` to
- * `--%NS%tint`, for a DOM renderer to fill with a namespace; there is none here.
- */
-const customPropertyName = (style: string): string => style.replace(/%NS%/g, '');
-
 function parseStyleAttribute(css: string): Record<string, unknown> {
   const out: Record<string, unknown> = {};
   for (const declaration of css.split(';')) {
@@ -229,14 +229,15 @@ class NativeRenderer implements Renderer2 {
       this.engine.setCustomProperty(el, customPropertyName(style), null);
       return;
     }
+    const key = styleKey(style);
     const current = el.props['style'] as Record<string, unknown> | undefined;
-    if (!current || !(styleKey(style) in current)) return;
+    if (!current || !(key in current)) return;
     if (current === el.ownStyle) {
-      delete current[styleKey(style)];
+      delete current[key];
       this.engine.styleChanged(el);
       return;
     }
-    const { [styleKey(style)]: _removed, ...rest } = current;
+    const { [key]: _removed, ...rest } = current;
     el.ownStyle = rest;
     this.engine.setProp(el, 'style', rest);
   }
@@ -498,11 +499,6 @@ export interface MountResult {
 }
 
 /**
- * `ɵINJECTOR_SCOPE` and `DOCUMENT` are both load-bearing: without the first Angular
- * cannot resolve `ChangeDetectionSchedulerImpl` (NG0201), without the second
- * `getStyleHost` throws NG0210.
- */
-/**
  * Angular decides whether `animate.enter` and `animate.leave` do anything when `@angular/core` is
  * first evaluated, by reading a global that a Metro polyfill has to have set by then. Nothing
  * later can change the answer, so the most that can be done is to notice and say so. Checked here
@@ -519,6 +515,8 @@ function warnIfAnimationsAreOff(): void {
       'adds the polyfill that sets it. Animated styles and CSS transitions work either way.',
   );
 }
+
+declare const __DEV__: boolean | undefined;
 
 /**
  * The reload the HMR block falls back to when a change is more than a template.
@@ -538,8 +536,6 @@ function warnIfAnimationsAreOff(): void {
  *
  * An app that sets its own is left alone: it will have a better reason string than this one.
  */
-declare const __DEV__: boolean | undefined;
-
 function installReloadHook(): void {
   reloadMetroThroughExpo();
   const scope = globalThis as { __angularNativeReload?: () => void };
@@ -708,6 +704,9 @@ export function mount(
 
   const injector = createEnvironmentInjector(
     [
+      // `INJECTOR_SCOPE` and `DOCUMENT` are both load-bearing: without the first Angular cannot
+      // resolve `ChangeDetectionSchedulerImpl` (NG0201), without the second `getStyleHost` throws
+      // NG0210.
       { provide: INJECTOR_SCOPE, useValue: 'root' },
       provideZonelessChangeDetectionInternal(),
       { provide: RendererFactory2, useValue: factory },
