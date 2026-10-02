@@ -7,17 +7,19 @@ import { MatchStore } from './match/match-store.ts';
 
 const lockScreen = vi.hoisted(() => {
   const shown: unknown[] = [];
+  const ended: unknown[] = [];
   let running = false;
   const activity = {
     getId: () => 'activity-1',
     update: async (props: unknown) => void shown.push(props),
-    end: async () => void (running = false),
+    end: async (dismissal: unknown) => void ((running = false), ended.push(dismissal)),
     getPushToken: async () => null,
     addPushTokenListener: () => ({ remove: () => {} }),
   };
   return {
     shown,
-    reset: () => ((shown.length = 0), (running = false)),
+    ended,
+    reset: () => ((shown.length = 0), (ended.length = 0), (running = false)),
     factory: {
       start: (props: unknown) => {
         running = true;
@@ -166,4 +168,6 @@ test('puts the score on the lock screen and keeps it in step', async () => {
 
   await userEvent.press(screen.getByRole('button', { name: 'On the lock screen' }));
   expect(await screen.findByRole('button', { name: 'Show on lock screen' })).toBeTruthy();
+  // Gone at once: an ended activity iOS keeps on the lock screen sits over the next one started.
+  expect(lockScreen.ended).toEqual(['immediate']);
 });

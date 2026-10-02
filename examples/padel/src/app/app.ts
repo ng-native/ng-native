@@ -371,7 +371,8 @@ export class App {
   );
 
   protected toggleLockScreen(): void {
-    if (this.lockScreen.active()) void this.lockScreen.end();
+    // Gone at once: an ended activity iOS keeps on the lock screen would sit over the next one.
+    if (this.lockScreen.active()) void this.lockScreen.end('immediate');
     else this.lockScreen.start();
   }
 }

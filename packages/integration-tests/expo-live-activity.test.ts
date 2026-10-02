@@ -161,7 +161,7 @@ describe('liveActivity', () => {
     const { activity } = withActivity(fake);
     assert.equal(activity.start(), false);
     assert.equal(activity.active(), false);
-    assert.match(String(activity.error()), /iOS/);
+    assert.match(String(activity.error()), /only on iOS/, 'not a version to update to on Android');
   });
 
   it('hands an update that fails to the ErrorHandler', async () => {

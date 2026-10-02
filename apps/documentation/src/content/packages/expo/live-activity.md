@@ -1,6 +1,6 @@
 ---
 title: Live Activities
-summary: Show what's happening now on the lock screen and in the Dynamic Island, kept in step with a signal.
+summary: Show what's happening now on the lock screen and in the Dynamic Island, from a signal.
 ---
 
 # Live Activities
@@ -72,7 +72,7 @@ import { Match } from './match.ts';
   selector: 'app-scoreboard',
   imports: [Pressable, Text],
   template: `
-    <pressable (press)="lockScreen.active() ? lockScreen.end() : lockScreen.start()">
+    <pressable (press)="lockScreen.active() ? lockScreen.end('immediate') : lockScreen.start()">
       <text>{{ lockScreen.active() ? 'Stop showing the score' : 'Show on lock screen' }}</text>
     </pressable>
   `,
@@ -95,7 +95,9 @@ Call it in an injection context, such as a field of a component or service.
   iOS limits how many one app can run.
 - **Updates** follow the signal while the activity is live.
 - **`end(dismissal)`** ends every activity of that kind with the final value. `dismissal` is
-  `'default'`, `'immediate'` or `{ after: date }`.
+  `'default'`, `'immediate'` or `{ after: date }`. With `'default'`, iOS keeps the ended activity on
+  the lock screen, with its final value, for up to four hours, above any started after it; a button
+  that ends one and can start the next wants `'immediate'`.
 - **`active`**, **`id`** and **`pushToken`** are signals. The push token is for updating the
   activity from a server through APNs.
 - **`error`** holds why the last start failed, for example Live Activities turned off in Settings.
