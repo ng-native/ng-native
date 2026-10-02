@@ -193,6 +193,7 @@ Android and the web, `expo-widgets` answers with a stand-in, and `start()` answe
 
 ## Testing
 
-Pass a stand-in for the factory, an object with `start(props)` and `getInstances()`. Mock the layout
-file in a Vitest test, since `expo-widgets` needs Expo's runtime and the layout needs
-`@ng-native/metro`'s transform.
+A layout file imports in a Vitest test as it is: with no `expo-widgets` to hand the layout to,
+`createLiveActivity` answers an activity that never starts. To check what the app sends, pass
+`liveActivity` a stand-in for the factory instead, an object with `start(props)` and
+`getInstances()`.
