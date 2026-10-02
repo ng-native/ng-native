@@ -5,6 +5,7 @@ import {
   UiButton,
   UiColorPicker,
   UiForm,
+  UiChart,
   UiGauge,
   UiHStack,
   UiLabeledContent,
@@ -105,6 +106,7 @@ export class ExpoUiListFixture {
   selector: 'expo-ui-controls-fixture',
   imports: [
     ExpoImage,
+    UiChart,
     UiColorPicker,
     UiForm,
     UiGauge,
@@ -131,6 +133,15 @@ export class ExpoUiListFixture {
           <ui-hstack [spacing]="4"><ui-text text="a" /><ui-spacer /><ui-text text="b" /></ui-hstack>
           <ui-gauge [value]="0.4" [min]="0" [max]="1" currentValueLabel="40%" />
           <ui-progress [value]="0.5" />
+          <ui-chart
+            type="pie"
+            [showLegend]="true"
+            [data]="[
+              { x: 'Won', y: 3 },
+              { x: 'Lost', y: 1, color: '#ff0000' },
+            ]"
+            [pieStyle]="{ innerRadius: 0.5 }"
+          />
         </ui-section>
       </ui-form>
     </ui-host>

@@ -123,6 +123,25 @@ const VIEWS = {
       modifiers: 'any',
     },
   },
+  chart: {
+    component: 'Chart',
+    inputs: {
+      data: 'any',
+      type: 'string',
+      showGrid: 'boolean',
+      animate: 'boolean',
+      showLegend: 'boolean',
+      referenceLines: 'any',
+      lineStyle: 'any',
+      pointStyle: 'any',
+      areaStyle: 'any',
+      barStyle: 'any',
+      pieStyle: 'any',
+      rectangleStyle: 'any',
+      ruleStyle: 'any',
+      modifiers: 'any',
+    },
+  },
 };
 
 /** The slots a Live Activity's layout fills: the lock screen banner and the Dynamic Island. */

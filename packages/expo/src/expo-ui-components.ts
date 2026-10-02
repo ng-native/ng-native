@@ -632,6 +632,106 @@ export class UiGauge {
   readonly modifiers = input<readonly UiModifier[]>();
 }
 
+/** One point of a `ui-chart`: `x`, a label or a number, against `y`, with a colour of its own. */
+export interface UiChartDataPoint {
+  readonly x: string | number;
+  readonly y: number;
+  readonly color?: string;
+}
+
+/** How a `ui-chart` draws its points: `pie` needs iOS 17. */
+export type UiChartType = 'line' | 'point' | 'bar' | 'area' | 'pie' | 'rectangle';
+
+/** The symbol a `ui-chart` marks a point with. */
+export type UiChartPointSymbol = 'circle' | 'square' | 'diamond';
+
+/** A line chart's line: its dashes, width, colour, and the symbol at each point. */
+export interface UiChartLineStyle {
+  readonly dashArray?: readonly number[];
+  readonly width?: number;
+  readonly pointStyle?: UiChartPointSymbol;
+  readonly pointSize?: number;
+  readonly color?: string;
+}
+
+/** A point chart's symbol and its size. */
+export interface UiChartPointStyle {
+  readonly pointStyle?: UiChartPointSymbol;
+  readonly pointSize?: number;
+}
+
+/** An area chart's fill. */
+export interface UiChartAreaStyle {
+  readonly color?: string;
+}
+
+/** A bar chart's bars: their corner radius and width. */
+export interface UiChartBarStyle {
+  readonly cornerRadius?: number;
+  readonly width?: number;
+}
+
+/** A pie chart's slices: `innerRadius` from 0, a full pie, to 0.5 for a donut, and the gap between. */
+export interface UiChartPieStyle {
+  readonly innerRadius?: number;
+  readonly angularInset?: number;
+}
+
+/** A rectangle chart's colour and corner radius. */
+export interface UiChartRectangleStyle {
+  readonly color?: string;
+  readonly cornerRadius?: number;
+}
+
+/** The lines `referenceLines` draws across a `ui-chart`. */
+export interface UiChartRuleStyle {
+  readonly color?: string;
+  readonly lineWidth?: number;
+  readonly dashArray?: readonly number[];
+}
+
+/**
+ * A Swift Charts chart of `data`, drawn as `type` says, iOS only, as Compose has no chart. Each
+ * style applies to its own type alone; `referenceLines` are drawn across it in `ruleStyle`.
+ * `showLegend` shows only when no point has a colour of its own.
+ */
+@Component({
+  selector: 'ui-chart',
+  template: '',
+  host: {
+    '[data]': 'data()',
+    '[type]': 'type()',
+    '[showGrid]': 'showGrid()',
+    '[animate]': 'animate()',
+    '[showLegend]': 'showLegend()',
+    '[referenceLines]': 'referenceLines()',
+    '[lineStyle]': 'lineStyle()',
+    '[pointStyle]': 'pointStyle()',
+    '[areaStyle]': 'areaStyle()',
+    '[barStyle]': 'barStyle()',
+    '[pieStyle]': 'pieStyle()',
+    '[rectangleStyle]': 'rectangleStyle()',
+    '[ruleStyle]': 'ruleStyle()',
+    '[modifiers]': 'modifiers()',
+  },
+})
+export class UiChart {
+  readonly data = input.required<readonly UiChartDataPoint[]>();
+  readonly type = input<UiChartType>();
+  readonly showGrid = input<boolean>(undefined, { transform: optionalBoolean });
+  readonly animate = input<boolean>(undefined, { transform: optionalBoolean });
+  readonly showLegend = input<boolean>(undefined, { transform: optionalBoolean });
+  readonly referenceLines = input<readonly UiChartDataPoint[]>();
+  readonly lineStyle = input<UiChartLineStyle>();
+  readonly pointStyle = input<UiChartPointStyle>();
+  readonly areaStyle = input<UiChartAreaStyle>();
+  readonly barStyle = input<UiChartBarStyle>();
+  readonly pieStyle = input<UiChartPieStyle>();
+  readonly rectangleStyle = input<UiChartRectangleStyle>();
+  readonly ruleStyle = input<UiChartRuleStyle>();
+  readonly modifiers = input<readonly UiModifier[]>();
+}
+
 /**
  * A SwiftUI `ProgressView`: a bar filled to `value`, from 0 to 1, or a spinner without one. On
  * Android, Compose's `LinearProgressIndicator`, a moving bar rather than a spinner without a value.

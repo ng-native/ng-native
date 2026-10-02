@@ -95,11 +95,12 @@ The extension runs the layout with no Angular and no instance of the class, so:
   naming the member and its line. The build removes the class, so it is not exported, and nothing
   but the call it is passed to names it.
 - **The template** is inline, and draws `ui-text`, `ui-hstack`, `ui-vstack`, `ui-zstack`,
-  `ui-spacer`, `ui-divider`, `ui-image`, `ui-progress`, `ui-gauge`, `ui-label`, `ui-link`,
-  `ui-accessory-widget-background` and the shapes (`ui-rectangle`, `ui-rounded-rectangle`,
-  `ui-uneven-rounded-rectangle`, `ui-capsule`, `ui-circle`, `ui-ellipse`), imported from
-  `@ng-native/expo/expo-ui-components`. A `ui-link` is how a tap opens the app at a deep link. It
-  can use `@if`, `@for`, `@switch` and `@let`; a `@let` before the slots is shared by all of them.
+  `ui-spacer`, `ui-divider`, `ui-image`, `ui-progress`, `ui-gauge`, `ui-chart`, `ui-label`,
+  `ui-link`, `ui-accessory-widget-background` and the shapes (`ui-rectangle`,
+  `ui-rounded-rectangle`, `ui-uneven-rounded-rectangle`, `ui-capsule`, `ui-circle`, `ui-ellipse`),
+  imported from `@ng-native/expo/expo-ui-components`. A `ui-link` is how a tap opens the app at a
+  deep link. It can use `@if`, `@for`, `@switch` and `@let`; a `@let` before the slots is shared by
+  all of them.
 - **A `ui-text`'s text** is what is written inside it, with whitespace collapsed as Angular
   collapses it; `&nbsp;` keeps a wider gap. A `ui-text` inside another is a build error: the
   extension drops a view nested in a text.

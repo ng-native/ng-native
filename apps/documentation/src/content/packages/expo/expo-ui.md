@@ -100,6 +100,10 @@ error. `expo-ui-components.ts` has thin typed components for the views an app re
 - **`UiTextField`** - its `text` is a `nativeState('')`, which the field writes to on the UI
   thread; `textChange` reports each change.
 - **`UiColorPicker`**, **`UiGauge`** and **`UiProgress`**.
+- **`UiChart`** - a Swift Charts chart of `data`, iOS only, each point an `x` label or number
+  against a `y`, with an optional `color`. `type` is `line`, `point`, `bar`, `area`, `pie` (iOS 17)
+  or `rectangle`, and each type takes a style of its own: `lineStyle`, `barStyle`, `pieStyle` and
+  so on. `referenceLines` draws lines across it in `ruleStyle`.
 - **`UiForm`**, **`UiSection`** and **`UiLabeledContent`** - settings-style grouped rows.
 - **`UiImage`** - an SF Symbol by `systemName`, or a picture by `uiImage` URL.
 - **`UiText`** - a SwiftUI `Text`. Its text is what is written inside it,
@@ -284,6 +288,7 @@ An element registered for `@expo/ui` when it is not installed commits as nothing
 <!-- api: UiTextField -->
 <!-- api: UiColorPicker -->
 <!-- api: UiGauge -->
+<!-- api: UiChart -->
 <!-- api: UiProgress -->
 <!-- api: UiForm -->
 <!-- api: UiSection -->

@@ -1,8 +1,9 @@
-import { Component, signal } from '@angular/core';
+import { Component, computed, signal } from '@angular/core';
 import { pickerStyle, tag } from '@expo/ui/swift-ui/modifiers';
 import {
   nativeState,
   UiButton,
+  UiChart,
   UiColorPicker,
   UiDatePicker,
   UiDivider,
@@ -66,6 +67,7 @@ import { page } from '../screen-styles.ts';
     Section,
     Text,
     UiButton,
+    UiChart,
     UiColorPicker,
     UiDatePicker,
     UiDivider,
@@ -307,6 +309,21 @@ import { page } from '../screen-styles.ts';
             <ui-progress [value]="level()"></ui-progress>
           </ui-host>
         </x-example>
+
+        <x-example
+          title="Chart"
+          note="Swift Charts, iOS only. The slider above moves the last bar."
+          code='<ui-chart type="bar" [data]="sets" />'
+        >
+          <ui-host ignoreSafeArea="container" [style]="hostChart">
+            <ui-chart
+              type="bar"
+              showGrid
+              [data]="sets()"
+              [barStyle]="{ cornerRadius: 4 }"
+            ></ui-chart>
+          </ui-host>
+        </x-example>
       </x-section>
 
       <x-section title="Layout" note="SwiftUI's own stacks, laid out by SwiftUI rather than Yoga.">
@@ -374,6 +391,12 @@ export class ExpoUiPage {
   protected readonly on = signal(true);
   protected readonly level = signal(0.5);
   protected readonly guests = signal(2);
+  protected readonly sets = computed(() => [
+    { x: 'Mon', y: 3 },
+    { x: 'Tue', y: 5 },
+    { x: 'Wed', y: 2 },
+    { x: 'Thu', y: Math.round(this.level() * 10) },
+  ]);
   protected readonly size = signal('Medium');
 
   protected pickSize(selection: string | number): void {
@@ -396,4 +419,5 @@ export class ExpoUiPage {
   protected readonly hostRow = {};
   protected readonly hostFill = {};
   protected readonly hostForm = { minHeight: 180 };
+  protected readonly hostChart = { height: 180 };
 }

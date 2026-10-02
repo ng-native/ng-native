@@ -54,6 +54,7 @@ function check(template: string, extra = ''): string {
 import { font, foregroundStyle } from '@expo/ui/swift-ui/modifiers';
 import {
   UiButton,
+  UiChart,
   UiHStack,
   UiLink,
   UiProgress,
@@ -69,12 +70,14 @@ interface Scoreline {
   us: string;
   them: string;
   done: number;
+  games: { x: string; y: number }[];
 }
 
 @Component({
   selector: 'score-layout',
   imports: [
     UiButton,
+    UiChart,
     UiHStack,
     UiLink,
     UiProgress,
@@ -131,6 +134,32 @@ describe("a widget layout's template, through ngc", () => {
     );
     assert.match(check('<ui-zstack alignment="middle" />'), /"middle"' is not assignable/);
     assert.match(check('<ui-link />'), /Required input 'destination'/);
+  });
+
+  it("type-checks a chart's data, type and styles", () => {
+    assert.equal(
+      check(`<ui-chart
+        type="bar"
+        showGrid
+        [data]="props().games"
+        [barStyle]="{ cornerRadius: 4 }"
+        [lineStyle]="{ pointStyle: 'circle', color: ball }"
+      />`),
+      '',
+    );
+    assert.match(check('<ui-chart />'), /Required input 'data'/);
+    assert.match(
+      check('<ui-chart type="donut" [data]="props().games" />'),
+      /"donut"' is not assignable/,
+    );
+    assert.match(
+      check('<ui-chart [data]="[{ x: 1, y: props().us }]" />'),
+      /'string' is not assignable to type 'number/,
+    );
+    assert.match(
+      check(`<ui-chart [data]="props().games" [barStyle]="{ cornerRadius: 'big' }" />`),
+      /'string' is not assignable to type 'number/,
+    );
   });
 
   it("type-checks a widget's buttons: a target, and the props a press changes", () => {

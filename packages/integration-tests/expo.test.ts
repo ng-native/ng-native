@@ -629,6 +629,15 @@ describe('the typed SwiftUI controls and expo-image', () => {
     assert.equal(named(/ExpoUI_HStackView$/).props['spacing'], 4);
     assert.equal(named(/ExpoUI_GaugeView$/).props['currentValueLabel'], '40%');
     assert.equal(named(/ExpoUI_ProgressView$/).props['value'], 0.5);
+    const chart = named(/ExpoUI_ChartView$/).props;
+    assert.equal(chart['type'], 'pie');
+    assert.equal(chart['showLegend'], true);
+    assert.deepEqual(chart['data'], [
+      { x: 'Won', y: 3 },
+      { x: 'Lost', y: 1, color: '#ff0000' },
+    ]);
+    assert.deepEqual(chart['pieStyle'], { innerRadius: 0.5 });
+    assert.ok(!('barStyle' in chart), 'an unset style never reaches native');
     assert.ok(named(/ExpoUI_FormView$/) && named(/ExpoUI_SpacerView$/));
     assert.ok(named(/ExpoUI_LabeledContentView$/));
 

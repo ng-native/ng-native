@@ -44,6 +44,7 @@ const COMPONENTS = [
   'Divider',
   'ProgressView',
   'Gauge',
+  'Chart',
   'Button',
 ];
 const GLOBALS = {
@@ -200,6 +201,24 @@ describe('inputs', () => {
       type: 'Gauge',
       props: { value: 1, currentValueLabel: { type: 'Text', props: { children: 'done' } } },
     });
+  });
+
+  it("draws a ui-chart as the extension's Chart, its data and styles as they are bound", () => {
+    assert.deepEqual(
+      render(
+        '<ui-chart type="bar" showGrid [data]="props().sets" [barStyle]="{ cornerRadius: 4 }" />',
+        { sets: [{ x: 'Set 1', y: 6 }] },
+      ),
+      {
+        type: 'Chart',
+        props: {
+          type: 'bar',
+          showGrid: true,
+          data: [{ x: 'Set 1', y: 6 }],
+          barStyle: { cornerRadius: 4 },
+        },
+      },
+    );
   });
 
   it('passes a bound input through as its value', () => {
@@ -511,8 +530,8 @@ describe('a layout the compiler refuses', () => {
     );
   });
 
-  it('refuses a view with no typed component, which ngc refuses in the app too', () => {
-    fails('<ui-chart />', /<ui-chart> is not a view/);
+  it('refuses a view the widget extension cannot draw', () => {
+    fails('<ui-toggle />', /<ui-toggle> is not a view the widget extension can draw/);
   });
 
   it('refuses a slot a Live Activity does not have', () => {

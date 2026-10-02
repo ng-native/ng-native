@@ -351,6 +351,58 @@ describe('a layout through the widget extension', () => {
     );
   });
 
+  it('draws a ui-chart as its JSX does, with every style it takes', () => {
+    same(
+      `<ui-chart
+        type="line"
+        showGrid
+        showLegend="false"
+        [animate]="false"
+        [data]="props().games"
+        [referenceLines]="[{ x: 'target', y: 6, color: '#d7f23c' }]"
+        [lineStyle]="{ width: 2, pointStyle: 'circle', dashArray: [4, 2] }"
+        [pointStyle]="{ pointStyle: 'diamond', pointSize: 6 }"
+        [areaStyle]="{ color: '#0b2a5b' }"
+        [barStyle]="{ cornerRadius: 4, width: 12 }"
+        [pieStyle]="{ innerRadius: 0.5, angularInset: 1 }"
+        [rectangleStyle]="{ color: '#ff0000', cornerRadius: 2 }"
+        [ruleStyle]="{ lineWidth: 1, dashArray: [2, 2] }"
+        [modifiers]="[frame({ height: 80 })]"
+      />`,
+      `(props) => {
+        'widget';
+        return (
+          <Chart
+            type="line"
+            showGrid={true}
+            showLegend={false}
+            animate={false}
+            data={props.games}
+            referenceLines={[{ x: 'target', y: 6, color: '#d7f23c' }]}
+            lineStyle={{ width: 2, pointStyle: 'circle', dashArray: [4, 2] }}
+            pointStyle={{ pointStyle: 'diamond', pointSize: 6 }}
+            areaStyle={{ color: '#0b2a5b' }}
+            barStyle={{ cornerRadius: 4, width: 12 }}
+            pieStyle={{ innerRadius: 0.5, angularInset: 1 }}
+            rectangleStyle={{ color: '#ff0000', cornerRadius: 2 }}
+            ruleStyle={{ lineWidth: 1, dashArray: [2, 2] }}
+            modifiers={[frame({ height: 80 })]}
+          />
+        );
+      }`,
+      [
+        {
+          props: {
+            games: [
+              { x: 'Set 1', y: 6 },
+              { x: 'Set 2', y: 3, color: '#8fa3c9' },
+            ],
+          },
+        },
+      ],
+    );
+  });
+
   it('layers shapes, a label and links in a ui-zstack as its JSX does', () => {
     same(
       `<ui-zstack alignment="topLeading">
