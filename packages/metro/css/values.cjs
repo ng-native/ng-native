@@ -509,7 +509,56 @@ const STAND_IN = { lineHeight: 'length', family: 'keyword', display: 'keyword' }
 
 /** A token's value in one form, allowing for the forms another stands in for. */
 function formOf(token, kind) {
-  return token?.[kind] ?? token?.[STAND_IN[kind]];
+  const form = token?.[kind] ?? token?.[STAND_IN[kind]];
+  // Two words, `inline flex`, are a family when written, and a display where one is read.
+  return form === undefined && kind === 'display' ? token?.family : form;
+}
+
+/**
+ * Where part of a declaration native cannot express is refused. Throwing drops the declaration;
+ * `withRefusals` reports the part instead, and the rest of the declaration stands.
+ */
+let refuse = (message) => {
+  throw new CssUnsupported(message);
+};
+
+function withRefusals(report, run) {
+  const outer = refuse;
+  if (report) refuse = report;
+  try {
+    return run();
+  } finally {
+    refuse = outer;
+  }
+}
+
+/** The displays the device lays out, as it reads one (`displayOf` in fabric's css.ts). */
+const NATIVE_DISPLAYS = new Set([
+  ...['flex', 'block', 'inline', 'inline-block', 'flow-root', 'inline-flex', 'flow'],
+  ...['none', 'contents'],
+]);
+const OUTER_DISPLAYS = new Set(['block', 'inline']);
+const INNER_DISPLAYS = new Set(['flow', 'flow-root', 'flex']);
+
+/** A fallback, refused where it is a display native has no layout for, as `display` is. */
+function laidOut(fallback, kind, context) {
+  if (kind !== 'display' || fallback === undefined || nativeDisplay(fallback)) return fallback;
+  refuse(
+    `${context}: display: ${fallback} does not exist on native; only flex, block (read as flex), contents and none do`,
+  );
+  return undefined;
+}
+
+function nativeDisplay(value) {
+  const words = String(value)
+    .toLowerCase()
+    .split(/[ \t\n\r\f]+/);
+  if (words.length === 1) return NATIVE_DISPLAYS.has(words[0]);
+  const [first, second] = words;
+  const pair =
+    (OUTER_DISPLAYS.has(first) && INNER_DISPLAYS.has(second)) ||
+    (INNER_DISPLAYS.has(first) && OUTER_DISPLAYS.has(second));
+  return words.length === 2 && pair;
 }
 
 /**
@@ -902,7 +951,7 @@ function fallbacks(varPart, kind, context) {
   const { alternatives, token: converted } = fallbackChain(varPart.value?.fallback, context);
   // `var(--c, currentColor)`: the colour in scope where it is used, which the device fills in.
   const current = kind === 'color' && converted?.keyword?.toLowerCase() === 'currentcolor';
-  const fallback = current ? CURRENT_COLOUR : formOf(converted, kind);
+  const fallback = laidOut(current ? CURRENT_COLOUR : formOf(converted, kind), kind, context);
   // One made of other tokens is worked out where it is used, from the tokens in scope there.
   const derived = converted && DERIVED.some((form) => form in converted);
   return {
@@ -928,6 +977,7 @@ function fallbackChain(raw, context) {
 
 module.exports = {
   CssUnsupported,
+  withRefusals,
   fallbackChain,
   fallbacks,
   camel,

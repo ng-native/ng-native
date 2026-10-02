@@ -24,6 +24,7 @@ const {
   length,
   keyword,
   round,
+  withRefusals,
 } = require('./values.cjs');
 const {
   translate,
@@ -1917,21 +1918,25 @@ function compileCss(source, context = 'styles', options = {}) {
         return true;
       },
     });
+    // A var() arrives as `unparsed`, which names the parser's shape rather than the property.
+    const name =
+      declaration.property === 'custom'
+        ? declaration.value?.name
+        : declaration.property === 'unparsed'
+          ? declaration.value?.propertyId?.property
+          : declaration.property;
+    // A part refused, such as a fallback native has no layout for, is reported and the rest kept.
+    const refused =
+      onUnsupported &&
+      ((message) => onUnsupported(reported(context, `dropped part of '${name}'`, message)));
     try {
-      add(declaration, tracked, tokens, deferred, context);
+      withRefusals(refused, () => add(declaration, tracked, tokens, deferred, context));
       assertDrawnEverywhere(declaration, out, tokens, deferred, before, platforms, context);
       // The whole rule: a slot can be set after the declaration that reads it.
       assertVariantsKnown(tokens, deferred, 0);
       supersede(deferred, before, written);
     } catch (error) {
       if (!onUnsupported || !(error instanceof CssUnsupported)) throw error;
-      // A var() arrives as `unparsed`, which names the parser's shape rather than the property.
-      const name =
-        declaration.property === 'custom'
-          ? declaration.value?.name
-          : declaration.property === 'unparsed'
-            ? declaration.value?.propertyId?.property
-            : declaration.property;
       onUnsupported(reported(context, `dropped '${name}'`, error.message));
     }
   }

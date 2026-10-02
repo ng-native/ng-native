@@ -149,6 +149,29 @@ describe('display: var() of two keywords', () => {
   });
 });
 
+describe('display: var() with a written fallback', () => {
+  it('refuses at build time a fallback native has no layout for, as it refuses the value', () => {
+    for (const value of UNREAD) {
+      const { warnings } = tree(`.a { display: var(--missing, ${value}) }`);
+      assert.equal(warnings.length, 1, value);
+      assert.match(warnings[0]!, /does not exist on native/, value);
+    }
+  });
+
+  it('still reads the token where it is set, with such a fallback', () => {
+    assert.equal(tree('.a { --d: none; display: var(--d, grid) }').display(), 'none');
+  });
+
+  it('keeps a fallback of two keywords', () => {
+    // It lays out as flex whether or not it is kept, as an unset display does, so this reads the
+    // compiled declaration: a lost fallback is the bug, and nothing renders differently.
+    for (const value of AS_FLEX.filter((word) => !word.includes('\t'))) {
+      const sheet = compileCss(`.a { display: var(--missing, ${value}) }`, 'display');
+      assert.equal(sheet.rules[0].deferred[0].fallback, value.replace(/ +/g, ' '), value);
+    }
+  });
+});
+
 describe('display: var() of a value native has no layout for, in development', () => {
   const warnings: string[] = [];
   const warn = console.warn;
