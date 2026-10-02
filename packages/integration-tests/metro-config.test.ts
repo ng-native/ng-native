@@ -16,8 +16,8 @@ import path from 'node:path';
 import vm from 'node:vm';
 
 const require = createRequire(import.meta.url);
-const { withAngularNative, chunkOutsideServerRoot } = require('@ng-native/metro/config.cjs') as {
-  withAngularNative(config: object): unknown;
+const { withAngularNative } = require('@ng-native/metro/config.cjs');
+const { chunkOutsideServerRoot } = require('@ng-native/metro/config.cjs') as {
   chunkOutsideServerRoot(
     url: string,
     roots: { serverRoot: string; sourceExts: readonly string[] },
