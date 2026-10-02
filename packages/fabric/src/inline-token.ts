@@ -11,7 +11,7 @@
  * Anything else is kept as a word, which leaves a use site that wants a length or a colour unset,
  * as a token of the wrong kind does.
  */
-import type { TokenValue } from './css.ts';
+import { CSS_SPACE, type TokenValue } from './css.ts';
 import { derivedToken } from './inline-derived-token.ts';
 import { isNamedColor } from './transition.ts';
 
@@ -33,6 +33,12 @@ const VAR = /^var\(\s*(--[\w-]+)\s*(?:,([\s\S]*))?\)$/i;
  */
 const DERIVED = /var\(|^color-mix\(|^[a-z]+\(\s*from\s/i;
 const WEIGHTS: Record<string, string> = { normal: '400', bold: '700' };
+/**
+ * CSS whitespace at either end: a space, a tab, a newline, a carriage return or a form feed. A
+ * no-break space is part of the value, as it is in a browser, where `trim()` would drop it.
+ */
+const PADDED = new RegExp(`^${CSS_SPACE.source}|${CSS_SPACE.source}$`, 'g');
+const cssTrim = (text: string): string => text.replace(PADDED, '');
 
 /**
  * CSS takes a bare 0 wherever it takes a length, and no other bare number. A number from 1 to 1000
@@ -69,7 +75,7 @@ const clamp = (value: number, low: number, high: number) => Math.min(high, Math.
 function fromChannels(text: string): TokenValue | undefined {
   const commas = text.split(',');
   const spaced = commas.length === 1;
-  const words = spaced ? text.split(/\s+/) : commas.map((word) => word.trim());
+  const words = spaced ? text.split(CSS_SPACE) : commas.map(cssTrim);
   const parsed = words.map((word) => CHANNEL.exec(word));
   if (parsed.length !== 3 || parsed.some((match) => !match)) return undefined;
   const values = parsed.map((match) => ({ n: Number(match![1]), unit: match![2] ?? '' }));
@@ -141,7 +147,7 @@ function withTokens(text: string): TokenValue {
 export function tokenFromValue(value: unknown): TokenValue | undefined {
   if (typeof value === 'number') return fromNumber(value);
   if (typeof value !== 'string') return undefined;
-  const text = value.trim();
+  const text = cssTrim(value);
   if (!text) return undefined;
   const px = PX.exec(text);
   if (px) return { length: Number(px[1]) };

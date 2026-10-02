@@ -568,6 +568,536 @@
     }
   },
   {
+    "name": "display: var() of block flex, in the stylesheet",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "display": "flex"
+    }
+  },
+  {
+    "name": "display: var() of block flex, bound on the element",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "display": "flex"
+    }
+  },
+  {
+    "name": "display: var() of inline flex, in the stylesheet",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "display": "inline-flex"
+    }
+  },
+  {
+    "name": "display: var() of inline flex, bound on the element",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "display": "inline-flex"
+    }
+  },
+  {
+    "name": "display: var() of flex inline, in the stylesheet",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "display": "inline-flex"
+    }
+  },
+  {
+    "name": "display: var() of flex inline, bound on the element",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "display": "inline-flex"
+    }
+  },
+  {
+    "name": "display: var() of block flow, in the stylesheet",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "display": "block"
+    }
+  },
+  {
+    "name": "display: var() of block flow, bound on the element",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "display": "block"
+    }
+  },
+  {
+    "name": "display: var() of inline flow, in the stylesheet",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "display": "inline"
+    }
+  },
+  {
+    "name": "display: var() of inline flow, bound on the element",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "display": "inline"
+    }
+  },
+  {
+    "name": "display: var() of flow, in the stylesheet",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "display": "block"
+    }
+  },
+  {
+    "name": "display: var() of flow, bound on the element",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "display": "block"
+    }
+  },
+  {
+    "name": "display: var() of block flow-root, in the stylesheet",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "display": "flow-root"
+    }
+  },
+  {
+    "name": "display: var() of block flow-root, bound on the element",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "display": "flow-root"
+    }
+  },
+  {
+    "name": "display: var() of inline flow-root, in the stylesheet",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "display": "inline-block"
+    }
+  },
+  {
+    "name": "display: var() of inline flow-root, bound on the element",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "display": "inline-block"
+    }
+  },
+  {
+    "name": "display: var() of grid, in the stylesheet",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "display": "grid"
+    }
+  },
+  {
+    "name": "display: var() of grid, bound on the element",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "display": "grid"
+    }
+  },
+  {
+    "name": "display: var() of inline-grid, in the stylesheet",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "display": "inline-grid"
+    }
+  },
+  {
+    "name": "display: var() of inline-grid, bound on the element",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "display": "inline-grid"
+    }
+  },
+  {
+    "name": "display: var() of block grid, in the stylesheet",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "display": "grid"
+    }
+  },
+  {
+    "name": "display: var() of block grid, bound on the element",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "display": "grid"
+    }
+  },
+  {
+    "name": "display: var() of table, in the stylesheet",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "display": "table"
+    }
+  },
+  {
+    "name": "display: var() of table, bound on the element",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "display": "table"
+    }
+  },
+  {
+    "name": "display: var() of table-cell, in the stylesheet",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "display": "table-cell"
+    }
+  },
+  {
+    "name": "display: var() of table-cell, bound on the element",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "display": "table-cell"
+    }
+  },
+  {
+    "name": "display: var() of list-item, in the stylesheet",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "display": "list-item"
+    }
+  },
+  {
+    "name": "display: var() of list-item, bound on the element",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "display": "list-item"
+    }
+  },
+  {
+    "name": "display: var() of -webkit-box, in the stylesheet",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "display": "-webkit-box"
+    }
+  },
+  {
+    "name": "display: var() of -webkit-box, bound on the element",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "display": "-webkit-box"
+    }
+  },
+  {
+    "name": "whitespace: a colour token padded with CSS whitespace, which is trimmed, in the stylesheet",
+    "expected": {
+      "color": "rgb(1, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)"
+    }
+  },
+  {
+    "name": "whitespace: a colour token padded with CSS whitespace, which is trimmed, bound on the element",
+    "expected": {
+      "color": "rgb(1, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)"
+    }
+  },
+  {
+    "name": "whitespace: a colour token after a no-break space, which is kept, in the stylesheet",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)"
+    }
+  },
+  {
+    "name": "whitespace: a colour token after a no-break space, which is kept, bound on the element",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)"
+    }
+  },
+  {
+    "name": "whitespace: a colour token before a no-break space, which is kept, in the stylesheet",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)"
+    }
+  },
+  {
+    "name": "whitespace: a colour token before a no-break space, which is kept, bound on the element",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)"
+    }
+  },
+  {
+    "name": "whitespace: a colour token after an em space, which is kept, in the stylesheet",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)"
+    }
+  },
+  {
+    "name": "whitespace: a colour token after an em space, which is kept, bound on the element",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)"
+    }
+  },
+  {
+    "name": "whitespace: a length token padded with CSS whitespace, which is trimmed, in the stylesheet",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "padding-top": "4px"
+    }
+  },
+  {
+    "name": "whitespace: a length token padded with CSS whitespace, which is trimmed, bound on the element",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "padding-top": "4px"
+    }
+  },
+  {
+    "name": "whitespace: a length token after a no-break space, which is kept, in the stylesheet",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "padding-top": "0px"
+    }
+  },
+  {
+    "name": "whitespace: a length token after a no-break space, which is kept, bound on the element",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "padding-top": "0px"
+    }
+  },
+  {
+    "name": "whitespace: a length token before a no-break space, which is kept, in the stylesheet",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "padding-top": "0px"
+    }
+  },
+  {
+    "name": "whitespace: a length token before a no-break space, which is kept, bound on the element",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "padding-top": "0px"
+    }
+  },
+  {
+    "name": "whitespace: a length token after an em space, which is kept, in the stylesheet",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "padding-top": "0px"
+    }
+  },
+  {
+    "name": "whitespace: a length token after an em space, which is kept, bound on the element",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "padding-top": "0px"
+    }
+  },
+  {
+    "name": "whitespace: a number token padded with CSS whitespace, which is trimmed, in the stylesheet",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "opacity": "0.5"
+    }
+  },
+  {
+    "name": "whitespace: a number token padded with CSS whitespace, which is trimmed, bound on the element",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "opacity": "0.5"
+    }
+  },
+  {
+    "name": "whitespace: a number token after a no-break space, which is kept, in the stylesheet",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "opacity": "1"
+    }
+  },
+  {
+    "name": "whitespace: a number token after a no-break space, which is kept, bound on the element",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "opacity": "1"
+    }
+  },
+  {
+    "name": "whitespace: a number token before a no-break space, which is kept, in the stylesheet",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "opacity": "1"
+    }
+  },
+  {
+    "name": "whitespace: a number token before a no-break space, which is kept, bound on the element",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "opacity": "1"
+    }
+  },
+  {
+    "name": "whitespace: a number token after an em space, which is kept, in the stylesheet",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "opacity": "1"
+    }
+  },
+  {
+    "name": "whitespace: a number token after an em space, which is kept, bound on the element",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "opacity": "1"
+    }
+  },
+  {
+    "name": "whitespace: a display token padded with CSS whitespace, which is trimmed, in the stylesheet",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "display": "none"
+    }
+  },
+  {
+    "name": "whitespace: a display token padded with CSS whitespace, which is trimmed, bound on the element",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "display": "none"
+    }
+  },
+  {
+    "name": "whitespace: a display token after a no-break space, which is kept, in the stylesheet",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "display": "inline"
+    }
+  },
+  {
+    "name": "whitespace: a display token after a no-break space, which is kept, bound on the element",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "display": "inline"
+    }
+  },
+  {
+    "name": "whitespace: a display token before a no-break space, which is kept, in the stylesheet",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "display": "inline"
+    }
+  },
+  {
+    "name": "whitespace: a display token before a no-break space, which is kept, bound on the element",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "display": "inline"
+    }
+  },
+  {
+    "name": "whitespace: a display token after an em space, which is kept, in the stylesheet",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "display": "inline"
+    }
+  },
+  {
+    "name": "whitespace: a display token after an em space, which is kept, bound on the element",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "display": "inline"
+    }
+  },
+  {
+    "name": "whitespace: channels separated by tabs and newlines, in the stylesheet",
+    "expected": {
+      "color": "rgb(1, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)"
+    }
+  },
+  {
+    "name": "whitespace: channels separated by tabs and newlines, bound on the element",
+    "expected": {
+      "color": "rgb(1, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)"
+    }
+  },
+  {
+    "name": "whitespace: channels separated by no-break spaces, in the stylesheet",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)"
+    }
+  },
+  {
+    "name": "whitespace: channels separated by no-break spaces, bound on the element",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)"
+    }
+  },
+  {
+    "name": "whitespace: channels with a no-break space after a comma, in the stylesheet",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)"
+    }
+  },
+  {
+    "name": "whitespace: channels with a no-break space after a comma, bound on the element",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)"
+    }
+  },
+  {
     "name": "background: var() of a colour token is the background colour",
     "expected": {
       "color": "rgb(0, 0, 0)",

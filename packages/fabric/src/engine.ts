@@ -1604,8 +1604,10 @@ export class Engine implements HostEngine {
     if (options.tokens) this.styles.setRootTokens(options.tokens);
     this.structuralSheets = options.globalStyles?.structural === true;
     this.dev = options.dev ?? (globalThis as { __DEV__?: boolean }).__DEV__ === true;
-    if (this.dev)
+    if (this.dev) {
       this.styles.onUndefinedToken = (name, props) => this.reportUndefinedToken(name, props);
+      this.styles.onUnreadDisplay = (name, value) => this.reportUnreadDisplay(name, value);
+    }
     this.now = options.now ?? (() => globalThis.performance?.now?.() ?? Date.now());
     this.onDirty = options.onDirty;
     this.onError = options.onError;
@@ -3226,6 +3228,23 @@ export class Engine implements HostEngine {
       `[angular-native] var(${name}) in ${props.join(', ')} names a custom property nothing in` +
         ` scope defines, so the declaration is dropped, as a browser drops it. Define ${name} on` +
         ` :root or an ancestor, or give the var() a fallback.`,
+    );
+  }
+
+  private readonly unreadDisplays = new Set<string>();
+
+  /**
+   * Said once per token and value: the compiler refuses `display: grid` written out, but a token
+   * is only known here, and without this the view lays out as flex with nothing said.
+   */
+  private reportUnreadDisplay(name: string, value: string | undefined): void {
+    const report = `${name} ${value}`;
+    if (this.unreadDisplays.has(report)) return;
+    this.unreadDisplays.add(report);
+    console.warn(
+      `[angular-native] display: var(${name}) is ${value ?? 'no keyword'}, which is no display` +
+        ` native has, so display is unset and the view lays out as flex. Native has flex, none` +
+        ` and contents, and reads block, inline, inline-block, flow-root and inline-flex as flex.`,
     );
   }
 

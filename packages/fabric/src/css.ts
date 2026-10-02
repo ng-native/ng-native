@@ -118,6 +118,9 @@ export interface Conditions {
   readonly fontScale?: number;
 }
 
+/** A run of CSS whitespace: spaces, tabs, newlines, carriage returns and form feeds, and no other. */
+export const CSS_SPACE = /[ \t\n\r\f]+/;
+
 /** A custom property's value, in each form it can legally take. Absent forms are unusable. */
 export interface TokenValue {
   readonly length?: number | string;
@@ -220,8 +223,9 @@ const STAND_IN: Partial<Record<TokenKind, keyof TokenValue>> = {
 
 function formOf(token: TokenValue | undefined, kind: TokenKind): unknown {
   if (!token) return undefined;
-  // A display is a word, read as one native has where it is used: see `displayOf`.
-  if (kind === 'display') return token.keyword;
+  // A display is a word, read as one native has where it is used: see `displayOf`. Two words,
+  // `inline flex`, are a family when the stylesheet wrote them, as a font stack's first name is.
+  if (kind === 'display') return token.keyword ?? token.family;
   const stand = STAND_IN[kind];
   return token[kind] ?? (stand ? token[stand] : undefined);
 }
@@ -1127,6 +1131,13 @@ export class StyleResolver {
    */
   onUndefinedToken: ((name: string, props: readonly string[]) => void) | null = null;
 
+  /**
+   * Told of a `display: var()` whose token holds no display native has, `grid` or `table`, which
+   * leaves display unset. Set only in development, where it is how the engine says so: the
+   * compiler refuses the same value written out, but a token is only known here.
+   */
+  onUnreadDisplay: ((name: string, value: string | undefined) => void) | null = null;
+
   constructor(globalSheet: StyleSheet | null, conditions: Conditions) {
     this.globalSheet = globalSheet;
     this.conditions = conditions;
@@ -1522,6 +1533,9 @@ export class StyleResolver {
       if (settled === undefined && this.onUndefinedToken) {
         this.reportUndefined(declaration, tokens);
       }
+      if (settled === undefined && declaration.kind === 'display' && this.onUnreadDisplay) {
+        this.reportDisplay(declaration, tokens);
+      }
       const value = settled ?? declaration.unset;
       for (const prop of declaration.props) {
         if (!declaration.important && important && prop in important) continue;
@@ -1589,6 +1603,16 @@ export class StyleResolver {
     if (declaration.fallback !== undefined || declaration.fallbackToken) return;
     if (declaration.alternatives?.some((alternative) => alternative in tokens)) return;
     this.onUndefinedToken!(name, declaration.props);
+  }
+
+  /** A display token set to a value native has no display for. */
+  private reportDisplay(
+    declaration: DeferredDeclaration,
+    tokens: Readonly<Record<string, TokenValue>>,
+  ): void {
+    const names = [declaration.reference!, ...(declaration.alternatives ?? [])];
+    const name = names.find((candidate) => tokens[candidate] !== undefined);
+    if (name) this.onUnreadDisplay!(name, formOf(tokens[name], 'display') as string | undefined);
   }
 
   /**
@@ -2178,19 +2202,33 @@ function referenced(
 
 /**
  * What native displays for a keyword: flex, none or contents. A block, inline, inline-block,
- * flow-root or inline-flex box is flex, as the compiler reads one written out. Anything else is no
- * display native has, so the property is unset, as Chrome unsets it for a token that is no display.
+ * flow-root or inline-flex box is flex, as the compiler reads one written out, and so is `flow`,
+ * which is a block. Anything else, a grid or a table, is no display native has, so the property
+ * is unset.
  */
 const DISPLAYS: ReadonlyMap<string, string> = new Map([
-  ...['flex', 'block', 'inline', 'inline-block', 'flow-root', 'inline-flex'].map(
+  ...['flex', 'block', 'inline', 'inline-block', 'flow-root', 'inline-flex', 'flow'].map(
     (word) => [word, 'flex'] as const,
   ),
   ['none', 'none'],
   ['contents', 'contents'],
 ]);
 
-const displayOf = (value: unknown): string | undefined =>
-  typeof value === 'string' ? DISPLAYS.get(value.toLowerCase()) : undefined;
+/**
+ * The two-keyword form, an outer display and an inner one in either order: `inline flex` is
+ * `inline-flex` and `block flow` is `block`, as Chrome computes them, so each is flex here.
+ */
+const OUTER = new Set(['block', 'inline']);
+const INNER = new Set(['flow', 'flow-root', 'flex']);
+
+function displayOf(value: unknown): string | undefined {
+  if (typeof value !== 'string') return undefined;
+  const words = value.toLowerCase().split(CSS_SPACE);
+  if (words.length === 1) return DISPLAYS.get(words[0]!);
+  const [first, second] = words as [string, string];
+  const pair = (OUTER.has(first) && INNER.has(second)) || (INNER.has(first) && OUTER.has(second));
+  return words.length === 2 && pair ? 'flex' : undefined;
+}
 
 /**
  * A set token's value in the form wanted. A token of `currentColor` is the colour in scope where

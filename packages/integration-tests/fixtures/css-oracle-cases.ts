@@ -42,6 +42,13 @@ export interface OracleCase {
   none?: string;
   /** Properties measured on this case beside `PROPERTIES`, which must match exactly. */
   extra?: readonly ExtraProperty[];
+  /**
+   * Custom properties set on the probe as `[style.--t]` sets them: `style.setProperty` in the
+   * browser, and the engine's reading of a bound value here.
+   */
+  bound?: Readonly<Record<string, string>>;
+  /** The compiler refuses part of `css` with a warning, for a value native has no form for. */
+  warns?: boolean;
 }
 
 /** The properties a case can measure beyond `PROPERTIES`, and the style key each lands in. */
@@ -50,6 +57,8 @@ export const EXTRA_KEYS = {
   'border-left-color': 'borderLeftColor',
   'border-top-width': 'borderTopWidth',
   'outline-color': 'outlineColor',
+  'padding-top': 'paddingTop',
+  opacity: 'opacity',
   display: 'display',
 } as const;
 
@@ -68,6 +77,101 @@ const probe = (extra: Partial<CaseNode> = {}): CaseNode => ({
   id: 'probe',
   ...extra,
 });
+
+/**
+ * `property: var(--t)` over a weaker rule, with the token written in the stylesheet and, as a
+ * second case, bound on the probe.
+ */
+function tokenCases(
+  name: string,
+  property: string,
+  value: string,
+  weaker: string,
+  extra?: ExtraProperty,
+  { use = 'var(--t)', warns = false } = {},
+): OracleCase[] {
+  const tree = probe({ name: 'view', classes: ['c'] });
+  const base = { tree, ...(extra ? { extra: [extra] } : {}) };
+  const weakerRule = weaker ? `#probe { ${property}: ${weaker} } ` : '';
+  return [
+    {
+      name: `${name}, in the stylesheet`,
+      css: `${weakerRule}#probe.c { --t: ${value}; ${property}: ${use} }`,
+      ...(warns ? { warns } : {}),
+      ...base,
+    },
+    {
+      name: `${name}, bound on the element`,
+      css: `${weakerRule}#probe.c { ${property}: ${use} }`,
+      bound: { '--t': value },
+      ...base,
+    },
+  ];
+}
+
+/**
+ * CSS whitespace is a space, a tab, a newline, a carriage return and a form feed, and only that
+ * is trimmed from a token's value. A no-break space or an em space is part of it, so the value is
+ * no colour, length, number or display, and the declaration is unset. In a stylesheet the
+ * compiler refuses such a colour or number token outright, with a warning; a length or display
+ * one is kept as a word.
+ */
+const TOKEN_KINDS: readonly [string, string, string, string, ExtraProperty | undefined][] = [
+  ['a colour token', 'color', 'rgb(1, 0, 0)', 'rgb(2, 0, 0)', undefined],
+  ['a length token', 'padding-top', '4px', '9px', 'padding-top'],
+  ['a number token', 'opacity', '0.5', '0.25', 'opacity'],
+  ['a display token', 'display', 'none', '', 'display'],
+];
+const PADDING: readonly [string, string, string][] = [
+  ['padded with CSS whitespace, which is trimmed', ' \t\n\r\f', '\f\r\n\t '],
+  ['after a no-break space, which is kept', '\u00a0', ''],
+  ['before a no-break space, which is kept', '', '\u00a0'],
+  ['after an em space, which is kept', '\u2003', ''],
+];
+const WHITESPACE_CASES = TOKEN_KINDS.flatMap(([kind, property, value, weaker, extra]) =>
+  PADDING.flatMap(([how, before, after]) => {
+    const warns = how.endsWith('kept') && ['color', 'opacity'].includes(property);
+    const padded = before + value + after;
+    return tokenCases(`whitespace: ${kind} ${how}`, property, padded, weaker, extra, { warns });
+  }),
+);
+
+/** Colour channels, `rgb(var(--t))`, are split at CSS whitespace and no other. */
+const CHANNEL_CASES = (
+  [
+    ['separated by tabs and newlines', '1\t0\n0', false],
+    ['separated by no-break spaces', '1\u00a00\u00a00', false],
+    ['with a no-break space after a comma', '1,\u00a00, 0', true],
+  ] as const
+).flatMap(([how, value, warns]) =>
+  tokenCases(`whitespace: channels ${how}`, 'color', value, 'rgb(2, 0, 0)', undefined, {
+    use: 'rgb(var(--t))',
+    warns,
+  }),
+);
+
+/**
+ * A display token in the two-keyword form, or one native has no layout for. Chrome computes
+ * `inline flex` as `inline-flex` and `block flow` as `block`, which native reads as flex; a grid,
+ * a table, a list item and the old flexbox keep their own value, and native has none of them.
+ */
+const DISPLAY_CASES = [
+  'block flex',
+  'inline flex',
+  'flex inline',
+  'block flow',
+  'inline flow',
+  'flow',
+  'block flow-root',
+  'inline flow-root',
+  'grid',
+  'inline-grid',
+  'block grid',
+  'table',
+  'table-cell',
+  'list-item',
+  '-webkit-box',
+].flatMap((value) => tokenCases(`display: var() of ${value}`, 'display', value, 'none', 'display'));
 
 export const CASES: OracleCase[] = [
   {
@@ -564,6 +668,9 @@ export const CASES: OracleCase[] = [
     tree: { name: 'view', children: [probe({ name: 'view' })] },
     extra: ['display'],
   },
+  ...DISPLAY_CASES,
+  ...WHITESPACE_CASES,
+  ...CHANNEL_CASES,
   {
     name: 'background: var() of a colour token is the background colour',
     css: '#probe { --bg: rgb(1, 0, 0); background: var(--bg) }',

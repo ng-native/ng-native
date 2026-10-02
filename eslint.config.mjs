@@ -146,6 +146,7 @@ export default tseslint.config(
       'packages/integration-tests/tailwind-metro.test.ts',
       // Tests of internals the package entry points do not export, which have no other way in.
       'packages/integration-tests/css-cost.test.ts',
+      'packages/integration-tests/css-oracle.test.ts',
       'packages/integration-tests/dev-loading-view.test.ts',
       'packages/integration-tests/device-sources.test.ts',
       'packages/integration-tests/dialogs.test.ts',
