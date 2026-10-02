@@ -1109,20 +1109,18 @@ export function setsInherited(style: unknown): boolean {
  * `color: inherit` and `currentColor`, as a rule's would be.
  */
 export function inlineInherited(style: unknown): Record<string, unknown> | null {
-  if (!style || typeof style !== 'object') return null;
-  if (Array.isArray(style)) {
-    let out: Record<string, unknown> | null = null;
-    for (const entry of style) {
-      const part = inlineInherited(entry);
-      if (part) out = Object.assign(out ?? {}, part);
-    }
-    return out;
-  }
   let out: Record<string, unknown> | null = null;
-  for (const [key, value] of Object.entries(style)) {
+  // Flattened first, as native applies it, so a later entry's null clears an earlier value.
+  for (const [key, value] of Object.entries(flattenInline(style, {}))) {
     if (INHERITED.has(key) && value !== undefined && value !== null) (out ??= {})[key] = value;
   }
   return out;
+}
+
+function flattenInline(style: unknown, into: Record<string, unknown>): Record<string, unknown> {
+  if (Array.isArray(style)) for (const entry of style) flattenInline(entry, into);
+  else if (style && typeof style === 'object') Object.assign(into, style);
+  return into;
 }
 
 /**

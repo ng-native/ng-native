@@ -60,6 +60,17 @@ describe('an inherited property set by inline style', () => {
     assert.equal(tree('bg', '', { color: RED }).view_()['backgroundColor'], RED);
   });
 
+  it('is the last value an inline style array gives, so a later null clears it', () => {
+    assert.equal(
+      tree('', '', [{ color: RED }, { color: null }] as never).text()['color'],
+      'rgb(0, 0, 1)',
+    );
+    assert.equal(
+      tree('', '', [{ color: 'rgb(0, 0, 9)' }, { color: RED }] as never).text()['color'],
+      RED,
+    );
+  });
+
   it('loses to an important rule', () => {
     assert.equal(tree('imp', '', { color: RED }).text()['color'], 'rgb(0, 0, 2)');
   });
