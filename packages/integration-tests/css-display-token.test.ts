@@ -158,6 +158,21 @@ describe('display: var() with a written fallback', () => {
     }
   });
 
+  it('refuses such a fallback outright in a strict compile, even inside a lenient one', () => {
+    // A strict compile run from another's warning callback must not take that compile's reporter.
+    let nested: unknown;
+    compileCss('.a { display: var(--missing, grid) }', 'outer', {
+      onUnsupported: () => {
+        try {
+          compileCss('.b { display: var(--missing, grid) }', 'inner');
+        } catch (error) {
+          nested = error;
+        }
+      },
+    });
+    assert.match(String(nested), /does not exist on native/);
+  });
+
   it('still reads the token where it is set, with such a fallback', () => {
     assert.equal(tree('.a { --d: none; display: var(--d, grid) }').display(), 'none');
   });

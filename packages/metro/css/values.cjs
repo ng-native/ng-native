@@ -518,13 +518,15 @@ function formOf(token, kind) {
  * Where part of a declaration native cannot express is refused. Throwing drops the declaration;
  * `withRefusals` reports the part instead, and the rest of the declaration stands.
  */
-let refuse = (message) => {
+const throwRefusal = (message) => {
   throw new CssUnsupported(message);
 };
+let refuse = throwRefusal;
 
+/** A strict compile, with no `report`, throws even when run from within a lenient one. */
 function withRefusals(report, run) {
   const outer = refuse;
-  if (report) refuse = report;
+  refuse = report ?? throwRefusal;
   try {
     return run();
   } finally {
