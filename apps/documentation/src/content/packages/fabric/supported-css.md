@@ -191,7 +191,9 @@ way, in a stylesheet or set on the element, and reads the two-keyword form, `inl
 `block flow`, as the one-word value it stands for. A token of any other value, such as `grid` or a
 table value, unsets `display`, and the element is laid out as a flex column. In development the
 engine logs a warning naming the token and its value, since the compiler only sees the token's
-name.
+name. A written fallback is read the same way, `var(--d, inline flex)` included. One native has no
+layout for, such as `var(--d, grid)`, is dropped with a build warning, and the token is still read
+where it is set.
 
 `overflow` is one value for both axes - Yoga has no separate `overflow-x`/`overflow-y` - so a rule
 that gives them different values is dropped with a warning rather than silently picking one.
