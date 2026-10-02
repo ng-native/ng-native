@@ -4,33 +4,41 @@
 # tapped there.
 #
 # `LINK` is the link, `canary://navigation` say; `SHOWS` is text on the screen it opens.
+#
+# A starved CI simulator has dropped the link itself: `openLink` returned after half a minute and
+# the app stayed on the screen it was on. So the whole of it is tried once more when the screen
+# never comes, which on a link that did land opens the same screen again.
 appId: ${APP_ID || 'dev.angularnative.canary'}
 ---
-- openLink: ${LINK}
-# On iOS the dialog or the screen comes first, and either can take a while on a loaded machine, so
-# the subflow waits for whichever it is, and answers the dialog if that is what came. A loaded
-# SpringBoard has dropped a tap on Open and left the dialog up, so Open is tapped until it closes.
-- runFlow:
-    when:
-      platform: iOS
+- retry:
+    maxRetries: 1
     commands:
-      - extendedWaitUntil:
-          visible: 'Open|${SHOWS}'
-          timeout: 90000
-      - retry:
-          maxRetries: 2
+      - openLink: ${LINK}
+      # On iOS the dialog or the screen comes first, and either can take a while on a loaded
+      # machine, so the subflow waits for whichever it is, and answers the dialog if that is what
+      # came. A loaded SpringBoard has dropped a tap on Open and left the dialog up, so Open is
+      # tapped until it closes.
+      - runFlow:
+          when:
+            platform: iOS
           commands:
-            - runFlow:
-                when:
-                  visible: 'Open'
-                commands:
-                  - tapOn: 'Open'
             - extendedWaitUntil:
-                notVisible: 'Open'
-                timeout: 10000
-# A starved CI simulator has taken over a minute from the answer to the screen: 23s to hand the link
-# to the app, then half a minute before the screen was there.
-- runFlow:
-    file: wait-for.yaml
-    env:
-      SHOWS: '${SHOWS}'
+                visible: 'Open|${SHOWS}'
+                timeout: 90000
+            - retry:
+                maxRetries: 2
+                commands:
+                  - runFlow:
+                      when:
+                        visible: 'Open'
+                      commands:
+                        - tapOn: 'Open'
+                  - extendedWaitUntil:
+                      notVisible: 'Open'
+                      timeout: 10000
+      # A starved CI simulator has taken over a minute from the answer to the screen: 23s to hand
+      # the link to the app, then half a minute before the screen was there.
+      - runFlow:
+          file: wait-for.yaml
+          env:
+            SHOWS: '${SHOWS}'

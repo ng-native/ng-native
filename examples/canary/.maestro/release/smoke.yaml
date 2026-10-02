@@ -33,13 +33,18 @@ appId: ${APP_ID || 'dev.angularnative.canary'}
     file: ../subflows/wait-for.yaml
     env:
       SHOWS: 'Detail'
-- tapOn:
-    text: 'Done'
-    retryTapIfNoChange: true
-- runFlow:
-    file: ../subflows/wait-for.yaml
-    env:
-      SHOWS: 'reset to home.*'
+# A starved CI simulator has dropped the tap on the sheet's Done, and retryTapIfNoChange saw the
+# screen change anyway as the sheet settled, so the tap is tried again until the sheet is gone.
+- retry:
+    maxRetries: 2
+    commands:
+      - tapOn:
+          text: 'Done'
+          retryTapIfNoChange: true
+      - runFlow:
+          file: ../subflows/wait-for.yaml
+          env:
+            SHOWS: 'reset to home.*'
 - tapOn:
     text: 'reset to home.*'
     retryTapIfNoChange: true
