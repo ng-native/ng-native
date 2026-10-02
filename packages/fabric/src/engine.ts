@@ -791,12 +791,54 @@ export function registerViewName(
   elementName: string,
   viewName: string | PlatformViewName,
   defaultProps?: Record<string, unknown>,
+  options?: ViewNameOptions,
 ): void {
   VIEW_NAMES[elementName] = viewName;
-  if (!defaultProps) return;
   for (const name of typeof viewName === 'string' ? [viewName] : [viewName.ios, viewName.android]) {
-    DEFAULT_PROPS[name] = defaultProps;
+    if (defaultProps) DEFAULT_PROPS[name] = defaultProps;
+    if (options?.textContent) TEXT_CONTENT_PROPS[name] = options.textContent;
   }
+}
+
+/** What else a registered view needs the engine to know about it. */
+export interface ViewNameOptions {
+  /**
+   * The prop the view reads its text from, where it takes no children: SwiftUI's `Text` through
+   * `@expo/ui` reads `text`. The text written inside the element becomes that prop, as `<text>`
+   * takes its own content, and is not committed as children. An explicit prop wins over it.
+   */
+  readonly textContent?: string;
+}
+
+/** The prop each view that takes its text content as a prop reads it from. See `ViewNameOptions`. */
+const TEXT_CONTENT_PROPS: Record<string, string> = {};
+
+/** Whether `node` takes its text content as a prop rather than as text children. */
+function takesTextAsProp(node: EngineNode): boolean {
+  return node.kind === 'element' && TEXT_CONTENT_PROPS[viewNameOf(node)] !== undefined;
+}
+
+/** Sets a view's text prop from its content, unless the prop is set explicitly. */
+function withTextContent(node: EngineNode, viewName: string, props: Record<string, unknown>): void {
+  const prop = TEXT_CONTENT_PROPS[viewName];
+  if (!prop || props[prop] !== undefined) return;
+  const text = textContent(node);
+  if (text) props[prop] = text;
+}
+
+/**
+ * The text written inside a view that takes it as a prop: every run joined, with the whitespace at
+ * the two ends dropped as a paragraph drops it, and kept inside. A nested view is drawn after the
+ * text, as SwiftUI's `Text` through `@expo/ui` draws a child `Text`, so the space before it stays.
+ */
+function textContent(node: EngineNode): string {
+  let text = '';
+  let nested = false;
+  for (const child of node.children) {
+    if (child.kind === 'text') text += child.text;
+    else if (child.kind === 'element') nested = true;
+  }
+  return nested ? text.trimStart() : text.trim();
 }
 
 /**
@@ -1898,6 +1940,7 @@ export class Engine implements HostEngine {
     parent.children.push(child);
     if (child.dormantHoists) this.wakeHoists(child);
     this.markStructure(parent);
+    this.markTextContent(parent, child);
   }
 
   insertBefore(parent: EngineNode, child: EngineNode, ref: EngineNode | null): void {
@@ -1908,6 +1951,7 @@ export class Engine implements HostEngine {
     else parent.children.splice(at, 0, child);
     if (child.dormantHoists) this.wakeHoists(child);
     this.markStructure(parent);
+    this.markTextContent(parent, child);
   }
 
   removeChild(parent: EngineNode | null, child: EngineNode): void {
@@ -1919,6 +1963,12 @@ export class Engine implements HostEngine {
     child.parent = null;
     this.removedSinceCommit.add(child);
     this.markStructure(target);
+    this.markTextContent(target, child);
+  }
+
+  /** A run of text came or went under a view that takes its text as a prop: that prop changed. */
+  private markTextContent(parent: EngineNode, child: EngineNode): void {
+    if (child.kind === 'text' && takesTextAsProp(parent)) this.markProps(parent);
   }
 
   /** A subtree that went out of the tree is back in: its hoisted nodes commit again. */
@@ -2084,6 +2134,7 @@ export class Engine implements HostEngine {
   setText(node: EngineNode, value: string): void {
     node.text = value;
     this.markProps(node);
+    if (node.parent) this.markTextContent(node.parent, node);
   }
 
   setEventListener(
@@ -2301,7 +2352,11 @@ export class Engine implements HostEngine {
 
   /** Anchors take part in sibling ordering but never reach Fabric. */
   private visibleChildren(node: EngineNode): EngineNode[] {
-    return node.children.filter((child) => child.kind !== 'anchor');
+    // A view that takes its text as a prop has no text children to commit. See `ViewNameOptions`.
+    const textAsProp = takesTextAsProp(node);
+    return node.children.filter(
+      (child) => child.kind !== 'anchor' && !(textAsProp && child.kind === 'text'),
+    );
   }
 
   /**
@@ -2333,6 +2388,7 @@ export class Engine implements HostEngine {
         props[key] = node.props[key];
       }
     }
+    withTextContent(node, viewName, props);
     const style = flattenStyle(node.props['style'], props);
     const intrinsic = node.props[INTRINSIC_SIZE] as IntrinsicSize | undefined;
     if (intrinsic) applyIntrinsicSize(style, intrinsic);
@@ -2847,9 +2903,9 @@ export class Engine implements HostEngine {
     if (this.isClean(node) && !styleChanged) return node.committed!.handle;
     node.styleCommitted = style;
 
-    const childHandles = this.reconcileChildren(node, style);
-    const previous = node.committed;
     const viewName = viewNameOf(node);
+    const childHandles = this.reconcileChildren(node, viewName, style);
+    const previous = node.committed;
     this.notePresented(node, viewName);
     if (!previous)
       return this.create(node, viewName, this.mergeProps(node, viewName), childHandles);
@@ -2915,14 +2971,21 @@ export class Engine implements HostEngine {
    * handle as it stands, so it is answered here without the call, the resolve and the walk -
    * which, per child, was most of what a one-row update cost.
    */
-  private reconcileChildren(node: EngineNode, style: StyleCache | null): FabricNode[] {
+  private reconcileChildren(
+    node: EngineNode,
+    viewName: string,
+    style: StyleCache | null,
+  ): FabricNode[] {
     const context = style?.context;
     if (HOIST_TARGETS.has(node.name)) return this.reconcileHoistTarget(node, context);
+    // A view that takes its text as a prop has no text children to commit. See `ViewNameOptions`.
+    const textAsProp = TEXT_CONTENT_PROPS[viewName] !== undefined;
     const handles: FabricNode[] = [];
     for (const child of node.children) {
       if (child.kind === 'anchor' || this.committedElsewhere(child) || this.withheld(child)) {
         continue;
       }
+      if (textAsProp && child.kind === 'text') continue;
       handles.push(this.reconcileUnder(node, child, context));
     }
     return handles;

@@ -47,6 +47,7 @@ export {
   registerPlatformComponents,
   registerViewName,
   type PlatformViewName,
+  type ViewNameOptions,
   viewNameOf,
   type EngineNode,
   type EngineOptions,

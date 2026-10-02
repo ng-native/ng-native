@@ -53,6 +53,11 @@ export interface ExpoViewOptions {
    * source to an array and a `contentFit` to a string native understands.
    */
   readonly defaultProps?: Record<string, unknown>;
+  /**
+   * The prop the view reads its text from, where it takes no child views, as `@expo/ui`'s `Text`
+   * reads `text`. The text written inside the element becomes that prop. See `ViewNameOptions`.
+   */
+  readonly textContent?: string;
 }
 
 /**
@@ -67,7 +72,14 @@ export function registerExpoView(
   moduleName: string,
   options?: ExpoViewOptions,
 ): void {
-  registerViewName(elementName, expoViewName(moduleName, options?.viewName), options?.defaultProps);
+  registerViewName(
+    elementName,
+    expoViewName(moduleName, options?.viewName),
+    options?.defaultProps,
+    {
+      textContent: options?.textContent,
+    },
+  );
   optional(() =>
     (
       require('expo') as { requireNativeView(module: string, view?: string): unknown }

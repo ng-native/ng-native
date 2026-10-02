@@ -24,6 +24,7 @@ interface DefaultsFixture {
 
 let Platforms: Type<Fixture>;
 let Defaults: Type<DefaultsFixture>;
+let TextContent: Type<{ us: { set(value: string): void } }>;
 
 before(async () => {
   const mod = await compileFixture(
@@ -31,6 +32,7 @@ before(async () => {
   );
   Platforms = mod['ExpoUiPlatformsFixture'] as Type<Fixture>;
   Defaults = mod['ExpoUiPlatformDefaultsFixture'] as Type<DefaultsFixture>;
+  TextContent = mod['ExpoUiTextContentFixture'] as typeof TextContent;
 });
 
 after(() => {
@@ -154,4 +156,21 @@ describe('what a template leaves unset, the same on both', () => {
     const { every } = await boot('android', Defaults);
     assert.equal(every(/ExpoUI_SliderView$/)[1]!.props['steps'], 2);
   });
+});
+
+describe('a ui-text with its text written inside it', () => {
+  for (const platform of ['ios', 'android'] as const) {
+    it(`shows that text, and follows it, on ${platform}`, async () => {
+      const { app, every, instance } = await boot(platform, TextContent);
+      const [content, bound] = every(/ExpoUI_TextView$/);
+      assert.equal(content!.props['text'], 'Us 15 - 0 Them');
+      assert.deepEqual(content!.children, [], 'the native text view takes no children');
+      assert.equal(bound!.props['text'], 'bound', 'text= still sets it');
+
+      instance.us.set('30');
+      app.applicationRef.tick();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      assert.equal(every(/ExpoUI_TextView$/)[0]!.props['text'], 'Us 30 - 0 Them');
+    });
+  }
 });

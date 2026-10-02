@@ -94,7 +94,10 @@ error. `expo-ui-components.ts` has thin typed components for the views an app re
 - **`UiColorPicker`**, **`UiGauge`** and **`UiProgress`**.
 - **`UiForm`**, **`UiSection`** and **`UiLabeledContent`** - settings-style grouped rows.
 - **`UiImage`** - an SF Symbol by `systemName`, or a picture by `uiImage` URL.
-- **`UiText`** - a SwiftUI `Text`.
+- **`UiText`** - a SwiftUI `Text`. Its text is what is written inside it,
+  `<ui-text>Us {{ score() }}</ui-text>`, as `<text>` takes its own; `text` sets it too, and wins.
+  A `ui-text` nested inside one is a span with its own modifiers, drawn after the text: put text
+  that comes after a span in a `ui-text` of its own.
 - **`UiDatePicker`** - SwiftUI's `DatePicker` on iOS, Compose's on Android, and a Signal Forms
   field: its `value` model is a `Date` or null, whichever way each platform takes and reports one.
   A pick is when it emits `touch`. SwiftUI's picker always shows a date, today when the field is

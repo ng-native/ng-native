@@ -154,6 +154,9 @@ export function registerExpoUiViews(platform: PlatformOSType): void {
   const index = platform === 'ios' ? 0 : 1;
   for (const [element, views] of Object.entries(EXPO_UI_VIEWS)) {
     const viewName = views[index];
-    if (viewName) registerExpoView(`ui-${element}`, 'ExpoUI', { viewName });
+    if (!viewName) continue;
+    // SwiftUI's and Compose's `Text` read their text from `text`, and take no child views.
+    const textContent = element === 'text' ? 'text' : undefined;
+    registerExpoView(`ui-${element}`, 'ExpoUI', { viewName, textContent });
   }
 }

@@ -286,10 +286,13 @@ export class UiImage {
   readonly modifiers = input<readonly UiModifier[]>();
 }
 
-/** A SwiftUI `Text`. */
+/**
+ * A SwiftUI `Text`, or Compose's on Android. Its text is what is written inside it,
+ * `<ui-text>Us {{ score }}</ui-text>`, as `<text>` takes its own, or `text`, which wins over it.
+ */
 @Component({
   selector: 'ui-text',
-  template: '',
+  template: '<ng-content />',
   host: { '[text]': 'text()', '[modifiers]': 'modifiers()' },
 })
 export class UiText {

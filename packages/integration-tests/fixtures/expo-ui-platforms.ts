@@ -67,3 +67,18 @@ export class ExpoUiPlatformDefaultsFixture {
   readonly bubbled = signal(0);
   readonly on = signal(false);
 }
+
+@Component({
+  selector: 'expo-ui-text-content',
+  imports: [UiHost, UiText],
+  template: `
+    <ui-host>
+      <ui-text>Us {{ us() }} - {{ them() }} Them</ui-text>
+      <ui-text text="bound" />
+    </ui-host>
+  `,
+})
+export class ExpoUiTextContentFixture {
+  readonly us = signal('15');
+  readonly them = signal('0');
+}
