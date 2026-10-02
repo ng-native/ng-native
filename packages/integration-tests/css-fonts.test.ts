@@ -17,8 +17,13 @@ const require = createRequire(import.meta.url);
 const { compileCss } = require('@ng-native/metro/css/compile.cjs');
 const { transformAngular } = require('@ng-native/metro/angular-transform.cjs');
 
-import { expoFonts, FontRegistry, loadFonts, registrationsFor } from '@ng-native/expo/fonts';
+import { fileURLToPath } from 'node:url';
+import type { Type } from '@angular/core';
+import { expoFonts, FontRegistry, Fonts, loadFonts, registrationsFor } from '@ng-native/expo/fonts';
 import { styleSheetOf, type StyleSheet } from '@ng-native/fabric';
+import { mount } from '@ng-native/platform';
+import { createFakeFabric } from '@ng-native/testing';
+import { compileFixture } from './compile.ts';
 
 /** Fakes `require`, the same seam `optional()` reaches through on a device or in Node. */
 function withExpoFont<T>(module: unknown | null, run: () => T): T {
@@ -239,6 +244,31 @@ describe('reaching expo-font itself', () => {
       loadFonts({ fonts: [{ family: 'Inter', source: 1, weight: 700 }] }),
     );
     assert.deepEqual(loaded, [{ Inter: 1, 'Inter-700': 1 }]);
+  });
+
+  it('is seen by the injected registry, which an app reads before the faces finish loading', async () => {
+    // `loadFonts` is not awaited before `mount`, so a screen's first read of `inject(Fonts)` comes
+    // first. Each kept a signal of its own, and the injected one never heard of the load.
+    const registered = new Set<string>();
+    const expoFont = {
+      loadAsync: async (map: Record<string, unknown>) =>
+        void Object.keys(map).forEach((name) => registered.add(name)),
+      isLoaded: (family: string) => registered.has(family),
+      getLoadedFonts: () => [...registered],
+    };
+    const mod = await compileFixture(
+      fileURLToPath(new URL('./fixtures/counter.ts', import.meta.url)),
+    );
+    const app = mount(1, mod['Counter'] as Type<unknown>, createFakeFabric());
+    const fonts = withExpoFont(expoFont, () => app.componentRef.injector.get(Fonts));
+    assert.deepEqual(fonts.families(), []);
+    assert.equal(fonts.has('Inter'), false);
+
+    await withExpoFont(expoFont, () => loadFonts({ fonts: [{ family: 'Inter', source: 1 }] }));
+
+    assert.deepEqual(fonts.families(), ['Inter']);
+    assert.equal(fonts.has('Inter'), true);
+    app.componentRef.destroy();
   });
 
   it('does nothing where expo-font is not installed, rather than throwing at bootstrap', async () => {

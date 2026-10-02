@@ -21,7 +21,7 @@
  * here would be copying out its internals rather than using it.
  */
 import { InjectionToken, computed, signal, type Signal } from '@angular/core';
-import { faceName, fontsRegistered } from '@ng-native/fabric';
+import { faceName, fontsRegistered, onFontsRegistered } from '@ng-native/fabric';
 import { expoModule } from './native.ts';
 
 /** A face a stylesheet declared, as the compiler collected it. */
@@ -80,17 +80,20 @@ export function expoFonts(): NativeFonts | null {
   };
 }
 
+/**
+ * Bumped whenever faces are registered, by any registry.
+ *
+ * The platform's own list is a plain array that changes underneath us, so a template binding to
+ * it would render once and never again - and the one moment it changes is exactly the moment a
+ * screen waiting on a font wants to hear about. This makes both readers reactive without
+ * mirroring the list. Shared by every registry, because `loadFonts()` registers through its own
+ * and a screen reads through the injected one.
+ */
+const generation = signal(0);
+onFontsRegistered(() => generation.update((n) => n + 1));
+
 export class FontRegistry {
   private readonly native: NativeFonts | null;
-  /**
-   * Bumped whenever faces are registered.
-   *
-   * The platform's own list is a plain array that changes underneath us, so a template binding to
-   * it would render once and never again - and the one moment it changes is exactly the moment a
-   * screen waiting on a font wants to hear about. This makes both readers reactive without
-   * mirroring the list.
-   */
-  private readonly generation = signal(0);
 
   constructor(native: NativeFonts | null) {
     this.native = native;
@@ -103,13 +106,13 @@ export class FontRegistry {
 
   /** Every family the platform can currently find, custom or bundled. */
   readonly families: Signal<readonly string[]> = computed(() => {
-    this.generation();
+    generation();
     return this.native?.getLoadedFonts() ?? [];
   });
 
   /** Whether a family is registered. Reactive: re-read after a `load` that adds one. */
   has(family: string): boolean {
-    this.generation();
+    generation();
     return this.native?.isLoaded(family) ?? false;
   }
 
@@ -137,7 +140,6 @@ export class FontRegistry {
       // faces that registered: one failing fails the whole load, not the others in it.
       fontsRegistered(Object.keys(map).filter((family) => native.isLoaded(family)));
     }
-    this.generation.update((n) => n + 1);
   }
 }
 
