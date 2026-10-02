@@ -11,6 +11,7 @@ import { Text } from '../../components/src/text.ts';
   styles: [
     ".sheet { font-family: 'Inter-Bold'; }",
     ".sheet-stack { font-family: 'Inter Display', sans-serif; }",
+    ".sheet-escaped { font-family: 'D\\'Angelo', serif; }",
     '.from-token { font-family: var(--family); }',
   ],
   template: `
@@ -19,6 +20,8 @@ import { Text } from '../../components/src/text.ts';
     <text nativeID="static" style="font-family: 'Inter-Bold'">a</text>
     <text nativeID="static-double" style='font-family: "Inter-Bold"'>a</text>
     <text nativeID="static-stack" style="font-family: 'Inter Display', sans-serif">a</text>
+    <text nativeID="sheet-escaped" class="sheet-escaped">a</text>
+    <text nativeID="single-escaped" [style.font-family]="escaped">a</text>
     <text nativeID="bound-string" [style]="declaration">a</text>
     <text nativeID="single" [style.font-family]="family">a</text>
     <text nativeID="token" class="from-token" style="--family: 'Inter-Bold'">a</text>
@@ -27,4 +30,5 @@ import { Text } from '../../components/src/text.ts';
 export class QuotedFontFamily {
   protected readonly declaration = "font-family: 'Inter-Bold'";
   protected readonly family = "'Inter-Bold'";
+  protected readonly escaped = "'D\\'Angelo', serif";
 }

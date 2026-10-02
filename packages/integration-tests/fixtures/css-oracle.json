@@ -1120,6 +1120,38 @@
     }
   },
   {
+    "name": "font-family: a family with an escaped quote, in the stylesheet",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "font-family": "\"D'Angelo\", serif"
+    }
+  },
+  {
+    "name": "font-family: a family with an escaped quote, bound on the element",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "font-family": "\"D'Angelo\", serif"
+    }
+  },
+  {
+    "name": "font-family: a family with a hex escape, in the stylesheet",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "font-family": "foo"
+    }
+  },
+  {
+    "name": "font-family: a family with a hex escape, bound on the element",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "font-family": "foo"
+    }
+  },
+  {
     "name": "display: a quoted none token bound on the element is no display",
     "expected": {
       "color": "rgb(0, 0, 0)",

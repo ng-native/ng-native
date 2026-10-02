@@ -29,6 +29,8 @@ describe('a quoted font-family on an element', () => {
       'bound-string',
       'single',
       'token',
+      'sheet-escaped',
+      'single-escaped',
     ];
     const props = Object.fromEntries(ids.map((id) => [id, screen.getByTestId(id).props]));
     family = (id) => props[id]!['fontFamily'];
@@ -45,6 +47,11 @@ describe('a quoted font-family on an element', () => {
       assert.equal(family(id), family('sheet'));
     });
   }
+
+  it('reads an escaped quote in a family, as a rule does', () => {
+    assert.equal(family('sheet-escaped'), "D'Angelo");
+    assert.equal(family('single-escaped'), family('sheet-escaped'));
+  });
 
   it('takes the first family of a stack, as a rule does', () => {
     assert.equal(family('static-stack'), family('sheet-stack'));
