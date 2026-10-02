@@ -23,3 +23,14 @@ describe('a view name registered before the platform is known', () => {
     assert.equal(viewNameOf(element('native-tab')), 'RNSTabsScreenAndroid');
   });
 });
+
+describe('reporting a platform again', () => {
+  it("puts back iOS's names once iOS is reported after Android, as a test resetting does", () => {
+    registerPlatformComponents('android');
+    assert.equal(viewNameOf(element('switch')), 'AndroidSwitch');
+    registerPlatformComponents('ios');
+    assert.equal(viewNameOf(element('switch')), 'Switch');
+    assert.equal(viewNameOf(element('text-input')), 'TextInput');
+    assert.equal(viewNameOf(element('safe-area-view')), 'SafeAreaView');
+  });
+});

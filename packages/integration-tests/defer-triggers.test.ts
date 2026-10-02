@@ -221,13 +221,35 @@ describe('a trigger listener on an engine node', () => {
   });
 });
 
+/** The globals installing the triggers may define or patch. */
+const TOUCHED = ['Element', 'IntersectionObserver'] as const;
+
+/**
+ * Puts the globals installing touches back exactly as they were: a global that did not exist is
+ * deleted rather than left as `undefined`, and one that did gets its own descriptor back.
+ */
+function snapshotGlobals(): () => void {
+  const descriptors = TOUCHED.map(
+    (name) => [name, Object.getOwnPropertyDescriptor(globalThis, name)] as const,
+  );
+  // An `Element` that exists already has its instance check patched in place, not replaced.
+  const element = (globalThis as Record<string, unknown>)['Element'] as object | undefined;
+  const check = element && Object.getOwnPropertyDescriptor(element, Symbol.hasInstance);
+  return () => {
+    for (const [name, descriptor] of descriptors) {
+      if (descriptor) Object.defineProperty(globalThis, name, descriptor);
+      else delete (globalThis as Record<string, unknown>)[name];
+    }
+    if (!element) return;
+    if (check) Object.defineProperty(element, Symbol.hasInstance, check);
+    else delete (element as Record<symbol, unknown>)[Symbol.hasInstance];
+  };
+}
+
 describe('installing the triggers where React Native already has an Element', () => {
   it('makes an engine node an instance of it, and leaves its own instances to it', async () => {
     const scope = globalThis as Record<string, unknown>;
-    const saved = {
-      Element: scope['Element'],
-      IntersectionObserver: scope['IntersectionObserver'],
-    };
+    const restore = snapshotGlobals();
     class Element {}
     const watched: unknown[] = [];
     class NativeObserver {
@@ -255,25 +277,25 @@ describe('installing the triggers where React Native already has an Element', ()
       new Observer(() => {}).observe(own as never);
       assert.deepEqual(watched, [own], "React Native's observer watches its own nodes");
     } finally {
-      Object.assign(scope, saved);
+      restore();
     }
   });
 
   /**
-   * Installs a fresh copy of the triggers over `globals`, runs `body`, and puts the globals back.
+   * Installs a fresh copy of the triggers over `globals`, runs `body`, and puts back every global
+   * installing touches.
    * A copy of its own each time, since installing runs once per module.
    */
   async function installedOver(copy: string, globals: Record<string, unknown>, body: () => void) {
-    const scope = globalThis as Record<string, unknown>;
-    const saved = Object.fromEntries(Object.keys(globals).map((name) => [name, scope[name]]));
-    Object.assign(scope, globals);
+    const restore = snapshotGlobals();
+    Object.assign(globalThis, globals);
     try {
       const fresh = `../fabric/src/defer-triggers.ts?${copy}`;
       const { installDeferTriggers } = await import(fresh);
       installDeferTriggers();
       body();
     } finally {
-      Object.assign(scope, saved);
+      restore();
     }
   }
 
@@ -339,5 +361,25 @@ describe('installing the triggers where React Native already has an Element', ()
         ['disconnect'],
       ]);
     });
+  });
+});
+
+describe('a seeded install, once it is over', () => {
+  it('leaves the Element it found, and its instance check, as they were', async () => {
+    const scope = globalThis as Record<string, unknown>;
+    const element = scope['Element'] as object | undefined;
+    const check = element && Object.getOwnPropertyDescriptor(element, Symbol.hasInstance);
+    const restore = snapshotGlobals();
+    try {
+      const fresh = '../fabric/src/defer-triggers.ts?leaves-globals';
+      const { installDeferTriggers } = await import(fresh);
+      installDeferTriggers();
+    } finally {
+      restore();
+    }
+    assert.equal(scope['Element'], element);
+    if (element) {
+      assert.deepEqual(Object.getOwnPropertyDescriptor(element, Symbol.hasInstance), check);
+    }
   });
 });

@@ -583,6 +583,14 @@ export const ANDROID_VIEW_NAMES: Record<string, string> = {
 };
 
 /**
+ * iOS's names for the elements Android names differently, so reporting iOS after Android puts
+ * them back.
+ */
+const IOS_VIEW_NAMES: Record<string, string> = Object.fromEntries(
+  Object.keys(ANDROID_VIEW_NAMES).map((element) => [element, VIEW_NAMES[element] as string]),
+);
+
+/**
  * The platform the host reported at startup. Defaults to iOS, which is what the view-name table
  * above assumes too.
  *
@@ -602,10 +610,8 @@ export function nativePlatform(): string {
  */
 export function registerPlatformComponents(platform: string): void {
   platformOS = platform;
-  if (platform !== 'android') return;
-  for (const [element, viewName] of Object.entries(ANDROID_VIEW_NAMES)) {
-    registerViewName(element, viewName);
-  }
+  const names = platform === 'android' ? ANDROID_VIEW_NAMES : IOS_VIEW_NAMES;
+  for (const [element, viewName] of Object.entries(names)) registerViewName(element, viewName);
 }
 
 /**
