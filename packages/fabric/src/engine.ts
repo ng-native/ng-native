@@ -9,6 +9,7 @@
  */
 
 import {
+  setsInherited,
   StyleResolver,
   type Conditions,
   type StyleCache,
@@ -424,6 +425,8 @@ export interface EngineNode extends HostNode {
   styleCache: StyleCache | null;
   /** Set when something that could change what this node matches has changed. */
   styleDirty: boolean;
+  /** See `StyleTarget.inlineInherits`. */
+  inlineInherits?: boolean;
   /** `:focus`, from the native focus and blur events. */
   focused?: boolean;
   /** `:active`, set on the responder and every ancestor of it. */
@@ -2119,7 +2122,18 @@ export class Engine implements HostEngine {
     // Inline style is applied after the cascade and inherited by nothing, so it cannot change
     // what any node matches or inherits. Every other prop can: `[disabled]` is a selector. An
     // inline `direction` is the exception, because the paragraphs below it align by it.
-    this.markProps(node, key !== 'style' || this.noteInlineDirection(node));
+    this.markProps(node, key !== 'style' || this.inlineReachesStyle(node));
+  }
+
+  /**
+   * Whether a node's inline style can change what it or anything below it resolves to: it sets,
+   * or until now set, a property its children inherit.
+   */
+  private inlineReachesStyle(node: EngineNode): boolean {
+    const inherits = setsInherited(node.props['style']);
+    const inherited = node.inlineInherits === true;
+    node.inlineInherits = inherits;
+    return this.noteInlineDirection(node) || inherits || inherited;
   }
 
   /** Whether a node's inline style sets `direction`, remembering that one has. */
@@ -2142,7 +2156,7 @@ export class Engine implements HostEngine {
    * has changed for the props diff to notice.
    */
   styleChanged(node: EngineNode): void {
-    this.markProps(node, this.noteInlineDirection(node));
+    this.markProps(node, this.inlineReachesStyle(node));
   }
 
   /**

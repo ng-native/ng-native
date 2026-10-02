@@ -20,13 +20,14 @@ const BLUE = 'rgb(0, 0, 255)';
 const RED = 'rgb(255, 0, 0)';
 
 /** The colour the line under a text inside a view is drawn in: its own, or the text's colour. */
-function line(css: string): unknown {
+function line(css: string, inline: Record<string, unknown> | null = null): unknown {
   const fabric = createFakeFabric();
   const engine = new Engine(fabric, 1, { globalStyles: compileCss(css) as StyleSheet });
   const view = engine.createElement('view');
   const text = engine.createElement('text');
   engine.setClasses(view, 'outer');
   engine.setClasses(text, 'inner');
+  if (inline) engine.setProp(view, 'style', inline);
   engine.appendChild(engine.root, view);
   engine.appendChild(view, text);
   engine.commit();
@@ -89,6 +90,15 @@ describe('the colour of a text decoration on the text inside', () => {
           `.inner { color: ${BLUE}; text-decoration-color: rgb(255, 0, 255) }`,
       ),
       GREEN,
+    );
+  });
+
+  it("is the declaring element's inline text colour, which beats its rule's", () => {
+    assert.equal(
+      line(`.outer { color: ${GREEN}; text-decoration: underline } .inner { color: ${BLUE} }`, {
+        color: RED,
+      }),
+      RED,
     );
   });
 });
