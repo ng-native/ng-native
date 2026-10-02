@@ -141,6 +141,21 @@ describe('mount() with an injector: an island inside a host app', () => {
     assert.match(reset!, /\[data-rn-root\][^{]*\{[^}]*font-family/, 'the root carries the font');
   });
 
+  it('leaves an element its own ngSkipHydration when it comes apart', async () => {
+    const booted = await bootHost(
+      'app-host',
+      async () => (await import('./embed-app.ts')).HostShell,
+    );
+    const { mount } = await import('./mount.ts');
+    const shell = booted.appRef.components[0]!.instance as InstanceType<
+      typeof booted.app.HostShell
+    >;
+    const slot = shell.slot().nativeElement as Element;
+    slot.setAttribute('ngSkipHydration', 'true');
+    mount(slot, booted.app.IslandCounter, { injector: shell.injector }).destroy();
+    assert.equal(slot.getAttribute('ngSkipHydration'), 'true');
+  });
+
   it('comes apart without taking the host app with it', async () => {
     const { document, island, appRef, shell } = await bootIsland();
     island.destroy();

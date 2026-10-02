@@ -171,14 +171,25 @@ export function mount(
 
   const engine = new BrowserEngine(document);
   const factory = new BrowserRendererFactory(engine, document);
+  // `wrapRoot` marks the element `ngSkipHydration`; an island gives back what it had on unmount.
+  const skipHydration = rootElement.getAttribute('ngSkipHydration');
   const rootNode = engine.wrapRoot(rootElement) as unknown as Element;
   const own = hostProviders(engine, factory, document.defaultView);
 
   const mounted = host
-    ? mountInside(host, rootElement, rootNode, component, [...own, ...extraProviders], inputs, {
-        factory,
-        engine,
-      })
+    ? mountInside(
+        host,
+        rootElement,
+        rootNode,
+        component,
+        [...own, ...extraProviders],
+        inputs,
+        {
+          factory,
+          engine,
+        },
+        skipHydration,
+      )
     : mountAlone(rootNode, component, [...own, ...extraProviders], inputs, document, {
         factory,
         engine,
@@ -326,6 +337,7 @@ function mountInside(
   providers: (Provider | EnvironmentProviders)[],
   inputs: Readonly<Record<string, unknown>>,
   host: { factory: BrowserRendererFactory; engine: BrowserEngine },
+  skipHydration: string | null,
 ): MountResult {
   const injector = createEnvironmentInjector(
     [Screen, ColorScheme, Direction, HardwareBack, StatusBar, ...providers],
@@ -352,7 +364,8 @@ function mountInside(
       componentRef.destroy();
       injector.destroy();
       rootElement.removeAttribute('data-rn-root');
-      rootElement.removeAttribute('ngSkipHydration');
+      if (skipHydration === null) rootElement.removeAttribute('ngSkipHydration');
+      else rootElement.setAttribute('ngSkipHydration', skipHydration);
       rootElement.classList.remove('platform-web');
     },
   };
