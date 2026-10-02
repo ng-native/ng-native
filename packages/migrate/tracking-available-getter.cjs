@@ -97,26 +97,79 @@ function thisOf(ts, node) {
   return null;
 }
 
-/** The declaration of `name` in the scope `node` opens, if it declares one there. */
-function declaredIn(ts, node, name) {
-  if (ts.isFunctionLike(node)) {
-    return node.parameters.find((p) => ts.isIdentifier(p.name) && p.name.text === name);
-  }
-  const statements = ts.isSourceFile(node) || ts.isBlock(node) ? node.statements : [];
+/** What a binding of a name is when only its shape is known: a pattern, a catch, a function. */
+const ELSE = Symbol('something else');
+
+/** Whether a binding name, or any name inside a destructuring pattern, is `name`. */
+function binds(ts, nameNode, name) {
+  if (ts.isIdentifier(nameNode)) return nameNode.text === name;
+  return nameNode.elements.some(
+    (element) => !ts.isOmittedExpression(element) && binds(ts, element.name, name),
+  );
+}
+
+/** A variable or parameter binding `name`: itself if bound plainly, `ELSE` if destructured. */
+const bound = (ts, declaration, name) => (ts.isIdentifier(declaration.name) ? declaration : ELSE);
+
+/** The bindings of `name` a list of variable declarations makes, as `bound` answers. */
+function inDeclarations(ts, list, name) {
+  const found = list.declarations.find((d) => binds(ts, d.name, name));
+  return found && bound(ts, found);
+}
+
+/** The bindings of `name` a block's statements make: variables, and functions and classes. */
+function inStatements(ts, statements, name) {
   for (const statement of statements) {
-    if (!ts.isVariableStatement(statement)) continue;
-    const found = statement.declarationList.declarations.find(
-      (d) => ts.isIdentifier(d.name) && d.name.text === name,
-    );
-    if (found) return found;
+    if (ts.isVariableStatement(statement)) {
+      const found = inDeclarations(ts, statement.declarationList, name);
+      if (found) return found;
+    }
+    const named = ts.isFunctionDeclaration(statement) || ts.isClassDeclaration(statement);
+    if (named && statement.name?.text === name) return ELSE;
   }
   return undefined;
 }
 
-/** Whether the nearest declaration of the name `identifier` reads holds a `Tracking`. */
+/** A function's own name, if it is an expression's, and its parameters. */
+function inFunction(ts, node, name) {
+  if (ts.isFunctionExpression(node) && node.name?.text === name) return ELSE;
+  const parameter = node.parameters.find((p) => binds(ts, p.name, name));
+  return parameter && bound(ts, parameter);
+}
+
+/** A `for`, `for...of` or `for...in` loop's own variables. */
+function inLoop(ts, node, name) {
+  const { initializer } = node;
+  if (!initializer || !ts.isVariableDeclarationList(initializer)) return undefined;
+  return inDeclarations(ts, initializer, name);
+}
+
+/** A `catch` clause's binding. */
+const inCatch = (ts, node, name) =>
+  node.variableDeclaration && binds(ts, node.variableDeclaration.name, name) ? ELSE : undefined;
+
+const isLoop = (ts, node) =>
+  ts.isForStatement(node) || ts.isForOfStatement(node) || ts.isForInStatement(node);
+
+const isBlock = (ts, node) => ts.isSourceFile(node) || ts.isBlock(node) || ts.isModuleBlock(node);
+
+/**
+ * The binding of `name` the scope `node` opens, if it makes one there: the declaration when it is a
+ * plain variable or parameter, `ELSE` for one only its shape is known of (a destructured name, a
+ * catch binding, a function or class), which is never a `Tracking` this can tell.
+ */
+function declaredIn(ts, node, name) {
+  if (ts.isFunctionLike(node)) return inFunction(ts, node, name);
+  if (isLoop(ts, node)) return inLoop(ts, node, name);
+  if (ts.isCatchClause(node)) return inCatch(ts, node, name);
+  return isBlock(ts, node) ? inStatements(ts, node.statements, name) : undefined;
+}
+
+/** Whether the nearest binding of the name `identifier` reads holds a `Tracking`. */
 function identifierHolds(ts, identifier, types) {
   for (let at = identifier.parent; at; at = at.parent) {
     const declaration = declaredIn(ts, at, identifier.text);
+    if (declaration === ELSE) return false;
     if (declaration) return holds(ts, declaration, types);
   }
   return false;
