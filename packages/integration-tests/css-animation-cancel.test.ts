@@ -16,7 +16,9 @@ const { compileCss } = require('@ng-native/metro/css/compile.cjs');
 
 const CSS =
   '@keyframes a { to { opacity: 0 } } @keyframes b { to { opacity: 0.5 } } ' +
-  '.a { animation: a 10s } .b { animation: b 10s } .short { animation: a 10ms }';
+  '.a { animation: a 10s } .b { animation: b 10s } .short { animation: a 10ms } ' +
+  '.scroll-b { animation: b linear both; animation-timeline: scroll() } ' +
+  '.scroll-a { animation: a linear both; animation-timeline: scroll() }';
 
 function scene(classes: string) {
   let now = 1000;
@@ -86,5 +88,12 @@ describe('animationcancel', () => {
     engine.setClasses(view, '');
     engine.commit();
     assert.deepEqual(heard, ['start a', 'end a']);
+  });
+
+  it('fires for a clock animation replaced by a differently named scroll-driven one', () => {
+    const { engine, view, heard } = scene('a');
+    engine.setClasses(view, 'scroll-b');
+    engine.commit();
+    assert.deepEqual(heard, ['start a', 'cancel a']);
   });
 });

@@ -2781,6 +2781,8 @@ export class Engine implements HostEngine {
     }
     this.stopScrolled(node);
     if (node.playing) {
+      // Played by the scroll instead, which is the same animation where only the timeline moved.
+      if (node.playing.spec.name !== spec.name) this.cancelPlaying(node);
       node.playing = undefined;
       this.playing.delete(node);
     }
