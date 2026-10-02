@@ -1673,13 +1673,9 @@ const TRANSLATORS = new Map([
       if (value.style !== undefined) {
         out.textDecorationStyle = honoured('text-decoration-style', keyword(value.style, property));
       }
-      // currentColor, written or left out, is native's own default for a decoration: the text's
-      // colour. `null` clears the prop back to it, so the shorthand resets an earlier colour just
-      // as it does on the web.
-      if (value.color !== undefined) {
-        out.textDecorationColor =
-          value.color?.type === 'currentcolor' ? null : color(value.color, property);
-      }
+      // currentColor, written or left out, is the colour of the text where the rule applies, as
+      // the longhand reads it, so the shorthand resets an earlier colour just as it does on the web.
+      if (value.color !== undefined) out.textDecorationColor = paintColour(value.color, property);
     },
   ],
   [

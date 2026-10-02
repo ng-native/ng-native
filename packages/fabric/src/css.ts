@@ -1060,6 +1060,35 @@ function inheritFrom(
 }
 
 /**
+ * A text decoration's colour, which travels with its line rather than inheriting on its own. A
+ * decoration is drawn under the text inside the element that declares it, in that element's
+ * decoration colour or its text colour, and a text's own decoration colour only colours a line it
+ * declares itself. `style` is the node's, and gets the colour its line is drawn in; what its
+ * children inherit is returned.
+ */
+function decorate(
+  style: Record<string, unknown>,
+  inherited: Record<string, unknown>,
+  own: Record<string, unknown>,
+): Record<string, unknown> {
+  const declared = own['textDecorationLine'] !== undefined;
+  // With no line declared here or above, nothing is drawn and the colour is left as computed.
+  if (!declared && !drawsLine(inherited['textDecorationLine'])) return inherited;
+  const colour = declared
+    ? (own['textDecorationColor'] ?? style['color'])
+    : inherited['textDecorationColor'];
+  if (colour === undefined) delete style['textDecorationColor'];
+  else style['textDecorationColor'] = colour;
+  if (!declared || inherited['textDecorationColor'] === colour) return inherited;
+  const { textDecorationColor: _parent, ...rest } = inherited;
+  return colour === undefined ? rest : { ...rest, textDecorationColor: colour };
+}
+
+function drawsLine(line: unknown): boolean {
+  return line !== undefined && line !== 'none';
+}
+
+/**
  * The runtime half of CSS for one engine: the global sheet, the conditions media queries are
  * evaluated against, and the memo that makes resolution cost nodes x rules rather than
  * nodes x rules x depth.
@@ -1421,11 +1450,8 @@ export class StyleResolver {
       this.applyDeferred(result.deferred, own, tokens, parentInherited, result.important);
     }
     if (own['borderStyle'] === 'none') drawNoBorder(own);
-    return {
-      style: { ...parentInherited, ...own },
-      inherited: inheritFrom(parentInherited, own),
-      tokens,
-    };
+    const style = { ...parentInherited, ...own };
+    return { style, inherited: decorate(style, inheritFrom(parentInherited, own), own), tokens };
   }
 
   /** The rules that apply to a node, weakest first. */

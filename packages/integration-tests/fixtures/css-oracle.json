@@ -1572,6 +1572,22 @@
     }
   },
   {
+    "name": "text-decoration: underline currentColor is the colour of the text",
+    "expected": {
+      "color": "rgb(6, 6, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "text-decoration-color": "rgb(6, 6, 0)"
+    }
+  },
+  {
+    "name": "text-decoration: underline currentColor is the colour the text inherits",
+    "expected": {
+      "color": "rgb(7, 6, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "text-decoration-color": "rgb(7, 6, 0)"
+    }
+  },
+  {
     "name": "a text decoration of a currentColor token set on the element is the colour of the text",
     "expected": {
       "color": "rgb(8, 5, 0)",

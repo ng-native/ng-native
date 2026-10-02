@@ -931,6 +931,20 @@ export const CASES: OracleCase[] = [
     extra: ['text-decoration-color'],
   },
   {
+    name: 'text-decoration: underline currentColor is the colour of the text',
+    css:
+      '.c { text-decoration-color: rgb(9, 9, 9) } ' +
+      '#probe { color: rgb(6, 6, 0); text-decoration: underline currentColor }',
+    tree: probe({ classes: ['c'] }),
+    extra: ['text-decoration-color'],
+  },
+  {
+    name: 'text-decoration: underline currentColor is the colour the text inherits',
+    css: '.outer { color: rgb(7, 6, 0) } #probe { text-decoration: underline currentColor }',
+    tree: { name: 'view', classes: ['outer'], children: [probe()] },
+    extra: ['text-decoration-color'],
+  },
+  {
     name: 'a text decoration of a currentColor token set on the element is the colour of the text',
     css: '#probe { color: rgb(8, 5, 0); --c: currentColor; text-decoration-color: var(--c) }',
     tree: probe(),

@@ -140,13 +140,13 @@ describe('the parts of a shorthand the author left out', () => {
     assert.deepEqual(declarationsOf('outline: 0'), { outlineWidth: 0 });
   });
 
-  it('text-decoration without a colour, which native already draws in the text colour', () => {
-    // currentColor is native's own default for a decoration, so it is cleared to that default
-    // rather than refused: clearing it is what makes a later shorthand reset an earlier colour.
+  it('text-decoration without a colour, whose colour is the text colour where it applies', () => {
+    // The colour left out is currentColor, worked out on device as the longhand's is, so it is no
+    // written declaration. The Chrome oracle's `text-decoration: underline currentColor` rows pin
+    // that it resets an earlier colour.
     assert.deepEqual(declarationsOf('text-decoration: none'), {
       textDecorationLine: 'none',
       textDecorationStyle: 'solid',
-      textDecorationColor: null,
     });
     assert.deepEqual(
       declarationsOf('text-decoration: underline')['textDecorationLine'],
