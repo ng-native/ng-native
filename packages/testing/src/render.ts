@@ -130,6 +130,9 @@ function queriesFor(roots: () => readonly FakeFabricNode[], owner: () => Mounted
  * class form is AOT like the app. An AOT compile of the string would mean evaluating generated
  * code that imports the caller's own classes by name; do that if JIT ever disagrees with AOT.
  */
+/** Wrappers built so far: each takes the next as a host attribute, so no two share an ID. */
+let wrappers = 0;
+
 async function hostFor<T>(template: string, options: RenderOptions<T>): Promise<Type<unknown>> {
   await import('@angular/compiler' as string);
   const properties = options.componentProperties ?? {};
@@ -140,6 +143,9 @@ async function hostFor<T>(template: string, options: RenderOptions<T>): Promise<
   }
   return Component({
     selector: 'ng-native-wrapper',
+    // Angular derives a component's ID from its metadata, not its template's text, so wrappers
+    // alike in shape collided (NG0912) without it.
+    host: { 'data-wrapper': String(++wrappers) },
     template,
     imports: (options.imports ?? []) as Type<unknown>[],
   })(WrapperComponent);
