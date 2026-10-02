@@ -125,6 +125,8 @@ const SPEC_FIELDS = [
 /** A node's scroll-driven animation: what it plays, what drives it, and the frame it commits. */
 interface ScrollAnimation {
   readonly spec: AnimationSpec;
+  /** The `@keyframes` it was laid out from, so a hot swap that edits them lays it out again. */
+  readonly frames: readonly Keyframe[];
   readonly tracks: ReadonlyMap<string, readonly { offset: number; value: unknown }[]>;
   readonly resting: Record<string, unknown>;
   readonly first: Record<string, unknown>;
@@ -1578,12 +1580,16 @@ export class Engine implements HostEngine {
   /** The nodes taken out of a child list since the last commit. See `releaseDetached`. */
   private readonly removedSinceCommit = new Set<EngineNode>();
   /**
-   * `@keyframes` by name, across every sheet seen so far. One registry rather than one per sheet,
+   * `@keyframes` by name, across every sheet registered. One registry rather than one per sheet,
    * because that is the scope CSS gives them: a name defined in a global stylesheet is usable
    * from a component's. The cost is that two components defining the same name collide, last one
    * in wins, exactly as two stylesheets in a document would.
    */
   private readonly keyframes = new Map<string, readonly Keyframe[]>();
+  /** Every sheet registered, in the order a document would hold them. See `sheetReplaced`. */
+  private readonly sheetOrder: StyleSheet[] = [];
+  /** The `@keyframes` each playing animation was started from. See `startPlaying`. */
+  private readonly playedFrames = new WeakMap<RunningAnimation, readonly Keyframe[]>();
   /** Element names already reported as unclaimed, so a list of a thousand rows reports once. */
   private readonly reported = new Set<string>();
   private readonly processColor: (value: string | number) => unknown;
@@ -1686,7 +1692,8 @@ export class Engine implements HostEngine {
    */
   addGlobalSheet(sheet: StyleSheet, replacing?: StyleSheet): boolean {
     if (!this.styles.addGlobalSheet(sheet, replacing)) return false;
-    this.registerSheet(sheet);
+    if (replacing) this.sheetReplaced(replacing, sheet);
+    else this.registerSheet(sheet);
     if (sheet.structural) this.structuralSheets = true;
     this.markPath(this.root);
     return true;
@@ -1698,6 +1705,7 @@ export class Engine implements HostEngine {
    */
   removeGlobalSheet(sheet: StyleSheet): boolean {
     if (!this.styles.removeGlobalSheet(sheet)) return false;
+    this.sheetReplaced(sheet, null);
     this.markPath(this.root);
     return true;
   }
@@ -2460,10 +2468,55 @@ export class Engine implements HostEngine {
   private registerSheet(sheet: StyleSheet | null | undefined): void {
     if (!sheet || this.knownSheets.has(sheet)) return;
     this.knownSheets.add(sheet);
+    this.sheetOrder.push(sheet);
     for (const name of Object.keys(sheet.keyframes ?? {})) {
       this.keyframes.set(name, sheet.keyframes![name]!);
     }
     if (sheet.fonts && this.fontFaces.add(sheet.fonts)) this.facesAdded = true;
+  }
+
+  /**
+   * A hot swap edited a component's sheet into `next`, or took it away with null: `sheet`'s
+   * `@keyframes` go, and `next`'s take its place among the others, as an edited stylesheet keeps
+   * its place in a document. A name another sheet also defines falls back to that one. Every
+   * animation re-resolves the name it plays, so one whose keyframes went stops, as in a browser.
+   * A `sheet` already gone, such as a global sheet removed, leaves `next` registered last.
+   */
+  sheetReplaced(sheet: StyleSheet, next: StyleSheet | null): void {
+    if (sheet === next && this.knownSheets.has(sheet)) return;
+    const at = this.sheetOrder.indexOf(sheet);
+    if (at === -1) {
+      this.registerSheet(next);
+      return;
+    }
+    this.knownSheets.delete(sheet);
+    if (next && !this.knownSheets.has(next)) {
+      this.knownSheets.add(next);
+      this.sheetOrder[at] = next;
+      if (next.fonts && this.fontFaces.add(next.fonts)) this.facesAdded = true;
+    } else {
+      this.sheetOrder.splice(at, 1);
+    }
+    if (sheet.keyframes || next?.keyframes) this.reindexKeyframes();
+  }
+
+  /** Every sheet's `@keyframes` again, in order, and every animation told to look them up. */
+  private reindexKeyframes(): void {
+    this.keyframes.clear();
+    for (const sheet of this.sheetOrder) {
+      for (const name of Object.keys(sheet.keyframes ?? {})) {
+        this.keyframes.set(name, sheet.keyframes![name]!);
+      }
+    }
+    this.markAnimated(this.root);
+  }
+
+  /** Mark every node under `node` with an animation, so it looks its keyframes up again. */
+  private markAnimated(node: EngineNode): void {
+    for (const child of node.children) {
+      if (child.playing || child.scrolled) this.markProps(child, false);
+      this.markAnimated(child);
+    }
   }
 
   /** Every `@font-face` seen, global as on the web: a face declared in one sheet serves all. */
@@ -2511,6 +2564,10 @@ export class Engine implements HostEngine {
 
     const frames = this.keyframes.get(spec.name);
     if (!frames) {
+      // Keyframes a hot swap deleted, from under an animation that was playing them.
+      node.playing = undefined;
+      this.playing.delete(node);
+      this.stopScrolled(node);
       if (this.dev) this.reportMissingKeyframes(spec.name);
       return props;
     }
@@ -2543,13 +2600,33 @@ export class Engine implements HostEngine {
       // resting style: `animation-fill-mode: backwards` behaviour, always. It is what an entrance
       // wants, and the alternative is the flash again.
       started.values = sample(started, this.now()).values;
+      this.playedFrames.set(started, frames);
       node.playing = started;
       if (spec.paused) started.pausedAt = this.now();
       else this.playing.add(node);
       this.emitTransition(node, 'topAnimationstart', spec.name);
       return;
     }
-    this.playOrPause(node, current, spec);
+    if (this.playedFrames.get(current) !== frames) this.reframe(node, current, frames, props);
+    this.playOrPause(node, node.playing!, spec);
+  }
+
+  /**
+   * The name an animation plays now has other frames: a hot swap edited them, or took away the
+   * sheet whose copy won. It carries on along the new ones, on its own clock, as a browser does.
+   */
+  private reframe(
+    node: EngineNode,
+    current: RunningAnimation,
+    frames: readonly Keyframe[],
+    props: Record<string, unknown>,
+  ): void {
+    const reframed: RunningAnimation = { ...current, tracks: tracksOf(frames, props) };
+    const { values, finished } = sample(reframed, current.pausedAt ?? this.now());
+    const holds = current.spec.fill === 'forwards' || current.spec.fill === 'both';
+    reframed.values = finished && !holds ? {} : values;
+    this.playedFrames.set(reframed, frames);
+    node.playing = reframed;
   }
 
   /**
@@ -2590,8 +2667,10 @@ export class Engine implements HostEngine {
     props: Record<string, unknown>,
   ): Record<string, unknown> {
     const current = node.scrolled;
-    if (current && sameAnimation(current.spec, spec)) return Object.assign(props, current.first);
-    if (current) this.stopScrolled(node);
+    if (current?.frames === frames && sameAnimation(current.spec, spec)) {
+      return Object.assign(props, current.first);
+    }
+    this.stopScrolled(node);
     if (node.playing) {
       node.playing = undefined;
       this.playing.delete(node);
@@ -2608,7 +2687,7 @@ export class Engine implements HostEngine {
     // As Animated does: Fabric flattens a view that only lays out, and then there is no native
     // view for the animation to move. Committed with the first frame, so it stays put.
     if (drive) first['collapsable'] = false;
-    node.scrolled = { spec, tracks, resting, first, source, drive };
+    node.scrolled = { spec, frames, tracks, resting, first, source, drive };
     return Object.assign(props, first);
   }
 

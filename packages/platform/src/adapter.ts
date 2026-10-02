@@ -279,6 +279,8 @@ export class NativeRendererFactory implements RendererFactory2 {
   private readonly byComponent = new Map<string, NativeRenderer>();
   /** The global sheet each `ViewEncapsulation.None` component registered, which a hot swap replaces. */
   private readonly globalById = new Map<string, StyleSheet>();
+  /** The scoped sheet each emulated or Shadow DOM component has, which a hot swap replaces. */
+  private readonly scopedById = new Map<string, StyleSheet>();
   readonly engine: Engine;
 
   constructor(engine: Engine) {
@@ -328,16 +330,32 @@ export class NativeRendererFactory implements RendererFactory2 {
   private scopedSheetOf(type: ComponentDefLike | null): StyleSheet | null {
     const sheet = styleSheetOf(type?.type);
     const id = type?.id ?? '';
+    this.swapScoped(id, type?.encapsulation === NONE ? null : sheet);
     const registered = this.globalById.get(id);
     if (!sheet || type?.encapsulation !== NONE) {
-      // A hot swap that left the component no rules, or made it scoped: its old sheet goes.
-      if (registered) this.engine.removeGlobalSheet(registered);
+      // A hot swap that left the component no rules, or made it scoped: its old sheet goes, and a
+      // scoped one takes its `@keyframes` over now, before anything plays them.
+      if (registered) {
+        this.engine.removeGlobalSheet(registered);
+        if (sheet) this.engine.sheetReplaced(registered, sheet);
+      }
       this.globalById.delete(id);
       return sheet;
     }
     this.engine.addGlobalSheet(sheet, registered);
     this.globalById.set(id, sheet);
     return null;
+  }
+
+  /**
+   * Tell the engine when a hot swap gave a component another scoped sheet, or none, so the
+   * `@keyframes` the old one defined go with it. Nothing changes without a hot swap.
+   */
+  private swapScoped(id: string, sheet: StyleSheet | null): void {
+    const previous = this.scopedById.get(id);
+    if (previous && previous !== sheet) this.engine.sheetReplaced(previous, sheet);
+    if (sheet) this.scopedById.set(id, sheet);
+    else this.scopedById.delete(id);
   }
 
   /**
