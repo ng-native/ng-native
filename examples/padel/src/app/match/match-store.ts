@@ -1,5 +1,6 @@
 import { Service, computed, effect, inject, signal, untracked } from '@angular/core';
 import { Watch, type WatchPayload } from '@ng-native/expo/watch';
+import type { Scoreline } from '../live/score-activity.tsx';
 import { NEW_MATCH, addPoint, pointLabel, setsWon, type Score, type Team } from './match.ts';
 
 export type Source = 'phone' | 'watch';
@@ -65,13 +66,16 @@ export class MatchStore {
   }
 }
 
-export function forWatch(score: Score): WatchPayload {
+export function scoreline(score: Score): Scoreline {
   return {
     us: pointLabel(score, 0),
     them: pointLabel(score, 1),
     games: `${score.games[0]}-${score.games[1]}`,
     sets: `${setsWon(score, 0)}-${setsWon(score, 1)}`,
-    tiebreak: score.tiebreak,
     winner: score.winner === null ? '' : TEAMS[score.winner],
   };
+}
+
+export function forWatch(score: Score): WatchPayload {
+  return { ...scoreline(score), tiebreak: score.tiebreak };
 }

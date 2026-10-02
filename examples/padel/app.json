@@ -11,6 +11,6 @@
     "android": {
       "package": "dev.angularnative.padel"
     },
-    "plugins": ["@ng-native/metro", "@bacons/apple-targets"]
+    "plugins": ["@ng-native/metro", "@bacons/apple-targets", ["expo-widgets", {}]]
   }
 }

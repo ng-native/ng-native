@@ -1,8 +1,37 @@
 import { Watch, type NativeWatch, type WatchPayload } from '@ng-native/expo/watch';
 import { render, screen, userEvent } from '@ng-native/testing';
-import { expect, test } from 'vitest';
+import { beforeEach, expect, test, vi } from 'vitest';
 import { App } from './app.ts';
+import type { Scoreline } from './live/score-activity.tsx';
 import { MatchStore } from './match/match-store.ts';
+
+const lockScreen = vi.hoisted(() => {
+  const shown: unknown[] = [];
+  let running = false;
+  const activity = {
+    getId: () => 'activity-1',
+    update: async (props: unknown) => void shown.push(props),
+    end: async () => void (running = false),
+    getPushToken: async () => null,
+    addPushTokenListener: () => ({ remove: () => {} }),
+  };
+  return {
+    shown,
+    reset: () => ((shown.length = 0), (running = false)),
+    factory: {
+      start: (props: unknown) => {
+        running = true;
+        shown.push(props);
+        return activity;
+      },
+      getInstances: () => (running ? [activity] : []),
+    },
+  };
+});
+
+vi.mock('./live/score-activity.tsx', () => ({ scoreActivity: lockScreen.factory }));
+
+beforeEach(() => lockScreen.reset());
 
 function fakeWatch() {
   const listeners = new Map<string, (...args: unknown[]) => void>();
@@ -121,4 +150,20 @@ test('undoes the last point', async () => {
   await userEvent.press(screen.getByRole('button', { name: 'Undo' }));
 
   expect(await screen.findByText('Tap a point here or on the watch to start.')).toBeTruthy();
+});
+
+test('puts the score on the lock screen and keeps it in step', async () => {
+  await start();
+
+  await userEvent.press(screen.getByRole('button', { name: 'Show on lock screen' }));
+  await userEvent.press(screen.getByRole('button', { name: 'Point Us' }));
+
+  expect(await screen.findByRole('button', { name: 'On the lock screen' })).toBeTruthy();
+  expect(lockScreen.shown.at(-1)).toMatchObject({
+    us: '15',
+    them: '0',
+  } satisfies Partial<Scoreline>);
+
+  await userEvent.press(screen.getByRole('button', { name: 'On the lock screen' }));
+  expect(await screen.findByRole('button', { name: 'Show on lock screen' })).toBeTruthy();
 });

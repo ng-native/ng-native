@@ -8,8 +8,10 @@ import {
   Text,
   View,
 } from '@ng-native/components';
+import { liveActivity } from '@ng-native/expo/live-activity';
 import { Watch } from '@ng-native/expo/watch';
-import { MatchStore, TEAMS } from './match/match-store.ts';
+import { scoreActivity } from './live/score-activity.tsx';
+import { MatchStore, TEAMS, scoreline } from './match/match-store.ts';
 import { pointLabel, type Score, type Team } from './match/match.ts';
 
 @Component({
@@ -77,6 +79,15 @@ import { pointLabel, type Score, type Team } from './match/match.ts';
               ></switch>
             </view>
           </view>
+
+          <pressable
+            accessibilityRole="button"
+            class="lock-screen"
+            [class.live]="lockScreen.active()"
+            (press)="toggleLockScreen()"
+          >
+            <text class="lock-screen-text">{{ lockScreenLabel() }}</text>
+          </pressable>
 
           <text class="heading">Last points</text>
           @for (entry of log(); track entry.id) {
@@ -231,6 +242,21 @@ import { pointLabel, type Score, type Team } from './match/match.ts';
     .tool:disabled {
       opacity: 0.4;
     }
+    .lock-screen {
+      height: 48px;
+      align-items: center;
+      justify-content: center;
+      border-radius: 14px;
+      background-color: rgba(255, 255, 255, 0.12);
+    }
+    .lock-screen.live {
+      background-color: rgba(215, 242, 60, 0.3);
+    }
+    .lock-screen-text {
+      color: #ffffff;
+      font-size: 15px;
+      font-weight: 700;
+    }
     .tool-text {
       color: #ffffff;
       font-size: 15px;
@@ -285,6 +311,10 @@ export class App {
   protected readonly match = inject(MatchStore);
   protected readonly teams = TEAMS;
   protected readonly golden = this.match.goldenPoint;
+  protected readonly lockScreen = liveActivity(
+    scoreActivity,
+    computed(() => scoreline(this.match.score())),
+  );
 
   protected readonly over = computed(() => this.match.score().winner !== null);
 
@@ -334,6 +364,15 @@ export class App {
 
   protected scorePoint(index: number): void {
     this.match.point(index as Team);
+  }
+
+  protected readonly lockScreenLabel = computed(() =>
+    this.lockScreen.active() ? 'On the lock screen' : 'Show on lock screen',
+  );
+
+  protected toggleLockScreen(): void {
+    if (this.lockScreen.active()) void this.lockScreen.end();
+    else this.lockScreen.start();
   }
 }
 
