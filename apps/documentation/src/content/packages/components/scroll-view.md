@@ -61,6 +61,37 @@ translate is written as a prop only once scrolling pauses.
 `scrollTo({ x, y, animated })`, `scrollToEnd({ animated })`, `flashScrollIndicators()` and, on iOS,
 `zoomToRect(rect, animated)` are available as methods through a template reference.
 
+## The scroll event
+
+`(scroll)`, `(scrollBeginDrag)`, `(scrollEndDrag)`, `(momentumScrollBegin)` and
+`(momentumScrollEnd)` deliver a `ScrollEvent`, which has the offset, sizes and insets under
+`nativeEvent`, as a React Native scroll handler gets them:
+
+```ts
+import { Component, signal } from '@angular/core';
+import { ScrollView, Text, type ScrollEvent } from '@ng-native/components';
+
+@Component({
+  selector: 'app-offset',
+  imports: [ScrollView, Text],
+  template: `
+    <scroll-view (scroll)="track($event)">
+      <text>Scrolled {{ offset() }}</text>
+    </scroll-view>
+  `,
+})
+export class Offset {
+  protected readonly offset = signal(0);
+
+  protected track(event: ScrollEvent): void {
+    this.offset.set(event.nativeEvent.contentOffset.y);
+  }
+}
+```
+
+A `workletScroll()` worklet is different: it runs on the UI thread and takes the native event
+itself, so it reads `event.contentOffset` (see [Animation](/packages/components/animation)).
+
 ## A scroll handler and change detection
 
 A `(scroll)` handler runs change detection for its component on every scroll event, and Angular
