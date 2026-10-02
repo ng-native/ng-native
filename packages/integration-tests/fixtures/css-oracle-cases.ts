@@ -163,6 +163,9 @@ const DERIVED_SPACE_CASES = (
     ['after a calc() of tokens', 'calc(var(--two) * 2)\u00a0', true],
     ['before a token in a calc()', 'calc(\u00a0var(--two) * 2)', true],
     ['between a token and an operator in a calc()', 'calc(var(--two)\u00a0* 2)', true],
+    // Bound only: lightningcss refuses a stylesheet with a no-break space in a var()'s name.
+    ['before the name in a var()', 'var(\u00a0--two)', null],
+    ['after the name in a var()', 'var(--two\u00a0)', null],
     // The compiler drops such a fallback without a warning, and the token is unset as in Chrome.
     ['before a fallback in a calc()', 'calc(var(--missing,\u00a02px) * 2)', false],
     ['after a fallback in a calc()', 'calc(var(--missing, 2px\u00a0) * 2)', false],
@@ -170,14 +173,15 @@ const DERIVED_SPACE_CASES = (
 ).flatMap(([where, value, warns]): OracleCase[] => {
   const tree = probe({ name: 'view', classes: ['c'] });
   const name = `no-break space ${where}`;
+  const sheet: OracleCase = {
+    name: `${name}, in the stylesheet`,
+    css: `#probe { --two: 2px; padding-top: 9px } #probe.c { --t: ${value}; padding-top: var(--t) }`,
+    ...(warns ? { warns } : {}),
+    tree,
+    extra: ['padding-top'],
+  };
   return [
-    {
-      name: `${name}, in the stylesheet`,
-      css: `#probe { --two: 2px; padding-top: 9px } #probe.c { --t: ${value}; padding-top: var(--t) }`,
-      ...(warns ? { warns } : {}),
-      tree,
-      extra: ['padding-top'],
-    },
+    ...(warns === null ? [] : [sheet]),
     {
       name: `${name}, bound on the element`,
       css: '#probe { --two: 2px; padding-top: 9px } #probe.c { padding-top: var(--t) }',

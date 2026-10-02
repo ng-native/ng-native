@@ -1240,6 +1240,22 @@
     }
   },
   {
+    "name": "no-break space before the name in a var(), bound on the element",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "padding-top": "0px"
+    }
+  },
+  {
+    "name": "no-break space after the name in a var(), bound on the element",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "padding-top": "0px"
+    }
+  },
+  {
     "name": "no-break space before a fallback in a calc(), in the stylesheet",
     "expected": {
       "color": "rgb(0, 0, 0)",

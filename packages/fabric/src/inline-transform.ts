@@ -25,6 +25,14 @@ const ARGUMENT = /^[+-]?(?:\d+\.?\d*|\.\d+)(?:e[+-]?\d+)?(?:%|[a-z]+)?$/i;
 const SPACE = /^[ \t\n\r\f]*$/;
 const PADDED = /^[ \t\n\r\f]+|[ \t\n\r\f]+$/g;
 const FUNCTIONS = /([a-zA-Z0-9]+)\(([^)]*)\)/g;
+/** The transform functions native has, by their name in any case, as CSS reads one. */
+const NAMES = new Map(
+  [
+    ...['matrix', 'matrix3d', 'perspective', 'rotate', 'rotateX', 'rotateY', 'rotateZ'],
+    ...['scale', 'scaleX', 'scaleY', 'skew', 'skewX', 'skewY'],
+    ...['translate', 'translateX', 'translateY'],
+  ].map((name) => [name.toLowerCase(), name]),
+);
 
 function argument(raw: string): number | string {
   return PX.test(raw) ? parseFloat(raw) : raw;
@@ -33,14 +41,14 @@ function argument(raw: string): number | string {
 /** Each function and its arguments, or undefined where anything else is in the value. */
 function readCalls(value: string): { name: string; raw: string[] }[] | undefined {
   const calls = [...value.matchAll(FUNCTIONS)].map(([, name, body]) => ({
-    name: name!,
+    name: NAMES.get(name!.toLowerCase())!,
     raw: body!.split(/[ \t\n\r\f,]+/).filter(Boolean),
   }));
-  // Functions, CSS whitespace between them and nothing else, each with arguments CSS can read.
+  // Functions native has, CSS whitespace between them and nothing else, and arguments CSS reads.
   const readable =
     calls.length &&
     SPACE.test(value.replace(FUNCTIONS, '')) &&
-    calls.every(({ raw }) => raw.length && raw.every((arg) => ARGUMENT.test(arg)));
+    calls.every(({ name, raw }) => name && raw.length && raw.every((arg) => ARGUMENT.test(arg)));
   return readable ? calls : undefined;
 }
 

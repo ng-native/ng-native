@@ -33,6 +33,9 @@ describe('a transform bound on an element', () => {
       'none',
       'upper-none',
       'comma',
+      'upper',
+      'mixed',
+      'unknown',
     ];
     const props = Object.fromEntries(ids.map((id) => [id, screen.getByTestId(id).props]));
     transform = (id) => props[id]!['transform'];
@@ -45,13 +48,18 @@ describe('a transform bound on an element', () => {
     assert.deepEqual(transform('comma'), [{ translateX: 4 }, { translateY: 8 }]);
   });
 
+  it('reads a function name in any case', () => {
+    assert.deepEqual(transform('upper'), [{ rotate: '90deg' }]);
+    assert.deepEqual(transform('mixed'), [{ translateX: 4 }]);
+  });
+
   it('applies none over the rule, in any case', () => {
     const none = (id: string) => (transform(id) as unknown[] | undefined)?.length ?? 0;
     assert.equal(none('none'), 0);
     assert.equal(none('upper-none'), 0);
   });
 
-  for (const id of ['nbsp-argument', 'nbsp-none', 'junk-after', 'nbsp-between']) {
+  for (const id of ['nbsp-argument', 'nbsp-none', 'junk-after', 'nbsp-between', 'unknown']) {
     it(`leaves the rule's transform where it cannot read ${id}`, () => {
       assert.deepEqual(transform(id), transform('class-only'));
     });

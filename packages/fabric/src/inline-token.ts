@@ -26,12 +26,12 @@ const WORD = /^-?[a-z][\w-]*$/i;
 const CHANNEL = /^(-?(?:\d+\.?\d*|\.\d+))(%|deg|grad|rad|turn)?$/;
 const HUE_UNITS: Record<string, number> = { deg: 1, grad: 0.9, rad: 180 / Math.PI, turn: 360 };
 /** `var(--name)` or `var(--name, <fallback>)`, the whole value. */
-const VAR = /^var\(\s*(--[\w-]+)\s*(?:,([\s\S]*))?\)$/i;
+const VAR = /^var\([ \t\n\r\f]*(--[\w-]+)[ \t\n\r\f]*(?:,([\s\S]*))?\)$/i;
 /**
  * A value worked out where it is set: one with a `var()` in it, a `color-mix()`, or a relative
  * colour, of tokens or of colours written out.
  */
-const DERIVED = /var\(|^color-mix\(|^[a-z]+\(\s*from\s/i;
+const DERIVED = /var\(|^color-mix\(|^[a-z]+\([ \t\n\r\f]*from[ \t\n\r\f]/i;
 const WEIGHTS: Record<string, string> = { normal: '400', bold: '700' };
 /**
  * CSS whitespace at either end: a space, a tab, a newline, a carriage return or a form feed. A

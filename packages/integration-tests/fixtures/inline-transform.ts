@@ -29,5 +29,8 @@ export class InlineTransform {
     { id: 'none', turned: true, value: 'none' },
     { id: 'upper-none', turned: true, value: 'NONE' },
     { id: 'comma', turned: true, value: 'translate(4px, 8px)' },
+    { id: 'upper', turned: true, value: 'ROTATE(90deg)' },
+    { id: 'mixed', turned: true, value: 'TranslateX(4px)' },
+    { id: 'unknown', turned: true, value: 'spin(90deg)' },
   ];
 }
