@@ -157,6 +157,14 @@ describe('a DOM component in the app', () => {
       assert.deepEqual(fixture.sent, []);
     });
 
+    it("is ignored from a server whose origin only starts with the dev server's", async () => {
+      // 80811 is another port, as `https://abc.exp.direct.evil.com` is another tunnel's host.
+      await post({ type: 'ready', outputs: ['sent'] }, 'http://192.168.1.5:80811/note.ts');
+      await post({ type: 'output', name: 'sent', value: 'forged' }, 'http://192.168.1.5:80811/');
+      assert.equal(injected.length, 0);
+      assert.deepEqual(fixture.sent, []);
+    });
+
     it('is heard from anywhere on the dev server that serves its page', async () => {
       await post({ type: 'ready', outputs: ['sent'] }, `${page}#section`);
       await post({ type: 'output', name: 'sent', value: 'Hi' }, 'http://192.168.1.5:8081/x');

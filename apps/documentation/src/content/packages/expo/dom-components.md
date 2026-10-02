@@ -172,6 +172,10 @@ page, that page's messages are ignored, so it cannot fire an output or ask to be
 inputs. A message that is not JSON is dropped, and an output name is only looked up among the
 handlers you passed.
 
+In development the page is told apart by where it is served from, so any page from the same dev
+server is heard. In either case a message names the page the web view is showing, not the frame
+that sent it, so an `<iframe>` inside the component's own page is heard as the page.
+
 The inputs the page reads as it loads are the web view's to give, though, and it gives them to any
 page it shows, so keep secrets out of them.
 
