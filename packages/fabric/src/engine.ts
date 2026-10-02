@@ -2517,11 +2517,21 @@ export class Engine implements HostEngine {
     if (next && !this.knownSheets.has(next)) {
       this.knownSheets.add(next);
       this.sheetOrder[at] = next;
-      if (next.fonts && this.fontFaces.add(next.fonts)) this.facesAdded = true;
     } else {
       this.sheetOrder.splice(at, 1);
     }
     if (sheet.keyframes || next?.keyframes) this.reindexKeyframes();
+    if (sheet.fonts || next?.fonts) this.reindexFonts();
+  }
+
+  /**
+   * Every sheet's `@font-face` rules again, in order, and every text that names a family matched
+   * again: a face whose rule went is no longer matched, though the platform keeps it registered.
+   */
+  private reindexFonts(): void {
+    this.fontFaces.clear();
+    for (const sheet of this.sheetOrder) if (sheet.fonts) this.fontFaces.add(sheet.fonts);
+    this.markFontText(this.root);
   }
 
   /** Every sheet's `@keyframes` again, in order, and every animation told to look them up. */
@@ -2554,15 +2564,17 @@ export class Engine implements HostEngine {
    * Once per sheet that declares faces, so walking the tree costs nothing that matters.
    */
   private rematchFonts(): void {
-    const visit = (node: EngineNode): void => {
-      for (const child of node.children) {
-        if (child.kind !== 'element') continue;
-        if (typeof child.committed?.props['fontFamily'] === 'string') this.markProps(child, false);
-        visit(child);
-      }
-    };
-    visit(this.root);
+    this.markFontText(this.root);
     this.commit();
+  }
+
+  /** Mark every element under `node` committed with a family, so it is matched again. */
+  private markFontText(node: EngineNode): void {
+    for (const child of node.children) {
+      if (child.kind !== 'element') continue;
+      if (typeof child.committed?.props['fontFamily'] === 'string') this.markProps(child, false);
+      this.markFontText(child);
+    }
   }
 
   private readonly knownSheets = new WeakSet<StyleSheet>();

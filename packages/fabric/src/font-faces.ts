@@ -83,6 +83,11 @@ const familyKey = (family: string) => family.toLowerCase();
 export class FontFaces {
   private readonly byFamily = new Map<string, FontFace[]>();
 
+  /** Forget every face, before they are taken in again from the sheets still registered. */
+  clear(): void {
+    this.byFamily.clear();
+  }
+
   /** Take faces in; whether any was new, which changes what text already matched may match. */
   add(faces: readonly FontFace[]): boolean {
     let added = false;
