@@ -258,4 +258,86 @@ describe('installing the triggers where React Native already has an Element', ()
       Object.assign(scope, saved);
     }
   });
+
+  /**
+   * Installs a fresh copy of the triggers over `globals`, runs `body`, and puts the globals back.
+   * A copy of its own each time, since installing runs once per module.
+   */
+  async function installedOver(copy: string, globals: Record<string, unknown>, body: () => void) {
+    const scope = globalThis as Record<string, unknown>;
+    const saved = Object.fromEntries(Object.keys(globals).map((name) => [name, scope[name]]));
+    Object.assign(scope, globals);
+    try {
+      const fresh = `../fabric/src/defer-triggers.ts?${copy}`;
+      const { installDeferTriggers } = await import(fresh);
+      installDeferTriggers();
+      body();
+    } finally {
+      Object.assign(scope, saved);
+    }
+  }
+
+  it("keeps an instance check React Native's Element defines for itself", async () => {
+    const marked = { reactNative: true };
+    class Element {
+      static [Symbol.hasInstance](value: unknown) {
+        return value === marked;
+      }
+    }
+    class TextElement extends Element {}
+    await installedOver('own-instance-check', { Element }, () => {
+      const node = new Engine(createFakeFabric(), 1).createElement('view');
+      assert.equal(node instanceof Element, true, 'an engine node passes the check');
+      assert.equal(marked instanceof Element, true, 'and what React Native counts still does');
+      assert.equal({} instanceof Element, false);
+      assert.equal(node instanceof TextElement, false, 'a subclass is not widened to engine nodes');
+    });
+  });
+
+  it("hands every target but an engine node to React Native's observer, made once", async () => {
+    const made: { args: unknown[]; calls: [string, unknown?][] }[] = [];
+    class NativeObserver {
+      private readonly calls: [string, unknown?][] = [];
+      constructor(...args: unknown[]) {
+        made.push({ args, calls: this.calls });
+      }
+      observe(target: unknown) {
+        this.calls.push(['observe', target]);
+      }
+      unobserve(target: unknown) {
+        this.calls.push(['unobserve', target]);
+      }
+      disconnect() {
+        this.calls.push(['disconnect']);
+      }
+    }
+    await installedOver('native-observer', { IntersectionObserver: NativeObserver }, () => {
+      const Observer = (globalThis as Record<string, unknown>)[
+        'IntersectionObserver'
+      ] as typeof EngineIntersectionObserver;
+      const callback = () => {};
+      const options = { threshold: 0.5 };
+      const observer = new Observer(callback, options);
+
+      const engine = new Engine(createFakeFabric(), 1);
+      const node = engine.createElement('view');
+      observer.observe(node);
+      observer.unobserve(node);
+      assert.equal(made.length, 0, 'an engine node is watched without one');
+
+      const [first, second] = [{ id: 1 }, { id: 2 }];
+      observer.observe(first as never);
+      observer.observe(second as never);
+      observer.unobserve(first as never);
+      observer.disconnect();
+      assert.equal(made.length, 1);
+      assert.deepEqual(made[0]!.args, [callback, options], 'made with what the observer was');
+      assert.deepEqual(made[0]!.calls, [
+        ['observe', first],
+        ['observe', second],
+        ['unobserve', first],
+        ['disconnect'],
+      ]);
+    });
+  });
 });

@@ -154,6 +154,7 @@ interface NativeObserver {
 }
 type NativeObserverClass = new (callback: unknown, options?: unknown) => NativeObserver;
 
+// Never reset: the globals it patches stay patched for the life of the process.
 let installed = false;
 
 /**
@@ -172,7 +173,8 @@ export function installDeferTriggers(): void {
 
   const existing = scope['Element'] as Constructor | undefined;
   if (existing) {
-    const own = Function.prototype[Symbol.hasInstance];
+    // Its own check if it defines one, and the ordinary prototype walk if not.
+    const own = existing[Symbol.hasInstance];
     Object.defineProperty(existing, Symbol.hasInstance, {
       configurable: true,
       value(this: Constructor, value: unknown): boolean {
