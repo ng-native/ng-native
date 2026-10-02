@@ -6,22 +6,31 @@ The migrations that update an Angular Native app to a new release. `nx migrate @
 
 Alpha: APIs may change before 1.0.
 
-## Usage
+## Install
 
-Run it before installing the new versions:
+Run it before installing the new versions - there is nothing to add as a dependency:
 
 ```sh
 npx @ng-native/migrate@latest
 npm install
 ```
 
-It runs every migration newer than the `@ng-native/*` version the app's `package.json` lists, moves
-those versions to the new release, and prints each file it changed and anything left to do by hand.
+## Example
 
 ```sh
 npx @ng-native/migrate@latest --dry-run       # print what would change, write nothing
 npx @ng-native/migrate@latest --from 0.2.0    # the version the app was on
 ```
 
-See [Updating an app](https://ng-native.com/guide/updating) for every way to update and what each
-migration does.
+It runs every migration newer than the `@ng-native/*` version the app's `package.json` lists, moves
+those versions to the new release, and prints each file it changed and anything left to do by hand.
+
+## Docs
+
+- [Updating an app](https://ng-native.com/guide/updating) for every way to update and what each
+  migration does
+- [Root README](https://github.com/ng-native/ng-native/blob/main/README.md)
+
+## License
+
+MIT

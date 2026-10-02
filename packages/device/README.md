@@ -33,42 +33,24 @@ export class Composer {
 Nothing is provided anywhere. Each service declares its own factory, so injecting it is the whole
 setup, and one nobody injects is never constructed.
 
-| Service         | What                                                                   |
-| --------------- | ---------------------------------------------------------------------- |
-| `Keyboard`      | `height`, `visible` and the full `metrics`, plus `dismiss()`.          |
-| `Screen`        | `window`, `display` and `orientation`, following a rotation.           |
-| `ColorScheme`   | `current`: light or dark, as the user set it.                          |
-| `AppState`      | `current` and `active`: whether the app is in front of the user.       |
-| `Accessibility` | `screenReader`, `reduceMotion`, `boldText`, and `announce()`.          |
-| `HardwareBack`  | `handle()`: Android's back button, answering whether it was consumed.  |
-| `DeepLinks`     | `initialUrl()`, `subscribe()` and `open()`, as paths rather than urls. |
+## What's in the package
 
-## Styling reads most of this without injecting anything
+- `Screen`, `SafeArea` - the window, the physical display, orientation and safe-area insets.
+- `ColorScheme`, `Accessibility`, `Direction` - light or dark, screen reader and reduced-motion
+  state, and text direction.
+- `StatusBar`, `Keyboard`, `HardwareBack`, `AppState`, `DeepLinks`, `AndroidPermissions`,
+  `LayoutAnimation` - the rest of the system surfaces a screen reads from.
+- `Dialogs`, `Sharing`, `Vibration` - the platform's own alert, share sheet and vibration motor.
+- `DevMenu` - switches in the shake menu, gone in a release build.
 
-The engine answers `@media (prefers-color-scheme: dark)`, `(orientation: landscape)`,
-`(min-width: …)` and `(prefers-reduced-motion: reduce)` from the same values, so styling should use
-a media query and leave these services for the decisions CSS cannot make - which asset to load,
-which native component to render, whether to announce something. `watchConditions(engine)` is what
-keeps the engine in step; an app calls it once, next to `mount`.
+## Docs
 
-## Testing
+- [Device](https://ng-native.com/packages/device)
+- [Testing with services](https://ng-native.com/packages/testing/testing-services), for
+  overriding a service's `SOURCE` token without a device underneath it
+- [Root README](https://github.com/ng-native/ng-native/blob/main/README.md) and
+  [ARCHITECTURE.md](https://github.com/ng-native/ng-native/blob/main/docs/ARCHITECTURE.md)
 
-Every service reads its platform through a token that hangs off the service itself, so a test
-overrides the token rather than the service and the code under test stays real:
+## License
 
-```ts
-mount(1, App, fabric, {
-  providers: [
-    { provide: Keyboard.SOURCE, useValue: { subscribe: fakeKeyboard, dismiss: () => {} } },
-  ],
-});
-```
-
-## Off a device
-
-`react-native` is required lazily, inside each source, because React Native ships its JavaScript as
-Flow and a static import would make this package - and `@ng-native/components`, which imports
-it - unloadable in Node. Off a device the require finds nothing and every capability is inert: the
-keyboard is never visible, the screen is zero by zero, a back handler is never called. That is the
-same behavior as not providing the token that used to stand here, and it is what lets the test
-suite import any of this without a simulator.
+MIT
