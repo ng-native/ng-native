@@ -2288,8 +2288,33 @@ export class Engine implements HostEngine {
 
     this.flushTransitionEvents();
     this.scrollDriver?.afterCommit();
+    if (this.awaitingKeyframes.size) this.settleKeyframes();
     if (this.facesAdded) this.rematchFonts();
     return true;
+  }
+
+  /** Nodes that asked for `@keyframes` this commit had not met, by the name they asked for. */
+  private readonly awaitingKeyframes = new Map<EngineNode, string>();
+
+  /**
+   * A sheet is registered when the first node it styles is committed, so a node committed before
+   * it can name keyframes that arrive later in the same commit. Those nodes play them from another
+   * commit straight away, as a browser applies keyframes however the sheets arrived; a name still
+   * unknown once the commit is over is reported.
+   */
+  private settleKeyframes(): void {
+    const waiting = [...this.awaitingKeyframes];
+    this.awaitingKeyframes.clear();
+    let found = false;
+    for (const [node, name] of waiting) {
+      if (this.keyframes.has(name)) {
+        this.markProps(node, false);
+        found = true;
+      } else if (this.dev) {
+        this.reportMissingKeyframes(name);
+      }
+    }
+    if (found) this.commit();
   }
 
   private readonly scrollDriver: NativeScrollDriver | null;
@@ -2588,11 +2613,12 @@ export class Engine implements HostEngine {
 
     const frames = this.keyframes.get(spec.name);
     if (!frames) {
-      // Keyframes a hot swap deleted, from under an animation that was playing them.
+      // Keyframes a hot swap deleted, from under an animation that was playing them, or ones a
+      // sheet later in this commit has: see `settleKeyframes`.
       node.playing = undefined;
       this.playing.delete(node);
       this.stopScrolled(node);
-      if (this.dev) this.reportMissingKeyframes(spec.name);
+      this.awaitingKeyframes.set(node, spec.name);
       return props;
     }
     if (spec.timeline) return this.scrollAnimated(node, spec, frames, props);
