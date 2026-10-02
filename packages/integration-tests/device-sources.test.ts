@@ -428,7 +428,7 @@ describe('the colour scheme and app state sources', () => {
       const stop = service.subscribe((value) => heard.push(`service ${value}`));
       const stopToo = conditions.subscribe((value) => heard.push(`conditions ${value}`));
       service.set?.('dark');
-      service.set?.(null);
+      service.set?.('light');
       stop();
       stopToo();
       service.set?.('dark');
@@ -463,6 +463,36 @@ describe('the colour scheme and app state sources', () => {
       emit();
       emit();
       assert.deepEqual(heard, ['dark']);
+    });
+  });
+
+  it('waits for the platform to say which scheme set(null) hands back', () => {
+    // React Native resolves 'unspecified' from its native cache, which on iOS can still hold the
+    // scheme from before a full-screen modal opened, so only its own report is to be trusted.
+    let native = 'light';
+    let scheme: string | null = native;
+    let emit: () => void = () => {};
+    const fake = {
+      Appearance: {
+        getColorScheme: () => scheme,
+        addChangeListener: (handler: () => void) => {
+          emit = handler;
+          return { remove: () => {} };
+        },
+        setColorScheme: (next: string) => void (scheme = next === 'unspecified' ? native : next),
+      },
+    };
+    withNative(fake, () => {
+      const source = colorSchemeSource();
+      const heard: string[] = [];
+      source.subscribe((value) => heard.push(value));
+      source.set?.('dark');
+      source.set?.(null);
+      assert.deepEqual(heard, ['dark'], 'nothing yet: the cache may be stale');
+      native = 'light';
+      scheme = native;
+      emit();
+      assert.deepEqual(heard, ['dark', 'light']);
     });
   });
 

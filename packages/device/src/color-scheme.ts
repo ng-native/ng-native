@@ -52,7 +52,9 @@ export function colorSchemeSource(): ColorSchemeSource {
     },
     set: (scheme) => {
       native.Appearance.setColorScheme?.(scheme ?? 'unspecified');
-      for (const listener of [...setListeners]) listener();
+      // Back to the system's waits for the platform's report: React Native resolves it from a
+      // native cache that a full-screen modal on iOS can leave stale.
+      if (scheme !== null) for (const listener of [...setListeners]) listener();
     },
   };
 }
