@@ -1,6 +1,6 @@
 import { Service, computed, effect, inject, signal, untracked } from '@angular/core';
 import { Watch, type WatchPayload } from '@ng-native/expo/watch';
-import type { Scoreline } from '../live/score-activity.tsx';
+import type { Scoreline } from '../live/score-activity.ts';
 import { NEW_MATCH, addPoint, pointLabel, setsWon, type Score, type Team } from './match.ts';
 
 export type Source = 'phone' | 'watch';

@@ -14,7 +14,8 @@
  *   (an `Image`'s `size` and `color` become modifiers, for one). Each input is the prop of the same
  *   name the typed `ui-*` component takes; a number or a boolean written as a static attribute is
  *   read as that component's transform reads it.
- * - A `ui-text`'s content is its text, as in an app, with the whitespace at its two ends dropped.
+ * - A `ui-text`'s content is its text, as in an app: each run of whitespace collapsed to one space,
+ *   as Angular collapses it, and the space at the two ends dropped.
  * - `props()` and `environment()` are the function's parameters, a member standing for a modifier
  *   is the extension's global of that name, and a constant member is inlined.
  * - `@if`, `@for` (with `@empty` and the contextual names), `@switch` and `@let` are expressions.
@@ -152,7 +153,7 @@ class LayoutError extends Error {
  */
 function compileWidgetLayout(template, options = {}) {
   const file = options.file ?? 'layout';
-  const parsed = ng.parseTemplate(template, file, { preserveWhitespaces: true });
+  const parsed = ng.parseTemplate(template, file, { preserveWhitespaces: false });
   if (parsed.errors?.length) {
     const [first] = parsed.errors;
     throw new LayoutError(file, first.span, first.msg, options.at);

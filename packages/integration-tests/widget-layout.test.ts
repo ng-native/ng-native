@@ -123,7 +123,7 @@ describe('text', () => {
     );
   });
 
-  it('drops the whitespace at the two ends, and keeps every space inside', () => {
+  it('drops the whitespace at the two ends, and collapses each run inside, as Angular does in an app', () => {
     assert.deepEqual(
       render(
         `<ui-text>
@@ -131,8 +131,15 @@ describe('text', () => {
       </ui-text>`,
         { sets: '0-0', games: '2-1' },
       ),
-      { type: 'Text', props: { children: 'Sets 0-0  Games 2-1' } },
+      { type: 'Text', props: { children: 'Sets 0-0 Games 2-1' } },
     );
+  });
+
+  it('keeps a non-breaking space, which Angular does not collapse', () => {
+    assert.deepEqual(render('<ui-text>Sets&nbsp;&nbsp;Games</ui-text>'), {
+      type: 'Text',
+      props: { children: 'Sets\u00a0\u00a0Games' },
+    });
   });
 
   it('is text, which wins over the content', () => {

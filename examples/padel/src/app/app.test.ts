@@ -2,7 +2,7 @@ import { Watch, type NativeWatch, type WatchPayload } from '@ng-native/expo/watc
 import { render, screen, userEvent } from '@ng-native/testing';
 import { beforeEach, expect, test, vi } from 'vitest';
 import { App } from './app.ts';
-import type { Scoreline } from './live/score-activity.tsx';
+import type { Scoreline } from './live/score-activity.ts';
 import { MatchStore } from './match/match-store.ts';
 
 const lockScreen = vi.hoisted(() => {
@@ -31,7 +31,7 @@ const lockScreen = vi.hoisted(() => {
   };
 });
 
-vi.mock('./live/score-activity.tsx', () => ({ scoreActivity: lockScreen.factory }));
+vi.mock('./live/score-activity.ts', () => ({ scoreActivity: lockScreen.factory }));
 
 beforeEach(() => lockScreen.reset());
 

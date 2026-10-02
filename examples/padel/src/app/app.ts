@@ -10,7 +10,7 @@ import {
 } from '@ng-native/components';
 import { liveActivity } from '@ng-native/expo/live-activity';
 import { Watch } from '@ng-native/expo/watch';
-import { scoreActivity } from './live/score-activity.tsx';
+import { scoreActivity } from './live/score-activity.ts';
 import { MatchStore, TEAMS, scoreline } from './match/match-store.ts';
 import { pointLabel, type Score, type Team } from './match/match.ts';
 

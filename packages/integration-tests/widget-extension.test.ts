@@ -152,7 +152,7 @@ describe('a layout through the widget extension', () => {
         <ui-hstack [modifiers]="[padding({ all: 16 })]">
           <ui-vstack>
             <ui-text [modifiers]="[font({ size: 13, weight: 'semibold' }), foregroundStyle(muted)]">
-              @if (props().winner) { {{ props().winner }} win } @else { Sets {{ props().sets }}  Games {{ props().games }} }
+              @if (props().winner) { {{ props().winner }} win } @else { Sets {{ props().sets }} Games {{ props().games }} }
             </ui-text>
             <ui-text [modifiers]="[big]">Us {{ props().us }} - {{ props().them }} Them</ui-text>
           </ui-vstack>
@@ -169,7 +169,7 @@ describe('a layout through the widget extension', () => {
         <ui-text [modifiers]="[font({ size: 28, weight: 'heavy', design: 'rounded' })]">{{ props().them }} Them</ui-text>
       </ng-template>
       <ng-template #expandedBottom>
-        <ui-text [modifiers]="[font({ size: 14 }), foregroundStyle(muted)]">Sets {{ props().sets }}   Games {{ props().games }}</ui-text>
+        <ui-text [modifiers]="[font({ size: 14 }), foregroundStyle(muted)]">Sets {{ props().sets }} Games {{ props().games }}</ui-text>
       </ng-template>
       `,
       `(score) => {
@@ -183,7 +183,7 @@ describe('a layout through the widget extension', () => {
             <HStack modifiers={[padding({ all: 16 })]}>
               <VStack>
                 <Text modifiers={[font({ size: 13, weight: 'semibold' }), foregroundStyle(muted)]}>
-                  {score.winner ? \`\${score.winner} win\` : \`Sets \${score.sets}  Games \${score.games}\`}
+                  {score.winner ? \`\${score.winner} win\` : \`Sets \${score.sets} Games \${score.games}\`}
                 </Text>
                 <Text modifiers={[big]}>{\`Us \${score.us} - \${score.them} Them\`}</Text>
               </VStack>
@@ -202,7 +202,7 @@ describe('a layout through the widget extension', () => {
             <Text modifiers={[font({ size: 28, weight: 'heavy', design: 'rounded' })]}>{\`\${score.them} Them\`}</Text>
           ),
           expandedBottom: (
-            <Text modifiers={[font({ size: 14 }), foregroundStyle(muted)]}>{\`Sets \${score.sets}   Games \${score.games}\`}</Text>
+            <Text modifiers={[font({ size: 14 }), foregroundStyle(muted)]}>{\`Sets \${score.sets} Games \${score.games}\`}</Text>
           ),
         };
       }`,
