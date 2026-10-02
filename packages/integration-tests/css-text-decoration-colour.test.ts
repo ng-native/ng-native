@@ -55,6 +55,21 @@ describe('the colour of a text decoration on the text inside', () => {
       line(`.outer { color: ${GREEN}; text-decoration-line: underline } .inner { color: ${BLUE} }`),
       GREEN,
     );
+    // An explicit currentColor is the declaring element's colour, not the text's inside it.
+    assert.equal(
+      line(
+        `.outer { color: ${GREEN}; text-decoration: underline currentColor } ` +
+          `.inner { color: ${BLUE} }`,
+      ),
+      GREEN,
+    );
+    assert.equal(
+      line(
+        `.outer { color: ${GREEN}; text-decoration-line: underline; ` +
+          `text-decoration-color: currentColor } .inner { color: ${BLUE} }`,
+      ),
+      GREEN,
+    );
   });
 
   it("is the text's own colour where the text declares a line of its own", () => {
