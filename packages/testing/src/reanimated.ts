@@ -19,6 +19,9 @@ export interface SharedValue<T = number> {
   value: T;
   get(): T;
   set(value: T | ((current: T) => T)): void;
+  modify(modifier?: (value: T) => T, forceUpdate?: boolean): void;
+  addListener(id: number, listener: (value: T) => void): void;
+  removeListener(id: number): void;
 }
 
 export interface WorkletStyleSpec {
@@ -33,16 +36,23 @@ export interface WorkletScrollSpec {
 
 export function sharedValue<T>(initial: T): SharedValue<T> {
   const state = signal(initial);
+  const listeners = new Map<number, (value: T) => void>();
+  const write = (next: T) => {
+    state.set(next);
+    for (const listener of listeners.values()) listener(next);
+  };
   return {
     get value() {
       return state();
     },
     set value(next: T) {
-      state.set(next);
+      write(next);
     },
     get: () => state(),
-    set: (next) =>
-      state.set(typeof next === 'function' ? (next as (current: T) => T)(state()) : next),
+    set: (next) => write(typeof next === 'function' ? (next as (current: T) => T)(state()) : next),
+    modify: (modifier) => write(modifier ? modifier(state()) : state()),
+    addListener: (id, listener) => void listeners.set(id, listener),
+    removeListener: (id) => void listeners.delete(id),
   };
 }
 

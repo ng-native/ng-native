@@ -81,3 +81,18 @@ describe('a component animated on the UI thread', () => {
     expect(screen.getByText('1')).toBeTruthy();
   });
 });
+
+describe('a shared value', () => {
+  it('has the surface Reanimated gives code outside a worklet', () => {
+    const offset = sharedValue(1);
+    const heard: number[] = [];
+    offset.addListener(1, (value) => heard.push(value));
+    offset.value = 2;
+    offset.set((value) => value + 1);
+    offset.modify((value) => value * 2);
+    offset.removeListener(1);
+    offset.set(0);
+    expect(offset.get()).toBe(0);
+    expect(heard).toEqual([2, 3, 6]);
+  });
+});

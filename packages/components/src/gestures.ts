@@ -46,10 +46,6 @@
  * cannot parse, and the rest of the package has to stay loadable in the test suite.
  */
 import { Component, Directive, ElementRef, inject } from '@angular/core';
-// For the side effect: evaluating the package's index is what starts its event receiver, which
-// is what delivers a gesture whose callbacks are ordinary functions. An app importing `Gesture`
-// does this too; this file does not depend on that.
-import 'react-native-gesture-handler';
 import { claimHost, nativePlatform, registerViewName, type HostNode } from '@ng-native/fabric';
 import {
   gestureDispatcher,
@@ -58,6 +54,12 @@ import {
 } from './gesture-dispatch.ts';
 import { GESTURES, type GestureBackend } from './gesture-backend.ts';
 import { NativeGestureBase } from './native-gesture.ts';
+
+// For the side effect: evaluating the package's index is what starts its event receiver, which
+// is what delivers a gesture whose callbacks are ordinary functions. An app importing `Gesture`
+// does this too; this file does not depend on that. A `require`, so the published types do not
+// name a library a web app may not have installed.
+require('react-native-gesture-handler');
 
 export { type GestureSpec, type GestureTarget } from './gesture-backend.ts';
 

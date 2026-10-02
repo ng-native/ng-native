@@ -31,12 +31,7 @@
  * them, and re-exporting them here would only add a name to keep in step.
  */
 import { Directive } from '@angular/core';
-import {
-  makeMutable,
-  startMapper,
-  stopMapper,
-  type SharedValue as Mutable,
-} from 'react-native-reanimated';
+import { makeMutable, startMapper, stopMapper } from 'react-native-reanimated';
 /**
  * `updateProps` is what every animated style in Reanimated goes through, and there is no exported
  * equivalent. It is a worklet, so it is called from ours rather than from here.
@@ -52,7 +47,7 @@ const { updateProps } = require('react-native-reanimated/src/updateProps/index.t
 };
 import { WorkletScrollBase } from './worklet-scroll.ts';
 import { WorkletStyleBase } from './worklet-style.ts';
-import { WORKLETS, type WorkletBackend } from './worklets.ts';
+import { WORKLETS, type MutableValue, type WorkletBackend } from './worklets.ts';
 
 export {
   workletScroll,
@@ -64,10 +59,10 @@ export {
 
 /**
  * A value both runtimes can see. Reanimated's own `useSharedValue` is this plus a React ref, and
- * the ref is the half that does not apply here. Typed as Reanimated's own, so it goes to
- * `cancelAnimation` and the rest of the library as one of theirs would.
+ * the ref is the half that does not apply here. Typed with the shape of Reanimated's own, so it
+ * goes to `cancelAnimation` and the rest of the library as one of theirs would.
  */
-export function sharedValue<T>(initial: T): Mutable<T> {
+export function sharedValue<T>(initial: T): MutableValue<T> {
   return makeMutable(initial);
 }
 

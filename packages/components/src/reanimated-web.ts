@@ -8,7 +8,7 @@
  * and the directives do nothing.
  */
 import { Directive, input } from '@angular/core';
-import type { SharedValue, WorkletScrollSpec, WorkletStyleSpec } from './worklets.ts';
+import type { MutableValue, WorkletScrollSpec, WorkletStyleSpec } from './worklets.ts';
 
 export {
   workletScroll,
@@ -18,20 +18,11 @@ export {
   type WorkletStyleSpec,
 } from './worklets.ts';
 
-/** Reanimated's public `SharedValue` surface, which code outside a worklet reads and writes. */
-interface PlainSharedValue<T> extends SharedValue<T> {
-  get(): T;
-  set(value: T | ((value: T) => T)): void;
-  modify(modifier?: (value: T) => T): void;
-  addListener(id: number, listener: (value: T) => void): void;
-  removeListener(id: number): void;
-}
-
 /**
  * A shared value as a plain holder, with no second runtime to share it with. Every write reaches
  * the listeners added with `addListener`.
  */
-export function sharedValue<T>(initial: T): PlainSharedValue<T> {
+export function sharedValue<T>(initial: T): MutableValue<T> {
   let current = initial;
   const listeners = new Map<number, (value: T) => void>();
   const write = (next: T) => {

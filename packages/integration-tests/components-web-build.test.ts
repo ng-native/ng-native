@@ -25,6 +25,7 @@ import path from 'node:path';
 import { after, before, describe, it } from 'node:test';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { ngNativeWeb } from '@ng-native/web/vite';
+import ts from 'typescript';
 import { build, optimizeDeps, resolveConfig } from 'vite';
 
 const source = fileURLToPath(new URL('../components/', import.meta.url));
@@ -137,6 +138,44 @@ for (const withNative of [false, true]) {
         },
       });
       assertInert(await evaluate<Exports>(path.join(root, 'build/main.mjs')));
+    });
+
+    it('type-checks against the published types', () => {
+      // One types file serves both runtimes, so it must not need either library to resolve, and a
+      // shared value must keep its type rather than become `any` where Reanimated is missing.
+      const lines = [
+        "import { sharedValue } from '@ng-native/components/reanimated';",
+        "import { NativeGesture, GestureRoot } from '@ng-native/components/gestures';",
+        'const offset = sharedValue(1);',
+        'const read: number = offset.get();',
+        'offset.set((value) => value + 1);',
+        '// @ts-expect-error a shared value is typed, not any',
+        'offset.nothing();',
+        'export const used = [read, NativeGesture, GestureRoot];',
+      ];
+      if (withNative) {
+        lines.push(
+          "import type { SharedValue } from 'react-native-reanimated';",
+          'export const theirs: SharedValue<number> = offset;',
+        );
+      }
+      writeFileSync(path.join(root, 'check.ts'), lines.join('\n'));
+      const program = ts.createProgram([path.join(root, 'check.ts')], {
+        target: ts.ScriptTarget.ES2022,
+        module: ts.ModuleKind.Preserve,
+        moduleResolution: ts.ModuleResolutionKind.Bundler,
+        strict: true,
+        noEmit: true,
+        allowImportingTsExtensions: true,
+        // Off where neither library is installed, as a web app may have it. Beside them, their own
+        // declarations and React Native's are not clean against the DOM's, which is not ours.
+        skipLibCheck: withNative,
+        types: [],
+      });
+      const errors = ts
+        .getPreEmitDiagnostics(program)
+        .map((d) => ts.flattenDiagnosticMessageText(d.messageText, '\n'));
+      assert.deepEqual(errors, []);
     });
 
     it('pre-bundles for the dev server, and both entry points are inert', async () => {

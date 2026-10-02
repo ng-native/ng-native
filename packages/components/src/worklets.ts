@@ -16,6 +16,18 @@ export interface SharedValue<T = number> {
 }
 
 /**
+ * Reanimated's public `SharedValue` surface, which code outside a worklet reads and writes. Written
+ * out rather than imported, so that a type naming one resolves where Reanimated is not installed.
+ */
+export interface MutableValue<T> extends SharedValue<T> {
+  get(): T;
+  set(value: T | ((value: T) => T)): void;
+  modify(modifier?: (value: T) => T, forceUpdate?: boolean): void;
+  addListener(id: number, listener: (value: T) => void): void;
+  removeListener(id: number): void;
+}
+
+/**
  * A style, and the shared values it is computed from.
  *
  * The values are arguments to the worklet rather than things it captures, and that is the whole
