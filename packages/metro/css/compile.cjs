@@ -1631,11 +1631,25 @@ function addFrameDeclaration(declaration, out, tokens, _deferred, context) {
   }
   if (deferred.length) {
     for (const one of deferred) for (const prop of one.props) delete out[prop];
+    if (deferred.some((one) => namesCurrentColour(one.within))) {
+      throw new CssUnsupported(
+        `${context}: currentColor in a keyframe is the element's own colour, which the same ` +
+          `frames can be animating, so only color can take it. Write the colour out.`,
+      );
+    }
     throw new CssUnsupported(
       `${context}: a keyframe's values are settled at build time, so var(), em and the ` +
         `viewport units cannot be used in one. Write the value in px, rem or %.`,
     );
   }
+}
+
+/** Whether a deferred value is, or is worked out from, the colour in scope. */
+function namesCurrentColour(value) {
+  if (value === CURRENT_COLOUR) return true;
+  if (value === null || typeof value !== 'object') return false;
+  if (value.color === 'currentcolor') return true;
+  return Object.values(value).some(namesCurrentColour);
 }
 
 /** `from` and `to` are 0 and 1; a percentage already arrives as a fraction. */

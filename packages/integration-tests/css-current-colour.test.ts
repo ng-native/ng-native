@@ -423,12 +423,18 @@ describe('color: currentColor in a keyframe', () => {
     assert.equal(painted(), 'rgba(200, 100, 0, 1)');
   });
 
-  it('still refuses currentColor on any other property in a frame', () => {
+  it('still refuses currentColor on any other property in a frame, and says that is why', () => {
     // The element's own colour, which the same frames can be animating.
-    assert.throws(
-      () => compileCss('@keyframes k { to { background-color: currentColor } }'),
-      /keyframe/,
-    );
+    for (const property of ['background-color', 'border-color', 'text-decoration-color']) {
+      assert.throws(
+        () => compileCss(`@keyframes k { to { ${property}: currentColor } }`),
+        (error: Error) =>
+          /keyframe/.test(error.message) &&
+          /currentColor/.test(error.message) &&
+          !/var\(\), em/.test(error.message),
+        property,
+      );
+    }
   });
 });
 
