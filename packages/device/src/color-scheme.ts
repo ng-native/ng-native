@@ -17,6 +17,14 @@ export interface ColorSchemeSource {
   set?(scheme: Scheme | null): void;
 }
 
+/**
+ * Every source's listeners, told of a scheme the app sets. React Native takes it at once but
+ * reports it only when its root view next changes appearance, and on iOS a full-screen modal takes
+ * that view out of the window, so the change arrived when the modal closed. The platform's own
+ * report, when it comes, repeats the same scheme.
+ */
+const setListeners = new Set<() => void>();
+
 export function colorSchemeSource(): ColorSchemeSource {
   const native = reactNative();
   if (!native) return { current: () => 'light', subscribe: () => () => {} };
@@ -27,9 +35,17 @@ export function colorSchemeSource(): ColorSchemeSource {
     current: read,
     subscribe: (listener) => {
       const subscription = native.Appearance.addChangeListener(() => listener(read()));
-      return () => subscription.remove();
+      const onSet = () => listener(read());
+      setListeners.add(onSet);
+      return () => {
+        subscription.remove();
+        setListeners.delete(onSet);
+      };
     },
-    set: (scheme) => native.Appearance.setColorScheme?.(scheme ?? 'unspecified'),
+    set: (scheme) => {
+      native.Appearance.setColorScheme?.(scheme ?? 'unspecified');
+      for (const listener of [...setListeners]) listener();
+    },
   };
 }
 

@@ -409,6 +409,38 @@ describe('the colour scheme and app state sources', () => {
     });
   });
 
+  it('tells every source of a scheme the app sets, though the platform sends no change', () => {
+    // On iOS a full-screen modal takes the root view out of the window, and React Native hears of
+    // an appearance change only from that view, so `setColorScheme` emits nothing until the modal
+    // closes. React Native's own state takes the scheme at once, which is what this reads.
+    let scheme: string | null = 'light';
+    const native = {
+      Appearance: {
+        getColorScheme: () => scheme,
+        addChangeListener: () => ({ remove: () => {} }),
+        setColorScheme: (next: string) => void (scheme = next === 'unspecified' ? 'light' : next),
+      },
+    };
+    withNative(native, () => {
+      // Two, as `ColorScheme` and `watchConditions` each make their own.
+      const [service, conditions] = [colorSchemeSource(), colorSchemeSource()];
+      const heard: string[] = [];
+      const stop = service.subscribe((value) => heard.push(`service ${value}`));
+      const stopToo = conditions.subscribe((value) => heard.push(`conditions ${value}`));
+      service.set?.('dark');
+      service.set?.(null);
+      stop();
+      stopToo();
+      service.set?.('dark');
+      assert.deepEqual(heard, [
+        'service dark',
+        'conditions dark',
+        'service light',
+        'conditions light',
+      ]);
+    });
+  });
+
   it('keeps inactive apart from active, as a call or the app switcher leaves it', () => {
     const native = {
       AppState: { currentState: 'inactive', addEventListener: () => ({ remove: () => {} }) },
