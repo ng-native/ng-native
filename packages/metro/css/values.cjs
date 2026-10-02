@@ -567,6 +567,7 @@ function filterListForm(parts) {
     require('./properties.cjs').translate('filter', parsed, out);
     return out.filter;
   } catch {
+    // Not a filter list native draws: no filter form. A token with no form at all is refused.
     return undefined;
   }
 }
@@ -581,6 +582,7 @@ function shadowWithTokens(parts) {
     // Required here rather than at the top: colour-expression.cjs requires this module.
     return require('./colour-expression.cjs').shadowsWithColourTokens(parts, 'token');
   } catch {
+    // Not a shadow of colour tokens: no shadow form from here, and a use site reading one is unset.
     return undefined;
   }
 }
@@ -603,6 +605,7 @@ function dropShadowWithTokens(part) {
     const { offsetX, offsetY, blurRadius, color } = shadow;
     return [{ dropShadow: { offsetX, offsetY, standardDeviation: blurRadius, color } }];
   } catch {
+    // Not a drop shadow of colour tokens; the other filter forms are tried beside this one.
     return undefined;
   }
 }
@@ -701,6 +704,7 @@ function easingForm(part) {
     // Required here rather than at the top: properties.cjs requires this module.
     return require('./properties.cjs').easing(parsed[0], 'token');
   } catch {
+    // Not a curve native can play: no easing form.
     return undefined;
   }
 }
@@ -732,6 +736,7 @@ function animationForm(parts) {
     finishAnimation(out, 'token');
     return out['$animation'] ?? undefined;
   } catch {
+    // Not an animation the engine plays: no animation form. A token with no form at all is refused.
     return undefined;
   }
 }
@@ -764,6 +769,7 @@ function shadowForm(parts) {
     require('./properties.cjs').translate('box-shadow', parsed, out);
     return out.boxShadow;
   } catch {
+    // Not a plain shadow; one with currentColor or a colour token is read by shadowWithTokens.
     return undefined;
   }
 }
@@ -810,6 +816,7 @@ function functionForm(part, property, names) {
     require('./properties.cjs').translate(property, parsed, out);
     return out[property === 'filter' ? 'filter' : 'transform'];
   } catch {
+    // Not a function the property compiles: no form for it.
     return undefined;
   }
 }
@@ -839,6 +846,7 @@ function partText(part) {
     try {
       return color(value, 'token');
     } catch {
+      // Not convertible to sRGB: the text, and each form parsed from it, is absent.
       return null;
     }
   }
