@@ -49,3 +49,17 @@ pnpm export                       # release bundles of every example, after CSS 
 - **Add a version plan** in `.nx/version-plans/` (`npx nx release plan`) for a change someone using
   the packages would notice.
 - **Commit messages are sentence-case summaries,** with no `feat:` or `fix:` prefix.
+- **A test must fail without the change it covers.** Revert the change and watch it fail. A test
+  that passes anyway (an assertion another rule satisfies, an object compared with itself, a helper
+  called directly instead of the default path) guards nothing. Tests restore any global, temp
+  directory or registration they change, in `finally`.
+- **Every cache needs an invalidation path, for a change and for a removal.** Stale derived state
+  (a dirty flag not set, a registry that only adds, an inherited value read once) is the most
+  common bug review finds here. Test the input changing and the input going away.
+- **A native module can be absent, and so can one of its methods.** Expo Go, the web host and Node
+  tests run without it: call methods with `?.()`, never `getEnforcing` at import, and give a
+  stand-in every method its callers use. Gate anything newer than iOS 16.4 or Android API 24.
+- **Scripts fail closed.** A failed or truncated `gh` request, or a rate limit, never reads as
+  "nothing to do".
+- **Review with the `review-change` skill** (`.claude/skills/review-change`) before opening a pull
+  request.

@@ -26,12 +26,18 @@ Anything else that is project-internal goes in `docs/`.
 
 ## Rules for every Markdown file
 
+Version plans in `.nx/version-plans/` are the exception: they take no heading and are not wrapped,
+since `nx release changelog` turns each body into a `CHANGELOG.md` bullet under its own heading, and
+the first line becomes the bullet. [RELEASING.md](./RELEASING.md#describing-changes) gives their
+format.
+
 - Prettier formats it (`pnpm format`, checked by `pnpm format:check`): 100 columns.
 - One `#` heading, first in the file (after front matter, where a file has it). Headings go down one
   level at a time: `##` under `#`, `###` under `##`.
 - Use the words [`CONTEXT.md`](./CONTEXT.md) defines, and avoid the ones it lists against them.
 - Fence code with a language. Use `sh` or `bash` for commands, and `pnpm`, never `npm`, for anything
-  run in this workspace.
+  run in this workspace. Instructions for someone setting up their own app keep the command that
+  app's tools document, such as `npx expo install`.
 - Link to another file with a relative path. Inside `docs/` that includes the `.md` extension:
   `[Architecture](./ARCHITECTURE.md)`. A package README links to `docs/` with a full
   `https://github.com/ng-native/ng-native/blob/main/docs/...` URL, because npm renders it away from

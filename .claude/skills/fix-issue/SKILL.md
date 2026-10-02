@@ -86,8 +86,8 @@ switches, cycles, invalid values, other package managers (npm, yarn, bun, pnpm 1
 workspaces, re-running a generator, Tailwind 3 and 4, the web host, what screen readers announce and what
 `getByRole` finds, the docs, and cost per commit.
 
-Fix the real findings, each with a test. Anything outside the issue goes in the PR as a follow-up rather than
-into the diff.
+Then run the [review-change](../review-change/SKILL.md) checklist over the diff. Fix the real findings, each
+with a test. Anything outside the issue goes in the PR as a follow-up rather than into the diff.
 
 ## 8. Version plan
 
