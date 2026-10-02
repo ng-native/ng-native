@@ -3,6 +3,7 @@
  * `@react-native/babel-preset` and does the TypeScript stripping oxc-angular does not).
  */
 const { inlineIcons } = require('./inline-icons.cjs');
+const { inlineWidgetLayouts } = require('./inline-widget-layouts.cjs');
 const { createHash } = require('node:crypto');
 const { readFileSync, readdirSync } = require('node:fs');
 const path = require('node:path');
@@ -190,7 +191,10 @@ module.exports = {
       result.metadata = { ...result.metadata, expoDomComponentReference: reference };
       return result;
     }
-    params = { ...params, src: inlineIcons(params.src, params.filename) };
+    params = {
+      ...params,
+      src: inlineWidgetLayouts(inlineIcons(params.src, params.filename), params.filename),
+    };
     const { code, map, mapLineOffset } = angularOrSyntaxError(params);
     const result = upstream.transform({ ...params, src: code });
     if (map && result.ast) {

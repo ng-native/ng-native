@@ -28,6 +28,7 @@
     "@babel/core": "^7.29.7",
     "@babel/generator": "^7.29.8",
     "@babel/plugin-transform-react-jsx": "^7.29.7",
+    "@expo/ui": "~57.0.21",
     "@jridgewell/trace-mapping": "^0.3.31",
     "@ng-icons/core": "^36.0.0",
     "@ng-icons/heroicons": "^36.0.0",

@@ -118,8 +118,16 @@ const LOOP_CONTEXT = {
 };
 
 class LayoutError extends Error {
-  constructor(file, span, message) {
-    const where = span ? `${file}:${span.start.line + 1}:${span.start.col + 1}` : file;
+  /**
+   * @param {string} file
+   * @param {{ start: { line: number, col: number } } | null} span where, from 0, in the template
+   * @param {string} message
+   * @param {{ line: number, col: number }} [at] where, from 0, the template starts in the file
+   */
+  constructor(file, span, message, at = { line: 0, col: 0 }) {
+    const line = span && span.start.line + at.line;
+    const col = span && span.start.col + (span.start.line === 0 ? at.col : 0);
+    const where = span ? `${file}:${line + 1}:${col + 1}` : file;
     super(`${where}: ${message}`);
     this.name = 'LayoutError';
   }
@@ -129,13 +137,15 @@ class LayoutError extends Error {
  * @param {string} template the layout component's template
  * @param {{
  *   file?: string,
+ *   at?: { line: number, col: number },
  *   members?: {
  *     props?: string,
  *     environment?: string,
  *     modifiers?: Record<string, string>,
  *     constants?: Record<string, string>,
  *   },
- * }} options the file, for errors, and the component's members: the names of its `props` and
+ * }} options the file and where in it, from 0, the template starts, for errors, and the
+ *   component's members: the names of its `props` and
  *   `environment` inputs, its members that stand for a modifier (member name to the modifier's
  *   global name), and its constant members (name to the JavaScript source of the value)
  * @returns {string} the source of `function(props, environment) { ... }`
@@ -145,15 +155,16 @@ function compileWidgetLayout(template, options = {}) {
   const parsed = ng.parseTemplate(template, file, { preserveWhitespaces: true });
   if (parsed.errors?.length) {
     const [first] = parsed.errors;
-    throw new LayoutError(file, first.span, first.msg);
+    throw new LayoutError(file, first.span, first.msg, options.at);
   }
-  const compiler = new Compiler(file, options.members ?? {});
+  const compiler = new Compiler(file, options.at, options.members ?? {});
   return compiler.layout(parsed.nodes);
 }
 
 class Compiler {
-  constructor(file, members) {
+  constructor(file, at, members) {
     this.file = file;
+    this.at = at;
     this.members = {
       props: members.props ?? 'props',
       environment: members.environment ?? 'environment',
@@ -164,7 +175,7 @@ class Compiler {
   }
 
   fail(node, message) {
-    throw new LayoutError(this.file, node?.sourceSpan ?? node?.span ?? null, message);
+    throw new LayoutError(this.file, node?.sourceSpan ?? node?.span ?? null, message, this.at);
   }
 
   /** A name no template can write, for the loop variables the output introduces. */

@@ -1,6 +1,7 @@
 /**
  * `liveActivity`, which keeps an iOS Live Activity in step with a signal: on the lock screen and in
- * the Dynamic Island, through `expo-widgets`.
+ * the Dynamic Island, through `expo-widgets`; and `widgetLayout`, which draws one, or a home-screen
+ * widget, from an Angular template.
  *
  * It takes the factory `createLiveActivity` makes in the app's layout file, so this package
  * imports nothing of `expo-widgets` itself and adds no peer. Off iOS, `expo-widgets` starts a
@@ -13,8 +14,34 @@ import {
   inject,
   signal,
   untracked,
+  type InputSignal,
   type Signal,
+  type Type,
 } from '@angular/core';
+
+/**
+ * A layout `createLiveActivity` or `createWidget` takes, from an Angular component: its template,
+ * written with the `ui-*` views, draws the activity or widget from its `props` input, and, for a
+ * widget, its `environment` input.
+ *
+ * ```ts
+ * createLiveActivity('Score', widgetLayout(ScoreLayout));
+ * ```
+ *
+ * `@ng-native/metro`'s transformer replaces the call with the layout compiled to the source the
+ * widget extension evaluates, and drops the class, so the app never runs it: the extension does,
+ * with no Angular. So the class holds only its inputs, members holding a modifier from
+ * `@expo/ui/swift-ui/modifiers`, and members holding a literal, and its template is inline.
+ */
+export function widgetLayout<T extends object>(
+  layout: Type<{ readonly props: InputSignal<T> }>,
+): (props: T, environment: unknown) => never {
+  return () => {
+    throw new Error(
+      `widgetLayout(${layout.name}) is compiled by @ng-native/metro's transformer, which did not run on this file.`,
+    );
+  };
+}
 
 /**
  * How an ended activity leaves the lock screen: `'default'` keeps it, with its final props, for up

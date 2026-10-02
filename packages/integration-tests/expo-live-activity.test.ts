@@ -12,6 +12,7 @@ import {
 } from '@angular/core';
 import {
   liveActivity,
+  widgetLayout,
   type LiveActivityFactory,
   type NativeLiveActivity,
 } from '@ng-native/expo/live-activity';
@@ -199,5 +200,15 @@ describe('liveActivity', () => {
     destroy();
     assert.equal(fake.listening(), 0);
     assert.equal(fake.instances.length, 1, 'a Live Activity outlives the app that started it');
+  });
+});
+
+describe('widgetLayout', () => {
+  it('says the transformer did not run, where a layout is called without it', () => {
+    class ScoreLayout {
+      readonly props = null as never;
+    }
+    const layout = widgetLayout<{ us: string }>(ScoreLayout);
+    assert.throws(() => layout({ us: '30' }, {}), /widgetLayout\(ScoreLayout\).*@ng-native\/metro/);
   });
 });
