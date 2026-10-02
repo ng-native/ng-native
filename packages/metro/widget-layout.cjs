@@ -190,6 +190,8 @@ class Compiler {
       constants: members.constants ?? {},
     };
     this.fresh = 0;
+    /** The slots filled so far. */
+    this.filled = new Set();
     /** The temporaries a safe read keeps its receiver in, declared once at the top. */
     this.temporaries = [];
     /** Each constant member as a local of its own, so it hides no global and no other member. */
@@ -290,6 +292,10 @@ class Compiler {
         `#${reference.name} is not a Live Activity slot: ${[...SLOTS].join(', ')}.`,
       );
     }
+    if (this.filled.has(reference.name)) {
+      this.fail(template, `#${reference.name} is filled twice; a slot draws one layout.`);
+    }
+    this.filled.add(reference.name);
     this.oneView(template.children, false);
     return `${reference.name}:${this.children(template.children, scope, true)}`;
   }
@@ -394,7 +400,13 @@ class Compiler {
   staticInput(node, view, attribute) {
     this.knownInput(node, view, attribute.name, attribute);
     const kind = view.inputs?.[attribute.name];
-    if (kind === 'number') return JSON.stringify(numberAttribute(attribute.value));
+    if (kind === 'number') {
+      const number = numberAttribute(attribute.value);
+      if (Number.isNaN(number)) {
+        this.fail(attribute, `${attribute.name}="${attribute.value}" is not a number.`);
+      }
+      return JSON.stringify(number);
+    }
     if (kind === 'boolean') return JSON.stringify(attribute.value !== 'false');
     return JSON.stringify(attribute.value);
   }

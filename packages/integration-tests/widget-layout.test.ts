@@ -448,6 +448,20 @@ describe('a layout the compiler refuses', () => {
     fails('<ng-template #header><ui-spacer /></ng-template>', /header.*not a Live Activity slot/s);
   });
 
+  it('refuses a slot named twice, naming the second', () => {
+    fails(
+      '<ng-template #banner><ui-spacer /></ng-template>\n<ng-template #banner><ui-divider /></ng-template>',
+      /^LayoutError: layout\.ts:2:1: #banner is filled twice/,
+    );
+  });
+
+  it('refuses a number written as text that is not one', () => {
+    fails(
+      '<ui-vstack>\n  <ui-vstack spacing="wide" />\n</ui-vstack>',
+      /^LayoutError: layout\.ts:2:14: spacing="wide" is not a number/,
+    );
+  });
+
   it('refuses more than one root for a widget', () => {
     fails('<ui-spacer /><ui-divider />', /one root/);
   });
