@@ -13,7 +13,10 @@ import {
   type FakeFabric,
   type FakeFabricNode,
 } from '@ng-native/testing';
+import { createRequire } from 'node:module';
 import { compileFixture } from './compile.ts';
+
+const { compileCss } = createRequire(import.meta.url)('@ng-native/metro/css/compile.cjs');
 
 const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
 // No nativeID/testID in this fixture, and the fields aren't matched by role - `getByTestId`/
@@ -28,7 +31,10 @@ interface Host {
     set(value: { name: string; subscribed: boolean }): void;
     (): { name: string; subscribed: boolean };
   };
-  f: { name: () => { errors: () => readonly unknown[] } };
+  f: {
+    name: () => { errors: () => readonly unknown[] };
+    subscribed: () => { touched: () => boolean };
+  };
 }
 
 describe('signal forms over native controls', () => {
@@ -101,6 +107,28 @@ describe('signal forms over native controls', () => {
     await settle();
 
     assert.equal(find(fabric, 'Switch').props['value'], false, 'native was pushed back');
+  });
+});
+
+describe('a switch as a Signal Forms control', () => {
+  it('marks its field touched when the user flips it, and publishes it for a stylesheet', async () => {
+    // A switch has no blur, so the flip is the moment the user has dealt with it: what a form that
+    // shows its errors once a field is touched waits for.
+    const mod = await compileFixture(
+      fileURLToPath(new URL('./fixtures/signal-form.ts', import.meta.url)),
+    );
+    const { fabric, instance } = await render(mod['SignalForm'] as Type<unknown>, {
+      globalStyles: compileCss('[data-touched] { opacity: 0.5 }', 'global'),
+    });
+    const host = instance as unknown as Host;
+    assert.equal(host.f.subscribed().touched(), false, 'untouched until the user acts');
+    assert.equal(find(fabric, 'Switch').props['opacity'], undefined);
+
+    await fireEvent(find(fabric, 'Switch'), 'change', { value: true });
+
+    assert.equal(host.f.subscribed().touched(), true);
+    assert.equal(find(fabric, 'Switch').props['opacity'], 0.5);
+    cleanup();
   });
 });
 

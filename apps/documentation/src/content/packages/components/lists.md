@@ -207,10 +207,12 @@ protected readonly itemHeight = (_item: Contact, index: number, section: Contact
 
 `stickySectionHeadersEnabled` defaults to on for iOS and off for Android, as in React Native.
 `scrollToLocation({ sectionIndex, itemIndex })` counts the header as item 0, as React Native does,
-and allows for a pinned header. `listHeader` and `listFooter` content and a `<refresh-control>`
-pass through.
+and allows for a pinned header. `listHeader` and `listFooter` content, a `<refresh-control>`,
+`contentPadding` and `keyboardShouldPersistTaps` pass through, as `<virtual-list>` takes them.
 
 It has no `horizontal` or `inverted` and no viewability events, a separator is not told
-`highlighted`, and its host is a plain view with the list filling it.
+`highlighted`, and its host is a plain view with the list filling it, so it takes no scroll-view
+props. It has no `keyExtractor` or `maintainVisibleContentPosition` either: rows are fixed height,
+so there is no measured height for a key to carry across an insert.
 
 <!-- api: SectionList -->

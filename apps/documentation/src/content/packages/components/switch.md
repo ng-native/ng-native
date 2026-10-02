@@ -18,6 +18,18 @@ art: switch
 for on a checkbox-shaped control, so `<switch [formField]="f.enabled" />` needs no adapter code.
 `[(checked)]` works the same way without a form.
 
+A form marks the field touched when the user flips the switch: a switch has no blur, so the flip is
+the moment the user has dealt with it, and a form that shows its errors once a field is touched
+shows them then. The field's `invalid` and `touched` come out as `data-invalid` and `data-touched`,
+as on [`<text-input>`](/packages/components/input#the-signal-forms-contract), for a stylesheet to
+match:
+
+```css
+switch[data-invalid][data-touched] {
+  opacity: 0.6;
+}
+```
+
 ## Colors on both platforms at once
 
 The two platforms spell the same props differently - iOS reads `onTintColor`, `tintColor` and

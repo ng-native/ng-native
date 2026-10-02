@@ -3,11 +3,13 @@ import {
   Injector,
   type SimpleChanges,
   afterNextRender,
+  booleanAttribute,
   computed,
   effect,
   inject,
   input,
   model,
+  output,
 } from '@angular/core';
 import { type NativeSyntheticEvent, nativePlatform } from '@ng-native/fabric';
 import { ControlledModel } from './controlled-model.ts';
@@ -17,6 +19,10 @@ import { ViewBase } from './view-base.ts';
 /**
  * A toggle, wired for signal forms as a `FormCheckboxControl` (`checked`, not `value`). Commits
  * as `Switch` on iOS and `AndroidSwitch` on Android.
+ *
+ * `invalid` and `touched` come out as `data-invalid` and `data-touched` for a stylesheet, as on
+ * `<text-input>`, and `touch` fires when the user flips it: a switch has no blur, so the flip is
+ * the moment the user has dealt with it, which a form that shows errors once touched waits for.
  *
  * The two platforms spell the same props differently, so both spellings are sent and each
  * native side reads its own; a prop it does not know is ignored.
@@ -37,6 +43,8 @@ import { ViewBase } from './view-base.ts';
     '[value]': 'checked()',
     '[disabled]': 'disabled()',
     '[attr.data-disabled]': "disabled() ? '' : null",
+    '[attr.data-invalid]': "invalid() ? '' : null",
+    '[attr.data-touched]': "touched() ? '' : null",
     '[enabled]': 'enabled()',
     '[thumbTintColor]': 'thumbColor()',
     '[tintColor]': 'trackColor()?.false',
@@ -52,6 +60,12 @@ export class Switch extends ViewBase {
   readonly checked = model<boolean>(false);
   /** Ignore touches and grey out. */
   readonly disabled = input(undefined, { transform: optionalBoolean });
+  /** Published as `data-invalid`; nothing native reads it. */
+  readonly invalid = input(false, { transform: booleanAttribute });
+  /** Published as `data-touched`; nothing native reads it. */
+  readonly touched = input(false, { transform: booleanAttribute });
+  /** The user flipped it. What Signal Forms marks a field touched from. */
+  readonly touch = output<void>();
 
   /** `Switch.js`: `accessibilityRole={props.accessibilityRole ?? 'switch'}`. */
   protected override roleByDefault(): 'switch' {
@@ -100,6 +114,7 @@ export class Switch extends ViewBase {
   protected onNativeChange(event: NativeSyntheticEvent<{ value?: boolean }>): void {
     this.nativeValue = event.nativeEvent?.value ?? false;
     this.control.propose(this.nativeValue);
+    this.touch.emit();
     afterNextRender({ write: () => this.reconcile() }, { injector: this.injector });
   }
 

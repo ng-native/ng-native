@@ -14,7 +14,8 @@ import { nativePlatform } from '@ng-native/fabric';
 import { TemplateSlot } from './template-slot.ts';
 import { optionalBoolean } from './transforms.ts';
 import { View } from './view.ts';
-import { VirtualList } from './virtual-list.ts';
+import type { KeyboardShouldPersistTaps } from './keyboard-taps.ts';
+import { VirtualList, type VirtualListPadding } from './virtual-list.ts';
 
 /** A section as RN's SectionList takes it: its rows in `data`, plus whatever else it carries. */
 export interface SectionListSection<T> {
@@ -223,8 +224,14 @@ const measure = <A extends unknown[]>(height: Height<A>, ...args: A): number =>
  * It defaults to on for iOS and off for Android, as RN's does. `listHeader` and `listFooter`
  * content and a `<refresh-control>` pass through to the list.
  *
+ * `contentPadding` and `keyboardShouldPersistTaps` pass through to the list as `<virtual-list>`
+ * takes them.
+ *
  * ponytail: no `horizontal` or `inverted`, no viewability events, and no `highlighted` on a
- * separator. The host is a plain view with the list filling it, where RN's host is the scroll view.
+ * separator. No `keyExtractor` or `maintainVisibleContentPosition` either: rows are fixed height,
+ * so there is no measured height for a key to carry across an insert. The host is a plain view
+ * with the list filling it, where RN's host is the scroll view, so scroll-view props are not
+ * taken.
  */
 @Component({
   selector: 'section-list',
@@ -238,6 +245,8 @@ const measure = <A extends unknown[]>(height: Height<A>, ...args: A): number =>
       [stickyIndices]="stickyRows()"
       [overscan]="overscan()"
       [endReachedThreshold]="endReachedThreshold()"
+      [contentPadding]="contentPadding()"
+      [keyboardShouldPersistTaps]="keyboardShouldPersistTaps()"
       [style]="fill"
       (endReached)="endReached.emit($event)"
     >
@@ -305,6 +314,10 @@ export class SectionList<T, S extends SectionListSection<T> = SectionListSection
   readonly stickySectionHeadersEnabled = input(undefined, { transform: optionalBoolean });
   readonly overscan = input(4, { transform: numberAttribute });
   readonly endReachedThreshold = input(2, { transform: numberAttribute });
+  /** Space around the rows, inside the scrolling content. See `<virtual-list>`. */
+  readonly contentPadding = input<VirtualListPadding>(0);
+  /** What a tap in the list does while a text input has the keyboard up. See `ScrollView`. */
+  readonly keyboardShouldPersistTaps = input<KeyboardShouldPersistTaps>('never');
 
   /** The end of the last section is within `endReachedThreshold`. See `<virtual-list>`. */
   readonly endReached = output<{ distanceFromEnd: number }>();

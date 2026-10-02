@@ -44,7 +44,10 @@ import { ViewBase } from './view-base.ts';
   },
 })
 export class RefreshControl extends ViewBase implements AfterViewChecked {
-  /** Whether the spinner shows. Two-way: `[(refreshing)]`. */
+  /**
+   * Whether the spinner shows. Only the app changes it: a pull fires `(refresh)` and leaves this
+   * alone, so `[(refreshing)]` and `[refreshing]` behave the same.
+   */
   readonly refreshing = model(false);
   /** How far from the top the spinner sits. */
   readonly progressViewOffset = input(undefined, { transform: optionalNumber });

@@ -7,7 +7,13 @@ import { after, before, describe, it } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import type { Type } from '@angular/core';
 import { registerPlatformComponents, registerViewName } from '@ng-native/fabric';
-import { render, screen, type FakeFabric, type FakeFabricNode } from '@ng-native/testing';
+import {
+  fireEvent,
+  render,
+  screen,
+  type FakeFabric,
+  type FakeFabricNode,
+} from '@ng-native/testing';
 import { compileFixture } from './compile.ts';
 
 const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
@@ -284,5 +290,33 @@ describe('section list on Android', () => {
     await scrollTo(fabric, 3 * SECTION + 100);
     assert.ok(!slotOf(fabric, 'S3#3'), 'the header scrolled away with its section');
     app.unmount();
+  });
+});
+
+describe('the list options a section list passes on', () => {
+  async function padded() {
+    const app = await render(mod['PaddedSections'] as Type<unknown>);
+    app.fabric.emit(scrollView(app.fabric), 'topLayout', { layout: { height: 300 } });
+    await settle();
+    return app.fabric;
+  }
+
+  it('pads the rows inside the scrolling content', async () => {
+    const fabric = await padded();
+    const header = slotOf(fabric, 'A')!;
+    assert.equal(header.props['top'], 12, 'the first row starts below the top padding');
+    assert.equal(header.props['left'], 16);
+    assert.equal(header.props['right'], 16);
+  });
+
+  it('keeps the keyboard up on a tap in the list when taps persist', async () => {
+    const fabric = await padded();
+    await fireEvent(screen.getByTestId('field'), 'focus', {});
+    const item = screen.getAllByTestId('item')[0]!;
+    const touch = (type: string) =>
+      fireEvent(item, type, { pageX: 0, pageY: 0, touches: type === 'topTouchEnd' ? [] : [{}] });
+    await touch('topTouchStart');
+    await touch('topTouchEnd');
+    assert.deepEqual(fabric.commands, [], 'no blur was sent to the field');
   });
 });
