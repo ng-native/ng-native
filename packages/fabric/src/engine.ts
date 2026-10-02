@@ -2657,6 +2657,17 @@ export class Engine implements HostEngine {
   }
 
   /**
+   * A clock animation the scroll plays instead: the same animation where only the timeline moved,
+   * and one cancelled where the name changed.
+   */
+  private handOverToScroll(node: EngineNode, spec: AnimationSpec): void {
+    if (!node.playing) return;
+    if (node.playing.spec.name !== spec.name) this.cancelPlaying(node);
+    node.playing = undefined;
+    this.playing.delete(node);
+  }
+
+  /**
    * `animationcancel` for an animation stopped before it ended: the element no longer asks for it,
    * asks for another by name, or its keyframes went, as a browser fires it.
    */
@@ -2780,12 +2791,7 @@ export class Engine implements HostEngine {
       return Object.assign(props, this.rescrolled(node, current, frames, props, inherited));
     }
     this.stopScrolled(node);
-    if (node.playing) {
-      // Played by the scroll instead, which is the same animation where only the timeline moved.
-      if (node.playing.spec.name !== spec.name) this.cancelPlaying(node);
-      node.playing = undefined;
-      this.playing.delete(node);
-    }
+    this.handOverToScroll(node, spec);
 
     const tracks = tracksOf(frames, props, inherited);
     const source = this.scrollSourceOf(node);
