@@ -48,11 +48,12 @@ the keyboard down to dismiss it (`keyboardDismissMode="interactive"`), iOS repor
 changes until the finger lets go, so anything moved by keyboard events - this view included -
 stays where it was and a gap opens under it.
 
-On iOS, with [react-native-keyboard-controller](https://kirillzyusko.github.io/react-native-keyboard-controller/)
+On iOS, with
+[react-native-keyboard-controller](https://kirillzyusko.github.io/react-native-keyboard-controller/)
 installed and `provideKeyboardController()` in the app's providers, the dock's bar is moved by the
 keyboard's height on the native side, every frame: as the keyboard rises and falls, and through an
-interactive dismissal. The drag takes the keyboard from the top of the bar, as Messages does, and
-a short drag springs it back. `[keyboardLift]` moves the content above with it:
+interactive dismissal. The drag takes the keyboard from the top of the bar, as Messages does, and a
+short drag springs it back. `[keyboardLift]` moves the content above with it:
 
 ```ts
 import { provideKeyboardController } from '@ng-native/components';

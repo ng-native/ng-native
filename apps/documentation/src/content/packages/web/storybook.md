@@ -10,8 +10,8 @@ two additions: `ngNativeWeb()` in its Vite config, and a `render` function that 
 component with `mount`. A story names its component in `parameters`, and its args become the
 component's inputs.
 
-Storybook's Angular framework, `@storybook/angular`, builds with the Angular CLI's builders, which do
-not build `@ng-native/*` ([The Angular CLI](/packages/web#the-angular-cli) covers why).
+Storybook's Angular framework, `@storybook/angular`, builds with the Angular CLI's builders, which
+do not build `@ng-native/*` ([The Angular CLI](/packages/web#the-angular-cli) covers why).
 
 ## Setting it up
 

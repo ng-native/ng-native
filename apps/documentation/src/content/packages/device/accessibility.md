@@ -1,6 +1,6 @@
 ---
 title: Accessibility
-summary: The screen reader, reduced motion, bold text and font scale settings `Accessibility` reports.
+summary: The screen reader, reduced motion, bold text and font scale `Accessibility` reports.
 ---
 
 # Accessibility

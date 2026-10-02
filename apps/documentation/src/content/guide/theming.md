@@ -1,6 +1,6 @@
 ---
 title: Theming and Tailwind
-summary: Tailwind and your own CSS on native views, through a real cascade with no className interop layer.
+summary: Tailwind and your own CSS on native views, through a real cascade, no className interop.
 ---
 
 # Theming and Tailwind
@@ -27,9 +27,9 @@ since its own chrome is a real document even though the components in it are not
 
 The compiler unwraps `@layer` and `@supports`, drops `@property`, substitutes static theme
 variables, and folds `calc()` through lightningcss. A theme variable the app sets itself stays a
-`var()` instead (see [Tokens cross component boundaries](#tokens-cross-component-boundaries)). For example, `calc(var(--spacing) * 4)` is
-constant but cannot resolve on a device. The compiler converts `oklch()` to sRGB as in component
-stylesheets.
+`var()` instead (see [Tokens cross component boundaries](#tokens-cross-component-boundaries)). For
+example, `calc(var(--spacing) * 4)` is constant but cannot resolve on a device. The compiler
+converts `oklch()` to sRGB as in component stylesheets.
 
 Then the utilities compile:
 
@@ -58,8 +58,8 @@ Diagnostics prevent unsupported styles from silently doing nothing.
 ### `hover:` is the pressed state
 
 `:hover` is permanently unsupported by the native matcher and dropped with a build warning. The
-`hover:` variant instead matches `:active`, which the engine sets on touched views and their ancestors,
-letting hover classes express touch engagement.
+`hover:` variant instead matches `:active`, which the engine sets on touched views and their
+ancestors, letting hover classes express touch engagement.
 
 `data-hover` supports iPad trackpads through React Native's W3C pointer events. Components must
 listen for these events and set the attribute themselves. Phones never send them, so the variant
@@ -141,8 +141,8 @@ inject(ColorScheme).set('dark'); // the whole app is dark, whatever the system s
 inject(ColorScheme).set(null); // back to the system's
 ```
 
-`prefers-color-scheme`, `light-dark()` and `ColorScheme.current` all follow it, so nothing else has to
-know.
+`prefers-color-scheme`, `light-dark()` and `ColorScheme.current` all follow it, so nothing
+else has to know.
 
 ## Tokens cross component boundaries
 

@@ -39,11 +39,11 @@ Android 15 includes the system bars because the app draws behind them. `Screen.w
 rather than `Dimensions` for that reason; see the [screen](/packages/device/screen) page. `known()`
 tells you whether a real measurement has arrived yet, for a layout that would rather wait than jump.
 
-Most layouts should not read `SafeArea` at all. A [`<safe-area-view>`](/packages/components/safe-area) applies the insets natively, in
-the same layout pass as everything else, without a round trip through JavaScript, and a screen in a
-native stack has its header do it. Inject `SafeArea` for what neither covers: a floating button that
-must clear the home indicator, a scroll view computing its own content inset, a sheet drawing its
-own chrome.
+Most layouts should not read `SafeArea` at all. A
+[`<safe-area-view>`](/packages/components/safe-area) applies the insets natively, in the same layout
+pass as everything else, without a round trip through JavaScript, and a screen in a native stack has
+its header do it. Inject `SafeArea` for what neither covers: a floating button that must clear the
+home indicator, a scroll view computing its own content inset, a sheet drawing its own chrome.
 
 `report()` is called by `<safe-area-provider>`, not by an app. An inset written from anywhere else
 is a number that stops matching the screen the moment the device rotates.

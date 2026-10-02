@@ -12,13 +12,14 @@ verified features.
 ## There is no DOM
 
 Native apps have no browser DOM: `document`, `window` and DOM APIs do not work.
-`ElementRef.nativeElement` is a retained engine node, not an `HTMLElement`, also exposed by `NativeRef` in
-`@ng-native/components` for native commands. `DomSanitizer` and `NgOptimizedImage` are unavailable;
-use `<image>` from `@ng-native/components`, which loads assets through `resolveAssetSource`.
-`mount()` provides a `DOCUMENT` stub only to prevent `TransferState` errors when creating a
-`resource()`; see [Bootstrapping](/packages/platform/bootstrapping#what-is-in-the-injector). Do not
-use it as a document. Element-based `@defer` triggers (`on interaction`, `on hover`, `on viewport`)
-have native equivalents; see [The renderer](/packages/platform/renderer#defer-triggers).
+`ElementRef.nativeElement` is a retained engine node, not an `HTMLElement`, also exposed by
+`NativeRef` in `@ng-native/components` for native commands. `DomSanitizer` and
+`NgOptimizedImage` are unavailable; use `<image>` from `@ng-native/components`, which loads
+assets through `resolveAssetSource`. `mount()` provides a `DOCUMENT` stub only to prevent
+`TransferState` errors when creating a `resource()`; see
+[Bootstrapping](/packages/platform/bootstrapping#what-is-in-the-injector). Do not use it as a
+document. Element-based `@defer` triggers (`on interaction`, `on hover`, `on viewport`) have
+native equivalents; see [The renderer](/packages/platform/renderer#defer-triggers).
 
 **Workaround:** use `@ng-native/components` for elements, `Engine`/`HostEngine` for imperative
 native commands, and `@ng-native/device` for capabilities browsers expose through `window` or
@@ -87,8 +88,8 @@ bundle imports `expo`:
 
 Use `provideNativeHttpClient()` from `@ng-native/platform/http`: it configures `HttpClient` with
 `withXhr()`, which uses React Native's native `XMLHttpRequest`, upload progress included, whatever
-the global `fetch` is. See [HTTP requests](/packages/platform#http-requests) for the signature and an
-interceptor example.
+the global `fetch` is. See [HTTP requests](/packages/platform#http-requests) for the signature and
+an interceptor example.
 
 **Workaround:** `provideNativeHttpClient(...features)` in `mount()`'s `providers`, never
 `provideHttpClient()` on its own.
@@ -110,10 +111,10 @@ anything required `react-native/Libraries/Renderer` after mount.
 `<virtual-list>` supports separators (`<ng-template virtualListSeparator>`), sticky rows and a
 sticky header. `<section-list>` covers `SectionList`, item and section separators included, but
 lacks horizontal and inverted layouts and viewability events. Separators lack `highlighted` state. A
-`<section-list>`'s row heights are fixed and include separators, as with
-`getItemLayout`; a `<virtual-list>`'s can be measured instead. A virtual list holds its position with
-a `scrollTo` after the commit rather than inside the native mount, so a correction made mid-fling
-lands where the last scroll event said the list was.
+`<section-list>`'s row heights are fixed and include separators, as with `getItemLayout`; a
+`<virtual-list>`'s can be measured instead. A virtual list holds its position with a `scrollTo`
+after the commit rather than inside the native mount, so a correction made mid-fling lands where the
+last scroll event said the list was.
 
 On Android, `<refresh-control>` becomes the scroll view's parent, as in React Native. The scroll
 view's inline layout style moves with it; class-based layout stays on the inner scroll view.

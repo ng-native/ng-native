@@ -12,14 +12,15 @@ const REPO_ROOT = new URL('../..', import.meta.url).pathname;
 
 describe('findLongLines', () => {
   it('flags a prose line over the limit', () => {
-    const line = 'a'.repeat(LIMIT + 1);
+    const line = `${'word '.repeat(Math.ceil((LIMIT + 1) / 5))}`.slice(0, LIMIT + 1);
     assert.deepEqual(findLongLines('x.md', line), [
       { file: 'x.md', line: 1, length: line.length, kind: 'prose' },
     ]);
   });
 
   it('leaves a line at the limit alone', () => {
-    assert.deepEqual(findLongLines('x.md', 'a'.repeat(LIMIT)), []);
+    const line = `${'word '.repeat(Math.ceil(LIMIT / 5))}`.slice(0, LIMIT);
+    assert.deepEqual(findLongLines('x.md', line), []);
   });
 
   it('excludes a fenced code block', () => {

@@ -1,6 +1,7 @@
 ---
 title: On-device AI
-summary: The language model the phone already has, as a service - Apple Foundation Models and Gemini Nano.
+summary: The language model the phone already has, as a service - Apple Foundation Models and
+  Gemini Nano.
 ---
 
 # On-device AI

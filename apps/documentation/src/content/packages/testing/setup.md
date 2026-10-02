@@ -17,7 +17,9 @@ Install the package and Vitest as development dependencies:
 npm install --save-dev @ng-native/testing vitest
 ```
 
-Add `ngNative()` to a `vitest.config.mts` at the root of the app - `.mts` because an Expo app's `package.json` is not `"type": "module"`, and Vite warns on every run about an ESM config it has to load as CommonJS. This is the template's, verbatim:
+Add `ngNative()` to a `vitest.config.mts` at the root of the app - `.mts` because an Expo app's
+`package.json` is not `"type": "module"`, and Vite warns on every run about an ESM config it has to
+load as CommonJS. This is the template's, verbatim:
 
 ```ts
 import { ngNative } from '@ng-native/testing/vitest';
@@ -115,8 +117,9 @@ and the Vitest plugin and the Node hook each fix all three the same way:
   `@ng-native/metro`'s transform first, the one Metro uses for the app bundle. That covers your
   components and a test file that declares one inline.
 - **Partial compilation.** `@angular/common`, `@angular/router`, `@angular/forms`, the
-  `@ng-native/*` packages and most Angular libraries on npm ship `ɵɵngDeclare*` declarations that have to be linked before they can run.
-  The Angular linker runs over every file that has them, as it does in Metro.
+  `@ng-native/*` packages and most Angular libraries on npm ship `ɵɵngDeclare*` declarations that
+  have to be linked before they can run. The Angular linker runs over every file that has them, as
+  it does in Metro.
 - **`node_modules`.** Vitest normally hands a dependency straight to Node, which would bypass both
   steps above, so `ngNative()` tells it to process `@angular/*`, `@ng-native/*` and `@ng-icons/*`
   itself. Node refuses to strip types from any `.ts` file under `node_modules`, so the Node hook

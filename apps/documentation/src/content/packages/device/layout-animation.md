@@ -30,8 +30,8 @@ A `transition` animates a property from one value to another, and the engine alr
 without anything here. It cannot animate a layout: when a row is removed and the rows below move up,
 nothing about those rows changed - their `top` was never set, Yoga computed it, and there is no old
 value to transition from. The web solves this with FLIP, measuring before and after in JavaScript;
-native solves it in the shadow tree, which is where the two layouts both exist. So `animate()` is not
-a nicer `transition` - it is the only way to say the thing at all.
+native solves it in the shadow tree, which is where the two layouts both exist. So `animate()` is
+not a nicer `transition` - it is the only way to say the thing at all.
 
 `animate(change, options?)` takes the change to make as a function, because the two have to be
 adjacent: a configured animation with nothing after it animates whatever commit happens next, which
@@ -41,8 +41,9 @@ forever.
 
 `LayoutChange` takes `duration` (300ms default), `easing` (`'spring' | 'linear' | 'easeInEaseOut' |
 'easeIn' | 'easeOut' | 'keyboard'`, default `'easeInEaseOut'`; `'spring'` is the platform's own and
-what a native list uses, and `'keyboard'` is the curve iOS moves its keyboard on), and `appear`/`leave` (`'opacity' | 'scaleXY' | 'none'`, both defaulting to `'opacity'`)
-for what a view appearing or leaving does.
+what a native list uses, and `'keyboard'` is the curve iOS moves its keyboard on), and
+`appear`/`leave` (`'opacity' | 'scaleXY' | 'none'`, both defaulting to `'opacity'`) for what a view
+appearing or leaving does.
 
 It animates whatever the next layout pass happens to move, so it is a blunt instrument by design.
 Where you want one specific property animated, a CSS `transition` or a

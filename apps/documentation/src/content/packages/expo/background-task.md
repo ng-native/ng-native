@@ -101,8 +101,9 @@ being rebuilt since - throws a `MissingModuleError` when the service first reach
 message names the module and the commands that fix it; see
 [Using a module](/packages/expo/using-a-module#what-happens-without-the-module-installed).
 
-On the web, and in a test that provides no fake, `status()` resolves to `BackgroundTaskStatus.Restricted`, `register()` and `unregister()` resolve
-without doing anything, and `triggerForTesting()` resolves to `false`.
+On the web, and in a test that provides no fake, `status()` resolves to
+`BackgroundTaskStatus.Restricted`, `register()` and `unregister()` resolve without doing anything,
+and `triggerForTesting()` resolves to `false`.
 
 ## Reference
 

@@ -76,6 +76,7 @@ being rebuilt since - throws a `MissingModuleError` when `hold()` first reaches 
 message names the module and the commands that fix it; see
 [Using a module](/packages/expo/using-a-module#what-happens-without-the-module-installed).
 
-On the web, and in a test that provides no fake, `available` is `false`. `hold()`, `hide()` and `hideWhenReady()` all resolve without touching
-anything - the app starts as though the module hides itself instantly, which is what actually
-happens: with no `expo-splash-screen`, the native splash hides itself on the first frame anyway.
+On the web, and in a test that provides no fake, `available` is `false`. `hold()`, `hide()` and
+`hideWhenReady()` all resolve without touching anything - the app starts as though the module hides
+itself instantly, which is what actually happens: with no `expo-splash-screen`, the native splash
+hides itself on the first frame anyway.

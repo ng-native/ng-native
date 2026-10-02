@@ -56,11 +56,11 @@ A browser build is Vite with `ngNativeWeb()` from `@ng-native/web/vite`, as
 - **The Angular CLI's builders are not supported.** Their compiler checks the components' host
   bindings against the browser's DOM schema and rejects React Native's props on elements that are
   not HTML. An Angular web app that hosts islands builds with Vite and `ngNativeWeb()` instead.
-- **A library that ships decorated TypeScript source is not compiled.** Angular libraries
-  published the usual way, as partial-compiled JavaScript, the `@ng-native/*` packages among them,
-  go through `@oxc-angular/vite`'s linker as they would in any Vite app. One that ships decorated
-  TypeScript source instead is not compiled, and fails in the browser the way an uncompiled component does: a syntax error at its
-  first decorator.
+- **A library that ships decorated TypeScript source is not compiled.** Angular libraries published
+  the usual way, as partial-compiled JavaScript, the `@ng-native/*` packages among them, go through
+  `@oxc-angular/vite`'s linker as they would in any Vite app. One that ships decorated TypeScript
+  source instead is not compiled, and fails in the browser the way an uncompiled component does: a
+  syntax error at its first decorator.
 - **`react-native` and `expo` are left out of the bundle, and nothing else native is.** The
   packages `require` those two only on a device. Importing anything else native-only, such as
   `react-native-svg` or an `expo-*` module, fails the build, as the section above describes.

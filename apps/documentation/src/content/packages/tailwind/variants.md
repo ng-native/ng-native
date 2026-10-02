@@ -68,14 +68,14 @@ per node. Define your tokens that way and the switch reaches them.
 
 On native, `hover:` means the pressed state: `:hover` is dropped with a build warning there and
 always will be - there is no pointer cascade to answer it - but a hover style and a press style ask
-the same design question. The native preset points the variant at `:active` (set by the engine while a touch is
-down) and also `data-hover`, for the one native device with a real pointer - an
-iPad with a trackpad, which React Native's pointer events do report. `press:` and `hovered:` name
-one half each, for a component that wants to be precise rather than portable.
+the same design question. The native preset points the variant at `:active` (set by the engine while
+a touch is down) and also `data-hover`, for the one native device with a real pointer - an iPad with
+a trackpad, which React Native's pointer events do report. `press:` and `hovered:` name one half
+each, for a component that wants to be precise rather than portable.
 
-On the web, `hover:` keeps the real `:hover` as well as `:active` and `data-hover`, so a class string written once
-behaves the same on a desktop browser, a touchscreen laptop, and a phone browser without the
-component knowing which it is on.
+On the web, `hover:` keeps the real `:hover` as well as `:active` and `data-hover`, so a class
+string written once behaves the same on a desktop browser, a touchscreen laptop, and a phone browser
+without the component knowing which it is on.
 
 ```css
 /* native.css */
@@ -91,9 +91,9 @@ On native, `focus-visible:` is aliased straight to `focus:`, because the distinc
 on the web - keeping a ring off a control someone clicked - has no case on a phone: focus only ever
 arrives from a keyboard, a remote or an assistive technology, exactly the situations a ring is for.
 `:focus-visible` is dropped with a build warning on native for the same reason `:hover` is. Both
-platforms also match `[data-focus]`, because focus lands on the control itself while the border and padding that
-form the ring usually sit on a wrapper around it, which can only know it is focused because the
-behavior composed onto the control told it.
+platforms also match `[data-focus]`, because focus lands on the control itself while the border and
+padding that form the ring usually sit on a wrapper around it, which can only know it is focused
+because the behavior composed onto the control told it.
 
 ## `peer-*` and `group-*`
 

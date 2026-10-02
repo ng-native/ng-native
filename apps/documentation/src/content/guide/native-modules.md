@@ -1,6 +1,6 @@
 ---
 title: Write a native module
-summary: Write Swift and Kotlin for a capability no package covers, and inject it as an Angular service.
+summary: Write Swift and Kotlin for a missing capability, and inject it as an Angular service.
 ---
 
 # Write a native module

@@ -1,6 +1,7 @@
 ---
 title: Maps
-summary: <expo-map> - Apple Maps on iOS and Google Maps on Android, with markers, shapes, a camera and taps.
+summary: <expo-map> - Apple Maps on iOS and Google Maps on Android, with markers, shapes, a camera
+  and taps.
 ---
 
 # Maps
@@ -129,7 +130,8 @@ and `registerExpoViews('expo-maps-google')` register the same two views under th
   Apple's; `snippet`, `draggable`, `showCallout`, `anchor` and `zIndex` are Google's. Each platform
   ignores the other's.
 - **`polylines`** - lines, such as a route: `{ id, coordinates, color, width }`. To draw one along
-  the Earth's curve, set `contourStyle` to `'GEODESIC'` for iOS and `geodesic` to `true` for Android.
+  the Earth's curve, set `contourStyle` to `'GEODESIC'` for iOS and `geodesic` to `true` for
+  Android.
 - **`polygons`** - filled shapes: `{ id, coordinates, color, lineColor, lineWidth }`, with the
   corners as `coordinates`.
 - **`circles`** - filled circles: `{ id, center, radius, color, lineColor, lineWidth }`, with the
@@ -185,10 +187,10 @@ Each is the view's own event, so the payload is `$event.nativeEvent`:
 **`selectMarker(id, { zoom, moveCamera })`** selects a marker as a tap would (no `id` clears the
 selection). Both resolve to `true` once the view has been asked, and to `false` without the module.
 
-A call made before the native map is on screen is held, not dropped, and sent in order once it
-is: calling from a constructor or an `effect` that runs as the screen opens is safe. The map says
-it is there with its first camera move, on both platforms, and **`ready`** is a signal of whether
-it has. A held call resolves to `false` if the map goes before it ever appears.
+A call made before the native map is on screen is held, not dropped, and sent in order once it is:
+calling from a constructor or an `effect` that runs as the screen opens is safe. The map says it is
+there with its first camera move, on both platforms, and **`ready`** is a signal of whether it has.
+A held call resolves to `false` if the map goes before it ever appears.
 
 In React these are methods on the map's ref. Underneath they are functions `expo-maps` defines on
 the view, which native finds by the tag it is called with; `MapView` calls them with the tag the

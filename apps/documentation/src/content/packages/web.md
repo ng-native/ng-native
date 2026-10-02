@@ -19,8 +19,8 @@ Fabric, and an app built around them will not run here unchanged.
 ## Setting up a browser app
 
 A browser app on `@ng-native/web` builds with [Vite](https://vite.dev), and `ngNativeWeb()` from
-`@ng-native/web/vite` sets it up: it compiles the app's components, links the `@ng-native/*` packages
-as it links any Angular library, and keeps React Native and Expo out of the bundle.
+`@ng-native/web/vite` sets it up: it compiles the app's components, links the `@ng-native/*`
+packages as it links any Angular library, and keeps React Native and Expo out of the bundle.
 
 In an empty directory:
 
@@ -45,15 +45,15 @@ export default defineConfig({
 `ngNativeWeb()` is three things: `@oxc-angular/vite`'s Angular compiler for the app's own
 components, the same compiler for the decorated `@ng-native/*` source under `node_modules`, which
 `@oxc-angular/vite` leaves alone, and the resolution a browser build needs. `react-native` and
-`expo`, which the packages only `require` on a device, resolve to an empty module, in the bundle
-and in Vite's dependency pre-bundling alike, including in a workspace that has React Native
-installed for its native app. An Expo module that a package `require`s, such as `expo-battery`
-behind `@ng-native/expo/battery`, resolves to a module that throws when it is loaded, so the
-service is inert, as it is anywhere the module is missing, whether or not Expo is installed. An
-`import` of one in the app's own code still fails the build. It sets no `build.rolldownOptions.external`, so it combines with a tool that sets
-its own, such as [Storybook](/packages/web/storybook). It takes
-`@oxc-angular/vite`'s options and passes them on, over `zoneless: true` and
-`emitClassMetadata: false`.
+`expo`, which the packages only `require` on a device, resolve to an empty module, in the bundle and
+in Vite's dependency pre-bundling alike, including in a workspace that has React Native installed
+for its native app. An Expo module that a package `require`s, such as `expo-battery` behind
+`@ng-native/expo/battery`, resolves to a module that throws when it is loaded, so the service is
+inert, as it is anywhere the module is missing, whether or not Expo is installed. An `import` of one
+in the app's own code still fails the build. It sets no `build.rolldownOptions.external`, so it
+combines with a tool that sets its own, such as [Storybook](/packages/web/storybook). It takes
+`@oxc-angular/vite`'s options and passes them on, over `zoneless: true` and `emitClassMetadata:
+false`.
 
 `index.html`, which Vite serves as the page:
 
@@ -302,9 +302,9 @@ with the app and what it keeps.
 ## The other way round
 
 This package also has the web half of the opposite arrangement: an Angular component rendered by a
-browser, in a web view inside a native screen. `mountInWebView` (from `@ng-native/web/web-view`) mounts a component in the page
-a native web view loaded, and `<dom-component>` from `@ng-native/expo` shows it.
-[DOM components](/packages/expo/dom-components) covers both halves.
+browser, in a web view inside a native screen. `mountInWebView` (from `@ng-native/web/web-view`)
+mounts a component in the page a native web view loaded, and `<dom-component>` from
+`@ng-native/expo` shows it. [DOM components](/packages/expo/dom-components) covers both halves.
 
 From here, [Islands](/packages/web/islands) covers placing components in an existing app and
 mounting more than one app into one page, [Storybook](/packages/web/storybook) covers a catalogue

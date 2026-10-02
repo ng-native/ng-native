@@ -58,8 +58,8 @@ being rebuilt since - throws a `MissingModuleError` when the service first reach
 message names the module and the commands that fix it; see
 [Using a module](/packages/expo/using-a-module#what-happens-without-the-module-installed).
 
-On the web, and in a test that provides no fake, `hold()` still tracks the tag in `holders` and `active`, but nothing on the device changes and
-`stop` calls into a module that is not there safely.
+On the web, and in a test that provides no fake, `hold()` still tracks the tag in `holders` and
+`active`, but nothing on the device changes and `stop` calls into a module that is not there safely.
 
 ## Reference
 

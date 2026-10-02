@@ -19,9 +19,9 @@ if (!(await check()).granted && !(await request()).granted) {
 }
 ```
 
-`check()` cannot tell "denied" from "not yet asked" - `PermissionsAndroid.check` only answers yes or
-no - so a permission nobody has asked about yet answers `undetermined` rather than `denied`, which is
-the honest answer and lets a caller decide whether to ask. `request()` maps Android's
+`check()` cannot tell "denied" from "not yet asked" - `PermissionsAndroid.check` only answers yes
+or no - so a permission nobody has asked about yet answers `undetermined` rather than `denied`,
+which is the honest answer and lets a caller decide whether to ask. `request()` maps Android's
 `never_ask_again` result onto `canAskAgain: false`, which is Android's way of saying the dialog is
 over; anything else is a no the user can still change their mind about, so `canAskAgain` stays
 `true`.

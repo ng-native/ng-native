@@ -1,6 +1,6 @@
 ---
 title: The native header
-summary: NativeHeader, NativeHeaderItem, NativeSearchBar, their default colors and withHeaderDefaults.
+summary: NativeHeader, NativeHeaderItem, NativeSearchBar, default colors, and withHeaderDefaults.
 ---
 
 # The native header

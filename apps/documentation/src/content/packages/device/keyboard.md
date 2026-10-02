@@ -42,8 +42,9 @@ moment on both platforms.
   Android sends no Will events. `easing` is always `'keyboard'` with a `duration` of zero: the
   platform animates its own keyboard, and nothing here should try to animate alongside it.
 
-To move with the keyboard on iOS, hand its timing to [`LayoutAnimation`](/packages/device/layout-animation)
-before the change it causes, which is what `<keyboard-avoiding-view>` does:
+To move with the keyboard on iOS, hand its timing to
+[`LayoutAnimation`](/packages/device/layout-animation) before the change it causes, which is what
+`<keyboard-avoiding-view>` does:
 
 ```ts
 import { Component, effect, inject, signal } from '@angular/core';

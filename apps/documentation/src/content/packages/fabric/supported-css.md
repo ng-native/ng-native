@@ -89,8 +89,9 @@ conic. A stop can be a `var()`, a `color-mix()` with one in it, or a literal col
 a stop that is a lone `var()` nobody defines is dropped, which is what makes an optional middle
 color optional. A radial gradient with tokens in its stops takes its shape, size and center as
 keywords and positions (`circle closest-side at 50% 18%`), not an explicit radius; a position
-can be a token too (`at var(--x) 30%`), with a fallback after its name. `background-image` takes gradients only - a `url()` in `background-image` is dropped, because there is no
-image loader behind that prop; put an image in an `<image>` element instead.
+can be a token too (`at var(--x) 30%`), with a fallback after its name. `background-image` takes
+gradients only - a `url()` in `background-image` is dropped, because there is no image loader
+behind that prop; put an image in an `<image>` element instead.
 
 `filter` compiles to the list of functions React Native's `filter` prop takes, and which of them a
 device draws depends on the platform:
@@ -177,17 +178,17 @@ which keep spaces and line breaks, are dropped. `font-variant-numeric` takes `ta
 `proportional-nums`, `lining-nums` and `oldstyle-nums`, as `fontVariant`.
 
 `display` takes `flex`, `none`, `block` and `contents`. Every native view is already a flex
-container stacking its children in a column, which is what a block does with its own, so `block`
-is read as `flex`: that is what lets `.d-none` followed by `.d-md-block` show an element again at a
+container stacking its children in a column, which is what a block does with its own, so `block` is
+read as `flex`: that is what lets `.d-none` followed by `.d-md-block` show an element again at a
 breakpoint. `inline-flex` is read as `flex` for the same reason. `inline` and `inline-block` are
 read as `flex` too, because every native view sits in a flex container, and a browser lays out a
 flex container's inline children as blocks. `flow-root` is read as `flex` as well: it is a block
-that contains its floats, which a flex item already does. `contents` is Yoga's own: the element draws no box of
-its own (no background, border or padding) and its children are laid out as if they were its
-parent's. `grid` and the table values are dropped, because a column of flex children cannot pretend
-to lay them out in a grid. `display: var(--d)` reads the token on device the same way, in a
-stylesheet or set on the element. A token that is none of these values unsets `display`, as Chrome
-does, and the element is laid out as a flex column.
+that contains its floats, which a flex item already does. `contents` is Yoga's own: the element
+draws no box of its own (no background, border or padding) and its children are laid out as if they
+were its parent's. `grid` and the table values are dropped, because a column of flex children
+cannot pretend to lay them out in a grid. `display: var(--d)` reads the token on device the same
+way, in a stylesheet or set on the element. A token that is none of these values unsets `display`,
+as Chrome does, and the element is laid out as a flex column.
 
 `overflow` is one value for both axes - Yoga has no separate `overflow-x`/`overflow-y` - so a rule
 that gives them different values is dropped with a warning rather than silently picking one.

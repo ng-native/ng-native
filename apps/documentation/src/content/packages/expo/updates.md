@@ -73,8 +73,9 @@ being rebuilt since - throws a `MissingModuleError` when the service first reach
 message names the module and the commands that fix it; see
 [Using a module](/packages/expo/using-a-module#what-happens-without-the-module-installed).
 
-On the web, and in a test that provides no fake, `enabled` is `false` and `check()` resolves `false` without doing anything, the same behavior as
-running in Expo Go. `apply()` does nothing, since `state()` can never reach `'ready'`.
+On the web, and in a test that provides no fake, `enabled` is `false` and `check()` resolves `false`
+without doing anything, the same behavior as running in Expo Go. `apply()` does nothing, since
+`state()` can never reach `'ready'`.
 
 ## Reference
 

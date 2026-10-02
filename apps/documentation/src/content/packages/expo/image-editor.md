@@ -77,12 +77,13 @@ enums, without loading the module, so code that edits can run in a test.
 
 ## Without the module
 
-On iOS and Android, a missing `expo-image-manipulator` - never installed, or installed without the app
-being rebuilt since - throws a `MissingModuleError` when the service first reaches for it. Its
+On iOS and Android, a missing `expo-image-manipulator` - never installed, or installed without the
+app being rebuilt since - throws a `MissingModuleError` when the service first reaches for it. Its
 message names the module and the commands that fix it; see
 [Using a module](/packages/expo/using-a-module#what-happens-without-the-module-installed).
 
-On the web, and in a test that provides no fake, `edit()` resolves to `null` and `manipulate()` returns `null`.
+On the web, and in a test that provides no fake, `edit()` resolves to `null` and `manipulate()`
+returns `null`.
 
 ## Reference
 

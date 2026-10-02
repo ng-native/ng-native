@@ -1,6 +1,6 @@
 ---
 title: Screen
-summary: The window `Screen` tracks, the physical display, orientation, and the `compact` breakpoint.
+summary: The window `Screen` tracks, the physical display, orientation and the `compact` breakpoint.
 ---
 
 # Screen

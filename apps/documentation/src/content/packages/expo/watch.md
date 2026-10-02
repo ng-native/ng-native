@@ -1,6 +1,7 @@
 ---
 title: Apple Watch
-summary: Talk to a SwiftUI Apple Watch app from Angular, with messages, shared context, queued data and files.
+summary: Talk to a SwiftUI Apple Watch app from Angular, with messages, shared context, queued data
+  and files.
 ---
 
 # Apple Watch

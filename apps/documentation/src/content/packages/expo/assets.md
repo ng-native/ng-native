@@ -74,4 +74,5 @@ being rebuilt since - throws a `MissingModuleError` when `assets()` first reache
 message names the module and the commands that fix it; see
 [Using a module](/packages/expo/using-a-module#what-happens-without-the-module-installed).
 
-On the web, and in a test that provides no fake, the resource resolves to an empty list rather than throwing or rejecting.
+On the web, and in a test that provides no fake, the resource resolves to an empty list rather than
+throwing or rejecting.

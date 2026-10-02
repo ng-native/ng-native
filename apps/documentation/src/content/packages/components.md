@@ -21,13 +21,13 @@ element does not behave as documented, check the import list first.
 
 ## One name, two layers
 
-`<view>` is two things with one name. The engine keeps a table of element names and the native
-view each commits as - `view` is `View`, `scroll-view` is `ScrollView`, `text` is `Paragraph` - so
-a bare `<view>` reaches native even with nothing imported. The component in this package takes the
-element name as its selector (`View` is `selector: 'view'`), so importing it does not change the tag.
-It attaches to the same element and adds what the table cannot: typed inputs, React Native's
-default props, accessibility, events, and for `<text>` the text layer itself. There is no second,
-prefixed set of wrappers to reach for; `<view>` with `View` imported is the wrapper.
+`<view>` is two things with one name. The engine keeps a table of element names and the native view
+each commits as - `view` is `View`, `scroll-view` is `ScrollView`, `text` is `Paragraph` - so a bare
+`<view>` reaches native even with nothing imported. The component in this package takes the element
+name as its selector (`View` is `selector: 'view'`), so importing it does not change the tag. It
+attaches to the same element and adds what the table cannot: typed inputs, React Native's default
+props, accessibility, events, and for `<text>` the text layer itself. There is no second, prefixed
+set of wrappers to reach for; `<view>` with `View` imported is the wrapper.
 
 That is also what the console message is about. On the first commit of a known element that no
 component has claimed, development builds log:
@@ -166,13 +166,14 @@ rather than thrown back into the native code that delivered the event.
 ## Where each element lives
 
 The [layout](/packages/components/layout) page covers `<view>` and Yoga's flexbox defaults, and
-[safe area](/packages/components/safe-area) covers keeping content clear of the notch. The [text](/packages/components/text) page covers `<text>`, why nothing renders without
-one, and fonts. The [input](/packages/components/input) page covers `<text-input>`, keyboards and
-the props Signal Forms binds to. The [pressable](/packages/components/pressable) page covers
-`<pressable>` and `<touchable-opacity>`, and the responder negotiation behind press events; the
-[gestures](/packages/components/gestures) page covers `react-native-gesture-handler`. The
-[scroll view](/packages/components/scroll-view) page covers `<scroll-view>` and pull-to-refresh,
-and the [lists](/packages/components/lists) page covers `<virtual-list>` and `<section-list>`. The
+[safe area](/packages/components/safe-area) covers keeping content clear of the notch. The
+[text](/packages/components/text) page covers `<text>`, why nothing renders without one, and fonts.
+The [input](/packages/components/input) page covers `<text-input>`, keyboards and the props Signal
+Forms binds to. The [pressable](/packages/components/pressable) page covers `<pressable>` and
+`<touchable-opacity>`, and the responder negotiation behind press events; the
+[gestures](/packages/components/gestures) page covers `react-native-gesture-handler`. The [scroll
+view](/packages/components/scroll-view) page covers `<scroll-view>` and pull-to-refresh, and the
+[lists](/packages/components/lists) page covers `<virtual-list>` and `<section-list>`. The
 [keyboard-avoiding view](/packages/components/keyboard-avoiding-view) page covers moving content
 clear of the on-screen keyboard. The [image](/packages/components/image) page covers `<image>` and
 `<image-background>`; the [activity indicator](/packages/components/activity-indicator) and

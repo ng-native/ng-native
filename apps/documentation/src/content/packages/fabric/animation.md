@@ -43,8 +43,8 @@ engine plays it, tracked separately from the transitions above.
 
 The longhands work too: `animation-name`, `animation-duration`, `animation-timing-function`,
 `animation-delay`, `animation-iteration-count`, `animation-direction`, `animation-fill-mode` and
-`animation-play-state`. Within a rule they apply in the order written, as in CSS, so a longhand after
-the shorthand changes only its own part and a shorthand after a longhand resets it:
+`animation-play-state`. Within a rule they apply in the order written, as in CSS, so a longhand
+after the shorthand changes only its own part and a shorthand after a longhand resets it:
 
 ```css
 .spinner {
@@ -87,8 +87,8 @@ while a finger is down: `.held { animation-play-state: paused }`. An animation t
 paused shows its first frame.
 
 `animation-name: none` (or `animation: none`) stops an animation a weaker rule started, and a rule
-with durations but no name plays nothing on its own, as in a browser. A few real constraints come with it,
-whichever spelling you use:
+with durations but no name plays nothing on its own, as in a browser. A few real constraints come
+with it, whichever spelling you use:
 
 - Only one animation per rule, so `animation-name` takes one name and the shorthand one entry. Two
   would need two players and a rule for what happens when they touch the same property, which

@@ -26,7 +26,8 @@ With `LOCALE_ID` set to `fr`:
 ```
 
 French uses narrow and non-breaking spaces, as in a browser. For regional variants (`fr-CA`,
-`en-GB`), register the matching `@angular/common/locales/` data file and use the full `LOCALE_ID` tag.
+`en-GB`), register the matching `@angular/common/locales/` data file and
+use the full `LOCALE_ID` tag.
 
 ### Timezones
 

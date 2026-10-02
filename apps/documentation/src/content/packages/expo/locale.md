@@ -69,8 +69,8 @@ being rebuilt since - throws a `MissingModuleError` when the service first reach
 message names the module and the commands that fix it; see
 [Using a module](/packages/expo/using-a-module#what-happens-without-the-module-installed).
 
-On the web, and in a test that provides no fake, `locales` and `calendars` are empty arrays, `locale` is null, `rtl` is `false`, `tag` is
-`undefined`.
+On the web, and in a test that provides no fake, `locales` and `calendars` are empty arrays,
+`locale` is null, `rtl` is `false`, `tag` is `undefined`.
 
 ## Reference
 

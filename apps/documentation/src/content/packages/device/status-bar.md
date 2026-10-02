@@ -29,8 +29,9 @@ order, later ones winning per property. Anything a claim leaves unset falls thro
 underneath it.
 
 `StatusBarState` takes `style` (`'default' | 'light' | 'dark' | 'auto'`, `'light'` meaning light
-_content_ for a dark bar, as CSS would), `hidden`, `animated`, and two Android-only properties: `backgroundColor`
-(iOS has no such thing) and `translucent` (whether content draws underneath the bar).
+_content_ for a dark bar, as CSS would), `hidden`, `animated`, and two Android-only properties:
+`backgroundColor` (iOS has no such thing) and `translucent` (whether content draws underneath the
+bar).
 
 ## Following the color scheme
 

@@ -1,6 +1,6 @@
 ---
 title: DOM components
-summary: An Angular component rendered by a browser, in a web view, inside a native screen - with its inputs and outputs bound from native.
+summary: An Angular component in a web view inside a native screen, with inputs and outputs bound.
 ---
 
 # DOM components
@@ -24,8 +24,9 @@ Two things it is not:
   view. A DOM component is the deliberate exception, a web page embedded in one.
 
 Expo has the same feature for React, [DOM components](https://docs.expo.dev/guides/dom-components/),
-and this is the Angular version of it, using the same machinery: Expo's web view, the same `'use dom'`
-directive, Expo's dev server route and Expo's release export. The two can live in one app.
+and this is the Angular version of it, using the same machinery: Expo's web view, the same
+`'use dom'` directive, Expo's dev server route and Expo's release export. The two can live in one
+app.
 
 ## Setup
 
@@ -194,7 +195,8 @@ file directly instead of mounting a React component, and the file mounts itself.
 
 ## Limits
 
-- **Only JSON crosses.** No shared services, signals or state; see [What can cross](#what-can-cross).
+- **Only JSON crosses.** No shared services, signals or state; see
+  [What can cross](#what-can-cross).
 - **One browser view per instance.** Tens of megabytes and a few hundred milliseconds to start.
   Fine for a screen's centerpiece, wrong for a list.
 - **No children.** Native content cannot be projected into a DOM component.

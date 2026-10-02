@@ -64,8 +64,8 @@ being rebuilt since - throws a `MissingModuleError` when the service first reach
 message names the module and the commands that fix it; see
 [Using a module](/packages/expo/using-a-module#what-happens-without-the-module-installed).
 
-On the web, and in a test that provides no fake, `changes` stays at `0`. `read()` resolves to an empty string. `write()` resolves without doing
-anything.
+On the web, and in a test that provides no fake, `changes` stays at `0`. `read()` resolves to an
+empty string. `write()` resolves without doing anything.
 
 ## Reference
 

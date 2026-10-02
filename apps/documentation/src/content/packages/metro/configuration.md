@@ -130,9 +130,10 @@ live views still point at - by calling `ɵɵreplaceMetadata`, and then calls `mo
 Metro stops bubbling the change into a full reload.
 
 Only a template or inline `styles` edit can be applied this way. The block decides by hashing the
-file with every component's template and inline styles removed - if that "shape" hash has not
-moved, only those changed and the swap runs, carrying the recompiled rule set for a styles edit; if it has (a new method, a different import, a changed selector), it falls back to a
-full reload through `globalThis.__angularNativeReload`, the hook [`mount()` installs in
+file with every component's template and inline styles removed - if that "shape" hash has not moved,
+only those changed and the swap runs, carrying the recompiled rule set for a styles edit; if it has
+(a new method, a different import, a changed selector), it falls back to a full reload through
+`globalThis.__angularNativeReload`, the hook [`mount()` installs in
 development](/packages/platform/bootstrapping). That hook exists because React Native's own Fast
 Refresh accepts an update and reports success even when the actual reload needed a fresh module
 evaluation, so without it an edit that is more than a template would ship, log nothing, and leave
@@ -146,25 +147,25 @@ than leaving a half-rebuilt view on screen that throws on every change detection
 
 ### External templates and stylesheets
 
-An edit to a `templateUrl` or `styleUrl` file swaps in place too, keeping the component's state.
-It cannot go through the component's own module: Metro caches a transform on the file's own
-content and re-transforms only the file that changed, so the component's module is still the one
-compiled against the old template. Instead the template's or stylesheet's own module does it. In
-dev, the transformer finds the components that use the file - the source files anywhere in the
-project (the nearest directory above the file with a `package.json`, leaving out `node_modules`,
-`ios`, `android` and build output) naming it in a `templateUrl` or `styleUrl`, whether as
-`./card.css` beside it or `../shared/lab.css` from another directory - and compiles each of them
-against the new text into that module: the same `ɵɵreplaceMetadata` swap, plus the component's recompiled rule set when the file
-is a stylesheet. The module accepts its own update, so nothing bubbles into a reload.
+An edit to a `templateUrl` or `styleUrl` file swaps in place too, keeping the component's state. It
+cannot go through the component's own module: Metro caches a transform on the file's own content and
+re-transforms only the file that changed, so the component's module is still the one compiled
+against the old template. Instead the template's or stylesheet's own module does it. In dev, the
+transformer finds the components that use the file - the source files anywhere in the project (the
+nearest directory above the file with a `package.json`, leaving out `node_modules`, `ios`, `android`
+and build output) naming it in a `templateUrl` or `styleUrl`, whether as `./card.css` beside it or
+`../shared/lab.css` from another directory - and compiles each of them against the new text into
+that module: the same `ɵɵreplaceMetadata` swap, plus the component's recompiled rule set when the
+file is a stylesheet. The module accepts its own update, so nothing bubbles into a reload.
 
 The same module also fixes what a full reload after the edit shows. It runs before the component's
 module (the component imports it), and when the component registers, any template or sheet newer
 than the one it was compiled with is applied first.
 
-A stylesheet several screens share is swapped on every one of them by the one edit. The ceiling
-is the project: a component in another package of a monorepo that reaches the file across the
-package boundary is not found, and the dev server warns when a template has no component in the
-project using it. An edit to the component's `.ts` file follows the rules above: a changed selector, input, method or
-import is a full reload, whichever file its template lives in. Inline `styles` edits can hot-swap
-too, the same as a template edit - it is a change to selectors, inputs, methods or imports that
-forces a full reload, not which kind of style the edit touched.
+A stylesheet several screens share is swapped on every one of them by the one edit. The ceiling is
+the project: a component in another package of a monorepo that reaches the file across the package
+boundary is not found, and the dev server warns when a template has no component in the project
+using it. An edit to the component's `.ts` file follows the rules above: a changed selector, input,
+method or import is a full reload, whichever file its template lives in. Inline `styles` edits can
+hot-swap too, the same as a template edit - it is a change to selectors, inputs, methods or imports
+that forces a full reload, not which kind of style the edit touched.

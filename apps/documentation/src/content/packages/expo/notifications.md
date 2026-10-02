@@ -1,6 +1,7 @@
 ---
 title: Notifications
-summary: The notification that launched the app, the one just tapped, and a push token for your server.
+summary: The notification that launched the app, the one just tapped, and a push token for your
+  server.
 ---
 
 # Notifications
@@ -95,8 +96,9 @@ being rebuilt since - throws a `MissingModuleError` when the service first reach
 message names the module and the commands that fix it; see
 [Using a module](/packages/expo/using-a-module#what-happens-without-the-module-installed).
 
-On the web, and in a test that provides no fake, `latest` and `response` stay `null`, `take()` always returns `null`, `dismissAll()` and
-`setBadge()` do nothing, and both push token methods resolve to `null`.
+On the web, and in a test that provides no fake, `latest` and `response` stay `null`, `take()`
+always returns `null`, `dismissAll()` and `setBadge()` do nothing, and both push token methods
+resolve to `null`.
 
 ## Push notifications from your server
 

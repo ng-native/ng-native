@@ -233,7 +233,8 @@ is the one showing, and false while another screen is pushed over it, presented 
 its tab is not selected. The stack and tab outlets provide it for every screen they show, combined
 with the screen they are themselves on; outside an outlet it is always true. A covered screen's
 views are detached from change detection, so read it in a root effect (`effect(fn, { injector })`
-with the environment injector) to act while covered. `<keyboard-dock>` uses it to let the keyboard go.
+with the environment injector) to act while covered. `<keyboard-dock>` uses it to let the keyboard
+go.
 
 ## Above every screen
 

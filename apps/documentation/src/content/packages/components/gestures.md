@@ -81,7 +81,8 @@ renders a plain view there instead.
 source, which Node cannot parse, so the test suite that runs this package's own code under Node
 would break if the main entry point tried to load them. Import these from their own files -
 `@ng-native/components/gestures`, `@ng-native/components/animations`,
-`@ng-native/components/reanimated` - covered on the gestures and [animation](/packages/components/animation) pages.
+`@ng-native/components/reanimated` - covered on the gestures and
+[animation](/packages/components/animation) pages.
 
 ## A gesture inside a scroll view that moves the same way
 

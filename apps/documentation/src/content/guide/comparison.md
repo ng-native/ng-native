@@ -30,8 +30,8 @@ to add zone.js; see [Bootstrapping](/packages/platform/bootstrapping).
 NativeScript generates synchronous JavaScript bindings for 100% of platform APIs at compile time,
 including marshalling of all data types ([NativeScript iOS Marshalling
 docs](https://docs.nativescript.org/guide/ios-marshalling)). It calls Objective-C and Java APIs
-directly, without React Native or per-API wrappers. Angular Native instead reuses the RN/Expo
-module ecosystem. An arbitrary native SDK still needs a facade, as each `@ng-native/expo` module does.
+directly, without React Native or per-API wrappers. Angular Native instead reuses the RN/Expo module
+ecosystem. An arbitrary native SDK still needs a facade, as each `@ng-native/expo` module does.
 
 `@nativescript/angular` is actively maintained: the [NativeScript/angular
 monorepo](https://github.com/NativeScript/angular) tracks current Angular releases, including
@@ -42,12 +42,12 @@ and visionOS, with no browser counterpart to [`@ng-native/web`](/packages/web).
 ## Ionic and Capacitor
 
 A Capacitor app runs in the platform's WebView: `WKWebView` on iOS, `android.webkit.WebView` on
-Android. A JavaScript bridge exposes native plugin methods on `window.Capacitor`
-([How Capacitor works](https://ionic.io/blog/how-capacitor-works-2)). Its `ion-button` and `ion-list`
-web components render as DOM, styled with CSS and shadow DOM. Angular is one of Ionic's three
-first-class framework targets, with an official, mature integration. Angular knowledge carries
-over, but `ion-*` components, browser CSS and DOM API calls do not. Angular Native's `<view>` and
-`<text>` render as `UIView`s and Android `View`s; see [Architecture](/guide/architecture).
+Android. A JavaScript bridge exposes native plugin methods on `window.Capacitor` ([How Capacitor
+works](https://ionic.io/blog/how-capacitor-works-2)). Its `ion-button` and `ion-list` web components
+render as DOM, styled with CSS and shadow DOM. Angular is one of Ionic's three first-class framework
+targets, with an official, mature integration. Angular knowledge carries over, but `ion-*`
+components, browser CSS and DOM API calls do not. Angular Native's `<view>` and `<text>` render as
+`UIView`s and Android `View`s; see [Architecture](/guide/architecture).
 
 Ionic is closer to Angular Native's web target: `@ng-native/web` runs in a browser, and both are
 accessible by URL. Capacitor's UI always runs in a WebView. `@ng-native/web`'s `BrowserEngine`

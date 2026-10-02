@@ -199,8 +199,8 @@ export class ReplyLine {
 
 - **ICU plurals and selects** throw on first render. Use `i18nPlural` and `@switch`.
 - **`i18n-` attributes** lose their source text. Bind a `$localize` string.
-- **Build-time translation** (`localize-translate`, one bundle per language) has no Metro integration
-  or verification. Use runtime translation.
+- **Build-time translation** (`localize-translate`, one bundle per language) has no Metro
+  integration or verification. Use runtime translation.
 - **`ng extract-i18n`** requires an unsupported browser build. Use `localize-extract` on the Metro
   bundle; see [Extracting messages](/guide/localization-extraction).
 

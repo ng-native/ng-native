@@ -1,6 +1,7 @@
 ---
 title: Sponsor Angular Native
-summary: Angular Native is free and MIT licensed. Sponsorship pays for keeping it working on every new iOS, Android, Expo and Angular release.
+summary: Angular Native is free and MIT licensed. Sponsorship pays for keeping it working on
+  every new release.
 ---
 
 # Sponsor Angular Native
@@ -17,8 +18,8 @@ A framework that renders native views sits under four release cycles at once, an
 them can break it:
 
 - **Keeping up.** Expo ships a new SDK three times a year, React Native moves with it, and Angular
-  ships a new major version every year. Each one means updating the renderer, the Metro integration and the
-  template, and checking every component still commits the views it should.
+  ships a new major version every year. Each one means updating the renderer, the Metro
+  integration and the template, and checking every component still commits the views it should.
 - **Real devices.** Physical iPhones and Android phones to test on, because some bugs in layout,
   gestures and navigation only exist on hardware.
 - **Continuous integration.** Every change builds the example app for iOS and Android. An iOS

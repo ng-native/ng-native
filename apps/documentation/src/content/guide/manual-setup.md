@@ -120,12 +120,12 @@ ngc -p tsconfig.json --noEmit
 
 `typeCheckHostBindings` is off because the components' own host bindings name native props that
 Angular's DOM schema does not know. `strictDomEventTypes` is off because a native event such as
-`(scroll)` is an element event, not an output, so under the DOM schema its `$event` would be typed as
-a DOM `Event`. A view registered by name, such as `registerExpoView('expo-image', 'ExpoImage')`, is
-used through a component whose inputs are its props, so the template is checked against them:
+`(scroll)` is an element event, not an output, so under the DOM schema its `$event` would be typed
+as a DOM `Event`. A view registered by name, such as `registerExpoView('expo-image', 'ExpoImage')`,
+is used through a component whose inputs are its props, so the template is checked against them:
 `@ng-native/expo` has `ExpoImage` and the `Ui*` SwiftUI components, and a view with none yet gets a
-small one of the same shape. Leave `CUSTOM_ELEMENTS_SCHEMA` and `NO_ERRORS_SCHEMA` out: either
-turns template checking off for the whole component.
+small one of the same shape. Leave `CUSTOM_ELEMENTS_SCHEMA` and `NO_ERRORS_SCHEMA` out: either turns
+template checking off for the whole component.
 
 ## Write the entry point
 

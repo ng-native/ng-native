@@ -63,7 +63,8 @@ being rebuilt since - throws a `MissingModuleError` when the service first reach
 message names the module and the commands that fix it; see
 [Using a module](/packages/expo/using-a-module#what-happens-without-the-module-installed).
 
-On the web, and in a test that provides no fake, `level` stays at `1`. `set()` and `restore()` do nothing and do not throw.
+On the web, and in a test that provides no fake, `level` stays at `1`. `set()` and `restore()` do
+nothing and do not throw.
 
 ## Reference
 

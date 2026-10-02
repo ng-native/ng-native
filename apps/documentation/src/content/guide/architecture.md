@@ -1,6 +1,6 @@
 ---
 title: Architecture
-summary: How Angular's Renderer2 drives React Native's Fabric renderer directly, with no React tree or reconciler.
+summary: How Angular's Renderer2 drives Fabric directly, with no React tree or reconciler.
 ---
 
 # Architecture

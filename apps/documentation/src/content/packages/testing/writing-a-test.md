@@ -1,6 +1,7 @@
 ---
 title: Writing a test
-summary: Render, query, interact and assert - the recipes for forms, async work, services, HTTP, the router and styling follow.
+summary: Render, query, interact and assert - the recipes for forms, async work, services,
+  HTTP, the router and styling follow.
 ---
 
 # Writing a test

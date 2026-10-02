@@ -118,9 +118,9 @@ being rebuilt since - throws a `MissingModuleError` when `AppleSignIn` first rea
 message names the module and the commands that fix it; see
 [Using a module](/packages/expo/using-a-module#what-happens-without-the-module-installed).
 
-On Android and the web, and in a test that provides no fake, `available()` resolves to false, `signIn()`,
-`refresh()`, `signOut()` and `credentialState()` resolve to null, and `formatName()` returns an
-empty string.
+On Android and the web, and in a test that provides no fake, `available()` resolves to false,
+`signIn()`, `refresh()`, `signOut()` and `credentialState()` resolve to null, and `formatName()`
+returns an empty string.
 
 ## Reference
 

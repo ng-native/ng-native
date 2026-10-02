@@ -92,9 +92,9 @@ formulas, stepped by `requestAnimationFrame`. There every value is driven from J
 `WorkletStyle` and `WorkletScroll`, from `@ng-native/components/reanimated`, are for
 anything that needs to compute a style on every frame without ever touching the JavaScript thread
 
-- a value that follows a gesture, or a header that shrinks as a list scrolls. `sharedValue`
-  creates a value both the JavaScript and UI runtimes can see; `workletStyle` describes a style
-  computed from one or more shared values, bound to an element with `[workletStyle]`; `workletScroll`
+- a value that follows a gesture, or a header that shrinks as a list scrolls. `sharedValue` creates
+  a value both the JavaScript and UI runtimes can see; `workletStyle` describes a style computed
+  from one or more shared values, bound to an element with `[workletStyle]`; `workletScroll`
   describes a worklet that runs on every scroll frame, bound with `[workletScroll]`. A shared value
   that `[workletScroll]` writes and `[workletStyle]` elsewhere reads means the two never involve the
   JavaScript thread at all:

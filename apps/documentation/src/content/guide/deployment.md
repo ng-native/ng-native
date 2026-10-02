@@ -1,6 +1,6 @@
 ---
 title: Deployment
-summary: Development builds, release builds, signing, EAS Build and local builds, and submitting to a store.
+summary: Development and release builds, signing, EAS Build and local builds, and store submission.
 ---
 
 # Deployment

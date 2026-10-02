@@ -1,6 +1,6 @@
 ---
 title: Extracting messages
-summary: Pull messages.json out of a Metro bundle with localize-extract, then translate a copy of it.
+summary: Pull messages.json from a Metro bundle with localize-extract, then translate a copy.
 ---
 
 # Extracting messages

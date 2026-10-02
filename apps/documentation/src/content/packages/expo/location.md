@@ -83,8 +83,9 @@ being rebuilt since - throws a `MissingModuleError` when the service first reach
 message names the module and the commands that fix it; see
 [Using a module](/packages/expo/using-a-module#what-happens-without-the-module-installed).
 
-On the web, and in a test that provides no fake, `permission` reports `denied` with `canAskAgain: false`. `current()` resolves to null and
-`start()` to a stop function that does nothing, exactly as though the permission had been refused.
+On the web, and in a test that provides no fake, `permission` reports `denied` with `canAskAgain:
+false`. `current()` resolves to null and `start()` to a stop function that does nothing, exactly as
+though the permission had been refused.
 
 ## Reference
 

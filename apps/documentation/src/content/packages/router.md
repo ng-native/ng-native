@@ -42,10 +42,11 @@ AppRegistry.registerRunnable('main', ({ rootTag }) => {
 
 `provideNativeRouter(routes, ...features)` is `provideRouter` - it takes the same routes and the
 same router features, and calls it - plus what native needs on top: a `PlatformLocation` backed by
-an in-memory history instead of the browser's, a `RouteReuseStrategy` that detaches a screen instead of destroying it (what keeps
-a pushed-away screen's scroll position and text input alive), and `NativeNavigation`. Android's
-hardware back button and deep links come from `@ng-native/device`'s `HardwareBack` and
-`DeepLinks` and need no wiring here - both already fall back to doing nothing off a device.
+an in-memory history instead of the browser's, a `RouteReuseStrategy` that detaches a screen instead
+of destroying it (what keeps a pushed-away screen's scroll position and text input alive), and
+`NativeNavigation`. Android's hardware back button and deep links come from `@ng-native/device`'s
+`HardwareBack` and `DeepLinks` and need no wiring here - both already fall back to doing nothing off
+a device.
 
 The native options are passed the same way: `withLinkParent` for deep links, and
 `withHeaderDefaults` and `withTabDefaults` for how every [header](/packages/router/header) and

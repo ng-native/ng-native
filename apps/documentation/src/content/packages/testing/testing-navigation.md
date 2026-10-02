@@ -1,6 +1,6 @@
 ---
 title: Testing the router
-summary: Pushing a screen on the native stack, route parameters as inputs, and native router features.
+summary: Pushing a screen on the native stack, route parameters as inputs, and router features.
 ---
 
 # Testing the router

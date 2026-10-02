@@ -1,6 +1,6 @@
 ---
 title: Native and web
-summary: One set of components for native and the browser, through a shared renderer seam, and what differs on the web.
+summary: One component set for native and web, sharing a renderer seam, and what differs on the web.
 ---
 
 # Native and web

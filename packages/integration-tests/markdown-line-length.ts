@@ -59,44 +59,48 @@ function isSingleToken(line: string): boolean {
   return line.trim().split(/\s+/).length <= 1;
 }
 
+/** Where `findLongLines` is as it walks the file, line by line. */
+interface WalkState {
+  inFence: boolean;
+  inFrontMatter: boolean;
+}
+
+/** The violation on one line, or undefined if the line is exempt or within the limit. */
+function checkLine(
+  line: string,
+  number: number,
+  state: WalkState,
+): LineLengthViolation['kind'] | undefined {
+  const trimmed = line.trim();
+
+  if (number === 1 && trimmed === '---') {
+    state.inFrontMatter = true;
+    return undefined;
+  }
+  if (state.inFrontMatter) {
+    if (trimmed === '---') state.inFrontMatter = false;
+    else if (trimmed.startsWith('summary:') && line.length > LIMIT) return 'summary';
+    return undefined;
+  }
+  if (trimmed.startsWith('```')) {
+    state.inFence = !state.inFence;
+    return undefined;
+  }
+  if (state.inFence || isTableLine(line) || isSingleToken(line)) return undefined;
+
+  return line.length > LIMIT ? 'prose' : undefined;
+}
+
 /** Every line in `text` over the limit, excluding what cannot or need not be rewrapped. */
 export function findLongLines(file: string, text: string): LineLengthViolation[] {
   const violations: LineLengthViolation[] = [];
-  const lines = text.split('\n');
-  let inFence = false;
-  let inFrontMatter = false;
+  const state: WalkState = { inFence: false, inFrontMatter: false };
 
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i];
-    const number = i + 1;
-    const trimmed = line.trim();
-
-    if (number === 1 && trimmed === '---') {
-      inFrontMatter = true;
-      continue;
-    }
-    if (inFrontMatter) {
-      if (trimmed === '---') {
-        inFrontMatter = false;
-        continue;
-      }
-      if (trimmed.startsWith('summary:') && line.length > LIMIT) {
-        violations.push({ file, line: number, length: line.length, kind: 'summary' });
-      }
-      continue;
-    }
-    if (trimmed.startsWith('```')) {
-      inFence = !inFence;
-      continue;
-    }
-    if (inFence) continue;
-    if (isTableLine(line)) continue;
-    if (isSingleToken(line)) continue;
-
-    if (line.length > LIMIT) {
-      violations.push({ file, line: number, length: line.length, kind: 'prose' });
-    }
-  }
+  text.split('\n').forEach((line, index) => {
+    const number = index + 1;
+    const kind = checkLine(line, number, state);
+    if (kind) violations.push({ file, line: number, length: line.length, kind });
+  });
 
   return violations;
 }

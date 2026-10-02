@@ -63,8 +63,8 @@ being rebuilt since - throws a `MissingModuleError` when the service first reach
 message names the module and the commands that fix it; see
 [Using a module](/packages/expo/using-a-module#what-happens-without-the-module-installed).
 
-On the web, and in a test that provides no fake, everything reads as offline and unknown: `connected` is `false`, `type` is `'unknown'`, `reachable`
-is `null`.
+On the web, and in a test that provides no fake, everything reads as offline and unknown:
+`connected` is `false`, `type` is `'unknown'`, `reachable` is `null`.
 
 ## Working offline
 

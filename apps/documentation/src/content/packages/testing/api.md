@@ -1,6 +1,6 @@
 ---
 title: API reference
-summary: Every export of @ng-native/testing, the query matrix, and the exact events each interaction sends.
+summary: Every export of @ng-native/testing, the query matrix and the events each interaction sends.
 ---
 
 # API reference
@@ -118,9 +118,9 @@ rejects with the query's own error once the timeout passes. Its `waitForOptions`
 argument, after the query's options, so a query that takes none passes `undefined`:
 `screen.findByText('Going soon', undefined, { timeout: 60, interval: 10 })`.
 
-Every error says what was looked for and prints the tree. With none:
-`Unable to find a node with text "Bananas".`. With more than one:
-`Found 2 nodes with role "listitem", and expected one. Use getAllByRole if more than one is expected.`
+Every error says what was looked for and prints the tree. With none: `Unable to find a node with
+text "Bananas".`. With more than one: `Found 2 nodes with role "listitem", and expected one. Use
+getAllByRole if more than one is expected.`
 
 | Query               | Arguments                   | Matches a node when                                                                                                                                                                   |
 | ------------------- | --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -147,8 +147,8 @@ span is part of its text, not a match of its own.
 - Both sides are normalized first: whitespace runs collapse to one space, and the ends are trimmed.
   `getByText('  Pears ')` finds a paragraph holding `Pears`.
 - A string matches the whole value, case-sensitively, by default.
-- `{ exact: false }` matches a case-insensitive substring instead: `getByText('apple', { exact: false })`
-  finds `Apples`.
+- `{ exact: false }` matches a case-insensitive substring instead:
+  `getByText('apple', { exact: false })` finds `Apples`.
 - A `RegExp` is tested against the normalized value as given, so `/pears/i` is case-insensitive
   and `/^and plums$/` is anchored.
 - In `ByRole`, the role itself is always an exact match, and `exact` applies to `name`.
@@ -220,8 +220,8 @@ holds for `duration` milliseconds, 500 by default, which is React Native's long-
 
 ### Event sequences
 
-`touch` below is `{ identifier: 0, target, pageX: 0, pageY: 0, locationX: 0, locationY: 0, timestamp }`.
-A "task" is one `setTimeout(0)`, which is when change detection runs and commits.
+`touch` below is `{ identifier: 0, target, pageX: 0, pageY: 0, locationX: 0, locationY: 0,
+timestamp }`. A "task" is one `setTimeout(0)`, which is when change detection runs and commits.
 
 | Call                                      | Events, in order                                                                                                                                                                                                                                                                |
 | ----------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -307,10 +307,11 @@ signal set on `instance` for example, and then wants to read the tree.
 function cleanup(): void;
 ```
 
-Unmounts everything rendered so far, and destroys every app `injectService()` created. It runs after every test by itself when `afterEach` is a
-global, which it is in Vitest with `globals: true`; with `node:test` or Vitest's default, call it
-from an `afterEach` of your own if a test should not leave its render mounted. Every render has its
-own fake, so a test that skips cleanup still cannot see another test's tree.
+Unmounts everything rendered so far, and destroys every app `injectService()` created. It runs after
+every test by itself when `afterEach` is a global, which it is in Vitest with `globals: true`; with
+`node:test` or Vitest's default, call it from an `afterEach` of your own if a test should not leave
+its render mounted. Every render has its own fake, so a test that skips cleanup still cannot see
+another test's tree.
 
 ## `createFakeFabric()`
 
@@ -333,8 +334,8 @@ through `render()`. It records every call instead of drawing, and adds what a te
 | `calls`                          | How many of each node operation the renderer made. `reset()` zeroes them.                                                                               |
 
 It also does what native does that a test would otherwise have to stand in for. A `ModalHostView`
-committed with `visible: false` reports `topDismiss` as soon as that commit is done, as iOS does once
-the dismissal has animated, so a modal a test closes leaves the tree and `(dismiss)` fires. One
+committed with `visible: false` reports `topDismiss` as soon as that commit is done, as iOS does
+once the dismissal has animated, so a modal a test closes leaves the tree and `(dismiss)` fires. One
 dismissal gets through per close, so a test that also sends `fireEvent(host, 'dismiss')` does not
 see `(dismiss)` twice.
 

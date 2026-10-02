@@ -1,6 +1,7 @@
 ---
 title: Updating an app
-summary: Move an app to a new release with nx migrate, ng update or npx @ng-native/migrate, and let the migrations change its code.
+summary: Move an app to a new release with nx migrate, ng update or npx @ng-native/migrate, and
+  let the migrations change its code.
 ---
 
 # Updating an app

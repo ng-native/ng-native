@@ -1,6 +1,7 @@
 ---
 title: Angular CLI
-summary: ng add for an Angular CLI workspace, with a native app beside the web one that ng serve, ng build and ng test run.
+summary: ng add for an Angular CLI workspace, with a native app beside the web one that ng serve,
+  ng build and ng test run.
 ---
 
 # Angular CLI
@@ -21,12 +22,11 @@ a workspace around it, [the template](/guide/getting-started) is still the short
 ## What it adds
 
 The files are the template's, copied as they are: `src/app/app.ts`, `src/main.ts`,
-`src/app/app.test.ts`, `metro.config.js`, `tsconfig.json` and `vitest.config.mts`, plus an `app.json` named for the
-project, a small `package.json` for Expo, and a `.gitignore` that ignores the `ios/` and
-`android/` projects `expo prebuild` writes and the `.angular-native/` Tailwind generates, as the
-template's does. The dependencies go in the workspace's root
-`package.json`, beside Angular's, and `ng add` installs them. A version the workspace already has
-is left alone.
+`src/app/app.test.ts`, `metro.config.js`, `tsconfig.json` and `vitest.config.mts`, plus an
+`app.json` named for the project, a small `package.json` for Expo, and a `.gitignore` that ignores
+the `ios/` and `android/` projects `expo prebuild` writes and the `.angular-native/` Tailwind
+generates, as the template's does. The dependencies go in the workspace's root `package.json`,
+beside Angular's, and `ng add` installs them. A version the workspace already has is left alone.
 
 The project's own `package.json` is never installed from. Expo reads `main` from it to find the
 entry file, and it also lists every dependency the app has at the root's ranges. Expo links the

@@ -1,6 +1,7 @@
 ---
 title: Safe area
-summary: Keep content clear of the notch, status bar and home indicator with safe-area-provider and safe-area-view.
+summary: Keep content clear of the notch, status bar and home indicator with safe-area-provider
+  and safe-area-view.
 art: safe-area
 ---
 

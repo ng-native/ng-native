@@ -130,6 +130,6 @@ AppRegistry.registerRunnable('main', ({ rootTag }) => {
 
 `inject(Fonts)` throws it when `Fonts` is first injected.
 
-On the web, and in a test that provides no fake, `loadFonts()` resolves without registering anything, so text renders in the platform's fallback
-face rather than failing to mount. `Fonts.available` is `false`, `families()` is empty, and
-`has()` is always `false`.
+On the web, and in a test that provides no fake, `loadFonts()` resolves without registering
+anything, so text renders in the platform's fallback face rather than failing to mount.
+`Fonts.available` is `false`, `families()` is empty, and `has()` is always `false`.

@@ -107,9 +107,9 @@ being rebuilt since - throws a `MissingModuleError` when the service first reach
 message names the module and the commands that fix it; see
 [Using a module](/packages/expo/using-a-module#what-happens-without-the-module-installed).
 
-On the web, and in a test that provides no fake, both permissions are refused, `save()`, `album()` and `createAlbum()` resolve to `null`,
-`asset()` returns `null`, the queries and `albums()` resolve to empty lists, `watch()` stays
-`null`, and every other method resolves without doing anything.
+On the web, and in a test that provides no fake, both permissions are refused, `save()`, `album()`
+and `createAlbum()` resolve to `null`, `asset()` returns `null`, the queries and `albums()` resolve
+to empty lists, `watch()` stays `null`, and every other method resolves without doing anything.
 
 ## Reference
 
