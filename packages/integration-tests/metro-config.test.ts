@@ -16,7 +16,13 @@ import path from 'node:path';
 import vm from 'node:vm';
 
 const require = createRequire(import.meta.url);
-const { withAngularNative } = require('@ng-native/metro/config.cjs');
+const { withAngularNative, chunkOutsideServerRoot } = require('@ng-native/metro/config.cjs') as {
+  withAngularNative(config: object): unknown;
+  chunkOutsideServerRoot(
+    url: string,
+    roots: { serverRoot: string; sourceExts: readonly string[] },
+  ): string | undefined;
+};
 
 type Resolve = (context: { resolveRequest: Resolve }, name: string, platform: string) => unknown;
 
@@ -756,6 +762,90 @@ describe('the Metro preset', () => {
       const wrapped = once.server.rewriteRequestUrl;
       const twice = withAngularNative(once) as typeof once;
       assert.equal(twice.server.rewriteRequestUrl, wrapped);
+    });
+
+    it("puts the library's path in a source map request too, and keeps the URL's hash", () => {
+      const root = workspace();
+      try {
+        const roots = { serverRoot: path.join(root, 'apps/mobile'), sourceExts: ['ts'] };
+        const map = chunkOutsideServerRoot(
+          `/packages/settings/src/index.map?${query}#line`,
+          roots,
+        )!;
+        const request = new URL(map, 'http://localhost:8081');
+        assert.equal(request.pathname, '/packages/settings/src/index.map');
+        assert.equal(
+          request.searchParams.get('bundleEntry'),
+          '../../packages/settings/src/index.map',
+        );
+        assert.equal(request.hash, '#line');
+      } finally {
+        rmSync(root, { recursive: true, force: true });
+      }
+    });
+
+    it('finds a file whose name the URL percent-encoded', () => {
+      const root = workspace();
+      try {
+        writeFileSync(path.join(root, 'packages/settings/src/two words.ts'), 'export {};\n');
+        const url = chunkOutsideServerRoot(`/packages/settings/src/two%20words.bundle?${query}`, {
+          serverRoot: path.join(root, 'apps/mobile'),
+          sourceExts: ['ts'],
+        })!;
+        assert.equal(
+          new URL(url, 'http://localhost:8081').searchParams.get('bundleEntry'),
+          '../../packages/settings/src/two words.bundle',
+        );
+      } finally {
+        rmSync(root, { recursive: true, force: true });
+      }
+    });
+
+    it('answers nothing for a request that is not a lazy chunk', () => {
+      const root = workspace();
+      try {
+        const roots = { serverRoot: path.join(root, 'apps/mobile'), sourceExts: ['ts'] };
+        const eager = '/packages/settings/src/index.bundle?platform=ios&dev=true';
+        assert.equal(chunkOutsideServerRoot(eager, roots), undefined, 'not modulesOnly');
+        assert.equal(chunkOutsideServerRoot(`/status?${query}`, roots), undefined, 'not a bundle');
+        assert.equal(
+          chunkOutsideServerRoot(`/assets/icon.png?${query}`, roots),
+          undefined,
+          'an asset',
+        );
+      } finally {
+        rmSync(root, { recursive: true, force: true });
+      }
+    });
+
+    it('drops an inherited path that leads to no file, rather than send Metro after it', () => {
+      const root = workspace();
+      try {
+        const inherited = `/packages/settings/src/gone.bundle?${query}&bundleEntry=../../packages/settings/src/index.bundle`;
+        const url = chunkOutsideServerRoot(inherited, {
+          serverRoot: path.join(root, 'apps/mobile'),
+          sourceExts: ['ts'],
+        });
+        assert.equal(url, `/packages/settings/src/gone.bundle?${query}`);
+      } finally {
+        rmSync(root, { recursive: true, force: true });
+      }
+    });
+
+    it('is installed with no rewrite of its own before it, from the project root', () => {
+      const root = workspace();
+      try {
+        const app = path.join(root, 'apps/mobile');
+        const config = withAngularNative({ ...base(), projectRoot: app }) as MetroConfig & {
+          server: { rewriteRequestUrl(url: string): string };
+        };
+        const rewritten = config.server.rewriteRequestUrl(
+          requestFor(app, path.join(root, 'packages/settings/src/index.ts')),
+        );
+        assert.equal(entryOf(app, rewritten), path.join(root, 'packages/settings/src/index'));
+      } finally {
+        rmSync(root, { recursive: true, force: true });
+      }
     });
   });
 

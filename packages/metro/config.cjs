@@ -433,6 +433,7 @@ function watchCompiler(dir, fingerprint) {
   };
   const watcher = watch(dir, { recursive: true, persistent: false }, check);
   watcher.unref?.();
+  return watcher;
 }
 
 function withAngularNative(config, options = {}) {
@@ -530,4 +531,4 @@ function withAngularNative(config, options = {}) {
   return config;
 }
 
-module.exports = { withAngularNative, compilerFingerprint };
+module.exports = { withAngularNative, compilerFingerprint, chunkOutsideServerRoot, watchCompiler };
