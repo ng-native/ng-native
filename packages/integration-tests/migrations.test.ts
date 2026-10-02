@@ -217,6 +217,21 @@ describe('tracking-available-getter, through nx migrate, ng update and ng-native
     ].join('\n'),
     'src/app/settings.html': "<text>{{ ads.available() ? 'on' : 'off' }}</text>\n",
     'src/app/everything.ts': "import * as tracking from '@ng-native/expo/tracking';\n",
+    // A template that declares its own name for what the component calls tracking.
+    'src/app/local.ts': [
+      "import { Component, inject } from '@angular/core';",
+      "import { Tracking } from '@ng-native/expo/tracking';",
+      '',
+      '@Component({',
+      "  selector: 'app-local',",
+      '  template: `@let tracking = other; {{ tracking.available() }}`,',
+      '})',
+      'export class Local {',
+      '  readonly tracking = inject(Tracking);',
+      '  readonly other = { available: () => true };',
+      '}',
+      '',
+    ].join('\n'),
     // \`this\` that is not the class's, and a static member sharing an instance member's name.
     'src/app/this.ts': [
       "import { Component as View, inject } from '@angular/core';",
@@ -317,8 +332,10 @@ describe('tracking-available-getter, through nx migrate, ng update and ng-native
     assert.match(self, /go\(\) \{\n    return this\.x\.available\(\);/, 'the instance x');
     assert.match(self, /static ask\(\) \{\n    return this\.x\.available;/, 'the static x');
     assert.match(self, /template: `\{\{ ads\.available \}\}`/, '@Component under another name');
+    assert.equal(nx.files['src/app/local.ts'], files['src/app/local.ts'], 'its own tracking');
     assert.deepEqual(nx.notes, [
       "src/app/everything.ts:1: A namespace import of '@ng-native/expo/tracking' cannot be followed automatically. Tracking's available is now a property: read it as tracking.available, without calling it.",
+      "src/app/local.ts:6: The template declares a tracking of its own, so it was left as it is. Where it reads the component's Tracking, read tracking.available without calling it.",
     ]);
     assert.deepEqual(angular, nx);
     assert.deepEqual(cli, nx);

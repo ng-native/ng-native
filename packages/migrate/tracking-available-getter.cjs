@@ -150,14 +150,42 @@ function codeEdits(ts, source, types) {
   return edits;
 }
 
-/** A template with `name.available()` read as a property, for each name that holds a `Tracking`. */
+/**
+ * A template declaring `name` itself: `@let`, a `@for` or `*ngFor` item or `let` alias, a
+ * `#` reference, an `as` alias, or an `ng-template`'s `let-`. Such a name may be something other
+ * than the component's member wherever it is in scope.
+ */
+const declaration = (name) =>
+  new RegExp(
+    `@let\\s+${name}\\b|\\blet[\\s-]+${name}\\b|#${name}\\b|\\bas\\s+${name}\\b|@for\\s*\\(\\s*${name}\\s+of\\b`,
+  );
+const declares = (text, name) => declaration(name).test(text);
+
+/**
+ * A template with `name.available()` read as a property, for each name that holds a `Tracking` and
+ * that the template does not declare for itself, and the names it left for that reason.
+ */
 function inTemplate(text, names) {
   let next = text;
-  for (const name of names) {
+  const left = [];
+  for (const name of new Set(names)) {
+    if (declares(text, name)) {
+      if (new RegExp(`\\b${name}\\.available\\(\\s*\\)`).test(text)) left.push(name);
+      continue;
+    }
     next = next.replace(new RegExp(`\\b${name}\\.available\\(\\s*\\)`, 'g'), `${name}.available`);
   }
-  return next;
+  return { text: next, left };
 }
+
+/** The line of a template file where it first declares `name` for itself. */
+const declarationLine = (text, name) =>
+  text.slice(0, text.search(declaration(name))).split('\n').length;
+
+/** The note for a name a template declares for itself, which it leaves to the developer. */
+const localNote = (where, name) =>
+  `${where}: The template declares a ${name} of its own, so it was left as it is. ` +
+  `Where it reads the component's Tracking, read ${name}.available without calling it.`;
 
 /** The object literal a class's `@Component(...)` decorator is given, if it has one. */
 function componentMetadata(ts, cls, components) {
@@ -196,14 +224,16 @@ function componentNames(ts, source) {
 }
 
 /** One component's inline template as an edit, and the template file it names, with its holders. */
-function componentTemplate(ts, metadata, names, dir, found) {
+function componentTemplate(ts, source, file, metadata, names, dir, found) {
   for (const property of metadata.properties) {
     if (!ts.isPropertyAssignment(property) || !ts.isIdentifier(property.name)) continue;
     const value = property.initializer;
     if (!ts.isStringLiteralLike(value)) continue;
     if (property.name.text === 'templateUrl') found.urls.push([normalise(dir + value.text), names]);
     if (property.name.text !== 'template') continue;
-    const text = inTemplate(value.getText(), names);
+    const { text, left } = inTemplate(value.getText(), names);
+    const line = source.getLineAndCharacterOfPosition(property.getStart()).line + 1;
+    for (const name of left) found.notes.push(localNote(`${file}:${line}`, name));
     if (text !== value.getText()) {
       found.edits.push({ start: value.getStart(), end: value.getEnd(), text });
     }
@@ -212,7 +242,7 @@ function componentTemplate(ts, metadata, names, dir, found) {
 
 /** Each component's inline template edits, and the template files it names, with its holders. */
 function templates(ts, source, file, types) {
-  const found = { edits: [], urls: [] };
+  const found = { edits: [], urls: [], notes: [] };
   const dir = file.includes('/') ? file.slice(0, file.lastIndexOf('/') + 1) : '';
   const components = componentNames(ts, source);
   const visit = (node) => {
@@ -220,7 +250,7 @@ function templates(ts, source, file, types) {
     const metadata = cls && componentMetadata(ts, node, components);
     // A template reads the instance's members.
     const names = metadata ? classHolders(ts, node, types).instance : null;
-    if (names?.size) componentTemplate(ts, metadata, names, dir, found);
+    if (names?.size) componentTemplate(ts, source, file, metadata, names, dir, found);
     ts.forEachChild(node, visit);
   };
   visit(source);
@@ -248,7 +278,8 @@ function rewriteSource(ts, host, file, text, notes) {
   const { types, namespace } = imported(ts, source);
   if (namespace) notes.push(namespaceNote(file, source, namespace));
   if (!types.size) return [];
-  const { edits, urls } = templates(ts, source, file, types);
+  const { edits, urls, notes: local } = templates(ts, source, file, types);
+  notes.push(...local);
   edits.push(...codeEdits(ts, source, types));
   if (edits.length) host.write(file, applied(text, edits));
   return urls;
@@ -268,7 +299,9 @@ function trackingAvailableGetter(host) {
   }
   for (const [url, names] of named) {
     const text = host.read(url);
-    const next = text === null ? null : inTemplate(text, names);
+    if (text === null) continue;
+    const { text: next, left } = inTemplate(text, names);
+    for (const name of left) notes.push(localNote(`${url}:${declarationLine(text, name)}`, name));
     if (next !== text) host.write(url, next);
   }
   return notes;
