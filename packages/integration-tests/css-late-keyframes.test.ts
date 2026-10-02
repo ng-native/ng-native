@@ -65,4 +65,48 @@ describe('keyframes from a sheet met later in the same commit', () => {
       [],
     );
   });
+
+  it('still reports a name no sheet has once the commit is over', () => {
+    const fabric = createFakeFabric();
+    const engine = new Engine(fabric, 1, { dev: true });
+    const errors: string[] = [];
+    const error = console.error;
+    console.error = (...args: unknown[]) => void errors.push(args.join(' '));
+    try {
+      const node = engine.createElement(
+        'view',
+        compileCss('.p { animation: nowhere 1s }') as StyleSheet,
+      );
+      engine.addClass(node, 'p');
+      engine.appendChild(engine.root, node);
+      engine.commit();
+    } finally {
+      console.error = error;
+    }
+    assert.equal(errors.filter((e) => /no @keyframes named 'nowhere'/.test(e)).length, 1);
+  });
+
+  it('leave a face a later sheet declares in the same commit matched', () => {
+    // The commit that plays them must not lose the font rematch the first one asked for.
+    const fabric = createFakeFabric();
+    const engine = new Engine(fabric, 1, { now: () => 0 });
+    const above = compileCss(
+      '.t { font-family: Zig; font-weight: 700 } .p { animation: fade 1000ms linear }',
+    ) as StyleSheet;
+    const below = compileCss(
+      "@font-face { font-family: Zig; src: url('./Zig.ttf'); font-weight: 700 } " +
+        '@keyframes fade { from { opacity: 0 } to { opacity: 1 } } .c { width: 1px }',
+    ) as StyleSheet;
+    const text = engine.createElement('text', above);
+    const named = engine.createElement('view', above);
+    const later = engine.createElement('view', below);
+    engine.addClass(text, 't');
+    engine.addClass(named, 'p');
+    engine.addClass(later, 'c');
+    for (const node of [text, named, later]) engine.appendChild(engine.root, node);
+    engine.commit();
+    const [first, second] = flatten(fabric.committed);
+    assert.equal(first?.props['fontFamily'], 'Zig-700');
+    assert.equal(second?.props['opacity'], 0);
+  });
 });

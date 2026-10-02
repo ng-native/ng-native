@@ -2288,8 +2288,10 @@ export class Engine implements HostEngine {
 
     this.flushTransitionEvents();
     this.scrollDriver?.afterCommit();
+    // Read first: the commit that settles keyframes starts by clearing it.
+    const facesAdded = this.facesAdded;
     if (this.awaitingKeyframes.size) this.settleKeyframes();
-    if (this.facesAdded) this.rematchFonts();
+    if (facesAdded) this.rematchFonts();
     return true;
   }
 
