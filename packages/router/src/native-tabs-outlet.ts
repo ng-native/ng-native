@@ -27,7 +27,6 @@
  */
 import {
   ApplicationRef,
-  ChangeDetectionStrategy,
   ChangeDetectorRef,
   Component,
   DestroyRef,
@@ -89,7 +88,6 @@ interface TabSelection {
 @Component({
   selector: 'native-tabs-outlet',
   template: '<ng-content />',
-  changeDetection: ChangeDetectionStrategy.OnPush,
   host: {
     '[style]': 'fill',
     '[tabBarHidden]': 'barHidden()',

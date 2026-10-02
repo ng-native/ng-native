@@ -18,7 +18,6 @@
  */
 import {
   ApplicationRef,
-  ChangeDetectionStrategy,
   Component,
   DestroyRef,
   ElementRef,
@@ -100,7 +99,6 @@ type NativeDispatch = (node: unknown, topLevelType: string, nativeEvent: unknown
 @Component({
   selector: 'native-stack-outlet',
   template: '',
-  changeDetection: ChangeDetectionStrategy.OnPush,
   host: { '[style]': 'fill' },
 })
 export class NativeStackOutlet implements RouterOutletContract {
