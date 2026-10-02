@@ -34,12 +34,20 @@ export function colorSchemeSource(): ColorSchemeSource {
   return {
     current: read,
     subscribe: (listener) => {
-      const subscription = native.Appearance.addChangeListener(() => listener(read()));
-      const onSet = () => listener(read());
-      setListeners.add(onSet);
+      // Each scheme once: the platform's report repeats one the app set, and it also reports
+      // appearance changes that are not the scheme.
+      let last = read();
+      const onChange = () => {
+        const scheme = read();
+        if (scheme === last) return;
+        last = scheme;
+        listener(scheme);
+      };
+      const subscription = native.Appearance.addChangeListener(onChange);
+      setListeners.add(onChange);
       return () => {
         subscription.remove();
-        setListeners.delete(onSet);
+        setListeners.delete(onChange);
       };
     },
     set: (scheme) => {

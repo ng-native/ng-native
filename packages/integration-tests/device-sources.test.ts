@@ -441,6 +441,31 @@ describe('the colour scheme and app state sources', () => {
     });
   });
 
+  it('says each scheme once, when the platform then reports the one the app set', () => {
+    // Each repeat would cost a subscriber such as `watchConditions` a commit of its own.
+    let scheme: string | null = 'light';
+    let emit: () => void = () => {};
+    const native = {
+      Appearance: {
+        getColorScheme: () => scheme,
+        addChangeListener: (handler: () => void) => {
+          emit = handler;
+          return { remove: () => {} };
+        },
+        setColorScheme: (next: string) => void (scheme = next === 'unspecified' ? 'light' : next),
+      },
+    };
+    withNative(native, () => {
+      const source = colorSchemeSource();
+      const heard: string[] = [];
+      source.subscribe((value) => heard.push(value));
+      source.set?.('dark');
+      emit();
+      emit();
+      assert.deepEqual(heard, ['dark']);
+    });
+  });
+
   it('keeps inactive apart from active, as a call or the app switcher leaves it', () => {
     const native = {
       AppState: { currentState: 'inactive', addEventListener: () => ({ remove: () => {} }) },
