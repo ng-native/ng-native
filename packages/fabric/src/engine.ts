@@ -2691,7 +2691,7 @@ export class Engine implements HostEngine {
     const current = node.scrolled;
     const inherited = this.inheritedColour(node, frames);
     if (current?.frames === frames && sameAnimation(current.spec, spec)) {
-      return Object.assign(props, this.rescrolled(node, current, frames, inherited));
+      return Object.assign(props, this.rescrolled(node, current, frames, props, inherited));
     }
     this.stopScrolled(node);
     if (node.playing) {
@@ -2724,16 +2724,20 @@ export class Engine implements HostEngine {
     node: EngineNode,
     current: ScrollAnimation,
     frames: readonly Keyframe[],
+    props: Record<string, unknown>,
     inherited: unknown,
   ): Record<string, unknown> {
     if (inherited === current.inherited) return current.first;
-    const tracks = tracksOf(frames, current.resting, inherited);
+    // The element's own colour, which a track with no first frame starts at, may be the one it
+    // inherits, so it is read again too.
+    const resting = { ...current.resting, color: props['color'] };
+    const tracks = tracksOf(frames, resting, inherited);
     const extent = current.source ? this.scrollExtents.get(current.source) : undefined;
     const range = rangeOf(current.spec, extent?.[current.spec.timeline!] ?? null);
     const first = { ...current.first };
     const colour = firstFrame(tracks, current.spec, range)['color'];
     if ('color' in first) first['color'] = colour;
-    node.scrolled = { ...current, tracks, first, inherited };
+    node.scrolled = { ...current, tracks, resting, first, inherited };
     return first;
   }
 

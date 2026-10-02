@@ -396,6 +396,33 @@ describe('color: currentColor in a keyframe', () => {
     assert.equal(painted(), 'rgba(200, 100, 0, 1)');
   });
 
+  it('starts a scroll-played animation with no first frame at the colour inherited now', () => {
+    // No frame at 0%, so the animation starts at the element's own colour, which it inherits.
+    const sheet = compileCss(`
+      .p { color: rgb(10, 20, 30) }
+      .q { color: rgb(200, 100, 0) }
+      @keyframes k { 50% { color: currentColor } to { color: rgb(110, 120, 130) } }
+      .a { animation: k 1s linear; animation-timeline: scroll() }
+    `);
+    const fabric = createFakeFabric();
+    const engine = new Engine(fabric, 1);
+    const scroll = engine.createElement('scroll-view', sheet);
+    const outer = engine.createElement('view', sheet);
+    engine.addClass(outer, 'p');
+    const node = engine.createElement('text', sheet);
+    engine.addClass(node, 'a');
+    engine.appendChild(outer, node);
+    engine.appendChild(scroll, outer);
+    engine.appendChild(engine.root, scroll);
+    engine.commit();
+    const painted = () => fabric.committed[0]!.children[0]!.children[0]!.props['color'];
+    assert.equal(painted(), 'rgba(10, 20, 30, 1)');
+    engine.removeClass(outer, 'p');
+    engine.addClass(outer, 'q');
+    engine.commit();
+    assert.equal(painted(), 'rgba(200, 100, 0, 1)');
+  });
+
   it('still refuses currentColor on any other property in a frame', () => {
     // The element's own colour, which the same frames can be animating.
     assert.throws(
