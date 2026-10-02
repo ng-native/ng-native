@@ -965,6 +965,14 @@ function compound(parts, context) {
         break;
       }
       case 'pseudo-element':
+        if (part.name === 'ng-deep') {
+          throw new CssUnsupported(
+            `${context}: '::ng-deep' lets a browser's rule past Angular's emulated encapsulation, ` +
+              `and a sheet here has no encapsulation to pierce: applied as written it would reach ` +
+              `whatever matches the rest of the selector. Style the inner element from its own ` +
+              `component's sheet, or from the global sheet.`,
+          );
+        }
         throw new CssUnsupported(
           `${context}: pseudo-elements like ::before are never supported. They would mean ` +
             `synthesising nodes no template declares, which puts the style engine in the ` +
@@ -1641,6 +1649,26 @@ function placed(error, where) {
   return new Error(`${where(error.loc.line)}: ${error.message}`);
 }
 
+/**
+ * Each rule lightningcss dropped for not parsing, under `errorRecovery`, reported once a place: it
+ * can give a rule two reasons, the last the one that decided. A pseudo-class or pseudo-element it
+ * does not know is kept, as a custom one, so no rule was dropped for it, and the compile has
+ * already said what it made of the selector.
+ */
+function reportUnparsed(warnings, where, onUnsupported) {
+  const unparsed = new Map();
+  for (const warning of warnings) {
+    if (!warning.loc || KEPT_BY_LIGHTNINGCSS.has(warning.value?.type)) continue;
+    unparsed.set(`${warning.loc.line}:${warning.loc.column}`, warning);
+  }
+  for (const { loc, message } of unparsed.values()) {
+    onUnsupported?.(`${where(loc.line)}: dropped a rule that does not parse: ${message}`);
+  }
+}
+
+/** What lightningcss warns about with `errorRecovery` but keeps in the sheet. */
+const KEPT_BY_LIGHTNINGCSS = new Set(['UnsupportedPseudoClass', 'UnsupportedPseudoElement']);
+
 /** Both native platforms, which is who a sheet is for when the build does not say. */
 const NATIVE = ['ios', 'android'];
 
@@ -1822,7 +1850,10 @@ function undrawn(name, context) {
  *   express, naming where it is, what was dropped and why, and the compile goes on without it.
  *   Every build path passes one: Metro prints each as a build warning, and Tailwind's step and the
  *   docs preview collect them. Without one, the first thing that cannot be expressed throws a
- *   `CssUnsupported` with the same message. CSS that does not parse throws either way.
+ *   `CssUnsupported` with the same message. CSS that does not parse throws either way, unless
+ *   `recover` is set: then a rule that does not parse is dropped and reported as the rest are,
+ *   which is what a browser does with it. That is for a library's CSS, which the app cannot fix;
+ *   the app's own fails the build, where the mistake is its author's to see.
  */
 function compileCss(source, context = 'styles', options = {}) {
   const rules = [];
@@ -2118,10 +2149,12 @@ function compileCss(source, context = 'styles', options = {}) {
   }
 
   const flattened = flatten(source, context);
+  let parsed;
   try {
-    lightning.transform({
+    parsed = lightning.transform({
       filename: `${context}.css`,
       code: Buffer.from(markUnitless(flattened.code)),
+      errorRecovery: options.recover === true,
       visitor: {
         Rule(rule) {
           return guarded(() => compileRule(rule), locationOf(rule));
@@ -2131,6 +2164,7 @@ function compileCss(source, context = 'styles', options = {}) {
   } catch (error) {
     throw placed(error, where);
   }
+  if (options.recover === true) reportUnparsed(parsed.warnings, where, onUnsupported);
 
   function compileRule(rule) {
     if (rule.type === 'font-face') {

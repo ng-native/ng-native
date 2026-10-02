@@ -16,10 +16,11 @@ const { parse } = require('@babel/parser');
  * properties hold.
  *
  * - `type` is the name of the class the definition belongs to, or null when it is not a name.
- * - `styles` is the extent of the property's value, `{ start, end }` as offsets into `code`, with
- *   `entries` when every entry is a string: each one's value as the string it means, and the line
- *   its literal starts on. `entries` is null when an entry is anything else, and `styles` is null
- *   when the object has no such property.
+ * - `styles` is the extent of the property's value, `{ start, end }` as offsets into `code`, and
+ *   the line it starts on, with `entries` when every entry is a string: each one's value as the
+ *   string it means, the line its literal starts on, and whether its lines are the file's (`exact`),
+ *   which they are not when the literal escapes its line breaks. `entries` is null when an entry is
+ *   anything else, and `styles` is null when the object has no such property.
  *
  * Null when the module does not parse, including one the parser could only recover from by guessing.
  *
@@ -112,8 +113,13 @@ function stylesOf(value) {
   return {
     start: value.start,
     end: value.end,
+    line: value.loc.start.line,
     entries: strings
-      ? elements.map((element) => ({ value: stringOf(element), line: element.loc.start.line }))
+      ? elements.map((element) => ({
+          value: stringOf(element),
+          line: element.loc.start.line,
+          exact: lines(rawOf(element)) === lines(stringOf(element)),
+        }))
       : null,
   };
 }
@@ -127,6 +133,14 @@ function isString(node) {
 
 function stringOf(node) {
   return node.type === 'StringLiteral' ? node.value : node.quasis[0].value.cooked;
+}
+
+function rawOf(node) {
+  return node.type === 'StringLiteral' ? node.extra.raw : node.quasis[0].value.raw;
+}
+
+function lines(text) {
+  return text.split('\n').length;
 }
 
 module.exports = { componentDeclarations };

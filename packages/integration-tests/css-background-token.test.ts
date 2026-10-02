@@ -97,4 +97,35 @@ describe('background: var()', () => {
     assert.equal(warnings.length, 1);
     assert.match(warnings[0]!, /'background' mixes var\(\) with other values/);
   });
+
+  it('reads a relative colour from a token, worked out on device', () => {
+    // Chrome 154 gives `color(srgb 0 0 0.784314 / 0.5)`, the same colour, written in a form the
+    // oracle cannot compare as text.
+    const { background, warnings } = tree(
+      '.a { --bg: rgb(0, 0, 200); background: rgb(from var(--bg) r g b / 0.5) }',
+    );
+    assert.deepEqual(warnings, []);
+    assert.equal(background(), 'rgba(0, 0, 200, 0.5)');
+  });
+
+  it('lands a platform colour in the background colour, the prop native has', () => {
+    const { background, warnings } = tree('.a { background: platform-color(systemBlue) }');
+    assert.deepEqual(warnings, []);
+    assert.deepEqual(
+      background(),
+      { semantic: ['systemBlue'] },
+      "iOS's form, which the engine makes",
+    );
+  });
+
+  it('unsets the colour for a token holding a colour and an image, which a browser paints', () => {
+    // Chrome 154 paints rgb(1, 2, 3) for `--bg: rgb(1, 2, 3) none`: the token is the whole
+    // shorthand there. Here a token is one value, so it is no colour; supported-css says so.
+    const { engine, node, background } = tree(
+      '.a { background-color: rgb(9, 9, 9) } .a { background: var(--bg) }',
+    );
+    engine.setCustomProperty(node, '--bg', 'rgb(1, 2, 3) none');
+    engine.commit();
+    assert.equal(background(), undefined);
+  });
 });

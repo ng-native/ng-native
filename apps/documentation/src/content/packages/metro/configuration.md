@@ -105,19 +105,33 @@ module.exports = withAngularNative(getDefaultConfig(__dirname), {
 
 The CSS is read from the file as the library shipped it, before the linker shims it for emulated
 encapsulation, so a `:host([data-tone="warm"])` rule compiles to the host attribute match it means.
-What native cannot express is dropped under the same warnings as your own CSS, naming the library's
-file, the line and the component; a library written for a browser can produce a long list, and
-each line is a declaration that does nothing on a device. The rules a library writes for a browser
+What native cannot express is dropped, as your own CSS's is, and a rule that does not parse is
+dropped too, as a browser drops it, where in your own CSS it fails the build. A library written for
+a browser drops a great deal, so each of its files gets one line counting what was dropped and why:
+
+```text
+[angular-native] @acme/ui (fesm2022/acme-ui.mjs): 12 sheets, 40 declarations and rules dropped:
+a pseudo-element 14, ':hover' 9, 'cursor' 6, ..., ...
+```
+
+Set `ANGULAR_NATIVE_LIBRARY_WARNINGS=all` in the environment Metro starts in to see each one,
+naming the library's file, the line and the component, as your own CSS's warnings do. The warnings
+are printed when a file is transformed, so a build from a warm cache prints none; start Metro with
+`--clear` to see them again. The rules a library writes for a browser
 and native reads differently - `display: flex` with the row direction a browser gives it, `:hover`,
 `position: fixed` - are the same ones [what CSS reaches a device](/packages/fabric/supported-css)
 lists for your own CSS.
 
-A package is named as it is imported, `@acme/ui`, and matched by the `node_modules/@acme/ui/` on a
-file's path, or by the `name` in the nearest `package.json` for a linked workspace library. A
-dependency of the library, under its own `node_modules`, is not the library. The list goes into
+A package is named as its `package.json` names it, `@acme/ui`, and matched by the
+`node_modules/@acme/ui/` on a file's path, or by the `name` in the nearest `package.json` for a
+linked workspace library. An entry point such as `@acme/ui/button` is part of its package, so the
+preset refuses it and asks for `@acme/ui`, as it refuses a path or a name no npm package can have.
+A dependency of the library, under its own `node_modules`, is not the library. The list goes into
 Metro's `cacheVersion`, so changing it starts the cache afresh. The option needs the preset's
 transform worker in front of Expo's, which is how the list reaches the transformer; with a
-`transformerPath` of your own the preset refuses it rather than let it do nothing. A web build
+`transformerPath` of your own the preset refuses it rather than let it do nothing, and when
+something replaces the worker after the preset, the build says that a listed library's file arrived
+without the list. A web build
 leaves the library's CSS to the browser, as it does yours, and an edit to a library's CSS reloads
 rather than hot-swaps.
 

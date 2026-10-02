@@ -118,6 +118,35 @@ function originalLoc(loc, tracer, lineOffset) {
 }
 
 /**
+ * The preset's `libraryStyles`, which the transform worker it installs puts into the bundle's
+ * `customTransformOptions`.
+ *
+ * A config that replaced that worker after `withAngularNative` leaves them out, and the option
+ * would do nothing without a word. The preset also leaves the list in the environment its workers
+ * inherit, so a file of a listed package that arrives without it is said to, once a build.
+ */
+function libraryStylesOf(params) {
+  const carried = params.options?.customTransformOptions?.angularNativeLibraryStyles;
+  if (carried || warnedWorker) return carried;
+  const expected = process.env['ANGULAR_NATIVE_LIBRARY_STYLES']?.split(',').filter(Boolean) ?? [];
+  const listed = expected.find((name) =>
+    params.filename.split(path.sep).join('/').includes(`/node_modules/${name}/`),
+  );
+  if (listed) {
+    warnedWorker = true;
+    console.warn(
+      `[angular-native] libraryStyles names '${listed}', but ${params.filename} arrived without ` +
+        "the list, so the library's components have no sheets. Metro is running a transform " +
+        'worker other than the one withAngularNative installs, which is the only way the list ' +
+        'reaches the transformer: something set transformerPath after withAngularNative.',
+    );
+  }
+  return carried;
+}
+
+let warnedWorker = false;
+
+/**
  * The Angular stage, or the file's own syntax error when that is why it failed.
  *
  * The Angular compiler parses the file first, and a plain TypeScript mistake comes back from it as
@@ -132,7 +161,8 @@ function angularOrSyntaxError(params) {
       dev: params.options?.dev === true,
       platform: params.options?.platform,
       // From the preset's `libraryStyles`, by way of the transform worker: see `transform-worker.cjs`.
-      libraryStyles: params.options?.customTransformOptions?.angularNativeLibraryStyles,
+      libraryStyles: libraryStylesOf(params),
+      projectRoot: params.options?.projectRoot,
     });
   } catch (error) {
     try {

@@ -456,7 +456,39 @@ function libraryStylesOf(options) {
         `["@acme/ui"]; got ${JSON.stringify(libraryStyles)}.`,
     );
   }
+  for (const name of libraryStyles) {
+    const wrong = wrongPackageName(name);
+    if (wrong) throw new Error(`[angular-native] libraryStyles: '${name}' ${wrong}`);
+  }
   return libraryStyles.length ? [...new Set(libraryStyles)] : undefined;
+}
+
+/**
+ * Why a name is no npm package's, or null when it could be one: a list entry matches a file by
+ * its package's name alone, so a name that is close but not it would match nothing in silence.
+ */
+function wrongPackageName(name) {
+  if (/\s/.test(name)) return 'has white space in it, which no package name has.';
+  if (/^[./]/.test(name)) {
+    return "is a path. Name the package, as its package.json's name says it.";
+  }
+  if (/^@[^/]*\/?$/.test(name))
+    return `is a scope. Name a package in it, as '${name.replace(/\/$/, '')}/ui'.`;
+  const [, scope, rest] = /^(@[^/]+\/)?(.*)$/.exec(name);
+  if (rest.includes('/')) {
+    const root = (scope ?? '') + rest.split('/')[0];
+    return (
+      `is an entry point of '${root}', and the CSS is compiled a package at a time: ` +
+      `name '${root}'.`
+    );
+  }
+  if (name !== name.toLowerCase()) {
+    return `has capital letters, and npm takes only lowercase names for a new package: '${name.toLowerCase()}'?`;
+  }
+  if (!/^(@[a-z0-9~-][a-z0-9._~-]*\/)?[a-z0-9~-][a-z0-9._~-]*$/.test(name)) {
+    return 'has a character an npm package name cannot.';
+  }
+  return null;
 }
 
 /**
@@ -471,7 +503,10 @@ function libraryStylesOf(options) {
  */
 function recordLibraryStyles(config, options) {
   const libraryStyles = libraryStylesOf(options);
-  if (!libraryStyles) return;
+  if (!libraryStyles) {
+    delete process.env['ANGULAR_NATIVE_LIBRARY_STYLES'];
+    return;
+  }
   if (config.transformerPath !== require.resolve('./transform-worker.cjs')) {
     throw new Error(
       "[angular-native] libraryStyles needs this preset in front of Expo's transform worker, " +
@@ -480,6 +515,9 @@ function recordLibraryStyles(config, options) {
     );
   }
   config.transformer.angularNativeLibraryStyles = libraryStyles;
+  // For the transformer to notice a worker that does not carry the list: see `transformer.cjs`.
+  // Metro's workers inherit the environment of the process that loaded this config.
+  process.env['ANGULAR_NATIVE_LIBRARY_STYLES'] = libraryStyles.join(',');
   config.transformer.cacheVersion = [
     config.transformer.cacheVersion,
     `library-styles-${[...libraryStyles].sort().join(',')}`,

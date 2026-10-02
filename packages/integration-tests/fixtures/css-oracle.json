@@ -608,5 +608,26 @@
       "color": "rgb(0, 0, 0)",
       "background-color": "rgba(0, 0, 0, 0)"
     }
+  },
+  {
+    "name": "background: rgba() of a channel token is the background colour",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(8, 0, 0, 0.5)"
+    }
+  },
+  {
+    "name": "background: light-dark() of two tokens is the light one in a light scheme",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgb(9, 0, 0)"
+    }
+  },
+  {
+    "name": "background: var() of a currentColor token from the parent is the element's own colour",
+    "expected": {
+      "color": "rgb(12, 0, 0)",
+      "background-color": "rgb(12, 0, 0)"
+    }
   }
 ]

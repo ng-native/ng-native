@@ -718,9 +718,13 @@ function locator(parts, className) {
       const length = part.text.split('\n').length;
       if (line < start + length) {
         const offset = line - start;
-        return part.line === null
-          ? `${part.file} (${className}, line ${offset + 1} of its styles)`
-          : `${part.file}:${part.line + offset} (${className})`;
+        if (part.line === null)
+          return `${part.file} (${className}, line ${offset + 1} of its styles)`;
+        // A literal that escapes its line breaks is one line of the file, however many it holds.
+        if (part.exact === false && offset > 0) {
+          return `${part.file}:${part.line} (${className}, line ${offset + 1} of its styles)`;
+        }
+        return `${part.file}:${part.line + offset} (${className})`;
       }
       start += length;
     }
@@ -747,9 +751,10 @@ function buildWarnings() {
  * Anything native cannot express is dropped and reported to `warn`, and the rest of its rule
  * still applies. `platform` is the one Metro is bundling for, so a declaration only one platform
  * draws is dropped with a warning in the build for the other; with none, as under a test, the
- * sheet has to suit both. CSS that does not parse still fails the build.
+ * sheet has to suit both. CSS that does not parse fails the build, unless `recover` is set, as
+ * it is for a library's: then the rule is dropped and reported like the rest.
  */
-function componentSheet(css, filename, className, platform, parts, warn) {
+function componentSheet(css, filename, className, platform, parts, warn, recover = false) {
   if (!css.trim()) return null;
 
   const context = `${filename} (${className})`;
@@ -757,6 +762,7 @@ function componentSheet(css, filename, className, platform, parts, warn) {
     platform,
     ...(parts ? { locate: locator(parts, className) } : {}),
     onUnsupported: warn,
+    recover,
   };
 
   const sheet = compileCss(css, context, options);
@@ -807,34 +813,34 @@ function compileTwice(src, filename, compilerOptions) {
  * word about it, which is what the option exists to make loud.
  */
 function link(src, filename, options) {
-  const { code } = linkAngularPackageSync(src, filename);
+  const owner = options.platform === 'web' ? null : packageOf(filename, options.projectRoot);
+  const listed = owner !== null && options.libraryStyles?.includes(owner.name);
+  const { code } = linkAngularPackageSync(
+    listed ? withLibrarySheets(src, filename, owner, options.platform) : src,
+    filename,
+  );
   const strip = options.dev !== true && options.platform !== 'web';
-  const sheets = optedIn(filename, options)
-    ? libraryStyleBlock(src, filename, options.platform)
-    : '';
-  return { code: (strip ? stripComponentStyles(code, filename) : code) + sheets, dependencies: [] };
-}
-
-/** Whether a native build compiles this file's component CSS: its package is in `libraryStyles`. */
-function optedIn(filename, options) {
-  const packages = options.libraryStyles;
-  if (options.platform === 'web' || !Array.isArray(packages) || !packages.length) return false;
-  const name = packageNameOf(filename);
-  return name !== null && packages.includes(name);
+  return { code: strip ? stripComponentStyles(code, filename) : code, dependencies: [] };
 }
 
 /**
- * The npm package a file belongs to: the last `node_modules/<name>/` on its path, which is also
- * the right one under pnpm (`node_modules/.pnpm/<name>@<version>/node_modules/<name>/`), or else
- * the `name` of the nearest `package.json` above it, which is where a linked workspace package
- * says who it is. Metro names a file relative to the project root, which is the worker's directory.
+ * The npm package a file belongs to, `{ name, file }` with the file's path inside the package, or
+ * null when nothing claims it.
+ *
+ * The last `node_modules/<name>/` on its path, which is also the right one under pnpm
+ * (`node_modules/.pnpm/<name>@<version>/node_modules/<name>/`), or else the `name` of the nearest
+ * `package.json` above it, which is where a linked workspace package says who it is. Metro names a
+ * file relative to the project root, which is not always the directory the build was started in.
  */
-function packageNameOf(filename) {
-  const absolute = path.resolve(filename).split(path.sep).join('/');
+function packageOf(filename, root = process.cwd()) {
+  const absolute = path.resolve(root, filename).split(path.sep).join('/');
   // The closing slash is looked ahead to, not taken: it opens the next `node_modules` on the path.
   const owners = [...absolute.matchAll(/\/node_modules\/((?:@[^/]+\/)?[^/@.][^/]*)(?=\/)/g)];
-  if (owners.length) return owners[owners.length - 1][1];
-  return manifestName(projectRoot(absolute));
+  const last = owners[owners.length - 1];
+  if (last) return { name: last[1], file: absolute.slice(last.index + last[0].length + 1) };
+  const directory = projectRoot(absolute);
+  const name = manifestName(directory);
+  return name === null ? null : { name, file: path.relative(directory, absolute) };
 }
 
 /** The `name` in a directory's `package.json`, read once per directory, or null without one. */
@@ -854,28 +860,118 @@ function manifestName(directory) {
 }
 
 /**
- * Compile each `ɵɵngDeclareComponent({ type: X, ..., styles: [...] })`'s CSS into X's sheet, as
- * `styleBlock` does for a component the compiler sees.
+ * The file with each `ɵɵngDeclareComponent({ type: X, ..., styles: [...] })` handing X the sheet
+ * its CSS compiles to, as `styleBlock` does for a component the compiler sees.
  *
  * Read from the file as shipped, before the linker: the linker shims the CSS for emulated
- * encapsulation, `[_nghost-%COMP%]`, and that `%` is no selector lightningcss can tokenize. A
- * declaration's `type` is its class, so the sheet hangs off the same name the linked definition
- * belongs to. Only a `styles` that is a list of strings is read, which is how the Angular compiler
- * writes it; anything else is left alone rather than guessed at.
+ * encapsulation, `[_nghost-%COMP%]`, and that `%` is no selector lightningcss can tokenize. The
+ * sheet is put on the definition the call returns, through its `type`, rather than on X by name:
+ * a minifier leaves a class named only inside its own body (`var a = class r { ... type: r }`),
+ * where a statement after it could not reach it. The linker links the call where it stands.
+ *
+ * A library's CSS is the library's, so a rule in it that does not parse is dropped with a warning,
+ * as a browser drops it, where the app's own fails the build. What it drops is summed up in one
+ * line for the file unless `ANGULAR_NATIVE_LIBRARY_WARNINGS=all` asks for each one: a library
+ * written for a browser drops a great deal, and a thousand lines bury the one that matters.
  */
-function libraryStyleBlock(src, filename, platform) {
-  const warn = buildWarnings();
-  const blocks = [];
-  for (const declared of componentDeclarations(src, filename, 'ɵɵngDeclareComponent') ?? []) {
-    const parts = (declared.styles?.entries ?? [])
-      .filter((entry) => entry.value)
-      .map((entry) => ({ text: entry.value, file: filename, line: entry.line }));
-    if (!declared.type || !parts.length) continue;
-    const css = parts.map((part) => part.text).join('\n');
-    const sheet = componentSheet(css, filename, declared.type, platform, parts, warn);
-    if (sheet) blocks.push(`${declared.type}["ɵnativeStyles"] = ${literal(sheet)};`);
+function withLibrarySheets(src, filename, owner, platform) {
+  const declarations = componentDeclarations(src, filename, 'ɵɵngDeclareComponent');
+  if (declarations === null) {
+    console.warn(
+      `[angular-native] ${filename}: does not parse as JavaScript, so ${owner.name}'s ` +
+        'components in it have no sheets.',
+    );
+    return src;
   }
-  return blocks.length ? `\n${blocks.join('\n')}\n` : '';
+
+  // Compiled in the file's order, so the warnings are; then spliced in from the end, so each
+  // declaration's offsets still hold when its turn comes.
+  const report = libraryWarnings(owner);
+  const compiled = declarations
+    .sort((a, b) => a.start - b.start)
+    .map((declared) => ({
+      declared,
+      sheet: declaredSheet(declared, filename, platform, report.warn),
+    }))
+    .filter(({ sheet }) => sheet);
+  report.done(compiled.length);
+  let out = src;
+  for (const { declared, sheet } of compiled.reverse()) {
+    const call = out.slice(declared.start, declared.end);
+    out =
+      out.slice(0, declared.start) +
+      `((d) => ((d.type["ɵnativeStyles"] = ${literal(sheet)}), d))(${call})` +
+      out.slice(declared.end);
+  }
+  return out;
+}
+
+/** The sheet one declaration's CSS compiles to, or null, saying why when it cannot be read. */
+function declaredSheet(declared, filename, platform, warn) {
+  const { type, styles } = declared;
+  if (!styles) return null;
+  if (!styles.entries) {
+    console.warn(
+      `[angular-native] ${filename}:${styles.line} (${type ?? 'a component'}): its styles are ` +
+        'not a list of strings, which is how the Angular compiler writes them, so it has no sheet.',
+    );
+    return null;
+  }
+  const parts = styles.entries
+    .filter((entry) => entry.value)
+    .map((entry) => ({ text: entry.value, file: filename, line: entry.line, exact: entry.exact }));
+  if (!parts.length) return null;
+  const css = parts.map((part) => part.text).join('\n');
+  return componentSheet(css, filename, type ?? 'a component', platform, parts, warn, true);
+}
+
+/**
+ * Where a library's warnings go: each one, with `ANGULAR_NATIVE_LIBRARY_WARNINGS=all`, or else one
+ * line for the file when it is done, counting what was dropped and why.
+ */
+function libraryWarnings(owner) {
+  const every = process.env['ANGULAR_NATIVE_LIBRARY_WARNINGS'] === 'all';
+  const seen = new Set();
+  return {
+    warn(message) {
+      if (seen.has(message)) return;
+      seen.add(message);
+      if (every) console.warn(`[angular-native] ${message}`);
+    },
+    done(sheets) {
+      if (every || !seen.size) return;
+      const reasons = new Map();
+      for (const message of seen) {
+        const reason = reasonOf(message);
+        reasons.set(reason, (reasons.get(reason) ?? 0) + 1);
+      }
+      const counted = [...reasons].sort((a, b) => b[1] - a[1]);
+      const named = counted.slice(0, SUMMARISED).map(([reason, count]) => `${reason} ${count}`);
+      const rest = counted.length > SUMMARISED ? `, and ${counted.length - SUMMARISED} more` : '';
+      console.warn(
+        `[angular-native] ${owner.name} (${owner.file}): ${sheets} sheet${sheets === 1 ? '' : 's'}, ` +
+          `${seen.size} declaration${seen.size === 1 ? '' : 's'} and rules dropped: ` +
+          `${named.join(', ')}${rest}. Set ANGULAR_NATIVE_LIBRARY_WARNINGS=all to see each one.`,
+      );
+    },
+  };
+}
+
+/** How many reasons a summary names before it counts the rest. */
+const SUMMARISED = 8;
+
+/** What a warning dropped, in a word or two: the property, the selector part, or the kind. */
+function reasonOf(message) {
+  // A media query's refusal names the sheet again after the place: `dropped a rule: file (X): ...`.
+  const what = message
+    .slice(message.indexOf('): ') + 3)
+    .replace(/^(dropped a (?:rule|selector): )\S.*? \([^)]*\): /, '$1');
+  if (what.startsWith('dropped a rule that does not parse')) return 'CSS that does not parse';
+  if (/^dropped a (?:rule|selector): pseudo-elements/.test(what)) return 'a pseudo-element';
+  const feature = /^dropped a rule: '([^']+)' is not a media feature/.exec(what);
+  if (feature) return `@media (${feature[1]})`;
+  const named = /^dropped (?:a (?:rule|selector): )?('[^']+')/.exec(what);
+  return named ? named[1] : what.split(':')[0];
 }
 
 /**

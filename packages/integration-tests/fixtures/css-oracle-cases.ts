@@ -577,4 +577,19 @@ export const CASES: OracleCase[] = [
     css: '#probe { background-color: rgb(7, 0, 0) } #probe.c { background: var(--missing) }',
     tree: probe({ classes: ['c'] }),
   },
+  {
+    name: 'background: rgba() of a channel token is the background colour',
+    css: '#probe { --rgb: 8, 0, 0; background: rgba(var(--rgb), 0.5) }',
+    tree: probe(),
+  },
+  {
+    name: 'background: light-dark() of two tokens is the light one in a light scheme',
+    css: '#probe { --l: rgb(9, 0, 0); --d: rgb(10, 0, 0); background: light-dark(var(--l), var(--d)) }',
+    tree: probe(),
+  },
+  {
+    name: "background: var() of a currentColor token from the parent is the element's own colour",
+    css: '.outer { color: rgb(11, 0, 0); --bg: currentColor } #probe { color: rgb(12, 0, 0); background: var(--bg) }',
+    tree: { name: 'view', classes: ['outer'], children: [probe()] },
+  },
 ];

@@ -944,6 +944,29 @@ describe("a library's component CSS", () => {
     }
   });
 
+  it('refuses a name no npm package can have, saying what to write instead', () => {
+    const refused: [string, RegExp][] = [
+      ['@acme/ui/button', /'@acme\/ui\/button' is an entry point of '@acme\/ui'.*name '@acme\/ui'/],
+      ['acme-ui/button', /'acme-ui\/button' is an entry point of 'acme-ui'.*name 'acme-ui'/],
+      [' @acme/ui', /' @acme\/ui' has white space/],
+      ['@acme/ui ', /'@acme\/ui ' has white space/],
+      ['@ACME/ui', /'@ACME\/ui' has capital letters.*'@acme\/ui'/],
+      ['./libs/ui', /'\.\/libs\/ui' is a path/],
+      ['/libs/ui', /'\/libs\/ui' is a path/],
+      ['@acme', /'@acme' is a scope/],
+    ];
+    for (const [name, message] of refused) {
+      const config = base();
+      config.transformerPath = EXPO;
+      assert.throws(() => withAngularNative(config, { libraryStyles: [name] }), message, name);
+    }
+    for (const name of ['acme-ui', '@acme/ui', '@a.b/c-d_e', 'x~y']) {
+      const config = base();
+      config.transformerPath = EXPO;
+      withAngularNative(config, { libraryStyles: [name] });
+    }
+  });
+
   it("refuses the option in front of a transform worker that is not Expo's, which it cannot reach", () => {
     const config = base();
     config.transformerPath = '/app/my-worker.js';
