@@ -131,6 +131,8 @@ interface ScrollAnimation {
   readonly tracks: ReadonlyMap<string, readonly { offset: number; value: unknown }[]>;
   readonly resting: Record<string, unknown>;
   readonly first: Record<string, unknown>;
+  /** The colour the node inherits, which the tracks were built with, for frames that read it. */
+  readonly inherited: unknown;
   readonly source: EngineNode | null;
   readonly drive: { update(channels: DrivenChannels): void; stop(): void } | null;
 }
@@ -2687,8 +2689,9 @@ export class Engine implements HostEngine {
     props: Record<string, unknown>,
   ): Record<string, unknown> {
     const current = node.scrolled;
+    const inherited = this.inheritedColour(node, frames);
     if (current?.frames === frames && sameAnimation(current.spec, spec)) {
-      return Object.assign(props, current.first);
+      return Object.assign(props, this.rescrolled(node, current, frames, inherited));
     }
     this.stopScrolled(node);
     if (node.playing) {
@@ -2696,7 +2699,7 @@ export class Engine implements HostEngine {
       this.playing.delete(node);
     }
 
-    const tracks = tracksOf(frames, props, this.inheritedColour(node, frames));
+    const tracks = tracksOf(frames, props, inherited);
     const source = this.scrollSourceOf(node);
     const extent = source ? (this.scrollExtents.get(source)?.[spec.timeline!] ?? null) : null;
     const range = rangeOf(spec, extent);
@@ -2707,8 +2710,31 @@ export class Engine implements HostEngine {
     // As Animated does: Fabric flattens a view that only lays out, and then there is no native
     // view for the animation to move. Committed with the first frame, so it stays put.
     if (drive) first['collapsable'] = false;
-    node.scrolled = { spec, frames, tracks, resting, first, source, drive };
+    node.scrolled = { spec, frames, tracks, resting, first, source, drive, inherited };
     return Object.assign(props, first);
+  }
+
+  /**
+   * The first frame of a scroll-driven animation already playing. When the colour its
+   * `color: currentColor` stands for has changed, that frame's colour is taken from tracks built
+   * again. Native drives opacity and transforms only, so a colour holds its first frame, and
+   * nothing native animates is touched.
+   */
+  private rescrolled(
+    node: EngineNode,
+    current: ScrollAnimation,
+    frames: readonly Keyframe[],
+    inherited: unknown,
+  ): Record<string, unknown> {
+    if (inherited === current.inherited) return current.first;
+    const tracks = tracksOf(frames, current.resting, inherited);
+    const extent = current.source ? this.scrollExtents.get(current.source) : undefined;
+    const range = rangeOf(current.spec, extent?.[current.spec.timeline!] ?? null);
+    const first = { ...current.first };
+    const colour = firstFrame(tracks, current.spec, range)['color'];
+    if ('color' in first) first['color'] = colour;
+    node.scrolled = { ...current, tracks, first, inherited };
+    return first;
   }
 
   /** Hand a scroll-driven animation's channels to native, fed by `source`'s scroll events. */

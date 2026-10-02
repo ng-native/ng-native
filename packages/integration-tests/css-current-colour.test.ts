@@ -373,6 +373,29 @@ describe('color: currentColor in a keyframe', () => {
     assert.equal(s.painted(), 'rgba(60, 70, 80, 1)');
   });
 
+  it('follows it in an animation a scroll plays, which holds its first frame', () => {
+    const sheet = compileCss(
+      `${css('currentColor')} .a { animation: k 1s linear; animation-timeline: scroll() }`,
+    );
+    const fabric = createFakeFabric();
+    const engine = new Engine(fabric, 1);
+    const scroll = engine.createElement('scroll-view', sheet);
+    const outer = engine.createElement('view', sheet);
+    engine.addClass(outer, 'p');
+    const node = engine.createElement('text', sheet);
+    engine.addClass(node, 'a');
+    engine.appendChild(outer, node);
+    engine.appendChild(scroll, outer);
+    engine.appendChild(engine.root, scroll);
+    engine.commit();
+    const painted = () => fabric.committed[0]!.children[0]!.children[0]!.props['color'];
+    assert.equal(painted(), 'rgba(10, 20, 30, 1)');
+    engine.removeClass(outer, 'p');
+    engine.addClass(outer, 'q');
+    engine.commit();
+    assert.equal(painted(), 'rgba(200, 100, 0, 1)');
+  });
+
   it('still refuses currentColor on any other property in a frame', () => {
     // The element's own colour, which the same frames can be animating.
     assert.throws(
