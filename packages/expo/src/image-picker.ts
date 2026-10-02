@@ -51,14 +51,14 @@ export class ImagePicker {
    * asks; this is for an app that reads the library itself.
    */
   readonly libraryPermission = Permission.of(
-    () => this.native?.getMediaLibraryPermissionsAsync() ?? Promise.resolve(UNAVAILABLE),
-    () => this.native?.requestMediaLibraryPermissionsAsync() ?? Promise.resolve(UNAVAILABLE),
+    () => this.native?.getMediaLibraryPermissionsAsync?.() ?? Promise.resolve(UNAVAILABLE),
+    () => this.native?.requestMediaLibraryPermissionsAsync?.() ?? Promise.resolve(UNAVAILABLE),
   );
 
   /** The camera, which `capture()` asks for itself. */
   readonly cameraPermission = Permission.of(
-    () => this.native?.getCameraPermissionsAsync() ?? Promise.resolve(UNAVAILABLE),
-    () => this.native?.requestCameraPermissionsAsync() ?? Promise.resolve(UNAVAILABLE),
+    () => this.native?.getCameraPermissionsAsync?.() ?? Promise.resolve(UNAVAILABLE),
+    () => this.native?.requestCameraPermissionsAsync?.() ?? Promise.resolve(UNAVAILABLE),
   );
 
   /** Pick from the photo library. Empty if they cancelled. */

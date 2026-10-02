@@ -6,9 +6,10 @@
  */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
+import { fileURLToPath } from 'node:url';
 import { findAllLongLines, findLongLines, LIMIT } from './markdown-line-length.ts';
 
-const REPO_ROOT = new URL('../..', import.meta.url).pathname;
+const REPO_ROOT = fileURLToPath(new URL('../..', import.meta.url));
 
 describe('findLongLines', () => {
   it('flags a prose line over the limit', () => {

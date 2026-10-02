@@ -82,8 +82,8 @@ export class Location {
 
   /** The foreground permission, which `current()` and `start()` ask for themselves. */
   readonly permission = Permission.of(
-    () => this.native?.getForegroundPermissionsAsync() ?? Promise.resolve(UNAVAILABLE),
-    () => this.native?.requestForegroundPermissionsAsync() ?? Promise.resolve(UNAVAILABLE),
+    () => this.native?.getForegroundPermissionsAsync?.() ?? Promise.resolve(UNAVAILABLE),
+    () => this.native?.requestForegroundPermissionsAsync?.() ?? Promise.resolve(UNAVAILABLE),
   );
 
   /** The last position read, or null before the first. */

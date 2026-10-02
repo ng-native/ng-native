@@ -135,8 +135,8 @@ export class Notifications {
   constructor() {
     const native = this.native;
     this.permission = Permission.of(
-      () => native?.getPermissionsAsync() ?? Promise.resolve(UNAVAILABLE),
-      () => native?.requestPermissionsAsync() ?? Promise.resolve(UNAVAILABLE),
+      () => native?.getPermissionsAsync?.() ?? Promise.resolve(UNAVAILABLE),
+      () => native?.requestPermissionsAsync?.() ?? Promise.resolve(UNAVAILABLE),
     );
     if (!native) return;
     const subscriptions = [

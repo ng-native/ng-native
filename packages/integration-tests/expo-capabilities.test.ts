@@ -93,6 +93,13 @@ describe('the image picker', () => {
     assert.deepEqual(await service.pick(), []);
     assert.deepEqual(await service.capture(), []);
   });
+
+  it('answers denied, rather than throwing, from a module without the permission methods', async () => {
+    const native = {} as NativeImagePicker;
+    const service = serviceWith(ImagePicker.SOURCE, native, () => new ImagePicker());
+    assert.equal(await service.libraryPermission.check(), false);
+    assert.equal(await service.cameraPermission.check(), false);
+  });
 });
 
 describe('the location', () => {
@@ -168,6 +175,11 @@ describe('the location', () => {
     stop();
     assert.deepEqual(log, [], 'no read the platform would refuse');
     assert.equal(service.permission.blocked(), true);
+  });
+
+  it('answers denied, rather than throwing, from a module without the permission methods', async () => {
+    const service = serviceWith(Location.SOURCE, {} as NativeLocation, () => new Location());
+    assert.equal(await service.permission.check(), false);
   });
 
   it('is inert without the module', async () => {

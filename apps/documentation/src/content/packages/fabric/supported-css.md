@@ -227,19 +227,19 @@ follow the text color when it changes. A border shorthand's width may be a
 `border-width` with no color anywhere is drawn black, native's default, and the
 web host draws it black too.
 
-A custom property can hold a font stack (read as its first family, as `font-family` is), a
-unitless line-height, a ratio for `aspect-ratio`, a whole `box-shadow` list, or bare color
-channels for `rgba(var(--channels), <alpha>)`, which is how Bootstrap writes its color utilities.
-A shorthand may mix `var()`s and written values: `padding: var(--y) var(--x)`,
-`border: var(--width) solid var(--colour)`. `background: var(--surface)` is read as
-`background-color`, the one part of that shorthand native has; a token that is no colour unsets it,
-as a browser unsets the shorthand, and a gradient in the token stays out. With anything beside the
-token, `background: var(--surface) none`, the shorthand is refused. `flex: var(--grow)` is `flex: <number>`: it grows by
-the token, shrinks by 1, and starts from a basis of 0, once the token is set. With no token it is
-`flex`'s initial value, `0 1 auto`, whatever a weaker rule set, as on the web, where a `var()` that
-cannot be substituted gives the property its initial value; `flex-grow`, `flex-shrink` and
-`flex-basis` take theirs the same way. Yoga's own shrink is 0, so this is the one place an unset
-token writes something rather than nothing.
+A custom property can hold a font stack (read as its first family, as `font-family` is), a unitless
+line-height, a ratio for `aspect-ratio`, a whole `box-shadow` list, or bare color channels for
+`rgba(var(--channels), <alpha>)`, which is how Bootstrap writes its color utilities. A shorthand may
+mix `var()`s and written values: `padding: var(--y) var(--x)`, `border: var(--width) solid
+var(--colour)`. `background: var(--surface)` is read as `background-color`, the one part of that
+shorthand native has; a token that is no colour unsets it, as a browser unsets the shorthand, and a
+gradient in the token stays out. With anything beside the token, `background: var(--surface) none`,
+the shorthand is refused. `flex: var(--grow)` is `flex: <number>`: it grows by the token, shrinks by
+1, and starts from a basis of 0, once the token is set. With no token it is `flex`'s initial value,
+`0 1 auto`, whatever a weaker rule set, as on the web, where a `var()` that cannot be substituted
+gives the property its initial value; `flex-grow`, `flex-shrink` and `flex-basis` take theirs the
+same way. Yoga's own shrink is 0, so this is the one place an unset token writes something rather
+than nothing.
 
 A length needs a unit, as in a browser: `margin-top: 3` is dropped with a warning, and so is a
 token holding a bare number where a length is read. `0` needs none, a bare number is a factor

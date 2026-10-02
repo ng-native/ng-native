@@ -53,8 +53,8 @@ export class Tracking {
    * the text in it is `NSUserTrackingUsageDescription`, set through the module's config plugin.
    */
   readonly permission: Permission = Permission.of(
-    () => this.native?.getTrackingPermissionsAsync() ?? Promise.resolve(UNAVAILABLE),
-    () => this.native?.requestTrackingPermissionsAsync() ?? Promise.resolve(UNAVAILABLE),
+    () => this.native?.getTrackingPermissionsAsync?.() ?? Promise.resolve(UNAVAILABLE),
+    () => this.native?.requestTrackingPermissionsAsync?.() ?? Promise.resolve(UNAVAILABLE),
   );
 
   /** Whether the device has the tracking API. Where it does not, the permission answers granted. */
