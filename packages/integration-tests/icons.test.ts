@@ -70,6 +70,10 @@ describe('parsing an icon', () => {
   });
 });
 
+/** The named props, absent ones included as undefined. */
+const pick = (props: Record<string, unknown>, ...names: string[]) =>
+  Object.fromEntries(names.map((name) => [name, props[name]]));
+
 describe('translating an icon', () => {
   it('turns paint into a brush, because native does not take a colour', () => {
     assert.deepEqual(brushOf('#fff', colour), { type: 0, payload: 'processed:#fff' });
@@ -136,6 +140,37 @@ describe('translating an icon', () => {
 
     const bare = nativeProps('path', { d: 'M0 0' }, colour);
     assert.equal(bare['propList'], undefined, 'nothing of its own, so everything is inherited');
+  });
+
+  it("defaults a shape's absent geometry to 0, as react-native-svg's components do", () => {
+    // Android's shape views read a missing length as null and crash drawing it.
+    assert.deepEqual(
+      pick(
+        nativeProps('rect', { width: '10', height: '10', x: '2' }, colour),
+        'x',
+        'y',
+        'width',
+        'height',
+      ),
+      { x: '2', y: 0, width: '10', height: '10' },
+    );
+    assert.deepEqual(pick(nativeProps('circle', { r: '4' }, colour), 'cx', 'cy', 'r'), {
+      cx: 0,
+      cy: 0,
+      r: '4',
+    });
+    assert.deepEqual(pick(nativeProps('ellipse', {}, colour), 'cx', 'cy', 'rx', 'ry'), {
+      cx: 0,
+      cy: 0,
+      rx: 0,
+      ry: 0,
+    });
+    assert.deepEqual(pick(nativeProps('line', { x2: '24' }, colour), 'x1', 'y1', 'x2', 'y2'), {
+      x1: 0,
+      y1: 0,
+      x2: '24',
+      y2: 0,
+    });
   });
 
   it('makes a path out of a polyline, which has no component of its own', () => {

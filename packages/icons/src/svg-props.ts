@@ -52,6 +52,30 @@ const GEOMETRY: Record<string, readonly string[]> = {
   line: ['x1', 'y1', 'x2', 'y2'],
 };
 
+/** A shape's geometry, as written, and 0 for what react-native-svg defaults and it left out. */
+function geometry(
+  tag: string,
+  attrs: Readonly<Record<string, string>>,
+  props: Record<string, unknown>,
+): void {
+  for (const name of GEOMETRY[tag] ?? []) {
+    if (attrs[name] !== undefined) props[name] = attrs[name];
+  }
+  for (const name of ZERO_BY_DEFAULT[tag] ?? []) props[name] ??= 0;
+}
+
+/**
+ * The geometry each shape defaults to 0 when absent, as react-native-svg's `Rect`, `Circle`,
+ * `Ellipse` and `Line` do before they commit. Android's shape views read a missing length as null
+ * and crash drawing it, and design tools often leave out a `y="0"`.
+ */
+const ZERO_BY_DEFAULT: Record<string, readonly string[]> = {
+  circle: ['cx', 'cy', 'r'],
+  ellipse: ['cx', 'cy', 'rx', 'ry'],
+  rect: ['x', 'y', 'width', 'height'],
+  line: ['x1', 'y1', 'x2', 'y2'],
+};
+
 /** SVG attribute -> native prop, for the presentation attributes shapes and groups share. */
 const PRESENTATION: Record<string, string> = {
   fill: 'fill',
@@ -216,9 +240,7 @@ export function nativeProps(
   }
   if (propList.length > 0) props['propList'] = propList;
 
-  for (const name of GEOMETRY[tag] ?? []) {
-    if (attrs[name] !== undefined) props[name] = attrs[name];
-  }
+  geometry(tag, attrs, props);
   if (tag === 'polyline' || tag === 'polygon') {
     props['d'] = pointsToPath(attrs['points'] ?? '', tag === 'polygon');
   }
