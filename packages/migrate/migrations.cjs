@@ -17,8 +17,10 @@
  * @property {(host: import('./host.cjs').Host) => string[]} run Changes the files, and answers
  *   what is left for the developer to do, one line each.
  */
+const { deviceReactNativeImport } = require('./device-react-native-import.cjs');
 const { splitStoreAndPlayer } = require('./split-store-and-player.cjs');
 const { syncAppVersions } = require('./sync-app-versions.cjs');
+const { trackingAvailableGetter } = require('./tracking-available-getter.cjs');
 const { version } = require('./package.json');
 
 /** @type {Migration[]} */
@@ -36,6 +38,19 @@ const migrations = [
     description:
       'Import Storage, SecureStorage, audioPlayer and videoPlayer from the entry points that now hold them.',
     run: splitStoreAndPlayer,
+  },
+  {
+    name: 'tracking-available-getter',
+    version: '0.3.0',
+    description: "Read Tracking's available as a property rather than calling it.",
+    run: trackingAvailableGetter,
+  },
+  {
+    name: 'device-react-native-import',
+    version: '0.3.0',
+    description:
+      'Note each import of reactNative or ReactNative from @ng-native/device, which no longer exports them.',
+    run: deviceReactNativeImport,
   },
 ];
 

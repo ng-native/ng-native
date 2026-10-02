@@ -23,9 +23,10 @@ import {
   currentConditions,
   deviceTokens,
   pathOf,
-  reactNative,
   watchConditions,
 } from '@ng-native/device';
+import * as device from '@ng-native/device';
+import { reactNative } from '../device/src/react-native.ts';
 import { cleanup, injectService } from '@ng-native/testing';
 import { appStateSource } from '../device/src/app-state.ts';
 import { colorSchemeSource } from '../device/src/color-scheme.ts';
@@ -45,6 +46,10 @@ const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
 describe('off a device', () => {
   it('has no react native to reach, so every source is inert rather than broken', () => {
     assert.equal(reactNative(), null, 'Node has no CommonJS require in an ES module');
+  });
+
+  it('keeps its React Native loader to itself: an app imports react-native directly', () => {
+    assert.equal('reactNative' in device, false);
 
     const keyboard = keyboardSource();
     assert.doesNotThrow(() => keyboard.dismiss());

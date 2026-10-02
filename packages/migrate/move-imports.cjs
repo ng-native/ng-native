@@ -190,4 +190,4 @@ function moveImports(host, table) {
   return notes;
 }
 
-module.exports = { moveImports };
+module.exports = { moveImports, typescript, scriptKind, applied, SOURCE };

@@ -119,6 +119,11 @@ describe('accessibility defaults', () => {
     assert.deepEqual(node('switched-on').props['accessibilityState'], { checked: true });
   });
 
+  it("announces a switch's own position over an aria-checked that says otherwise", () => {
+    // As its own `disabled` wins over `aria-disabled`: the position is what the switch shows.
+    assert.deepEqual(node('said-off').props['accessibilityState'], { checked: true });
+  });
+
   /**
    * `Text.js` splits by platform: an element on iOS always, on Android only when pressable. The
    * suite runs as iOS, which is what the engine assumes until a host says otherwise.

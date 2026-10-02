@@ -58,7 +58,7 @@ export class Tracking {
   );
 
   /** Whether the device has the tracking API. Where it does not, the permission answers granted. */
-  available(): boolean {
+  get available(): boolean {
     return this.native?.isAvailable() ?? false;
   }
 

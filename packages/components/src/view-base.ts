@@ -424,6 +424,9 @@ export abstract class ViewBase {
    * The component's own `checked`, for a control whose checked state is not an accessibility
    * input at all - `Switch`'s `checked` is a `model()`, not one of this class's inputs, so it
    * cannot reach `ngOnChanges` here any more than `disabled` can.
+   *
+   * It wins over `aria-checked` and `accessibilityState.checked`, as `disabledForAccessibility`
+   * does over theirs: what a screen reader announces is the position the control shows.
    */
   protected checkedForAccessibility(): boolean | 'mixed' | undefined {
     return undefined;
@@ -649,9 +652,9 @@ export abstract class ViewBase {
     const set = (key: keyof AccessibilityState, value: unknown) => {
       if (value !== undefined) merged[key] = value;
     };
-    set('checked', this.checkedForAccessibility());
     set('busy', this.ariaBusy());
     set('checked', this.ariaChecked());
+    set('checked', this.checkedForAccessibility());
     set('disabled', this.ariaDisabled());
     set('disabled', this.disabledOver(merged['disabled']));
     set('expanded', this.ariaExpanded());

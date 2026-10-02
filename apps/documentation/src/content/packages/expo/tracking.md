@@ -52,7 +52,7 @@ export class Consent {
 
 - **`permission`** - a [`Permission`](/packages/expo/permissions): `ensure()` shows Apple's dialog
   only if it has not been answered, `granted()` and `blocked()` are signals.
-- **`available()`** - whether the device has the tracking API. Where it does not, the permission
+- **`available`** - whether the device has the tracking API. Where it does not, the permission
   answers granted.
 - **`advertisingId()`** - the IDFA on iOS, the advertising ID on Android. Null on iOS until
   tracking is allowed, in the simulator, and on Android with ad tracking limited.
@@ -65,7 +65,7 @@ Its message names the module and the commands that fix it; see
 [Using a module](/packages/expo/using-a-module#what-happens-without-the-module-installed).
 
 On the web, and in a test that provides no fake, the permission is refused and cannot be asked for,
-`available()` is `false`, and `advertisingId()` is `null`.
+`available` is `false`, and `advertisingId()` is `null`.
 
 ## Reference
 

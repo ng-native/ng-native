@@ -182,6 +182,178 @@ describe('split-store-and-player, through nx migrate, ng update and ng-native-mi
   });
 });
 
+describe('tracking-available-getter, through nx migrate, ng update and ng-native-migrate', () => {
+  const files = {
+    'src/app/privacy.ts': [
+      "import { Component, inject } from '@angular/core';",
+      "import { Biometrics } from '@ng-native/expo/biometrics';",
+      "import { Tracking as Ads } from '@ng-native/expo/tracking';",
+      '',
+      '@Component({',
+      "  selector: 'app-privacy',",
+      '  template: `@if (tracking.available()) { <text>Ask</text> }`,',
+      '})',
+      'export class Privacy {',
+      '  protected readonly tracking = inject(Ads);',
+      '  private readonly biometrics = inject(Biometrics);',
+      '',
+      '  async ask(): Promise<boolean> {',
+      '    return this.tracking.available() && (await this.biometrics.available());',
+      '  }',
+      '}',
+      '',
+      'export const supported = (ads: Ads) => ads.available() || inject(Ads).available();',
+      '',
+    ].join('\n'),
+    'src/app/settings.ts': [
+      "import { Component, inject } from '@angular/core';",
+      "import { Tracking } from '@ng-native/expo/tracking';",
+      '',
+      "@Component({ selector: 'app-settings', templateUrl: './settings.html' })",
+      'export class Settings {',
+      '  readonly ads = inject(Tracking);',
+      '}',
+      '',
+    ].join('\n'),
+    'src/app/settings.html': "<text>{{ ads.available() ? 'on' : 'off' }}</text>\n",
+    'src/app/everything.ts': "import * as tracking from '@ng-native/expo/tracking';\n",
+    // \`this\` that is not the class's, and a static member sharing an instance member's name.
+    'src/app/this.ts': [
+      "import { Component as View, inject } from '@angular/core';",
+      "import { Tracking } from '@ng-native/expo/tracking';",
+      '',
+      'export class Nested {',
+      '  constructor(private readonly x: Tracking) {}',
+      '  go() {',
+      '    function helper(this: { x: { available(): boolean } }) {',
+      '      return this.x.available();',
+      '    }',
+      '    const box = { x: { available: () => true }, check() { return this.x.available(); } };',
+      '    return [helper, box];',
+      '  }',
+      '}',
+      '',
+      'export class Both {',
+      '  x = { available: () => true };',
+      '  static x: Tracking = inject(Tracking);',
+      '  go() {',
+      '    return this.x.available();',
+      '  }',
+      '  static ask() {',
+      '    return this.x.available();',
+      '  }',
+      '}',
+      '',
+      "@View({ selector: 'app-aliased', template: `{{ ads.available() }}` })",
+      'export class Aliased {',
+      '  readonly ads = inject(Tracking);',
+      '}',
+      '',
+    ].join('\n'),
+    // Two classes, one name: only the one that holds a Tracking changes.
+    'src/app/two.ts': [
+      "import { Component, inject } from '@angular/core';",
+      "import { Biometrics } from '@ng-native/expo/biometrics';",
+      "import { Tracking } from '@ng-native/expo/tracking';",
+      '',
+      'export class Ads {',
+      '  readonly service = inject(Tracking);',
+      '  read() {',
+      '    return this.service.available();',
+      '  }',
+      '}',
+      '',
+      '@Component({',
+      "  selector: 'app-lock',",
+      '  template: `@if (service.available()) { <text>Lock</text> }`,',
+      '})',
+      'export class Lock {',
+      '  readonly service = inject(Biometrics);',
+      '  check() {',
+      '    return this.service.available();',
+      '  }',
+      '}',
+      '',
+      'export function inside(service: Biometrics) {',
+      '  return service.available();',
+      '}',
+      '',
+    ].join('\n'),
+    'src/app/unrelated.ts':
+      'export const ready = (scanner: { available(): boolean }) => scanner.available();\n',
+  };
+
+  it("reads Tracking's available as a property, in code and in templates, and nothing else's", async () => {
+    const { nx, angular, cli } = await acrossAdapters(files, 'tracking-available-getter', '0.2.0');
+    const privacy = nx.files['src/app/privacy.ts']!;
+    assert.match(privacy, /template: `@if \(tracking\.available\) \{/);
+    assert.match(
+      privacy,
+      /return this\.tracking\.available && \(await this\.biometrics\.available\(\)\);/,
+    );
+    assert.match(privacy, /\(ads: Ads\) => ads\.available \|\| inject\(Ads\)\.available;/);
+    assert.equal(nx.files['src/app/settings.ts'], files['src/app/settings.ts']);
+    assert.equal(
+      nx.files['src/app/settings.html'],
+      "<text>{{ ads.available ? 'on' : 'off' }}</text>\n",
+    );
+    assert.equal(nx.files['src/app/unrelated.ts'], files['src/app/unrelated.ts']);
+    const two = nx.files['src/app/two.ts']!;
+    assert.match(two, /class Ads \{[^}]*return this\.service\.available;/s);
+    assert.match(
+      two,
+      /template: `@if \(service\.available\(\)\)/,
+      "Lock's template is Biometrics'",
+    );
+    assert.match(two, /check\(\) \{\n    return this\.service\.available\(\);/);
+    assert.match(two, /inside\(service: Biometrics\) \{\n  return service\.available\(\);/);
+    const self = nx.files['src/app/this.ts']!;
+    assert.match(
+      self,
+      /return this\.x\.available\(\);\n    \}\n    const box/,
+      'not the class this',
+    );
+    assert.match(self, /check\(\) \{ return this\.x\.available\(\); \}/, "the object's this");
+    assert.match(self, /go\(\) \{\n    return this\.x\.available\(\);/, 'the instance x');
+    assert.match(self, /static ask\(\) \{\n    return this\.x\.available;/, 'the static x');
+    assert.match(self, /template: `\{\{ ads\.available \}\}`/, '@Component under another name');
+    assert.deepEqual(nx.notes, [
+      "src/app/everything.ts:1: A namespace import of '@ng-native/expo/tracking' cannot be followed automatically. Tracking's available is now a property: read it as tracking.available, without calling it.",
+    ]);
+    assert.deepEqual(angular, nx);
+    assert.deepEqual(cli, nx);
+  });
+
+  it('changes nothing the second time', async () => {
+    const first = await viaNx(files, 'tracking-available-getter');
+    const again = await viaNx(first.files as Record<string, string>, 'tracking-available-getter');
+    assert.deepEqual(again.files, first.files);
+  });
+});
+
+describe('device-react-native-import, through nx migrate, ng update and ng-native-migrate', () => {
+  const files = {
+    'src/app/scale.ts': [
+      "import { Screen, reactNative, type ReactNative } from '@ng-native/device';",
+      'export const scale = () => reactNative()?.PixelRatio.get() ?? 1;',
+      '',
+    ].join('\n'),
+    'src/app/fine.ts': "import { Screen } from '@ng-native/device';\n",
+    'src/app/index.ts': "export { reactNative } from '@ng-native/device';\n",
+  };
+
+  it('says where each import of the React Native loader is, and changes nothing', async () => {
+    const { nx, angular, cli } = await acrossAdapters(files, 'device-react-native-import', '0.2.0');
+    assert.equal(nx.files['src/app/scale.ts'], files['src/app/scale.ts']);
+    assert.deepEqual(nx.notes, [
+      "src/app/index.ts:1: reactNative is no longer exported from '@ng-native/device'. Import what you use from 'react-native' directly.",
+      "src/app/scale.ts:1: reactNative and ReactNative are no longer exported from '@ng-native/device'. Import what you use from 'react-native' directly.",
+    ]);
+    assert.deepEqual(angular, nx);
+    assert.deepEqual(cli, nx);
+  });
+});
+
 describe('ng-native-migrate', () => {
   const app = {
     'package.json': JSON.stringify({ dependencies: { '@ng-native/components': '^0.1.3' } }),

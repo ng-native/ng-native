@@ -10,6 +10,16 @@
       "version": "0.3.0",
       "description": "Import Storage, SecureStorage, audioPlayer and videoPlayer from the entry points that now hold them.",
       "factory": "./migrations/run.cjs#split-store-and-player"
+    },
+    "tracking-available-getter": {
+      "version": "0.3.0",
+      "description": "Read Tracking's available as a property rather than calling it.",
+      "factory": "./migrations/run.cjs#tracking-available-getter"
+    },
+    "device-react-native-import": {
+      "version": "0.3.0",
+      "description": "Note each import of reactNative or ReactNative from @ng-native/device, which no longer exports them.",
+      "factory": "./migrations/run.cjs#device-react-native-import"
     }
   }
 }

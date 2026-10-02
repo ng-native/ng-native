@@ -28,6 +28,7 @@ import { View } from '../../components/src/view.ts';
     <switch testID="checkbox" accessibilityRole="checkbox" />
     <switch testID="unavailable" [disabled]="true" />
     <switch testID="switched-on" [checked]="true" />
+    <switch testID="said-off" [checked]="true" aria-checked="false" />
 
     <image testID="pic" alt="A cat asleep on a keyboard" />
     <image testID="decoration" />

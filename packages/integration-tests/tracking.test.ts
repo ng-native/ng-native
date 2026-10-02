@@ -49,7 +49,7 @@ describe('tracking', () => {
   it('reaches the rest of the module under its own names, and hands back its answers', () => {
     const native = platform();
     const tracking = serviceOn(native);
-    assert.equal(tracking.available(), true);
+    assert.equal(tracking.available, true);
     assert.equal(tracking.advertisingId(), 'ad-id');
     assert.deepEqual(native.calls, ['isAvailable', 'getAdvertisingId']);
   });
@@ -64,7 +64,7 @@ describe('tracking', () => {
     const tracking = serviceOn(null);
     assert.equal(await tracking.permission.ensure(), false);
     assert.equal(tracking.permission.blocked(), true);
-    assert.equal(tracking.available(), false);
+    assert.equal(tracking.available, false);
     assert.equal(tracking.advertisingId(), null);
   });
 });

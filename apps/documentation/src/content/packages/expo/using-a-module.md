@@ -68,6 +68,21 @@ a wrong one: a [database](/packages/expo/database) or a [player](/packages/expo/
 the web as well, and [Crypto](/packages/expo/crypto) throws wherever it has no module, since an
 empty identifier or hash looks right and is not.
 
+## Whether a feature is available
+
+A service that can say whether its feature is there says it as `available`, in one of three shapes,
+by what the answer is like:
+
+- **A getter**, `available`, when the answer is known at once and does not change: whether the
+  module is in the build, as for [Haptics](/packages/expo/haptics),
+  [Fonts](/packages/expo/fonts) and [Tracking](/packages/expo/tracking).
+- **A method that resolves**, `await available()`, when the answer is a fresh native check that can
+  change while the app runs: whether a face or fingerprint is enrolled for
+  [Biometrics](/packages/expo/biometrics), and likewise for Sign in with Apple, screen capture and
+  the store review prompt. Ask it just before offering the feature.
+- **A signal**, `available()`, when the feature comes and goes and a template follows it: the hinge
+  of a [foldable](/packages/expo/foldable), the on-device language model, a sensor.
+
 ## What is on the bare import
 
 A handful of exports are not bound to one optional module, so they live on `@ng-native/expo`
