@@ -1423,6 +1423,9 @@ importers:
       '@angular/compiler':
         specifier: ^22.0.0
         version: 22.2.0
+      '@babel/parser':
+        specifier: ^7.29.0
+        version: 7.29.9
       '@jridgewell/trace-mapping':
         specifier: ^0.3.25
         version: 0.3.31

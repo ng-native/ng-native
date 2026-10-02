@@ -35,6 +35,8 @@ export default tseslint.config(
       // source, and a test in each package fails if they stop matching the template's.
       'packages/schematics/files/**',
       'packages/nx/files/**',
+      // A library as ng-packagr builds it, kept byte for byte: the tests read what it really emits.
+      'packages/integration-tests/fixtures/ng-packagr/**',
     ],
   },
   {

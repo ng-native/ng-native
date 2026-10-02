@@ -15,6 +15,7 @@ const { compileError } = require('./compile-error.cjs');
 const { assertTemplateFileParses, assertTemplatesParse } = require('./template-syntax.cjs');
 const { compileCss } = require('./css/compile.cjs');
 const { assertStylesRead } = require('./styles-expression.cjs');
+const { componentDeclarations } = require('./component-declarations.cjs');
 const {
   compileForHmrSync,
   extractComponentMetadataSync,
@@ -153,56 +154,20 @@ function readResources(dependencies, filename) {
  * `ɵnativeStyles`. Left in, it was 8.6% of the canary's emitted component code, and a minifier
  * cannot prove it dead because it is a property of an object handed to a function.
  *
- * Scoped to the generated `ɵɵdefineComponent(...)` call rather than applied to the whole module,
- * so an object of the author's own that happens to have a `styles` key is left alone. The
- * property is emptied rather than removed, because the shape of the definition is Angular's to
- * decide and an absent key and an empty one are not always the same thing.
+ * Only the definition's own `styles` property, read with a parser (`component-declarations.cjs`):
+ * an input whose class field is called `styles` sits in the same definition, and a template's text
+ * can read like the property, and both are the component's. The property is emptied rather than
+ * removed, because the shape of the definition is Angular's to decide and an absent key and an
+ * empty one are not always the same thing. A module that does not parse keeps its CSS: it is only
+ * weight, and the bundler reports the syntax error itself.
  */
-function stripComponentStyles(code) {
-  const CALL = 'ɵɵdefineComponent(';
-  let out = '';
-  let from = 0;
-
-  for (let at = code.indexOf(CALL); at !== -1; at = code.indexOf(CALL, from)) {
-    const end = matchingClose(code, at + CALL.length - 1, '(', ')');
-    if (end === -1) break;
-    // The compiler writes `styles:[`, the linker `styles: [`.
-    const styles = /\bstyles:\s*\[/.exec(code.slice(at, end));
-    if (!styles) {
-      out += code.slice(from, end);
-      from = end;
-      continue;
-    }
-    const open = at + styles.index + styles[0].length - 1;
-    const listEnd = matchingClose(code, open, '[', ']');
-    if (listEnd === -1) break;
-    out += code.slice(from, at + styles.index) + 'styles:[]';
-    from = listEnd;
+function stripComponentStyles(code, filename) {
+  const declarations = componentDeclarations(code, filename, 'ɵɵdefineComponent') ?? [];
+  let out = code;
+  for (const { styles } of declarations.sort((a, b) => b.start - a.start)) {
+    if (styles?.entries?.length) out = out.slice(0, styles.start) + '[]' + out.slice(styles.end);
   }
-
-  return out + code.slice(from);
-}
-
-/**
- * Index just past the bracket closing the one at `open`, skipping over string literals so a
- * bracket inside a CSS string cannot be mistaken for structure. Returns -1 if unbalanced.
- */
-function matchingClose(code, open, opener, closer) {
-  let depth = 0;
-  let quote = null;
-
-  for (let i = open; i < code.length; i++) {
-    const character = code[i];
-    if (quote) {
-      if (character === '\\') i++;
-      else if (character === quote) quote = null;
-      continue;
-    }
-    if (character === '"' || character === "'" || character === '`') quote = character;
-    else if (character === opener) depth++;
-    else if (character === closer && --depth === 0) return i + 1;
-  }
-  return -1;
+  return out;
 }
 
 /** Throw the compiler's errors, placed in the template they are about where that can be told. */
@@ -847,7 +812,7 @@ function link(src, filename, options) {
   const sheets = optedIn(filename, options)
     ? libraryStyleBlock(src, filename, options.platform)
     : '';
-  return { code: (strip ? stripComponentStyles(code) : code) + sheets, dependencies: [] };
+  return { code: (strip ? stripComponentStyles(code, filename) : code) + sheets, dependencies: [] };
 }
 
 /** Whether a native build compiles this file's component CSS: its package is in `libraryStyles`. */
@@ -888,8 +853,6 @@ function manifestName(directory) {
   return name;
 }
 
-const DECLARE_COMPONENT = 'ɵɵngDeclareComponent(';
-
 /**
  * Compile each `ɵɵngDeclareComponent({ type: X, ..., styles: [...] })`'s CSS into X's sheet, as
  * `styleBlock` does for a component the compiler sees.
@@ -897,70 +860,22 @@ const DECLARE_COMPONENT = 'ɵɵngDeclareComponent(';
  * Read from the file as shipped, before the linker: the linker shims the CSS for emulated
  * encapsulation, `[_nghost-%COMP%]`, and that `%` is no selector lightningcss can tokenize. A
  * declaration's `type` is its class, so the sheet hangs off the same name the linked definition
- * belongs to. Only a `styles` that is a list of string literals is read, which is how the Angular
- * compiler writes it; anything else is left alone rather than guessed at.
+ * belongs to. Only a `styles` that is a list of strings is read, which is how the Angular compiler
+ * writes it; anything else is left alone rather than guessed at.
  */
 function libraryStyleBlock(src, filename, platform) {
   const warn = buildWarnings();
   const blocks = [];
-  for (
-    let at = src.indexOf(DECLARE_COMPONENT);
-    at !== -1;
-    at = src.indexOf(DECLARE_COMPONENT, at + 1)
-  ) {
-    const declared = declaredStyles(src, at, filename);
-    if (!declared) continue;
-    const css = declared.parts.map((part) => part.text).join('\n');
-    const sheet = componentSheet(css, filename, declared.type, platform, declared.parts, warn);
+  for (const declared of componentDeclarations(src, filename, 'ɵɵngDeclareComponent') ?? []) {
+    const parts = (declared.styles?.entries ?? [])
+      .filter((entry) => entry.value)
+      .map((entry) => ({ text: entry.value, file: filename, line: entry.line }));
+    if (!declared.type || !parts.length) continue;
+    const css = parts.map((part) => part.text).join('\n');
+    const sheet = componentSheet(css, filename, declared.type, platform, parts, warn);
     if (sheet) blocks.push(`${declared.type}["ɵnativeStyles"] = ${literal(sheet)};`);
   }
   return blocks.length ? `\n${blocks.join('\n')}\n` : '';
-}
-
-/**
- * The class and the stylesheets of the component declared at `at`, each sheet with the line of
- * the file its literal starts on, or null when the declaration has no styles to read.
- */
-function declaredStyles(src, at, filename) {
-  const end = matchingClose(src, at + DECLARE_COMPONENT.length - 1, '(', ')');
-  if (end === -1) return null;
-  const call = src.slice(at, end);
-  // The first `type:` names the class; an input called `type` comes later, as a string or an object.
-  const type = /\btype:\s*([A-Za-z_$][\w$]*)\s*,/.exec(call);
-  const styles = /\bstyles:\s*\[/.exec(call);
-  if (!type || !styles) return null;
-  const open = at + styles.index + styles[0].length - 1;
-  const listEnd = literalEnd(src, open);
-  if (listEnd === -1) return null;
-  const parts = [];
-  for (let i = open + 1; i < listEnd - 1;) {
-    if (/[\s,]/.test(src[i])) {
-      i++;
-      continue;
-    }
-    const close = stringEnd(src, i);
-    const text = stringLiteralValue(src.slice(i, close));
-    if (text) parts.push({ text, file: filename, line: src.slice(0, i).split('\n').length });
-    i = close;
-  }
-  return parts.length ? { type: type[1], parts } : null;
-}
-
-/** The escapes a JavaScript string literal can hold, each to the character it stands for. */
-const ESCAPES = { n: '\n', r: '\r', t: '\t', b: '\b', f: '\f', v: '\v', 0: '\0' };
-
-/** A JavaScript string literal, quotes and all, as the string it means. */
-function stringLiteralValue(source) {
-  return source
-    .slice(1, -1)
-    .replace(
-      /\\(u\{([0-9a-fA-F]+)\}|u([0-9a-fA-F]{4})|x([0-9a-fA-F]{2})|\r\n|[\s\S])/g,
-      (_, escaped, brace, four, two) => {
-        if (brace || four || two) return String.fromCodePoint(parseInt(brace ?? four ?? two, 16));
-        if (/^(\r\n|\n|\r|\u2028|\u2029)$/.test(escaped)) return '';
-        return ESCAPES[escaped] ?? escaped;
-      },
-    );
 }
 
 /**
@@ -1026,7 +941,8 @@ function transformAngular(src, filename, options = {}) {
     const quiet = hmr ? collisionQuiet(filename, components) : '';
     // Dev keeps the emitted CSS: the bundle size does not matter there, and the HMR path is
     // easier to reason about when the compiler's output is untouched.
-    const compiled = options.dev === true ? result.code : stripComponentStyles(result.code);
+    const compiled =
+      options.dev === true ? result.code : stripComponentStyles(result.code, filename);
     return {
       code: edges + quiet + compiled + styles + hmr,
       dependencies,
