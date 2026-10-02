@@ -21,7 +21,13 @@
  * here would be copying out its internals rather than using it.
  */
 import { InjectionToken, computed, signal, type Signal } from '@angular/core';
-import { faceName, fontsRegistered, onFontsRegistered } from '@ng-native/fabric';
+import {
+  faceName,
+  fontsLoading,
+  fontsRegistered,
+  fontsSettled,
+  onFontsRegistered,
+} from '@ng-native/fabric';
 import { expoModule } from './native.ts';
 
 /** A face a stylesheet declared, as the compiler collected it. */
@@ -133,9 +139,13 @@ export class FontRegistry {
   async load(map: Record<string, unknown>): Promise<void> {
     const native = this.native;
     if (!native) return;
+    // Before the first await, so text the app lays out meanwhile waits for the face by name.
+    const families = Object.keys(map);
+    fontsLoading(families);
     try {
       await native.loadAsync(map);
     } finally {
+      fontsSettled(families);
       // Text already laid out in the fallback face keeps it until it is laid out again. Only the
       // faces that registered: one failing fails the whole load, not the others in it.
       fontsRegistered(Object.keys(map).filter((family) => native.isLoaded(family)));

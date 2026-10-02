@@ -197,6 +197,35 @@ function payloads(fabric: FakeFabric): Map<number, Record<string, unknown>> {
   return sent;
 }
 
+describe('a face still loading when its text is first laid out', () => {
+  // Native caches a text's measurement by its family name, not by the cap the engine moves, so text
+  // measured in the fallback under the face's name kept that size once the face drew (#345).
+  it('lays its text out in the fallback, without the name, until the face registers', async () => {
+    let finish: () => void = () => {};
+    const registered = new Set<string>();
+    const native: NativeFonts = {
+      loadAsync: (map) =>
+        new Promise<void>((resolve) => {
+          finish = () => {
+            for (const family of Object.keys(map)) registered.add(family);
+            resolve();
+          };
+        }),
+      isLoaded: (family) => registered.has(family),
+      getLoadedFonts: () => [...registered],
+    };
+    const loading = new FontRegistry(native).load({ 'Inter-600': 1 });
+    const { fabric } = await render(LateFonts);
+    assert.equal(paragraph(fabric, 'Title').props['fontFamily'], undefined, 'held while loading');
+    assert.equal(paragraph(fabric, 'code line').props['fontFamily'], 'JetBrains Mono');
+
+    finish();
+    await loading;
+
+    assert.equal(paragraph(fabric, 'Title').props['fontFamily'], 'Inter-600');
+  });
+});
+
 describe('a face registered after a text input naming it was laid out', () => {
   it('sets the font again on the same view, keeping its focus and typed text', async () => {
     const { fabric } = await render(LateFonts);

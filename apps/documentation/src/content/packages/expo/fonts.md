@@ -52,6 +52,10 @@ the bundler ships the file - a plain path would be a font that is simply missing
 with nothing anywhere to say why. `loadFonts()` takes any number of compiled sheets and does
 nothing at all when none of them declare a face, so bootstrap can call it unconditionally.
 
+Mounting without waiting for it works too. Text that names a face still loading is laid out in
+the fallback face meanwhile, and again in the face once it registers, with a size measured for
+it.
+
 A face declared in the Tailwind entry works the same way: pass the generated sheet to
 `loadFonts()`. Its `url()` is relative to the entry file, including in a stylesheet the entry
 imports, because the Tailwind CLI inlines imports without rewriting their URLs.
