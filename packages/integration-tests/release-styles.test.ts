@@ -132,3 +132,17 @@ describe("a release build of a library's components", () => {
     assert.deepEqual(paddings, [1, 2, 3], 'each component got its own sheet');
   });
 });
+
+describe('a module the parser only guesses at', () => {
+  it('is left as it is, rather than spliced at offsets of a guessed structure', () => {
+    // `return` outside a function where a semicolon is missing: Babel recovers from it by guessing
+    // where the statement ends. Nothing past the guess can be trusted, so nothing is emptied.
+    const { componentDeclarations } = require('@ng-native/metro/component-declarations.cjs') as {
+      componentDeclarations: (code: string, file: string, callee: string) => unknown[] | null;
+    };
+    const guessed = `i0.ɵɵdefineComponent({ type: A, styles: ["x"] }) return 1;`;
+    assert.equal(componentDeclarations(guessed, '/app/a.mjs', 'ɵɵdefineComponent'), null);
+    const redeclared = `let a; let a; i0.ɵɵdefineComponent({ type: A, styles: ["x"] });`;
+    assert.equal(componentDeclarations(redeclared, '/app/a.mjs', 'ɵɵdefineComponent'), null);
+  });
+});

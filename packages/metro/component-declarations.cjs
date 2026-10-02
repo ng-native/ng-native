@@ -21,7 +21,7 @@ const { parse } = require('@babel/parser');
  *   its literal starts on. `entries` is null when an entry is anything else, and `styles` is null
  *   when the object has no such property.
  *
- * Null when the module does not parse.
+ * Null when the module does not parse, including one the parser could only recover from by guessing.
  *
  * @param {string} code
  * @param {string} filename the module's path, whose extension says whether it is TypeScript
@@ -37,7 +37,6 @@ function componentDeclarations(code, filename, callee) {
       sourceType: 'unambiguous',
       plugins: pluginsFor(filename),
       allowReturnOutsideFunction: true,
-      errorRecovery: true,
     }).program;
   } catch {
     return null;
