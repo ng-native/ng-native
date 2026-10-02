@@ -38,7 +38,7 @@ const WEIGHTS: Record<string, string> = { normal: '400', bold: '700' };
  * no-break space is part of the value, as it is in a browser, where `trim()` would drop it.
  */
 const PADDED = new RegExp(`^${CSS_SPACE.source}|${CSS_SPACE.source}$`, 'g');
-const cssTrim = (text: string): string => text.replace(PADDED, '');
+export const cssTrim = (text: string): string => text.replace(PADDED, '');
 /** A family name's parts: a quoted string, which may hold escapes, or a bare word. */
 const FAMILY_PART = /^(?:'((?:[^'\\]|\\[\s\S])*)'|"((?:[^"\\]|\\[\s\S])*)"|(-?[a-z_][\w-]*))/i;
 const LEADING_SPACE = new RegExp(`^${CSS_SPACE.source}`);

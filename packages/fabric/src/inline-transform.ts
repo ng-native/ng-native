@@ -19,20 +19,43 @@ const AXES: Readonly<Record<string, readonly [string, string]>> = {
 };
 
 const PX = /^-?\d*\.?\d+(px)?$/;
+/** A transform function's argument: a number, a length, an angle or a percentage. */
+const ARGUMENT = /^[+-]?(?:\d+\.?\d*|\.\d+)(?:e[+-]?\d+)?(?:%|[a-z]+)?$/i;
+/** CSS whitespace: a space, a tab, a newline, a carriage return or a form feed, and no other. */
+const SPACE = /^[ \t\n\r\f]*$/;
+const PADDED = /^[ \t\n\r\f]+|[ \t\n\r\f]+$/g;
+const FUNCTIONS = /([a-zA-Z0-9]+)\(([^)]*)\)/g;
 
 function argument(raw: string): number | string {
   return PX.test(raw) ? parseFloat(raw) : raw;
 }
 
-export function transformList(value: string): TransformEntry[] {
+/** Each function and its arguments, or undefined where anything else is in the value. */
+function readCalls(value: string): { name: string; raw: string[] }[] | undefined {
+  const calls = [...value.matchAll(FUNCTIONS)].map(([, name, body]) => ({
+    name: name!,
+    raw: body!.split(/[ \t\n\r\f,]+/).filter(Boolean),
+  }));
+  // Functions, CSS whitespace between them and nothing else, each with arguments CSS can read.
+  const readable =
+    calls.length &&
+    SPACE.test(value.replace(FUNCTIONS, '')) &&
+    calls.every(({ raw }) => raw.length && raw.every((arg) => ARGUMENT.test(arg)));
+  return readable ? calls : undefined;
+}
+
+/**
+ * The list, or undefined for a value CSS cannot read, which a browser drops: the transform a rule
+ * sets then applies instead.
+ */
+export function transformList(value: string): TransformEntry[] | undefined {
   const out: TransformEntry[] = [];
-  if (value.trim() === 'none') return out;
-  for (const [, name, body] of value.matchAll(/([a-zA-Z0-9]+)\(([^)]*)\)/g)) {
-    const args = body!
-      .split(/[\s,]+/)
-      .filter(Boolean)
-      .map(argument);
-    const axes = AXES[name!];
+  if (value.replace(PADDED, '').toLowerCase() === 'none') return out;
+  const calls = readCalls(value);
+  if (!calls) return undefined;
+  for (const { name, raw } of calls) {
+    const args = raw.map(argument);
+    const axes = AXES[name];
     if (axes && args.length === 2) {
       out.push({ [axes[0]]: args[0]! }, { [axes[1]]: args[1]! });
     } else if (axes && name !== 'scale') {

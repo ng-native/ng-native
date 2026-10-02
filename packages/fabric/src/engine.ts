@@ -1359,6 +1359,24 @@ const ASSET_PROPS = new Set(['source', 'defaultSource', 'loadingIndicatorSource'
 const NESTED_COLOR_LIST_PROPS = new Set(['boxShadow']);
 
 /** Styles arrive as objects, arrays, nested arrays and nulls. Reduce to one object. */
+/**
+ * A bound transform is still the CSS string: see `inline-transform.ts`. One CSS cannot read
+ * leaves the transform the rules set, as a browser drops it.
+ */
+function boundTransform(
+  style: Record<string, unknown>,
+  cascaded: unknown,
+): Record<string, unknown> {
+  if (typeof style['transform'] !== 'string') return style;
+  const list = transformList(style['transform']) ?? cascaded;
+  if (list === undefined) delete style['transform'];
+  else style['transform'] = list;
+  return style;
+}
+
+/** A transform string as the list native reads, and none for one CSS cannot read. */
+const transformOf = (value: string): unknown[] => transformList(value) ?? [];
+
 function flattenStyle(value: unknown, into: Record<string, unknown>): Record<string, unknown> {
   if (!value) return into;
   if (Array.isArray(value)) {
@@ -1433,7 +1451,7 @@ function composeTransform(
     value = last.value;
   } else {
     // A bound style's transform is still the CSS string: see `inline-transform.ts`.
-    const own = typeof transform === 'string' ? transformList(transform) : transform;
+    const own = typeof transform === 'string' ? transformOf(transform) : transform;
     value = [translate, rotate, scale, own].flatMap((part) => (Array.isArray(part) ? part : []));
     node.composedTransform = { parts, value };
   }
@@ -2405,7 +2423,8 @@ export class Engine implements HostEngine {
       }
     }
     withTextContent(node, viewName, props);
-    const style = flattenStyle(node.props['style'], props);
+    const cascaded = props['transform'];
+    const style = boundTransform(flattenStyle(node.props['style'], props), cascaded);
     const intrinsic = node.props[INTRINSIC_SIZE] as IntrinsicSize | undefined;
     if (intrinsic) applyIntrinsicSize(style, intrinsic);
     flattenStyle(node.props[STYLE_OVERRIDE], style);
@@ -2966,7 +2985,7 @@ export class Engine implements HostEngine {
       else if (key === 'experimental_backgroundImage') out[key] = this.processGradients(value);
       else if (key === 'filter') out[key] = this.processFilters(value);
       // A bound style's transform is still the CSS string: see `inline-transform.ts`.
-      else if (key === 'transform' && typeof value === 'string') out[key] = transformList(value);
+      else if (key === 'transform' && typeof value === 'string') out[key] = transformOf(value);
       else out[key] = value;
     }
     return out;

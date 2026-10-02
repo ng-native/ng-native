@@ -14,7 +14,7 @@
 import { MIX_SPACES, type HueMethod, type MixSpace } from './color-mix.ts';
 import type { Channel } from './relative-colour.ts';
 import type { ColourExpression, HslChannel, TokenValue } from './css.ts';
-import { tokenFromValue } from './inline-token.ts';
+import { cssTrim, tokenFromValue } from './inline-token.ts';
 
 type Marker = NonNullable<TokenValue['deferredCalc']>[number];
 type Expression = Marker['expression'];
@@ -31,13 +31,14 @@ interface Reference {
   readonly fallback?: string;
 }
 
-const SPACE = /\s*/y;
-const FUNCTION = /([a-z][a-z-]*)\(\s*/iy;
-const VAR = /var\(\s*(--[\w-]+)\s*/iy;
+/** CSS whitespace, and no other: a no-break space is part of a word, as it is in a browser. */
+const SPACE = /[ \t\n\r\f]*/y;
+const FUNCTION = /([a-z][a-z-]*)\([ \t\n\r\f]*/iy;
+const VAR = /var\([ \t\n\r\f]*(--[\w-]+)[ \t\n\r\f]*/iy;
 const LITERAL = /([+-]?(?:\d+\.?\d*|\.\d+)(?:e[+-]?\d+)?)(%|[a-z]+)?/iy;
-const WORD = /[^\s,/()]+/y;
+const WORD = /[^ \t\n\r\f,/()]+/y;
 /** A fallback that is a `var()` or arithmetic, rather than a value written out. */
-const NESTED = /^\s*(var|calc|min|max)\(/i;
+const NESTED = /^[ \t\n\r\f]*(var|calc|min|max)\(/i;
 /** What one of each unit counts as: points, degrees, milliseconds, or itself. */
 const PER_UNIT: Readonly<Record<string, number>> = {
   '': 1,
@@ -174,12 +175,13 @@ function factor(cursor: Cursor, kind: Marker['kind']): Expression {
  */
 function leafFallback(text: string | undefined, kind: Marker['kind']): Expression | undefined {
   if (text !== undefined && NESTED.test(text)) {
-    return whole(text.trim(), (cursor) => factor(cursor, kind)) ?? fail();
+    return whole(cssTrim(text), (cursor) => factor(cursor, kind)) ?? fail();
   }
   const token = fallbackToken(text);
   if (kind !== 'length') return numberFallback(token, kind);
   if (typeof token?.length === 'number') return token.length;
-  const rem = text === undefined ? undefined : /^\s*(-?\d*\.?\d+)rem\s*$/i.exec(text);
+  const rem =
+    text === undefined ? undefined : /^[ \t\n\r\f]*(-?\d*\.?\d+)rem[ \t\n\r\f]*$/i.exec(text);
   return rem ? Number(rem[1]) * PER_UNIT['rem']! : undefined;
 }
 
@@ -334,8 +336,12 @@ function closing(cursor: Cursor): number {
  */
 function referenceColour({ reference: name, fallback }: Reference): ColourExpression {
   const alternatives: string[] = [];
-  let rest = fallback?.trim();
-  for (let next; rest && (next = whole(rest, nextReference)); rest = next.fallback?.trim()) {
+  let rest = fallback === undefined ? undefined : cssTrim(fallback);
+  for (
+    let next;
+    rest && (next = whole(rest, nextReference));
+    rest = next.fallback === undefined ? undefined : cssTrim(next.fallback)
+  ) {
     alternatives.push(next.reference);
   }
   return {

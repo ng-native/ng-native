@@ -1,70 +1,63 @@
 /**
- * A transform written as a string on a node's own style: `[style.transform]="'rotate(30deg)'"`.
+ * A transform bound on an element as a string, which no build step converts.
  *
- * A class's transform is compiled at build time into the list React Native wants. A bound style
- * has no build step, and Fabric reads only the list, so a string reached it untouched and was
- * dropped without a word: every rotated element on screen drew straight. In React Native it is
- * the JavaScript layer's `processTransform` that turns the string into the list, and there is no
- * React Native JavaScript between this engine and Fabric, so the engine does it.
+ * Chrome drops an inline transform it cannot read, and the transform a rule sets applies instead,
+ * or none. CSS whitespace is a space, a tab, a newline, a carriage return or a form feed; a no-break
+ * space is part of a word, so a value with one in it is unreadable. The expected values were read
+ * from Chrome's `getComputedStyle` with the same rule and inline values.
  */
 import assert from 'node:assert/strict';
-import { beforeEach, describe, it } from 'node:test';
-import { Engine } from '@ng-native/fabric';
-import { createFakeFabric, type FakeFabric } from '@ng-native/testing';
+import { before, describe, it } from 'node:test';
+import { fileURLToPath } from 'node:url';
+import type { Type } from '@angular/core';
+import { cleanup, render, screen } from '@ng-native/testing';
+import { compileFixture } from './compile.ts';
 
-describe('a transform string on a bound style', () => {
-  let fabric: FakeFabric;
-  let engine: Engine;
+describe('a transform bound on an element', () => {
+  let transform: (id: string) => unknown;
 
-  beforeEach(() => {
-    fabric = createFakeFabric();
-    engine = new Engine(fabric, 1, { processColor: (value) => value });
+  before(async () => {
+    const mod = await compileFixture(
+      fileURLToPath(new URL('./fixtures/inline-transform.ts', import.meta.url)),
+    );
+    await render(mod['InlineTransform'] as Type<unknown>);
+    const ids = [
+      'class-only',
+      'nbsp-argument',
+      'nbsp-argument-alone',
+      'nbsp-none',
+      'junk-after',
+      'nbsp-between',
+      'valid',
+      'padded',
+      'none',
+      'upper-none',
+      'comma',
+    ];
+    const props = Object.fromEntries(ids.map((id) => [id, screen.getByTestId(id).props]));
+    transform = (id) => props[id]!['transform'];
+    cleanup();
   });
 
-  const committed = (transform: unknown) => {
-    const view = engine.createElement('view');
-    engine.setProp(view, 'style', { transform });
-    engine.appendChild(engine.root, view);
-    engine.commit();
-    return fabric.committed[0]!.props['transform'];
-  };
-
-  it('reaches native as the list React Native builds from it', () => {
-    assert.deepEqual(committed('rotate(30deg)'), [{ rotate: '30deg' }]);
+  it('applies one it can read over the rule', () => {
+    assert.deepEqual(transform('valid'), [{ rotate: '90deg' }]);
+    assert.deepEqual(transform('padded'), [{ rotate: '90deg' }]);
+    assert.deepEqual(transform('comma'), [{ translateX: 4 }, { translateY: 8 }]);
   });
 
-  it('keeps every function, in order, with lengths as numbers', () => {
-    assert.deepEqual(committed('translateX(10px) rotate(-29.5deg) scale(1.5)'), [
-      { translateX: 10 },
-      { rotate: '-29.5deg' },
-      { scale: 1.5 },
-    ]);
+  it('applies none over the rule, in any case', () => {
+    const none = (id: string) => (transform(id) as unknown[] | undefined)?.length ?? 0;
+    assert.equal(none('none'), 0);
+    assert.equal(none('upper-none'), 0);
   });
 
-  it('splits the two-argument forms into their axes, as React Native does', () => {
-    assert.deepEqual(committed('translate(4px, -2px) scale(2, 0.5)'), [
-      { translateX: 4 },
-      { translateY: -2 },
-      { scaleX: 2 },
-      { scaleY: 0.5 },
-    ]);
-  });
+  for (const id of ['nbsp-argument', 'nbsp-none', 'junk-after', 'nbsp-between']) {
+    it(`leaves the rule's transform where it cannot read ${id}`, () => {
+      assert.deepEqual(transform(id), transform('class-only'));
+    });
+  }
 
-  it('keeps a percentage translate, which React Native resolves against the view', () => {
-    assert.deepEqual(committed('translateX(-50%)'), [{ translateX: '-50%' }]);
-  });
-
-  it('leaves a list alone, which is what a compiled class already gives it', () => {
-    assert.deepEqual(committed([{ rotate: '10deg' }]), [{ rotate: '10deg' }]);
-  });
-
-  it('widens a 2D matrix() to the sixteen values native reads, column by column', () => {
-    assert.deepEqual(committed('matrix(1, 2, 3, 4, 5, 6)'), [
-      { matrix: [1, 2, 0, 0, 3, 4, 0, 0, 0, 0, 1, 0, 5, 6, 0, 1] },
-    ]);
-  });
-
-  it("treats 'none' as no transform", () => {
-    assert.deepEqual(committed('none'), []);
+  it('leaves no transform where no rule sets one', () => {
+    assert.equal(transform('nbsp-argument-alone'), undefined);
   });
 });

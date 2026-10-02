@@ -153,6 +153,40 @@ const FAMILY_CASES = (
 ).flatMap(([kind, value]) =>
   tokenCases(`font-family: ${kind}`, 'font-family', value, 'monospace', 'font-family'),
 );
+/**
+ * A no-break space is no CSS whitespace inside a value worked out where it is used either: beside a
+ * token it is part of a word, so a `calc()` of tokens, or a fallback in one, holding one is invalid,
+ * and the declaration that reads it is unset.
+ */
+const DERIVED_SPACE_CASES = (
+  [
+    ['after a calc() of tokens', 'calc(var(--two) * 2)\u00a0', true],
+    ['before a token in a calc()', 'calc(\u00a0var(--two) * 2)', true],
+    ['between a token and an operator in a calc()', 'calc(var(--two)\u00a0* 2)', true],
+    // The compiler drops such a fallback without a warning, and the token is unset as in Chrome.
+    ['before a fallback in a calc()', 'calc(var(--missing,\u00a02px) * 2)', false],
+    ['after a fallback in a calc()', 'calc(var(--missing, 2px\u00a0) * 2)', false],
+  ] as const
+).flatMap(([where, value, warns]): OracleCase[] => {
+  const tree = probe({ name: 'view', classes: ['c'] });
+  const name = `no-break space ${where}`;
+  return [
+    {
+      name: `${name}, in the stylesheet`,
+      css: `#probe { --two: 2px; padding-top: 9px } #probe.c { --t: ${value}; padding-top: var(--t) }`,
+      ...(warns ? { warns } : {}),
+      tree,
+      extra: ['padding-top'],
+    },
+    {
+      name: `${name}, bound on the element`,
+      css: '#probe { --two: 2px; padding-top: 9px } #probe.c { padding-top: var(--t) }',
+      bound: { '--t': value },
+      tree,
+      extra: ['padding-top'],
+    },
+  ];
+});
 
 /** Colour channels, `rgb(var(--t))`, are split at CSS whitespace and no other. */
 const CHANNEL_CASES = (
@@ -697,6 +731,7 @@ export const CASES: OracleCase[] = [
     bound: { '--t': '"none"' },
     extra: ['display'],
   },
+  ...DERIVED_SPACE_CASES,
   ...CHANNEL_CASES,
   {
     name: 'background: var() of a colour token is the background colour',

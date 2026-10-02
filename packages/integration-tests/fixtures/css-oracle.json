@@ -1192,6 +1192,86 @@
     }
   },
   {
+    "name": "no-break space after a calc() of tokens, in the stylesheet",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "padding-top": "0px"
+    }
+  },
+  {
+    "name": "no-break space after a calc() of tokens, bound on the element",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "padding-top": "0px"
+    }
+  },
+  {
+    "name": "no-break space before a token in a calc(), in the stylesheet",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "padding-top": "0px"
+    }
+  },
+  {
+    "name": "no-break space before a token in a calc(), bound on the element",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "padding-top": "0px"
+    }
+  },
+  {
+    "name": "no-break space between a token and an operator in a calc(), in the stylesheet",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "padding-top": "0px"
+    }
+  },
+  {
+    "name": "no-break space between a token and an operator in a calc(), bound on the element",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "padding-top": "0px"
+    }
+  },
+  {
+    "name": "no-break space before a fallback in a calc(), in the stylesheet",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "padding-top": "0px"
+    }
+  },
+  {
+    "name": "no-break space before a fallback in a calc(), bound on the element",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "padding-top": "0px"
+    }
+  },
+  {
+    "name": "no-break space after a fallback in a calc(), in the stylesheet",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "padding-top": "0px"
+    }
+  },
+  {
+    "name": "no-break space after a fallback in a calc(), bound on the element",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "padding-top": "0px"
+    }
+  },
+  {
     "name": "whitespace: channels separated by tabs and newlines, in the stylesheet",
     "expected": {
       "color": "rgb(1, 0, 0)",
