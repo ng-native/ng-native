@@ -85,6 +85,13 @@ function app(globalCss: string, options: { inScroll?: boolean } = {}) {
     },
     opacity: () =>
       flatten(fabric.committed).find((node) => node.instanceHandle === spinner)!.props['opacity'],
+    color: () =>
+      flatten(fabric.committed).find((node) => node.instanceHandle === spinner)!.props['color'],
+    /** A class on what the spinner sits in, which it inherits a colour from. */
+    classOuter(name: string): void {
+      engine.setClasses(outer, name);
+      engine.commit();
+    },
     tick(ms: number): void {
       now += ms;
       engine.advanceAnimations();
@@ -265,5 +272,32 @@ describe('a finished animation holding its last frame, when its @keyframes are d
 
     s.swap('pulser', 'view { padding: 1px }');
     assert.equal(s.opacity(), 1);
+  });
+});
+
+describe('an animation from currentColor, when a hot swap edits its @keyframes', () => {
+  it('plays the edited frames from the colour the element inherits, and follows it', () => {
+    // Paused half way, from the inherited colour to the frame's: rgb(10, 20, 30) to
+    // rgb(210, 220, 230) is rgb(110, 120, 130), and from rgb(200, 100, 0) it is rgb(205, 160, 115).
+    const s = app(
+      `
+      scroll-view { color: rgb(10, 20, 30) }
+      .other { color: rgb(200, 100, 0) }
+      .spinner { animation: pulse 1s linear -0.5s paused }
+    `,
+      { inScroll: true },
+    );
+    s.mount({
+      pulser: '@keyframes pulse { from { color: currentColor } to { color: rgb(110, 120, 130) } }',
+    });
+    assert.equal(s.color(), 'rgba(60, 70, 80, 1)');
+
+    s.swap(
+      'pulser',
+      '@keyframes pulse { from { color: currentColor } to { color: rgb(210, 220, 230) } }',
+    );
+    assert.equal(s.color(), 'rgba(110, 120, 130, 1)', 'half way along the edited frames');
+    s.classOuter('other');
+    assert.equal(s.color(), 'rgba(205, 160, 115, 1)', 'from the colour inherited now');
   });
 });
