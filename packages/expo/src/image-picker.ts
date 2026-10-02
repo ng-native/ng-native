@@ -12,7 +12,7 @@
  */
 import { InjectionToken, Service, inject } from '@angular/core';
 import { expoModule } from './native.ts';
-import { Permission, type PermissionResponse } from './permissions.ts';
+import { Permission, UNAVAILABLE, type PermissionResponse } from './permissions.ts';
 
 export type PickerOptions = import('expo-image-picker').ImagePickerOptions;
 export type PickedAsset = import('expo-image-picker').ImagePickerAsset;
@@ -31,13 +31,6 @@ interface PickerResult {
   readonly canceled: boolean;
   readonly assets: readonly PickedAsset[] | null;
 }
-
-/** What a permission is without the module: refused, and never to be asked about. */
-const UNAVAILABLE = async (): Promise<PermissionResponse> => ({
-  status: 'denied',
-  granted: false,
-  canAskAgain: false,
-});
 
 @Service()
 export class ImagePicker {
@@ -58,14 +51,14 @@ export class ImagePicker {
    * asks; this is for an app that reads the library itself.
    */
   readonly libraryPermission = Permission.of(
-    this.native?.getMediaLibraryPermissionsAsync ?? UNAVAILABLE,
-    this.native?.requestMediaLibraryPermissionsAsync ?? UNAVAILABLE,
+    () => this.native?.getMediaLibraryPermissionsAsync() ?? Promise.resolve(UNAVAILABLE),
+    () => this.native?.requestMediaLibraryPermissionsAsync() ?? Promise.resolve(UNAVAILABLE),
   );
 
   /** The camera, which `capture()` asks for itself. */
   readonly cameraPermission = Permission.of(
-    this.native?.getCameraPermissionsAsync ?? UNAVAILABLE,
-    this.native?.requestCameraPermissionsAsync ?? UNAVAILABLE,
+    () => this.native?.getCameraPermissionsAsync() ?? Promise.resolve(UNAVAILABLE),
+    () => this.native?.requestCameraPermissionsAsync() ?? Promise.resolve(UNAVAILABLE),
   );
 
   /** Pick from the photo library. Empty if they cancelled. */

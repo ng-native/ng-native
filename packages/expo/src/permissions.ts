@@ -30,6 +30,13 @@ export interface PermissionApi {
   request(): Promise<PermissionResponse>;
 }
 
+/** What a permission is without its module: refused, and never to be asked about again. */
+export const UNAVAILABLE: PermissionResponse = {
+  status: 'denied',
+  granted: false,
+  canAskAgain: false,
+};
+
 export class Permission {
   private readonly api: PermissionApi;
   private readonly last = signal<PermissionResponse | null>(null);

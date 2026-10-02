@@ -42,7 +42,7 @@ import type {
   Query,
 } from 'expo-media-library';
 import { expoModule } from './native.ts';
-import { Permission, type PermissionResponse } from './permissions.ts';
+import { Permission, UNAVAILABLE } from './permissions.ts';
 
 type Expo = typeof import('expo-media-library');
 
@@ -85,9 +85,6 @@ export const AssetField = {
   DURATION: 'duration',
   IS_FAVORITE: 'isFavorite',
 } as unknown as typeof ExpoAssetField;
-
-/** The permission answer without the module: nothing granted, and nothing to ask. */
-const UNAVAILABLE: PermissionResponse = { status: 'denied', granted: false, canAskAgain: false };
 
 @Service()
 export class MediaLibrary {
