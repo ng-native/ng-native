@@ -593,6 +593,17 @@ describe('the typed SwiftUI and segmented-control components', () => {
         ['SlotView', 'preview'],
       ],
     );
+    // The trigger is a row of the app's own, hosted back inside the SwiftUI content.
+    const hosted = menu.children[0]!.children[0]!;
+    assert.match(hosted.viewName, /ExpoUI_RNHostView$/);
+    assert.equal(hosted.props['matchContents'], true);
+    assert.equal(hosted.props['expoInternalSizeFromChildren'], true, 'what sizes it natively');
+    assert.equal('layoutRoot' in hosted.props, false);
+    assert.equal(hosted.children.length, 1);
+    assert.equal(
+      all([hosted]).some((node) => node.props['text'] === 'Row'),
+      true,
+    );
     const archive = menu.children[1]!.children[0]!;
     assert.equal(archive.props['label'], 'Archive');
     fabric.emit(archive, 'topButtonPress');

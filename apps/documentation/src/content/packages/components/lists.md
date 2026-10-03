@@ -232,9 +232,9 @@ list keeps its scroll. The content has a background, or the action shows through
 the next item to take its views arrives already open, since a recycled row keeps its fields.
 
 A long press for a menu is `(longPress)` on the row's `<pressable>` with
-[`Dialogs.choose()`](/packages/device/dialogs). The system's own context menu, with a preview, is
-[`UiContextMenu`](/packages/expo/expo-ui#a-context-menu), whose trigger is SwiftUI content rather
-than a row of the app's own.
+[`Dialogs.choose()`](/packages/device/dialogs). On iOS the system's own context menu, which lifts
+the row and shows a preview, is [`UiContextMenu`](/packages/expo/expo-ui#a-context-menu), with the
+row as its trigger inside a `<ui-rn-host>`.
 
 ### Padding and gaps
 

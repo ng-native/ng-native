@@ -1,4 +1,6 @@
 import { Component, signal } from '@angular/core';
+import { Pressable } from '../../components/src/pressable.ts';
+import { Text } from '../../components/src/text.ts';
 import { DateTimePicker } from '../../expo/src/date-time-picker.ts';
 import { SegmentedControl } from '../../expo/src/segmented-control.ts';
 import { ExpoImage } from '../../expo/src/expo-image.ts';
@@ -6,6 +8,7 @@ import {
   UiButton,
   UiColorPicker,
   UiContextMenu,
+  UiRnHost,
   UiForm,
   UiChart,
   UiGauge,
@@ -37,6 +40,9 @@ import {
     SegmentedControl,
     UiButton,
     UiContextMenu,
+    Pressable,
+    Text,
+    UiRnHost,
     UiDatePicker,
     UiDivider,
     UiHost,
@@ -53,7 +59,13 @@ import {
         <ui-divider />
       </ui-menu>
       <ui-context-menu [modifiers]="[{ $type: 'opacity', value: 1 }]">
-        <ui-slot name="trigger"><ui-text text="Row" /></ui-slot>
+        <ui-slot name="trigger"
+          ><ui-rn-host [matchContents]="true"
+            ><pressable (press)="presses.set(presses() + 100)"
+              ><text>Row</text></pressable
+            ></ui-rn-host
+          ></ui-slot
+        >
         <ui-slot name="items">
           <ui-button label="Archive" (buttonPress)="presses.set(presses() + 10)" />
         </ui-slot>

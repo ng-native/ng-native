@@ -97,6 +97,11 @@ export const EXPO_UI_VIEWS: Readonly<Record<string, readonly [string | null, str
   'radio-button': [null, 'RadioButtonView'],
   rectangle: ['RectangleView', null],
   'rich-tooltip': [null, 'RichTooltipView'],
+  /**
+   * The other way round from `host`: views of the app's own inside SwiftUI or Compose content,
+   * as a context menu's trigger or a sheet's body.
+   */
+  'rn-host': ['RNHostView', 'RNHostView'],
   'rounded-rectangle': ['RoundedRectangleView', null],
   'scroll-view-component': ['ScrollViewComponent', null],
   'search-bar': [null, 'SearchBarView'],

@@ -116,6 +116,35 @@ export class UiMenu {
 }
 
 /**
+ * Views of the app's own inside SwiftUI or Compose content: the way back from a `ui-host`. What
+ * it holds is laid out by the engine, as anywhere else, and takes presses as anywhere else, so a
+ * row drawn with the app's own components can be a context menu's trigger or a sheet's body.
+ *
+ * It holds one element. `matchContents` sizes it to that element, where it otherwise fills what
+ * the SwiftUI or Compose view around it offers.
+ */
+@Component({
+  selector: 'ui-rn-host',
+  template: '<ng-content />',
+  host: {
+    '[matchContents]': 'matchContents()',
+    '[expoInternalSizeFromChildren]': 'matchContents()',
+    '[layoutRoot]': 'layoutRoot()',
+    '[modifiers]': 'modifiers()',
+  },
+})
+export class UiRnHost {
+  protected readonly nativeView = nativeView();
+  readonly matchContents = input<boolean>(undefined, { transform: optionalBoolean });
+  /**
+   * For content presented in a window of its own, a sheet or a popover, where nothing above it
+   * delivers its touches: it then takes them itself, and is measured from itself.
+   */
+  readonly layoutRoot = input<boolean>(undefined, { transform: optionalBoolean });
+  readonly modifiers = input<readonly UiModifier[]>();
+}
+
+/**
  * A SwiftUI `contextMenu`: the menu a long press on its trigger opens, with the trigger lifted
  * over the dimmed screen. iOS only.
  *
