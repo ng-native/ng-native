@@ -53,6 +53,8 @@ export interface ExpoViewOptions {
    * source to an array and a `contentFit` to a string native understands.
    */
   readonly defaultProps?: Record<string, unknown>;
+  /** Whether a component of the app's own with this selector is a plain view. */
+  readonly yieldsToComponents?: boolean;
   /**
    * The prop the view reads its text from, where it takes no child views, as `@expo/ui`'s `Text`
    * reads `text`. The text written inside the element becomes that prop. See `ViewNameOptions`.
@@ -78,6 +80,7 @@ export function registerExpoView(
     options?.defaultProps,
     {
       textContent: options?.textContent,
+      yieldsToComponents: options?.yieldsToComponents,
     },
   );
   optional(() =>

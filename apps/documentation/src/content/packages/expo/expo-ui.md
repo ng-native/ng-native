@@ -50,6 +50,13 @@ Element names are platform-neutral where both platforms have the control, so a t
 the wrong platform is an element that commits as nothing, which `registerExpoUiViews` avoids by
 reading the platform you pass it.
 
+**A component of your own keeps its `ui-` selector.** A design system often picks the same prefix.
+An element a component of the app's is mounted on, a `ui-button` of your own, is a plain view
+drawing that component's template, whatever `@expo/ui` has under the name. The name is the native
+view where no component matches it, and for the typed components this package exports. A template
+that imports both your `ui-button` and `UiButton` is a compile error, as two components on one
+element always are.
+
 ## `<ui-host>` is required
 
 **SwiftUI and Compose lay out their own subtrees.** `<ui-host>` is the bridge from Yoga's layout to

@@ -82,3 +82,22 @@ export class ExpoUiTextContentFixture {
   readonly us = signal('15');
   readonly them = signal('0');
 }
+
+/** An app's own component, under a selector `@expo/ui` has a view for. */
+@Component({
+  selector: 'ui-button',
+  template: `<text>{{ label() }}</text>`,
+})
+export class AppButton {
+  readonly label = signal('Mine');
+}
+
+@Component({
+  selector: 'expo-ui-own-button',
+  imports: [AppButton, UiHost],
+  template: `
+    <ui-button testID="own" />
+    <ui-host><ui-gauge testID="raw" /></ui-host>
+  `,
+})
+export class ExpoUiOwnButtonFixture {}

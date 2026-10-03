@@ -157,6 +157,11 @@ export function registerExpoUiViews(platform: PlatformOSType): void {
     if (!viewName) continue;
     // SwiftUI's and Compose's `Text` read their text from `text`, and take no child views.
     const textContent = element === 'text' ? 'text' : undefined;
-    registerExpoView(`ui-${element}`, 'ExpoUI', { viewName, textContent });
+    // `ui-` is a prefix a design system picks too: a component of the app's own keeps its host.
+    registerExpoView(`ui-${element}`, 'ExpoUI', {
+      viewName,
+      textContent,
+      yieldsToComponents: true,
+    });
   }
 }

@@ -497,6 +497,8 @@ export interface EngineNode extends HostNode {
    * knows. See `markComponentHost`.
    */
   componentHost?: true;
+  /** See `keepNativeView`. */
+  nativeView?: true;
   /**
    * Style weaker than every sheet, where no rule and no inline style says otherwise. What lets the
    * root component's host fill the surface by default and still give way to its own `:host`. See
@@ -633,6 +635,15 @@ export function claimHost(node: HostNode): void {
  */
 export function markComponentHost(node: HostNode): void {
   (node as EngineNode).componentHost = true;
+}
+
+/**
+ * Say that a component's host is the native view its element name is registered as: a typed
+ * wrapper for the view, where a component of the app's own with the same selector is a plain view.
+ * Called from the component's constructor. See `ViewNameOptions.yieldsToComponents`.
+ */
+export function keepNativeView(node: HostNode): void {
+  (node as EngineNode).nativeView = true;
 }
 
 /** `text-input` -> `TextInput`: how the components package names the class for an element. */
@@ -862,6 +873,8 @@ export function registerViewName(
   options?: ViewNameOptions,
 ): void {
   VIEW_NAMES[elementName] = viewName;
+  if (options?.yieldsToComponents) YIELDING.add(elementName);
+  else YIELDING.delete(elementName);
   // A name the app registers is the app's: no longer decided by what the element holds.
   TEXT_ELEMENTS.delete(elementName);
   for (const name of typeof viewName === 'string' ? [viewName] : [viewName.ios, viewName.android]) {
@@ -878,7 +891,17 @@ export interface ViewNameOptions {
    * takes its own content, and is not committed as children. An explicit prop wins over it.
    */
   readonly textContent?: string;
+  /**
+   * Whether the name gives way to a component of the app's own with the same selector, whose host
+   * is then a plain view. For a set of views registered under a prefix an app may also use for
+   * its design system, as `@expo/ui`'s are under `ui-`. A component that is the view itself, a
+   * typed wrapper for it, says so with `keepNativeView`.
+   */
+  readonly yieldsToComponents?: boolean;
 }
+
+/** The registered names that give way to a component's own host. See `ViewNameOptions`. */
+const YIELDING = new Set<string>();
 
 /** The prop each view that takes its text content as a prop reads it from. See `ViewNameOptions`. */
 const TEXT_CONTENT_PROPS: Record<string, string> = {};
@@ -1131,6 +1154,9 @@ export interface ViewNameNode {
   readonly kind: string;
   readonly name: string;
   readonly parent: ViewNameNode | null;
+  /** Whether a component is mounted on it, and whether that component is the native view. */
+  readonly componentHost?: boolean;
+  readonly nativeView?: boolean;
   /** What it holds, which decides whether one of HTML's text elements is text or a view. */
   readonly children?: readonly ViewNameNode[];
 }
@@ -1168,6 +1194,8 @@ export function viewNameOf(node: ViewNameNode): string {
   // RN models nested text as a span inside a paragraph: `Paragraph > [RawText, Text > RawText]`.
   // Committing a nested `<text>` as another Paragraph gives a paragraph inside a paragraph,
   // which lays out as a separate block instead of flowing inline.
+  // A component of the app's own under a name a view set registered: its host is a plain view.
+  if (node.componentHost && !node.nativeView && YIELDING.has(node.name)) return DEFAULT_VIEW;
   const registered = registeredViewName(node.name);
   // Nearly every element: a view of some kind, by its name alone.
   if (registered !== PARAGRAPH) return registered ?? DEFAULT_VIEW;

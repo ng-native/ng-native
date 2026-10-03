@@ -25,6 +25,7 @@ interface DefaultsFixture {
 let Platforms: Type<Fixture>;
 let Defaults: Type<DefaultsFixture>;
 let TextContent: Type<{ us: { set(value: string): void } }>;
+let OwnButton: Type<unknown>;
 
 before(async () => {
   const mod = await compileFixture(
@@ -33,6 +34,7 @@ before(async () => {
   Platforms = mod['ExpoUiPlatformsFixture'] as Type<Fixture>;
   Defaults = mod['ExpoUiPlatformDefaultsFixture'] as Type<DefaultsFixture>;
   TextContent = mod['ExpoUiTextContentFixture'] as typeof TextContent;
+  OwnButton = mod['ExpoUiOwnButtonFixture'] as Type<unknown>;
 });
 
 after(() => {
@@ -173,4 +175,19 @@ describe('a ui-text with its text written inside it', () => {
       assert.equal(every(/ExpoUI_TextView$/)[0]!.props['text'], 'Us 30 - 0 Them');
     });
   }
+});
+
+describe("a component of the app's own under a `ui-` selector", () => {
+  it('is a plain view, where an element with no component is the registered one', async () => {
+    const { fabric } = await boot('ios', OwnButton);
+    const byId = (id: string) => all(fabric.committed).find((n) => n.props['testID'] === id)!;
+    assert.equal(byId('own').viewName, 'View');
+    assert.equal(byId('own').children[0]!.viewName, 'Paragraph', 'and draws its own template');
+    assert.match(byId('raw').viewName, /ExpoUI/);
+  });
+
+  it('leaves the typed component the view it wraps', async () => {
+    const { named } = await boot('ios');
+    assert.match(named(/Button/).viewName, /ExpoUI/);
+  });
 });

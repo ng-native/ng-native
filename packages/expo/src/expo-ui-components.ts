@@ -41,6 +41,7 @@ import {
   HostEngine,
   type HostNode,
   type NativeSyntheticEvent,
+  keepNativeView,
   nativePlatform,
 } from '@ng-native/fabric';
 import { optionalBoolean, optionalNumber } from './transforms.ts';
@@ -49,6 +50,15 @@ import { optionalBoolean, optionalNumber } from './transforms.ts';
 export interface UiModifier {
   readonly $type: string;
   readonly [key: string]: unknown;
+}
+
+/**
+ * Says the component's host is the `@expo/ui` view its selector is registered as. A component of
+ * an app's own with a `ui-` selector does not, and its host is a plain view.
+ */
+function nativeView(): true {
+  keepNativeView(inject(ElementRef).nativeElement);
+  return true;
 }
 
 /**
@@ -69,6 +79,7 @@ export interface UiModifier {
   },
 })
 export class UiHost {
+  protected readonly nativeView = nativeView();
   readonly matchContents = input<
     boolean | { readonly vertical?: boolean; readonly horizontal?: boolean }
   >();
@@ -96,6 +107,7 @@ export class UiHost {
   },
 })
 export class UiMenu {
+  protected readonly nativeView = nativeView();
   readonly label = input<string>();
   /** An SF Symbol name. */
   readonly systemImage = input<string>();
@@ -124,6 +136,7 @@ export class UiMenu {
   },
 })
 export class UiButton {
+  protected readonly nativeView = nativeView();
   protected readonly android = nativePlatform() === 'android';
   readonly label = input<string>();
   /** An SF Symbol name. */
@@ -145,6 +158,7 @@ export class UiButton {
   host: { '[modifiers]': 'modifiers()' },
 })
 export class UiDivider {
+  protected readonly nativeView = nativeView();
   readonly modifiers = input<readonly UiModifier[]>();
 }
 
@@ -163,6 +177,7 @@ export class UiDivider {
   },
 })
 export class UiSlot {
+  protected readonly nativeView = nativeView();
   protected readonly android = nativePlatform() === 'android';
   readonly name = input.required<string>();
   readonly extraProps = input<Readonly<Record<string, unknown>>>();
@@ -178,6 +193,7 @@ export class UiSlot {
   host: { '[modifiers]': 'modifiers()' },
 })
 export class UiList {
+  protected readonly nativeView = nativeView();
   readonly modifiers = input<readonly UiModifier[]>();
 }
 
@@ -192,6 +208,7 @@ export class UiList {
   host: { '[modifiers]': 'modifiers()' },
 })
 export class UiSwipeActions {
+  protected readonly nativeView = nativeView();
   readonly modifiers = input<readonly UiModifier[]>();
 }
 
@@ -216,6 +233,7 @@ export type UiSliderChangeEvent = NativeSyntheticEvent<{ readonly value: number 
   },
 })
 export class UiSlider {
+  protected readonly nativeView = nativeView();
   readonly value = input<number>(undefined, { transform: optionalNumber });
   readonly min = input<number>(undefined, { transform: optionalNumber });
   readonly max = input<number>(undefined, { transform: optionalNumber });
@@ -261,6 +279,7 @@ export class UiSlider {
   },
 })
 export class UiVStack {
+  protected readonly nativeView = nativeView();
   readonly alignment = input<'leading' | 'center' | 'trailing'>();
   readonly spacing = input<number>(undefined, { transform: optionalNumber });
   readonly modifiers = input<readonly UiModifier[]>();
@@ -285,6 +304,7 @@ export class UiVStack {
   },
 })
 export class UiImage {
+  protected readonly nativeView = nativeView();
   readonly systemName = input<string>();
   readonly uiImage = input<string>();
   readonly size = input<number>(undefined, { transform: optionalNumber });
@@ -302,6 +322,7 @@ export class UiImage {
   host: { '[text]': 'text()', '[modifiers]': 'modifiers()' },
 })
 export class UiText {
+  protected readonly nativeView = nativeView();
   readonly text = input<string>();
   readonly modifiers = input<readonly UiModifier[]>();
 }
@@ -375,6 +396,7 @@ function withDisabled(
   },
 })
 export class UiDatePicker {
+  protected readonly nativeView = nativeView();
   readonly title = input<string>();
   readonly selection = input<string>();
   readonly displayedComponents = input<readonly ('date' | 'hourAndMinute')[]>();
@@ -458,6 +480,7 @@ export interface UiPickerOption {
   },
 })
 export class UiPicker {
+  protected readonly nativeView = nativeView();
   readonly label = input<string>();
   /** An SF Symbol name. */
   readonly systemImage = input<string>();
@@ -521,6 +544,7 @@ export type UiToggleChangeEvent = NativeSyntheticEvent<{ readonly isOn: boolean 
   },
 })
 export class UiToggle {
+  protected readonly nativeView = nativeView();
   readonly isOn = input<boolean>(undefined, { transform: optionalBoolean });
   readonly label = input<string>();
   readonly modifiers = input<readonly UiModifier[]>();
@@ -552,6 +576,7 @@ export type UiStepperChangeEvent = NativeSyntheticEvent<{ readonly value: number
   },
 })
 export class UiStepper {
+  protected readonly nativeView = nativeView();
   readonly value = input<number>(undefined, { transform: optionalNumber });
   readonly min = input<number>(undefined, { transform: optionalNumber });
   readonly max = input<number>(undefined, { transform: optionalNumber });
@@ -578,6 +603,7 @@ export type UiTextFieldChangeEvent = NativeSyntheticEvent<{ readonly value: stri
   },
 })
 export class UiTextField {
+  protected readonly nativeView = nativeView();
   readonly text = input<NativeState<string> | null>();
   readonly placeholder = input<string>();
   readonly modifiers = input<readonly UiModifier[]>();
@@ -599,6 +625,7 @@ export type UiColorChangeEvent = NativeSyntheticEvent<{ readonly value: string }
   },
 })
 export class UiColorPicker {
+  protected readonly nativeView = nativeView();
   readonly selection = input<string>();
   readonly label = input<string>();
   readonly supportsOpacity = input<boolean>(undefined, { transform: optionalBoolean });
@@ -622,6 +649,7 @@ export class UiColorPicker {
   },
 })
 export class UiGauge {
+  protected readonly nativeView = nativeView();
   readonly value = input<number>(undefined, { transform: optionalNumber });
   readonly min = input<number>(undefined, { transform: optionalNumber });
   readonly max = input<number>(undefined, { transform: optionalNumber });
@@ -716,6 +744,7 @@ export interface UiChartRuleStyle {
   },
 })
 export class UiChart {
+  protected readonly nativeView = nativeView();
   readonly data = input.required<readonly UiChartDataPoint[]>();
   readonly type = input<UiChartType>();
   readonly showGrid = input<boolean>(undefined, { transform: optionalBoolean });
@@ -746,6 +775,7 @@ export class UiChart {
   },
 })
 export class UiProgress {
+  protected readonly nativeView = nativeView();
   protected readonly android = nativePlatform() === 'android';
   readonly value = input<number>(undefined, { transform: optionalNumber });
   readonly modifiers = input<readonly UiModifier[]>();
@@ -768,6 +798,7 @@ export class UiProgress {
   },
 })
 export class UiHStack {
+  protected readonly nativeView = nativeView();
   readonly alignment = input<'top' | 'center' | 'bottom' | 'firstTextBaseline'>();
   readonly spacing = input<number>(undefined, { transform: optionalNumber });
   readonly modifiers = input<readonly UiModifier[]>();
@@ -792,6 +823,7 @@ function spacedBy(spacing: number | undefined) {
   host: { '[modifiers]': 'modifiers()' },
 })
 export class UiSpacer {
+  protected readonly nativeView = nativeView();
   readonly modifiers = input<readonly UiModifier[]>();
 }
 
@@ -834,6 +866,7 @@ const CONTENT_ALIGNMENT: Record<UiZStackAlignment, string> = {
   },
 })
 export class UiZStack {
+  protected readonly nativeView = nativeView();
   readonly alignment = input<UiZStackAlignment>();
   readonly modifiers = input<readonly UiModifier[]>();
 
@@ -848,6 +881,7 @@ export class UiZStack {
   host: { '[modifiers]': 'modifiers()' },
 })
 export class UiRectangle {
+  protected readonly nativeView = nativeView();
   readonly modifiers = input<readonly UiModifier[]>();
 }
 
@@ -858,6 +892,7 @@ export class UiRectangle {
   host: { '[cornerRadius]': 'cornerRadius()', '[modifiers]': 'modifiers()' },
 })
 export class UiRoundedRectangle {
+  protected readonly nativeView = nativeView();
   readonly cornerRadius = input<number>(undefined, { transform: optionalNumber });
   readonly modifiers = input<readonly UiModifier[]>();
 }
@@ -875,6 +910,7 @@ export class UiRoundedRectangle {
   },
 })
 export class UiUnevenRoundedRectangle {
+  protected readonly nativeView = nativeView();
   readonly topLeadingRadius = input<number>(undefined, { transform: optionalNumber });
   readonly topTrailingRadius = input<number>(undefined, { transform: optionalNumber });
   readonly bottomLeadingRadius = input<number>(undefined, { transform: optionalNumber });
@@ -889,6 +925,7 @@ export class UiUnevenRoundedRectangle {
   host: { '[cornerStyle]': 'cornerStyle()', '[modifiers]': 'modifiers()' },
 })
 export class UiCapsule {
+  protected readonly nativeView = nativeView();
   readonly cornerStyle = input<'continuous' | 'circular'>();
   readonly modifiers = input<readonly UiModifier[]>();
 }
@@ -900,6 +937,7 @@ export class UiCapsule {
   host: { '[modifiers]': 'modifiers()' },
 })
 export class UiCircle {
+  protected readonly nativeView = nativeView();
   readonly modifiers = input<readonly UiModifier[]>();
 }
 
@@ -910,6 +948,7 @@ export class UiCircle {
   host: { '[modifiers]': 'modifiers()' },
 })
 export class UiEllipse {
+  protected readonly nativeView = nativeView();
   readonly modifiers = input<readonly UiModifier[]>();
 }
 
@@ -923,6 +962,7 @@ export class UiEllipse {
   host: { '[modifiers]': 'modifiers()' },
 })
 export class UiAccessoryWidgetBackground {
+  protected readonly nativeView = nativeView();
   readonly modifiers = input<readonly UiModifier[]>();
 }
 
@@ -938,6 +978,7 @@ export class UiAccessoryWidgetBackground {
   },
 })
 export class UiLabel {
+  protected readonly nativeView = nativeView();
   readonly title = input<string>();
   /** An SF Symbol name. */
   readonly systemImage = input<string>();
@@ -959,6 +1000,7 @@ export class UiLabel {
   },
 })
 export class UiLink {
+  protected readonly nativeView = nativeView();
   readonly destination = input.required<string>();
   readonly label = input<string>();
   readonly modifiers = input<readonly UiModifier[]>();
@@ -972,6 +1014,7 @@ export class UiLink {
   host: { '[label]': 'label()', '[modifiers]': 'modifiers()' },
 })
 export class UiLabeledContent {
+  protected readonly nativeView = nativeView();
   readonly label = input<string>();
   readonly modifiers = input<readonly UiModifier[]>();
 }
@@ -983,6 +1026,7 @@ export class UiLabeledContent {
   host: { '[modifiers]': 'modifiers()' },
 })
 export class UiForm {
+  protected readonly nativeView = nativeView();
   readonly modifiers = input<readonly UiModifier[]>();
 }
 
@@ -994,6 +1038,7 @@ export class UiForm {
   host: { '[title]': 'title()', '[modifiers]': 'modifiers()' },
 })
 export class UiSection {
+  protected readonly nativeView = nativeView();
   readonly title = input<string>();
   readonly modifiers = input<readonly UiModifier[]>();
 }
