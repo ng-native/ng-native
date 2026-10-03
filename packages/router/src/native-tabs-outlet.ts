@@ -182,6 +182,20 @@ export class NativeTabsOutlet implements RouterOutletContract, AfterContentInit 
   /** A bar nobody has navigated into yet still has to show a selected item. */
   ngAfterContentInit(): void {
     this.readTabs();
+    this.activateCurrentRoute();
+  }
+
+  /**
+   * The route the router is already on, for an outlet created after the navigation that reached
+   * it, as `NativeStackOutlet` takes its own: a tab bar held behind a condition until a session
+   * is ready. Once the tabs are read, since activating one needs to know which they are.
+   */
+  private activateCurrentRoute(): void {
+    if (this.isActivated) return;
+    const context = this.parentContexts.getContext(this.name);
+    if (!context?.route) return;
+    if (context.attachRef) this.attach(context.attachRef, context.route);
+    else this.activateWith(context.route, context.injector);
   }
 
   /** The tabs in the bar, in template order. Exposed for tests. */

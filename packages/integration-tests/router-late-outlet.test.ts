@@ -53,3 +53,13 @@ it('navigates from there as an outlet that was there from the start does', async
   assert.equal(app.queryByText('Detail page'), null);
   assert.ok(app.getByText('Home page'));
 });
+
+it('shows the current tab when a tabs outlet is created after the navigation', async () => {
+  const app = await render(mod['LateTabs'] as Type<{ ready: { set(value: boolean): void } }>, {
+    providers: [provideNativeRouter(mod['lateTabRoutes'] as Routes)],
+  });
+  for (let turn = 0; turn < 5; turn++) await settle();
+  app.instance.ready.set(true);
+  await app.detectChanges();
+  assert.ok(await app.findByText('Home page'));
+});
