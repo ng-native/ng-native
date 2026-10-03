@@ -23,6 +23,7 @@ import {
 } from '@angular/router';
 import { NativeBack } from './native-back.ts';
 import type { ScreenPresentation, StackPresentation } from './screen-presentation.ts';
+import { leavingPresented, presentedCommands } from './presented-route.ts';
 
 /** What `Router` takes: a url string, or the array form with segments and params. */
 export type NavigationCommands = string | readonly unknown[];
@@ -94,7 +95,8 @@ export class NativeNavigation {
    */
   present(commands: NavigationCommands, options: PresentOptions = {}): Promise<boolean> {
     const { as = 'modal', presentation, ...extras } = options;
-    return this.go(commands, extras, {
+    const over = this.overTheTabInFront(commands, extras);
+    return this.go(over?.commands ?? commands, over?.extras ?? extras, {
       stack: 'push',
       presentation: { stackPresentation: as, ...presentation },
     });
@@ -169,12 +171,16 @@ export class NativeNavigation {
       ? { ...intent, presentation: { ...intent.presentation, ...presentation } }
       : intent;
 
-    const navigate = () =>
-      this.router.navigate(typeof commands === 'string' ? [pathOf(commands)] : [...commands], {
+    const navigate = () => {
+      const list = typeof commands === 'string' ? [pathOf(commands)] : [...commands];
+      const all = {
         ...extras,
         ...(typeof commands === 'string' ? this.queryOf(commands, extras) : {}),
         state: { ...(state as object), [NATIVE_INTENT]: full },
-      });
+      };
+      const leaving = leavingPresented(this.router, list, all);
+      return leaving ? this.router.navigateByUrl(leaving, all) : this.router.navigate(list, all);
+    };
     // A screen stacked on the first one waits for it. Navigating while the router's first
     // navigation is still running - a lazily loaded root waiting on its import - cancels that
     // navigation, and the app opens on this screen with nothing beneath it. A reset replaces the
@@ -199,13 +205,37 @@ export class NativeNavigation {
     navigate: () => Promise<boolean>,
   ): Promise<boolean> {
     if (intent.stack !== 'push' || intent.presentation) return navigate();
-    const path =
-      typeof commands === 'string'
-        ? pathOf(commands)
-        : this.router.serializeUrl(this.router.createUrlTree([...commands], extras));
-    const tab = this.outlets.unopenedTabOf(path.replace(/[?#].*$/, ''));
+    const tab = this.outlets.unopenedTabOf(this.pathFor(commands, extras));
     if (!tab) return navigate();
     return this.router.navigateByUrl(tab).then((arrived) => (arrived ? navigate() : false));
+  }
+
+  /** The path the commands lead to, without its query and fragment. */
+  private pathFor(commands: NavigationCommands, extras: NavigationExtras): string {
+    const url =
+      typeof commands === 'string'
+        ? commands
+        : this.router.serializeUrl(this.router.createUrlTree([...commands], extras));
+    return pathOf(url);
+  }
+
+  /**
+   * A page of a tab that is not in front, presented over the one that is: its url would select
+   * its own tab and show it there, so it goes to the root's presented outlet instead, where the
+   * app's own stack shows it over everything. See `presented-route.ts`. Null for a page of the
+   * tab in front, or of no tab, which is presented where its url puts it.
+   */
+  private overTheTabInFront(
+    commands: NavigationCommands,
+    extras: NavigationExtras,
+  ): { commands: unknown[]; extras: NavigationExtras } | null {
+    if (!this.outlets.presents) return null;
+    const path = this.pathFor(commands, extras);
+    if (!this.outlets.inTabBehind(path)) return null;
+    const presented = presentedCommands(this.router, path);
+    if (!presented) return null;
+    const query = typeof commands === 'string' ? this.queryOf(commands, extras) : {};
+    return { commands: presented, extras: { ...extras, ...query, relativeTo: null } };
   }
 
   /**

@@ -227,6 +227,9 @@ export const routes: Routes = [
 A push to one of those children stays inside the modal; a push to any other route leaves it and is
 presented over it, as above.
 
+A page of a tab that is not in front is presented over the tab that is, rather than in its own:
+see [Presenting a page of another tab](/packages/router/tabs#presenting-a-page-of-another-tab).
+
 ## Presentation options
 
 `ScreenPresentation` is the full set of options a screen can be given - stack animation, the

@@ -140,8 +140,35 @@ it, and a back from the page lands there, as it does when the tab has been opene
 first screen refuses the navigation, a guard that redirects among them, the push resolves to
 `false` and the page is not shown.
 
-`present()` does not do this, and neither does `Router.navigateByUrl()`: each goes straight to the
-url it is given.
+`Router.navigateByUrl()` does not do this: it goes straight to the url it is given.
+
+## Presenting a page of another tab
+
+A detail page that lives in one tab is often shown as a sheet over another: an invoice opened from
+the dashboard, a search result, a notification. `present()` shows a page of a tab that is not in
+front over the tab that is, and leaves the page's own tab as it was:
+
+```ts
+// On the Home tab. The Invoices tab is not selected, and is not opened.
+void this.nav.present('/invoices/7', { as: 'formSheet' });
+```
+
+The route is the one the tab already has, with its params, resolvers, data and lazy component, and
+with the guards and providers of the routes it sits inside. Only their components are left out:
+the page is shown on the app's own stack, over the tab bar, and not inside the Invoices tab's.
+While it is up the url names it beside where the app is, `/home(presented:invoices/7)`, and a
+back, or the swipe that dismisses a sheet, returns to `/home`.
+
+Three things follow from the page being over the tabs rather than in one:
+
+- It has no header and no stack of its own, as any [presented
+  screen](/packages/router/screens#presented-screens-have-no-header)
+  has none, so it needs its own way out.
+- A `push()` from it, or a link inside it, leaves it: the push goes to its url's own tab, and the
+  page is dismissed rather than left covering where the app went.
+- It needs the app's root to be a `<native-stack-outlet>`, the usual shape, with the tab bar as
+  the stack's first screen. Without one, and for a page of the tab in front or of no tab,
+  `present()` shows the page where its url puts it.
 
 ## Going back
 

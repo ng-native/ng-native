@@ -63,6 +63,7 @@ import { optionalBoolean } from './transforms.ts';
 import { NativeTab } from './native-tab.ts';
 import { ownHost } from './own-host.ts';
 import { markTabRoute } from './tab-routes.ts';
+import { withoutPresented } from './presented-route.ts';
 
 interface TabEntry {
   readonly tab: NativeTab;
@@ -160,14 +161,20 @@ export class NativeTabsOutlet implements RouterOutletContract, AfterContentInit 
     // for it; the router's navigation is the only sign. Without this, coming back to the tab
     // returns it to its root and pops the screens the user left it on.
     const following = this.router?.events?.subscribe((event) => {
-      if (event instanceof NavigationEnd) this.follow(event.urlAfterRedirects);
+      // Without a page presented over the bar, which is no part of where the tab is.
+      if (event instanceof NavigationEnd) {
+        this.follow(withoutPresented(this.router!, event.urlAfterRedirects));
+      }
     });
 
     // Android's back button, and `NativeNavigation.back()`, once the stack in front, if the tab
     // has one, is at its root. Subscribed before any tab's own stack, so it is asked after them.
     const back = inject(NativeBack);
     const unsubscribeBack = back.handle(() => this.goBack());
-    const unsubscribeBar = back.addTabBar({ unopenedTabOf: (url) => this.unopenedTabOf(url) });
+    const unsubscribeBar = back.addTabBar({
+      unopenedTabOf: (url) => this.unopenedTabOf(url),
+      behind: (url) => this.behind(url),
+    });
 
     inject(DestroyRef).onDestroy(() => {
       unsubscribeBack();
@@ -444,6 +451,15 @@ export class NativeTabsOutlet implements RouterOutletContract, AfterContentInit 
       if (url.startsWith(`${root}/`)) return root;
     }
     return null;
+  }
+
+  /** Whether `url` is a tab other than the one in front, or a page inside one. */
+  private behind(url: string): boolean {
+    return this.entries.some((entry) => {
+      if (entry === this.selected) return false;
+      const root = this.pathOf(entry);
+      return url === root || url.startsWith(`${root}/`);
+    });
   }
 
   private request(entry: TabEntry): void {

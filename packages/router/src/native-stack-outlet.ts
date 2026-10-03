@@ -55,6 +55,7 @@ import { bindRouteInputs } from './bind-route-inputs.ts';
 import { NativeBack, isShowing } from './native-back.ts';
 import { intentOf, type NativeIntent } from './native-navigation.ts';
 import { NativePlatformLocation } from './native-platform-location.ts';
+import { PRESENTED, withoutPresented } from './presented-route.ts';
 import { markScreenRoute } from './tab-routes.ts';
 import { ownHost } from './own-host.ts';
 import { HostEngine, type EngineNode } from '@ng-native/fabric';
@@ -197,9 +198,11 @@ export class NativeStackOutlet implements RouterOutletContract, OnInit {
     });
 
     const unhold = this.holder ? this.holdRefusals(this.holder) : undefined;
+    const unpresent = this.takePresentedPages(back);
 
     inject(DestroyRef).onDestroy(() => {
       unhold?.();
+      unpresent?.();
       unsubscribeBack();
       unsubscribeStack();
       navigations?.unsubscribe();
@@ -210,6 +213,112 @@ export class NativeStackOutlet implements RouterOutletContract, OnInit {
       this.entries.length = 0;
       this.parentContexts.onChildOutletDestroyed(this.name);
     });
+  }
+
+  /** The page presented over everything, while there is one. See `presented-route.ts`. */
+  private presentedPage: (StackEntry & { stopBack(): void }) | null = null;
+
+  /**
+   * The app's own stack, the one in the root component, is also the root's presented outlet: a
+   * page of a tab that is not in front is shown here, as a screen over the bar and everything in
+   * it. One page at a time, which the router sees to, and never kept: it is dismissed.
+   */
+  private takePresentedPages(back: NativeBack): (() => void) | undefined {
+    const router = this.router;
+    const root = inject(ActivatedRoute, { optional: true });
+    if (!router?.routerState || this.name !== PRIMARY_OUTLET || root !== router.routerState.root) {
+      return undefined;
+    }
+    const page = () => this.presentedPage;
+    const outlet: RouterOutletContract = {
+      supportsBindingToComponentInputs: true,
+      get isActivated() {
+        return page() !== null;
+      },
+      get component() {
+        return (page()?.ref.instance as Object | undefined) ?? null;
+      },
+      get activatedRoute() {
+        return page()?.route ?? null;
+      },
+      get activatedRouteData() {
+        return page()?.route.snapshot.data ?? {};
+      },
+      activateWith: (route, environmentInjector) =>
+        this.presentPage(route, environmentInjector, back),
+      deactivate: () => this.dropPresentedPage(),
+      detach: () => {
+        throw new Error('[angular-native] a presented page is dismissed, not detached');
+      },
+      attach: () => {
+        throw new Error('[angular-native] a presented page is not kept to attach again');
+      },
+    };
+    this.parentContexts.onChildOutletCreated(PRESENTED, outlet);
+    back.presents = true;
+    return () => {
+      back.presents = false;
+      this.dropPresentedPage();
+      this.parentContexts.onChildOutletDestroyed(PRESENTED);
+    };
+  }
+
+  private presentPage(
+    route: ActivatedRoute,
+    environmentInjector: EnvironmentInjector,
+    back: NativeBack,
+  ): void {
+    const component = (route.component ?? route.snapshot.component) as Type<unknown> | null;
+    if (!component) throw new Error('[angular-native] route has no component to present');
+    const presentation = this.claimPresentation(this.currentIntent()) ?? {
+      stackPresentation: 'modal',
+    };
+    const screen = this.createScreen(presentation, () => this.dismissPresentedPage());
+    const inFront = signal(true);
+    const { ref, unbind } = this.createPage(
+      component,
+      route,
+      environmentInjector,
+      screen,
+      inFront,
+      PRESENTED,
+    );
+    this.fillScreen(screen);
+    // Subscribed now, so it is the newest answer and the first asked: a back dismisses the page
+    // before it pops anything in the tab under it.
+    const stopBack = back.handle(() => this.dismissPresentedPage());
+    this.presentedPage = {
+      route,
+      ref,
+      screen,
+      detached: false,
+      unbind,
+      presentation,
+      inFront,
+      stopBack,
+    };
+  }
+
+  /** The router left the presented page: take it off the stack. */
+  private dropPresentedPage(): void {
+    const page = this.presentedPage;
+    if (!page) return;
+    this.presentedPage = null;
+    page.stopBack();
+    this.drop(page);
+  }
+
+  /**
+   * Take the router off the presented page, for a back or for a sheet the user swiped away: one
+   * entry back where that is the url without the page, and otherwise a navigation to that url in
+   * place of this entry, since something under the page was navigated while it was up.
+   */
+  private dismissPresentedPage(): boolean {
+    if (!this.presentedPage || !this.router) return false;
+    const without = withoutPresented(this.router, this.router.url);
+    if (this.historyUrl(-1) === without) this.location.historyGo(-1);
+    else void this.router.navigateByUrl(without, { replaceUrl: true });
+    return true;
   }
 
   /** The screens currently in the stack, oldest first. Exposed for tests. */
@@ -316,13 +425,14 @@ export class NativeStackOutlet implements RouterOutletContract, OnInit {
     environmentInjector: EnvironmentInjector,
     screen: unknown,
     inFront: WritableSignal<boolean>,
+    outlet = this.name,
   ): { ref: ComponentRef<unknown>; unbind: () => void } {
     let ref: ComponentRef<unknown> | undefined;
     let unbind: (() => void) | undefined;
     try {
       ref = createComponent(component, {
         environmentInjector,
-        elementInjector: this.outletInjector(route, inFront, screen),
+        elementInjector: this.outletInjector(route, inFront, screen, outlet),
         hostElement: screen as Element,
       });
       this.applicationRef.attachView(ref.hostView);
@@ -548,7 +658,10 @@ export class NativeStackOutlet implements RouterOutletContract, OnInit {
     }
   }
 
-  private createScreen(presentation?: ScreenPresentation): unknown {
+  private createScreen(
+    presentation?: ScreenPresentation,
+    dismissed = (count: number) => this.onNativeDismiss(count),
+  ): unknown {
     const screen = ownHost(this.renderer.createElement('screen'));
     this.fillScreen(screen);
     // Set once and never lowered: see the note at the top of this file.
@@ -560,7 +673,7 @@ export class NativeStackOutlet implements RouterOutletContract, OnInit {
       screen,
       'dismissed',
       (event: { nativeEvent?: { dismissCount?: number } }) =>
-        this.onNativeDismiss(event?.nativeEvent?.dismissCount ?? 1),
+        dismissed(event?.nativeEvent?.dismissCount ?? 1),
     );
     // Every key is a prop `RNSScreen` already declares, spelled the way the codegen spec spells
     // it, so this forwards rather than translates. Set before the screen joins the stack: the
@@ -758,6 +871,7 @@ export class NativeStackOutlet implements RouterOutletContract, OnInit {
     route: ActivatedRoute,
     inFront: WritableSignal<boolean>,
     screen: unknown,
+    outlet = this.name,
   ): Injector {
     const outer = this.injector.get(SCREEN_IN_FRONT);
     return Injector.create({
@@ -774,7 +888,7 @@ export class NativeStackOutlet implements RouterOutletContract, OnInit {
         { provide: ActivatedRoute, useValue: route },
         {
           provide: ChildrenOutletContexts,
-          useValue: this.parentContexts.getOrCreateContext(this.name).children,
+          useValue: this.parentContexts.getOrCreateContext(outlet).children,
         },
       ],
     });

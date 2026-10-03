@@ -17,6 +17,7 @@ import {
   type Route,
 } from '@angular/router';
 import { intentOf } from './native-navigation.ts';
+import { PRESENTED } from './presented-route.ts';
 import { isScreenRoute, isTabRoute } from './tab-routes.ts';
 
 /**
@@ -93,6 +94,8 @@ export class NativeStackReuseStrategy extends BaseRouteReuseStrategy {
    */
   override shouldDetach(route: ActivatedRouteSnapshot): boolean {
     if (route.component === null) return false;
+    // A page presented over the tabs is dismissed, not kept: nothing goes back to it.
+    if (route.outlet === PRESENTED) return false;
     return (
       route.children.length === 0 ||
       isTabRoute(route.routeConfig) ||

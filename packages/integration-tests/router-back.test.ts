@@ -13,7 +13,15 @@ import { fileURLToPath } from 'node:url';
 import type { Type } from '@angular/core';
 import { NavigationEnd, Router, type Routes } from '@angular/router';
 import { HardwareBack } from '@ng-native/device';
-import { cleanup, render, screen, settle } from '@ng-native/testing';
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  settle,
+  type FakeFabric,
+  type FakeFabricNode,
+} from '@ng-native/testing';
 import { NativeNavigation } from '../router/src/native-navigation.ts';
 import { provideNativeRouter } from '../router/src/provide-native-router.ts';
 import { compileFixture } from './compile.ts';
@@ -22,6 +30,7 @@ describe('going back in an app with tabs', () => {
   let mod: Record<string, unknown>;
   let router: Router;
   let navigation: NativeNavigation;
+  let fabric: FakeFabric;
   /** Every handler the app gave the button, oldest first, as React Native holds them. */
   let handlers: (() => boolean)[];
 
@@ -57,6 +66,7 @@ describe('going back in an app with tabs', () => {
         },
       ],
     });
+    fabric = app.fabric;
     router = app.componentRef.injector.get(Router);
     navigation = app.componentRef.injector.get(NativeNavigation);
     await settle();
@@ -100,6 +110,100 @@ describe('going back in an app with tabs', () => {
     events.unsubscribe();
     assert.equal(ended, 1);
     assert.equal(router.url, '/library/7');
+  });
+
+  describe('presenting a page of another tab', () => {
+    /** The screens of the app's own stack, as native has them: the bar, then what is over it. */
+    const rootScreens = () => {
+      const all = (nodes: readonly FakeFabricNode[]): FakeFabricNode[] =>
+        nodes.flatMap((node) => [node, ...all(node.children)]);
+      const stack = all(fabric.committed).find((node) => node.viewName === 'RNSScreenStack')!;
+      return stack.children.filter((node) => node.viewName === 'RNSScreen');
+    };
+
+    it('shows it over the tab that asked, and leaves its own tab unopened', async () => {
+      assert.equal(await navigation.present('/library/7', { as: 'modal' }), true);
+      await settle();
+
+      assert.ok(screen.getByText('album'), 'the page is shown');
+      assert.equal(screen.queryByText('library'), null, 'in no stack of the library tab');
+      assert.equal(router.url, '/home(presented:library/7)', 'and the tab in front is still home');
+      const screens = rootScreens();
+      assert.equal(screens.length, 2, 'on the app s own stack, over the bar');
+      assert.equal(screens[1]!.props['stackPresentation'], 'modal');
+    });
+
+    it('gives the page its params, and goes back to the tab it was presented over', async () => {
+      await navigation.present('/search/cats', { as: 'formSheet' });
+      await settle();
+      assert.equal(rootScreens()[1]!.props['stackPresentation'], 'formSheet');
+      const route = router.routerState.root.children.find((child) => child.outlet === 'presented');
+      assert.deepEqual(route?.snapshot.params, { q: 'cats' });
+
+      navigation.back();
+      await settle();
+      await settle();
+      assert.equal(router.url, '/home');
+      assert.equal(screen.queryByText('result'), null);
+      assert.equal(rootScreens().length, 1);
+    });
+
+    it('is dismissed by the swipe that dismisses a sheet', async () => {
+      await navigation.present('/library/7', { as: 'modal' });
+      await settle();
+      await fireEvent(rootScreens()[1]!, 'dismissed', { dismissCount: 1 });
+      await settle();
+      assert.equal(router.url, '/home');
+      assert.equal(rootScreens().length, 1);
+    });
+
+    it('is left behind by a push from it, which goes to its url s own tab', async () => {
+      await go('/library');
+      await go('/home');
+      await navigation.present('/search/cats', { as: 'modal' });
+      await settle();
+      await navigation.push('/library/7');
+      await settle();
+      assert.equal(router.url, '/library/7');
+      assert.equal(screen.queryByText('result'), null, 'the page is dismissed');
+      assert.equal(rootScreens().length, 1);
+    });
+
+    it('is left behind by a link relative to it, which goes where the link leads', async () => {
+      await navigation.present('/library/7', { as: 'modal' });
+      await settle();
+      const page = router.routerState.root.children.find((child) => child.outlet === 'presented');
+      assert.equal(await navigation.push(['..', '9'], { relativeTo: page }), true);
+      await settle();
+      assert.equal(router.url, '/library/9');
+      assert.equal(rootScreens().length, 1);
+    });
+
+    it('is replaced by the next page presented', async () => {
+      await navigation.present('/search/cats', { as: 'modal' });
+      await settle();
+      await navigation.present('/library/7', { as: 'modal' });
+      await settle();
+      assert.equal(router.url, '/home(presented:library/7)');
+      assert.equal(rootScreens().length, 2);
+
+      navigation.back();
+      await settle();
+      await settle();
+      assert.equal(router.url, '/home');
+      assert.equal(rootScreens().length, 1);
+    });
+
+    it('still presents a page of the tab in front, or of no tab, where its url puts it', async () => {
+      await go('/library');
+      await navigation.present('/library/7', { as: 'modal' });
+      await settle();
+      assert.equal(router.url, '/library/7');
+
+      await navigation.present('/detail/1', { as: 'modal' });
+      await settle();
+      assert.equal(router.url, '/detail/1');
+    });
   });
 
   it('pops the stack in front after a trip to another tab, rather than going back to that tab', async () => {

@@ -33,6 +33,8 @@ export interface PoppableStack {
 export interface TabBar {
   /** The url of the tab `url` is a page inside, when that tab has not been opened. */
   unopenedTabOf(url: string): string | null;
+  /** Whether `url` is a tab other than the one in front, or a page inside one. */
+  behind(url: string): boolean;
 }
 
 @Service()
@@ -63,6 +65,17 @@ export class NativeBack {
     }
     return null;
   }
+
+  /** Whether `url` belongs to a tab that is not the one in front. */
+  inTabBehind(url: string): boolean {
+    return this.tabBars.some((bar) => bar.behind(url));
+  }
+
+  /**
+   * Whether the app's own stack takes a page presented over whatever is showing. Set by the root
+   * stack outlet for as long as there is one: see `presented-route.ts`.
+   */
+  presents = false;
 
   /** Offer a stack for popping several screens at once. Returns an unsubscribe. */
   addStack(stack: PoppableStack): () => void {
