@@ -46,9 +46,9 @@ purpose: both forms declare a root-scoped service, and a test resolves either th
 
 ## A service on its own
 
-A service with no component to render goes through `injectService()`. It creates the service in a
-fresh app's root injector, built with the `providers` given, so a `@Service()` and every root
-service it injects resolve as they do in the app. There is no `TestBed` to configure, and
+A service with no component to render goes through `injectService()`. It creates the service in an
+app's root injector, built with the `providers` given, so a `@Service()` and every root service it
+injects resolve as they do in the app. There is no `TestBed` to configure, and
 `Injector.create()` does not stand in for one: an injector made that way has no root scope, so it
 finds no `@Service()` or `providedIn: 'root'` class.
 
@@ -75,5 +75,36 @@ it('tests a service on its own', async () => {
 });
 ```
 
-`cleanup()` destroys the app, which runs the service's `DestroyRef` callbacks, just as it unmounts
-a render.
+The calls in one test share that app, so a second call returns the service the first one's service
+injected:
+
+```ts
+import { Service, inject, signal } from '@angular/core';
+import { injectService } from '@ng-native/testing';
+import { expect, it } from 'vitest';
+
+@Service()
+class Counter {
+  readonly count = signal(0);
+}
+
+@Service()
+class Clicker {
+  private readonly counter = inject(Counter);
+  click = () => this.counter.count.update((n) => n + 1);
+}
+
+it('drives one service and reads another', () => {
+  const clicker = injectService(Clicker);
+  const counter = injectService(Counter);
+
+  clicker.click();
+
+  expect(counter.count()).toBe(1);
+});
+```
+
+A call with `providers` starts a new app, which the calls after it use. The app ends with its test:
+the next test starts another whether or not `cleanup()` ran, so one test never sees another's
+services. `cleanup()` destroys the app, which runs the service's `DestroyRef` callbacks, just as it
+unmounts a render.

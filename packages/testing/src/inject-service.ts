@@ -27,15 +27,40 @@ class ServiceHost {}
 const apps: ApplicationRef[] = [];
 
 /**
- * The instance of `token` from a fresh app's root injector, built with `providers`. The app is
- * destroyed by `cleanup()`, which ends the service's `DestroyRef`.
+ * Which test is running, as the runner's setup counts them: `runner/setup.mjs` under Vitest and
+ * `runner/register.mjs` under `node:test` each add one after every test. Undefined where neither
+ * ran, and then nothing says where one test ends and the next begins.
+ */
+const TEST = Symbol.for('ng-native.testing.test');
+const currentTest = (): unknown => (globalThis as Record<symbol, unknown>)[TEST];
+
+/** The app the calls in the running test share, and the test it was made in. */
+let shared: { readonly app: ApplicationRef; readonly test: unknown } | null = null;
+
+/**
+ * The instance of `token` from an app's root injector.
+ *
+ * The calls in one test share an app, so a service and the services it injects are the ones a
+ * later call returns, as they share a root in the app. A call with `providers` starts a new app,
+ * which the calls after it use. The app ends with its test: the next test starts another, whether
+ * or not `cleanup()` was called, so one test never sees another's services. `cleanup()` destroys
+ * every app, which ends each service's `DestroyRef`.
+ *
+ * Where the runner's setup did not run, there is no telling one test from the next, and every
+ * call makes an app of its own.
  */
 export function injectService<T>(token: ProviderToken<T>, options: InjectServiceOptions = {}): T {
-  const { applicationRef } = mount(1, ServiceHost, createFakeFabric(), {
-    providers: options.providers,
-  });
+  const test = currentTest();
+  const reusable = options.providers === undefined && test !== undefined && shared?.test === test;
+  const app = reusable ? shared!.app : appWith(options.providers);
+  if (test !== undefined) shared = { app, test };
+  return app.injector.get(token);
+}
+
+function appWith(providers: InjectServiceOptions['providers']): ApplicationRef {
+  const { applicationRef } = mount(1, ServiceHost, createFakeFabric(), { providers });
   apps.push(applicationRef);
-  return applicationRef.injector.get(token);
+  return applicationRef;
 }
 
 /**
@@ -43,6 +68,7 @@ export function injectService<T>(token: ProviderToken<T>, options: InjectService
  * not stop the rest: each app is destroyed, then the first error is thrown.
  */
 export function destroyServiceApps(): void {
+  shared = null;
   const errors: unknown[] = [];
   for (const app of apps.splice(0)) {
     try {

@@ -46,12 +46,41 @@ describe('injectService', () => {
     expect(injectService(Scheme, { providers: [sourceOf('dark')] }).current).toBe('dark');
   });
 
-  it('gives each call an app of its own', () => {
-    const first = injectService(Scheme, { providers: [sourceOf('dark')] });
-    const second = injectService(Scheme);
+  it('gives a second call the app the first one made, so two services share a root', () => {
+    const scheme = injectService(Scheme);
+    const clock = injectService(Clock);
 
-    expect(second).not.toBe(first);
-    expect(second.current).toBe('light');
+    expect(scheme.clock).toBe(clock);
+    expect(injectService(Scheme)).toBe(scheme);
+  });
+
+  it('keeps to the app a call with providers made, for the calls after it', () => {
+    const scheme = injectService(Scheme, { providers: [sourceOf('dark')] });
+
+    expect(injectService(Scheme)).toBe(scheme);
+    expect(injectService(Clock)).toBe(scheme.clock);
+  });
+
+  it('starts a new app for a call with providers, which the calls after it then use', () => {
+    const light = injectService(Scheme);
+    const dark = injectService(Scheme, { providers: [sourceOf('dark')] });
+
+    expect(dark).not.toBe(light);
+    expect(dark.current).toBe('dark');
+    expect(injectService(Scheme)).toBe(dark);
+  });
+
+  it('starts a new app for an empty list of providers too', () => {
+    const first = injectService(Scheme);
+
+    expect(injectService(Scheme, { providers: [] })).not.toBe(first);
+  });
+
+  it('starts again after cleanup', () => {
+    const before = injectService(Scheme);
+    cleanup();
+
+    expect(injectService(Scheme)).not.toBe(before);
   });
 
   it("ends the service's DestroyRef on cleanup", () => {
@@ -97,5 +126,19 @@ describe('injectService', () => {
   it('finds a service Injector.create cannot', () => {
     expect(() => Injector.create({ providers: [sourceOf('dark')] }).get(Scheme)).toThrow(/NG0201/);
     expect(injectService(Scheme, { providers: [sourceOf('dark')] }).current).toBe('dark');
+  });
+});
+
+describe('injectService, in a file that never calls cleanup', () => {
+  let earlier: Scheme | undefined;
+
+  it('makes an app in one test', () => {
+    earlier = injectService(Scheme);
+    expect(injectService(Scheme)).toBe(earlier);
+  });
+
+  it("and another in the next, which cannot see the first one's services", () => {
+    expect(earlier).toBeDefined();
+    expect(injectService(Scheme)).not.toBe(earlier);
   });
 });

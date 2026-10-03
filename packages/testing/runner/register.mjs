@@ -15,3 +15,14 @@ createRequire(import.meta.url)('@ng-native/metro/polyfills/animation-globals.js'
 globalThis.__DEV__ ??= true;
 
 register('./loader.mjs', import.meta.url);
+
+// Tells `injectService` where one test ends and the next begins. See `setup.mjs`. Only under
+// `node --test`: a hook starts the test runner, which a script run through this file is not for.
+if (process.env.NODE_TEST_CONTEXT || process.execArgv.some((arg) => arg.startsWith('--test'))) {
+  const { afterEach } = await import('node:test');
+  const TEST = Symbol.for('ng-native.testing.test');
+  globalThis[TEST] = 0;
+  afterEach(() => {
+    globalThis[TEST]++;
+  });
+}
