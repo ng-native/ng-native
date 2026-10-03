@@ -83,6 +83,52 @@ providers: [{ provide: Crypto.SOURCE, useValue: { randomUUID: () => 'test-id' } 
 A database has no token: `openDatabasesWith()` points `database()` at a stand-in. See
 [Database](/packages/expo/database#in-a-test).
 
+## A module with no service
+
+An Expo module this package has no service for, `expo-print` or `expo-contacts`, has no React in
+it and works as it is. What does not work is its documented import in a file a test loads:
+`import * as Print from 'expo-print'` evaluates the package, the package imports `react-native`,
+and a test in Node fails while the module graph loads, with `Flow is not supported`, whether or
+not the test prints anything.
+
+Load it where it is used instead, as this package's own services do: a token whose factory calls
+`expoModule()`, and a service that injects it.
+
+```ts
+import { InjectionToken, Service, inject } from '@angular/core';
+import { expoModule } from '@ng-native/expo';
+
+interface NativePrint {
+  printToFileAsync(options: { html: string }): Promise<{ uri: string }>;
+}
+
+export const PRINT = new InjectionToken<NativePrint | null>('app.print', {
+  factory: () => expoModule('expo-print', () => require('expo-print') as NativePrint),
+});
+
+@Service()
+export class Printer {
+  private readonly native = inject(PRINT);
+
+  async toFile(html: string): Promise<string | null> {
+    return (await this.native?.printToFileAsync({ html }))?.uri ?? null;
+  }
+}
+```
+
+The `require` runs when the token is first injected rather than when the file loads. In a test
+`expoModule()` answers `null`, so the service is inert, and a test that wants an answer provides
+one under the token.
+
+```ts
+providers: [
+  { provide: PRINT, useValue: { printToFileAsync: async () => ({ uri: 'file:///out.pdf' }) } },
+];
+```
+
+The interface is the part of the module the app calls, written by hand or taken from the
+package's own types with `import type`, which a test does not evaluate.
+
 ## Whether a feature is available
 
 A service that can say whether its feature is there says it as `available`, in one of three shapes,

@@ -7,7 +7,9 @@ summary: Register an Expo module's view, or a community library's, as an element
 
 Most Expo modules need nothing from this package: `requireNativeModule`, `EventEmitter`,
 `SharedObject` and `SharedRef` have no React in them, so a module that only calls into native is
-imported and used as its own documentation says. What needs something is a module that _renders_.
+used as its own documentation says, loaded as
+[A module with no service](/packages/expo/using-a-module#a-module-with-no-service) shows so that a
+test can load the file. What needs something is a module that _renders_.
 Its React wrapper reaches the Fabric component through `requireNativeViewManager`, which caches a
 host component, builds a view config for React's renderer, and derives the Fabric component's
 name from the module name. None of the React parts are reachable without React, and none of them
