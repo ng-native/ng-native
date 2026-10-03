@@ -21,10 +21,6 @@ import {
 /** The root outlet a page of another tab is presented in. */
 export const PRESENTED = 'presented';
 
-/** A lazily loaded route's children, once the router has loaded them. */
-const loaded = (route: Route): Routes | undefined =>
-  (route as { _loadedRoutes?: Routes })._loadedRoutes;
-
 /**
  * How many of `segments` a route's path takes, or null when it does not match them or is one this
  * does not follow: a redirect, a custom matcher, a wildcard, or a route of another outlet.
@@ -41,23 +37,49 @@ function taken(route: Route, segments: readonly string[]): number | null {
   return matches ? parts.length : null;
 }
 
-/** Whether a route is a page of its own: a component, and no children to choose among. */
-const isPage = (route: Route, children: Routes | undefined): boolean =>
-  !children && Boolean(route.component || route.loadComponent);
+/** The children each lazily loaded route answered with, or null when they are not plain routes. */
+const lazyChildren = new WeakMap<Route, Promise<Routes | null>>();
+
+/**
+ * A route's children, loading them when they are lazy. The router loads them again when it
+ * navigates, from the same function, which a dynamic import answers from its cache.
+ *
+ * ponytail: a loader that answers routes, or a module whose default export is routes, as
+ * `loadChildren: () => import('./invoices.routes')` does. An NgModule or an observable falls back
+ * to presenting the page where its url puts it.
+ */
+function childrenOf(route: Route): Promise<Routes | null> | Routes | undefined {
+  if (route.children || !route.loadChildren) return route.children;
+  let loading = lazyChildren.get(route);
+  if (!loading) {
+    loading = Promise.resolve()
+      .then(() => (route.loadChildren as () => unknown)())
+      .then((answer) => {
+        const routes = (answer as { default?: unknown } | null)?.default ?? answer;
+        return Array.isArray(routes) ? (routes as Routes) : null;
+      })
+      // A loader that fails is the router's to report, when it navigates there as before.
+      .catch(() => null);
+    lazyChildren.set(route, loading);
+  }
+  return loading;
+}
 
 /**
  * The routes from the root to the one that shows `segments`, or null when the config has none
- * this can follow, a lazy route whose children are not loaded yet among them.
+ * this can follow.
  */
-function chainTo(routes: Routes, segments: readonly string[]): Route[] | null {
+async function chainTo(routes: Routes, segments: readonly string[]): Promise<Route[] | null> {
   for (const route of routes) {
     const count = taken(route, segments);
     if (count === null) continue;
     const rest = segments.slice(count);
-    const children = route.children ?? loaded(route);
-    const inside = children && chainTo(children, rest);
+    const children = await childrenOf(route);
+    if (children === null) return null;
+    const inside = children && (await chainTo(children, rest));
     if (inside) return [route, ...inside];
-    if (!rest.length && isPage(route, children)) return [route];
+    // A page of its own: a component, and no children to choose among.
+    if (!rest.length && !children && (route.component || route.loadComponent)) return [route];
   }
   return null;
 }
@@ -72,6 +94,8 @@ function presentedCopy(chain: readonly Route[]): Route {
   const above = chain.slice(0, -1);
   return {
     ...page,
+    // Its own children are in the copy by now, where they were lazy.
+    loadChildren: undefined,
     path: chain
       .map((route) => route.path)
       .filter(Boolean)
@@ -98,9 +122,9 @@ const copies = new WeakMap<Router, Set<string>>();
  * The commands that present the page at `path` in the root's presented outlet, having given its
  * route a copy there, or null when the config is not one this follows.
  */
-export function presentedCommands(router: Router, path: string): unknown[] | null {
+export async function presentedCommands(router: Router, path: string): Promise<unknown[] | null> {
   const segments = path.split('/').filter(Boolean);
-  const chain = chainTo(router.config, segments);
+  const chain = await chainTo(router.config, segments);
   if (!chain) return null;
   const copy = presentedCopy(chain);
   const known = copies.get(router) ?? new Set<string>();

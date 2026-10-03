@@ -73,6 +73,8 @@ export const routes: Routes = [
         component: TabStack,
         children: [
           { path: '', component: Search },
+          // Loaded lazily, as a feature's own routes are: its page is under a route with no component.
+          { path: 'saved/:q', loadChildren: () => [{ path: '', component: Result }] },
           { path: ':q', component: Result },
         ],
       },

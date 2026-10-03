@@ -148,6 +148,22 @@ describe('going back in an app with tabs', () => {
       assert.equal(rootScreens().length, 1);
     });
 
+    it('presents a lazily loaded page the same way, the first time as every other', async () => {
+      for (const time of ['first', 'second']) {
+        assert.equal(await navigation.present('/search/saved/cats', { as: 'modal' }), true, time);
+        await settle();
+        assert.equal(router.url, '/home(presented:search/saved/cats)', time);
+        assert.ok(screen.getByText('result'), time);
+        assert.equal(rootScreens().length, 2, time);
+
+        navigation.back();
+        await settle();
+        await settle();
+        assert.equal(router.url, '/home', time);
+        assert.equal(rootScreens().length, 1, time);
+      }
+    });
+
     it('is dismissed by the swipe that dismisses a sheet', async () => {
       await navigation.present('/library/7', { as: 'modal' });
       await settle();

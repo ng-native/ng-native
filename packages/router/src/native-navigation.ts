@@ -95,11 +95,17 @@ export class NativeNavigation {
    */
   present(commands: NavigationCommands, options: PresentOptions = {}): Promise<boolean> {
     const { as = 'modal', presentation, ...extras } = options;
-    const over = this.overTheTabInFront(commands, extras);
-    return this.go(over?.commands ?? commands, over?.extras ?? extras, {
+    const intent: NativeIntent = {
       stack: 'push',
       presentation: { stackPresentation: as, ...presentation },
-    });
+    };
+    // Asked at once, and only waited for when the page is another tab's: finding its route may
+    // load a lazy one.
+    const over = this.overTheTabInFront(commands, extras);
+    if (!over) return this.go(commands, extras, intent);
+    return over.then((found) =>
+      this.go(found?.commands ?? commands, found?.extras ?? extras, intent),
+    );
   }
 
   /**
@@ -228,14 +234,15 @@ export class NativeNavigation {
   private overTheTabInFront(
     commands: NavigationCommands,
     extras: NavigationExtras,
-  ): { commands: unknown[]; extras: NavigationExtras } | null {
+  ): Promise<{ commands: unknown[]; extras: NavigationExtras } | null> | null {
     if (!this.outlets.presents) return null;
     const path = this.pathFor(commands, extras);
     if (!this.outlets.inTabBehind(path)) return null;
-    const presented = presentedCommands(this.router, path);
-    if (!presented) return null;
     const query = typeof commands === 'string' ? this.queryOf(commands, extras) : {};
-    return { commands: presented, extras: { ...extras, ...query, relativeTo: null } };
+    return presentedCommands(this.router, path).then(
+      (presented) =>
+        presented && { commands: presented, extras: { ...extras, ...query, relativeTo: null } },
+    );
   }
 
   /**

@@ -42,9 +42,9 @@ const tabs = (): Routes => [
 ];
 
 describe('the route a presented page gets at the root', () => {
-  it('is the page under its whole path, with the guards, providers and data above it', () => {
+  it('is the page under its whole path, with the guards, providers and data above it', async () => {
     const router = routerWith(tabs());
-    assert.deepEqual(presentedCommands(router, '/invoices/7'), [
+    assert.deepEqual(await presentedCommands(router, '/invoices/7'), [
       { outlets: { [PRESENTED]: ['invoices', '7'] } },
     ]);
     const copy = router.config.at(-1) as Route;
@@ -56,31 +56,71 @@ describe('the route a presented page gets at the root', () => {
     assert.deepEqual(copy.data, { section: 'billing', kind: 'detail' });
   });
 
-  it('is made once for a path, however many times a page of it is presented', () => {
+  it('is made once for a path, however many times a page of it is presented', async () => {
     const router = routerWith(tabs());
-    presentedCommands(router, '/invoices/7');
-    presentedCommands(router, '/invoices/8');
+    await presentedCommands(router, '/invoices/7');
+    await presentedCommands(router, '/invoices/8');
     assert.equal(router.config.length, 2);
   });
 
-  it('is the first screen of a tab, for the tab s own url', () => {
+  it('is the first screen of a tab, for the tab s own url', async () => {
     const router = routerWith(tabs());
-    presentedCommands(router, '/invoices');
+    await presentedCommands(router, '/invoices');
     assert.equal((router.config.at(-1) as Route).component, List);
     assert.equal((router.config.at(-1) as Route).path, 'invoices');
   });
 
-  it('leaves alone a url it cannot follow through the config', () => {
+  it('is a page inside a lazily loaded route, whose routes it loads to find it', async () => {
+    let loads = 0;
+    const load = async () => {
+      loads++;
+      return { default: [{ path: ':id', component: Detail, data: { kind: 'detail' } }] };
+    };
+    const router = routerWith([
+      {
+        path: '',
+        component: Bar,
+        children: [{ path: 'orders', loadChildren: load, canActivate: [signedIn] }],
+      },
+    ]);
+    for (const id of ['7', '8']) {
+      assert.deepEqual(await presentedCommands(router, `/orders/${id}`), [
+        { outlets: { [PRESENTED]: ['orders', id] } },
+      ]);
+    }
+    const copy = router.config.at(-1) as Route;
+    assert.equal(copy.path, 'orders/:id');
+    assert.equal(copy.component, Detail);
+    assert.equal(copy.loadChildren, undefined);
+    assert.deepEqual(copy.canActivate, [signedIn]);
+    assert.equal(loads, 1, 'loaded once for the copy, however many times it is presented');
+    assert.equal(router.config.length, 2);
+  });
+
+  it('leaves alone lazy routes that are not plain routes, or that fail to load', async () => {
+    class FeatureModule {}
+    for (const loadChildren of [
+      async () => FeatureModule,
+      async () => {
+        throw new Error('offline');
+      },
+    ]) {
+      const router = routerWith([{ path: 'lazy', loadChildren }] as Routes);
+      assert.equal(await presentedCommands(router, '/lazy/1'), null);
+      assert.equal(router.config.length, 1);
+    }
+  });
+
+  it('leaves alone a url it cannot follow through the config', async () => {
     for (const config of [
       [{ path: 'old', redirectTo: 'new' }],
       [{ path: '**', component: Detail }],
       [{ matcher: () => null, component: Detail }],
-      [{ path: 'lazy', loadChildren: async () => [] }],
       [{ path: 'other', component: Detail }],
     ] as Routes[]) {
       const router = routerWith(config);
       const path = `/${config[0]!.path === '**' ? 'anything' : (config[0]!.path ?? 'x')}/1`;
-      assert.equal(presentedCommands(router, path), null, JSON.stringify(config[0]!.path));
+      assert.equal(await presentedCommands(router, path), null, JSON.stringify(config[0]!.path));
       assert.equal(router.config.length, 1, 'and adds nothing');
     }
   });
