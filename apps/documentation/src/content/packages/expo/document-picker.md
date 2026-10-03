@@ -47,7 +47,8 @@ export class Attach {
 ```
 
 To read what was picked, open its uri with [`FileSystem`](/packages/expo/file-system#fileuri):
-`await inject(FileSystem).file(file.uri).text()`, or `.bytes()` for anything that is not text.
+`await this.files.file(file.uri).text()`, with `files = inject(FileSystem)` as a field of the
+component, or `.bytes()` for anything that is not text.
 
 ## What it does
 
