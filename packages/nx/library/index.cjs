@@ -198,7 +198,9 @@ function emitsDeclarationsOnly(tree, file) {
  */
 function emitOptions(tree, file, seen) {
   if (seen.has(file) || !tree.exists(file)) return {};
-  seen.add(file);
+  // The configs on the way here, to stop at a cycle. Not every config read: two entries of a list
+  // may share an ancestor, and each is read whole.
+  const above = new Set(seen).add(file);
   const { compilerOptions = {}, extends: base = [] } = readJson(tree, file);
   // ponytail: a config that comes from a package is not followed, so a library under one keeps
   // `.js`. Resolve the specifier from the config's directory if a workspace needs it.
@@ -206,7 +208,7 @@ function emitOptions(tree, file, seen) {
     .flat()
     .filter((from) => typeof from === 'string' && from.startsWith('.'))
     .map((from) => joinPathFragments(path.dirname(file), from))
-    .map((from) => emitOptions(tree, from.endsWith('.json') ? from : `${from}.json`, seen));
+    .map((from) => emitOptions(tree, from.endsWith('.json') ? from : `${from}.json`, above));
   const { noEmit, emitDeclarationOnly } = compilerOptions;
   return Object.assign(
     {},

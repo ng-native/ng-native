@@ -419,6 +419,23 @@ describe('in the TypeScript preset', () => {
     assert.equal(index, TS);
   });
 
+  it('reads each config in a list whole, a shared ancestor included', async () => {
+    const tree = tsPreset();
+    // `first` turns its ancestor's noEmit on; `second`, later in the list, inherits it off.
+    writeJson(tree, 'shared.json', { compilerOptions: { noEmit: false } });
+    writeJson(tree, 'first.json', { extends: './shared.json', compilerOptions: { noEmit: true } });
+    writeJson(tree, 'second.json', { extends: './shared.json' });
+    lib = { extends: ['../../first.json', '../../second.json'], emit: {} };
+    try {
+      await generate(tree, { directory: 'packages/ui' });
+    } finally {
+      lib = STOCK_LIB;
+    }
+    const { compilerOptions } = readJson(tree, 'packages/ui/tsconfig.lib.json');
+    assert.equal(compilerOptions.allowImportingTsExtensions, undefined);
+    assert.equal(tree.read('packages/ui/src/index.ts', 'utf-8'), JS);
+  });
+
   it("takes the library's own noEmit: false over a base that emits nothing", async () => {
     const { tree, option, index } = await generated({ noEmit: true }, { emit: { noEmit: false } });
     assert.equal(option, undefined);
