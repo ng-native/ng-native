@@ -234,7 +234,7 @@ the next item to take its views arrives already open, since a recycled row keeps
 A long press for a menu is `(longPress)` on the row's `<pressable>` with
 [`Dialogs.choose()`](/packages/device/dialogs). On iOS the system's own context menu, which lifts
 the row and shows a preview, is [`UiContextMenu`](/packages/expo/expo-ui#a-context-menu), with the
-row as its trigger inside a `<ui-rn-host>`.
+row as its trigger inside a `<ui-view-host>`.
 
 ### Padding and gaps
 

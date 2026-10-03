@@ -124,7 +124,7 @@ export class UiMenu {
  * the SwiftUI or Compose view around it offers.
  */
 @Component({
-  selector: 'ui-rn-host',
+  selector: 'ui-view-host',
   template: '<ng-content />',
   host: {
     '[matchContents]': 'matchContents()',
@@ -133,7 +133,7 @@ export class UiMenu {
     '[modifiers]': 'modifiers()',
   },
 })
-export class UiRnHost {
+export class UiViewHost {
   protected readonly nativeView = nativeView();
   readonly matchContents = input<boolean>(undefined, { transform: optionalBoolean });
   /**

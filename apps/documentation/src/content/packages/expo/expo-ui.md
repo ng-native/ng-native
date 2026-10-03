@@ -85,8 +85,9 @@ error. `expo-ui-components.ts` has thin typed components for the views an app re
 - **`UiContextMenu`** - a SwiftUI `contextMenu`, the menu a long press opens, iOS only. Its
   content is three `ui-slot`s: `trigger`, what is always shown; `items`, the menu's buttons; and
   `preview`, shown above the open menu when there is one. See [A context menu](#a-context-menu).
-- **`UiRnHost`** - views of the app's own inside SwiftUI or Compose content, the way back from a
-  `ui-host`. It holds one element; `matchContents` sizes it to that element.
+- **`UiViewHost`** - views of the app's own inside SwiftUI or Compose content, the way back from a
+  `ui-host`: `@expo/ui`'s `RNHostView`. It holds one element; `matchContents` sizes it to that
+  element.
 - **`UiButton`** - a SwiftUI `Button`, as a menu item or on its own. `role` is `'default'`,
   `'cancel'` or `'destructive'`.
 - **`UiDivider`** - a separator between groups of menu items.
@@ -194,7 +195,7 @@ A long press on the trigger lifts it over the dimmed screen and opens the menu b
 ```
 
 The trigger is SwiftUI content, as everything inside a `ui-host` is: `ui-text`, `ui-image`, the
-stacks. A row drawn with the app's own components becomes one inside a `<ui-rn-host>`, which
+stacks. A row drawn with the app's own components becomes one inside a `<ui-view-host>`, which
 hosts views of the app's own in SwiftUI content. The row is laid out and pressed as anywhere
 else, and a long press lifts it and opens the menu:
 
@@ -204,11 +205,11 @@ else, and a long press lifts it and opens the menu:
   <ui-host ignoreSafeArea="all" [matchContents]="{ vertical: true }">
     <ui-context-menu>
       <ui-slot name="trigger">
-        <ui-rn-host [matchContents]="true">
+        <ui-view-host [matchContents]="true">
           <pressable class="row" (press)="open(row.item)">
             <text>{{ row.item.label }}</text>
           </pressable>
-        </ui-rn-host>
+        </ui-view-host>
       </ui-slot>
       <ui-slot name="items">
         <ui-button
@@ -229,7 +230,7 @@ else, and a long press lifts it and opens the menu:
 }
 ```
 
-`<ui-rn-host>` holds one element, and `matchContents` sizes it to that element. Each row has a
+`<ui-view-host>` holds one element, and `matchContents` sizes it to that element. Each row has a
 host of its own, sized to the row's height. `ignoreSafeArea="all"` matters in a list: a host
 keeps clear of the safe area otherwise, and a row that scrolls under the home indicator is pushed
 over the one above it. The menu is SwiftUI's alone, and on Android `ui-context-menu` commits as
@@ -336,7 +337,7 @@ An element registered for `@expo/ui` when it is not installed commits as nothing
 <!-- api: UiHost -->
 <!-- api: UiMenu -->
 <!-- api: UiContextMenu -->
-<!-- api: UiRnHost -->
+<!-- api: UiViewHost -->
 <!-- api: UiButton -->
 <!-- api: UiDivider -->
 <!-- api: UiSlot -->

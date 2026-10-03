@@ -8,7 +8,7 @@ import {
   UiButton,
   UiColorPicker,
   UiContextMenu,
-  UiRnHost,
+  UiViewHost,
   UiForm,
   UiChart,
   UiGauge,
@@ -42,7 +42,7 @@ import {
     UiContextMenu,
     Pressable,
     Text,
-    UiRnHost,
+    UiViewHost,
     UiDatePicker,
     UiDivider,
     UiHost,
@@ -60,10 +60,10 @@ import {
       </ui-menu>
       <ui-context-menu [modifiers]="[{ $type: 'opacity', value: 1 }]">
         <ui-slot name="trigger"
-          ><ui-rn-host [matchContents]="true"
+          ><ui-view-host [matchContents]="true"
             ><pressable (press)="presses.set(presses() + 100)"
               ><text>Row</text></pressable
-            ></ui-rn-host
+            ></ui-view-host
           ></ui-slot
         >
         <ui-slot name="items">
