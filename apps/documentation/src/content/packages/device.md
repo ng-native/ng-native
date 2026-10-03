@@ -72,6 +72,16 @@ it('reads the scheme the source reports', () => {
 The same `providers` work in `render()`, for a component that injects the service. See
 [Testing with services](/packages/testing/testing-services).
 
+## The OS version
+
+`OS_VERSION` is the major version of the operating system the app runs on, for a default that
+follows what the platform draws in that version: `26` on iOS 26.5, and the API level on Android.
+It is `null` on the web and in a test, and a test that wants a version provides one:
+
+```ts
+providers: [{ provide: OS_VERSION, useValue: 26 }];
+```
+
 ## The services
 
 **Screen**

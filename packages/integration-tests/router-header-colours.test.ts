@@ -14,9 +14,11 @@
 import assert from 'node:assert/strict';
 import { before, describe, it } from 'node:test';
 import { fileURLToPath } from 'node:url';
-import type { Type } from '@angular/core';
-import { ColorScheme, type Scheme } from '@ng-native/device';
+import { signal, type Type } from '@angular/core';
+import { ColorScheme, OS_VERSION, type Scheme } from '@ng-native/device';
+import { registerPlatformComponents } from '@ng-native/fabric';
 import { cleanup, render, screen } from '@ng-native/testing';
+import { NATIVE_HEADER_DEFAULTS } from '../router/src/native-bar-defaults.ts';
 import { NATIVE_HEADER_PALETTE } from '../router/src/native-header-palette.ts';
 import { compileFixture } from './compile.ts';
 
@@ -72,6 +74,76 @@ describe('a header nobody gave a colour', () => {
     });
     assert.equal(props['backgroundColor'], '#123456');
     assert.equal(props['color'], '#abcdef');
+  });
+});
+
+describe('a header in an app that asks for the system bar', () => {
+  let mod: Record<string, unknown>;
+
+  before(async () => {
+    mod = await compileFixture(
+      fileURLToPath(new URL('./fixtures/header-colours.ts', import.meta.url)),
+    );
+  });
+
+  const bar = async (name: string, version: number | null, defaults: object | null) => {
+    await render(mod[name] as Type<unknown>, {
+      providers: [
+        { provide: OS_VERSION, useValue: version },
+        ...(defaults ? [{ provide: NATIVE_HEADER_DEFAULTS, useValue: signal(defaults) }] : []),
+      ],
+    });
+    const props = screen.getByTestId('bar').props;
+    cleanup();
+    return props;
+  };
+
+  it('is clear, over the content, with no line under it, on iOS 26', async () => {
+    const props = await bar('HeaderDefault', 26, { systemBar: true });
+    assert.equal(props['backgroundColor'], 'transparent');
+    assert.equal(props['translucent'], true);
+    assert.equal(props['hideShadow'], true);
+    assert.equal(props['color'], 'rgb(10, 10, 10)', 'the foreground is still the palette');
+  });
+
+  it('is the neutral bar where nobody asked, on iOS 26 too', async () => {
+    for (const defaults of [null, {}, { systemBar: false }]) {
+      const props = await bar('HeaderDefault', 26, defaults);
+      assert.equal(props['backgroundColor'], 'rgb(255, 255, 255)');
+      assert.equal(props['translucent'], undefined);
+      assert.equal(props['hideShadow'], undefined);
+    }
+  });
+
+  it('is the neutral bar before iOS 26, and on Android', async () => {
+    const before26 = await bar('HeaderDefault', 18, { systemBar: true });
+    assert.equal(before26['backgroundColor'], 'rgb(255, 255, 255)');
+    assert.equal(before26['translucent'], undefined);
+
+    registerPlatformComponents('android');
+    try {
+      const android = await bar('HeaderDefault', 36, { systemBar: true });
+      assert.equal(android['backgroundColor'], 'rgb(255, 255, 255)');
+      assert.equal(android['translucent'], undefined);
+    } finally {
+      registerPlatformComponents('ios');
+    }
+  });
+
+  it('stays the bar a call site or the defaults gave a background', async () => {
+    const bound = await bar('HeaderBound', 26, { systemBar: true });
+    assert.equal(bound['backgroundColor'], '#ff0000');
+    assert.equal(bound['translucent'], undefined);
+    assert.equal(bound['hideShadow'], undefined);
+
+    const coloured = await bar('HeaderDefault', 26, { systemBar: true, backgroundColor: '#0f0' });
+    assert.equal(coloured['backgroundColor'], '#0f0');
+    assert.equal(coloured['translucent'], undefined);
+  });
+
+  it('gives way to a call site that turns translucency off', async () => {
+    const props = await bar('HeaderLargeOpaque', 26, { systemBar: true });
+    assert.equal(props['translucent'], false);
   });
 });
 

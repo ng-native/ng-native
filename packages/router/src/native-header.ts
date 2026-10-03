@@ -27,7 +27,7 @@
  */
 import { Component, computed, input } from '@angular/core';
 import { ElementRef, inject } from '@angular/core';
-import { ColorScheme } from '@ng-native/device';
+import { ColorScheme, OS_VERSION } from '@ng-native/device';
 import { NATIVE_HEADER_DEFAULTS } from './native-bar-defaults.ts';
 import { NATIVE_HEADER_PALETTE } from './native-header-palette.ts';
 import type { EngineNode } from '@ng-native/fabric';
@@ -81,8 +81,8 @@ export type HeaderInterfaceStyle = 'unspecified' | 'light' | 'dark';
     '[color]': 'resolvedColor()',
     '[blurEffect]': 'blurEffect() ?? defaults().blurEffect',
     '[hidden]': 'hidden()',
-    '[hideShadow]': 'hideShadow() ?? defaults().hideShadow',
-    '[translucent]': 'translucent() ?? defaults().translucent ?? iosLargeTitle()',
+    '[hideShadow]': 'hideShadow() ?? defaults().hideShadow ?? systemBar()',
+    '[translucent]': 'translucent() ?? defaults().translucent ?? iosLargeTitle() ?? systemBar()',
     '[direction]': 'direction()',
     '[topInsetEnabled]': 'topInsetEnabled()',
     '[userInterfaceStyle]': 'userInterfaceStyle() ?? defaults().userInterfaceStyle',
@@ -128,8 +128,29 @@ export class NativeHeader {
    */
   private readonly colours = computed(() => this.palette[this.scheme.current()]);
 
+  /** iOS 26 and later, where the system's own bar is clear and floats over the content. */
+  private readonly glass = nativePlatform() === 'ios' && (inject(OS_VERSION) ?? 0) >= 26;
+
+  /**
+   * Whether the bar is the system's own, which `withHeaderDefaults({ systemBar: true })` asks
+   * for: clear, over the content, with no line under it, where the system blurs what scrolls
+   * beneath and floats the buttons. Only on iOS 26 and later, and only while nothing gave the
+   * bar a background of its own.
+   */
+  protected readonly systemBar = computed(() =>
+    this.glass &&
+    this.defaults().systemBar &&
+    this.backgroundColor() === undefined &&
+    this.defaults().backgroundColor === undefined
+      ? true
+      : undefined,
+  );
+
   protected readonly resolvedBackgroundColor = computed(
-    () => this.backgroundColor() ?? this.defaults().backgroundColor ?? this.colours().background,
+    () =>
+      this.backgroundColor() ??
+      this.defaults().backgroundColor ??
+      (this.systemBar() ? 'transparent' : this.colours().background),
   );
   protected readonly resolvedColor = computed(
     () => this.color() ?? this.defaults().color ?? this.colours().foreground,

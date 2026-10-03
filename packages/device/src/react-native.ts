@@ -105,7 +105,8 @@ export interface ReactNative {
     /** The user's text size setting, as a multiplier. One is the default. */
     getFontScale(): number;
   };
-  Platform: { OS: string };
+  /** `Version` is a string on iOS, `'26.5'`, and the API level, a number, on Android. */
+  Platform: { OS: string; Version?: string | number };
   Share: {
     share(
       content: { message?: string; url?: string; title?: string },

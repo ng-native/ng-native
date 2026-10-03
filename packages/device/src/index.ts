@@ -54,3 +54,4 @@ export {
   type StatusBarStyle,
 } from './status-bar.ts';
 export { SCREEN_IN_FRONT } from './screen-in-front.ts';
+export { OS_VERSION } from './os-version.ts';

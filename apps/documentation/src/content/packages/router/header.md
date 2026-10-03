@@ -160,6 +160,25 @@ providers: [
 Binding `backgroundColor`, `color` or `titleColor` on a particular `<native-header>` still wins
 over the palette - the token only fills in what a call site left unset.
 
+### The system bar on iOS 26
+
+A bar with a background is opaque: the content stops at it, with a hairline under it. Since iOS 26
+the system's own navigation bar is clear instead, with the content scrolling under it and blurring
+out and the buttons floating over it. `withHeaderDefaults` asks for that bar for the whole app:
+
+```ts
+provideNativeRouter(routes, withHeaderDefaults({ systemBar: true }));
+```
+
+Every `<native-header>` with no background of its own is then clear, translucent and unlined on
+iOS 26 and later. Before iOS 26 and on Android it is the neutral bar above, and a header that
+binds `backgroundColor`, or defaults that give one, keep it.
+
+The bar is over the page rather than above it, so the page is built for that: its scroll view is
+the page's body and takes `contentInsetAdjustmentBehavior="automatic"`, which starts the content
+below the bar and lets it scroll under. A page with anything above its scroll view, or with no
+scroll view, starts behind the bar; give that page's header a `backgroundColor`.
+
 ## Defaults for every header
 
 An app whose bars should match its pages would otherwise repeat the same bindings on every
