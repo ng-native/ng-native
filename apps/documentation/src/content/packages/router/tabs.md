@@ -166,9 +166,10 @@ Three things follow from the page being over the tabs rather than in one:
   has none, so it needs its own way out.
 - A `push()` from it, or a link inside it, leaves it: the push goes to its url's own tab, and the
   page is dismissed rather than left covering where the app went.
-- It needs the app's root to be a `<native-stack-outlet>`, the usual shape, with the tab bar as
-  the stack's first screen. Without one, and for a page of the tab in front or of no tab,
-  `present()` shows the page where its url puts it.
+- It needs the app's root to be a `<native-stack-outlet>`, the usual shape, with the tab bar as the
+  stack's first screen. Without one, and for a page of the tab in front or of no tab, `present()`
+  shows the page where its url puts it. So it does for a page behind a `canMatch` guard, on its own
+  route or one above it, which only the route's own place can run.
 
 ## Going back
 

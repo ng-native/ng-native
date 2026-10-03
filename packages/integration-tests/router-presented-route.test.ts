@@ -111,6 +111,23 @@ describe('the route a presented page gets at the root', () => {
     }
   });
 
+  it('leaves alone a page whose route, or one above it, has a canMatch guard', async () => {
+    const allowed = () => false;
+    for (const config of [
+      [{ path: 'admin', canMatch: [allowed], children: [{ path: ':id', component: Detail }] }],
+      [{ path: 'admin', children: [{ path: ':id', component: Detail, canMatch: [allowed] }] }],
+      // A later route that would match is not taken in its place: the guard decides that.
+      [
+        { path: 'admin/:id', component: Detail, canMatch: [allowed] },
+        { path: ':section/:id', component: List },
+      ],
+    ] as Routes[]) {
+      const router = routerWith(config);
+      assert.equal(await presentedCommands(router, '/admin/1'), null);
+      assert.equal(router.config.length, config.length, 'and adds nothing');
+    }
+  });
+
   it('leaves alone a url it cannot follow through the config', async () => {
     for (const config of [
       [{ path: 'old', redirectTo: 'new' }],

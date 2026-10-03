@@ -65,18 +65,33 @@ function childrenOf(route: Route): Promise<Routes | null> | Routes | undefined {
   return loading;
 }
 
+/** A route on the way that the copy cannot stand in for: the search stops, with no copy made. */
+const STOP = Symbol('stop');
+
+/** A route's children, or `STOP` where the copy cannot follow it: see `chainTo`. */
+async function followable(route: Route): Promise<Routes | undefined | typeof STOP> {
+  if (route.canMatch?.length) return STOP;
+  return (await childrenOf(route)) ?? (route.loadChildren ? STOP : undefined);
+}
+
 /**
- * The routes from the root to the one that shows `segments`, or null when the config has none
- * this can follow.
+ * The routes from the root to the one that shows `segments`, null when none of `routes` leads
+ * there, or `STOP` at a route with a `canMatch` guard. The router runs that guard against the
+ * route and the segments it was matched with, which a copy under another path cannot give it,
+ * and leaving it out would let the page match where its own route refuses to.
  */
-async function chainTo(routes: Routes, segments: readonly string[]): Promise<Route[] | null> {
+async function chainTo(
+  routes: Routes,
+  segments: readonly string[],
+): Promise<Route[] | null | typeof STOP> {
   for (const route of routes) {
     const count = taken(route, segments);
     if (count === null) continue;
     const rest = segments.slice(count);
-    const children = await childrenOf(route);
-    if (children === null) return null;
+    const children = await followable(route);
+    if (children === STOP) return STOP;
     const inside = children && (await chainTo(children, rest));
+    if (inside === STOP) return STOP;
     if (inside) return [route, ...inside];
     // A page of its own: a component, and no children to choose among.
     if (!rest.length && !children && (route.component || route.loadComponent)) return [route];
@@ -125,7 +140,7 @@ const copies = new WeakMap<Router, Set<string>>();
 export async function presentedCommands(router: Router, path: string): Promise<unknown[] | null> {
   const segments = path.split('/').filter(Boolean);
   const chain = await chainTo(router.config, segments);
-  if (!chain) return null;
+  if (!chain || chain === STOP) return null;
   const copy = presentedCopy(chain);
   const known = copies.get(router) ?? new Set<string>();
   copies.set(router, known);
