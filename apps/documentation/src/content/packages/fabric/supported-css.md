@@ -239,8 +239,11 @@ color, an `outline-color`, a `background-color` and a `text-decoration-color` of
 the same way, where they are used. `color: currentColor` and `color: inherit` are the color the
 element inherits, as on the web, in a rule or in a `@keyframes` frame. All of them follow the text
 color when it changes. A border shorthand's width may be a `calc()` of one token, as in Bootstrap's
-`border-top: calc(var(--bs-border-width) * 2) solid`. A `border-width` with no color anywhere is
-drawn black, native's default, and the web host draws it black too.
+`border-top: calc(var(--bs-border-width) * 2) solid`, and its color a `color-mix()` of a token, as
+in `border: 1px solid color-mix(in srgb, var(--tint) 35%, transparent)`; with the token unset there
+is no border, as on the web. `currentColor` as a side of such a mix, written or held by a token, is
+the text color where the mix is used. A `border-width` with no color anywhere is drawn black,
+native's default, and the web host draws it black too.
 
 A custom property can hold a font stack (read as its first family, as `font-family` is), a unitless
 line-height, a ratio for `aspect-ratio`, a whole `box-shadow` list, or bare color channels for

@@ -128,7 +128,21 @@ function assertExtra(property: ExtraProperty, style: Record<string, unknown>, br
   const ours = style[EXTRA_KEYS[property]] ?? NATIVE_INITIAL[property];
   const unit = property === 'opacity' ? '' : 'px';
   const value = typeof ours === 'number' ? `${ours}${unit}` : ours;
-  assert.equal(value, browser, property);
+  assert.equal(value, legacyColour(browser), property);
+}
+
+/**
+ * Chrome reports a `color-mix()` in sRGB as `color(srgb 0 0 1 / 0.35)`, channels from 0 to 1.
+ * Native takes the same colour as `rgba(0, 0, 255, 0.35)`.
+ */
+function legacyColour(browser: string): string {
+  const mixed = /^color\(srgb ([\d.]+) ([\d.]+) ([\d.]+)(?: \/ ([\d.]+))?\)$/.exec(browser);
+  if (!mixed) return browser;
+  const channels = mixed.slice(1, 4).map((channel) => Math.round(Number(channel) * 255));
+  const alpha = mixed[4];
+  return alpha === undefined
+    ? `rgb(${channels.join(', ')})`
+    : `rgba(${channels.join(', ')}, ${alpha})`;
 }
 
 /** CSS property name to the React Native style key it lands in. */

@@ -551,6 +551,41 @@
     }
   },
   {
+    "name": "a border whose colour is a color-mix() of a token is drawn in the mix",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "border-top-width": "1px",
+      "border-top-color": "color(srgb 0 0 1 / 0.35)"
+    }
+  },
+  {
+    "name": "a border whose colour is a color-mix() of a token follows the token nearest it",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "border-top-width": "2px",
+      "border-top-color": "color(srgb 1 0.5 0.5)"
+    }
+  },
+  {
+    "name": "a color-mix() of currentColor and a token mixes the colour of the text",
+    "expected": {
+      "color": "rgb(255, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "border-top-width": "1px",
+      "border-top-color": "color(srgb 0.5 0 0.5)"
+    }
+  },
+  {
+    "name": "a border whose colour is a color-mix() of an unset token is no border at all",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "border-top-width": "0px"
+    }
+  },
+  {
     "name": "an outline with no colour is drawn in the colour of the text",
     "expected": {
       "color": "rgb(7, 1, 0)",

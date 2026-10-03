@@ -715,6 +715,40 @@ export const CASES: OracleCase[] = [
     warns: true,
   },
   {
+    name: 'a border whose colour is a color-mix() of a token is drawn in the mix',
+    css:
+      '#probe { --tint: rgb(0, 0, 255); ' +
+      'border: 1px solid color-mix(in srgb, var(--tint) 35%, transparent) }',
+    tree: probe({ name: 'view' }),
+    extra: ['border-top-width', 'border-top-color'],
+  },
+  {
+    name: 'a border whose colour is a color-mix() of a token follows the token nearest it',
+    css:
+      '.outer { --tint: rgb(0, 0, 255) } .inner { --tint: rgb(255, 0, 0) } ' +
+      '#probe { border-top: 2px solid color-mix(in srgb, var(--tint) 50%, white) }',
+    tree: {
+      name: 'view',
+      classes: ['outer'],
+      children: [{ name: 'view', classes: ['inner'], children: [probe({ name: 'view' })] }],
+    },
+    extra: ['border-top-width', 'border-top-color'],
+  },
+  {
+    name: 'a color-mix() of currentColor and a token mixes the colour of the text',
+    css:
+      '.outer { color: rgb(255, 0, 0); --tint: rgb(0, 0, 255) } ' +
+      '#probe { border: 1px solid color-mix(in srgb, currentColor 50%, var(--tint) 50%) }',
+    tree: { name: 'view', classes: ['outer'], children: [probe({ name: 'view' })] },
+    extra: ['border-top-width', 'border-top-color'],
+  },
+  {
+    name: 'a border whose colour is a color-mix() of an unset token is no border at all',
+    css: '#probe { border: 1px solid color-mix(in srgb, var(--tint) 35%, transparent) }',
+    tree: probe({ name: 'view' }),
+    extra: ['border-top-width'],
+  },
+  {
     name: 'an outline with no colour is drawn in the colour of the text',
     css: '#probe { color: rgb(7, 1, 0); outline: 2px solid }',
     tree: probe({ name: 'view' }),

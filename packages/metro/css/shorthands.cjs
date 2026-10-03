@@ -107,6 +107,8 @@ const LINE = {
 
 const LINE_STYLES = new Set(['solid', 'dashed', 'dotted', 'double', 'groove', 'ridge', 'inset']);
 const LINE_WIDTHS = { thin: 1, medium: 3, thick: 5 };
+/** Functions that make a length, so one of them in a line is its width and never its colour. */
+const MATHS = new Set(['calc', 'min', 'max', 'clamp']);
 
 /** A value's components, split where CSS splits a shorthand: on whitespace. */
 function components(parts) {
@@ -197,7 +199,9 @@ function arithmetic(part, prop, context, linear) {
  * a colour has no length form, so exactly one of the two resolves. Anything left out takes its
  * initial value as CSS says: no style means no line at all, which native is told as a width of 0.
  * A `calc()` of one `var()` is offered as the width only, as in Bootstrap's
- * `calc(var(--bs-border-width) * 2)`, its arithmetic done on device.
+ * `calc(var(--bs-border-width) * 2)`, its arithmetic done on device. Any other function with a
+ * `var()` in it is the colour, `color-mix(in srgb, var(--tint) 35%, transparent)`, worked out on
+ * device as `border-color` has it.
  */
 // eslint-disable-next-line complexity -- one flat case per kind of component
 function line(property, list, context, linear) {
@@ -213,7 +217,14 @@ function line(property, list, context, linear) {
   let style = null;
   let color = null;
   let current = false;
+  let mixed = null;
   let width = null;
+  const oneColour = () => {
+    // A line has one colour: CSS reads a second as an invalid declaration.
+    if (current || color !== null || mixed !== null) {
+      throw new CssUnsupported(`${context}: '${property}' has more than one colour`);
+    }
+  };
   for (const [part, ...rest] of list) {
     if (rest.length) throw new CssUnsupported(`${context}: could not read '${property}'`);
     if (part.type === 'var') {
@@ -221,7 +232,13 @@ function line(property, list, context, linear) {
       continue;
     }
     if (part.type === 'function') {
-      references.push(computedWidth(part, context, linear));
+      const computed = computedWidth(part, context, linear);
+      if (computed) references.push(computed);
+      else {
+        oneColour();
+        const { colourExpression } = require('./colour-expression.cjs');
+        mixed = { __colour: colourExpression([part], context) };
+      }
       continue;
     }
     const value = tokenValue([part], context);
@@ -230,10 +247,7 @@ function line(property, list, context, linear) {
     else if (word in LINE_WIDTHS) width = LINE_WIDTHS[word];
     else if (value?.length !== undefined) width = value.length;
     else if (word?.toLowerCase() === 'currentcolor' || value?.color !== undefined) {
-      // A line has one colour: CSS reads a second as an invalid declaration.
-      if (current || color !== null) {
-        throw new CssUnsupported(`${context}: '${property}' has more than one colour`);
-      }
+      oneColour();
       if (word?.toLowerCase() === 'currentcolor') current = true;
       else color = value.color;
     } else throw new CssUnsupported(`${context}: '${describe(part)}' in '${property}'`);
@@ -253,12 +267,12 @@ function line(property, list, context, linear) {
   Object.assign(declarations, color === null ? {} : every(colors, color));
   if (withStyle && style !== null) declarations[`${prefix}Style`] = style;
 
-  if (!references.length) return { declarations, deferred: [] };
+  if (!references.length && mixed === null) return { declarations, deferred: [] };
   const styleProp = withStyle ? [`${prefix}Style`] : [];
   const roles = [
     ...(width === null ? ['width'] : []),
     ...(withStyle && styleInToken ? ['style'] : []),
-    ...(color === null && !current ? ['color'] : []),
+    ...(color === null && !current && mixed === null ? ['color'] : []),
   ];
   // One declaration for the whole line, every longhand it sets: the tokens are given their roles
   // on device, by what each holds, and a line they make nothing of unsets all of it, as in CSS.
@@ -272,6 +286,7 @@ function line(property, list, context, linear) {
         roles,
         widths,
         colors,
+        ...(mixed === null ? {} : { colour: mixed }),
         ...(withStyle ? { style: `${prefix}Style` } : {}),
       },
     },
@@ -279,15 +294,19 @@ function line(property, list, context, linear) {
   return { declarations, deferred };
 }
 
-/** `calc(var(--w) * 2)` in a line: the token, and the arithmetic that makes it the width. */
+/**
+ * `calc(var(--w) * 2)` in a line: the token, and the arithmetic that makes it the width. Null for
+ * a function that is not arithmetic on one `var()`, which is the line's colour if it is anything.
+ */
 function computedWidth(part, context, linear) {
   const found = linear(part, context);
-  if (!found) {
+  if (!found && MATHS.has(part.value?.name?.toLowerCase())) {
     throw new CssUnsupported(
-      `${context}: '${part.value?.name}()' is not arithmetic on one var() that can be settled ` +
+      `${context}: '${part.value.name}()' is not arithmetic on one var() that can be settled ` +
         `here, so it needs evaluating on device`,
     );
   }
+  if (!found) return null;
   return {
     ...lineReference(found.reference, context),
     adjust: found.adjust ?? {},

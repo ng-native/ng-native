@@ -524,3 +524,88 @@ describe("a border whose width is a calc() of a token, as Bootstrap's .table-gro
     assert.equal(props()['borderTopColor'], BLUE);
   });
 });
+
+describe('a line whose colour is a colour function of a token', () => {
+  const MIXED = 'rgba(0, 0, 255, 0.35)';
+  const mix = 'color-mix(in srgb, var(--tint) 35%, transparent)';
+
+  it('draws a border in the colour the device works out, as border-color does', () => {
+    const { props, warnings } = tree(`.a { --tint: ${BLUE}; border: 1px solid ${mix} }`);
+    assert.deepEqual(warnings, []);
+    assert.deepEqual(colours(props()), [MIXED, MIXED, MIXED, MIXED]);
+    assert.equal(props()['borderTopWidth'], 1);
+    assert.equal(props()['borderStyle'], 'solid');
+  });
+
+  it('draws one side and an outline the same way', () => {
+    const { props, warnings } = tree(
+      `.a { --tint: ${BLUE}; border-top: 2px solid ${mix}; outline: 3px dashed ${mix} }`,
+    );
+    assert.deepEqual(warnings, []);
+    assert.equal(props()['borderTopColor'], MIXED);
+    assert.equal(props()['borderTopWidth'], 2);
+    assert.equal(props()['outlineColor'], MIXED);
+    assert.equal(props()['outlineWidth'], 3);
+  });
+
+  it('takes its width from a token beside it', () => {
+    const { props, warnings } = tree(
+      `.a { --w: 4px; --tint: ${BLUE}; border: var(--w) solid ${mix} }`,
+    );
+    assert.deepEqual(warnings, []);
+    assert.equal(props()['borderTopWidth'], 4);
+    assert.equal(props()['borderTopColor'], MIXED);
+  });
+
+  it('follows the token when it changes, and draws no line at all when it goes', () => {
+    const { engine, node, props } = tree(`.a { border: 1px solid ${mix} }`);
+    assert.equal(props()['borderTopWidth'], undefined, 'an unset token makes the border invalid');
+    assert.equal(props()['borderTopColor'], undefined);
+    engine.setCustomProperty(node, '--tint', RED);
+    engine.commit();
+    assert.equal(props()['borderTopWidth'], 1);
+    assert.equal(props()['borderTopColor'], MIXED.replace('0, 0, 255', '255, 0, 0'));
+    engine.setCustomProperty(node, '--tint', null);
+    engine.commit();
+    assert.equal(props()['borderTopWidth'] ?? 0, 0, 'and none again once it is unset');
+    assert.equal(props()['borderTopColor'] ?? null, null);
+  });
+
+  it('mixes the colour of the text where a side of the mix is currentColor', () => {
+    const half = `color-mix(in srgb, currentColor 50%, var(--tint) 50%)`;
+    const { props, warnings } = tree(
+      `.p { color: ${RED}; --tint: ${BLUE} } .a { border: 1px solid ${half}; outline-color: ${half} }`,
+      ['p'],
+    );
+    assert.deepEqual(warnings, []);
+    assert.equal(props()['borderTopColor'], 'rgb(128, 0, 128)');
+    assert.equal(props()['borderTopWidth'], 1);
+    assert.equal(props()['outlineColor'], 'rgb(128, 0, 128)');
+  });
+
+  it('mixes the colour of the text where a token in the mix holds currentColor', () => {
+    const { props } = tree(
+      `.p { color: ${RED}; --c: currentColor; --tint: ${BLUE} } ` +
+        `.a { border-color: color-mix(in srgb, var(--c) 50%, var(--tint) 50%) }`,
+      ['p'],
+    );
+    assert.equal(props()['borderTopColor'], 'rgb(128, 0, 128)');
+  });
+
+  it('is one colour only: a second colour beside it is not a border', () => {
+    const { props, warnings } = tree(`.a { --tint: ${BLUE}; border: 1px solid ${mix} ${RED} }`);
+    assert.match(warnings.join('\n'), /more than one colour/);
+    assert.equal(props()['borderTopWidth'], undefined);
+  });
+
+  it('says a length function it cannot settle is arithmetic, not a colour', () => {
+    const { warnings } = tree(`.a { --w: 1px; border: min(var(--w), 2px) solid ${RED} }`);
+    assert.match(warnings.join('\n'), /'min\(\)' is not arithmetic on one var\(\)/);
+  });
+
+  it('still reads a calc() of a token as the width', () => {
+    const { props, warnings } = tree(`.a { --w: 1px; border: calc(var(--w) * 2) solid ${RED} }`);
+    assert.deepEqual(warnings, []);
+    assert.equal(props()['borderTopWidth'], 2);
+  });
+});

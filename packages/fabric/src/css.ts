@@ -338,6 +338,8 @@ export interface LineTemplate {
   readonly roles: readonly ('width' | 'style' | 'color')[];
   readonly widths: readonly string[];
   readonly colors: readonly string[];
+  /** `color-mix(in srgb, var(--tint) 35%, transparent)`: the colour, written as a function. */
+  readonly colour?: unknown;
   readonly style?: string;
 }
 
@@ -1823,6 +1825,12 @@ export class StyleResolver {
     const line = declaration.line!;
     const values = lineValues(line, tokens);
     if (!values) return undefined;
+    if (line.colour !== undefined) {
+      // A colour that cannot be worked out makes the whole line invalid, as an unset token does.
+      const colour = this.settledWithin(line.colour, declaration, own, parentInherited, tokens);
+      if (colour === undefined) return undefined;
+      for (const prop of line.colors) values[prop] = colour;
+    }
     // `currentcolor` is the colour in scope, which only the node knows.
     if (values[line.colors[0]!] === 'currentcolor') {
       const colour = own['color'] ?? parentInherited['color'] ?? 'black';
@@ -1888,13 +1896,14 @@ export class StyleResolver {
     if (!needsFilling(value)) return value;
     const fill = (part: unknown) => this.filledIn(part, declaration, own, parentInherited, tokens);
     if (Array.isArray(value)) return this.filledList(value, fill, tokens);
-    const marked = settledMarker(value, tokens);
     // `currentcolor` is the colour in scope, which only the node knows: Tailwind's ring default.
     // On `color` itself that is the inherited colour, as CSS reads it.
-    if (marked === 'currentcolor') {
+    const current = (): string => {
       const ownColour = declaration.props.includes('color') ? undefined : own['color'];
-      return ownColour ?? parentInherited['color'] ?? 'black';
-    }
+      return (ownColour ?? parentInherited['color'] ?? 'black') as string;
+    };
+    const marked = settledMarker(value, tokens, current);
+    if (marked === 'currentcolor') return current();
     if (marked !== NOT_A_MARKER) return marked ?? UNSETTLED;
     const pending = (value as { __defer?: DeferredDeclaration['compute'] }).__defer;
     if (pending) return this.computed({ ...declaration, compute: pending }, own, parentInherited);
@@ -2739,10 +2748,14 @@ function placed(
 /**
  * A colour expression with its tokens looked up and any mix in it worked out. Undefined when a
  * token it needs is not defined anywhere and has nothing to fall back to.
+ *
+ * `current` is the node's colour, for a `currentColor` inside a mix or a relative colour. One that
+ * is the whole expression is answered as `currentcolor`, for the caller to fill in.
  */
 function resolveColour(
   expression: ColourExpression,
   tokens: Readonly<Record<string, TokenValue>>,
+  current?: CurrentColour,
 ): string | undefined {
   if ('color' in expression) return expression.color;
   if ('channels' in expression) return channelsColour(expression, tokens);
@@ -2750,11 +2763,29 @@ function resolveColour(
   if ('reference' in expression) return tokenColour(expression, tokens);
   if ('relative' in expression) {
     const { space, from, channels, alpha } = expression.relative;
-    const origin = resolveColour(from, tokens);
+    const origin = innerColour(from, tokens, current);
     return origin === undefined ? undefined : relativeColour(space, origin, channels, alpha);
   }
-  const sides = mixSides(expression.mix, tokens);
+  const sides = mixSides(expression.mix, tokens, current);
   return sides && mixColours(expression.mix.space, ...sides, expression.mix.hue);
+}
+
+/** The colour of the node a value is settled for, worked out only when something asks. */
+type CurrentColour = () => string;
+
+/** A colour inside another: `currentColor` there, written or in a token, is the node's colour. */
+function innerColour(
+  expression: ColourExpression,
+  tokens: Readonly<Record<string, TokenValue>>,
+  current: CurrentColour | undefined,
+): string | undefined {
+  if (!current) return resolveColour(expression, tokens);
+  if ('reference' in expression) {
+    const names = [expression.reference, ...(expression.alternatives ?? [])];
+    if (isCurrentColour(firstSet(names, tokens))) return current();
+  }
+  const colour = resolveColour(expression, tokens, current);
+  return colour?.toLowerCase() === 'currentcolor' ? current() : colour;
 }
 
 type Mix = Extract<ColourExpression, { mix: unknown }>['mix'];
@@ -2763,9 +2794,10 @@ type Mix = Extract<ColourExpression, { mix: unknown }>['mix'];
 function mixSides(
   mix: Mix,
   tokens: Readonly<Record<string, TokenValue>>,
+  current?: CurrentColour,
 ): [MixSide, MixSide] | undefined {
   const colour = (side: ColourExpression) =>
-    'mix' in side ? unroundedMix(side.mix, tokens) : resolveColour(side, tokens);
+    'mix' in side ? unroundedMix(side.mix, tokens, current) : innerColour(side, tokens, current);
   const first = colour(mix.a);
   const second = colour(mix.b);
   if (first === undefined || second === undefined) return undefined;
@@ -2775,8 +2807,12 @@ function mixSides(
   ];
 }
 
-function unroundedMix(mix: Mix, tokens: Readonly<Record<string, TokenValue>>): Rgba | undefined {
-  const sides = mixSides(mix, tokens);
+function unroundedMix(
+  mix: Mix,
+  tokens: Readonly<Record<string, TokenValue>>,
+  current?: CurrentColour,
+): Rgba | undefined {
+  const sides = mixSides(mix, tokens, current);
   return sides && mixChannels(mix.space, ...sides, mix.hue);
 }
 
@@ -3001,9 +3037,13 @@ const NEEDS_FILLING = new WeakMap<object, boolean>();
 const NOT_A_MARKER = Symbol('not a marker');
 
 /** A colour, length or calc marker settled from the tokens, or undefined when one cannot be. */
-function settledMarker(value: object, tokens: Readonly<Record<string, TokenValue>>): unknown {
+function settledMarker(
+  value: object,
+  tokens: Readonly<Record<string, TokenValue>>,
+  current?: CurrentColour,
+): unknown {
   const colour = colourMarker(value);
-  if (colour) return resolveColour(colour, tokens);
+  if (colour) return resolveColour(colour, tokens, current);
   // Whether a shadow is inset, from a token that is the word or nothing: `ring-inset`.
   const inset = (value as { __inset?: { reference: string } }).__inset;
   if (inset) return formOf(tokens[inset.reference], 'keyword') === 'inset';
