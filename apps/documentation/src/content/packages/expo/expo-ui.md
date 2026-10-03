@@ -242,8 +242,20 @@ without `matchContents` it has the width and no height.
 
 Each row has a host of its own, sized to the row's height. `ignoreSafeArea="all"` matters in a
 list: a host keeps clear of the safe area otherwise, and a row that scrolls under the home
-indicator is pushed over the one above it. The menu is SwiftUI's alone, and on Android
-`ui-context-menu` commits as nothing; a long press there opens `Dialogs.choose()`.
+indicator is pushed over the one above it.
+
+This is iOS's menu: `ui-context-menu` is SwiftUI's alone, and has no view on Android. Render the
+row on its own there, with a long press that opens [`Dialogs.choose()`](/packages/device/dialogs):
+
+```html
+@if (ios) {
+<!-- the ui-host and ui-context-menu above -->
+} @else {
+<pressable class="row" (press)="open(row.item)" (longPress)="choose(row.item)">
+  <text>{{ row.item.label }}</text>
+</pressable>
+}
+```
 
 ## Text field state: `nativeState`
 
