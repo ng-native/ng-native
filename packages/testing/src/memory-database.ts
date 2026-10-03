@@ -29,7 +29,8 @@ function bound(params: unknown[]): never[] {
   const [only] = params;
   if (params.length !== 1) return params.map(value) as never[];
   if (Array.isArray(only)) return only.map(value) as never[];
-  if (only !== null && typeof only === 'object') {
+  // Bytes are one value, a BLOB, and not an object of named parameters.
+  if (only !== null && typeof only === 'object' && !(only instanceof Uint8Array)) {
     const named = Object.entries(only).map(([name, param]) => [name, value(param)]);
     return [Object.fromEntries(named)] as never[];
   }

@@ -85,6 +85,14 @@ describe('database() in a Node test', () => {
     ]);
   });
 
+  it('binds bytes as one value', async () => {
+    const db = await database('bytes.db', schema).ready();
+    await db.execAsync('CREATE TABLE blob (data BLOB)');
+    await db.runAsync('INSERT INTO blob (data) VALUES (?)', new Uint8Array([1, 2, 3]) as never);
+    const row = await db.getFirstAsync<{ data: Uint8Array }>('SELECT data FROM blob');
+    assert.deepEqual([...row!.data], [1, 2, 3]);
+  });
+
   it('keeps the error of a task whose transaction is already rolled back', async () => {
     const db = await database('gone.db', schema).ready();
     await assert.rejects(
