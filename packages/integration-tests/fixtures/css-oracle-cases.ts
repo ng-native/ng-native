@@ -365,6 +365,8 @@ export const CASES: OracleCase[] = [
       children: [{ name: 'view', classes: ['inner'], children: [probe()] }],
     },
     extra: ['pointer-events'],
+  },
+  {
     name: '@layer: an unlayered rule beats a layered one of higher specificity',
     css: '@layer base { #probe.c { color: rgb(1, 0, 0) } } .c { color: rgb(2, 0, 0) }',
     tree: probe({ classes: ['c'] }),

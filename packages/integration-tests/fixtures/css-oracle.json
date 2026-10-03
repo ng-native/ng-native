@@ -167,11 +167,18 @@
     }
   },
   {
+    "name": "pointer-events: none through an ancestor that sets nothing",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "pointer-events": "none"
+    }
+  },
+  {
     "name": "@layer: an unlayered rule beats a layered one of higher specificity",
     "expected": {
       "color": "rgb(2, 0, 0)",
-      "background-color": "rgba(0, 0, 0, 0)",
-      "pointer-events": "auto"
+      "background-color": "rgba(0, 0, 0, 0)"
     }
   },
   {
