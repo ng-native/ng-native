@@ -1,0 +1,268 @@
+import type { Engine, EngineNode } from '@ng-native/fabric';
+import { propOf } from './attribute.ts';
+import { descendants, matches } from './selector.ts';
+
+/** A node as a library holds one: an engine node with the members below on it. */
+type Dom = EngineNode & Record<string, (...args: unknown[]) => unknown>;
+type Listener = (event: unknown) => void;
+
+const engineOf = (node: EngineNode): Engine => (node as unknown as { host: Engine }).host;
+const camel = (name: string) => name.replace(/-([a-z])/g, (_, c: string) => c.toUpperCase());
+const topLevel = (type: string) => 'top' + type.charAt(0).toUpperCase() + type.slice(1);
+const classesOf = (node: EngineNode) => (node.classes ? [...node.classes].join(' ') : '');
+const textOf = (node: EngineNode): string =>
+  node.kind === 'text' ? node.text : node.children.map(textOf).join('');
+const sibling = (node: EngineNode, by: number) => {
+  const siblings = node.parent?.children;
+  return siblings?.[siblings.indexOf(node) + by] ?? null;
+};
+
+/**
+ * HTML attributes React Native also reads as a typed prop. Android rejects a string where it
+ * wants a boolean (`focusable="false"` is a native crash), so these are coerced. Others pass as
+ * written: Fabric ignores a prop a view does not know.
+ */
+const BOOLEAN_ATTRIBUTES = new Set([
+  'focusable',
+  'aria-hidden',
+  'aria-disabled',
+  'aria-selected',
+  'aria-expanded',
+  'aria-busy',
+  'aria-modal',
+  'aria-checked',
+  'accessible',
+  'disabled',
+]);
+
+function attributeValue(name: string, value: string): unknown {
+  if (!BOOLEAN_ATTRIBUTES.has(name)) return value;
+  if (name === 'aria-checked' && value === 'mixed') return value;
+  return value !== 'false';
+}
+
+/** `element.style`: reads and writes of the node's inline style, by either spelling of a name. */
+function styleOf(node: EngineNode): Record<string, unknown> {
+  const engine = engineOf(node);
+  const current = () => (node.props['style'] as Record<string, unknown> | undefined) ?? {};
+  const write = (key: string, value: unknown) => {
+    const next = { ...current() };
+    if (value === '' || value == null) delete next[key];
+    else
+      next[key] =
+        typeof value === 'string' && /^-?[\d.]+(px)?$/.test(value) ? parseFloat(value) : value;
+    engine.setProp(node, 'style', next);
+  };
+  const methods: Record<string, unknown> = {
+    setProperty: (name: string, value: unknown) =>
+      name.startsWith('--')
+        ? engine.setCustomProperty(node, name, value)
+        : write(camel(name), value),
+    removeProperty: (name: string) => write(camel(name), null),
+    getPropertyValue: (name: string) => String(current()[camel(name)] ?? ''),
+  };
+  return new Proxy(methods, {
+    get: (target, key) =>
+      key in target ? target[key as string] : (current()[key as string] ?? ''),
+    set: (_, key, value) => (write(String(key), value), true),
+  });
+}
+
+/** The event types core's own `addEventListener` attaches, for `@defer`. */
+const DEFER_TRIGGERS = new Set(['click', 'keydown', 'mouseenter', 'focusin']);
+
+/** What removes each listener `addEventListener` attached, by node, type and function. */
+const listeners = new WeakMap<EngineNode, Map<string, Map<Listener, () => void>>>();
+
+const get = (read: (this: Dom) => unknown, write?: (this: Dom, value: unknown) => void) => ({
+  get: read,
+  set: write,
+});
+const method = (value: (this: Dom, ...args: never[]) => unknown) => ({ value, writable: true });
+
+/** What a node has in core that the members below take the place of. */
+export interface CoreNode {
+  addEventListener(type: string, listener: Listener): void;
+  removeEventListener(type: string, listener: Listener): void;
+}
+
+/**
+ * The DOM members every engine node answers to, for `extendNodes`. `core` is the node prototype
+ * as it was: its listeners are what Angular's `@defer` triggers go through, and still do.
+ */
+export const nodeMembers = (core: CoreNode): PropertyDescriptorMap => ({
+  nodeName: get(function () {
+    return this.kind === 'text'
+      ? '#text'
+      : this.kind === 'anchor'
+        ? '#comment'
+        : this.name.toUpperCase();
+  }),
+  localName: get(function () {
+    return this.name;
+  }),
+  id: get(
+    function () {
+      return this.props['nativeID'] ?? '';
+    },
+    function (value) {
+      engineOf(this).setProp(this, 'nativeID', value);
+    },
+  ),
+
+  setAttribute: method(function (name: string, value: unknown) {
+    if (name === 'class') engineOf(this).setClasses(this, String(value));
+    else engineOf(this).setProp(this, propOf(name), attributeValue(name, String(value)));
+  }),
+  getAttribute: method(function (name: string) {
+    if (name === 'class') return this.classes ? classesOf(this) : null;
+    const value = this.props[propOf(name)];
+    return value == null ? null : String(value);
+  }),
+  hasAttribute: method(function (name: string) {
+    return name === 'class' ? !!this.classes?.size : this.props[propOf(name)] != null;
+  }),
+  removeAttribute: method(function (name: string) {
+    if (name === 'class') engineOf(this).setClasses(this, '');
+    else if (propOf(name) in this.props) engineOf(this).setProp(this, propOf(name), null);
+  }),
+  toggleAttribute: method(function (name: string, force?: boolean) {
+    const on = force ?? !this['hasAttribute']!(name);
+    if (on) this['setAttribute']!(name, '');
+    else this['removeAttribute']!(name);
+    return on;
+  }),
+  getAttributeNames: method(function () {
+    return Object.keys(this.props)
+      .filter((key) => key !== 'style')
+      .map((key) => (key === 'nativeID' ? 'id' : key));
+  }),
+
+  classList: get(function () {
+    const node = this;
+    const engine = engineOf(node);
+    const toggle = (name: string, force?: boolean) => {
+      const on = force ?? !node.classes?.has(name);
+      if (on) engine.addClass(node, name);
+      else engine.removeClass(node, name);
+      return on;
+    };
+    return {
+      add: (...names: string[]) => names.forEach((name) => engine.addClass(node, name)),
+      remove: (...names: string[]) => names.forEach((name) => engine.removeClass(node, name)),
+      contains: (name: string) => !!node.classes?.has(name),
+      toggle,
+      get length() {
+        return node.classes?.size ?? 0;
+      },
+      [Symbol.iterator]: () => (node.classes ?? new Set<string>()).values(),
+    };
+  }),
+  className: get(
+    function () {
+      return classesOf(this);
+    },
+    function (value) {
+      engineOf(this).setClasses(this, String(value));
+    },
+  ),
+  style: get(function () {
+    return styleOf(this);
+  }),
+
+  parentNode: get(function () {
+    return this.parent;
+  }),
+  parentElement: get(function () {
+    return this.parent;
+  }),
+  childNodes: get(function () {
+    return this.children;
+  }),
+  firstChild: get(function () {
+    return this.children[0] ?? null;
+  }),
+  lastChild: get(function () {
+    return this.children.at(-1) ?? null;
+  }),
+  firstElementChild: get(function () {
+    return this.children.find((child) => child.kind === 'element') ?? null;
+  }),
+  nextSibling: get(function () {
+    return sibling(this, 1);
+  }),
+  previousSibling: get(function () {
+    return sibling(this, -1);
+  }),
+  isConnected: get(function () {
+    let at: EngineNode = this;
+    while (at.parent) at = at.parent;
+    return at === engineOf(this).root;
+  }),
+  textContent: get(
+    function () {
+      return textOf(this);
+    },
+    function (value) {
+      if (this.kind === 'text') engineOf(this).setText(this, String(value));
+    },
+  ),
+  nodeValue: get(function () {
+    return this.kind === 'text' ? this.text : null;
+  }),
+
+  contains: method(function (other: EngineNode | null) {
+    for (let at = other; at; at = at.parent) if (at === this) return true;
+    return false;
+  }),
+  matches: method(function (selector: string) {
+    return matches(this, selector);
+  }),
+  closest: method(function (selector: string) {
+    for (let at: EngineNode | null = this; at; at = at.parent) if (matches(at, selector)) return at;
+    return null;
+  }),
+  querySelectorAll: method(function (selector: string) {
+    return [...descendants(this)].filter((node) => matches(node, selector));
+  }),
+  querySelector: method(function (selector: string) {
+    for (const node of descendants(this)) if (matches(node, selector)) return node;
+    return null;
+  }),
+
+  appendChild: method(function (child: EngineNode) {
+    engineOf(this).appendChild(this, child);
+    return child;
+  }),
+  insertBefore: method(function (child: EngineNode, before: EngineNode | null) {
+    engineOf(this).insertBefore(this, child, before);
+    return child;
+  }),
+  removeChild: method(function (child: EngineNode) {
+    engineOf(this).removeChild(this, child);
+    return child;
+  }),
+  remove: method(function () {
+    if (this.parent) engineOf(this).removeChild(this.parent, this);
+  }),
+
+  addEventListener: method(function (type: string, listener: Listener) {
+    // Core maps the events a `@defer` trigger listens for to the native ones that stand for
+    // them, and does nothing with any other type: both run, and one of them attaches.
+    core.addEventListener.call(this, type, listener);
+    if (DEFER_TRIGGERS.has(type)) return;
+    let byType = listeners.get(this);
+    if (!byType) listeners.set(this, (byType = new Map()));
+    let byListener = byType.get(type);
+    if (!byListener) byType.set(type, (byListener = new Map()));
+    // The DOM adds a listener once, however often it is asked to.
+    if (byListener.has(listener)) return;
+    byListener.set(listener, engineOf(this).setEventListener(this, topLevel(type), listener));
+  }),
+  removeEventListener: method(function (type: string, listener: Listener) {
+    core.removeEventListener.call(this, type, listener);
+    const byListener = listeners.get(this)?.get(type);
+    byListener?.get(listener)?.();
+    byListener?.delete(listener);
+  }),
+});

@@ -69,6 +69,7 @@ const PUBLISHED = [
   'packages/tailwind',
   'packages/testing',
   'packages/web',
+  'packages/web-compat',
   'template',
 ];
 

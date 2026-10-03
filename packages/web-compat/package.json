@@ -1,0 +1,70 @@
+{
+  "name": "@ng-native/web-compat",
+  "version": "0.4.0",
+  "description": "Opt-in DOM compatibility for Angular Native, so component libraries written for the browser can render as native views.",
+  "keywords": [
+    "angular",
+    "react-native",
+    "angular-native",
+    "ios",
+    "android",
+    "fabric",
+    "native",
+    "dom",
+    "compatibility"
+  ],
+  "type": "module",
+  "main": "src/index.ts",
+  "dependencies": {
+    "@ng-native/fabric": "workspace:*",
+    "@ng-native/platform": "workspace:*"
+  },
+  "peerDependencies": {
+    "@angular/core": "^22.0.0"
+  },
+  "nx": {
+    "tags": [
+      "scope:web-compat",
+      "layer:compat"
+    ]
+  },
+  "scripts": {
+    "build": "ngc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "node --import @ng-native/testing/register --test \"src/*.test.ts\""
+  },
+  "license": "MIT",
+  "homepage": "https://ng-native.com/packages/web-compat",
+  "bugs": {
+    "url": "https://github.com/ng-native/ng-native/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ng-native/ng-native.git",
+    "directory": "packages/web-compat"
+  },
+  "files": [
+    "dist"
+  ],
+  "devDependencies": {
+    "@angular/core": "22.2.0",
+    "@ng-native/components": "workspace:*",
+    "@ng-native/testing": "workspace:*"
+  },
+  "exports": {
+    ".": "./src/index.ts",
+    "./package.json": "./package.json"
+  },
+  "publishConfig": {
+    "access": "public",
+    "main": "dist/index.js",
+    "types": "dist/index.d.ts",
+    "exports": {
+      ".": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      },
+      "./package.json": "./package.json"
+    }
+  }
+}
