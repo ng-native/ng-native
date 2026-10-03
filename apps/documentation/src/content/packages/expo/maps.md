@@ -202,7 +202,8 @@ A marker takes coordinates, and [`Location`](/packages/expo/location#an-address-
 an address into them:
 
 ```ts
-const [place] = await inject(Location).geocode('10 Downing Street, London');
+// With `location = inject(Location)` as a field of the component.
+const [place] = await this.location.geocode('10 Downing Street, London');
 if (place) this.markers.set([{ id: 'home', coordinates: place, title: 'Home' }]);
 ```
 
