@@ -82,6 +82,8 @@ export interface StyleRule {
   readonly important?: Readonly<Record<string, unknown>>;
   /** Custom properties this rule defines, pre-converted into every form a use site might want. */
   readonly tokens?: Readonly<Record<string, TokenValue>>;
+  /** The names among `tokens` declared `!important`, which beat every plain one. */
+  readonly importantTokens?: readonly string[];
   /** Declarations whose value is a `var()`, resolved once the token map is known. */
   readonly deferred?: readonly DeferredDeclaration[];
   /** The media query guarding this rule, if any. */
@@ -917,8 +919,13 @@ function carryDeferred(
 
 const NO_DECLARATIONS: Readonly<Record<string, unknown>> = Object.freeze({});
 
+const pick = <T>(from: Readonly<Record<string, T>>, names: readonly string[]): Record<string, T> =>
+  Object.fromEntries(names.map((name) => [name, from[name]!]));
+
 const isImportant = (rule: StyleRule): boolean =>
-  rule.important !== undefined || rule.deferred?.some((one) => one.important) === true;
+  rule.important !== undefined ||
+  rule.importantTokens !== undefined ||
+  rule.deferred?.some((one) => one.important) === true;
 
 /**
  * The matched rules in the order their declarations apply, weakest first.
@@ -935,7 +942,12 @@ function byImportance(
   if (!matched.some((rule) => rule.layer !== undefined && isImportant(rule))) return matched;
   const plain = matched.map((rule) =>
     isImportant(rule)
-      ? { ...rule, important: undefined, deferred: rule.deferred?.filter((one) => !one.important) }
+      ? {
+          ...rule,
+          important: undefined,
+          importantTokens: undefined,
+          deferred: rule.deferred?.filter((one) => !one.important),
+        }
       : rule,
   );
   const important = matched
@@ -946,7 +958,8 @@ function byImportance(
     .map((rule) => ({
       ...rule,
       declarations: NO_DECLARATIONS,
-      tokens: undefined,
+      // Its important custom properties alone: the plain ones were applied where it matched.
+      tokens: rule.importantTokens && pick(rule.tokens!, rule.importantTokens),
       deferred: rule.deferred?.filter((one) => one.important),
     }));
   return [...plain, ...important];
@@ -1698,6 +1711,7 @@ export class StyleResolver {
     const important: Record<string, unknown> = {};
     let hasImportant = false;
     let tokens: Record<string, TokenValue> | null = null;
+    let importantTokens: Record<string, TokenValue> | null = null;
     let deferred: DeferredDeclaration[] | null = null;
 
     for (const rule of this.layered ? byImportance(matched, this.layerPlaces) : matched) {
@@ -1707,8 +1721,13 @@ export class StyleResolver {
         hasImportant = true;
       }
       if (rule.tokens) Object.assign((tokens ??= {}), rule.tokens);
+      // An important custom property beats every plain one, whatever the rules' order.
+      if (rule.importantTokens) {
+        Object.assign((importantTokens ??= {}), pick(rule.tokens!, rule.importantTokens));
+      }
       deferred = carryDeferred(deferred, rule);
     }
+    if (importantTokens) Object.assign(tokens!, importantTokens);
 
     return {
       declarations: hasImportant ? { ...normal, ...important } : normal,

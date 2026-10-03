@@ -763,6 +763,30 @@ export const CASES: OracleCase[] = [
     extra: ['text-shadow'],
   },
   {
+    name: 'an important custom property beats a more specific plain one',
+    css: '.c { --t: rgb(1, 0, 0) !important } #probe.c { --t: rgb(2, 0, 0) } #probe { color: var(--t) }',
+    tree: probe({ classes: ['c'] }),
+  },
+  {
+    name: 'the more specific of two important custom properties wins',
+    css:
+      '#probe.c { --t: rgb(3, 0, 0) !important } .c { --t: rgb(4, 0, 0) !important } ' +
+      '#probe { color: var(--t) }',
+    tree: probe({ classes: ['c'] }),
+  },
+  {
+    name: 'an important custom property in a layer beats an important one outside it',
+    css:
+      '@layer base { .c { --t: rgb(5, 0, 0) !important } } #probe.c { --t: rgb(6, 0, 0) !important } ' +
+      '#probe { color: var(--t) }',
+    tree: probe({ classes: ['c'] }),
+  },
+  {
+    name: 'an important custom property is inherited over a plain one nearer the root',
+    css: '.outer { --t: rgb(7, 0, 0) !important; --t: rgb(8, 0, 0) } #probe { color: var(--t) }',
+    tree: { name: 'view', classes: ['outer'], children: [probe()] },
+  },
+  {
     name: 'an outline with no colour is drawn in the colour of the text',
     css: '#probe { color: rgb(7, 1, 0); outline: 2px solid }',
     tree: probe({ name: 'view' }),

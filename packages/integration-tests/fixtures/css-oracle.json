@@ -602,6 +602,34 @@
     }
   },
   {
+    "name": "an important custom property beats a more specific plain one",
+    "expected": {
+      "color": "rgb(1, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)"
+    }
+  },
+  {
+    "name": "the more specific of two important custom properties wins",
+    "expected": {
+      "color": "rgb(3, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)"
+    }
+  },
+  {
+    "name": "an important custom property in a layer beats an important one outside it",
+    "expected": {
+      "color": "rgb(5, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)"
+    }
+  },
+  {
+    "name": "an important custom property is inherited over a plain one nearer the root",
+    "expected": {
+      "color": "rgb(7, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)"
+    }
+  },
+  {
     "name": "an outline with no colour is drawn in the colour of the text",
     "expected": {
       "color": "rgb(7, 1, 0)",
