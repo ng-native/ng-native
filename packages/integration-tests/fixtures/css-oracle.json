@@ -135,6 +135,38 @@
     }
   },
   {
+    "name": "pointer-events: inherit takes the parent's over a weaker rule's auto",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "pointer-events": "none"
+    }
+  },
+  {
+    "name": "pointer-events: unset is inherit, as the property inherits",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "pointer-events": "none"
+    }
+  },
+  {
+    "name": "pointer-events: initial is auto inside none",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "pointer-events": "auto"
+    }
+  },
+  {
+    "name": "pointer-events: an important auto beats a more specific none",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "pointer-events": "auto"
+    }
+  },
+  {
     "name": "pointer-events: none through an ancestor that sets nothing",
     "expected": {
       "color": "rgb(0, 0, 0)",

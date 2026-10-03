@@ -1125,7 +1125,9 @@ export function inlineInherited(style: unknown): Record<string, unknown> | null 
   let out: Record<string, unknown> | null = null;
   // Flattened first, as native applies it, so a later entry's null clears an earlier value.
   for (const [key, value] of Object.entries(flattenInline(style, {}))) {
-    if (INHERITED.has(key) && value !== undefined && value !== null) (out ??= {})[key] = value;
+    if (INHERITED.has(key) && value !== undefined && value !== null && value !== 'inherit') {
+      (out ??= {})[key] = value;
+    }
   }
   return out;
 }
@@ -1509,6 +1511,8 @@ export class StyleResolver {
       this.applyDeferred(result.deferred, own, tokens, parentInherited, result.important);
     }
     if (own['borderStyle'] === 'none') drawNoBorder(own);
+    // `pointer-events: inherit` won the cascade: what the parent hands down stands.
+    if (own['pointerEvents'] === 'inherit') delete own['pointerEvents'];
     const style = { ...parentInherited, ...own };
     return { style, inherited: decorate(style, inheritFrom(parentInherited, own), own), tokens };
   }

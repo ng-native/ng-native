@@ -333,6 +333,30 @@ export const CASES: OracleCase[] = [
     extra: ['pointer-events'],
   },
   {
+    name: "pointer-events: inherit takes the parent's over a weaker rule's auto",
+    css: '.outer { pointer-events: none } #probe { pointer-events: auto } #probe.c { pointer-events: inherit }',
+    tree: { name: 'view', classes: ['outer'], children: [probe({ classes: ['c'] })] },
+    extra: ['pointer-events'],
+  },
+  {
+    name: 'pointer-events: unset is inherit, as the property inherits',
+    css: '.outer { pointer-events: none } #probe { pointer-events: auto } #probe.c { pointer-events: unset }',
+    tree: { name: 'view', classes: ['outer'], children: [probe({ classes: ['c'] })] },
+    extra: ['pointer-events'],
+  },
+  {
+    name: 'pointer-events: initial is auto inside none',
+    css: '.outer { pointer-events: none } #probe { pointer-events: initial }',
+    tree: { name: 'view', classes: ['outer'], children: [probe({ classes: ['c'] })] },
+    extra: ['pointer-events'],
+  },
+  {
+    name: 'pointer-events: an important auto beats a more specific none',
+    css: '.outer { pointer-events: none } .c { pointer-events: auto !important } #probe.c { pointer-events: none }',
+    tree: { name: 'view', classes: ['outer'], children: [probe({ classes: ['c'] })] },
+    extra: ['pointer-events'],
+  },
+  {
     name: 'pointer-events: none through an ancestor that sets nothing',
     css: '.outer { pointer-events: none }',
     tree: {

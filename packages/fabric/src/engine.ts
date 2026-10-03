@@ -9,6 +9,7 @@
  */
 
 import {
+  inlineInherited,
   setsInherited,
   StyleResolver,
   type Conditions,
@@ -1149,9 +1150,13 @@ function boxNone(node: EngineNode, style: Record<string, unknown>): void {
   if (node.touchWithin && style['pointerEvents'] === 'none') style['pointerEvents'] = 'box-none';
 }
 
-/** The `pointer-events` an element computes to: its inline style's, or what the sheets resolve. */
+/**
+ * The `pointer-events` an element computes to: its inline style's, or what the sheets resolve.
+ * The inline one is read for itself because an element no rule matches resolves to what it
+ * inherits, with its own inline value only in what it hands down.
+ */
 function pointerEventsOf(node: EngineNode, resolved: Record<string, unknown>): unknown {
-  const inline = node.props['style'] as Record<string, unknown> | undefined;
+  const inline = node.inlineInherits ? inlineInherited(node.props['style']) : null;
   return inline?.['pointerEvents'] ?? resolved['pointerEvents'];
 }
 
@@ -1170,8 +1175,11 @@ function noteTouches(node: EngineNode, style: StyleCache | null): void {
   const resolved = style.style['pointerEvents'];
   if (resolved === undefined && !node.inlineInherits && !node.touchWithin) return;
   const value = pointerEventsOf(node, style.style);
+  // `none` and native's `box-none` take no touches themselves: their children answer for them.
   const within =
-    value === 'none' ? node.children.some((child) => child.touchWithin) : value !== undefined;
+    value === 'none' || value === 'box-none'
+      ? node.children.some((child) => child.touchWithin)
+      : value !== undefined;
   if (within === !!node.touchWithin) return;
   node.touchWithin = within;
   if (value === 'none') node.propsDirty = true;

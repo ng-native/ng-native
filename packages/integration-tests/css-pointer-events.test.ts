@@ -130,6 +130,34 @@ describe('pointer-events: none', () => {
     assert.deepEqual(committed(), { layer: 'box-none', panel: 'none', plain: 'box-none' });
   });
 
+  it('stays none around a box-none element with nothing inside it that takes touches', () => {
+    // `box-none` takes no touches itself: it only passes the question on to its children.
+    const { engine, panel, committed } = tree('.layer { pointer-events: none }');
+    engine.setProp(panel, 'style', { pointerEvents: 'box-none' });
+    engine.commit();
+    assert.deepEqual(committed(), { layer: 'none', panel: 'box-none', plain: 'none' });
+
+    const inside = engine.createElement('view', panel.sheet);
+    engine.setProp(inside, 'style', { pointerEvents: 'auto' });
+    engine.appendChild(panel, inside);
+    engine.commit();
+    assert.equal(committed().layer, 'box-none', 'and opens for something inside that does');
+  });
+
+  it('reads an inline style given as a list, on an element no rule matches', () => {
+    const fabric = createFakeFabric();
+    const engine = new Engine(fabric, 1);
+    const layer = engine.createElement('view');
+    const child = engine.createElement('view');
+    engine.setProp(layer, 'style', [{ opacity: 1 }, { pointerEvents: 'none' }]);
+    engine.setProp(child, 'style', [{ opacity: 1 }, { pointerEvents: 'auto' }]);
+    engine.appendChild(layer, child);
+    engine.appendChild(engine.root, layer);
+    engine.commit();
+    assert.equal(fabric.committed[0]!.props['pointerEvents'], 'box-none');
+    assert.equal(fabric.committed[0]!.children[0]!.props['pointerEvents'], 'auto');
+  });
+
   it("keeps React Native's meaning as the pointerEvents prop: the whole subtree", () => {
     const { engine, layer, committed } = tree('.panel { pointer-events: auto }');
     engine.setProp(layer, 'pointerEvents', 'none');

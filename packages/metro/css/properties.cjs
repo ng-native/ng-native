@@ -1504,7 +1504,10 @@ const TRANSLATORS = new Map([
       // The rest of CSS's values are SVG ones, which a browser reads as auto on any other element:
       // Bulma's is-clickable is pointer-events: all. Fabric drops a value it does not know.
       const found = keyword(value, property);
-      out.pointerEvents = ['none', 'box-none', 'box-only'].includes(found) ? found : 'auto';
+      // `inherit`, and `unset` on a property that inherits, are the parent's value: the engine
+      // drops the declaration there, over whatever a weaker rule set.
+      if (found === 'inherit' || found === 'unset') out.pointerEvents = 'inherit';
+      else out.pointerEvents = ['none', 'box-none', 'box-only'].includes(found) ? found : 'auto';
     },
   ],
   [

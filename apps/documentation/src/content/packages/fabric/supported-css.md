@@ -209,7 +209,8 @@ of the text it underlines, because its text has no decoration colour.
 whatever inherits the value take no touches, and a descendant that sets `pointer-events: auto`
 takes them again. An element with such a descendant is committed as React Native's `box-none`, and
 one with none as `none`. React Native's own `box-none` and `box-only` are taken as written and are
-not inherited. The `pointerEvents` prop keeps React Native's meaning, where `none` is the whole
+not inherited. `pointer-events: inherit` and `unset` are the parent's value. The `pointerEvents`
+prop keeps React Native's meaning, where `none` is the whole
 subtree. On Android, text and images take no `pointerEvents` of their own, so text written
 directly inside a `box-none` element still takes touches there; put it in a view to keep them off.
 
