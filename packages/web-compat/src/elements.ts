@@ -22,4 +22,11 @@ export function created(node: EngineNode, engine: Engine): void {
   // Props a binding can replace, as it can any other: `role="tab"` on a button is a tab.
   engine.setProp(node, 'accessibilityRole', role);
   engine.setProp(node, 'accessible', true);
+  // A keyboard, a switch control or a remote can reach it, which is where `:focus` comes from.
+  engine.setProp(node, 'focusable', true);
+  // `:hover`, for the devices with a pointer: the Tailwind preset reads it as `data-hover`.
+  // ponytail: on the elements a pointer is aimed at. A stylesheet's `:hover` on any other
+  // element never matches; track every element with a hover rule if a library needs it.
+  engine.setEventListener(node, 'topPointerEnter', () => engine.setProp(node, 'data-hover', true));
+  engine.setEventListener(node, 'topPointerLeave', () => engine.setProp(node, 'data-hover', null));
 }

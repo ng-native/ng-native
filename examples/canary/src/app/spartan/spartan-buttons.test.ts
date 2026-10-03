@@ -2,13 +2,14 @@ import { execFileSync } from 'node:child_process';
 import { provideWebCompat } from '@ng-native/web-compat';
 import {
   cleanup,
+  fireEvent,
   render,
   screen,
   settle,
   userEvent,
   type FakeFabricNode,
 } from '@ng-native/testing';
-import { afterEach, beforeAll, expect, test } from 'vitest';
+import { afterEach, beforeAll, expect, test, vi } from 'vitest';
 import { SpartanButtons } from './spartan-buttons.ts';
 
 let tailwind: unknown;
@@ -100,4 +101,64 @@ test('a press on a button is its click, and a disabled one hears nothing', async
   expect(screen.getByText('Presses: 2')).toBeTruthy();
   await userEvent.press(screen.getByTestId('disabled'));
   expect(screen.getByText('Presses: 2')).toBeTruthy();
+});
+
+/** A finger down on, or lifted from, a node: what Fabric sends for either. */
+const touch = (node: FakeFabricNode, phase: 'Start' | 'End') => {
+  const point = { identifier: 0, target: node.reactTag, pageX: 0, pageY: 0, timestamp: Date.now() };
+  return fireEvent(node, `topTouch${phase}`, {
+    ...point,
+    touches: phase === 'Start' ? [point] : [],
+    changedTouches: [point],
+  });
+};
+
+test('a held button shows its pressed state, and loses it when the finger lifts', async () => {
+  await mount();
+  for (const [id, pressed] of [
+    ['default', 'rgba(16, 24, 40, 0.8)'],
+    ['destructive', 'rgba(231, 0, 11, 0.2)'],
+    ['ghost', 'rgb(243, 244, 246)'],
+  ] as const) {
+    // No background at rest is a prop that is absent, and cleared again after a press.
+    const rest = button(id).view['backgroundColor'] ?? null;
+    await touch(screen.getByTestId(id), 'Start');
+    // Spartan's `transition-all`: the colour is on its way for 150ms.
+    await vi.waitFor(() => expect(button(id).view['backgroundColor'], id).toBe(pressed));
+    expect(button(id).view['transform'], id).toContainEqual({ translateY: 1 });
+    await touch(screen.getByTestId(id), 'End');
+    await vi.waitFor(() => expect(button(id).view['backgroundColor'] ?? null, id).toBe(rest));
+    expect(button(id).view['transform'] ?? [], id).not.toContainEqual({ translateY: 1 });
+  }
+});
+
+test('a held disabled button shows no pressed state', async () => {
+  await mount();
+  await touch(screen.getByTestId('disabled'), 'Start');
+  expect(button('disabled').view['transform'] ?? []).toEqual([]);
+  await touch(screen.getByTestId('disabled'), 'End');
+});
+
+test('a focused button has its ring, as a keyboard or switch control shows it', async () => {
+  await mount();
+  expect(button('default').view['focusable']).toBe(true);
+  await fireEvent(screen.getByTestId('default'), 'topFocus');
+  await vi.waitFor(() =>
+    expect(button('default').view).toMatchObject({
+      borderTopColor: 'rgb(153, 161, 175)',
+      boxShadow: [{ spreadDistance: 3, color: 'rgba(153, 161, 175, 0.5)' }],
+    }),
+  );
+  await fireEvent(screen.getByTestId('default'), 'topBlur');
+  await vi.waitFor(() => expect(button('default').view['borderTopColor']).toBe('rgba(0, 0, 0, 0)'));
+});
+
+test('a hovered button, under a pointer, has its hover colour', async () => {
+  await mount();
+  await fireEvent(screen.getByTestId('default'), 'topPointerEnter');
+  await vi.waitFor(() =>
+    expect(button('default').view['backgroundColor']).toBe('rgba(16, 24, 40, 0.8)'),
+  );
+  await fireEvent(screen.getByTestId('default'), 'topPointerLeave');
+  await vi.waitFor(() => expect(button('default').view['backgroundColor']).toBe('rgb(16, 24, 40)'));
 });

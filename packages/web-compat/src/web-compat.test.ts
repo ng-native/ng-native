@@ -303,6 +303,17 @@ describe('@ng-native/web-compat elements', () => {
     assert.equal(button.props['accessibilityRole'], 'button');
     assert.equal(button.props['accessible'], true);
     assert.equal(screen.getByTestId('link').props['role'], 'tab');
+    assert.equal(button.props['focusable'], true);
+  });
+
+  it('marks a button a pointer is over, for a hover style', async () => {
+    await render(Links, { providers: [provideWebCompat()] });
+    // On the node, where a stylesheet matches it: a `data-` attribute is not a native prop.
+    const node = globals.document.querySelector('button');
+    await fireEvent(screen.getByTestId('button'), 'topPointerEnter');
+    assert.equal(node.getAttribute('data-hover'), 'true');
+    await fireEvent(screen.getByTestId('button'), 'topPointerLeave');
+    assert.equal(node.hasAttribute('data-hover'), false);
   });
 
   it('leaves them unknown to an app that did not ask, and after the one that did', async () => {
