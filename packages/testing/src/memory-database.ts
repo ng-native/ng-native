@@ -21,12 +21,28 @@ export interface MemoryDatabase {
   closeAsync(): Promise<void>;
 }
 
-/** `expo-sqlite` takes parameters one by one or as one array. */
-const bound = (params: unknown[]): never[] =>
-  (params.length === 1 && Array.isArray(params[0]) ? params[0] : params) as never[];
+/** A value as SQLite binds it: `expo-sqlite` takes a boolean as 1 or 0, which Node refuses. */
+const value = (param: unknown): unknown => (typeof param === 'boolean' ? Number(param) : param);
+
+/** `expo-sqlite` takes parameters one by one, as one array, or as one object of named ones. */
+function bound(params: unknown[]): never[] {
+  const [only] = params;
+  if (params.length !== 1) return params.map(value) as never[];
+  if (Array.isArray(only)) return only.map(value) as never[];
+  if (only !== null && typeof only === 'object') {
+    const named = Object.entries(only).map(([name, param]) => [name, value(param)]);
+    return [Object.fromEntries(named)] as never[];
+  }
+  return [value(only)] as never[];
+}
 
 export function memoryDatabase(): MemoryDatabase {
-  const { DatabaseSync } = process.getBuiltinModule('node:sqlite');
+  const sqlite = process.getBuiltinModule('node:sqlite') as
+    typeof import('node:sqlite') | undefined;
+  if (!sqlite) {
+    throw new Error('[angular-native] memoryDatabase() needs node:sqlite: Node 22.13 or later.');
+  }
+  const { DatabaseSync } = sqlite;
   // Foreign keys off until asked for, as a connection `expo-sqlite` opens is: Node turns them on.
   const db = new DatabaseSync(':memory:', { enableForeignKeyConstraints: false });
   return {
@@ -35,8 +51,10 @@ export function memoryDatabase(): MemoryDatabase {
       const { lastInsertRowid, changes } = db.prepare(source).run(...bound(params));
       return { lastInsertRowId: Number(lastInsertRowid), changes: Number(changes) };
     },
-    getFirstAsync: async <T>(source: string, ...params: unknown[]) =>
-      ({ ...db.prepare(source).get(...bound(params)) }) as T | null,
+    getFirstAsync: async <T>(source: string, ...params: unknown[]) => {
+      const row = db.prepare(source).get(...bound(params));
+      return row === undefined ? null : ({ ...row } as T);
+    },
     getAllAsync: async <T>(source: string, ...params: unknown[]) =>
       db
         .prepare(source)
@@ -48,7 +66,13 @@ export function memoryDatabase(): MemoryDatabase {
         await task();
         db.exec('COMMIT');
       } catch (error) {
-        db.exec('ROLLBACK');
+        // SQLite rolls some failures back itself, and a second rollback then fails: the error
+        // worth having is the task's.
+        try {
+          db.exec('ROLLBACK');
+        } catch {
+          // Already rolled back.
+        }
         throw error;
       }
     },

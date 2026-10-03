@@ -139,14 +139,19 @@ import { afterEach, beforeEach, expect, test } from 'vitest';
 
 let restore: () => void;
 beforeEach(() => (restore = openDatabasesWith(() => memoryDatabase())));
-afterEach(() => restore());
+afterEach(async () => {
+  // The database is a value of the module, so its connection outlives the test unless closed.
+  await notes.close();
+  restore();
+});
 
 test('adds a note', async () => {
   expect(await injectService(Notes).add('hello')).toBe(1);
 });
 ```
 
-Each open is a database of its own, so one test's rows are not another's. The stand-in has
+Each open is a database of its own, so once the last one is closed a test starts with no rows. It
+needs Node 22.13 or later, where `node:sqlite` loads without a flag. The stand-in has
 `execAsync`, `runAsync`, `getFirstAsync`, `getAllAsync`, `withTransactionAsync` and `closeAsync`.
 
 ## Working offline

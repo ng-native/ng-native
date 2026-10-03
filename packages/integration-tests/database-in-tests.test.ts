@@ -70,6 +70,32 @@ describe('database() in a Node test', () => {
     assert.deepEqual(await db.getAllAsync('SELECT * FROM note'), []);
   });
 
+  it('answers null for no first row, and binds a boolean as expo-sqlite does', async () => {
+    const db = await database('rows.db', schema).ready();
+    assert.equal(await db.getFirstAsync('SELECT * FROM note WHERE id = ?', 7), null);
+    await db.execAsync('CREATE TABLE flag (id INTEGER PRIMARY KEY, done INTEGER)');
+    await db.runAsync('INSERT INTO flag (id, done) VALUES (?, ?)', 1, true as never);
+    await db.runAsync('INSERT INTO flag (id, done) VALUES ($id, $done)', {
+      $id: 2,
+      $done: false,
+    } as never);
+    assert.deepEqual(await db.getAllAsync('SELECT done FROM flag ORDER BY id'), [
+      { done: 1 },
+      { done: 0 },
+    ]);
+  });
+
+  it('keeps the error of a task whose transaction is already rolled back', async () => {
+    const db = await database('gone.db', schema).ready();
+    await assert.rejects(
+      db.withTransactionAsync(async () => {
+        await db.execAsync('ROLLBACK');
+        throw new Error('the task failed');
+      }),
+      /the task failed/,
+    );
+  });
+
   it('opens with expo-sqlite again once restored', async () => {
     restore();
     await assert.rejects(database('real.db').ready());
