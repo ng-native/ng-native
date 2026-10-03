@@ -294,6 +294,27 @@
     }
   },
   {
+    "name": "@layer: a component's new layer is named after every layer of the app's sheet",
+    "expected": {
+      "color": "rgb(2, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)"
+    }
+  },
+  {
+    "name": "@layer: a component's layer keeps the place the app's sheet gave that name",
+    "expected": {
+      "color": "rgb(2, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)"
+    }
+  },
+  {
+    "name": "@layer: a component nests a layer in one the app's sheet named",
+    "expected": {
+      "color": "rgb(2, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)"
+    }
+  },
+  {
     "name": "background-color does not inherit",
     "expected": {
       "color": "rgb(0, 0, 0)",

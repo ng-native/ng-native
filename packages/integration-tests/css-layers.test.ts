@@ -24,7 +24,12 @@ const layersOf = (css: string): Record<string, number | undefined> => {
 };
 
 describe('@layer', () => {
-  it('numbers layers from the weakest, and leaves a rule in no layer unnumbered', () => {
+  it('names each layer once, in the order first named, and marks each rule with its layer', () => {
+    const sheet = compileCss(
+      '@layer a { .a { opacity: 1 } } @layer b { .b { opacity: 1 } } .c { opacity: 1 } @layer a { .a2 { opacity: 1 } }',
+      'layers',
+    );
+    assert.deepEqual(sheet.layers, [['a'], ['b']]);
     assert.deepEqual(
       layersOf('@layer a { .a { opacity: 1 } } @layer b { .b { opacity: 1 } } .c { opacity: 1 }'),
       {
@@ -35,17 +40,23 @@ describe('@layer', () => {
     );
   });
 
-  it('puts the rules of a sheet with no layer in it exactly as before', () => {
+  it('leaves a sheet with no layer in it exactly as before', () => {
     const sheet = compileCss('.a { opacity: 1 } .b { opacity: 0.5 }', 'plain');
+    assert.equal('layers' in sheet, false);
     assert.ok((sheet.rules as Rule[]).every((rule) => !('layer' in rule)));
   });
 
-  it("numbers a layer's nested layers before its own rules", () => {
+  it("names a nested layer by its path, and orders a layer's nested rules before its own", () => {
+    const sheet = compileCss(
+      '@layer a { .own { opacity: 1 } @layer x { .x { opacity: 1 } } } @layer b { .b { opacity: 1 } } @layer { .anon { opacity: 1 } }',
+      'nested',
+    );
+    assert.deepEqual(sheet.layers.slice(0, 3), [['a'], ['a', 'x'], ['b']]);
+    assert.match(sheet.layers[3][0], /^\0/, 'a block with no name has one nothing can write');
     assert.deepEqual(
-      layersOf(
-        '@layer a { .own { opacity: 1 } @layer x { .x { opacity: 1 } } } @layer b { .b { opacity: 1 } }',
-      ),
-      { x: 0, own: 1, b: 2 },
+      (sheet.rules as Rule[]).map((rule) => rule.compounds.at(-1)!.classes![0]),
+      ['x', 'own', 'b', 'anon'],
+      'weakest first',
     );
   });
 
@@ -61,6 +72,23 @@ describe('@layer', () => {
     assert.ok(sheet.keyframes?.spin, 'the keyframes');
     assert.equal(sheet.fonts?.length, 1, 'the face');
     assert.equal(sheet.rules.length, 1);
+  });
+
+  it('takes @keyframes of one name from the strongest layer, as Chrome does', () => {
+    // Chrome 154: one 0.2, two 0.5, three 0.7. The nesting pass settles it: lightningcss puts
+    // the layers in their order before a rule here is read.
+    const sheet = compileCss(
+      `@layer a, b;
+       @layer b { @keyframes one { to { opacity: 0.2 } } }
+       @layer a { @keyframes one { to { opacity: 0.9 } } }
+       @keyframes two { to { opacity: 0.5 } }
+       @layer a { @keyframes two { to { opacity: 0.9 } } }
+       @layer a { @keyframes three { to { opacity: 0.3 } } }
+       @layer a { @keyframes three { to { opacity: 0.7 } } }`,
+      'frames',
+    );
+    const last = (name: string) => sheet.keyframes[name].at(-1).declarations.opacity;
+    assert.deepEqual([last('one'), last('two'), last('three')], [0.2, 0.5, 0.7]);
   });
 
   it('still says what it refuses inside a layer, and keeps the rest of the layer', () => {

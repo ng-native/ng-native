@@ -458,6 +458,24 @@ export const CASES: OracleCase[] = [
     tree: probe({ classes: ['c'] }),
   },
   {
+    name: "@layer: a component's new layer is named after every layer of the app's sheet",
+    global: '@layer x, y, z; @layer y { #probe.c { color: rgb(1, 0, 0) } }',
+    css: '@layer mine { .c { color: rgb(2, 0, 0) } }',
+    tree: probe({ classes: ['c'] }),
+  },
+  {
+    name: "@layer: a component's layer keeps the place the app's sheet gave that name",
+    global: '@layer x, y; @layer y { .c { color: rgb(2, 0, 0) } }',
+    css: '@layer x { #probe.c { color: rgb(1, 0, 0) } }',
+    tree: probe({ classes: ['c'] }),
+  },
+  {
+    name: "@layer: a component nests a layer in one the app's sheet named",
+    global: '@layer base { .c { color: rgb(2, 0, 0) } }',
+    css: '@layer base.extra { #probe.c { color: rgb(1, 0, 0) } }',
+    tree: probe({ classes: ['c'] }),
+  },
+  {
     name: 'background-color does not inherit',
     css: '.outer { background-color: rgb(1, 0, 0) }',
     tree: { name: 'view', classes: ['outer'], children: [probe()] },

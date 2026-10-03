@@ -696,16 +696,23 @@ function refusedAtRule(rule, context) {
   );
 }
 
-/** One cascade layer: the layers nested in it, in the order each was first named. */
-function layerNode() {
-  return { nested: new Map(), rank: 0 };
+/**
+ * One cascade layer: its name from the outermost layer in, the layers nested in it in the order
+ * each was first named, and where it is in the sheet's list of layers.
+ */
+function layerNode(path = [], all = []) {
+  return { path, all, nested: new Map(), rank: 0, index: all.length };
 }
 
 /** The layer `name` names inside `parent`, made on first mention: `a.x` is `x` inside `a`. */
 function layerNamed(parent, name) {
   let node = parent;
   for (const part of name) {
-    if (!node.nested.has(part)) node.nested.set(part, layerNode());
+    if (!node.nested.has(part)) {
+      const nested = layerNode([...node.path, part], node.all);
+      node.all.push(nested);
+      node.nested.set(part, nested);
+    }
     node = node.nested.get(part);
   }
   return node;
@@ -2251,7 +2258,8 @@ function compileCss(source, context = 'styles', options = {}) {
     // A layer's rules, compiled as any others and marked with the layer they are in. A block
     // with no name is a layer of its own, which nothing can name again.
     const outer = layer;
-    layer = layerNamed(outer, rule.value.name ?? [Symbol()]);
+    // No stylesheet can write a name that starts with a null, so it is this block's alone.
+    layer = layerNamed(outer, rule.value.name ?? [`\0${layers.all.length}`]);
     try {
       for (const inner of rule.value.rules ?? []) {
         guarded(() => compileRule(inner), locationOf(inner));
@@ -2299,12 +2307,18 @@ function compileCss(source, context = 'styles', options = {}) {
   // Cascade order is decided here, so the device only walks the list. A layered rule is weaker
   // than every rule outside a layer, and a layer weaker than each one named after it.
   rankLayers(layers);
-  for (const rule of rules) if (rule.layer) rule.layer = rule.layer.rank;
   rules.sort(
-    (a, b) => layerOrder(a.layer, b.layer) || a.specificity - b.specificity || a.order - b.order,
+    (a, b) =>
+      layerOrder(a.layer?.rank, b.layer?.rank) ||
+      a.specificity - b.specificity ||
+      a.order - b.order,
   );
+  // A rule names its layer by its place in the sheet's list of them. The engine gives each name
+  // one place among every sheet's layers, as a document has one order for them all.
+  for (const rule of rules) if (rule.layer) rule.layer = rule.layer.index;
   return {
     rules,
+    ...(layers.all.length ? { layers: layers.all.map((one) => one.path) } : {}),
     ...(fonts.length ? { fonts } : {}),
     ...(Object.keys(keyframes).length ? { keyframes } : {}),
     // Said once, on the sheet, because what it costs is not matching but invalidation: adding a

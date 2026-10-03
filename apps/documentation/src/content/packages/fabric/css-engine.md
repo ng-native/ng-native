@@ -136,7 +136,9 @@ important declaration in a layer beats one in a later layer, and both beat one o
 So a library can ship its defaults in a layer and the app's plain rules win without matching the
 library's specificity.
 
-Layers are ordered within a stylesheet. A component's layer and a layer of the same name in the
-app's global sheet each take the place their own sheet gave them, where a browser keeps one order
-for the whole document. `revert-layer` is dropped with a warning, and `@import ... layer()` is not
-read.
+Layers have one order across every stylesheet, as they do in a document: a name keeps the place
+it had when it was first seen, in the app's global sheet and then in each component's sheet as the
+component first renders. So a library's layer and the app's layer of the same name are one layer.
+`@keyframes` of one name resolve by layer within a stylesheet. `revert-layer` is dropped with a
+warning, `@import ... layer()` is not read, and `!important` on a custom property is not tracked,
+in a layer or out of one.
