@@ -196,6 +196,16 @@ In React these are methods on the map's ref. Underneath they are functions `expo
 the view, which native finds by the tag it is called with; `MapView` calls them with the tag the
 engine committed the view under, so a `viewChild` is all you need.
 
+## An address on the map
+
+A marker takes coordinates, and [`Location`](/packages/expo/location#an-address-and-a-point) turns
+an address into them:
+
+```ts
+const [place] = await inject(Location).geocode('10 Downing Street, London');
+if (place) this.markers.set([{ id: 'home', coordinates: place, title: 'Home' }]);
+```
+
 ## Platform differences
 
 - The option enums differ: a plain map is `mapType: 'STANDARD'` on iOS and `'NORMAL'` on Android,

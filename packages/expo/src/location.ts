@@ -53,6 +53,15 @@ export interface WatchOptions {
 }
 
 type ExpoFix = import('expo-location').LocationObject;
+/** A point on the map: what an address geocodes to, and what `reverseGeocode` takes. */
+export interface Coordinates {
+  readonly latitude: number;
+  readonly longitude: number;
+}
+
+/** A place as the platform's geocoder names it: street, city, region, country and the rest. */
+export type Address = import('expo-location').LocationGeocodedAddress;
+
 type ExpoOptions = import('expo-location').LocationOptions;
 
 /** The slice of `expo-location` this needs. */
@@ -64,6 +73,8 @@ export interface NativeLocation {
     options: ExpoOptions,
     callback: (fix: ExpoFix) => void,
   ): Promise<{ remove(): void }>;
+  geocodeAsync?(address: string): Promise<readonly Coordinates[]>;
+  reverseGeocodeAsync?(coordinates: Coordinates): Promise<readonly Address[]>;
 }
 
 @Service()
@@ -95,6 +106,23 @@ export class Location {
     const fix = await this.native.getCurrentPositionAsync({ accuracy: ACCURACY[accuracy] });
     this.latest.set(positionOf(fix));
     return this.latest();
+  }
+
+  /**
+   * The places an address could be, best match first, from the platform's own geocoder. Empty
+   * for an address it does not know, and without the permission or the module.
+   */
+  async geocode(address: string): Promise<Coordinates[]> {
+    if (!this.native?.geocodeAsync || !(await this.permission.ensure())) return [];
+    const found = await this.native.geocodeAsync(address);
+    return found.map(({ latitude, longitude }) => ({ latitude, longitude }));
+  }
+
+  /** The addresses at a point. Empty without the permission or the module. */
+  async reverseGeocode(coordinates: Coordinates): Promise<Address[]> {
+    if (!this.native?.reverseGeocodeAsync || !(await this.permission.ensure())) return [];
+    const { latitude, longitude } = coordinates;
+    return [...(await this.native.reverseGeocodeAsync({ latitude, longitude }))];
   }
 
   /** Follow the position into the signal. Resolves to the function that stops. */

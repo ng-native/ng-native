@@ -76,6 +76,18 @@ Add to `Info.plist`:
 Android's `ACCESS_COARSE_LOCATION` and `ACCESS_FINE_LOCATION` permissions are added automatically
 by the module's config plugin.
 
+## An address and a point
+
+`geocode(address)` answers the places an address could be, best match first, from the platform's
+own geocoder, and `reverseGeocode(coordinates)` the addresses at a point. Both ask for the
+foreground permission as `current()` does, and answer an empty list without it, without the
+module, or for an address the geocoder does not know.
+
+```ts
+const [place] = await this.location.geocode('10 Downing Street, London');
+if (place) this.marker.set(place); // { latitude, longitude }
+```
+
 ## Without the module
 
 On iOS and Android, a missing `expo-location` - never installed, or installed without the app

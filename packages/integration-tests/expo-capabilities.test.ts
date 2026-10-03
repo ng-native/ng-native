@@ -135,7 +135,7 @@ describe('the location', () => {
       },
     };
     const service = serviceWith(Location.SOURCE, native, () => new Location());
-    return { service, log, emit: (latitude: number) => emit?.(fix(latitude)) };
+    return { service, native, log, emit: (latitude: number) => emit?.(fix(latitude)) };
   }
 
   const expected = (latitude: number): Position => ({
@@ -187,6 +187,46 @@ describe('the location', () => {
     assert.equal(await service.current(), null);
     (await service.start())();
     assert.equal(service.position(), null);
+  });
+
+  it('geocodes an address to coordinates, and a point back to addresses', async () => {
+    const { native } = location();
+    const asked: unknown[] = [];
+    const service = serviceWith(
+      Location.SOURCE,
+      {
+        ...native,
+        geocodeAsync: async (address: string) => {
+          asked.push(address);
+          return [{ latitude: 51.5, longitude: -0.12, altitude: 11, accuracy: 3 }];
+        },
+        reverseGeocodeAsync: async (point: { latitude: number; longitude: number }) => {
+          asked.push(point);
+          return [{ city: 'London', country: 'United Kingdom' }] as never;
+        },
+      },
+      () => new Location(),
+    );
+    assert.deepEqual(await service.geocode('10 Downing Street'), [
+      { latitude: 51.5, longitude: -0.12 },
+    ]);
+    const [address] = await service.reverseGeocode({ latitude: 51.5, longitude: -0.12 });
+    assert.equal(address?.city, 'London');
+    assert.deepEqual(asked, ['10 Downing Street', { latitude: 51.5, longitude: -0.12 }]);
+  });
+
+  it('answers no places without the permission, the module, or a geocoder in the source', async () => {
+    const refused = location(DENIED).native;
+    const geocoder = { geocodeAsync: async () => [{ latitude: 1, longitude: 2 }] };
+    const without = serviceWith(Location.SOURCE, { ...refused, ...geocoder }, () => new Location());
+    assert.deepEqual(await without.geocode('anywhere'), []);
+
+    const absent = serviceWith(Location.SOURCE, null, () => new Location());
+    assert.deepEqual(await absent.geocode('anywhere'), []);
+    assert.deepEqual(await absent.reverseGeocode({ latitude: 1, longitude: 2 }), []);
+
+    const plain = serviceWith(Location.SOURCE, location().native, () => new Location());
+    assert.deepEqual(await plain.geocode('anywhere'), []);
   });
 });
 
