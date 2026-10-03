@@ -1807,7 +1807,7 @@ const TRANSLATORS = new Map([
         );
       }
       const [shadow] = value;
-      if (!shadow) return;
+      if (!shadow) return noTextShadow(out);
       out.textShadowOffset = {
         width: length(shadow.xOffset, property),
         height: length(shadow.yOffset, property),
@@ -1824,6 +1824,16 @@ const TRANSLATORS = new Map([
   ],
   ['font-weight', fontWeight],
 ]);
+
+/**
+ * `text-shadow: none`: no shadow at all, said in full, so it clears one a weaker rule or a parent
+ * gave. Native's three props have no word for none.
+ */
+function noTextShadow(out) {
+  out.textShadowOffset = { width: 0, height: 0 };
+  out.textShadowRadius = 0;
+  out.textShadowColor = 'rgba(0, 0, 0, 0)';
+}
 
 /** `font-weight`, as the absolute weight native draws. */
 function fontWeight(property, value, out) {
@@ -2117,6 +2127,7 @@ function kindOf(property) {
 
 module.exports = {
   FONT_VARIANTS,
+  noTextShadow,
   easing,
   animationTimeWithTokens,
   translate,

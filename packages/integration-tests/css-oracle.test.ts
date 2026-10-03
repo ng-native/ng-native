@@ -102,6 +102,14 @@ const NATIVE_INITIAL: Partial<Record<ExtraProperty, unknown>> = {
   'pointer-events': 'auto',
 };
 
+/** One shadow in three props here: none is no blur, no offset and no colour to draw one in. */
+function assertNoTextShadow(style: Record<string, unknown>, browser: string): void {
+  assert.equal(browser, 'none', 'only none is compared');
+  assert.equal(style['textShadowRadius'], 0);
+  assert.deepEqual(style['textShadowOffset'], { width: 0, height: 0 });
+  assert.equal(style['textShadowColor'], 'rgba(0, 0, 0, 0)');
+}
+
 /** One of a case's extra properties against what the browser computed for it. */
 function assertExtra(property: ExtraProperty, style: Record<string, unknown>, browser: string) {
   if (property === 'display') {
@@ -181,7 +189,9 @@ describe('what a browser does with the same stylesheet', () => {
         }
       }
       for (const property of test.extra ?? []) {
-        assertExtra(property, style, expected.expected[property]!);
+        const browser = expected.expected[property]!;
+        if (property === 'text-shadow') assertNoTextShadow(style, browser);
+        else assertExtra(property, style, browser);
       }
     });
   });

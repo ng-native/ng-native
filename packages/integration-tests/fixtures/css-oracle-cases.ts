@@ -53,6 +53,8 @@ export interface OracleCase {
 
 /** The properties a case can measure beyond `PROPERTIES`, and the style key each lands in. */
 export const EXTRA_KEYS = {
+  // Three props on native: read by the oracle test for itself.
+  'text-shadow': 'textShadowRadius',
   'border-top-color': 'borderTopColor',
   'border-left-color': 'borderLeftColor',
   'border-top-width': 'borderTopWidth',
@@ -747,6 +749,18 @@ export const CASES: OracleCase[] = [
     css: '#probe { border: 1px solid color-mix(in srgb, var(--tint) 35%, transparent) }',
     tree: probe({ name: 'view' }),
     extra: ['border-top-width'],
+  },
+  {
+    name: 'text-shadow: none clears the shadow a weaker rule set',
+    css: '#probe { text-shadow: 1px 2px 3px rgb(9, 0, 0) } #probe.plain { text-shadow: none }',
+    tree: probe({ classes: ['plain'] }),
+    extra: ['text-shadow'],
+  },
+  {
+    name: 'text-shadow: none clears the shadow a parent gave',
+    css: '.outer { text-shadow: 1px 2px 3px rgb(9, 0, 0) } #probe { text-shadow: none }',
+    tree: { name: 'view', classes: ['outer'], children: [probe()] },
+    extra: ['text-shadow'],
   },
   {
     name: 'an outline with no colour is drawn in the colour of the text',

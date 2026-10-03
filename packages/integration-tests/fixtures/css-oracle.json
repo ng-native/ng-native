@@ -586,6 +586,22 @@
     }
   },
   {
+    "name": "text-shadow: none clears the shadow a weaker rule set",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "text-shadow": "none"
+    }
+  },
+  {
+    "name": "text-shadow: none clears the shadow a parent gave",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "text-shadow": "none"
+    }
+  },
+  {
     "name": "an outline with no colour is drawn in the colour of the text",
     "expected": {
       "color": "rgb(7, 1, 0)",

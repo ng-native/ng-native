@@ -153,17 +153,18 @@ in an iOS build, and in a keyframe of one. A skew of 0 is kept everywhere, since
 on Android.
 
 `box-shadow` and `text-shadow` both work, though native has room for exactly one `text-shadow`, not
-a list. On iOS a `text-shadow` is drawn inside the text's own box, so a blur or offset that
+a list. `none` switches either off, over a weaker rule's shadow or, for a `text-shadow`, an
+inherited one. On iOS a `text-shadow` is drawn inside the text's own box, so a blur or offset that
 reaches past it is cut off square; give the text padding as deep as the shadow. A `box-shadow` can
 have tokens in it as design systems write them: a color that is a `var()`, a `color-mix()`, a
-relative color, `rgba(var(--channels), 0.25)` or an `hsl()` of tokens; a length that is
-a `var()` or `calc()` around one (`0 0 0 var(--ring-width)`); and a whole shadow that is a token,
-in a list with others, with the shadows after its name as the fallback. A shadow whose lengths are
-all one token is the exception, since a token is read in one form: write its lengths out, or put
-the whole shadow in the token. A shadow token can have a token in its color too, `--ring: 0 0 0
-2px var(--ring-color, currentcolor)`, filled in where it is used. `currentcolor` as the fallback
-of a shadow's color is the element's `color`, or the one it inherits, or black. A `text-shadow`
-takes tokens the same way, in its color and its lengths.
+relative color, `rgba(var(--channels), 0.25)` or an `hsl()` of tokens; a length that is a `var()` or
+`calc()` around one (`0 0 0 var(--ring-width)`); and a whole shadow that is a token, in a list with
+others, with the shadows after its name as the fallback. A shadow whose lengths are all one token is
+the exception, since a token is read in one form: write its lengths out, or put the whole shadow in
+the token. A shadow token can have a token in its color too, `--ring: 0 0 0 2px var(--ring-color,
+currentcolor)`, filled in where it is used. `currentcolor` as the fallback of a shadow's color is
+the element's `color`, or the one it inherits, or black. A `text-shadow` takes tokens the same way,
+in its color and its lengths.
 
 Truncation is a paragraph's props on native, not a style, and CSS's three ways of asking for it
 compile to them: `white-space: nowrap` to `numberOfLines: 1`, `line-clamp` or `-webkit-line-clamp`

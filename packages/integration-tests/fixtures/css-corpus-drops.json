@@ -1,7 +1,7 @@
 {
   "bootstrap": {
     "rules": 2520,
-    "dropped": 700,
+    "dropped": 698,
     "emitted": [
       "$animation",
       "$animationDelay",
@@ -90,6 +90,9 @@
       "textDecorationColor",
       "textDecorationLine",
       "textDecorationStyle",
+      "textShadowColor",
+      "textShadowOffset",
+      "textShadowRadius",
       "textTransform",
       "top",
       "transform",
@@ -310,9 +313,6 @@
       },
       "text-indent": {
         "'text-indent' is not mapped yet. React Native may well support it; nothing here translates it. Check RN's style types, then add it to css/properties.cjs.": 1
-      },
-      "text-shadow": {
-        "'text-shadow: none' is not a value native can take": 2
       },
       "text-size-adjust": {
         "'text-size-adjust' has no React Native equivalent: no style prop of a native view does what it does.": 1

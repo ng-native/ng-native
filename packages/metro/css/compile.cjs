@@ -31,6 +31,7 @@ const {
   finishTransition,
   animationTimeWithTokens,
   finishAnimation,
+  noTextShadow,
   frameEasing,
   finishBox,
   unsupported,
@@ -1509,21 +1510,27 @@ function onlyWord(parts) {
 /** The CSS-wide keywords, which every property takes and which lightningcss leaves unparsed. */
 const CSS_WIDE = new Set(['inherit', 'initial', 'unset', 'revert', 'revert-layer']);
 
+/** `box-shadow: none` or `text-shadow: none` written to `out`, and whether `property` was one. */
+function noShadow(property, out) {
+  if (property === 'box-shadow') out.boxShadow = [];
+  else if (property === 'text-shadow') noTextShadow(out);
+  else return false;
+  return true;
+}
+
 /**
  * A value lightningcss could not parse that has no `var()` in it either.
  *
  * These arrive exactly as a `var()` does: `color: inherit` and `flex-basis: content` included.
- * They get their own message, and the ones native can say are said: `box-shadow: none`, which
- * lightningcss leaves unparsed for reasons of its own, and `color: inherit`.
+ * They get their own message, and the ones native can say are said: `box-shadow: none` and
+ * `text-shadow: none`, which lightningcss leaves unparsed for reasons of its own, and
+ * `color: inherit`.
  */
 function unparsedValue(value, out, deferred, context) {
   const property = value?.propertyId?.property ?? 'a property';
   const parts = terms(value?.value);
   const word = onlyWord(parts);
-  if (property === 'box-shadow' && word === 'none') {
-    out.boxShadow = [];
-    return;
-  }
+  if (word === 'none' && noShadow(property, out)) return;
   // `color: inherit` is the parent's colour, which is what currentColor is on `color` itself, so
   // it is the same marker the device fills in. `unset` is `inherit` on a property CSS inherits.
   if (property === 'color' && (word === 'inherit' || word === 'unset')) {

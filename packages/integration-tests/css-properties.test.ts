@@ -302,6 +302,34 @@ describe('properties React Native supports that we were rejecting', () => {
     });
   });
 
+  it('text-shadow: none, as no shadow at all, so it clears one a weaker rule or a parent gave', () => {
+    assert.deepEqual(declarationsOf('text-shadow: none'), {
+      textShadowOffset: { width: 0, height: 0 },
+      textShadowRadius: 0,
+      textShadowColor: 'rgba(0, 0, 0, 0)',
+    });
+    const sheet = compileCss(
+      '.a { text-shadow: 1px 2px 3px red } .a.plain { text-shadow: none }',
+      't',
+    );
+    const resolver = new StyleResolver(sheet, { width: 400, height: 800, colorScheme: 'light' });
+    const node = {
+      name: 'text',
+      classes: new Set(['a', 'plain']),
+      props: {},
+      parent: null,
+      children: [],
+      sheet,
+      hostSheet: null,
+      styleCache: null,
+      styleDirty: true,
+    } as unknown as StyleTarget;
+    const { style } = resolver.resolve(node, 1);
+    assert.equal(style['textShadowRadius'], 0);
+    assert.deepEqual(style['textShadowOffset'], { width: 0, height: 0 });
+    assert.equal(style['textShadowColor'], 'rgba(0, 0, 0, 0)');
+  });
+
   it('refuses a text-shadow list, because native has room for exactly one', () => {
     assert.throws(() => declarationsOf('text-shadow: 1px 1px red, 2px 2px blue'), /only one/i);
   });
