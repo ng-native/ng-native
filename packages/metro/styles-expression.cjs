@@ -114,11 +114,29 @@ function trim(code, { start, end }) {
 }
 
 /**
+ * Where the last `@Component` before `classStart` is, or -1. One written in a comment or a string
+ * between the decorator and the class is not it.
+ */
+function lastDecorator(src, classStart) {
+  let found = -1;
+  for (let i = 0; i < classStart;) {
+    const next = skip(src, i);
+    if (next !== i) {
+      i = next;
+      continue;
+    }
+    if (src.startsWith('@Component', i)) found = i;
+    i += 1;
+  }
+  return found;
+}
+
+/**
  * The `name` property of the `@Component({...})` decorating the class that starts at
  * `classStart`: where its value is in the source, or null when the decorator has none.
  */
 function decoratorProperty(src, classStart, name) {
-  const decorator = src.lastIndexOf('@Component', classStart);
+  const decorator = lastDecorator(src, classStart);
   if (decorator === -1) return null;
   const open = src.indexOf('{', decorator);
   if (open === -1 || open > classStart) return null;

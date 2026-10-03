@@ -41,6 +41,19 @@ describe('a host the compiler cannot read', () => {
     );
   });
 
+  it('finds the decorator past a comment that mentions one', () => {
+    const source = `
+import { Component } from '@angular/core';
+const SHARED = { '(press)': 'go()' };
+@Component({ selector: 'app-card', template: '', host: { ...SHARED } })
+// @Component({}) is what this replaced
+export class Card {
+  go() {}
+}
+`;
+    assert.throws(() => transformAngular(source, '/app/src/card.ts'), /"\.\.\.SHARED"/);
+  });
+
   it('names only the entries that were dropped', () => {
     assert.throws(
       () =>
