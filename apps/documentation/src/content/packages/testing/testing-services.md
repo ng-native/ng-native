@@ -41,16 +41,16 @@ it('replaces a service with a stand-in', async () => {
 });
 ```
 
-`Weather` is written with `@Injectable({ providedIn: 'root' })` rather than `@Service()` on
-purpose: both forms declare a root-scoped service, and a test resolves either the same way.
+`Weather` is written with `@Injectable({ providedIn: 'root' })` rather than `@Service()` on purpose:
+both forms declare a root-scoped service, and a test resolves either the same way.
 
 ## A service on its own
 
 A service with no component to render goes through `injectService()`. It creates the service in an
 app's root injector, built with the `providers` given, so a `@Service()` and every root service it
-injects resolve as they do in the app. There is no `TestBed` to configure, and
-`Injector.create()` does not stand in for one: an injector made that way has no root scope, so it
-finds no `@Service()` or `providedIn: 'root'` class.
+injects resolve as they do in the app. There is no `TestBed` to configure, and `Injector.create()`
+does not stand in for one: an injector made that way has no root scope, so it finds no `@Service()`
+or `providedIn: 'root'` class.
 
 ```ts
 import { Service, inject } from '@angular/core';
@@ -107,5 +107,5 @@ it('drives one service and reads another', () => {
 A call with `providers` starts a new app, which the calls after it use. The app ends with its test:
 the next test starts another whether or not `cleanup()` ran, so one test never sees another's
 services. Call it inside the test it belongs to: a call in a `beforeAll`, or in tests that run at
-once (`it.concurrent`), makes an app of its own each time, since no one test owns it. `cleanup()` destroys the app, which runs the service's `DestroyRef` callbacks, just as it
-unmounts a render.
+once (`it.concurrent`), makes an app of its own each time, since no one test owns it. `cleanup()`
+destroys the app, which runs the service's `DestroyRef` callbacks, just as it unmounts a render.

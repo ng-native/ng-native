@@ -69,13 +69,14 @@ function injectService<T>(token: ProviderToken<T>, options?: InjectServiceOption
 ```
 
 Mounts an empty component onto a fresh fake Fabric with `mount()`, as `render()` does, and returns
-`token` from that app's root injector. A service with no component gets the same root an app
-gives it, so a `@Service()` and the root services it injects resolve. The calls in one test share
-the app, so each returns the instance the others see. `InjectServiceOptions` has one option,
-`providers`, which works as it does for `render()`; a call that passes it starts a new app, which
-later calls use. The next test starts another app. Every call makes its own outside a test (a `beforeAll`), while
-tests run at once (`it.concurrent`), and where the runner's setup did not run (a file run with
-neither `ngNative()` nor `node --import @ng-native/testing/register --test`). The app is not what `screen` queries, and `cleanup()` destroys it. See
+`token` from that app's root injector. A service with no component gets the same root an app gives
+it, so a `@Service()` and the root services it injects resolve. The calls in one test share the app,
+so each returns the instance the others see. `InjectServiceOptions` has one option, `providers`,
+which works as it does for `render()`; a call that passes it starts a new app, which later calls
+use. The next test starts another app. Every call makes its own outside a test (a `beforeAll`),
+while tests run at once (`it.concurrent`), and where the runner's setup did not run (a file run with
+neither `ngNative()` nor `node --import @ng-native/testing/register --test`). The app is not what
+`screen` queries, and `cleanup()` destroys it. See
 [A service on its own](/packages/testing/testing-services#a-service-on-its-own).
 
 ## `screen`
