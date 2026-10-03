@@ -100,6 +100,61 @@ describe('width: fit-content', () => {
   });
 });
 
+describe('fit-content and the rest of what a node is merged from', () => {
+  it('reads the alignment a component overrides its container with', () => {
+    const s = scene(FIT);
+    s.engine.setProp(s.outer, 'styleOverride', { alignItems: 'center' });
+    assert.equal(s.props()['alignSelf'] ?? null, null);
+    s.engine.setProp(s.outer, 'styleOverride', null);
+    assert.equal(s.props()['alignSelf'], 'flex-start');
+  });
+
+  it('reads the container a `display: contents` parent leaves its children in', () => {
+    const css =
+      '.row { flex-direction: row } .gone { display: contents } .c { height: fit-content }';
+    const sheet = compileCss(css, 'app.css', { onUnsupported: () => {} });
+    const fabric = createFakeFabric();
+    const engine = new Engine(fabric, 1, { globalStyles: sheet as never });
+    const [row, gone, box] = ['row', 'gone', 'c'].map((classes) => {
+      const node = engine.createElement('view');
+      engine.setClasses(node, classes);
+      return node;
+    }) as [EngineNode, EngineNode, EngineNode];
+    engine.appendChild(engine.root, row);
+    engine.appendChild(row, gone);
+    engine.appendChild(gone, box);
+    const alignSelf = () => {
+      engine.commit();
+      const found: unknown[] = [];
+      const walk = (node: { props: Record<string, unknown>; children: readonly unknown[] }) => {
+        if ('alignSelf' in node.props) found.push(node.props['alignSelf']);
+        node.children.forEach((child) => walk(child as never));
+      };
+      walk(fabric.committed[0] as never);
+      return found[0] ?? null;
+    };
+    // Laid out in the row above, across which a height stretches.
+    assert.equal(alignSelf(), 'flex-start');
+    engine.removeClass(row, 'row');
+    assert.equal(alignSelf(), null);
+    engine.addClass(row, 'row');
+    assert.equal(alignSelf(), 'flex-start');
+    // No longer `contents`: its own column is the container, and a height does not stretch in it.
+    engine.removeClass(gone, 'gone');
+    assert.equal(alignSelf(), null);
+    engine.addClass(gone, 'gone');
+    assert.equal(alignSelf(), 'flex-start');
+  });
+
+  it('leaves an image its own size, which is what its content is', () => {
+    const s = scene('.c { width: fit-content; height: fit-content }');
+    s.engine.setProp(s.inner, 'intrinsicSize', { width: 30, height: 20 });
+    const props = s.props();
+    assert.equal(props['width'], 30);
+    assert.equal(props['height'], 20);
+  });
+});
+
 describe('Tailwind', () => {
   it('reads w-fit and h-fit', () => {
     const css = flattenTailwind(build('native', 'w-fit h-fit flex-row'));
