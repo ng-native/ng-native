@@ -63,9 +63,7 @@ export function compileAngular(source, file, options = {}) {
     : result.code;
   const directory = path.dirname(file);
   return {
-    // The compiler writes a `require` of its own for each font a stylesheet's `@font-face` names,
-    // which was in no source a caller could have stubbed.
-    code: stubAssets(code),
+    code: stubFonts(code),
     dependencies: result.dependencies.map((dependency) => path.resolve(directory, dependency)),
     map: result.map,
   };
@@ -80,5 +78,14 @@ export function compileAngular(source, file, options = {}) {
 const ASSET =
   /\brequire\(\s*(['"])([^'"]+\.(?:png|jpe?g|gif|webp|bmp|svg|ttf|otf|mp3|mp4|wav|m4a|mov|json5?))\1\s*\)/g;
 /** @param {string} code */
+/**
+ * The `require` the compiler writes for the file a stylesheet's `@font-face` names, which is in no
+ * source a caller could have stubbed and has no `require` to run with either. Matched by where it
+ * sits in a compiled sheet, so whatever the file is called, and nothing a package wrote itself.
+ */
+const FONT = /"source":require\(("(?:[^"\\]|\\.)*")\)/g;
+/** @param {string} code */
+const stubFonts = (code) => code.replace(FONT, (_, path) => `"source":({ testUri: ${path} })`);
+
 export const stubAssets = (code) =>
   code.replace(ASSET, (_, _quote, path) => `({ testUri: ${JSON.stringify(path)} })`);

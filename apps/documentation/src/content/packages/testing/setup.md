@@ -141,7 +141,8 @@ plugin and the Node hook both replace each such call in your own source with
 can still see which image it was given.
 
 A font a stylesheet declares with `@font-face { src: url('./brand.ttf') }` is a `require` too, one
-the compiler writes, and gets the same stand-in: the component loads, and the font file is not read.
+the compiler writes, and gets the same stand-in whatever kind of file it names: the component loads,
+and the font file is not read.
 
 ## Troubleshooting
 

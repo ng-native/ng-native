@@ -38,6 +38,11 @@ test('a required image renders, with the path it was required by', async () => {
       font-family: 'Brand';
       src: url('./brand.ttf');
     }
+    @font-face {
+      font-family: 'Brand';
+      font-weight: 700;
+      src: url('./brand-bold.woff2');
+    }
   `,
 })
 class Brand {}
