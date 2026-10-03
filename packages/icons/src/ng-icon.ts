@@ -33,11 +33,19 @@ import {
   numberAttribute,
   type Signal,
 } from '@angular/core';
-import { claimHost, type EngineNode, HostEngine } from '@ng-native/fabric';
+import { claimHost, type Engine, type EngineNode, HostEngine } from '@ng-native/fabric';
 import { NgIconsToken } from '@ng-icons/core';
 import { parseSvg, type SvgNode } from './parse-svg.ts';
 import { registerSvgComponents } from './svg-elements.ts';
-import { SVG_ELEMENTS, nativeProps, own, styleAttributes, viewBoxProps } from './svg-props.ts';
+import {
+  PAINT,
+  SVG_ELEMENTS,
+  isTokenPaint,
+  nativeProps,
+  own,
+  styleAttributes,
+  viewBoxProps,
+} from './svg-props.ts';
 
 /** ng-icons stores icons under a camel-cased key, so `hero-book-open` finds `heroBookOpen`. */
 function toPropertyName(name: string): string {
@@ -171,6 +179,14 @@ export class NgIcon {
       }),
     };
     const props = nativeProps(node.tag, attrs, { color: (value) => this.engine.color(value) });
+    // A paint that reads a custom property is settled by the cascade, with the tokens in scope
+    // for the shape, and follows them. It stays in `propList`, which says the shape has one.
+    const cascade = this.engine as Partial<Pick<Engine, 'setBoundStyle'>>;
+    for (const paint of PAINT) {
+      if (!isTokenPaint(attrs[paint]) || !cascade.setBoundStyle?.(shape, paint, attrs[paint]))
+        continue;
+      delete props[paint];
+    }
     for (const [prop, value] of Object.entries(props)) {
       this.renderer.setProperty(shape, prop, value);
     }

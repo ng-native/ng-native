@@ -80,6 +80,15 @@ surface). Anything outside it - `<defs>`, gradients, a `<style>` block, an embed
 silently skipped rather than rejected, so a hand-written SVG with those features will render an
 incomplete icon with no error. Stick to icons that are just paths and basic shapes.
 
+A drawing with more than one colour takes each from a custom property: a `fill` or a `stroke` in
+the markup whose value is a `var()`, as an attribute or in `style`, reads the token in scope for
+the icon and follows it, with a fallback if it needs one.
+
+```ts
+protected readonly logo =
+  '<svg viewBox="0 0 10 10"><path d="M0 0L5 5" stroke="var(--brand)"/></svg>';
+```
+
 ## Accessibility
 
 An icon with no `accessibilityLabel` is treated as decorative: it is left out of the accessibility

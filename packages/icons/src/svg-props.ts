@@ -98,6 +98,13 @@ const PRESENTATION: Record<string, string> = {
   opacity: 'opacity',
 };
 
+/** The presentation attributes that are a paint. */
+export const PAINT: ReadonlySet<string> = new Set(['fill', 'stroke']);
+
+/** Whether a paint is a `var()`, which only the cascade can settle. */
+export const isTokenPaint = (value: string | undefined): value is string =>
+  value !== undefined && /^\s*var\(/i.test(value);
+
 export interface SvgContext {
   /** The host's colour conversion, which a brush payload is the result of. */
   color(value: string): unknown;
@@ -138,7 +145,8 @@ export function styleAttributes(
     if (colon === -1) continue;
     const name = declaration.slice(0, colon).trim();
     const value = declaration.slice(colon + 1).trim();
-    const resolved = resolveVar(value, variables);
+    // A paint's `var()` is kept as written: the cascade settles it, with the tokens in scope.
+    const resolved = resolveVar(value, variables) ?? (PAINT.has(name) ? value : undefined);
     if (name && resolved !== undefined) attrs[name] = resolved;
   }
   return attrs;

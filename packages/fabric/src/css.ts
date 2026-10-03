@@ -2527,7 +2527,8 @@ const BOUND_KINDS: Readonly<Record<string, TokenKind>> = {
 
 /** What a token is read as for a bound declaration of `prop`, as the compiler says for a rule. */
 function boundKind(prop: string): TokenKind {
-  if (/color$/i.test(prop)) return 'color';
+  // `fill` and `stroke` are a shape's paint, which is a colour.
+  if (/color$/i.test(prop) || prop === 'fill' || prop === 'stroke') return 'color';
   if (prop === 'fontWeight') return 'weight';
   if (prop === 'fontFamily') return 'family';
   if (prop === 'lineHeight') return 'lineHeight';

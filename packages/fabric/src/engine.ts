@@ -1640,7 +1640,9 @@ const IS_COLOR_PROP = /color(android)?$/i;
 const colorProps = new Map<string, boolean>();
 function isColorProp(key: string): boolean {
   let answer = colorProps.get(key);
-  if (answer === undefined) colorProps.set(key, (answer = IS_COLOR_PROP.test(key)));
+  if (answer === undefined) {
+    colorProps.set(key, (answer = IS_COLOR_PROP.test(key) || BRUSH_PROPS.has(key)));
+  }
   return answer;
 }
 const ASSET_PROPS = new Set(['source', 'defaultSource', 'loadingIndicatorSource']);
@@ -1654,6 +1656,9 @@ const ASSET_PROPS = new Set(['source', 'defaultSource', 'loadingIndicatorSource'
  * approximated, it is dropped.
  */
 const NESTED_COLOR_LIST_PROPS = new Set(['boxShadow']);
+
+/** The props of an SVG shape that take a brush, not a colour. */
+const BRUSH_PROPS = new Set(['fill', 'stroke']);
 
 /** Styles arrive as objects, arrays, nested arrays and nulls. Reduce to one object. */
 /**
@@ -3422,7 +3427,7 @@ export class Engine implements HostEngine {
     for (const key of Object.keys(props)) {
       const value = props[key];
       if (value === null || value === undefined) out[key] = value;
-      else if (isColorProp(key)) out[key] = this.color(value);
+      else if (isColorProp(key)) out[key] = this.painted(key, value);
       // A list of sources has already been resolved by whoever built it, as RN's resolver
       // also assumes: it passes any object through and only turns a number into one.
       else if (ASSET_PROPS.has(key) && !Array.isArray(value))
@@ -4121,6 +4126,17 @@ export class Engine implements HostEngine {
   /** The host's `resolveAssetSource`, for a component that needs an asset's size up front. */
   resolveAsset(value: unknown): unknown {
     return this.resolveAssetSource(value);
+  }
+
+  /**
+   * A colour prop as native takes it. A shape's `fill` or `stroke` the cascade settled from a
+   * token is the solid brush react-native-svg takes, and `none` no paint at all.
+   */
+  private painted(key: string, value: unknown): unknown {
+    if (!BRUSH_PROPS.has(key)) return this.color(value);
+    // Already a brush, as the icon wrote it: only one the cascade settled is still text.
+    if (typeof value !== 'string') return value;
+    return value === 'none' ? null : { type: 0, payload: this.color(value) };
   }
 
   /**
