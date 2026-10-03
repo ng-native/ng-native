@@ -516,7 +516,7 @@ describe('the SwiftUI and Compose views', () => {
 describe('the typed SwiftUI and segmented-control components', () => {
   let fabric: FakeFabric;
   let app: ReturnType<typeof mount>;
-  let fixture: { presses(): number; date(): string; index(): number };
+  let fixture: { presses(): number; date(): string; index(): number; due(): Date };
   const all = (n: readonly FakeFabricNode[]): FakeFabricNode[] =>
     n.flatMap((x) => [x, ...all(x.children)]);
   const named = (pattern: RegExp) => all(fabric.committed).find((n) => pattern.test(n.viewName))!;
@@ -534,7 +534,7 @@ describe('the typed SwiftUI and segmented-control components', () => {
 
   beforeEach(async () => {
     registerExpoUiViews('ios');
-    registerNativeViews('segmented-control');
+    registerNativeViews('segmented-control', 'date-time-picker');
     fabric = createFakeFabric();
     app = mount(1, Fixture, fabric, {
       providers: [
@@ -579,6 +579,22 @@ describe('the typed SwiftUI and segmented-control components', () => {
     assert.equal(fixture.presses(), 1, 'once, not once per route');
     assert.equal(fixture.date(), '2026-03-04T00:00:00Z');
     assert.equal(fixture.index(), 1);
+    assert.deepEqual(errors, []);
+  });
+
+  it('gives the date picker its dates in milliseconds, and hears a pick as a timestamp', async () => {
+    const picker = () => named(/RNDateTimePicker/);
+    assert.equal(picker().props['date'], 1800000000000, 'from a Date');
+    assert.equal(picker().props['minimumDate'], 1700000000000, 'from milliseconds');
+    assert.equal(picker().props['displayIOS'], 'compact');
+    assert.equal(picker().props['mode'], 'date');
+    assert.equal('maximumDate' in picker().props, false, 'and nothing for what is not set');
+
+    fabric.emit(picker(), 'topChange', { timestamp: 1800086400000, utcOffset: 0 });
+    app.applicationRef.tick();
+    await settle();
+    assert.equal(fixture.due().getTime(), 1800086400000);
+    assert.equal(picker().props['date'], 1800086400000);
     assert.deepEqual(errors, []);
   });
 });

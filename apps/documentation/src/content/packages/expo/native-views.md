@@ -137,7 +137,7 @@ Fabric names are their own - whatever codegen produced from each library's spec 
 | ------------------------ | --------------------------------------------------- | ---------------------------------------------------------------------------- |
 | `web-view`               | `react-native-webview`                              |                                                                              |
 | `slider`                 | `@react-native-community/slider`                    |                                                                              |
-| `date-time-picker`       | `@react-native-community/datetimepicker`            | Android renders a dialog, iOS an inline view.                                |
+| `date-time-picker`       | `@react-native-community/datetimepicker`            | iOS only. See below.                                                         |
 | `picker` / `picker-item` | `@react-native-picker/picker`                       | Items are `<picker-item>` children.                                          |
 | `segmented-control`      | `@react-native-segmented-control/segmented-control` | iOS only. See below.                                                         |
 | `masked-view`            | `@react-native-masked-view/masked-view`             | `maskElement` is a prop, not a child.                                        |
@@ -151,6 +151,42 @@ only installs its `onChange` native block when the prop is set - as React's hand
 there. Bind `(change)` or nothing fires. `SegmentedControl` (`segmented-control.ts`) is a thin
 typed component over this element for strict templates: import it and keep registering the name -
 the component supplies the types, the registration is what makes the element commit.
+
+`date-time-picker` is the library's native view, not its React component, so it takes what the
+view does and not what the library's README lists: the date is `date`, in milliseconds, where the
+README's is `value`; the style is `displayIOS`; and a pick is `(change)` with the moment in
+`$event.nativeEvent.timestamp`. `DateTimePicker` is the typed component over the element, as
+`SegmentedControl` is over its own. It takes a `Date` or milliseconds for `date`, `minimumDate`
+and `maximumDate`:
+
+```ts
+import { Component, signal } from '@angular/core';
+import { DateTimePicker } from '@ng-native/expo';
+
+@Component({
+  selector: 'due-date',
+  imports: [DateTimePicker],
+  template: `
+    <date-time-picker
+      mode="date"
+      displayIOS="compact"
+      [date]="due()"
+      (change)="due.set(asDate($event.nativeEvent.timestamp))"
+    />
+  `,
+})
+export class DueDate {
+  readonly due = signal(new Date());
+
+  protected asDate(timestamp: number): Date {
+    return new Date(timestamp);
+  }
+}
+```
+
+On Android the library has no view, only a module that opens a dialog, so the element commits as
+nothing there. Show the picker on iOS alone, and on Android open the library's dialog from a press
+with its own `DateTimePickerAndroid.open()`.
 
 `skia-view`'s name is right, but worth being plain about: Skia's drawing model is React elements
 through a reconciler of its own, and none of that is reachable here. What the element takes is a
@@ -175,5 +211,7 @@ An element registered for a module or library that is not installed commits as n
 name, so check the name and the install first.
 
 ## Reference
+
+<!-- api: DateTimePicker -->
 
 <!-- api: SegmentedControl -->

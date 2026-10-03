@@ -97,6 +97,7 @@ export {
   type SymbolType,
   type SymbolWeight,
 } from './symbol.ts';
+export { DateTimePicker, type DateTimePickerChangeEvent } from './date-time-picker.ts';
 export {
   SegmentedControl,
   type SegmentedControlChangeEvent,

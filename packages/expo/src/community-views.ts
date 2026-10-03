@@ -23,7 +23,7 @@ export const NATIVE_VIEWS: Readonly<Record<string, [string, Record<string, unkno
   'web-view': ['RNCWebView', { javaScriptEnabled: true, domStorageEnabled: true }],
   /** `@react-native-community/slider`. */
   slider: ['RNCSlider', { maximumValue: 1, minimumValue: 0, step: 0 }],
-  /** `@react-native-community/datetimepicker`. Android renders a dialog, iOS an inline view. */
+  /** `@react-native-community/datetimepicker`. iOS only: on Android the library has no view. */
   'date-time-picker': ['RNDateTimePicker'],
   /** `@react-native-picker/picker`, whose items are `<picker-item>` children. */
   picker: ['RNCPicker'],

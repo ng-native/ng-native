@@ -1,4 +1,5 @@
 import { Component, signal } from '@angular/core';
+import { DateTimePicker } from '../../expo/src/date-time-picker.ts';
 import { SegmentedControl } from '../../expo/src/segmented-control.ts';
 import { ExpoImage } from '../../expo/src/expo-image.ts';
 import {
@@ -31,6 +32,7 @@ import {
 @Component({
   selector: 'expo-ui-fixture',
   imports: [
+    DateTimePicker,
     SegmentedControl,
     UiButton,
     UiDatePicker,
@@ -60,12 +62,23 @@ import {
       [selectedIndex]="0"
       (change)="index.set($event.nativeEvent.selectedSegmentIndex)"
     />
+    <date-time-picker
+      mode="date"
+      displayIOS="compact"
+      [date]="due()"
+      [minimumDate]="1700000000000"
+      (change)="due.set(asDate($event.nativeEvent.timestamp))"
+    />
   `,
 })
 export class ExpoUiFixture {
   readonly presses = signal(0);
   readonly date = signal('');
   readonly index = signal(-1);
+  readonly due = signal(new Date(1800000000000));
+  protected asDate(timestamp: number): Date {
+    return new Date(timestamp);
+  }
 }
 
 /** A SwiftUI list of rows that swipe, as a mail client's inbox does on iOS. */
