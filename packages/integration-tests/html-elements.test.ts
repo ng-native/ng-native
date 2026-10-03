@@ -240,5 +240,12 @@ describe('HTML elements in a template', () => {
       engine.appendChild(strong, engine.createText('x'));
       assert.equal(commit(strong).props['fontWeight'], '400');
     });
+
+    it("gives way to a rule of the app's in a cascade layer", () => {
+      const sheet = compileCss('@layer base { strong { font-weight: 400 } }', 'layered');
+      const strong = engine.createElement('strong', sheet);
+      engine.appendChild(strong, engine.createText('x'));
+      assert.equal(commit(strong).props['fontWeight'], '400');
+    });
   });
 });
