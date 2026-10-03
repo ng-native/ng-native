@@ -506,7 +506,11 @@ class Compiler {
       }
     }
     if (!parts.length) return null;
-    return outer ? `String(${parts.join('+')}).trim()` : `(${parts.join('+')})`;
+    // The ends a paragraph drops are CSS whitespace, as the engine drops them: a no-break space is
+    // text, which `trim()` would take too.
+    return outer
+      ? `String(${parts.join('+')}).replace(/^[ \\t\\n\\r\\f]+|[ \\t\\n\\r\\f]+$/g,'')`
+      : `(${parts.join('+')})`;
   }
 
   /**
@@ -792,7 +796,9 @@ const isImplicit = (receiver) =>
 
 /** Nodes with whitespace-only text and comments left out. */
 function significant(nodes) {
-  return nodes.filter((node) => !(node instanceof ng.TmplAstText && !node.value.trim()));
+  return nodes.filter(
+    (node) => !(node instanceof ng.TmplAstText && /^[ \t\n\r\f]*$/.test(node.value)),
+  );
 }
 
 /** What `numberAttribute` makes of an attribute: a number, or NaN for text that is not one. */

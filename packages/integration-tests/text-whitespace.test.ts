@@ -31,6 +31,24 @@ describe('text written across lines', () => {
     assert.deepEqual(runs, ['Ada Lovelace']);
   });
 
+  it('keeps a no-break space at either end, which is text and not space to collapse', () => {
+    const runs = commit((engine) => {
+      const p = engine.createElement('text');
+      engine.appendChild(p, engine.createText(' \u00a0indented, with a space after\u00a0 '));
+      engine.appendChild(engine.root, p);
+    });
+    assert.deepEqual(runs, ['\u00a0indented, with a space after\u00a0']);
+  });
+
+  it('draws a value of no-break spaces alone, which holds a line open', () => {
+    const runs = commit((engine) => {
+      const view = engine.createElement('view');
+      engine.appendChild(view, engine.createText('\u00a0'));
+      engine.appendChild(engine.root, view);
+    });
+    assert.deepEqual(runs, ['\u00a0']);
+  });
+
   it('keeps the space between a run and a nested one, as HTML does', () => {
     const runs = commit((engine) => {
       const p = engine.createElement('text');

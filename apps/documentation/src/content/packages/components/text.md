@@ -36,6 +36,16 @@ cascade exactly as it does on the web. It does not inherit from an inline `[styl
 ancestor `<view>`, which is easy to assume works like a cascading `color` and does not: put text
 styles in a stylesheet rule or on the `<text>` itself.
 
+## Whitespace
+
+A paragraph drops the space at its start and its end, as a browser does, so a `<text>` written
+across lines by a formatter is not indented. That applies to a bound value as to the template's own
+text: `{{ value() }}` with `'  a  '` draws `a`. Spaces inside the text, and between a run and a
+nested `<text>`, are kept.
+
+A no-break space is text and is kept, at either end: `'\u00a0'` in a value, or `&nbsp;` in a
+template, holds a space where it has to be drawn, and one alone holds a line open.
+
 ## Presses
 
 React Native only makes a piece of text pressable when a press handler is actually attached to it,

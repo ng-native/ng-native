@@ -897,6 +897,15 @@ function withTextContent(node: EngineNode, viewName: string, props: Record<strin
 }
 
 /**
+ * The whitespace a paragraph drops at its ends is what CSS collapses: spaces, tabs and line
+ * breaks. A no-break space is text, as in a browser, so `&nbsp;` is how a value keeps a space at
+ * its end; `String.prototype.trim` would take that too.
+ */
+const trimStart = (text: string): string => text.replace(/^[ \t\n\r\f]+/, '');
+const trimEnd = (text: string): string => text.replace(/[ \t\n\r\f]+$/, '');
+const trimEnds = (text: string): string => trimEnd(trimStart(text));
+
+/**
  * The text written inside a view that takes it as a prop: every run joined, with the whitespace at
  * the two ends dropped as a paragraph drops it, and kept inside. A nested view is drawn after the
  * text, as SwiftUI's `Text` through `@expo/ui` draws a child `Text`, so the space before it stays.
@@ -908,7 +917,7 @@ function textContent(node: EngineNode): string {
     if (child.kind === 'text') text += child.text;
     else if (child.kind === 'element') nested = true;
   }
-  return nested ? text.trimStart() : text.trim();
+  return nested ? trimStart(text) : trimEnd(trimStart(text));
 }
 
 /**
@@ -1107,9 +1116,9 @@ interface KeptHoist {
 function paragraphText(node: EngineNode): string {
   let root = node.parent;
   // Text written straight into a view is a paragraph of its own, and all of it.
-  if (root === null || !isTextElement(root)) return node.box ? node.text.trim() : node.text;
+  if (root === null || !isTextElement(root)) return node.box ? trimEnds(node.text) : node.text;
   // The commonest paragraph by far: one run and nothing else, so it is both the first and last.
-  if (root.children.length === 1 && !isTextElement(root.parent)) return node.text.trim();
+  if (root.children.length === 1 && !isTextElement(root.parent)) return trimEnds(node.text);
   while (isTextElement(root.parent)) root = root.parent!;
   const runs: EngineNode[] = [];
   const collect = (from: EngineNode) => {
@@ -1121,8 +1130,8 @@ function paragraphText(node: EngineNode): string {
   };
   collect(root);
   let text = node.text;
-  if (runs[0] === node) text = text.replace(/^\s+/, '');
-  if (runs[runs.length - 1] === node) text = text.replace(/\s+$/, '');
+  if (runs[0] === node) text = trimStart(text);
+  if (runs[runs.length - 1] === node) text = trimEnd(text);
   return text;
 }
 
@@ -3627,7 +3636,7 @@ export class Engine implements HostEngine {
   }
 
   private looseText(parent: EngineNode, text: EngineNode): EngineNode | null {
-    if (!text.text.trim()) return null;
+    if (!trimEnds(text.text)) return null;
     let box = text.box;
     if (!box) {
       box = new RetainedNode('element', 'text', this);
