@@ -99,6 +99,7 @@ const NATIVE_INITIAL: Partial<Record<ExtraProperty, unknown>> = {
   'border-top-width': 0,
   'padding-top': 0,
   opacity: 1,
+  'pointer-events': 'auto',
 };
 
 /** One of a case's extra properties against what the browser computed for it. */

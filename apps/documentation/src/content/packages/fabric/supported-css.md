@@ -204,9 +204,14 @@ draw, `plus-darker`, and a `text-decoration-line` of `overline`, which native ha
 text decoration is drawn under the text inside the element that declares it, in that element's
 `text-decoration-color` or its text colour, as on the web. Android draws every line in the colour
 of the text it underlines, because its text has no decoration colour.
-`align-content: baseline` is the start it comes to in both engines. `border-style: none` and
-`hidden` draw no border whichever rule set the width, as on the web, so `border-hidden border-x`
-draws no side.
+
+`pointer-events` is inherited, as on the web, and `none` is about the element alone: it and
+whatever inherits the value take no touches, and a descendant that sets `pointer-events: auto`
+takes them again. An element with such a descendant is committed as React Native's `box-none`, and
+one with none as `none`. React Native's own `box-none` and `box-only` are taken as written and are
+not inherited. The `pointerEvents` prop keeps React Native's meaning, where `none` is the whole
+subtree. On Android, text and images take no `pointerEvents` of their own, so text written
+directly inside a `box-none` element still takes touches there; put it in a view to keep them off.
 
 The logical properties all work: `inset-inline`, `inset-block`, `margin-inline`, `margin-block`,
 `padding-inline` and `padding-block`, with their `-start` and `-end` longhands, and the border

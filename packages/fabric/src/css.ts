@@ -559,7 +559,16 @@ const INHERITED = new Set([
   'textShadowRadius',
   'textShadowColor',
   'selectable',
+  // CSS inherits it, and its `none` is the element alone: a descendant's `auto` takes touches
+  // again. The engine commits a computed `none` as native's `box-none`, which means that.
+  'pointerEvents',
 ]);
+
+/**
+ * The `pointer-events` values CSS has. Native's own `box-none` and `box-only` say what their
+ * children do already, so neither is handed down.
+ */
+const INHERITED_POINTER_EVENTS = new Set(['none', 'auto']);
 
 /**
  * `border-style: none`, which the compiler writes as a style native does not have. On the web it
@@ -1059,7 +1068,11 @@ function inheritFrom(
   for (const key of Object.keys(own)) {
     if (!INHERITED.has(key)) continue;
     if (inherited === parentInherited) inherited = { ...parentInherited };
-    inherited[key] = own[key];
+    if (key === 'pointerEvents' && !INHERITED_POINTER_EVENTS.has(own[key] as string)) {
+      delete inherited[key];
+    } else {
+      inherited[key] = own[key];
+    }
   }
   return inherited;
 }

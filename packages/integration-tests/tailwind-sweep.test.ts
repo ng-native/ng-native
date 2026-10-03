@@ -43,10 +43,10 @@ const DELIBERATE: readonly Accounted[] = [
   },
   {
     where: 'child',
-    property: /^(cursor|pointer-events)$/,
+    property: /^cursor$/,
     reason:
-      "Native applies a view's cursor and its pointer events to everything inside it, so the " +
-      'text needs no value of its own for either.',
+      "Native applies a view's cursor to everything inside it, so the text needs no value of " +
+      'its own.',
   },
   {
     property: /^overflow-[xy]$/,

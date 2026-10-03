@@ -119,6 +119,30 @@
     }
   },
   {
+    "name": "pointer-events is inherited",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "pointer-events": "none"
+    }
+  },
+  {
+    "name": "pointer-events: auto inside none is its own",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "pointer-events": "auto"
+    }
+  },
+  {
+    "name": "pointer-events: none through an ancestor that sets nothing",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "pointer-events": "none"
+    }
+  },
+  {
     "name": "background-color does not inherit",
     "expected": {
       "color": "rgb(0, 0, 0)",
