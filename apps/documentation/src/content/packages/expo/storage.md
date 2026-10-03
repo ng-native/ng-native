@@ -169,6 +169,7 @@ the three verbs of a `NativeStore`:
 ```ts
 import { Storage } from '@ng-native/expo/async-storage';
 import { Store } from '@ng-native/expo/store';
+import { render } from '@ng-native/testing';
 
 const disk = new Map([['theme', JSON.stringify('dark')]]);
 const storage = new Store({
@@ -181,9 +182,9 @@ await render(Settings, { providers: [{ provide: Storage, useValue: storage }] })
 ```
 
 The map holds what the device would: each value as JSON text, so the string `dark` is stored as
-`'"dark"'`. A signal from `signal('theme', 'system')` reads `'dark'` once `render()` has
-resolved, and `await storage.flush()` after a write is when the map has it. `SecureStorage` from
-`@ng-native/expo/secure-store` takes the same fake.
+`'"dark"'`. The `theme` signal of the `Settings` component above, whose `initial` is `'light'`,
+reads `'dark'` once `render()` has resolved, and `await storage.flush()` after a write is when the
+map has it. `SecureStorage` from `@ng-native/expo/secure-store` takes the same fake.
 
 ## Working offline
 
