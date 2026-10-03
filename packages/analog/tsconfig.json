@@ -1,0 +1,9 @@
+{
+  "extends": "../../tsconfig.published.json",
+  "compilerOptions": {
+    "allowJs": true,
+    "checkJs": false
+  },
+  "include": ["src", "metro.cjs"],
+  "exclude": ["**/*.generated.ts"]
+}

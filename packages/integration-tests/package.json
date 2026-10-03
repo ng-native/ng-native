@@ -19,11 +19,13 @@
     ]
   },
   "devDependencies": {
+    "@analogjs/router": "~2.8.0",
     "@angular/common": "22.2.0",
     "@angular/compiler-cli": "22.2.0",
     "@angular/core": "22.2.0",
     "@angular/forms": "22.2.0",
     "@angular/localize": "22.2.0",
+    "@angular/platform-browser": "22.2.0",
     "@angular/router": "22.2.0",
     "@babel/core": "^7.29.7",
     "@babel/generator": "^7.29.8",
@@ -33,6 +35,7 @@
     "@ng-icons/core": "^36.0.0",
     "@ng-icons/heroicons": "^36.0.0",
     "@ng-icons/lucide": "^36.0.0",
+    "@ng-native/analog": "workspace:*",
     "@ng-native/components": "workspace:*",
     "@ng-native/device": "workspace:*",
     "@ng-native/expo": "workspace:*",

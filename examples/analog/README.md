@@ -1,0 +1,48 @@
+# Analog Showroom
+
+[Analog](https://analogjs.org)'s file-based routing, running as native iOS and Android views. Every
+screen is an Analog page in `src/app/pages`, routed by `createRoutes` from `@analogjs/router`
+through `@ng-native/analog`, and each one shows the file that made it, what the feature does, and
+the feature working.
+
+| Feature              | File                                                      | What the page shows                                             |
+| -------------------- | --------------------------------------------------------- | --------------------------------------------------------------- |
+| Static page          | `about.page.ts`                                           | A file's path is its URL: `/about`                              |
+| Dynamic parameter    | `products/[productId].page.ts`                            | The `productId` it was opened with, as an input                 |
+| Nested layout        | `products.page.ts`, `products/index.page.ts`              | A list on the layout's own stack, in a sheet, pushing items     |
+| Catch-all            | `docs/[...slug].page.ts`                                  | Every segment after `/docs`, for paths of any depth             |
+| Route group          | `(account)/profile.page.ts`, `(account)/settings.page.ts` | URLs with no `(account)` in them                                |
+| Tabs                 | `tabs.page.ts`, `tabs/index.page.ts`, `tabs/laps.page.ts` | A native tab bar whose tabs are pages, each kept as it was left |
+| `routeMeta` title    | `titled.page.ts`                                          | The native header's title, from `routeMeta.title`               |
+| `routeMeta` redirect | `old-home.page.ts`                                        | No component: `/old-home` lands on the home page                |
+| `routeMeta` guard    | `admin.page.ts`                                           | Refused until Admin access is turned on in Settings             |
+| `routeMeta` resolver | `resolved.page.ts`                                        | Data a resolver loaded before the page was shown                |
+| Lazy loading         | `lazy.page.ts`                                            | Each page is a chunk of its own, loaded on first open           |
+| Query parameters     | `search.page.ts`                                          | `?q=` read from `ActivatedRoute`, followed as it changes        |
+
+The home page is `index.page.ts`. The product pages open as a sheet: a presented screen has no
+navigation bar of its own, and the stack in `products.page.ts` gives its pages a header and a back
+button.
+
+## Run it
+
+From the repository root, after `pnpm install`:
+
+```sh
+cd examples/analog
+pnpm start     # press i or a, or scan the QR code with Expo Go
+pnpm test      # Vitest in Node, no simulator
+```
+
+`src/app/app.test.ts` opens each feature from the home page and checks what it demonstrates: the
+parameter's value, the caught segments, the group's URLs, each tab keeping its count, the header title, the redirect landing
+home, the guard refusing and then letting in, the resolved data and the query value. It feeds the
+same pages to the router from `import.meta.glob`, since Vitest has no `require.context`.
+
+## The Analog logo
+
+The logo on the home page, drawn by `NgIcon` from `@ng-native/icons`, and the app icon
+(`assets/icon.png`) are the Analog logo from the
+[analogjs/analog](https://github.com/analogjs/analog) repository, under its MIT license. The file
+there clips each shape to a rectangle, which `NgIcon` does not draw; every shape already lies inside
+its rectangle, so `src/app/ui/analog-logo.ts` leaves the clips out and rounds the coordinates.

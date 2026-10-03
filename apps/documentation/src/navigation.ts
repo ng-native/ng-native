@@ -254,6 +254,11 @@ export const PACKAGES: NavSection = {
     },
     { path: 'packages/icons', title: 'Icons', summary: 'Icon sets, drawn as native SVG' },
     {
+      path: 'packages/analog',
+      title: 'Analog',
+      summary: "Analog's file-based pages, as native routes",
+    },
+    {
       path: 'packages/web',
       title: 'Web',
       summary: 'The same components in a browser, for previews and docs',

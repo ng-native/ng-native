@@ -110,6 +110,13 @@ describe('going back in an app with tabs', () => {
     events.unsubscribe();
     assert.equal(ended, 1);
     assert.equal(router.url, '/library/7');
+    const stacks = (nodes: readonly FakeFabricNode[]): number =>
+      nodes.reduce(
+        (count, node) =>
+          count + (node.viewName === 'RNSScreenStack' ? 1 : 0) + stacks(node.children),
+        0,
+      );
+    assert.equal(stacks(fabric.committed), 2, "the app's stack and the tab's, not a second one");
   });
 
   describe('presenting a page of another tab', () => {

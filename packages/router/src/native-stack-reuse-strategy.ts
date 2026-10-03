@@ -164,9 +164,13 @@ export class NativeStackReuseStrategy extends BaseRouteReuseStrategy {
    * Never for a route with no component, which is never kept: the router asks for every route,
    * and a group at path `''` has the same url as a page at `''` beside it, whose screen it would
    * otherwise be handed.
+   *
+   * A tab is attached for a push too: the push is into the tab's own stack, which is kept with it,
+   * and building the tab again would leave a second stack in the tab's screen.
    */
   override shouldAttach(route: ActivatedRouteSnapshot): boolean {
-    if (route.component === null || this.pushing()) return false;
+    if (route.component === null) return false;
+    if (this.pushing() && !isTabRoute(route.routeConfig)) return false;
     return this.retrieve(route) !== null;
   }
 

@@ -55,6 +55,7 @@ const REGISTRY = process.env.REGISTRY ?? 'http://localhost:4873';
 
 /** Every package that would go to npm, plus the template. */
 const PUBLISHED = [
+  'packages/analog',
   'packages/components',
   'packages/device',
   'packages/expo',

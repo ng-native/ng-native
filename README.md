@@ -107,7 +107,8 @@ to native styles at build time.
 - [Architecture](docs/ARCHITECTURE.md)
 
 The [examples](examples) are complete apps: a bank (`wallet`), a habit tracker (`habits`), a music
-player (`music`), a run tracker with maps (`runs`) and a notes app (`notes`).
+player (`music`), a run tracker with maps (`runs`), a notes app (`notes`) and a showroom of
+Analog's file-based routing (`analog`).
 
 ## Packages
 
@@ -119,6 +120,7 @@ player (`music`), a run tracker with maps (`runs`) and a notes app (`notes`).
 | `@ng-native/device`     | Keyboard, screen, color scheme, app state, accessibility, deep links and more.     |
 | `@ng-native/expo`       | Expo's modules as Angular services and directives.                                 |
 | `@ng-native/icons`      | `<ng-icon>` with the `@ng-icons` sets, drawn as native SVG.                        |
+| `@ng-native/analog`     | Analog's file-based pages, routed on a native stack.                               |
 | `@ng-native/metro`      | The Metro preset: the Angular compiler, the CSS compiler and hot reload.           |
 | `@ng-native/tailwind`   | The Tailwind preset and its platform variants.                                     |
 | `@ng-native/testing`    | Testing Library for Angular Native, running in Node.                               |

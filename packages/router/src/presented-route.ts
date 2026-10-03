@@ -28,7 +28,7 @@ export const PRESENTED = 'presented';
  * ponytail: static and `:param` segments only, which is what a page's url is made of. The rest
  * falls back to presenting the page where its url puts it, as before.
  */
-function taken(route: Route, segments: readonly string[]): number | null {
+export function taken(route: Route, segments: readonly string[]): number | null {
   if (route.outlet && route.outlet !== PRIMARY_OUTLET) return null;
   if (route.redirectTo !== undefined || route.matcher || route.path === undefined) return null;
   const parts = route.path ? route.path.split('/') : [];

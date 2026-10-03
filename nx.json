@@ -51,6 +51,7 @@
   },
   "release": {
     "projects": [
+      "@ng-native/analog",
       "@ng-native/components",
       "@ng-native/device",
       "@ng-native/expo",

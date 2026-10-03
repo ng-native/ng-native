@@ -1,0 +1,51 @@
+{
+  "name": "analog-example",
+  "version": "1.0.0",
+  "private": true,
+  "main": "src/main.ts",
+  "scripts": {
+    "start": "expo start",
+    "ios": "expo run:ios",
+    "android": "expo run:android",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "export": "expo export --platform ios --platform android --output-dir dist"
+  },
+  "dependencies": {
+    "@analogjs/router": "~2.8.0",
+    "@angular/common": "22.2.0",
+    "@angular/core": "22.2.0",
+    "@angular/platform-browser": "22.2.0",
+    "@angular/router": "22.2.0",
+    "@ng-icons/core": "^36.0.0",
+    "@ng-native/analog": "workspace:*",
+    "@ng-native/components": "workspace:*",
+    "@ng-native/device": "workspace:*",
+    "@ng-native/fabric": "workspace:*",
+    "@ng-native/icons": "workspace:*",
+    "@ng-native/platform": "workspace:*",
+    "@ng-native/router": "workspace:*",
+    "expo": "~57.0.26",
+    "react": "19.2.3",
+    "react-native": "0.86.3",
+    "react-native-safe-area-context": "~5.7.0",
+    "react-native-screens": "~4.26.0",
+    "react-native-svg": "15.15.4",
+    "rxjs": "^7.8.2"
+  },
+  "devDependencies": {
+    "@babel/core": "^7.29.7",
+    "@ng-native/metro": "workspace:*",
+    "@ng-native/testing": "workspace:*",
+    "@types/react": "~19.2.4",
+    "typescript": "~6.0.3",
+    "vite": "^8.3.1",
+    "vitest": "^5.0.2"
+  },
+  "nx": {
+    "tags": [
+      "scope:analog-example",
+      "layer:app"
+    ]
+  }
+}
