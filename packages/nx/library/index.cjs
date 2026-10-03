@@ -170,8 +170,8 @@ function writeSpecConfig(tree, root, angular) {
  * in place of the `.js` `@nx/js` gives it.
  *
  * TypeScript takes the option only where no JavaScript is emitted, which is the TypeScript
- * preset's own setting (`emitDeclarationOnly` in `tsconfig.base.json`). A workspace that has
- * turned that off keeps `.js`.
+ * preset's own setting (`emitDeclarationOnly`, which `@nx/js` writes into `tsconfig.lib.json`). A
+ * workspace that has turned that off keeps `.js`.
  */
 function importWithTsExtensions(tree, root) {
   const config = joinPathFragments(root, 'tsconfig.lib.json');
@@ -186,15 +186,34 @@ function importWithTsExtensions(tree, root) {
   tree.write(index, source.replace(/(from\s+['"]\.{1,2}\/[^'"]*)\.js(['"])/g, '$1.ts$2'));
 }
 
-/** Whether a tsconfig, or one it extends, emits declarations and no JavaScript. */
-function emitsDeclarationsOnly(tree, file, seen = new Set()) {
-  if (seen.has(file) || !tree.exists(file)) return false;
+/** Whether a tsconfig emits declarations and no JavaScript, once what it extends is merged in. */
+function emitsDeclarationsOnly(tree, file) {
+  const { noEmit, emitDeclarationOnly } = emitOptions(tree, file, new Set());
+  return noEmit === true || emitDeclarationOnly === true;
+}
+
+/**
+ * `noEmit` and `emitDeclarationOnly` as the compiler reads them: each from the nearest config that
+ * sets it, and a later entry of an `extends` list over an earlier one.
+ */
+function emitOptions(tree, file, seen) {
+  if (seen.has(file) || !tree.exists(file)) return {};
   seen.add(file);
-  const { compilerOptions = {}, extends: base } = readJson(tree, file);
-  if (compilerOptions.noEmit === true) return true;
-  if (compilerOptions.emitDeclarationOnly !== undefined) return compilerOptions.emitDeclarationOnly;
-  if (typeof base !== 'string' || !base.startsWith('.')) return false;
-  return emitsDeclarationsOnly(tree, joinPathFragments(path.dirname(file), base), seen);
+  const { compilerOptions = {}, extends: base = [] } = readJson(tree, file);
+  // ponytail: a config that comes from a package is not followed, so a library under one keeps
+  // `.js`. Resolve the specifier from the config's directory if a workspace needs it.
+  const inherited = [base]
+    .flat()
+    .filter((from) => typeof from === 'string' && from.startsWith('.'))
+    .map((from) => joinPathFragments(path.dirname(file), from))
+    .map((from) => emitOptions(tree, from.endsWith('.json') ? from : `${from}.json`, seen));
+  const { noEmit, emitDeclarationOnly } = compilerOptions;
+  return Object.assign(
+    {},
+    ...inherited,
+    noEmit === undefined ? {} : { noEmit },
+    emitDeclarationOnly === undefined ? {} : { emitDeclarationOnly },
+  );
 }
 
 /**

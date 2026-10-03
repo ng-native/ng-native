@@ -63,6 +63,13 @@ function fakeAngular(tree: Tree, options: Options) {
   tree.write(`${root}/src/lib/${name}/${name}.css`, '');
 }
 
+/**
+ * What `tsconfig.lib.json` says of emitting. `@nx/js` writes `emitDeclarationOnly: true` for a
+ * library with no bundler; a test sets this to stand in for a workspace that has changed it.
+ */
+const STOCK_LIB = { extends: '../../tsconfig.base.json', emit: { emitDeclarationOnly: true } };
+let lib: { extends: string | string[]; emit: Record<string, boolean> } = STOCK_LIB;
+
 /** What `@nx/js:library packages/ui --bundler=none --unitTestRunner=none` writes. */
 function fakeJs(tree: Tree, options: Options) {
   calls.push({ base: 'js', options });
@@ -82,8 +89,8 @@ function fakeJs(tree: Tree, options: Options) {
     references: [{ path: './tsconfig.lib.json' }],
   });
   writeJson(tree, `${root}/tsconfig.lib.json`, {
-    extends: '../../tsconfig.base.json',
-    compilerOptions: { rootDir: 'src', outDir: 'dist', types: ['node'] },
+    extends: lib.extends,
+    compilerOptions: { rootDir: 'src', outDir: 'dist', ...lib.emit, types: ['node'] },
     include: ['src/**/*.ts'],
     references: [],
   });
@@ -371,15 +378,62 @@ describe('in the TypeScript preset', () => {
     assert.doesNotMatch(diagnostics, /TS5097|TS5096|TS2691/);
   });
 
-  it('leaves .js imports where the workspace emits JavaScript, which .ts imports cannot', async () => {
+  /** The library generated where the base config and `tsconfig.lib.json` say this of emitting. */
+  const generated = async (base: Record<string, boolean>, written: Partial<typeof lib>) => {
     const tree = tsPreset();
-    writeJson(tree, 'tsconfig.base.json', { compilerOptions: { composite: true } });
-    await generate(tree, { directory: 'packages/ui' });
-    assert.equal(
-      readJson(tree, 'packages/ui/tsconfig.lib.json').compilerOptions.allowImportingTsExtensions,
-      undefined,
+    writeJson(tree, 'tsconfig.base.json', { compilerOptions: { composite: true, ...base } });
+    lib = { ...STOCK_LIB, ...written };
+    try {
+      await generate(tree, { directory: 'packages/ui' });
+    } finally {
+      lib = STOCK_LIB;
+    }
+    const { compilerOptions } = readJson(tree, 'packages/ui/tsconfig.lib.json');
+    return {
+      tree,
+      option: compilerOptions.allowImportingTsExtensions,
+      index: tree.read('packages/ui/src/index.ts', 'utf-8'),
+    };
+  };
+  const JS = "export * from './lib/ui.js';\n";
+  const TS = "export * from './lib/ui.ts';\n";
+
+  it('leaves .js imports where the workspace emits JavaScript, which .ts imports cannot', async () => {
+    const { option, index } = await generated({}, { emit: { emitDeclarationOnly: false } });
+    assert.equal(option, undefined);
+    assert.equal(index, JS);
+  });
+
+  it('reads the setting from a config the library extends, where its own is silent', async () => {
+    const { option, index } = await generated({ emitDeclarationOnly: true }, { emit: {} });
+    assert.equal(option, true);
+    assert.equal(index, TS);
+  });
+
+  it('reads it from every config in a list of them', async () => {
+    const { option, index } = await generated(
+      { emitDeclarationOnly: true },
+      { emit: {}, extends: ['../../tsconfig.base.json'] },
     );
-    assert.equal(tree.read('packages/ui/src/index.ts', 'utf-8'), "export * from './lib/ui.js';\n");
+    assert.equal(option, true);
+    assert.equal(index, TS);
+  });
+
+  it("takes the library's own noEmit: false over a base that emits nothing", async () => {
+    const { tree, option, index } = await generated({ noEmit: true }, { emit: { noEmit: false } });
+    assert.equal(option, undefined);
+    assert.equal(index, JS);
+    assert.doesNotMatch(typecheck(tree, 'packages/ui/tsconfig.lib.json'), /TS5096/);
+  });
+
+  it("keeps a base's noEmit where the library only turns emitDeclarationOnly off", async () => {
+    const { tree, option, index } = await generated(
+      { noEmit: true },
+      { emit: { emitDeclarationOnly: false } },
+    );
+    assert.equal(option, true);
+    assert.equal(index, TS);
+    assert.doesNotMatch(typecheck(tree, 'packages/ui/tsconfig.lib.json'), /TS5096|TS5097/);
   });
 });
 
