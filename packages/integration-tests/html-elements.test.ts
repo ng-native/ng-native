@@ -113,9 +113,24 @@ describe('HTML elements in a template', () => {
     const text = engine.createText('one');
     engine.appendChild(view, text);
     commit(view);
+    const created = fabric.calls.createNode;
     engine.setText(text, 'two');
     engine.commit();
     assert.deepEqual(shape(fabric.committed[0]!), { View: [{ Paragraph: ['"two"'] }] });
+    engine.setText(text, 'three');
+    engine.commit();
+    assert.deepEqual(shape(fabric.committed[0]!), { View: [{ Paragraph: ['"three"'] }] });
+    assert.equal(fabric.calls.createNode, created, 'the paragraph is the same view, cloned');
+  });
+
+  it('sends a touch on the paragraph it made to the view the text is in', () => {
+    const view = engine.createElement('view');
+    engine.appendChild(view, engine.createText('Press'));
+    const heard: string[] = [];
+    engine.setEventListener(view, 'topClick', () => heard.push('view'));
+    const paragraph = commit(view).children[0]!;
+    fabric.emit(paragraph, 'topClick', {});
+    assert.deepEqual(heard, ['view']);
   });
 
   it("styles the paragraph it made with what the view's text would inherit", () => {

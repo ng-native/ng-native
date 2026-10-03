@@ -44,12 +44,12 @@ describe('text written across lines', () => {
     assert.deepEqual(runs, ['Tenant Name ', '*', '']);
   });
 
-  it('leaves text that is not in a paragraph alone', () => {
+  it('trims text written straight into a view, which is a paragraph of its own', () => {
     const runs = commit((engine) => {
       const view = engine.createElement('view');
       engine.appendChild(view, engine.createText(' loose '));
       engine.appendChild(engine.root, view);
     });
-    assert.deepEqual(runs, [' loose ']);
+    assert.deepEqual(runs, ['loose']);
   });
 });

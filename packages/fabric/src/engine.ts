@@ -3524,7 +3524,9 @@ export class Engine implements HostEngine {
   ): FabricNode | null {
     if (TEXT_CONTENT_PROPS[viewName] !== undefined) return null;
     if (viewName === PARAGRAPH || viewName === VIRTUAL_TEXT) {
-      if (text.box) text.box = undefined;
+      // Under a text element, the paragraph it had in a view is done with. Under that paragraph
+      // itself, which is where a loose run is committed, it is the one to keep.
+      if (text.box && text.box !== parent) text.box = undefined;
       return this.reconcileUnder(parent, text, context);
     }
     const box = this.looseText(parent, text);
