@@ -7,11 +7,14 @@ import {
   withTabDefaults,
 } from '@ng-native/router';
 import { projectLinkParent } from './projects/project-links.ts';
+import { provideWebCompat } from '@ng-native/web-compat';
 import { routes } from './app.routes.ts';
 import { palette } from './palette.ts';
 
 export const appConfig = {
   providers: [
+    // For src/app/spartan: a component library written for the browser, rendered as native views.
+    provideWebCompat(),
     // react-native-keyboard-controller is installed: the chat's composer follows the keyboard on
     // the native side, a drag through the transcript included.
     provideKeyboardController(),

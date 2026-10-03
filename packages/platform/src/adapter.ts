@@ -136,7 +136,9 @@ class NativeRenderer implements Renderer2 {
   destroy(): void {}
 
   createElement(name: string): EngineNode {
-    return this.engine.createElement(name, this.sheet);
+    const node = this.engine.createElement(name, this.sheet);
+    for (const extension of extensions) extension.created?.(node, this.engine);
+    return node;
   }
 
   createComment(): EngineNode {
@@ -288,6 +290,11 @@ export interface RendererExtension {
     callback: (event: unknown) => boolean | void,
     engine: Engine,
   ): (() => void) | undefined;
+  /**
+   * Told of each element a template creates, before it has attributes or children: where an
+   * element gets what it has for its name alone, as a `button` has its role.
+   */
+  created?(node: EngineNode, engine: Engine): void;
 }
 
 const extensions: RendererExtension[] = [];
@@ -301,7 +308,10 @@ const extensions: RendererExtension[] = [];
  */
 export function extendRenderer(extension: RendererExtension): () => void {
   // An entry of this call's own: the same extension added twice is removed once by each.
-  const entry: RendererExtension = { listen: (...args) => extension.listen?.(...args) };
+  const entry: RendererExtension = {
+    listen: (...args) => extension.listen?.(...args),
+    created: (...args) => extension.created?.(...args),
+  };
   extensions.push(entry);
   return () => {
     const index = extensions.indexOf(entry);

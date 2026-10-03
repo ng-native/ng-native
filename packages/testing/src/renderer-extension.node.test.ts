@@ -7,9 +7,9 @@ import assert from 'node:assert/strict';
 import { afterEach, test } from 'node:test';
 import { Component, RendererFactory2, signal } from '@angular/core';
 import { Text, View } from '@ng-native/components';
-import { Engine, extendNodes, type EngineNode } from '@ng-native/fabric';
+import { Engine, extendNodes, registerViewName, type EngineNode } from '@ng-native/fabric';
 import { extendRenderer } from '@ng-native/platform';
-import { cleanup, fireEvent, render, screen } from '@ng-native/testing';
+import { cleanup, createFakeFabric, fireEvent, render, screen } from '@ng-native/testing';
 
 afterEach(cleanup);
 
@@ -141,4 +141,35 @@ test('an extension added twice is removed once by each removal', async () => {
   } finally {
     second();
   }
+});
+
+test('an extension is told of each element a template creates', async () => {
+  const created: string[] = [];
+  const undo = extendRenderer({ created: (node) => void created.push(node.name) });
+  try {
+    await render(Clicks);
+    assert.deepEqual(created, ['x-clicks', 'view', 'text']);
+  } finally {
+    undo();
+  }
+});
+
+test('an element name registered for a while goes back to what it was', async () => {
+  const names = () => {
+    const fabric = createFakeFabric();
+    const engine = new Engine(fabric, 1);
+    return ['x-probe', 'text'].map((name) => {
+      const node = engine.createElement(name);
+      engine.appendChild(engine.root, node);
+      engine.commit();
+      return fabric.committed.at(-1)!.viewName;
+    });
+  };
+  const before = names();
+  const undoProbe = registerViewName('x-probe', 'RCTProbe');
+  const undoText = registerViewName('text', 'RCTProbe');
+  assert.deepEqual(names(), ['RCTProbe', 'RCTProbe']);
+  undoText();
+  undoProbe();
+  assert.deepEqual(names(), before);
 });

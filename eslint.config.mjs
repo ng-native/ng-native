@@ -26,6 +26,9 @@ export default tseslint.config(
       '**/dist/**',
       '.claude/**',
       'examples/*/.expo/**',
+      // Spartan UI's own components, copied in as its generator writes them: the library under
+      // test in the canary's Spartan page, not this repo's code.
+      'examples/canary/src/app/spartan/helm/**',
       // The published starters. Their files are an app's source, copied verbatim into someone
       // else's project, so this workspace's boundary rules do not apply to them. They are verified
       // by being used: `scripts/verify-publish.mjs` publishes to a local registry, generates an

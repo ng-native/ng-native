@@ -9,6 +9,7 @@ import {
 import { Engine, extendNodes } from '@ng-native/fabric';
 import { extendRenderer } from '@ng-native/platform';
 import { documentFor } from './document.ts';
+import { registerElements } from './elements.ts';
 import { webListen } from './listen.ts';
 import { nodeMembers, type CoreNode } from './node-members.ts';
 import { installWindow } from './window.ts';
@@ -26,6 +27,7 @@ function install(engine: Engine): void {
   removals = [
     extendNodes(nodeMembers({ addEventListener, removeEventListener })),
     extendRenderer(webListen),
+    registerElements(),
   ];
 }
 

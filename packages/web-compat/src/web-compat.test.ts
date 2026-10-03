@@ -236,6 +236,33 @@ describe('@ng-native/web-compat document and window', () => {
     assert.ok(screen.getByText('0'));
   });
 
+  it('runs every click listener a node has, until each is removed', async () => {
+    const { app, card } = await mount();
+    const heard: string[] = [];
+    const stopFirst = app.instance.renderer.listen(card, 'click', () => void heard.push('first'));
+    const stopSecond = app.instance.renderer.listen(card, 'click', () => void heard.push('second'));
+    await userEvent.press(screen.getByTestId('card'));
+    assert.deepEqual(heard, ['first', 'second']);
+    stopFirst();
+    await userEvent.press(screen.getByTestId('card'));
+    assert.deepEqual(heard, ['first', 'second', 'second']);
+    stopSecond();
+    await userEvent.press(screen.getByTestId('card'));
+    assert.equal(heard.length, 3);
+  });
+
+  it('delivers no click to a disabled element, as a browser does not', async () => {
+    const { app, card } = await mount();
+    let heard = 0;
+    app.instance.renderer.listen(card, 'click', () => void heard++);
+    card.setAttribute('disabled', '');
+    await userEvent.press(screen.getByTestId('card'));
+    assert.equal(heard, 0);
+    card.removeAttribute('disabled');
+    await userEvent.press(screen.getByTestId('card'));
+    assert.equal(heard, 1);
+  });
+
   it('takes its globals away with the last app', async () => {
     const before = globals.document;
     await mount();
@@ -245,5 +272,44 @@ describe('@ng-native/web-compat document and window', () => {
     assert.equal(globals.document, before);
     assert.equal(globals.matchMedia, undefined);
     assert.equal(globals.ResizeObserver, undefined);
+  });
+});
+
+@Component({
+  selector: 'x-links',
+  template: `<button testID="button">Save</button><a testID="link" role="tab">More</a>`,
+})
+class Links {}
+
+describe('@ng-native/web-compat elements', () => {
+  /** What the engine reports while `run` renders, an unknown element among it. */
+  const reported = async (run: () => Promise<unknown>) => {
+    const { error } = console;
+    const seen: string[] = [];
+    console.error = (message: unknown) => void seen.push(String(message));
+    try {
+      await run();
+    } finally {
+      console.error = error;
+    }
+    return seen.filter((message) => /not a known element/.test(message));
+  };
+
+  it('knows a button and a link, each a view with its role, which a binding replaces', async () => {
+    const unknown = await reported(() => render(Links, { providers: [provideWebCompat()] }));
+    assert.deepEqual(unknown, []);
+    const button = screen.getByTestId('button');
+    assert.equal(button.viewName, 'View');
+    assert.equal(button.props['accessibilityRole'], 'button');
+    assert.equal(button.props['accessible'], true);
+    assert.equal(screen.getByTestId('link').props['role'], 'tab');
+  });
+
+  it('leaves them unknown to an app that did not ask, and after the one that did', async () => {
+    await render(Links, { providers: [provideWebCompat()] });
+    cleanup();
+    const unknown = await reported(() => render(Links));
+    assert.equal(unknown.length, 2);
+    assert.equal(screen.getByTestId('button').props['accessibilityRole'], undefined);
   });
 });

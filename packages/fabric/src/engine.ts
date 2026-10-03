@@ -944,7 +944,12 @@ export function registerViewName(
   viewName: string | PlatformViewName,
   defaultProps?: Record<string, unknown>,
   options?: ViewNameOptions,
-): void {
+): () => void {
+  const before = {
+    viewName: VIEW_NAMES[elementName],
+    yielding: YIELDING.has(elementName),
+    text: TEXT_ELEMENTS.has(elementName),
+  };
   VIEW_NAMES[elementName] = viewName;
   if (options?.yieldsToComponents) YIELDING.add(elementName);
   else YIELDING.delete(elementName);
@@ -954,6 +959,17 @@ export function registerViewName(
     if (defaultProps) DEFAULT_PROPS[name] = defaultProps;
     if (options?.textContent) TEXT_CONTENT_PROPS[name] = options.textContent;
   }
+  // What the element name was before, for a package that registers one for as long as an app
+  // that asked for it is up. The native view's own defaults and text prop stay: they are the
+  // view's, whichever element names it.
+  return () => {
+    if (VIEW_NAMES[elementName] !== viewName) return;
+    if (before.viewName === undefined) delete VIEW_NAMES[elementName];
+    else VIEW_NAMES[elementName] = before.viewName;
+    if (before.yielding) YIELDING.add(elementName);
+    else YIELDING.delete(elementName);
+    if (before.text) TEXT_ELEMENTS.add(elementName);
+  };
 }
 
 /** What else a registered view needs the engine to know about it. */
