@@ -14,6 +14,7 @@ import {
   ErrorHandler,
   Renderer2,
   RendererFactory2,
+  booleanAttribute,
   createComponent,
   createEnvironmentInjector,
   PLATFORM_ID,
@@ -118,6 +119,33 @@ function parseStyleAttribute(css: string): Record<string, unknown> {
   return out;
 }
 
+/**
+ * The props every native view reads as a boolean: the `bool` fields of React Native's
+ * `BaseViewProps`, `AccessibilityProps` and `HostPlatformViewProps`, by the names JavaScript sends.
+ *
+ * An attribute arrives as text. A component that declares the prop as an input turns it into a
+ * boolean itself, but an element nothing claims, such as a component's own host, commits what it
+ * was given, and Android refuses a string where it reads a boolean: `focusable="false"` is
+ * `java.lang.String cannot be cast to java.lang.Boolean` at the first commit. iOS ignores it.
+ */
+const BOOLEAN_VIEW_PROPS = new Set([
+  'accessibilityElementsHidden',
+  'accessibilityIgnoresInvertColors',
+  'accessibilityRespondsToUserInteraction',
+  'accessibilityShowsLargeContentViewer',
+  'accessibilityViewIsModal',
+  'accessible',
+  'collapsable',
+  'collapsableChildren',
+  'focusable',
+  'hasTVPreferredFocus',
+  'needsOffscreenAlphaCompositing',
+  'removeClippedSubviews',
+  'renderToHardwareTextureAndroid',
+  'screenReaderFocusable',
+  'shouldRasterizeIOS',
+]);
+
 class NativeRenderer implements Renderer2 {
   readonly data: { [key: string]: unknown } = Object.create(null);
   destroyNode: (node: EngineNode) => void;
@@ -191,7 +219,7 @@ class NativeRenderer implements Renderer2 {
       }
       return;
     }
-    this.engine.setProp(el, name, value);
+    this.engine.setProp(el, name, BOOLEAN_VIEW_PROPS.has(name) ? booleanAttribute(value) : value);
   }
 
   removeAttribute(el: EngineNode, name: string): void {
