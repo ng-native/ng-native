@@ -394,3 +394,31 @@ describe('the Vitest plugin', () => {
     );
   });
 });
+
+/** A wrapper with a `placeholder` input of its own, around the one text field it draws. */
+@Component({
+  selector: 'x-search-field',
+  imports: [TextInput],
+  template: `<text-input [placeholder]="placeholder()" />`,
+})
+class SearchField {
+  readonly placeholder = input('');
+}
+
+@Component({
+  selector: 'x-search',
+  imports: [SearchField],
+  template: `<x-search-field placeholder="Search" />`,
+})
+class Search {}
+
+describe('getByPlaceholderText', () => {
+  it('finds the text field, not a host view the same attribute was written on', async () => {
+    await render(Search);
+    const found = screen.getAllByPlaceholderText('Search');
+    assert.deepEqual(
+      found.map((node) => /TextInput/.test(node.viewName)),
+      [true],
+    );
+  });
+});

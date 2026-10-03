@@ -143,7 +143,10 @@ const QUERIES: { [K in Name]: (...args: QueryArgs[K]) => Query } = {
   }),
   PlaceholderText: (placeholder, options = {}) => ({
     describe: `placeholder ${show(placeholder)}`,
-    select: (node) => matches(node.props['placeholder'], placeholder, options.exact),
+    // A text field alone draws a placeholder. A wrapper with a `placeholder` input of its own has
+    // the attribute on its host view too, which nobody sees.
+    select: (node) =>
+      isTextInput(node) && matches(node.props['placeholder'], placeholder, options.exact),
   }),
   // A text field's value is its `text` prop, which is what `<text-input>` binds its model to.
   DisplayValue: (value, options = {}) => ({
