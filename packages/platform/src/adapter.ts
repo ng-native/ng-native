@@ -266,10 +266,45 @@ class NativeRenderer implements Renderer2 {
     eventName: string,
     callback: (event: unknown) => boolean | void,
   ): () => void {
+    for (const extension of extensions) {
+      const unlisten = extension.listen?.(target, eventName, callback, this.engine);
+      if (unlisten) return unlisten;
+    }
     // Angular's names for a global target, 'window', 'document' and 'body': there is none here.
     if (typeof target === 'string') return () => {};
     return this.engine.setEventListener(target, topLevelType(eventName), callback);
   }
+}
+
+/** What a package outside core changes about how a template is rendered. */
+export interface RendererExtension {
+  /**
+   * Take a listener over: answer what removes it, or nothing to leave it to the renderer. The
+   * target is a node, or the name Angular gives a global one: `'window'`, `'document'`, `'body'`.
+   */
+  listen?(
+    target: EngineNode | string,
+    eventName: string,
+    callback: (event: unknown) => boolean | void,
+    engine: Engine,
+  ): (() => void) | undefined;
+}
+
+const extensions: RendererExtension[] = [];
+
+/**
+ * Add to what the renderer does, for every app in the process. Returns what takes it away again.
+ *
+ * For a package that renders templates written for another host, as a web-compatibility layer
+ * delivers a `click` from a press and gives `(document:keydown)` something to listen on. The
+ * extensions are asked in the order they were added, and the first to answer takes the listener.
+ */
+export function extendRenderer(extension: RendererExtension): () => void {
+  extensions.push(extension);
+  return () => {
+    const index = extensions.indexOf(extension);
+    if (index !== -1) extensions.splice(index, 1);
+  };
 }
 
 /**

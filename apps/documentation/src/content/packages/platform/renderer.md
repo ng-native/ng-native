@@ -99,6 +99,26 @@ and the root is always the window.
 }
 ```
 
+## Extending the renderer
+
+Two functions let a package outside these change how a template is rendered, for every app in the
+process. They are what a compatibility layer for templates written for another host is built on,
+and neither puts that host's API in the engine or the renderer.
+
+**`extendRenderer({ listen })`**, from `@ng-native/platform`, takes listeners over. `listen` is
+asked for each one with its target, the event name, the callback and the engine, and answers what
+removes the listener, or nothing to leave it to the renderer. The target is a node, or the name
+Angular gives a global one: `'window'`, `'document'` or `'body'`.
+
+**`extendNodes(members)`**, from `@ng-native/fabric`, gives every node the property descriptors
+it is passed, a getter or a method, on the prototype the nodes share. The engine reads none of
+them. A field the engine keeps on a node, such as `kind` or `props`, is refused. A member a node
+already has on that prototype, such as `classList`, is replaced and put back when the extension is
+taken away, so what replaces it has to keep doing what Angular relied on.
+
+Each returns a function that takes the extension away again, which is what a test calls when it
+is done.
+
 ## Reading commit stats
 
 `engine.stats` tracks commit counts and timings - worst commit, worst render span, slow-commit
