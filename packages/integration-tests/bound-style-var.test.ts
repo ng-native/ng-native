@@ -51,6 +51,14 @@ describe('a var() in a bound style declaration', () => {
     assert.equal(props('object')['opacity'], 0.5);
   });
 
+  it('reads a fallback of currentColor as the colour of the element', () => {
+    assert.equal(props('current')['borderTopColor'], 'rgb(3, 3, 3)');
+  });
+
+  it('reads a display token as the display native has for it', () => {
+    assert.equal(props('kinds')['display'], 'flex', 'block is flex on native');
+  });
+
   it('never reaches native as text', () => {
     for (const id of ['card', 'inner', 'fallback', 'chain', 'tinted', 'switching', 'object']) {
       const sent = Object.values(props(id)).filter((value) => /var\(/.test(String(value)));
@@ -78,5 +86,22 @@ describe('a var() in a bound style declaration', () => {
     app.instance.colour.set(undefined);
     await settle();
     assert.equal(props('switching')['backgroundColor'] ?? undefined, undefined);
+  });
+});
+
+describe('a bound var() nothing defines', () => {
+  it('is said in development, naming the property and the element', async () => {
+    const mod = await compileFixture(
+      fileURLToPath(new URL('./fixtures/bound-style-var.ts', import.meta.url)),
+    );
+    const warn = console.warn;
+    const said: string[] = [];
+    console.warn = (...args: unknown[]) => said.push(args.map(String).join(' '));
+    try {
+      await render(mod['Unset'] as Type<unknown>, { dev: true });
+    } finally {
+      console.warn = warn;
+    }
+    assert.match(said.join('\n'), /var\(--nowhere\) in backgroundColor, bound on <view>/);
   });
 });

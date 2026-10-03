@@ -1910,7 +1910,8 @@ export class Engine implements HostEngine {
     this.structuralSheets = options.globalStyles?.structural === true;
     this.dev = options.dev ?? (globalThis as { __DEV__?: boolean }).__DEV__ === true;
     if (this.dev) {
-      this.styles.onUndefinedToken = (name, props) => this.reportUndefinedToken(name, props);
+      this.styles.onUndefinedToken = (name, props, on) =>
+        this.reportUndefinedToken(name, props, on);
       this.styles.onUnreadDisplay = (name, value) => this.reportUnreadDisplay(name, value);
     }
     this.now = options.now ?? (() => globalThis.performance?.now?.() ?? Date.now());
@@ -2474,7 +2475,8 @@ export class Engine implements HostEngine {
    */
   setBoundStyle(node: EngineNode, prop: string, value: unknown): boolean {
     const text = typeof value === 'string' && /^\s*var\(/i.test(value) ? value : undefined;
-    const bound = text === undefined ? null : boundDeclaration(prop, tokenFromValue(text));
+    const bound =
+      text === undefined ? null : boundDeclaration(prop, tokenFromValue(text), node.name);
     if (!bound && !node.boundByProp?.has(prop)) return false;
     const byProp = (node.boundByProp ??= new Map());
     if (bound) byProp.set(prop, bound);
@@ -3858,11 +3860,13 @@ export class Engine implements HostEngine {
   private readonly undefinedTokens = new Set<string>();
 
   /** Said once per name: a phone has no inspector to show the declaration struck out. */
-  private reportUndefinedToken(name: string, props: readonly string[]): void {
+  private reportUndefinedToken(name: string, props: readonly string[], on?: string): void {
     if (this.undefinedTokens.has(name)) return;
     this.undefinedTokens.add(name);
+    // A bound declaration has no rule to be found by, so it says which element it is on.
+    const where = on === undefined ? props.join(', ') : `${props.join(', ')}, bound on <${on}>,`;
     console.warn(
-      `[angular-native] var(${name}) in ${props.join(', ')} names a custom property nothing in` +
+      `[angular-native] var(${name}) in ${where} names a custom property nothing in` +
         ` scope defines, so the declaration is dropped, as a browser drops it. Define ${name} on` +
         ` :root or an ancestor, or give the var() a fallback.`,
     );

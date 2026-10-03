@@ -242,6 +242,8 @@ export interface DeferredDeclaration {
    * unambiguous given a single-valued token, so `padding: var(--gap)` writes all four.
    */
   readonly props: readonly string[];
+  /** The element a bound declaration is on, by name, for a message about it to say. */
+  readonly on?: string;
   /** A `var()` reference. Exactly one of this and `compute` is present. */
   readonly kind?: TokenKind;
   readonly reference?: string;
@@ -1323,7 +1325,7 @@ export class StyleResolver {
    * Told of a `var()` that names a custom property nothing in scope defines and has no fallback,
    * which is dropped. Set only in development, where it is how the engine says so.
    */
-  onUndefinedToken: ((name: string, props: readonly string[]) => void) | null = null;
+  onUndefinedToken: ((name: string, props: readonly string[], on?: string) => void) | null = null;
 
   /**
    * Told of a `display: var()` whose token holds no display native has, `grid` or `table`, which
@@ -1865,7 +1867,7 @@ export class StyleResolver {
     if (name === undefined || name in tokens) return;
     if (declaration.fallback !== undefined || declaration.fallbackToken) return;
     if (declaration.alternatives?.some((alternative) => alternative in tokens)) return;
-    this.onUndefinedToken!(name, declaration.props);
+    this.onUndefinedToken!(name, declaration.props, declaration.on);
   }
 
   /** A display token set to a value native has no display for. */
@@ -2515,12 +2517,21 @@ const BOUND_NUMBERS = new Set([
 const BOUND_LENGTH =
   /^(?:(?:min|max)?(?:width|height)|top|right|bottom|left|start|end|gap|fontSize|letterSpacing)$|(?:margin|padding|inset|Width|Radius|Gap|Basis)/i;
 
+/** The properties whose token is read in a form of its own. */
+const BOUND_KINDS: Readonly<Record<string, TokenKind>> = {
+  display: 'display',
+  transform: 'transform',
+  boxShadow: 'shadow',
+  filter: 'filter',
+};
+
 /** What a token is read as for a bound declaration of `prop`, as the compiler says for a rule. */
 function boundKind(prop: string): TokenKind {
   if (/color$/i.test(prop)) return 'color';
   if (prop === 'fontWeight') return 'weight';
   if (prop === 'fontFamily') return 'family';
   if (prop === 'lineHeight') return 'lineHeight';
+  if (prop in BOUND_KINDS) return BOUND_KINDS[prop]!;
   if (BOUND_NUMBERS.has(prop)) return 'number';
   return BOUND_LENGTH.test(prop) ? 'length' : 'keyword';
 }
@@ -2537,14 +2548,17 @@ function boundKind(prop: string): TokenKind {
 export function boundDeclaration(
   prop: string,
   token: TokenValue | undefined,
+  on?: string,
 ): DeferredDeclaration | null {
   if (!token?.alias) return null;
   const kind = boundKind(prop);
   const [reference, ...alternatives] = aliasesOf(token);
   for (; token?.alias; token = token.fallback);
-  const fallback = token && !isDerived(token) ? formOf(token, kind) : undefined;
+  // `tokenForm`, so a fallback of `currentColor` is the colour of the element, as in a rule.
+  const fallback = token && !isDerived(token) ? tokenForm(token, kind) : undefined;
   return {
     props: [prop],
+    ...(on === undefined ? {} : { on }),
     kind,
     reference: reference!,
     ...(alternatives.length ? { alternatives } : {}),
