@@ -212,6 +212,8 @@ class NativeRenderer implements Renderer2 {
       return;
     }
     const key = styleKey(style);
+    // A `var()` is for the cascade to settle, with the tokens in scope, not a value of the style.
+    if (this.engine.setBoundStyle(el, key, value)) return this.dropStyle(el, key);
     const next = declaredValue(key, value);
     const current = el.props['style'] as Record<string, unknown> | undefined;
     if (current && current === el.ownStyle) {
@@ -231,6 +233,12 @@ class NativeRenderer implements Renderer2 {
       return;
     }
     const key = styleKey(style);
+    this.engine.setBoundStyle(el, key, null);
+    this.dropStyle(el, key);
+  }
+
+  /** Takes `key` out of an element's inline style, if it is there. */
+  private dropStyle(el: EngineNode, key: string): void {
     const current = el.props['style'] as Record<string, unknown> | undefined;
     if (!current || !(key in current)) return;
     if (current === el.ownStyle) {

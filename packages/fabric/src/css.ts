@@ -513,6 +513,11 @@ export interface StyleTarget {
    * resolver reads the style only where it can matter. Absent is false.
    */
   readonly inlineInherits?: boolean;
+  /**
+   * The bound declarations that are a `var()`, `[style.color]="'var(--brand)'"`, as the deferred
+   * declarations a rule's would be: settled with the node's tokens, last of its normal ones.
+   */
+  readonly boundStyle?: readonly DeferredDeclaration[] | null;
   /** A node the engine made, such as the paragraph around loose text: it only inherits. */
   readonly anonymous?: true;
   /** One of HTML's text elements the engine has styles of its own for, such as `strong`. */
@@ -1458,6 +1463,7 @@ export class StyleResolver {
       this.globalSheet === null &&
       this.addedSheets.length === 0 &&
       !node.customProperties &&
+      !node.boundStyle &&
       !node.styled
     );
   }
@@ -1607,7 +1613,7 @@ export class StyleResolver {
   ): Styled {
     // Shared between nodes that match alike, unless the node sets something of its own.
     const inline = node.inlineInherits ? inlineInherited(node.props['style']) : null;
-    if (node.customProperties || inline) {
+    if (node.customProperties || inline || node.boundStyle) {
       return this.style(node, matched, parentTokens, parentInherited, inline);
     }
     if (this.sharedGeneration !== this.generation) {
@@ -1650,8 +1656,14 @@ export class StyleResolver {
     inline: Record<string, unknown> | null = null,
   ): Styled {
     // Inline style is the last normal declaration, under every important one.
+    const bound = node.boundStyle;
     const result = this.cascade(
-      inline ? [...matched, { declarations: inline } as StyleRule] : matched,
+      inline || bound
+        ? [
+            ...matched,
+            { declarations: inline ?? EMPTY, ...(bound && { deferred: bound }) } as StyleRule,
+          ]
+        : matched,
     );
 
     // Tokens are in scope for this node's own declarations as well as its descendants', so they
@@ -2489,6 +2501,63 @@ function displayOf(value: unknown): string | undefined {
 function tokenForm(token: TokenValue, kind: TokenKind): unknown {
   const value = formOf(token, kind);
   return value === undefined && kind === 'color' && isCurrentColour(token) ? CURRENT_COLOUR : value;
+}
+
+const BOUND_NUMBERS = new Set([
+  'opacity',
+  'flex',
+  'flexGrow',
+  'flexShrink',
+  'zIndex',
+  'aspectRatio',
+  'elevation',
+]);
+const BOUND_LENGTH =
+  /^(?:(?:min|max)?(?:width|height)|top|right|bottom|left|start|end|gap|fontSize|letterSpacing)$|(?:margin|padding|inset|Width|Radius|Gap|Basis)/i;
+
+/** What a token is read as for a bound declaration of `prop`, as the compiler says for a rule. */
+function boundKind(prop: string): TokenKind {
+  if (/color$/i.test(prop)) return 'color';
+  if (prop === 'fontWeight') return 'weight';
+  if (prop === 'fontFamily') return 'family';
+  if (prop === 'lineHeight') return 'lineHeight';
+  if (BOUND_NUMBERS.has(prop)) return 'number';
+  return BOUND_LENGTH.test(prop) ? 'length' : 'keyword';
+}
+
+/**
+ * A bound declaration whose value is one `var()`, `var(--brand, red)`, as the deferred declaration
+ * the compiler writes for the same value in a rule. `token` is the value as a token, which is an
+ * alias when it is a `var()`; null for any other.
+ *
+ * ponytail: the whole value has to be the `var()`. One inside a longer value, `calc()` included,
+ * is what the compiler parses at build time and nothing here does; write the sum in a custom
+ * property, `[style.--gap]`, and read that in the stylesheet.
+ */
+export function boundDeclaration(
+  prop: string,
+  token: TokenValue | undefined,
+): DeferredDeclaration | null {
+  if (!token?.alias) return null;
+  const kind = boundKind(prop);
+  const [reference, ...alternatives] = aliasesOf(token);
+  for (; token?.alias; token = token.fallback);
+  const fallback = token && !isDerived(token) ? formOf(token, kind) : undefined;
+  return {
+    props: [prop],
+    kind,
+    reference: reference!,
+    ...(alternatives.length ? { alternatives } : {}),
+    ...(fallback !== undefined ? { fallback } : {}),
+    ...(token && isDerived(token) ? { fallbackToken: token } : {}),
+  };
+}
+
+/** The names a `var()` tries in turn: its own, then each `var()` nested as its fallback. */
+function aliasesOf(token: TokenValue | undefined): string[] {
+  const names: string[] = [];
+  for (; token?.alias; token = token.fallback) names.push(token.alias);
+  return names;
 }
 
 /** The fallback written, or one made of other tokens, worked out from the tokens where it is used. */

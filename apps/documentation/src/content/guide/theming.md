@@ -162,6 +162,11 @@ in a component stylesheet, a `style` attribute, a `[style.--color-brand]` bindin
 </view>
 ```
 
+A bound declaration reads a token too, where its whole value is the `var()`:
+`[style.background-color]="'var(--color-brand)'"`, with a fallback if it needs one. It follows the
+token as a stylesheet declaration does. A `var()` inside a longer value, a `calc()` included, is
+not read from a binding: set a custom property and read that in the stylesheet.
+
 Every theme token is resolved on device, where it is read: colours, including the `color-mix()`
 behind shadow colours and opacity modifiers, bare channels such as `--primary: 0 100% 50%` read
 through `hsl(var(--primary))`, lengths and the spacing scale's `calc()`s and `max()`s, transition
