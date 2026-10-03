@@ -2,11 +2,11 @@ import { Directive } from '@angular/core';
 import { classes } from '../../utils';
 
 @Directive({
-	selector: '[hlmCardTitle]',
-	host: { 'data-slot': 'card-title' },
+  selector: '[hlmCardTitle]',
+  host: { 'data-slot': 'card-title' },
 })
 export class HlmCardTitle {
-	constructor() {
-		classes(() => 'spartan-card-title');
-	}
+  constructor() {
+    classes(() => 'spartan-card-title');
+  }
 }
