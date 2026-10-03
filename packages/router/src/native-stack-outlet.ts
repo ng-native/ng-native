@@ -33,6 +33,7 @@ import {
   signal,
   type ComponentRef,
   type EnvironmentInjector,
+  type OnInit,
   type Type,
   type WritableSignal,
 } from '@angular/core';
@@ -123,7 +124,7 @@ type NativeDispatch = (node: unknown, topLevelType: string, nativeEvent: unknown
   template: '',
   host: { '[style]': 'fill' },
 })
-export class NativeStackOutlet implements RouterOutletContract {
+export class NativeStackOutlet implements RouterOutletContract, OnInit {
   /**
    * Named outlets work exactly as on the web: `<native-stack-outlet name="list" />` is filled by
    * routes with `outlet: 'list'`. The default is the primary one. Read once, as the router's own
@@ -214,6 +215,24 @@ export class NativeStackOutlet implements RouterOutletContract {
   /** The screens currently in the stack, oldest first. Exposed for tests. */
   get depth(): number {
     return this.entries.length;
+  }
+
+  ngOnInit(): void {
+    this.activateCurrentRoute();
+  }
+
+  /**
+   * The route the router is already on, for an outlet created after the navigation that reached
+   * it: one held behind a condition until a session or a database is ready. The router activates
+   * an outlet as a navigation ends, and that one ended with no outlet to activate, so the outlet
+   * takes the route from its context as it arrives, as Angular's own `RouterOutlet` does.
+   */
+  private activateCurrentRoute(): void {
+    if (this.isActivated) return;
+    const context = this.parentContexts.getContext(this.name);
+    if (!context?.route) return;
+    if (context.attachRef) this.attach(context.attachRef, context.route);
+    else this.activateWith(context.route, context.injector);
   }
 
   // --- RouterOutletContract ----------------------------------------------
