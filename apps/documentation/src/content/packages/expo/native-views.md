@@ -117,6 +117,11 @@ registerExpoViews('expo-glass', 'expo-symbol'); // once, before the app mounts
 export class Like {}
 ```
 
+A symbol's color is its `tintColor`, and `tint-color` in a stylesheet is the declaration that sets
+it, so that is how a symbol takes its color from a token and follows a theme:
+`.like { tint-color: var(--color-accent); }` on `<expo-symbol class="like">`. `color` does not tint
+a symbol: it is the color of text. A `tintColor` written on the element wins over the stylesheet.
+
 A glass view's corners are its own `border-radius`. Where Liquid Glass is unavailable - before iOS
 26, and on Android - `<expo-glass>` renders as a plain view, and `liquidGlassAvailable()` says
 which it will be, so a fallback background can be set for the rest.

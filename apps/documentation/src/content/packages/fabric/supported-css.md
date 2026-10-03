@@ -300,6 +300,9 @@ Three more:
 Transitions, `animate.enter`/`animate.leave`, `@keyframes` and `animation` are their own page: see
 [Animation](/packages/fabric/animation).
 
+`tint-color` is native's own, with no counterpart on the web: the color an image is drawn in, and
+the color of an SF Symbol. It takes a token as any color does.
+
 ## What has nothing to map onto
 
 These are dropped with a warning that says so, not declarations that quietly do nothing:

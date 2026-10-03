@@ -100,6 +100,38 @@ default.
 Keeping content clear of the notch, the status bar and the home indicator is the job of
 `<safe-area-provider>` and `<safe-area-view>`; see [Safe area](/packages/components/safe-area).
 
+## Measuring a view
+
+`(layout)` reports a view's frame in its parent's coordinates. Where a view is in the window, which
+is what a popover placing itself by its trigger needs, comes from the engine:
+
+```ts
+import { ElementRef, inject } from '@angular/core';
+import { HostEngine, type WindowFrame } from '@ng-native/fabric';
+
+private readonly engine = inject(HostEngine);
+private readonly host = inject(ElementRef).nativeElement;
+
+protected placeBy(): void {
+  this.engine.measure(this.host, (frame: WindowFrame) => {
+    // frame.x and frame.y are in the window; frame.width and frame.height the view's size.
+  });
+}
+```
+
+The node is a component's own host, or `.node` of a `[nativeRef]` on any element. The callback is
+not called at all for a view that has not been committed yet, so measure in or after
+`afterNextRender`, and again after anything that moves the view: a rotation, a scroll, the
+keyboard. A frame is where the view was when asked, not a subscription.
+
+In a test nothing is laid out, so a frame is what the test says it is. `fabric.frames` is a map
+from a `nativeID`, or a view name, to the frame `measure` answers for that view:
+
+```ts
+const { fabric } = await render(Menu);
+fabric.frames.set('trigger', { x: 16, y: 120, width: 44, height: 44 });
+```
+
 ## Escape hatches
 
 `[nativeRef]` reads the retained native node a primitive sits on, for the rare case an app needs
