@@ -8,7 +8,7 @@
  * // {{ player.state().currentTime }}
  * ```
  */
-import { expoModule } from './native.ts';
+import { expoModule, unavailable } from './native.ts';
 import { ownPlayer, watchPlayer, type Player } from './player.ts';
 
 /** A video player owned by the current component, released when it is destroyed. */
@@ -21,7 +21,7 @@ export function videoPlayer(
     () => require('expo-video') as typeof import('expo-video'),
     ['ios', 'android', 'web'],
   );
-  if (!expo) throw new Error('[angular-native] expo-video is not installed');
+  if (!expo) throw unavailable('expo-video', 'Stand in for the player in the test.');
   const native = expo.createVideoPlayer(source);
   return ownPlayer(native, () => watchPlayer(native, options));
 }

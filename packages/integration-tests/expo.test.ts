@@ -295,9 +295,9 @@ describe('the file system', () => {
     assert.equal(present.creations(), 0, 'create() throws on a file that is already there');
   });
 
-  it('says the module is not installed rather than failing on a directory it does not have', () => {
+  it('says there is no module to load rather than failing on a directory it does not have', () => {
     const system = serviceWith(FileSystem.SOURCE, null, () => new FileSystem());
-    const notInstalled = { message: '[angular-native] expo-file-system is not installed' };
+    const notInstalled = { message: /expo-file-system has no native module to load in Node/ };
     assert.throws(() => system.cache('canary.txt'), notInstalled);
     assert.throws(() => system.document('canary.txt'), notInstalled);
   });

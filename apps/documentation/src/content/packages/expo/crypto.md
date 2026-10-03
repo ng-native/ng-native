@@ -76,6 +76,17 @@ message names the module and the commands that fix it; see
 On the web, and in a test that provides no fake, every method throws, or rejects for the
 promise-returning ones, with an error naming `expo-crypto`.
 
+## In a test
+
+Node has no native modules, so in a test `Crypto` throws when it is first used, saying so. Provide
+`Crypto.SOURCE` with the methods the code under test calls:
+
+```ts
+const ids = injectService(Ids, {
+  providers: [{ provide: Crypto.SOURCE, useValue: { randomUUID: () => 'test-id' } }],
+});
+```
+
 ## Reference
 
 <!-- api: Crypto -->

@@ -6,7 +6,7 @@
  * name lands in and hands the file back.
  */
 import { InjectionToken, Service, inject } from '@angular/core';
-import { expoModule } from './native.ts';
+import { expoModule, unavailable } from './native.ts';
 
 /**
  * A file. Structural on purpose: this is Expo's `File`, described in terms a test can satisfy, so
@@ -96,7 +96,9 @@ export class FileSystem {
   }
 
   private installed(): NativeFiles {
-    if (!this.native) throw new Error('[angular-native] expo-file-system is not installed');
+    if (!this.native) {
+      throw unavailable('expo-file-system', 'Provide FileSystem.SOURCE with a stand-in.');
+    }
     return this.native;
   }
 }

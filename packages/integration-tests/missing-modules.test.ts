@@ -23,7 +23,7 @@ import {
   type Type,
 } from '@angular/core';
 import { mount } from '@ng-native/platform';
-import { createFakeFabric } from '@ng-native/testing';
+import { cleanup, createFakeFabric, injectService } from '@ng-native/testing';
 import { compileFixture } from './compile.ts';
 import { MissingModuleError } from '@ng-native/expo';
 import { AppInfo } from '@ng-native/expo/app-info';
@@ -437,5 +437,41 @@ describe('the watch, without its TurboModule in the build', () => {
     const evaluated = device(true);
     assert.ok(factoryOf(Watch.SOURCE)());
     assert.deepEqual(evaluated, ['react-native-watch-connectivity']);
+  });
+});
+
+/**
+ * In Node there is no platform, so every native module is absent whether its package is installed
+ * or not. Saying "install it" there is advice to do what is already done.
+ */
+describe('a module in a Node test', () => {
+  afterEach(cleanup);
+
+  it('says there is nothing to load it on, and what a test does instead', async () => {
+    const { Crypto } = await import('@ng-native/expo/crypto');
+    const { database } = await import('@ng-native/expo/database');
+    const crypto = injectService(Crypto);
+    assert.throws(
+      () => crypto.randomUUID(),
+      (error: Error) =>
+        /expo-crypto has no native module to load in Node/.test(error.message) &&
+        /Crypto\.SOURCE/.test(error.message) &&
+        !/install/.test(error.message),
+    );
+    await assert.rejects(
+      database('test.db').ready(),
+      (error: Error) =>
+        /expo-sqlite has no native module to load in Node/.test(error.message) &&
+        /new Database\(open, migrations\)/.test(error.message) &&
+        !/install/.test(error.message),
+    );
+  });
+
+  it('takes a stand-in through SOURCE', async () => {
+    const { Crypto } = await import('@ng-native/expo/crypto');
+    const crypto = injectService(Crypto, {
+      providers: [{ provide: Crypto.SOURCE, useValue: { randomUUID: () => 'test-id' } }],
+    });
+    assert.equal(crypto.randomUUID(), 'test-id');
   });
 });

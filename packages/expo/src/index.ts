@@ -8,7 +8,13 @@
  */
 export { observed, type Observed } from './observed.ts';
 export { Permission, type PermissionApi, type PermissionResponse } from './permissions.ts';
-export { MissingModuleError, expoModule, optional, type ModulePlatform } from './native.ts';
+export {
+  MissingModuleError,
+  expoModule,
+  optional,
+  unavailable,
+  type ModulePlatform,
+} from './native.ts';
 export { NATIVE_VIEWS, registerNativeViews } from './community-views.ts';
 export { registerExpoUiViews } from './expo-ui.ts';
 export { nativeState, type NativeState } from './native-state.ts';

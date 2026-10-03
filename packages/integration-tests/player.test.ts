@@ -157,11 +157,11 @@ describe('owning a player', () => {
     assert.equal(native.released, true, 'released along with the component, not left playing');
   });
 
-  it('refuses to create one where expo-video is not installed', () => {
+  it('refuses to create one in Node, where expo-video has nothing to load', () => {
     const injector = Injector.create({ providers: [] });
     assert.throws(
       () => runInInjectionContext(injector, () => videoPlayer({ uri: 'file://a.mp4' } as never)),
-      /expo-video is not installed/,
+      /expo-video has no native module to load in Node/,
     );
   });
 
@@ -188,11 +188,11 @@ describe('owning a player', () => {
     assert.equal(native.released, true, 'released along with the component, not left playing');
   });
 
-  it('refuses to create one where expo-audio is not installed', () => {
+  it('refuses to create one in Node, where expo-audio has nothing to load', () => {
     const injector = Injector.create({ providers: [] });
     assert.throws(
       () => runInInjectionContext(injector, () => audioPlayer({ uri: 'file://a.mp3' } as never)),
-      /expo-audio is not installed/,
+      /expo-audio has no native module to load in Node/,
     );
   });
 

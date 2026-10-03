@@ -68,6 +68,21 @@ a wrong one: a [database](/packages/expo/database) or a [player](/packages/expo/
 the web as well, and [Crypto](/packages/expo/crypto) throws wherever it has no module, since an
 empty identifier or hash looks right and is not.
 
+## Faking a module in a test
+
+A test runs in Node, where no native module can load, installed or not. Most services do nothing
+there, as off a device. One that has no answer to give without its module, `Crypto` and
+`FileSystem` among them, throws an error that says so, not a `MissingModuleError`. A service with
+a `SOURCE` token, `Crypto.SOURCE` or `FileSystem.SOURCE`, reads its module through it, so a test
+provides a stand-in with the methods the code under test calls:
+
+```ts
+providers: [{ provide: Crypto.SOURCE, useValue: { randomUUID: () => 'test-id' } }];
+```
+
+A database has no token: build the service on `new Database(open, migrations)`, with an `open`
+the test supplies.
+
 ## Whether a feature is available
 
 A service that can say whether its feature is there says it as `available`, in one of three shapes,

@@ -24,7 +24,7 @@ import type {
   CryptoDigestAlgorithm as ExpoDigestAlgorithm,
   CryptoEncoding as ExpoEncoding,
 } from 'expo-crypto';
-import { expoModule } from './native.ts';
+import { expoModule, unavailable } from './native.ts';
 
 type Expo = typeof import('expo-crypto');
 
@@ -101,7 +101,7 @@ export class Crypto {
   }
 
   private module(): NativeCrypto {
-    if (!this.native) throw new Error('Crypto needs expo-crypto: npx expo install expo-crypto');
+    if (!this.native) throw unavailable('expo-crypto', 'Provide Crypto.SOURCE with a stand-in.');
     return this.native;
   }
 }

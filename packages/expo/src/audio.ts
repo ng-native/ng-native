@@ -7,7 +7,7 @@
  * // {{ player.state().currentTime }}
  * ```
  */
-import { expoModule } from './native.ts';
+import { expoModule, unavailable } from './native.ts';
 import { ownPlayer, watchAudioPlayer, type Player } from './player.ts';
 
 /**
@@ -25,7 +25,7 @@ export function audioPlayer(
     () => require('expo-audio') as typeof import('expo-audio'),
     ['ios', 'android', 'web'],
   );
-  if (!expo) throw new Error('[angular-native] expo-audio is not installed');
+  if (!expo) throw unavailable('expo-audio', 'Stand in for the player in the test.');
   const updateInterval = options.timeUpdate === undefined ? undefined : options.timeUpdate * 1000;
   const native = expo.createAudioPlayer(source, { updateInterval });
   return ownPlayer(native, () => watchAudioPlayer(native));

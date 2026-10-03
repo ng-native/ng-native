@@ -47,6 +47,21 @@ export class MissingModuleError extends Error {
   }
 }
 
+/**
+ * What to throw where `expoModule` answered null: the module is installed or not, but there is
+ * nothing to load it on. In Node, where a test runs, that is every native module, and "install it"
+ * would be advice to do what is already done; `inTest` says what a test does instead. On a platform
+ * the module does not support, it says that.
+ */
+export function unavailable(module: string, inTest: string): Error {
+  const platform = currentPlatform();
+  return new Error(
+    platform === null
+      ? `[angular-native] ${module} has no native module to load in Node, where a test runs. ${inTest}`
+      : `[angular-native] ${module} is not available on ${platform}.`,
+  );
+}
+
 /** The platform the app is running on, or null in Node, where there is none to ask. */
 export function currentPlatform(): ModulePlatform | null {
   return optional(
