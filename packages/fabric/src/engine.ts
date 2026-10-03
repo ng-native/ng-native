@@ -3895,7 +3895,9 @@ export class Engine implements HostEngine {
    * layout bug. On the first commit of any known element with no component behind it, say so.
    */
   private checkClaimed(node: EngineNode): void {
-    if (node.kind !== 'element' || node.claimed || !PRIMITIVE_NAMES.has(node.name)) return;
+    // The paragraph the engine wraps loose text in is its own: no template wrote it.
+    if (node.kind !== 'element' || node.claimed || node.anonymous) return;
+    if (!PRIMITIVE_NAMES.has(node.name)) return;
     if (this.reported.has(node.name)) return;
     this.reported.add(node.name);
     console.error(

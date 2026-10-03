@@ -177,6 +177,12 @@ describe('HTML elements in a template', () => {
     assert.deepEqual(errors, []);
   });
 
+  it('wraps loose text in a layout element without asking for a Text import', () => {
+    // The paragraph is the engine's own, not a <text> the template wrote without its component.
+    assert.deepEqual(shape(commit(el('div', 'loose'))), { View: [{ Paragraph: ['"loose"'] }] });
+    assert.deepEqual(errors, []);
+  });
+
   it('still reports an element name it does not know', () => {
     commit(el('div', el('spam', 'x')));
     assert.match(errors.join('\n'), /<spam> is not a known element/);
