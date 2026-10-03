@@ -1139,16 +1139,17 @@ function committedProp(key: string, value: unknown): unknown {
 }
 
 /**
- * The `pointer-events` an element computes to: its inline style's, or what the sheets resolve.
- * The inline one is read for itself because an element no rule matches resolves to what it
- * inherits, with its own inline value only in what it hands down.
+ * The `pointer-events` an element ends up with, in the order its props are merged: its inline
+ * style's, then its `pointerEvents` prop, then what the sheets resolve. The inline one is read for
+ * itself because an element no rule matches resolves to what it inherits, with its own inline
+ * value only in what it hands down. An inline `inherit` is no value of its own.
  */
 function pointerEventsOf(node: EngineNode, resolved: Record<string, unknown>): unknown {
   const inline = node.inlineInherits ? inlineInherited(node.props['style']) : null;
   const own = inline?.['pointerEvents'];
-  return own === undefined || own === 'inherit' ? resolved['pointerEvents'] : own;
+  if (own !== undefined && own !== 'inherit') return own;
+  return node.props['pointerEvents'] ?? resolved['pointerEvents'];
 }
-
 /**
  * A node's `pointer-events` as native takes it, once its props and styles are merged.
  *
@@ -1178,6 +1179,18 @@ function nativePointerEvents(
     style['pointerEvents'] = 'box-none';
   }
 }
+/** Whether `node`, whose `pointer-events` is `value`, takes touches or holds something that does. */
+function takesTouches(node: EngineNode, value: unknown, prop: unknown): boolean {
+  if (value === undefined) return false;
+  // The prop's `none` is native's: the whole subtree, whatever is inside it.
+  if (value === 'none' && prop === 'none') return false;
+  // CSS's `none` and native's `box-none` take no touches themselves: their children answer.
+  if (value === 'none' || value === 'box-none') {
+    return node.children.some((child) => child.touchWithin);
+  }
+  return true;
+}
+
 /**
  * Records on `node` whether it, or something inside it, takes touches where it would inherit
  * `none`. When that changes a `none` element's own answer, its props are marked to be committed
@@ -1189,15 +1202,14 @@ function nativePointerEvents(
  */
 function noteTouches(node: EngineNode, style: StyleCache | null): void {
   if (!style) return;
-  // Nearly every node: no `pointer-events` in any sheet or inline style, and nothing recorded.
+  // Nearly every node: no `pointer-events` in any sheet, style or prop, and nothing recorded.
   const resolved = style.style['pointerEvents'];
-  if (resolved === undefined && !node.inlineInherits && !node.touchWithin) return;
+  const prop = node.props['pointerEvents'];
+  if (resolved === undefined && prop === undefined && !node.inlineInherits && !node.touchWithin) {
+    return;
+  }
   const value = pointerEventsOf(node, style.style);
-  // `none` and native's `box-none` take no touches themselves: their children answer for them.
-  const within =
-    value === 'none' || value === 'box-none'
-      ? node.children.some((child) => child.touchWithin)
-      : value !== undefined;
+  const within = takesTouches(node, value, prop);
   if (within === !!node.touchWithin) return;
   node.touchWithin = within;
   if (value === 'none') node.propsDirty = true;

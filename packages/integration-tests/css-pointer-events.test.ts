@@ -195,6 +195,30 @@ describe('pointer-events: none', () => {
     assert.equal(fabric.committed[0]!.children[0]!.props['pointerEvents'], 'none');
   });
 
+  it('opens for a descendant whose pointerEvents prop takes touches', () => {
+    const { engine, panel, plain, committed } = tree('.layer { pointer-events: none }');
+    engine.setProp(panel, 'pointerEvents', 'auto');
+    engine.commit();
+    assert.deepEqual(committed(), { layer: 'box-none', panel: 'auto', plain: 'none' });
+    engine.setProp(panel, 'pointerEvents', null);
+    engine.setProp(plain, 'pointerEvents', 'box-only');
+    engine.commit();
+    assert.deepEqual(committed(), { layer: 'box-none', panel: 'none', plain: 'box-only' });
+  });
+
+  it('stays closed around a descendant whose pointerEvents prop is none, whatever is inside it', () => {
+    const { engine, layer, panel, committed } = tree(
+      '.layer { pointer-events: none } .deep { pointer-events: auto }',
+    );
+    const deep = engine.createElement('view', layer.sheet);
+    engine.addClass(deep, 'deep');
+    engine.appendChild(panel, deep);
+    engine.setProp(panel, 'pointerEvents', 'none');
+    engine.commit();
+    // Native's none is the whole subtree, so nothing under the panel can take a touch.
+    assert.deepEqual(committed(), { layer: 'none', panel: 'none', plain: 'none' });
+  });
+
   it("keeps React Native's meaning as the pointerEvents prop: the whole subtree", () => {
     const { engine, layer, committed } = tree('.panel { pointer-events: auto }');
     engine.setProp(layer, 'pointerEvents', 'none');
