@@ -300,9 +300,11 @@ const extensions: RendererExtension[] = [];
  * extensions are asked in the order they were added, and the first to answer takes the listener.
  */
 export function extendRenderer(extension: RendererExtension): () => void {
-  extensions.push(extension);
+  // An entry of this call's own: the same extension added twice is removed once by each.
+  const entry: RendererExtension = { listen: (...args) => extension.listen?.(...args) };
+  extensions.push(entry);
   return () => {
-    const index = extensions.indexOf(extension);
+    const index = extensions.indexOf(entry);
     if (index !== -1) extensions.splice(index, 1);
   };
 }

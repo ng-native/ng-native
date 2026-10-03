@@ -79,7 +79,7 @@ test('nodes answer to what a package gives them, until it is taken away', async 
     assert.equal(box.localName, 'view');
     assert.equal(box.hasAttribute!('testID'), true);
     assert.equal(box.hasAttribute!('title'), false);
-    for (const field of ['kind', 'props', 'children']) {
+    for (const field of ['kind', 'props', 'children', 'defaultStyle', '__ngContext__']) {
       assert.throws(() => extendNodes({ [field]: { value: 'x' } }), new RegExp(field), field);
     }
   } finally {
@@ -103,4 +103,42 @@ test('a member a node already has is replaced, and put back', async () => {
     undo();
   }
   assert.equal(typeof (box.classList as { contains?: unknown }).contains, 'function');
+});
+
+test('members that cannot all be installed leave none behind', async () => {
+  const { componentRef } = await render(Clicks);
+  const box = componentRef.injector.get(Engine).root.children[0] as EngineNode & { first?: number };
+  assert.throws(() =>
+    extendNodes({ first: { value: 1 }, second: { value: 2, get: () => 2 } as PropertyDescriptor }),
+  );
+  assert.equal(box.first, undefined);
+});
+
+test('a member is taken away even when its descriptor says it is not configurable', async () => {
+  const { componentRef } = await render(Clicks);
+  const box = componentRef.injector.get(Engine).root.children[0] as EngineNode & { fixed?: number };
+  const undo = extendNodes({ fixed: { value: 1, configurable: false } });
+  assert.equal(box.fixed, 1);
+  undo();
+  assert.equal(box.fixed, undefined);
+});
+
+test('an extension added twice is removed once by each removal', async () => {
+  let asked = 0;
+  const extension = {
+    listen: () => {
+      asked++;
+      return undefined;
+    },
+  };
+  const first = extendRenderer(extension);
+  const second = extendRenderer(extension);
+  try {
+    first();
+    first();
+    await render(Clicks);
+    assert.equal(asked, 1, 'the second registration still answers');
+  } finally {
+    second();
+  }
 });
