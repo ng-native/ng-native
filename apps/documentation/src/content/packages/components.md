@@ -129,6 +129,15 @@ native view accepts: accessibility (`accessibilityLabel`/`aria-label`, `accessib
 `testID`, `hitSlop`, `pointerEvents`). None of these show up in a specific element's own table
 below; they are all here instead.
 
+`role` takes the ARIA roles as well as the ones `accessibilityRole` names. One only ARIA has, such
+as `row`, `listitem`, `heading` or `dialog`, is committed as native's own `role` prop, which each
+platform maps to what it has and reads over `accessibilityRole`.
+
+`role` and the `aria-*` attributes are read on any element that draws a view, the host of a
+component of your own included: `<app-card role="button" aria-label="Open">` is announced as the
+`<view>` it is. An `accessibilityLabel` or `accessibilityState` the element has is its own answer,
+and the `aria-*` attribute beside it is not read.
+
 <!-- api: ViewBase -->
 
 ## Events

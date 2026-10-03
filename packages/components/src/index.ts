@@ -110,6 +110,7 @@ export {
   type AccessibilityContribution,
   type AccessibilityLiveRegion,
   type AccessibilityRole,
+  type Role,
   type AccessibilityState,
   type AccessibilityValue,
   type AndroidDrawable,

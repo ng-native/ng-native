@@ -521,6 +521,18 @@ describe('accessibilityRole', () => {
     set('role', null);
     assert.equal(el.getAttribute('role'), null);
   });
+
+  it('reads role over accessibilityRole when an element has both, as native does', () => {
+    const { el, set } = scene('view');
+    set('role', 'listitem');
+    set('accessibilityRole', 'button');
+    assert.equal(el.getAttribute('role'), 'listitem');
+    set('role', null);
+    assert.equal(el.getAttribute('role'), 'button', 'and accessibilityRole once role has gone');
+    set('role', 'row');
+    set('accessibilityRole', null);
+    assert.equal(el.getAttribute('role'), 'row');
+  });
 });
 
 describe('props the other groups leave at their defaults', () => {

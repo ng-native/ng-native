@@ -19,6 +19,7 @@ import {
   type StyleSheet,
   type TokenValue,
 } from './css.ts';
+import { applyAria } from './aria-props.ts';
 import { STYLED_ELEMENTS } from './element-styles.ts';
 import {
   animationEvent,
@@ -1224,6 +1225,22 @@ function wasOrIsEmptyWithout(node: EngineNode, moved: EngineNode): boolean {
     if (child !== moved && child.kind !== 'anchor') return false;
   }
   return true;
+}
+
+/**
+ * A node's own props onto what it commits with. No native prop has a hyphen: `data-*` and `aria-*`
+ * attributes stay on the node for selectors to match, and an `aria-*` one is mapped to the prop
+ * native reads.
+ */
+function writeOwnProps(own: Record<string, unknown>, props: Record<string, unknown>): void {
+  let aria = false;
+  for (const key of Object.keys(own)) {
+    if (key.includes('-')) aria ||= key.startsWith('aria-');
+    else if (key !== 'style' && key !== INTRINSIC_SIZE && key !== STYLE_OVERRIDE) {
+      props[key] = committedProp(key, own[key]);
+    }
+  }
+  if (aria) applyAria(own, props);
 }
 
 /** A prop as it is committed: a boolean view prop held as text is the boolean the text says. */
@@ -2812,18 +2829,7 @@ export class Engine implements HostEngine {
     const props: Record<string, unknown> = { ...DEFAULT_PROPS[viewName], ...node.defaultStyle };
     Object.assign(props, this.styles.resolve(node, this.styleEpoch).style);
     const resolved = props['pointerEvents'];
-    for (const key of Object.keys(node.props)) {
-      // No native prop has a hyphen. `data-*` and `aria-*` attributes stay on the node for
-      // selectors to match, and the components package maps `aria-*` to what native reads.
-      if (
-        key !== 'style' &&
-        key !== INTRINSIC_SIZE &&
-        key !== STYLE_OVERRIDE &&
-        !key.includes('-')
-      ) {
-        props[key] = committedProp(key, node.props[key]);
-      }
-    }
+    writeOwnProps(node.props, props);
     withTextContent(node, viewName, props);
     const cascaded = props['transform'];
     const style = boundTransform(node, flattenStyle(node.props['style'], props), cascaded);

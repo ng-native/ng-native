@@ -126,14 +126,14 @@ Every error says what was looked for and prints the tree. With none: `Unable to 
 text "Bananas".`. With more than one: `Found 2 nodes with role "listitem", and expected one. Use
 getAllByRole if more than one is expected.`
 
-| Query               | Arguments                   | Matches a node when                                                                                                                                                                   |
-| ------------------- | --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `ByRole`            | `(role, { name?, exact? })` | `accessibilityRole` is `role`; and, given `name`, the node's accessible name matches it: its `accessibilityLabel`, or its text content when it has none, as a screen reader reads it. |
-| `ByText`            | `(text, { exact? })`        | It is a `Paragraph` and its text content matches.                                                                                                                                     |
-| `ByTestId`          | `(testId, { exact? })`      | `testID` or `nativeID` matches.                                                                                                                                                       |
-| `ByLabelText`       | `(label, { exact? })`       | `accessibilityLabel` matches.                                                                                                                                                         |
-| `ByPlaceholderText` | `(placeholder, { exact? })` | A text field's `placeholder` matches.                                                                                                                                                 |
-| `ByDisplayValue`    | `(value, { exact? })`       | It is a text field and its `text`, the value `<text-input>` binds its model to, matches.                                                                                              |
+| Query               | Arguments                   | Matches a node when                                                                                                                                                                             |
+| ------------------- | --------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `ByRole`            | `(role, { name?, exact? })` | `accessibilityRole` or `role` is `role`; and, given `name`, the node's accessible name matches it: its `accessibilityLabel`, or its text content when it has none, as a screen reader reads it. |
+| `ByText`            | `(text, { exact? })`        | It is a `Paragraph` and its text content matches.                                                                                                                                               |
+| `ByTestId`          | `(testId, { exact? })`      | `testID` or `nativeID` matches.                                                                                                                                                                 |
+| `ByLabelText`       | `(label, { exact? })`       | `accessibilityLabel` matches.                                                                                                                                                                   |
+| `ByPlaceholderText` | `(placeholder, { exact? })` | A text field's `placeholder` matches.                                                                                                                                                           |
+| `ByDisplayValue`    | `(value, { exact? })`       | It is a text field and its `text`, the value `<text-input>` binds its model to, matches.                                                                                                        |
 
 Every query reads the props on the committed nodes, which are the props native was sent: what a
 component writes for `testID`, `id` (as `nativeID`), `accessibilityRole` or `role` (as

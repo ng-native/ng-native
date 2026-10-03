@@ -94,9 +94,11 @@ export const ROLE_MAP: Readonly<Record<string, string>> = {
   iconmenu: 'menu',
 };
 
-function applyRole(node: BrowserNode, value: unknown, clear: boolean): void {
+function applyRole(node: BrowserNode): void {
+  // Whichever of the two changed, `role` is the one read where an element has both, as on native.
+  const value = node.props['role'] ?? node.props['accessibilityRole'];
   const role = typeof value === 'string' ? (ROLE_MAP[value] ?? value) : undefined;
-  setOrRemove(node, 'role', role, clear || role === undefined);
+  setOrRemove(node, 'role', role, role === undefined);
   // Which attribute `checked` goes to depends on the role, and the two arrive in either order.
   const state = node.props['accessibilityState'];
   applyAccessibilityState(node, state, state === undefined || state === null);

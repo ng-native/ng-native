@@ -19,7 +19,128 @@ import type { Insets } from './events.ts';
 import { optionalBoolean, optionalNumber } from './transforms.ts';
 import { WRITTEN_PROPS } from './written-props.ts';
 
-/** The roles assistive technologies understand. `Role` is the web spelling of the same set. */
+/**
+ * The ARIA roles, which `role` takes as React Native's own `role` prop does. Native maps each to
+ * what the platform has.
+ */
+export type Role =
+  | 'alert'
+  | 'alertdialog'
+  | 'application'
+  | 'article'
+  | 'banner'
+  | 'button'
+  | 'cell'
+  | 'checkbox'
+  | 'columnheader'
+  | 'combobox'
+  | 'complementary'
+  | 'contentinfo'
+  | 'definition'
+  | 'dialog'
+  | 'directory'
+  | 'document'
+  | 'feed'
+  | 'figure'
+  | 'form'
+  | 'grid'
+  | 'group'
+  | 'heading'
+  | 'img'
+  | 'link'
+  | 'list'
+  | 'listitem'
+  | 'log'
+  | 'main'
+  | 'marquee'
+  | 'math'
+  | 'menu'
+  | 'menubar'
+  | 'menuitem'
+  | 'meter'
+  | 'navigation'
+  | 'none'
+  | 'note'
+  | 'option'
+  | 'presentation'
+  | 'progressbar'
+  | 'radio'
+  | 'radiogroup'
+  | 'region'
+  | 'row'
+  | 'rowgroup'
+  | 'rowheader'
+  | 'scrollbar'
+  | 'searchbox'
+  | 'separator'
+  | 'slider'
+  | 'spinbutton'
+  | 'status'
+  | 'summary'
+  | 'switch'
+  | 'tab'
+  | 'table'
+  | 'tablist'
+  | 'tabpanel'
+  | 'term'
+  | 'timer'
+  | 'toolbar'
+  | 'tooltip'
+  | 'tree'
+  | 'treegrid'
+  | 'treeitem';
+
+/**
+ * The ARIA roles `accessibilityRole` has no word for. One of these is committed as `role`, which
+ * native reads over `accessibilityRole`; any other is `accessibilityRole` under its web spelling.
+ */
+const ARIA_ONLY_ROLES: ReadonlySet<string> = new Set([
+  'alertdialog',
+  'application',
+  'article',
+  'banner',
+  'cell',
+  'columnheader',
+  'complementary',
+  'contentinfo',
+  'definition',
+  'dialog',
+  'directory',
+  'document',
+  'feed',
+  'figure',
+  'form',
+  'group',
+  'heading',
+  'img',
+  'listitem',
+  'log',
+  'main',
+  'marquee',
+  'math',
+  'meter',
+  'navigation',
+  'note',
+  'option',
+  'presentation',
+  'region',
+  'row',
+  'rowgroup',
+  'rowheader',
+  'searchbox',
+  'separator',
+  'slider',
+  'status',
+  'table',
+  'tabpanel',
+  'term',
+  'tooltip',
+  'tree',
+  'treegrid',
+  'treeitem',
+]);
+
+/** The roles assistive technologies understand, as `accessibilityRole` names them. */
 export type AccessibilityRole =
   | 'none'
   | 'button'
@@ -262,8 +383,8 @@ export abstract class ViewBase {
   readonly accessibilityHint = input<string>();
   /** The kind of control this is, for assistive technologies. */
   readonly accessibilityRole = input<AccessibilityRole>();
-  /** `role`: the web spelling of `accessibilityRole`. */
-  readonly role = input<AccessibilityRole>();
+  /** `role`: the web spelling, which takes the ARIA roles as well as `accessibilityRole`'s. */
+  readonly role = input<Role | AccessibilityRole>();
   /** Disabled, selected, checked, busy and expanded, as one object. */
   readonly accessibilityState = input<AccessibilityState>();
   /** `aria-busy`. */
@@ -467,7 +588,14 @@ export abstract class ViewBase {
     );
     write('accessibilityLabelledBy', this.accessibilityLabelledBy() ?? this.ariaLabelledBy());
     write('accessibilityHint', this.accessibilityHint());
-    write('accessibilityRole', this.accessibilityRole() ?? this.role() ?? this.impliedRole());
+    const role = this.role();
+    const aria = role !== undefined && ARIA_ONLY_ROLES.has(role);
+    write('role', aria ? role : undefined);
+    // An ARIA role is the element's role whatever the component implies, as any explicit one is.
+    write(
+      'accessibilityRole',
+      this.accessibilityRole() ?? (aria ? undefined : (role ?? this.impliedRole())),
+    );
     write('accessibilityState', this.mergedAccessibilityState());
     write('accessibilityValue', this.mergedAccessibilityValue());
     write('accessibilityActions', this.accessibilityActions());

@@ -119,7 +119,7 @@ const QUERIES: { [K in Name]: (...args: QueryArgs[K]) => Query } = {
     describe:
       `role ${show(role)}` + (options.name === undefined ? '' : ` and name ${show(options.name)}`),
     select: (node) =>
-      matches(node.props['accessibilityRole'], role) &&
+      (matches(node.props['accessibilityRole'], role) || matches(node.props['role'], role)) &&
       (options.name === undefined || matches(nameOf(node), options.name, options.exact)),
   }),
   // `Paragraph` alone: a nested `<text>` commits as a `Text` span inside one, so the paragraph is
@@ -236,6 +236,7 @@ const IDENTIFYING = [
   'testID',
   'nativeID',
   'accessibilityRole',
+  'role',
   'accessibilityLabel',
   'placeholder',
   'text',
