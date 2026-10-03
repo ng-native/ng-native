@@ -17,6 +17,7 @@ import {
   createComponent,
   createEnvironmentInjector,
   PLATFORM_ID,
+  type Binding,
   type ComponentRef,
   type EnvironmentInjector,
   type EnvironmentProviders,
@@ -692,6 +693,11 @@ export function mount(
      * set one afterwards. What `render()` in `@ng-native/testing` passes a component's inputs as.
      */
     inputs?: Record<string, unknown>;
+    /**
+     * Bindings for the root component, as `createComponent` takes them: `outputBinding()` for a
+     * listener a template would bind. What `render()` passes its `on` as.
+     */
+    bindings?: Binding[];
   } = {},
 ): MountResult {
   // The bare identifier, behind `typeof` so Node does not throw: Metro inlines `__DEV__` and folds
@@ -703,7 +709,7 @@ export function mount(
     calmDevBanner();
   }
   installDeferTriggers();
-  const { providers: extraProviders = [], inputs = {}, ...engineOptions } = options;
+  const { providers: extraProviders = [], inputs = {}, bindings, ...engineOptions } = options;
   // The factory needs the engine and the engine needs the factory's dirty hook, so the hook is
   // handed over once both exist rather than through the constructor.
   const engine = new Engine(fabric, rootTag, {
@@ -769,7 +775,10 @@ export function mount(
   // component's, and it goes under the engine root as a view of its own. The engine root is the
   // surface and is never committed: as the host it took the component's `:host` rules and sent
   // them nowhere, so a root component's background and padding were dropped without a word.
-  const componentRef = createComponent(component, { environmentInjector: injector });
+  const componentRef = createComponent(component, {
+    environmentInjector: injector,
+    ...(bindings && { bindings }),
+  });
   const host = componentRef.location.nativeElement as EngineNode;
   // The full height of the surface, as the web's mount point is given, so a template's `flex: 1`
   // still fills the screen. A height rather than `flex: 1`, which a `:host` height would lose to.

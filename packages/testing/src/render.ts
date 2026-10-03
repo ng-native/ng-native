@@ -12,6 +12,7 @@ import {
   // here is the host a test's template string is compiled into: see `hostFor`.
   // eslint-disable-next-line no-restricted-syntax
   NO_ERRORS_SCHEMA,
+  outputBinding,
   type ApplicationRef,
   type ComponentRef,
   type EnvironmentProviders,
@@ -180,6 +181,11 @@ export async function render<T>(
     ...engine,
     providers,
     inputs: isTemplate ? {} : inputs,
+    // As a template would bind them, so an output a host directive forwards is heard, by the name
+    // it is forwarded under, and a name that is no output is refused by Angular, by name.
+    bindings: Object.entries(on ?? {}).map(([name, handler]) =>
+      outputBinding(name, handler as (value: unknown) => void),
+    ),
   });
   const self: Mounted = {
     fabric,
@@ -191,9 +197,6 @@ export async function render<T>(
 
   const componentRef = app.componentRef as ComponentRef<T>;
   const instance = componentRef.instance as T & Record<string, unknown>;
-  for (const [name, handler] of Object.entries(on ?? {})) {
-    (instance[name] as { subscribe(fn: (value: never) => void): void }).subscribe(handler);
-  }
 
   const detectChanges = async (): Promise<void> => {
     // The component's own view, not the host's: `componentRef.changeDetectorRef` marks the host
