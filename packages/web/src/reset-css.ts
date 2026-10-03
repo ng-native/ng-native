@@ -55,14 +55,149 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
-[data-rn]:not([data-rn='text']) {
+[data-rn]:not([data-rn='text']):not(
+    :where(
+      :is(
+        [data-rn='span'],
+        [data-rn='p'],
+        [data-rn='h1'],
+        [data-rn='h2'],
+        [data-rn='h3'],
+        [data-rn='h4'],
+        [data-rn='h5'],
+        [data-rn='h6'],
+        [data-rn='label'],
+        [data-rn='strong'],
+        [data-rn='b'],
+        [data-rn='em'],
+        [data-rn='i'],
+        [data-rn='u'],
+        [data-rn='s'],
+        [data-rn='small'],
+        [data-rn='code'],
+        [data-rn='mark'],
+        [data-rn='abbr'],
+        [data-rn='cite'],
+        [data-rn='time']
+      ):not(
+        :has(
+          [data-rn]:not(
+            [data-rn='text'],
+            [data-rn='span'],
+            [data-rn='p'],
+            [data-rn='h1'],
+            [data-rn='h2'],
+            [data-rn='h3'],
+            [data-rn='h4'],
+            [data-rn='h5'],
+            [data-rn='h6'],
+            [data-rn='label'],
+            [data-rn='strong'],
+            [data-rn='b'],
+            [data-rn='em'],
+            [data-rn='i'],
+            [data-rn='u'],
+            [data-rn='s'],
+            [data-rn='small'],
+            [data-rn='code'],
+            [data-rn='mark'],
+            [data-rn='abbr'],
+            [data-rn='cite'],
+            [data-rn='time']
+          )
+        )
+      )
+    )
+  ) {
   display: flex;
   flex-direction: column;
   align-items: stretch;
 }
 
-[data-rn='text'] {
+[data-rn='text'],
+:where(
+  :is(
+    [data-rn='span'],
+    [data-rn='p'],
+    [data-rn='h1'],
+    [data-rn='h2'],
+    [data-rn='h3'],
+    [data-rn='h4'],
+    [data-rn='h5'],
+    [data-rn='h6'],
+    [data-rn='label'],
+    [data-rn='strong'],
+    [data-rn='b'],
+    [data-rn='em'],
+    [data-rn='i'],
+    [data-rn='u'],
+    [data-rn='s'],
+    [data-rn='small'],
+    [data-rn='code'],
+    [data-rn='mark'],
+    [data-rn='abbr'],
+    [data-rn='cite'],
+    [data-rn='time']
+  ):not(
+    :has(
+      [data-rn]:not(
+        [data-rn='text'],
+        [data-rn='span'],
+        [data-rn='p'],
+        [data-rn='h1'],
+        [data-rn='h2'],
+        [data-rn='h3'],
+        [data-rn='h4'],
+        [data-rn='h5'],
+        [data-rn='h6'],
+        [data-rn='label'],
+        [data-rn='strong'],
+        [data-rn='b'],
+        [data-rn='em'],
+        [data-rn='i'],
+        [data-rn='u'],
+        [data-rn='s'],
+        [data-rn='small'],
+        [data-rn='code'],
+        [data-rn='mark'],
+        [data-rn='abbr'],
+        [data-rn='cite'],
+        [data-rn='time']
+      )
+    )
+  )
+)[data-rn] {
   display: inline;
+}
+
+:where(h1, h2, h3, h4, h5, h6, p)[data-rn] {
+  font-size: inherit;
+  font-weight: inherit;
+  margin: 0;
+}
+
+:where(ul, ol)[data-rn] {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+:where(strong, b)[data-rn] {
+  font-weight: bold;
+}
+
+:where(small)[data-rn] {
+  font-size: 80%;
+}
+
+:where(code)[data-rn] {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 1em;
+}
+
+:where(mark)[data-rn] {
+  background-color: rgb(255, 255, 0);
+  color: rgb(0, 0, 0);
 }
 
 [data-rn='scroll-view'],

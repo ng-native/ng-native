@@ -131,6 +131,7 @@ export const PACKAGES: NavSection = {
         { path: 'packages/components/keyboard-avoiding-view', title: 'Keyboard-avoiding view' },
         { path: 'packages/components/lists', title: 'Lists' },
         { path: 'packages/components/text', title: 'Text', group: 'Content' },
+        { path: 'packages/components/html-elements', title: 'HTML elements' },
         { path: 'packages/components/image', title: 'Image' },
         { path: 'packages/components/activity-indicator', title: 'Activity indicator' },
         { path: 'packages/components/input', title: 'Text input', group: 'Input' },

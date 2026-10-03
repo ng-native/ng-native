@@ -6,7 +6,7 @@ summary: What a coding agent needs to build with Angular Native, and where it fi
 # Using AI assistants
 
 A coding agent may know Angular and React Native but not Angular Native. It may write `<View>`
-for `<view>`, use `document`, or wrap a list in a `<div>`, producing code that compiles but renders
+for `<view>`, use `document`, or reach for a `<button>`, producing code that compiles but renders
 nothing. Two resources address this without setup.
 
 ## `AGENTS.md` in every new app

@@ -31,6 +31,7 @@ export {
   type TokenKind,
   type TokenValue,
 } from './css.ts';
+export { ELEMENT_STYLES, ELEMENT_STYLES_CSS } from './element-styles.ts';
 export { EngineIntersectionObserver, installDeferTriggers } from './defer-triggers.ts';
 export { faceName } from './font-faces.ts';
 export { firstFamily } from './inline-token.ts';

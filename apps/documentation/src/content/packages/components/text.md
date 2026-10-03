@@ -1,14 +1,15 @@
 ---
 title: Text
-summary: <text>, why text cannot be bare, and how fonts and truncation work.
+summary: <text>, how nested text flows inline, and how fonts and truncation work.
 art: text
 ---
 
 # Text
 
-A native view has no concept of a bare text node. There is no `<p>` and no way to imply one: any
-character an app wants on screen has to sit inside a `<text>` element, imported from this package.
-Writing `<view>Hello</view>` compiles, and renders nothing.
+A native view has no concept of a bare text node: every character on screen is inside a native
+text view. `<text>`, imported from this package, is that view, with the inputs below. HTML's own
+text elements, `p` and `span` among them, are text as well, and text written straight into a view
+is given a paragraph of its own: see [HTML elements](/packages/components/html-elements).
 
 ```ts
 import { Component, input } from '@angular/core';

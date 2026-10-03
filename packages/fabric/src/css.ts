@@ -13,6 +13,7 @@ import {
   mixChannels,
   mixColours,
 } from './color-mix.ts';
+import { ELEMENT_STYLES } from './element-styles.ts';
 import { type Channel, relativeColour } from './relative-colour.ts';
 import type { Keyframe } from './transition.ts';
 
@@ -510,6 +511,10 @@ export interface StyleTarget {
    * resolver reads the style only where it can matter. Absent is false.
    */
   readonly inlineInherits?: boolean;
+  /** A node the engine made, such as the paragraph around loose text: it only inherits. */
+  readonly anonymous?: true;
+  /** One of HTML's text elements the engine has styles of its own for, such as `strong`. */
+  readonly styled?: true;
   /**
    * The sheet this node's own rules come from, which is the sheet of the component whose renderer
    * created it. Read from the node rather than passed in, because a node's ancestors usually
@@ -1002,6 +1007,18 @@ function layerOrder(a: LayerPlace | undefined, b: LayerPlace | undefined): numbe
   // One is nested in the other, whose own rules are the stronger.
   return b.length - a.length;
 }
+
+/**
+ * The engine's own styles for HTML's text elements, as rules to match before any a stylesheet
+ * holds, so every rule an author writes beats them whatever its specificity, as a browser's own
+ * sheet is beaten. Offered only to a node marked `styled`, which few are.
+ */
+const ELEMENT_ENTRIES: readonly RuleEntry[] = ELEMENT_STYLES.rules.map((rule) => ({
+  rule,
+  sheet: ELEMENT_STYLES,
+  weight: rule.specificity,
+}));
+
 /** One rule in a cascade: the sheet it came from, which `:host` needs, and its weight here. */
 interface RuleEntry {
   readonly rule: StyleRule;
@@ -1376,13 +1393,18 @@ export class StyleResolver {
 
     const parentInherited = parent ? parent.inherited : EMPTY;
 
-    if (this.hasNoRules(node)) {
+    // A box the engine made around loose text is in no template, so no rule matches it.
+    if (node.anonymous || this.hasNoRules(node)) {
       return this.unstyled(node, epoch, parent, parentContext, parentInherited);
     }
 
     styleStats.nodesResolved++;
 
-    const matched = this.matched(node, this.rulesFor(node));
+    const candidates = this.rulesFor(node);
+    const matched = this.matched(
+      node,
+      node.styled ? ELEMENT_ENTRIES.concat(candidates) : candidates,
+    );
     const parentTokens = parent ? parent.tokens : this.tokensOnRoot;
     const styled = this.styled(node, matched, parentTokens, parentInherited);
 
@@ -1433,7 +1455,8 @@ export class StyleResolver {
       node.hostSheet === null &&
       this.globalSheet === null &&
       this.addedSheets.length === 0 &&
-      !node.customProperties
+      !node.customProperties &&
+      !node.styled
     );
   }
 

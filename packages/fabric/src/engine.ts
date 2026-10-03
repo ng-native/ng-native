@@ -17,6 +17,7 @@ import {
   type StyleSheet,
   type TokenValue,
 } from './css.ts';
+import { STYLED_ELEMENTS } from './element-styles.ts';
 import {
   animationEvent,
   bezier,
@@ -400,6 +401,8 @@ interface Committed {
   props: Record<string, unknown>;
   /** The child handles this node was committed with, in order. */
   childHandles: FabricNode[];
+  /** The native view it was created as, which a clone cannot change. */
+  viewName: string;
 }
 
 export interface EngineNode extends HostNode {
@@ -435,6 +438,15 @@ export interface EngineNode extends HostNode {
    * otherwise inherit. Kept as each node is reconciled, children first. See `noteTouches`.
    */
   touchWithin?: boolean;
+  /**
+   * The paragraph the engine makes around a run of text written straight into a view. It is in no
+   * template and in no node's `children`: it holds the text, and commits where the text would.
+   */
+  box?: EngineNode;
+  /** A node the engine made, which no rule matches: it only inherits. */
+  anonymous?: true;
+  /** See `StyleTarget.styled`. */
+  styled?: true;
   /** `:focus`, from the native focus and blur events. */
   focused?: boolean;
   /** `:active`, set on the responder and every ancestor of it. */
@@ -546,6 +558,36 @@ const VIEW_NAMES: Record<string, string | PlatformViewName> = {
  * `@ng-native/expo`, and warning about it would be noise.
  */
 const PRIMITIVE_NAMES = new Set(Object.keys(VIEW_NAMES));
+
+/**
+ * HTML's text elements, which a template can write as it would for a browser.
+ *
+ * Each is text when it holds only text and other text elements, and a view when it holds anything
+ * else: a box inside a paragraph has no layout, so `<span>Inbox<view class="dot" /></span>` is a
+ * view with its text in a paragraph of its own. Decided as the element is committed, by
+ * `viewNameOf`. They have no component to import, so they are not `PRIMITIVE_NAMES`.
+ */
+const TEXT_ELEMENTS = new Set([
+  ...['span', 'p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'label', 'strong', 'b', 'em', 'i'],
+  ...['u', 's', 'small', 'code', 'mark', 'abbr', 'cite', 'time'],
+]);
+
+/** HTML's layout elements, each a plain view, as a browser's are boxes with a name. */
+const LAYOUT_ELEMENTS = [
+  ...['div', 'section', 'article', 'header', 'footer', 'main', 'nav', 'ul', 'ol', 'li'],
+];
+
+for (const name of TEXT_ELEMENTS) VIEW_NAMES[name] = 'Paragraph';
+for (const name of LAYOUT_ELEMENTS) VIEW_NAMES[name] = 'View';
+
+/**
+ * What an HTML element has for its name alone, given to the node as it is made: a heading's role,
+ * which a binding can replace as it can any prop, and whether the engine has styles for it.
+ */
+const HTML_ELEMENTS = new Map<string, { role?: string; styled?: true }>([
+  ...['h1', 'h2', 'h3', 'h4', 'h5', 'h6'].map((name) => [name, { role: 'header' }] as const),
+  ...[...STYLED_ELEMENTS].map((name) => [name, { styled: true }] as const),
+]);
 
 /**
  * The props each host primitive's native view is sent, by element name, as the components
@@ -810,6 +852,8 @@ export function registerViewName(
   options?: ViewNameOptions,
 ): void {
   VIEW_NAMES[elementName] = viewName;
+  // A name the app registers is the app's: no longer decided by what the element holds.
+  TEXT_ELEMENTS.delete(elementName);
   for (const name of typeof viewName === 'string' ? [viewName] : [viewName.ios, viewName.android]) {
     if (defaultProps) DEFAULT_PROPS[name] = defaultProps;
     if (options?.textContent) TEXT_CONTENT_PROPS[name] = options.textContent;
@@ -1052,16 +1096,17 @@ interface KeptHoist {
  */
 function paragraphText(node: EngineNode): string {
   let root = node.parent;
-  if (root?.name !== 'text') return node.text;
+  // Text written straight into a view is a paragraph of its own, and all of it.
+  if (root === null || !isTextElement(root)) return node.box ? node.text.trim() : node.text;
   // The commonest paragraph by far: one run and nothing else, so it is both the first and last.
-  if (root.children.length === 1 && root.parent?.name !== 'text') return node.text.trim();
-  while (root.parent?.name === 'text') root = root.parent;
+  if (root.children.length === 1 && !isTextElement(root.parent)) return node.text.trim();
+  while (isTextElement(root.parent)) root = root.parent!;
   const runs: EngineNode[] = [];
   const collect = (from: EngineNode) => {
     for (const child of from.children) {
       if (child.kind === 'text') {
         if (child.text) runs.push(child);
-      } else if (child.name === 'text') collect(child);
+      } else if (isTextElement(child)) collect(child);
     }
   };
   collect(root);
@@ -1075,7 +1120,28 @@ function paragraphText(node: EngineNode): string {
 export interface ViewNameNode {
   readonly kind: string;
   readonly name: string;
-  readonly parent: { readonly name: string } | null;
+  readonly parent: ViewNameNode | null;
+  /** What it holds, which decides whether one of HTML's text elements is text or a view. */
+  readonly children?: readonly ViewNameNode[];
+}
+
+/**
+ * Whether an element is text: a `<text>`, or one of HTML's text elements that holds only text and
+ * other such elements. Worked out each time, from the tree as it is, so nothing can go stale.
+ */
+function isTextElement(node: ViewNameNode | null): boolean {
+  if (node === null || node.kind !== 'element') return false;
+  if (node.name === 'text') return true;
+  // One lookup settles nearly every other element, which is a view.
+  if (registeredViewName(node.name) !== PARAGRAPH) return false;
+  return !TEXT_ELEMENTS.has(node.name) || holdsOnlyText(node);
+}
+
+function holdsOnlyText(node: ViewNameNode): boolean {
+  for (const child of node.children ?? []) {
+    if (child.kind === 'element' && !isTextElement(child)) return false;
+  }
+  return true;
 }
 
 /**
@@ -1092,8 +1158,14 @@ export function viewNameOf(node: ViewNameNode): string {
   // RN models nested text as a span inside a paragraph: `Paragraph > [RawText, Text > RawText]`.
   // Committing a nested `<text>` as another Paragraph gives a paragraph inside a paragraph,
   // which lays out as a separate block instead of flowing inline.
-  if (node.name === 'text' && node.parent?.name === 'text') return VIRTUAL_TEXT;
-  return registeredViewName(node.name) ?? DEFAULT_VIEW;
+  const registered = registeredViewName(node.name);
+  // Nearly every element: a view of some kind, by its name alone.
+  if (registered !== PARAGRAPH) return registered ?? DEFAULT_VIEW;
+  // One of HTML's text elements that holds something other than text: a view.
+  if (node.name !== 'text' && TEXT_ELEMENTS.has(node.name) && !holdsOnlyText(node)) {
+    return DEFAULT_VIEW;
+  }
+  return isTextElement(node.parent) ? VIRTUAL_TEXT : PARAGRAPH;
 }
 
 /**
@@ -1329,6 +1401,9 @@ class RetainedNode {
   structureDirty = false;
   subtreeDirty = false;
   touchWithin: boolean | undefined = undefined;
+  box: EngineNode | undefined = undefined;
+  anonymous: true | undefined = undefined;
+  styled: true | undefined = undefined;
   transitions?: Map<string, Transition>;
   playing?: RunningAnimation;
   scrolled?: ScrollAnimation;
@@ -2114,6 +2189,11 @@ export class Engine implements HostEngine {
   createElement(name: string, sheet: StyleSheet | null = null): EngineNode {
     const node = new RetainedNode('element', name, this);
     node.sheet = sheet;
+    const html = HTML_ELEMENTS.get(name);
+    if (html !== undefined) {
+      if (html.role) node.props['accessibilityRole'] = html.role;
+      node.styled = html.styled;
+    }
     if (sheet?.structural) this.structuralSheets = true;
     if (HOISTS[name]) this.hoisted.add(node);
     return node;
@@ -3333,6 +3413,7 @@ export class Engine implements HostEngine {
     node.styleCommitted = style;
 
     const viewName = viewNameOf(node);
+    this.forgetRenamed(node, viewName);
     const childHandles = this.reconcileChildren(node, viewName, style);
     noteTouches(node, style);
     const previous = node.committed;
@@ -3360,7 +3441,7 @@ export class Engine implements HostEngine {
       );
       // A clone is the same view, so it keeps the tag it was created with, not the newest tag
       // handed out, which is some other node's.
-      node.committed = { handle, tag: previous.tag, props, childHandles };
+      node.committed = { handle, tag: previous.tag, props, childHandles, viewName };
     }
     this.clearFlags(node);
     return handle;
@@ -3408,17 +3489,61 @@ export class Engine implements HostEngine {
   ): FabricNode[] {
     const context = style?.context;
     if (HOIST_TARGETS.has(node.name)) return this.reconcileHoistTarget(node, context);
-    // A view that takes its text as a prop has no text children to commit. See `ViewNameOptions`.
-    const textAsProp = TEXT_CONTENT_PROPS[viewName] !== undefined;
     const handles: FabricNode[] = [];
     for (const child of node.children) {
       if (child.kind === 'anchor' || this.committedElsewhere(child) || this.withheld(child)) {
         continue;
       }
-      if (textAsProp && child.kind === 'text') continue;
+      if (child.kind === 'text') {
+        const handle = this.reconcileText(node, child, viewName, context);
+        if (handle) handles.push(handle);
+        continue;
+      }
       handles.push(this.reconcileUnder(node, child, context));
     }
     return handles;
+  }
+
+  /**
+   * The paragraph a run of text written straight into a view is drawn in, or nothing for a run of
+   * whitespace, which a browser draws nothing for between the items of a flex box either.
+   *
+   * It is the text's own, kept on the text node, and no part of the tree: its parent is the view,
+   * so it inherits what the view's text would, and no rule matches it.
+   */
+  /**
+   * A run of text under `parent`, which commits as `viewName`: the text itself inside a text, a
+   * paragraph of its own inside any other view, and nothing where the view takes its text as a
+   * prop (see `ViewNameOptions`) or the run is whitespace between a view's children.
+   */
+  private reconcileText(
+    parent: EngineNode,
+    text: EngineNode,
+    viewName: string,
+    context?: object,
+  ): FabricNode | null {
+    if (TEXT_CONTENT_PROPS[viewName] !== undefined) return null;
+    if (viewName === PARAGRAPH || viewName === VIRTUAL_TEXT) {
+      if (text.box) text.box = undefined;
+      return this.reconcileUnder(parent, text, context);
+    }
+    const box = this.looseText(parent, text);
+    return box ? this.reconcileUnder(parent, box, context) : null;
+  }
+
+  private looseText(parent: EngineNode, text: EngineNode): EngineNode | null {
+    if (!text.text.trim()) return null;
+    let box = text.box;
+    if (!box) {
+      box = new RetainedNode('element', 'text', this);
+      box.anonymous = true;
+      box.children = [text];
+      text.box = box;
+    }
+    box.parent = parent;
+    // The text is not under the box in the tree, so a change to it never marked the box.
+    if (!this.isClean(text)) box.subtreeDirty = true;
+    return box;
   }
 
   /** Remember an iOS modal host committed as showing, so hiding it waits for `topDismiss`. */
@@ -3493,6 +3618,14 @@ export class Engine implements HostEngine {
   }
 
   /**
+   * A node whose native view is no longer the one it was created as is created again: a text
+   * element that came to hold a view, or stopped. A clone keeps the view it was made as.
+   */
+  private forgetRenamed(node: EngineNode, viewName: string): void {
+    if (node.committed && node.committed.viewName !== viewName) this.forgetCommitted(node);
+  }
+
+  /**
    * Let a node and everything under it be created again at the next commit. The views it keeps
    * for hoisted names go too: they are children of the native view it is losing.
    */
@@ -3501,7 +3634,10 @@ export class Engine implements HostEngine {
     node.committedUnder = null;
     node.styleCommitted = null;
     node.kept = undefined;
-    for (const child of node.children) if (child.committed) this.forgetCommitted(child);
+    if (node.box?.committed) this.forgetCommitted(node.box);
+    for (const child of node.children) {
+      if (child.committed || child.box?.committed) this.forgetCommitted(child);
+    }
   }
 
   /** A hoisted node, which commits into an ancestor further up than the parent it is in. */
@@ -3543,7 +3679,7 @@ export class Engine implements HostEngine {
         };
         const payload = diffProps(kept.committed.props, props);
         const handle = this.clone(kept.committed.handle, payload && this.processed(payload), []);
-        kept.committed = { handle, tag: kept.committed.tag, props, childHandles: [] };
+        kept.committed = { ...kept.committed, handle, props, childHandles: [] };
         kept.node = null;
       }
       handles.push(kept.committed.handle);
@@ -3615,7 +3751,7 @@ export class Engine implements HostEngine {
     // instanceHandle is the retained node itself: it is what Fabric hands back on events.
     const handle = this.fabric.createNode(tag, viewName, this.rootTag, this.processed(props), node);
     for (const child of childHandles) this.fabric.appendChild(handle, child);
-    node.committed = { handle, tag, props, childHandles };
+    node.committed = { handle, tag, props, childHandles, viewName };
     this.clearFlags(node);
     return handle;
   }
