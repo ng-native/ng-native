@@ -110,7 +110,8 @@ export class Location {
 
   /**
    * The places an address could be, best match first, from the platform's own geocoder. Empty
-   * for an address it does not know, and without the permission or the module.
+   * for an address it does not know, without the permission, and where the source has no
+   * geocoder, as off a device. An app built without `expo-location` throws `MissingModuleError`.
    */
   async geocode(address: string): Promise<Coordinates[]> {
     if (!this.native?.geocodeAsync || !(await this.permission.ensure())) return [];
@@ -118,7 +119,7 @@ export class Location {
     return found.map(({ latitude, longitude }) => ({ latitude, longitude }));
   }
 
-  /** The addresses at a point. Empty without the permission or the module. */
+  /** The addresses at a point. Empty, and throwing, where `geocode` is. */
   async reverseGeocode(coordinates: Coordinates): Promise<Address[]> {
     if (!this.native?.reverseGeocodeAsync || !(await this.permission.ensure())) return [];
     const { latitude, longitude } = coordinates;

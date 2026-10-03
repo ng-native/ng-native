@@ -80,8 +80,9 @@ by the module's config plugin.
 
 `geocode(address)` answers the places an address could be, best match first, from the platform's
 own geocoder, and `reverseGeocode(coordinates)` the addresses at a point. Both ask for the
-foreground permission as `current()` does, and answer an empty list without it, without the
-module, or for an address the geocoder does not know.
+foreground permission as `current()` does, and answer an empty list without it, for an address the
+geocoder does not know, and off a device. In an app built without `expo-location` they throw
+`MissingModuleError`, as the rest of the service does.
 
 ```ts
 const [place] = await this.location.geocode('10 Downing Street, London');
