@@ -35,6 +35,8 @@ export interface NativeFiles {
   /** Survives, and is backed up. */
   readonly documentDirectory: NativeDirectory;
   file(directory: NativeDirectory, name: string): NativeFile;
+  /** The file at a uri, such as one a picker answers with. */
+  fileAt?(uri: string): NativeFile;
 }
 
 /**
@@ -66,6 +68,7 @@ export class FileSystem {
           },
           file: (directory, name) =>
             new expo.File(directory as InstanceType<typeof expo.Directory>, name),
+          fileAt: (uri) => new expo.File(uri),
         };
       },
     },
@@ -83,6 +86,20 @@ export class FileSystem {
   document(name: string): NativeFile {
     const native = this.installed();
     return native.file(native.documentDirectory, name);
+  }
+
+  /**
+   * The file at a uri: a document the user picked, a photo from the library, a download. What a
+   * picker answers with is a uri, and this is the file to read from it.
+   */
+  file(uri: string): NativeFile {
+    const native = this.installed();
+    if (!native.fileAt) {
+      throw new Error(
+        '[angular-native] this FileSystem.SOURCE has no fileAt(uri), which file() opens a uri with.',
+      );
+    }
+    return native.fileAt(uri);
   }
 
   /**

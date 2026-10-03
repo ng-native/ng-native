@@ -270,6 +270,25 @@ describe('the file system', () => {
     assert.deepEqual(asked, ['cache/canary.txt', 'documents/canary.txt']);
   });
 
+  it('opens the file at a uri, such as one a picker answered with', async () => {
+    const picked = fakeFile(true);
+    picked.file.write('contents');
+    const uris: string[] = [];
+    const source = {
+      ...files(picked.file),
+      fileAt: (uri: string) => (uris.push(uri), picked.file),
+    };
+    const system = serviceWith(FileSystem.SOURCE, source, () => new FileSystem());
+    assert.equal(await system.file('file:///picked/report.txt').text(), 'contents');
+    assert.deepEqual(uris, ['file:///picked/report.txt']);
+  });
+
+  it('says so when a stand-in cannot open a uri', () => {
+    const { file } = fakeFile(true);
+    const system = serviceWith(FileSystem.SOURCE, files(file), () => new FileSystem());
+    assert.throws(() => system.file('file:///x'), /no fileAt\(uri\)/);
+  });
+
   it('creates a file that is not there before writing it', () => {
     const missing = fakeFile(false);
     const system = serviceWith(FileSystem.SOURCE, files(missing.file), () => new FileSystem());

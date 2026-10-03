@@ -52,6 +52,16 @@ Neither call touches disk; it only names where the file would live. `File` carri
 `exists`, `size`, and its own `text()`, `textSync()`, `bytes()`, `create()` and `delete()` - use
 those directly for anything beyond writing.
 
+## `file(uri)`
+
+The file at a uri: a document the user picked, a photo from the library, a download. A picker
+answers with a uri, and this is the file to read from it:
+
+```ts
+const [picked] = await this.documents.pick({ type: 'text/plain' });
+if (picked) this.contents.set(await this.files.file(picked.uri).text());
+```
+
 ## `write(file, content)`
 
 `File.write()` alone throws on a file that has never been created, which is the first thing
