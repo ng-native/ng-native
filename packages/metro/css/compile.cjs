@@ -2118,7 +2118,7 @@ function compileCss(source, context = 'styles', options = {}) {
 
   function placeholderColour(built, context) {
     reportPlaceholderDrops(built, context);
-    const { declarations, important, tokens, deferred } = built;
+    const { declarations, important, tokens, importantTokens, deferred } = built;
     const kept = (deferred ?? [])
       .filter((entry) => entry.props?.length === 1 && entry.props[0] === 'color')
       .map((entry) => ({ ...entry, props: ['placeholderTextColor'] }));
@@ -2126,6 +2126,7 @@ function compileCss(source, context = 'styles', options = {}) {
       declarations: placeholderOf(declarations),
       ...(important && 'color' in important ? { important: placeholderOf(important) } : {}),
       ...(tokens ? { tokens } : {}),
+      ...(importantTokens ? { importantTokens } : {}),
       ...(kept.length ? { deferred: kept } : {}),
     };
     const empty = !Object.keys(out.declarations).length && !out.important && !out.tokens;

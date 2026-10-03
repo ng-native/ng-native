@@ -302,6 +302,16 @@ describe('properties React Native supports that we were rejecting', () => {
     });
   });
 
+  it('keeps which custom properties are important, on a placeholder rule too', () => {
+    const rules = (css: string) => compileCss(css, 't').rules as { importantTokens?: string[] }[];
+    assert.deepEqual(rules('.a { --t: red !important; --u: blue }')[0]!.importantTokens, ['--t']);
+    assert.deepEqual(
+      rules('.a::placeholder { --t: red !important; color: var(--t) }')[0]!.importantTokens,
+      ['--t'],
+    );
+    assert.equal(rules('.a { --t: red }')[0]!.importantTokens, undefined);
+  });
+
   it('text-shadow: none, as no shadow at all, so it clears one a weaker rule or a parent gave', () => {
     assert.deepEqual(declarationsOf('text-shadow: none'), {
       textShadowOffset: { width: 0, height: 0 },
