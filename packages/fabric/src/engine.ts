@@ -1674,8 +1674,15 @@ class RetainedNode {
   }
 }
 
-/** The fields the engine keeps on a node, which an extension may not shadow. */
-const NODE_FIELDS = new Set(Object.keys(new RetainedNode('element', '', null as never)));
+/**
+ * The fields kept on a node, which an extension may not shadow: the ones a node is made with, and
+ * the two assigned later, by the engine and by Angular.
+ */
+const NODE_FIELDS = new Set([
+  ...Object.keys(new RetainedNode('element', '', null as never)),
+  'defaultStyle',
+  '__ngContext__',
+]);
 
 /**
  * Give every node members of a package's own, on the prototype they share: a getter, a method.
@@ -1698,15 +1705,23 @@ export function extendNodes(members: PropertyDescriptorMap & ThisType<EngineNode
   const replaced = new Map(
     names.map((name) => [name, Object.getOwnPropertyDescriptor(prototype, name)]),
   );
-  for (const name of names) {
-    Object.defineProperty(prototype, name, { configurable: true, ...members[name] });
-  }
-  return () => {
+  const restore = () => {
     for (const [name, original] of replaced) {
       if (original) Object.defineProperty(prototype, name, original);
       else Reflect.deleteProperty(prototype, name);
     }
   };
+  try {
+    for (const name of names) {
+      // Configurable whatever the descriptor says, or it could not be taken away again.
+      Object.defineProperty(prototype, name, { ...members[name], configurable: true });
+    }
+  } catch (error) {
+    // A descriptor the runtime refuses: the ones before it do not stay behind.
+    restore();
+    throw error;
+  }
+  return restore;
 }
 
 /**
