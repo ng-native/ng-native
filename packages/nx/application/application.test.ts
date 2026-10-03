@@ -540,6 +540,39 @@ describe('in a pnpm workspace', () => {
     assert.equal(readJson(tree, 'apps/mobile/tsconfig.json').extends, 'expo/tsconfig.base');
   });
 
+  it("typechecks against the app's own copy of each @ng-native package, where libraries are links", async () => {
+    const tree = pnpmWorkspace();
+    await generate(tree, { directory: 'apps/mobile' });
+    const { extends: base, compilerOptions } = readJson(
+      tree,
+      'apps/mobile/tsconfig.typecheck.json',
+    );
+    assert.equal(base, './tsconfig.json');
+    assert.deepEqual(compilerOptions.paths['@ng-native/*'], ['./node_modules/@ng-native/*']);
+    assert.deepEqual(compilerOptions.paths['@ng-native/components/*'], [
+      './node_modules/@ng-native/components/dist/*',
+    ]);
+    const { typecheck } = readProjectConfiguration(tree, '@proj/mobile').targets ?? {};
+    assert.equal(
+      typecheck?.options.command,
+      'node metro.config.js && ngc -p tsconfig.typecheck.json --noEmit',
+    );
+    // Metro reads the paths of tsconfig.json, and these skip each package's exports.
+    assert.equal(readJson(tree, 'apps/mobile/tsconfig.json').compilerOptions.paths, undefined);
+  });
+
+  it('leaves the typecheck on tsconfig.json where path aliases reach the libraries', async () => {
+    const tree = pnpmWorkspace();
+    tree.write(
+      'tsconfig.base.json',
+      JSON.stringify({ compilerOptions: { paths: { '@proj/ui': ['libs/ui/src/index.ts'] } } }),
+    );
+    await generate(tree, { directory: 'apps/mobile' });
+    assert.equal(tree.exists('apps/mobile/tsconfig.typecheck.json'), false);
+    const { typecheck } = readProjectConfiguration(tree, '@proj/mobile').targets ?? {};
+    assert.equal(typecheck?.options.command, native.TYPECHECK);
+  });
+
   it('extends a tsconfig.base.json that holds path aliases, and resolves them in tests too', async () => {
     // A pnpm workspace can still import its libraries through tsconfig paths, as the
     // angular-monorepo preset does, and nx typecheck, nx test and Metro all failed to find one.

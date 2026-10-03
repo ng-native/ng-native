@@ -121,6 +121,31 @@ function tsconfig(workspaceBase, conditions = []) {
   };
 }
 
+/** The `@ng-native` packages with entry points beside their main one, each published in `dist`. */
+const WITH_ENTRY_POINTS = ['components', 'expo', 'platform', 'web'];
+
+/** `nx typecheck` in a workspace whose libraries are the package manager's links. */
+const TYPECHECK_ONE_COPY = TYPECHECK.replace('tsconfig.json', 'tsconfig.typecheck.json');
+
+/**
+ * The tsconfig `nx typecheck` reads where libraries are the package manager's links: the app's,
+ * with every `@ng-native` package resolved to the app's own copy.
+ *
+ * pnpm gives a library a copy of its own of a package whose peers it does not share with the app,
+ * the gesture and animation packages an app adds among them. `ngc` then finds a component a
+ * library imports in one copy and the app's import of it in the other, and stops at `NG3004`
+ * before it checks a template. The Metro preset and the Vitest plugin make the same choice where
+ * they resolve. It is a file of its own because Metro reads the `paths` of `tsconfig.json`, and
+ * these skip the `exports` of each package, its `browser` condition included.
+ */
+function typecheckTsconfig() {
+  const paths = { '@ng-native/*': ['./node_modules/@ng-native/*'] };
+  for (const name of WITH_ENTRY_POINTS) {
+    paths[`@ng-native/${name}/*`] = [`./node_modules/@ng-native/${name}/dist/*`];
+  }
+  return { extends: './tsconfig.json', compilerOptions: { paths } };
+}
+
 /** @param {boolean} withPaths whether to resolve the workspace's tsconfig path aliases */
 function vitestConfig(withPaths) {
   const template = readFileSync(path.join(__dirname, 'files', 'vitest.config.mts'), 'utf8');
@@ -165,7 +190,10 @@ module.exports = {
   agentsFile,
   METRO_CONFIG,
   TYPECHECK,
+  TYPECHECK_ONE_COPY,
+  WITH_ENTRY_POINTS,
   tsconfig,
+  typecheckTsconfig,
   vitestConfig,
   reuseRootRanges,
   expoCompanions,

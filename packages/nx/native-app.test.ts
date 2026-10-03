@@ -87,6 +87,22 @@ describe('the generated app', () => {
     assert.equal(native.TYPECHECK, 'node metro.config.js && ngc -p tsconfig.json --noEmit');
   });
 
+  it('maps the entry points of every package that publishes them in dist, and of no other', () => {
+    const packages = path.resolve(import.meta.dirname, '..');
+    const inDist = readdirSync(packages).filter((name) => {
+      const file = path.join(packages, name, 'package.json');
+      if (!existsSync(file)) return false;
+      const published = JSON.parse(readFileSync(file, 'utf8')).publishConfig?.exports ?? {};
+      const entries = Object.entries(published).filter(
+        ([key, to]) => key !== '.' && typeof to === 'object' && to !== null && 'types' in to,
+      ) as [string, { types: string }][];
+      // An entry point published elsewhere, a Vite plugin or the test runner, is not mapped, and
+      // resolves as it would with no mapping.
+      return entries.some(([key, to]) => to.types === `./dist/${key.slice(2)}.d.ts`);
+    });
+    assert.deepEqual(inDist.sort(), [...native.WITH_ENTRY_POINTS].sort());
+  });
+
   it("ignores what the template's gitignore does in the app's own directory", () => {
     const ignored = (text: string) =>
       text.split('\n').filter((line: string) => line && !line.startsWith('#'));

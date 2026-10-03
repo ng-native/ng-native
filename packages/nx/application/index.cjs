@@ -59,6 +59,15 @@ function hasPathAliases(tree, workspaces) {
  * The compiler options `file` ends up with, those it inherits through `extends` included, as
  * TypeScript merges them: each option from the last config that sets it.
  */
+/**
+ * Whether the app reaches its libraries through the package manager's links alone, where a
+ * library can have a copy of its own of a package the app has too. With path aliases the
+ * workspace has one `node_modules`, and a `paths` list of the app's would replace the aliases.
+ */
+function linksLibraries(tree, workspaces) {
+  return workspaces && !hasPathAliases(tree, workspaces);
+}
+
 function baseCompilerOptions(tree, file = 'tsconfig.base.json', ancestors = []) {
   if (ancestors.includes(file) || !tree.exists(file)) return {};
   const config = readJson(tree, file);
@@ -116,7 +125,7 @@ function metroPort(tree) {
   return port;
 }
 
-function targets(directory, port) {
+function targets(directory, port, oneCopy) {
   const run = (command) => ({ executor: 'nx:run-commands', options: { cwd: directory, command } });
   const own = port === DEFAULT_PORT ? '' : ` --port ${port}`;
   // `expo run:ios` and `expo run:android` build the port into the app, so a later app's has to be
@@ -127,7 +136,7 @@ function targets(directory, port) {
   };
   return {
     typecheck: {
-      ...run(native.TYPECHECK),
+      ...run(oneCopy ? native.TYPECHECK_ONE_COPY : native.TYPECHECK),
       cache: true,
       inputs: ['default', '^production'],
       // The Tailwind sheet the command builds, which a cache hit restores rather than rebuilds.
@@ -190,6 +199,9 @@ async function writeFiles(tree, { directory, projectName, workspaces, bundleIden
   const workspaceBase = base ? `${offsetFromRoot(directory)}tsconfig.base.json` : undefined;
   const conditions = baseCompilerOptions(tree).customConditions ?? [];
   file('tsconfig.json', JSON.stringify(native.tsconfig(workspaceBase, conditions), null, 2) + '\n');
+  if (linksLibraries(tree, workspaces)) {
+    file('tsconfig.typecheck.json', JSON.stringify(native.typecheckTsconfig(), null, 2) + '\n');
+  }
   file('vitest.config.mts', native.vitestConfig(Boolean(base)));
 
   const manifest = { name: projectName, version: '0.0.1', private: true, main: 'src/main.ts' };
@@ -258,7 +270,7 @@ async function application(tree, options) {
       .split(',')
       .map((tag) => tag.trim())
       .filter(Boolean),
-    targets: targets(directory, port),
+    targets: targets(directory, port, linksLibraries(tree, workspaces)),
   });
 
   ignoreExpo(tree);

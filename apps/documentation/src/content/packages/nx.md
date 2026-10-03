@@ -82,6 +82,33 @@ notice. `typecheck` loads `metro.config.js` before `ngc`, as the template's scri
 once [Tailwind](/packages/tailwind) is added, the sheet `src/main.ts` imports exists on a fresh
 checkout. It declares `.angular-native/` as its output, so a cache hit restores the sheet too.
 
+Where the app reaches its libraries through the package manager's links, the TypeScript preset's
+layout, `typecheck` reads `tsconfig.typecheck.json`, which extends the app's `tsconfig.json` and
+maps every `@ng-native` package to the app's own copy. pnpm gives a library a copy of its own of a
+package whose peers it does not share with the app, which an app that installs
+`react-native-reanimated` or `react-native-gesture-handler` brings about, and `ngc` given both
+copies stops at `NG3004: Unable to import symbol` before it checks a template. Metro and Vitest
+resolve to the app's copy themselves. The mapping is a file of its own because Metro reads the
+`paths` of `tsconfig.json`, and a path skips the `browser` entry of a package's `exports`. An app
+without the file takes it by hand:
+
+```json
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "paths": {
+      "@ng-native/*": ["./node_modules/@ng-native/*"],
+      "@ng-native/components/*": ["./node_modules/@ng-native/components/dist/*"],
+      "@ng-native/expo/*": ["./node_modules/@ng-native/expo/dist/*"],
+      "@ng-native/platform/*": ["./node_modules/@ng-native/platform/dist/*"],
+      "@ng-native/web/*": ["./node_modules/@ng-native/web/dist/*"]
+    }
+  }
+}
+```
+
+with `ngc -p tsconfig.typecheck.json --noEmit` as the `typecheck` target's command.
+
 Each app gets a Metro port of its own, so `nx run-many -t start` runs several side by side. The
 first Expo app in the workspace uses Expo's default, 8081, with a plain `expo start`. Each later one
 takes the lowest port no other app's `start` or `serve` uses (`expo start --port 8082`, and so on),
