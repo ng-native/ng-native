@@ -22,6 +22,10 @@ export class Card {}
     <app-card id="events" onLayout="false" onAccessibilityTap="true" />
     <app-card id="other" testID="false" nativeID="true" />
     <view id="typed" focusable="false"></view>
+    <app-card id="bound" [attr.testID]="'row-' + row" [attr.accessibilityLabel]="label" />
   `,
 })
-export class BooleanAttributesFixture {}
+export class BooleanAttributesFixture {
+  protected readonly row = 7;
+  protected readonly label: string | null = null;
+}

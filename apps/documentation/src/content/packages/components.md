@@ -138,6 +138,19 @@ component of your own included: `<app-card role="button" aria-label="Open">` is 
 `<view>` it is. An `accessibilityLabel` or `accessibilityState` the element has is its own answer,
 and the `aria-*` attribute beside it is not read.
 
+On a component of your own, a shared prop is an attribute, not an input: the component declares no
+`testID`, so `<app-row [testID]="id">` is the template error `NG8002`. Write it static, or bind it
+with `attr.`, which commits the prop to the host view:
+
+```html
+<app-row testID="row" /> <app-row [attr.testID]="'row-' + id" [attr.accessibilityLabel]="name()" />
+```
+
+An `attr.` binding carries text, and `null` takes the prop off. That covers `testID`, `nativeID`,
+`accessibilityLabel`, `accessibilityRole`, `pointerEvents`, `role` and the `aria-*` attributes. A
+prop that is an object, `hitSlop` or `accessibilityState`, goes on a `<view>` inside the
+component.
+
 <!-- api: ViewBase -->
 
 ## Events

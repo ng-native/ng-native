@@ -43,6 +43,12 @@ describe('a boolean prop written as an attribute', () => {
     assert.equal(props('on')['opacity'], undefined);
   });
 
+  it('commits a prop bound with attr. on a component host, and none for null', () => {
+    const bound = props('bound');
+    assert.equal(bound['testID'], 'row-7');
+    assert.equal('accessibilityLabel' in bound, false);
+  });
+
   it("is true for 'true', and for the attribute alone", () => {
     const on = props('on');
     assert.equal(on['focusable'], true);
