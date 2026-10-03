@@ -63,7 +63,9 @@ export function compileAngular(source, file, options = {}) {
     : result.code;
   const directory = path.dirname(file);
   return {
-    code,
+    // The compiler writes a `require` of its own for each font a stylesheet's `@font-face` names,
+    // which was in no source a caller could have stubbed.
+    code: stubAssets(code),
     dependencies: result.dependencies.map((dependency) => path.resolve(directory, dependency)),
     map: result.map,
   };

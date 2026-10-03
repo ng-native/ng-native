@@ -140,6 +140,9 @@ plugin and the Node hook both replace each such call in your own source with
 `{ testUri: './logo.png' }`, as React Native's Jest preset does, so the component renders and a test
 can still see which image it was given.
 
+A font a stylesheet declares with `@font-face { src: url('./brand.ttf') }` is a `require` too, one
+the compiler writes, and gets the same stand-in: the component loads, and the font file is not read.
+
 ## Troubleshooting
 
 ### "needs to be compiled using the JIT compiler"

@@ -5,7 +5,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { Component } from '@angular/core';
-import { Image } from '@ng-native/components';
+import { Image, Text } from '@ng-native/components';
 import { render, screen } from '@ng-native/testing';
 
 @Component({
@@ -22,4 +22,27 @@ test('a required image renders, with the path it was required by', async () => {
 
   assert.deepEqual(instance.logo, { testUri: './assets/logo.png' });
   assert.ok(screen.getByTestId('logo'));
+});
+
+/**
+ * A font declared in a stylesheet, as the fonts page says to. The compiler writes its
+ * `require('./brand.ttf')` into the compiled sheet, so it is not in the source a stand-in could be
+ * found in, and the file would fail to load before any test ran.
+ */
+@Component({
+  selector: 'app-brand',
+  imports: [Text],
+  template: `<text>Brand</text>`,
+  styles: `
+    @font-face {
+      font-family: 'Brand';
+      src: url('./brand.ttf');
+    }
+  `,
+})
+class Brand {}
+
+test('a component whose stylesheet declares a font face loads and renders', async () => {
+  await render(Brand);
+  assert.ok(screen.getByText('Brand'));
 });
