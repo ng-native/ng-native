@@ -57,6 +57,9 @@
     "tags": [
       "scope:schematics",
       "layer:build"
+    ],
+    "implicitDependencies": [
+      "@ng-native/template"
     ]
   },
   "scripts": {
