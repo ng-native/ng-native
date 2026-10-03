@@ -612,10 +612,12 @@ export class NativeStackOutlet implements RouterOutletContract {
       holder.screen,
       'nativeDismissCancelled',
       (event: { nativeEvent?: unknown }) => {
-        if (!this.held) return;
+        // The stack can have lost its last screen with the refusal not yet released.
+        const top = this.top;
+        if (!this.held || !top) return;
         const native = this.engine as { dispatchEvent?: NativeDispatch } | null;
         const report = event?.nativeEvent ?? { dismissCount: 1 };
-        native?.dispatchEvent?.(this.top!.screen, 'topNativeDismissCancelled', report);
+        native?.dispatchEvent?.(top.screen, 'topNativeDismissCancelled', report);
       },
     );
     return () => {
