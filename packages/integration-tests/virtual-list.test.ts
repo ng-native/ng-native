@@ -373,6 +373,13 @@ describe('windowed list options', () => {
       [{ scaleY: -1 }],
       'each row is flipped back, which is what keeps its content upright',
     );
+    // The rows keep their order under the flip, so the first item is the one at the bottom: a
+    // transcript is passed newest first, as FlatList takes it.
+    assert.equal(rows()[0]?.props['top'], 0);
+    assert.equal(
+      labels(fabric).find((label) => label.startsWith('row ')),
+      'row 0',
+    );
     // FlatList flips its header and footer cells back too; without it they read upside down.
     const wrapperOf = (label: string) =>
       flatten(fabric.committed).find((n) =>

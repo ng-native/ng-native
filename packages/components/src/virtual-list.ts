@@ -198,7 +198,8 @@ interface Span {
  * `horizontal` swaps the axis: rows are placed by `left` and sized by `width`, and the offset is
  * read from `contentOffset.x`. `inverted` is a scale of -1 on the list and on each row, which is
  * how FlatList does it too - the list scrolls from the bottom and each row is flipped back the
- * right way up, so a chat transcript needs no reversed array.
+ * right way up. The first item is the one at the bottom, so a chat passes its messages newest
+ * first.
  *
  * `stickyIndices` pins a row to the leading edge while the rows under it scroll past, which is
  * FlatList's `stickyHeaderIndices` counted without the header. `stickyHeader` pins the
@@ -489,7 +490,7 @@ export class VirtualList<T> extends ScrollViewProps {
    *
    * The list ends up scrolled from the far end with its rows in reverse, and the second flip puts
    * each row's own content back the right way up. It is what `FlatList` does, and it is why an
-   * inverted list needs no reversed array and no reversed maths.
+   * inverted list needs no reversed maths: the first item is at offset 0, which is the bottom.
    */
   protected readonly flip = computed<StaticTransform[] | undefined>(() => {
     if (!this.inverted()) return undefined;

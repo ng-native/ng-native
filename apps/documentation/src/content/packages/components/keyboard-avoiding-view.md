@@ -69,7 +69,7 @@ export const appConfig = { providers: [provideKeyboardController() /* ... */] };
         class="flex-1"
         [inverted]="true"
         keyboardDismissMode="interactive"
-        [items]="messages()"
+        [items]="newestFirst()"
       >
         <!-- rows -->
       </virtual-list>
@@ -80,6 +80,9 @@ export const appConfig = { providers: [provideKeyboardController() /* ... */] };
   </keyboard-dock>
 </view>
 ```
+
+An inverted list draws its first item at the bottom, against the dock, so `newestFirst` is the
+transcript reversed: `computed(() => this.messages().toReversed())`.
 
 The lifted view sits inside one that clips, so what rises past its top is hidden rather than
 drawn over the screen above it. Without the library, and on Android, the dock sits in flow,

@@ -101,16 +101,16 @@ mid-animation. `track row.index` keeps a view with a position rather than an ite
 insert above it shows a different item; avoid it for rows with any state of their own.
 
 Content marked `listHeader` or `listFooter` renders above and below the windowed rows in normal
-flow, the way `FlatList`'s header and footer components do. `itemHeight` takes either a fixed
-number or a function of the item and its index, for rows that are not all the same height.
-`horizontal` lays rows out along `x` instead of `y`; `inverted` flips the list to scroll from the
-bottom, with every row flipped back the right way up, so a chat transcript needs no reversed
-array. `stickyIndices` pins specific rows to the leading edge while the rest scroll underneath
-them, and `stickyHeader` pins the `listHeader` content until the first sticky row pushes it off -
-between them, `FlatList`'s `stickyHeaderIndices`. A `<refresh-control>` (see the
-[scroll view page](/packages/components/scroll-view)) projects like any other child.
-The list is a native scroll view and takes the scroll view's own props as `FlatList` does:
-`pagingEnabled`, `snapToInterval`, `decelerationRate`, `showsHorizontalScrollIndicator`,
+flow, the way `FlatList`'s header and footer components do. `itemHeight` takes either a fixed number
+or a function of the item and its index, for rows that are not all the same height. `horizontal`
+lays rows out along `x` instead of `y`; `inverted` flips the list to scroll from the bottom, with
+every row flipped back the right way up. Its first item is the one at the bottom, as `FlatList`'s
+is, so a chat passes its messages newest first. `stickyIndices` pins specific rows to the leading
+edge while the rest scroll underneath them, and `stickyHeader` pins the `listHeader` content until
+the first sticky row pushes it off - between them, `FlatList`'s `stickyHeaderIndices`. A
+`<refresh-control>` (see the [scroll view page](/packages/components/scroll-view)) projects like any
+other child. The list is a native scroll view and takes the scroll view's own props as `FlatList`
+does: `pagingEnabled`, `snapToInterval`, `decelerationRate`, `showsHorizontalScrollIndicator`,
 `scrollEventThrottle`, `keyboardDismissMode`, `contentInsetAdjustmentBehavior` and the rest, with
 the same defaults, so a horizontal list rubber-bands sideways and `'fast'` is resolved to the rate
 UIKit takes. `horizontal`, `maintainVisibleContentPosition` and `keyboardShouldPersistTaps` are the
