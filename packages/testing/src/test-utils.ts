@@ -11,6 +11,11 @@ export interface FakeFabricNode {
   props: Record<string, unknown>;
   children: FakeFabricNode[];
   instanceHandle: unknown;
+  /**
+   * The node this one is under, in the commit a query found it in: null at the top. Set by the
+   * queries, so a node held from before a later commit says where it was, not where it is.
+   */
+  readonly parent?: FakeFabricNode | null;
 }
 
 export interface FakeFabric extends FabricUIManager {

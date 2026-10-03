@@ -89,7 +89,27 @@ const named = {
     emit(node, 'topBlur');
     await settle();
   },
+  /** A `(layout)` event with the frame native would report: `{ x, y, width, height }`. */
+  async layout(node: FakeFabricNode, frame: Partial<LayoutFrame> = {}): Promise<void> {
+    emit(node, 'topLayout', { layout: { x: 0, y: 0, width: 0, height: 0, ...frame } });
+    await settle();
+  },
 };
+
+/** Where a view is in its parent, and its size, as `(layout)` reports them. */
+export interface LayoutFrame {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+/** The frame in a layout payload, written bare, as `{ layout }`, or as `{ nativeEvent: { layout } }`. */
+function frameOf(payload: unknown): Partial<LayoutFrame> {
+  const given = (payload ?? {}) as { nativeEvent?: unknown; layout?: Partial<LayoutFrame> };
+  const event = (given.nativeEvent ?? given) as { layout?: Partial<LayoutFrame> };
+  return event.layout ?? (event as Partial<LayoutFrame>);
+}
 
 type FireEvent = ((node: FakeFabricNode, name: string, payload?: unknown) => Promise<void>) &
   typeof named;
@@ -104,6 +124,8 @@ export const fireEvent: FireEvent = Object.assign(
     if (name === 'press' || name === 'scroll' || name === 'focus' || name === 'blur') {
       return named[name](node, payload as EventPayload);
     }
+    // A layout by name takes the frame, or the event wrapped as `fireEvent.scroll` takes one.
+    if (name === 'layout') return named.layout(node, frameOf(payload));
     emit(node, topLevel(name), nativeOf(payload as EventPayload));
     await settle();
   },

@@ -80,6 +80,25 @@ export const flatten = (nodes: readonly FakeFabricNode[]): FakeFabricNode[] =>
   nodes.flatMap((node) => [node, ...flatten(node.children)]);
 
 /**
+ * `nodes` with each node's `parent` set through the tree beneath, so a test can go up from what a
+ * query found: the row a text is in. Not enumerable, so a node compares and prints as it did.
+ */
+export function withParents(
+  nodes: readonly FakeFabricNode[],
+  parent?: FakeFabricNode,
+): readonly FakeFabricNode[] {
+  for (const node of nodes) {
+    // The nodes a walk starts from keep the parent they have: `within(row)` starts from the row.
+    if (parent || !('parent' in node)) {
+      const value = parent ?? null;
+      Object.defineProperty(node, 'parent', { value, configurable: true, writable: true });
+    }
+    withParents(node.children, node);
+  }
+  return nodes;
+}
+
+/**
  * A view that takes itself and everything under it out of sight or out of the accessibility tree,
  * as React Native Testing Library's `isHiddenFromAccessibility` decides it.
  */
@@ -173,7 +192,7 @@ export function bindQueries(
       const query = (QUERIES[name] as (...a: unknown[]) => Query)(...args);
       const options = args[1] as TextMatchOptions | undefined;
       const walk = options?.includeHiddenElements ? flatten : reachable;
-      const hits = walk(roots()).filter(query.select);
+      const hits = walk(withParents(roots())).filter(query.select);
       hits.forEach(found);
       return hits;
     };

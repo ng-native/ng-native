@@ -164,6 +164,9 @@ them as well. A node scrolled off screen is not hidden; the fake has no layout t
 `<virtual-list>` keeps a few recycled rows hidden this way, still showing their last item, so a
 query does not find those either.
 
+A node a query returns has `parent`: the node it is under in that commit, and `null` at the top.
+So a test goes up from what it found, `screen.getByText('Hello').parent`, to the row around it.
+
 ## Interactions
 
 Every interaction delivers its events through the handler the renderer registered with Fabric, the
@@ -183,15 +186,17 @@ fireEvent.press(node: FakeFabricNode): Promise<void>;
 fireEvent.changeText(node: FakeFabricNode, text: string): Promise<void>;
 fireEvent.scroll(node: FakeFabricNode, payload?: EventPayload): Promise<void>;
 fireEvent.focus(node: FakeFabricNode): Promise<void>;
+fireEvent.layout(node: FakeFabricNode, frame?: Partial<LayoutFrame>): Promise<void>;
 fireEvent.blur(node: FakeFabricNode): Promise<void>;
 ```
 
 One event, or the one pair a press is, then a task for the commit. `fireEvent(node, name)` with
-`press`, `changeText`, `scroll`, `focus` or `blur` is the matching method; any other name is sent
-as a top-level event, with `top` and a capital letter put in front unless the name has them:
+`press`, `changeText`, `scroll`, `focus` or `blur` is the matching method; any other name is sent as
+a top-level event, with `top` and a capital letter put in front unless the name has them:
 `fireEvent(field, 'submitEditing', { text: 'x' })` sends `topSubmitEditing`. A payload is the native
-event itself, or an event object with it under `nativeEvent`, as React Native Testing Library
-passes one: `fireEvent.scroll(node, { nativeEvent: { contentOffset: { x: 0, y: 120 } } })`.
+event itself, or an event object with it under `nativeEvent`, as React Native Testing Library passes
+one: `fireEvent.scroll(node, { nativeEvent: { contentOffset: { x: 0, y: 120 } } })`. `layout` sends
+a `(layout)` event with the frame given, `{ x, y, width, height }`, each 0 where left out.
 
 `fireEvent.changeText` goes to the first `TextInput` at or under `node`, so a query for the view
 wrapping a field reaches the field. The navigation bar's search field (`RNSSearchBar`, from a
