@@ -69,4 +69,12 @@ export const guardRoutes: Routes = [
     ],
   },
   { path: 'locked', component: LockedStack, children: [{ path: '', component: EditorSheet }] },
+  {
+    // A stack in a page of a stack in the presented screen: the refusal has two screens to pass.
+    path: 'nested',
+    component: ComposeStack,
+    children: [
+      { path: '', component: ComposeStack, children: [{ path: '', component: EditorSheet }] },
+    ],
+  },
 ];

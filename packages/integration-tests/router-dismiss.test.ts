@@ -195,6 +195,26 @@ describe('a page inside a presented stack that refuses a native dismissal', () =
     assert.equal(sheet().props['preventNativeDismiss'], true, 'and the editor under it does');
   });
 
+  it('passes the refusal through a stack inside a stack, and releases it the same way', async () => {
+    const { sheet, page } = await presentStack('/nested');
+    page.dirty.set(true);
+    await settle();
+    assert.equal(sheet().props['preventNativeDismiss'], true);
+    page.dirty.set(false);
+    await settle();
+    assert.notEqual(sheet().props['preventNativeDismiss'], true);
+  });
+
+  it("refuses Android's Back from a stack inside a stack", async () => {
+    const { screens, pressBack, page } = await presentStack('/nested');
+    page.dirty.set(true);
+    await settle();
+    const before = screens().length;
+    assert.equal(await pressBack(), true);
+    assert.equal(screens().length, before, 'the sheet is still there');
+    assert.equal(page.attempts(), 1);
+  });
+
   it("leaves the sheet's own refusal in place when the page stops refusing", async () => {
     const { sheet, page } = await presentStack('/locked');
     assert.equal(sheet().props['preventNativeDismiss'], true);

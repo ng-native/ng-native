@@ -100,7 +100,16 @@ const UNLIMITED_SWIPE = { start: -1, end: -1, top: -1, bottom: -1 } as const;
  * such a stack, and the page that knows whether to refuse a dismissal is a screen inside it, where
  * the screen a swipe down dismisses is this one.
  */
-const HOLDING_SCREEN = new InjectionToken<unknown>('ng-native.router.holding-screen');
+const HOLDING_SCREEN = new InjectionToken<HoldingScreen>('ng-native.router.holding-screen');
+
+interface HoldingScreen {
+  readonly screen: unknown;
+  /**
+   * Told when a stack inside the screen changes what the screen refuses, so the stack the screen
+   * is in can pass that on in turn, in the same render: its own look came before this one.
+   */
+  refusalChanged(): void;
+}
 
 /** Whether a screen refuses a native dismissal, as its page bound it. */
 const refuses = (screen: unknown): boolean =>
@@ -597,10 +606,10 @@ export class NativeStackOutlet implements RouterOutletContract {
    *
    * Read after every render, since the refusal is a host binding of whatever page is on top.
    */
-  private holdRefusals(holder: unknown): () => void {
+  private holdRefusals(holder: HoldingScreen): () => void {
     const render = afterEveryRender(() => this.holdRefusal(holder));
     const unlisten = this.renderer.listen(
-      holder,
+      holder.screen,
       'nativeDismissCancelled',
       (event: { nativeEvent?: unknown }) => {
         if (!this.held) return;
@@ -616,21 +625,23 @@ export class NativeStackOutlet implements RouterOutletContract {
     };
   }
 
-  private holdRefusal(holder: unknown): void {
+  private holdRefusal(holder: HoldingScreen): void {
     // A stack in a tab behind is inside the same screen, and has no say in it.
     if (!refuses(this.top?.screen) || !this.isShowing()) return this.release(holder);
-    if (refuses(holder)) return;
+    if (refuses(holder.screen)) return;
     // ponytail: the holder's own binding is read when the top screen starts refusing. One that
     // turns true while it does is put back as it was then; bind the refusal in one of the two.
-    this.held = { own: (holder as EngineNode).props?.['preventNativeDismiss'] };
-    this.renderer.setProperty(holder, 'preventNativeDismiss', true);
+    this.held = { own: (holder.screen as EngineNode).props?.['preventNativeDismiss'] };
+    this.renderer.setProperty(holder.screen, 'preventNativeDismiss', true);
+    holder.refusalChanged();
   }
 
   /** The holder's own answer again, once the top screen no longer refuses. */
-  private release(holder: unknown): void {
+  private release(holder: HoldingScreen): void {
     if (!this.held) return;
-    this.renderer.setProperty(holder, 'preventNativeDismiss', this.held.own ?? false);
+    this.renderer.setProperty(holder.screen, 'preventNativeDismiss', this.held.own ?? false);
     this.held = null;
+    holder.refusalChanged();
   }
 
   private goBack(): boolean {
@@ -732,7 +743,13 @@ export class NativeStackOutlet implements RouterOutletContract {
       parent: this.injector,
       providers: [
         { provide: SCREEN_IN_FRONT, useValue: computed(() => outer() && inFront()) },
-        { provide: HOLDING_SCREEN, useValue: screen },
+        {
+          provide: HOLDING_SCREEN,
+          useValue: {
+            screen,
+            refusalChanged: () => this.holder && this.holdRefusal(this.holder),
+          } satisfies HoldingScreen,
+        },
         { provide: ActivatedRoute, useValue: route },
         {
           provide: ChildrenOutletContexts,
