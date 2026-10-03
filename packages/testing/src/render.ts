@@ -128,6 +128,46 @@ function queriesFor(roots: () => readonly FakeFabricNode[], owner: () => Mounted
   );
 }
 
+/** The part of a component or directive definition that says what can be bound on its host. */
+interface Bindable {
+  readonly inputs?: Readonly<Record<string, unknown>>;
+  readonly hostDirectives?: readonly (HostDirective | (() => HostDirective))[] | null;
+}
+interface HostDirective {
+  readonly inputs?: Readonly<Record<string, string>>;
+}
+
+/**
+ * The names a template can bind as inputs on `type`: its own, by alias where one has one, and
+ * those its host directives forward, by the name each is forwarded under. Null where the
+ * definition cannot be read, and nothing is checked.
+ */
+function inputNames(type: Type<unknown>): string[] | null {
+  const def = (type as { ɵcmp?: Bindable }).ɵcmp;
+  if (!def?.inputs) return null;
+  const forwarded = (def.hostDirectives ?? []).flatMap((entry) =>
+    Object.values((typeof entry === 'function' ? entry() : entry).inputs ?? {}),
+  );
+  return [...Object.keys(def.inputs), ...forwarded];
+}
+
+/**
+ * Throws for a name in `inputs` that is no input of `type`. Angular only logs one, and renders the
+ * component with its defaults. Checked before any input is set, so a refused batch changes nothing
+ * and a required input left unset by a misspelling is named for what it is.
+ */
+function refuseUnknownInputs(type: Type<unknown>, inputs: Record<string, unknown> = {}): void {
+  const known = inputNames(type);
+  if (!known) return;
+  const unknown = Object.keys(inputs).filter((name) => !known.includes(name));
+  if (!unknown.length) return;
+  throw new Error(
+    `[angular-native] ${type.name} has no input named ` +
+      `${unknown.map((name) => `'${name}'`).join(', ')}. ` +
+      (known.length ? `Its inputs are ${known.join(', ')}.` : 'It has no inputs.'),
+  );
+}
+
 /**
  * The template form, compiled just in time.
  *
@@ -177,6 +217,7 @@ export async function render<T>(
   const isTemplate = typeof component === 'string';
   const type = isTemplate ? await hostFor(component, options) : component;
   const fabric = createFakeFabric();
+  if (!isTemplate) refuseUnknownInputs(type, inputs);
   const app = mount(1, type, fabric, {
     ...engine,
     providers,
@@ -206,6 +247,7 @@ export async function render<T>(
     await settle();
   };
   const rerender: RenderResult<T>['rerender'] = async (changes = {}) => {
+    refuseUnknownInputs(type, changes.inputs);
     for (const [name, value] of Object.entries(changes.inputs ?? {})) {
       componentRef.setInput(name, value);
     }
