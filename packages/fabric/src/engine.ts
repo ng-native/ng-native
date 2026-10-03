@@ -1115,6 +1115,12 @@ const BOOLEAN_VIEW_PROPS = new Set([
   'focusable',
   'hasTVPreferredFocus',
   'needsOffscreenAlphaCompositing',
+  // The flags native reads to know an event has a listener, which are booleans as well.
+  'onAccessibilityAction',
+  'onAccessibilityEscape',
+  'onAccessibilityMagicTap',
+  'onAccessibilityTap',
+  'onLayout',
   'removeClippedSubviews',
   'renderToHardwareTextureAndroid',
   'screenReaderFocusable',

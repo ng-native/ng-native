@@ -19,6 +19,7 @@ export class Card {}
   template: `
     <app-card id="off" focusable="false" accessible="false" collapsable="false" />
     <app-card id="on" focusable="true" accessible collapsable="true" />
+    <app-card id="events" onLayout="false" onAccessibilityTap="true" />
     <app-card id="other" testID="false" nativeID="true" />
     <view id="typed" focusable="false"></view>
   `,

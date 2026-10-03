@@ -50,6 +50,12 @@ describe('a boolean prop written as an attribute', () => {
     assert.equal(on['collapsable'], true);
   });
 
+  it('covers the flags native reads for an event it should send', () => {
+    const events = props('events');
+    assert.equal(events['onLayout'], false);
+    assert.equal(events['onAccessibilityTap'], true);
+  });
+
   it('leaves a string prop the text it was given', () => {
     const other = props('other');
     assert.equal(other['testID'], 'false');
