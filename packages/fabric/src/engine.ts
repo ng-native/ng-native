@@ -1142,13 +1142,14 @@ function committedProp(key: string, value: unknown): unknown {
  * The `pointer-events` an element ends up with, in the order its props are merged: its inline
  * style's, then its `pointerEvents` prop, then what the sheets resolve. The inline one is read for
  * itself because an element no rule matches resolves to what it inherits, with its own inline
- * value only in what it hands down. An inline `inherit` is no value of its own.
+ * value only in what it hands down.
  */
 function pointerEventsOf(node: EngineNode, resolved: Record<string, unknown>): unknown {
   const inline = node.inlineInherits ? inlineInherited(node.props['style']) : null;
   const own = inline?.['pointerEvents'];
-  if (own !== undefined && own !== 'inherit') return own;
-  return node.props['pointerEvents'] ?? resolved['pointerEvents'];
+  // Merged over the prop, so its `inherit` is what the sheets and the parent settled, not the prop.
+  if (own === 'inherit') return resolved['pointerEvents'];
+  return own ?? node.props['pointerEvents'] ?? resolved['pointerEvents'];
 }
 /**
  * A node's `pointer-events` as native takes it, once its props and styles are merged.

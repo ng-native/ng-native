@@ -219,6 +219,15 @@ describe('pointer-events: none', () => {
     assert.deepEqual(committed(), { layer: 'none', panel: 'none', plain: 'none' });
   });
 
+  it("tracks an inline inherit as the parent's value, over the element's own prop", () => {
+    const { engine, panel, committed } = tree('.layer { pointer-events: none }');
+    engine.setProp(panel, 'pointerEvents', 'auto');
+    engine.setProp(panel, 'style', { pointerEvents: 'inherit' });
+    engine.commit();
+    // The inline style is merged over the prop, and its inherit is the layer's none.
+    assert.deepEqual(committed(), { layer: 'none', panel: 'none', plain: 'none' });
+  });
+
   it("keeps React Native's meaning as the pointerEvents prop: the whole subtree", () => {
     const { engine, layer, committed } = tree('.panel { pointer-events: auto }');
     engine.setProp(layer, 'pointerEvents', 'none');
