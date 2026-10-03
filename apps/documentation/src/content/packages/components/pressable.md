@@ -99,6 +99,10 @@ disabled while it is true or `disabled` is: presses are refused, a stylesheet ma
 `:host([data-disabled])`, and a screen reader is told.
 
 ```ts
+import { inject, input } from '@angular/core';
+import { PressBehavior } from '@ng-native/components';
+
+// In the component:
 readonly loading = input(false);
 
 constructor() {
