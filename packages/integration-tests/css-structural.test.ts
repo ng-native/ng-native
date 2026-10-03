@@ -294,6 +294,51 @@ describe('a position test that is not at the top of its compound', () => {
     assert.equal(lastProps(fabric, list)['opacity'], null, 'no longer empty');
   });
 
+  // What a later sibling matches can hang on whether this node is empty, though nothing about the
+  // sibling moved: `.box:empty + .spacer`.
+  for (const combinator of ['+', '~']) {
+    it(`restyles a sibling after :empty (${combinator}) when the node gains its first child and loses its last`, () => {
+      const fabric = createFakeFabric();
+      const css = `.spacer { height: 0 } .box:empty ${combinator} .spacer { height: 20px }`;
+      const engine = new Engine(fabric, 1, { globalStyles: compileCss(css, 'test') });
+      const box = engine.createElement('view');
+      engine.setClasses(box, 'box');
+      // The anchor an @if leaves, which :empty does not see.
+      engine.appendChild(box, engine.createAnchor());
+      const spacer = engine.createElement('view');
+      engine.setClasses(spacer, 'spacer');
+      engine.appendChild(engine.root, box);
+      engine.appendChild(engine.root, spacer);
+      engine.commit();
+      assert.equal(lastProps(fabric, spacer)['height'], 20);
+
+      const child = engine.createElement('view');
+      engine.insertBefore(box, child, box.children[0]!);
+      engine.commit();
+      assert.equal(lastProps(fabric, spacer)['height'], 0, 'the box is no longer empty');
+
+      engine.removeChild(box, child);
+      engine.commit();
+      assert.equal(lastProps(fabric, spacer)['height'], 20, 'and is empty again');
+    });
+  }
+
+  it('restyles a sibling after :empty when the child is appended, not inserted', () => {
+    const fabric = createFakeFabric();
+    const css = '.spacer { height: 0 } .box:empty + .spacer { height: 20px }';
+    const engine = new Engine(fabric, 1, { globalStyles: compileCss(css, 'test') });
+    const box = engine.createElement('view');
+    engine.setClasses(box, 'box');
+    const spacer = engine.createElement('view');
+    engine.setClasses(spacer, 'spacer');
+    engine.appendChild(engine.root, box);
+    engine.appendChild(engine.root, spacer);
+    engine.commit();
+    engine.appendChild(box, engine.createText('content'));
+    engine.commit();
+    assert.equal(lastProps(fabric, spacer)['height'], 0);
+  });
+
   it('counts a node holding only the anchor of an empty @for or @if as :empty', () => {
     // The anchor is a comment on the web, and :empty ignores comments. A list whose @for has no
     // rows holds nothing else.

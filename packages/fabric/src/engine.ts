@@ -1205,6 +1205,18 @@ const BOOLEAN_VIEW_PROPS = new Set([
   'shouldRasterizeIOS',
 ]);
 
+/**
+ * Whether `node` holds nothing `:empty` sees besides `moved`: so it was empty before `moved` came,
+ * or is now that it has gone. An anchor is a comment on the web, which `:empty` does not see.
+ */
+function wasOrIsEmptyWithout(node: EngineNode, moved: EngineNode): boolean {
+  if (moved.kind === 'anchor') return false;
+  for (const child of node.children) {
+    if (child !== moved && child.kind !== 'anchor') return false;
+  }
+  return true;
+}
+
 /** A prop as it is committed: a boolean view prop held as text is the boolean the text says. */
 function committedProp(key: string, value: unknown): unknown {
   return typeof value === 'string' && BOOLEAN_VIEW_PROPS.has(key) ? value !== 'false' : value;
@@ -2253,7 +2265,7 @@ export class Engine implements HostEngine {
     child.parent = parent;
     parent.children.push(child);
     if (child.dormantHoists) this.wakeHoists(child);
-    this.markStructure(parent);
+    this.markStructure(parent, child);
     this.markTextContent(parent, child);
   }
 
@@ -2264,7 +2276,7 @@ export class Engine implements HostEngine {
     if (at < 0) parent.children.push(child);
     else parent.children.splice(at, 0, child);
     if (child.dormantHoists) this.wakeHoists(child);
-    this.markStructure(parent);
+    this.markStructure(parent, child);
     this.markTextContent(parent, child);
   }
 
@@ -2276,7 +2288,7 @@ export class Engine implements HostEngine {
     target.children.splice(at, 1);
     child.parent = null;
     this.removedSinceCommit.add(child);
-    this.markStructure(target);
+    this.markStructure(target, child);
     this.markTextContent(target, child);
   }
 
@@ -2510,13 +2522,17 @@ export class Engine implements HostEngine {
     }
   }
 
-  private markStructure(node: EngineNode): void {
+  /** `node`'s child list changed: `moved` came into it or went out of it. */
+  private markStructure(node: EngineNode, moved: EngineNode): void {
     node.structureDirty = true;
     // A child list that moved changes what its members match, though nothing about them did:
     // the old last row is no longer the last. Only sheets that ask about position pay for this.
     if (this.structuralSheets) {
       node.styleDirty = true;
       for (const child of node.children) child.styleDirty = true;
+      // `.box:empty + .spacer`: what a later sibling matches can hang on whether this node is
+      // empty, which only its first child arriving or its last one leaving changes.
+      if (wasOrIsEmptyWithout(node, moved)) this.markLaterSiblings(node);
     }
     this.markPath(node.parent);
   }
