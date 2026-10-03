@@ -184,6 +184,11 @@ preset. In place of the tests it writes:
 - a component built from `<view>` and `<text>`, where the generator put its own, and a `.test.ts`
   beside it that renders it.
 
+In the TypeScript preset the library's source imports with `.ts`, as its tests and the examples on
+this site do: `tsconfig.lib.json` allows it and `src/index.ts` is written that way. TypeScript only
+takes that where a project emits declarations and no JavaScript, which is the preset's own setting,
+so a workspace that has changed it keeps the `.js` imports `@nx/js` writes.
+
 It adds `@ng-native/components`, `@ng-native/testing` and Vitest where the library's dependencies
 go: its own `package.json` in the TypeScript preset, and the root's otherwise. It takes `--name`,
 `--tags` and `--skipInstall`, as the app generator does.

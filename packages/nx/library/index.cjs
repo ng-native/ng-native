@@ -165,6 +165,39 @@ function writeSpecConfig(tree, root, angular) {
 }
 
 /**
+ * Lets the library's source import as its test, the template and the documentation do, with
+ * `.ts`: `allowImportingTsExtensions` in `tsconfig.lib.json`, and `src/index.ts` written that way
+ * in place of the `.js` `@nx/js` gives it.
+ *
+ * TypeScript takes the option only where no JavaScript is emitted, which is the TypeScript
+ * preset's own setting (`emitDeclarationOnly` in `tsconfig.base.json`). A workspace that has
+ * turned that off keeps `.js`.
+ */
+function importWithTsExtensions(tree, root) {
+  const config = joinPathFragments(root, 'tsconfig.lib.json');
+  if (!emitsDeclarationsOnly(tree, config)) return;
+  updateJson(tree, config, (lib) => ({
+    ...lib,
+    compilerOptions: { ...lib.compilerOptions, allowImportingTsExtensions: true },
+  }));
+  const index = joinPathFragments(root, 'src', 'index.ts');
+  if (!tree.exists(index)) return;
+  const source = tree.read(index, 'utf-8');
+  tree.write(index, source.replace(/(from\s+['"]\.{1,2}\/[^'"]*)\.js(['"])/g, '$1.ts$2'));
+}
+
+/** Whether a tsconfig, or one it extends, emits declarations and no JavaScript. */
+function emitsDeclarationsOnly(tree, file, seen = new Set()) {
+  if (seen.has(file) || !tree.exists(file)) return false;
+  seen.add(file);
+  const { compilerOptions = {}, extends: base } = readJson(tree, file);
+  if (compilerOptions.noEmit === true) return true;
+  if (compilerOptions.emitDeclarationOnly !== undefined) return compilerOptions.emitDeclarationOnly;
+  if (typeof base !== 'string' || !base.startsWith('.')) return false;
+  return emitsDeclarationsOnly(tree, joinPathFragments(path.dirname(file), base), seen);
+}
+
+/**
  * The packages the component and its test import: in the library's own `package.json` when it is
  * a workspace package, which pnpm links from, and at the root otherwise. A version already there
  * is left alone.
@@ -211,6 +244,7 @@ async function library(tree, options) {
   const aliases = hasPathAliases(tree, usesWorkspaces(tree));
   tree.write(joinPathFragments(directory, 'vitest.config.mts'), native.vitestConfig(aliases));
   writeSpecConfig(tree, directory, angular);
+  if (!angular) importWithTsExtensions(tree, directory);
   updateProjectConfiguration(tree, name, {
     ...project,
     targets: {

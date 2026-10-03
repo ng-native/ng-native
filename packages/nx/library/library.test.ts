@@ -6,6 +6,7 @@
  * fakes writing the files each writes with `--unitTestRunner=none`, as Nx 23.2 does.
  */
 import assert from 'node:assert/strict';
+import { execFileSync } from 'node:child_process';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
@@ -114,7 +115,10 @@ function tsPreset() {
     name: '@org/source',
     devDependencies: { nx: '23.2.0', '@nx/js': '23.2.0' },
   }));
-  writeJson(tree, 'tsconfig.base.json', { compilerOptions: { composite: true } });
+  // As `@nx/js`'s ts-solution `tsconfig.base.json` has it: declarations are all a library emits.
+  writeJson(tree, 'tsconfig.base.json', {
+    compilerOptions: { composite: true, emitDeclarationOnly: true },
+  });
   tree.write('pnpm-workspace.yaml', "packages:\n  - 'packages/*'\n");
   bases.js = async (tree: Tree, options: Options) => fakeJs(tree, options);
   bases.angular = async () => assert.fail('@nx/angular in a workspace without it');
@@ -348,4 +352,61 @@ describe('in the TypeScript preset', () => {
     });
     assert.equal(manifest.nx.targets.test.options.command, 'vitest run');
   });
+
+  it('lets a source file import as the documentation and its own test do, with .ts', async () => {
+    const tree = tsPreset();
+    await generate(tree, { directory: 'packages/ui' });
+    assert.equal(
+      readJson(tree, 'packages/ui/tsconfig.lib.json').compilerOptions.allowImportingTsExtensions,
+      true,
+    );
+    assert.equal(tree.read('packages/ui/src/index.ts', 'utf-8'), "export * from './lib/ui.ts';\n");
+  });
+
+  it('typechecks a source file that imports a sibling with .ts, with the real compiler', async () => {
+    const tree = tsPreset();
+    await generate(tree, { directory: 'packages/ui' });
+    tree.write('packages/ui/src/lib/again.ts', "export { Ui } from './ui.ts';\n");
+    const diagnostics = typecheck(tree, 'packages/ui/tsconfig.lib.json');
+    assert.doesNotMatch(diagnostics, /TS5097|TS5096|TS2691/);
+  });
+
+  it('leaves .js imports where the workspace emits JavaScript, which .ts imports cannot', async () => {
+    const tree = tsPreset();
+    writeJson(tree, 'tsconfig.base.json', { compilerOptions: { composite: true } });
+    await generate(tree, { directory: 'packages/ui' });
+    assert.equal(
+      readJson(tree, 'packages/ui/tsconfig.lib.json').compilerOptions.allowImportingTsExtensions,
+      undefined,
+    );
+    assert.equal(tree.read('packages/ui/src/index.ts', 'utf-8'), "export * from './lib/ui.js';\n");
+  });
 });
+
+/**
+ * The compiler's own word on a generated project: the tree written out under this package, so
+ * its modules resolve, and `tsc` run on one of its configs. Answers the diagnostics, or ''.
+ */
+function typecheck(tree: Tree, config: string): string {
+  const cache = path.join(import.meta.dirname, '..', 'node_modules', '.cache');
+  mkdirSync(cache, { recursive: true });
+  const root = mkdtempSync(path.join(cache, 'library-'));
+  try {
+    for (const change of tree.listChanges()) {
+      if (change.type === 'DELETE' || !change.content) continue;
+      const file = path.join(root, change.path);
+      mkdirSync(path.dirname(file), { recursive: true });
+      writeFileSync(file, change.content);
+    }
+    const tsc = require.resolve('typescript/bin/tsc');
+    execFileSync(process.execPath, [tsc, '-p', path.join(root, config)], {
+      stdio: 'pipe',
+    });
+    return '';
+  } catch (error) {
+    const { stdout, stderr } = error as { stdout?: Buffer; stderr?: Buffer };
+    return `${stdout ?? ''}${stderr ?? ''}` || String(error);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+}
