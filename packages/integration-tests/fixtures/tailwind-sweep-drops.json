@@ -11018,7 +11018,7 @@
     "visited:opacity-50",
     "visited:p-4"
   ],
-  "dropped a rule: '@container' is not supported. Media queries and keyframes are the only at-rules with a runtime meaning here.": [
+  "dropped a rule: '@container' is not supported. Media queries, keyframes, font faces and cascade layers are the only at-rules with a runtime meaning here.": [
     "@3xs:bg-[rgb(1,2,3)]",
     "@3xs:bg-red-500",
     "@3xs:opacity-50",
@@ -11044,7 +11044,7 @@
     "@min-7xl:opacity-50",
     "@min-7xl:p-4"
   ],
-  "dropped a rule: '@starting-style' is not supported. Media queries and keyframes are the only at-rules with a runtime meaning here.": [
+  "dropped a rule: '@starting-style' is not supported. Media queries, keyframes, font faces and cascade layers are the only at-rules with a runtime meaning here.": [
     "starting:bg-[rgb(1,2,3)]",
     "starting:bg-red-500",
     "starting:opacity-50",

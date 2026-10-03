@@ -365,6 +365,97 @@ export const CASES: OracleCase[] = [
       children: [{ name: 'view', classes: ['inner'], children: [probe()] }],
     },
     extra: ['pointer-events'],
+    name: '@layer: an unlayered rule beats a layered one of higher specificity',
+    css: '@layer base { #probe.c { color: rgb(1, 0, 0) } } .c { color: rgb(2, 0, 0) }',
+    tree: probe({ classes: ['c'] }),
+  },
+  {
+    name: '@layer: an unlayered rule beats a layered one written after it',
+    css: '.c { color: rgb(2, 0, 0) } @layer base { #probe.c { color: rgb(1, 0, 0) } }',
+    tree: probe({ classes: ['c'] }),
+  },
+  {
+    name: '@layer: a later layer beats an earlier one of higher specificity',
+    css: '@layer a { #probe.c { color: rgb(1, 0, 0) } } @layer b { .c { color: rgb(2, 0, 0) } }',
+    tree: probe({ classes: ['c'] }),
+  },
+  {
+    name: '@layer: within a layer, specificity decides',
+    css: '@layer a { #probe { color: rgb(1, 0, 0) } .c { color: rgb(2, 0, 0) } }',
+    tree: probe({ classes: ['c'] }),
+  },
+  {
+    name: '@layer: a statement sets the order before the blocks',
+    css: '@layer b, a; @layer a { .c { color: rgb(1, 0, 0) } } @layer b { #probe { color: rgb(2, 0, 0) } }',
+    tree: probe({ classes: ['c'] }),
+  },
+  {
+    name: '@layer: a layer opened again keeps its first place',
+    css: '@layer a { .c { color: rgb(1, 0, 0) } } @layer b { .c { color: rgb(2, 0, 0) } } @layer a { #probe { color: rgb(3, 0, 0) } }',
+    tree: probe({ classes: ['c'] }),
+  },
+  {
+    name: "@layer: a layer's own rules beat its nested layers",
+    css: '@layer a { @layer x { #probe { color: rgb(1, 0, 0) } } .c { color: rgb(2, 0, 0) } }',
+    tree: probe({ classes: ['c'] }),
+  },
+  {
+    name: '@layer: a dotted name is the nested layer',
+    css: '@layer a.x { #probe { color: rgb(1, 0, 0) } } @layer a { .c { color: rgb(2, 0, 0) } } @layer b { .c { background-color: rgb(3, 0, 0) } }',
+    tree: probe({ classes: ['c'] }),
+  },
+  {
+    name: '@layer: an anonymous layer is a layer of its own, in order',
+    css: '@layer { #probe { color: rgb(1, 0, 0) } } @layer { .c { color: rgb(2, 0, 0) } }',
+    tree: probe({ classes: ['c'] }),
+  },
+  {
+    name: '@layer: !important in a layer beats !important outside one',
+    css: '@layer a { .c { color: rgb(1, 0, 0) !important } } #probe { color: rgb(2, 0, 0) !important }',
+    tree: probe({ classes: ['c'] }),
+  },
+  {
+    name: "@layer: !important in an earlier layer beats a later layer's",
+    css: '@layer a { .c { color: rgb(1, 0, 0) !important } } @layer b { #probe { color: rgb(2, 0, 0) !important } }',
+    tree: probe({ classes: ['c'] }),
+  },
+  {
+    name: '@layer: a layered !important beats an unlayered plain rule',
+    css: '@layer a { .c { color: rgb(1, 0, 0) !important } } #probe { color: rgb(2, 0, 0) }',
+    tree: probe({ classes: ['c'] }),
+  },
+  {
+    name: '@layer: a media query inside a layer keeps the layer',
+    css: '@layer a { @media (min-width: 1px) { #probe { color: rgb(1, 0, 0) } } } .c { color: rgb(2, 0, 0) }',
+    tree: probe({ classes: ['c'] }),
+  },
+  {
+    name: '@layer: a layer inside a media query',
+    css: '@media (min-width: 1px) { @layer a { #probe { color: rgb(1, 0, 0) } } } .c { color: rgb(2, 0, 0) }',
+    tree: probe({ classes: ['c'] }),
+  },
+  {
+    name: '@layer: a property only the layer sets still applies',
+    css: '@layer a { .c { background-color: rgb(1, 0, 0) } } .c { color: rgb(2, 0, 0) }',
+    tree: probe({ classes: ['c'] }),
+  },
+  {
+    name: "@layer: an unlayered rule in the app's sheet beats a component's layered one",
+    global: '.c { color: rgb(2, 0, 0) }',
+    css: '@layer a { #probe.c { color: rgb(1, 0, 0) } }',
+    tree: probe({ classes: ['c'] }),
+  },
+  {
+    name: "@layer: a component's unlayered rule beats a layered one in the app's sheet",
+    global: '@layer a { #probe.c { color: rgb(1, 0, 0) } }',
+    css: '.c { color: rgb(2, 0, 0) }',
+    tree: probe({ classes: ['c'] }),
+  },
+  {
+    name: "@layer: a layer named later in the app's sheet beats a component's earlier one",
+    global: '@layer a, b; @layer b { .c { color: rgb(1, 0, 0) } }',
+    css: '@layer a { #probe.c { color: rgb(2, 0, 0) } }',
+    tree: probe({ classes: ['c'] }),
   },
   {
     name: 'background-color does not inherit',

@@ -829,7 +829,10 @@ describe('unsupported CSS, through the build', () => {
 describe('messages for things that are refused', () => {
   it('names the at-rule rather than printing an object', () => {
     assert.throws(() => compileCss('@supports (a: b) { .a { color: red } }'), /@supports/);
-    assert.throws(() => compileCss('@layer base { .a { color: red } }'), /@layer/);
+    assert.throws(
+      () => compileCss('@container (min-width: 1px) { .a { color: red } }'),
+      /@container/,
+    );
   });
 
   it('says a pseudo-element is permanent, not pending', () => {

@@ -167,11 +167,130 @@
     }
   },
   {
-    "name": "pointer-events: none through an ancestor that sets nothing",
+    "name": "@layer: an unlayered rule beats a layered one of higher specificity",
     "expected": {
-      "color": "rgb(0, 0, 0)",
+      "color": "rgb(2, 0, 0)",
       "background-color": "rgba(0, 0, 0, 0)",
-      "pointer-events": "none"
+      "pointer-events": "auto"
+    }
+  },
+  {
+    "name": "@layer: an unlayered rule beats a layered one written after it",
+    "expected": {
+      "color": "rgb(2, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)"
+    }
+  },
+  {
+    "name": "@layer: a later layer beats an earlier one of higher specificity",
+    "expected": {
+      "color": "rgb(2, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)"
+    }
+  },
+  {
+    "name": "@layer: within a layer, specificity decides",
+    "expected": {
+      "color": "rgb(1, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)"
+    }
+  },
+  {
+    "name": "@layer: a statement sets the order before the blocks",
+    "expected": {
+      "color": "rgb(1, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)"
+    }
+  },
+  {
+    "name": "@layer: a layer opened again keeps its first place",
+    "expected": {
+      "color": "rgb(2, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)"
+    }
+  },
+  {
+    "name": "@layer: a layer's own rules beat its nested layers",
+    "expected": {
+      "color": "rgb(2, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)"
+    }
+  },
+  {
+    "name": "@layer: a dotted name is the nested layer",
+    "expected": {
+      "color": "rgb(2, 0, 0)",
+      "background-color": "rgb(3, 0, 0)"
+    }
+  },
+  {
+    "name": "@layer: an anonymous layer is a layer of its own, in order",
+    "expected": {
+      "color": "rgb(2, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)"
+    }
+  },
+  {
+    "name": "@layer: !important in a layer beats !important outside one",
+    "expected": {
+      "color": "rgb(1, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)"
+    }
+  },
+  {
+    "name": "@layer: !important in an earlier layer beats a later layer's",
+    "expected": {
+      "color": "rgb(1, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)"
+    }
+  },
+  {
+    "name": "@layer: a layered !important beats an unlayered plain rule",
+    "expected": {
+      "color": "rgb(1, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)"
+    }
+  },
+  {
+    "name": "@layer: a media query inside a layer keeps the layer",
+    "expected": {
+      "color": "rgb(2, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)"
+    }
+  },
+  {
+    "name": "@layer: a layer inside a media query",
+    "expected": {
+      "color": "rgb(2, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)"
+    }
+  },
+  {
+    "name": "@layer: a property only the layer sets still applies",
+    "expected": {
+      "color": "rgb(2, 0, 0)",
+      "background-color": "rgb(1, 0, 0)"
+    }
+  },
+  {
+    "name": "@layer: an unlayered rule in the app's sheet beats a component's layered one",
+    "expected": {
+      "color": "rgb(2, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)"
+    }
+  },
+  {
+    "name": "@layer: a component's unlayered rule beats a layered one in the app's sheet",
+    "expected": {
+      "color": "rgb(2, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)"
+    }
+  },
+  {
+    "name": "@layer: a layer named later in the app's sheet beats a component's earlier one",
+    "expected": {
+      "color": "rgb(1, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)"
     }
   },
   {

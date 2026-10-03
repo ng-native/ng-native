@@ -691,10 +691,46 @@ function refusedAtRule(rule, context) {
       ? rule.value.name
       : (AT_RULE_NAMES[rule.type] ?? rule.type);
   return new CssUnsupported(
-    `${context}: '@${name}' is not supported. Media queries and keyframes are the only ` +
-      `at-rules with a runtime meaning here.`,
+    `${context}: '@${name}' is not supported. Media queries, keyframes, font faces and cascade ` +
+      `layers are the only at-rules with a runtime meaning here.`,
   );
 }
+
+/** One cascade layer: the layers nested in it, in the order each was first named. */
+function layerNode() {
+  return { nested: new Map(), rank: 0 };
+}
+
+/** The layer `name` names inside `parent`, made on first mention: `a.x` is `x` inside `a`. */
+function layerNamed(parent, name) {
+  let node = parent;
+  for (const part of name) {
+    if (!node.nested.has(part)) node.nested.set(part, layerNode());
+    node = node.nested.get(part);
+  }
+  return node;
+}
+
+/**
+ * Numbers every layer from the weakest, as CSS orders them: layers in the order they were first
+ * named, and a layer's own rules after the layers nested in it, which they beat.
+ */
+function rankLayers(root, next = { rank: 0 }) {
+  for (const nested of root.nested.values()) {
+    rankLayers(nested, next);
+    nested.rank = next.rank++;
+  }
+}
+
+/** Two rules' layers, weakest first. A rule in no layer is stronger than any rule in one. */
+function layerOrder(a, b) {
+  if (a === b) return 0;
+  if (a === undefined) return 1;
+  if (b === undefined) return -1;
+  return a - b;
+}
+
+const isLayer = (rule) => rule.type === 'layer-block' || rule.type === 'layer-statement';
 
 /** Rule types whose at-rule is spelled differently in a stylesheet. */
 const AT_RULE_NAMES = { 'layer-block': 'layer', 'layer-statement': 'layer' };
@@ -1892,6 +1928,13 @@ function compileCss(source, context = 'styles', options = {}) {
   /** The platforms this sheet is built for: the one Metro is bundling, or both when it is not said. */
   const targets = NATIVE.includes(options.platform) ? [options.platform] : NATIVE;
   let order = 0;
+  /**
+   * The sheet's cascade layers, in the order each was first named, and the one being compiled.
+   * A rule carries its layer until the whole sheet is read, since a later `@layer a, b;` cannot
+   * move a layer already named but a nested layer can still be added to one.
+   */
+  const layers = layerNode();
+  let layer = layers;
 
   /**
    * Whether a rule ended up with nothing to apply.
@@ -2053,6 +2096,7 @@ function compileCss(source, context = 'styles', options = {}) {
           specificity: compiled.specificity + (placeholder ? 1 : 0),
           order: orderOf(written),
           ...built,
+          ...(layer === layers ? {} : { layer }),
         });
       }
     }
@@ -2197,6 +2241,26 @@ function compileCss(source, context = 'styles', options = {}) {
   }
   if (options.recover === true) reportUnparsed(parsed.warnings, where, onUnsupported);
 
+  /** `@layer`, as a statement that names layers or a block of rules in one. */
+  function layerRule(rule) {
+    if (rule.type === 'layer-statement') {
+      // `@layer a, b;` names layers, which is what gives them their place in the order.
+      for (const name of rule.value.names) layerNamed(layer, name);
+      return;
+    }
+    // A layer's rules, compiled as any others and marked with the layer they are in. A block
+    // with no name is a layer of its own, which nothing can name again.
+    const outer = layer;
+    layer = layerNamed(outer, rule.value.name ?? [Symbol()]);
+    try {
+      for (const inner of rule.value.rules ?? []) {
+        guarded(() => compileRule(inner), locationOf(inner));
+      }
+    } finally {
+      layer = outer;
+    }
+  }
+
   function compileRule(rule) {
     if (rule.type === 'font-face') {
       fonts.push(fontFace(rule.value, context));
@@ -2207,6 +2271,10 @@ function compileCss(source, context = 'styles', options = {}) {
       // Keep it out of the emitted CSS; nothing downstream reads it.
       return [];
     }
+    if (isLayer(rule)) {
+      layerRule(rule);
+      return [];
+    }
     if (rule.type === 'media') {
       // Compile the inner rules and hang the condition off each. The visitor is not called
       // again for nested rules, so this recursion is how they are reached at all.
@@ -2215,7 +2283,7 @@ function compileCss(source, context = 'styles', options = {}) {
         const before = rules.length;
         // Conditioned even when it throws: a selector list can fail part way, after the selectors
         // before the bad one were already added, and those must not apply unconditionally.
-        guarded(() => styleRule(inner), locationOf(inner));
+        guarded(() => (isLayer(inner) ? compileRule(inner) : styleRule(inner)), locationOf(inner));
         for (let i = before; i < rules.length; i++) {
           const own = rules[i].condition;
           rules[i].condition = own ? { all: [condition, own] } : condition;
@@ -2228,8 +2296,13 @@ function compileCss(source, context = 'styles', options = {}) {
     styleRule(rule);
   }
 
-  // Cascade order is decided here, so the device only walks the list.
-  rules.sort((a, b) => a.specificity - b.specificity || a.order - b.order);
+  // Cascade order is decided here, so the device only walks the list. A layered rule is weaker
+  // than every rule outside a layer, and a layer weaker than each one named after it.
+  rankLayers(layers);
+  for (const rule of rules) if (rule.layer) rule.layer = rule.layer.rank;
+  rules.sort(
+    (a, b) => layerOrder(a.layer, b.layer) || a.specificity - b.specificity || a.order - b.order,
+  );
   return {
     rules,
     ...(fonts.length ? { fonts } : {}),

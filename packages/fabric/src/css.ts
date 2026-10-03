@@ -71,6 +71,11 @@ export interface StyleRule {
   /** Between compounds; length is `compounds.length - 1`. */
   readonly combinators: readonly Combinator[];
   readonly specificity: number;
+  /**
+   * The cascade layer the rule is in, numbered from the weakest in its sheet, or nothing for a
+   * rule in no layer, which beats every layered one whatever their specificity.
+   */
+  readonly layer?: number;
   readonly order: number;
   readonly declarations: Readonly<Record<string, unknown>>;
   readonly important?: Readonly<Record<string, unknown>>;
@@ -890,6 +895,39 @@ function carryDeferred(
   return kept;
 }
 
+const NO_DECLARATIONS: Readonly<Record<string, unknown>> = Object.freeze({});
+
+const isImportant = (rule: StyleRule): boolean =>
+  rule.important !== undefined || rule.deferred?.some((one) => one.important) === true;
+
+/**
+ * The matched rules in the order their declarations apply, weakest first.
+ *
+ * That is the order they matched in, unless a layered rule is important. Layers turn round for
+ * `!important`: an important declaration in a layer beats one in a later layer, and both beat one
+ * in no layer. So each such rule is split, its plain declarations where it matched, and its
+ * important ones after every plain one, in the layers' order reversed.
+ */
+function byImportance(matched: readonly StyleRule[]): readonly StyleRule[] {
+  if (!matched.some((rule) => rule.layer !== undefined && isImportant(rule))) return matched;
+  const plain = matched.map((rule) =>
+    isImportant(rule)
+      ? { ...rule, important: undefined, deferred: rule.deferred?.filter((one) => !one.important) }
+      : rule,
+  );
+  const important = matched
+    .filter(isImportant)
+    .map((rule) => ({
+      ...rule,
+      declarations: NO_DECLARATIONS,
+      tokens: undefined,
+      deferred: rule.deferred?.filter((one) => one.important),
+    }))
+    // Stable, so rules of one layer keep the order their specificity gave them.
+    .sort((a, b) => layerOrder(b, a));
+  return [...plain, ...important];
+}
+
 function countPosition(
   node: StyleTarget,
   siblings: readonly StyleTarget[],
@@ -926,6 +964,18 @@ function lastElement(siblings: readonly StyleTarget[]): StyleTarget | null {
  * precedence people already have in their fingers rather than inventing a rule for native.
  */
 const COMPONENT_SPECIFICITY_BUMP = 1_000;
+
+/**
+ * Two rules by cascade layer, weakest first: a layer before each one named after it, and every
+ * layered rule before a rule in no layer. Layers are numbered within their own sheet, so across
+ * sheets a layer's place is the one its own sheet gave it.
+ */
+function layerOrder(a: StyleRule, b: StyleRule): number {
+  if (a.layer === b.layer) return 0;
+  if (a.layer === undefined) return 1;
+  if (b.layer === undefined) return -1;
+  return a.layer - b.layer;
+}
 
 /** One rule in a cascade: the sheet it came from, which `:host` needs, and its weight here. */
 interface RuleEntry {
@@ -1176,6 +1226,11 @@ export class StyleResolver {
    * single index.
    */
   private merged = new WeakMap<StyleSheet, Map<StyleSheet | null, RuleIndex>>();
+  /**
+   * Whether any sheet merged so far has a rule in a cascade layer. Until one does, rules are
+   * ordered by weight alone and the cascade does not look for layers, which is nearly every app.
+   */
+  private layered = false;
 
   /**
    * The application-level sheet, if any: the one set of rules allowed to match a node whatever
@@ -1436,7 +1491,11 @@ export class StyleResolver {
     add(hostSheet, COMPONENT_SPECIFICITY_BUMP);
     add(sheet, COMPONENT_SPECIFICITY_BUMP);
     for (const added of this.addedSheets) add(added, 0);
-    return entries.sort((a, b) => a.weight - b.weight);
+    if (!entries.some((entry) => entry.rule.layer !== undefined)) {
+      return entries.sort((a, b) => a.weight - b.weight);
+    }
+    this.layered = true;
+    return entries.sort((a, b) => layerOrder(a.rule, b.rule) || a.weight - b.weight);
   }
 
   /**
@@ -1535,7 +1594,7 @@ export class StyleResolver {
     let tokens: Record<string, TokenValue> | null = null;
     let deferred: DeferredDeclaration[] | null = null;
 
-    for (const rule of matched) {
+    for (const rule of this.layered ? byImportance(matched) : matched) {
       Object.assign(normal, rule.declarations);
       if (rule.important) {
         Object.assign(important, rule.important);
