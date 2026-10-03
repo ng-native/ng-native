@@ -16,6 +16,7 @@
       "@ng-native/device/*": ["./packages/device/dist/*.d.ts"],
       "@ng-native/router": ["./packages/router/dist/index.d.ts"],
       "@ng-native/router/*": ["./packages/router/dist/*.d.ts"],
+      "@ng-native/web-compat": ["./packages/web-compat/dist/index.d.ts"],
       "@ng-native/icons": ["./packages/icons/dist/index.d.ts"],
       "@ng-native/icons/*": ["./packages/icons/dist/*.d.ts"],
       "@ng-native/components": ["./packages/components/dist/index.d.ts"],

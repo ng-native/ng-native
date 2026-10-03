@@ -65,6 +65,7 @@
       "@ng-native/tailwind",
       "@ng-native/testing",
       "@ng-native/web",
+      "@ng-native/web-compat",
       "@ng-native/template"
     ],
     "projectsRelationship": "fixed",
