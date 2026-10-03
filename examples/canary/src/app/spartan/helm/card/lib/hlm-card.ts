@@ -1,0 +1,19 @@
+import { Directive, input } from '@angular/core';
+import { classes } from '../../utils';
+import { HlmCardConfig, injectHlmCardConfig } from './hlm-card.token';
+
+@Directive({
+	selector: '[hlmCard],hlm-card',
+	host: {
+		'data-slot': 'card',
+		'[attr.data-size]': 'size()',
+	},
+})
+export class HlmCard {
+	private readonly _defaultConfig = injectHlmCardConfig();
+	public readonly size = input<HlmCardConfig['size']>(this._defaultConfig.size);
+
+	constructor() {
+		classes(() => 'spartan-card group/card flex flex-col');
+	}
+}

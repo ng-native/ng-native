@@ -142,3 +142,28 @@
 .spartan-badge-variant-link {
   @apply text-primary underline-offset-4 hover:underline;
 }
+
+/* MARK: Card */
+.spartan-card {
+  @apply ring-foreground/10 bg-card text-card-foreground gap-(--card-spacing) overflow-hidden rounded-xl py-(--card-spacing) text-sm shadow-xs ring-1 [--card-spacing:--spacing(6)] has-[>img:first-child]:pt-0 data-[size=sm]:[--card-spacing:--spacing(4)] *:[img:first-child]:rounded-t-xl *:[img:last-child]:rounded-b-xl;
+}
+
+.spartan-card-header {
+  @apply gap-1 rounded-t-xl px-(--card-spacing) [.border-b]:pb-(--card-spacing);
+}
+
+.spartan-card-title {
+  @apply text-base leading-normal font-medium group-data-[size=sm]/card:text-sm;
+}
+
+.spartan-card-description {
+  @apply text-muted-foreground text-sm;
+}
+
+.spartan-card-content {
+  @apply px-(--card-spacing);
+}
+
+.spartan-card-footer {
+  @apply rounded-b-xl px-(--card-spacing) [.border-t]:pt-(--card-spacing);
+}
