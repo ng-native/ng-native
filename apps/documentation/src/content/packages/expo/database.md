@@ -101,7 +101,7 @@ one, and once, so it is the wrong place for it twice over. `onOpen` runs on ever
 migrations and outside any transaction:
 
 ```ts
-readonly db = database('app.db', migrations, {
+const db = database('app.db', migrations, {
   onOpen: (db) => db.execAsync('PRAGMA foreign_keys = ON; PRAGMA journal_mode = WAL;'),
 });
 ```
