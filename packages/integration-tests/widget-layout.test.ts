@@ -162,6 +162,15 @@ describe('text', () => {
     });
   });
 
+  it('keeps a no-break space at either end, and one alone, where the space beside it goes', () => {
+    assert.equal(render('<ui-text> &nbsp;a&nbsp; </ui-text>').props['children'], '\u00a0a\u00a0');
+    assert.equal(render('<ui-text>&nbsp;</ui-text>').props['children'], '\u00a0');
+    assert.equal(
+      render('<ui-text>{{ props().x }}</ui-text>', { x: ' \t\u00a0a\u00a0\n' }).props['children'],
+      '\u00a0a\u00a0',
+    );
+  });
+
   it('is text, which wins over the content', () => {
     assert.deepEqual(render('<ui-text text="bound">content</ui-text>'), {
       type: 'Text',
