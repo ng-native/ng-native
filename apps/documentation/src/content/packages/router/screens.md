@@ -158,7 +158,8 @@ The same binding works on a page inside a
 [presented screen that is a stack of its own](#pushing-from-a-presented-screen): the stack gives
 the refusal of the screen on top of it to the presented screen, the one a swipe down dismisses, and
 the page hears the attempt. Bind it on the page or on the component that holds the
-`<native-stack-outlet>`, not on both.
+`<native-stack-outlet>`, not on both: a refusal the holding component binds is its own, and it is
+the one that hears `(nativeDismissCancelled)` for it.
 
 ## Presented screens have no header
 
