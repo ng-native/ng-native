@@ -4,6 +4,7 @@ import { NativeHeader } from '@ng-native/router';
 import { SpartanBadges } from './spartan-badges.ts';
 import { SpartanButtons } from './spartan-buttons.ts';
 import { SpartanCards } from './spartan-cards.ts';
+import { SpartanInputs } from './spartan-inputs.ts';
 
 /**
  * Spartan UI on the engine through `@ng-native/web-compat`, one component at a time: each section
@@ -11,7 +12,7 @@ import { SpartanCards } from './spartan-cards.ts';
  */
 @Component({
   selector: 'app-spartan-page',
-  imports: [NativeHeader, ScrollView, SpartanBadges, SpartanButtons, SpartanCards],
+  imports: [NativeHeader, ScrollView, SpartanBadges, SpartanButtons, SpartanCards, SpartanInputs],
   template: `
     <native-header title="Spartan UI" />
     <scroll-view contentInsetAdjustmentBehavior="automatic">
@@ -22,6 +23,8 @@ import { SpartanCards } from './spartan-cards.ts';
         <app-spartan-badges />
         <h2 class="text-lg font-semibold">Card</h2>
         <app-spartan-cards />
+        <h2 class="text-lg font-semibold">Input</h2>
+        <app-spartan-inputs />
       </div>
     </scroll-view>
   `,

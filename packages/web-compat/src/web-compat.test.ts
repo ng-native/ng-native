@@ -335,3 +335,96 @@ describe('@ng-native/web-compat elements', () => {
     assert.equal(screen.getByTestId('button').props['accessibilityRole'], undefined);
   });
 });
+
+@Component({
+  selector: 'x-fields',
+  template: `
+    <input
+      testID="name"
+      placeholder="Name"
+      [value]="value()"
+      (input)="typed.set($any($event.target).value)"
+      (change)="changed.set($any($event.target).value)"
+    />
+    <input testID="secret" type="password" />
+    <input testID="mail" [type]="kind()" />
+    <input testID="off" [disabled]="off()" />
+    <input testID="fixed" readonly maxlength="5" />
+    <textarea testID="long"></textarea>
+  `,
+})
+class Fields {
+  readonly value = signal('Ada');
+  readonly typed = signal('');
+  readonly changed = signal('');
+  readonly kind = signal('email');
+  readonly off = signal(true);
+}
+
+describe('@ng-native/web-compat text fields', () => {
+  const fields = () => render(Fields, { providers: [provideWebCompat()] });
+  const field = (id: string) => screen.getByTestId(id);
+
+  it('makes an input and a textarea the platform text field', async () => {
+    await fields();
+    assert.match(field('name').viewName, /TextInput$/);
+    assert.equal(field('name').props['placeholder'], 'Name');
+    assert.match(field('long').viewName, /TextInput$/);
+    assert.equal(field('long').props['multiline'], true);
+  });
+
+  it('shows the value it is given, and the one it is given next', async () => {
+    const app = await fields();
+    assert.equal(field('name').props['text'], 'Ada');
+    assert.equal(field('name').props['value'], undefined);
+    app.instance.value.set('Grace');
+    await settle();
+    assert.equal(field('name').props['text'], 'Grace');
+  });
+
+  it('reports what is typed as an input event, with the new value on its target', async () => {
+    const app = await fields();
+    await fireEvent.changeText(field('name'), 'Ad');
+    assert.equal(app.instance.typed(), 'Ad');
+    assert.equal(app.instance.changed(), '', 'not a change until the edit ends');
+    await userEvent.type(field('name'), '!');
+    assert.equal(app.instance.typed(), 'Ada!');
+    assert.equal(globals.document.querySelector('input').value, 'Ada!');
+    // Native takes the next text set from here only if it names the edit it follows.
+    assert.equal(Number(field('name').props['mostRecentEventCount']) > 1, true);
+    // `type` leaves the field, which is when a browser reports a change.
+    assert.equal(app.instance.changed(), 'Ada!');
+  });
+
+  it('reads a type as the keyboard and entry it stands for, and follows it changing', async () => {
+    const app = await fields();
+    assert.equal(field('secret').props['secureTextEntry'], true);
+    assert.equal(field('mail').props['keyboardType'], 'email-address');
+    assert.equal(field('mail').props['autoCapitalize'], 'none');
+    app.instance.kind.set('tel');
+    await settle();
+    assert.equal(field('mail').props['keyboardType'], 'phone-pad');
+    assert.equal(field('mail').props['autoCapitalize'] ?? null, null);
+    app.instance.kind.set('text');
+    await settle();
+    assert.equal(field('mail').props['keyboardType'] ?? null, null);
+  });
+
+  it('cannot be edited when disabled or read-only, and can again once it is not', async () => {
+    const app = await fields();
+    assert.equal(field('off').props['editable'], false);
+    assert.equal(field('fixed').props['editable'], false);
+    assert.equal(field('fixed').props['maxLength'], 5);
+    app.instance.off.set(false);
+    await settle();
+    assert.equal(field('off').props['editable'] ?? null, null);
+  });
+
+  it('is an unknown element again for an app that did not ask', async () => {
+    await fields();
+    cleanup();
+    await render(Fields);
+    assert.equal(field('name').viewName, 'View');
+    assert.equal(field('name').props['text'], undefined);
+  });
+});

@@ -2,6 +2,7 @@ import type { Engine, EngineNode } from '@ng-native/fabric';
 import type { RendererExtension } from '@ng-native/platform';
 import { documentOf } from './document.ts';
 import { created } from './elements.ts';
+import { FIELD_EVENTS, createField, isField, setField } from './field.ts';
 
 /** Elements whose own component already turns a touch into a press. */
 const PRESSABLES = new Set(['pressable', 'touchable-opacity']);
@@ -20,13 +21,21 @@ const PRESSABLES = new Set(['pressable', 'touchable-opacity']);
 export const webListen: RendererExtension = {
   created(node, engine) {
     if (created(node, engine)) takesPress(engine, node);
+    createField(node, engine);
   },
+  set: setField,
   listen(target, eventName, callback, engine) {
     const document = documentOf(engine);
     if (!document) return undefined;
     if (typeof target === 'string') {
       if (target !== 'body') return undefined;
       return engine.setEventListener(document.body, topLevel(eventName), callback);
+    }
+    const native = isField(target) ? FIELD_EVENTS[eventName] : undefined;
+    if (native) {
+      return engine.setEventListener(target, native, (event) =>
+        callback(dom(eventName, target, event)),
+      );
     }
     if (eventName !== 'click' || PRESSABLES.has(target.name)) return undefined;
     return onClick(engine, target, callback);
@@ -93,9 +102,13 @@ function onClick(engine: Engine, node: EngineNode, listener: Listener): () => vo
 const topLevel = (type: string) => 'top' + type.charAt(0).toUpperCase() + type.slice(1);
 
 /** The event a `click` listener is given. */
-function click(target: EngineNode, nativeEvent: unknown): object {
+const click = (target: EngineNode, nativeEvent: unknown): object =>
+  dom('click', target, nativeEvent);
+
+/** A DOM event as a listener reads one: its type, its target, and the native event behind it. */
+function dom(type: string, target: EngineNode, nativeEvent: unknown): object {
   return {
-    type: 'click',
+    type,
     target,
     currentTarget: target,
     nativeEvent,

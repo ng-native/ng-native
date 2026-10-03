@@ -110,3 +110,10 @@ test('a press on a link badge is its click', async () => {
   await userEvent.press(badge('link'));
   expect(screen.getByText('Link followed: 1')).toBeTruthy();
 });
+
+test('a badge on its own in a column is as wide as its label, not the column', async () => {
+  await mount();
+  // `w-fit`: across a column a box stretches, and this one sits at the start instead.
+  expect(badge('alone').props['alignSelf']).toBe('flex-start');
+  expect(badge('alone').props['width']).toBeUndefined();
+});

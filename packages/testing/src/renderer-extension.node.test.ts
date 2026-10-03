@@ -173,3 +173,36 @@ test('an element name registered for a while goes back to what it was', async ()
   undoProbe();
   assert.deepEqual(names(), before);
 });
+
+@Component({
+  selector: 'x-attributes',
+  template: `<div testID="box" title="a" [lang]="label()"></div>`,
+})
+class Attributes {
+  readonly label = signal('one');
+}
+
+test('an extension takes the attributes and properties it answers for', async () => {
+  const taken: [string, unknown][] = [];
+  const undo = extendRenderer({
+    set(node, name, value, engine) {
+      if (name !== 'title' && name !== 'lang') return false;
+      taken.push([name, value]);
+      engine.setProp(node, 'accessibilityHint', `${name}=${String(value)}`);
+      return true;
+    },
+  });
+  try {
+    await render(Attributes);
+    const box = screen.getByTestId('box');
+    assert.deepEqual(taken, [
+      ['title', 'a'],
+      ['lang', 'one'],
+    ]);
+    assert.equal(box.props['title'], undefined, 'not set as written');
+    assert.equal(box.props['testID'], 'box', 'the rest are');
+    assert.equal(box.props['accessibilityHint'], 'lang=one');
+  } finally {
+    undo();
+  }
+});

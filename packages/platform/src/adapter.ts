@@ -194,11 +194,19 @@ class NativeRenderer implements Renderer2 {
       }
       return;
     }
-    this.engine.setProp(el, name, value);
+    this.set(el, name, value);
   }
 
   removeAttribute(el: EngineNode, name: string): void {
-    this.engine.setProp(el, name, null);
+    this.set(el, name, null);
+  }
+
+  /** Set a prop, unless an extension takes the attribute or property it was written as. */
+  private set(el: EngineNode, name: string, value: unknown): void {
+    for (const extension of extensions) {
+      if (extension.set?.(el, name, value, this.engine)) return;
+    }
+    this.engine.setProp(el, name, value);
   }
 
   addClass(el: EngineNode, name: string): void {
@@ -256,7 +264,7 @@ class NativeRenderer implements Renderer2 {
 
   setProperty(el: EngineNode, name: string, value: unknown): void {
     if (this.engine.dev) reportUnboundFormsInput(this.engine, el, name);
-    this.engine.setProp(el, name, value);
+    this.set(el, name, value);
   }
 
   setValue(node: EngineNode, value: string): void {
@@ -295,6 +303,11 @@ export interface RendererExtension {
    * element gets what it has for its name alone, as a `button` has its role.
    */
   created?(node: EngineNode, engine: Engine): void;
+  /**
+   * Take an attribute or a property over, `null` for one being removed: answer true once it is
+   * set as the props the element's view reads, as an `<input>`'s `value` is a text field's text.
+   */
+  set?(node: EngineNode, name: string, value: unknown, engine: Engine): boolean;
 }
 
 const extensions: RendererExtension[] = [];
@@ -311,6 +324,7 @@ export function extendRenderer(extension: RendererExtension): () => void {
   const entry: RendererExtension = {
     listen: (...args) => extension.listen?.(...args),
     created: (...args) => extension.created?.(...args),
+    set: (...args) => extension.set?.(...args) ?? false,
   };
   extensions.push(entry);
   return () => {

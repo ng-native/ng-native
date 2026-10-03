@@ -1,6 +1,7 @@
 import type { Engine, EngineNode } from '@ng-native/fabric';
 import { propOf } from './attribute.ts';
 import { documentOf } from './document.ts';
+import { setField, valueOf } from './field.ts';
 import { descendants, matches } from './selector.ts';
 
 /** A node as a library holds one: an engine node with the members below on it. */
@@ -135,6 +136,16 @@ export const nodeMembers = (core: CoreNode): PropertyDescriptorMap => ({
     },
     function (value) {
       engineOf(this).setProp(this, 'nativeID', value);
+    },
+  ),
+
+  // A text field's text. Not on any other element, where a library tells the two apart by it.
+  value: get(
+    function () {
+      return valueOf(this);
+    },
+    function (value) {
+      setField(this, 'value', value, engineOf(this));
     },
   ),
 

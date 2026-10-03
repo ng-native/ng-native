@@ -7,11 +7,20 @@ import { documentOf } from './document.ts';
  */
 const ROLES: Readonly<Record<string, string>> = { button: 'button', a: 'link' };
 
+/** The platform's text field, which an `<input>` and a `<textarea>` are. */
+const TEXT_FIELD = { ios: 'TextInput', android: 'AndroidTextInput' };
+
 /** Register the elements above, and answer what takes them away again. */
 export function registerElements(): () => void {
-  const undo = Object.keys(ROLES).map((name) =>
-    registerViewName(name, 'View', undefined, { yieldsToComponents: true }),
-  );
+  const yieldsToComponents = { yieldsToComponents: true };
+  const undo = [
+    ...Object.keys(ROLES).map((name) =>
+      registerViewName(name, 'View', undefined, yieldsToComponents),
+    ),
+    ...['input', 'textarea'].map((name) =>
+      registerViewName(name, TEXT_FIELD, undefined, yieldsToComponents),
+    ),
+  ];
   return () => undo.forEach((each) => each());
 }
 
