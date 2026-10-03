@@ -20,7 +20,8 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { after, before, describe, it } from 'node:test';
 import { createServer, type ViteDevServer } from 'vite';
-import { ngNative } from '../runner/vitest.mjs';
+import { pathToFileURL } from 'node:url';
+import { ngNative, standIn } from '../runner/vitest.mjs';
 
 type Transform = (source: string, id: string) => { code: string } | string | null;
 
@@ -250,5 +251,43 @@ describe("a package a workspace library installed in a copy of its own, through 
       await resolve('@scope/exports/feature'),
       path.join(library, 'node_modules/@scope/exports/sub.js'),
     );
+  });
+});
+
+/**
+ * The stand-ins for gestures, Reanimated and worklets. The published package ships `dist` and
+ * `runner` and no `src`, so a path built from the source tree exists only in the repository.
+ */
+describe('a stand-in module', () => {
+  const names = ['gestures', 'gesture-handler', 'reanimated', 'reanimated-library'];
+  let root: string;
+  before(() => {
+    root = realpathSync(mkdtempSync(path.join(tmpdir(), 'ngn-stand-in-')));
+    mkdirSync(path.join(root, 'runner'));
+    mkdirSync(path.join(root, 'dist'));
+  });
+  after(() => rmSync(root, { recursive: true, force: true }));
+
+  it('is the compiled file where the package has no source, as published', () => {
+    const runner = pathToFileURL(path.join(root, 'runner', 'vitest.mjs'));
+    for (const name of [...names, 'worklets-library']) {
+      assert.equal(standIn(name, runner), path.join(root, 'dist', `${name}.js`));
+    }
+  });
+
+  it('is the source in the repository, and every one of them is there', () => {
+    for (const name of [...names, 'worklets-library']) {
+      const file = standIn(name);
+      assert.equal(file, path.join(import.meta.dirname, `${name}.ts`));
+      assert.doesNotThrow(() => readFileSync(file), name);
+    }
+  });
+
+  it('is a file the build emits, by the same name', () => {
+    const build = JSON.parse(
+      readFileSync(path.join(import.meta.dirname, '..', 'tsconfig.build.json'), 'utf8'),
+    ) as { include: string[]; compilerOptions: { rootDir: string; outDir: string } };
+    assert.deepEqual(build.include, ['src']);
+    assert.deepEqual(build.compilerOptions, { rootDir: 'src', outDir: 'dist' });
   });
 });

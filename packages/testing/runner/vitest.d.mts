@@ -10,3 +10,9 @@ export interface NgNativeOptions {
 
 /** Compile Angular for Vitest: AOT for decorated sources, the linker for partial-compiled packages. */
 export declare function ngNative(options?: NgNativeOptions): Plugin;
+
+/**
+ * Where a stand-in module is: the source in the repository, the compiled file in the published
+ * package. `from` is the runner's own location.
+ */
+export declare function standIn(name: string, from?: string | URL): string;

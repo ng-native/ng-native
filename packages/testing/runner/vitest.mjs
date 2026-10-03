@@ -20,7 +20,7 @@
  * The environment is Vitest's default, `node`. There is no DOM to emulate: the renderer talks to
  * a fake Fabric, and jsdom would only give Angular a `document` to misread.
  */
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { defaultClientConditions, defaultServerConditions } from 'vite';
@@ -35,19 +35,27 @@ const SETUP = fileURLToPath(new URL('./setup.mjs', import.meta.url));
  * an app imports for `withTiming` and `scheduleOnRN`. See each stand-in for what it does and does
  * not do.
  */
-const STAND_INS = {
-  '@ng-native/components/gestures': fileURLToPath(new URL('../src/gestures.ts', import.meta.url)),
-  'react-native-gesture-handler': fileURLToPath(
-    new URL('../src/gesture-handler.ts', import.meta.url),
-  ),
-  '@ng-native/components/reanimated': fileURLToPath(
-    new URL('../src/reanimated.ts', import.meta.url),
-  ),
-  'react-native-reanimated': fileURLToPath(
-    new URL('../src/reanimated-library.ts', import.meta.url),
-  ),
-  'react-native-worklets': fileURLToPath(new URL('../src/worklets-library.ts', import.meta.url)),
-};
+const STAND_INS = Object.fromEntries(
+  Object.entries({
+    '@ng-native/components/gestures': 'gestures',
+    'react-native-gesture-handler': 'gesture-handler',
+    '@ng-native/components/reanimated': 'reanimated',
+    'react-native-reanimated': 'reanimated-library',
+    'react-native-worklets': 'worklets-library',
+  }).map(([source, name]) => [source, standIn(name)]),
+);
+
+/**
+ * Where a stand-in is: the source beside this file in the repository, and the compiled file in
+ * the published package, which ships `dist` and no `src`.
+ *
+ * @param {string} name
+ * @param {string | URL} [from] the runner's own directory
+ */
+export function standIn(name, from = import.meta.url) {
+  const source = fileURLToPath(new URL(`../src/${name}.ts`, from));
+  return existsSync(source) ? source : fileURLToPath(new URL(`../dist/${name}.js`, from));
+}
 
 /**
  * ponytail: inlining is by package name, so a third-party Angular library other than these has
