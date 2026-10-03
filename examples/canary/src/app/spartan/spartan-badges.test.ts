@@ -1,6 +1,13 @@
 import { execFileSync } from 'node:child_process';
 import { provideWebCompat } from '@ng-native/web-compat';
-import { cleanup, fireEvent, render, screen, type FakeFabricNode } from '@ng-native/testing';
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  userEvent,
+  type FakeFabricNode,
+} from '@ng-native/testing';
 import { afterEach, beforeAll, expect, test, vi } from 'vitest';
 import { SpartanBadges } from './spartan-badges.ts';
 
@@ -96,4 +103,10 @@ test('a held link badge shows its hover colour, and a span badge has none', asyn
   await new Promise((resolve) => setTimeout(resolve, 200));
   expect(badge('default').props['backgroundColor']).toBe('rgb(16, 24, 40)');
   await hold('default', 'End');
+});
+
+test('a press on a link badge is its click', async () => {
+  await mount();
+  await userEvent.press(badge('link'));
+  expect(screen.getByText('Link followed: 1')).toBeTruthy();
 });

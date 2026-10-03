@@ -1,4 +1,4 @@
-import { Component } from '@angular/core';
+import { Component, signal } from '@angular/core';
 import { HlmBadgeImports } from './helm/badge';
 
 /** Spartan UI's badge, every variant, on a span and as a link. */
@@ -7,6 +7,7 @@ import { HlmBadgeImports } from './helm/badge';
   imports: [HlmBadgeImports],
   host: { class: 'spartan flex flex-col gap-3' },
   template: `
+    <p class="text-muted-foreground text-sm">Link followed: {{ followed() }}</p>
     <div class="flex flex-wrap items-center gap-2">
       <span hlmBadge testID="default">Default</span>
       <span hlmBadge testID="secondary" variant="secondary">Secondary</span>
@@ -15,7 +16,7 @@ import { HlmBadgeImports } from './helm/badge';
       <span hlmBadge testID="ghost" variant="ghost">Ghost</span>
     </div>
     <div class="flex flex-wrap items-center gap-2">
-      <a hlmBadge testID="link">A link</a>
+      <a hlmBadge testID="link" (click)="follow()">A link</a>
       <span hlmBadge testID="count" variant="secondary">8</span>
       <span hlmBadge testID="long" variant="outline">A longer label</span>
     </div>
@@ -23,4 +24,10 @@ import { HlmBadgeImports } from './helm/badge';
     <span hlmBadge testID="alone">On its own</span>
   `,
 })
-export class SpartanBadges {}
+export class SpartanBadges {
+  protected readonly followed = signal(0);
+
+  protected follow(): void {
+    this.followed.update((count) => count + 1);
+  }
+}
