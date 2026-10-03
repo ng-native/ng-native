@@ -114,12 +114,8 @@ describe('animate.leave', () => {
 });
 
 /**
- * `animate.enter`, on a `@keyframes` animation, which is what it is designed for.
- *
- * Angular adds the enter classes from a queue that runs after the render pass, so the element has
- * already been committed once in its resting style. A transition cannot survive that - it would
- * animate to the entering style and back - but an animation plays from its own frames regardless
- * of what came before, so the ordering stops mattering.
+ * `animate.enter` on a `@keyframes` animation, which plays from its own frames whatever the element
+ * was drawn as before.
  */
 describe('animate.enter', () => {
   it('plays the keyframes and holds the element until they finish', async () => {
@@ -135,8 +131,8 @@ describe('animate.enter', () => {
     const opacity = () =>
       flatten(fabric.committed).find((n) => n.props['opacity'] !== undefined)?.props['opacity'];
 
-    // The enter class arrives from Angular's animation queue after the render pass, and the first
-    // frame is what commits it.
+    // The enter class arrives from Angular's animation queue after the render pass, and is
+    // committed in the same turn.
     await time.tick(0);
     assert.equal(opacity(), 0, 'playing from the first frame');
     await time.tick(60);
@@ -148,5 +144,66 @@ describe('animate.enter', () => {
     const node = componentRef.injector.get(Engine).root.children[0]!.children[0]!;
     assert.equal(node.classes?.has('arriving'), false, 'with the enter class taken off again');
     cleanup();
+  });
+});
+
+/**
+ * `animate.enter` on a transition. On the web the element is inserted with the enter class on it,
+ * so its first frame is the enter style, and Angular takes the class off a frame later, which is
+ * the one change the transition runs for. Here Angular adds the class after the render pass that
+ * created the element, so the class has to reach the element's first frame without being read as
+ * a change from a resting style nobody saw.
+ */
+describe('animate.enter on a transition', () => {
+  it('starts in the enter style and eases once to the resting one', async () => {
+    const time = clock();
+    const { fabric, instance, componentRef } = await render(
+      mod['FadingIn'] as Type<{ shown: { set(v: boolean): void } }>,
+      { now: time.now },
+    );
+    const engine = componentRef.injector.get(Engine);
+    time.use(engine);
+    const opacity = () =>
+      flatten(fabric.committed).find((n) => n.props['opacity'] !== undefined)?.props['opacity'];
+    const seen: unknown[] = [];
+    const commit = fabric.completeRoot.bind(fabric);
+    fabric.completeRoot = (...args: Parameters<typeof commit>) => {
+      commit(...args);
+      seen.push(opacity());
+    };
+
+    try {
+      instance.shown.set(true);
+      await settle();
+      // Native mounts once a turn is over, its microtasks included, so the last commit of the
+      // turn is what the first frame draws.
+      assert.equal(seen.at(-1), 0, 'the enter style is what the first frame draws');
+      seen.length = 0;
+
+      // Angular takes the class off in the next frame, having found nothing running.
+      const node = engine.root.children[0]!.children[0]!;
+      for (let waited = 0; node.classes?.has('entering') && waited < 100; waited++) {
+        await new Promise((resolve) => setTimeout(resolve, 10));
+      }
+      assert.equal(node.classes?.has('entering'), false, 'the enter class is taken off');
+      await time.tick(0);
+      assert.equal(opacity(), 0, 'and the fade starts from the enter style');
+
+      await time.tick(150);
+      assert.equal(opacity(), 0.5, 'halfway through the one fade');
+      await time.tick(150);
+      assert.equal(opacity(), 1);
+      const values = seen.filter((value): value is number => typeof value === 'number');
+      assert.deepEqual(
+        values,
+        [...values].sort((a, b) => a - b),
+        'it only ever rises',
+      );
+    } finally {
+      // Run out whatever is still easing, or the frame pump never stops.
+      await time.tick(1e9);
+      await time.tick(1e9);
+      cleanup();
+    }
   });
 });

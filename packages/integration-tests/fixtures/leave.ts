@@ -33,9 +33,7 @@ export class Leaving {
 }
 
 /**
- * `animate.enter` with a class carrying a `@keyframes` animation, which is what the instruction is
- * designed for. An animation plays from its own frames rather than from what was on screen, so it
- * does not matter that Angular adds the class after the element has already been committed once.
+ * `animate.enter` with a class carrying a `@keyframes` animation, which plays from its own frames.
  */
 @Component({
   selector: 'x-entering',
@@ -67,5 +65,34 @@ export class Leaving {
   `,
 })
 export class Entering {
+  readonly shown = signal(false);
+}
+
+/**
+ * `animate.enter` with a class whose resting style has the transition, as a fade-in is written
+ * on the web: the element starts in the enter style and eases to its own.
+ */
+@Component({
+  selector: 'x-fading-in',
+  imports: [Text, View],
+  template: `
+    @if (shown()) {
+      <view class="panel" animate.enter="entering">
+        <text>panel</text>
+      </view>
+    }
+  `,
+  styles: `
+    .panel {
+      opacity: 1;
+      transition: opacity 300ms linear;
+    }
+
+    .panel.entering {
+      opacity: 0;
+    }
+  `,
+})
+export class FadingIn {
   readonly shown = signal(false);
 }

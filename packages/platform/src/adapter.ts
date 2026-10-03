@@ -471,6 +471,27 @@ export class NativeRendererFactory implements RendererFactory2 {
   };
 
   private rendering = false;
+  /** How many commits there had been before the first one of this turn, while one is unsettled. */
+  private unseenSince: number | null = null;
+
+  /**
+   * Commit what the rest of this turn changes before a frame is drawn, rather than a frame later.
+   *
+   * Angular's `animate.enter` adds its class from a queue that runs after the render pass, so the
+   * element has been committed once without it. Committed again in the same turn, the class is on
+   * the view's first frame, and the engine starts the view there instead of easing to it.
+   */
+  private settleUnseen(before: number): void {
+    if (this.unseenSince !== null) return;
+    this.unseenSince = before;
+    queueMicrotask(() => {
+      const since = this.unseenSince!;
+      this.unseenSince = null;
+      if (!this.engine.pending) return;
+      this.engine.commitUnseen(since);
+      if (this.engine.animating) this.schedule();
+    });
+  }
 
   begin(): void {
     this.rendering = true;
@@ -480,7 +501,8 @@ export class NativeRendererFactory implements RendererFactory2 {
   /** The single commit point: at most one commit per change-detection pass. */
   end(): void {
     this.rendering = false;
-    this.engine.commit();
+    const before = this.engine.stats.commits;
+    if (this.engine.commit()) this.settleUnseen(before);
 
     // A commit is what starts a transition, because it is where the cascade is recomputed.
     if (this.engine.animating) this.schedule();

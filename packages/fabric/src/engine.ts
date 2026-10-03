@@ -476,6 +476,8 @@ export interface EngineNode extends HostNode {
    * from. Reused while the parts are the same objects, so an unrelated change does not re-send it.
    */
   composedTransform?: { parts: readonly unknown[]; value: unknown[] };
+  /** The commit that created this node's view, by its number: see `Engine.commitUnseen`. */
+  bornIn?: number;
   /**
    * Set by the component that owns this element. A host primitive that reaches a commit without it
    * was written in a template that never imported the component, which is reported in dev.
@@ -2589,6 +2591,28 @@ export class Engine implements HostEngine {
     return true;
   }
 
+  /** The first commit whose new views have not been drawn yet, while `commitUnseen` runs. */
+  private unseen = Infinity;
+
+  /**
+   * A commit for what changed in the same turn as earlier commits, before a frame was drawn.
+   * `since` is how many commits there had been before the first of them (`stats.commits`).
+   *
+   * A view those commits created has not been seen in the style they gave it, so what this one
+   * gives it is where it starts, and no transition runs toward it. That is what a browser
+   * does with a class added to an element in the turn that inserted it, and what `animate.enter`
+   * is built on: Angular adds the enter class after the render pass that created the element, and
+   * takes it off a frame later, which is the one change the transition is for.
+   */
+  commitUnseen(since: number): boolean {
+    this.unseen = since;
+    try {
+      return this.commit();
+    } finally {
+      this.unseen = Infinity;
+    }
+  }
+
   /** Nodes that asked for `@keyframes` this commit had not met, by the name they asked for. */
   private readonly awaitingKeyframes = new Map<EngineNode, string>();
 
@@ -3215,6 +3239,8 @@ export class Engine implements HostEngine {
   }
 
   private transitioned(node: EngineNode, props: Record<string, unknown>): Record<string, unknown> {
+    // Nobody saw what the last commit gave a view it created, so this is where the view starts.
+    if (node.bornIn! >= this.unseen) node.transitions = undefined;
     const spec = transitionSpec(props);
     if (!spec && !node.transitions) return props;
 
@@ -3754,6 +3780,7 @@ export class Engine implements HostEngine {
     const handle = this.fabric.createNode(tag, viewName, this.rootTag, this.processed(props), node);
     for (const child of childHandles) this.fabric.appendChild(handle, child);
     node.committed = { handle, tag, props, childHandles, viewName };
+    node.bornIn = this.stats.commits;
     this.clearFlags(node);
     return handle;
   }

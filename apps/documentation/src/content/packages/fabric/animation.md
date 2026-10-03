@@ -23,13 +23,18 @@ one in a stylesheet, and one bound straight into a style is looked up by name.
 
 ## `animate.enter` and `animate.leave`
 
-These are built on transitions specifically, not `@keyframes`: they add and remove a class and wait
-for the `transitionend` the class change starts, using `getAnimations()` on the element to know how
-long to wait. The engine only ever emits `transitionstart`/`transitionend` for a value the cascade
-recomputed - a `@keyframes` animation playing on a node fires no equivalent JavaScript event at all,
-it is only visible through `getAnimations()`'s own timing. Style an `animate.enter`/`animate.leave`
-target with `transition`, not `animation`, or nothing will tell Angular when the effect has
-finished.
+They add and remove a class, and wait for what the class starts, using `getAnimations()` on the
+element to know how long to wait.
+
+An entering element starts in the style its enter class gives it. Angular adds the class in the
+turn that creates the element and takes it off a frame later, and that is the one change a
+`transition` on the element's resting style runs for: `.panel { opacity: 1; transition: opacity
+200ms }` with `.panel.entering { opacity: 0 }` fades in once. A class added to any element in the
+turn that created it is its starting style in the same way, as in a browser.
+
+The engine only emits `transitionstart`/`transitionend` for a value the cascade recomputed. A
+`@keyframes` animation on the enter or leave class plays, and Angular reads how long it lasts from
+`getAnimations()`.
 
 In development, [`mount()`](/packages/platform/bootstrapping) checks that Angular was built with
 support for these enabled - that depends on a polyfill [Metro](/packages/metro/configuration)
