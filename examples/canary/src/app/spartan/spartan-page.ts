@@ -1,6 +1,7 @@
 import { Component } from '@angular/core';
 import { ScrollView } from '@ng-native/components';
 import { NativeHeader } from '@ng-native/router';
+import { SpartanBadges } from './spartan-badges.ts';
 import { SpartanButtons } from './spartan-buttons.ts';
 
 /**
@@ -9,13 +10,15 @@ import { SpartanButtons } from './spartan-buttons.ts';
  */
 @Component({
   selector: 'app-spartan-page',
-  imports: [NativeHeader, ScrollView, SpartanButtons],
+  imports: [NativeHeader, ScrollView, SpartanBadges, SpartanButtons],
   template: `
     <native-header title="Spartan UI" />
     <scroll-view contentInsetAdjustmentBehavior="automatic">
       <div class="spartan bg-background text-foreground flex flex-col gap-6 p-4">
         <h2 class="text-lg font-semibold">Button</h2>
         <app-spartan-buttons />
+        <h2 class="text-lg font-semibold">Badge</h2>
+        <app-spartan-badges />
       </div>
     </scroll-view>
   `,

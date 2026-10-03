@@ -15,10 +15,13 @@ export function registerElements(): () => void {
   return () => undo.forEach((each) => each());
 }
 
-/** Give an element what it has for its name alone, in an app that asked for this package. */
-export function created(node: EngineNode, engine: Engine): void {
+/**
+ * Give an element what it has for its name alone, in an app that asked for this package.
+ * Answers whether it is one a press is aimed at.
+ */
+export function created(node: EngineNode, engine: Engine): boolean {
   const role = ROLES[node.name];
-  if (!role || !documentOf(engine)) return;
+  if (!role || !documentOf(engine)) return false;
   // Props a binding can replace, as it can any other: `role="tab"` on a button is a tab.
   engine.setProp(node, 'accessibilityRole', role);
   engine.setProp(node, 'accessible', true);
@@ -29,4 +32,5 @@ export function created(node: EngineNode, engine: Engine): void {
   // element never matches; track every element with a hover rule if a library needs it.
   engine.setEventListener(node, 'topPointerEnter', () => engine.setProp(node, 'data-hover', true));
   engine.setEventListener(node, 'topPointerLeave', () => engine.setProp(node, 'data-hover', null));
+  return true;
 }

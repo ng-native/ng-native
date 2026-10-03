@@ -18,7 +18,9 @@ const PRESSABLES = new Set(['pressable', 'touchable-opacity']);
  * A pressable's own hit testing is the upgrade.
  */
 export const webListen: RendererExtension = {
-  created,
+  created(node, engine) {
+    if (created(node, engine)) takesPress(engine, node);
+  },
   listen(target, eventName, callback, engine) {
     const document = documentOf(engine);
     if (!document) return undefined;
@@ -42,8 +44,11 @@ function disabled(node: EngineNode): boolean {
 /** Each node's click listeners, with what stops its responder: a node has one responder. */
 const clicks = new WeakMap<EngineNode, { listeners: Set<Listener>; stop: () => void }>();
 
-/** Add a click listener to a node, which takes the touch for as long as it has one. */
-function onClick(engine: Engine, node: EngineNode, listener: Listener): () => void {
+/** The node's click listeners, behind a responder it gets the first time it is asked for. */
+function clicksOf(
+  engine: Engine,
+  node: EngineNode,
+): { listeners: Set<Listener>; stop: () => void } {
   let entry = clicks.get(node);
   if (!entry) {
     const listeners = new Set<Listener>();
@@ -58,11 +63,28 @@ function onClick(engine: Engine, node: EngineNode, listener: Listener): () => vo
     });
     clicks.set(node, (entry = { listeners, stop }));
   }
+  return entry;
+}
+
+/**
+ * Have a node take the touch whether or not anything listens for its click, as a button or a
+ * link does in a browser: it is `:active` while held, which is where its pressed style comes from.
+ */
+export function takesPress(engine: Engine, node: EngineNode): void {
+  held.add(clicksOf(engine, node));
+}
+
+/** The entries `takesPress` made, which keep their responder with no listener left. */
+const held = new WeakSet<object>();
+
+/** Add a click listener to a node, which takes the touch for as long as it has one. */
+function onClick(engine: Engine, node: EngineNode, listener: Listener): () => void {
+  const entry = clicksOf(engine, node);
   const { listeners, stop } = entry;
   listeners.add(listener);
   return () => {
     listeners.delete(listener);
-    if (listeners.size || clicks.get(node) !== entry) return;
+    if (listeners.size || held.has(entry) || clicks.get(node) !== entry) return;
     clicks.delete(node);
     stop();
   };
