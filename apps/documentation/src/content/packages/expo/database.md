@@ -93,6 +93,22 @@ rejection arrives, so nothing is left holding the file. The failed open is then 
 call to `ready()` opens the database and tries the outstanding migrations again. `close()` after a
 failed open resolves without doing anything, since there is no connection left to release.
 
+## Foreign keys and other connection settings
+
+SQLite enforces a foreign key only on a connection that has asked it to, with
+`PRAGMA foreign_keys = ON`, and ignores that statement inside a transaction. A migration runs in
+one, and once, so it is the wrong place for it twice over. `onOpen` runs on every open, before the
+migrations and outside any transaction:
+
+```ts
+readonly db = database('app.db', migrations, {
+  onOpen: (db) => db.execAsync('PRAGMA foreign_keys = ON; PRAGMA journal_mode = WAL;'),
+});
+```
+
+Without it a schema's `REFERENCES ... ON DELETE CASCADE` is declared and not enforced, with no
+error. If `onOpen` throws, the connection is closed and `ready()` rejects with its error.
+
 ## Closing
 
 `close()` releases the database connection, and resolves even if opening it had failed. It does

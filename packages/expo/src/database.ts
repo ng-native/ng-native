@@ -35,14 +35,29 @@ export interface Migration {
   readonly up: (database: NativeDatabase) => Promise<void>;
 }
 
+export interface DatabaseOptions<T extends NativeDatabase = NativeDatabase> {
+  /**
+   * Run on every open, before the migrations and outside any transaction: where the settings of a
+   * connection go. `PRAGMA foreign_keys = ON` belongs here and nowhere else, since SQLite ignores
+   * it inside a transaction, which a migration is, and forgets it when the connection closes.
+   */
+  readonly onOpen?: (database: T) => Promise<void> | void;
+}
+
 export class Database<T extends NativeDatabase> {
   private readonly open: () => Promise<T>;
   private readonly migrations: readonly Migration[];
+  private readonly onOpen: DatabaseOptions<T>['onOpen'];
   private opening: Promise<T> | null = null;
 
-  constructor(open: () => Promise<T>, migrations: readonly Migration[] = []) {
+  constructor(
+    open: () => Promise<T>,
+    migrations: readonly Migration[] = [],
+    options: DatabaseOptions<T> = {},
+  ) {
     this.open = open;
     this.migrations = [...migrations].sort((a, b) => a.to - b.to);
+    this.onOpen = options.onOpen;
   }
 
   /**
@@ -77,10 +92,11 @@ export class Database<T extends NativeDatabase> {
     await database?.closeAsync();
   }
 
-  /** Open and migrate, closing the connection again if the migration fails. */
+  /** Open, set the connection up and migrate, closing it again if either fails. */
   private async start(): Promise<T> {
     const database = await this.open();
     try {
+      await this.onOpen?.(database);
       await this.migrate(database);
     } catch (error) {
       // The migration's own error is the one worth reporting; a failure to close after it is not.
@@ -116,14 +132,22 @@ export class Database<T extends NativeDatabase> {
 }
 
 /** A database, opened on first use and migrated before the first query sees it. */
-export function database(name: string, migrations: readonly Migration[] = []) {
-  return new Database<import('expo-sqlite').SQLiteDatabase>(async () => {
-    const expo = expoModule(
-      'expo-sqlite',
-      () => require('expo-sqlite') as typeof import('expo-sqlite'),
-      ['ios', 'android', 'web'],
-    );
-    if (!expo) throw new Error('[angular-native] expo-sqlite is not installed');
-    return expo.openDatabaseAsync(name);
-  }, migrations);
+export function database(
+  name: string,
+  migrations: readonly Migration[] = [],
+  options: DatabaseOptions<import('expo-sqlite').SQLiteDatabase> = {},
+) {
+  return new Database<import('expo-sqlite').SQLiteDatabase>(
+    async () => {
+      const expo = expoModule(
+        'expo-sqlite',
+        () => require('expo-sqlite') as typeof import('expo-sqlite'),
+        ['ios', 'android', 'web'],
+      );
+      if (!expo) throw new Error('[angular-native] expo-sqlite is not installed');
+      return expo.openDatabaseAsync(name);
+    },
+    migrations,
+    options,
+  );
 }

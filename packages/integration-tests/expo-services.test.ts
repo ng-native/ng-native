@@ -101,6 +101,30 @@ describe('a database', () => {
     ]);
   });
 
+  it('runs onOpen on every open, before the migrations and outside their transactions', async () => {
+    // `PRAGMA foreign_keys` does nothing inside a transaction, and is per connection: it has to
+    // be said each time the database is opened, before anything else is.
+    const db = database();
+    const onOpen = async (opened: NativeDatabase) => opened.execAsync('PRAGMA foreign_keys = ON');
+    const service = new Database(async () => db, [migration(1)], { onOpen });
+    await service.ready();
+    assert.deepEqual(db.log.slice(0, 2), ['PRAGMA foreign_keys = ON', 'begin']);
+
+    await service.close();
+    db.log.length = 0;
+    await service.ready();
+    assert.deepEqual(db.log, ['PRAGMA foreign_keys = ON'], 'again, though no migration is due');
+  });
+
+  it('closes the connection and fails ready() when onOpen throws', async () => {
+    const db = database();
+    const onOpen = async () => {
+      throw new Error('no such pragma');
+    };
+    await assert.rejects(new Database(async () => db, [], { onOpen }).ready(), /no such pragma/);
+    assert.deepEqual(db.log, ['close']);
+  });
+
   it('leaves the version where it was when a migration fails, so the next launch retries it', async () => {
     // The version bump is inside the migration's transaction, so a half-run migration can never
     // be recorded as done.
