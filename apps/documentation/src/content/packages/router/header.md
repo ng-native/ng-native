@@ -160,21 +160,21 @@ providers: [
 Binding `backgroundColor`, `color` or `titleColor` on a particular `<native-header>` still wins
 over the palette - the token only fills in what a call site left unset.
 
-### The system bar on iOS 26
+### Liquid Glass on iOS 26
 
 A bar with a background is opaque: the content stops at it, with a hairline under it. Since iOS 26
 the system's own navigation bar is clear instead, with the content scrolling under it and blurring
 out and the buttons floating over it. `withHeaderDefaults` asks for that bar for the whole app:
 
 ```ts
-provideNativeRouter(routes, withHeaderDefaults({ systemBar: true }));
+provideNativeRouter(routes, withHeaderDefaults({ liquidGlass: true }));
 ```
 
 Every `<native-header>` with no background of its own is then clear, translucent and unlined on iOS
-26 and later. One header asks for it, or refuses it, with its own `systemBar` input, which wins over
-the app's: `<native-header title="Orders" [systemBar]="true" />` on the one page built for it, or
-`[systemBar]="false"` on a page that is not. Before iOS 26 and on Android it is the neutral bar
-above, and a header that binds `backgroundColor`, or defaults that give one, keep it.
+26 and later. One header asks for it, or refuses it, with its own `liquidGlass` input, which wins
+over the app's: `<native-header title="Orders" [liquidGlass]="true" />` on the one page built for
+it, or `[liquidGlass]="false"` on a page that is not. Before iOS 26 and on Android it is the neutral
+bar above, and a header that binds `backgroundColor`, or defaults that give one, keep it.
 
 The bar is over the page rather than above it, so the page is built for that: its scroll view is
 the page's body and takes `contentInsetAdjustmentBehavior="automatic"`, which starts the content

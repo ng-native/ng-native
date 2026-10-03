@@ -77,7 +77,7 @@ describe('a header nobody gave a colour', () => {
   });
 });
 
-describe('a header in an app that asks for the system bar', () => {
+describe('a header in an app that asks for the Liquid Glass bar', () => {
   let mod: Record<string, unknown>;
 
   before(async () => {
@@ -99,7 +99,7 @@ describe('a header in an app that asks for the system bar', () => {
   };
 
   it('is clear, over the content, with no line under it, on iOS 26', async () => {
-    const props = await bar('HeaderDefault', 26, { systemBar: true });
+    const props = await bar('HeaderDefault', 26, { liquidGlass: true });
     assert.equal(props['backgroundColor'], 'transparent');
     assert.equal(props['translucent'], true);
     assert.equal(props['hideShadow'], true);
@@ -107,7 +107,7 @@ describe('a header in an app that asks for the system bar', () => {
   });
 
   it('is the neutral bar where nobody asked, on iOS 26 too', async () => {
-    for (const defaults of [null, {}, { systemBar: false }]) {
+    for (const defaults of [null, {}, { liquidGlass: false }]) {
       const props = await bar('HeaderDefault', 26, defaults);
       assert.equal(props['backgroundColor'], 'rgb(255, 255, 255)');
       assert.equal(props['translucent'], undefined);
@@ -116,13 +116,13 @@ describe('a header in an app that asks for the system bar', () => {
   });
 
   it('is the neutral bar before iOS 26, and on Android', async () => {
-    const before26 = await bar('HeaderDefault', 18, { systemBar: true });
+    const before26 = await bar('HeaderDefault', 18, { liquidGlass: true });
     assert.equal(before26['backgroundColor'], 'rgb(255, 255, 255)');
     assert.equal(before26['translucent'], undefined);
 
     registerPlatformComponents('android');
     try {
-      const android = await bar('HeaderDefault', 36, { systemBar: true });
+      const android = await bar('HeaderDefault', 36, { liquidGlass: true });
       assert.equal(android['backgroundColor'], 'rgb(255, 255, 255)');
       assert.equal(android['translucent'], undefined);
     } finally {
@@ -131,30 +131,30 @@ describe('a header in an app that asks for the system bar', () => {
   });
 
   it('stays the bar a call site or the defaults gave a background', async () => {
-    const bound = await bar('HeaderBound', 26, { systemBar: true });
+    const bound = await bar('HeaderBound', 26, { liquidGlass: true });
     assert.equal(bound['backgroundColor'], '#ff0000');
     assert.equal(bound['translucent'], undefined);
     assert.equal(bound['hideShadow'], undefined);
 
-    const coloured = await bar('HeaderDefault', 26, { systemBar: true, backgroundColor: '#0f0' });
+    const coloured = await bar('HeaderDefault', 26, { liquidGlass: true, backgroundColor: '#0f0' });
     assert.equal(coloured['backgroundColor'], '#0f0');
     assert.equal(coloured['translucent'], undefined);
   });
 
   it('is asked for by one header, where the app did not', async () => {
-    const props = await bar('HeaderSystem', 26, null);
+    const props = await bar('HeaderGlass', 26, null);
     assert.equal(props['backgroundColor'], 'transparent');
     assert.equal(props['translucent'], true);
     assert.equal(props['hideShadow'], true);
-    assert.equal(props['systemBar'], undefined, 'and is not a prop of the native bar');
+    assert.equal(props['liquidGlass'], undefined, 'and is not a prop of the native bar');
   });
 
   it('is refused by one header, where the app asked', async () => {
-    await render(mod['HeaderSystem'] as Type<unknown>, {
-      inputs: { system: false },
+    await render(mod['HeaderGlass'] as Type<unknown>, {
+      inputs: { glass: false },
       providers: [
         { provide: OS_VERSION, useValue: 26 },
-        { provide: NATIVE_HEADER_DEFAULTS, useValue: signal({ systemBar: true }) },
+        { provide: NATIVE_HEADER_DEFAULTS, useValue: signal({ liquidGlass: true }) },
       ],
     });
     const props = screen.getByTestId('bar').props;
@@ -164,7 +164,7 @@ describe('a header in an app that asks for the system bar', () => {
   });
 
   it('gives way to a call site that turns translucency off', async () => {
-    const props = await bar('HeaderLargeOpaque', 26, { systemBar: true });
+    const props = await bar('HeaderLargeOpaque', 26, { liquidGlass: true });
     assert.equal(props['translucent'], false);
   });
 });

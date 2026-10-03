@@ -81,8 +81,9 @@ export type HeaderInterfaceStyle = 'unspecified' | 'light' | 'dark';
     '[color]': 'resolvedColor()',
     '[blurEffect]': 'blurEffect() ?? defaults().blurEffect',
     '[hidden]': 'hidden()',
-    '[hideShadow]': 'hideShadow() ?? defaults().hideShadow ?? isSystemBar()',
-    '[translucent]': 'translucent() ?? defaults().translucent ?? iosLargeTitle() ?? isSystemBar()',
+    '[hideShadow]': 'hideShadow() ?? defaults().hideShadow ?? isLiquidGlass()',
+    '[translucent]':
+      'translucent() ?? defaults().translucent ?? iosLargeTitle() ?? isLiquidGlass()',
     '[direction]': 'direction()',
     '[topInsetEnabled]': 'topInsetEnabled()',
     '[userInterfaceStyle]': 'userInterfaceStyle() ?? defaults().userInterfaceStyle',
@@ -132,14 +133,14 @@ export class NativeHeader {
   private readonly glass = nativePlatform() === 'ios' && (inject(OS_VERSION) ?? 0) >= 26;
 
   /**
-   * Whether the bar is the system's own, which `systemBar` asks for here or through
+   * Whether the bar is iOS 26's Liquid Glass one, which `liquidGlass` asks for here or through
    * `withHeaderDefaults`: clear, over the content, with no line under it, where the system blurs
    * what scrolls beneath and floats the buttons. Only on iOS 26 and later, and only while nothing
    * gave the bar a background of its own.
    */
-  protected readonly isSystemBar = computed(() =>
+  protected readonly isLiquidGlass = computed(() =>
     this.glass &&
-    (this.systemBar() ?? this.defaults().systemBar) &&
+    (this.liquidGlass() ?? this.defaults().liquidGlass) &&
     this.backgroundColor() === undefined &&
     this.defaults().backgroundColor === undefined
       ? true
@@ -150,7 +151,7 @@ export class NativeHeader {
     () =>
       this.backgroundColor() ??
       this.defaults().backgroundColor ??
-      (this.isSystemBar() ? 'transparent' : this.colours().background),
+      (this.isLiquidGlass() ? 'transparent' : this.colours().background),
   );
   protected readonly resolvedColor = computed(
     () => this.color() ?? this.defaults().color ?? this.colours().foreground,
@@ -189,14 +190,14 @@ export class NativeHeader {
 
   // --- the bar itself ------------------------------------------------------------------
 
-  /** The bar's background. Ignored unless `blurEffect` is `none`. */
   /**
-   * On iOS 26 and later, the system's own navigation bar for this header, where it has no
+   * On iOS 26 and later, the Liquid Glass navigation bar for this header, where it has no
    * background of its own: clear and unlined, with the content scrolling under it. `false` keeps
-   * the neutral bar on a page of an app whose `withHeaderDefaults` asks for the system one. The
+   * the neutral bar on a page of an app whose `withHeaderDefaults` asks for the glass one. The
    * bar is over the page, so its scroll view takes `contentInsetAdjustmentBehavior="automatic"`.
    */
-  readonly systemBar = input(undefined, { transform: optionalBoolean });
+  readonly liquidGlass = input(undefined, { transform: optionalBoolean });
+  /** The bar's background. Ignored unless `blurEffect` is `none`. */
   readonly backgroundColor = input<string | number>();
   /** Tint colour: the back chevron, and any header item that does not set its own. */
   readonly color = input<string | number>();

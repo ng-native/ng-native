@@ -21,12 +21,12 @@ export type SchemeDefaults<T> = T | ((scheme: Scheme) => T);
 /** The appearance inputs of `<native-header>` that make sense for a whole app. */
 export interface HeaderDefaults {
   /**
-   * On iOS 26 and later, the system's own navigation bar for every header that has no background
+   * On iOS 26 and later, the Liquid Glass navigation bar for every header that has no background
    * of its own: clear and unlined, with the content scrolling under it and blurring out. The bar
    * is then over the page, so the page's scroll view takes
    * `contentInsetAdjustmentBehavior="automatic"` to start below it. Elsewhere it does nothing.
    */
-  readonly systemBar?: boolean;
+  readonly liquidGlass?: boolean;
   readonly userInterfaceStyle?: HeaderInterfaceStyle;
   readonly backgroundColor?: string | number;
   readonly color?: string | number;
