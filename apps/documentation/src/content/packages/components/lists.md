@@ -133,6 +133,109 @@ over its trailing edge once its height is known:
 </virtual-list>
 ```
 
+### Row actions
+
+A row that swipes aside to show an action is a pan on the row, built on the
+[gesture](/packages/components/gestures) and [worklet](/packages/components/animation) entry
+points. The action sits behind the row's content, and the content slides over it:
+
+```ts
+import { Component, effect, input, output } from '@angular/core';
+import { Gesture } from 'react-native-gesture-handler';
+import { withTiming } from 'react-native-reanimated';
+import { Pressable, Text, View } from '@ng-native/components';
+import { NativeGesture } from '@ng-native/components/gestures';
+import { WorkletStyle, sharedValue, workletStyle } from '@ng-native/components/reanimated';
+
+/** How far the row opens: the width of the action behind it. */
+const OPEN = 88;
+
+@Component({
+  selector: 'app-swipe-row',
+  imports: [NativeGesture, Pressable, Text, View, WorkletStyle],
+  template: `
+    <pressable class="action" accessibilityRole="button" (press)="remove.emit()">
+      <text>Delete</text>
+    </pressable>
+    <view class="front" [gesture]="swipe" [workletStyle]="slide"><ng-content /></view>
+  `,
+  styles: `
+    .action {
+      position: absolute;
+      top: 0;
+      right: 0;
+      bottom: 0;
+      width: 88px;
+      align-items: center;
+      justify-content: center;
+      background-color: #d92d20;
+    }
+    .front {
+      background-color: #ffffff;
+    }
+  `,
+})
+export class SwipeRow {
+  /** What the row shows, so a row recycled for another item closes. */
+  readonly item = input.required<unknown>();
+  readonly remove = output<void>();
+
+  private readonly x = sharedValue(0);
+  protected readonly slide;
+  protected readonly swipe;
+
+  constructor() {
+    // Locals, since a worklet cannot close over `this`.
+    const x = this.x;
+    const from = sharedValue(0);
+    this.slide = workletStyle([x], (offset) => {
+      'worklet';
+      return { transform: [{ translateX: offset.value }] };
+    });
+    this.swipe = Gesture.Pan()
+      .activeOffsetX([-12, 12]) // a sideways drag is the row's
+      .failOffsetY([-10, 10]) // a vertical one fails it, and the list scrolls
+      .onBegin(() => {
+        'worklet';
+        from.value = x.value;
+      })
+      .onUpdate((event) => {
+        'worklet';
+        x.value = Math.min(0, Math.max(-OPEN, from.value + event.translationX));
+      })
+      .onEnd(() => {
+        'worklet';
+        x.value = withTiming(x.value < -OPEN / 2 ? -OPEN : 0);
+      });
+    // The list recycles a row's views for another item: close before it shows the next one.
+    effect(() => {
+      this.item();
+      x.value = 0;
+    });
+  }
+}
+```
+
+```html
+@for (row of list.window(); track row.slot) {
+<view [virtualListRow]="row">
+  <app-swipe-row [item]="row.item" (remove)="remove(row.item)">
+    <text>{{ row.item.label }}</text>
+  </app-swipe-row>
+</view>
+}
+```
+
+Three things make it sit well in a list. `failOffsetY` fails the pan on a vertical drag, so the
+list keeps its scroll. The content has a background, or the action shows through it. And the
+`item` input closes the row when its slot is recycled: without it, a row left open scrolls out and
+the next item to take its views arrives already open, since a recycled row keeps its fields.
+
+A long press for a menu is `(longPress)` on the row's `<pressable>` with
+[`Dialogs.choose()`](/packages/device/dialogs). The system's own context menu, with a preview, is
+[`UiContextMenu`](/packages/expo/expo-ui#a-context-menu), whose trigger is SwiftUI content rather
+than a row of the app's own.
+
 ### Padding and gaps
 
 `contentPadding` puts space around the rows inside the scrolling content, as `FlatList`'s

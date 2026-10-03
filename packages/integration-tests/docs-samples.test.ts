@@ -102,7 +102,9 @@ function writeFixtures(samples: DocSample[]): Map<string, DocSample> {
  */
 function writeStylesheetDeclaration(): string {
   const file = path.join(OUT_DIR, 'stylesheets.d.ts');
-  writeFileSync(file, "declare module '*.css';\n");
+  // Reanimated is a peer an app installs, not a dependency here: a sample that animates with it
+  // is checked for everything but what the library returns.
+  writeFileSync(file, "declare module '*.css';\ndeclare module 'react-native-reanimated';\n");
   return file;
 }
 
