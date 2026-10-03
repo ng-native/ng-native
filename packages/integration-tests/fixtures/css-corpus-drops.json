@@ -695,7 +695,7 @@
   },
   "pico": {
     "rules": 437,
-    "dropped": 311,
+    "dropped": 310,
     "emitted": [
       "$animation",
       "$animationDelay",
@@ -964,8 +964,7 @@
         "vertical-align: 'baseline' has no native equivalent (auto, top, bottom, middle do)": 4
       },
       "width": {
-        "'width: inherit' is a CSS-wide keyword, which this cascade does not implement. Write the value it stands for.": 1,
-        "width: expected a length, and 'fit-content' is not one": 1
+        "'width: inherit' is a CSS-wide keyword, which this cascade does not implement. Write the value it stands for.": 1
       }
     }
   },
