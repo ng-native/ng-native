@@ -29,9 +29,9 @@
  * those events can. `press:` and `hovered:` say one half each, for code that would rather be
  * precise than portable.
  */
-@custom-variant hover (&:active, &[data-hover]);
+@custom-variant hover (&:active, &[data-hover]:where(:not([data-hover="false"])));
 @custom-variant press (&:active);
-@custom-variant hovered (&[data-hover]);
+@custom-variant hovered (&[data-hover]:where(:not([data-hover="false"])));
 
 /*
  * `focus-visible:` is `focus:`, and both match the state attribute as well as the pseudo-class.
@@ -46,8 +46,8 @@
  * on a view wrapping it, and that view can only know it is focused because the primitive told it.
  * The same idea as `hovered:` matching `data-hover`.
  */
-@custom-variant focus-visible (&:focus, &[data-focus]);
-@custom-variant focus (&:focus, &[data-focus]);
+@custom-variant focus-visible (&:focus, &[data-focus]:where(:not([data-focus="false"])));
+@custom-variant focus (&:focus, &[data-focus]:where(:not([data-focus="false"])));
 
 /*
  * `font-mono`, which named a font neither platform has.

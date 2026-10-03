@@ -30,24 +30,31 @@ const firstFamily = (value) =>
     .trim();
 
 /**
+ * A state attribute that is set, and not to `"false"`: an Angular attribute binding to a boolean
+ * writes the string, and a state that is off is not a state. In `:where()`, so the variant weighs
+ * what one attribute does.
+ */
+const on = (attribute) => `[${attribute}]:where(:not([${attribute}="false"]))`;
+
+/**
  * The states each variant reads. On native, `hover:` is the pressed state, or a real hover where
  * there is a pointer, and `focus-visible:` is `focus:`. A browser has `:hover` and `:focus-visible`
  * for real, so there they lead and the others stay, as in `web.css`.
  */
 const STATES = {
   native: {
-    hover: [':active', '[data-hover]'],
-    hovered: ['[data-hover]'],
-    focus: [':focus', '[data-focus]'],
-    'focus-visible': [':focus', '[data-focus]'],
-    disabled: ['[data-disabled]', ':disabled'],
+    hover: [':active', on('data-hover')],
+    hovered: [on('data-hover')],
+    focus: [':focus', on('data-focus')],
+    'focus-visible': [':focus', on('data-focus')],
+    disabled: [on('data-disabled'), ':disabled'],
   },
   web: {
-    hover: [':hover', ':active', '[data-hover]'],
-    hovered: [':hover', '[data-hover]'],
-    focus: [':focus', '[data-focus]'],
-    'focus-visible': [':focus-visible', '[data-focus]'],
-    disabled: ['[data-disabled]', ':disabled'],
+    hover: [':hover', ':active', on('data-hover')],
+    hovered: [':hover', on('data-hover')],
+    focus: [':focus', on('data-focus')],
+    'focus-visible': [':focus-visible', on('data-focus')],
+    disabled: [on('data-disabled'), ':disabled'],
   },
 };
 

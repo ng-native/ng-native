@@ -42,7 +42,7 @@
  * accessibility state and nothing else. `data-disabled` is what a primitive publishes, and both
  * selectors are kept so a host primitive that really does carry the prop still matches.
  */
-@custom-variant disabled (&[data-disabled], &:disabled);
+@custom-variant disabled (&[data-disabled]:where(:not([data-disabled="false"])), &:disabled);
 
 /*
  * `dark:` follows a class, seeded from the OS.

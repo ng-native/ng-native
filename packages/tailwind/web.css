@@ -29,9 +29,9 @@
  * `hovered:` gains `:hover`, so the precise spellings stay precise on a platform that can tell the
  * two apart.
  */
-@custom-variant hover (&:hover, &:active, &[data-hover]);
+@custom-variant hover (&:hover, &:active, &[data-hover]:where(:not([data-hover="false"])));
 @custom-variant press (&:active);
-@custom-variant hovered (&:hover, &[data-hover]);
+@custom-variant hovered (&:hover, &[data-hover]:where(:not([data-hover="false"])));
 
 /*
  * `focus-visible:` is the real thing here, which is the distinction native cannot make.
@@ -47,8 +47,8 @@
  * `:focus-within` would cover the wrapper case natively here, but not the one where the two
  * elements are siblings rather than nested, so the attribute stays as the general answer.
  */
-@custom-variant focus-visible (&:focus-visible, &[data-focus]);
-@custom-variant focus (&:focus, &[data-focus]);
+@custom-variant focus-visible (&:focus-visible, &[data-focus]:where(:not([data-focus="false"])));
+@custom-variant focus (&:focus, &[data-focus]:where(:not([data-focus="false"])));
 
 /*
  * Where the shared utilities get their numbers from on this platform.

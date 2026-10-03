@@ -26,6 +26,11 @@ sit on one ancestor, as they do on the root, or on two.
 is consumed by the behavior composed onto it and never left as a prop `:disabled` could read;
 `data-disabled` is what that behavior publishes instead. A `<text>` publishes it too.
 
+`data-disabled`, `data-focus` and `data-hover` count as set unless their value is `"false"`. An
+attribute binding to a boolean, `[attr.data-disabled]="off()"`, writes the string `"false"` when it
+is off, and some component libraries publish their state the same way, so a state written as off is
+read as off.
+
 `aria-busy:`, `aria-checked:`, `aria-disabled:`, `aria-expanded:`, `aria-hidden:` and
 `aria-selected:` match as on the web. Each of those attributes is an input that sets the
 accessibility state, and the component puts it back on the node as the attribute it came in as, so
@@ -79,10 +84,10 @@ without the component knowing which it is on.
 
 ```css
 /* native.css */
-@custom-variant hover (&:active, &[data-hover]);
+@custom-variant hover (&:active, &[data-hover]:where(:not([data-hover="false"])));
 
 /* web.css */
-@custom-variant hover (&:hover, &:active, &[data-hover]);
+@custom-variant hover (&:hover, &:active, &[data-hover]:where(:not([data-hover="false"])));
 ```
 
 ## `focus-visible:` and `focus:`
