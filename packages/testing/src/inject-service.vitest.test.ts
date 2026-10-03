@@ -184,7 +184,8 @@ describe('injectService, when the setup file runs again in one worker', () => {
     const finished = counted.finished;
     expect(finished).toBeGreaterThan(0);
     // Last in the file: whatever Vitest makes of hooks registered inside a test ends with it.
-    await import('../runner/setup.mjs?again').catch(() => undefined);
+    const again: string = '../runner/setup.mjs?again';
+    await import(again).catch(() => undefined);
     const after = (globalThis as Record<symbol, { finished: number } | undefined>)[key]!;
     expect(after).toBe(counted);
     expect(after.finished).toBe(finished);
