@@ -40,8 +40,10 @@ is to write the element.
 `::placeholder` is the exception, because it needs no node: a text input draws its own placeholder,
 and its `placeholderTextColor` is the colour. `.field::placeholder { color: #8b8b96 }`, or
 Tailwind's `placeholder:text-gray-400`, sets that colour on a `<text-input>`, a token in it
-included. A placeholder takes only a colour, so anything else in the rule is dropped with a
-warning, and the rule matches a `<text-input>` only, as a browser's matches an input.
+included, and on an element named `input` or `textarea` where an app or a package has
+registered one as a text field. A placeholder takes only a colour, so anything else in the rule is
+dropped with a warning, and the rule matches those three elements only, as a browser's matches an
+input.
 
 `:hover` and `:focus-visible` are also unsupported, because there is no hover or focus cascade to
 answer them from: a phone has no pointer to hover with, and focus arriving from a keyboard or an

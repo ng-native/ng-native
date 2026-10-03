@@ -102,6 +102,25 @@ describe('::placeholder, as the text input placeholder colour', () => {
     assert.match(s.reports[0]!, /font-style/);
   });
 
+  it('applies to an HTML input and textarea too, by element name or by class', () => {
+    for (const name of ['input', 'textarea']) {
+      for (const css of ['.f::placeholder { color: red }', `${name}::placeholder { color: red }`]) {
+        const s = scene(css);
+        s.add(name, 'f');
+        const found = s.props().find((props) => 'placeholderTextColor' in props);
+        assert.equal(found?.['placeholderTextColor'], 'rgb(255, 0, 0)', `${name}: ${css}`);
+        assert.deepEqual(s.reports, []);
+      }
+    }
+    // Named for one of them, it is not the other's.
+    const s = scene('textarea::placeholder { color: red }');
+    s.add('input', 'f');
+    assert.equal(
+      s.props().some((props) => 'placeholderTextColor' in props),
+      false,
+    );
+  });
+
   it('applies to a text input only, where a browser has a placeholder', () => {
     const s = scene('.f::placeholder { color: red } view::placeholder { color: blue }');
     s.add('view', 'f');

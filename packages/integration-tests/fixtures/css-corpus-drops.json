@@ -351,7 +351,7 @@
     }
   },
   "bulma": {
-    "rules": 3014,
+    "rules": 3018,
     "dropped": 1856,
     "emitted": [
       "$animation",
@@ -694,8 +694,8 @@
     }
   },
   "pico": {
-    "rules": 437,
-    "dropped": 310,
+    "rules": 441,
+    "dropped": 313,
     "emitted": [
       "$animation",
       "$animationDelay",
@@ -768,6 +768,7 @@
       "paddingRight",
       "paddingStart",
       "paddingTop",
+      "placeholderTextColor",
       "pointerEvents",
       "position",
       "right",
@@ -914,6 +915,9 @@
       },
       "min-width": {
         "min-width: expected a length, and 'fit-content' is not one": 1
+      },
+      "opacity": {
+        "a placeholder takes only a colour on native, not 'opacity'": 3
       },
       "overflow-wrap": {
         "'overflow-wrap' has no React Native equivalent: no style prop of a native view does what it does.": 1

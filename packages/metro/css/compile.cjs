@@ -1361,12 +1361,25 @@ const placeholderOf = (from) => ('color' in from ? { placeholderTextColor: from.
 
 const subject = (compiled, placeholder) => (placeholder ? onTextInput(compiled) : compiled);
 
+/** The elements with a placeholder: the text input, and HTML's two names for one. */
+const TEXT_FIELDS = ['text-input', 'input', 'textarea'];
+
+/**
+ * A `::placeholder` rule, as a rule on the field itself. One that names a field keeps the name;
+ * one that names none, `.f::placeholder`, is any of them, and one that names anything else is
+ * no field's.
+ */
 function onTextInput(compiled) {
   const subject = compiled?.compounds.at(-1);
-  if (!subject || (subject.type && subject.type !== 'text-input')) return null;
+  if (!subject || (subject.type && !TEXT_FIELDS.includes(subject.type))) return null;
+  if (subject.type) return compiled;
+  const fields = TEXT_FIELDS.map((type) => ({ type, classes: [] }));
   return {
     ...compiled,
-    compounds: [...compiled.compounds.slice(0, -1), { ...subject, type: 'text-input' }],
+    compounds: [
+      ...compiled.compounds.slice(0, -1),
+      { ...subject, is: [...(subject.is ?? []), fields] },
+    ],
   };
 }
 
