@@ -177,7 +177,8 @@ event payload carries `target`, the node's React tag. Each interaction resolves 
 had a task to commit.
 
 An interaction on a node found by a query goes to the render that node came from. A node held from
-an earlier commit still works: events find their target by its tag, which does not change.
+an earlier commit still works: events find their target by its tag, which does not change. Its
+`props` and `children` are that earlier commit's, though: query again to read what changed.
 
 ### `fireEvent`
 
@@ -323,6 +324,32 @@ every test by itself when `afterEach` is a global, which it is in Vitest with `g
 its render mounted. Every render has its own fake, so a test that skips cleanup still cannot see
 another test's tree.
 
+## Asserting how much re-rendered
+
+The engine counts what it commits in `engine.stats`, and a test reaches the engine through the
+render's injector. `createdNodes` and `clonedNodes` are the two a test of re-rendering reads: a
+node created is a view native builds, and a node cloned is one whose props or children changed, or
+that holds one that did.
+
+```ts
+import { Engine } from '@ng-native/fabric';
+
+const { componentRef } = await render(Orders);
+const { stats } = componentRef.injector.get(Engine);
+const before = { ...stats };
+
+await userEvent.press(screen.getByText('Tapped 0'));
+
+expect(stats.createdNodes - before.createdNodes).toBe(0);
+expect(stats.clonedNodes - before.clonedNodes).toBeLessThan(10);
+```
+
+The counters run from the mount, so a test compares against a copy taken before the interaction.
+`commits` counts commits, and `slowCommits` those after the mount that took longer than 8ms, a
+frame at 120Hz; the timings beside them (`firstCommitMs`, `worstCommitMs`, `worstRenderMs`) are
+real time, and belong in a benchmark rather than an assertion. `fabric.calls` counts the same
+operations as native receives them, from the last `fabric.reset()`.
+
 ## `compileCss()`
 
 ```ts
@@ -362,7 +389,7 @@ through `render()`. It records every call instead of drawing, and adds what a te
 | `frames`                         | `measureInWindow`'s answers, by `nativeID` and then by view name. A node with no entry is not measured, as on a platform that has not laid it out.      |
 | `responderCalls`                 | Every `setIsJSResponder` call, in order.                                                                                                                |
 | `commands`                       | Every `dispatchCommand`, in order: `focus`, `blur`, `setTextAndSelection` and the rest.                                                                 |
-| `calls`                          | How many of each node operation the renderer made. `reset()` zeroes them.                                                                               |
+| `calls`                          | How many of each node operation the renderer made. `fabric.reset()` zeroes them.                                                                        |
 
 It also does what native does that a test would otherwise have to stand in for. A `ModalHostView`
 committed with `visible: false` reports `topDismiss` as soon as that commit is done, as iOS does

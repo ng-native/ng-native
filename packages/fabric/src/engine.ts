@@ -1852,7 +1852,7 @@ export interface EngineStats {
   firstCommitMs: number;
   /** Worst commit *after* the mount. This is the number that matters for frame rate. */
   worstCommitMs: number;
-  /** Commits that blew a 60fps frame budget, excluding the mount. */
+  /** Commits that took longer than 8ms, a frame at 120Hz, excluding the mount. */
   slowCommits: number;
   /**
    * Worst `begin()`..`end()` span, excluding the mount. This brackets Angular's whole render
