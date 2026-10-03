@@ -16,13 +16,16 @@ globalThis.__DEV__ ??= true;
 
 register('./loader.mjs', import.meta.url);
 
-// Tells `injectService` where one test ends and the next begins. See `setup.mjs`. Only under
-// `node --test`: a hook starts the test runner, which a script run through this file is not for.
+// Tells `injectService` which test is running. See `setup.mjs`. Only under `node --test`: a hook
+// starts the test runner, which a script run through this file is not for.
 if (process.env.NODE_TEST_CONTEXT || process.execArgv.some((arg) => arg.startsWith('--test'))) {
-  const { afterEach } = await import('node:test');
-  const TEST = Symbol.for('ng-native.testing.test');
-  globalThis[TEST] = 0;
+  const { afterEach, beforeEach } = await import('node:test');
+  const tests = (globalThis[Symbol.for('ng-native.testing.tests')] = { finished: 0, running: 0 });
+  beforeEach(() => {
+    tests.running++;
+  });
   afterEach(() => {
-    globalThis[TEST]++;
+    tests.running--;
+    tests.finished++;
   });
 }

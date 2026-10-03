@@ -1,5 +1,5 @@
 import { DestroyRef, InjectionToken, Injector, Service, inject } from '@angular/core';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeAll, describe, expect, it } from 'vitest';
 import { cleanup, injectService, render, screen } from './index.ts';
 
 interface Source {
@@ -140,5 +140,38 @@ describe('injectService, in a file that never calls cleanup', () => {
   it("and another in the next, which cannot see the first one's services", () => {
     expect(earlier).toBeDefined();
     expect(injectService(Scheme)).not.toBe(earlier);
+  });
+});
+
+describe('injectService, in tests that run at once', () => {
+  const made: Scheme[] = [];
+  let started = () => {};
+  const both = new Promise<void>((resolve) => (started = resolve));
+
+  // Each waits for the other to have started, so both are under way when either asks again.
+  const run = async () => {
+    made.push(injectService(Scheme));
+    if (made.length === 2) started();
+    await both;
+    made.push(injectService(Scheme));
+  };
+
+  it.concurrent('gives one test no app of another that is still running', run);
+  it.concurrent('and the other none of the first', run);
+
+  it('so no two of their services are the same', () => {
+    expect(made).toHaveLength(4);
+    expect(new Set(made).size).toBe(4);
+  });
+});
+
+describe('injectService, before any test', () => {
+  let before: Scheme;
+  beforeAll(() => {
+    before = injectService(Scheme);
+  });
+
+  it("makes an app that is no test's, so the first test does not share it", () => {
+    expect(injectService(Scheme)).not.toBe(before);
   });
 });

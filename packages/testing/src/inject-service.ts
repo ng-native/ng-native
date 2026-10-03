@@ -27,15 +27,19 @@ class ServiceHost {}
 const apps: ApplicationRef[] = [];
 
 /**
- * Which test is running, as the runner's setup counts them: `runner/setup.mjs` under Vitest and
- * `runner/register.mjs` under `node:test` each add one after every test. Undefined where neither
- * ran, and then nothing says where one test ends and the next begins.
+ * What the runner's setup says about the tests: how many have finished, which tells one test from
+ * the next, and how many are running now. `runner/setup.mjs` keeps it under Vitest and
+ * `runner/register.mjs` under `node:test`. Undefined where neither ran.
  */
-const TEST = Symbol.for('ng-native.testing.test');
-const currentTest = (): unknown => (globalThis as Record<symbol, unknown>)[TEST];
+interface Tests {
+  finished: number;
+  running: number;
+}
+const TESTS = Symbol.for('ng-native.testing.tests');
+const tests = (): Tests | undefined => (globalThis as Record<symbol, Tests | undefined>)[TESTS];
 
-/** The app the calls in the running test share, and the test it was made in. */
-let shared: { readonly app: ApplicationRef; readonly test: unknown } | null = null;
+/** The app the calls in the running test share, and which test that is. */
+let shared: { readonly app: ApplicationRef; readonly test: number } | null = null;
 
 /**
  * The instance of `token` from an app's root injector.
@@ -46,14 +50,16 @@ let shared: { readonly app: ApplicationRef; readonly test: unknown } | null = nu
  * or not `cleanup()` was called, so one test never sees another's services. `cleanup()` destroys
  * every app, which ends each service's `DestroyRef`.
  *
- * Where the runner's setup did not run, there is no telling one test from the next, and every
- * call makes an app of its own.
+ * An app is shared only while exactly one test is running, since that is the only time the test
+ * a call belongs to is known. Every call makes an app of its own outside a test (a `beforeAll`),
+ * while tests run at once (`it.concurrent`), and where the runner's setup did not run.
  */
 export function injectService<T>(token: ProviderToken<T>, options: InjectServiceOptions = {}): T {
-  const test = currentTest();
+  const state = tests();
+  const test = state?.running === 1 ? state.finished : undefined;
   const reusable = options.providers === undefined && test !== undefined && shared?.test === test;
   const app = reusable ? shared!.app : appWith(options.providers);
-  if (test !== undefined) shared = { app, test };
+  shared = test === undefined ? null : { app, test };
   return app.injector.get(token);
 }
 

@@ -35,3 +35,21 @@ describe('injectService', () => {
     assert.equal(counter.count(), 0);
   });
 });
+
+describe('injectService, in tests that run at once', { concurrency: 2 }, () => {
+  const made: Counter[] = [];
+  let started = () => {};
+  const both = new Promise<void>((resolve) => (started = resolve));
+  const run = async () => {
+    made.push(injectService(Counter));
+    if (made.length === 2) started();
+    await both;
+    made.push(injectService(Counter));
+  };
+
+  it('gives one test no app of another that is still running', run);
+  it('and the other none of the first', run);
+  it('so no two of their services are the same', () => {
+    assert.equal(new Set(made).size, 4);
+  });
+});

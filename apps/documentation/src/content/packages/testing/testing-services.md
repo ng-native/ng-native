@@ -106,5 +106,6 @@ it('drives one service and reads another', () => {
 
 A call with `providers` starts a new app, which the calls after it use. The app ends with its test:
 the next test starts another whether or not `cleanup()` ran, so one test never sees another's
-services. `cleanup()` destroys the app, which runs the service's `DestroyRef` callbacks, just as it
+services. Call it inside the test it belongs to: a call in a `beforeAll`, or in tests that run at
+once (`it.concurrent`), makes an app of its own each time, since no one test owns it. `cleanup()` destroys the app, which runs the service's `DestroyRef` callbacks, just as it
 unmounts a render.
