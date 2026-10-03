@@ -107,7 +107,8 @@ without the file takes it by hand:
 }
 ```
 
-with `ngc -p tsconfig.typecheck.json --noEmit` as the `typecheck` target's command.
+with `node metro.config.js && ngc -p tsconfig.typecheck.json --noEmit` as the `typecheck` target's
+command.
 
 Each app gets a Metro port of its own, so `nx run-many -t start` runs several side by side. The
 first Expo app in the workspace uses Expo's default, 8081, with a plain `expo start`. Each later one
