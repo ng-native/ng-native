@@ -18,6 +18,9 @@ import { installWindow } from './window.ts';
 let apps = 0;
 let removals: (() => void)[] = [];
 let removeWindow: (() => void) | undefined;
+/** The documents of the apps that are up, oldest first, and the global there was before them. */
+const documents: unknown[] = [];
+let original: unknown;
 
 /** Add what every app shares: the node members and the renderer's listeners. */
 function install(engine: Engine): void {
@@ -62,13 +65,16 @@ export function provideWebCompat(): EnvironmentProviders {
         if (apps === 0) install(engine);
         apps++;
         removeWindow ??= installWindow();
-        // A library reads the global as often as the injected one. The last app up has it.
+        // A library reads the global as often as the injected one. The newest app up has it.
         const globals = globalThis as { document?: unknown };
-        const before = globals.document;
+        if (!documents.length) original = globals.document;
         const document = documentFor(engine);
+        documents.push(document);
         globals.document = document;
         inject(DestroyRef).onDestroy(() => {
-          if (globals.document === document) globals.document = before;
+          // In whatever order the apps go: the newest still up, or what was there before any.
+          documents.splice(documents.indexOf(document), 1);
+          globals.document = documents.at(-1) ?? original;
           if (--apps === 0) uninstall();
         });
       },

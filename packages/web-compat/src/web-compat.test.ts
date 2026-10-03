@@ -263,6 +263,17 @@ describe('@ng-native/web-compat document and window', () => {
     assert.equal(heard, 1);
   });
 
+  it('leaves the global document to the apps still up, in whatever order they go', async () => {
+    const before = globals.document;
+    const one = await render(Card, { providers: [provideWebCompat()] });
+    const two = await render(Card, { providers: [provideWebCompat()] });
+    assert.equal(globals.document, two.instance.document);
+    one.unmount();
+    assert.equal(globals.document, two.instance.document);
+    two.unmount();
+    assert.equal(globals.document, before);
+  });
+
   it('takes its globals away with the last app', async () => {
     const before = globals.document;
     await mount();
