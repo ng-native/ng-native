@@ -8,11 +8,13 @@
 import {
   Directive,
   booleanAttribute,
+  computed,
   forwardRef,
   input,
   numberAttribute,
   output,
   signal,
+  type Signal,
 } from '@angular/core';
 import { nativePlatform, type NativeSyntheticEvent } from '@ng-native/fabric';
 import type { Insets, TouchEvent } from './events.ts';
@@ -508,7 +510,7 @@ export abstract class TouchableBase extends ViewBase {
     // the one binding that keeps the announced state in step with it.
     '[accessibilityState]': 'accessibilityStateProp()',
     // Nor is it left on the node for `:disabled` to read, so this is what a stylesheet matches.
-    '[attr.data-disabled]': "disabled() ? '' : null",
+    '[attr.data-disabled]': "pressDisabled() ? '' : null",
     '[nativeBackgroundAndroid]': 'rippleBackground()',
     '[nativeForegroundAndroid]': 'rippleForeground()',
   },
@@ -531,6 +533,24 @@ export abstract class ControlBase extends TouchableBase {}
   providers: [{ provide: TouchableBase, useExisting: forwardRef(() => PressBehavior) }],
 })
 export class PressBehavior extends ControlBase {
+  /** The conditions the composing component gave, any of which disables the control. */
+  private readonly conditions = signal<readonly Signal<boolean>[]>([]);
+  private readonly held = computed(() => this.conditions().some((condition) => condition()));
+
+  /**
+   * Disable the control while `condition` is true, from the component that composes this: a
+   * button that is loading, which its caller's `disabled` knows nothing of. Either one disables
+   * it, as `disabled={loading || disabled}` does on React Native's `Pressable`: presses are
+   * refused, a stylesheet sees `[data-disabled]`, and a screen reader is told.
+   *
+   *     constructor() {
+   *       inject(PressBehavior).disableWhile(this.loading);
+   *     }
+   */
+  disableWhile(condition: Signal<boolean>): void {
+    this.conditions.update((conditions) => [...conditions, condition]);
+  }
+
   protected override accessibleByDefault(): boolean {
     return true;
   }
@@ -539,8 +559,12 @@ export class PressBehavior extends ControlBase {
     return true;
   }
 
+  protected override pressDisabled(): boolean {
+    return this.held() || super.pressDisabled();
+  }
+
   protected override disabledForAccessibility(): boolean | undefined {
-    return this.disabled();
+    return this.held() ? true : this.disabled();
   }
 }
 

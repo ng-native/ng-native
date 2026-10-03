@@ -93,6 +93,19 @@ export class Checkbox {
 }
 ```
 
+A component like that often has a reason of its own to refuse presses, a `loading` input for one,
+which its caller's `disabled` knows nothing of. `disableWhile` takes a signal, and the control is
+disabled while it is true or `disabled` is: presses are refused, a stylesheet matches
+`:host([data-disabled])`, and a screen reader is told.
+
+```ts
+readonly loading = input(false);
+
+constructor() {
+  inject(PressBehavior).disableWhile(this.loading);
+}
+```
+
 The forwarding is Angular's rule rather than this package's: a host listener hears only the
 outputs the host exposes. Without `outputs: ['press']` the `(press)` listener never runs, and
 nothing reports it. Forwarded, `press` also reaches a `(press)` the app binds on `<ui-checkbox>`.
