@@ -114,3 +114,36 @@ describe('a shared value', () => {
     expect(heard).toEqual([2]);
   });
 });
+
+@Component({
+  selector: 'x-fading',
+  imports: [View, WorkletStyle],
+  template: `<view testID="box" [workletStyle]="style"></view>`,
+})
+class Fading {
+  readonly shown = sharedValue(0);
+  protected readonly style = workletStyle([this.shown], (shown) => ({
+    opacity: shown.value,
+    height: 40 * shown.value,
+  }));
+}
+
+describe('a worklet style that is not a transform', () => {
+  it('lands where a test reads it, with nothing said of an unknown prop', async () => {
+    const said: string[] = [];
+    const { error, warn } = console;
+    console.error = (...args: unknown[]) => void said.push(String(args[0]));
+    console.warn = (...args: unknown[]) => void said.push(String(args[0]));
+    try {
+      const { instance, detectChanges } = await render(Fading, { dev: true });
+      expect(screen.getByTestId('box').props).toMatchObject({ opacity: 0, height: 0 });
+      instance.shown.value = 1;
+      await detectChanges();
+      expect(screen.getByTestId('box').props).toMatchObject({ opacity: 1, height: 40 });
+    } finally {
+      console.error = error;
+      console.warn = warn;
+    }
+    expect(said.filter((line) => /has no prop/.test(line))).toEqual([]);
+  });
+});

@@ -97,8 +97,10 @@ export class WorkletStyle {
     effect(() => {
       const { values, updater } = this.workletStyle();
       const style = updater(...values);
-      for (const key of written) if (!(key in style)) renderer.setProperty(node, key, undefined);
-      for (const [key, value] of Object.entries(style)) renderer.setProperty(node, key, value);
+      // As styles, which is what they are: written as props, `opacity` and `height` are names
+      // no view declares, and the unknown-prop check says so.
+      for (const key of written) if (!(key in style)) renderer.removeStyle(node, key);
+      for (const [key, value] of Object.entries(style)) renderer.setStyle(node, key, value);
       written = Object.keys(style);
     });
   }
