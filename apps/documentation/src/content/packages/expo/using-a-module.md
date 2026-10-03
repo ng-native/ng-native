@@ -80,8 +80,8 @@ provides a stand-in with the methods the code under test calls:
 providers: [{ provide: Crypto.SOURCE, useValue: { randomUUID: () => 'test-id' } }];
 ```
 
-A database has no token: build the service on `new Database(open, migrations)`, with an `open`
-the test supplies.
+A database has no token: `openDatabasesWith()` points `database()` at a stand-in. See
+[Database](/packages/expo/database#in-a-test).
 
 ## Whether a feature is available
 

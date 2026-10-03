@@ -464,7 +464,7 @@ describe('a module in a Node test', () => {
       (error: Error) =>
         error instanceof MissingModuleError &&
         /expo-sqlite has no native module to load in Node/.test(error.message) &&
-        /new Database\(open, migrations\)/.test(error.message) &&
+        /openDatabasesWith\(\)/.test(error.message) &&
         !/install/.test(error.message),
     );
   });

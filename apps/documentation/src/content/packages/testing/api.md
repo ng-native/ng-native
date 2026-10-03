@@ -328,6 +328,16 @@ what a message about the sheet calls it. A declaration or rule native cannot exp
 test never passes on a sheet that lost a rule; pass `onUnsupported` to be told of each instead, and
 the rest of the sheet is kept. See [Testing styling](/packages/testing/testing-styling).
 
+## `memoryDatabase()`
+
+```ts
+function memoryDatabase(): MemoryDatabase;
+```
+
+An in-memory SQLite database with the part of `expo-sqlite`'s interface a service uses, on Node's
+`node:sqlite`. Give it to `openDatabasesWith` from `@ng-native/expo/database` to test a service
+built on `database()`: see [Database](/packages/expo/database#in-a-test).
+
 ## `createFakeFabric()`
 
 ```ts

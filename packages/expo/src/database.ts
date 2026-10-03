@@ -131,6 +131,21 @@ export class Database<T extends NativeDatabase> {
   }
 }
 
+let opener: ((name: string) => unknown) | null = null;
+
+/**
+ * Open every `database()` with `open` in place of `expo-sqlite`, until the function this answers
+ * is called. For a test, where no native module can load: `open` gives a stand-in, such as
+ * `memoryDatabase()` from `@ng-native/testing`, and the migrations and `onOpen` run against it.
+ */
+export function openDatabasesWith(open: (name: string) => unknown): () => void {
+  const before = opener;
+  opener = open;
+  return () => {
+    opener = before;
+  };
+}
+
 /** A database, opened on first use and migrated before the first query sees it. */
 export function database(
   name: string,
@@ -139,6 +154,7 @@ export function database(
 ) {
   return new Database<import('expo-sqlite').SQLiteDatabase>(
     async () => {
+      if (opener) return opener(name) as import('expo-sqlite').SQLiteDatabase;
       const expo = expoModule(
         'expo-sqlite',
         () => require('expo-sqlite') as typeof import('expo-sqlite'),
@@ -147,7 +163,7 @@ export function database(
       if (!expo) {
         throw unavailable(
           'expo-sqlite',
-          "Build the service on `new Database(open, migrations)` with an `open` of the test's own.",
+          'Point database() at a stand-in with openDatabasesWith(), such as memoryDatabase() from @ng-native/testing.',
         );
       }
       return expo.openDatabaseAsync(name);

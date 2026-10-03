@@ -18,6 +18,7 @@ export {
   type RenderResult,
 } from './render.ts';
 export { injectService, type InjectServiceOptions } from './inject-service.ts';
+export { memoryDatabase, type MemoryDatabase } from './memory-database.ts';
 export { compileCss, type CompileCssOptions } from './compile-css.ts';
 export type { BoundQueries, ByRoleOptions, Matcher, TextMatchOptions } from './queries.ts';
 export { waitFor, type WaitForOptions } from './wait-for.ts';
