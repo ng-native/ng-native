@@ -143,7 +143,9 @@ On a component of your own, a shared prop is an attribute, not an input: the com
 with `attr.`, which commits the prop to the host view:
 
 ```html
-<app-row testID="row" /> <app-row [attr.testID]="'row-' + id" [attr.accessibilityLabel]="name()" />
+<app-row testID="row" />
+
+<app-row [attr.testID]="'row-' + id" [attr.accessibilityLabel]="name()" />
 ```
 
 An `attr.` binding carries text, and `null` takes the prop off. That covers `testID`, `nativeID`,
