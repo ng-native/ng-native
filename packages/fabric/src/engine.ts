@@ -1674,6 +1674,41 @@ class RetainedNode {
   }
 }
 
+/** The fields the engine keeps on a node, which an extension may not shadow. */
+const NODE_FIELDS = new Set(Object.keys(new RetainedNode('element', '', null as never)));
+
+/**
+ * Give every node members of a package's own, on the prototype they share: a getter, a method.
+ * Returns what takes them away again.
+ *
+ * For a package that presents nodes to code written against another API, as a web-compatibility
+ * layer answers `getAttribute` and `closest` from a node's name and props. A field the engine
+ * keeps on a node (`kind`, `props`, `children`) is refused. A member a node already has on the
+ * prototype (`classList`, `addEventListener`) is replaced, and put back when the extension is
+ * taken away: what replaces it has to do what the original did for Angular.
+ */
+export function extendNodes(members: PropertyDescriptorMap & ThisType<EngineNode>): () => void {
+  const prototype = RetainedNode.prototype;
+  const names = Object.keys(members);
+  for (const name of names) {
+    if (NODE_FIELDS.has(name)) {
+      throw new Error(`[angular-native] extendNodes: '${name}' is a field the engine keeps.`);
+    }
+  }
+  const replaced = new Map(
+    names.map((name) => [name, Object.getOwnPropertyDescriptor(prototype, name)]),
+  );
+  for (const name of names) {
+    Object.defineProperty(prototype, name, { configurable: true, ...members[name] });
+  }
+  return () => {
+    for (const [name, original] of replaced) {
+      if (original) Object.defineProperty(prototype, name, original);
+      else Reflect.deleteProperty(prototype, name);
+    }
+  };
+}
+
 /**
  * RN-specific helpers, injected rather than imported so the engine stays runnable under Node.
  */
