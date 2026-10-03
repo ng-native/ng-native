@@ -1067,6 +1067,9 @@ function inheritFrom(
   let inherited = parentInherited;
   for (const key of Object.keys(own)) {
     if (!INHERITED.has(key)) continue;
+    // `pointer-events: inherit`, which only an inline style on an element no rule matches still
+    // holds here: what the parent hands down stands.
+    if (key === 'pointerEvents' && own[key] === 'inherit') continue;
     if (inherited === parentInherited) inherited = { ...parentInherited };
     if (key === 'pointerEvents' && !INHERITED_POINTER_EVENTS.has(own[key] as string)) {
       delete inherited[key];
@@ -1125,9 +1128,7 @@ export function inlineInherited(style: unknown): Record<string, unknown> | null 
   let out: Record<string, unknown> | null = null;
   // Flattened first, as native applies it, so a later entry's null clears an earlier value.
   for (const [key, value] of Object.entries(flattenInline(style, {}))) {
-    if (INHERITED.has(key) && value !== undefined && value !== null && value !== 'inherit') {
-      (out ??= {})[key] = value;
-    }
+    if (INHERITED.has(key) && value !== undefined && value !== null) (out ??= {})[key] = value;
   }
   return out;
 }
@@ -1385,7 +1386,7 @@ export class StyleResolver {
       context: {},
       parentContext,
       style: parentInherited,
-      inherited: inline ? { ...parentInherited, ...inline } : parentInherited,
+      inherited: inline ? inheritFrom(parentInherited, inline) : parentInherited,
       tokens,
     };
     node.styleCache = passthrough;

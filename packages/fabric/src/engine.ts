@@ -1139,27 +1139,45 @@ function committedProp(key: string, value: unknown): unknown {
 }
 
 /**
- * `pointer-events: none` on an element something inside takes touches under, as native says it.
- * In CSS `none` is the element alone, and a descendant's `auto` takes touches again, which native
- * calls `box-none`. Native's own `none` is the whole subtree. It is what a `none` with nothing
- * inside to open it stays, because Android's text and images take no `pointerEvents` of their own
- * and only an ancestor's `none` keeps touches off them. It is also what the `pointerEvents` prop
- * means.
- */
-function boxNone(node: EngineNode, style: Record<string, unknown>): void {
-  if (node.touchWithin && style['pointerEvents'] === 'none') style['pointerEvents'] = 'box-none';
-}
-
-/**
  * The `pointer-events` an element computes to: its inline style's, or what the sheets resolve.
  * The inline one is read for itself because an element no rule matches resolves to what it
  * inherits, with its own inline value only in what it hands down.
  */
 function pointerEventsOf(node: EngineNode, resolved: Record<string, unknown>): unknown {
   const inline = node.inlineInherits ? inlineInherited(node.props['style']) : null;
-  return inline?.['pointerEvents'] ?? resolved['pointerEvents'];
+  const own = inline?.['pointerEvents'];
+  return own === undefined || own === 'inherit' ? resolved['pointerEvents'] : own;
 }
 
+/**
+ * A node's `pointer-events` as native takes it, once its props and styles are merged.
+ *
+ * In CSS `none` is the element alone, and a descendant's `auto` takes touches again, which native
+ * calls `box-none`: what a `none` with something inside to open it is committed as. Native's own
+ * `none` is the whole subtree. It is what a `none` with nothing inside to open it stays, because
+ * Android's text and images take no `pointerEvents` of their own and only an ancestor's `none`
+ * keeps touches off them. It is also what the `pointerEvents` prop means, so a `none` that is the
+ * prop's is left as it is.
+ *
+ * An inline `inherit` is what the element has without it, which is `resolved`: what the sheets
+ * and its parent settled.
+ */
+function nativePointerEvents(
+  node: EngineNode,
+  style: Record<string, unknown>,
+  resolved: unknown,
+): void {
+  let value = style['pointerEvents'];
+  if (value === undefined) return;
+  if (value === 'inherit') {
+    value = resolved;
+    if (value === undefined) delete style['pointerEvents'];
+    else style['pointerEvents'] = value;
+  }
+  if (value === 'none' && node.touchWithin && node.props['pointerEvents'] !== 'none') {
+    style['pointerEvents'] = 'box-none';
+  }
+}
 /**
  * Records on `node` whether it, or something inside it, takes touches where it would inherit
  * `none`. When that changes a `none` element's own answer, its props are marked to be committed
@@ -2620,7 +2638,7 @@ export class Engine implements HostEngine {
     this.registerSheet(node.hostSheet);
     const props: Record<string, unknown> = { ...DEFAULT_PROPS[viewName], ...node.defaultStyle };
     Object.assign(props, this.styles.resolve(node, this.styleEpoch).style);
-    boxNone(node, props);
+    const resolved = props['pointerEvents'];
     for (const key of Object.keys(node.props)) {
       // No native prop has a hyphen. `data-*` and `aria-*` attributes stay on the node for
       // selectors to match, and the components package maps `aria-*` to what native reads.
@@ -2636,8 +2654,7 @@ export class Engine implements HostEngine {
     withTextContent(node, viewName, props);
     const cascaded = props['transform'];
     const style = boundTransform(flattenStyle(node.props['style'], props), cascaded);
-    // An inline `pointer-events: none` is CSS's as well, unless it only repeats the prop.
-    if (node.props['pointerEvents'] !== 'none') boxNone(node, style);
+    nativePointerEvents(node, style, resolved);
     const intrinsic = node.props[INTRINSIC_SIZE] as IntrinsicSize | undefined;
     if (intrinsic) applyIntrinsicSize(style, intrinsic);
     flattenStyle(node.props[STYLE_OVERRIDE], style);

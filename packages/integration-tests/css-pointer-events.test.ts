@@ -158,6 +158,43 @@ describe('pointer-events: none', () => {
     assert.equal(fabric.committed[0]!.children[0]!.props['pointerEvents'], 'auto');
   });
 
+  it('hands no box-none down from an inline style, on elements no rule matches', () => {
+    const fabric = createFakeFabric();
+    const engine = new Engine(fabric, 1);
+    const parent = engine.createElement('view');
+    const child = engine.createElement('view');
+    engine.setProp(parent, 'style', { pointerEvents: 'box-none', opacity: 0.9 });
+    engine.setProp(child, 'style', { opacity: 0.8 });
+    engine.appendChild(parent, child);
+    engine.appendChild(engine.root, parent);
+    engine.commit();
+    assert.equal(fabric.committed[0]!.props['pointerEvents'], 'box-none');
+    assert.equal(fabric.committed[0]!.children[0]!.props['pointerEvents'], undefined);
+  });
+
+  it("takes an inline inherit as the parent's value, over a weaker rule's auto", () => {
+    const { engine, panel, committed } = tree(
+      '.layer { pointer-events: none } .panel { pointer-events: auto }',
+    );
+    engine.setProp(panel, 'style', { pointerEvents: 'inherit' });
+    engine.commit();
+    assert.deepEqual(committed(), { layer: 'none', panel: 'none', plain: 'none' });
+  });
+
+  it("takes an inline inherit as the parent's value where no rule matches at all", () => {
+    const fabric = createFakeFabric();
+    const engine = new Engine(fabric, 1);
+    const parent = engine.createElement('view');
+    const child = engine.createElement('view');
+    engine.setProp(parent, 'style', { pointerEvents: 'none', opacity: 0.9 });
+    engine.setProp(child, 'style', { pointerEvents: 'inherit', opacity: 0.8 });
+    engine.appendChild(parent, child);
+    engine.appendChild(engine.root, parent);
+    engine.commit();
+    assert.equal(fabric.committed[0]!.props['pointerEvents'], 'none');
+    assert.equal(fabric.committed[0]!.children[0]!.props['pointerEvents'], 'none');
+  });
+
   it("keeps React Native's meaning as the pointerEvents prop: the whole subtree", () => {
     const { engine, layer, committed } = tree('.panel { pointer-events: auto }');
     engine.setProp(layer, 'pointerEvents', 'none');
