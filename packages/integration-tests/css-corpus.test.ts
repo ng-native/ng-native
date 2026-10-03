@@ -97,9 +97,10 @@ describe('the corpus compiles', () => {
 
 /**
  * `<context>:<line>: dropped '<name>': <reason>`, the form a declaration is reported in. The
- * context may carry a keyframes name: `bootstrap:5235 (@keyframes spin)`.
+ * context may carry a keyframes name: `bootstrap:5235 (@keyframes spin)`. `dropped part of` is
+ * the same for a declaration that stands with one part of it refused, which the reason names.
  */
-const DECLARATION = /^[^']*?: dropped '([^']+)': ([\s\S]*)$/;
+const DECLARATION = /^[^']*?: dropped (?:part of )?'([^']+)': ([\s\S]*)$/;
 /**
  * `<context>:<line>: dropped a rule: <reason>`, the form a whole rule is reported in, or `dropped
  * a selector` for one selector out of a list whose others were kept.

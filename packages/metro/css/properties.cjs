@@ -8,6 +8,7 @@
 const {
   CURRENT_COLOUR,
   CssUnsupported,
+  drawnSolid,
   angle,
   camel,
   color,
@@ -1141,10 +1142,7 @@ function sideBorder(property, sides, value, out) {
   for (const side of sides) {
     const style = line(value, `border${side}`, out, property, { style: false });
     if (style !== undefined && !['solid', 'none', 'hidden'].includes(style)) {
-      throw new CssUnsupported(
-        `${property}: native has one border style for the whole box, so a '${style}' side ` +
-          `cannot be drawn. Solid, native's default, is the one a single side can say.`,
-      );
+      drawnSolid(property, style);
     }
   }
 }

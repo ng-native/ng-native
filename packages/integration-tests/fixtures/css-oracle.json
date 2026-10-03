@@ -542,6 +542,15 @@
     }
   },
   {
+    "name": "a dashed border on one side keeps its width and colour",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "border-top-width": "2px",
+      "border-top-color": "rgb(1, 2, 3)"
+    }
+  },
+  {
     "name": "an outline with no colour is drawn in the colour of the text",
     "expected": {
       "color": "rgb(7, 1, 0)",

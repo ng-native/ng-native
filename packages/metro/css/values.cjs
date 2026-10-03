@@ -528,6 +528,17 @@ const throwRefusal = (message) => {
 };
 let refuse = throwRefusal;
 
+/**
+ * A side of the border in a style native cannot give one side: reported, and the side drawn solid
+ * with its width and colour, which is nearer what was meant than no line at all.
+ */
+function drawnSolid(context, style) {
+  refuse(
+    `${context}: native has one border style for the whole box, so a '${style}' side is ` +
+      `drawn solid, native's default.`,
+  );
+}
+
 /** A strict compile, with no `report`, throws even when run from within a lenient one. */
 function withRefusals(report, run) {
   const outer = refuse;
@@ -985,6 +996,7 @@ function fallbackChain(raw, context) {
 module.exports = {
   CssUnsupported,
   withRefusals,
+  drawnSolid,
   fallbackChain,
   fallbacks,
   camel,

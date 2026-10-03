@@ -228,19 +228,19 @@ meets a physical one (`inset-inline-start` and `left` on the same element), the 
 edge wins, whichever was written last.
 
 `border-style` is likewise one value for all four sides: a native border has one style, and a
-per-side style that disagrees with the others is dropped for the same reason. `border-top` and
-the other per-side shorthands set that side's width and color, and take `solid` (native's
-default) or `none` as their style. A border shorthand with no color, such as `border: 2px solid`,
-is drawn in the element's text color, its own or inherited, as on the web, and so is a border color
-of `currentColor`, which is what Tailwind's `border-current` writes. An outline with no color, an
-`outline-color`, a `background-color` and a `text-decoration-color` of `currentColor`, a `var()`
-that falls back to `currentColor` and a custom property that holds it take the text color the same
-way, where they are used. `color: currentColor` and `color: inherit` are the color the element
-inherits, as on the web, in a rule or in a `@keyframes` frame. All of them follow the text color
-when it changes. A border shorthand's width may be a
-`calc()` of one token, as in Bootstrap's `border-top: calc(var(--bs-border-width) * 2) solid`. A
-`border-width` with no color anywhere is drawn black, native's default, and the
-web host draws it black too.
+per-side style that disagrees with the others is dropped for the same reason. `border-top` and the
+other per-side shorthands set that side's width and color, and take `solid` (native's default) or
+`none` as their style. Any other style there, as in `border-top: 1px dashed red`, is drawn solid
+with its width and color, and the build says so. A border shorthand with no color, such as `border:
+2px solid`, is drawn in the element's text color, its own or inherited, as on the web, and so is a
+border color of `currentColor`, which is what Tailwind's `border-current` writes. An outline with no
+color, an `outline-color`, a `background-color` and a `text-decoration-color` of `currentColor`, a
+`var()` that falls back to `currentColor` and a custom property that holds it take the text color
+the same way, where they are used. `color: currentColor` and `color: inherit` are the color the
+element inherits, as on the web, in a rule or in a `@keyframes` frame. All of them follow the text
+color when it changes. A border shorthand's width may be a `calc()` of one token, as in Bootstrap's
+`border-top: calc(var(--bs-border-width) * 2) solid`. A `border-width` with no color anywhere is
+drawn black, native's default, and the web host draws it black too.
 
 A custom property can hold a font stack (read as its first family, as `font-family` is), a unitless
 line-height, a ratio for `aspect-ratio`, a whole `box-shadow` list, or bare color channels for

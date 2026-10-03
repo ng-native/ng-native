@@ -228,6 +228,29 @@ describe('the per-side border shorthands', () => {
     // Solid is native's default, so saying it for one side changes nothing about the others.
     assert.throws(() => declarationsOf('border-top: 1px dashed red'), /one border style/);
   });
+
+  /** The first rule's declarations and deferred ones, with what the compiler said of the sheet. */
+  const lenient = (css: string) => {
+    const warnings: string[] = [];
+    const sheet = compileCss(css, 'side', { onUnsupported: (m: string) => warnings.push(m) });
+    return { rule: sheet.rules[0], warnings };
+  };
+
+  it('draws a dashed side solid and says so, where it cannot say dashed', () => {
+    const { rule, warnings } = lenient('.a { border-top: 1px dashed red }');
+    assert.equal(rule.declarations.borderTopWidth, 1);
+    assert.equal(rule.declarations.borderTopColor, 'rgb(255, 0, 0)');
+    assert.equal(warnings.length, 1);
+    assert.match(warnings[0]!, /dropped part of 'border-top'.*'dashed'.*drawn solid/);
+  });
+
+  it('says the same of a dashed side whose colour is a token, and keeps the line', () => {
+    const { rule, warnings } = lenient('.a { border-inline-start: 2px dotted var(--c) }');
+    assert.equal(rule.declarations.borderStartWidth, 2);
+    assert.equal(rule.deferred.length, 1, 'the colour, for the device');
+    assert.equal(warnings.length, 1);
+    assert.match(warnings[0]!, /dropped part of 'border-inline-start'.*'dotted'.*drawn solid/);
+  });
 });
 
 describe('properties React Native supports that we were rejecting', () => {

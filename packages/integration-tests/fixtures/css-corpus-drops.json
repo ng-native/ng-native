@@ -849,7 +849,7 @@
         "'background-size' mixes var() with other values, which needs a parser on device. calc() of tokens, numbers and points, max(var(--x), <length>), colours and transforms are understood; anything else has to be worked out at build time.": 2
       },
       "border-bottom": {
-        "border-bottom: native has one border style for the whole box, so a 'dotted' side cannot be drawn. Solid, native's default, is the one a single side can say.": 2
+        "border-bottom: native has one border style for the whole box, so a 'dotted' side is drawn solid, native's default.": 2
       },
       "border-collapse": {
         "'border-collapse' has no React Native equivalent: no style prop of a native view does what it does.": 1

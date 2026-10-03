@@ -15,6 +15,7 @@
 const {
   CURRENT_COLOUR,
   CssUnsupported,
+  drawnSolid,
   fallbackChain,
   fallbacks,
   tokenValue,
@@ -247,12 +248,7 @@ function line(property, list, context, linear) {
   const styleInToken = style === null;
   if (style === 'none' || style === 'hidden')
     return { declarations: every(widths, 0), deferred: [] };
-  if (!withStyle && style !== 'solid' && !styleInToken) {
-    throw new CssUnsupported(
-      `${context}: native has one border style for the whole box, so a '${style}' side cannot ` +
-        `be drawn. Solid, native's default, is the one a single side can say.`,
-    );
-  }
+  if (!withStyle && style !== 'solid' && !styleInToken) drawnSolid(context, style);
   Object.assign(declarations, width === null ? {} : every(widths, width));
   Object.assign(declarations, color === null ? {} : every(colors, color));
   if (withStyle && style !== null) declarations[`${prefix}Style`] = style;

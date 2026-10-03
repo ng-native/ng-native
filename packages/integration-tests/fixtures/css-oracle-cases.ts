@@ -706,6 +706,15 @@ export const CASES: OracleCase[] = [
     extra: ['border-top-width', 'border-top-color'],
   },
   {
+    // A known difference: the browser draws the side dashed, native solid, and the compiler says
+    // so. The width and the colour are the browser's.
+    name: 'a dashed border on one side keeps its width and colour',
+    css: '#probe { border-top: 2px dashed rgb(1, 2, 3) }',
+    tree: probe({ name: 'view' }),
+    extra: ['border-top-width', 'border-top-color'],
+    warns: true,
+  },
+  {
     name: 'an outline with no colour is drawn in the colour of the text',
     css: '#probe { color: rgb(7, 1, 0); outline: 2px solid }',
     tree: probe({ name: 'view' }),
