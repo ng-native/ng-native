@@ -20,7 +20,7 @@ const { transformAngular } = require('@ng-native/metro/angular-transform.cjs');
 import { fileURLToPath } from 'node:url';
 import type { Type } from '@angular/core';
 import { expoFonts, FontRegistry, Fonts, loadFonts, registrationsFor } from '@ng-native/expo/fonts';
-import { styleSheetOf, type StyleSheet } from '@ng-native/fabric';
+import { Engine, styleSheetOf, type StyleSheet } from '@ng-native/fabric';
 import { mount } from '@ng-native/platform';
 import { createFakeFabric } from '@ng-native/testing';
 import { compileFixture } from './compile.ts';
@@ -58,6 +58,21 @@ describe('declaring a face', () => {
     assert.deepEqual(fonts, [
       { family: 'Inter', source: { asset: './Inter-Bold.ttf' }, weight: 700 },
     ]);
+  });
+
+  it('keeps the range a variable font declares, and a range of one weight as that weight', () => {
+    const face = (weight: string) =>
+      compileCss(
+        `@font-face { font-family: Inter; src: url('./Inter.ttf'); font-weight: ${weight} }`,
+        'test',
+      ).fonts[0];
+    assert.deepEqual(face('100 900'), {
+      family: 'Inter',
+      source: { asset: './Inter.ttf' },
+      weightRange: [100, 900],
+    });
+    assert.equal(face('400 400').weight, 400);
+    assert.equal(face('400 400').weightRange, undefined);
   });
 
   it('reads bold in a face as 700, and normal as no weight', () => {
@@ -281,5 +296,50 @@ describe('reaching expo-font itself', () => {
     // `loadFonts` asks for, so an app following the docs did not compile.
     const tailwind: StyleSheet = { rules: [], fonts: [{ family: 'Inter', source: 1 }] };
     await withExpoFont(null, () => loadFonts(tailwind, styleSheetOf(class {})));
+  });
+});
+
+/**
+ * A variable font: one file that covers a range of weights. Native picks the instance from the
+ * weight it is given, so the weight has to stay on the text, where a face of one weight draws it
+ * and the weight is taken off.
+ */
+describe('a face that covers a range of weights', () => {
+  const props = (css: string) => {
+    const fabric = createFakeFabric();
+    const engine = new Engine(fabric, 1, { globalStyles: compileCss(css, 'fonts') as StyleSheet });
+    const text = engine.createElement('text');
+    engine.setClasses(text, 'title');
+    engine.appendChild(text, engine.createText('Title'));
+    engine.appendChild(engine.root, text);
+    engine.commit();
+    return fabric.committed[0]!.props;
+  };
+  const face = (file: string, weight: string) =>
+    `@font-face { font-family: Inter; src: url('./${file}.ttf'); font-weight: ${weight} }`;
+
+  it('keeps the weight of the text, and names the face by its range', () => {
+    const committed = props(
+      `${face('Inter', '100 900')} .title { font-family: Inter; font-weight: 600 }`,
+    );
+    assert.equal(committed['fontWeight'], '600');
+    assert.equal(committed['fontFamily'], 'Inter-100to900');
+  });
+
+  it('picks between two files by the range each covers', () => {
+    const sheet = `${face('Inter-Light', '100 400')} ${face('Inter-Heavy', '500 900')}`;
+    const at = (weight: number) =>
+      props(`${sheet} .title { font-family: Inter; font-weight: ${weight} }`)['fontFamily'];
+    assert.equal(at(300), 'Inter-100to400');
+    assert.equal(at(400), 'Inter-100to400');
+    assert.equal(at(700), 'Inter-500to900');
+  });
+
+  it('still takes the weight off for a face of one weight, which draws it', () => {
+    const committed = props(
+      `${face('Inter-Bold', '700')} .title { font-family: Inter; font-weight: 700 }`,
+    );
+    assert.equal(committed['fontWeight'], undefined);
+    assert.equal(committed['fontFamily'], 'Inter-700');
   });
 });

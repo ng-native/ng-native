@@ -454,6 +454,8 @@ export interface StyleSheet {
     readonly family: string;
     readonly source: unknown;
     readonly weight?: number;
+    /** The weights a variable font covers, `font-weight: 100 900`, in place of one `weight`. */
+    readonly weightRange?: readonly [number, number];
     readonly style?: string;
   }[];
 }

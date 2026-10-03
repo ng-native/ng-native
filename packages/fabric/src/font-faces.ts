@@ -19,11 +19,15 @@ export const DROP_MATCHED_WEIGHT_AND_STYLE = true;
 
 /**
  * The name a face is registered under: the family, then its weight and its style where it
- * declares them. `Inter`, `Inter-600`, `Inter-italic`, `Inter-600-italic`.
+ * declares them. `Inter`, `Inter-600`, `Inter-italic`, `Inter-600-italic`. A variable font's
+ * range is both its ends, `Inter-100to900`, so two files that split a family by range differ.
  */
-export function faceName(face: Pick<FontFace, 'family' | 'weight' | 'style'>): string {
+export function faceName(
+  face: Pick<FontFace, 'family' | 'weight' | 'weightRange' | 'style'>,
+): string {
   let name = face.family;
   if (face.weight !== undefined) name += `-${face.weight}`;
+  else if (face.weightRange) name += `-${face.weightRange[0]}to${face.weightRange[1]}`;
   if (face.style) name += `-${face.style}`;
   return name;
 }
@@ -59,7 +63,11 @@ export function matchFace(
   const wantedStyle = order.find((one) => faces.some((face) => slant(face) === one));
   const candidates = faces.filter((face) => slant(face) === wantedStyle);
 
-  const weightOfFace = (face: FontFace) => face.weight ?? 400;
+  // A face that covers a range has every weight in it: the nearest it has to the one wanted.
+  const weightOfFace = (face: FontFace) =>
+    face.weightRange
+      ? Math.min(Math.max(weight, face.weightRange[0]), face.weightRange[1])
+      : (face.weight ?? 400);
   const heavier = (from: number, to: number) =>
     candidates
       .filter((face) => weightOfFace(face) >= from && weightOfFace(face) <= to)
@@ -125,6 +133,7 @@ export class FontFaces {
     // upright one Android draws its system font slanted in place of the face, which iOS draws
     // upright anyway.
     delete style['fontStyle'];
+    // A face of one weight draws it. One that covers a range is told which, so the weight stays.
     if (face.weight !== undefined) delete style['fontWeight'];
   }
 }

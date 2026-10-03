@@ -83,6 +83,22 @@ slanted.
 A face is found once the sheet declaring it has been used, so declare faces in the global
 stylesheet, or in the component whose styles use them.
 
+### A variable font
+
+A variable font is one file that covers a range of weights, declared as CSS declares it:
+
+```css
+@font-face {
+  font-family: 'Inter';
+  src: url('./fonts/Inter-VariableFont_wght.ttf');
+  font-weight: 100 900;
+}
+```
+
+A weight inside the range is covered by that face, and the text keeps its `font-weight`, since the
+weight is what native picks the instance by. The face is registered as `Inter-100to900`. Two files
+that split a family, `100 400` and `500 900`, are picked between by the range each covers.
+
 ## Reading what loaded: `Fonts`
 
 `loadFonts()` runs before there is an injector to inject from, which is why it is a function

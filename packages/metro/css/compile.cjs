@@ -2355,14 +2355,20 @@ function fontFace(value, context) {
     // bundler never sees and a font that is missing on device with nothing to say why.
     source: { asset: fontUrl(read('source'), family, context) },
     ...(typeof weight === 'number' ? { weight } : {}),
+    ...(Array.isArray(weight) ? { weightRange: weight } : {}),
     ...(style && style !== 'normal' ? { style } : {}),
   };
 }
 
-/** A face's weight: the first of a range, `bold` as 700, `normal` as none given. */
+/**
+ * A face's weight: `bold` as 700, `normal` as none given, and a range, which is what a variable
+ * font declares, as its two ends. A range of one weight is that weight.
+ */
 function faceWeight(value) {
-  const first = value?.[0]?.value;
-  return first?.type === 'bold' ? 700 : first?.value;
+  const [low, high] = (value ?? []).map((end) =>
+    end?.value?.type === 'bold' ? 700 : end?.value?.value,
+  );
+  return typeof high === 'number' && high !== low ? [low, high] : low;
 }
 
 /** The file a face comes from. Anything but a `url()` is a font the bundle would not contain. */
