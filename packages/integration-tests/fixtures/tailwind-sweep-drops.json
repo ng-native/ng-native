@@ -2588,8 +2588,6 @@
     "block-[3]!"
   ],
   "dropped 'block-size': height: expected a length, and '…' is not one": [
-    "block-fit",
-    "block-fit!",
     "block-max",
     "block-max!",
     "block-min",
@@ -4780,14 +4778,10 @@
     "size-[3]!"
   ],
   "dropped 'height': height: expected a length, and '…' is not one": [
-    "h-fit",
-    "h-fit!",
     "h-max",
     "h-max!",
     "h-min",
     "h-min!",
-    "size-fit",
-    "size-fit!",
     "size-max",
     "size-max!",
     "size-min",
@@ -4846,8 +4840,6 @@
     "inline-[3]!"
   ],
   "dropped 'inline-size': width: expected a length, and '…' is not one": [
-    "inline-fit",
-    "inline-fit!",
     "inline-max",
     "inline-max!",
     "inline-min",
@@ -10695,14 +10687,10 @@
     "w-[3]!"
   ],
   "dropped 'width': width: expected a length, and '…' is not one": [
-    "size-fit",
-    "size-fit!",
     "size-max",
     "size-max!",
     "size-min",
     "size-min!",
-    "w-fit",
-    "w-fit!",
     "w-max",
     "w-max!",
     "w-min",

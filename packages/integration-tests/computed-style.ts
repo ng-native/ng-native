@@ -215,6 +215,8 @@ export function compare(property: string, browser: string, style: Style, box: nu
     return verdict(browser === 'nowrap' ? value === 1 : value === undefined);
   if (property === 'background-position') return verdict(samePosition(browser, value));
   if (COLOUR.test(property)) return verdict(sameColour(browser, value));
+  // A size the engine reads where the container is known, kept as the keyword until then.
+  if (browser === 'fit-content') return verdict(value === 'fit-content');
   if (LENGTH.test(property)) return verdict(sameLength(browser, value));
   if (NUMBER.test(property))
     return verdict(typeof value === 'number' && close(value, Number(browser)));

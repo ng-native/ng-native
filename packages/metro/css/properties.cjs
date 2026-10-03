@@ -1908,6 +1908,12 @@ const FALLBACKS = [
   [
     (property) => LENGTH.has(property),
     (property, value, out) => {
+      // Yoga has no such size. The engine reads it where the container is known: across the
+      // container's main axis the box stops stretching, and along it nothing changes.
+      if ((property === 'width' || property === 'height') && value?.type === 'fit-content') {
+        out[rnName(property)] = 'fit-content';
+        return;
+      }
       const settled = length(value, property);
       // A font size in percent is a share of the inherited one, which is what an em is: native's
       // fontSize takes points, so it is worked out where the inherited size is known.

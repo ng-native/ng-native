@@ -2532,12 +2532,6 @@
     "size-[0.35]",
     "size-[3]"
   ],
-  "dropped 'height': height: expected a length, and '…' is not one": [
-    "!h-fit",
-    "!size-fit",
-    "h-fit",
-    "size-fit"
-  ],
   "dropped 'hyphens': '…' is not mapped yet. React Native may well support it; nothing here translates it. Check RN's style types, then add it to css/properties.cjs.": [
     "!hyphens-auto",
     "!hyphens-manual",
@@ -4878,12 +4872,6 @@
     "size-[3]",
     "w-[0.35]",
     "w-[3]"
-  ],
-  "dropped 'width': width: expected a length, and '…' is not one": [
-    "!size-fit",
-    "!w-fit",
-    "size-fit",
-    "w-fit"
   ],
   "dropped 'will-change': '…' has no React Native equivalent: no style prop of a native view does what it does.": [
     "!will-change-[#1a2b3c]",

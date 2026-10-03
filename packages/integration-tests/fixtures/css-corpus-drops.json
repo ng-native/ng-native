@@ -972,7 +972,7 @@
   },
   "open-props": {
     "rules": 70,
-    "dropped": 204,
+    "dropped": 203,
     "emitted": [
       "aspectRatio",
       "backgroundColor",
@@ -1121,9 +1121,6 @@
       },
       "white-space": {
         "white-space: pre is not supported: native text has no switch for how spaces and line breaks are kept. nowrap, read as one line, and normal are.": 1
-      },
-      "width": {
-        "width: expected a length, and 'fit-content' is not one": 1
       },
       "writing-mode": {
         "'writing-mode' is not mapped yet. React Native may well support it; nothing here translates it. Check RN's style types, then add it to css/properties.cjs.": 1

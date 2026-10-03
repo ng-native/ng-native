@@ -683,6 +683,20 @@ const TEXT_PROPS =
 /** Props the engine writes that are a component's rather than a style's. */
 const COMPONENT_PROPS = new Set(['nativeID', 'accessible', 'pointerEvents', 'collapsable']);
 
+/**
+ * A `fit-content` size as the engine commits it in the layout scene, whose container is a column
+ * that stretches: no size, and across the column no stretch. What the engine does is tested in
+ * `css-fit-content.test.ts`; this is what checks that doing it puts the box where Chrome does.
+ */
+function fitted(style: Record<string, unknown>): Record<string, unknown> {
+  const { width, height, ...rest } = style;
+  if (width !== 'fit-content' && height !== 'fit-content') return style;
+  if (width !== 'fit-content') rest['width'] = width;
+  else if (rest['alignSelf'] === undefined) rest['alignSelf'] = 'flex-start';
+  if (height !== 'fit-content') rest['height'] = height;
+  return rest;
+}
+
 /** Properties that move a box, whose refusal accounts for a layout that differs. */
 const LAYOUT =
   /^(display|position|width|height|min-|max-|margin|padding|inset|top|right|bottom|left|gap|row-gap|column-gap|flex|align|justify|place|order|aspect-ratio|border.*width|box-sizing|overflow|grid|float|columns|zoom|translate|scale|rotate|transform|contain|content-visibility)/;
@@ -850,7 +864,7 @@ function sweepSuite(config: SweepConfig) {
       if (skipped === 'all' || [...skipped].some((one) => LAYOUT.test(one))) continue;
       const theirs = layout.cases[test.name] ?? layout.control;
       const resolved = resolve(test.classes, SCENE.inside.length);
-      const mine = layOut(resolved.own, layout.viewport, resolved.inside);
+      const mine = layOut(fitted(resolved.own), layout.viewport, resolved.inside);
       MEASURED.forEach((which, i) => {
         const box: Box = mine[which];
         const [left, top, width, height] = theirs[i]!;

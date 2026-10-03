@@ -196,6 +196,12 @@ name. A written fallback is read the same way, `var(--d, inline flex)` included.
 layout for, such as `var(--d, grid)`, is dropped with a build warning, and the token is still read
 where it is set.
 
+`width: fit-content` and `height: fit-content` keep a box at the size of its content. Along its
+container's main axis a box is that size already. Across it, where a box stretches, it stops
+stretching and sits at the start, as in a browser, unless the container's `align-items` or its own
+`align-self` already places it. `max-content` and `min-content` are dropped with a warning, as is
+`fit-content` on `min-width`, `max-width` and the two heights.
+
 `overflow` is one value for both axes - Yoga has no separate `overflow-x`/`overflow-y` - so a rule
 that gives them different values is dropped with a warning rather than silently picking one.
 `overflow: auto` is read as `scroll`, which is how Yoga lays out a scroll container, and `clip` as
