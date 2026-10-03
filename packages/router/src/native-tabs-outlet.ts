@@ -54,6 +54,7 @@ import {
   PRIMARY_OUTLET,
   Router,
   type Data,
+  type Route,
   type RouterOutletContract,
 } from '@angular/router';
 import { bindRouteInputs } from './bind-route-inputs.ts';
@@ -63,7 +64,26 @@ import { optionalBoolean } from './transforms.ts';
 import { NativeTab } from './native-tab.ts';
 import { ownHost } from './own-host.ts';
 import { markTabRoute } from './tab-routes.ts';
-import { withoutPresented } from './presented-route.ts';
+import { IN_TAB, type InTab } from './in-tab.ts';
+import { taken, withoutPresented } from './presented-route.ts';
+
+/** A url without its query or fragment. */
+const pathOnly = (url: string): string => url.split(/[?#]/, 1)[0]!;
+
+/**
+ * Whether one of `routes` matches `segments`, whole or up to lazy children not loaded yet, which a
+ * route that took a segment of its own is taken to lead to.
+ */
+function reaches(routes: readonly Route[], segments: readonly string[]): boolean {
+  return routes.some((route) => {
+    const count = taken(route, segments);
+    if (count === null) return false;
+    const rest = segments.slice(count);
+    if (rest.length === 0) return true;
+    if (route.children) return reaches(route.children, rest);
+    return count > 0 && route.loadChildren !== undefined;
+  });
+}
 
 interface TabEntry {
   readonly tab: NativeTab;
@@ -78,6 +98,8 @@ interface TabEntry {
   unbind: () => void;
   /** Whether this tab is the one showing, for what its screens hold: see `SCREEN_IN_FRONT`. */
   readonly inFront: WritableSignal<boolean>;
+  /** What the tab's stacks dismiss when another tab comes in front: see `IN_TAB`. */
+  readonly leaving: Set<() => string | null>;
 }
 
 /** What `tabSelected` carries. Only two fields matter here; the rest is diagnostics. */
@@ -259,7 +281,7 @@ export class NativeTabsOutlet implements RouterOutletContract, AfterContentInit 
     try {
       ref = createComponent(component, {
         environmentInjector,
-        elementInjector: this.outletInjector(route, entry.inFront),
+        elementInjector: this.outletInjector(route, entry),
         hostElement: content as Element,
       });
       this.applicationRef.attachView(ref.hostView);
@@ -286,12 +308,18 @@ export class NativeTabsOutlet implements RouterOutletContract, AfterContentInit 
     this.select(entry);
   }
 
+  /**
+   * Destroy the tab page in front: nothing once the router has detached it, as Angular's own
+   * outlet does nothing then. A tab under a route with no component of its own, a `loadChildren`
+   * wrapper or a group, has the router detach the page and then deactivate this same outlet, and
+   * that page is the tab, kept for when it is selected again.
+   */
   deactivate(): void {
-    const entry = this.selected;
-    if (!entry?.ref) return;
+    if (!this.isActivated) return;
+    const entry = this.selected!;
     entry.unbind();
     entry.unbind = () => {};
-    entry.ref.destroy();
+    entry.ref!.destroy();
     entry.ref = null;
     entry.route = null;
   }
@@ -375,6 +403,7 @@ export class NativeTabsOutlet implements RouterOutletContract, AfterContentInit 
         detached: false,
         unbind: () => {},
         inFront: signal(false),
+        leaving: new Set(),
       });
       // The reuse strategy detaches a tab whole, and has only the route to go on.
       // A path can have multiple route configs selected by canMatch (for example an iPad split
@@ -396,8 +425,18 @@ export class NativeTabsOutlet implements RouterOutletContract, AfterContentInit 
     return this.entries;
   }
 
+  /**
+   * The tab `route` is the page of, by its path from this outlet's route down to it. A route with
+   * no component above the page is part of that path: a `loadChildren` wrapper takes the tab's
+   * path and leaves `''` to the page under it, and a group is a `''` of its own.
+   */
   private entryFor(route: ActivatedRoute): TabEntry {
-    const path = (route.routeConfig ?? route.snapshot.routeConfig)?.path;
+    const config = route.routeConfig ?? route.snapshot.routeConfig;
+    const paths = [config?.path];
+    for (let above = route.parent; above && !above.component; above = above.parent) {
+      paths.unshift(above.routeConfig?.path);
+    }
+    const path = paths.filter(Boolean).join('/');
     const entry = this.readTabs().find((candidate) => candidate.key === path);
     if (!entry) {
       throw new Error(
@@ -405,15 +444,33 @@ export class NativeTabsOutlet implements RouterOutletContract, AfterContentInit 
           `reach needs one, and its path is what native identifies the tab by.`,
       );
     }
+    // Under a wrapper the page's config is not one of the children `readTabs` marked, and it is
+    // the one the reuse strategy is asked to detach whole.
+    if (config) markTabRoute(config);
     return entry;
   }
 
   /** Remember where this tab is, and tell native to show it. */
   private select(entry: TabEntry): void {
+    const left = this.selected;
+    if (left && left !== entry) this.leave(left);
     this.selected = entry;
     for (const other of this.entries) other.inFront.set(other === entry);
     entry.url = this.router?.url ?? entry.url;
     this.request(entry);
+  }
+
+  /**
+   * Another tab came in front of `entry`: its stacks dismiss what they presented, and it is
+   * remembered at the page beneath, where the outermost stack that dismissed something is left.
+   */
+  private leave(entry: TabEntry): void {
+    let url: string | null = null;
+    for (const dismiss of entry.leaving) {
+      const beneath = dismiss();
+      url ??= beneath;
+    }
+    if (url !== null) entry.url = url;
   }
 
   /**
@@ -435,9 +492,7 @@ export class NativeTabsOutlet implements RouterOutletContract, AfterContentInit 
   /** Keep the tab in front on the url it has reached, as long as the url is still inside it. */
   private follow(url: string): void {
     const entry = this.selected;
-    if (!entry) return;
-    const root = this.pathOf(entry);
-    if (url === root || url.startsWith(`${root}/`) || url.startsWith(`${root}?`)) entry.url = url;
+    if (entry && this.tabOf(url) === entry) entry.url = url;
   }
 
   /**
@@ -445,21 +500,44 @@ export class NativeTabsOutlet implements RouterOutletContract, AfterContentInit 
    * first screen, which a push into the tab from outside it shows first.
    */
   private unopenedTabOf(url: string): string | null {
-    for (const entry of this.entries) {
-      if (entry.ref) continue;
-      const root = this.pathOf(entry);
-      if (url.startsWith(`${root}/`)) return root;
-    }
-    return null;
+    const entry = this.tabOf(url);
+    if (!entry || entry.ref) return null;
+    const root = this.pathOf(entry);
+    return pathOnly(url) === root ? null : root;
   }
 
   /** Whether `url` is a tab other than the one in front, or a page inside one. */
   private behind(url: string): boolean {
-    return this.entries.some((entry) => {
-      if (entry === this.selected) return false;
+    const entry = this.tabOf(url);
+    return entry !== null && entry !== this.selected;
+  }
+
+  /**
+   * The tab `url` is in: the one with the longest url that starts it. A tab at `''` has the bar's
+   * own url, which at the root starts every url, pages outside the bar included, so it takes only
+   * a url its routes lead to, as far as they are loaded.
+   */
+  private tabOf(url: string): TabEntry | null {
+    const path = pathOnly(url);
+    let found: TabEntry | null = null;
+    for (const entry of this.entries) {
       const root = this.pathOf(entry);
-      return url === root || url.startsWith(`${root}/`);
-    });
+      const inside = path === root || path.startsWith(root.endsWith('/') ? root : `${root}/`);
+      if (!inside || (found && this.pathOf(found).length >= root.length)) continue;
+      if (!entry.key && !this.leadsInto(entry, path.slice(root.length))) continue;
+      found = entry;
+    }
+    return found;
+  }
+
+  /** Whether the routes of the tab at `''` lead to `rest`, the path under the bar's own url. */
+  private leadsInto(entry: TabEntry, rest: string): boolean {
+    const segments = rest.split('/').filter(Boolean);
+    const own = entry.route?.snapshot.routeConfig;
+    const routes = own
+      ? [own]
+      : (this.route.routeConfig?.children ?? []).filter((config) => config.path === '');
+    return segments.length === 0 || reaches(routes, segments);
   }
 
   private request(entry: TabEntry): void {
@@ -519,13 +597,20 @@ export class NativeTabsOutlet implements RouterOutletContract, AfterContentInit 
     return `/${[parent, entry.key].filter(Boolean).join('/')}`;
   }
 
-  /** As the stack outlet's: the route, the outlet contexts, and whether the tab is showing. */
-  private outletInjector(route: ActivatedRoute, inFront: WritableSignal<boolean>): Injector {
+  /**
+   * As the stack outlet's: the route, the outlet contexts, and whether the tab is showing. And the
+   * tab itself, for its stacks to hear when another comes in front.
+   */
+  private outletInjector(route: ActivatedRoute, entry: TabEntry): Injector {
     const outer = this.injector.get(SCREEN_IN_FRONT);
+    const tab: InTab = {
+      onLeave: (leave) => (entry.leaving.add(leave), () => entry.leaving.delete(leave)),
+    };
     return Injector.create({
       parent: this.injector,
       providers: [
-        { provide: SCREEN_IN_FRONT, useValue: computed(() => outer() && inFront()) },
+        { provide: SCREEN_IN_FRONT, useValue: computed(() => outer() && entry.inFront()) },
+        { provide: IN_TAB, useValue: tab },
         { provide: ActivatedRoute, useValue: route },
         {
           provide: ChildrenOutletContexts,

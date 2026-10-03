@@ -196,6 +196,7 @@ describe('the entry points a published package has', () => {
   // in every test here and be missing, or dangling, for an app.
   const BUILT = [
     'fabric',
+    'analog',
     'platform',
     'device',
     'router',

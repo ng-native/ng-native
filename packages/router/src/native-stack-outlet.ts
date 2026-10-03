@@ -57,6 +57,7 @@ import { intentOf, type NativeIntent } from './native-navigation.ts';
 import { NativePlatformLocation } from './native-platform-location.ts';
 import { PRESENTED, withoutPresented } from './presented-route.ts';
 import { markScreenRoute } from './tab-routes.ts';
+import { IN_TAB } from './in-tab.ts';
 import { ownHost } from './own-host.ts';
 import { SCREEN_HEADER } from './screen-header.ts';
 import { HostEngine, type EngineNode } from '@ng-native/fabric';
@@ -200,8 +201,10 @@ export class NativeStackOutlet implements RouterOutletContract, OnInit {
 
     const unhold = this.holder ? this.holdRefusals(this.holder) : undefined;
     const unpresent = this.takePresentedPages(back);
+    const unleave = inject(IN_TAB, { optional: true })?.onLeave(() => this.dismissPresented());
 
     inject(DestroyRef).onDestroy(() => {
+      unleave?.();
       unhold?.();
       unpresent?.();
       unsubscribeBack();
@@ -582,6 +585,20 @@ export class NativeStackOutlet implements RouterOutletContract, OnInit {
     entry.unbind();
     entry.ref.destroy();
     this.removeScreen(entry.screen);
+  }
+
+  /**
+   * Take off the lowest screen presented rather than pushed, and every screen over it, for a tab
+   * that has gone behind another: see `IN_TAB`. Answers the url of the screen left on top, or null
+   * when nothing was presented.
+   */
+  private dismissPresented(): string | null {
+    const index = this.entries.findIndex(
+      (entry, at) => at > 0 && (entry.presentation?.stackPresentation ?? 'push') !== 'push',
+    );
+    if (index === -1) return null;
+    for (const entry of this.entries.splice(index)) this.drop(entry);
+    return this.router ? this.urlOf(this.entries[index - 1]!) : null;
   }
 
   /** Take one entry out of the stack, wherever it is, and drop it. */

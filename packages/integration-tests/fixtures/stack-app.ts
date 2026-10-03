@@ -125,8 +125,80 @@ export class Fine {
 })
 export class Bar {}
 
+@Component({ selector: 'x-schedule', imports: [Text], template: `<text>schedule</text>` })
+export class Schedule {
+  constructor() {
+    track('Schedule');
+  }
+}
+
+@Component({ selector: 'x-speakers', imports: [Text], template: `<text>speakers</text>` })
+export class Speakers {
+  constructor() {
+    track('Speakers');
+  }
+}
+
+/** A tab that is a stack of its own, so a switch away and back has screens to lose. */
+@Component({
+  selector: 'x-venues',
+  imports: [NativeStackOutlet],
+  template: `<native-stack-outlet />`,
+})
+export class Venues {
+  constructor() {
+    track('Venues');
+  }
+}
+
+@Component({ selector: 'x-rooms', imports: [Text], template: `<text>rooms</text>` })
+export class Rooms {}
+
+@Component({ selector: 'x-room', imports: [Text], template: `<text>room {{ id() }}</text>` })
+export class Room {
+  readonly id = input.required<string>();
+  constructor() {
+    track('Room');
+  }
+}
+
+/** A tab bar whose tabs are under routes with no component of their own, as Analog's are. */
+@Component({
+  selector: 'x-wrapped-bar',
+  imports: [NativeTab, NativeTabsOutlet],
+  template: `
+    <native-tabs-outlet>
+      <native-tab path="schedule" title="Schedule" />
+      <native-tab path="speakers" title="Speakers" />
+      <native-tab path="venues" title="Venues" />
+    </native-tabs-outlet>
+  `,
+})
+export class WrappedBar {}
+
 export const routes: Routes = [
   { path: '', component: Home },
+  {
+    path: 'wrapped-tabs',
+    component: WrappedBar,
+    children: [
+      { path: 'schedule', loadChildren: () => [{ path: '', component: Schedule }] },
+      { path: '', children: [{ path: 'speakers', component: Speakers }] },
+      {
+        path: 'venues',
+        loadChildren: () => [
+          {
+            path: '',
+            component: Venues,
+            children: [
+              { path: '', component: Rooms },
+              { path: ':id', component: Room },
+            ],
+          },
+        ],
+      },
+    ],
+  },
   {
     path: 'tabs',
     component: Bar,

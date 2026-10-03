@@ -47,3 +47,15 @@ packageExtensions:
   debug:
     dependencies:
       supports-color: ^8.1.1
+  # @analogjs/router imports @analogjs/content only for a Markdown page, and lists it as a required
+  # peer, which pnpm installs: sharp, satori, marked and @nx/devkit, for a feature a native app
+  # cannot use. Optional, nothing installs it unless the app does. It also imports @angular/common,
+  # @angular/platform-browser and rxjs without declaring them; as peers they resolve to the app's.
+  '@analogjs/router':
+    peerDependencies:
+      '@angular/common': '*'
+      '@angular/platform-browser': '*'
+      rxjs: '*'
+    peerDependenciesMeta:
+      '@analogjs/content':
+        optional: true

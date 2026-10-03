@@ -1,0 +1,13 @@
+:host {
+  flex: none;
+}
+
+.note {
+  padding: 14px 16px;
+  gap: 8px;
+}
+
+.file {
+  color: light-dark(#c30f2e, #ff6b81);
+  font-size: 13px;
+}

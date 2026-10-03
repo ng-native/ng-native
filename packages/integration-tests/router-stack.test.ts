@@ -269,6 +269,118 @@ describe('a native stack driven by the router', () => {
     });
   });
 
+  /**
+   * A tab whose route has no component of its own, a `loadChildren` wrapper or a group, as every
+   * page of Analog's file routes is. The page the tab bar activates is the one under it, at `''`
+   * or at its own path, and the tab is still the one named by the path above it.
+   */
+  describe('a tab under a route with no component', () => {
+    const host = () =>
+      flatten(fabric.committed).find((node) => node.viewName === 'RNSTabsHostIOS')!;
+    const selected = () =>
+      (host().props['navStateRequest'] as { selectedScreenKey: string }).selectedScreenKey;
+    let provenance = 0;
+    const tap = async (key: string) => {
+      await fireEvent(host(), 'tabSelected', { selectedScreenKey: key, provenance: ++provenance });
+      await idle();
+    };
+
+    it('opens a tab under a loadChildren wrapper, and one in a group, from a link', async () => {
+      assert.equal(await router.navigateByUrl('/wrapped-tabs/schedule'), true);
+      await idle();
+      assert.equal(selected(), 'schedule');
+      assert.equal(live['Schedule'], 1);
+
+      assert.equal(await router.navigateByUrl('/wrapped-tabs/speakers'), true);
+      await idle();
+      assert.equal(selected(), 'speakers');
+      assert.equal(live['Speakers'], 1);
+
+      assert.equal(await router.navigateByUrl('/wrapped-tabs/venues/2'), true);
+      await idle();
+      assert.equal(selected(), 'venues', 'and a page inside a wrapped tab selects that tab');
+      assert.equal(live['Room'], 1);
+    });
+
+    it('switches between them on a tap, keeping each page as it was left', async () => {
+      await router.navigateByUrl('/wrapped-tabs/schedule');
+      await idle();
+      await tap('speakers');
+      assert.equal(router.url, '/wrapped-tabs/speakers');
+      await tap('schedule');
+      assert.equal(router.url, '/wrapped-tabs/schedule');
+      assert.equal(selected(), 'schedule');
+      assert.equal(created['Schedule'], 1, 'the same page, not a new one');
+      assert.equal(live['Schedule'], 1);
+      assert.equal(live['Speakers'], 1, 'and the tab behind is still mounted');
+      assert.deepEqual(reported, []);
+    });
+
+    it('keeps the stack inside a wrapped tab across a switch', async () => {
+      await router.navigateByUrl('/wrapped-tabs/venues');
+      await nav.push('/wrapped-tabs/venues/1');
+      await idle();
+      assert.equal(router.url, '/wrapped-tabs/venues/1');
+      assert.deepEqual(stack(fabric).slice(-2), ['rooms', 'room 1']);
+
+      await tap('schedule');
+      await tap('venues');
+      assert.equal(router.url, '/wrapped-tabs/venues/1');
+      assert.equal(created['Venues'], 1, 'the tab and its stack, not new ones');
+      assert.equal(created['Room'], 1);
+      assert.deepEqual(stack(fabric).slice(-2), ['rooms', 'room 1']);
+    });
+
+    /**
+     * A sheet presented in a tab's own stack covers the whole window natively, the tab bar too, so
+     * a tab kept with its sheet up would leave the sheet over the tab now in front.
+     */
+    describe('with a sheet presented in its own stack', () => {
+      const sheets = () =>
+        flatten(fabric.committed).filter((node) => node.props['stackPresentation'] === 'formSheet');
+
+      beforeEach(async () => {
+        await router.navigateByUrl('/wrapped-tabs/venues');
+        await nav.present('/wrapped-tabs/venues/1', { as: 'formSheet' });
+        await idle();
+        assert.equal(sheets().length, 1);
+      });
+
+      it('dismisses the sheet when another tab comes in front', async () => {
+        await tap('schedule');
+        assert.equal(router.url, '/wrapped-tabs/schedule');
+        assert.equal(sheets().length, 0, 'no sheet left over the tab in front');
+        assert.equal(live['Room'], 0);
+      });
+
+      it('comes back on the page beneath the sheet', async () => {
+        await tap('schedule');
+        await tap('venues');
+        assert.equal(router.url, '/wrapped-tabs/venues');
+        assert.equal(selected(), 'venues');
+        assert.deepEqual(stack(fabric).slice(-1), ['rooms']);
+        assert.equal(sheets().length, 0);
+        assert.equal(created['Venues'], 1, 'the same tab and stack');
+        assert.equal(created['Room'], 1, 'and no sheet opened again');
+      });
+    });
+
+    it('leaves a sheet on the app stack, over the bar, to the router', async () => {
+      await router.navigateByUrl('/wrapped-tabs/venues');
+      await nav.push('/wrapped-tabs/venues/1');
+      await nav.present('/user/1', { as: 'formSheet' });
+      await idle();
+      assert.deepEqual(stack(fabric).slice(-1), ['user 1']);
+
+      nav.back();
+      await idle();
+      assert.equal(router.url, '/wrapped-tabs/venues/1');
+      assert.equal(live['User'], 0);
+      assert.equal(live['Room'], 1, 'the page pushed in the tab is still there');
+      assert.equal(created['Room'], 1);
+    });
+  });
+
   describe('a push from a presented screen', () => {
     /** The app stack's own screens, bottom first: what each says, and how it is presented. */
     const appStack = () =>

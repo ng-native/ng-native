@@ -1,0 +1,17 @@
+{
+  "expo": {
+    "name": "Analog Showroom",
+    "slug": "analog-example",
+    "scheme": "analogshowroom",
+    "icon": "./assets/icon.png",
+    "newArchEnabled": true,
+    "userInterfaceStyle": "automatic",
+    "ios": {
+      "bundleIdentifier": "dev.angularnative.analog"
+    },
+    "android": {
+      "package": "dev.angularnative.analog"
+    },
+    "plugins": ["@ng-native/metro"]
+  }
+}

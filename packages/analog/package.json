@@ -1,0 +1,75 @@
+{
+  "name": "@ng-native/analog",
+  "version": "0.4.0",
+  "description": "Analog's file-based pages as native routes for Angular Native: src/app/pages, routed by @analogjs/router on a native stack.",
+  "keywords": [
+    "angular",
+    "react-native",
+    "angular-native",
+    "ios",
+    "android",
+    "fabric",
+    "native",
+    "analog",
+    "analogjs",
+    "router",
+    "file-based-routing"
+  ],
+  "type": "module",
+  "main": "src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./metro": "./metro.cjs",
+    "./package.json": "./package.json"
+  },
+  "publishConfig": {
+    "access": "public",
+    "main": "dist/index.js",
+    "types": "dist/index.d.ts",
+    "exports": {
+      ".": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      },
+      "./metro": "./metro.cjs",
+      "./package.json": "./package.json"
+    }
+  },
+  "peerDependencies": {
+    "@analogjs/router": "^2.8.0",
+    "@angular/core": "^22.0.0",
+    "@angular/router": "^22.0.0"
+  },
+  "devDependencies": {
+    "@analogjs/router": "~2.8.0",
+    "@angular/common": "22.2.0",
+    "@angular/core": "22.2.0",
+    "@angular/platform-browser": "22.2.0",
+    "@angular/router": "22.2.0",
+    "rxjs": "^7.8.2"
+  },
+  "nx": {
+    "tags": [
+      "scope:analog",
+      "layer:angular"
+    ]
+  },
+  "scripts": {
+    "build": "ngc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "license": "MIT",
+  "homepage": "https://ng-native.com/packages/analog",
+  "bugs": {
+    "url": "https://github.com/ng-native/ng-native/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ng-native/ng-native.git",
+    "directory": "packages/analog"
+  },
+  "files": [
+    "dist",
+    "metro.cjs"
+  ]
+}

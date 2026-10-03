@@ -31,12 +31,16 @@ export class TabsPage {
 ```
 
 `path` names the child route the tab selects - the route config underneath needs one child route per
-`<native-tab>`, matched by that same path. `sfSymbol` (iOS) and `drawable` (Android) are shorthand
-for the fuller `icon`/`selectedIcon` inputs, and a tab that names both draws each on its own
-platform. Each platform reads only its own, so a tab with just one has no icon on the other, and in
-development that platform logs a warning naming the tab's path. The fuller inputs also take a
-`require()`d image drawn either as-authored or as a tinted template mask; `icon` and `selectedIcon`
-must be the same kind of image, since native carries one icon type for both states.
+`<native-tab>`, matched by that same path. A child route with no component of its own counts as
+part of the path: a `loadChildren` wrapper whose page sits at `''` beneath it, as Analog's file
+routes make, or a group at `''` around the tab's route. A tab can be at `path=""` too, the bar's
+own url, with its pages at urls beside those of routes outside the bar; a page belongs to it when
+its routes lead there. `sfSymbol` (iOS) and `drawable` (Android) are shorthand for the fuller
+`icon`/`selectedIcon` inputs, and a tab that names both draws each on its own platform. Each
+platform reads only its own, so a tab with just one has no icon on the other, and in development
+that platform logs a warning naming the tab's path. The fuller inputs also take a `require()`d
+image drawn either as-authored or as a tinted template mask; `icon` and `selectedIcon` must be the
+same kind of image, since native carries one icon type for both states.
 
 Every tab is a route a user reaches in one tap, so a tab whose route is lazy pauses on its first
 visit while its code loads. `withPreloading(PreloadAllModules)` in `provideNativeRouter` loads
@@ -76,6 +80,10 @@ Native holds the current selection, not your app - a tap is round-tripped throug
 real navigation, so the URL and the bar never disagree, and each tab keeps its own screen (and its
 own stack, if it has one) mounted while another tab is in front. Returning to a tab returns to
 wherever it was left, because the outlet remembers each tab's own url.
+
+A sheet or modal presented in a tab's own stack is the exception. Natively it covers the whole
+window, the bar included, so it cannot stay up while its tab is behind another: when another tab
+comes in front it is dismissed, and returning to its tab returns to the page beneath it.
 
 ## Content above the tab bar
 
