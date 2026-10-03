@@ -12,8 +12,9 @@ export interface FakeFabricNode {
   children: FakeFabricNode[];
   instanceHandle: unknown;
   /**
-   * The node this one is under, in the commit a query found it in: null at the top. Set by the
-   * queries, so a node held from before a later commit says where it was, not where it is.
+   * The node this one is under, as of the last query: null at the top. Set by the queries as they
+   * walk the committed tree. A commit shares the nodes it did not change with the one before, so
+   * on a node held across commits a later query may set it again, to the parent in that commit.
    */
   readonly parent?: FakeFabricNode | null;
 }

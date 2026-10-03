@@ -164,7 +164,8 @@ them as well. A node scrolled off screen is not hidden; the fake has no layout t
 `<virtual-list>` keeps a few recycled rows hidden this way, still showing their last item, so a
 query does not find those either.
 
-A node a query returns has `parent`: the node it is under in that commit, and `null` at the top.
+A node a query returns has `parent`: the node it is under as of that query, and `null` at the top.
+Query again after a change rather than keep a node and read its `parent` later.
 So a test goes up from what it found, `screen.getByText('Hello').parent`, to the row around it.
 
 ## Interactions
