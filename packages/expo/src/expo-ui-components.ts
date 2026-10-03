@@ -120,8 +120,10 @@ export class UiMenu {
  * it holds is laid out by the engine, as anywhere else, and takes presses as anywhere else, so a
  * row drawn with the app's own components can be a context menu's trigger or a sheet's body.
  *
- * It holds one element. `matchContents` sizes it to that element, where it otherwise fills what
- * the SwiftUI or Compose view around it offers.
+ * It holds one element. `matchContents` sizes it to that element, both ways: the element needs a
+ * width of its own, since nothing here stretches it. Without `matchContents` it fills what the
+ * SwiftUI or Compose view around it offers, which inside a view sized to its content is a width
+ * and no height.
  */
 @Component({
   selector: 'ui-view-host',

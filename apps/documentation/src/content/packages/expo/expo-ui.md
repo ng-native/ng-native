@@ -202,11 +202,15 @@ else, and a long press lifts it and opens the menu:
 ```html
 @for (row of list.window(); track row.slot) {
 <view [virtualListRow]="row">
-  <ui-host ignoreSafeArea="all" [matchContents]="{ vertical: true }">
+  <ui-host
+    ignoreSafeArea="all"
+    [matchContents]="{ vertical: true }"
+    (layout)="rowWidth.set($event.nativeEvent.layout.width)"
+  >
     <ui-context-menu>
       <ui-slot name="trigger">
         <ui-view-host [matchContents]="true">
-          <pressable class="row" (press)="open(row.item)">
+          <pressable class="row" [style.width.px]="rowWidth()" (press)="open(row.item)">
             <text>{{ row.item.label }}</text>
           </pressable>
         </ui-view-host>
@@ -230,11 +234,16 @@ else, and a long press lifts it and opens the menu:
 }
 ```
 
-`<ui-view-host>` holds one element, and `matchContents` sizes it to that element. Each row has a
-host of its own, sized to the row's height. `ignoreSafeArea="all"` matters in a list: a host
-keeps clear of the safe area otherwise, and a row that scrolls under the home indicator is pushed
-over the one above it. The menu is SwiftUI's alone, and on Android `ui-context-menu` commits as
-nothing; a long press there opens `Dialogs.choose()`.
+`<ui-view-host>` holds one element, and `matchContents` sizes it to that element: its height, and
+its width too. Nothing stretches the row to the list's width as a `<view>` around it would, so the
+row is given one, here the width its `ui-host` is laid out at, kept in a signal
+(`rowWidth = signal<number | undefined>(undefined)`). Without it the row is as wide as its text;
+without `matchContents` it has the width and no height.
+
+Each row has a host of its own, sized to the row's height. `ignoreSafeArea="all"` matters in a
+list: a host keeps clear of the safe area otherwise, and a row that scrolls under the home
+indicator is pushed over the one above it. The menu is SwiftUI's alone, and on Android
+`ui-context-menu` commits as nothing; a long press there opens `Dialogs.choose()`.
 
 ## Text field state: `nativeState`
 
