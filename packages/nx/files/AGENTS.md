@@ -38,9 +38,10 @@ change; both are fast.
 - **A component's host is a flex item.** `<app-case-list />` commits as a view of its own, with no
   `flex`, so a `flex: 1` scroll view inside it gets a height of zero and shows nothing. A component
   that fills the space it is given sets `host: { style: 'flex: 1' }` (or `:host { flex: 1; }`).
-- **Text is drawn in a text element.** `<text>` is the one with inputs (`numberOfLines`, `(press)`);
-  `p`, `span` and the other HTML text elements are text too. Text written straight into a view is
-  given a paragraph of its own, one per run, and never flows inline with the elements beside it.
+- **Text is drawn in a text element.** `<text>` is the one with inputs and outputs (`numberOfLines`,
+  `(press)`). `p`, `span` and the other HTML text elements are text while they hold only text and
+  other text elements; one that holds a view is a view. Text written straight into a view is given
+  a paragraph of its own, one per run, and never flows inline with the elements beside it.
 - **Events are native:** `(press)` on `<pressable>`, not `(click)`; `[(value)]` or `(changeText)` on
   `<text-input>`; `(scroll)`, `(layout)`. A pressable text is `<text pressable (press)="...">`.
 - **Signals, zoneless, AOT.** State is signals and `computed()`; there is no zone.js, so nothing
