@@ -354,6 +354,7 @@ describe('in the TypeScript preset', () => {
       '@ng-native/components': native.dependencies['@ng-native/components'],
     });
     assert.deepEqual(manifest.devDependencies, {
+      '@angular/compiler-cli': native.devDependencies['@angular/compiler-cli'],
       '@ng-native/testing': native.devDependencies['@ng-native/testing'],
       vitest: native.devDependencies.vitest,
     });
@@ -454,11 +455,60 @@ describe('in the TypeScript preset', () => {
   });
 });
 
+describe('nx typecheck for a library in the TypeScript preset', () => {
+  /** A component with nothing to import but Angular, so it compiles where the test runs. */
+  const component = (template: string) =>
+    `import { Component, signal } from '@angular/core';\n` +
+    `@Component({ selector: 'lib-ui', template: \`${template}\` })\n` +
+    `export class Ui { protected readonly count = signal(0); }\n`;
+
+  it('runs ngc on a config of its own, with the compiler among its dependencies', async () => {
+    const tree = tsPreset();
+    await generate(tree, { directory: 'packages/ui' });
+    assert.deepEqual(readJson(tree, 'packages/ui/tsconfig.typecheck.json'), {
+      extends: './tsconfig.lib.json',
+      compilerOptions: { noEmit: true, composite: false, emitDeclarationOnly: false },
+      angularCompilerOptions: {
+        strictTemplates: true,
+        typeCheckHostBindings: false,
+        strictDomEventTypes: false,
+      },
+    });
+    const manifest = readJson(tree, 'packages/ui/package.json');
+    assert.deepEqual(manifest.nx.targets.typecheck.options, {
+      cwd: 'packages/ui',
+      command: 'ngc -p tsconfig.typecheck.json',
+    });
+    assert.ok(manifest.devDependencies['@angular/compiler-cli']);
+  });
+
+  it('fails on a template that reads what the component does not have, and passes one that is right', async () => {
+    const tree = tsPreset();
+    await generate(tree, { directory: 'packages/ui' });
+    tree.write('packages/ui/src/lib/ui.ts', component('{{ missing() }}'));
+    assert.match(compile(tree, 'ngc', 'packages/ui/tsconfig.typecheck.json'), /missing/);
+
+    tree.write('packages/ui/src/lib/ui.ts', component('{{ count() }}'));
+    assert.equal(compile(tree, 'ngc', 'packages/ui/tsconfig.typecheck.json'), '');
+  });
+
+  it('leaves an @nx/angular workspace, which has its own, alone', async () => {
+    const tree = integrated();
+    await generate(tree, { directory: 'libs/ui' });
+    assert.equal(tree.exists('libs/ui/tsconfig.typecheck.json'), false);
+  });
+});
+
 /**
  * The compiler's own word on a generated project: the tree written out under this package, so
  * its modules resolve, and `tsc` run on one of its configs. Answers the diagnostics, or ''.
  */
 function typecheck(tree: Tree, config: string): string {
+  return compile(tree, 'tsc', config);
+}
+
+/** The same with either compiler: `tsc`, or `ngc`, which reads the templates as well. */
+function compile(tree: Tree, compiler: 'tsc' | 'ngc', config: string): string {
   const cache = path.join(import.meta.dirname, '..', 'node_modules', '.cache');
   mkdirSync(cache, { recursive: true });
   const root = mkdtempSync(path.join(cache, 'library-'));
@@ -469,8 +519,14 @@ function typecheck(tree: Tree, config: string): string {
       mkdirSync(path.dirname(file), { recursive: true });
       writeFileSync(file, change.content);
     }
-    const tsc = require.resolve('typescript/bin/tsc');
-    execFileSync(process.execPath, [tsc, '-p', path.join(root, config)], {
+    const bin =
+      compiler === 'tsc'
+        ? require.resolve('typescript/bin/tsc')
+        : path.join(
+            path.dirname(require.resolve('@angular/compiler-cli/package.json')),
+            'bundles/src/bin/ngc.js',
+          );
+    execFileSync(process.execPath, [bin, '-p', path.join(root, config)], {
       stdio: 'pipe',
     });
     return '';

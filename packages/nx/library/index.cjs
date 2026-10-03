@@ -23,6 +23,7 @@ const {
   names,
   readNxJson,
   readJson,
+  writeJson,
   updateJson,
   updateProjectConfiguration,
 } = require('@nx/devkit');
@@ -107,6 +108,11 @@ const imports = {
   },
 };
 
+/** What `nx typecheck` runs for a library in the TypeScript preset: `ngc`, which reads templates. */
+const typecheckDependencies = {
+  '@angular/compiler-cli': native.devDependencies['@angular/compiler-cli'],
+};
+
 function projectAt(tree, root) {
   for (const [name, project] of getProjects(tree))
     if (project.root === root) return { name, project };
@@ -186,6 +192,39 @@ function importWithTsExtensions(tree, root) {
   tree.write(index, source.replace(/(from\s+['"]\.{1,2}\/[^'"]*)\.js(['"])/g, '$1.ts$2'));
 }
 
+/** The config `nx typecheck` gives `ngc` for a library, beside the one it is built with. */
+const TYPECHECK_CONFIG = 'tsconfig.typecheck.json';
+
+/**
+ * A config `ngc` can check the library's templates with, as an app's `typecheck` does. `@nx/js`
+ * infers a `typecheck` that runs `tsc`, which reads no template: a misspelled input passes.
+ *
+ * `tsconfig.lib.json` itself will not do: `ngc` refuses `emitDeclarationOnly`, and a project that
+ * is `composite` has to emit. The Angular options are the generated app's: a native view has no
+ * DOM to check a host binding or an event against.
+ */
+function writeTypecheckConfig(tree, root) {
+  writeJson(tree, joinPathFragments(root, TYPECHECK_CONFIG), {
+    extends: './tsconfig.lib.json',
+    compilerOptions: { noEmit: true, composite: false, emitDeclarationOnly: false },
+    angularCompilerOptions: {
+      strictTemplates: true,
+      typeCheckHostBindings: false,
+      strictDomEventTypes: false,
+    },
+  });
+}
+
+/** `nx typecheck <library>`: `ngc`, in place of the `tsc` `@nx/js` infers. */
+function typecheckTarget(root) {
+  return {
+    executor: 'nx:run-commands',
+    options: { cwd: root, command: `ngc -p ${TYPECHECK_CONFIG}` },
+    cache: true,
+    inputs: ['default', '^production'],
+  };
+}
+
 /** Whether a tsconfig emits declarations and no JavaScript, once what it extends is merged in. */
 function emitsDeclarationsOnly(tree, file) {
   const { noEmit, emitDeclarationOnly } = emitOptions(tree, file, new Set());
@@ -223,7 +262,8 @@ function emitOptions(tree, file, seen) {
  * a workspace package, which pnpm links from, and at the root otherwise. A version already there
  * is left alone.
  */
-async function addImports(tree, root) {
+async function addImports(tree, root, alsoDev = {}) {
+  const devDependencies = { ...imports.devDependencies, ...alsoDev };
   const manifest = joinPathFragments(root, 'package.json');
   const rootManifest = readJson(tree, 'package.json');
   if (tree.exists(manifest)) {
@@ -231,7 +271,7 @@ async function addImports(tree, root) {
     return addDependenciesToPackageJson(
       tree,
       await own(imports.dependencies),
-      await own(imports.devDependencies),
+      await own(devDependencies),
       manifest,
       true,
     );
@@ -240,7 +280,7 @@ async function addImports(tree, root) {
   return addDependenciesToPackageJson(
     tree,
     await asSaved(tree, imports.dependencies, existing),
-    await asSaved(tree, imports.devDependencies, existing),
+    await asSaved(tree, devDependencies, existing),
     'package.json',
     true,
   );
@@ -266,10 +306,12 @@ async function library(tree, options) {
   tree.write(joinPathFragments(directory, 'vitest.config.mts'), native.vitestConfig(aliases));
   writeSpecConfig(tree, directory, angular);
   if (!angular) importWithTsExtensions(tree, directory);
+  if (!angular) writeTypecheckConfig(tree, directory);
   updateProjectConfiguration(tree, name, {
     ...project,
     targets: {
       ...project.targets,
+      ...(angular ? {} : { typecheck: typecheckTarget(directory) }),
       test: {
         executor: 'nx:run-commands',
         options: { cwd: directory, command: 'vitest run' },
@@ -279,7 +321,7 @@ async function library(tree, options) {
     },
   });
 
-  await addImports(tree, directory);
+  await addImports(tree, directory, angular ? {} : typecheckDependencies);
   // `nxViteTsPaths()`, which the Vitest config uses to reach the workspace's other libraries.
   if (aliases) {
     const vite = { '@nx/vite': workspaceNxVersion(tree) };
