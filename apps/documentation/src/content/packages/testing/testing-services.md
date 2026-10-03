@@ -44,6 +44,9 @@ it('replaces a service with a stand-in', async () => {
 `Weather` is written with `@Injectable({ providedIn: 'root' })` rather than `@Service()` on purpose:
 both forms declare a root-scoped service, and a test resolves either the same way.
 
+A service that is a token rather than a class is faked the same way. `Storage` holds a `Store`,
+and [its page](/packages/expo/storage#in-a-test) has the fake a test gives it.
+
 ## A service on its own
 
 A service with no component to render goes through `injectService()`. It creates the service in an

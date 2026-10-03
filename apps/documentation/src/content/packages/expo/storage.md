@@ -160,6 +160,31 @@ On the web, and in a test that provides no fake, every read resolves to `null` a
 dropped silently: `signal()` stays at `initial` forever, `ready` still becomes `true`, `error` stays
 `null` and `flush()` resolves. Nothing throws.
 
+## In a test
+
+`Storage` and `SecureStorage` are tokens holding a `Store`, so a test's fake is a `Store` of its
+own over a map, provided under the token. `Store` comes from `@ng-native/expo/store`, and takes
+the three verbs of a `NativeStore`:
+
+```ts
+import { Storage } from '@ng-native/expo/async-storage';
+import { Store } from '@ng-native/expo/store';
+
+const disk = new Map([['theme', JSON.stringify('dark')]]);
+const storage = new Store({
+  get: async (key) => disk.get(key) ?? null,
+  set: async (key, value) => void disk.set(key, value),
+  remove: async (key) => void disk.delete(key),
+});
+
+await render(Settings, { providers: [{ provide: Storage, useValue: storage }] });
+```
+
+The map holds what the device would: each value as JSON text, so the string `dark` is stored as
+`'"dark"'`. A signal from `signal('theme', 'system')` reads `'dark'` once `render()` has
+resolved, and `await storage.flush()` after a write is when the map has it. `SecureStorage` from
+`@ng-native/expo/secure-store` takes the same fake.
+
 ## Working offline
 
 `Storage` is the right cache for one value - a preference, a "last synced at" timestamp - not a
