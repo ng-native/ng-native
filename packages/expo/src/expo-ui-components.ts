@@ -116,6 +116,25 @@ export class UiMenu {
 }
 
 /**
+ * A SwiftUI `contextMenu`: the menu a long press on its trigger opens, with the trigger lifted
+ * over the dimmed screen. iOS only.
+ *
+ * Its content is three slots: `<ui-slot name="trigger">` is what is always shown,
+ * `<ui-slot name="items">` holds the `ui-button`s, `ui-divider`s and `ui-section`s of the menu, and
+ * `<ui-slot name="preview">`, when there is one, is shown above the open menu in place of the
+ * trigger. All three are SwiftUI content, as everything inside a `ui-host` is.
+ */
+@Component({
+  selector: 'ui-context-menu',
+  template: '<ng-content />',
+  host: { '[modifiers]': 'modifiers()' },
+})
+export class UiContextMenu {
+  protected readonly nativeView = nativeView();
+  readonly modifiers = input<readonly UiModifier[]>();
+}
+
+/**
  * A SwiftUI `Button`, as a menu item or on its own, or Compose's on Android, which draws `label` as
  * text inside it. `systemImage` and `role` are SwiftUI's alone.
  */

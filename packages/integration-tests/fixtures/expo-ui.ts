@@ -5,6 +5,7 @@ import { ExpoImage } from '../../expo/src/expo-image.ts';
 import {
   UiButton,
   UiColorPicker,
+  UiContextMenu,
   UiForm,
   UiChart,
   UiGauge,
@@ -35,6 +36,7 @@ import {
     DateTimePicker,
     SegmentedControl,
     UiButton,
+    UiContextMenu,
     UiDatePicker,
     UiDivider,
     UiHost,
@@ -50,6 +52,13 @@ import {
         <ui-button label="Delete" role="destructive" (buttonPress)="presses.set(presses() + 1)" />
         <ui-divider />
       </ui-menu>
+      <ui-context-menu [modifiers]="[{ $type: 'opacity', value: 1 }]">
+        <ui-slot name="trigger"><ui-text text="Row" /></ui-slot>
+        <ui-slot name="items">
+          <ui-button label="Archive" (buttonPress)="presses.set(presses() + 10)" />
+        </ui-slot>
+        <ui-slot name="preview"><ui-text text="Preview" /></ui-slot>
+      </ui-context-menu>
       <ui-date-picker
         selection="2026-01-02T00:00:00Z"
         [displayedComponents]="['date']"

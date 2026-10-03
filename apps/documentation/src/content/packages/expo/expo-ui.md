@@ -82,6 +82,9 @@ error. `expo-ui-components.ts` has thin typed components for the views an app re
 - **`UiHost`** - the bridge above.
 - **`UiMenu`** - a SwiftUI `Menu`. Its trigger is the `label` input or a `<ui-slot name="label">`;
   its items are children.
+- **`UiContextMenu`** - a SwiftUI `contextMenu`, the menu a long press opens, iOS only. Its
+  content is three `ui-slot`s: `trigger`, what is always shown; `items`, the menu's buttons; and
+  `preview`, shown above the open menu when there is one. See [A context menu](#a-context-menu).
 - **`UiButton`** - a SwiftUI `Button`, as a menu item or on its own. `role` is `'default'`,
   `'cancel'` or `'destructive'`.
 - **`UiDivider`** - a separator between groups of menu items.
@@ -170,6 +173,28 @@ Still call `registerExpoUiViews` alongside importing these. The component suppli
 registration is what makes the element commit as the SwiftUI or Compose view. Add a component here
 when a template wants one of the other views typed, from `@expo/ui`'s own props for it - the rest
 stay names.
+
+## A context menu
+
+A long press on the trigger lifts it over the dimmed screen and opens the menu beside it:
+
+```html
+<ui-host [matchContents]="true">
+  <ui-context-menu>
+    <ui-slot name="trigger"><ui-text text="Invoice 1042" /></ui-slot>
+    <ui-slot name="items">
+      <ui-button label="Duplicate" systemImage="plus.square.on.square" (buttonPress)="copy()" />
+      <ui-divider />
+      <ui-button label="Delete" role="destructive" systemImage="trash" (buttonPress)="remove()" />
+    </ui-slot>
+  </ui-context-menu>
+</ui-host>
+```
+
+The trigger is SwiftUI content, as everything inside a `ui-host` is: `ui-text`, `ui-image`, the
+stacks. A row drawn with the app's own components is not one, so a `<virtual-list>` row of the
+app's cannot be the trigger; a long press on such a row opens `Dialogs.choose()` instead. The view
+is SwiftUI's alone, and on Android the element commits as nothing.
 
 ## Text field state: `nativeState`
 
@@ -271,6 +296,7 @@ An element registered for `@expo/ui` when it is not installed commits as nothing
 
 <!-- api: UiHost -->
 <!-- api: UiMenu -->
+<!-- api: UiContextMenu -->
 <!-- api: UiButton -->
 <!-- api: UiDivider -->
 <!-- api: UiSlot -->

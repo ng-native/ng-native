@@ -582,6 +582,25 @@ describe('the typed SwiftUI and segmented-control components', () => {
     assert.deepEqual(errors, []);
   });
 
+  it('commits a context menu as the native view, with its trigger, items and preview as slots', async () => {
+    const menu = named(/ExpoUI_ContextMenu$/);
+    assert.deepEqual(menu.props['modifiers'], [{ $type: 'opacity', value: 1 }]);
+    assert.deepEqual(
+      menu.children.map((slot) => [slot.viewName.replace(/^.*ExpoUI_/, ''), slot.props['name']]),
+      [
+        ['SlotView', 'trigger'],
+        ['SlotView', 'items'],
+        ['SlotView', 'preview'],
+      ],
+    );
+    const archive = menu.children[1]!.children[0]!;
+    assert.equal(archive.props['label'], 'Archive');
+    fabric.emit(archive, 'topButtonPress');
+    app.applicationRef.tick();
+    await settle();
+    assert.equal(fixture.presses(), 10);
+  });
+
   it('gives the date picker its dates in milliseconds, and hears a pick as a timestamp', async () => {
     const picker = () => named(/RNDateTimePicker/);
     assert.equal(picker().props['date'], 1800000000000, 'from a Date');
