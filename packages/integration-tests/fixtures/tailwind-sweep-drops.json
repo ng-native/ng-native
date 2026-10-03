@@ -10884,12 +10884,6 @@
     "focus-within:opacity-50",
     "focus-within:p-4"
   ],
-  "dropped a rule: ':has()' is not supported. It styles a node by its descendants or later siblings, so any change beneath it would mean matching it again. Put a class on the node from the state it depends on.": [
-    "has-midnight:bg-[rgb(1,2,3)]",
-    "has-midnight:bg-red-500",
-    "has-midnight:opacity-50",
-    "has-midnight:p-4"
-  ],
   "dropped a rule: ':in-range' is not supported. Nothing on native answers it; bind a class or an attribute from the state it stands for, and select on that.": [
     "in-range:bg-[rgb(1,2,3)]",
     "in-range:bg-red-500",

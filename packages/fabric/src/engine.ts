@@ -432,6 +432,8 @@ export interface EngineNode extends HostNode {
   styleCache: StyleCache | null;
   /** Set when something that could change what this node matches has changed. */
   styleDirty: boolean;
+  /** See `StyleTarget.hasDirty`. */
+  hasDirty: boolean;
   /** A family left out while it loads. See `loadingFamilies`. */
   heldFamily?: string;
   /** See `StyleTarget.inlineInherits`. */
@@ -1537,6 +1539,7 @@ class RetainedNode {
   styleDirty = true;
   styleCommitted: StyleCache | null = null;
   fitContainer: string | undefined = undefined;
+  hasDirty = false;
   ownStyle: object | undefined = undefined;
   claimed: true | undefined = undefined;
   dormantHoists: EngineNode[] | null = null;
@@ -2035,6 +2038,8 @@ export class Engine implements HostEngine {
    * does, a child list can move without anything else needing to be looked at again.
    */
   private structuralSheets = false;
+  /** Whether any sheet uses `:has()`. See `markBeneath`. */
+  private hasSheets = false;
   private readonly resolveAssetSource: (value: unknown) => unknown;
 
   constructor(fabric: FabricUIManager, rootTag: number, options: EngineOptions = {}) {
@@ -2046,6 +2051,7 @@ export class Engine implements HostEngine {
     this.fontScale = conditions.fontScale;
     if (options.tokens) this.styles.setRootTokens(options.tokens);
     this.structuralSheets = options.globalStyles?.structural === true;
+    this.watchHas(options.globalStyles);
     this.dev = options.dev ?? (globalThis as { __DEV__?: boolean }).__DEV__ === true;
     if (this.dev) {
       this.styles.onUndefinedToken = (name, props, on) =>
@@ -2135,6 +2141,7 @@ export class Engine implements HostEngine {
     if (replacing) this.sheetReplaced(replacing, sheet);
     else this.registerSheet(sheet);
     if (sheet.structural) this.structuralSheets = true;
+    this.watchHas(sheet);
     this.markPath(this.root);
     return true;
   }
@@ -2317,6 +2324,7 @@ export class Engine implements HostEngine {
     if (sheet === undefined || node.sheet === sheet) return;
     node.sheet = sheet;
     if (sheet?.structural) this.structuralSheets = true;
+    this.watchHas(sheet);
     this.markProps(node);
   }
 
@@ -2362,6 +2370,7 @@ export class Engine implements HostEngine {
       node.styled = html.styled;
     }
     if (sheet?.structural) this.structuralSheets = true;
+    this.watchHas(sheet);
     if (HOISTS[name]) this.hoisted.add(node);
     return node;
   }
@@ -2681,10 +2690,32 @@ export class Engine implements HostEngine {
       // `.peer:focus ~ .label`: what a later sibling matches can hang on this node's classes and
       // state, though nothing about the sibling moved. Only sheets that ask about siblings pay.
       if (this.structuralSheets) this.markLaterSiblings(node);
+      if (this.hasSheets) this.markBeneath(node.parent);
     }
     // The root has no parent to carry the mark, so it carries its own: `.dark` on the root alone
     // restyles everything beneath it.
     this.markPath(node.parent ?? node);
+  }
+
+  /** Start matching ancestors again on a change, once a sheet that uses `:has()` is in play. */
+  private watchHas(sheet: StyleSheet | null | undefined): void {
+    if (!sheet?.has || this.hasSheets) return;
+    this.hasSheets = true;
+    this.styles.tracksHas = true;
+    // What is already resolved kept no record of the rules it matched: resolve it again. Nothing
+    // is, when the sheet is the one the engine was made with.
+    if (!this.root) return;
+    this.root.styleDirty = true;
+    this.markPath(this.root);
+  }
+
+  /**
+   * Something at or beneath `from` changed: every node from there up may match a `:has()` rule
+   * it did not, or stop matching one. They are matched again rather than marked for restyling,
+   * which would restyle everything under them. Only sheets that use `:has()` pay.
+   */
+  private markBeneath(from: EngineNode | null): void {
+    for (let node = from; node; node = node.parent) node.hasDirty = true;
   }
 
   private markLaterSiblings(node: EngineNode): void {
@@ -2707,6 +2738,7 @@ export class Engine implements HostEngine {
       // empty, which only its first child arriving or its last one leaving changes.
       if (wasOrIsEmptyWithout(node, moved)) this.markLaterSiblings(node);
     }
+    if (this.hasSheets) this.markBeneath(node);
     this.markPath(node.parent);
   }
 

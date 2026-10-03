@@ -53,8 +53,18 @@ already point at them for you.
 `:checked`, `:indeterminate`, `:valid`, `:invalid`, `:placeholder-shown` and the other form-state
 pseudo-classes are unsupported too: a native control keeps that state in its component's inputs,
 where no selector can see it. Bind an attribute from the same signal (`[attr.data-checked]`) and
-select on that. `:has()` is unsupported, because a style that depends on what is beneath a node
-would have to be matched again whenever anything beneath it changed.
+select on that.
+
+`:has()` styles a node by what is beneath it. Its argument is one compound selector, for a
+descendant (`.card:has(.action)`), or one after `>`, for a child (`.card:has(> img)`), and a list of
+either. It is read on the node the rule styles: `.card:has(.action) .title`, where the node with
+`:has()` is an ancestor of the one styled, is dropped with a warning, and so is a longer selector or
+a sibling one inside it (`:has(.a .b)`, `:has(+ .next)`). Tailwind's `has-[...]` and
+`has-data-[...]` variants are the supported form; `group-has-*` and `peer-has-*` are the other.
+
+A sheet that uses `:has()` has the engine match a changed node's ancestors again on each change,
+and restyle one only where the rules it matches came out different. A sheet that does not use it
+costs nothing.
 
 ## Everything else CSS can paint
 

@@ -993,6 +993,15 @@ function compound(parts, context) {
           types += inner.types;
           break;
         }
+        if (part.kind === 'has') {
+          const test = hasTest(part, context);
+          (out.has ??= []).push(test.has);
+          // As specific as its most specific argument, as `:is()` is.
+          ids += test.ids;
+          classes += test.classes;
+          types += test.types;
+          break;
+        }
         const nested = functionalPseudo(part, context);
         if (nested === null) {
           // lightningcss files a pseudo-class it does not know as `custom`, with its name beside.
@@ -1082,13 +1091,6 @@ function refusedPseudoClass(part, name, context) {
       `${context}: ':${name}()' with 'of <selector>' is not supported: counting only the siblings ` +
         `that match a selector needs a second matching pass for every sibling. ':${name}()' ` +
         `without 'of' is supported.`,
-    );
-  }
-  if (part.kind === 'has') {
-    return new CssUnsupported(
-      `${context}: ':has()' is not supported. It styles a node by its descendants or later ` +
-        `siblings, so any change beneath it would mean matching it again. Put a class on the ` +
-        `node from the state it depends on.`,
     );
   }
   if (CONTROL_STATE.has(part.kind)) {
@@ -1284,6 +1286,75 @@ function functionalPseudo(part, context) {
   return { compounds, ancestors, ids, classes, types };
 }
 
+/** Which elements a `:has()` argument is looked for among, by its leading combinator. */
+const RELATION = { null: false, descendant: false, child: true };
+
+/**
+ * The arguments of `:has()`: each one compound, a descendant of the node or, after `>`, a child.
+ *
+ * A longer selector inside would be a second matching pass from every descendant, and a sibling
+ * one (`:has(+ x)`, `:has(~ x)`) asks about what comes after the node, which nothing marks it for.
+ */
+function hasTest(part, context) {
+  const parsed = part.selectors.map((argument) => hasArgument(argument, context));
+  if (new Set(parsed.map((one) => one.child)).size > 1) {
+    throw new CssUnsupported(
+      `${context}: ':has()' takes descendants or children, not a list that mixes the two.`,
+    );
+  }
+  // As specific as its most specific argument, taken whole, as `:is()` is.
+  const top = parsed.reduce((a, b) => (weigh(b) > weigh(a) ? b : a));
+  const any = parsed.map((one) => one.compound);
+  const has = parsed[0].child ? { child: true, any } : { any };
+  return { has, ids: top.ids, classes: top.classes, types: top.types };
+}
+
+const weigh = (built) => pack(built.ids, built.classes, built.types);
+
+/** One argument of `:has()`: its compound, and whether it is looked for among children only. */
+function hasArgument(argument, context) {
+  // `:has(> x)` is parsed as `:scope > x`, the node itself standing at the front.
+  const scoped = argument[0]?.type === 'pseudo-class' && argument[0].kind === 'scope';
+  const leading = scoped && argument[1]?.type === 'combinator' ? argument[1].value : null;
+  const rest = leading ? argument.slice(2) : argument;
+  const child = RELATION[leading];
+  if (child === undefined || rest.some((piece) => piece.type === 'combinator')) {
+    throw new CssUnsupported(
+      `${context}: ':has()' takes one compound selector, for a descendant, or one after '>', ` +
+        `for a child. A longer selector or a sibling one inside it is not supported.`,
+    );
+  }
+  return { ...compound(rest, context), child };
+}
+
+/** Whether a compound, or any compound nested in it, uses `:has()`. */
+function asksBeneath(compound) {
+  if (compound.has !== undefined) return true;
+  const nested = [
+    ...(compound.not ?? []),
+    ...(compound.is ?? []).flat(),
+    ...(compound.ancestors ?? []),
+    ...(compound.hostContext ?? []),
+  ];
+  return nested.some(asksBeneath);
+}
+
+/**
+ * `:has()` is read on the node a rule styles. On an ancestor of it, `.card:has(.x) .title`, the
+ * title's style would hang on a change the title is nowhere near, and nothing restyles it.
+ */
+function refuseHasAbove(compounds, context) {
+  const subject = compounds.at(-1);
+  const above = compounds.slice(0, -1).some(asksBeneath);
+  const within = [...(subject?.ancestors ?? []), ...(subject?.hostContext ?? [])].some(asksBeneath);
+  if (above || within) {
+    throw new CssUnsupported(
+      `${context}: ':has()' is supported on the node the rule styles, not on an ancestor or a ` +
+        `sibling of it. Put a class on that node from the state it depends on.`,
+    );
+  }
+}
+
 const isPlaceholder = (part) => part?.type === 'pseudo-element' && part.kind === 'placeholder';
 
 const placeholderOf = (from) => ('color' in from ? { placeholderTextColor: from.color } : {});
@@ -1347,6 +1418,7 @@ function selector(parts, context) {
     }
   }
   flush();
+  refuseHasAbove(compounds, context);
 
   return { compounds, combinators, specificity: pack(ids, classes, types) };
 }
@@ -2336,10 +2408,7 @@ function compileCss(source, context = 'styles', options = {}) {
     ...(layers.all.length ? { layers: layers.all.map((one) => one.path) } : {}),
     ...(fonts.length ? { fonts } : {}),
     ...(Object.keys(keyframes).length ? { keyframes } : {}),
-    // Said once, on the sheet, because what it costs is not matching but invalidation: adding a
-    // row changes what its neighbours match while nothing about those neighbours moved. The
-    // engine only has to watch a child list where some sheet actually asks about one.
-    ...(rules.some(asksAboutSiblings) ? { structural: true } : {}),
+    ...invalidation(rules),
   };
 }
 
@@ -2401,6 +2470,19 @@ function fontUrl(sources, family, context) {
   throw new CssUnsupported(
     `${context}: @font-face '${family}' needs a src: url() naming a file in the app (${what}).`,
   );
+}
+
+/**
+ * What the sheet's rules ask the engine to watch. Said once, on the sheet, because what it costs
+ * is not matching but invalidation: adding a row changes what its neighbours match while nothing
+ * about them moved, and with `:has()` what everything above it matches. The engine watches a
+ * child list, or a subtree, only where some sheet asks.
+ */
+function invalidation(rules) {
+  return {
+    ...(rules.some(asksAboutSiblings) ? { structural: true } : {}),
+    ...(rules.some((rule) => rule.compounds.some(asksBeneath)) ? { has: true } : {}),
+  };
 }
 
 /** Whether a rule's outcome can change because a sibling appeared or left. */

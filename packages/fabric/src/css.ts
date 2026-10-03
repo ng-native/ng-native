@@ -56,6 +56,15 @@ export interface Compound {
   readonly nth?: readonly NthTest[];
   /** `:empty`: no children at all, text included. */
   readonly empty?: true;
+  /** `:has()`: every one of these must find a match beneath the node. */
+  readonly has?: readonly HasTest[];
+}
+
+/** One `:has()`: some element beneath the node, or some child of it, matches one of `any`. */
+export interface HasTest {
+  /** `:has(> x)`: a child, not any descendant. */
+  readonly child?: true;
+  readonly any: readonly Compound[];
 }
 
 /** `an + b`, counted from the start unless `fromEnd`. */
@@ -448,6 +457,12 @@ export interface StyleSheet {
    */
   readonly structural?: true;
   /**
+   * Some rule uses `:has()`, so what a node matches can change when something beneath it does.
+   * Said on the sheet for the same reason `structural` is: the cost is invalidation, and only a
+   * sheet that asks has the engine match a changed node's ancestors again.
+   */
+  readonly has?: true;
+  /**
    * The `@font-face` rules the sheet declares, each `source` the bundler's `require` of the file.
    * The engine does not read them: `loadFonts()` in `@ng-native/expo/fonts` registers them with
    * the platform before mount.
@@ -494,6 +509,11 @@ export interface StyleCache {
    * values do, and by the same copy-on-write rule, so a subtree that defines none shares one map.
    */
   tokens: Readonly<Record<string, TokenValue>>;
+  /**
+   * The rules the node matched, kept only while a sheet uses `:has()`: what a node whose
+   * subtree changed is compared against, to tell whether it has to be restyled.
+   */
+  matched?: readonly StyleRule[];
 }
 
 /** What the matcher needs of a node. The engine's node satisfies this structurally. */
@@ -550,6 +570,12 @@ export interface StyleTarget {
   styleCache: StyleCache | null;
   /** Set when something that could change what this node matches has changed. */
   styleDirty: boolean;
+  /**
+   * Set when something beneath this node changed and a sheet uses `:has()`: the node is matched
+   * again, and restyled only if the rules it matches came out different. Absent on a hand-built
+   * target.
+   */
+  hasDirty?: boolean;
   /** `:focus`. Set by the engine from the native focus and blur events. */
   focused?: boolean;
   /**
@@ -715,6 +741,11 @@ function matchesCompound(node: StyleTarget, compound: Compound, sheet: StyleShee
       if (!alternatives.some((option) => matchesCompound(node, option, sheet))) return false;
     }
   }
+  if (compound.has) {
+    for (const test of compound.has) {
+      if (!hasBeneath(node, test, sheet)) return false;
+    }
+  }
   if (compound.ancestors) {
     for (const ancestor of compound.ancestors) {
       let found = false;
@@ -734,6 +765,16 @@ function matchesCompound(node: StyleTarget, compound: Compound, sheet: StyleShee
     if (!found) return false;
   }
   return true;
+}
+
+/** Whether some element beneath `node`, or some child of it for `:has(> x)`, matches the test. */
+function hasBeneath(node: StyleTarget, test: HasTest, sheet: StyleSheet | null): boolean {
+  for (const child of node.children ?? []) {
+    if (child.kind !== undefined && child.kind !== 'element') continue;
+    if (test.any.some((option) => matchesCompound(child, option, sheet))) return true;
+    if (!test.child && hasBeneath(child, test, sheet)) return true;
+  }
+  return false;
 }
 
 /**
@@ -1414,6 +1455,8 @@ export class StyleResolver {
       cached.epoch = epoch;
       return cached;
     }
+    const kept = this.keptBeneath(node, parentContext, epoch);
+    if (kept) return kept;
 
     const parentInherited = parent ? parent.inherited : EMPTY;
 
@@ -1438,10 +1481,46 @@ export class StyleResolver {
       context: {},
       parentContext,
       ...styled,
+      ...this.record(matched),
     };
     node.styleCache = cache;
     node.styleDirty = false;
+    node.hasDirty = false;
     return cache;
+  }
+
+  /** The rules a node matched, for its cache to keep, while a sheet uses `:has()`. */
+  private record(matched: readonly StyleRule[]): { matched?: readonly StyleRule[] } {
+    return this.tracksHas ? { matched } : {};
+  }
+
+  /**
+   * Set by the engine once a sheet uses `:has()`. Until then no cache keeps the rules it matched,
+   * so an app that never asks pays nothing for it.
+   */
+  tracksHas = false;
+
+  /**
+   * The cache of a node whose subtree changed, and nothing else, when it matches the rules it
+   * did: keeping the object is what leaves everything under it alone. Nothing when it has to be
+   * resolved, as it does with no record of what it matched, made before any sheet asked.
+   */
+  private keptBeneath(node: StyleTarget, parentContext: object, epoch: number): StyleCache | null {
+    const cached = node.styleCache;
+    const stands =
+      node.hasDirty === true &&
+      cached?.matched !== undefined &&
+      !node.styleDirty &&
+      cached.parentContext === parentContext &&
+      cached.generation === this.generation;
+    if (!stands) return null;
+    const candidates = this.rulesFor(node);
+    const now = this.matched(node, node.styled ? ELEMENT_ENTRIES.concat(candidates) : candidates);
+    const before = cached.matched!;
+    if (now.length !== before.length || now.some((rule, i) => rule !== before[i])) return null;
+    node.hasDirty = false;
+    cached.epoch = epoch;
+    return cached;
   }
 
   /**
@@ -1464,6 +1543,7 @@ export class StyleResolver {
     return (
       cached !== null &&
       !node.styleDirty &&
+      !node.hasDirty &&
       cached.parentContext === parentContext &&
       cached.generation === this.generation
     );

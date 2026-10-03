@@ -576,7 +576,7 @@ describe('real Tailwind output, end to end', () => {
     // them. Each one is dropped with a warning, as in a component's own stylesheet.
     const refused: string[] = [];
     const sheet = compileCss(
-      '.a { color: red } .b:has(> .c) { color: blue } .d { color: green }',
+      '.a { color: red } .b:has(+ .c) { color: blue } .d { color: green }',
       'tw',
       {
         onUnsupported: (message: string) => refused.push(message),

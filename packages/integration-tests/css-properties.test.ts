@@ -647,7 +647,7 @@ describe('what it refuses, and how it says so', () => {
     // `group-hover:` beside `data-[state=on]:` of the same colour arrives as one rule, and
     // refusing the whole list silently took the variant that was fine with it.
     const dropped: string[] = [];
-    const sheet = compileCss('.a:hover, .b, .c:has(.d) { color: red }', 'list.css', {
+    const sheet = compileCss('.a:hover, .b, .c:has(+ .d) { color: red }', 'list.css', {
       onUnsupported: (message: string) => dropped.push(message),
     });
     assert.deepEqual(
@@ -665,7 +665,7 @@ describe('what it refuses, and how it says so', () => {
   it('names the line of a dropped rule before saying it was dropped', () => {
     // `app.tailwind.css: dropped a rule: app.tailwind.css:430: ...`, the line in the middle.
     const dropped: string[] = [];
-    compileCss('.a { color: red }\n.b:has(.c) { color: blue }', 'app.tailwind.css', {
+    compileCss('.a { color: red }\n.b:has(+ .c) { color: blue }', 'app.tailwind.css', {
       onUnsupported: (message: string) => dropped.push(message),
     });
     assert.equal(dropped.length, 1);
@@ -855,7 +855,7 @@ describe('unsupported CSS, through the build', () => {
     const { transformAngular } = require('@ng-native/metro/angular-transform.cjs');
     const { result, warnings } = warned(() =>
       transformAngular(
-        component('  .a:has(> .b) { color: blue }\n  .c { color: red }'),
+        component('  .a:has(+ .b) { color: blue }\n  .c { color: red }'),
         '/tmp/r.ts',
       ),
     );

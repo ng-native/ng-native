@@ -224,10 +224,10 @@ describe('what a refused selector says', () => {
 
   // Every pseudo-class the matcher had no answer for was refused as though it were :hover, with
   // "Native has no hover or focus cascade", which is nothing to do with :has() or :checked.
-  it('says :has() asks about what is below a node, not about hover', () => {
-    const message = refusal('view:has(.a)');
-    assert.match(message, /':has\(\)' is not supported/);
-    assert.match(message, /descendants/);
+  it('says which :has() it takes, not that native has no hover', () => {
+    const message = refusal('view:has(+ .a)');
+    assert.match(message, /':has\(\)' takes one compound selector/);
+    assert.match(message, /sibling/);
     assert.doesNotMatch(message, /hover/);
   });
 
