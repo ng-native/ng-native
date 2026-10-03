@@ -31,12 +31,16 @@ change; both are fast.
   imported from `@ng-native/components` into the component's `imports`, like any Angular
   component: `imports: [View, Text]`. `<View>` compiles to an empty template, and an element used
   without its import renders as a plain view.
-- **There is no DOM.** No `document`, no `window`, no `<div>`, `<span>`, `<button>` or `<input>`,
-  no `@angular/platform-browser`, and no `@angular/animations`. Use the native elements above.
+- **There is no DOM.** No `document`, no `window`, no `<button>`, `<a>`, `<input>` or `<img>`, no
+  `@angular/platform-browser`, and no `@angular/animations`. Use the native elements above. HTML's
+  text elements (`p`, `span`, `h1`, `strong`) draw as text and its layout elements (`div`,
+  `section`, `ul`) as plain views, with none of a browser's default styles.
 - **A component's host is a flex item.** `<app-case-list />` commits as a view of its own, with no
   `flex`, so a `flex: 1` scroll view inside it gets a height of zero and shows nothing. A component
   that fills the space it is given sets `host: { style: 'flex: 1' }` (or `:host { flex: 1; }`).
-- **Text only renders inside `<text>`.** `<view>Hello</view>` compiles and shows nothing.
+- **Text is drawn in a text element.** `<text>` is the one with inputs (`numberOfLines`, `(press)`);
+  `p`, `span` and the other HTML text elements are text too. Text written straight into a view is
+  given a paragraph of its own, one per run, and never flows inline with the elements beside it.
 - **Events are native:** `(press)` on `<pressable>`, not `(click)`; `[(value)]` or `(changeText)` on
   `<text-input>`; `(scroll)`, `(layout)`. A pressable text is `<text pressable (press)="...">`.
 - **Signals, zoneless, AOT.** State is signals and `computed()`; there is no zone.js, so nothing
