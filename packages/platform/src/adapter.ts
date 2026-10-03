@@ -262,10 +262,12 @@ class NativeRenderer implements Renderer2 {
   }
 
   listen(
-    target: EngineNode,
+    target: EngineNode | string,
     eventName: string,
     callback: (event: unknown) => boolean | void,
   ): () => void {
+    // Angular's names for a global target, 'window', 'document' and 'body': there is none here.
+    if (typeof target === 'string') return () => {};
     return this.engine.setEventListener(target, topLevelType(eventName), callback);
   }
 }
