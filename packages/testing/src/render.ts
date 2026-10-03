@@ -8,6 +8,10 @@
 import {
   ChangeDetectorRef,
   Component,
+  // The rule is for templates an app ships, which are checked when they are compiled. The one use
+  // here is the host a test's template string is compiled into: see `hostFor`.
+  // eslint-disable-next-line no-restricted-syntax
+  NO_ERRORS_SCHEMA,
   type ApplicationRef,
   type ComponentRef,
   type EnvironmentProviders,
@@ -148,6 +152,11 @@ async function hostFor<T>(template: string, options: RenderOptions<T>): Promise<
     host: { 'data-wrapper': String(++wrappers) },
     template,
     imports: (options.imports ?? []) as Type<unknown>[],
+    // A component's own host bindings are checked against the schemas of the template it is used
+    // in, and only where that template was compiled just in time: the app's, compiled ahead, has
+    // no such check. Without this every native prop a component binds on its host logs NG0303.
+    // eslint-disable-next-line no-restricted-syntax -- as above
+    schemas: [NO_ERRORS_SCHEMA],
   })(WrapperComponent);
 }
 

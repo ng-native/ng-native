@@ -118,7 +118,9 @@ it('renders a template, as a parent would use the component', async () => {
 ```
 
 The template form is compiled just in time, so it needs `@angular/compiler` installed as a
-development dependency. The component class form does not.
+development dependency. The component class form does not. Nothing type-checks the string: a
+property it misspells on a component is set as a prop of the view and reported nowhere, so assert on
+what the test renders.
 
 `rerender` changes inputs on a component that is already rendered, and waits for the result - also
 continuing with `Greeting` from above:
