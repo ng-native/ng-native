@@ -1,5 +1,6 @@
 import type { Engine, EngineNode } from '@ng-native/fabric';
 import { propOf } from './attribute.ts';
+import { documentOf } from './document.ts';
 import { descendants, matches } from './selector.ts';
 
 /** A node as a library holds one: an engine node with the members below on it. */
@@ -71,6 +72,28 @@ function styleOf(node: EngineNode): Record<string, unknown> {
 /** The event types core's own `addEventListener` attaches, for `@defer`. */
 const DEFER_TRIGGERS = new Set(['click', 'keydown', 'mouseenter', 'focusin']);
 
+/** Where native last laid a node out, in the window. Zero for one it has not. */
+function frameOf(node: EngineNode) {
+  let frame = { x: 0, y: 0, width: 0, height: 0 };
+  // Fabric answers before `measure` returns, so this reads as a DOM measurement does.
+  engineOf(node).measure(node, (measured) => (frame = measured));
+  return frame;
+}
+
+/** The extent of what a node holds, which is more than its own frame when it clips. */
+function contentOf(node: EngineNode) {
+  const own = frameOf(node);
+  let right = own.x + own.width;
+  let bottom = own.y + own.height;
+  for (const child of node.children) {
+    if (child.kind !== 'element') continue;
+    const frame = frameOf(child);
+    right = Math.max(right, frame.x + frame.width);
+    bottom = Math.max(bottom, frame.y + frame.height);
+  }
+  return { width: right - own.x, height: bottom - own.y };
+}
+
 /** What removes each listener `addEventListener` attached, by node, type and function. */
 const listeners = new WeakMap<EngineNode, Map<string, Map<Listener, () => void>>>();
 
@@ -79,6 +102,11 @@ const get = (read: (this: Dom) => unknown, write?: (this: Dom, value: unknown) =
   set: write,
 });
 const method = (value: (this: Dom, ...args: never[]) => unknown) => ({ value, writable: true });
+const noop = method(function () {});
+const zero = get(
+  () => 0,
+  () => {},
+);
 
 /** What a node has in core that the members below take the place of. */
 export interface CoreNode {
@@ -210,6 +238,47 @@ export const nodeMembers = (core: CoreNode): PropertyDescriptorMap => ({
   nodeValue: get(function () {
     return this.kind === 'text' ? this.text : null;
   }),
+
+  ownerDocument: get(function () {
+    return documentOf(engineOf(this)) ?? null;
+  }),
+  getRootNode: method(function () {
+    return documentOf(engineOf(this)) ?? engineOf(this).root;
+  }),
+  dataset: get(function () {
+    const { props } = this;
+    const prop = (key: string | symbol) =>
+      `data-${String(key).replace(/[A-Z]/g, (c) => '-' + c.toLowerCase())}`;
+    return new Proxy({}, { get: (_, key) => props[prop(key)] });
+  }),
+
+  getBoundingClientRect: method(function () {
+    const { x, y, width, height } = frameOf(this);
+    return { x, y, top: y, left: x, right: x + width, bottom: y + height, width, height };
+  }),
+  offsetWidth: get(function () {
+    return frameOf(this).width;
+  }),
+  clientWidth: get(function () {
+    return frameOf(this).width;
+  }),
+  offsetHeight: get(function () {
+    return frameOf(this).height;
+  }),
+  clientHeight: get(function () {
+    return frameOf(this).height;
+  }),
+  scrollWidth: get(function () {
+    return contentOf(this).width;
+  }),
+  scrollHeight: get(function () {
+    return contentOf(this).height;
+  }),
+  scrollTop: zero,
+  scrollLeft: zero,
+  blur: noop,
+  scrollIntoView: noop,
+  dispatchEvent: method(() => true),
 
   contains: method(function (other: EngineNode | null) {
     for (let at = other; at; at = at.parent) if (at === this) return true;

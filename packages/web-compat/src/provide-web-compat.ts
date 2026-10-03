@@ -1,38 +1,73 @@
 import {
   DestroyRef,
+  DOCUMENT,
   ENVIRONMENT_INITIALIZER,
   inject,
   makeEnvironmentProviders,
   type EnvironmentProviders,
 } from '@angular/core';
 import { Engine, extendNodes } from '@ng-native/fabric';
+import { extendRenderer } from '@ng-native/platform';
+import { documentFor } from './document.ts';
+import { webListen } from './listen.ts';
 import { nodeMembers, type CoreNode } from './node-members.ts';
+import { installWindow } from './window.ts';
 
-/** How many apps in the process asked for it: nodes share one prototype between them. */
+/** How many apps in the process asked for it: nodes share one prototype, and globals are global. */
 let apps = 0;
-let remove: (() => void) | undefined;
+let removals: (() => void)[] = [];
+let removeWindow: (() => void) | undefined;
+
+/** Add what every app shares: the node members and the renderer's listeners. */
+function install(engine: Engine): void {
+  const core = Object.getPrototypeOf(engine.root) as CoreNode;
+  // Read now: once extended, the prototype's listeners are this package's.
+  const { addEventListener, removeEventListener } = core;
+  removals = [
+    extendNodes(nodeMembers({ addEventListener, removeEventListener })),
+    extendRenderer(webListen),
+  ];
+}
+
+function uninstall(): void {
+  for (const remove of removals) remove();
+  removals = [];
+  removeWindow?.();
+  removeWindow = undefined;
+}
 
 /**
- * Give the app's nodes the DOM members a component library written for the browser calls.
+ * Let a component library written for the browser render in this app.
  *
- * The members are on the prototype every node shares, so they are there for each app in the
- * process while any app that asked for them is up, and gone when the last is destroyed.
+ * - Nodes answer to the DOM members such a library calls on its elements.
+ * - `DOCUMENT`, and the global `document`, create engine nodes, with a `body` that draws over the
+ *   screen for overlays.
+ * - The `window` globals a library reads exist, `ResizeObserver` among them.
+ * - A `click` listener hears a press.
+ *
+ * All of it is there while any app that asked for it is up, and gone when the last is destroyed.
  */
 export function provideWebCompat(): EnvironmentProviders {
+  // Now, not when the app starts: a library reads `window` as it is imported.
+  removeWindow ??= installWindow();
   return makeEnvironmentProviders([
+    { provide: DOCUMENT, useFactory: () => documentFor(inject(Engine)) },
     {
       provide: ENVIRONMENT_INITIALIZER,
       multi: true,
       useValue: () => {
-        if (apps === 0) {
-          const core = Object.getPrototypeOf(inject(Engine).root) as CoreNode;
-          // Read now: once extended, the prototype's listeners are the ones below.
-          const { addEventListener, removeEventListener } = core;
-          remove = extendNodes(nodeMembers({ addEventListener, removeEventListener }));
-        }
+        const engine = inject(Engine);
+        if (apps === 0) install(engine);
         apps++;
+        removeWindow ??= installWindow();
+        // A library reads the global as often as the injected one. The last app up has it.
+        const globals = globalThis as { document?: unknown };
+        const before = globals.document;
+        const document = documentFor(engine);
+        globals.document = document;
         inject(DestroyRef).onDestroy(() => {
-          if (--apps === 0) remove?.();
+          if (globals.document === document) globals.document = before;
+          if (--apps === 0) uninstall();
         });
       },
     },

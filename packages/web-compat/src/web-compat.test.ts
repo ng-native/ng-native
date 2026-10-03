@@ -4,9 +4,9 @@
  */
 import assert from 'node:assert/strict';
 import { afterEach, describe, it } from 'node:test';
-import { Component, ElementRef, inject } from '@angular/core';
+import { Component, DOCUMENT, ElementRef, Renderer2, inject, signal } from '@angular/core';
 import { Text, View } from '@ng-native/components';
-import { cleanup, fireEvent, render, screen, settle } from '@ng-native/testing';
+import { cleanup, fireEvent, render, screen, settle, userEvent } from '@ng-native/testing';
 import { provideWebCompat } from './index.ts';
 
 afterEach(cleanup);
@@ -26,7 +26,22 @@ type Dom = any;
 })
 class Card {
   readonly host: Dom = inject(ElementRef).nativeElement;
+  readonly document: Dom = inject(DOCUMENT);
+  readonly renderer = inject(Renderer2);
 }
+
+@Component({
+  selector: 'x-clicks',
+  imports: [Text, View],
+  template: `<view testID="box" (click)="clicks.set(clicks() + 1)"
+    ><text>{{ clicks() }}</text></view
+  >`,
+})
+class Clicks {
+  readonly clicks = signal(0);
+}
+
+const globals = globalThis as Dom;
 
 const mount = async () => {
   const app = await render(Card, { providers: [provideWebCompat()] });
@@ -144,5 +159,91 @@ describe('@ng-native/web-compat nodes', () => {
     const two = await render(Card, { providers: [provideWebCompat()] });
     one.unmount();
     assert.equal(typeof two.instance.host.getAttribute, 'function');
+  });
+});
+
+describe('@ng-native/web-compat document and window', () => {
+  it('creates engine nodes, and draws what is appended to the body over the app', async () => {
+    const { app, host } = await mount();
+    const document = app.instance.document;
+    assert.equal(globals.document, document);
+    assert.equal(host.ownerDocument, document);
+    assert.equal(document.querySelector('#second'), document.getElementById('second'));
+
+    const overlay = document.createElement('DIV');
+    overlay.setAttribute('testID', 'overlay');
+    document.body.appendChild(overlay);
+    await settle();
+    assert.ok(screen.getByTestId('overlay'));
+    const root = document.documentElement;
+    assert.equal(root.children.at(-1), document.body, 'last under the root, so on top');
+    assert.equal(document.body.props.pointerEvents, 'box-none');
+  });
+
+  it('has no body in the tree until something is appended to it', async () => {
+    const { app } = await mount();
+    assert.equal(app.instance.document.body.isConnected, false);
+  });
+
+  it('listens on the body for the renderer', async () => {
+    const { app } = await mount();
+    const stop = app.instance.renderer.listen('body', 'layout', () => {});
+    assert.equal(app.instance.document.body.listeners.get('topLayout').size, 1);
+    stop();
+    assert.equal(app.instance.document.body.listeners.get('topLayout').size, 0);
+  });
+
+  it('measures a node from where native laid it out', async () => {
+    const { app, card } = await mount();
+    app.fabric.frames.set('View', { x: 10, y: 20, width: 100, height: 40 });
+    assert.deepEqual(card.getBoundingClientRect(), {
+      x: 10,
+      y: 20,
+      top: 20,
+      left: 10,
+      right: 110,
+      bottom: 60,
+      width: 100,
+      height: 40,
+    });
+    assert.equal(card.offsetWidth, 100);
+    assert.equal(card.clientHeight, 40);
+    assert.equal(card.scrollHeight, 40);
+  });
+
+  it('reports a layout to a ResizeObserver until it is disconnected', async () => {
+    const { card } = await mount();
+    const seen: Dom[] = [];
+    const observer = new globals.ResizeObserver((entries: Dom[]) => seen.push(...entries));
+    observer.observe(card);
+    await fireEvent.layout(screen.getByTestId('card'), { width: 30, height: 12 });
+    assert.equal(seen.length, 1);
+    assert.equal(seen[0].target, card);
+    assert.deepEqual(seen[0].contentRect, { width: 30, height: 12 });
+    observer.disconnect();
+    await fireEvent.layout(screen.getByTestId('card'), { width: 31, height: 12 });
+    assert.equal(seen.length, 1);
+  });
+
+  it('delivers a click from a press, and only where the package was asked for', async () => {
+    await render(Clicks, { providers: [provideWebCompat()] });
+    await userEvent.press(screen.getByTestId('box'));
+    assert.ok(screen.getByText('1'));
+    cleanup();
+
+    await render(Clicks);
+    await userEvent.press(screen.getByTestId('box'));
+    assert.ok(screen.getByText('0'));
+  });
+
+  it('takes its globals away with the last app', async () => {
+    const before = globals.document;
+    await mount();
+    assert.equal(typeof globals.matchMedia, 'function');
+    assert.equal(typeof globals.ResizeObserver, 'function');
+    cleanup();
+    assert.equal(globals.document, before);
+    assert.equal(globals.matchMedia, undefined);
+    assert.equal(globals.ResizeObserver, undefined);
   });
 });
