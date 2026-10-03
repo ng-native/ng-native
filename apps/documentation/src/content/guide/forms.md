@@ -166,3 +166,75 @@ the button and changing its label through signal bindings.
 `action` can return a validation error after validation passes. When `createAccount` returns
 `false`, the example names `f.name` as the error's `fieldTree`, so `f.name().errors()` exposes it
 like a client-side validation error.
+
+## Arrays
+
+An order, a quote or an invoice is a form with an array of items. An array in the model is an
+array of fields in the form: `@for` runs over it, and each item goes to a component of its own as
+a `FieldTree`:
+
+```ts
+import { Component, input, signal } from '@angular/core';
+import { FormField, applyEach, form, required, type FieldTree } from '@angular/forms/signals';
+import { Pressable, Text, TextInput } from '@ng-native/components';
+
+interface Line {
+  name: string;
+  cents: number;
+}
+
+@Component({
+  selector: 'app-line',
+  imports: [FormField, Text, TextInput],
+  template: `
+    <text-input accessibilityLabel="Line" [formField]="line().name" />
+    @if (line().name().touched() && line().name().invalid()) {
+      <text accessibilityRole="alert">Name is required</text>
+    }
+  `,
+})
+export class LineCard {
+  readonly line = input.required<FieldTree<Line>>();
+}
+
+@Component({
+  selector: 'app-order',
+  imports: [LineCard, Pressable, Text],
+  template: `
+    @for (line of f.lines; track line) {
+      <app-line [line]="line" />
+    }
+    <pressable accessibilityRole="button" (press)="add()"><text>Add a line</text></pressable>
+  `,
+})
+export class Order {
+  readonly order = signal<{ lines: Line[] }>({ lines: [{ name: '', cents: 0 }] });
+  readonly f = form(this.order, (path) => applyEach(path.lines, (line) => required(line.name)));
+
+  protected add(): void {
+    this.f.lines().value.update((lines) => [...lines, { name: '', cents: 0 }]);
+  }
+}
+```
+
+Adding, removing and reordering are updates of the array's own value, `f.lines().value.update()`.
+An item's field keeps its identity through a move, so what was typed into it, its `touched` and
+its errors follow the item, and `track line` moves its card rather than building another.
+`applyEach` gives every item the same rules, and an item's error goes when the item does.
+
+**A control with a model of another name takes a two-way binding.** `[formField]` binds a control
+whose model is `value` or `checked`. One whose model is called something else, a price field with
+a `cents` model, is bound to the field's own value instead:
+
+```html
+<app-price [(cents)]="line().cents().value" />
+```
+
+**The model is not deeply equal to the data it was given.** Signal Forms keys each item of an
+array with a symbol, so `expect(order()).toEqual({ lines: [...] })` fails on the key.
+`toMatchObject` compares the properties it is given and passes.
+
+**A long array costs more per keystroke.** The form's model is one signal, so a keystroke asks
+every field of every item whether it changed, though only the one line is committed, and a
+`<scroll-view>` mounts a card for every item when the form opens. For hundreds of items, a
+[`<virtual-list>`](/packages/components/lists) mounts only the rows on screen.
