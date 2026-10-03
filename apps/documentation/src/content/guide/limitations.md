@@ -143,6 +143,18 @@ unexplained `SyntaxError`.
 {} } }` instead of `useValue: { attach() {} } }`. An arrow (`attach: () => {}`) also works if it
 does not need its own `this`.
 
+## No spread or constant as a component's `host`
+
+A component's `host` is read at build time as an object literal written out in the decorator: each
+entry a key with a string, or with a constant from the same file. `@oxc-angular/vite` reads nothing
+from a spread (`host: { ...SHARED, '(press)': 'go()' }`) or from a `host` that is itself a constant
+or a call, and reports no error, while Angular's own compiler, and so `ngc`, accepts the file.
+Angular Native fails the build on one, naming the component and the entry, since otherwise the
+listeners never fire and the attributes never appear.
+
+**Workaround:** write the bindings out in the literal. Share the behavior with a directive in
+`hostDirectives` rather than an object of bindings.
+
 ## No template arrow function that reads its own parameter
 
 A template arrow that reads its parameter, such as `(press)="open.update((was) => !was)"`, compiles

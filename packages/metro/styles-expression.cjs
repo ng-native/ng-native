@@ -114,10 +114,10 @@ function trim(code, { start, end }) {
 }
 
 /**
- * The `styles` property of the `@Component({...})` decorating the class that starts at
+ * The `name` property of the `@Component({...})` decorating the class that starts at
  * `classStart`: where its value is in the source, or null when the decorator has none.
  */
-function stylesValue(src, classStart) {
+function decoratorProperty(src, classStart, name) {
   const decorator = src.lastIndexOf('@Component', classStart);
   if (decorator === -1) return null;
   const open = src.indexOf('{', decorator);
@@ -126,9 +126,9 @@ function stylesValue(src, classStart) {
 
   for (const property of split(src, open + 1, end, ',')) {
     const { start, text } = trim(src, property);
-    const key = /^(?:styles|'styles'|"styles")\s*(:|$)/.exec(text);
+    const key = new RegExp(`^(?:${name}|'${name}'|"${name}")\\s*(:|$)`).exec(text);
     if (!key) continue;
-    // `styles,` shorthand is a variable called `styles`: the whole property is the expression.
+    // `styles,` shorthand is a variable of that name: the whole property is the expression.
     if (!key[1]) return { start, end: start + text.length };
     return trim(src, { start: start + key[0].length, end: property.end });
   }
@@ -157,7 +157,7 @@ function readable(src, filename, className, value, entry) {
 
 /** Every `styles` entry of `component` the compiler dropped, as its source text. */
 function unreadStyles(src, filename, component) {
-  const value = stylesValue(src, component.spanStart);
+  const value = decoratorProperty(src, component.spanStart, 'styles');
   if (!value) return [];
   return entries(src, value)
     .filter((entry) => !LITERAL.test(entry.text))
@@ -182,4 +182,4 @@ function assertStylesRead(src, filename, components) {
   }
 }
 
-module.exports = { assertStylesRead };
+module.exports = { assertStylesRead, close, decoratorProperty, split, trim };

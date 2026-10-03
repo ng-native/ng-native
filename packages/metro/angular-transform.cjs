@@ -15,6 +15,7 @@ const { compileError } = require('./compile-error.cjs');
 const { assertTemplateFileParses, assertTemplatesParse } = require('./template-syntax.cjs');
 const { compileCss } = require('./css/compile.cjs');
 const { assertStylesRead } = require('./styles-expression.cjs');
+const { assertHostRead } = require('./host-expression.cjs');
 const { componentDeclarations } = require('./component-declarations.cjs');
 const {
   compileForHmrSync,
@@ -1011,6 +1012,7 @@ function transformAngular(src, filename, options = {}) {
     assertTemplatesParse(src, filename, components, resources);
     assertTemplatesCompiled(result.code, src, filename, components);
     assertStylesRead(src, filename, components);
+    assertHostRead(src, filename, components);
 
     // An external template is not an import, so without an edge Metro would never watch it. The
     // edge does not re-transform this file when the template changes - Metro caches a transform
