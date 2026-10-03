@@ -20,7 +20,7 @@ register('./loader.mjs', import.meta.url);
 // starts the test runner, which a script run through this file is not for.
 if (process.env.NODE_TEST_CONTEXT || process.execArgv.some((arg) => arg.startsWith('--test'))) {
   const { afterEach, beforeEach } = await import('node:test');
-  const tests = (globalThis[Symbol.for('ng-native.testing.tests')] = { finished: 0, running: 0 });
+  const tests = (globalThis[Symbol.for('ng-native.testing.tests')] ??= { finished: 0, running: 0 });
   beforeEach(() => {
     tests.running++;
   });

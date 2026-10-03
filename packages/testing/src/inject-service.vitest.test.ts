@@ -175,3 +175,18 @@ describe('injectService, before any test', () => {
     expect(injectService(Scheme)).not.toBe(before);
   });
 });
+
+describe('injectService, when the setup file runs again in one worker', () => {
+  // As it does for each test file under Vitest's `isolate: false`, where the files share a global.
+  it('keeps counting tests, so a test in the next file is not taken for one in the last', async () => {
+    const key = Symbol.for('ng-native.testing.tests');
+    const counted = (globalThis as Record<symbol, { finished: number } | undefined>)[key]!;
+    const finished = counted.finished;
+    expect(finished).toBeGreaterThan(0);
+    // Last in the file: whatever Vitest makes of hooks registered inside a test ends with it.
+    await import('../runner/setup.mjs?again').catch(() => undefined);
+    const after = (globalThis as Record<symbol, { finished: number } | undefined>)[key]!;
+    expect(after).toBe(counted);
+    expect(after.finished).toBe(finished);
+  });
+});

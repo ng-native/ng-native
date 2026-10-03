@@ -13,7 +13,7 @@ globalThis.__DEV__ ??= true;
 // Tells `injectService` which test is running, so the app the calls in a test share is never
 // another test's: how many tests have finished, and how many are running now. On the global, since
 // this file and the package a test imports need not be one module instance.
-const tests = (globalThis[Symbol.for('ng-native.testing.tests')] = { finished: 0, running: 0 });
+const tests = (globalThis[Symbol.for('ng-native.testing.tests')] ??= { finished: 0, running: 0 });
 beforeEach(() => {
   tests.running++;
 });
