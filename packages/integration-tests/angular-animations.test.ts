@@ -207,3 +207,30 @@ describe('animate.enter on a transition', () => {
     }
   });
 });
+
+/** A transform bound as a style eases under a transition as one a class sets does. */
+describe('a bound transform under a transition', () => {
+  it('eases beside the one a rule sets, and arrives with it', async () => {
+    const bound = await compileFixture(
+      fileURLToPath(new URL('./fixtures/bound-transform.ts', import.meta.url)),
+    );
+    const time = clock();
+    const app = await render(bound['Slide'] as Type<{ on: { set(v: boolean): void } }>, {
+      now: time.now,
+    });
+    time.use(app.componentRef.injector.get(Engine));
+    const x = (id: string) =>
+      (app.getByTestId(id).props['transform'] as [{ translateX: number }])[0].translateX;
+    try {
+      app.instance.on.set(true);
+      await settle();
+      await time.tick(150);
+      assert.deepEqual([x('ruled'), x('bound')], [50, 50]);
+      await time.tick(150);
+      assert.deepEqual([x('ruled'), x('bound')], [100, 100]);
+    } finally {
+      await time.tick(1e9);
+      cleanup();
+    }
+  });
+});

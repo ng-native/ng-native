@@ -650,6 +650,40 @@ describe('transitioning a transform', () => {
   });
 });
 
+describe('transitioning a transform that is a style binding', () => {
+  // A bound transform is the CSS string, which the engine reads as the list a rule compiles to.
+  for (const [what, from, to, halfway, there] of [
+    ['translate', 'translateX(0px)', 'translateX(100px)', { translateX: 50 }, { translateX: 100 }],
+    ['rotate', 'rotate(0deg)', 'rotate(90deg)', { rotate: '45deg' }, { rotate: '90deg' }],
+    ['scale', 'scale(1)', 'scale(2)', { scale: 1.5 }, { scale: 2 }],
+  ] as const) {
+    it(`eases a bound ${what} as it eases one a rule sets`, () => {
+      let now = 1000;
+      const fabric = createFakeFabric();
+      const engine = new Engine(fabric, 1, {
+        globalStyles: compileCss('view { transition: transform 100ms linear }') as never,
+        now: () => now,
+      });
+      const view = engine.createElement('view');
+      engine.setProp(view, 'style', { transform: from });
+      engine.appendChild(engine.root, view);
+      engine.commit();
+      const painted = () => flatten(fabric.committed)[0]?.props['transform'];
+
+      engine.setProp(view, 'style', { transform: to });
+      engine.commit();
+      now += 50;
+      engine.advanceAnimations();
+      engine.commit();
+      assert.deepEqual(painted(), [halfway], 'halfway, not there already');
+      now += 50;
+      engine.advanceAnimations();
+      engine.commit();
+      assert.deepEqual(painted(), [there], 'and it arrives');
+    });
+  }
+});
+
 describe('interpolating a transform', () => {
   it('eases toward none, an empty list, as it does toward no transform at all', () => {
     // `animate-bounce`'s 50% keyframe is `transform: none`. Read as a list of another length, the

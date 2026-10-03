@@ -478,6 +478,8 @@ export interface EngineNode extends HostNode {
   composedTransform?: { parts: readonly unknown[]; value: unknown[] };
   /** The commit that created this node's view, by its number: see `Engine.commitUnseen`. */
   bornIn?: number;
+  /** The last bound `transform` string and the list it reads as, undefined where CSS cannot. */
+  boundTransform?: { text: string; list: unknown[] | undefined };
   /**
    * Set by the component that owns this element. A host primitive that reaches a commit without it
    * was written in a template that never imported the component, which is reported in dev.
@@ -1637,11 +1639,16 @@ const NESTED_COLOR_LIST_PROPS = new Set(['boxShadow']);
  * leaves the transform the rules set, as a browser drops it.
  */
 function boundTransform(
+  node: EngineNode,
   style: Record<string, unknown>,
   cascaded: unknown,
 ): Record<string, unknown> {
-  if (typeof style['transform'] !== 'string') return style;
-  const list = transformList(style['transform']) ?? cascaded;
+  const text = style['transform'];
+  if (typeof text !== 'string') return style;
+  // The same list for the same string, commit after commit: a transition compares the two ends
+  // it is given, and a list made afresh each time reads as a new place to go.
+  if (node.boundTransform?.text !== text) node.boundTransform = { text, list: transformList(text) };
+  const list = node.boundTransform.list ?? cascaded;
   if (list === undefined) delete style['transform'];
   else style['transform'] = list;
   return style;
@@ -2795,7 +2802,7 @@ export class Engine implements HostEngine {
     }
     withTextContent(node, viewName, props);
     const cascaded = props['transform'];
-    const style = boundTransform(flattenStyle(node.props['style'], props), cascaded);
+    const style = boundTransform(node, flattenStyle(node.props['style'], props), cascaded);
     nativePointerEvents(node, style, resolved);
     const intrinsic = node.props[INTRINSIC_SIZE] as IntrinsicSize | undefined;
     if (intrinsic) applyIntrinsicSize(style, intrinsic);
