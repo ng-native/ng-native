@@ -197,11 +197,13 @@ export function createFakeFabric(): FakeFabric {
 
   const walk = (nodes: FakeFabricNode[], depth: number, withProps: boolean): string[] =>
     nodes.flatMap((n) => {
-      const text = typeof n.props['text'] === 'string' ? ` "${n.props['text']}"` : '';
+      // The text is printed for itself, so the payload beside it is every other prop: a text
+      // field's placeholder and keyboard, where a `RawText` has nothing more to say.
+      const { text: said, ...rest } = n.props;
+      const text = typeof said === 'string' ? ` "${said}"` : '';
+      const shown = text ? rest : n.props;
       const props =
-        withProps && Object.keys(n.props).length && !text
-          ? ' ' + JSON.stringify(n.props, sorted)
-          : '';
+        withProps && Object.keys(shown).length ? ' ' + JSON.stringify(shown, sorted) : '';
       return [
         '  '.repeat(depth) + n.viewName + text + props,
         ...walk(n.children, depth + 1, withProps),

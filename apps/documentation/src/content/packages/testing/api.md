@@ -329,7 +329,7 @@ through `render()`. It records every call instead of drawing, and adds what a te
 | Member                           | What it is                                                                                                                                              |
 | -------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `committed`                      | The root nodes of the most recent `completeRoot`. Each `FakeFabricNode` has `viewName`, `props`, `children`, `reactTag`, `handle` and `instanceHandle`. |
-| `render(options?)`               | The committed tree as an indented string of view names and text. `{ props: true }` adds every node's full prop payload.                                 |
+| `render(options?)`               | The committed tree as an indented string of view names and text. `{ props: true }` adds every node's props, after its text where it has text.           |
 | `find(viewName)`                 | The first committed node with that view name.                                                                                                           |
 | `emit(node, type, nativeEvent?)` | Calls the registered event handler, as the C++ side does. Everything in [Interactions](#interactions) is built on it.                                   |
 | `frames`                         | `measureInWindow`'s answers, by `nativeID` and then by view name. A node with no entry is not measured, as on a platform that has not laid it out.      |
