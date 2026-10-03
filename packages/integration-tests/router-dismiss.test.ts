@@ -114,6 +114,98 @@ describe("Android's Back on a screen that refuses a native dismissal", () => {
   });
 });
 
+/**
+ * A presented screen that wants a header is a stack of its own, so the page that knows about the
+ * unsaved changes is the first screen inside it, and the screen a swipe dismisses is the one the
+ * stack sits on. The stack passes its top screen's refusal down to that screen.
+ */
+describe('a page inside a presented stack that refuses a native dismissal', () => {
+  async function presentStack(url = '/compose') {
+    const handlers: (() => boolean)[] = [];
+    const app = await render(mod['GuardShell'] as Type<unknown>, {
+      providers: [
+        provideNativeRouter(mod['guardRoutes'] as Routes),
+        {
+          provide: HardwareBack.SOURCE,
+          useValue: {
+            subscribe: (handler: () => boolean) => {
+              handlers.push(handler);
+              return () => handlers.splice(handlers.indexOf(handler), 1);
+            },
+          },
+        },
+      ],
+    });
+    const nav = app.componentRef.injector.get(NativeNavigation);
+    await nav.present(url, { as: 'formSheet' });
+    await settle();
+    const screens = () =>
+      flatten(app.fabric.committed).filter((node) => node.viewName === 'RNSScreen');
+    const sheet = () => screens().find((node) => node.props['stackPresentation'] === 'formSheet')!;
+    const pressBack = async () => {
+      const taken = [...handlers].reverse().some((handler) => handler());
+      for (let turn = 0; turn < 5; turn++) await settle();
+      return taken;
+    };
+    return { nav, screens, sheet, pressBack, page: (mod['editors'] as Editor[]).at(-1)! };
+  }
+
+  it('refuses a swipe down on the sheet while the page is dirty, and no longer once clean', async () => {
+    const { sheet, page } = await presentStack();
+    assert.notEqual(sheet().props['preventNativeDismiss'], true, 'a clean page can be swiped away');
+    page.dirty.set(true);
+    await settle();
+    assert.equal(sheet().props['preventNativeDismiss'], true);
+    page.dirty.set(false);
+    await settle();
+    assert.notEqual(sheet().props['preventNativeDismiss'], true);
+  });
+
+  it('tells the page of the attempt the sheet refused', async () => {
+    const { sheet, page } = await presentStack();
+    page.dirty.set(true);
+    await settle();
+    await fireEvent(sheet(), 'nativeDismissCancelled', { dismissCount: 1 });
+    assert.equal(page.attempts(), 1);
+  });
+
+  it("refuses Android's Back the same way, and tells the page", async () => {
+    const { screens, pressBack, page } = await presentStack();
+    page.dirty.set(true);
+    await settle();
+    const before = screens().length;
+    assert.equal(await pressBack(), true, 'the press is taken, not passed to the platform');
+    assert.equal(screens().length, before, 'the sheet is still there');
+    assert.equal(page.attempts(), 1);
+  });
+
+  it('follows the screen on top of the stack, not the first one', async () => {
+    const { nav, sheet, page } = await presentStack();
+    page.dirty.set(true);
+    await settle();
+    await nav.push('/compose/more');
+    for (let turn = 0; turn < 5; turn++) await settle();
+    assert.notEqual(
+      sheet().props['preventNativeDismiss'],
+      true,
+      'the screen on top does not refuse',
+    );
+    nav.back();
+    for (let turn = 0; turn < 5; turn++) await settle();
+    assert.equal(sheet().props['preventNativeDismiss'], true, 'and the editor under it does');
+  });
+
+  it("leaves the sheet's own refusal in place when the page stops refusing", async () => {
+    const { sheet, page } = await presentStack('/locked');
+    assert.equal(sheet().props['preventNativeDismiss'], true);
+    page.dirty.set(true);
+    await settle();
+    page.dirty.set(false);
+    await settle();
+    assert.equal(sheet().props['preventNativeDismiss'], true);
+  });
+});
+
 interface Editor {
   dirty: { set(value: boolean): void };
   attempts(): number;

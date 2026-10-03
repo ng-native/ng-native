@@ -154,6 +154,12 @@ export class Editor {
 }
 ```
 
+The same binding works on a page inside a
+[presented screen that is a stack of its own](#pushing-from-a-presented-screen): the stack gives
+the refusal of the screen on top of it to the presented screen, the one a swipe down dismisses, and
+the page hears the attempt. Bind it on the page or on the component that holds the
+`<native-stack-outlet>`, not on both.
+
 ## Presented screens have no header
 
 A presented screen (`present()`) is shown outside the stack's own navigation controller - the same

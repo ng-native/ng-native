@@ -23,8 +23,10 @@ import {
   ElementRef,
   ErrorHandler,
   HostAttributeToken,
+  InjectionToken,
   Injector,
   Renderer2,
+  afterEveryRender,
   computed,
   createComponent,
   inject,
@@ -93,6 +95,17 @@ const FILL = { position: 'absolute', left: 0, right: 0, top: 0, bottom: 0 } as c
 /** A swipe-back area with no limit on any edge. */
 const UNLIMITED_SWIPE = { start: -1, end: -1, top: -1, bottom: -1 } as const;
 
+/**
+ * The screen a page lives in, for a stack inside that page. A presented screen with a header is
+ * such a stack, and the page that knows whether to refuse a dismissal is a screen inside it, where
+ * the screen a swipe down dismisses is this one.
+ */
+const HOLDING_SCREEN = new InjectionToken<unknown>('ng-native.router.holding-screen');
+
+/** Whether a screen refuses a native dismissal, as its page bound it. */
+const refuses = (screen: unknown): boolean =>
+  (screen as Partial<EngineNode> | undefined)?.props?.['preventNativeDismiss'] === true;
+
 /** The native engine's `dispatchEvent`, as Fabric calls it. */
 type NativeDispatch = (node: unknown, topLevelType: string, nativeEvent: unknown) => void;
 
@@ -127,6 +140,10 @@ export class NativeStackOutlet implements RouterOutletContract {
   private readonly engine = inject(HostEngine, { optional: true });
 
   private readonly errors = inject(ErrorHandler);
+  /** The screen this stack sits in, when it is a stack inside a page of another. */
+  private readonly holder = inject(HOLDING_SCREEN, { optional: true });
+  /** What the holder's own `preventNativeDismiss` was, while this stack's top screen refuses. */
+  private held: { own: unknown } | null = null;
 
   private readonly entries: StackEntry[] = [];
   /**
@@ -169,7 +186,10 @@ export class NativeStackOutlet implements RouterOutletContract {
       else if (event instanceof NavigationError) this.rollBack(event.id);
     });
 
+    const unhold = this.holder ? this.holdRefusals(this.holder) : undefined;
+
     inject(DestroyRef).onDestroy(() => {
+      unhold?.();
       unsubscribeBack();
       unsubscribeStack();
       navigations?.unsubscribe();
@@ -274,7 +294,7 @@ export class NativeStackOutlet implements RouterOutletContract {
     try {
       ref = createComponent(component, {
         environmentInjector,
-        elementInjector: this.outletInjector(route, inFront),
+        elementInjector: this.outletInjector(route, inFront, screen),
         hostElement: screen as Element,
       });
       this.applicationRef.attachView(ref.hostView);
@@ -570,6 +590,49 @@ export class NativeStackOutlet implements RouterOutletContract {
     return true;
   }
 
+  /**
+   * Passes the top screen's refusal to the screen this stack sits in, and that screen's report of
+   * an attempt back to the top screen: the swipe that dismisses a presented stack is on the
+   * screen holding it, which the page inside cannot bind.
+   *
+   * Read after every render, since the refusal is a host binding of whatever page is on top.
+   */
+  private holdRefusals(holder: unknown): () => void {
+    const render = afterEveryRender(() => this.holdRefusal(holder));
+    const unlisten = this.renderer.listen(
+      holder,
+      'nativeDismissCancelled',
+      (event: { nativeEvent?: unknown }) => {
+        if (!this.held) return;
+        const native = this.engine as { dispatchEvent?: NativeDispatch } | null;
+        const report = event?.nativeEvent ?? { dismissCount: 1 };
+        native?.dispatchEvent?.(this.top!.screen, 'topNativeDismissCancelled', report);
+      },
+    );
+    return () => {
+      render.destroy();
+      unlisten();
+      this.release(holder);
+    };
+  }
+
+  private holdRefusal(holder: unknown): void {
+    // A stack in a tab behind is inside the same screen, and has no say in it.
+    if (!refuses(this.top?.screen) || !this.isShowing()) return this.release(holder);
+    if (refuses(holder)) return;
+    // ponytail: the holder's own binding is read when the top screen starts refusing. One that
+    // turns true while it does is put back as it was then; bind the refusal in one of the two.
+    this.held = { own: (holder as EngineNode).props?.['preventNativeDismiss'] };
+    this.renderer.setProperty(holder, 'preventNativeDismiss', true);
+  }
+
+  /** The holder's own answer again, once the top screen no longer refuses. */
+  private release(holder: unknown): void {
+    if (!this.held) return;
+    this.renderer.setProperty(holder, 'preventNativeDismiss', this.held.own ?? false);
+    this.held = null;
+  }
+
   private goBack(): boolean {
     if (this.entries.length < 2 || !this.isShowing()) return false;
     this.popBy(1);
@@ -655,16 +718,21 @@ export class NativeStackOutlet implements RouterOutletContract {
   }
 
   /**
-   * What a page is created with: its route, the outlet contexts its own outlets register in, and
-   * whether its screen is in front - which is this screen's own say and, for a stack inside a
+   * What a page is created with: its route, its screen, the outlet contexts its own outlets
+   * register in, and whether its screen is in front - which is this screen's own say and, for a stack inside a
    * screen of another, that screen's too.
    */
-  private outletInjector(route: ActivatedRoute, inFront: WritableSignal<boolean>): Injector {
+  private outletInjector(
+    route: ActivatedRoute,
+    inFront: WritableSignal<boolean>,
+    screen: unknown,
+  ): Injector {
     const outer = this.injector.get(SCREEN_IN_FRONT);
     return Injector.create({
       parent: this.injector,
       providers: [
         { provide: SCREEN_IN_FRONT, useValue: computed(() => outer() && inFront()) },
+        { provide: HOLDING_SCREEN, useValue: screen },
         { provide: ActivatedRoute, useValue: route },
         {
           provide: ChildrenOutletContexts,

@@ -37,7 +37,36 @@ export class EditorSheet {
 /** Every editor made, newest last, for a test to reach the page on the screen. */
 export const editors: EditorSheet[] = [];
 
+/**
+ * A presented screen that is a stack of its own, as one with a header is: the editor is the first
+ * screen inside it, and the screen a swipe down dismisses is this component's.
+ */
+@Component({
+  selector: 'x-compose-stack',
+  imports: [NativeStackOutlet],
+  template: `<native-stack-outlet />`,
+})
+export class ComposeStack {}
+
+/** The same, where the stack's own screen refuses a dismissal whatever the page inside says. */
+@Component({
+  selector: 'x-locked-stack',
+  imports: [NativeStackOutlet],
+  template: `<native-stack-outlet />`,
+  host: { '[preventNativeDismiss]': 'true' },
+})
+export class LockedStack {}
+
 export const guardRoutes: Routes = [
   { path: '', component: GuardHome },
   { path: 'editor', component: EditorSheet },
+  {
+    path: 'compose',
+    component: ComposeStack,
+    children: [
+      { path: '', component: EditorSheet },
+      { path: 'more', component: GuardHome },
+    ],
+  },
+  { path: 'locked', component: LockedStack, children: [{ path: '', component: EditorSheet }] },
 ];
