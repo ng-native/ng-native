@@ -54,6 +54,33 @@ export class Card {
     assert.throws(() => transformAngular(source, '/app/src/card.ts'), /"\.\.\.SHARED"/);
   });
 
+  it('reads the host of a class that is not exported, as a test file writes one', () => {
+    const source = (host: string) => `
+import { Component } from '@angular/core';
+const SHARED = { '(press)': 'go()' };
+@Component({ selector: 'app-first', template: '', host: { '(window:resize)': 'go()', '(press)': 'go()' } })
+class First { go() {} }
+
+@Component({ selector: 'app-second', template: ''${host} })
+class Second { go() {} }
+`;
+    // The second has no host: the first one's is not taken for it.
+    assert.doesNotThrow(() => transformAngular(source(''), '/app/src/two.ts'));
+    assert.throws(
+      () => transformAngular(source(', host: { ...SHARED }'), '/app/src/two.ts'),
+      /two\.ts: Second's host cannot be read at build time: "\.\.\.SHARED"/,
+    );
+    // And the first one's own is checked, where it was passed over.
+    assert.throws(
+      () =>
+        transformAngular(
+          source('').replace("{ '(window:resize)': 'go()', '(press)': 'go()' }", '{ ...SHARED }'),
+          '/app/src/two.ts',
+        ),
+      /two\.ts: First's host cannot be read at build time/,
+    );
+  });
+
   it('names only the entries that were dropped', () => {
     assert.throws(
       () =>

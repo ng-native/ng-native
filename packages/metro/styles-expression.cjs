@@ -132,14 +132,32 @@ function lastDecorator(src, classStart) {
 }
 
 /**
+ * Where the `class` keyword of the class whose span starts at `from` is: the first one outside a
+ * string, a comment and a decorator's arguments, where `class` is also a host key.
+ */
+function classKeyword(src, from) {
+  for (let i = from; i < src.length;) {
+    const next = skip(src, i);
+    if (next !== i) i = next;
+    else if (src[i] === '(') i = close(src, i);
+    else if (/^class\b/.test(src.slice(i, i + 6)) && !/[\w$.]/.test(src[i - 1] ?? '')) return i;
+    else i += 1;
+  }
+  return from;
+}
+
+/**
  * The `name` property of the `@Component({...})` decorating the class that starts at
  * `classStart`: where its value is in the source, or null when the decorator has none.
  */
 function decoratorProperty(src, classStart, name) {
-  const decorator = lastDecorator(src, classStart);
+  // The compiler's span for a class starts at its decorator unless the class is exported, where
+  // it starts at `export`: the `class` keyword is past the decorator either way.
+  const keyword = classKeyword(src, classStart);
+  const decorator = lastDecorator(src, keyword);
   if (decorator === -1) return null;
   const open = src.indexOf('{', decorator);
-  if (open === -1 || open > classStart) return null;
+  if (open === -1 || open > keyword) return null;
   const end = close(src, open) - 1;
 
   for (const property of split(src, open + 1, end, ',')) {
