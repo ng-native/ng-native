@@ -131,6 +131,18 @@ A scroll view that fills the tab can usually do without: on iOS, with
 included. Android has no equivalent, so there the last rows scroll under the bar unless the
 content is padded.
 
+## Pushing into another tab
+
+`NativeNavigation.push('/items/1')` from another tab selects the Items tab and pushes the page
+onto its stack, over whatever the tab was left on. A tab nobody has opened has no stack yet, so
+the push goes to the tab first and then to the page: the tab's own first screen, `/items`, is under
+it, and a back from the page lands there, as it does when the tab has been opened. If the tab's
+first screen refuses the navigation, a guard that redirects among them, the push resolves to
+`false` and the page is not shown.
+
+`present()` does not do this, and neither does `Router.navigateByUrl()`: each goes straight to the
+url it is given.
+
 ## Going back
 
 Android's back button pops the stack in the tab in front, never one in a tab behind it. That is a

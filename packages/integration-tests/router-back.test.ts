@@ -11,9 +11,9 @@ import assert from 'node:assert/strict';
 import { afterEach, before, beforeEach, describe, it } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import type { Type } from '@angular/core';
-import { Router, type Routes } from '@angular/router';
+import { NavigationEnd, Router, type Routes } from '@angular/router';
 import { HardwareBack } from '@ng-native/device';
-import { cleanup, render, settle } from '@ng-native/testing';
+import { cleanup, render, screen, settle } from '@ng-native/testing';
 import { NativeNavigation } from '../router/src/native-navigation.ts';
 import { provideNativeRouter } from '../router/src/provide-native-router.ts';
 import { compileFixture } from './compile.ts';
@@ -64,6 +64,43 @@ describe('going back in an app with tabs', () => {
   });
 
   afterEach(() => cleanup());
+
+  it("puts a tab's first screen under a page pushed into a tab not opened yet", async () => {
+    assert.equal(await navigation.push('/library/7'), true);
+    await settle();
+    assert.equal(router.url, '/library/7');
+    assert.ok(screen.getByText('album'));
+    assert.ok(screen.getByText('library'), 'the list is mounted under it');
+
+    navigation.back();
+    await settle();
+    await settle();
+    assert.equal(router.url, '/library', 'and a back pops to it, not to the tab it came from');
+  });
+
+  it('pushes the same way from an array of commands, and with a query', async () => {
+    assert.equal(await navigation.push(['/search', 'cats'], { queryParams: { page: 2 } }), true);
+    await settle();
+    assert.equal(router.url, '/search/cats?page=2');
+    navigation.back();
+    await settle();
+    await settle();
+    assert.equal(router.url, '/search');
+  });
+
+  it('pushes straight onto a tab that has been opened, in one navigation', async () => {
+    await go('/library');
+    await go('/home');
+    let ended = 0;
+    const events = router.events.subscribe((event) => {
+      if (event instanceof NavigationEnd) ended++;
+    });
+    await navigation.push('/library/7');
+    await settle();
+    events.unsubscribe();
+    assert.equal(ended, 1);
+    assert.equal(router.url, '/library/7');
+  });
 
   it('pops the stack in front after a trip to another tab, rather than going back to that tab', async () => {
     await go('/library');

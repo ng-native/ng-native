@@ -53,9 +53,12 @@ describe('asking for a screen', () => {
               navigated.push({ commands, extras });
               return Promise.resolve(true);
             },
+            // A push asks which tab its url is in, and there is no tab bar here.
+            createUrlTree: (commands: unknown[]) => commands,
+            serializeUrl: (commands: unknown[]) => commands.join('/'),
           },
         ],
-        [NativeBack, { back: () => ((backs += 1), true) }],
+        [NativeBack, { back: () => ((backs += 1), true), unopenedTabOf: () => null }],
       ],
       () => new NativeNavigation(),
     );

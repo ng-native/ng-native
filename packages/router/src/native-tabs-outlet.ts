@@ -165,10 +165,13 @@ export class NativeTabsOutlet implements RouterOutletContract, AfterContentInit 
 
     // Android's back button, and `NativeNavigation.back()`, once the stack in front, if the tab
     // has one, is at its root. Subscribed before any tab's own stack, so it is asked after them.
-    const unsubscribeBack = inject(NativeBack).handle(() => this.goBack());
+    const back = inject(NativeBack);
+    const unsubscribeBack = back.handle(() => this.goBack());
+    const unsubscribeBar = back.addTabBar({ unopenedTabOf: (url) => this.unopenedTabOf(url) });
 
     inject(DestroyRef).onDestroy(() => {
       unsubscribeBack();
+      unsubscribeBar();
       following?.unsubscribe();
       for (const entry of this.entries) {
         entry.unbind();
@@ -428,6 +431,19 @@ export class NativeTabsOutlet implements RouterOutletContract, AfterContentInit 
     if (!entry) return;
     const root = this.pathOf(entry);
     if (url === root || url.startsWith(`${root}/`) || url.startsWith(`${root}?`)) entry.url = url;
+  }
+
+  /**
+   * The url of the tab `url` is a page inside, when nothing has opened that tab: the tab's own
+   * first screen, which a push into the tab from outside it shows first.
+   */
+  private unopenedTabOf(url: string): string | null {
+    for (const entry of this.entries) {
+      if (entry.ref) continue;
+      const root = this.pathOf(entry);
+      if (url.startsWith(`${root}/`)) return root;
+    }
+    return null;
   }
 
   private request(entry: TabEntry): void {

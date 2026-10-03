@@ -25,6 +25,16 @@ export interface PoppableStack {
   popTo(url: string): Promise<boolean> | null;
 }
 
+/**
+ * What a tab bar offers `NativeNavigation` for a push into one of its tabs from outside it. A tab
+ * nobody has opened has no stack yet, and a page pushed into it would be the stack's first
+ * screen, with nothing under it to go back to.
+ */
+export interface TabBar {
+  /** The url of the tab `url` is a page inside, when that tab has not been opened. */
+  unopenedTabOf(url: string): string | null;
+}
+
 @Service()
 export class NativeBack {
   private readonly hardwareBack = inject(HardwareBack);
@@ -32,6 +42,27 @@ export class NativeBack {
   private readonly answers: BackAnswer[] = [];
   /** Oldest first, and so outermost first, as the answers are. */
   private readonly stacks: PoppableStack[] = [];
+
+  /** Oldest first. */
+  private readonly tabBars: TabBar[] = [];
+
+  /** Offer a tab bar's unopened tabs to a push into one. Returns an unsubscribe. */
+  addTabBar(bar: TabBar): () => void {
+    this.tabBars.push(bar);
+    return () => {
+      const index = this.tabBars.indexOf(bar);
+      if (index !== -1) this.tabBars.splice(index, 1);
+    };
+  }
+
+  /** The url of the unopened tab `url` is a page inside, or null: see `TabBar`. */
+  unopenedTabOf(url: string): string | null {
+    for (const bar of this.tabBars) {
+      const root = bar.unopenedTabOf(url);
+      if (root) return root;
+    }
+    return null;
+  }
 
   /** Offer a stack for popping several screens at once. Returns an unsubscribe. */
   addStack(stack: PoppableStack): () => void {

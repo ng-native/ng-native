@@ -179,9 +179,33 @@ export class NativeNavigation {
     // navigation is still running - a lazily loaded root waiting on its import - cancels that
     // navigation, and the app opens on this screen with nothing beneath it. A reset replaces the
     // stack anyway, so it goes at once.
+    const start = () => this.underTabRoot(commands, extras, full, navigate);
     return intent.stack !== 'reset' && this.firstNavigationRunning()
-      ? this.firstNavigation().then(navigate)
-      : navigate();
+      ? this.firstNavigation().then(start)
+      : start();
+  }
+
+  /**
+   * A push into a tab nobody has opened goes to the tab first, so its stack has the tab's own
+   * first screen under the page, and a back from the page lands there: what a tab bar with a
+   * navigation controller per tab does. Without it the page is the stack's only screen, and the
+   * same push leaves a different stack behind depending on whether the tab was ever tapped. A
+   * presented screen goes where it is asked, and a replace or a reset has nothing to keep.
+   */
+  private underTabRoot(
+    commands: NavigationCommands,
+    extras: NavigationExtras,
+    intent: NativeIntent,
+    navigate: () => Promise<boolean>,
+  ): Promise<boolean> {
+    if (intent.stack !== 'push' || intent.presentation) return navigate();
+    const path =
+      typeof commands === 'string'
+        ? pathOf(commands)
+        : this.router.serializeUrl(this.router.createUrlTree([...commands], extras));
+    const tab = this.outlets.unopenedTabOf(path.replace(/[?#].*$/, ''));
+    if (!tab) return navigate();
+    return this.router.navigateByUrl(tab).then((arrived) => (arrived ? navigate() : false));
   }
 
   /**
