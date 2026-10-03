@@ -1090,6 +1090,42 @@ export function viewNameOf(node: ViewNameNode): string {
   return registeredViewName(node.name) ?? DEFAULT_VIEW;
 }
 
+/**
+ * The props every native view reads as a boolean: the `bool` fields of React Native's
+ * `BaseViewProps`, `AccessibilityProps` and `HostPlatformViewProps`, by the names JavaScript sends.
+ *
+ * An attribute arrives as text. A component that declares the prop as an input turns it into a
+ * boolean itself, but an element nothing claims, such as a component's own host, holds what it
+ * was given, and Android refuses a string where it reads a boolean: `focusable="false"` is
+ * `java.lang.String cannot be cast to java.lang.Boolean` at the first commit. iOS ignores it.
+ *
+ * So the text is made a boolean as it is committed, `"false"` false and anything else true, as an
+ * attribute reads in HTML. The node keeps the text, which is what `[focusable="false"]` in a
+ * stylesheet matches against.
+ */
+const BOOLEAN_VIEW_PROPS = new Set([
+  'accessibilityElementsHidden',
+  'accessibilityIgnoresInvertColors',
+  'accessibilityRespondsToUserInteraction',
+  'accessibilityShowsLargeContentViewer',
+  'accessibilityViewIsModal',
+  'accessible',
+  'collapsable',
+  'collapsableChildren',
+  'focusable',
+  'hasTVPreferredFocus',
+  'needsOffscreenAlphaCompositing',
+  'removeClippedSubviews',
+  'renderToHardwareTextureAndroid',
+  'screenReaderFocusable',
+  'shouldRasterizeIOS',
+]);
+
+/** A prop as it is committed: a boolean view prop held as text is the boolean the text says. */
+function committedProp(key: string, value: unknown): unknown {
+  return typeof value === 'string' && BOOLEAN_VIEW_PROPS.has(key) ? value !== 'false' : value;
+}
+
 /** Whether `node` is `ancestor` or somewhere under it. */
 function isWithin(node: EngineNode | null, ancestor: EngineNode): boolean {
   for (let at = node; at; at = at.parent) if (at === ancestor) return true;
@@ -2533,7 +2569,7 @@ export class Engine implements HostEngine {
         key !== STYLE_OVERRIDE &&
         !key.includes('-')
       ) {
-        props[key] = node.props[key];
+        props[key] = committedProp(key, node.props[key]);
       }
     }
     withTextContent(node, viewName, props);

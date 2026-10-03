@@ -9,7 +9,12 @@ import { fileURLToPath } from 'node:url';
 import type { Type } from '@angular/core';
 import { mount } from '@ng-native/platform';
 import { createFakeFabric, type FakeFabricNode } from '@ng-native/testing';
+import { createRequire } from 'node:module';
+import { Engine } from '@ng-native/fabric';
 import { compileFixture } from './compile.ts';
+
+const require = createRequire(import.meta.url);
+const { compileCss } = require('@ng-native/metro/css/compile.cjs');
 
 describe('a boolean prop written as an attribute', () => {
   let props: (id: string) => Record<string, unknown>;
@@ -34,6 +39,8 @@ describe('a boolean prop written as an attribute', () => {
     assert.equal(off['focusable'], false);
     assert.equal(off['accessible'], false);
     assert.equal(off['collapsable'], false);
+    assert.equal(off['opacity'], 0.5, 'and still "false" to the attribute selector');
+    assert.equal(props('on')['opacity'], undefined);
   });
 
   it("is true for 'true', and for the attribute alone", () => {
@@ -51,5 +58,21 @@ describe('a boolean prop written as an attribute', () => {
 
   it('still takes a typed input on a component that declares one', () => {
     assert.equal(props('typed')['focusable'], false);
+  });
+
+  it('is still its text to a stylesheet, as an attribute selector reads it in a browser', () => {
+    const sheet = compileCss(
+      '[focusable="false"] { opacity: 0.5 } [focusable="true"] { opacity: 0.25 }',
+      'boolean-attributes',
+      {},
+    );
+    const fabric = createFakeFabric();
+    const engine = new Engine(fabric, 1);
+    const node = engine.createElement('view', sheet);
+    engine.setProp(node, 'focusable', 'false');
+    engine.appendChild(engine.root, node);
+    engine.commit();
+    assert.equal(fabric.committed[0]!.props['focusable'], false, 'a boolean to native');
+    assert.equal(fabric.committed[0]!.props['opacity'], 0.5, 'and "false" to the selector');
   });
 });

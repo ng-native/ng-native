@@ -11,6 +11,11 @@ export class Card {}
 @Component({
   selector: 'boolean-attributes-fixture',
   imports: [Card, View],
+  styles: `
+    app-card[focusable='false'] {
+      opacity: 0.5;
+    }
+  `,
   template: `
     <app-card id="off" focusable="false" accessible="false" collapsable="false" />
     <app-card id="on" focusable="true" accessible collapsable="true" />
