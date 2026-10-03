@@ -3854,7 +3854,7 @@ export class Engine implements HostEngine {
 
   /**
    * Angular's own unknown-element check does not run in this pipeline, so a `<text>` in a
-   * template that never imported `Text` compiles, renders as a plain view, and looks like a
+   * template that never imported `Text` compiles, draws without the component, and looks like a
    * layout bug. On the first commit of any known element with no component behind it, say so.
    */
   private checkClaimed(node: EngineNode): void {
@@ -3864,7 +3864,8 @@ export class Engine implements HostEngine {
     console.error(
       `[angular-native] <${node.name}> is used in a template that does not import ` +
         `${className(node.name)}. Add it to the component's \`imports\` from ` +
-        `'@ng-native/components'; without it the element renders as a plain view.`,
+        `'@ng-native/components'; without it the element has none of the component's inputs ` +
+        `or behavior, so a prop written on it stays the text it was written as.`,
     );
   }
 

@@ -36,3 +36,15 @@ Styles flatten onto a node's props rather than sitting under a `style` key, so `
 the node is exactly what the native view is told to paint. A small stylesheet written for the test,
 rather than the app's real one, keeps the test about which rule wins rather than about what a
 color token is worth this week. `createRequire` because the compiler is CommonJS.
+
+## A style with a transition
+
+A property with a `transition` eases to its new value over frames, so an awaited interaction is
+not enough: right after `await userEvent.press(...)` the prop is still near where it started.
+
+- Wait for the value: `await waitFor(() => expect(panel().props['opacity']).toBe(1))`.
+- Or render with `reducedMotion: true` in `conditions`, where the component has a
+  `@media (prefers-reduced-motion: reduce)` rule that drops the transition, and assert at once.
+- Or drive the clock: `render(Panel, { now: () => time })` gives the engine the test's clock, and
+  `engine.advanceAnimations()` followed by `engine.commit()` runs the frame the clock is at, with
+  the engine from the render's `componentRef.injector.get(Engine)`.

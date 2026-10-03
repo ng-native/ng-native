@@ -21,6 +21,11 @@ channel by channel; a length or an angle interpolates as long as both ends share
 them would be a guess). A named color (`'red'`) interpolates as well: the compiler emits `rgb()` for
 one in a stylesheet, and one bound straight into a style is looked up by name.
 
+A duration, a delay or a curve can be a token in the longhands: `transition-property: opacity`
+with `transition-duration: var(--duration-fast)`. The `transition` shorthand does not take one:
+`transition: opacity var(--duration-fast) ease-out` is dropped whole, with a build warning, and the
+element has no transition.
+
 ## `animate.enter` and `animate.leave`
 
 They add and remove a class, and wait for what the class starts, using `getAnimations()` on the

@@ -143,8 +143,8 @@ by default commits one without you writing it, the way `<switch>` commits `acces
 
 **Text content** is every `RawText` under the node, in order, joined with nothing between them.
 `<text>and <text>plums</text></text>` commits as one `Paragraph` holding a `RawText` and a nested
-`Text` span, and its text content is `and plums`. Only the `Paragraph` is a `ByText` match; the
-span is part of its text, not a match of its own.
+`VirtualText`, and its text content is `and plums`. Only the `Paragraph` is a `ByText` match; the
+`VirtualText` is part of its text, not a match of its own.
 
 **Matching** follows Testing Library's rules:
 
