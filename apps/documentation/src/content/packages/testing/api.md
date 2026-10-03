@@ -37,7 +37,7 @@ promise.
 | `providers`           | `(Provider \| EnvironmentProviders)[]` | none    | Providers for the app the component is mounted in: `provideNativeRouter`, `provideNativeHttpClient`, a stand-in for a service.                                      |
 | `imports`             | `unknown[]`                            | none    | What the template may use. Template form only.                                                                                                                      |
 | `componentProperties` | `Partial<T> & Record<string, unknown>` | none    | Fields assigned to the instance. On the template form's host, before its first pass; on a class, after it, followed by another pass.                                |
-| `globalStyles`        | `StyleSheet \| null`                   | none    | A compiled global stylesheet, as `compileCss` from `@ng-native/metro/css/compile.cjs` returns it. What Tailwind classes resolve against.                            |
+| `globalStyles`        | `StyleSheet \| null`                   | none    | A compiled global stylesheet, as [`compileCss()`](#compilecss) returns it. What Tailwind classes resolve against.                                                   |
 | `conditions`          | `Conditions`                           | none    | What `@media` queries resolve against: width, height, color scheme. With none, every media query is false. `Screen` from `@ng-native/device` reports the same size. |
 | `tokens`              | `Record<string, TokenValue>`           | none    | Values only a device knows, such as the hairline width.                                                                                                             |
 | `processColor`        | `(value: string \| number) => unknown` | none    | React Native's `processColor`. With none, colors reach the props as the strings the stylesheet wrote, which is what a test usually wants to assert.                 |
@@ -316,6 +316,17 @@ every test by itself when `afterEach` is a global, which it is in Vitest with `g
 `node:test` or Vitest's default, call it from an `afterEach` of your own if a test should not leave
 its render mounted. Every render has its own fake, so a test that skips cleanup still cannot see
 another test's tree.
+
+## `compileCss()`
+
+```ts
+function compileCss(css: string, name?: string, options?: CompileCssOptions): StyleSheet;
+```
+
+Compiles a stylesheet as the build compiles an app's, for `render()`'s `globalStyles`. `name` is
+what a message about the sheet calls it. A declaration or rule native cannot express throws, so a
+test never passes on a sheet that lost a rule; pass `onUnsupported` to be told of each instead, and
+the rest of the sheet is kept. See [Testing styling](/packages/testing/testing-styling).
 
 ## `createFakeFabric()`
 

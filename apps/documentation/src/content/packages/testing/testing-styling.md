@@ -11,14 +11,10 @@ global stylesheet, which is what Tailwind classes resolve against, is passed to 
 `globalStyles`, compiled by the same CSS compiler Metro uses:
 
 ```ts
-import { createRequire } from 'node:module';
 import { Component } from '@angular/core';
 import { Text, View } from '@ng-native/components';
-import { render, screen } from '@ng-native/testing';
+import { compileCss, render, screen } from '@ng-native/testing';
 import { expect, it } from 'vitest';
-
-const require = createRequire(import.meta.url);
-const { compileCss } = require('@ng-native/metro/css/compile.cjs');
 
 @Component({
   selector: 'app-badge',

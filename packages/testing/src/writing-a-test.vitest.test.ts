@@ -2,7 +2,6 @@
  * Every sample on the "Writing a test" docs page, run as written. The page quotes this file; a
  * change here is a change there.
  */
-import { createRequire } from 'node:module';
 import { describe, expect, it, vi } from 'vitest';
 import {
   Component,
@@ -26,7 +25,15 @@ import {
   provideNativeRouter,
   withLinkParent,
 } from '@ng-native/router';
-import { injectService, render, screen, userEvent, waitFor, within } from '@ng-native/testing';
+import {
+  compileCss,
+  injectService,
+  render,
+  screen,
+  userEvent,
+  waitFor,
+  within,
+} from '@ng-native/testing';
 
 @Component({
   selector: 'app-counter',
@@ -288,9 +295,6 @@ describe('HttpClient', () => {
     http.verify();
   });
 });
-
-const require = createRequire(import.meta.url);
-const { compileCss } = require('@ng-native/metro/css/compile.cjs');
 
 @Component({
   selector: 'app-badge',
