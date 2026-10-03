@@ -71,6 +71,9 @@ describe('declaring a face', () => {
       source: { asset: './Inter.ttf' },
       weightRange: [100, 900],
     });
+    assert.deepEqual(face('900 100').weightRange, [100, 900], 'either way round');
+    assert.deepEqual(face('100 normal').weightRange, [100, 400], 'normal is 400 in a range');
+    assert.deepEqual(face('normal bold').weightRange, [400, 700]);
     assert.equal(face('400 400').weight, 400);
     assert.equal(face('400 400').weightRange, undefined);
   });

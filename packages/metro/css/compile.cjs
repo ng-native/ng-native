@@ -2365,9 +2365,14 @@ function fontFace(value, context) {
  * font declares, as its two ends. A range of one weight is that weight.
  */
 function faceWeight(value) {
-  const [low, high] = (value ?? []).map((end) =>
-    end?.value?.type === 'bold' ? 700 : end?.value?.value,
-  );
+  const ends = value ?? [];
+  // `normal` on its own is no weight given. As an end of a range it is 400, and the ends may be
+  // written either way round.
+  const ranged = ends.some((end) => end?.value?.type !== 'normal');
+  const named = { bold: 700, normal: ranged && ends.length > 1 ? 400 : undefined };
+  const [low, high] = ends
+    .map((end) => (end?.value?.type in named ? named[end.value.type] : end?.value?.value))
+    .sort((a, b) => a - b);
   return typeof high === 'number' && high !== low ? [low, high] : low;
 }
 
