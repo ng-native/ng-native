@@ -8,13 +8,15 @@
  *
  * No decorators, so tests can import it and so it can be provided with `useClass`.
  */
-import type { ComponentRef } from '@angular/core';
+import { Injector, inject, type ComponentRef } from '@angular/core';
 import {
   BaseRouteReuseStrategy,
   type ActivatedRouteSnapshot,
   type DetachedRouteHandle,
+  Router,
   type Route,
 } from '@angular/router';
+import { intentOf } from './native-navigation.ts';
 import { isScreenRoute, isTabRoute } from './tab-routes.ts';
 
 /**
@@ -58,8 +60,25 @@ function keyOf(route: ActivatedRouteSnapshot): string {
   return JSON.stringify(levels);
 }
 
+function injectorHere(): Injector | null {
+  try {
+    return inject(Injector);
+  } catch {
+    return null;
+  }
+}
+
 export class NativeStackReuseStrategy extends BaseRouteReuseStrategy {
-  private readonly handles = new Map<string, DetachedRouteHandle>();
+  /**
+   * The screens kept for each url, oldest first. More than one where the same url is on the stack
+   * twice: a customer, one of its jobs, and the customer again from the job.
+   */
+  private readonly handles = new Map<string, DetachedRouteHandle[]>();
+  /**
+   * For the navigation in flight, read when it is asked for: the router is built from this. Null
+   * where the strategy is made by hand, outside an injector, and every navigation is then plain.
+   */
+  private readonly injector = injectorHere();
 
   /**
    * Only leaf routes become screens; a parent with children is layout, not a destination.
@@ -83,14 +102,18 @@ export class NativeStackReuseStrategy extends BaseRouteReuseStrategy {
 
   override store(route: ActivatedRouteSnapshot, handle: DetachedRouteHandle | null): void {
     const key = keyOf(route);
-    // A null handle is the router telling us the screen is gone for good.
+    const kept = this.handles.get(key) ?? [];
     if (handle) {
-      this.handles.set(key, handle);
+      // The same screen stored again takes its place at the end, not a second one.
+      this.handles.set(key, [...kept.filter((one) => one !== handle), handle]);
       this.forgetOnDestroy((handle as StoredHandle).componentRef);
-    } else this.handles.delete(key);
+      return;
+    }
+    // The router has re-attached the one `retrieve` answered with: the last.
+    if (kept.length > 1) this.handles.set(key, kept.slice(0, -1));
+    else this.handles.delete(key);
   }
 
-  /** Refs whose destruction already drops their handles. */
   private readonly watched = new WeakSet<ComponentRef<unknown>>();
 
   /**
@@ -106,8 +129,10 @@ export class NativeStackReuseStrategy extends BaseRouteReuseStrategy {
     if (!ref || this.watched.has(ref)) return;
     this.watched.add(ref);
     ref.onDestroy(() => {
-      for (const [key, handle] of this.handles) {
-        if ((handle as StoredHandle).componentRef === ref) this.handles.delete(key);
+      for (const [key, kept] of this.handles) {
+        const left = kept.filter((handle) => (handle as StoredHandle).componentRef !== ref);
+        if (left.length) this.handles.set(key, left);
+        else this.handles.delete(key);
       }
     });
   }
@@ -128,24 +153,32 @@ export class NativeStackReuseStrategy extends BaseRouteReuseStrategy {
     return keyOf(future) === keyOf(curr);
   }
 
+  /**
+   * Whether the router goes back to a kept screen for this url. Not for a push: a push to a url
+   * already on the stack is a new screen over it, as a native stack makes one, and Back returns
+   * to where the push came from. Going back to the kept one is a back, or `popTo`.
+   */
   override shouldAttach(route: ActivatedRouteSnapshot): boolean {
+    if (this.pushing()) return false;
     return this.retrieve(route) !== null;
   }
 
-  /**
-   * The router only ever tells the strategy about a screen it detached, never about one the
-   * outlet destroyed on a pop, so a handle can outlive its component. Pushing A, then B, going
-   * back and pushing B again would otherwise attach B's destroyed ref: a screen that renders and
-   * never updates. The ref knows it is dead, so ask it rather than couple the two.
-   */
+  private pushing(): boolean {
+    const navigation = this.injector?.get(Router).currentNavigation();
+    // A back restores the state its history entry was pushed with, intent and all: that is the
+    // screen being returned to, not a push.
+    if (!navigation || navigation.trigger === 'popstate') return false;
+    return intentOf(navigation.extras.state)?.stack === 'push';
+  }
+
   override retrieve(route: ActivatedRouteSnapshot): DetachedRouteHandle | null {
     const key = keyOf(route);
-    const handle = this.handles.get(key) as StoredHandle | undefined;
-    if (!handle) return null;
-    if (handle.componentRef?.hostView.destroyed) {
-      this.handles.delete(key);
-      return null;
-    }
-    return handle;
+    const kept = (this.handles.get(key) ?? []).filter(
+      (handle) => !(handle as StoredHandle).componentRef?.hostView.destroyed,
+    );
+    if (kept.length) this.handles.set(key, kept);
+    else this.handles.delete(key);
+    // The newest: the one a back from the top of the stack returns to.
+    return kept.at(-1) ?? null;
   }
 }
