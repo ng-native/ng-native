@@ -161,6 +161,10 @@ the page hears the attempt. Bind it on the page or on the component that holds t
 `<native-stack-outlet>`, not on both: a refusal the holding component binds is its own, and it is
 the one that hears `(nativeDismissCancelled)` for it.
 
+A page that should not be shown at all, a record that no longer exists, can call `back()` as it
+appears, from an `effect()` in its constructor: a back asked for while the navigation is still
+putting the page up waits for it, then goes.
+
 ## Presented screens have no header
 
 A presented screen (`present()`) is shown outside the stack's own navigation controller - the same

@@ -114,8 +114,28 @@ export class NativeNavigation {
    * another tab is that tab. At the root of the app there is nowhere to go, and this does nothing.
    */
   back(): void {
-    this.outlets.back();
+    // Optional call: a test that stands a plain object in for the router has no such signal.
+    if (!this.router.currentNavigation?.()) {
+      this.outlets.back();
+      return;
+    }
+    // Asked while a navigation is still putting its screen up: a page that leaves as it appears,
+    // from an effect in its constructor. No stack has that screen to pop yet, so the back waits
+    // for the navigation, and goes nowhere if the navigation does not arrive.
+    if (this.backWaiting) return;
+    this.backWaiting = this.router.events.subscribe((event) => {
+      const ended = event instanceof NavigationEnd;
+      if (!ended && !(event instanceof NavigationCancel) && !(event instanceof NavigationError)) {
+        return;
+      }
+      this.backWaiting?.unsubscribe();
+      this.backWaiting = null;
+      if (ended) this.outlets.back();
+    });
   }
+
+  /** The wait of a back asked for mid-navigation, so two asked for in one are one. */
+  private backWaiting: { unsubscribe(): void } | null = null;
 
   /**
    * Pop straight back to the screen at `commands`, taking every screen above it off the stack at
