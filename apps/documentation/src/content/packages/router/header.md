@@ -170,9 +170,11 @@ out and the buttons floating over it. `withHeaderDefaults` asks for that bar for
 provideNativeRouter(routes, withHeaderDefaults({ systemBar: true }));
 ```
 
-Every `<native-header>` with no background of its own is then clear, translucent and unlined on
-iOS 26 and later. Before iOS 26 and on Android it is the neutral bar above, and a header that
-binds `backgroundColor`, or defaults that give one, keep it.
+Every `<native-header>` with no background of its own is then clear, translucent and unlined on iOS
+26 and later. One header asks for it, or refuses it, with its own `systemBar` input, which wins over
+the app's: `<native-header title="Orders" [systemBar]="true" />` on the one page built for it, or
+`[systemBar]="false"` on a page that is not. Before iOS 26 and on Android it is the neutral bar
+above, and a header that binds `backgroundColor`, or defaults that give one, keep it.
 
 The bar is over the page rather than above it, so the page is built for that: its scroll view is
 the page's body and takes `contentInsetAdjustmentBehavior="automatic"`, which starts the content

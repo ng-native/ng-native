@@ -17,6 +17,16 @@ export class HeaderDefault {}
 })
 export class HeaderBound {}
 
+/** A header that asks for the system bar itself, or refuses it, whatever the app's defaults. */
+@Component({
+  imports: [NativeHeader],
+  selector: 'x-header-system',
+  template: `<native-header title="Inbox" nativeID="bar" [systemBar]="system()" />`,
+})
+export class HeaderSystem {
+  readonly system = input(true);
+}
+
 /** A large title that says nothing else, which should look as iOS draws one. */
 @Component({
   imports: [NativeHeader],

@@ -141,6 +141,28 @@ describe('a header in an app that asks for the system bar', () => {
     assert.equal(coloured['translucent'], undefined);
   });
 
+  it('is asked for by one header, where the app did not', async () => {
+    const props = await bar('HeaderSystem', 26, null);
+    assert.equal(props['backgroundColor'], 'transparent');
+    assert.equal(props['translucent'], true);
+    assert.equal(props['hideShadow'], true);
+    assert.equal(props['systemBar'], undefined, 'and is not a prop of the native bar');
+  });
+
+  it('is refused by one header, where the app asked', async () => {
+    await render(mod['HeaderSystem'] as Type<unknown>, {
+      inputs: { system: false },
+      providers: [
+        { provide: OS_VERSION, useValue: 26 },
+        { provide: NATIVE_HEADER_DEFAULTS, useValue: signal({ systemBar: true }) },
+      ],
+    });
+    const props = screen.getByTestId('bar').props;
+    cleanup();
+    assert.equal(props['backgroundColor'], 'rgb(255, 255, 255)');
+    assert.equal(props['translucent'], undefined);
+  });
+
   it('gives way to a call site that turns translucency off', async () => {
     const props = await bar('HeaderLargeOpaque', 26, { systemBar: true });
     assert.equal(props['translucent'], false);
