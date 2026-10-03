@@ -34,13 +34,14 @@ export class MissingModuleError extends Error {
   /** The package, as it is installed: `expo-haptics`. */
   readonly module: string;
 
-  constructor(module: string, platform: ModulePlatform, cause?: unknown) {
+  constructor(module: string, platform: ModulePlatform, cause?: unknown, message?: string) {
     super(
-      platform === 'web'
-        ? `${module} is not installed. Install it with "npx expo install ${module}", then restart the dev server.`
-        : `${module} is not in this build of the app. Install it with "npx expo install ${module}", ` +
+      message ??
+        (platform === 'web'
+          ? `${module} is not installed. Install it with "npx expo install ${module}", then restart the dev server.`
+          : `${module} is not in this build of the app. Install it with "npx expo install ${module}", ` +
             `then rebuild the app ("npx expo run:${platform}", or a new EAS build): a development ` +
-            `build, and Expo Go, contain only the native modules they were built with.`,
+            `build, and Expo Go, contain only the native modules they were built with.`),
       { cause },
     );
     this.module = module;
@@ -48,18 +49,19 @@ export class MissingModuleError extends Error {
 }
 
 /**
- * What to throw where `expoModule` answered null: the module is installed or not, but there is
+ * The `MissingModuleError` to throw where `expoModule` answered null: the module is installed or not, but there is
  * nothing to load it on. In Node, where a test runs, that is every native module, and "install it"
  * would be advice to do what is already done; `inTest` says what a test does instead. On a platform
  * the module does not support, it says that.
  */
-export function unavailable(module: string, inTest: string): Error {
+export function unavailable(module: string, inTest: string): MissingModuleError {
   const platform = currentPlatform();
-  return new Error(
+  const message =
     platform === null
       ? `[angular-native] ${module} has no native module to load in Node, where a test runs. ${inTest}`
-      : `[angular-native] ${module} is not available on ${platform}.`,
-  );
+      : `[angular-native] ${module} is not available on ${platform}.`;
+  // The platform is only read for the default message, which this replaces.
+  return new MissingModuleError(module, platform ?? 'web', undefined, message);
 }
 
 /** The platform the app is running on, or null in Node, where there is none to ask. */

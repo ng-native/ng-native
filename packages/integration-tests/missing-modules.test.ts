@@ -454,6 +454,7 @@ describe('a module in a Node test', () => {
     assert.throws(
       () => crypto.randomUUID(),
       (error: Error) =>
+        error instanceof MissingModuleError &&
         /expo-crypto has no native module to load in Node/.test(error.message) &&
         /Crypto\.SOURCE/.test(error.message) &&
         !/install/.test(error.message),
@@ -461,6 +462,7 @@ describe('a module in a Node test', () => {
     await assert.rejects(
       database('test.db').ready(),
       (error: Error) =>
+        error instanceof MissingModuleError &&
         /expo-sqlite has no native module to load in Node/.test(error.message) &&
         /new Database\(open, migrations\)/.test(error.message) &&
         !/install/.test(error.message),

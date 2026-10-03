@@ -72,7 +72,7 @@ empty identifier or hash looks right and is not.
 
 A test runs in Node, where no native module can load, installed or not. Most services do nothing
 there, as off a device. One that has no answer to give without its module, `Crypto` and
-`FileSystem` among them, throws an error that says so, not a `MissingModuleError`. A service with
+`FileSystem` among them, throws a `MissingModuleError` that says so. A service with
 a `SOURCE` token, `Crypto.SOURCE` or `FileSystem.SOURCE`, reads its module through it, so a test
 provides a stand-in with the methods the code under test calls:
 
