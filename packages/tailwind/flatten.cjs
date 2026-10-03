@@ -376,15 +376,34 @@ function nest(at, c) {
  * nothing to say why.
  */
 function dropPseudoElementRules(css) {
-  return css.replace(/([^{}]+)\{([^{}]*)\}/g, (whole, selectors, body) => {
-    if (!selectors.includes('::')) return whole;
+  return css.replace(/([^{}]+)\{([^{}]*)\}/g, (whole, before, body) => {
+    if (!before.includes('::')) return whole;
+    // A nested rule follows its parent's declarations, which are no part of its selector: a comma
+    // in one, `transition-property: color,box-shadow`, is not a comma between selectors.
+    const start = selectorStart(before);
+    const selectors = before.slice(start);
     const all = selectorList(selectors).map((one) => one.trim());
     const kept = all.filter((one) => one && !/::(?!placeholder\b)/.test(one));
     // Tailwind 3's `::backdrop { --tw-...: ... }`, the reset again for a box native never draws: no
     // author wrote it, so it goes without a word.
-    if (!kept.length && /^\s*(--tw-[\w-]+\s*:[^;{}]*;?\s*)*$/.test(body)) return '';
-    return kept.length && kept.length < all.length ? `${kept.join(', ')} {${body}}` : whole;
+    if (!kept.length && /^\s*(--tw-[\w-]+\s*:[^;{}]*;?\s*)*$/.test(body)) {
+      return before.slice(0, start);
+    }
+    return kept.length && kept.length < all.length
+      ? `${before.slice(0, start)}${kept.join(', ')} {${body}}`
+      : whole;
   });
+}
+
+/** Where a rule's selector starts in the text before its block: after the last declaration. */
+function selectorStart(before) {
+  const at = { depth: 0, quote: null };
+  let start = 0;
+  for (let i = 0; i < before.length; i++) {
+    nest(at, before[i]);
+    if (before[i] === ';' && !at.quote && at.depth === 0) start = i + 1;
+  }
+  return start;
 }
 
 /**

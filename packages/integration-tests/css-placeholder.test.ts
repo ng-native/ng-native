@@ -115,4 +115,31 @@ describe('::placeholder, as the text input placeholder colour', () => {
     assert.equal(s.reports.length, 1);
     assert.match(s.reports[0]!, /pseudo-element/);
   });
+
+  it('keeps a rule whole when a pseudo-element rule is nested after its declarations', () => {
+    // What Tailwind emits for `@apply transition-[color,box-shadow] file:font-medium`. The comma
+    // in the declaration is not one between selectors, and the build failed on what was left.
+    const s = scene(`.f {
+      transition-property: color,box-shadow;
+      opacity: 0.5;
+      &::file-selector-button {
+        font-weight: 500;
+      }
+    }`);
+    s.add('view', 'f');
+    assert.equal(s.props().find((props) => 'opacity' in props)?.['opacity'], 0.5);
+    assert.equal(s.reports.filter((report) => /pseudo-element/.test(report)).length, 1);
+  });
+
+  it('still drops a pseudo-element from a nested list that has other selectors', () => {
+    const s = scene(`.f {
+      opacity: 0.5;
+      &[data-on="a,b"], &::before {
+        opacity: 1;
+      }
+    }`);
+    s.add('view', 'f');
+    assert.equal(s.props().find((props) => 'opacity' in props)?.['opacity'], 0.5);
+    assert.deepEqual(s.reports, []);
+  });
 });
