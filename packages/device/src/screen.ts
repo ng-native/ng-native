@@ -15,6 +15,7 @@ import {
   signal,
   type Signal,
 } from '@angular/core';
+import { HostEngine, type Engine } from '@ng-native/fabric';
 import { reactNative } from './react-native.ts';
 import { SafeArea } from './safe-area.ts';
 
@@ -65,11 +66,28 @@ export function screenSource(): ScreenSource {
   };
 }
 
+/**
+ * The screen as the engine was told it, where there is no React Native to ask: a test, whose
+ * `conditions` size what `@media` sees, so the two views of the screen agree. Null on a host whose
+ * engine keeps no viewport.
+ */
+function engineScreenSource(): ScreenSource | null {
+  const engine = inject(HostEngine, { optional: true }) as Partial<
+    Pick<Engine, 'viewport' | 'watchViewport'>
+  > | null;
+  if (!engine?.viewport) return null;
+  const current = (): Sizes => ({ window: engine.viewport!, screen: engine.viewport! });
+  return {
+    current,
+    subscribe: (listener) => engine.watchViewport?.(() => listener(current())) ?? (() => {}),
+  };
+}
+
 @Service()
 export class Screen {
   /** Overridden in a test to resize the screen, or rotate it. */
   static readonly SOURCE = new InjectionToken<ScreenSource>('angular-native.screenSource', {
-    factory: screenSource,
+    factory: () => (reactNative() ? screenSource() : (engineScreenSource() ?? screenSource())),
   });
 
   private readonly source = inject(Screen.SOURCE);

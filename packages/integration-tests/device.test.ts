@@ -9,6 +9,7 @@
 import assert from 'node:assert/strict';
 import { afterEach, describe, it } from 'node:test';
 import { ErrorHandler, Injector, type Provider, type Type } from '@angular/core';
+import { HostEngine, type Engine } from '@ng-native/fabric';
 import {
   COMPACT_WIDTH,
   Accessibility,
@@ -322,6 +323,19 @@ describe('the screen', () => {
    * two are about. `screen-drawable.test.ts` covers the measured case.
    */
   const withoutAProvider = { provide: SafeArea, useFactory: () => new SafeArea() };
+
+  it('is the size a test gives the engine as its conditions, and follows it', () => {
+    // No React Native to ask under test: the engine was told the screen, for media queries.
+    const app = injectService(Injector);
+    const engine = app.get(HostEngine) as Engine;
+    engine.updateConditions({ width: 390, height: 844, colorScheme: 'light' });
+    const screen = app.get(Screen);
+    assert.deepEqual(screen.window(), { width: 390, height: 844 });
+    assert.equal(screen.orientation(), 'portrait');
+    engine.updateConditions({ width: 844, height: 390, colorScheme: 'light' });
+    assert.deepEqual(screen.window(), { width: 844, height: 390 });
+    assert.equal(screen.orientation(), 'landscape');
+  });
 
   it('calls a square window portrait, as a media query does', () => {
     const screen = build(Screen, [

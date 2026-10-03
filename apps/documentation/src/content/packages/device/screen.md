@@ -72,6 +72,14 @@ not going to answer. On the web the engine resolves `(orientation: landscape)`, 
 and viewport units from the same values without anything being injected; reach for `Screen` only for
 the decisions a stylesheet cannot make, such as which component tree to build.
 
+## In a test
+
+In a test the window is the `conditions` the render was given, the size `@media` sees, so
+`render(Menu, { conditions: { width: 390, height: 844, colorScheme: 'light' } })` gives
+`inject(Screen).window()` 390 by 844, and it follows `engine.updateConditions()`. With no
+`conditions` it is zero by zero. Provide `Screen.SOURCE` for a display that differs from the window,
+or to drive the size yourself.
+
 ## Reference
 
 <!-- api: Screen -->
