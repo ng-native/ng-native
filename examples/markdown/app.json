@@ -1,0 +1,16 @@
+{
+  "expo": {
+    "name": "Markdown Reader",
+    "slug": "markdown-example",
+    "scheme": "markdownreader",
+    "newArchEnabled": true,
+    "userInterfaceStyle": "automatic",
+    "ios": {
+      "bundleIdentifier": "dev.angularnative.markdown"
+    },
+    "android": {
+      "package": "dev.angularnative.markdown"
+    },
+    "plugins": ["@ng-native/metro"]
+  }
+}

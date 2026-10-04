@@ -13,8 +13,10 @@ where the work needs to happen.
 
 This needs nothing from this package at all: a component's own `styles` can use `transition` and
 `@keyframes` exactly as they read on the web, compiled into the native stylesheet at build time.
-`<touchable-opacity>`'s own press fade is built this way. This is the right choice for anything
-that only needs to ease between states a class change already describes.
+`<touchable-opacity>`'s own press fade is built this way, and an app that installs the package from
+npm gets it with no Metro option, since every `@ng-native/*` package's component CSS is compiled.
+This is the right choice for anything that only needs to ease between states a class change
+already describes.
 
 ```ts
 import { Component } from '@angular/core';

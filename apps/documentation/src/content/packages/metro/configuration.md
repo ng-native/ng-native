@@ -124,6 +124,10 @@ lists for your own CSS. A component the library writes with `ViewEncapsulation.N
 Material writes every one, has its sheet matched as a global one once it renders, as a browser
 applies it: see [the CSS engine](/packages/fabric/css-engine).
 
+The `@ng-native/*` packages are never listed: their components' CSS, such as `<markdown>`'s
+default classes and `<touchable-opacity>`'s fade, is written for the device and always compiled,
+from the workspace or from npm.
+
 A package is named as its `package.json` names it, `@acme/ui`, and matched by the
 `node_modules/@acme/ui/` on a file's path, or by the `name` in the nearest `package.json` for a
 linked workspace library. An entry point such as `@acme/ui/button` is part of its package, so the

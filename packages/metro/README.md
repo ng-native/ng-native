@@ -40,7 +40,8 @@ module.exports = withAngularNative(getDefaultConfig(__dirname), {
 A component library from npm draws unstyled by default: its CSS is written for a browser, and
 nothing compiles it. Name the packages whose component CSS should be compiled into native sheets,
 as the app's own is, with `{ libraryStyles: ['@acme/ui'] }`; what native cannot express is dropped,
-counted in one build warning a file, or listed with `ANGULAR_NATIVE_LIBRARY_WARNINGS=all`. See
+counted in one build warning a file, or listed with `ANGULAR_NATIVE_LIBRARY_WARNINGS=all`. The
+`@ng-native/*` packages need no entry: their component CSS is always compiled. See
 [Configuration](https://ng-native.com/packages/metro/configuration).
 
 ## What's in the package

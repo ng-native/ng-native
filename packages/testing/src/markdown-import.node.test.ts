@@ -37,4 +37,18 @@ describe('a .md import', () => {
     assert.match(result?.code ?? '', /^export default \{"attributes":\{"title":"Hello"\}/);
     assert.equal(transform(SOURCE, '/app/src/content/post.md?raw'), null);
   });
+
+  it('leaves a .md file another plugin already made a module of to that plugin', () => {
+    const dir = realpathSync(mkdtempSync(path.join(tmpdir(), 'ng-native-md-')));
+    try {
+      const file = path.join(dir, 'lesson.md');
+      writeFileSync(file, SOURCE);
+      const transform = ngNative().transform as unknown as Transform;
+      const rendered = 'export const blocks = [];\nexport default { blocks };\n';
+      assert.equal(transform(rendered, file), null);
+      assert.match(transform(SOURCE, file)?.code ?? '', /"title":"Hello"/);
+    } finally {
+      rmSync(dir, { recursive: true });
+    }
+  });
 });

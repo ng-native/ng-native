@@ -1,6 +1,6 @@
 ---
 title: Markdown
-summary: Draw a Markdown document as native text and views, with links and images held to safe schemes.
+summary: Draw Markdown as native text and views, with links and images held to safe schemes.
 ---
 
 # Markdown
@@ -117,10 +117,9 @@ has to come from a stylesheet that reaches inside the component: a global one, o
 
 Keep the default beside your own, as `a` does above, to change only part of it.
 
-In an app that installs the packages from npm, the default classes are compiled into the native
-stylesheet only when `@ng-native/components` is in the
-[`libraryStyles`](/packages/metro/configuration) list of your Metro config. Without it the document
-draws with no default styles, and `classes` still works.
+The default classes need nothing in your Metro config, in a workspace or installed from npm: the
+[transformer](/packages/metro/configuration) compiles every `@ng-native/*` package's component CSS
+into native sheets, with no `libraryStyles` entry.
 
 ## Tokens lexed already
 
@@ -206,6 +205,13 @@ An edit to a `.md` file rebuilds it like any other module, and a new version of 
 every one. In tests, the `ngNative()` Vitest plugin and the `@ng-native/testing/register` hook
 import a `.md` file the same way, so a test sees what the bundle has. Add `?raw` to an import under
 Vitest to get the file's text instead.
+
+## An example app
+
+`examples/markdown` in the repository is a reader built on this page, without Analog: notes that
+are `.md` files imported through Metro and drawn from their tokens, a live editor that parses what
+is typed through `source`, relative links pushed on a native stack with `(linkPress)`, light and
+dark appearance, and a note whose elements take the app's own classes through `classes`.
 
 ## With Analog
 

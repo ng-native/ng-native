@@ -821,11 +821,15 @@ function compileTwice(src, filename, compilerOptions) {
  * A library the app opted in with `libraryStyles` gets what the app's own components get: each
  * component's CSS compiled into the sheet on `ɵnativeStyles`, with what native cannot express
  * dropped under a warning. Without the opt-in a library's components draw with no styles and no
- * word about it, which is what the option exists to make loud.
+ * word about it, which is what the option exists to make loud. An `@ng-native/*` package is always
+ * opted in: its CSS is written for this engine, and an app installing it from npm gets the
+ * published, partial-compiled files rather than the sources a workspace compiles as its own.
  */
 function link(src, filename, options) {
   const owner = options.platform === 'web' ? null : packageOf(filename, options.projectRoot);
-  const listed = owner !== null && options.libraryStyles?.includes(owner.name);
+  const listed =
+    owner !== null &&
+    (owner.name.startsWith('@ng-native/') || options.libraryStyles?.includes(owner.name));
   const { code } = linkAngularPackageSync(
     listed ? withLibrarySheets(src, filename, owner, options.platform) : src,
     filename,

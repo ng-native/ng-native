@@ -1,0 +1,71 @@
+/* An iOS grouped list, light and dark. */
+
+:host {
+  flex: 1;
+}
+
+.scroll {
+  flex: 1;
+  background-color: light-dark(#f2f2f7, #000000);
+}
+
+.content {
+  padding: 16px;
+  gap: 20px;
+}
+
+.section {
+  color: light-dark(#6c6c70, #98989f);
+  font-size: 13px;
+  font-weight: 600;
+  margin: 0 16px -12px;
+}
+
+.card {
+  border-radius: 14px;
+  background-color: light-dark(#ffffff, #1c1c1e);
+  overflow: hidden;
+}
+
+.document {
+  padding: 16px;
+}
+
+.row {
+  flex-direction: row;
+  align-items: center;
+  padding: 12px 16px;
+  gap: 12px;
+}
+
+.row-divider {
+  border-top-width: 1px;
+  border-top-color: light-dark(#e5e5ea, #38383a);
+}
+
+.row-body {
+  flex: 1;
+  gap: 3px;
+}
+
+.row-title {
+  color: light-dark(#1c1c1e, #ffffff);
+  font-size: 17px;
+}
+
+.row-sub {
+  color: #8e8e93;
+  font-size: 14px;
+}
+
+.chevron {
+  color: light-dark(#c7c7cc, #5a5a5e);
+  font-size: 22px;
+}
+
+.missing {
+  color: #8e8e93;
+  font-size: 17px;
+  text-align: center;
+  padding: 32px 16px;
+}

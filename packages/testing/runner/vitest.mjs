@@ -13,7 +13,8 @@
  * - It stubs assets. With no `require`, an app's `require('./logo.png')` would throw; it becomes
  *   `{ testUri }` instead. And it stands in for the gesture and animation entry points, whose
  *   React Native source Node cannot load (`STAND_INS`).
- * - It imports a `.md` file as Metro does, as `{ attributes, content, tokens }`.
+ * - It imports a `.md` file as Metro does, as `{ attributes, content, tokens }`, unless a plugin
+ *   ahead of it already made the file a module.
  * - It resolves as Metro does. A workspace library's copy of a package at the app's version
  *   resolves to the app's copy (`appCopy`), so a test has one `@ng-native/components`, as the
  *   bundle does.
@@ -203,6 +204,21 @@ async function appCopy(context, source, importer, options, root) {
 }
 
 /**
+ * Whether `source` is still the file as written, or a file Vite only has in memory. A plugin ahead
+ * of this one that made the `.md` a module of its own, as the documentation site's does, keeps it.
+ *
+ * @param {string} source
+ * @param {string} file
+ */
+function asWritten(source, file) {
+  try {
+    return readFileSync(file, 'utf8') === source;
+  } catch {
+    return true;
+  }
+}
+
+/**
  * @param {{ inline?: (string | RegExp)[], libraryStyles?: string[] }} [options]
  * @returns {import('vitest/config').Plugin}
  */
@@ -236,7 +252,7 @@ export function ngNative(options = {}) {
     transform(source, id) {
       const file = id.split('?')[0];
       if (!file.startsWith('\0') && file.endsWith('.md') && id === file) {
-        return { code: compileMarkdown(source, file), map: null };
+        return asWritten(source, file) ? { code: compileMarkdown(source, file), map: null } : null;
       }
       if (file.startsWith('\0') || !/\.m?[jt]s$/.test(file)) return null;
       const code = file.includes('/node_modules/') ? source : stubAssets(source);

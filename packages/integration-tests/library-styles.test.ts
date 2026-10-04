@@ -7,8 +7,9 @@
  */
 import assert from 'node:assert/strict';
 import { after, describe, it } from 'node:test';
+import { execFileSync } from 'node:child_process';
 import { createRequire } from 'node:module';
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -562,5 +563,65 @@ describe('a transform worker that does not carry the list', () => {
     } finally {
       delete process.env['ANGULAR_NATIVE_LIBRARY_STYLES'];
     }
+  });
+});
+
+describe("an @ng-native package's own components, installed from npm", () => {
+  const source = fileURLToPath(new URL('../components/', import.meta.url));
+  const root = mkdtempSync(path.join(tmpdir(), 'ng-native-dist-styles-'));
+  const dist = path.join(root, 'node_modules/@ng-native/components/dist');
+  after(() => rmSync(root, { recursive: true, force: true }));
+
+  /** The file as `ngc` publishes it, transformed for an app that lists no `libraryStyles`. */
+  function published(name: string): { code: string; warnings: string[] } {
+    if (!existsSync(dist)) {
+      const compiler = path.dirname(require.resolve('@angular/compiler-cli/package.json'));
+      const ngc = path.join(compiler, 'bundles/src/bin/ngc.js');
+      execFileSync(process.execPath, [ngc, '-p', 'tsconfig.build.json', '--outDir', dist], {
+        cwd: source,
+        stdio: 'pipe',
+      });
+    }
+    const file = path.join(dist, name);
+    const { result, warnings } = warned(() =>
+      transformAngular(readFileSync(file, 'utf8'), file, { dev: false, platform: 'ios' }),
+    );
+    return { code: result.code, warnings };
+  }
+
+  /** The sheet the transform put on the one declaration in `code` that has one. */
+  function attached(code: string): { rules: (Rule & { condition?: object })[] } {
+    const marker = 'd.type["ɵnativeStyles"] = ';
+    const start = code.indexOf(marker);
+    assert.notEqual(start, -1, 'the declaration carries a sheet');
+    const literal = code.slice(start + marker.length, code.indexOf('), d))(', start));
+    return JSON.parse(literal);
+  }
+
+  it('gives <markdown> its default md-* sheet, light and dark, with no libraryStyles', () => {
+    const { code, warnings } = published('markdown.js');
+    assert.deepEqual(warnings, []);
+    assert.match(code, /ɵɵdefineComponent/, 'the linker still ran');
+    const rules = attached(code).rules;
+    const classes = new Set(
+      rules.flatMap((rule) => rule.compounds.flatMap((c) => (c as { classes: string[] }).classes)),
+    );
+    for (const name of ['md-h1', 'md-p', 'md-a', 'md-code', 'md-pre', 'md-table', 'md-img']) {
+      assert.ok(classes.has(name), name);
+    }
+    assert.ok(
+      rules.some((rule) => rule.condition !== undefined),
+      'the dark scheme rules came along',
+    );
+  });
+
+  it('gives <touchable-opacity> its resting opacity and fade, with no libraryStyles', () => {
+    const { code, warnings } = published('touchable-opacity.js');
+    assert.deepEqual(warnings, []);
+    const rules = attached(code).rules;
+    assert.ok(
+      rules.some((rule) => 'opacity' in (rule.declarations as Record<string, unknown>)),
+      JSON.stringify(rules),
+    );
   });
 });

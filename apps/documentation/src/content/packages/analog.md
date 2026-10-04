@@ -1,6 +1,6 @@
 ---
 title: Analog
-summary: Route a native app with Analog's file-based pages and read its Markdown content, through Analog's own createRoutes.
+summary: Analog's file-based pages and Markdown content in a native app, through createRoutes.
 ---
 
 # Analog
