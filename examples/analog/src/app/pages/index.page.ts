@@ -61,6 +61,14 @@ const SECTIONS: readonly Section[] = [
       { name: 'Query parameters', file: 'search.page.ts', url: '/search?q=signals' },
     ],
   },
+  {
+    title: 'CONTENT',
+    features: [
+      { name: 'Markdown', file: 'markdown.page.ts', url: '/markdown' },
+      { name: 'Blog', file: 'blog/index.page.ts', url: '/blog' },
+      { name: 'Markdown page', file: 'colophon.md', url: '/colophon' },
+    ],
+  },
 ];
 
 /**

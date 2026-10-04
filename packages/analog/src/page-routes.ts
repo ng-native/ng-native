@@ -15,7 +15,9 @@
  * it leaves `import.meta.env` undefined.
  */
 import { createRoutes, type Files } from '@analogjs/router';
+import type { Type } from '@angular/core';
 import type { Routes } from '@angular/router';
+import { MARKDOWN_PAGE, markdownModuleOf, markdownPageFile } from './content.ts';
 
 /**
  * What Metro's `require.context(directory, true, pattern, 'lazy')` returns: the files it found,
@@ -32,16 +34,74 @@ export interface PageContext {
  */
 export type PageFiles = Record<string, () => Promise<unknown>>;
 
+export interface PageRoutesOptions {
+  /**
+   * The component a `.md` page is drawn with. It reads its file with `injectMarkdownPage()` and
+   * draws `tokens` with `<markdown>` from `@ng-native/components/markdown`. Required when the
+   * pages include a `.md` file.
+   */
+  markdownPage?: Type<unknown>;
+}
+
 /**
  * The routes for an app's pages, as `createRoutes` makes them in an Analog app.
  *
  * `pages` is the `require.context` of the pages directory in an app, or in a Vitest test, which
  * has no `require.context`, the files of an `import.meta.glob` such as
  * `import.meta.glob('./pages/**\/*.page.ts')`.
+ *
+ * A `.md` file among them is a page too, at the URL its name gives it, as in Analog: its front
+ * matter `title` is the route's title and `meta` its `routeMeta.meta`, and it is drawn by
+ * `options.markdownPage`.
  */
-export function pageRoutes(pages: PageContext | PageFiles): Routes {
+export function pageRoutes(
+  pages: PageContext | PageFiles,
+  options: PageRoutesOptions = {},
+): Routes {
   defineImportMetaEnv();
-  return createRoutes((typeof pages === 'function' ? filesOf(pages) : pages) as Files);
+  const files = typeof pages === 'function' ? filesOf(pages) : pages;
+  return createRoutes(withMarkdownPages(files, options.markdownPage) as Files);
+}
+
+/**
+ * The files with each `.md` page renamed to the `.page.ts` it routes as, loading `markdownPage`
+ * with the file in its route data. Analog's own Markdown pages render with `@analogjs/content`,
+ * which draws HTML, so `createRoutes` is never handed one.
+ */
+function withMarkdownPages(files: PageFiles, markdownPage: Type<unknown> | undefined): PageFiles {
+  const markdown = Object.keys(files).filter((name) => name.endsWith('.md'));
+  if (!markdown.length) return files;
+  if (!markdownPage) {
+    throw new Error(
+      `${markdown[0]} is a Markdown page, and pageRoutes has no component to draw it with. Pass ` +
+        'one: pageRoutes(pages, { markdownPage }). See injectMarkdownPage.',
+    );
+  }
+  const routed: PageFiles = {};
+  for (const [name, load] of Object.entries(files)) {
+    if (!name.endsWith('.md')) {
+      routed[name] = load;
+      continue;
+    }
+    const page = name.replace(/\.md$/, '.page.ts');
+    if (page in files) {
+      throw new Error(`${name} and ${page} are the same page. Keep one of them.`);
+    }
+    routed[page] = async () => {
+      const filename = name.replace(/^.*?\/pages\//, '/src/app/pages/');
+      const file = markdownPageFile(filename, markdownModuleOf(await load(), filename));
+      const { title, meta } = file.attributes;
+      return {
+        default: markdownPage,
+        routeMeta: {
+          ...(typeof title === 'string' ? { title } : {}),
+          ...(Array.isArray(meta) ? { meta } : {}),
+          data: { [MARKDOWN_PAGE]: file },
+        },
+      };
+    };
+  }
+  return routed;
 }
 
 /**

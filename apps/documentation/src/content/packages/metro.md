@@ -56,6 +56,11 @@ A capitalized element name - `<Card>` instead of `<card>` - is a hard build fail
 than a blank screen, because Angular itself would otherwise compile it to an empty template with no
 error at all.
 
+A `.md` file is a module too: `import post from './post.md'` is `{ attributes, content, tokens }`,
+its front matter parsed and its Markdown lexed by `marked` as the app is bundled, for
+[`<markdown [tokens]>`](/packages/components/markdown#importing-md-files). `marked` is an optional
+peer, needed only when the app has a `.md` file.
+
 In a monorepo where the framework packages live outside your app's own `node_modules`, pass
 `{ workspaceRoot }` to `withAngularNative` - it adds the workspace root to `watchFolders` and both
 `node_modules` directories to `resolver.nodeModulesPaths`, which is what lets Metro see a workspace

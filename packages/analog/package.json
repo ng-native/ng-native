@@ -1,7 +1,7 @@
 {
   "name": "@ng-native/analog",
   "version": "0.4.0",
-  "description": "Analog's file-based pages as native routes for Angular Native: src/app/pages, routed by @analogjs/router on a native stack.",
+  "description": "Analog's file-based pages and content files for Angular Native: src/app/pages, routed by @analogjs/router on a native stack, and src/content read as @analogjs/content reads it.",
   "keywords": [
     "angular",
     "react-native",
@@ -13,7 +13,9 @@
     "analog",
     "analogjs",
     "router",
-    "file-based-routing"
+    "file-based-routing",
+    "markdown",
+    "content"
   ],
   "type": "module",
   "main": "src/index.ts",
@@ -38,7 +40,8 @@
   "peerDependencies": {
     "@analogjs/router": "^2.8.0",
     "@angular/core": "^22.0.0",
-    "@angular/router": "^22.0.0"
+    "@angular/router": "^22.0.0",
+    "rxjs": "^7.4.0"
   },
   "devDependencies": {
     "@analogjs/router": "~2.8.0",

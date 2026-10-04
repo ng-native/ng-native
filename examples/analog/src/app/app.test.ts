@@ -15,8 +15,14 @@ import { afterEach, expect, test, vi } from 'vitest';
 import { App } from './app.ts';
 import { appConfig } from './app.config.ts';
 
-// The same pages, found by Vite rather than by Metro's require.context.
-vi.mock('./pages.ts', () => ({ pages: import.meta.glob('./pages/**/*.page.ts') }));
+// The same pages and content files, found by Vite rather than by Metro's require.context. The
+// ngNative() plugin makes each .md file the module Metro makes of it.
+vi.mock('./pages.ts', () => ({
+  pages: import.meta.glob(['./pages/**/*.page.ts', './pages/**/*.md']),
+}));
+vi.mock('./content.ts', () => ({
+  content: import.meta.glob('../content/**/*.md', { eager: true }),
+}));
 
 const flatten = (nodes: FakeFabricNode[]): FakeFabricNode[] =>
   nodes.flatMap((node) => [node, ...flatten(node.children)]);
@@ -80,7 +86,7 @@ test('home shows the Analog logo and a row for every feature', async () => {
   const logo = nodes(fabric, 'RNSVGSvgView')[0]!;
   expect(logo.props['vbWidth']).toBe(273);
   expect(flatten([logo]).filter((node) => node.viewName === 'RNSVGPath')).toHaveLength(4);
-  expect(screen.getAllByRole('button')).toHaveLength(12);
+  expect(screen.getAllByRole('button')).toHaveLength(15);
 });
 
 test('a static page is at the URL its file name gives it', async () => {
@@ -271,4 +277,85 @@ test('a tab layout keeps each tab as it was left while the other is in front', a
   expect(router.url).toBe('/tabs');
   expect(shown(fabric, 'COUNTER')).toEqual(['2']);
   expect(shown(fabric, 'LAPS')).toEqual(['1']);
+});
+
+test('a Markdown page draws its document natively and routes its relative links', async () => {
+  const { fabric, router } = await start();
+
+  await openFeature(fabric, router, 'Markdown', '/markdown');
+
+  const page = front(fabric);
+  expect(page.getByRole('header', { name: 'Release notes' })).toBeTruthy();
+  expect(page.getByText('<b>', { exact: false })).toBeTruthy();
+  expect(nodes(fabric, 'Image').at(-1)?.props['accessibilityLabel']).toBe('The Analog logo');
+
+  await fireEvent.press(page.getByRole('link', { name: 'a link to the About page' }));
+
+  await waitFor(() => expect(router.url).toBe('/about'));
+  expect(titles(fabric)).toEqual(['Analog Showroom', 'Markdown', 'About']);
+});
+
+test('the blog lists the posts in src/content, newest first, from their front matter', async () => {
+  const { fabric, router } = await start();
+
+  await openFeature(fabric, router, 'Blog', '/blog');
+
+  expect(titles(fabric)).toEqual(['Analog Showroom', 'Blog']);
+  expect(
+    front(fabric)
+      .getAllByRole('button')
+      .map((row) => row.props['accessibilityLabel']),
+  ).toEqual([
+    'Markdown without a parser on the device',
+    'File routes on a native stack',
+    'Signals everywhere',
+  ]);
+  expect(front(fabric).getByText('October 2, 2026')).toBeTruthy();
+});
+
+test('a post is found by its slug and drawn from the tokens Metro lexed', async () => {
+  const { fabric, router } = await start();
+  await openFeature(fabric, router, 'Blog', '/blog');
+
+  await userEvent.press(
+    front(fabric).getByRole('button', { name: 'File routes on a native stack' }),
+  );
+
+  await waitFor(() => expect(router.url).toBe('/blog/native-file-routes'));
+  await waitFor(() =>
+    expect(front(fabric).getByRole('header', { name: 'What you get' })).toBeTruthy(),
+  );
+  expect(titles(fabric)).toEqual(['Analog Showroom', 'Blog', 'File routes on a native stack']);
+  expect(front(fabric).getByText('The Angular Native team · September 12, 2026')).toBeTruthy();
+
+  await fireEvent.press(front(fabric).getByRole('link', { name: 'other post' }));
+
+  await waitFor(() => expect(router.url).toBe('/blog/markdown-without-a-parser'));
+  await waitFor(() =>
+    expect(titles(fabric).at(-1)).toBe('Markdown without a parser on the device'),
+  );
+});
+
+test('a post that is not there shows the fallback, as in Analog', async () => {
+  const { fabric } = await launch('/blog/no-such-post');
+
+  await waitFor(() => expect(front(fabric).getByText('No Content Found')).toBeTruthy());
+  expect(titles(fabric).at(-1)).toBe('Post');
+});
+
+test('a .md file in pages/ is a page, titled by its front matter', async () => {
+  const { fabric, router } = await start();
+
+  await openFeature(fabric, router, 'Markdown page', '/colophon');
+
+  expect(titles(fabric)).toEqual(['Analog Showroom', 'Colophon']);
+  expect(front(fabric).getByText('src/app/pages/colophon.md')).toBeTruthy();
+  expect(
+    front(fabric).getByRole('header', { name: 'A page that is a Markdown file' }),
+  ).toBeTruthy();
+
+  await fireEvent.press(front(fabric).getByRole('link', { name: 'the blog' }));
+
+  await waitFor(() => expect(router.url).toBe('/blog'));
+  expect(titles(fabric)).toEqual(['Analog Showroom', 'Colophon', 'Blog']);
 });

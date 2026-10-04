@@ -1,6 +1,6 @@
 {
   "extends": "../../tsconfig.base.json",
-  "include": ["*.cjs", "css/*.cjs"],
+  "include": ["*.cjs", "*.d.ts", "css/*.cjs"],
   "compilerOptions": {
     "allowJs": true,
     "checkJs": false

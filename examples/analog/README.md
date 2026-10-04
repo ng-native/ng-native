@@ -19,12 +19,20 @@ the feature working.
 | `routeMeta` resolver | `resolved.page.ts`                                        | Data a resolver loaded before the page was shown                |
 | Lazy loading         | `lazy.page.ts`                                            | A page's code runs on first open (its own file in dev and web)  |
 | Query parameters     | `search.page.ts`                                          | `?q=` read from `ActivatedRoute`, followed as it changes        |
+| Markdown             | `markdown.page.ts`                                        | A document drawn natively by `<markdown>`, its links routed     |
+| Blog                 | `blog/index.page.ts`, `blog/[slug].page.ts`               | The posts in `src/content`, read with `injectContent`           |
+| Markdown page        | `colophon.md`                                             | A `.md` file as a page, titled by its front matter              |
 
 The home page is `index.page.ts`. The product pages open as a sheet (a modal on Android, where React
 Native Screens does not render a nested stack in a form sheet): a presented screen has no navigation
 bar of its own, and the stack in `products.page.ts` gives its pages a header and a back button. A
 link that launches the app opens with the pages it sits under beneath it (`withLinkParent` in
 `app.config.ts`), so a product opened that way has the list and the home page to close back to.
+
+The blog's posts are the `.md` files in `src/content`. Metro parses each one's front matter and
+lexes its Markdown as it bundles, `provideContentFiles` in `app.config.ts` hands them to
+`injectContentFiles` and `injectContent`, and each post is drawn from its tokens. `colophon.md` is
+drawn by `ui/markdown-page.ts`, the component `pageRoutes` is given as `markdownPage`.
 
 ## Run it
 
@@ -39,8 +47,9 @@ pnpm test      # Vitest in Node, no simulator
 `src/app/app.test.ts` opens each feature from the home page and checks what it demonstrates: the
 parameter's value, the caught segments, the group's URLs, each tab keeping its count, the header
 title, the redirect landing home, the guard letting in only while Admin access is on, the resolved
-data and the query value, and that a product a link launched the app on closes with Done. It feeds
-the same pages to the router from `import.meta.glob`, since Vitest has no `require.context`.
+data and the query value, that a product a link launched the app on closes with Done, the blog's
+list and posts, a missing post's fallback, and the Markdown page. It feeds the same pages and posts
+to the app from `import.meta.glob`, since Vitest has no `require.context`.
 
 ## The Analog logo
 

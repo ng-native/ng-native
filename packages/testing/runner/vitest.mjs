@@ -1,7 +1,7 @@
 /**
  * `ngNative()`: the Vite plugin that lets Vitest run Angular Native code in Node, with no DOM.
  *
- * Five things, each of which Vitest would otherwise get wrong on its own:
+ * Six things, each of which Vitest would otherwise get wrong on its own:
  *
  * - It compiles. Every decorated `.ts` goes through `@ng-native/metro`'s AOT transform and every
  *   partial-compiled package through the linker (see `compile.mjs`), before Vite strips types.
@@ -13,6 +13,7 @@
  * - It stubs assets. With no `require`, an app's `require('./logo.png')` would throw; it becomes
  *   `{ testUri }` instead. And it stands in for the gesture and animation entry points, whose
  *   React Native source Node cannot load (`STAND_INS`).
+ * - It imports a `.md` file as Metro does, as `{ attributes, content, tokens }`.
  * - It resolves as Metro does. A workspace library's copy of a package at the app's version
  *   resolves to the app's copy (`appCopy`), so a test has one `@ng-native/components`, as the
  *   bundle does.
@@ -24,7 +25,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { defaultClientConditions, defaultServerConditions } from 'vite';
-import { compileAngular, needsAngular, stubAssets } from './compile.mjs';
+import { compileAngular, compileMarkdown, needsAngular, stubAssets } from './compile.mjs';
 
 const SETUP = fileURLToPath(new URL('./setup.mjs', import.meta.url));
 
@@ -234,6 +235,9 @@ export function ngNative(options = {}) {
     },
     transform(source, id) {
       const file = id.split('?')[0];
+      if (!file.startsWith('\0') && file.endsWith('.md') && id === file) {
+        return { code: compileMarkdown(source, file), map: null };
+      }
       if (file.startsWith('\0') || !/\.m?[jt]s$/.test(file)) return null;
       const code = file.includes('/node_modules/') ? source : stubAssets(source);
       if (!needsAngular(code, file)) {

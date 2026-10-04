@@ -99,7 +99,9 @@ Native's own uncompiled source, which Node cannot parse, so the test suite that 
 package's own code under Node would break if the main entry point tried to load it. Import these
 from their own files - `@ng-native/components/gestures`,
 `@ng-native/components/animations`, `@ng-native/components/reanimated` - covered
-on the gestures and animation pages.
+on the gestures and animation pages. `@ng-native/components/markdown` has an entry point of its own
+too, so that only an app that renders Markdown needs `marked`; see the
+[markdown](/packages/components/markdown) page.
 
 The smallest thing that works:
 
@@ -200,7 +202,8 @@ view](/packages/components/scroll-view) page covers `<scroll-view>` and pull-to-
 [lists](/packages/components/lists) page covers `<virtual-list>` and `<section-list>`. The
 [keyboard-avoiding view](/packages/components/keyboard-avoiding-view) page covers moving content
 clear of the on-screen keyboard. The [image](/packages/components/image) page covers `<image>` and
-`<image-background>`; the [activity indicator](/packages/components/activity-indicator) and
+`<image-background>`, and the [markdown](/packages/components/markdown) page covers drawing a
+Markdown document; the [activity indicator](/packages/components/activity-indicator) and
 [switch](/packages/components/switch) pages cover those elements on their own; the
 [modal](/packages/components/modal) page covers presenting content over everything else. The
 [animation](/packages/components/animation) page covers plain CSS transitions, `AnimatedStyle` and
@@ -215,6 +218,7 @@ Reanimated worklets.
 [lists](/packages/components/lists)
 
 **Content** - [text](/packages/components/text), [image](/packages/components/image),
+[markdown](/packages/components/markdown),
 [activity indicator](/packages/components/activity-indicator)
 
 **Input** - [input](/packages/components/input), [switch](/packages/components/switch),

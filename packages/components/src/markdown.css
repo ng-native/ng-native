@@ -1,0 +1,199 @@
+/* What a document looks like with no `classes` of the app's, in light and in dark. */
+
+:host {
+  gap: 12px;
+  color: #1c1c1e;
+}
+
+.md-h1,
+.md-h2,
+.md-h3,
+.md-h4,
+.md-h5,
+.md-h6 {
+  font-weight: 700;
+}
+
+.md-h1 {
+  font-size: 28px;
+  line-height: 34px;
+}
+
+.md-h2 {
+  font-size: 22px;
+  line-height: 28px;
+}
+
+.md-h3 {
+  font-size: 20px;
+  line-height: 25px;
+}
+
+.md-h4 {
+  font-size: 17px;
+  line-height: 22px;
+}
+
+.md-h5 {
+  font-size: 15px;
+  line-height: 20px;
+}
+
+.md-h6 {
+  font-size: 13px;
+  line-height: 18px;
+  color: #6c6c70;
+}
+
+.md-p,
+.md-marker,
+.md-th,
+.md-td {
+  font-size: 16px;
+  line-height: 23px;
+}
+
+.md-strong {
+  font-weight: 700;
+}
+
+.md-em {
+  font-style: italic;
+}
+
+.md-del {
+  text-decoration-line: line-through;
+}
+
+.md-a {
+  color: #0a66d8;
+  text-decoration-line: underline;
+}
+
+.md-code {
+  background-color: rgba(120, 120, 128, 0.16);
+}
+
+.md-code,
+.md-pre {
+  font-family: Courier New;
+}
+
+:host(.md-ios) .md-code,
+:host(.md-ios) .md-pre {
+  font-family: Menlo;
+}
+
+:host(.md-android) .md-code,
+:host(.md-android) .md-pre {
+  font-family: monospace;
+}
+
+.md-blockquote {
+  gap: 8px;
+  padding-left: 12px;
+  border-left-width: 3px;
+  border-left-color: #d1d1d6;
+  color: #6c6c70;
+}
+
+.md-ul,
+.md-ol {
+  gap: 4px;
+}
+
+.md-li {
+  flex-direction: row;
+  gap: 8px;
+}
+
+.md-marker {
+  min-width: 16px;
+}
+
+.md-li-body {
+  flex: 1;
+  gap: 4px;
+}
+
+.md-pre {
+  flex-grow: 0;
+  border-radius: 8px;
+  background-color: #f2f2f7;
+}
+
+.md-pre-text {
+  padding: 12px;
+  font-size: 14px;
+  line-height: 20px;
+}
+
+.md-hr {
+  height: 1px;
+  background-color: #d1d1d6;
+}
+
+.md-img {
+  width: 100%;
+  height: 200px;
+  border-radius: 8px;
+}
+
+.md-table {
+  border-width: 1px;
+  border-color: #d1d1d6;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.md-tr {
+  flex-direction: row;
+}
+
+.md-th,
+.md-td {
+  flex: 1;
+  padding: 6px 8px;
+}
+
+.md-td {
+  border-top-width: 1px;
+  border-top-color: #d1d1d6;
+}
+
+.md-th {
+  font-weight: 600;
+}
+
+@media (prefers-color-scheme: dark) {
+  :host {
+    color: #f2f2f7;
+  }
+
+  .md-h6,
+  .md-blockquote {
+    color: #98989f;
+  }
+
+  .md-a {
+    color: #4c9bff;
+  }
+
+  .md-code {
+    background-color: rgba(120, 120, 128, 0.32);
+  }
+
+  .md-pre {
+    background-color: #1c1c1e;
+  }
+
+  .md-blockquote,
+  .md-table,
+  .md-td {
+    border-color: #38383a;
+  }
+
+  .md-hr {
+    background-color: #38383a;
+  }
+}

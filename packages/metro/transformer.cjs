@@ -11,6 +11,7 @@ const upstream = expoTransformer();
 const { TraceMap, originalPositionFor } = require('@jridgewell/trace-mapping');
 const { transformAngular } = require('./angular-transform.cjs');
 const { isAngularDomComponent, domComponentReference } = require('./dom-component.cjs');
+const { markdownModule, markdownVersions } = require('./markdown-module.cjs');
 
 /**
  * Expo's transformer, from wherever the app's `expo` has it. pnpm and most npm installs hoist
@@ -61,8 +62,11 @@ function ownSources(dir = __dirname, found = []) {
 
 const OWN_SOURCES = ownSources();
 
+// With the versions of the packages a `.md` file is lexed with, so a new `marked` lexes every
+// cached one again.
 const ownVersion = createHash('sha1')
   .update(OWN_SOURCES.map((file) => readFileSync(file)).join('\0'))
+  .update(markdownVersions())
   .digest('hex')
   .slice(0, 12);
 
@@ -181,6 +185,10 @@ module.exports = {
     return `${upstream.getCacheKey?.(...args) ?? ''}${ownVersion}`;
   },
   transform(params) {
+    // A `.md` file is data: see `markdown-module.cjs`.
+    if (params.filename.endsWith('.md')) {
+      return upstream.transform({ ...params, src: markdownModule(params.src, params.filename) });
+    }
     // A DOM component imported from native code is a reference to its page, not a component: see
     // `dom-component.cjs`.
     if (params.options?.platform !== 'web' && isAngularDomComponent(params.src)) {

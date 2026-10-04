@@ -5,8 +5,8 @@ declare const require: {
 };
 
 /**
- * Every page in `pages/`, for `pageRoutes`. Metro finds them as it bundles, and each one loads the
- * first time it is navigated to. The tests, which have no `require.context`, replace this module
- * with an `import.meta.glob` of the same files.
+ * Every page in `pages/`, for `pageRoutes`: the `.page.ts` components and the `.md` pages. Metro
+ * finds them as it bundles, and each one loads the first time it is navigated to. The tests, which
+ * have no `require.context`, replace this module with an `import.meta.glob` of the same files.
  */
-export const pages = require.context('./pages', true, /\.page\.ts$/, 'lazy');
+export const pages = require.context('./pages', true, /\.(page\.ts|md)$/, 'lazy');

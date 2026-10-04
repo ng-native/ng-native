@@ -257,6 +257,9 @@ importers:
       expo:
         specifier: ~57.0.26
         version: 57.0.26(@babel/core@7.29.7)(expo-widgets@57.0.22)(react-dom@19.2.8(react@19.2.3))(react-native-worklets@0.10.1(@babel/core@7.29.7)(@react-native/metro-config@0.86.3(@babel/core@7.29.7))(react-native@0.86.3(@babel/core@7.29.7)(@react-native/metro-config@0.86.3(@babel/core@7.29.7))(@types/react@19.2.18)(react@19.2.3))(react@19.2.3))(react-native@0.86.3(@babel/core@7.29.7)(@react-native/metro-config@0.86.3(@babel/core@7.29.7))(@types/react@19.2.18)(react@19.2.3))(react@19.2.3)(typescript@6.0.3)
+      marked:
+        specifier: ^18.0.14
+        version: 18.0.14
       react:
         specifier: 19.2.3
         version: 19.2.3
@@ -1161,6 +1164,9 @@ importers:
       '@babel/core':
         specifier: ^7.29.7
         version: 7.29.7
+      marked:
+        specifier: ^18.0.14
+        version: 18.0.14
 
   packages/device:
     dependencies:
@@ -1514,6 +1520,9 @@ importers:
       jiti:
         specifier: ^2.7.0
         version: 2.7.0
+      marked:
+        specifier: ^18.0.14
+        version: 18.0.14
       metro-resolver:
         specifier: 0.84.5
         version: 0.84.5
@@ -1568,6 +1577,9 @@ importers:
       '@oxc-angular/vite':
         specifier: 0.0.38
         version: 0.0.38(vite@8.3.1(@types/node@26.6.3)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.51.2)(yaml@2.9.1))
+      front-matter:
+        specifier: ^4.0.2
+        version: 4.0.2
       lightningcss:
         specifier: ^1.30.2
         version: 1.33.0
@@ -1578,6 +1590,9 @@ importers:
       '@expo/metro-config':
         specifier: ~57.0.12
         version: 57.0.12(expo@57.0.26)(typescript@6.0.3)
+      marked:
+        specifier: ^18.0.14
+        version: 18.0.14
       typescript:
         specifier: ~6.0.3
         version: 6.0.3
@@ -1801,6 +1816,9 @@ importers:
       jsdom:
         specifier: ^27.0.0
         version: 27.4.0
+      marked:
+        specifier: ^18.0.14
+        version: 18.0.14
       playwright:
         specifier: ^1.63.0
         version: 1.63.0

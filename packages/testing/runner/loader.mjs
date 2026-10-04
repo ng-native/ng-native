@@ -2,6 +2,8 @@
  * A Node module hook that compiles Angular for `node --test`, the way the Metro transformer does
  * for the app. `register.mjs` installs it; see `compile.mjs` for which files need it and why.
  *
+ * A `.md` file is imported as Metro imports it: see `compileMarkdown`.
+ *
  * One more job than the Vitest plugin has: Node refuses to strip types from a `.ts` file under
  * `node_modules` at all, and that is exactly where an installed `@ng-native/*` package's source
  * lives. So every `.ts` there is loaded here, compiled if it is decorated and stripped either way.
@@ -16,7 +18,7 @@
 import { readFileSync } from 'node:fs';
 import { stripTypeScriptTypes } from 'node:module';
 import { fileURLToPath } from 'node:url';
-import { compileAngular, needsAngular, stubAssets } from './compile.mjs';
+import { compileAngular, compileMarkdown, needsAngular, stubAssets } from './compile.mjs';
 
 /** @type {string[]} */
 let skip = [];
@@ -36,6 +38,15 @@ export function initialize(data) {
  */
 export async function load(url, context, nextLoad) {
   const installed = url.includes('/node_modules/');
+
+  if (url.startsWith('file:') && new URL(url).pathname.endsWith('.md')) {
+    const file = fileURLToPath(url);
+    return {
+      format: 'module',
+      source: compileMarkdown(readFileSync(file, 'utf8'), file),
+      shortCircuit: true,
+    };
+  }
 
   if (url.startsWith('file:') && url.endsWith('.ts') && !skip.some((part) => url.includes(part))) {
     const loaded = loadTypeScript(fileURLToPath(url), installed);

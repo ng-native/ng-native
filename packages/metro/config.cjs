@@ -18,7 +18,7 @@ const path = require('node:path');
 const { createHash } = require('node:crypto');
 const { existsSync, readdirSync, readFileSync, watch } = require('node:fs');
 
-const SOURCE_EXTS = ['html', 'css', 'scss'];
+const SOURCE_EXTS = ['html', 'css', 'scss', 'md'];
 
 const EXPO_WORKER =
   /@expo[\\/]metro-config[\\/]build[\\/]transform-worker[\\/]transform-worker\.js$/;
@@ -615,7 +615,8 @@ function withAngularNative(config, options = {}) {
 
   // External templates and stylesheets are in the graph so Metro watches them. In a release build
   // the transformer emits them as empty modules; in dev each one carries the hot update for the
-  // components that use it, because Metro re-transforms only the file that changed.
+  // components that use it, because Metro re-transforms only the file that changed. A `.md` file
+  // is a module of its own: see `markdown-module.cjs`.
   const exts = config.resolver.sourceExts;
   config.resolver.sourceExts = [...exts, ...SOURCE_EXTS.filter((ext) => !exts.includes(ext))];
   // Expo lists `html` as an asset, for its DOM components, and Metro checks assets first. Left

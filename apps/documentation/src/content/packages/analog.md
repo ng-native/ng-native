@@ -1,6 +1,6 @@
 ---
 title: Analog
-summary: Route a native app with Analog's file-based pages, through Analog's own createRoutes.
+summary: Route a native app with Analog's file-based pages and read its Markdown content, through Analog's own createRoutes.
 ---
 
 # Analog
@@ -152,6 +152,200 @@ export const routeMeta: RouteMeta = { title: productTitle };
 The native header does not read the route's title by itself: bind it, as `[title]` on
 `<native-header>`.
 
+## Markdown pages
+
+A `.md` file in `src/app/pages` is a page, as in Analog: `pages/colophon.md` is at `/colophon`, its
+front matter `title` is the route's title and its `meta` is the page's `routeMeta.meta`. Metro reads
+the front matter and lexes the Markdown as it bundles (see
+[Importing .md files](/packages/components/markdown#importing-md-files)), so install `marked`:
+
+```sh
+npx expo install marked
+```
+
+Let the `require.context` find the `.md` files too:
+
+```ts
+export const pages = require.context('./pages', true, /\.(page\.ts|md)$/, 'lazy');
+```
+
+Analog draws a Markdown page with `@analogjs/content`, which renders HTML, so on native the app
+gives `pageRoutes` the component that draws one. It reads its file with `injectMarkdownPage()` and
+draws the tokens with `<markdown>`:
+
+```ts
+// src/app/markdown-page.ts
+import { Component, inject } from '@angular/core';
+import { ActivatedRoute } from '@angular/router';
+import { injectMarkdownPage } from '@ng-native/analog';
+import { ScrollView } from '@ng-native/components';
+import { Markdown } from '@ng-native/components/markdown';
+import { NativeHeader } from '@ng-native/router';
+
+@Component({
+  imports: [Markdown, NativeHeader, ScrollView],
+  template: `
+    <native-header [title]="title" />
+    <scroll-view contentInsetAdjustmentBehavior="automatic">
+      <markdown [tokens]="page.tokens" />
+    </scroll-view>
+  `,
+})
+export class MarkdownPage {
+  protected readonly page = injectMarkdownPage();
+  protected readonly title = inject(ActivatedRoute).snapshot.title ?? '';
+}
+```
+
+```ts
+// src/app/app.config.ts
+provideNativeRouter(pageRoutes(pages, { markdownPage: MarkdownPage }), withComponentInputBinding());
+```
+
+`injectMarkdownPage()` returns the page's `ContentFile`: `filename` (`/src/app/pages/colophon.md`),
+`slug`, `attributes`, `content`, `tokens` and `toc`. `pageRoutes` fails at startup when the pages
+include a `.md` file and no `markdownPage` is given, and when `x.md` and `x.page.ts` would be the
+same page. `@ng-native/analog` does not import `@ng-native/components` itself, which is why the
+component is yours: the Angular-facing packages do not depend on each other.
+
+## Content files
+
+`@ng-native/analog` reads the Markdown files in `src/content` with the API `@analogjs/content` has:
+`injectContentFiles` lists them, and `injectContent` finds one by the route's `slug`. Find the
+files with a `require.context`, in a file of its own so a test can replace it. Leave out `'lazy'`:
+the list reads every file's front matter.
+
+```ts
+// src/app/content.ts
+import type { ContentContext } from '@ng-native/analog';
+
+declare const require: {
+  context(directory: string, recursive: boolean, filter: RegExp): ContentContext;
+};
+
+export const content = require.context('../content', true, /\.md$/);
+```
+
+```ts
+// src/app/app.config.ts
+import { pageRoutes, provideContentFiles } from '@ng-native/analog';
+import { content } from './content.ts';
+
+export const appConfig = {
+  providers: [
+    provideNativeRouter(pageRoutes(pages), withComponentInputBinding()),
+    provideContentFiles(content),
+  ],
+};
+```
+
+A post is a `.md` file with front matter:
+
+```md
+---
+title: File routes on a native stack
+description: How Analog's pages become screens.
+date: 2026-09-12
+---
+
+Every file in `src/app/pages` is a screen.
+```
+
+The blog's list, `pages/blog/index.page.ts`:
+
+```ts
+import { Component } from '@angular/core';
+import { injectContentFiles } from '@ng-native/analog';
+import { Pressable, ScrollView, Text } from '@ng-native/components';
+import { NativeRouterLink } from '@ng-native/router';
+
+interface PostAttributes {
+  title: string;
+  description: string;
+  date: string;
+}
+
+@Component({
+  imports: [NativeRouterLink, Pressable, ScrollView, Text],
+  template: `
+    <scroll-view contentInsetAdjustmentBehavior="automatic">
+      @for (post of posts; track post.slug) {
+        <pressable accessibilityRole="button" [nativeRouterLink]="['/blog', post.slug]">
+          <text>{{ post.attributes.title }}</text>
+          <text>{{ post.attributes.description }}</text>
+        </pressable>
+      }
+    </scroll-view>
+  `,
+})
+export default class BlogPage {
+  protected readonly posts = injectContentFiles<PostAttributes>().sort((a, b) =>
+    b.attributes.date.localeCompare(a.attributes.date),
+  );
+}
+```
+
+And one post, `pages/blog/[slug].page.ts`:
+
+```ts
+import { Component } from '@angular/core';
+import { toSignal } from '@angular/core/rxjs-interop';
+import { injectContent } from '@ng-native/analog';
+import { ScrollView } from '@ng-native/components';
+import { Markdown } from '@ng-native/components/markdown';
+import { NativeHeader } from '@ng-native/router';
+
+@Component({
+  imports: [Markdown, NativeHeader, ScrollView],
+  template: `
+    @if (post(); as post) {
+      <native-header [title]="post.attributes.title ?? 'Post'" />
+      <scroll-view contentInsetAdjustmentBehavior="automatic">
+        <markdown [tokens]="post.tokens" [source]="post.content" />
+      </scroll-view>
+    }
+  `,
+})
+export default class PostPage {
+  protected readonly post = toSignal(injectContent<{ title: string }>());
+}
+```
+
+`[source]` is there for a slug with no file: then `tokens` is not set, and the fallback text is
+drawn instead.
+
+| API                                      | What it gives                                                  |
+| ---------------------------------------- | -------------------------------------------------------------- |
+| `injectContent()`                        | The file the `slug` route parameter names, as an `Observable`  |
+| `injectContent('id')`                    | The file another parameter names                               |
+| `injectContent({ param, subdirectory })` | The file under `src/content/<subdirectory>/`                   |
+| `injectContent({ customFilename })`      | One file by name, with no parameter                            |
+| `injectContentFiles(filterFn?)`          | Every file's `filename`, `slug` and `attributes`, filtered     |
+| `contentFilesResource(filterFn?)`        | The same list, as a resource                                   |
+| `contentFileResource(slug?)`             | One file as a resource, by a signal of its slug or the route's |
+
+They behave as Analog's do. A file is found at `<slug>.md` or `<slug>/index.md`; a front matter
+`slug` replaces the file's name; `index.md` has the slug `''`; and a file that is not there, or a
+route with no `slug`, gives `{ attributes: {}, slug: '', content: 'No Content Found' }`, with your
+own text as the second argument. The context is read each time the list or a file is asked for,
+so a file the dev server adds or removes is in the next one.
+
+### What differs from @analogjs/content
+
+- **No renderer.** There is no `provideContent(withMarkdownRenderer())`, no `<analog-markdown>` and
+  no highlighter. Metro lexed the files already: draw `tokens` with `<markdown>`, which shows code
+  blocks as monospace text without colors.
+- **`provideContentFiles(content)`** takes the `require.context` that Analog's Vite plugin sets up
+  by itself.
+- **`tokens`** is added to every `ContentFile` that has content. `content` is always the Markdown
+  string, never a module, and `.agx` files are not read.
+- **`toc`** has an entry for each heading, with the `id` Analog would give it. There are no anchors
+  to scroll to on native.
+- **Dates** in front matter are ISO strings, where Analog's `injectContent` gives a `Date`.
+- **Locales** (`withLocale`) and `injectContentFilesMap` are not supported.
+- Everything comes from `@ng-native/analog`, the resources included, where Analog has them in
+  `@analogjs/content/resources`.
+
 ## What does not apply on native
 
 Analog is a full-stack framework, and the parts that run on a server or in a browser have nothing
@@ -160,8 +354,8 @@ to run on in an app:
 - **Server-side rendering and prerendering.** An app renders on the device.
 - **API routes** (`src/server/routes`) and **`.page.server.ts` loads.** There is no server beside
   the app. Fetch from your API with `HttpClient`, through `provideNativeHttpClient()`.
-- **Markdown pages and `@analogjs/content`.** `pageRoutes` finds what the `require.context` pattern
-  matches, and `/\.page\.ts$/` matches no Markdown.
+- **`@analogjs/content` itself.** It renders Markdown to HTML. `@ng-native/analog` has its API
+  over the files Metro lexed: see [Content files](#content-files).
 - **`routeMeta.meta`**, the page's meta tags. There is no document head on a device.
 - **`@analogjs/platform` and its Vite plugin.** Metro builds the app, with `@ng-native/metro`'s
   compiler.
@@ -177,7 +371,12 @@ import { expect, test, vi } from 'vitest';
 import { App } from './app.ts';
 import { appConfig } from './app.config.ts';
 
-vi.mock('./pages.ts', () => ({ pages: import.meta.glob('./pages/**/*.page.ts') }));
+vi.mock('./pages.ts', () => ({
+  pages: import.meta.glob(['./pages/**/*.page.ts', './pages/**/*.md']),
+}));
+vi.mock('./content.ts', () => ({
+  content: import.meta.glob('../content/**/*.md', { eager: true }),
+}));
 
 test('opens on the home page', async () => {
   await render(App, appConfig);
@@ -185,8 +384,8 @@ test('opens on the home page', async () => {
 });
 ```
 
-`@analogjs/router` ships partial-compiled code, which the `ngNative()` plugin links only for the
-packages it is told about:
+The `ngNative()` plugin makes each `.md` file the module Metro makes of it. `@analogjs/router`
+ships partial-compiled code, which the plugin links only for the packages it is told about:
 
 ```ts
 // vitest.config.mts
@@ -199,4 +398,5 @@ export default defineConfig({
 ```
 
 The `examples/analog` app in the repository is a showroom of these features, each page
-showing the file that makes it, with a test for each.
+showing the file that makes it, with a test for each. Its blog reads `src/content`, and
+`pages/colophon.md` is a Markdown page.

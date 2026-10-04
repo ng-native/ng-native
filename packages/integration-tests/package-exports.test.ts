@@ -136,6 +136,20 @@ describe('the entry points Metro has to resolve', () => {
     for (const name of ['animations', 'gestures', 'reanimated']) {
       assert.equal(resolved(`@ng-native/components/${name}`), `packages/components/src/${name}.ts`);
     }
+
+    // `marked` is an optional peer as well, and the same file on every platform.
+    for (const platform of ['ios', 'android', 'web']) {
+      assert.equal(
+        path.relative(
+          root,
+          resolve(context(from), '@ng-native/components/markdown', platform).filePath,
+        ),
+        'packages/components/src/markdown.ts',
+        platform,
+      );
+    }
+    const barrel = readFileSync(path.join(root, 'packages/components/src/index.ts'), 'utf8');
+    assert.doesNotMatch(barrel, /markdown|'marked'/, 'the barrel never reaches marked');
   });
 
   it('gives a browser build its own entry where a device needs a native library', () => {

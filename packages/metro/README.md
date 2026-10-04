@@ -49,6 +49,10 @@ counted in one build warning a file, or listed with `ANGULAR_NATIVE_LIBRARY_WARN
 - `angular-transform.cjs` (the package's `main`) - the Babel/Metro transformer itself, wired in by
   the preset.
 - `css/*.cjs` - the build-time CSS compiler, also used by `@ng-native/tailwind`.
+- `markdown-module.cjs` - a `.md` file as a module, `{ attributes, content, tokens }`: its front
+  matter parsed and its Markdown lexed by `marked`, an optional peer, as the app is bundled.
+  `markdown.d.ts` types the import: add `"types": ["@ng-native/metro/markdown"]` to the app's
+  `tsconfig.json`.
 - `polyfills/*.js` - the `ng-dev-mode`, `animation-globals` and `finalization-registry` polyfills
   the preset installs before `@angular/core` first runs.
 

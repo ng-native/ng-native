@@ -70,6 +70,22 @@ export function compileAngular(source, file, options = {}) {
   };
 }
 
+/** @type {((source: string, file: string) => string) | undefined} */
+let markdownModule;
+
+/**
+ * A `.md` file as the module Metro makes of it, `{ attributes, content, tokens }`, by Metro's own
+ * transform: see `@ng-native/metro/markdown-module.cjs`.
+ *
+ * @param {string} source
+ * @param {string} file
+ * @returns {string} an ES module
+ */
+export function compileMarkdown(source, file) {
+  markdownModule ??= require('@ng-native/metro/markdown-module.cjs').markdownModule;
+  return markdownModule(source, file);
+}
+
 /**
  * `require('./logo.png')`, which Metro turns into an asset id. An ES module has no `require` under
  * Vitest or under Node, so the module would throw as it is evaluated; it gets `{ testUri }`

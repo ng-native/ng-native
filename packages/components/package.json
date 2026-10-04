@@ -25,6 +25,7 @@
       "browser": "./src/gestures-web.ts",
       "default": "./src/gestures.ts"
     },
+    "./markdown": "./src/markdown.ts",
     "./reanimated": {
       "browser": "./src/reanimated-web.ts",
       "default": "./src/reanimated.ts"
@@ -52,6 +53,10 @@
         "types": "./dist/gestures.d.ts",
         "browser": "./dist/gestures-web.js",
         "default": "./dist/gestures.js"
+      },
+      "./markdown": {
+        "types": "./dist/markdown.d.ts",
+        "default": "./dist/markdown.js"
       },
       "./reanimated": {
         "types": "./dist/reanimated.d.ts",
@@ -84,7 +89,8 @@
     "react-native-reanimated": "^4.5.1",
     "react-native-safe-area-context": "^5.7.0",
     "react-native-keyboard-controller": "^1.21.9",
-    "@react-native-masked-view/masked-view": ">=0.3.0"
+    "@react-native-masked-view/masked-view": ">=0.3.0",
+    "marked": "^18.0.14"
   },
   "nx": {
     "tags": [
@@ -119,6 +125,9 @@
     },
     "@react-native-masked-view/masked-view": {
       "optional": true
+    },
+    "marked": {
+      "optional": true
     }
   },
   "repository": {
@@ -131,6 +140,7 @@
   ],
   "devDependencies": {
     "@angular/core": "22.2.0",
-    "@babel/core": "^7.29.7"
+    "@babel/core": "^7.29.7",
+    "marked": "^18.0.14"
   }
 }

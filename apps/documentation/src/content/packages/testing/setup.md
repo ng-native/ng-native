@@ -152,6 +152,11 @@ A font a stylesheet declares with `@font-face { src: url('./brand.ttf') }` is a 
 the compiler writes, and gets the same stand-in whatever kind of file it names: the component loads,
 and the font file is not read.
 
+A `.md` file is imported as Metro imports it, `{ attributes, content, tokens }`, by the same
+transform: see [Importing .md files](/packages/components/markdown#importing-md-files). A test sees
+the front matter and tokens the bundle has. Under Vitest, an import with a query, such as
+`./post.md?raw`, is left to Vite.
+
 ## Troubleshooting
 
 ### "needs to be compiled using the JIT compiler"
