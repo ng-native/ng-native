@@ -10,6 +10,7 @@ import { Text } from '../../components/src/text.ts';
       {{ word() }} <text class="em">now</text>
     </gradient-text>
     <gradient-text nativeID="named" accessibilityLabel="Brand">Wk</gradient-text>
+    <gradient-text nativeID="aria" aria-label="Logo">Wk</gradient-text>
     <text nativeID="plain" class="brand">Week</text>
     <gradient-text nativeID="inline" [style.background-color]="tint()">Tinted</gradient-text>
   `,

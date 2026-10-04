@@ -115,6 +115,7 @@ describe('gradient text', () => {
   it('keeps a label the app gave it', async () => {
     await mount();
     assert.equal(parts('named').host.props['accessibilityLabel'], 'Brand');
+    assert.equal(parts('aria').host.props['accessibilityLabel'], 'Logo', 'by its web name too');
   });
 });
 

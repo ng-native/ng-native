@@ -105,7 +105,8 @@ export class GradientText extends ViewBase implements AfterViewInit, AfterConten
    */
   private labelFromLetters(): void {
     const letters = this.letters()?.nativeElement as EngineNode | undefined;
-    if (!letters || this.accessibilityLabel() !== undefined) return;
+    const given = this.accessibilityLabel() ?? this.ariaLabel();
+    if (!letters || given !== undefined) return;
     const label = textOf(letters).replace(/\s+/g, ' ').trim();
     if (label === this.spoken) return;
     this.spoken = label;
