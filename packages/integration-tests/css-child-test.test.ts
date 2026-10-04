@@ -80,6 +80,13 @@ describe(':is(<compound> > *)', () => {
     assert.equal(s.opacity('grandchild'), 0.5);
   });
 
+  it('is not a form :not() takes, which says so', () => {
+    const s = scene('.x:not(.p > *) { opacity: 0.5 }');
+    assert.equal(s.opacity('child'), undefined);
+    assert.equal(s.reports.length, 1);
+    assert.match(s.reports[0]!, /':not\(\)' cannot contain a combinator/);
+  });
+
   it('still refuses a longer selector inside', () => {
     const s = scene('.x:is(.a .p > *) { opacity: 0.5 }');
     assert.equal(s.reports.length, 1);
