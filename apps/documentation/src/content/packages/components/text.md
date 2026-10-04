@@ -84,3 +84,42 @@ down to a floor. `dynamicTypeRamp` (iOS) follows a Dynamic Type style rather tha
 `dataDetectorType` (Android) turns phone numbers, links, addresses and emails into tappable text.
 
 <!-- api: Text -->
+
+## Gradient text
+
+`<gradient-text>` draws a background through its letters: a gradient, or any background the
+element is given. The rule is the one a web page writes:
+
+```html
+<gradient-text class="brand">Week</gradient-text>
+```
+
+```css
+.brand {
+  background-image: linear-gradient(to bottom, #437dfc, #4ad0ef);
+  background-clip: text;
+  color: transparent;
+  font-size: 34px;
+  font-weight: 700;
+}
+```
+
+It is text like any other. It wraps, follows the device's text size, is sized by its letters, and
+takes `<text>` spans inside it with their own weight or style. A span cannot have a color of its
+own, since the fill is the one background behind all of it. A screen reader reads the letters as
+one element, or the `accessibilityLabel` it is given.
+
+`background-clip: text` is what this element does, so a rule that has it applies to
+`<gradient-text>` and to nothing else. On a `<text>` the same class does nothing, where it would
+otherwise leave transparent letters on a block of color, and a rule written for another element,
+`text.brand`, is dropped at build time with a warning that names this one. The `color` in the
+rule is not used: the letters are the mask, and are drawn in full.
+
+The app must have `@react-native-masked-view/masked-view` installed, which is where the native
+view comes from, and which Expo Go includes:
+
+```sh
+npx expo install @react-native-masked-view/masked-view
+```
+
+<!-- api: GradientText -->

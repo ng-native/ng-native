@@ -72,6 +72,7 @@ export {
   type PressEvent,
 } from './pressable.ts';
 export { RefreshControl } from './refresh-control.ts';
+export { GradientText } from './gradient-text.ts';
 export { type SafeAreaEdge, type SafeAreaEdges } from './safe-area.ts';
 export { SafeAreaProvider } from './safe-area-provider.ts';
 export { SafeAreaView, type SafeAreaEdgeMode } from './safe-area-view.ts';

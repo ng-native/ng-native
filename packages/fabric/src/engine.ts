@@ -516,6 +516,8 @@ export interface EngineNode extends HostNode {
   nativeView?: true;
   /** Props kept for selectors to match and left out of what is committed. See `keepAsAttribute`. */
   attributeOnly?: Set<string>;
+  /** The child this node's background is painted on instead of itself. See `paintOn`. */
+  paintsOn?: EngineNode;
   /**
    * Style weaker than every sheet, where no rule and no inline style says otherwise. What lets the
    * root component's host fill the surface by default and still give way to its own `:host`. See
@@ -1433,6 +1435,23 @@ function wasOrIsEmptyWithout(node: EngineNode, moved: EngineNode): boolean {
   }
   return true;
 }
+
+/**
+ * Have the child that paints a node's background merged again with the node: nothing of the
+ * child's own moved, and what it paints may have.
+ */
+function repaint(node: EngineNode): void {
+  if (node.paintsOn?.parent === node) node.paintsOn.propsDirty = true;
+}
+
+/** The style keys that are a view's background. */
+const PAINT_KEYS = [
+  'backgroundColor',
+  'experimental_backgroundImage',
+  'experimental_backgroundSize',
+  'experimental_backgroundPosition',
+  'experimental_backgroundRepeat',
+];
 
 /**
  * A node's own props onto what it commits with. No native prop has a hyphen: `data-*` and `aria-*`
@@ -2705,6 +2724,18 @@ export class Engine implements HostEngine {
   }
 
   /**
+   * Paint a node's background on one of its children instead of on the node: the node keeps its
+   * `background-color` and `background-image` in the cascade, where a stylesheet wrote them, and
+   * the child is the view that draws them. What a view that masks its children and not itself
+   * needs, as `<gradient-text>` is.
+   */
+  paintOn(node: EngineNode, child: EngineNode): void {
+    node.paintsOn = child;
+    this.markProps(node, false);
+    this.markProps(child, false);
+  }
+
+  /**
    * Keep a prop the node already has as an attribute: on the node for a selector such as
    * `:host([variant='primary'])` to match, and left out of what is committed to the native view.
    * It is committed again once the prop is next written. What the platform adapter does with a
@@ -3131,7 +3162,22 @@ export class Engine implements HostEngine {
     alignMultiline(viewName, style);
     const merged = composeTransform(node, this.animated(node, this.transitioned(node, style)));
     centreSingleLine(viewName, merged, this.fontScale);
+    this.movePaint(node, merged);
     return merged;
+  }
+
+  /**
+   * Leave a node's background out of what it commits when a child paints it, and give that child
+   * its parent's: the cascade's, and over it the parent's inline style.
+   */
+  private movePaint(node: EngineNode, merged: Record<string, unknown>): void {
+    if (node.paintsOn) for (const key of PAINT_KEYS) delete merged[key];
+    const from = node.parent?.paintsOn === node ? node.parent : null;
+    if (!from) return;
+    const paint = flattenStyle(from.props['style'], {
+      ...this.styles.resolve(from, this.styleEpoch).style,
+    });
+    for (const key of PAINT_KEYS) if (paint[key] !== undefined) merged[key] = paint[key];
   }
 
   /**
@@ -3816,6 +3862,7 @@ export class Engine implements HostEngine {
     const styleChanged = node.styleCommitted !== style;
     if (this.isClean(node) && !styleChanged) return node.committed!.handle;
     node.styleCommitted = style;
+    repaint(node);
     this.refitChildren(node);
 
     const viewName = committedViewName(node);

@@ -14,6 +14,13 @@ import { buildFor, measuredIn, sweep, WORLDS } from './fixtures/tailwind-v3-swee
 /** Differences that are design decisions: native does not match, on purpose. */
 const DELIBERATE: readonly Accounted[] = [
   {
+    property: /^background-clip$/,
+    browser: /^text$/,
+    reason:
+      'No native view clips its background to its text. <gradient-text> does it, so the ' +
+      'declaration scopes its rule to that element rather than becoming a style.',
+  },
+  {
     property: /^align-content$/,
     browser: /^baseline$/,
     reason:
@@ -101,6 +108,11 @@ const YOGA: readonly Accounted[] = [
 
 /** Cases that compile to nothing with nothing to say, and why that is right. */
 const SILENT_BY_DESIGN: readonly (readonly [RegExp, string])[] = [
+  [
+    /^!?bg-clip-text!?$/,
+    'Marks its rule as one for <gradient-text>, the element that draws a background through its ' +
+      'letters, and writes no declaration of its own.',
+  ],
   [
     /^!?snap-(mandatory|proximity)$/,
     'Sets only the slot `snap-x` and `snap-y` read, which are refused.',

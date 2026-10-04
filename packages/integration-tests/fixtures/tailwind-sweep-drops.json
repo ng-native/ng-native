@@ -2405,9 +2405,7 @@
     "bg-clip-content",
     "bg-clip-content!",
     "bg-clip-padding",
-    "bg-clip-padding!",
-    "bg-clip-text",
-    "bg-clip-text!"
+    "bg-clip-padding!"
   ],
   "dropped 'background-color': '…' is not a value native can take": [
     "bg-[0.35]",

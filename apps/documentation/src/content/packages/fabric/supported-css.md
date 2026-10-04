@@ -107,6 +107,11 @@ can be a token too (`at var(--x) 30%`), with a fallback after its name. `backgro
 gradients only - a `url()` in `background-image` is dropped, because there is no image loader
 behind that prop; put an image in an `<image>` element instead.
 
+`background-clip: text` is not a value any native view takes. It marks its rule as one for
+[`<gradient-text>`](/packages/components/text#gradient-text), the element that draws a background
+through its letters: the rule applies to that element alone, and one written for another element
+is dropped with a warning. The other values of `background-clip` are dropped.
+
 `filter` compiles to the list of functions React Native's `filter` prop takes, and which of them a
 device draws depends on the platform:
 

@@ -2178,12 +2178,35 @@ function compileCss(source, context = 'styles', options = {}) {
   }
 
   /** A style rule's selectors and declarations as rules, each at the place `orderOf` gives it. */
-  function styleVariant(rule, orderOf, context) {
+  function styleVariant(written, orderOf, context) {
+    const clipped = withoutTextClip(written);
+    const rule = clipped ?? written;
     for (const { platforms, placeholder, selectors } of groupedSelectors(rule, context)) {
       const whole = buildRule(rule, platforms, context);
       const built = whole && placeholder ? placeholderColour(whole, context) : whole;
-      if (built) pushRules(selectors, built, placeholder, orderOf, context);
+      if (built) pushRules(selectors, built, placeholder, orderOf, context, clipped !== null);
     }
+  }
+
+  /**
+   * A selector as one that matches `<gradient-text>` alone, which is the element that draws a
+   * background through its letters. Written for another element, the rule is dropped and said so:
+   * there it would be transparent letters on a block of colour.
+   */
+  function forGradientText(compiled, context) {
+    const last = compiled.compounds.at(-1);
+    if (last.type === undefined || last.type === GRADIENT_TEXT) {
+      return {
+        ...compiled,
+        compounds: [...compiled.compounds.slice(0, -1), { ...last, type: GRADIENT_TEXT }],
+      };
+    }
+    const message =
+      `'background-clip: text' is drawn by <gradient-text>, from '@ng-native/components', and ` +
+      `this rule is for <${last.type}>. Use <gradient-text> for the text it fills.`;
+    if (!onUnsupported) throw new CssUnsupported(`${context}: ${message}`);
+    onUnsupported(reported(context, 'dropped a rule', message));
+    return null;
   }
 
   function groupedSelectors(rule, context) {
@@ -2209,12 +2232,13 @@ function compileCss(source, context = 'styles', options = {}) {
     return groups.values();
   }
 
-  function pushRules(selectors, built, placeholder, orderOf, context) {
+  function pushRules(selectors, built, placeholder, orderOf, context, clipsText = false) {
     for (const { source, parts, compiled, direction, bump } of selectors) {
       // One rule per alternative an ancestor test is among; each as specific as the selector
       // written, which is what `:is()` makes all of them.
       for (const one of alternatives(parts)) {
-        const alternative = one === parts ? compiled : subject(selector(one, context), placeholder);
+        const matched = one === parts ? compiled : subject(selector(one, context), placeholder);
+        const alternative = matched && clipsText ? forGradientText(matched, context) : matched;
         if (!alternative) continue;
         rules.push({
           ...alternative,
@@ -2518,6 +2542,39 @@ function compileCss(source, context = 'styles', options = {}) {
     ...(fonts.length ? { fonts } : {}),
     ...(Object.keys(keyframes).length ? { keyframes } : {}),
     ...invalidation(rules),
+  };
+}
+
+/** The element that draws a background through its letters. */
+const GRADIENT_TEXT = 'gradient-text';
+
+const isTextClip = (declaration) =>
+  declaration.property === 'background-clip' && declaration.value?.includes?.('text');
+
+/**
+ * A rule with its `background-clip: text` taken out, or null for a rule with none.
+ *
+ * No native view clips its background to its text. `<gradient-text>` does what the declaration
+ * asks for, so the declaration says which element the rule is for rather than being a value to
+ * convert.
+ *
+ * ponytail: the longhand only. A `background` shorthand with `text` as its clip is refused as any
+ * unmapped clip is; read its layers here if a sheet writes it that way.
+ */
+function withoutTextClip(rule) {
+  const { declarations = [], importantDeclarations = [] } = rule.value.declarations ?? {};
+  if (![...declarations, ...importantDeclarations].some(isTextClip)) return null;
+  const kept = (list) => list.filter((declaration) => !isTextClip(declaration));
+  return {
+    ...rule,
+    value: {
+      ...rule.value,
+      declarations: {
+        ...rule.value.declarations,
+        declarations: kept(declarations),
+        importantDeclarations: kept(importantDeclarations),
+      },
+    },
   };
 }
 

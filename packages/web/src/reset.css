@@ -440,3 +440,22 @@ body {
   /* A device draws an unset placeholder grey; this is the text colour, faded, on any theme. */
   color: var(--rn-placeholder-color, color-mix(in srgb, currentColor 45%, transparent));
 }
+
+/*
+ * `gradient-text.ts`: a background drawn through the letters. A browser has the property for it,
+ * so the element clips its own background to its text, the letters are transparent whatever the
+ * component drew them in to be a mask on a device, and the view a device paints the background on
+ * is not there.
+ */
+[data-rn='gradient-text'] {
+  -webkit-background-clip: text;
+  background-clip: text;
+}
+
+[data-rn='gradient-text'] > [data-rn='text'][data-rn] {
+  color: transparent;
+}
+
+[data-rn='gradient-text'] > [data-rn='view'][data-rn] {
+  display: none;
+}

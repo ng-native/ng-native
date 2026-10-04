@@ -289,6 +289,19 @@ body {
   /* A device draws an unset placeholder grey; this is the text colour, faded, on any theme. */
   color: var(--rn-placeholder-color, color-mix(in srgb, currentColor 45%, transparent));
 }
+
+[data-rn='gradient-text'] {
+  -webkit-background-clip: text;
+  background-clip: text;
+}
+
+[data-rn='gradient-text'] > [data-rn='text'][data-rn] {
+  color: transparent;
+}
+
+[data-rn='gradient-text'] > [data-rn='view'][data-rn] {
+  display: none;
+}
 `;
 
 /**
