@@ -206,6 +206,8 @@ imported in both. `index.html` links it, and Vite builds it with the page:
 <link rel="stylesheet" href="/src/styles.css" />
 ```
 
+Beside a native app, the `href` is `/src/styles.web.css`.
+
 An `import './styles.css';` in the web entry works too where TypeScript knows `.css` modules, as
 `vite/client`'s types declare them. Beside a native app it does not: TypeScript 6 refuses the
 import of a file it has no types for, so the app's typecheck fails on it.
