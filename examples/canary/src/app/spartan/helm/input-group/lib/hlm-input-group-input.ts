@@ -1,0 +1,14 @@
+import { Directive } from '@angular/core';
+import { HlmInput } from '../../input';
+import { classes } from '../../utils';
+
+@Directive({
+  selector: 'input[hlmInputGroupInput]',
+  hostDirectives: [HlmInput],
+  host: { 'data-slot': 'input-group-control' },
+})
+export class HlmInputGroupInput {
+  constructor() {
+    classes(() => `spartan-input-group-input flex-1`);
+  }
+}

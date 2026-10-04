@@ -4,11 +4,14 @@ import { NativeHeader } from '@ng-native/router';
 import { SpartanAccordions } from './spartan-accordions.ts';
 import { SpartanBadges } from './spartan-badges.ts';
 import { SpartanButtons } from './spartan-buttons.ts';
+import { SpartanCalendars } from './spartan-calendars.ts';
 import { SpartanCards } from './spartan-cards.ts';
 import { SpartanChecks } from './spartan-checks.ts';
+import { SpartanCommands } from './spartan-commands.ts';
 import { SpartanControls } from './spartan-controls.ts';
 import { SpartanDialogs } from './spartan-dialogs.ts';
 import { SpartanFeedback } from './spartan-feedback.ts';
+import { SpartanGroups } from './spartan-groups.ts';
 import { SpartanInputs } from './spartan-inputs.ts';
 import { SpartanMenus } from './spartan-menus.ts';
 import { SpartanNavigation } from './spartan-navigation.ts';
@@ -33,7 +36,10 @@ import { SpartanTabs } from './spartan-tabs.ts';
     SpartanAccordions,
     SpartanBadges,
     SpartanButtons,
+    SpartanCalendars,
     SpartanCards,
+    SpartanCommands,
+    SpartanGroups,
     SpartanChecks,
     SpartanControls,
     SpartanDialogs,
@@ -90,6 +96,12 @@ import { SpartanTabs } from './spartan-tabs.ts';
         <app-spartan-navigation />
         <h2 class="text-lg font-semibold">Table and keys</h2>
         <app-spartan-tables />
+        <h2 class="text-lg font-semibold">Command</h2>
+        <app-spartan-commands />
+        <h2 class="text-lg font-semibold">Calendar</h2>
+        <app-spartan-calendars />
+        <h2 class="text-lg font-semibold">Button group, input group, context menu</h2>
+        <app-spartan-groups />
         <h2 class="text-lg font-semibold">Toggle, radio group, textarea, avatar</h2>
         <app-spartan-controls />
       </div>

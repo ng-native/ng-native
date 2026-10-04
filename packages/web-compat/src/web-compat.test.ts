@@ -368,6 +368,33 @@ describe('@ng-native/web-compat document and window', () => {
 })
 class Links {}
 
+@Component({
+  selector: 'x-table',
+  template: `
+    <form>
+      <fieldset><legend>Sums</legend></fieldset>
+      <table>
+        <caption>
+          Invoices
+        </caption>
+        <thead>
+          <tr>
+            <th>Total</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td testID="cell">$250.00</td>
+          </tr>
+        </tbody>
+        <tfoot></tfoot>
+      </table>
+    </form>
+    <hr />
+  `,
+})
+class Table {}
+
 describe('@ng-native/web-compat elements', () => {
   /** What the engine reports while `run` renders, an unknown element among it. */
   const reported = async (run: () => Promise<unknown>) => {
@@ -391,6 +418,16 @@ describe('@ng-native/web-compat elements', () => {
     assert.equal(button.props['accessible'], true);
     assert.equal(screen.getByTestId('link').props['role'], 'tab');
     assert.equal(button.props['focusable'], true);
+  });
+
+  it('knows the elements of a table and a form, each a plain view', async () => {
+    const unknown = await reported(() => render(Table, { providers: [provideWebCompat()] }));
+    assert.deepEqual(unknown, []);
+    assert.equal(screen.getByTestId('cell').viewName, 'View');
+    assert.ok(screen.getByText('Total'));
+    cleanup();
+    const without = await reported(() => render(Table));
+    assert.match(without.join('\n'), /<table> is not a known element/, 'only where asked for');
   });
 
   it('marks a button a pointer is over, for a hover style', async () => {
@@ -564,6 +601,18 @@ describe('@ng-native/web-compat inline styles', () => {
 });
 
 @Component({
+  selector: 'x-held',
+  template: `
+    <div testID="area" (contextmenu)="menus.push($event)" (click)="clicks.set(clicks() + 1)"></div>
+    <div testID="plain"></div>
+  `,
+})
+class Held {
+  readonly menus: MouseEvent[] = [];
+  readonly clicks = signal(0);
+}
+
+@Component({
   selector: 'x-drag',
   template: `
     <div
@@ -640,6 +689,48 @@ describe('@ng-native/web-compat pointer events', () => {
         clientY: 6,
       },
     );
+  });
+
+  it('delivers a finger held still as a context menu at the finger, and no click after', async () => {
+    const app = await render(Held, { providers: [provideWebCompat()] });
+    const area = screen.getByTestId('area');
+    await fireEvent(area, 'touchStart', finger(40, 60));
+    await new Promise((resolve) => setTimeout(resolve, 550));
+    await fireEvent(area, 'touchEnd', finger(40, 60, false));
+    assert.equal(app.instance.menus.length, 1);
+    const { type, clientX, clientY, button } = app.instance.menus[0]!;
+    assert.deepEqual(
+      { type, clientX, clientY, button },
+      { type: 'contextmenu', clientX: 40, clientY: 60, button: 0 },
+    );
+    assert.equal(app.instance.clicks(), 0, 'the hold was the menu, not a press');
+  });
+
+  it('tells the document of no click for a hold either, which would close the menu it opened', async () => {
+    await render(Held, { providers: [provideWebCompat()] });
+    let clicks = 0;
+    globals.document.addEventListener('click', () => clicks++);
+    await settle();
+    const area = screen.getByTestId('area');
+    await fireEvent(area, 'touchStart', finger(40, 60));
+    await new Promise((resolve) => setTimeout(resolve, 550));
+    await fireEvent(area, 'touchEnd', finger(40, 60, false));
+    assert.equal(clicks, 0);
+    // On an element with no listener of its own, which is what a press outside a menu lands on.
+    await userEvent.press(screen.getByTestId('plain'));
+    assert.equal(clicks, 1, 'and of the next press as before');
+  });
+
+  it('delivers no context menu for a press, nor for a finger that moves away', async () => {
+    const app = await render(Held, { providers: [provideWebCompat()] });
+    const area = screen.getByTestId('area');
+    await userEvent.press(area);
+    assert.equal(app.instance.clicks(), 1);
+    await fireEvent(area, 'touchStart', finger(40, 60));
+    await fireEvent(area, 'touchMove', finger(80, 60));
+    await new Promise((resolve) => setTimeout(resolve, 550));
+    await fireEvent(area, 'touchEnd', finger(80, 60, false));
+    assert.equal(app.instance.menus.length, 0);
   });
 
   it('names the element the touch landed on as the target', async () => {

@@ -1,0 +1,14 @@
+import { Directive } from '@angular/core';
+import { classes } from '../../utils';
+
+@Directive({
+  selector: '[hlmCommandShortcut],hlm-command-shortcut',
+  host: {
+    'data-slot': 'command-shortcut',
+  },
+})
+export class HlmCommandShortcut {
+  constructor() {
+    classes(() => 'spartan-command-shortcut');
+  }
+}

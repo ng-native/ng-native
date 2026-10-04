@@ -75,6 +75,12 @@ const DOCUMENT_EVENTS: Readonly<Record<string, string>> = {
 type Listener = (event: unknown) => unknown;
 
 /**
+ * The apps whose touch in progress was held for a context menu. Lifting that finger is no click,
+ * here or on the element: a library closes the menu it just opened on a click outside it.
+ */
+export const heldForMenu = new WeakSet<Engine>();
+
+/**
  * Listen for an event anywhere in the app, as a listener on `document`, `body` or `window` does.
  * A touch bubbles to the engine's root, which is where this listens, and the event names the
  * node it landed on. Nothing for an event with no touch behind it, a key say.
@@ -93,7 +99,7 @@ export function listenAnywhere(
   let live = false;
   queueMicrotask(() => (live = true));
   return engine.setEventListener(engine.root, native, (event) => {
-    if (!live) return;
+    if (!live || (type === 'click' && heldForMenu.has(engine))) return;
     const target = (event as { target: EngineNode | null }).target;
     const path: EngineNode[] = [];
     for (let node = target; node; node = node.parent) path.push(node);

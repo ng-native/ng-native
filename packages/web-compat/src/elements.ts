@@ -7,6 +7,15 @@ import { documentOf } from './document.ts';
  */
 const ROLES: Readonly<Record<string, string>> = { button: 'button', a: 'link' };
 
+/**
+ * The elements with no role to give and no view of their own: a table's and a form's, each a
+ * plain view for a stylesheet to lay out. A table has no layout of its own here.
+ */
+const PLAIN = [
+  ...['table', 'caption', 'thead', 'tbody', 'tfoot', 'tr', 'th', 'td'],
+  ...['form', 'fieldset', 'legend', 'hr'],
+];
+
 /** The platform's text field, which an `<input>` and a `<textarea>` are. */
 const TEXT_FIELD = { ios: 'TextInput', android: 'AndroidTextInput' };
 
@@ -14,7 +23,7 @@ const TEXT_FIELD = { ios: 'TextInput', android: 'AndroidTextInput' };
 export function registerElements(): () => void {
   const yieldsToComponents = { yieldsToComponents: true };
   const undo = [
-    ...Object.keys(ROLES).map((name) =>
+    ...[...Object.keys(ROLES), ...PLAIN].map((name) =>
       registerViewName(name, 'View', undefined, yieldsToComponents),
     ),
     ...['input', 'textarea'].map((name) =>

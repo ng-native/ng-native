@@ -1,6 +1,6 @@
 import type { Engine, EngineNode } from '@ng-native/fabric';
 import type { RendererExtension } from '@ng-native/platform';
-import { documentOf, listenAnywhere } from './document.ts';
+import { documentOf, heldForMenu, listenAnywhere } from './document.ts';
 import { inlineStyle } from './inline-style.ts';
 import { setLabel } from './label.ts';
 import { created } from './elements.ts';
@@ -91,7 +91,10 @@ interface Touched {
 const touched = new WeakMap<EngineNode, Touched>();
 
 /** The events a touch is delivered as, beside the `click` its release is. */
-const POINTER_EVENTS = new Set(['pointerdown', 'pointermove', 'pointerup', 'pointercancel']);
+const POINTER_EVENTS = new Set([
+  ...['pointerdown', 'pointermove', 'pointerup', 'pointercancel'],
+  'contextmenu',
+]);
 
 /**
  * The nodes a touch is on: the one that took it and the one it landed on. A touch goes to the node
@@ -101,6 +104,16 @@ const capturing = new WeakSet<EngineNode>();
 
 /** Whether a touch is on the node, and so every move of it comes to the node's listeners. */
 export const hasCapture = (node: EngineNode): boolean => capturing.has(node);
+
+/** How long a finger is held for a context menu, and how far it may drift: the platforms' own. */
+const HOLD = 500;
+const SLOP = 10;
+
+/** Where on the screen a touch is. */
+function pointOf(event: unknown): { x: number; y: number } {
+  const touch = (event as { nativeEvent?: { pageX?: number; pageY?: number } }).nativeEvent;
+  return { x: touch?.pageX ?? 0, y: touch?.pageY ?? 0 };
+}
 
 /** The node's listeners, behind a responder it gets the first time it is asked for. */
 function touchedOf(engine: Engine, node: EngineNode): Touched {
@@ -117,7 +130,12 @@ function touchedOf(engine: Engine, node: EngineNode): Touched {
       // A copy: a listener may remove itself, or another, as it runs.
       for (const each of [...told]) each(sent);
     };
+    /** The wait for a finger held still, and whether it ran out: the hold was a context menu. */
+    let holding: ReturnType<typeof setTimeout> | undefined;
+    let menu = false;
+    let down = { x: 0, y: 0 };
     const over = (type: string, event: unknown) => {
+      clearTimeout(holding);
       tell(type, event);
       capturing.delete(node);
       capturing.delete(landed);
@@ -132,11 +150,30 @@ function touchedOf(engine: Engine, node: EngineNode): Touched {
         capturing.add(node);
         capturing.add(landed);
         tell('pointerdown', event);
+        menu = false;
+        if (!listeners.get('contextmenu')?.size) return;
+        // A finger held where it landed is what asks for a context menu with no second button.
+        down = pointOf(event);
+        holding = setTimeout(() => {
+          menu = true;
+          // Until the next touch, wherever it lands.
+          heldForMenu.add(engine);
+          const stop = engine.setEventListener(engine.root, 'topTouchStart', () => {
+            heldForMenu.delete(engine);
+            stop();
+          });
+          tell('contextmenu', event);
+        }, HOLD);
       },
-      onResponderMove: (event) => tell('pointermove', event),
+      onResponderMove: (event) => {
+        const at = pointOf(event);
+        if (Math.hypot(at.x - down.x, at.y - down.y) > SLOP) clearTimeout(holding);
+        tell('pointermove', event);
+      },
       onResponderRelease: (event) => {
         over('pointerup', event);
-        if (!disabled(node)) tell('click', event);
+        // A hold that opened a menu is not a press as well.
+        if (!disabled(node) && !menu) tell('click', event);
       },
       onResponderTerminate: (event) => over('pointercancel', event),
     });
@@ -177,10 +214,8 @@ function onTouch(engine: Engine, node: EngineNode, type: string, listener: Liste
  * and the client both, with no window to scroll.
  */
 function pointer(type: string, target: EngineNode, current: EngineNode, event: unknown): object {
-  const touch = (event as { nativeEvent?: { pageX?: number; pageY?: number; identifier?: number } })
-    .nativeEvent;
-  const x = touch?.pageX ?? 0;
-  const y = touch?.pageY ?? 0;
+  const touch = (event as { nativeEvent?: { identifier?: number } }).nativeEvent;
+  const { x, y } = pointOf(event);
   return {
     ...dom(type, target, event),
     currentTarget: current,
