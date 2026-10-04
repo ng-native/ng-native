@@ -412,6 +412,80 @@ class SearchField {
 })
 class Search {}
 
+@Component({
+  selector: 'x-labelled-field',
+  imports: [TextInput],
+  template: `<text-input [accessibilityLabel]="accessibilityLabel()" [placeholder]="hint()" />`,
+})
+class LabelledField {
+  readonly accessibilityLabel = input<string>();
+  readonly hint = input('', { alias: 'placeholder' });
+}
+
+@Component({
+  selector: 'x-badge',
+  imports: [Text],
+  template: `<text>new</text>`,
+  styles: `
+    :host([variant='primary']) {
+      background-color: red;
+    }
+  `,
+  host: { '[accessibilityHint]': 'accessibilityHint()' },
+})
+class Badge {
+  readonly variant = input<string>();
+  readonly accessibilityHint = input<string>();
+}
+
+@Component({
+  selector: 'x-badges',
+  imports: [Badge],
+  template: `<x-badge variant="primary" accessibilityHint="Unread" nativeID="badge" />`,
+})
+class Badges {}
+
+@Component({
+  selector: 'x-labelled-form',
+  imports: [LabelledField],
+  template: `<x-labelled-field
+    accessibilityLabel="Email"
+    placeholder="you@example.com"
+    nativeID="email"
+  />`,
+})
+class LabelledForm {}
+
+describe('a static attribute that is an input of the host component', () => {
+  it('reaches the component and is not committed to its host view as well', async () => {
+    await render(LabelledForm);
+
+    assert.match(screen.getByLabelText('Email').viewName, /TextInput/);
+    const host = screen.getByTestId('email');
+    assert.equal(host.props['accessibilityLabel'], undefined);
+    // By the name the template writes, which is the alias and not the property.
+    assert.equal(host.props['placeholder'], undefined);
+    assert.match(screen.getByPlaceholderText('you@example.com').viewName, /TextInput/);
+  });
+
+  it('still matches a selector that reads the attribute on the host', async () => {
+    await render(Badges);
+    const host = screen.getByTestId('badge');
+    assert.equal(host.props['backgroundColor'], 'rgb(255, 0, 0)');
+    assert.equal(host.props['variant'], undefined);
+  });
+
+  it('commits what a host binding writes by the same name', async () => {
+    await render(Badges);
+    assert.equal(screen.getByTestId('badge').props['accessibilityHint'], 'Unread');
+  });
+
+  it('still commits an attribute the component has no input for', async () => {
+    await render(LabelledForm);
+    assert.equal(screen.getByTestId('email').props['nativeID'], 'email');
+  });
+});
+
 describe('getByPlaceholderText', () => {
   it('finds the text field, not a host view the same attribute was written on', async () => {
     await render(Search);

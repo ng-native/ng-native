@@ -514,6 +514,8 @@ export interface EngineNode extends HostNode {
   componentHost?: true;
   /** See `keepNativeView`. */
   nativeView?: true;
+  /** Props kept for selectors to match and left out of what is committed. See `keepAsAttribute`. */
+  attributeOnly?: Set<string>;
   /**
    * Style weaker than every sheet, where no rule and no inline style says otherwise. What lets the
    * root component's host fill the surface by default and still give way to its own `:host`. See
@@ -1435,12 +1437,17 @@ function wasOrIsEmptyWithout(node: EngineNode, moved: EngineNode): boolean {
 /**
  * A node's own props onto what it commits with. No native prop has a hyphen: `data-*` and `aria-*`
  * attributes stay on the node for selectors to match, and an `aria-*` one is mapped to the prop
- * native reads.
+ * native reads. The node's `attributeOnly` names stay on it the same way.
  */
-function writeOwnProps(own: Record<string, unknown>, props: Record<string, unknown>): void {
+function writeOwnProps(
+  own: Record<string, unknown>,
+  props: Record<string, unknown>,
+  attributeOnly?: ReadonlySet<string>,
+): void {
   let aria = false;
   for (const key of Object.keys(own)) {
     if (key.includes('-')) aria ||= key.startsWith('aria-');
+    else if (attributeOnly?.has(key)) continue;
     else if (key !== 'style' && key !== INTRINSIC_SIZE && key !== STYLE_OVERRIDE) {
       props[key] = committedProp(key, own[key]);
     }
@@ -2673,6 +2680,8 @@ export class Engine implements HostEngine {
   }
 
   setProp(node: EngineNode, key: string, value: unknown): void {
+    // A prop written again is a binding's, and is committed as any other is.
+    if (node.attributeOnly?.delete(key)) this.markProps(node, false);
     if (value === undefined || value === null) {
       // Nothing to remove, so nothing changed. Worth its own branch because it is the common
       // case, not a rare one: a host primitive carries a host binding for every prop React Native
@@ -2688,6 +2697,18 @@ export class Engine implements HostEngine {
     // what any node matches or inherits. Every other prop can: `[disabled]` is a selector. An
     // inline `direction` is the exception, because the paragraphs below it align by it.
     this.markProps(node, key !== 'style' || this.inlineReachesStyle(node));
+  }
+
+  /**
+   * Keep a prop the node already has as an attribute: on the node for a selector such as
+   * `:host([variant='primary'])` to match, and left out of what is committed to the native view.
+   * It is committed again once the prop is next written. What the platform adapter does with a
+   * static attribute that is an input of the host's component.
+   */
+  keepAsAttribute(node: EngineNode, key: string): void {
+    if (!(key in node.props)) return;
+    (node.attributeOnly ??= new Set()).add(key);
+    this.markProps(node, false);
   }
 
   /**
@@ -3084,7 +3105,7 @@ export class Engine implements HostEngine {
     const props: Record<string, unknown> = { ...DEFAULT_PROPS[viewName], ...node.defaultStyle };
     Object.assign(props, this.styles.resolve(node, this.styleEpoch).style);
     const resolved = props['pointerEvents'];
-    writeOwnProps(node.props, props);
+    writeOwnProps(node.props, props, node.attributeOnly);
     withTextContent(node, viewName, props);
     const cascaded = props['transform'];
     const style = boundTransform(node, flattenStyle(node.props['style'], props), cascaded);

@@ -281,6 +281,8 @@ interface ComponentDefLike {
   id?: string;
   type?: unknown;
   encapsulation?: number;
+  /** The component's inputs, keyed by the name a template writes. */
+  inputs?: object;
   tView?: {
     directiveRegistry?:
       readonly { selectors?: readonly (readonly unknown[])[]; inputs?: object }[] | null;
@@ -326,6 +328,7 @@ export class NativeRendererFactory implements RendererFactory2 {
     if (host && typeof host === 'object') {
       this.engine.setHostSheet(host as EngineNode, sheet);
       markComponentHost(host as EngineNode);
+      this.keepInputAttributes(host as EngineNode, type);
     }
     if (type) this.declareElements(type);
 
@@ -338,6 +341,19 @@ export class NativeRendererFactory implements RendererFactory2 {
       this.byComponent.set(key, renderer);
     }
     return renderer;
+  }
+
+  /**
+   * Keep a static attribute that is one of the component's inputs off its host view.
+   *
+   * Angular gives `<app-field accessibilityLabel="Email">` to the input and writes it to the host
+   * element as well, which on a web page is an attribute only a selector reads and here is a prop:
+   * a second element with the label, on a view that is only a container. It stays on the node for
+   * `:host([variant])` to match. The component's host bindings have not run yet, so a prop by an
+   * input's name is the static attribute, and a host binding that writes it later is committed.
+   */
+  private keepInputAttributes(host: EngineNode, def: ComponentDefLike | null): void {
+    for (const input of Object.keys(def?.inputs ?? {})) this.engine.keepAsAttribute(host, input);
   }
 
   /**
