@@ -69,3 +69,27 @@
   text-align: center;
   padding: 32px 16px;
 }
+
+.hero {
+  align-items: center;
+  padding: 24px 16px;
+  gap: 8px;
+}
+
+.hero-logo {
+  width: 88px;
+  height: 88px;
+  border-radius: 20px;
+}
+
+.hero-title {
+  color: light-dark(#1c1c1e, #ffffff);
+  font-size: 28px;
+  font-weight: 700;
+}
+
+.hero-sub {
+  color: #8e8e93;
+  font-size: 15px;
+  text-align: center;
+}

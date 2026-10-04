@@ -1,15 +1,20 @@
 import { Component } from '@angular/core';
-import { Pressable, ScrollView, Text, View } from '@ng-native/components';
+import { Image, Pressable, ScrollView, Text, View } from '@ng-native/components';
 import { NativeHeader, NativeRouterLink } from '@ng-native/router';
 import { NOTES } from '../note/notes.ts';
 
 /** The notes, by their front matter, and the two screens that are not notes. */
 @Component({
-  imports: [NativeHeader, NativeRouterLink, Pressable, ScrollView, Text, View],
+  imports: [Image, NativeHeader, NativeRouterLink, Pressable, ScrollView, Text, View],
   template: `
     <native-header title="Markdown Reader" largeTitle />
     <scroll-view class="scroll" contentInsetAdjustmentBehavior="automatic">
       <view class="content">
+        <view class="card hero">
+          <image class="hero-logo" [source]="logo" alt="Angular Native" />
+          <text class="hero-title">Angular Native</text>
+          <text class="hero-sub">Markdown drawn as native iOS and Android views</text>
+        </view>
         <text class="section">NOTES</text>
         <view class="card">
           @for (note of notes; track note.slug; let first = $first) {
@@ -61,5 +66,6 @@ import { NOTES } from '../note/notes.ts';
   styleUrl: '../ui/page.css',
 })
 export class Library {
+  protected readonly logo = require('../../../assets/angular-native.png');
   protected readonly notes = NOTES;
 }
