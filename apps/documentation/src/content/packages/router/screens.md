@@ -240,6 +240,28 @@ screen was opened with - travels as router navigation state, which Angular's own
 carries: going back to a screen restores the presentation it was originally given, with no extra
 bookkeeping on your part.
 
+## A sideways drag on iOS 26
+
+On iOS 26 the swipe back starts anywhere on a pushed screen, not only at its edge. It takes the
+touch once a finger has moved a little way to the right, and whatever in the app was following that
+finger stops: a slider's thumb, a card being dragged, a row swiped to reveal its actions. The view
+gets `(responderTerminate)`, and a longer drag goes on to pop the screen. A drag to the left is not
+affected, and neither is a `<scroll-view>` that scrolls sideways, which the swipe waits for.
+
+This is `react-native-screens`' default from iOS 26, and a React Native app has it too. A screen
+that holds something dragged sideways opts out where it is navigated to, and keeps the swipe from
+its edge:
+
+```ts
+void this.nav.push('/mixer', { presentation: { fullScreenSwipeEnabled: false } });
+```
+
+`gestureResponseDistance` narrows the swipe instead of turning it off. Its four values bound where a
+touch may be for the swipe to start, in points from the screen's leading and top edges: `{ end: 40 }`
+starts it only within 40 points of the leading edge, and `{ top: 300 }` only below the first 300
+points, which leaves a slider above that line alone. Earlier versions of iOS start the swipe at the
+edge alone unless `fullScreenSwipeEnabled` is set.
+
 ## Whether a screen is in front
 
 `SCREEN_IN_FRONT` from `@ng-native/device` is a signal that is true while the screen something is on
