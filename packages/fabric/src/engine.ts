@@ -2272,9 +2272,13 @@ export class Engine implements HostEngine {
     elsewhere: [],
   };
 
+  private readonly activeWatched = new WeakSet<StyleSheet>();
+
   /** Note what a sheet in play asks about a pressed element. See `markActive`. */
   private watchActive(sheet: StyleSheet | null | undefined): void {
-    if (!sheet) return;
+    // Asked for every element a component's sheet is given to: noted once a sheet.
+    if (!sheet || this.activeWatched.has(sheet)) return;
+    this.activeWatched.add(sheet);
     const use = usesActive(sheet);
     if (!use.own && !use.elsewhere.length) return;
     this.activeUse = {
@@ -2587,6 +2591,7 @@ export class Engine implements HostEngine {
   setHostSheet(node: EngineNode, sheet: StyleSheet | null): void {
     if (node.hostSheet === sheet) return;
     node.hostSheet = sheet;
+    this.watchActive(sheet);
     this.markProps(node);
   }
 

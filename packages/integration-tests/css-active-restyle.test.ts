@@ -96,6 +96,52 @@ describe('a press', () => {
     assert.equal(s.props('outer')['opacity'], null);
   });
 
+  it('styles only the pressed element where the pressed state is asked inside :is() or :not()', () => {
+    // The state is the element's own, wherever in its selector it is written.
+    for (const rule of ['.btn:is(:active)', '.btn:not(:not(:active))', ':is(.btn:active)']) {
+      const s = scene(`${BASE} .btn { opacity: 1 } ${rule} { opacity: 0.5 }`);
+      assert.ok(s.touch('topTouchStart') <= 2, rule);
+      assert.equal(s.props('btn')['opacity'], 0.5, rule);
+      assert.ok(s.touch('topTouchEnd') <= 2, rule);
+      assert.equal(s.props('btn')['opacity'], 1, rule);
+    }
+  });
+
+  it('styles a host pressed under its own :host:active, with nothing else in the component', () => {
+    const s = scene(BASE);
+    s.engine.setHostSheet(s.button, compileCss(':host:active { opacity: 0.4 }') as StyleSheet);
+    s.engine.commit();
+    s.touch('topTouchStart');
+    assert.equal(s.props('btn')['opacity'], 0.4);
+    s.touch('topTouchEnd');
+    assert.equal(s.props('btn')['opacity'], null);
+  });
+
+  it('keeps the style of an element no rule can match, under tokens set on the root', () => {
+    // Only a component's sheet has a pressed style: everything else has no rule at all.
+    const fabric = createFakeFabric();
+    const engine = new Engine(fabric, 1, {});
+    engine.updateTokens({ '--gap': { length: 4 } });
+    const sheet = compileCss('.btn:active { opacity: 0.5 }') as StyleSheet;
+    const all: EngineNode[] = [];
+    const add = (parent: EngineNode, own?: StyleSheet): EngineNode => {
+      const node = engine.createElement('view', own);
+      all.push(node);
+      engine.appendChild(parent, node);
+      return node;
+    };
+    const screen = add(engine.root);
+    for (let row = 0; row < 20; row++) add(add(screen));
+    const button = add(add(screen), sheet);
+    engine.setClasses(button, 'btn');
+    engine.setResponder(button, { onStartShouldSetResponder: () => true });
+    engine.commit();
+    const before = all.map((node) => node.styleCache);
+    engine.dispatchEvent(button, 'topTouchStart', {});
+    engine.commit();
+    assert.ok(all.filter((node, i) => node.styleCache !== before[i]).length <= 1);
+  });
+
   it('styles nothing at all under a stylesheet with no pressed style in it', () => {
     const s = scene(BASE);
     assert.equal(s.touch('topTouchStart'), 0);
