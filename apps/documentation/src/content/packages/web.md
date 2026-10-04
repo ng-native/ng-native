@@ -139,15 +139,45 @@ and the packages' source together:
 
 `allowImportingTsExtensions` is required: the packages import their own files as `./x.ts`.
 
+### Beside a native app
+
+A browser build can also sit in a native app's own directory, such as one created from
+`@ng-native/template`, and render the same components. It has a web entry of its own next to the
+app's `src/main.ts`, which mounts through `@ng-native/platform` and stays the native entry.
+
+```sh
+npm install @ng-native/web
+npm install --save-dev vite
+npm pkg set scripts.web=vite
+```
+
+The config is the one above, named `vite.config.mts`, since the app's `package.json` is not
+`"type": "module"`. `index.html` is the one above with the web entry as its module script:
+
+```html
+<script type="module" src="/src/main.web.ts"></script>
+```
+
+`src/main.web.ts`:
+
+```ts
+import { mount } from '@ng-native/web';
+import { App } from './app/app.ts';
+
+mount(document.getElementById('root')!, App);
+```
+
+`npm run web` then serves the app in a browser, and `npm start` still runs it on a device. The
+app's own `tsconfig.json` checks the web entry too.
+
 ### With Tailwind
 
 `@ng-native/tailwind`'s web preset gives a browser the same variants and utilities a phone gets,
 so a class string written for native means the same thing here.
 
-A browser build is either an app of its own, as above, or sits beside a native app in that app's
-directory: a `vite.config.ts` and an `index.html` whose module script is a web entry of its own,
-such as `src/main.web.ts`, next to the app's `src/main.ts`. The setup is the same for both, except
-where the native build has a file of the same name. In an Nx workspace,
+The setup is the same for an app of its own and for one
+[beside a native app](#beside-a-native-app), except where the native build has a file of the same
+name. In an Nx workspace,
 `nx g @ng-native/nx:tailwind <project>` writes it for either: it takes a project whose Vite config
 runs `ngNativeWeb()` to build for a browser, and sets up the native build too when the project has
 one. [The Nx page](/packages/nx#tailwind) covers it. By hand:

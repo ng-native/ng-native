@@ -14,9 +14,9 @@ npm run typecheck
 release build or a native module Expo Go does not include needs a development build
 (`npx expo run:ios`).
 
-The app targets iOS and Android, so there is no `npm run web`, whatever `create-expo-app` suggests
-as it finishes. Angular Native components can also render in a browser, set up as
-https://ng-native.com/guide/native-and-web describes.
+The app targets iOS and Android, so `npm run web`, which `create-expo-app` suggests as it finishes,
+only says so and exits. Angular Native components can also render in a browser, set up as
+https://ng-native.com/packages/web#beside-a-native-app describes.
 
 `AGENTS.md` tells a coding agent how this framework differs from the web Angular it knows
 (Claude Code reads it through `CLAUDE.md`). Add your own conventions to it as the app grows.
