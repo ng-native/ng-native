@@ -2979,6 +2979,9 @@ export class Engine implements HostEngine {
     withTextContent(node, viewName, props);
     const cascaded = props['transform'];
     const style = boundTransform(node, flattenStyle(node.props['style'], props), cascaded);
+    if (node.props['style']) {
+      this.styles.overOtherForms(flattenStyle(node.props['style'], {}), style);
+    }
     nativePointerEvents(node, style, resolved);
     // Before an image's own size: `fit-content` is no size, so the image's is what it gets.
     fitContent(node, style);

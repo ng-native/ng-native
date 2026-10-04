@@ -138,6 +138,12 @@ export interface Conditions {
    * (`Engine.remeasureText`), which `watchConditions` does after it.
    */
   readonly fontScale?: number;
+  /**
+   * The direction the app is laid out in, which is the device's unless the app forced one:
+   * `I18nManager.isRTL`. Optional, and left to right when absent. It decides which physical
+   * corner or edge a logical one is, where an element has both and no `direction` of its own.
+   */
+  readonly direction?: 'ltr' | 'rtl';
 }
 
 /** A run of CSS whitespace: spaces, tabs, newlines, carriage returns and form feeds, and no other. */
@@ -947,6 +953,140 @@ function overriddenBy(
     else if (props.length) kept.push({ ...declaration, props });
   }
   return kept.length ? kept : null;
+}
+
+/**
+ * The logical property and the physical one for the same corner or edge, left to right. CSS
+ * settles the two as one property, the later declaration winning. A native view has a prop for
+ * each and takes one whatever their order: React Native the physical corner, Yoga the logical
+ * edge. So a declaration of either takes the other out of the cascade.
+ */
+const SIDES_LTR: readonly (readonly [logical: string, physical: string])[] = [
+  ['borderStartStartRadius', 'borderTopLeftRadius'],
+  ['borderStartEndRadius', 'borderTopRightRadius'],
+  ['borderEndStartRadius', 'borderBottomLeftRadius'],
+  ['borderEndEndRadius', 'borderBottomRightRadius'],
+  ...['margin', 'padding'].flatMap((box) => [
+    [`${box}Start`, `${box}Left`] as const,
+    [`${box}End`, `${box}Right`] as const,
+  ]),
+  ...['Width', 'Color'].flatMap((part) => [
+    [`borderStart${part}`, `borderLeft${part}`] as const,
+    [`borderEnd${part}`, `borderRight${part}`] as const,
+  ]),
+  ['start', 'left'],
+  ['end', 'right'],
+];
+
+const mirrored = (physical: string): string =>
+  physical.includes('Left') || physical === 'left'
+    ? physical.replace('Left', 'Right').replace('left', 'right')
+    : physical.replace('Right', 'Left').replace('right', 'left');
+
+/** Each property's other form, both ways, in a layout of each direction. */
+const twins = (pairs: readonly (readonly [string, string])[]): Readonly<Record<string, string>> =>
+  Object.fromEntries(
+    pairs.flatMap(([logical, physical]) => [
+      [logical, physical],
+      [physical, logical],
+    ]),
+  );
+
+const TWIN: Readonly<Record<'ltr' | 'rtl', Readonly<Record<string, string>>>> = {
+  ltr: twins(SIDES_LTR),
+  rtl: twins(SIDES_LTR.map(([logical, physical]) => [logical, mirrored(physical)] as const)),
+};
+
+/** The properties of a rule that have another form, plain and important, or null for neither. */
+interface Sided {
+  readonly plain: readonly string[];
+  readonly important: readonly string[];
+}
+
+const sidedOf = new WeakMap<StyleRule, Sided | null>();
+
+function sided(rule: StyleRule): Sided | null {
+  let found = sidedOf.get(rule);
+  if (found !== undefined) return found;
+  const twin = TWIN.ltr;
+  const plain = Object.keys(rule.declarations).filter((key) => key in twin);
+  const important = rule.important ? Object.keys(rule.important).filter((key) => key in twin) : [];
+  for (const declaration of rule.deferred ?? []) {
+    for (const prop of declaration.props) {
+      if (prop in twin) (declaration.important ? important : plain).push(prop);
+    }
+  }
+  found = plain.length || important.length ? { plain, important } : null;
+  sidedOf.set(rule, found);
+  return found;
+}
+
+/** Of `keys`, in the order a rule wrote them, each whose other form comes after it. */
+function writtenEarlier(keys: readonly string[], twin: Readonly<Record<string, string>>): string[] {
+  return keys.filter((key, at) => keys.indexOf(twin[key]!) > at);
+}
+
+/** The other form of each of `keys`, as the record `overriddenBy` reads. */
+function twinsOf(
+  keys: readonly string[],
+  twin: Readonly<Record<string, string>>,
+): Record<string, true> {
+  const out: Record<string, true> = {};
+  for (const key of keys) out[twin[key]!] = true;
+  return out;
+}
+
+/**
+ * One cascade's settling of the corners and edges set in both forms: each rule's are taken out of
+ * what the rules before it left, in the form the rule does not use.
+ */
+class OtherForms {
+  /** Worked out for the first rule that sets a corner or an edge, which most elements have none of. */
+  private twin: Readonly<Record<string, string>> | null = null;
+  private overImportant: Record<string, true> | null = null;
+  private readonly direction: () => 'ltr' | 'rtl';
+
+  constructor(direction: () => 'ltr' | 'rtl') {
+    this.direction = direction;
+  }
+
+  /** Before `rule` is applied: the other form of what it sets goes, as the same property would. */
+  before(
+    rule: StyleRule,
+    normal: Record<string, unknown>,
+    important: Record<string, unknown>,
+    deferred: DeferredDeclaration[] | null,
+  ): DeferredDeclaration[] | null {
+    const sides = sided(rule);
+    if (!sides) return deferred;
+    const twin = (this.twin ??= TWIN[this.direction()]);
+    const plain = twinsOf(sides.plain, twin);
+    for (const key in plain) delete normal[key];
+    let kept = deferred && overriddenBy(deferred, plain, false);
+    if (!sides.important.length) return kept;
+    const gone = twinsOf(sides.important, twin);
+    for (const key in gone) delete important[key];
+    kept &&= overriddenBy(kept, gone, true);
+    Object.assign((this.overImportant ??= {}), gone);
+    return kept;
+  }
+
+  /** Once `rule` is applied: where it has both forms, the one it wrote later stands. */
+  within(rule: StyleRule, normal: Record<string, unknown>): void {
+    const sides = this.twin && sided(rule);
+    if (!sides) return;
+    for (const key of writtenEarlier(sides.plain, this.twin!)) delete normal[key];
+  }
+
+  /** An important one stands over the other form wherever that was set, as over its own. */
+  after(
+    normal: Record<string, unknown>,
+    deferred: DeferredDeclaration[] | null,
+  ): DeferredDeclaration[] | null {
+    if (!this.overImportant) return deferred;
+    for (const key in this.overImportant) delete normal[key];
+    return deferred && overriddenBy(deferred, this.overImportant, false);
+  }
 }
 
 /**
@@ -1773,6 +1913,7 @@ export class StyleResolver {
             { declarations: inline ?? EMPTY, ...(bound && { deferred: bound }) } as StyleRule,
           ]
         : matched,
+      parentInherited,
     );
 
     // Tokens are in scope for this node's own declarations as well as its descendants', so they
@@ -1800,16 +1941,22 @@ export class StyleResolver {
   }
 
   /** The declarations of the rules a node matched. The list is sorted, so later simply wins. */
-  private cascade(matched: readonly StyleRule[]): CascadeResult {
+  private cascade(
+    matched: readonly StyleRule[],
+    parentInherited: Record<string, unknown>,
+  ): CascadeResult {
     const normal: Record<string, unknown> = {};
     const important: Record<string, unknown> = {};
     let hasImportant = false;
     let tokens: Record<string, TokenValue> | null = null;
     let importantTokens: Record<string, TokenValue> | null = null;
     let deferred: DeferredDeclaration[] | null = null;
+    const forms = new OtherForms(() => this.directionOf(matched, parentInherited));
 
     for (const rule of this.layered ? byImportance(matched, this.layerPlaces) : matched) {
+      deferred = forms.before(rule, normal, important, deferred);
       Object.assign(normal, rule.declarations);
+      forms.within(rule, normal);
       if (rule.important) {
         Object.assign(important, rule.important);
         hasImportant = true;
@@ -1822,6 +1969,7 @@ export class StyleResolver {
       deferred = carryDeferred(deferred, rule);
     }
     if (importantTokens) Object.assign(tokens!, importantTokens);
+    deferred = forms.after(normal, deferred);
 
     return {
       declarations: hasImportant ? { ...normal, ...important } : normal,
@@ -1829,6 +1977,39 @@ export class StyleResolver {
       tokens,
       deferred,
     };
+  }
+
+  /**
+   * An inline style over the style the cascade settled, both already in `style`: a corner or an
+   * edge the inline style sets takes the other form of it out, as a later rule would.
+   */
+  overOtherForms(inline: Readonly<Record<string, unknown>>, style: Record<string, unknown>): void {
+    let twin: Readonly<Record<string, string>> | null = null;
+    for (const key in inline) {
+      if (!(key in TWIN.ltr)) continue;
+      twin ??= TWIN[(style['direction'] ?? this.conditions.direction) === 'rtl' ? 'rtl' : 'ltr'];
+      const other = twin[key]!;
+      if (!(other in inline)) delete style[other];
+    }
+  }
+
+  /**
+   * The direction an element is laid out in: the last `direction` its own rules give it, the one
+   * it inherits, or the app's. A logical corner is a different physical one in each.
+   */
+  private directionOf(
+    matched: readonly StyleRule[],
+    parentInherited: Record<string, unknown>,
+  ): 'ltr' | 'rtl' {
+    let plain: unknown;
+    let important: unknown;
+    for (const rule of matched) {
+      plain = rule.declarations['direction'] ?? plain;
+      important = rule.important?.['direction'] ?? important;
+    }
+    const direction =
+      important ?? plain ?? parentInherited['direction'] ?? this.conditions.direction;
+    return direction === 'rtl' ? 'rtl' : 'ltr';
   }
 
   /**

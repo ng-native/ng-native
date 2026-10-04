@@ -85,6 +85,7 @@ describe('watchConditions and the text size', () => {
   type Listener = (sizes: { window: object; screen: object }) => void;
   let dimensions: Listener[];
   let appState: ((state: string) => void)[];
+  let rightToLeft = false;
   let fontScale: number;
   let remeasured: number;
   const original = (globalThis as { require?: unknown }).require;
@@ -121,6 +122,11 @@ describe('watchConditions and the text size', () => {
         ),
       },
       PixelRatio: { get: () => 3, getFontScale: () => fontScale },
+      I18nManager: {
+        get isRTL() {
+          return rightToLeft;
+        },
+      },
     };
     // What `reactNative()` reaches for on a device, where the bundle is CommonJS and Fabric is there.
     (globalThis as { require?: unknown }).require = () => native;
@@ -183,6 +189,17 @@ describe('watchConditions and the text size', () => {
   it('starts with the text size in the conditions', () => {
     fontScale = 1.25;
     assert.equal(currentConditions().fontScale, 1.25);
+  });
+
+  it("starts with the app's layout direction in the conditions", () => {
+    // Which physical corner a logical one is, for the cascade to settle the two as one.
+    assert.equal(currentConditions().direction, 'ltr');
+    rightToLeft = true;
+    try {
+      assert.equal(currentConditions().direction, 'rtl');
+    } finally {
+      rightToLeft = false;
+    }
   });
 
   it('re-measures when the app comes back at a different text size', () => {
