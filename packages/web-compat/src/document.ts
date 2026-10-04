@@ -58,12 +58,86 @@ function createBody(engine: Engine): EngineNode {
   return body;
 }
 
+/**
+ * The touch behind each DOM event a library listens for on the document, to hear a press
+ * anywhere: outside an overlay, which is how it knows to close.
+ */
+const DOCUMENT_EVENTS: Readonly<Record<string, string>> = {
+  pointerdown: 'topTouchStart',
+  mousedown: 'topTouchStart',
+  touchstart: 'topTouchStart',
+  pointerup: 'topTouchEnd',
+  mouseup: 'topTouchEnd',
+  touchend: 'topTouchEnd',
+  click: 'topTouchEnd',
+};
+
+type Listener = (event: unknown) => unknown;
+
+/**
+ * Listen for an event anywhere in the app, as a listener on `document`, `body` or `window` does.
+ * A touch bubbles to the engine's root, which is where this listens, and the event names the
+ * node it landed on. Nothing for an event with no touch behind it, a key say.
+ *
+ * ponytail: a drag ends in a `click` too. Tell a tap from a drag if a library closes on a scroll.
+ */
+export function listenAnywhere(
+  engine: Engine,
+  type: string,
+  listener: Listener,
+): (() => void) | undefined {
+  const native = DOCUMENT_EVENTS[type];
+  if (!native) return undefined;
+  // Not for the event it is added during: a listener a press adds on the document, as opening an
+  // overlay does, is added after a browser has passed the document for that press.
+  let live = false;
+  queueMicrotask(() => (live = true));
+  return engine.setEventListener(engine.root, native, (event) => {
+    if (!live) return;
+    const target = (event as { target: EngineNode | null }).target;
+    const path: EngineNode[] = [];
+    for (let node = target; node; node = node.parent) path.push(node);
+    listener({
+      type,
+      target,
+      nativeEvent: (event as { nativeEvent: unknown }).nativeEvent,
+      composedPath: () => path,
+      defaultPrevented: false,
+      preventDefault() {},
+      stopPropagation() {},
+    });
+  });
+}
+
+/** `addEventListener` and `removeEventListener` over `listenAnywhere`, for the document and body. */
+function anywhere(engine: Engine) {
+  const stops = new Map<string, Map<Listener, () => void>>();
+  return {
+    addEventListener(type: string, listener: Listener): void {
+      const byListener = stops.get(type) ?? stops.set(type, new Map()).get(type)!;
+      if (byListener.has(listener)) return;
+      const stop = listenAnywhere(engine, type, listener);
+      if (stop) byListener.set(listener, stop);
+    },
+    removeEventListener(type: string, listener: Listener): void {
+      stops.get(type)?.get(listener)?.();
+      stops.get(type)?.delete(listener);
+    },
+  };
+}
+
 /** The app's document, made the first time it is asked for. */
 export function documentFor(engine: Engine): CompatDocument {
   const existing = documents.get(engine);
   if (existing) return existing;
   const all = () => [...descendants(engine.root)];
+  const listeners = anywhere(engine);
   const body = createBody(engine);
+  // A listener on the body hears the whole page, as one on the document does.
+  Object.defineProperties(body, {
+    addEventListener: { value: listeners.addEventListener },
+    removeEventListener: { value: listeners.removeEventListener },
+  });
   const created: CompatDocument = {
     body,
     // Somewhere for a library's style elements to go: never in the tree, so never drawn.
@@ -82,9 +156,7 @@ export function documentFor(engine: Engine): CompatDocument {
     getElementById: (id: string) => all().find((node) => node.props['nativeID'] === id) ?? null,
     querySelector: (selector: string) => all().find((node) => matches(node, selector)) ?? null,
     querySelectorAll: (selector: string) => all().filter((node) => matches(node, selector)),
-    // Nothing on a device dispatches to the document.
-    addEventListener: () => {},
-    removeEventListener: () => {},
+    ...listeners,
     hasFocus: () => true,
   };
   documents.set(engine, created);

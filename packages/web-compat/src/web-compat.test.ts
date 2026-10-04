@@ -7,6 +7,7 @@ import { afterEach, describe, it } from 'node:test';
 import { Location } from '@angular/common';
 import { Component, DOCUMENT, ElementRef, Renderer2, inject, signal } from '@angular/core';
 import { Text, View } from '@ng-native/components';
+import { Engine } from '@ng-native/fabric';
 import { cleanup, fireEvent, render, screen, settle, userEvent } from '@ng-native/testing';
 import { provideWebCompat } from './index.ts';
 
@@ -188,12 +189,55 @@ describe('@ng-native/web-compat document and window', () => {
     assert.equal(app.instance.document.body.isConnected, false);
   });
 
-  it('listens on the body for the renderer', async () => {
-    const { app } = await mount();
-    const stop = app.instance.renderer.listen('body', 'layout', () => {});
-    assert.equal(app.instance.document.body.listeners.get('topLayout').size, 1);
+  it('does not hand a document listener the press it was added during', async () => {
+    const { app, card } = await mount();
+    const document = app.instance.document;
+    let later = 0;
+    app.instance.renderer.listen(card, 'click', () =>
+      document.addEventListener('click', () => later++),
+    );
+    await userEvent.press(screen.getByTestId('card'));
+    assert.equal(later, 0, 'the press that added it');
+    await userEvent.press(screen.getByTestId('card'));
+    assert.equal(later, 1, 'the next one');
+  });
+
+  it('hears a press anywhere from the document, the body and the renderer, until each is removed', async () => {
+    const { app, card } = await mount();
+    const document = app.instance.document;
+    const heard: [string, unknown][] = [];
+    const onDocument = (event: Dom) => void heard.push(['document', event.target]);
+    const onBody = (event: Dom) => void heard.push(['body', event.composedPath().includes(card)]);
+    document.addEventListener('click', onDocument);
+    document.body.addEventListener('pointerdown', onBody);
+    const stop = app.instance.renderer.listen(
+      'document',
+      'click',
+      () => void heard.push(['renderer', 0]),
+    );
+    const stopBody = app.instance.renderer.listen(
+      document.body,
+      'click',
+      () => void heard.push(['body node', 0]),
+    );
+    // A key has no touch behind it, and nothing to listen with.
+    document.addEventListener('keydown', onDocument);
+
+    await settle();
+    await userEvent.press(screen.getByTestId('card'));
+    assert.deepEqual(heard, [
+      ['body', true],
+      ['document', card],
+      ['renderer', 0],
+      ['body node', 0],
+    ]);
+
+    document.removeEventListener('click', onDocument);
+    document.body.removeEventListener('pointerdown', onBody);
     stop();
-    assert.equal(app.instance.document.body.listeners.get('topLayout').size, 0);
+    stopBody();
+    await userEvent.press(screen.getByTestId('card'));
+    assert.equal(heard.length, 4);
   });
 
   it('measures a node from where native laid it out', async () => {
@@ -212,6 +256,31 @@ describe('@ng-native/web-compat document and window', () => {
     assert.equal(card.offsetWidth, 100);
     assert.equal(card.clientHeight, 40);
     assert.equal(card.scrollHeight, 40);
+  });
+
+  it('has the size of the window, on the window and on the root element', async () => {
+    const app = await render(Card, {
+      providers: [provideWebCompat()],
+      conditions: { width: 390, height: 844, colorScheme: 'light' },
+    });
+    const { width, height } = app.componentRef.injector.get(Engine).viewport;
+    assert.deepEqual([width, height], [390, 844]);
+    assert.equal(globals.innerWidth, width);
+    assert.equal(globals.innerHeight, height);
+    const root = app.instance.document.documentElement;
+    assert.deepEqual(root.getBoundingClientRect(), {
+      x: 0,
+      y: 0,
+      top: 0,
+      left: 0,
+      right: width,
+      bottom: height,
+      width,
+      height,
+    });
+    assert.equal(root.clientWidth, width);
+    cleanup();
+    assert.equal(globals.innerWidth, undefined);
   });
 
   it('reports a layout to a ResizeObserver until it is disconnected', async () => {

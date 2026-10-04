@@ -1,6 +1,6 @@
 import type { Engine, EngineNode } from '@ng-native/fabric';
 import type { RendererExtension } from '@ng-native/platform';
-import { documentOf } from './document.ts';
+import { documentOf, listenAnywhere } from './document.ts';
 import { setLabel } from './label.ts';
 import { created } from './elements.ts';
 import { FIELD_EVENTS, createField, isField, setField } from './field.ts';
@@ -11,8 +11,7 @@ const PRESSABLES = new Set(['pressable', 'touchable-opacity']);
 /**
  * How a listener a web library adds is attached, in an app that asked for this package.
  *
- * - `'body'` is the document's body. `'window'` and `'document'` stay with the renderer, which
- *   attaches them to nothing.
+ * - `'window'`, `'document'` and `'body'` hear a press anywhere in the app.
  * - A `click` is a press: the node takes the touch as a pressable does, and the listener runs when
  *   the finger lifts. Native has no click of its own for a view to hear.
  *
@@ -44,9 +43,11 @@ export const webListen: RendererExtension = {
   listen(target, eventName, callback, engine) {
     const document = documentOf(engine);
     if (!document) return undefined;
-    if (typeof target === 'string') {
-      if (target !== 'body') return undefined;
-      return engine.setEventListener(document.body, topLevel(eventName), callback);
+    // `window`, `document` and `body`: a press anywhere. Any other event is left to the
+    // renderer, which attaches it to nothing.
+    // The body as a node too, which is what a library hands the renderer for the same thing.
+    if (typeof target === 'string' || target === document.body) {
+      return listenAnywhere(engine, eventName, callback);
     }
     const native = isField(target) ? FIELD_EVENTS[eventName] : undefined;
     if (native) {
@@ -119,8 +120,6 @@ function onClick(engine: Engine, node: EngineNode, listener: Listener): () => vo
     stop();
   };
 }
-
-const topLevel = (type: string) => 'top' + type.charAt(0).toUpperCase() + type.slice(1);
 
 /** The event a `click` listener is given. */
 const click = (target: EngineNode, nativeEvent: unknown): object =>

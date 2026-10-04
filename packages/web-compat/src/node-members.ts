@@ -75,9 +75,12 @@ const DEFER_TRIGGERS = new Set(['click', 'keydown', 'mouseenter', 'focusin']);
 
 /** Where native last laid a node out, in the window. Zero for one it has not. */
 function frameOf(node: EngineNode) {
+  const engine = engineOf(node);
+  // The root is the window: native has no view of its own to measure for it.
+  if (node === engine.root) return { x: 0, y: 0, ...engine.viewport };
   let frame = { x: 0, y: 0, width: 0, height: 0 };
   // Fabric answers before `measure` returns, so this reads as a DOM measurement does.
-  engineOf(node).measure(node, (measured) => (frame = measured));
+  engine.measure(node, (measured) => (frame = measured));
   return frame;
 }
 

@@ -14,7 +14,7 @@ import { registerElements } from './elements.ts';
 import { webListen } from './listen.ts';
 import { StillLocation } from './location.ts';
 import { nodeMembers, type CoreNode } from './node-members.ts';
-import { installWindow } from './window.ts';
+import { installWindow, windowOf } from './window.ts';
 
 /** How many apps in the process asked for it: nodes share one prototype, and globals are global. */
 let apps = 0;
@@ -76,7 +76,9 @@ export function provideWebCompat(): EnvironmentProviders {
         const document = documentFor(engine);
         documents.push(document);
         globals.document = document;
+        const leaveWindow = windowOf(engine);
         inject(DestroyRef).onDestroy(() => {
+          leaveWindow();
           // In whatever order the apps go: the newest still up, or what was there before any.
           documents.splice(documents.indexOf(document), 1);
           globals.document = documents.at(-1) ?? original;

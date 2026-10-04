@@ -65,7 +65,36 @@ export function installWindow(): () => void {
   const target = globalThis as Record<string, unknown>;
   const added = Object.keys(GLOBALS).filter((name) => typeof target[name] === 'undefined');
   for (const name of added) target[name] = GLOBALS[name];
+  const sized = Object.keys(SIZES).filter((name) => typeof target[name] === 'undefined');
+  for (const name of sized) {
+    Object.defineProperty(target, name, { configurable: true, get: SIZES[name] });
+  }
   return () => {
     for (const name of added) if (target[name] === GLOBALS[name]) delete target[name];
+    for (const name of sized) delete target[name];
   };
 }
+
+/** The engines of the apps that are up, oldest first: the newest is the one `window` speaks for. */
+const engines: Engine[] = [];
+
+/** An app that asked for the package has started: its window is the one read, until it goes. */
+export function windowOf(engine: Engine): () => void {
+  engines.push(engine);
+  return () => void engines.splice(engines.indexOf(engine), 1);
+}
+
+const viewport = () => engines.at(-1)?.viewport;
+
+/**
+ * The window's size, read each time: a library positions an overlay from it, and the device can
+ * turn. Nothing scrolls the window itself, so its scroll position is always the top.
+ */
+const SIZES: Readonly<Record<string, () => number>> = {
+  innerWidth: () => viewport()?.width ?? 0,
+  innerHeight: () => viewport()?.height ?? 0,
+  scrollX: () => 0,
+  scrollY: () => 0,
+  pageXOffset: () => 0,
+  pageYOffset: () => 0,
+};

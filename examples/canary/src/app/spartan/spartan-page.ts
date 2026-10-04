@@ -9,6 +9,7 @@ import { SpartanChecks } from './spartan-checks.ts';
 import { SpartanDialogs } from './spartan-dialogs.ts';
 import { SpartanFeedback } from './spartan-feedback.ts';
 import { SpartanInputs } from './spartan-inputs.ts';
+import { SpartanOverlays } from './spartan-overlays.ts';
 import { SpartanTabs } from './spartan-tabs.ts';
 
 /**
@@ -28,6 +29,7 @@ import { SpartanTabs } from './spartan-tabs.ts';
     SpartanDialogs,
     SpartanFeedback,
     SpartanInputs,
+    SpartanOverlays,
     SpartanTabs,
   ],
   template: `
@@ -52,6 +54,8 @@ import { SpartanTabs } from './spartan-tabs.ts';
         <app-spartan-dialogs />
         <h2 class="text-lg font-semibold">Alert, progress, separator, skeleton</h2>
         <app-spartan-feedback />
+        <h2 class="text-lg font-semibold">Popover and tooltip</h2>
+        <app-spartan-overlays />
       </div>
     </scroll-view>
   `,

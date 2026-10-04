@@ -9,12 +9,17 @@ import {
 import { projectLinkParent } from './projects/project-links.ts';
 import { provideWebCompat } from '@ng-native/web-compat';
 import { routes } from './app.routes.ts';
+import { cdkInABrowser } from './spartan/cdk-platform.ts';
 import { palette } from './palette.ts';
 
 export const appConfig = {
   providers: [
     // For src/app/spartan: a component library written for the browser, rendered as native views.
     provideWebCompat(),
+    // The CDK positions an overlay against its trigger only where its own `Platform` says it is in
+    // a browser, which it decides from Angular's platform id. With web-compat it has what it
+    // measures with, so it is told that it is.
+    cdkInABrowser,
     // react-native-keyboard-controller is installed: the chat's composer follows the keyboard on
     // the native side, a drag through the transcript included.
     provideKeyboardController(),
