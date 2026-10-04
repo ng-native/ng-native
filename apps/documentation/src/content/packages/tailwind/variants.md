@@ -100,6 +100,12 @@ platforms also match `[data-focus]`, because focus lands on the control itself w
 padding that form the ring usually sit on a wrapper around it, which can only know it is focused
 because the behavior composed onto the control told it.
 
+## `*:` and `**:`
+
+`*:` styles the children of the element it is on, and `**:` everything beneath it, as on the web:
+`*:rounded-full` on a row rounds each item in it. Either takes a variant of its own after it, as in
+`*:data-[slot=icon]:size-4`.
+
 ## `peer-*` and `group-*`
 
 `group-*` variants match an ancestor with the `group` class, and `peer-*` variants match an earlier

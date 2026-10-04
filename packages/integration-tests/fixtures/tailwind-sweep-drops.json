@@ -10902,11 +10902,7 @@
     "invalid:opacity-50",
     "invalid:p-4"
   ],
-  "dropped a rule: ':is()' cannot contain a combinator, only a compound selector, '…', which is an ancestor test, or '…', a sibling test.": [
-    "*:bg-[rgb(1,2,3)]",
-    "*:bg-red-500",
-    "*:opacity-50",
-    "*:p-4",
+  "dropped a rule: ':is()' cannot contain a combinator, only a compound selector, '…', which is an ancestor test, '…', a parent test, or '…', a sibling test.": [
     "peer-midnight:bg-[rgb(1,2,3)]",
     "peer-midnight:bg-red-500",
     "peer-midnight:opacity-50",

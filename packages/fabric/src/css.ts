@@ -47,6 +47,11 @@ export interface Compound {
    * What Tailwind's `group-*` variants compile to.
    */
   readonly ancestors?: readonly Compound[];
+  /**
+   * `:is(<compound> > *)`: every one of these must match the node's parent. What Tailwind's `*:`
+   * variant compiles to.
+   */
+  readonly parents?: readonly Compound[];
   /** Interaction state the engine tracks: `:focus` and `:active`. */
   readonly pseudo?: readonly ('focus' | 'active')[];
   /**
@@ -744,6 +749,13 @@ function matchesCompound(node: StyleTarget, compound: Compound, sheet: StyleShee
   if (compound.has) {
     for (const test of compound.has) {
       if (!hasBeneath(node, test, sheet)) return false;
+    }
+  }
+  if (compound.parents) {
+    const parent = node.parent;
+    if (!parent) return false;
+    for (const above of compound.parents) {
+      if (!matchesCompound(parent, above, sheet)) return false;
     }
   }
   if (compound.ancestors) {

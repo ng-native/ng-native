@@ -16,9 +16,10 @@ parse fails the build.
 Type, class and id selectors. Attribute selectors: `[name]`, `[name="value"]`, `[name^="value"]`,
 `[name$="value"]`, `[name*="value"]`, `[name~="value"]` and `[name|="value"]`. `:is()`, `:where()`
 and `:not()` (each compound argument only - a combinator inside one of these is dropped,
-other than two forms Tailwind writes: `<compound> *`, the ancestor test its `group-*` variants
-compile to, and `<compound> ~ *` or `<compound> + *`, the sibling test its `peer-*` variants
-compile to, which is read as the sibling combinator it means). `:host`
+other than three forms Tailwind writes: `<compound> *`, the ancestor test its `group-*` variants
+compile to, `<compound> > *`, the parent test its `*:` variant compiles to, and `<compound> ~ *` or
+`<compound> + *`, the sibling test its `peer-*` variants compile to, which is read as the sibling
+combinator it means). `:host`
 and `:host(<compound>)`. `:host-context(<compound>)`. `:first-child`, `:last-child`, `:only-child`,
 `:nth-child()` and `:nth-last-child()` (the `of <selector>` form is not supported). `:empty`.
 `:root`. `:disabled` (answered from the element's own `disabled` prop). `:focus` and `:active`,

@@ -1015,6 +1015,7 @@ function compound(parts, context) {
           types += nested.types;
         }
         if (nested.ancestors?.length) (out.ancestors ??= []).push(...nested.ancestors);
+        if (nested.parents?.length) (out.parents ??= []).push(...nested.parents);
         if (part.kind === 'not') (out.not ??= []).push(...nested.compounds);
         else if (nested.compounds.length) (out.is ??= []).push(nested.compounds);
         break;
@@ -1161,11 +1162,26 @@ function tokensToCompoundParts(tokens, context) {
  * @returns the ancestor compound, or null if this is not that shape.
  */
 function ancestorArgument(argument) {
+  return aboveArgument(argument, 'descendant');
+}
+
+/**
+ * `:is(<compound> > *)`: a test of the parent, which is how Tailwind 4 writes its `*:` variant.
+ * The same shape as the ancestor test, one step up and no further.
+ *
+ * @returns the parent compound, or null if this is not that shape.
+ */
+function parentArgument(argument) {
+  return aboveArgument(argument, 'child');
+}
+
+/** `<compound> <combinator> *`, as the compound, or null. */
+function aboveArgument(argument, relation) {
   if (argument.length < 3) return null;
   const last = argument[argument.length - 1];
   const combinator = argument[argument.length - 2];
   if (last?.type !== 'universal') return null;
-  if (combinator?.type !== 'combinator' || combinator.value !== 'descendant') return null;
+  if (combinator?.type !== 'combinator' || combinator.value !== relation) return null;
   const rest = argument.slice(0, -2);
   return rest.some((piece) => piece.type === 'combinator') ? null : rest;
 }
@@ -1195,7 +1211,8 @@ function partAlternatives(part) {
   if (!functional || !part.selectors) return [[part]];
   // An argument can hold alternatives of its own, which are more alternatives of this one.
   const args = part.selectors.flatMap(alternatives);
-  if (args.length < 2 || !args.some(ancestorArgument)) return [[{ ...part, selectors: args }]];
+  const above = (argument) => ancestorArgument(argument) || parentArgument(argument);
+  if (args.length < 2 || !args.some(above)) return [[{ ...part, selectors: args }]];
   return args.map((argument) => [{ ...part, selectors: [argument] }]);
 }
 
@@ -1248,42 +1265,41 @@ function siblingArgument(argument) {
 function functionalPseudo(part, context) {
   if (part.kind !== 'is' && part.kind !== 'where' && part.kind !== 'not') return null;
 
-  const compounds = [];
-  const ancestors = [];
-  let ids = 0;
-  let classes = 0;
-  let types = 0;
+  const found = { compounds: [], ancestors: [], parents: [] };
+  let top = { ids: 0, classes: 0, types: 0 };
 
   for (const argument of part.selectors) {
-    const ancestor = part.kind !== 'not' && ancestorArgument(argument);
-    if (ancestor) {
-      const built = compound(ancestor, context);
-      ancestors.push(built.compound);
-      if (pack(built.ids, built.classes, built.types) > pack(ids, classes, types)) {
-        ids = built.ids;
-        classes = built.classes;
-        types = built.types;
-      }
-      continue;
-    }
-    if (argument.some((piece) => piece.type === 'combinator')) {
-      throw new CssUnsupported(
-        `${context}: ':${part.kind}()' cannot contain a combinator, only a compound selector, ` +
-          `'<compound> *', which is an ancestor test, or '<compound> ~ *', a sibling test.`,
-      );
-    }
-    const built = compound(argument, context);
-    compounds.push(built.compound);
+    const { list, parts } = functionalArgument(part, argument, context);
+    const built = compound(parts, context);
+    found[list].push(built.compound);
     // The single most specific argument wins, taken whole. Not the maximum of each component
     // independently: `:is(.a, #b)` is as specific as `#b`, not as `#b.a`.
-    if (pack(built.ids, built.classes, built.types) > pack(ids, classes, types)) {
-      ids = built.ids;
-      classes = built.classes;
-      types = built.types;
-    }
+    if (weight(built) > weight(top)) top = built;
   }
 
-  return { compounds, ancestors, ids, classes, types };
+  return { ...found, ids: top.ids, classes: top.classes, types: top.types };
+}
+
+const weight = (built) => pack(built.ids, built.classes, built.types);
+
+/**
+ * One argument of `:is()`, `:where()` or `:not()`: the compound it tests, and which of the node,
+ * its parent or an ancestor it tests it against.
+ */
+function functionalArgument(part, argument, context) {
+  const above = part.kind !== 'not';
+  const ancestor = above && ancestorArgument(argument);
+  if (ancestor) return { list: 'ancestors', parts: ancestor };
+  const parent = above && parentArgument(argument);
+  if (parent) return { list: 'parents', parts: parent };
+  if (argument.some((piece) => piece.type === 'combinator')) {
+    throw new CssUnsupported(
+      `${context}: ':${part.kind}()' cannot contain a combinator, only a compound selector, ` +
+        `'<compound> *', which is an ancestor test, '<compound> > *', a parent test, or ` +
+        `'<compound> ~ *', a sibling test.`,
+    );
+  }
+  return { list: 'compounds', parts: argument };
 }
 
 /** Which elements a `:has()` argument is looked for among, by its leading combinator. */
@@ -1334,6 +1350,7 @@ function asksBeneath(compound) {
     ...(compound.not ?? []),
     ...(compound.is ?? []).flat(),
     ...(compound.ancestors ?? []),
+    ...(compound.parents ?? []),
     ...(compound.hostContext ?? []),
   ];
   return nested.some(asksBeneath);
@@ -1346,7 +1363,11 @@ function asksBeneath(compound) {
 function refuseHasAbove(compounds, context) {
   const subject = compounds.at(-1);
   const above = compounds.slice(0, -1).some(asksBeneath);
-  const within = [...(subject?.ancestors ?? []), ...(subject?.hostContext ?? [])].some(asksBeneath);
+  const within = [
+    ...(subject?.ancestors ?? []),
+    ...(subject?.parents ?? []),
+    ...(subject?.hostContext ?? []),
+  ].some(asksBeneath);
   if (above || within) {
     throw new CssUnsupported(
       `${context}: ':has()' is supported on the node the rule styles, not on an ancestor or a ` +
@@ -2515,6 +2536,7 @@ function asksAboutPosition(compound) {
     ...(compound.not ?? []),
     ...(compound.is ?? []).flat(),
     ...(compound.ancestors ?? []),
+    ...(compound.parents ?? []),
     ...(compound.hostContext ?? []),
   ];
   return nested.some(asksAboutPosition);

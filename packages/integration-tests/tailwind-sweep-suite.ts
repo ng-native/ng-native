@@ -128,7 +128,8 @@ function outcomes(
 
 /**
  * The classes some compiled rule does something for. An ancestor's counts too: `**:p-4` styles
- * the descendants of whatever wears it; and so does one inside `:where()`, as `space-x-2` is.
+ * the descendants of whatever wears it, and `*:p-4` its children; and so does one inside
+ * `:where()`, as `space-x-2` is.
  */
 function effectiveClasses(sheet: StyleSheet): Set<string> {
   const effective = new Set<string>();
@@ -144,10 +145,12 @@ function effectiveClasses(sheet: StyleSheet): Set<string> {
   return effective;
 }
 
-/** A compound's classes, its ancestors' and those inside its `:where()`. */
+/** A compound's classes, its ancestors', its parent's and those inside its `:where()`. */
 const classesIn = (compound: StyleSheet['rules'][number]['compounds'][number]): string[] => [
   ...compound.classes,
   ...(compound.ancestors ?? []).flatMap((ancestor) => ancestor.classes),
+  // `*:p-4` styles the children of whatever wears it.
+  ...(compound.parents ?? []).flatMap((parent) => parent.classes),
   ...(compound.is ?? []).flat().flatMap((inner) => inner.classes),
 ];
 
