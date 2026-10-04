@@ -391,6 +391,38 @@ describe('Angular HMR, with an external template and stylesheet', () => {
   });
 });
 
+describe('Angular HMR, on a cold start after a stylesheet edit', () => {
+  const evaluate = (source: string, filename: string, out: string) =>
+    compileSource(source, filename, out, { dev: true });
+  const owner = fixture('hmr-switch-row.ts');
+  const stylesheet = fixture('hmr-switch-row.css');
+  const read = (file: string) => readFileSync(file, 'utf8');
+  const scope = globalThis as Record<string, unknown>;
+
+  beforeEach(() => {
+    delete scope['__angularNativeHmr'];
+    delete scope['__angularNativeHmrPending'];
+  });
+  afterEach(cleanup);
+
+  it('leaves a custom form control one, with the edited sheet applied', async () => {
+    // Metro re-transformed the stylesheet's module on the edit and serves the component's from its
+    // cache, compiled against the sheet as it was. The stylesheet's module runs first and its
+    // update is applied to the component before anything has rendered.
+    const edited = read(stylesheet).replace('rgb(1, 1, 1)', 'rgb(9, 9, 9)');
+    await evaluate(edited, stylesheet, fixture('hmr-switch-row.css.cold.generated.ts'));
+    const mod = await evaluate(read(owner), owner, fixture('hmr-switch-row.cold.generated.ts'));
+
+    const { fabric } = await render(mod['SwitchRowPage'] as Type<unknown>);
+
+    assert.match(fabric.render(), /RawText "Open-ended on"/, 'the control took the field');
+    const flatten = (nodes: FakeFabricNode[]): FakeFabricNode[] =>
+      nodes.flatMap((node) => [node, ...flatten(node.children)]);
+    const colours = flatten(fabric.committed).map((node) => node.props['color']);
+    assert.ok(colours.includes('rgb(9, 9, 9)'), 'in the sheet as edited');
+  });
+});
+
 describe('Angular HMR, with a stylesheet shared through a ../ path', () => {
   // Two screens in sibling directories use `styleUrl: '../lab.css'`. The stylesheet's module only
   // looked beside itself for the components using it, found none, and carried no update: the edit

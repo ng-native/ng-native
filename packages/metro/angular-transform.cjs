@@ -438,6 +438,12 @@ function collisionQuiet(filename, components) {
  * half-built view left in the tree. So they are read off a full compile of the same template and
  * written in after the spread. Anything that cannot be read that way is no swap at all, which the
  * caller turns into a reload.
+ *
+ * The spread also hands `ɵɵdefineComponent` the live definition's `outputs`, which it has already
+ * turned round to read by public name, and turns round again: `checkedChange` became a property
+ * and `checked` its event. So they are written back the way a definition is given them. A
+ * component swapped before it first rendered, as on a cold start after a stylesheet edit, was no
+ * longer a form control (NG01914).
  */
 function hotUpdate(template, component, filename, options) {
   // The compiler builds a `path@ClassName` id and reads the class name back from the first `@`,
@@ -461,7 +467,11 @@ function hotUpdate(template, component, filename, options) {
     name,
     apply: result.hmrModule
       .replace(/export\s+default\s+function\s+\w+/, `function ${name}`)
-      .replace(spread, `${spread} ${layout}`),
+      .replace(
+        spread,
+        `${spread} ${layout} outputs: Object.fromEntries(Object.entries(` +
+          `${component.className}.ɵcmp.outputs).map(function (o) { return [o[1], o[0]]; })),`,
+      ),
   };
 }
 
