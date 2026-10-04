@@ -19,6 +19,13 @@ const PLAIN = [
 /** The platform's text field, which an `<input>` and a `<textarea>` are. */
 const TEXT_FIELD = { ios: 'TextInput', android: 'AndroidTextInput' };
 
+/**
+ * What Android gives a text field that a browser does not: a line under it, and padding above
+ * and below its text, which a field shorter than the two clips its text on. A stylesheet's own
+ * padding replaces these.
+ */
+const FIELD_DEFAULTS = { underlineColorAndroid: 'transparent', paddingTop: 0, paddingBottom: 0 };
+
 /** Register the elements above, and answer what takes them away again. */
 export function registerElements(): () => void {
   const yieldsToComponents = { yieldsToComponents: true };
@@ -27,7 +34,7 @@ export function registerElements(): () => void {
       registerViewName(name, 'View', undefined, yieldsToComponents),
     ),
     ...['input', 'textarea'].map((name) =>
-      registerViewName(name, TEXT_FIELD, undefined, yieldsToComponents),
+      registerViewName(name, TEXT_FIELD, FIELD_DEFAULTS, yieldsToComponents),
     ),
   ];
   return () => undo.forEach((each) => each());

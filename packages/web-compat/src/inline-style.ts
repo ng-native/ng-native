@@ -77,5 +77,27 @@ export function inlineStyle(
   // Hidden and still taking its space, which is an element drawn with no opacity.
   // ponytail: an opacity bound beside it is replaced; keep both apart if a library binds both.
   if (key === 'visibility') return { opacity: value === 'hidden' ? 0 : null };
-  return undefined;
+  return unreadable(key, value);
+}
+
+/** A root em, which is sixteen points wherever the app has not said otherwise. */
+const REM = /^(-?[\d.]+)rem$/;
+/** A length relative to a font or to the window, neither of which a native view measures by. */
+const FOREIGN_LENGTH = /^-?[\d.]+(em|ch|ex|lh|vw|vh|vmin|vmax)$/;
+/** The properties whose `none` is the absence of a value, where a native view reads a list. */
+const NONE = new Set(['boxShadow', 'textShadow', 'filter', 'transform']);
+
+/**
+ * What to set in place of a value a native view cannot read, or nothing for one it can. A view
+ * is not asked to make sense of CSS: Android throws on a string where it reads a number.
+ */
+function unreadable(key: string, value: unknown): Record<string, unknown> | undefined {
+  if (value === 'none' && NONE.has(key)) return { [key]: null };
+  // A line height with no unit is so many times the font size, which is not known here.
+  // ponytail: a small bare number is taken for one; 20 is points, as an app writes it.
+  if (key === 'lineHeight' && Number(value) <= 4) return { [key]: null };
+  if (typeof value !== 'string') return undefined;
+  const rem = REM.exec(value);
+  if (rem) return { [key]: parseFloat(rem[1]!) * 16 };
+  return FOREIGN_LENGTH.test(value) ? { [key]: null } : undefined;
 }

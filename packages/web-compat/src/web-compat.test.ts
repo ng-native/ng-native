@@ -482,6 +482,7 @@ describe('@ng-native/web-compat elements', () => {
     <input testID="radio" type="radio" value="a" />
     <input testID="check" type="checkbox" />
     <input testID="code" [inputMode]="mode()" autocomplete="one-time-code" />
+    <input testID="padded" style="padding-top: 6px" />
   `,
 })
 class Fields {
@@ -565,6 +566,24 @@ class Insets {
   readonly shown = signal(true);
 }
 
+@Component({
+  selector: 'x-units',
+  template: `<div testID="units" [style]="styles"></div>`,
+})
+class Units {
+  readonly styles = {
+    letterSpacing: '-0.5em',
+    lineHeight: 1,
+    boxShadow: 'none',
+    width: '10ch',
+    marginTop: '1.5rem',
+    height: '50%',
+    fontSize: '14px',
+    opacity: 0.5,
+    color: 'transparent',
+  };
+}
+
 describe('@ng-native/web-compat inline styles', () => {
   const thumb = () => screen.getByTestId('thumb').props;
   const none = (key: string) => assert.equal(thumb()[key] ?? null, null, key);
@@ -606,6 +625,20 @@ describe('@ng-native/web-compat inline styles', () => {
     await settle();
     assert.equal(thumb()['opacity'], 0);
     none('visibility');
+  });
+
+  it('sets no value a native view cannot read: a length in a unit it has none of', async () => {
+    // Android throws on a string where it reads a number, which takes the whole screen down.
+    await render(Units, { providers: [provideWebCompat()] });
+    const props = screen.getByTestId('units').props;
+    for (const key of ['letterSpacing', 'lineHeight', 'boxShadow', 'width']) {
+      assert.equal(props[key] ?? null, null, key);
+    }
+    assert.equal(props['marginTop'], 24, 'a rem is sixteen points');
+    assert.equal(props['height'], '50%', 'a percentage is one it reads');
+    assert.equal(props['fontSize'], 14);
+    assert.equal(props['opacity'], 0.5);
+    assert.equal(props['color'], 'transparent');
   });
 
   it('leaves the styles of an app that did not ask for the package as written', async () => {
@@ -829,6 +862,17 @@ describe('@ng-native/web-compat text fields', () => {
     assert.equal(Number(field('name').props['mostRecentEventCount']) > 1, true);
     // `type` leaves the field, which is when a browser reports a change.
     assert.equal(app.instance.changed(), 'Ada!');
+  });
+
+  it('draws a field as a browser does one: no underline, and no padding but what it is given', async () => {
+    // Android draws a line under a text field and pads it, which a short field clips its text on.
+    await fields();
+    assert.equal(field('name').props['underlineColorAndroid'], 'transparent');
+    assert.equal(field('name').props['paddingTop'], 0);
+    assert.equal(field('name').props['paddingBottom'], 0);
+    assert.equal(field('long').props['underlineColorAndroid'], 'transparent');
+    assert.equal(field('padded').props['paddingTop'], 6);
+    assert.equal(field('padded').props['paddingBottom'], 0);
   });
 
   it('reads an input mode as the keyboard, and an autocomplete as what the system offers', async () => {
