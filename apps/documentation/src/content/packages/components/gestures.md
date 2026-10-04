@@ -114,6 +114,34 @@ const swipe = Gesture.Pan()
 
 Without `failOffsetX` the pager waits for a pan that never fails, and does not page at all.
 
+## While a gesture is active
+
+Do not change `z-index` on the view a gesture is attached to, or on one of its ancestors, from the
+gesture's own callbacks. It is the first thing a drag-and-drop reaches for, to lift the dragged
+item above its neighbours:
+
+```ts
+host: { '[style.zIndex]': 'dragging() ? 10 : null' }
+```
+
+With `dragging` set from the pan's first `onUpdate`, the pan ends at once on iOS: the item moves
+one step and is dropped with the finger still down. Nothing is logged, and the settings of the
+gesture are not the cause. A change of `z-index` changes the order React Native keeps a parent's
+children in, and it re-orders them by taking the view out of its parent and putting it back. UIKit
+cancels the gesture recognizers of a view that leaves the hierarchy.
+
+The same goes for anything else that moves the gesture's view in the tree while the gesture runs:
+re-ordering it among its siblings, or moving it to another parent. A sibling arriving or leaving,
+or a text changing on every frame, does not end the gesture.
+
+Lift the item another way. A `transform`, an `opacity` or a shadow set from the gesture, with
+`[animatedStyle]` or `[workletStyle]`, changes how the view is drawn and not where it is in the
+tree: see [Animation](/packages/components/animation). Or give the item its stacking order before
+the drag starts.
+
+Under the test setup the gesture is a stand-in with no recognizer, so a drag driven from a test
+keeps going through a `z-index` change and passes. This one shows on a device.
+
 ## Testing a component with gestures
 
 Under the documented Vitest setup, `ngNative()` resolves `@ng-native/components/gestures` and
