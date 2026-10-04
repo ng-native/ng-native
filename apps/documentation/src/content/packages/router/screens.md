@@ -256,11 +256,11 @@ its edge:
 void this.nav.push('/mixer', { presentation: { fullScreenSwipeEnabled: false } });
 ```
 
-`gestureResponseDistance` narrows the swipe instead of turning it off. Its four values bound where a
-touch may be for the swipe to start, in points from the screen's leading and top edges: `{ end: 40 }`
-starts it only within 40 points of the leading edge, and `{ top: 300 }` only below the first 300
-points, which leaves a slider above that line alone. Earlier versions of iOS start the swipe at the
-edge alone unless `fullScreenSwipeEnabled` is set.
+`gestureResponseDistance` narrows the swipe instead of turning it off. Its four values bound where
+a touch may be for the swipe to start, in points from the screen's leading and top edges:
+`{ end: 40 }` starts it only within 40 points of the leading edge, and `{ top: 300 }` only below
+the first 300 points, which leaves a slider above that line alone. Earlier versions of iOS start
+the swipe at the edge alone unless `fullScreenSwipeEnabled` is set.
 
 ## Whether a screen is in front
 
