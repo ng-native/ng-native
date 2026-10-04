@@ -66,6 +66,36 @@ describe('compiling a CSS system colour', () => {
     assert.throws(() => declarationsOf('color: SelectedItemText'), /system colour/);
   });
 
+  it('reads a deprecated one as the colour CSS says it now is', () => {
+    // CSS Color 4 keeps the old names as other names for the current ones.
+    assert.deepEqual(declarationsOf('background-color: Window; color: WindowText'), {
+      backgroundColor: canvas,
+      color: text,
+    });
+    assert.deepEqual(declarationsOf('background-color: Menu; color: InfoText'), {
+      backgroundColor: canvas,
+      color: text,
+    });
+    assert.deepEqual(declarationsOf('background-color: ThreeDFace'), {
+      backgroundColor: {
+        platformColor: ['secondarySystemBackground', '?android:attr/colorButtonNormal'],
+      },
+    });
+    assert.deepEqual(declarationsOf('color: InactiveCaptionText'), {
+      color: { platformColor: ['secondaryLabel', '?android:attr/textColorSecondary'] },
+    });
+    // `ActiveBorder` is `ButtonBorder`, which has no colour of the platform.
+    assert.throws(() => declarationsOf('border-top-color: ActiveBorder'), /system colour/);
+    assert.throws(() => declarationsOf('box-shadow: 0 0 2px WindowText'), /system colour/);
+  });
+
+  it('leaves every other colour as it was', () => {
+    assert.deepEqual(declarationsOf('color: red; background-color: transparent'), {
+      color: 'rgb(255, 0, 0)',
+      backgroundColor: 'rgba(0, 0, 0, 0)',
+    });
+  });
+
   it('says so inside a shadow, where the platform resolves no colour by name', () => {
     assert.throws(() => declarationsOf('box-shadow: 0 0 2px GrayText'), /system colour/);
   });

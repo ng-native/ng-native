@@ -265,6 +265,37 @@ const UNMAPPED_SYSTEM_COLOURS = new Set([
   ...['selecteditem', 'selecteditemtext'],
 ]);
 
+/** The deprecated system colours, each the current one CSS Color 4 says it now is. */
+const DEPRECATED_SYSTEM_COLOURS = {
+  ...Object.fromEntries(
+    [
+      ...['activecaption', 'appworkspace', 'background', 'inactivecaption', 'infobackground'],
+      ...['menu', 'scrollbar', 'window'],
+    ].map((name) => [name, 'canvas']),
+  ),
+  ...Object.fromEntries(
+    ['captiontext', 'infotext', 'menutext', 'windowtext'].map((name) => [name, 'canvastext']),
+  ),
+  ...Object.fromEntries(
+    ['buttonhighlight', 'buttonshadow', 'threedface'].map((name) => [name, 'buttonface']),
+  ),
+  ...Object.fromEntries(
+    [
+      ...['activeborder', 'inactiveborder', 'threeddarkshadow', 'threedhighlight'],
+      ...['threedlightshadow', 'threedshadow', 'windowframe'],
+    ].map((name) => [name, 'buttonborder']),
+  ),
+  inactivecaptiontext: 'graytext',
+};
+
+/** A system colour's current name, in lower case, or nothing for a string that is not one. */
+function systemColour(value) {
+  if (typeof value !== 'string') return undefined;
+  const word = value.toLowerCase();
+  const current = DEPRECATED_SYSTEM_COLOURS[word] ?? word;
+  return current in SYSTEM_COLOURS || UNMAPPED_SYSTEM_COLOURS.has(current) ? current : undefined;
+}
+
 const refusedSystemColour = (word, context, why) =>
   new CssUnsupported(`${context}: the system colour '${word}' ${why}`);
 
@@ -273,19 +304,19 @@ const refusedSystemColour = (word, context, why) =>
  * name as a `platform-color()` is, and any other is what `color` makes of it.
  */
 function wholeColor(value, context) {
-  const names = typeof value === 'string' ? SYSTEM_COLOURS[value.toLowerCase()] : undefined;
+  const names = SYSTEM_COLOURS[systemColour(value)];
   return names ? { platformColor: [...names] } : color(value, context);
 }
 
 /** A colour, as an `rgba()` string: RN's processColor handles those, and they survive the bundle. */
 function color(value, context) {
-  // A string is a system colour, which the parser leaves as its keyword.
+  // A system colour is a string, which the parser leaves as its keyword.
   if (typeof value === 'string') {
-    const word = value.toLowerCase();
-    if (UNMAPPED_SYSTEM_COLOURS.has(word)) {
+    const system = systemColour(value);
+    if (system && UNMAPPED_SYSTEM_COLOURS.has(system)) {
       throw refusedSystemColour(value, context, 'has no colour of the platform to stand for it.');
     }
-    if (word in SYSTEM_COLOURS) {
+    if (system) {
       // Inside a shadow or a gradient the colour is part of a value native parses itself, where
       // it resolves no colour by name.
       throw refusedSystemColour(
