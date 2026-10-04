@@ -1446,13 +1446,18 @@ function writeOwnProps(
 ): void {
   let aria = false;
   for (const key of Object.keys(own)) {
+    if (attributeOnly?.has(key)) continue;
     if (key.includes('-')) aria ||= key.startsWith('aria-');
-    else if (attributeOnly?.has(key)) continue;
     else if (key !== 'style' && key !== INTRINSIC_SIZE && key !== STYLE_OVERRIDE) {
       props[key] = committedProp(key, own[key]);
     }
   }
-  if (aria) applyAria(own, props);
+  if (!aria) return;
+  // An attribute-only `aria-*` is not mapped to the prop native reads either.
+  const mapped = attributeOnly?.size
+    ? Object.fromEntries(Object.entries(own).filter(([key]) => !attributeOnly.has(key)))
+    : own;
+  applyAria(mapped, props);
 }
 
 /** A prop as it is committed: a boolean view prop held as text is the boolean the text says. */

@@ -423,6 +423,22 @@ class LabelledField {
 }
 
 @Component({
+  selector: 'x-aria-field',
+  imports: [TextInput],
+  template: `<text-input [accessibilityLabel]="label()" />`,
+})
+class AriaField {
+  readonly label = input('', { alias: 'aria-label' });
+}
+
+@Component({
+  selector: 'x-aria-form',
+  imports: [AriaField],
+  template: `<x-aria-field aria-label="Phone" nativeID="phone" />`,
+})
+class AriaForm {}
+
+@Component({
   selector: 'x-badge',
   imports: [Text],
   template: `<text>new</text>`,
@@ -466,6 +482,14 @@ describe('a static attribute that is an input of the host component', () => {
     // By the name the template writes, which is the alias and not the property.
     assert.equal(host.props['placeholder'], undefined);
     assert.match(screen.getByPlaceholderText('you@example.com').viewName, /TextInput/);
+  });
+
+  it('keeps an aria attribute that is an input off the host view too', async () => {
+    // An `aria-label` is mapped to `accessibilityLabel` on the way out, which is a second route
+    // to the same second label.
+    await render(AriaForm);
+    assert.match(screen.getByLabelText('Phone').viewName, /TextInput/);
+    assert.equal(screen.getByTestId('phone').props['accessibilityLabel'], undefined);
   });
 
   it('still matches a selector that reads the attribute on the host', async () => {
