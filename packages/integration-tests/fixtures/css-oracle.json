@@ -1475,6 +1475,54 @@
     }
   },
   {
+    "name": "a mix of an hsl() token, in the stylesheet",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "border-top-color": "color(srgb 0.6 0.7 0.8)"
+    }
+  },
+  {
+    "name": "a mix of an hsl() token, bound on the element",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "border-top-color": "color(srgb 0.6 0.7 0.8)"
+    }
+  },
+  {
+    "name": "a mix of an hwb() token at half opacity, in the stylesheet",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "border-top-color": "color(srgb 0.733333 0.966667 0.733333 / 0.75)"
+    }
+  },
+  {
+    "name": "a mix of an hwb() token at half opacity, bound on the element",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "border-top-color": "color(srgb 0.733333 0.966667 0.733333 / 0.75)"
+    }
+  },
+  {
+    "name": "a relative colour from a legacy hsla() token, in the stylesheet",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "border-top-color": "color(srgb 0 0.5 0.5 / 0.5)"
+    }
+  },
+  {
+    "name": "a relative colour from a legacy hsla() token, bound on the element",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "border-top-color": "color(srgb 0 0.5 0.5 / 0.5)"
+    }
+  },
+  {
     "name": "a quoted colour token is no colour, in the stylesheet",
     "expected": {
       "color": "rgb(0, 0, 0)",

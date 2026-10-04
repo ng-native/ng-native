@@ -67,6 +67,53 @@ export function bezier(points: readonly number[], x: number): number {
 const HEX = /^#([0-9a-f]{3,8})$/i;
 const RGB = /^rgba?\(\s*([\d.]+)[\s,]+([\d.]+)[\s,]+([\d.]+)(?:[\s,/]+([\d.]+))?\s*\)$/i;
 
+/** `hsl()` and `hwb()`, with commas or without: a hue, two percentages, and an alpha if any. */
+const HUED =
+  /^(hsla?|hwb)\(\s*(-?[\d.]+)(deg|grad|rad|turn)?[\s,]+([\d.]+)%[\s,]+([\d.]+)%(?:[\s,/]+([\d.]+)(%)?)?\s*\)$/i;
+/** How many degrees one of each hue unit is. */
+export const HUE_DEGREES: Record<string, number> = {
+  deg: 1,
+  grad: 0.9,
+  rad: 180 / Math.PI,
+  turn: 360,
+};
+
+type Channels = [number, number, number];
+
+/** `hsl()`'s hue in degrees and its saturation and lightness as fractions, as sRGB from 0 to 1. */
+export function hslToSrgb([h, s, l]: Channels): Channels {
+  const hue = Number.isFinite(h) ? ((h % 360) + 360) % 360 : 0;
+  const f = (n: number) => {
+    const k = (n + hue / 30) % 12;
+    return l - s * Math.min(l, 1 - l) * Math.max(-1, Math.min(k - 3, 9 - k, 1));
+  };
+  return [f(0), f(8), f(4)];
+}
+
+/** `hwb()`'s hue in degrees and its whiteness and blackness as fractions, as sRGB from 0 to 1. */
+export function hwbToSrgb([h, w, b]: Channels): Channels {
+  if (w + b >= 1) {
+    const grey = w / (w + b);
+    return [grey, grey, grey];
+  }
+  return hslToSrgb([h, 1, 0.5]).map((c) => c * (1 - w - b) + w) as Channels;
+}
+
+/** A colour written as `hsl()` or `hwb()`, as `[r, g, b, a]`. */
+function parseHued(value: string): [number, number, number, number] | null {
+  const parts = HUED.exec(value);
+  if (!parts) return null;
+  const [, name, hue, unit = 'deg', first, second, alpha, percent] = parts;
+  const convert = name!.toLowerCase() === 'hwb' ? hwbToSrgb : hslToSrgb;
+  const [r, g, b] = convert([
+    Number(hue) * HUE_DEGREES[unit.toLowerCase()]!,
+    Math.min(1, Number(first) / 100),
+    Math.min(1, Number(second) / 100),
+  ]).map((channel) => Math.round(channel * 255));
+  const opacity = alpha === undefined ? 1 : Number(alpha) / (percent ? 100 : 1);
+  return [r!, g!, b!, Math.min(1, opacity)];
+}
+
 /**
  * Every CSS named colour, as the `[r, g, b, a]` the compiler's own `namedColor()` in
  * `packages/metro/css/values.cjs` resolves it to - generated from that table rather than typed
@@ -254,7 +301,7 @@ export function parseColor(value: unknown): [number, number, number, number] | n
   }
 
   const named = NAMED_COLORS[value.toLowerCase()];
-  return named ? [...named] : null;
+  return named ? [...named] : parseHued(value);
 }
 
 /** Whether a word is a CSS colour name, such as `red` or `transparent`. */

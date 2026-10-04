@@ -57,6 +57,7 @@ export type FabricNode = { readonly __fabricNode: unique symbol } | object;
 import type { HostEngine, HostNode, Settling } from './host.ts';
 import { firstFrame, rangeOf, scrollChannels } from './scroll-animation.ts';
 import { FontFaces } from './font-faces.ts';
+import { premultipliedStops } from './premultiplied-stops.ts';
 
 /**
  * The animation a node's style asks for, with a play state from a rule of its own applied. Both
@@ -3756,7 +3757,8 @@ export class Engine implements HostEngine {
    *
    * A stop's colour is a colour like any other, but it is two levels down and nothing else looks
    * there: without this the device is handed the string `rgb(255, 0, 0)` where it wants a number,
-   * and paints nothing.
+   * and paints nothing. The stops are first rewritten so native's interpolation paints what
+   * CSS's premultiplied one does (see `premultipliedStops`).
    */
   private processGradients(value: unknown): unknown {
     if (!Array.isArray(value)) return value;
@@ -3765,7 +3767,7 @@ export class Engine implements HostEngine {
       if (!Array.isArray(gradient?.colorStops)) return entry;
       return {
         ...gradient,
-        colorStops: gradient.colorStops.map((stop) => ({
+        colorStops: premultipliedStops(gradient.colorStops).map((stop) => ({
           ...stop,
           color: this.color(stop.color),
         })),

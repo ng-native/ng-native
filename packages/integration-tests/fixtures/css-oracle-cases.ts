@@ -966,6 +966,33 @@ export const CASES: OracleCase[] = [
   ...DISPLAY_CASES,
   ...WHITESPACE_CASES,
   ...FAMILY_CASES,
+  // A token written as `hsl()` or `hwb()` is a colour a mix or a relative colour can start from.
+  ...tokenCases(
+    'a mix of an hsl() token',
+    'border-top-color',
+    'hsl(210 50% 40%)',
+    '',
+    'border-top-color',
+    {
+      use: 'color-mix(in srgb, var(--t) 50%, white)',
+    },
+  ),
+  ...tokenCases(
+    'a mix of an hwb() token at half opacity',
+    'border-top-color',
+    'hwb(120deg 20% 10% / 0.5)',
+    '',
+    'border-top-color',
+    { use: 'color-mix(in srgb, var(--t) 50%, white)' },
+  ),
+  ...tokenCases(
+    'a relative colour from a legacy hsla() token',
+    'border-top-color',
+    'hsla(0.5turn, 100%, 25%, 0.8)',
+    '',
+    'border-top-color',
+    { use: 'rgb(from var(--t) r g b / 0.5)' },
+  ),
   ...tokenCases('a quoted colour token is no colour', 'color', '"rgb(1, 0, 0)"', 'rgb(2, 0, 0)'),
   ...tokenCases('a quoted colour name is no colour', 'color', '"red"', 'rgb(2, 0, 0)'),
   {

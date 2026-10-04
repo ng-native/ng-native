@@ -414,6 +414,10 @@ describe('running a transition', () => {
     // word itself rather than as the rgb() the CSS compiler would have already turned it into.
     assert.equal(interpolate('red', 'blue', 0.5), 'rgba(128, 0, 128, 1)');
     assert.equal(interpolate('white', 'rgb(0, 0, 0)', 0.5), 'rgba(128, 128, 128, 1)');
+    // `hsl()` and `hwb()` are colours a bound token can hold as written.
+    assert.equal(interpolate('hsl(0 100% 50%)', 'hwb(240 0% 0%)', 0.5), 'rgba(128, 0, 128, 1)');
+    assert.equal(interpolate('hsla(120, 100%, 50%, 0.5)', 'lime', 1), 'rgba(0, 255, 0, 1)');
+    assert.equal(interpolate('hsl(210deg 50% 40% / 50%)', 'red', 0), 'rgba(51, 102, 153, 0.5)');
     assert.equal(interpolate('rebeccapurple', 'rebeccapurple', 0.5), 'rgba(102, 51, 153, 1)');
   });
 

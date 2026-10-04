@@ -11,7 +11,7 @@
  * convert a literal colour at build time, copied here because the engine cannot depend on the
  * build step; the tests hold the two to the same answers.
  */
-import { parseColor } from './transition.ts';
+import { hslToSrgb, hwbToSrgb, parseColor } from './transition.ts';
 
 /** The spaces a mix is worked out in: every one the compiler also folds a literal mix in. */
 export type MixSpace = 'srgb' | 'oklab' | 'oklch' | 'lab' | 'lch' | 'hsl' | 'hwb';
@@ -135,26 +135,9 @@ function srgbToHsl([r, g, b]: Vector): Vector {
   return [h, s, l];
 }
 
-function hslToSrgb([h, s, l]: Vector): Vector {
-  const hue = Number.isFinite(h) ? ((h % 360) + 360) % 360 : 0;
-  const f = (n: number) => {
-    const k = (n + hue / 30) % 12;
-    return l - s * Math.min(l, 1 - l) * Math.max(-1, Math.min(k - 3, 9 - k, 1));
-  };
-  return [f(0), f(8), f(4)];
-}
-
 function srgbToHwb(rgb: Vector): Vector {
   const [h] = srgbToHsl(rgb);
   return [h, Math.min(...rgb), 1 - Math.max(...rgb)];
-}
-
-function hwbToSrgb([h, w, b]: Vector): Vector {
-  if (w + b >= 1) {
-    const grey = w / (w + b);
-    return [grey, grey, grey];
-  }
-  return hslToSrgb([h, 1, 0.5]).map((c) => c * (1 - w - b) + w) as Vector;
 }
 
 /** Where the hue sits in each space's coordinates, if it has one. */

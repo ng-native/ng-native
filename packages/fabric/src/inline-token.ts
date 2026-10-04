@@ -13,7 +13,7 @@
  */
 import { CSS_SPACE, type TokenValue } from './css.ts';
 import { derivedToken } from './inline-derived-token.ts';
-import { isNamedColor } from './transition.ts';
+import { HUE_DEGREES, isNamedColor } from './transition.ts';
 
 const PX = /^(-?\d*\.?\d+)px$/;
 const PERCENT = /^-?\d*\.?\d+%$/;
@@ -24,7 +24,6 @@ const COLOR_FUNCTION = /^(#[\da-f]{3,8}|(rgba?|hsla?|hwb)\(.*\))$/i;
 const WORD = /^-?[a-z][\w-]*$/i;
 /** One colour channel: a number, a percentage, or a hue with its unit. */
 const CHANNEL = /^(-?(?:\d+\.?\d*|\.\d+))(%|deg|grad|rad|turn)?$/;
-const HUE_UNITS: Record<string, number> = { deg: 1, grad: 0.9, rad: 180 / Math.PI, turn: 360 };
 /** `var(--name)` or `var(--name, <fallback>)`, the whole value. */
 const VAR = /^var\([ \t\n\r\f]*(--[\w-]+)[ \t\n\r\f]*(?:,([\s\S]*))?\)$/i;
 /**
@@ -150,7 +149,7 @@ function rgbChannels(values: readonly Channel[]): number[] | undefined {
 
 /** As `hsl()` reads them: a hue, then two percentages, which the space syntax may write bare. */
 function hslOf([hue, ...rest]: readonly Channel[], spaced: boolean): number[] | undefined {
-  const degrees = hue!.n * (hue!.unit === '' ? 1 : (HUE_UNITS[hue!.unit] ?? NaN));
+  const degrees = hue!.n * (hue!.unit === '' ? 1 : (HUE_DEGREES[hue!.unit] ?? NaN));
   const fractions = rest.map((v) =>
     v.unit === '%' || (spaced && v.unit === '') ? clamp(v.n / 100, 0, 1) : NaN,
   );
@@ -204,7 +203,7 @@ export function tokenFromValue(value: unknown): TokenValue | undefined {
   const angle = ANGLE.exec(text);
   if (angle) {
     const [, value, unit] = angle;
-    return { angle: Number(value) * HUE_UNITS[unit!.toLowerCase()]!, number: Number(value) };
+    return { angle: Number(value) * HUE_DEGREES[unit!.toLowerCase()]!, number: Number(value) };
   }
   if (NUMBER.test(text)) return fromNumber(Number(text));
   if (DERIVED.test(text)) return withTokens(text);

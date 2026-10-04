@@ -361,3 +361,244 @@ describe('gradient stops', () => {
     assert.deepEqual(declaration!.gradient['position'], { right: 0, top: '20%' });
   });
 });
+
+/**
+ * CSS interpolates a gradient's stops in premultiplied alpha, so a stop at no opacity adds none of
+ * its own colour: `transparent` to white is white all the way down. iOS interpolates the four
+ * channels as they stand, where halfway from `rgb(0 0 0 / 0)` to white is grey at half opacity.
+ *
+ * Each row is what Chrome 154 painted for the same gradient down a 100px box on a transparent
+ * page, read from a screenshot at the y given. The stops committed here are run through iOS's
+ * arithmetic and have to come to the same pixels.
+ */
+describe('a gradient through a stop at no opacity', () => {
+  type Pixel = [y: number, r: number, g: number, b: number, a: number];
+  const CHROME: Record<string, Pixel[]> = {
+    first: [
+      [10, 255, 255, 255, 27],
+      [40, 255, 255, 255, 103],
+      [90, 255, 255, 255, 231],
+    ],
+    last: [
+      [10, 255, 255, 255, 228],
+      [60, 255, 255, 255, 101],
+      [90, 255, 255, 255, 24],
+    ],
+    red: [
+      [10, 255, 0, 0, 27],
+      [40, 255, 0, 0, 103],
+      [90, 255, 0, 0, 231],
+    ],
+    middle: [
+      [10, 255, 0, 0, 201],
+      [40, 255, 0, 0, 48],
+      [60, 0, 0, 255, 54],
+      [90, 0, 0, 255, 207],
+    ],
+    black: [
+      [10, 255, 0, 0, 201],
+      [40, 255, 0, 0, 48],
+      [60, 0, 0, 0, 54],
+      [90, 0, 0, 0, 207],
+    ],
+    run: [
+      [10, 255, 0, 0, 121],
+      [40, 0, 0, 0, 0],
+      [90, 0, 0, 255, 134],
+    ],
+    placed: [
+      [10, 255, 0, 0, 166],
+      [25, 255, 0, 0, 38],
+      [40, 0, 0, 255, 89],
+      [75, 0, 99, 156, 255],
+    ],
+    zero: [
+      [10, 0, 0, 255, 27],
+      [40, 0, 0, 255, 103],
+      [90, 0, 0, 255, 231],
+    ],
+    token: [
+      [10, 255, 255, 255, 27],
+      [40, 255, 255, 255, 103],
+      [90, 255, 255, 255, 231],
+    ],
+    mix: [
+      [10, 255, 255, 255, 27],
+      [40, 255, 255, 255, 103],
+      [90, 255, 255, 255, 231],
+    ],
+    bound: [
+      [10, 255, 255, 255, 27],
+      [40, 255, 255, 255, 103],
+      [90, 255, 255, 255, 231],
+    ],
+    hsl: [
+      [10, 255, 0, 0, 27],
+      [40, 255, 0, 0, 103],
+      [90, 255, 0, 0, 231],
+    ],
+    // A stop at part opacity adds its colour in proportion, so the colour between two stops
+    // bends towards the more opaque one.
+    veil: [
+      [3, 67, 67, 67, 34],
+      [10, 138, 138, 138, 50],
+      [25, 197, 197, 197, 84],
+      [50, 233, 233, 233, 141],
+      [90, 253, 253, 253, 233],
+    ],
+    through: [
+      [10, 243, 0, 13, 212],
+      [40, 139, 0, 119, 90],
+      [60, 0, 146, 111, 94],
+      [90, 0, 244, 12, 216],
+    ],
+    points: [
+      [10, 0, 0, 0, 26],
+      [25, 125, 125, 125, 47],
+      [50, 233, 233, 233, 142],
+      [90, 255, 255, 255, 255],
+    ],
+    veilToken: [
+      [3, 67, 67, 67, 34],
+      [25, 197, 197, 197, 84],
+      [90, 253, 253, 253, 233],
+    ],
+    even: [
+      [10, 229, 0, 28, 128],
+      [50, 128, 0, 129, 128],
+      [90, 26, 0, 231, 128],
+    ],
+    faint: [
+      [10, 255, 255, 255, 229],
+      [75, 240, 240, 240, 66],
+      [90, 220, 220, 220, 29],
+      [96, 164, 164, 164, 14],
+    ],
+    plateau: [
+      [25, 211, 0, 44, 151],
+      [40, 139, 0, 119, 90],
+      [60, 0, 0, 255, 51],
+      [90, 0, 0, 255, 51],
+    ],
+    fromStart: [
+      [3, 78, 78, 78, 36],
+      [25, 209, 209, 209, 99],
+      [60, 247, 247, 247, 199],
+      [90, 255, 255, 255, 255],
+    ],
+  };
+
+  /** A committed colour's channels, each out of 255: one the compiler wrote, or a bound name. */
+  const rgba = (colour: string): number[] => {
+    const bound = {
+      transparent: [0, 0, 0, 0],
+      white: [255, 255, 255, 255],
+      'hsl(0 100% 50%)': [255, 0, 0, 255],
+    }[colour];
+    if (bound) return bound;
+    const parts = /^rgba?\(([\d.]+), ([\d.]+), ([\d.]+)(?:, ([\d.]+))?\)$/.exec(colour);
+    assert.ok(parts, `a colour, not ${colour}`);
+    return [Number(parts[1]), Number(parts[2]), Number(parts[3]), Number(parts[4] ?? 1) * 255];
+  };
+
+  /**
+   * What iOS paints at `at` percent along the stops it is given: React Native's `getColors` in
+   * `RCTGradientUtils.mm`, which gives a transparent black stop the colour of the stop before it,
+   * then `CAGradientLayer`'s interpolation of each channel on its own.
+   */
+  function painted(stops: Stop[], at: number): number[] {
+    const places = stops.map((stop) =>
+      stop.position == null ? null : parseFloat(`${stop.position}`),
+    );
+    places[0] ??= 0;
+    places[places.length - 1] ??= 100;
+    for (let i = 1; i < places.length; i++) {
+      if (places[i] != null) continue;
+      const next = places.findIndex((place, j) => j > i && place != null);
+      for (let j = i; j < next; j++) {
+        places[j] =
+          places[i - 1]! + ((places[next]! - places[i - 1]!) * (j - i + 1)) / (next - i + 1);
+      }
+    }
+
+    let before: number[] | undefined;
+    const colours = stops.map((stop) => {
+      const colour = rgba(stop.color);
+      if (colour.some((channel) => channel !== 0)) return (before = colour);
+      return before ? [before[0]!, before[1]!, before[2]!, 0] : colour;
+    });
+
+    let i = 0;
+    while (i < places.length - 2 && places[i + 1]! <= at) i++;
+    const span = places[i + 1]! - places[i]!;
+    const t = span ? Math.min(1, Math.max(0, (at - places[i]!) / span)) : 1;
+    return colours[i]!.map((channel, c) => channel + (colours[i + 1]![c]! - channel) * t);
+  }
+
+  /** A pixel's colour weighted by its alpha, which is what reaches the screen. */
+  const premultiplied = ([r, g, b, a]: number[]) =>
+    [r! * a!, g! * a!, b! * a!, a! * 255].map((v) => v / 255);
+
+  for (const [id, pixels] of Object.entries(CHROME)) {
+    it(`paints #${id} as Chrome does`, async () => {
+      const mod = await compileFixture(
+        fileURLToPath(new URL('./fixtures/gradient.ts', import.meta.url)),
+      );
+      const { getByTestId } = await render(mod['FadingGradients'] as Type<unknown>, {
+        globalStyles: compileCss(':root { --surface: white; --veil: rgb(0 0 0 / 0.1) }', 'global'),
+      });
+      const [gradient] = getByTestId(id).props['experimental_backgroundImage'] as Linear[];
+
+      for (const [y, ...chrome] of pixels) {
+        const ours = premultiplied(painted(gradient!.colorStops, y + 0.5));
+        premultiplied(chrome).forEach((channel, c) =>
+          assert.ok(
+            Math.abs(ours[c]! - channel) <= 3,
+            `${y}px down: ${JSON.stringify(gradient!.colorStops)} paints ` +
+              `${ours.map(Math.round)}, and Chrome ${premultiplied(chrome).map(Math.round)}`,
+          ),
+        );
+      }
+    });
+  }
+
+  const stopsOf = async (id: string) => {
+    const mod = await compileFixture(
+      fileURLToPath(new URL('./fixtures/gradient.ts', import.meta.url)),
+    );
+    const { getByTestId } = await render(mod['FadingGradients'] as Type<unknown>);
+    return (getByTestId(id).props['experimental_backgroundImage'] as Linear[])[0]!.colorStops;
+  };
+
+  it('keeps a stop it cannot place as one stop, in the colour before it', async () => {
+    // Halfway between 20 points and 80% depends on the box's size, which only native has.
+    assert.deepEqual(await stopsOf('mixed'), [
+      { color: 'rgb(255, 0, 0)', position: 20 },
+      { color: 'rgba(255, 0, 0, 0)', position: null },
+      { color: 'rgb(0, 0, 255)', position: '80%' },
+    ]);
+    assert.deepEqual(await stopsOf('mixedVeil'), [
+      { color: 'rgba(0, 0, 0, 0.1)', position: 20 },
+      { color: 'rgb(255, 255, 255)', position: '80%' },
+    ]);
+  });
+
+  it('adds no stops to a hard edge, which has no run between its two stops', async () => {
+    assert.deepEqual(await stopsOf('hard'), [
+      { color: 'rgb(255, 0, 0)', position: '50%' },
+      { color: 'rgba(0, 0, 255, 0.5)', position: '50%' },
+    ]);
+  });
+
+  it('adds no stops between two at the same opacity, which native already paints as CSS does', async () => {
+    const mod = await compileFixture(
+      fileURLToPath(new URL('./fixtures/gradient.ts', import.meta.url)),
+    );
+    const { getByTestId } = await render(mod['FadingGradients'] as Type<unknown>);
+    const [gradient] = getByTestId('even').props['experimental_backgroundImage'] as Linear[];
+    assert.deepEqual(gradient!.colorStops, [
+      { color: 'rgba(255, 0, 0, 0.5)', position: null },
+      { color: 'rgba(0, 0, 255, 0.5)', position: null },
+    ]);
+  });
+});
