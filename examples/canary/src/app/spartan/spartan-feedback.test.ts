@@ -37,9 +37,9 @@ test('a destructive alert is in the destructive colour', async () => {
   expect(props('destructive')).toMatchObject({ color: 'rgb(231, 0, 11)' });
 });
 
-// Fails: the description's colour is `*:data-[slot=alert-description]:text-destructive/90`, and
-// Tailwind's `*:` variant compiles to `:is(.alert > *)`, which the engine does not match.
-test.fails('a destructive alert tints its description too', async () => {
+// The description's colour is `*:data-[slot=alert-description]:text-destructive/90`: Tailwind's
+// `*:` variant, which compiles to `:is(.alert > *)`.
+test('a destructive alert tints its description too', async () => {
   await mount();
   expect(props('destructive-description')).toMatchObject({ color: 'rgba(231, 0, 11, 0.9)' });
 });
