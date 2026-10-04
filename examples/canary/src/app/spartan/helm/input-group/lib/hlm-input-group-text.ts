@@ -1,0 +1,11 @@
+import { Directive } from '@angular/core';
+import { classes } from '../../utils';
+
+@Directive({
+  selector: '[hlmInputGroupText],hlm-input-group-text',
+})
+export class HlmInputGroupText {
+  constructor() {
+    classes(() => 'spartan-input-group-text flex items-center [&_ng-icon]:pointer-events-none');
+  }
+}

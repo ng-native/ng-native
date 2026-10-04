@@ -1,0 +1,15 @@
+import { Directive } from '@angular/core';
+import { classes } from '../../utils';
+
+@Directive({
+  selector: '[hlmEmpty],hlm-empty',
+  host: { 'data-slot': 'empty' },
+})
+export class HlmEmpty {
+  constructor() {
+    classes(
+      () =>
+        'spartan-empty flex w-full min-w-0 flex-1 flex-col items-center justify-center text-center text-balance',
+    );
+  }
+}

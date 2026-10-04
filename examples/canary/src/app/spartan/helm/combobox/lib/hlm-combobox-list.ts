@@ -1,0 +1,14 @@
+import { Directive } from '@angular/core';
+import { BrnComboboxList } from '@spartan-ng/brain/combobox';
+import { classes } from '../../utils';
+
+@Directive({
+  selector: '[hlmComboboxList]',
+  hostDirectives: [{ directive: BrnComboboxList, inputs: ['id'] }],
+  host: { 'data-slot': 'combobox-list' },
+})
+export class HlmComboboxList {
+  constructor() {
+    classes(() => 'spartan-combobox-list overflow-y-auto overscroll-contain');
+  }
+}

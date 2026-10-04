@@ -1,0 +1,32 @@
+import { Directive, input } from '@angular/core';
+import { classes } from '../../utils';
+import { cva, type VariantProps } from 'class-variance-authority';
+
+const alertVariants = cva('spartan-alert group/alert relative w-full', {
+  variants: {
+    variant: {
+      default: 'spartan-alert-variant-default',
+      destructive: 'spartan-alert-variant-destructive',
+    },
+  },
+  defaultVariants: {
+    variant: 'default',
+  },
+});
+
+export type AlertVariants = VariantProps<typeof alertVariants>;
+
+@Directive({
+  selector: 'hlm-alert,[hlmAlert]',
+  host: {
+    'data-slot': 'alert',
+    role: 'alert',
+  },
+})
+export class HlmAlert {
+  public readonly variant = input<AlertVariants['variant']>('default');
+
+  constructor() {
+    classes(() => alertVariants({ variant: this.variant() }));
+  }
+}

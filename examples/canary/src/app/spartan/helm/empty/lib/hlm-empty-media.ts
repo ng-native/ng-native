@@ -1,0 +1,35 @@
+import { Directive, input } from '@angular/core';
+import { classes } from '../../utils';
+import { cva, type VariantProps } from 'class-variance-authority';
+
+const emptyMediaVariants = cva(
+  'spartan-empty-media flex shrink-0 items-center justify-center [&_ng-icon]:pointer-events-none [&_ng-icon]:shrink-0',
+  {
+    variants: {
+      variant: {
+        default: 'spartan-empty-media-default',
+        icon: 'spartan-empty-media-icon',
+      },
+    },
+    defaultVariants: {
+      variant: 'default',
+    },
+  },
+);
+
+export type EmptyMediaVariants = VariantProps<typeof emptyMediaVariants>;
+
+@Directive({
+  selector: '[hlmEmptyMedia],hlm-empty-media',
+  host: {
+    'data-slot': 'empty-media',
+    '[attr.data-variant]': 'variant()',
+  },
+})
+export class HlmEmptyMedia {
+  public readonly variant = input<EmptyMediaVariants['variant']>();
+
+  constructor() {
+    classes(() => emptyMediaVariants({ variant: this.variant() }));
+  }
+}

@@ -74,6 +74,11 @@ export class Home {
 
   protected readonly features: Feature[] = [
     {
+      path: '/spartan',
+      title: 'Spartan UI',
+      blurb: 'a web component library on the engine through web-compat, one component at a time',
+    },
+    {
       path: '/feed',
       title: 'Feed',
       blurb: 'self-sizing posts, galleries, paging, refresh, optimistic likes',

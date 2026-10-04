@@ -40,6 +40,7 @@ export {
   Engine,
   SyntheticEvent,
   claimHost,
+  extendNodes,
   keepNativeView,
   declareNativeProps,
   fontsLoading,

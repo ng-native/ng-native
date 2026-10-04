@@ -1,0 +1,21 @@
+import { Directive } from '@angular/core';
+import { BrnCommandGroup } from '@spartan-ng/brain/command';
+import { classes } from '../../utils';
+
+@Directive({
+  selector: '[hlmCommandGroup],hlm-command-group',
+  hostDirectives: [
+    {
+      directive: BrnCommandGroup,
+      inputs: ['id'],
+    },
+  ],
+  host: {
+    'data-slot': 'command-group',
+  },
+})
+export class HlmCommandGroup {
+  constructor() {
+    classes(() => 'spartan-command-group block data-hidden:hidden');
+  }
+}

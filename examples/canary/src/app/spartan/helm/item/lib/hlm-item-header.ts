@@ -1,0 +1,12 @@
+import { Directive } from '@angular/core';
+import { classes } from '../../utils';
+
+@Directive({
+  selector: '[hlmItemHeader],hlm-item-header',
+  host: { 'data-slot': 'item-header' },
+})
+export class HlmItemHeader {
+  constructor() {
+    classes(() => 'spartan-item-header flex basis-full items-center justify-between');
+  }
+}

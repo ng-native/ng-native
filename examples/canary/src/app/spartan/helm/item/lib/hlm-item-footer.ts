@@ -1,0 +1,12 @@
+import { Directive } from '@angular/core';
+import { classes } from '../../utils';
+
+@Directive({
+  selector: '[hlmItemFooter],hlm-item-footer',
+  host: { 'data-slot': 'item-footer' },
+})
+export class HlmItemFooter {
+  constructor() {
+    classes(() => 'spartan-item-footer flex basis-full items-center justify-between');
+  }
+}

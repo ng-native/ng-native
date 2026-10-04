@@ -1,0 +1,21 @@
+import { Directive } from '@angular/core';
+import { BrnCommandList } from '@spartan-ng/brain/command';
+import { classes } from '../../utils';
+
+@Directive({
+  selector: '[hlmCommandList],hlm-command-list',
+  hostDirectives: [
+    {
+      directive: BrnCommandList,
+      inputs: ['id'],
+    },
+  ],
+  host: {
+    'data-slot': 'command-list',
+  },
+})
+export class HlmCommandList {
+  constructor() {
+    classes(() => 'spartan-command-list overflow-x-hidden overflow-y-auto');
+  }
+}

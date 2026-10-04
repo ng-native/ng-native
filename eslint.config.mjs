@@ -26,6 +26,9 @@ export default tseslint.config(
       '**/dist/**',
       '.claude/**',
       'examples/*/.expo/**',
+      // Spartan UI's own components, copied in as its generator writes them: the library under
+      // test in the canary's Spartan page, not this repo's code.
+      'examples/canary/src/app/spartan/helm/**',
       // The published starters. Their files are an app's source, copied verbatim into someone
       // else's project, so this workspace's boundary rules do not apply to them. They are verified
       // by being used: `scripts/verify-publish.mjs` publishes to a local registry, generates an
@@ -89,6 +92,14 @@ export default tseslint.config(
               // the router.
               sourceTag: 'layer:angular',
               onlyDependOnLibsWithTags: ['layer:runtime', 'layer:device'],
+              bannedExternalImports: ['lightningcss', '@oxc-angular/*'],
+            },
+            {
+              // A package that presents the engine to code written for another host. It sits on
+              // the platform as well as the engine, to extend the renderer, and nothing that
+              // ships depends on it.
+              sourceTag: 'layer:compat',
+              onlyDependOnLibsWithTags: ['layer:runtime', 'layer:angular'],
               bannedExternalImports: ['lightningcss', '@oxc-angular/*'],
             },
             {
@@ -168,6 +179,9 @@ export default tseslint.config(
       // fixture files, and the hook registration that makes `node --test` able to compile them,
       // are the same exception for the same reason.
       'packages/web/src/*-app.ts',
+      // `@ng-native/web-compat`'s tests mount real components through the test harness, for the
+      // same reason: its source imports neither.
+      'packages/web-compat/src/*.test.ts',
       'packages/web/register-linker.mjs',
       // The browser test target, for the same reason and one more. Its fixtures are the `*-app.ts`
       // files already excepted above, and its Vite config imports `@oxc-angular/vite` - which

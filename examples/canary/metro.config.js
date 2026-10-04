@@ -8,6 +8,9 @@ const path = require('node:path');
 const config = withTailwind(
   withAngularNative(getDefaultConfig(__dirname), {
     workspaceRoot: path.resolve(__dirname, '../..'),
+    // Spartan UI's primitives and the CDK they sit on, for src/app/spartan: their components'
+    // own stylesheets are compiled as an app's are.
+    libraryStyles: ['@angular/cdk', '@spartan-ng/brain'],
   }),
   { input: './src/tailwind.css' },
 );
