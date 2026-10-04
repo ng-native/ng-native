@@ -2,6 +2,7 @@ import type { Engine, EngineNode } from '@ng-native/fabric';
 import { propOf } from './attribute.ts';
 import { documentOf, ownView } from './document.ts';
 import { setField, valueOf } from './field.ts';
+import { inlineStyle } from './inline-style.ts';
 import { hasCapture, webListen } from './listen.ts';
 import { descendants, matches } from './selector.ts';
 
@@ -44,29 +45,45 @@ function attributeValue(name: string, value: string): unknown {
   return value !== 'false';
 }
 
-/** `element.style`: reads and writes of the node's inline style, by either spelling of a name. */
+/** What was set on `element.style` where the view was given something else, to read back. */
+const written = new WeakMap<EngineNode, Map<string, unknown>>();
+
+/** A bare number or a length in pixels, as the number a view reads. */
+const plain = (value: unknown): unknown =>
+  typeof value === 'string' && /^-?[\d.]+(px)?$/.test(value) ? parseFloat(value) : value;
+
+/**
+ * `element.style`: reads and writes of the node's inline style, by either spelling of a name.
+ * A write is CSS, as a bound style is, and is set as what the view reads; a read of one that
+ * was set as something else answers what was written.
+ */
 function styleOf(node: EngineNode): Record<string, unknown> {
   const engine = engineOf(node);
   const current = () => (node.props['style'] as Record<string, unknown> | undefined) ?? {};
   const write = (key: string, value: unknown) => {
+    const gone = value === '' || value == null;
+    const as = inlineStyle(node, key, gone ? null : value);
+    const kept = written.get(node) ?? written.set(node, new Map()).get(node)!;
+    if (as && !gone) kept.set(key, value);
+    else kept.delete(key);
     const next = { ...current() };
-    if (value === '' || value == null) delete next[key];
-    else
-      next[key] =
-        typeof value === 'string' && /^-?[\d.]+(px)?$/.test(value) ? parseFloat(value) : value;
+    for (const [name, set] of Object.entries(as ?? { [key]: gone ? null : value })) {
+      if (set == null) delete next[name];
+      else next[name] = plain(set);
+    }
     engine.setProp(node, 'style', next);
   };
+  const read = (key: string) => written.get(node)?.get(key) ?? current()[key] ?? '';
   const methods: Record<string, unknown> = {
     setProperty: (name: string, value: unknown) =>
       name.startsWith('--')
         ? engine.setCustomProperty(node, name, value)
         : write(camel(name), value),
     removeProperty: (name: string) => write(camel(name), null),
-    getPropertyValue: (name: string) => String(current()[camel(name)] ?? ''),
+    getPropertyValue: (name: string) => String(read(camel(name))),
   };
   return new Proxy(methods, {
-    get: (target, key) =>
-      key in target ? target[key as string] : (current()[key as string] ?? ''),
+    get: (target, key) => (key in target ? target[key as string] : read(key as string)),
     set: (_, key, value) => (write(String(key), value), true),
   });
 }

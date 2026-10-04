@@ -77,7 +77,32 @@ export function inlineStyle(
   // Hidden and still taking its space, which is an element drawn with no opacity.
   // ponytail: an opacity bound beside it is replaced; keep both apart if a library binds both.
   if (key === 'visibility') return { opacity: value === 'hidden' ? 0 : null };
+  if (key === 'transformOrigin') return { transformOrigin: originOf(value) };
   return unreadable(key, value);
+}
+
+/** Where each word for a side is along its axis. */
+const SIDES_OF_ORIGIN: Readonly<Record<string, string>> = {
+  left: '0%',
+  top: '0%',
+  center: '50%',
+  right: '100%',
+  bottom: '100%',
+};
+
+/**
+ * A `transform-origin` as the `[x, y, z]` a view reads, each a number of points or a percentage.
+ * A view is given the array or nothing: Android throws on the string.
+ */
+function originOf(value: unknown): unknown {
+  if (typeof value !== 'string') return value ?? null;
+  const [first = 'center', second = 'center', depth] = value.trim().split(/\s+/);
+  // The words may come in either order: `top right` is `right top`.
+  const swapped = ['top', 'bottom'].includes(first) || ['left', 'right'].includes(second);
+  const along = (part: string) =>
+    SIDES_OF_ORIGIN[part] ?? (part.endsWith('%') ? part : parseFloat(part) || 0);
+  const [x, y] = swapped ? [second, first] : [first, second];
+  return [along(x), along(y), depth ? parseFloat(depth) || 0 : 0];
 }
 
 /** A root em, which is sixteen points wherever the app has not said otherwise. */

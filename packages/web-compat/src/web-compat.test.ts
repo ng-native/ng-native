@@ -584,6 +584,14 @@ class Units {
   };
 }
 
+@Component({
+  selector: 'x-origin',
+  template: `<div testID="origin" [style.transform-origin]="origin()"></div>`,
+})
+class Origin {
+  readonly origin = signal('left top');
+}
+
 describe('@ng-native/web-compat inline styles', () => {
   const thumb = () => screen.getByTestId('thumb').props;
   const none = (key: string) => assert.equal(thumb()[key] ?? null, null, key);
@@ -639,6 +647,48 @@ describe('@ng-native/web-compat inline styles', () => {
     assert.equal(props['fontSize'], 14);
     assert.equal(props['opacity'], 0.5);
     assert.equal(props['color'], 'transparent');
+  });
+
+  it('sets a transform origin as the point a view reads, from the words CSS has for it', async () => {
+    const app = await render(Origin, { providers: [provideWebCompat()] });
+    const origin = () => screen.getByTestId('origin').props['transformOrigin'];
+    assert.deepEqual(origin(), ['0%', '0%', 0]);
+    for (const [written, read] of [
+      ['right bottom', ['100%', '100%', 0]],
+      ['top right', ['100%', '0%', 0]],
+      ['center', ['50%', '50%', 0]],
+      ['10px 25%', [10, '25%', 0]],
+    ] as const) {
+      app.instance.origin.set(written);
+      await settle();
+      assert.deepEqual(origin(), read, written);
+    }
+  });
+
+  it('reads what a library sets on element.style the same way, and hands it back as written', async () => {
+    // The CDK sets a menu's transform origin this way, and Spartan reads it back for the side.
+    const app = await render(Origin, { providers: [provideWebCompat()] });
+    const node = app.componentRef.location.nativeElement.children[0];
+    const props = () => screen.getByTestId('origin').props;
+    node.style.transformOrigin = 'right bottom';
+    node.style.letterSpacing = '-0.5em';
+    node.style.insetInlineStart = 'calc(50% + 2px)';
+    node.style.setProperty('margin-top', '1rem');
+    await settle();
+    assert.deepEqual(props()['transformOrigin'], ['100%', '100%', 0]);
+    assert.equal(props()['letterSpacing'] ?? null, null);
+    assert.equal(props()['start'], '50%');
+    assert.equal(props()['marginStart'], 2);
+    assert.equal(props()['marginTop'], 16);
+    assert.equal(node.style.transformOrigin, 'right bottom');
+    assert.equal(node.style.getPropertyValue('margin-top'), '1rem');
+    node.style.removeProperty('transform-origin');
+    node.style.insetInlineStart = '';
+    await settle();
+    assert.equal(props()['transformOrigin'] ?? null, null);
+    assert.equal(props()['start'] ?? null, null);
+    assert.equal(props()['marginStart'] ?? null, null);
+    assert.equal(node.style.transformOrigin, '');
   });
 
   it('leaves the styles of an app that did not ask for the package as written', async () => {
