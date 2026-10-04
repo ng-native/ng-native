@@ -188,6 +188,70 @@ describe('HTML elements in a template', () => {
     assert.match(errors.join('\n'), /<spam> is not a known element/);
   });
 
+  describe('a text element that is a flex container aligning its text', () => {
+    // An avatar's initials: `<span class="flex size-full items-center justify-center">AH</span>`.
+    // A browser makes the text a flex item and centres it. A paragraph's text is its content,
+    // which no alignment moves, so the element is a view around a paragraph of the text.
+    const CENTRED = '.c { display: flex; align-items: center; justify-content: center }';
+    const styled = (css: string, tag = 'span', classes = 'c', ...text: string[]) => {
+      const node = engine.createElement(tag, compileCss(css, 'flex'));
+      engine.setClasses(node, classes);
+      for (const run of text.length ? text : ['AH']) {
+        engine.appendChild(node, engine.createText(run));
+      }
+      return node;
+    };
+
+    it('draws as a view around a paragraph of its text, which takes its text styles', () => {
+      const span = styled(`${CENTRED} .c { width: 40px; height: 40px; color: rgb(1, 2, 3) }`);
+      const committed = commit(span);
+      assert.deepEqual(shape(committed), { View: [{ Paragraph: ['"AH"'] }] });
+      assert.equal(committed.props['alignItems'], 'center');
+      assert.equal(committed.props['justifyContent'], 'center');
+      assert.equal(committed.props['width'], 40);
+      assert.equal(committed.children[0]!.props['color'], 'rgb(1, 2, 3)');
+      assert.equal(committed.children[0]!.props['width'], undefined, 'and not its box');
+      assert.deepEqual(errors, []);
+    });
+
+    it('stays a paragraph where it aligns nothing, or is not a flex container', () => {
+      assert.deepEqual(shape(commit(styled('.c { display: flex }'))), { Paragraph: ['"AH"'] });
+      engine = new Engine((fabric = createFakeFabric()), 1);
+      assert.deepEqual(shape(commit(styled('.c { align-items: center }'))), {
+        Paragraph: ['"AH"'],
+      });
+    });
+
+    it('leaves a <text> a paragraph, whose own it is to lay out', () => {
+      assert.deepEqual(shape(commit(styled(CENTRED, 'text'))), { Paragraph: ['"AH"'] });
+    });
+
+    it('leaves one that holds more than a run of text as it was', () => {
+      const span = styled(CENTRED, 'span', 'c', 'A', 'H');
+      assert.deepEqual(shape(commit(span)), { Paragraph: ['"A"', '"H"'] });
+    });
+
+    it('follows the class that aligns it coming and going', () => {
+      const span = styled(CENTRED, 'span', '');
+      commit(span);
+      assert.deepEqual(shape(fabric.committed[0]!), { Paragraph: ['"AH"'] });
+      engine.addClass(span, 'c');
+      engine.commit();
+      assert.deepEqual(shape(fabric.committed[0]!), { View: [{ Paragraph: ['"AH"'] }] });
+      engine.removeClass(span, 'c');
+      engine.commit();
+      assert.deepEqual(shape(fabric.committed[0]!), { Paragraph: ['"AH"'] });
+    });
+
+    it('follows an alignment set inline', () => {
+      const span = styled('.c { display: flex }');
+      commit(span);
+      engine.setProp(span, 'style', { justifyContent: 'center' });
+      engine.commit();
+      assert.deepEqual(shape(fabric.committed[0]!), { View: [{ Paragraph: ['"AH"'] }] });
+    });
+  });
+
   describe('with no styles of their own', () => {
     const props = (tag: string) => commit(el(tag, 'x')).props;
 

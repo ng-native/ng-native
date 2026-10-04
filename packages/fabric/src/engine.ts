@@ -1241,6 +1241,8 @@ export interface ViewNameNode {
   readonly nativeView?: boolean;
   /** What it holds, which decides whether one of HTML's text elements is text or a view. */
   readonly children?: readonly ViewNameNode[];
+  /** Set on the paragraph the engine makes for a run of text written straight into a view. */
+  readonly anonymous?: boolean;
 }
 
 /**
@@ -1261,6 +1263,34 @@ function holdsOnlyText(node: ViewNameNode): boolean {
   }
   return true;
 }
+
+const ALIGNS = new Set(['center', 'flex-end', 'space-around', 'space-evenly']);
+
+/**
+ * Whether one of HTML's text elements is a flex container that aligns the one run of text it
+ * holds, as an avatar's initials are centred: `<span class="flex items-center justify-center">`.
+ *
+ * A browser makes the run a flex item and places it. A paragraph's text is its content, which no
+ * alignment moves, so such an element commits as a view, and its text as the paragraph any view's
+ * loose text is. Read from the node's own style on each reconcile, which a change to it brings
+ * about, so nothing is kept to go stale. A `<text>` is a paragraph whatever its style, and an
+ * element holding more than the one run is left as it was.
+ */
+function aligningText(node: EngineNode): boolean {
+  if (node.kind !== 'element' || node.name === 'text' || !TEXT_ELEMENTS.has(node.name)) {
+    return false;
+  }
+  if (node.children.length !== 1 || node.children[0]!.kind !== 'text') return false;
+  if (isTextElement(node.parent) || ownLayout(node, 'display') !== 'flex') return false;
+  return (
+    ALIGNS.has(ownLayout(node, 'alignItems') as string) ||
+    ALIGNS.has(ownLayout(node, 'justifyContent') as string)
+  );
+}
+
+/** The view a node is committed as: `viewNameOf`, but for a text element that aligns its text. */
+const committedViewName = (node: EngineNode): string =>
+  aligningText(node) ? DEFAULT_VIEW : viewNameOf(node);
 
 /**
  * The native view a node commits as: `Paragraph` for a `<text>`, `VirtualText` for one nested in
@@ -1285,7 +1315,9 @@ export function viewNameOf(node: ViewNameNode): string {
   if (node.name !== 'text' && TEXT_ELEMENTS.has(node.name) && !holdsOnlyText(node)) {
     return DEFAULT_VIEW;
   }
-  return isTextElement(node.parent) ? VIRTUAL_TEXT : PARAGRAPH;
+  // The paragraph the engine makes for a view's loose text is under a view, whatever the name
+  // of the element that view is.
+  return !node.anonymous && isTextElement(node.parent) ? VIRTUAL_TEXT : PARAGRAPH;
 }
 
 /**
@@ -3671,7 +3703,7 @@ export class Engine implements HostEngine {
     node.styleCommitted = style;
     this.refitChildren(node);
 
-    const viewName = viewNameOf(node);
+    const viewName = committedViewName(node);
     this.forgetRenamed(node, viewName);
     const childHandles = this.reconcileChildren(node, viewName, style);
     noteTouches(node, style);
