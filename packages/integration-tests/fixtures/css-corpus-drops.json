@@ -1,7 +1,7 @@
 {
   "bootstrap": {
     "rules": 2520,
-    "dropped": 698,
+    "dropped": 700,
     "emitted": [
       "$animation",
       "$animationDelay",
@@ -101,6 +101,9 @@
       "zIndex"
     ],
     "drops": {
+      "(alternative)": {
+        "':is()' cannot contain a combinator, only a compound selector, '<compound> *', which is an ancestor test, '<compound> > *', a parent test, or '<compound> ~ *', a sibling test.": 2
+      },
       "(rule)": {
         "':-moz-focusring' is not supported. Nothing on native answers it; bind a class or an attribute from the state it stands for, and select on that.": 1,
         "':autofill' is not supported. Nothing on native answers it; bind a class or an attribute from the state it stands for, and select on that.": 1,
@@ -352,7 +355,7 @@
   },
   "bulma": {
     "rules": 3018,
-    "dropped": 1856,
+    "dropped": 1860,
     "emitted": [
       "$animation",
       "$animationDelay",
@@ -451,6 +454,9 @@
       "zIndex"
     ],
     "drops": {
+      "(alternative)": {
+        "':placeholder-shown' is not supported. Nothing on native answers it; bind a class or an attribute from the state it stands for, and select on that.": 4
+      },
       "(rule)": {
         "':-moz-placeholder-shown' is not supported. Nothing on native answers it; bind a class or an attribute from the state it stands for, and select on that.": 10,
         "':-ms-placeholder-shown' is not supported. Nothing on native answers it; bind a class or an attribute from the state it stands for, and select on that.": 10,
@@ -694,8 +700,8 @@
     }
   },
   "pico": {
-    "rules": 441,
-    "dropped": 313,
+    "rules": 462,
+    "dropped": 316,
     "emitted": [
       "$animation",
       "$animationDelay",
@@ -786,27 +792,30 @@
       "zIndex"
     ],
     "drops": {
+      "(alternative)": {
+        "':hover' is not supported. Native has no hover or focus cascade: use ':active' or ':focus', which the engine tracks, or a bound attribute such as [attr.data-hover].": 24
+      },
       "(rule)": {
         "':-moz-focusring' is not supported. Nothing on native answers it; bind a class or an attribute from the state it stands for, and select on that.": 1,
         "':-moz-ui-invalid' is not supported. Nothing on native answers it; bind a class or an attribute from the state it stands for, and select on that.": 1,
         "':checked' has no state on native to read: whether a control is checked is an input of its component, not a prop a selector can see. Bind an attribute from the same signal, such as [attr.data-checked], and select on that.": 3,
         "':first-of-type' is not supported yet. It counts the siblings of one element type, which the matcher does not track; ':nth-child()' it does.": 1,
         "':focus-visible' is not supported. Native has no hover or focus cascade: use ':active' or ':focus', which the engine tracks, or a bound attribute such as [attr.data-hover].": 4,
-        "':hover' is not supported. Native has no hover or focus cascade: use ':active' or ':focus', which the engine tracks, or a bound attribute such as [attr.data-hover].": 5,
+        "':hover' is not supported. Native has no hover or focus cascade: use ':active' or ':focus', which the engine tracks, or a bound attribute such as [attr.data-hover].": 2,
         "':indeterminate' has no state on native to read: whether a control is checked is an input of its component, not a prop a selector can see. Bind an attribute from the same signal, such as [attr.data-checked], and select on that.": 5,
         "':last-of-type' is not supported yet. It counts the siblings of one element type, which the matcher does not track; ':nth-child()' it does.": 1,
         "':where()' cannot contain a combinator, only a compound selector, '<compound> *', which is an ancestor test, '<compound> > *', a parent test, or '<compound> ~ *', a sibling test.": 1,
         "'@moz-document' is not supported. Media queries, keyframes, font faces and cascade layers are the only at-rules with a runtime meaning here.": 1,
         "'@supports' is not supported. Media queries, keyframes, font faces and cascade layers are the only at-rules with a runtime meaning here.": 1,
         "'hover' is not a media feature a device can answer (width, height, orientation, prefers-color-scheme and prefers-reduced-motion are)": 1,
-        "pseudo-elements like ::before are never supported. They would mean synthesising nodes no template declares, which puts the style engine in the business of creating view hierarchy.": 59
+        "pseudo-elements like ::before are never supported. They would mean synthesising nodes no template declares, which puts the style engine in the business of creating view hierarchy.": 60
       },
       "(selector)": {
         "':checked' has no state on native to read: whether a control is checked is an input of its component, not a prop a selector can see. Bind an attribute from the same signal, such as [attr.data-checked], and select on that.": 39,
         "':first-of-type' is not supported yet. It counts the siblings of one element type, which the matcher does not track; ':nth-child()' it does.": 4,
         "':focus-visible' is not supported. Native has no hover or focus cascade: use ':active' or ':focus', which the engine tracks, or a bound attribute such as [attr.data-hover].": 3,
         "':focus-within' is not supported. Native has no hover or focus cascade: use ':active' or ':focus', which the engine tracks, or a bound attribute such as [attr.data-hover].": 1,
-        "':hover' is not supported. Native has no hover or focus cascade: use ':active' or ':focus', which the engine tracks, or a bound attribute such as [attr.data-hover].": 22,
+        "':hover' is not supported. Native has no hover or focus cascade: use ':active' or ':focus', which the engine tracks, or a bound attribute such as [attr.data-hover].": 3,
         "':invalid' is not supported. Nothing on native answers it; bind a class or an attribute from the state it stands for, and select on that.": 1,
         "':last-of-type' is not supported yet. It counts the siblings of one element type, which the matcher does not track; ':nth-child()' it does.": 4,
         "pseudo-elements like ::before are never supported. They would mean synthesising nodes no template declares, which puts the style engine in the business of creating view hierarchy.": 31
@@ -973,7 +982,7 @@
     }
   },
   "open-props": {
-    "rules": 70,
+    "rules": 72,
     "dropped": 203,
     "emitted": [
       "aspectRatio",
@@ -986,6 +995,7 @@
       "borderLeftWidth",
       "borderRightColor",
       "borderRightWidth",
+      "borderStartWidth",
       "borderStyle",
       "borderTopColor",
       "borderTopLeftRadius",
@@ -1013,6 +1023,7 @@
       "maxWidth",
       "minHeight",
       "minWidth",
+      "numberOfLines",
       "paddingBottom",
       "paddingEnd",
       "paddingLeft",
@@ -1026,12 +1037,15 @@
       "width"
     ],
     "drops": {
+      "(alternative)": {
+        "':where()' cannot contain a combinator, only a compound selector, '<compound> *', which is an ancestor test, '<compound> > *', a parent test, or '<compound> ~ *', a sibling test.": 2
+      },
       "(rule)": {
         "':first-of-type' is not supported yet. It counts the siblings of one element type, which the matcher does not track; ':nth-child()' it does.": 1,
         "':focus-visible' is not supported. Native has no hover or focus cascade: use ':active' or ':focus', which the engine tracks, or a bound attribute such as [attr.data-hover].": 4,
         "':hover' is not supported. Native has no hover or focus cascade: use ':active' or ':focus', which the engine tracks, or a bound attribute such as [attr.data-hover].": 1,
         "':visited' is not supported. Nothing on native answers it; bind a class or an attribute from the state it stands for, and select on that.": 2,
-        "':where()' cannot contain a combinator, only a compound selector, '<compound> *', which is an ancestor test, '<compound> > *', a parent test, or '<compound> ~ *', a sibling test.": 11,
+        "':where()' cannot contain a combinator, only a compound selector, '<compound> *', which is an ancestor test, '<compound> > *', a parent test, or '<compound> ~ *', a sibling test.": 9,
         "'@supports' is not supported. Media queries, keyframes, font faces and cascade layers are the only at-rules with a runtime meaning here.": 2,
         "'dynamic-range' is not a media feature a device can answer (width, height, orientation, prefers-color-scheme and prefers-reduced-motion are)": 1,
         "a @keyframes inside @media is not supported. Keyframes are global here, so there is nothing for the condition to attach to; write it at the top level.": 2,

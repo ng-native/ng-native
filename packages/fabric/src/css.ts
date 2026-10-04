@@ -125,7 +125,9 @@ export type MediaCondition =
       readonly value: number;
     }
   | {
-      readonly feature: 'orientation' | 'prefers-color-scheme' | 'prefers-reduced-motion';
+      /** `direction` is not a media feature: it is what `:dir()` asks, of the app as a whole. */
+      readonly feature:
+        'orientation' | 'prefers-color-scheme' | 'prefers-reduced-motion' | 'direction';
       readonly value: string;
     };
 
@@ -2074,8 +2076,11 @@ export class StyleResolver {
   }
 
   /** What the device answers for a feature that is a keyword rather than a measurement. */
-  private preference(feature: 'orientation' | 'prefers-color-scheme' | 'prefers-reduced-motion') {
-    const { width, height, colorScheme, reducedMotion } = this.conditions;
+  private preference(
+    feature: 'orientation' | 'prefers-color-scheme' | 'prefers-reduced-motion' | 'direction',
+  ) {
+    const { width, height, colorScheme, reducedMotion, direction } = this.conditions;
+    if (feature === 'direction') return direction ?? 'ltr';
     if (feature === 'orientation') return width > height ? 'landscape' : 'portrait';
     if (feature === 'prefers-color-scheme') return colorScheme;
     return reducedMotion ? 'reduce' : 'no-preference';

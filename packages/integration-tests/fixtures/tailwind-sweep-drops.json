@@ -10908,16 +10908,6 @@
     "peer-midnight:opacity-50",
     "peer-midnight:p-4"
   ],
-  "dropped a rule: ':lang' is not supported. Nothing on native answers it; bind a class or an attribute from the state it stands for, and select on that.": [
-    "ltr:bg-[rgb(1,2,3)]",
-    "ltr:bg-red-500",
-    "ltr:opacity-50",
-    "ltr:p-4",
-    "rtl:bg-[rgb(1,2,3)]",
-    "rtl:bg-red-500",
-    "rtl:opacity-50",
-    "rtl:p-4"
-  ],
   "dropped a rule: ':last-of-type' is not supported yet. It counts the siblings of one element type, which the matcher does not track; '…' it does.": [
     "last-of-type:bg-[rgb(1,2,3)]",
     "last-of-type:bg-red-500",
@@ -10947,12 +10937,6 @@
     "placeholder-shown:bg-red-500",
     "placeholder-shown:opacity-50",
     "placeholder-shown:p-4"
-  ],
-  "dropped a rule: ':popover-open' is not supported. Nothing on native answers it; bind a class or an attribute from the state it stands for, and select on that.": [
-    "open:bg-[rgb(1,2,3)]",
-    "open:bg-red-500",
-    "open:opacity-50",
-    "open:p-4"
   ],
   "dropped a rule: ':read-only' is not supported. Nothing on native answers it; bind a class or an attribute from the state it stands for, and select on that.": [
     "read-only:bg-[rgb(1,2,3)]",
@@ -11135,5 +11119,11 @@
     "selection:bg-red-500",
     "selection:opacity-50",
     "selection:p-4"
+  ],
+  "dropped an alternative of ':is()': '…' is not supported. Nothing on native answers it; bind a class or an attribute from the state it stands for, and select on that.": [
+    "open:bg-[rgb(1,2,3)]",
+    "open:bg-red-500",
+    "open:opacity-50",
+    "open:p-4"
   ]
 }

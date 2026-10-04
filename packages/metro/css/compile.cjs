@@ -2171,7 +2171,10 @@ function compileCss(source, context = 'styles', options = {}) {
     styleVariant(schemeSide(rule, 'light'), (parts) => first + selectors.indexOf(parts), context);
     const before = rules.length;
     styleVariant(darkSide(rule), () => order - 0.5, context);
-    for (let i = before; i < rules.length; i++) rules[i].condition = DARK;
+    for (let i = before; i < rules.length; i++) {
+      const own = rules[i].condition;
+      rules[i].condition = own ? { all: [DARK, own] } : DARK;
+    }
   }
 
   /** A style rule's selectors and declarations as rules, each at the place `orderOf` gives it. */
@@ -2185,7 +2188,8 @@ function compileCss(source, context = 'styles', options = {}) {
 
   function groupedSelectors(rule, context) {
     const groups = new Map();
-    for (const written of rule.value.selectors) {
+    for (const variant of rule.value.selectors.flatMap(byDirection)) {
+      const { written, source, direction, bump } = variant;
       const placeholder = isPlaceholder(written.at(-1));
       const parts = forgiving(placeholder ? written.slice(0, -1) : written, context);
       // One selector the engine cannot match is dropped on its own, not with the list it is in:
@@ -2199,13 +2203,13 @@ function compileCss(source, context = 'styles', options = {}) {
       const platforms = rulePlatforms([written], targets);
       const key = `${platforms.join()}${placeholder ? ' placeholder' : ''}`;
       if (!groups.has(key)) groups.set(key, { platforms, placeholder, selectors: [] });
-      groups.get(key).selectors.push({ written, parts, compiled });
+      groups.get(key).selectors.push({ source, parts, compiled, direction, bump });
     }
     return groups.values();
   }
 
   function pushRules(selectors, built, placeholder, orderOf, context) {
-    for (const { written, parts, compiled } of selectors) {
+    for (const { source, parts, compiled, direction, bump } of selectors) {
       // One rule per alternative an ancestor test is among; each as specific as the selector
       // written, which is what `:is()` makes all of them.
       for (const one of alternatives(parts)) {
@@ -2213,9 +2217,10 @@ function compileCss(source, context = 'styles', options = {}) {
         if (!alternative) continue;
         rules.push({
           ...alternative,
-          specificity: compiled.specificity + (placeholder ? 1 : 0),
-          order: orderOf(written),
+          specificity: compiled.specificity + (placeholder ? 1 : 0) + (bump ? pack(0, 1, 0) : 0),
+          order: orderOf(source),
           ...built,
+          ...(direction ? { condition: { feature: 'direction', value: direction } } : {}),
           ...(layer === layers ? {} : { layer }),
         });
       }
@@ -2680,6 +2685,60 @@ function sideOrder() {
       order.some((prop) => PHYSICAL_SIDES.has(prop)),
   };
 }
+
+const isDir = (part) => part?.type === 'pseudo-class' && part.kind === 'dir';
+const isList = (part) =>
+  part?.type === 'pseudo-class' && (part.kind === 'is' || part.kind === 'where') && part.selectors;
+
+/**
+ * A selector as the selectors it is with `:dir()` taken out of it, each with the direction it
+ * then holds in. The direction is the app's, the same for every element, so it is a condition on
+ * the rule as a media query is, and no part of what the matcher tests.
+ *
+ * Two shapes are read: `:dir(rtl)` on a compound, and `:dir(rtl)` as one whole alternative of an
+ * `:is()` or `:where()`, which is how Tailwind writes `rtl:` beside `[dir="rtl"]` for an element
+ * that says its own. Anywhere else it is refused with the rest of what the engine cannot match.
+ *
+ * `bump` is the pseudo-class's own weight, which a `:dir()` on the compound has and one inside
+ * `:where()` does not.
+ */
+/** Each variant with the selector it came from, whose place among the rules it keeps. */
+const byDirection = (written) =>
+  directionVariants(written).map((variant) => ({ ...variant, source: written }));
+
+function directionVariants(written) {
+  const at = written.findIndex(isDir);
+  if (at !== -1) {
+    const rest = [...written.slice(0, at), ...written.slice(at + 1)];
+    return [{ written: rest, direction: written[at].direction, bump: true }];
+  }
+  const list = written.findIndex((part) => isList(part) && part.selectors.some(aloneDir));
+  if (list === -1) return [{ written }];
+  const part = written[list];
+  const without = [...written.slice(0, list), ...written.slice(list + 1)];
+  const others = part.selectors.filter((argument) => !aloneDir(argument));
+  return [
+    ...part.selectors.filter(aloneDir).map(([dir]) => ({
+      written: without,
+      direction: dir.direction,
+      bump: part.kind === 'is',
+    })),
+    ...(others.length
+      ? [
+          {
+            written: [
+              ...written.slice(0, list),
+              { ...part, selectors: others },
+              ...without.slice(list),
+            ],
+          },
+        ]
+      : []),
+  ];
+}
+
+/** Whether an alternative of a list is `:dir()` and nothing else. */
+const aloneDir = (argument) => argument.length === 1 && isDir(argument[0]);
 
 /** The combinators a node's own position can answer, which is all four of the real ones. */
 const COMBINATORS = new Set(['descendant', 'child', 'next-sibling', 'later-sibling']);

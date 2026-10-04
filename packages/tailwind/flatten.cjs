@@ -490,7 +490,9 @@ function fold(css) {
       Features.MediaIntervalSyntax |
       Features.OklabColors |
       Features.LabColors |
-      Features.ColorFunction,
+      Features.ColorFunction |
+      // `:dir()` is answered from the app's layout direction; lowered, it is a list of languages.
+      Features.DirSelector,
   }).code.toString();
   // Lowering can reintroduce feature detection around what it just lowered.
   return rewriteAtRule(foldSimpleCalc(out), '@supports', true);

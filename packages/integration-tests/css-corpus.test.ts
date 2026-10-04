@@ -105,7 +105,8 @@ const DECLARATION = /^[^']*?: dropped (?:part of )?'([^']+)': ([\s\S]*)$/;
  * `<context>:<line>: dropped a rule: <reason>`, the form a whole rule is reported in, or `dropped
  * a selector` for one selector out of a list whose others were kept.
  */
-const RULE = /^[^']*?: dropped a (rule|selector): ([\s\S]*)$/;
+const RULE =
+  /^[^']*?: dropped an? (rule|selector|alternative)(?: of ':(?:is|where)\(\)')?: ([\s\S]*)$/;
 
 /**
  * A reason with the parts that say where rather than why taken out, so the same refusal on two
@@ -120,8 +121,9 @@ function reasonOf(message: string, library: string): string {
 }
 
 /**
- * Every drop, as `{ property: { reason: count } }`. A whole rule files under `(rule)`, and one
- * selector out of a list under `(selector)`.
+ * Every drop, as `{ property: { reason: count } }`. A whole rule files under `(rule)`, one
+ * selector out of a list under `(selector)`, and one alternative out of an `:is()` or a
+ * `:where()` under `(alternative)`.
  */
 function groupDrops(messages: string[], library: string) {
   const groups: Record<string, Record<string, number>> = {};
