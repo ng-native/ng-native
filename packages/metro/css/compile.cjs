@@ -2187,7 +2187,7 @@ function compileCss(source, context = 'styles', options = {}) {
     const groups = new Map();
     for (const written of rule.value.selectors) {
       const placeholder = isPlaceholder(written.at(-1));
-      const parts = placeholder ? written.slice(0, -1) : written;
+      const parts = forgiving(placeholder ? written.slice(0, -1) : written, context);
       // One selector the engine cannot match is dropped on its own, not with the list it is in:
       // lightningcss merges neighbouring rules with the same declarations, so a list is often
       // several unrelated utilities that happen to share a colour.
@@ -2250,6 +2250,42 @@ function compileCss(source, context = 'styles', options = {}) {
       const message = `${context}: a placeholder takes only a colour on native, not '${name}'`;
       if (!onUnsupported) throw new CssUnsupported(message);
       onUnsupported(reported(context, `dropped '${name}'`, message));
+    }
+  }
+
+  /**
+   * A selector with the alternatives the engine cannot match taken out of its `:is()` and
+   * `:where()` lists, each reported. CSS reads those lists forgivingly: an alternative a browser
+   * does not know is left out and the rest still match, which is how Tailwind writes one selector
+   * in the spellings different browsers know. A list with nothing left is kept as written, for
+   * the selector to be dropped with what it says. With nothing to report to, nothing is forgiven:
+   * the build that asked to hear of every drop fails as before.
+   */
+  function forgiving(parts, context) {
+    if (!onUnsupported) return parts;
+    return parts.map((part) => {
+      const list = part.type === 'pseudo-class' && (part.kind === 'is' || part.kind === 'where');
+      if (!list || !part.selectors || part.selectors.length < 2) return part;
+      const kept = part.selectors.filter((argument) => matchable(part, argument, context));
+      return kept.length && kept.length < part.selectors.length
+        ? { ...part, selectors: kept }
+        : part;
+    });
+  }
+
+  /** Whether one alternative of a list compiles, saying so where it does not. */
+  function matchable(part, argument, context) {
+    try {
+      for (const one of alternatives(argument)) {
+        functionalPseudo({ ...part, selectors: [one] }, context);
+      }
+      return true;
+    } catch (error) {
+      if (!(error instanceof CssUnsupported)) throw error;
+      onUnsupported(
+        reported(context, `dropped an alternative of ':${part.kind}()'`, error.message),
+      );
+      return false;
     }
   }
 

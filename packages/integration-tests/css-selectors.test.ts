@@ -192,6 +192,53 @@ describe('alternatives inside :is() and :where(), some of them ancestor tests', 
   });
 });
 
+describe('an alternative inside :is() or :where() the engine cannot match', () => {
+  // CSS reads these lists forgivingly: an alternative a browser does not know is left out, and
+  // the rest of the list still matches. Tailwind's `ltr:` is `:where(:dir(ltr), [dir="ltr"],
+  // [dir="ltr"] *)`, one selector in three spellings for the browsers that know each.
+  const compiled = (css: string) => {
+    const dropped: string[] = [];
+    const sheet = compileCss(css, 'app.css', { onUnsupported: (m: string) => dropped.push(m) });
+    return { rules: sheet.rules as StyleRule[], dropped };
+  };
+  const anyHits = (rules: StyleRule[], target: StyleTarget) =>
+    rules.some((rule) => matches(target, rule));
+
+  it('is left out, and the others still match', () => {
+    const { rules, dropped } = compiled('.b:is(.x, :target) { color: red }');
+    assert.equal(anyHits(rules, node('view', {}, ['b', 'x'])), true);
+    assert.equal(anyHits(rules, node('view', {}, ['b'])), false);
+    assert.equal(dropped.length, 1);
+    assert.match(dropped[0]!, /dropped an alternative of ':is\(\)'.*':target'/);
+  });
+
+  it('is left out of a list with an ancestor test in it too', () => {
+    const css = '.a:where(:target, [dir="ltr"], [dir="ltr"] *) { color: red }';
+    const { rules, dropped } = compiled(css);
+    assert.equal(anyHits(rules, node('view', { dir: 'ltr' }, ['a'])), true);
+    const inside = node('view', {}, ['a'], node('view', { dir: 'ltr' }));
+    assert.equal(anyHits(rules, inside), true);
+    assert.equal(anyHits(rules, node('view', {}, ['a'])), false);
+    assert.equal(dropped.length, 1);
+  });
+
+  it('drops the rule where no alternative is left, as before', () => {
+    const { rules, dropped } = compiled('.b:is(:target, :visited) { color: red }');
+    assert.deepEqual(rules, []);
+    assert.match(dropped.join('\n'), /dropped a rule/);
+  });
+
+  it('is not forgiven outside a list: the selector is dropped whole', () => {
+    const { rules, dropped } = compiled('.b:target { color: red }');
+    assert.deepEqual(rules, []);
+    assert.match(dropped[0]!, /dropped a rule/);
+  });
+
+  it('still throws with nothing to report to, so a build that must not drop anything fails', () => {
+    assert.throws(() => compileCss('.b:is(.x, :target) { color: red }'), /':target'/);
+  });
+});
+
 describe('html, the document element', () => {
   // Open Props defines every one of its tokens under `:where(html)`, and on native no element is
   // called `html`: the rule compiled, matched nothing, and said nothing. The document element is
