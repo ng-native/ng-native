@@ -9,7 +9,7 @@ import { Component, RendererFactory2, signal } from '@angular/core';
 import { Text, View } from '@ng-native/components';
 import { Engine, extendNodes, registerViewName, type EngineNode } from '@ng-native/fabric';
 import { extendRenderer } from '@ng-native/platform';
-import { cleanup, createFakeFabric, fireEvent, render, screen } from '@ng-native/testing';
+import { cleanup, createFakeFabric, fireEvent, render, screen, settle } from '@ng-native/testing';
 
 afterEach(cleanup);
 
@@ -205,6 +205,41 @@ test('an extension takes the attributes and properties it answers for', async ()
   } finally {
     undo();
   }
+});
+
+@Component({
+  selector: 'x-styled',
+  imports: [View],
+  template: `<view testID="box" [style.inset-inline]="inset()" [style.opacity]="0.5"></view>`,
+})
+class Styled {
+  readonly inset = signal<string | null>('4px 8px');
+}
+
+test('an extension answers the declarations a bound style is set as', async () => {
+  const undo = extendRenderer({
+    style(_node, name, value) {
+      if (name !== 'inset-inline') return undefined;
+      const [start, end] = value == null ? [null, null] : String(value).split(' ');
+      return { start, end };
+    },
+  });
+  try {
+    const app = await render(Styled);
+    const box = () => screen.getByTestId('box').props;
+    assert.equal(box()['start'], 4, 'set as the renderer sets any declaration');
+    assert.equal(box()['end'], 8);
+    assert.equal(box()['insetInline'], undefined, 'and not as written');
+    assert.equal(box()['opacity'], 0.5, 'one it does not answer for is left to the renderer');
+    app.instance.inset.set(null);
+    await settle();
+    assert.equal(box()['start'] ?? null, null, 'and removed through it too');
+    assert.equal(box()['end'] ?? null, null);
+  } finally {
+    undo();
+  }
+  await render(Styled);
+  assert.equal(screen.getByTestId('box').props['insetInline'], '4px 8px', 'as written without it');
 });
 
 test('two extensions of one member are taken away in either order', async () => {

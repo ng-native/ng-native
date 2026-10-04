@@ -292,6 +292,7 @@ describe('@ng-native/web-compat document and window', () => {
     assert.equal(seen.length, 1);
     assert.equal(seen[0].target, card);
     assert.deepEqual(seen[0].contentRect, { width: 30, height: 12 });
+    assert.deepEqual(seen[0].borderBoxSize, [{ inlineSize: 30, blockSize: 12 }]);
     observer.disconnect();
     await fireEvent.layout(screen.getByTestId('card'), { width: 31, height: 12 });
     assert.equal(seen.length, 1);
@@ -488,6 +489,136 @@ describe('@ng-native/web-compat hidden', () => {
     app.instance.label.set(null);
     await settle();
     assert.equal(screen.queryByText('Banana'), null);
+  });
+});
+
+@Component({
+  selector: 'x-insets',
+  template: `
+    <div
+      testID="thumb"
+      [style.inset-inline-start]="start()"
+      [style.inset-block]="block()"
+      [style.visibility]="shown() ? null : 'hidden'"
+      [style.opacity]="0.5"
+      style="inset-inline-end: 12px"
+    ></div>
+  `,
+})
+class Insets {
+  readonly start = signal<string | null>('calc(30% + 4.5px)');
+  readonly block = signal<string | null>('0px 70%');
+  readonly shown = signal(true);
+}
+
+describe('@ng-native/web-compat inline styles', () => {
+  const thumb = () => screen.getByTestId('thumb').props;
+  const none = (key: string) => assert.equal(thumb()[key] ?? null, null, key);
+
+  it('sets a logical inset as the side the view reads, and a shorthand as both', async () => {
+    await render(Insets, { providers: [provideWebCompat()] });
+    assert.equal(thumb()['top'], 0);
+    assert.equal(thumb()['bottom'], '70%');
+    assert.equal(thumb()['end'], 12, 'from a style attribute too');
+    for (const key of ['insetInlineStart', 'insetBlock', 'insetInlineEnd']) none(key);
+  });
+
+  it('sets a percentage and a length as an inset and a margin, and takes both away', async () => {
+    const app = await render(Insets, { providers: [provideWebCompat()] });
+    assert.equal(thumb()['start'], '30%');
+    assert.equal(thumb()['marginStart'], 4.5);
+    app.instance.start.set('calc(50% - 2px)');
+    await settle();
+    assert.equal(thumb()['start'], '50%');
+    assert.equal(thumb()['marginStart'], -2);
+    // A library's arithmetic, written out: a negative length added.
+    app.instance.start.set('calc(70% + -3.25px)');
+    await settle();
+    assert.equal(thumb()['start'], '70%');
+    assert.equal(thumb()['marginStart'], -3.25);
+    app.instance.start.set('40%');
+    await settle();
+    assert.equal(thumb()['start'], '40%');
+    none('marginStart');
+    app.instance.start.set(null);
+    app.instance.block.set(null);
+    await settle();
+    for (const key of ['start', 'top', 'bottom']) none(key);
+  });
+
+  it('hides an element that keeps its space, and shows it again', async () => {
+    const app = await render(Insets, { providers: [provideWebCompat()] });
+    app.instance.shown.set(false);
+    await settle();
+    assert.equal(thumb()['opacity'], 0);
+    none('visibility');
+  });
+
+  it('leaves the styles of an app that did not ask for the package as written', async () => {
+    await render(Insets);
+    assert.equal(thumb()['insetInlineStart'], 'calc(30% + 4.5px)');
+    none('start');
+  });
+});
+
+@Component({
+  selector: 'x-drag',
+  template: `
+    <div
+      testID="track"
+      (pointerdown)="see($event)"
+      (pointermove)="see($event)"
+      (pointerup)="see($event)"
+      (pointercancel)="see($event)"
+      (click)="seen.push('click')"
+    >
+      <div testID="range"></div>
+    </div>
+  `,
+})
+class Drag {
+  readonly seen: string[] = [];
+  readonly targets: unknown[] = [];
+  see(event: PointerEvent): void {
+    const target = event.target as unknown as Element & { props: Record<string, unknown> };
+    this.targets.push(target.props['testID']);
+    target.setPointerCapture(event.pointerId);
+    const captured = target.hasPointerCapture(event.pointerId) ? 'captured' : 'free';
+    this.seen.push(`${event.type} ${event.clientX},${event.clientY} ${captured}`);
+  }
+}
+
+describe('@ng-native/web-compat pointer events', () => {
+  const finger = (pageX: number, pageY: number, down = true) => {
+    const point = { identifier: 0, pageX, pageY, locationX: 0, locationY: 0 };
+    return { ...point, touches: down ? [point] : [], changedTouches: [point] };
+  };
+
+  it('delivers a touch as pointer events at the finger, captured until it lifts', async () => {
+    const app = await render(Drag, { providers: [provideWebCompat()] });
+    const track = screen.getByTestId('track');
+    await fireEvent(track, 'touchStart', finger(10, 5));
+    await fireEvent(track, 'touchMove', finger(60, 5));
+    await fireEvent(track, 'touchMove', finger(90, 8));
+    const node = app.componentRef.location.nativeElement.children[0];
+    assert.equal(node.hasPointerCapture(0), true);
+    await fireEvent(track, 'touchEnd', finger(90, 8, false));
+    assert.deepEqual(app.instance.seen, [
+      'pointerdown 10,5 captured',
+      'pointermove 60,5 captured',
+      'pointermove 90,8 captured',
+      'pointerup 90,8 captured',
+      'click',
+    ]);
+    assert.equal(node.hasPointerCapture(0), false, 'and let go once it has');
+  });
+
+  it('names the element the touch landed on as the target', async () => {
+    const app = await render(Drag, { providers: [provideWebCompat()] });
+    await fireEvent(screen.getByTestId('range'), 'touchStart', finger(1, 1));
+    await fireEvent(screen.getByTestId('range'), 'touchEnd', finger(1, 1, false));
+    assert.deepEqual(app.instance.targets, ['range', 'range']);
+    assert.equal(app.instance.seen[0], 'pointerdown 1,1 captured');
   });
 });
 

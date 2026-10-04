@@ -12,6 +12,9 @@ import { SpartanFeedback } from './spartan-feedback.ts';
 import { SpartanInputs } from './spartan-inputs.ts';
 import { SpartanMenus } from './spartan-menus.ts';
 import { SpartanOverlays } from './spartan-overlays.ts';
+import { SpartanToggleGroups } from './spartan-toggle-groups.ts';
+import { SpartanSheets } from './spartan-sheets.ts';
+import { SpartanSliders } from './spartan-sliders.ts';
 import { SpartanSelects } from './spartan-selects.ts';
 import { SpartanTabs } from './spartan-tabs.ts';
 
@@ -36,6 +39,9 @@ import { SpartanTabs } from './spartan-tabs.ts';
     SpartanMenus,
     SpartanOverlays,
     SpartanSelects,
+    SpartanSheets,
+    SpartanSliders,
+    SpartanToggleGroups,
     SpartanTabs,
   ],
   template: `
@@ -66,6 +72,12 @@ import { SpartanTabs } from './spartan-tabs.ts';
         <app-spartan-selects />
         <h2 class="text-lg font-semibold">Dropdown menu</h2>
         <app-spartan-menus />
+        <h2 class="text-lg font-semibold">Slider</h2>
+        <app-spartan-sliders />
+        <h2 class="text-lg font-semibold">Toggle group and collapsible</h2>
+        <app-spartan-toggle-groups />
+        <h2 class="text-lg font-semibold">Sheet</h2>
+        <app-spartan-sheets />
         <h2 class="text-lg font-semibold">Toggle, radio group, textarea, avatar</h2>
         <app-spartan-controls />
       </div>

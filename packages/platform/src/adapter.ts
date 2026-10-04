@@ -222,7 +222,12 @@ class NativeRenderer implements Renderer2 {
       this.engine.setCustomProperty(el, customPropertyName(style), value);
       return;
     }
-    const key = styleKey(style);
+    if (this.restyled(el, style, value)) return;
+    this.setDeclaration(el, styleKey(style), value);
+  }
+
+  /** Set one declaration of an element's inline style, by the key the view reads. */
+  private setDeclaration(el: EngineNode, key: string, value: unknown): void {
     // A `var()` is for the cascade to settle, with the tokens in scope, not a value of the style.
     if (this.engine.setBoundStyle(el, key, value)) return this.dropStyle(el, key);
     const next = declaredValue(key, value);
@@ -243,9 +248,30 @@ class NativeRenderer implements Renderer2 {
       this.engine.setCustomProperty(el, customPropertyName(style), null);
       return;
     }
-    const key = styleKey(style);
+    if (this.restyled(el, style, null)) return;
+    this.dropDeclaration(el, styleKey(style));
+  }
+
+  private dropDeclaration(el: EngineNode, key: string): void {
     this.engine.setBoundStyle(el, key, null);
     this.dropStyle(el, key);
+  }
+
+  /**
+   * Ask the extensions what a declaration is set as: the first to answer has each of its
+   * declarations set, or removed for a `null`, in place of the one written.
+   */
+  private restyled(el: EngineNode, style: string, value: unknown): boolean {
+    for (const extension of extensions) {
+      const declarations = extension.style?.(el, style, value, this.engine);
+      if (!declarations) continue;
+      for (const [key, next] of Object.entries(declarations)) {
+        if (next == null) this.dropDeclaration(el, key);
+        else this.setDeclaration(el, key, next);
+      }
+      return true;
+    }
+    return false;
   }
 
   /** Takes `key` out of an element's inline style, if it is there. */
@@ -308,6 +334,17 @@ export interface RendererExtension {
    * set as the props the element's view reads, as an `<input>`'s `value` is a text field's text.
    */
   set?(node: EngineNode, name: string, value: unknown, engine: Engine): boolean;
+  /**
+   * Take a bound style over, `null` for one being removed: answer the declarations it is set as,
+   * by the keys the view reads, each `null` to remove it. As CSS's `inset-inline: 4px 8px` is a
+   * `start` and an `end`.
+   */
+  style?(
+    node: EngineNode,
+    name: string,
+    value: unknown,
+    engine: Engine,
+  ): Record<string, unknown> | undefined;
 }
 
 const extensions: RendererExtension[] = [];
@@ -325,6 +362,7 @@ export function extendRenderer(extension: RendererExtension): () => void {
     listen: (...args) => extension.listen?.(...args),
     created: (...args) => extension.created?.(...args),
     set: (...args) => extension.set?.(...args) ?? false,
+    style: (...args) => extension.style?.(...args),
   };
   extensions.push(entry);
   return () => {

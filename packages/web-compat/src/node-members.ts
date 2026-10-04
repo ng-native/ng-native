@@ -2,6 +2,7 @@ import type { Engine, EngineNode } from '@ng-native/fabric';
 import { propOf } from './attribute.ts';
 import { documentOf, ownView } from './document.ts';
 import { setField, valueOf } from './field.ts';
+import { hasCapture } from './listen.ts';
 import { descendants, matches } from './selector.ts';
 
 /** A node as a library holds one: an engine node with the members below on it. */
@@ -278,6 +279,14 @@ export const nodeMembers = (core: CoreNode): PropertyDescriptorMap => ({
     const prop = (key: string | symbol) =>
       `data-${String(key).replace(/[A-Z]/g, (c) => '-' + c.toLowerCase())}`;
     return new Proxy({}, { get: (_, key) => props[prop(key)] });
+  }),
+
+  // A touch stays with the node that took it until it ends, so there is no capture to set or to
+  // let go: a node has it for as long as the touch is on it.
+  setPointerCapture: method(function () {}),
+  releasePointerCapture: method(function () {}),
+  hasPointerCapture: method(function () {
+    return hasCapture(this);
   }),
 
   getBoundingClientRect: method(function () {

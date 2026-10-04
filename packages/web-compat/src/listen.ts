@@ -1,6 +1,7 @@
 import type { Engine, EngineNode } from '@ng-native/fabric';
 import type { RendererExtension } from '@ng-native/platform';
 import { documentOf, listenAnywhere } from './document.ts';
+import { inlineStyle } from './inline-style.ts';
 import { setLabel } from './label.ts';
 import { created } from './elements.ts';
 import { FIELD_EVENTS, createField, isField, setField } from './field.ts';
@@ -35,7 +36,7 @@ export const webListen: RendererExtension = {
     // of its display, which is what a browser's own sheet and every reset make of it.
     if (name === 'hidden' && documentOf(engine)) {
       const hidden = value != null && value !== false && value !== 'false';
-      engine.setProp(node, 'style', { ...inlineStyle(node), display: hidden ? 'none' : undefined });
+      engine.setProp(node, 'style', { ...ownStyle(node), display: hidden ? 'none' : undefined });
       return true;
     }
     // An HTML `id` is the view's `nativeID`, which is where a selector and a lookup read it.
@@ -44,6 +45,9 @@ export const webListen: RendererExtension = {
       return true;
     }
     return setField(node, name, value, engine) || setLabel(node, name, value, engine);
+  },
+  style(node, name, value, engine) {
+    return documentOf(engine) ? inlineStyle(node, name, value) : undefined;
   },
   listen(target, eventName, callback, engine) {
     const document = documentOf(engine);
@@ -60,13 +64,14 @@ export const webListen: RendererExtension = {
         callback(dom(eventName, target, event)),
       );
     }
+    if (POINTER_EVENTS.has(eventName)) return onTouch(engine, target, eventName, callback);
     if (eventName !== 'click' || PRESSABLES.has(target.name)) return undefined;
-    return onClick(engine, target, callback);
+    return onTouch(engine, target, 'click', callback);
   },
 };
 
 /** A node's inline style, to add to. */
-const inlineStyle = (node: EngineNode) =>
+const ownStyle = (node: EngineNode) =>
   (node.props['style'] as Record<string, unknown> | undefined) ?? {};
 
 type Listener = (event: unknown) => boolean | void;
@@ -77,27 +82,64 @@ function disabled(node: EngineNode): boolean {
   return value != null && value !== false && value !== 'false';
 }
 
-/** Each node's click listeners, with what stops its responder: a node has one responder. */
-const clicks = new WeakMap<EngineNode, { listeners: Set<Listener>; stop: () => void }>();
+/** A node's listeners by event type, with what stops its responder: a node has one responder. */
+interface Touched {
+  readonly listeners: Map<string, Set<Listener>>;
+  readonly stop: () => void;
+}
 
-/** The node's click listeners, behind a responder it gets the first time it is asked for. */
-function clicksOf(
-  engine: Engine,
-  node: EngineNode,
-): { listeners: Set<Listener>; stop: () => void } {
-  let entry = clicks.get(node);
+const touched = new WeakMap<EngineNode, Touched>();
+
+/** The events a touch is delivered as, beside the `click` its release is. */
+const POINTER_EVENTS = new Set(['pointerdown', 'pointermove', 'pointerup', 'pointercancel']);
+
+/**
+ * The nodes a touch is on: the one that took it and the one it landed on. A touch goes to the node
+ * that took it until it ends, which is what a pointer capture asks a browser for.
+ */
+const capturing = new WeakSet<EngineNode>();
+
+/** Whether a touch is on the node, and so every move of it comes to the node's listeners. */
+export const hasCapture = (node: EngineNode): boolean => capturing.has(node);
+
+/** The node's listeners, behind a responder it gets the first time it is asked for. */
+function touchedOf(engine: Engine, node: EngineNode): Touched {
+  let entry = touched.get(node);
   if (!entry) {
-    const listeners = new Set<Listener>();
+    const listeners = new Map<string, Set<Listener>>();
+    /** Where the touch landed: the node, or one inside it with no responder of its own. */
+    let landed = node;
+    const tell = (type: string, event: unknown) => {
+      const told = listeners.get(type);
+      if (!told?.size) return;
+      const sent = type === 'click' ? dom(type, node, event) : pointer(type, landed, node, event);
+      // A copy: a listener may remove itself, or another, as it runs.
+      for (const each of [...told]) each(sent);
+    };
+    const over = (type: string, event: unknown) => {
+      tell(type, event);
+      capturing.delete(node);
+      capturing.delete(landed);
+    };
     const stop = engine.setResponder(node, {
-      onStartShouldSetResponder: () => !disabled(node),
-      onResponderRelease: (event) => {
-        if (disabled(node)) return;
-        const pressed = click(node, event);
-        // A copy: a listener may remove itself, or another, as it runs.
-        for (const each of [...listeners]) each(pressed);
+      onStartShouldSetResponder: (_event, target) => {
+        if (disabled(node)) return false;
+        landed = target ?? node;
+        return true;
       },
+      onResponderGrant: (event) => {
+        capturing.add(node);
+        capturing.add(landed);
+        tell('pointerdown', event);
+      },
+      onResponderMove: (event) => tell('pointermove', event),
+      onResponderRelease: (event) => {
+        over('pointerup', event);
+        if (!disabled(node)) tell('click', event);
+      },
+      onResponderTerminate: (event) => over('pointercancel', event),
     });
-    clicks.set(node, (entry = { listeners, stop }));
+    touched.set(node, (entry = { listeners, stop }));
   }
   return entry;
 }
@@ -107,28 +149,51 @@ function clicksOf(
  * link does in a browser: it is `:active` while held, which is where its pressed style comes from.
  */
 export function takesPress(engine: Engine, node: EngineNode): void {
-  held.add(clicksOf(engine, node));
+  held.add(touchedOf(engine, node));
 }
 
 /** The entries `takesPress` made, which keep their responder with no listener left. */
 const held = new WeakSet<object>();
 
-/** Add a click listener to a node, which takes the touch for as long as it has one. */
-function onClick(engine: Engine, node: EngineNode, listener: Listener): () => void {
-  const entry = clicksOf(engine, node);
+/** Add a click or pointer listener to a node, which takes the touch for as long as it has one. */
+function onTouch(engine: Engine, node: EngineNode, type: string, listener: Listener): () => void {
+  const entry = touchedOf(engine, node);
   const { listeners, stop } = entry;
-  listeners.add(listener);
+  let told = listeners.get(type);
+  if (!told) listeners.set(type, (told = new Set()));
+  told.add(listener);
   return () => {
-    listeners.delete(listener);
-    if (listeners.size || held.has(entry) || clicks.get(node) !== entry) return;
-    clicks.delete(node);
+    told.delete(listener);
+    const left = [...listeners.values()].some((each) => each.size);
+    if (left || held.has(entry) || touched.get(node) !== entry) return;
+    touched.delete(node);
     stop();
   };
 }
 
-/** The event a `click` listener is given. */
-const click = (target: EngineNode, nativeEvent: unknown): object =>
-  dom('click', target, nativeEvent);
+/**
+ * A pointer event as a listener reads one: where the finger is on the screen, which is the page
+ * and the client both, with no window to scroll.
+ */
+function pointer(type: string, target: EngineNode, current: EngineNode, event: unknown): object {
+  const touch = (event as { nativeEvent?: { pageX?: number; pageY?: number; identifier?: number } })
+    .nativeEvent;
+  const x = touch?.pageX ?? 0;
+  const y = touch?.pageY ?? 0;
+  return {
+    ...dom(type, target, event),
+    currentTarget: current,
+    clientX: x,
+    clientY: y,
+    pageX: x,
+    pageY: y,
+    pointerId: touch?.identifier ?? 0,
+    pointerType: 'touch',
+    isPrimary: true,
+    button: 0,
+    buttons: type === 'pointerup' || type === 'pointercancel' ? 0 : 1,
+  };
+}
 
 /** A DOM event as a listener reads one: its type, its target, and the native event behind it. */
 function dom(type: string, target: EngineNode, nativeEvent: unknown): object {

@@ -65,6 +65,28 @@
 }
 
 /*
+ * Spartan's sheet is `position: fixed`, against the screen, which nothing here says. The nearest
+ * thing is `absolute` with every element between it and the CDK's full-screen wrapper `static`,
+ * as they all are in a browser: an absolute element is then placed against the wrapper.
+ */
+.cdk-dialog-container:has(> .spartan-sheet-content) {
+  position: static;
+}
+.spartan .spartan-sheet-content,
+.cdk-overlay-container .spartan-sheet-content {
+  position: absolute;
+}
+/*
+ * A sheet from the top or the bottom is as wide as its `left: 0; right: 0` make it, which Yoga
+ * measures against the element's own parent, here one with no width, and not against the wrapper
+ * it places it in.
+ */
+.cdk-overlay-container .spartan-sheet-content[data-side='bottom'],
+.cdk-overlay-container .spartan-sheet-content[data-side='top'] {
+  width: 100%;
+}
+
+/*
  * Spartan's vega style, one component's section at a time, as each is brought up. In the
  * components layer, as Spartan's own setup has it, so a utility written beside a component's
  * class wins: `rounded-full` on a skeleton, `w-40` on an input.
@@ -449,6 +471,65 @@
 
   .spartan-select-values-content {
     @apply gap-2;
+  }
+
+  /* MARK: Sheet */
+  .spartan-sheet-overlay {
+    @apply data-open:animate-in data-closed:animate-out data-closed:fade-out-0 data-open:fade-in-0 isolate bg-black/10 duration-100 supports-backdrop-filter:backdrop-blur-xs;
+  }
+
+  .spartan-sheet-content {
+    @apply bg-popover text-popover-foreground fixed flex flex-col gap-4 bg-clip-padding text-sm shadow-lg transition duration-200 ease-in-out data-[side=bottom]:inset-x-0 data-[side=bottom]:bottom-0 data-[side=bottom]:h-auto data-[side=bottom]:border-t data-[side=left]:inset-y-0 data-[side=left]:left-0 data-[side=left]:h-full data-[side=left]:w-3/4 data-[side=left]:border-r data-[side=right]:inset-y-0 data-[side=right]:right-0 data-[side=right]:h-full data-[side=right]:w-3/4 data-[side=right]:border-l data-[side=top]:inset-x-0 data-[side=top]:top-0 data-[side=top]:h-auto data-[side=top]:border-b data-[side=left]:sm:max-w-sm data-[side=right]:sm:max-w-sm;
+  }
+
+  .spartan-sheet-close {
+    @apply absolute end-4 top-4;
+  }
+
+  .spartan-sheet-header {
+    @apply gap-1.5 p-4;
+  }
+
+  .spartan-sheet-footer {
+    @apply gap-2 p-4;
+  }
+
+  .spartan-sheet-title {
+    @apply text-foreground font-medium;
+  }
+
+  .spartan-sheet-description {
+    @apply text-muted-foreground text-sm;
+  }
+
+  /* MARK: Slider */
+  .spartan-slider {
+    @apply data-vertical:min-h-40;
+  }
+
+  .spartan-slider-track {
+    @apply bg-muted rounded-full data-horizontal:h-1.5 data-horizontal:w-full data-vertical:h-full data-vertical:w-1.5;
+  }
+
+  .spartan-slider-range {
+    @apply bg-primary;
+  }
+
+  .spartan-slider-thumb {
+    @apply border-primary ring-ring/50 size-4 rounded-full border bg-white shadow-sm transition-[color,box-shadow] hover:ring-4 focus-visible:ring-4 focus-visible:outline-hidden;
+  }
+
+  .spartan-slider-ticks {
+    @apply px-2 group-data-vertical:px-0 group-data-vertical:py-2;
+  }
+
+  /* MARK: Toggle Group */
+  .spartan-toggle-group {
+    @apply rounded-md data-[spacing=0]:data-[variant=outline]:shadow-xs;
+  }
+
+  .spartan-toggle-group-item {
+    @apply data-[state=on]:bg-muted group-data-[spacing=0]/toggle-group:rounded-none group-data-[spacing=0]/toggle-group:px-2 group-data-[spacing=0]/toggle-group:shadow-none group-data-horizontal/toggle-group:data-[spacing=0]:first:rounded-s-md group-data-vertical/toggle-group:data-[spacing=0]:first:rounded-t-md group-data-horizontal/toggle-group:data-[spacing=0]:last:rounded-e-md group-data-vertical/toggle-group:data-[spacing=0]:last:rounded-b-md;
   }
 
   /* MARK: Tooltip */

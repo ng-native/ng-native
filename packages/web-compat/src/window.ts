@@ -17,7 +17,10 @@ class LayoutResizeObserver {
       const layout = (event as { nativeEvent?: { layout?: { width: number; height: number } } })
         .nativeEvent?.layout;
       const contentRect = { width: layout?.width ?? 0, height: layout?.height ?? 0 };
-      this.callback([{ target: node, contentRect }], this);
+      // The frame native reports is the border box, and nothing here tells the content box apart.
+      const box = [{ inlineSize: contentRect.width, blockSize: contentRect.height }];
+      const entry = { target: node, contentRect, borderBoxSize: box, contentBoxSize: box };
+      this.callback([entry], this);
     });
     this.stops.set(node, stop);
   }
