@@ -2206,13 +2206,16 @@ export class Engine implements HostEngine {
    * which is what makes Fabric dirty a measured node and measure it at the size now in effect.
    */
   remeasureText(): void {
+    const again = (measured: EngineNode): void => {
+      measured.remeasure = true;
+      this.markProps(measured, false);
+    };
     const visit = (node: EngineNode): void => {
       for (const child of node.children) {
+        // The paragraph of a run of text written straight into a view is kept on the text.
+        if (child.kind === 'text' && child.box?.committed) again(child.box);
         if (child.kind !== 'element') continue;
-        if (child.committed && MEASURED_VIEWS.has(viewNameOf(child))) {
-          child.remeasure = true;
-          this.markProps(child, false);
-        }
+        if (child.committed && MEASURED_VIEWS.has(committedViewName(child))) again(child);
         visit(child);
       }
     };
@@ -3182,9 +3185,14 @@ export class Engine implements HostEngine {
 
   /** Mark every element under `node` committed with a family, so it is matched again. */
   private markFontText(node: EngineNode): void {
+    const named = (text: EngineNode | undefined): void => {
+      if (typeof text?.committed?.props['fontFamily'] === 'string') this.markProps(text, false);
+    };
     for (const child of node.children) {
+      // The paragraph of a run of text written straight into a view is kept on the text.
+      if (child.kind === 'text') named(child.box);
       if (child.kind !== 'element') continue;
-      if (typeof child.committed?.props['fontFamily'] === 'string') this.markProps(child, false);
+      named(child);
       this.markFontText(child);
     }
   }

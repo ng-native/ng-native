@@ -1,3 +1,4 @@
+import { createRequire } from 'node:module';
 /**
  * The system text size changing while the app runs.
  *
@@ -16,6 +17,8 @@ import { createFakeFabric, type FakeFabric, type FakeFabricNode } from '@ng-nati
 function flatten(nodes: FakeFabricNode[]): FakeFabricNode[] {
   return nodes.flatMap((node) => [node, ...flatten(node.children)]);
 }
+
+const { compileCss } = createRequire(import.meta.url)('@ng-native/metro/css/compile.cjs');
 
 describe('re-measuring text', () => {
   let fabric: FakeFabric;
@@ -66,6 +69,33 @@ describe('re-measuring text', () => {
       ['Services', undefined, ' and more'],
       'with the same content',
     );
+  });
+
+  it('commits the paragraph of a run of text written straight into a view again too', () => {
+    // The paragraph is the engine's own, kept on the text and not among the view's children.
+    const sheet = compileCss('.c { display: flex; align-items: center }', 'c');
+    const column = engine.createElement('view');
+    const loose = engine.createElement('view');
+    engine.appendChild(loose, engine.createText('Loose'));
+    const initials = engine.createElement('span', sheet);
+    engine.setClasses(initials, 'c');
+    engine.appendChild(initials, engine.createText('AH'));
+    engine.appendChild(column, loose);
+    engine.appendChild(column, initials);
+    engine.appendChild(engine.root, column);
+    engine.commit();
+    assert.deepEqual(
+      committed('Paragraph').map((node) => node.children[0]!.props['text']),
+      ['Loose', 'AH'],
+    );
+    const before = new Map(
+      flatten(fabric.committed).map((node) => [node.reactTag, node.handle] as const),
+    );
+
+    engine.remeasureText();
+
+    const moved = (node: FakeFabricNode) => before.get(node.reactTag) !== node.handle;
+    assert.deepEqual(committed('Paragraph').map(moved), [true, true]);
   });
 
   it('re-measures nothing twice: the next ordinary commit is ordinary again', () => {

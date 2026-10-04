@@ -123,6 +123,25 @@ describe('matching a weight to a declared face', () => {
     assert.equal(firstProps!['fontFamily'], 'Inter-700', 'text earlier in the same commit');
   });
 
+  it('matches text written straight into a view before its face was declared, too', () => {
+    // Its paragraph is the engine's own, kept on the text and not among the view's children.
+    const fabric = createFakeFabric();
+    const engine = new Engine(fabric, 1);
+    const consumer = compileCss('.a { font-family: Inter; font-weight: 700 }', 'consumer');
+    const declaring = compileCss(faces([], [700]), 'declaring');
+    const early = engine.createElement('view', consumer);
+    engine.setClasses(early, 'a');
+    engine.appendChild(early, engine.createText('Loose'));
+    engine.appendChild(engine.root, early);
+    engine.commit();
+    assert.equal(fabric.committed[0]!.children[0]!.props['fontFamily'], 'Inter');
+    const later = engine.createElement('text', declaring);
+    engine.appendChild(later, engine.createText('Later'));
+    engine.appendChild(engine.root, later);
+    engine.commit();
+    assert.equal(fabric.committed[0]!.children[0]!.props['fontFamily'], 'Inter-700');
+  });
+
   it('finds a face another sheet declared', () => {
     // Faces in the global sheet, the rule in a component's: `@font-face` is global, as on the web.
     const fabric = createFakeFabric();
