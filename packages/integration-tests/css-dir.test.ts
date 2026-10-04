@@ -74,6 +74,34 @@ describe(':dir()', () => {
   });
 });
 
+describe(':dir() more than once in a selector', () => {
+  it('holds where each of them does', () => {
+    const twice = '.a:dir(rtl):dir(rtl) { opacity: 0.5 }';
+    assert.equal(props(twice, 'rtl')['opacity'], 0.5);
+    assert.equal(props(twice, 'ltr')['opacity'], undefined);
+    const listed = '.a:dir(rtl):where(:dir(rtl), [dir="rtl"]) { opacity: 0.5 }';
+    assert.equal(props(listed, 'rtl')['opacity'], 0.5);
+    assert.equal(props(listed, 'ltr')['opacity'], undefined);
+  });
+
+  it('never holds where two of them ask for different directions', () => {
+    const both = '.a:dir(ltr):dir(rtl) { opacity: 0.5 }';
+    assert.equal(props(both, 'rtl')['opacity'], undefined);
+    assert.equal(props(both, 'ltr')['opacity'], undefined);
+  });
+});
+
+describe(':dir() inside :is()', () => {
+  it('is as specific as the most specific alternative beside it, as the whole :is() is', () => {
+    // `:is(:dir(rtl), #chosen)` weighs what `#chosen` does for every element it matches.
+    const css = '.a:is(:dir(rtl), #chosen) { opacity: 0.5 } .a.a { opacity: 1 }';
+    assert.equal(props(css, 'rtl')['opacity'], 0.5);
+    // Inside `:where()` it weighs nothing, and the later rule stands.
+    const where = '.a:where(:dir(rtl), #chosen) { opacity: 0.5 } .a.a { opacity: 1 }';
+    assert.equal(props(where, 'rtl')['opacity'], 1);
+  });
+});
+
 describe(':dir() among the rules around it', () => {
   it('keeps the place it was written at, so a rule after it still comes after', () => {
     const css = '.a { opacity: 1 } .a:where(:dir(ltr)) { opacity: 0.5 } .a { opacity: 0.25 }';

@@ -2188,7 +2188,8 @@ function compileCss(source, context = 'styles', options = {}) {
 
   function groupedSelectors(rule, context) {
     const groups = new Map();
-    for (const variant of rule.value.selectors.flatMap(byDirection)) {
+    const weigh = (part, others) => listWeight(part, others, context);
+    for (const variant of rule.value.selectors.flatMap((one) => byDirection(one, weigh))) {
       const { written, source, direction, bump } = variant;
       const placeholder = isPlaceholder(written.at(-1));
       const parts = forgiving(placeholder ? written.slice(0, -1) : written, context);
@@ -2217,7 +2218,7 @@ function compileCss(source, context = 'styles', options = {}) {
         if (!alternative) continue;
         rules.push({
           ...alternative,
-          specificity: compiled.specificity + (placeholder ? 1 : 0) + (bump ? pack(0, 1, 0) : 0),
+          specificity: compiled.specificity + (placeholder ? 1 : 0) + bump,
           order: orderOf(source),
           ...built,
           ...(direction ? { condition: { feature: 'direction', value: direction } } : {}),
@@ -2292,6 +2293,25 @@ function compileCss(source, context = 'styles', options = {}) {
       );
       return false;
     }
+  }
+
+  /**
+   * What the alternatives of a list weigh: the most specific of them, as `:is()` does. One the
+   * engine cannot match weighs nothing here, and is reported where the list itself is compiled.
+   */
+  function listWeight(part, others, context) {
+    let most = 0;
+    for (const argument of others) {
+      try {
+        most = Math.max(
+          most,
+          weight(functionalPseudo({ ...part, selectors: [argument] }, context)),
+        );
+      } catch (error) {
+        if (!(error instanceof CssUnsupported)) throw error;
+      }
+    }
+    return most;
   }
 
   /** One selector compiled, or null and reported when the engine cannot match it. */
@@ -2702,39 +2722,49 @@ const isList = (part) =>
  * `bump` is the pseudo-class's own weight, which a `:dir()` on the compound has and one inside
  * `:where()` does not.
  */
-/** Each variant with the selector it came from, whose place among the rules it keeps. */
-const byDirection = (written) =>
-  directionVariants(written).map((variant) => ({ ...variant, source: written }));
+/**
+ * Each variant with the selector it came from, whose place among the rules it keeps. `weigh`
+ * answers what a list's alternatives weigh, which a `:dir()` taken out of an `:is()` keeps.
+ */
+const byDirection = (written, weigh) =>
+  directionVariants(written, weigh).map((variant) => ({ ...variant, source: written }));
 
-function directionVariants(written) {
+/** One step of `directionVariants`: the first `:dir()` taken out, or null where there is none. */
+function directionStep(written, weigh) {
   const at = written.findIndex(isDir);
   if (at !== -1) {
     const rest = [...written.slice(0, at), ...written.slice(at + 1)];
-    return [{ written: rest, direction: written[at].direction, bump: true }];
+    return [{ written: rest, direction: written[at].direction, bump: pack(0, 1, 0) }];
   }
   const list = written.findIndex((part) => isList(part) && part.selectors.some(aloneDir));
-  if (list === -1) return [{ written }];
+  if (list === -1) return null;
   const part = written[list];
-  const without = [...written.slice(0, list), ...written.slice(list + 1)];
+  const before = written.slice(0, list);
+  const after = written.slice(list + 1);
   const others = part.selectors.filter((argument) => !aloneDir(argument));
+  // `:is()` weighs what its most specific alternative does, for whichever one matched.
+  const bump = part.kind === 'is' ? Math.max(pack(0, 1, 0), weigh(part, others)) : 0;
   return [
-    ...part.selectors.filter(aloneDir).map(([dir]) => ({
-      written: without,
-      direction: dir.direction,
-      bump: part.kind === 'is',
-    })),
-    ...(others.length
-      ? [
-          {
-            written: [
-              ...written.slice(0, list),
-              { ...part, selectors: others },
-              ...without.slice(list),
-            ],
-          },
-        ]
-      : []),
+    ...part.selectors
+      .filter(aloneDir)
+      .map(([dir]) => ({ written: [...before, ...after], direction: dir.direction, bump })),
+    ...(others.length ? [{ written: [...before, { ...part, selectors: others }, ...after] }] : []),
   ];
+}
+
+function directionVariants(written, weigh) {
+  const step = directionStep(written, weigh);
+  if (!step) return [{ written, bump: 0 }];
+  // What is left may ask again. Two that ask for different directions never both hold.
+  return step.flatMap((first) =>
+    directionVariants(first.written, weigh)
+      .filter((rest) => !first.direction || !rest.direction || rest.direction === first.direction)
+      .map((rest) => ({
+        written: rest.written,
+        direction: first.direction ?? rest.direction,
+        bump: (first.bump ?? 0) + rest.bump,
+      })),
+  );
 }
 
 /** Whether an alternative of a list is `:dir()` and nothing else. */
