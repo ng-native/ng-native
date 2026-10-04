@@ -104,3 +104,71 @@ describe('ng-icon, over real SVG elements', () => {
     assert.equal(line.getAttribute('stroke'), '#e5e7eb');
   });
 });
+
+describe('a gradient and text in an icon, over real SVG elements', () => {
+  let document: Document;
+
+  before(async () => {
+    ({ document } = await bootstrapSvg());
+  });
+
+  const mark = (selector: string) =>
+    document.getElementById('wordmark')!.querySelector(selector) as SVGElement;
+
+  it('commits <defs> and a <linearGradient> real, with its id, line, units and transform', () => {
+    assert.equal(mark('defs').namespaceURI, SVG_NAMESPACE);
+    const gradient = mark('defs > linearGradient');
+    assert.equal(gradient.namespaceURI, SVG_NAMESPACE);
+    assert.equal(gradient.getAttribute('id'), 'g');
+    assert.deepEqual(
+      ['x1', 'y1', 'x2', 'y2'].map((name) => gradient.getAttribute(name)),
+      ['0', '0', '0', '1'],
+    );
+    assert.equal(gradient.getAttribute('gradientUnits'), 'userSpaceOnUse');
+    assert.equal(gradient.getAttribute('gradientTransform'), 'matrix(1,0,0,1,1,2)');
+  });
+
+  it("writes the gradient's stops back as <stop> elements, opacity and currentColor included", () => {
+    const stops = [...mark('linearGradient').querySelectorAll('stop')];
+    assert.deepEqual(
+      stops.map((stop) => [stop.getAttribute('offset'), stop.getAttribute('stop-color')]),
+      [
+        ['0', '#437dfc'],
+        ['1', 'color-mix(in srgb, #4ad0ef 50%, transparent)'],
+      ],
+    );
+    assert.equal(stops[0]!.namespaceURI, SVG_NAMESPACE);
+  });
+
+  it('gives a <radialGradient> the one radius a browser reads, and its default centre', () => {
+    const radial = mark('radialGradient');
+    assert.equal(radial.getAttribute('r'), '40%');
+    assert.equal(radial.getAttribute('cx'), '50%');
+    assert.equal(radial.hasAttribute('rx'), false);
+    assert.equal(radial.hasAttribute('ry'), false);
+    // The units it was not given are the default, which needs no attribute.
+    assert.equal(radial.getAttribute('gradientUnits'), 'objectBoundingBox');
+    assert.equal(radial.hasAttribute('gradientTransform'), false);
+  });
+
+  it('commits <text> real, with its font, its positions and the gradient it is filled with', () => {
+    const text = mark('text');
+    assert.equal(text.namespaceURI, SVG_NAMESPACE);
+    assert.equal(text.getAttribute('fill'), 'url(#g)');
+    assert.equal(text.getAttribute('x'), '0 9');
+    assert.equal(text.getAttribute('y'), '18');
+    assert.equal(text.hasAttribute('dx'), false, 'a position it has none of is not written');
+    assert.equal(text.getAttribute('font-size'), '17');
+    assert.equal(text.getAttribute('font-weight'), '600');
+    assert.equal(text.getAttribute('font-family'), 'Inter');
+    assert.equal(text.hasAttribute('font'), false);
+  });
+
+  it('draws the characters, and a <tspan> with a paint and an offset of its own', () => {
+    assert.equal(mark('text').textContent, 'Week');
+    const span = mark('text > tspan[dy]');
+    assert.equal(span.textContent, 'ek');
+    assert.equal(span.getAttribute('dy'), '2');
+    assert.equal(span.getAttribute('fill'), 'none');
+  });
+});

@@ -16,9 +16,11 @@ import { parseSvg } from '../icons/src/parse-svg.ts';
 import { registerSvgComponents } from '../icons/src/svg-elements.ts';
 import {
   brushOf,
+  gradientProps,
   nativeProps,
   pointsToPath,
   styleAttributes,
+  textProps,
   transformMatrix,
   viewBoxProps,
 } from '../icons/src/svg-props.ts';
@@ -67,6 +69,226 @@ describe('parsing an icon', () => {
 
   it('is nothing for markup with no element in it', () => {
     assert.equal(parseSvg('<!-- nothing here -->'), null);
+  });
+
+  it('keeps the characters of a text and a tspan, which are what they draw', () => {
+    const root = parseSvg(
+      '<svg><text x="0">Fish &amp;\n   chips <tspan dy="4">&lt;hot&gt;</tspan></text><g> </g></svg>',
+    );
+    const text = root!.children[0]!;
+    assert.deepEqual(
+      text.children.map((child) => [child.tag, child.text]),
+      [
+        ['#text', 'Fish & chips '],
+        ['tspan', undefined],
+      ],
+    );
+    assert.equal(text.children[1]!.children[0]!.text, '<hot>');
+    assert.deepEqual(root!.children[1]!.children, [], 'and nothing between other elements');
+  });
+});
+
+describe('translating a gradient and a text', () => {
+  /** A host whose colours are numbers, as a device's are: AARRGGBB. */
+  const numbers = {
+    color: (value: string) => {
+      const hex = value.length === 4 ? value.replace(/[\da-f]/gi, '$&$&') : value;
+      return Number.parseInt((hex.slice(7) || 'ff') + hex.slice(1, 7), 16);
+    },
+  };
+  const node = (markup: string) => parseSvg(markup)!;
+
+  it('gives a linear gradient its name, its line and its stops as native takes them', () => {
+    const props = gradientProps(
+      node(
+        '<linearGradient id="g" x2="0" y2="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(2 3)">' +
+          '<stop offset="100%" stop-color="#0000ff"/><stop offset="0.25" stop-color="#ff0000"/>' +
+          '</linearGradient>',
+      ),
+      numbers,
+    );
+    assert.deepEqual(props, {
+      name: 'g',
+      // The line react-native-svg defaults to, with what the markup set.
+      x1: '0%',
+      y1: '0%',
+      x2: '0',
+      y2: '1',
+      // Offsets in order, each with its colour as one number.
+      gradient: [0.25, 0xffff0000 | 0, 1, 0xff0000ff | 0],
+      gradientUnits: 1,
+      gradientTransform: [1, 0, 0, 1, 2, 3],
+    });
+  });
+
+  it("multiplies a stop's opacity into its colour's own, and reads either from a style", () => {
+    const { gradient } = gradientProps(
+      node(
+        '<linearGradient id="g">' +
+          '<stop stop-color="#ff000080" stop-opacity="0.5"/>' +
+          '<stop offset="1" style="stop-color:#00ff00;stop-opacity:0"/>' +
+          '<stop offset="1"/>' +
+          '</linearGradient>',
+      ),
+      numbers,
+    ) as { gradient: number[] };
+    assert.deepEqual(gradient, [0, 0x40ff0000, 1, 0x0000ff00, 1, 0xff000000 | 0]);
+  });
+
+  it('gives a radial gradient the centre, radii and focus react-native-svg defaults', () => {
+    const props = gradientProps(node('<radialGradient id="r" cx="25%" r="10"/>'), numbers);
+    assert.deepEqual(props, {
+      name: 'r',
+      cx: '25%',
+      cy: '50%',
+      rx: '10',
+      ry: '10',
+      fx: '25%',
+      fy: '50%',
+      gradient: [],
+      gradientUnits: 0,
+      gradientTransform: null,
+    });
+  });
+
+  it('paints a currentColor stop in the colour it is given, and black with none', () => {
+    const stops = '<linearGradient id="g"><stop stop-color="currentColor"/></linearGradient>';
+    assert.deepEqual(gradientProps(node(stops), numbers, '#00ff00')['gradient'], [
+      0,
+      0xff00ff00 | 0,
+    ]);
+    assert.deepEqual(gradientProps(node(stops), numbers)['gradient'], [0, 0xff000000 | 0]);
+  });
+
+  it('leaves out a stop whose colour the host cannot convert, as a var() is', () => {
+    const none = {
+      color: (value: string) => (value.startsWith('var(') ? null : numbers.color(value)),
+    };
+    const props = gradientProps(
+      node(
+        '<linearGradient id="g"><stop stop-color="var(--a)"/>' +
+          '<stop offset="1" stop-color="#ff0000"/></linearGradient>',
+      ),
+      none,
+    );
+    assert.deepEqual(props['gradient'], [1, 0xffff0000 | 0]);
+  });
+
+  it('gives a text its font as one object and its positions as lists', () => {
+    assert.deepEqual(
+      textProps({
+        x: '0 10,20',
+        y: '18',
+        dy: '2',
+        'font-size': '17',
+        'font-weight': '600',
+        'font-family': "'Inter', sans-serif",
+        'text-anchor': 'middle',
+        'letter-spacing': '0.5',
+      }),
+      {
+        x: ['0', '10', '20'],
+        y: ['18'],
+        dx: [],
+        dy: ['2'],
+        rotate: [],
+        font: {
+          fontSize: '17',
+          fontWeight: '600',
+          fontFamily: 'Inter',
+          textAnchor: 'middle',
+          letterSpacing: '0.5',
+        },
+      },
+    );
+  });
+});
+
+describe('a wordmark in the tree', () => {
+  let instance: { tint: { set(value: string): void } };
+  const warnings: string[] = [];
+
+  before(async () => {
+    registerSvgComponents();
+    const mod = await compileFixture(
+      fileURLToPath(new URL('./fixtures/icon-wordmark.ts', import.meta.url)),
+    );
+    const warn = console.warn;
+    console.warn = (message: unknown) => warnings.push(String(message));
+    try {
+      ({ instance } = await render<typeof instance>(mod['WordmarkHost'] as Type<typeof instance>, {
+        processColor: (value) => `processed:${String(value)}`,
+      }));
+    } finally {
+      console.warn = warn;
+    }
+  });
+  after(cleanup);
+
+  const views = (id: string) => flatten([screen.getByTestId(id)]);
+  const named = (id: string, viewName: string) =>
+    views(id).find((view) => view.viewName === viewName)!;
+
+  it('commits the gradient in defs and the text that is filled with it', () => {
+    assert.deepEqual(
+      views('mark').map((view) => view.viewName),
+      ['RNSVGSvgView', 'RNSVGGroup', 'RNSVGDefs', 'RNSVGLinearGradient', 'RNSVGText', 'RNSVGTSpan'],
+      'the stops are the gradient s own prop, and a title is no view',
+    );
+    const gradient = named('mark', 'RNSVGLinearGradient');
+    assert.equal(gradient.props['name'], 'g');
+    assert.deepEqual(gradient.props['gradient'], [0, 'processed:#437dfc', 1, 'processed:#4ad0ef']);
+    assert.deepEqual(pick(gradient.props, 'x1', 'y1', 'x2', 'y2'), {
+      x1: '0',
+      y1: '0',
+      x2: '0',
+      y2: '1',
+    });
+
+    const text = named('mark', 'RNSVGText');
+    assert.deepEqual(text.props['fill'], { type: 1, brushRef: 'g' });
+    assert.deepEqual(text.props['propList'], ['fill']);
+    assert.deepEqual(text.props['font'], { fontSize: '17', fontWeight: '600' });
+    assert.deepEqual(pick(text.props, 'x', 'y'), { x: ['0'], y: ['18'] });
+    assert.equal(named('mark', 'RNSVGTSpan').props['content'], 'Week');
+  });
+
+  it('is as wide as its box, since a wordmark is not square', () => {
+    assert.deepEqual(pick(screen.getByTestId('mark').props, 'width', 'height'), {
+      width: 96,
+      height: 24,
+    });
+  });
+
+  it('warns about an element it does not draw, once, and not about a title or a stop', () => {
+    // Two icons, each with two masks.
+    assert.deepEqual(
+      warnings.filter((warning) => warning.includes('does not draw')),
+      [
+        '[angular-native] <ng-icon> does not draw <mask>, so it is left out of the icon. ' +
+          'It draws svg, g, path, circle, ellipse, rect, line, polyline, polygon, defs, ' +
+          'linearGradient, radialGradient, text, tspan and stop.',
+      ],
+    );
+  });
+
+  it('says so when a currentColor stop has no color input to take, and paints it black', () => {
+    assert.equal(warnings.filter((warning) => warning.includes('currentColor')).length, 1);
+    assert.deepEqual(named('untinted', 'RNSVGRadialGradient').props['gradient'], [
+      0,
+      'processed:#000',
+      1,
+      'color-mix(in srgb, processed:#000000 0%, transparent)',
+    ]);
+  });
+
+  it("paints a currentColor stop in the icon's color input, and follows it", async () => {
+    const stops = () => named('tinted', 'RNSVGRadialGradient').props['gradient'];
+    const clear = 'color-mix(in srgb, processed:#000000 0%, transparent)';
+    assert.deepEqual(stops(), [0, 'processed:#ff0000', 1, clear]);
+    instance.tint.set('#00ff00');
+    await settle();
+    assert.deepEqual(stops(), [0, 'processed:#00ff00', 1, clear]);
   });
 });
 

@@ -613,6 +613,81 @@ const SVG_PRESENTATION_HANDLERS: Record<string, Handler> = {
 };
 
 /**
+ * A gradient, read back from `svg-props.ts`'s `gradientProps`. Its stops arrive as one flat list,
+ * `[offset, colour, offset, colour]`, which is how native takes them, and a browser wants them as
+ * `<stop>` children. Its `name` is the `id` a `url(#id)` brush finds it by, and a radial one's
+ * two radii are the one `r` it was written with.
+ */
+const SVG_GRADIENT_HANDLERS: Record<string, Handler> = {
+  name: (n, v, c) => setOrRemove(n, 'id', v, c),
+  gradient: (n, v) => {
+    const list = Array.isArray(v) ? v : [];
+    const stops: Element[] = [];
+    for (let i = 0; i + 1 < list.length; i += 2) {
+      const stop = el(n).ownerDocument.createElementNS(el(n).namespaceURI, 'stop');
+      stop.setAttribute('offset', String(list[i]));
+      stop.setAttribute('stop-color', String(list[i + 1]));
+      stops.push(stop);
+    }
+    el(n).replaceChildren(...stops);
+  },
+  gradientUnits: (n, v, c) =>
+    setOrRemove(n, 'gradientUnits', v === 1 ? 'userSpaceOnUse' : 'objectBoundingBox', c),
+  gradientTransform: (n, v, c) => {
+    const matrix = Array.isArray(v) ? `matrix(${v.join(',')})` : undefined;
+    setOrRemove(n, 'gradientTransform', matrix, c || matrix === undefined);
+  },
+  rx: (n, v, c) => setOrRemove(n, 'r', v, c),
+  ry: noop,
+};
+
+/** The attributes `svg-props.ts`'s `textProps` gathers into the one `font` object native reads. */
+const FONT_ATTRIBUTES = [
+  'font-size',
+  'font-weight',
+  'font-style',
+  'font-family',
+  'font-variant',
+  'font-stretch',
+  'text-anchor',
+  'text-decoration',
+  'letter-spacing',
+  'word-spacing',
+  'kerning',
+];
+
+const camelCase = (name: string): string =>
+  name.replace(/-([a-z])/g, (_, letter: string) => letter.toUpperCase());
+
+/** A position list, `x: ['0', '9']`, as the attribute it was written as. An empty one is none. */
+const lengthList =
+  (attr: string): Handler =>
+  (n, v) => {
+    const list = Array.isArray(v) ? v : [];
+    setOrRemove(n, attr, list.join(' '), list.length === 0);
+  };
+
+/** A `text` or a `tspan`: a shape's paint, with its font, its positions and its characters. */
+const SVG_TEXT_HANDLERS: Record<string, Handler> = {
+  ...SVG_PRESENTATION_HANDLERS,
+  font: (n, v) => {
+    const font = (v ?? {}) as Record<string, unknown>;
+    for (const attr of FONT_ATTRIBUTES) {
+      const value = font[camelCase(attr)];
+      setOrRemove(n, attr, value, value === undefined || value === null);
+    }
+  },
+  x: lengthList('x'),
+  y: lengthList('y'),
+  dx: lengthList('dx'),
+  dy: lengthList('dy'),
+  rotate: lengthList('rotate'),
+  content: (n, v, c) => {
+    el(n).textContent = c ? '' : String(v);
+  },
+};
+
+/**
  * The SVG root's own sizing props - `ng-icon.ts`'s host bindings, none of which go through
  * `svg-props.ts`'s `nativeProps` (they are written directly, not parsed off markup).
  * `minX`/`minY`/`vbWidth`/`vbHeight` build one `viewBox` attribute together, and
@@ -713,6 +788,10 @@ const BY_ELEMENT: Record<string, Record<string, Handler>> = {
   'svg-ellipse': SVG_PRESENTATION_HANDLERS,
   'svg-rect': SVG_PRESENTATION_HANDLERS,
   'svg-line': SVG_PRESENTATION_HANDLERS,
+  'svg-linear-gradient': SVG_GRADIENT_HANDLERS,
+  'svg-radial-gradient': SVG_GRADIENT_HANDLERS,
+  'svg-text': SVG_TEXT_HANDLERS,
+  'svg-tspan': SVG_TEXT_HANDLERS,
   'ng-icon': SVG_ROOT_HANDLERS,
 };
 

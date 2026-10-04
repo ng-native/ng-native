@@ -26,11 +26,29 @@ const ICON_MARKUP = `
   </svg>
 `;
 
+/** A wordmark: a gradient in defs, and text filled with it, one span of it in a colour of its own. */
+const WORDMARK_MARKUP = `
+  <svg viewBox="0 0 96 24">
+    <defs>
+      <linearGradient id="g" x1="0" y1="0" x2="0" y2="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(1,2)">
+        <stop offset="0" stop-color="#437dfc" />
+        <stop offset="100%" stop-color="currentColor" stop-opacity="0.5" />
+      </linearGradient>
+      <radialGradient id="r" r="40%"><stop offset="0" stop-color="#ff0000" /></radialGradient>
+    </defs>
+    <text x="0 9" y="18" font-size="17" font-weight="600" font-family="'Inter', sans-serif" fill="url(#g)">We<tspan fill="none" dy="2">ek</tspan></text>
+  </svg>
+`;
+
 @Component({
   selector: 'app-root',
   imports: [NgIcon],
-  template: ` <ng-icon id="icon-root" [svg]="markup" [size]="32" color="#111827" /> `,
+  template: `
+    <ng-icon id="icon-root" [svg]="markup" [size]="32" color="#111827" />
+    <ng-icon id="wordmark" [svg]="wordmark" color="#4ad0ef" />
+  `,
 })
 export class SvgApp {
   readonly markup = ICON_MARKUP;
+  readonly wordmark = WORDMARK_MARKUP;
 }

@@ -26,6 +26,11 @@ const SVG_VIEW_NAMES: Record<string, string> = {
   'svg-ellipse': 'RNSVGEllipse',
   'svg-rect': 'RNSVGRect',
   'svg-line': 'RNSVGLine',
+  'svg-defs': 'RNSVGDefs',
+  'svg-linear-gradient': 'RNSVGLinearGradient',
+  'svg-radial-gradient': 'RNSVGRadialGradient',
+  'svg-text': 'RNSVGText',
+  'svg-tspan': 'RNSVGTSpan',
 };
 
 let registered = false;

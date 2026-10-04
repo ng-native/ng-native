@@ -40,5 +40,7 @@ export class IconHost {
   readonly size = signal(24);
   readonly color = signal('#ff9f0a');
   /** An element no native view draws, beside one that is drawn. */
-  readonly odd = signal('<svg viewBox="0 0 24 24"><text>x</text><toString/><circle r="1"/></svg>');
+  readonly odd = signal(
+    '<svg viewBox="0 0 24 24"><filter id="f"/><toString/><circle r="1"/></svg>',
+  );
 }

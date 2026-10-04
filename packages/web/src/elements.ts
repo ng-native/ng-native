@@ -44,7 +44,7 @@
  * enough to make that work here: an element born outside the SVG namespace never paints as SVG no
  * matter what tag string it is given (`document.createElement` always mints an
  * `HTMLUnknownElement` for a name a browser does not recognise, SVG names very much included), so
- * these seven names are the only ones in this file that need `ns` - everything else is content
+ * these names are the only ones in this file that need `ns` - everything else is content
  * HTML has no opinion on and is happy to create by string alone.
  */
 export interface ElementSpec {
@@ -73,6 +73,11 @@ const SPECS: Record<string, ElementSpec> = {
   'svg-ellipse': { tag: 'ellipse', ns: SVG_NAMESPACE },
   'svg-rect': { tag: 'rect', ns: SVG_NAMESPACE },
   'svg-line': { tag: 'line', ns: SVG_NAMESPACE },
+  'svg-defs': { tag: 'defs', ns: SVG_NAMESPACE },
+  'svg-linear-gradient': { tag: 'linearGradient', ns: SVG_NAMESPACE },
+  'svg-radial-gradient': { tag: 'radialGradient', ns: SVG_NAMESPACE },
+  'svg-text': { tag: 'text', ns: SVG_NAMESPACE },
+  'svg-tspan': { tag: 'tspan', ns: SVG_NAMESPACE },
   // The root. Commits as the same Fabric view natively (`svg-elements.ts`'s own doc comment); a
   // plain `<svg>` here too; `props.ts`'s `SVG_ROOT_HANDLERS` is what reads `NgIcon`'s own host
   // bindings into its `viewBox`/size.

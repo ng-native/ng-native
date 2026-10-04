@@ -63,7 +63,15 @@ const registry = new WeakMap<Element | Text | Comment, BrowserNode>();
  * own to paint (react-native-svg's `Line` never reads `fill` either), so there is nothing an
  * explicit `fill="none"` there could mean.
  */
-const SVG_BRUSH_ELEMENTS = new Set(['svg-g', 'svg-path', 'svg-circle', 'svg-ellipse', 'svg-rect']);
+const SVG_BRUSH_ELEMENTS = new Set([
+  'svg-g',
+  'svg-path',
+  'svg-circle',
+  'svg-ellipse',
+  'svg-rect',
+  'svg-text',
+  'svg-tspan',
+]);
 
 function hasAttribute(this: BrowserNode, name: string): boolean {
   return (this.el as Element).hasAttribute(name);

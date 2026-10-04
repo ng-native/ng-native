@@ -46,7 +46,17 @@ export const SVG_ELEMENTS: Record<string, string> = {
   line: 'svg-line',
   polyline: 'svg-path',
   polygon: 'svg-path',
+  defs: 'svg-defs',
+  linearGradient: 'svg-linear-gradient',
+  radialGradient: 'svg-radial-gradient',
+  text: 'svg-text',
+  tspan: 'svg-tspan',
+  // The characters of a text: react-native-svg draws them as a span of their own.
+  '#text': 'svg-tspan',
 };
+
+/** The tags that are no view and are not missed: a label, and what a gradient reads itself. */
+export const UNDRAWN: ReadonlySet<string> = new Set(['title', 'desc', 'stop']);
 
 /** Geometry, per tag. Everything else on a shape is presentation and shared. */
 const GEOMETRY: Record<string, readonly string[]> = {
@@ -119,6 +129,161 @@ export function brushOf(value: string, context: SvgContext): Brush {
   const reference = URL_REFERENCE.exec(value);
   if (reference) return { type: 1, brushRef: reference[1]! };
   return { type: 0, payload: context.color(value) };
+}
+
+const GRADIENT_UNITS: Record<string, number> = { objectBoundingBox: 0, userSpaceOnUse: 1 };
+
+/** Where a gradient runs when the markup does not say, as react-native-svg's components default. */
+const GRADIENT_LINE: Record<string, Readonly<Record<string, string>>> = {
+  linearGradient: { x1: '0%', y1: '0%', x2: '100%', y2: '0%' },
+  radialGradient: { cx: '50%', cy: '50%' },
+};
+
+export const isGradient = (tag: string): boolean => Object.hasOwn(GRADIENT_LINE, tag);
+
+/**
+ * A gradient's native props: its name, where it runs, and its stops.
+ *
+ * A `<stop>` is not a view. react-native-svg reads the stops in JavaScript and hands the gradient
+ * one flat list, `[offset, colour, offset, colour]`, in offset order, each colour a single number
+ * with the stop's opacity in its alpha. `currentColor` is the colour passed in: native has no
+ * brush for it inside a gradient, so it is settled here.
+ */
+export function gradientProps(
+  node: { tag: string; attrs: Readonly<Record<string, string>>; children: readonly SvgNodeLike[] },
+  context: SvgContext,
+  currentColor?: string,
+): Record<string, unknown> {
+  const { attrs } = node;
+  const stops = node.children
+    .filter((child) => child.tag === 'stop')
+    .map((stop) => stopOf(stop.attrs, context, currentColor))
+    .filter((stop) => stop !== null)
+    .sort((a, b) => a[0] - b[0]);
+  return {
+    name: attrs['id'],
+    ...gradientLine(node.tag, attrs),
+    gradient: stops.flat(),
+    gradientUnits: own(GRADIENT_UNITS, attrs['gradientUnits'] ?? '') ?? 0,
+    gradientTransform: transformMatrix(attrs['gradientTransform'] ?? '') ?? null,
+  };
+}
+
+/** Where a gradient runs: what the markup set, over what react-native-svg defaults. */
+function gradientLine(
+  tag: string,
+  attrs: Readonly<Record<string, string>>,
+): Record<string, unknown> {
+  const line: Record<string, unknown> = { ...own(GRADIENT_LINE, tag) };
+  for (const name of Object.keys(line)) line[name] = attrs[name] ?? line[name];
+  if (tag !== 'radialGradient') return line;
+  const radius = attrs['r'] ?? '50%';
+  return {
+    ...line,
+    rx: attrs['rx'] ?? radius,
+    ry: attrs['ry'] ?? radius,
+    fx: attrs['fx'] ?? line['cx'],
+    fy: attrs['fy'] ?? line['cy'],
+  };
+}
+
+interface SvgNodeLike {
+  readonly tag: string;
+  readonly attrs: Readonly<Record<string, string>>;
+}
+
+/** The stop colour of a stop, from its attribute or its `style`. */
+export const stopColor = (attrs: Readonly<Record<string, string>>): string =>
+  /(?:^|;)\s*stop-color\s*:\s*([^;]+)/.exec(attrs['style'] ?? '')?.[1]?.trim() ??
+  attrs['stop-color'] ??
+  '#000';
+
+/**
+ * One stop as `[offset, colour]`, its attributes read from its `style` where they are there, or
+ * null for a colour the host cannot convert, such as a `var()`: native takes a list of numbers,
+ * and one that is not there would be worse than a stop left out.
+ */
+function stopOf(
+  attrs: Readonly<Record<string, string>>,
+  context: SvgContext,
+  currentColor: string | undefined,
+): [number, unknown] | null {
+  const all = { ...attrs, ...styleAttributes(attrs['style'] ?? '', {}) };
+  const written = stopColor(attrs);
+  const colour = context.color(written === 'currentColor' ? (currentColor ?? '#000') : written);
+  if (colour === null || colour === undefined) return null;
+  return [fraction(all['offset'], 0), withOpacity(colour, fraction(all['stop-opacity'], 1))];
+}
+
+/** A number or a percentage as a fraction, or the fallback for one that is neither. */
+function fraction(value: string | undefined, fallback: number): number {
+  const number = Number.parseFloat(value ?? '');
+  if (Number.isNaN(number)) return fallback;
+  return value!.trim().endsWith('%') ? number / 100 : number;
+}
+
+/**
+ * A processed colour at a fraction of its own opacity: a device's is one number, AARRGGBB, and
+ * the web host's is the CSS colour it was given, which a mix with nothing fades the same way.
+ */
+function withOpacity(colour: unknown, fraction: number): unknown {
+  const opacity = Math.min(1, Math.max(0, fraction));
+  if (typeof colour !== 'number') {
+    return opacity === 1 ? colour : `color-mix(in srgb, ${colour} ${opacity * 100}%, transparent)`;
+  }
+  const alpha = Math.round((colour >>> 24) * opacity);
+  return (colour & 0x00ffffff) | (alpha << 24);
+}
+
+/** SVG attribute -> key of the `font` object react-native-svg's text views read. */
+const FONT: Record<string, string> = {
+  'font-size': 'fontSize',
+  'font-weight': 'fontWeight',
+  'font-style': 'fontStyle',
+  'font-family': 'fontFamily',
+  'font-variant': 'fontVariant',
+  'font-stretch': 'fontStretch',
+  'text-anchor': 'textAnchor',
+  'text-decoration': 'textDecoration',
+  'letter-spacing': 'letterSpacing',
+  'word-spacing': 'wordSpacing',
+  kerning: 'kerning',
+};
+
+const lengthList = (value: string | undefined): string[] =>
+  value === undefined
+    ? []
+    : value
+        .trim()
+        .split(/[\s,]+/)
+        .filter(Boolean);
+
+/**
+ * What a `text` or a `tspan` takes beside its paint: its font as one object, and each of its
+ * positions as a list, since SVG places a glyph at a time. The first family of a `font-family` is
+ * the one asked for, as react-native-svg reads it.
+ */
+export function textProps(attrs: Readonly<Record<string, string>>): Record<string, unknown> {
+  const font: Record<string, string> = {};
+  for (const [name, value] of Object.entries(attrs)) {
+    const key = own(FONT, name);
+    if (!key) continue;
+    font[key] =
+      key === 'fontFamily'
+        ? value
+            .split(',')[0]!
+            .trim()
+            .replace(/^["']|["']$/g, '')
+        : value;
+  }
+  return {
+    x: lengthList(attrs['x']),
+    y: lengthList(attrs['y']),
+    dx: lengthList(attrs['dx']),
+    dy: lengthList(attrs['dy']),
+    rotate: lengthList(attrs['rotate']),
+    font,
+  };
 }
 
 /** `M x,y L x,y ...`, which is what a polyline or polygon is once native sees it. */

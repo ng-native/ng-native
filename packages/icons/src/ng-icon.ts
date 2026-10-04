@@ -40,12 +40,20 @@ import { registerSvgComponents } from './svg-elements.ts';
 import {
   PAINT,
   SVG_ELEMENTS,
+  UNDRAWN,
+  gradientProps,
+  isGradient,
   isTokenPaint,
   nativeProps,
   own,
+  stopColor,
   styleAttributes,
+  textProps,
   viewBoxProps,
 } from './svg-props.ts';
+
+/** The tags already reported as not drawn, so a list of icons says it once. */
+const reported = new Set<string>();
 
 /** ng-icons stores icons under a camel-cased key, so `hero-book-open` finds `heroBookOpen`. */
 function toPropertyName(name: string): string {
@@ -181,10 +189,49 @@ export class NgIcon {
 
   private append(parent: unknown, node: SvgNode): void {
     const element = own(SVG_ELEMENTS, node.tag);
-    if (!element) return;
+    if (!element) return this.reportUndrawn(node.tag);
     const shape = this.create(element, node);
     for (const child of node.children) this.append(shape, child);
     this.renderer.appendChild(parent, shape);
+  }
+
+  /**
+   * A `currentColor` stop is settled here from the `color` input, where a `currentColor` brush is
+   * painted by native from the colour the cascade gives the icon. With no input it is black.
+   */
+  private reportUntintedStop(gradient: SvgNode): void {
+    if (typeof ngDevMode === 'undefined' || !ngDevMode) return;
+    if (this.color() !== undefined || reported.has('currentColor')) return;
+    if (!gradient.children.some((stop) => stopColor(stop.attrs) === 'currentColor')) return;
+    reported.add('currentColor');
+    console.warn(
+      '[angular-native] <ng-icon> paints a gradient stop written as currentColor from its ' +
+        '`color` input, and this icon has none, so the stop is black. Set `color` on the icon.',
+    );
+  }
+
+  /** An incomplete drawing with no message is the hardest failure to track down. */
+  private reportUndrawn(tag: string): void {
+    if (typeof ngDevMode === 'undefined' || !ngDevMode) return;
+    if (UNDRAWN.has(tag) || reported.has(tag)) return;
+    reported.add(tag);
+    const drawn = ['svg', ...Object.keys(SVG_ELEMENTS), 'stop'].filter((name) => name !== '#text');
+    console.warn(
+      `[angular-native] <ng-icon> does not draw <${tag}>, so it is left out of the icon. ` +
+        `It draws ${drawn.slice(0, -1).join(', ')} and ${drawn.at(-1)}.`,
+    );
+  }
+
+  /** The native props of one element: a gradient's, a text's, or a shape's. */
+  private propsOf(node: SvgNode, attrs: Record<string, string>): Record<string, unknown> {
+    const context = { color: (value: string) => this.engine.color(value) };
+    if (isGradient(node.tag)) {
+      this.reportUntintedStop(node);
+      return gradientProps(node, context, this.color());
+    }
+    const props = nativeProps(node.tag, attrs, context);
+    if (node.tag === '#text') return { ...props, content: node.text };
+    return node.tag === 'text' || node.tag === 'tspan' ? { ...props, ...textProps(attrs) } : props;
   }
 
   private create(element: string, node: SvgNode): unknown {
@@ -199,7 +246,7 @@ export class NgIcon {
         '--ng-icon__stroke-width': this.strokeWidth(),
       }),
     };
-    const props = nativeProps(node.tag, attrs, { color: (value) => this.engine.color(value) });
+    const props = this.propsOf(node, attrs);
     // A paint that reads a custom property is settled by the cascade, with the tokens in scope
     // for the shape, and follows them. It stays in `propList`, which says the shape has one.
     const cascade = this.engine as Partial<Pick<Engine, 'setBoundStyle'>>;

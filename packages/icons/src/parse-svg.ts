@@ -17,7 +17,18 @@ export interface SvgNode {
   readonly tag: string;
   readonly attrs: Readonly<Record<string, string>>;
   readonly children: SvgNode[];
+  /** The characters of a `#text` node, which only a `text` or a `tspan` has. */
+  readonly text?: string;
 }
+
+/** The elements whose characters are drawn. Between any others they are indentation. */
+const TEXT_CONTAINERS: ReadonlySet<string> = new Set(['text', 'tspan']);
+
+const ENTITIES: Record<string, string> = { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'" };
+
+/** Characters as SVG draws them by default: runs of white space as one space, entities read. */
+const characters = (raw: string): string =>
+  raw.replace(/\s+/g, ' ').replace(/&(amp|lt|gt|quot|apos);/g, (_, name) => ENTITIES[name]!);
 
 /** `<tag`, `/>`, `</tag>` and the attribute soup between them. */
 const TAG = /<\s*(\/)?\s*([a-zA-Z][\w:-]*)((?:[^>"']|"[^"]*"|'[^']*')*)(\/)?>/g;
@@ -38,8 +49,9 @@ function attributesOf(source: string): Record<string, string> {
 /**
  * The root element, or null when there is nothing renderable.
  *
- * Only elements are kept: an icon's text nodes are whitespace, and a `<title>` is a label a
- * screen reader on the web would read, which here is `accessibilityLabel` on the host.
+ * Only elements are kept, and the characters inside a `text` or a `tspan`: an icon's other text
+ * nodes are whitespace, and a `<title>` is a label a screen reader on the web would read, which
+ * here is `accessibilityLabel` on the host.
  */
 export function parseSvg(markup: string): SvgNode | null {
   const source = markup.replace(IGNORED, '');
@@ -48,8 +60,15 @@ export function parseSvg(markup: string): SvgNode | null {
 
   TAG.lastIndex = 0;
   let match: RegExpExecArray | null;
+  let from = 0;
   while ((match = TAG.exec(source)) !== null) {
     const [, closing, tag, attributes, selfClosing] = match;
+    const parent = stack[stack.length - 1];
+    const text = characters(source.slice(from, match.index));
+    from = TAG.lastIndex;
+    if (parent && TEXT_CONTAINERS.has(parent.tag) && text.trim()) {
+      parent.children.push({ tag: '#text', attrs: {}, children: [], text });
+    }
 
     if (closing) {
       stack.pop();
