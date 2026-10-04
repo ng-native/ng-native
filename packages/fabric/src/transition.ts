@@ -586,6 +586,11 @@ export interface RunningAnimation {
   /** What the properties read right now. Empty once a finished animation stops filling. */
   values: Record<string, unknown>;
   done: boolean;
+  /**
+   * Set while native plays it, with no frame of it in JavaScript: what stops it there. `values`
+   * is then the frame it started at, which is what the view is committed with.
+   */
+  native?: { stop(): void };
 }
 
 /**

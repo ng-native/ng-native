@@ -8,9 +8,20 @@ export function recorder() {
     (name: string) =>
     (...args: unknown[]) =>
       void calls.push([name, ...args]);
+  /** What each animation started with, and what tells the engine it has ended, by its id. */
+  const ends = new Map<number, (result: { finished: boolean }) => void>();
   const native: NativeAnimated = {
     generateNewNodeTag: () => next++,
+    generateNewAnimationId: () => next++,
     API: {
+      startAnimatingNode: (id, node, config, end) => {
+        calls.push(['start', id, node, config]);
+        ends.set(id, end);
+      },
+      stopAnimation: (id) => {
+        calls.push(['stop', id]);
+        ends.delete(id);
+      },
       createAnimatedNode: record('create'),
       connectAnimatedNodes: record('connect'),
       disconnectAnimatedNodes: record('disconnect'),
@@ -54,5 +65,11 @@ export function recorder() {
       ]),
     );
   };
-  return { native, calls, named, drives };
+  /** Native reaching the end of an animation it was started on, as it tells JavaScript. */
+  const finish = (id: number) => {
+    const end = ends.get(id);
+    ends.delete(id);
+    end?.({ finished: true });
+  };
+  return { native, calls, named, drives, finish };
 }

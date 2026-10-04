@@ -83,6 +83,42 @@ export function scrollChannels(
   };
 }
 
+/**
+ * The channels for an animation played by the clock, along a value native runs from nothing to
+ * `span`: one iteration along 0 to 1, and for `alternate` the way back along 1 to 2, so that
+ * native repeats there and back as one animation. Both ends are the frames' own: what the
+ * element rests at is committed when the animation ends, and not played.
+ */
+export function clockChannels(
+  tracks: ReadonlyMap<string, Track>,
+  spec: AnimationSpec,
+  resting: Readonly<Record<string, unknown>>,
+): { channels: DrivenChannels; held: string[]; span: number } {
+  const way = (direction: AnimationSpec['direction'], range: readonly [number, number]) =>
+    scrollChannels(tracks, { ...spec, fill: 'both', direction }, resting, range);
+  if (spec.direction !== 'alternate' && spec.direction !== 'alternate-reverse') {
+    return { ...way(spec.direction, [0, 1]), span: 1 };
+  }
+  const reversed = spec.direction === 'alternate-reverse';
+  const out = way(reversed ? 'reverse' : undefined, [0, 1]);
+  const back = way(reversed ? undefined : 'reverse', [1, 2]);
+  const join = (a: ScrollRange, b: ScrollRange): ScrollRange => ({
+    input: [...a.input, ...b.input.slice(1)],
+    output: [...a.output, ...b.output.slice(1)],
+  });
+  const transform = out.channels.transform.map((channel, i) => {
+    const other = back.channels.transform[i];
+    return 'range' in channel && other && 'range' in other
+      ? { property: channel.property, range: join(channel.range, other.range) }
+      : channel;
+  });
+  const opacity =
+    out.channels.opacity && back.channels.opacity
+      ? { opacity: join(out.channels.opacity, back.channels.opacity) }
+      : {};
+  return { channels: { ...opacity, transform }, held: out.held, span: 2 };
+}
+
 /** One transform group's entries, each driven along the scroll; null if their shapes differ. */
 function drivenGroup(
   track: Track,

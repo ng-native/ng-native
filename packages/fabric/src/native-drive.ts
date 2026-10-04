@@ -17,7 +17,16 @@
 /** The part of React Native's `NativeAnimatedHelper` default export this uses. */
 export interface NativeAnimated {
   generateNewNodeTag(): number;
+  generateNewAnimationId?(): number;
   readonly API: {
+    /** Run a value through `config` on the native side, and say when it has ended. */
+    startAnimatingNode?(
+      animationId: number,
+      nodeTag: number,
+      config: object,
+      end: (result: { finished: boolean }) => void,
+    ): void;
+    stopAnimation?(animationId: number): void;
     createAnimatedNode(tag: number, config: object): void;
     connectAnimatedNodes(parentTag: number, childTag: number): void;
     disconnectAnimatedNodes(parentTag: number, childTag: number): void;
@@ -209,6 +218,65 @@ export class NativeScrollDriver {
         if (!state.nodes || state.viewTag === null) return;
         this.dropChannels(state.nodes, state.viewTag);
         this.release(source, key);
+        this.flush();
+      },
+    };
+  }
+
+  /**
+   * Play a view's opacity and transform by the clock: each channel an interpolation from a value
+   * native runs from nothing to `timing.toValue`, over the frames it is given, as many times as
+   * asked. Nothing runs in JavaScript while it plays. `ended` is told when native reaches the end
+   * of the last iteration; `stop` lets the view go, and stops an animation still playing.
+   *
+   * Null where the native module cannot start an animation, and the caller plays it itself.
+   */
+  play(
+    view: object,
+    channels: DrivenChannels,
+    timing: { frames: readonly number[]; toValue: number; iterations: number },
+    tagOf: (node: object) => number | null,
+    ended: () => void,
+  ): { stop(): void } | null {
+    const { API } = this.native;
+    const start = API.startAnimatingNode;
+    if (!start || !API.stopAnimation || !this.native.generateNewAnimationId) return null;
+    const state = {
+      viewTag: null as number | null,
+      nodes: null as number[] | null,
+      value: 0,
+      id: 0,
+      over: false,
+    };
+    const connect = (): boolean => {
+      if (state.over) return true;
+      const viewTag = tagOf(view);
+      if (viewTag === null) return false;
+      state.viewTag = viewTag;
+      state.value = this.native.generateNewNodeTag();
+      API.createAnimatedNode(state.value, { type: 'value', value: 0, offset: 0 });
+      state.nodes = this.buildChannels(state.value, viewTag, channels);
+      state.id = this.native.generateNewAnimationId!();
+      const config = { type: 'frames', frames: [...timing.frames], toValue: timing.toValue };
+      start(state.id, state.value, { ...config, iterations: timing.iterations }, (result) => {
+        // Stopped rather than finished is the caller's own doing, and it knows.
+        if (!result.finished || state.over) return;
+        state.id = 0;
+        ended();
+      });
+      this.flush();
+      return true;
+    };
+    if (!connect()) this.pending.add(connect);
+    return {
+      stop: () => {
+        if (state.over) return;
+        state.over = true;
+        this.pending.delete(connect);
+        if (!state.nodes || state.viewTag === null) return;
+        if (state.id) API.stopAnimation!(state.id);
+        this.dropChannels(state.nodes, state.viewTag);
+        API.dropAnimatedNode(state.value);
         this.flush();
       },
     };

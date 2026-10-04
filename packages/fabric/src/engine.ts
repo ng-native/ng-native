@@ -55,7 +55,7 @@ export type FabricNode = { readonly __fabricNode: unique symbol } | object;
 
 /** Where a node is, in the window's coordinates. What `Engine.measure` reports. */
 import type { HostEngine, HostNode, Settling } from './host.ts';
-import { firstFrame, rangeOf, scrollChannels } from './scroll-animation.ts';
+import { clockChannels, firstFrame, rangeOf, scrollChannels } from './scroll-animation.ts';
 import { FontFaces } from './font-faces.ts';
 import { premultipliedStops } from './premultiplied-stops.ts';
 
@@ -1444,6 +1444,9 @@ function repaint(node: EngineNode): void {
   if (node.paintsOn?.parent === node) node.paintsOn.propsDirty = true;
 }
 
+/** A sixtieth of a second: how far apart the frames native is given for an animation are. */
+const NATIVE_FRAME = 1000 / 60;
+
 /** The style keys that are a view's background. */
 const PAINT_KEYS = [
   'backgroundColor',
@@ -2648,6 +2651,7 @@ export class Engine implements HostEngine {
       node.playing = undefined;
       this.markProps(node, false);
     }
+    this.releasePlayedNatively();
     for (const nodes of this.scrollTimelines.values()) {
       for (const node of nodes) {
         if (this.topOf(node) === this.root) continue;
@@ -2683,6 +2687,7 @@ export class Engine implements HostEngine {
     node.listeners = null;
     node.committed = null;
     node.transitions = undefined;
+    if (node.playing) this.stopNative(node, node.playing);
     node.playing = undefined;
     this.stopScrolled(node);
     this.running.delete(node);
@@ -3393,6 +3398,7 @@ export class Engine implements HostEngine {
    */
   private handOverToScroll(node: EngineNode, spec: AnimationSpec): void {
     if (!node.playing) return;
+    this.stopNative(node, node.playing);
     if (node.playing.spec.name !== spec.name) this.cancelPlaying(node);
     node.playing = undefined;
     this.playing.delete(node);
@@ -3404,8 +3410,93 @@ export class Engine implements HostEngine {
    */
   private cancelPlaying(node: EngineNode): void {
     const running = node.playing;
+    if (running) this.stopNative(node, running);
     if (running && !running.done)
       this.emitTransition(node, 'topAnimationcancel', running.spec.name);
+  }
+
+  /** Stop on native each animation whose view has left the tree. */
+  private releasePlayedNatively(): void {
+    for (const node of [...this.playedNatively]) {
+      if (this.topOf(node) === this.root) continue;
+      this.stopNative(node, node.playing!);
+      node.playing = undefined;
+      this.markProps(node, false);
+    }
+  }
+
+  /** Every node whose animation native is playing, with no frame of it in JavaScript. */
+  private readonly playedNatively = new Set<EngineNode>();
+
+  /**
+   * Hand an animation that has just started to native, where native can play it: one that moves
+   * only opacity and transforms, starts at once, and repeats a whole number of times. Native then
+   * runs it frame by frame, and JavaScript hears of it again when it ends. Anything else is
+   * played from here, a commit a frame. See `NativeScrollDriver.play`.
+   */
+  private playNatively(
+    node: EngineNode,
+    running: RunningAnimation,
+    props: Record<string, unknown>,
+  ): boolean {
+    const { spec } = running;
+    if (!this.scrollDriver || spec.delay !== 0 || spec.duration <= 0) return false;
+    const { channels, held, span } = clockChannels(running.tracks, spec, props);
+    if (held.length || !(channels.opacity || channels.transform.length)) return false;
+    // There and back is one native animation: an odd number of ways has no whole number of them.
+    const count = spec.iterations === null ? -1 : spec.iterations / span;
+    if (count !== -1 && !(Number.isInteger(count) && count > 0)) return false;
+    const length = Math.max(2, Math.round((spec.duration * span) / NATIVE_FRAME) + 1);
+    const frames = Array.from({ length }, (_, i) => i / (length - 1));
+    const native = this.scrollDriver.play(
+      node,
+      channels,
+      { frames, toValue: span, iterations: count },
+      (view) => this.tagOf(view as EngineNode),
+      () => this.endedNatively(node, running),
+    );
+    if (!native) return false;
+    running.native = native;
+    // As Animated does: Fabric flattens a view that only lays out, and then there is no native
+    // view for the animation to move.
+    running.values = { ...running.values, collapsable: false };
+    this.playedNatively.add(node);
+    return true;
+  }
+
+  /**
+   * Native reached the end of an animation it was playing. The frame it ends at, or the resting
+   * style where it does not fill, is committed before the view is let go, so nothing shows of
+   * the frame it started at, which is what the view had been committed with.
+   */
+  private endedNatively(node: EngineNode, running: RunningAnimation): void {
+    if (node.playing !== running || !running.native) return;
+    const { native, spec } = running;
+    running.native = undefined;
+    this.playedNatively.delete(node);
+    const end = running.start + spec.duration * (spec.iterations ?? 1);
+    this.advancePlayer(node, Math.max(this.now(), end));
+    this.commit();
+    native.stop();
+  }
+
+  /** Take an animation back from native, which stops it there. The caller plays it on, or not. */
+  private stopNative(node: EngineNode, running: RunningAnimation): void {
+    if (!running.native) return;
+    running.native.stop();
+    running.native = undefined;
+    this.playedNatively.delete(node);
+  }
+
+  /**
+   * Play on from JavaScript an animation native was playing, from where its clock has got to:
+   * what a pause, other frames or a view made again need, none of which native can be told of.
+   */
+  private backToScript(node: EngineNode, running: RunningAnimation): void {
+    if (!running.native) return;
+    this.stopNative(node, running);
+    running.values = sample(running, this.now()).values;
+    if (!running.done && running.pausedAt === undefined) this.playing.add(node);
   }
 
   /** Start the clock on an animation, unless the node is already playing this one. */
@@ -3419,6 +3510,7 @@ export class Engine implements HostEngine {
     const inherited = this.inheritedColour(node, frames);
     if (!current || !sameAnimation(current.spec, spec)) {
       if (current && current.spec.name !== spec.name) this.cancelPlaying(node);
+      else if (current) this.stopNative(node, current);
       const started: RunningAnimation = {
         spec,
         tracks: tracksOf(frames, props, inherited),
@@ -3438,11 +3530,14 @@ export class Engine implements HostEngine {
       this.playedFrames.set(started, frames);
       node.playing = started;
       if (spec.paused) started.pausedAt = this.now();
-      else this.playing.add(node);
+      else if (!this.playNatively(node, started, props)) this.playing.add(node);
       this.emitTransition(node, 'topAnimationstart', spec.name);
       return;
     }
+    // A view made again is another view: the one native was moving is gone.
+    if (node.committed === null) this.backToScript(node, current);
     if (this.playedFrames.get(current) !== frames || inherited !== current.inherited) {
+      this.backToScript(node, current);
       this.reframe(node, current, frames, props, inherited);
     }
     this.playOrPause(node, node.playing!, spec);
@@ -3488,6 +3583,7 @@ export class Engine implements HostEngine {
     current.spec = spec;
     const now = this.now();
     if (spec.paused && current.pausedAt === undefined && !current.done) {
+      this.backToScript(node, current);
       current.pausedAt = now;
       this.playing.delete(node);
     } else if (!spec.paused && current.pausedAt !== undefined) {
