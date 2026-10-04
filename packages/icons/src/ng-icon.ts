@@ -60,11 +60,22 @@ function toPropertyName(name: string): string {
 @Component({
   selector: 'ng-icon',
   template: '',
+  /*
+   * With no size it is as big as the text around it, which is what an icon is on the web:
+   * `@ng-icons/core` sizes one `1em`, and a library sizes its icons with a font size. A `size`
+   * is an inline style, which beats this.
+   */
+  styles: `
+    :host {
+      width: 1em;
+      height: 1em;
+    }
+  `,
   host: {
     '[style]': 'style()',
     '[color]': 'color()',
-    '[bbWidth]': 'size()',
-    '[bbHeight]': 'size()',
+    '[bbWidth]': 'box()',
+    '[bbHeight]': 'box()',
     '[minX]': 'viewBox().minX',
     '[minY]': 'viewBox().minY',
     '[vbWidth]': 'viewBox().vbWidth',
@@ -89,9 +100,13 @@ export class NgIcon {
   readonly svg = input<string>();
   /**
    * Points, square. Icons are drawn from a `viewBox`, so this is the size on screen. A static
-   * `size="32"` is read as the number it spells.
+   * `size="32"` is read as the number it spells. With none, the icon is `1em`: as big as the
+   * text around it, and sized by a `font-size` on it or above it, or by a width and height.
    */
-  readonly size = input(24, { transform: (value: number | string) => numberAttribute(value, 24) });
+  readonly size = input(undefined, {
+    transform: (value: number | string | undefined) =>
+      value === undefined || value === '' ? undefined : numberAttribute(value, undefined),
+  });
   /** What a `currentColor` stroke or fill paints as. Native resolves it, so binding is cheap. */
   readonly color = input<string>();
   /** Fills in `var(--ng-icon__stroke-width, …)`, which is how an outline set carries its weight. */
@@ -99,7 +114,13 @@ export class NgIcon {
   /** Absent leaves the icon out of the accessibility tree, which is right for a decorative one. */
   readonly accessibilityLabel = input<string>();
 
-  protected readonly style = computed(() => ({ width: this.size(), height: this.size() }));
+  /** The size as an inline style, or nothing for the stylesheet's `1em` to stand. */
+  protected readonly style = computed(() => {
+    const size = this.size();
+    return size === undefined ? {} : { width: size, height: size };
+  });
+  /** What the view scales its drawing to: the size, or the whole of the box it is laid out as. */
+  protected readonly box = computed(() => this.size() ?? '100%');
 
   private readonly markup: Signal<string | undefined> = computed(() => {
     const svg = this.svg();

@@ -35,7 +35,8 @@ underneath `NgIcon` changes.
 ## What's in the package
 
 - `NgIcon` - the component, taking `name` or `svg`, plus `size`, `color`, `strokeWidth` and
-  `accessibilityLabel`.
+  `accessibilityLabel`. With no `size` an icon is `1em`, as it is on the web: as big as the text
+  around it, and sized by a `font-size` or by a width and height from a stylesheet.
 - A narrow SVG parser (`svg`, `g`, `path`, `circle`, `ellipse`, `rect`, `line`, `polyline`,
   `polygon`) that covers every set ng-icons ships.
 

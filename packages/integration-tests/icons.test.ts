@@ -276,6 +276,18 @@ describe('an icon in the tree', () => {
     assert.equal(byId('named').props['name'], undefined, 'the input is not a native prop');
   });
 
+  it('is as big as the text around it where it is given no size, as an icon is on the web', () => {
+    // `@ng-icons/core` sizes an icon `1em`, so a library sizes one with a font size on it or
+    // around it. The view scales what it draws to whatever size that comes to.
+    assert.equal(byId('by-font').props['width'], 20);
+    assert.equal(byId('by-font').props['height'], 20);
+    assert.equal(byId('by-font').props['bbWidth'], '100%');
+    assert.equal(byId('by-font').props['bbHeight'], '100%');
+    // With no font size in scope it is the 16 an em falls back to.
+    assert.equal(byId('raw').props['width'], 16);
+    assert.equal(byId('raw').props['bbWidth'], '100%');
+  });
+
   it('takes a size written as a static attribute, which arrives as a string', () => {
     // `size="32"` is how the web writes it. A string width is one native drops, and the icon
     // lost its size.
