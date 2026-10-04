@@ -96,6 +96,15 @@ class that pauses whatever animation the element has, which is how a story or a 
 while a finger is down: `.held { animation-play-state: paused }`. An animation that starts
 paused shows its first frame.
 
+An animation whose keyframes set only `opacity` and transforms is played by native: the
+keyframes are handed to React Native's animated module when it starts, and nothing runs in
+JavaScript until it ends. A spinner or a pulsing placeholder, which never ends, costs the
+JavaScript thread nothing while its screen is open. Any other animation is played from
+JavaScript, a commit on every frame: one that sets a color or a size, one with an
+`animation-delay`, one that repeats a fractional number of times, and every animation where the
+animated module is absent. An animation native is playing is handed back to JavaScript, at the
+frame it has reached, when it is paused or its keyframes change.
+
 `animation-name: none` (or `animation: none`) stops an animation a weaker rule started, and a rule
 with durations but no name plays nothing on its own, as in a browser. A few real constraints come
 with it, whichever spelling you use:
