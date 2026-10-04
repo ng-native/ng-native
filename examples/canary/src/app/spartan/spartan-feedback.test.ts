@@ -84,9 +84,9 @@ test('a skeleton takes the size it is given, and pulses', async () => {
   await vi.waitFor(() => expect(props('avatar')['opacity']).toBeLessThan(1));
 });
 
-// Fails until a rule in `@layer components` keeps its place under the utilities: `rounded-full`
-// beside the skeleton's own `rounded-md` loses to it. When it does, this passes and `fails` flags it.
-test.fails('a skeleton takes the shape a utility gives it', async () => {
+// `rounded-full` beside the skeleton's own `rounded-md`, which is in the components layer and so
+// under the utilities.
+test('a skeleton takes the shape a utility gives it', async () => {
   await mount();
   expect(props('avatar')['borderTopLeftRadius']).toBeGreaterThan(20);
 });
