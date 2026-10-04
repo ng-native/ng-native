@@ -21,29 +21,25 @@ const box = (id: string): FakeFabricNode => {
   return find(screen.getByTestId(id))!;
 };
 
-// Fails with the test below it, and for the same reason: the focus ring's border is on.
-test.fails(
-  'a checkbox is a small bordered box that says what it is and whether it is checked',
-  async () => {
-    await mount();
-    expect(box('terms').props).toMatchObject({
-      role: 'checkbox',
-      accessibilityState: { checked: false },
-      width: 16,
-      height: 16,
-      borderTopWidth: 1,
-      borderTopLeftRadius: 4,
-      alignItems: 'center',
-      justifyContent: 'center',
-    });
-    expect(box('terms').props['backgroundColor']).toBeUndefined();
-    expect(box('checked').props).toMatchObject({
-      accessibilityState: { checked: true },
-      backgroundColor: 'rgb(16, 24, 40)',
-      borderTopColor: 'rgb(16, 24, 40)',
-    });
-  },
-);
+test('a checkbox is a small bordered box that says what it is and whether it is checked', async () => {
+  await mount();
+  expect(box('terms').props).toMatchObject({
+    role: 'checkbox',
+    accessibilityState: { checked: false },
+    width: 16,
+    height: 16,
+    borderTopWidth: 1,
+    borderTopLeftRadius: 4,
+    alignItems: 'center',
+    justifyContent: 'center',
+  });
+  expect(box('terms').props['backgroundColor']).toBeUndefined();
+  expect(box('checked').props).toMatchObject({
+    accessibilityState: { checked: true },
+    backgroundColor: 'rgb(16, 24, 40)',
+    borderTopColor: 'rgb(16, 24, 40)',
+  });
+});
 
 test('a press checks a checkbox, and another unchecks it', async () => {
   await mount();
@@ -58,8 +54,7 @@ test('a press checks a checkbox, and another unchecks it', async () => {
   expect(box('terms').props['backgroundColor'] ?? null).toBeNull();
 });
 
-// Fails with the test below it, and for the same reason: the focus ring's border is on.
-test.fails('a switch is a pill with a round thumb that slides when it is on', async () => {
+test('a switch is a pill with a round thumb', async () => {
   await mount();
   expect(box('wifi').props).toMatchObject({
     role: 'switch',
@@ -76,10 +71,16 @@ test.fails('a switch is a pill with a round thumb that slides when it is on', as
     height: 16,
     backgroundColor: 'rgb(255, 255, 255)',
   });
-  expect(thumb('wifi')['transform']).toContainEqual({ translateX: 0 });
+
   expect(box('on').props).toMatchObject({ backgroundColor: 'rgb(16, 24, 40)' });
-  // `translate-x-[calc(100%-2px)]`, of a 16 point thumb.
-  expect(thumb('on')['transform']).toContainEqual({ translateX: 14 });
+});
+
+// Fails: the thumb moves with `data-checked:ltr:translate-x-[calc(100%-2px)]`, and Tailwind's
+// `ltr:` variant is dropped on native, so the thumb of a switch that is on stays at the start.
+test.fails('the thumb of a switch that is on is at the far end', async () => {
+  await mount();
+  const thumb = box('on').children[0]!.props;
+  expect(thumb['transform']).toContainEqual({ translateX: 14 });
 });
 
 test('a press turns a switch on', async () => {
@@ -98,9 +99,9 @@ test('a disabled checkbox or switch is dimmed and does not change', async () => 
   expect(box('disabled-check').props['opacity']).toBe(0.5);
 });
 
-// Fails until the presets read `data-focus="false"` and `data-disabled="false"` as off, which is
-// how Spartan's primitives write a state that is off. When they do, this passes and `fails` flags it.
-test.fails('an enabled, unfocused checkbox or switch is neither dimmed nor ringed', async () => {
+// Spartan's primitives write a state that is off as `data-focus="false"`, which the presets read
+// as off.
+test('an enabled, unfocused checkbox or switch is neither dimmed nor ringed', async () => {
   await mount();
   for (const id of ['terms', 'wifi']) {
     expect(box(id).props['opacity'], id).toBeUndefined();

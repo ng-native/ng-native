@@ -195,3 +195,20 @@
 .spartan-switch-thumb {
   @apply bg-background dark:data-unchecked:bg-foreground dark:data-checked:bg-primary-foreground rounded-full group-data-[size=default]/switch:size-4 group-data-[size=sm]/switch:size-3 data-unchecked:translate-x-0 data-checked:ltr:translate-x-[calc(100%-2px)] data-checked:rtl:-translate-x-[calc(100%-2px)];
 }
+
+/* MARK: Tabs */
+.spartan-tabs {
+  @apply gap-2;
+}
+
+.spartan-tabs-list {
+  @apply rounded-lg p-[3px] group-data-horizontal/tabs:h-9 data-[variant=line]:rounded-none;
+}
+
+.spartan-tabs-trigger {
+  @apply gap-1.5 rounded-md border border-transparent px-2 py-1 text-sm font-medium group-data-[variant=default]/tabs-list:data-active:shadow-sm group-data-[variant=line]/tabs-list:data-active:shadow-none [&_ng-icon:not([class*='text-'])]:text-[length:--spacing(4)];
+}
+
+.spartan-tabs-content {
+  @apply text-sm;
+}

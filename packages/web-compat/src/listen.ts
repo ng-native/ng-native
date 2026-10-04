@@ -27,6 +27,13 @@ export const webListen: RendererExtension = {
   set(node, name, value, engine) {
     // Markup as a string is nothing a native view reads, and an icon's is long.
     if (name === 'innerHTML') return true;
+    // HTML's `hidden`: the element takes no space and draws nothing, whatever its stylesheet says
+    // of its display, which is what a browser's own sheet and every reset make of it.
+    if (name === 'hidden' && documentOf(engine)) {
+      const hidden = value != null && value !== false && value !== 'false';
+      engine.setProp(node, 'style', { ...inlineStyle(node), display: hidden ? 'none' : undefined });
+      return true;
+    }
     // An HTML `id` is the view's `nativeID`, which is where a selector and a lookup read it.
     if (name === 'id' && documentOf(engine)) {
       engine.setProp(node, 'nativeID', value);
@@ -51,6 +58,10 @@ export const webListen: RendererExtension = {
     return onClick(engine, target, callback);
   },
 };
+
+/** A node's inline style, to add to. */
+const inlineStyle = (node: EngineNode) =>
+  (node.props['style'] as Record<string, unknown> | undefined) ?? {};
 
 type Listener = (event: unknown) => boolean | void;
 

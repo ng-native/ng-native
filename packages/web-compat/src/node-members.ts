@@ -1,6 +1,6 @@
 import type { Engine, EngineNode } from '@ng-native/fabric';
 import { propOf } from './attribute.ts';
-import { documentOf } from './document.ts';
+import { documentOf, ownView } from './document.ts';
 import { setField, valueOf } from './field.ts';
 import { descendants, matches } from './selector.ts';
 
@@ -300,7 +300,7 @@ export const nodeMembers = (core: CoreNode): PropertyDescriptorMap => ({
   // `@ng-native/icons` draws, is the upgrade.
   content: get(function () {
     let placeholder = placeholders.get(this);
-    if (!placeholder) placeholders.set(this, (placeholder = engineOf(this).createElement('view')));
+    if (!placeholder) placeholders.set(this, (placeholder = ownView(engineOf(this))));
     return { firstElementChild: placeholder, firstChild: placeholder, childNodes: [placeholder] };
   }),
 

@@ -6,6 +6,7 @@ import { SpartanButtons } from './spartan-buttons.ts';
 import { SpartanCards } from './spartan-cards.ts';
 import { SpartanChecks } from './spartan-checks.ts';
 import { SpartanInputs } from './spartan-inputs.ts';
+import { SpartanTabs } from './spartan-tabs.ts';
 
 /**
  * Spartan UI on the engine through `@ng-native/web-compat`, one component at a time: each section
@@ -21,6 +22,7 @@ import { SpartanInputs } from './spartan-inputs.ts';
     SpartanCards,
     SpartanChecks,
     SpartanInputs,
+    SpartanTabs,
   ],
   template: `
     <native-header title="Spartan UI" />
@@ -36,6 +38,8 @@ import { SpartanInputs } from './spartan-inputs.ts';
         <app-spartan-inputs />
         <h2 class="text-lg font-semibold">Checkbox and switch</h2>
         <app-spartan-checks />
+        <h2 class="text-lg font-semibold">Tabs</h2>
+        <app-spartan-tabs />
       </div>
     </scroll-view>
   `,

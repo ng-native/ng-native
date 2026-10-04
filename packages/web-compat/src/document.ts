@@ -1,4 +1,4 @@
-import type { Engine, EngineNode } from '@ng-native/fabric';
+import { claimHost, type Engine, type EngineNode } from '@ng-native/fabric';
 import { descendants, matches } from './selector.ts';
 
 /** The document a library is given: what it creates elements with and appends overlays to. */
@@ -15,6 +15,16 @@ const documents = new WeakMap<Engine, CompatDocument>();
 export const documentOf = (engine: Engine): CompatDocument | undefined => documents.get(engine);
 
 /**
+ * A view of the package's own, in no template: claimed, so the engine does not take it for a
+ * `<view>` a template wrote without importing its component.
+ */
+export function ownView(engine: Engine): EngineNode {
+  const node = engine.createElement('view');
+  claimHost(node);
+  return node;
+}
+
+/**
  * `document.body`: a layer over the whole screen that lets touches through to the app, so what a
  * library appends to it (an overlay container) draws above the screen. It joins the tree with its
  * first child, and is kept last under the root, which is on top.
@@ -23,7 +33,7 @@ export const documentOf = (engine: Engine): CompatDocument | undefined => docume
  * the app's root view was added would sit under it; raise on the engine's append if that happens.
  */
 function createBody(engine: Engine): EngineNode {
-  const body = engine.createElement('view');
+  const body = ownView(engine);
   engine.setProp(body, 'style', { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 });
   engine.setProp(body, 'pointerEvents', 'box-none');
   const raise = () => {
@@ -57,7 +67,7 @@ export function documentFor(engine: Engine): CompatDocument {
   const created: CompatDocument = {
     body,
     // Somewhere for a library's style elements to go: never in the tree, so never drawn.
-    head: engine.createElement('view'),
+    head: ownView(engine),
     documentElement: engine.root,
     nodeType: 9,
     readyState: 'complete',
@@ -68,7 +78,7 @@ export function documentFor(engine: Engine): CompatDocument {
     createElementNS: (_: string, name: string) => engine.createElement(name.toLowerCase()),
     createTextNode: (text: string) => engine.createText(text),
     createComment: () => engine.createAnchor(),
-    createDocumentFragment: () => engine.createElement('view'),
+    createDocumentFragment: () => ownView(engine),
     getElementById: (id: string) => all().find((node) => node.props['nativeID'] === id) ?? null,
     querySelector: (selector: string) => all().find((node) => matches(node, selector)) ?? null,
     querySelectorAll: (selector: string) => all().filter((node) => matches(node, selector)),

@@ -361,6 +361,34 @@ class Fields {
   readonly off = signal(true);
 }
 
+@Component({
+  selector: 'x-panels',
+  template: `
+    <div testID="shown" [hidden]="false" style="opacity: 0.5">One</div>
+    <div testID="gone" [hidden]="gone()" style="opacity: 0.5">Two</div>
+    <div testID="static" hidden>Three</div>
+  `,
+})
+class Panels {
+  readonly gone = signal(true);
+}
+
+describe('@ng-native/web-compat hidden', () => {
+  it('takes a hidden element out of the layout, and puts it back', async () => {
+    const app = await render(Panels, { providers: [provideWebCompat()] });
+    const hidden = { includeHiddenElements: true };
+    assert.equal(screen.getByTestId('shown').props['display'] ?? null, null);
+    assert.equal(screen.queryByTestId('gone'), null, 'not there for anyone to find');
+    assert.equal(screen.getByTestId('gone', hidden).props['display'], 'none');
+    assert.equal(screen.getByTestId('static', hidden).props['display'], 'none');
+    assert.equal(screen.getByTestId('gone', hidden).props['opacity'], 0.5, 'its own style stays');
+    app.instance.gone.set(false);
+    await settle();
+    assert.equal(screen.getByTestId('gone').props['display'] ?? null, null);
+    assert.equal(screen.getByTestId('gone').props['opacity'], 0.5);
+  });
+});
+
 describe('@ng-native/web-compat markup', () => {
   it('hands an icon component an empty box for the markup it sets, and sends none of it', async () => {
     const { app, card } = await mount();
