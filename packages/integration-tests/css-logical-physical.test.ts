@@ -115,6 +115,55 @@ describe('a logical corner and a physical one', () => {
     assert.equal(has(second, 'borderStartEndRadius'), false);
   });
 
+  it('is the one written later where a rule has one from a token and one written out', () => {
+    // The token is settled on the device and the literal at build time: two lists, one order.
+    const token = ':root { --r: 8px }';
+    const later = scene(
+      `${token} .c { border-top-right-radius: var(--r); border-start-end-radius: 0 }`,
+      'c',
+    ).props();
+    assert.equal(later['borderStartEndRadius'], 0);
+    assert.equal(has(later, 'borderTopRightRadius'), false);
+    const earlier = scene(
+      `${token} .c { border-start-end-radius: 0; border-top-right-radius: var(--r) }`,
+      'c',
+    ).props();
+    assert.equal(earlier['borderTopRightRadius'], 8);
+    assert.equal(has(earlier, 'borderStartEndRadius'), false);
+    const both = scene(
+      `${token} :root { --s: 2px } .c { border-top-right-radius: var(--r); border-start-end-radius: var(--s) }`,
+      'c',
+    ).props();
+    assert.equal(both['borderStartEndRadius'], 2);
+    assert.equal(has(both, 'borderTopRightRadius'), false);
+  });
+
+  it('is the important one written later where a rule has both, important', () => {
+    const css =
+      '.c { border-top-right-radius: 8px !important; border-start-end-radius: 0 !important }';
+    const props = scene(css, 'c').props();
+    assert.equal(props['borderStartEndRadius'], 0);
+    assert.equal(has(props, 'borderTopRightRadius'), false);
+    const mixed = scene(
+      '.c { border-top-right-radius: 8px !important; border-start-end-radius: 0 }',
+      'c',
+    ).props();
+    assert.equal(mixed['borderTopRightRadius'], 8, 'an important one over a plain one after it');
+    assert.equal(has(mixed, 'borderStartEndRadius'), false);
+  });
+
+  it('is the one an inline style sets later where it sets both', () => {
+    const s = scene('', '');
+    s.engine.setProp(s.node, 'style', { borderTopRightRadius: 4, borderStartEndRadius: 0 });
+    const logical = s.props();
+    assert.equal(logical['borderStartEndRadius'], 0);
+    assert.equal(has(logical, 'borderTopRightRadius'), false);
+    s.engine.setProp(s.node, 'style', { borderStartEndRadius: 0, borderTopRightRadius: 4 });
+    const physical = s.props();
+    assert.equal(physical['borderTopRightRadius'], 4);
+    assert.equal(has(physical, 'borderStartEndRadius'), false);
+  });
+
   it('takes an inline one over a rule', () => {
     const s = scene(SQUARE_END, 'square-end');
     s.engine.setProp(s.node, 'style', { borderTopRightRadius: 4 });

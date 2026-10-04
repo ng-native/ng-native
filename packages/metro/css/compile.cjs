@@ -2274,10 +2274,20 @@ function compileCss(source, context = 'styles', options = {}) {
     const deferred = [];
 
     /** Translate one list of declarations, collecting tokens and deferred values as it goes. */
-    const build = (list) => {
-      const out = {};
+    const build = (list, sides) => {
+      const written = {};
+      // Each corner and edge as it is written, so the order the two forms came in is kept.
+      const out = new Proxy(written, {
+        set(target, prop, value) {
+          target[prop] = value;
+          sides.wrote(prop);
+          return true;
+        },
+      });
       for (const declaration of list ?? []) {
+        const before = deferred.length;
         declare(declaration, out, tokens, deferred, context, addDeclaration, platforms);
+        for (let i = before; i < deferred.length; i++) deferred[i].props.forEach(sides.wrote);
       }
       // The transition longhands are meaningless one at a time: a duration list is sized by the
       // property list, which may be declared after it. This is where the rule is complete.
@@ -2289,13 +2299,15 @@ function compileCss(source, context = 'styles', options = {}) {
         delete out['$animation'];
       }
       finishBox(out, context);
-      return out;
+      return written;
     };
 
-    const shared = build(declarations);
+    const sides = sideOrder();
+    const importantSides = sideOrder();
+    const shared = build(declarations, sides);
     const normalCount = deferred.length;
     const plainTokens = { ...tokens };
-    const important = build(importantDeclarations);
+    const important = build(importantDeclarations, importantSides);
     // The custom properties the important pass set, which the cascade applies after every plain
     // one, as it does an important declaration.
     const importantTokens = Object.keys(tokens).filter(
@@ -2319,6 +2331,8 @@ function compileCss(source, context = 'styles', options = {}) {
       ...(Object.keys(tokens).length ? { tokens } : {}),
       ...(importantTokens.length ? { importantTokens } : {}),
       ...(deferred.length ? { deferred } : {}),
+      ...(sides.mixed() ? { sides: sides.order } : {}),
+      ...(importantSides.mixed() ? { importantSides: importantSides.order } : {}),
     };
   }
 
@@ -2592,6 +2606,43 @@ function nameOf(term, context) {
     `${context}: '${JSON.stringify(term).slice(0, 40)}' is not a platform colour name. ` +
       `Quote it if it is not a plain word: platform-color("?attr/textColorPrimary").`,
   );
+}
+
+/**
+ * The properties with a logical form and a physical one for the same corner or edge, as the
+ * engine pairs them (`SIDES_LTR` in `@ng-native/fabric`'s `css.ts`). The engine settles the two
+ * as one property, the later winning, and between rules it has their order. Within one rule it
+ * has two lists, the values settled here and the ones settled on device, so the order the rule
+ * wrote them in is sent with it, for a rule that wrote both forms.
+ */
+const LOGICAL_SIDES = new Set([
+  ...['borderStartStartRadius', 'borderStartEndRadius', 'borderEndStartRadius'],
+  ...['borderEndEndRadius', 'marginStart', 'marginEnd', 'paddingStart', 'paddingEnd'],
+  ...['borderStartWidth', 'borderEndWidth', 'borderStartColor', 'borderEndColor', 'start', 'end'],
+]);
+const PHYSICAL_SIDES = new Set([
+  ...['borderTopLeftRadius', 'borderTopRightRadius', 'borderBottomLeftRadius'],
+  ...['borderBottomRightRadius', 'marginLeft', 'marginRight', 'paddingLeft', 'paddingRight'],
+  ...['borderLeftWidth', 'borderRightWidth', 'borderLeftColor', 'borderRightColor'],
+  ...['left', 'right'],
+]);
+
+/** The corners and edges one list of declarations wrote, in the order it last wrote each. */
+function sideOrder() {
+  const order = [];
+  return {
+    order,
+    wrote(prop) {
+      if (!LOGICAL_SIDES.has(prop) && !PHYSICAL_SIDES.has(prop)) return;
+      const at = order.indexOf(prop);
+      if (at !== -1) order.splice(at, 1);
+      order.push(prop);
+    },
+    /** Whether both forms were written, which is when the order between them matters. */
+    mixed: () =>
+      order.some((prop) => LOGICAL_SIDES.has(prop)) &&
+      order.some((prop) => PHYSICAL_SIDES.has(prop)),
+  };
 }
 
 /** The combinators a node's own position can answer, which is all four of the real ones. */

@@ -100,6 +100,15 @@ export interface StyleRule {
   readonly importantTokens?: readonly string[];
   /** Declarations whose value is a `var()`, resolved once the token map is known. */
   readonly deferred?: readonly DeferredDeclaration[];
+  /**
+   * The corners and edges the rule's plain declarations wrote, in the order it wrote them, where
+   * it wrote one in both its logical form and its physical one. The cascade settles the two as
+   * one property, and a value settled on device is in a list of its own, with no order between
+   * it and the rest.
+   */
+  readonly sides?: readonly string[];
+  /** The same for the rule's important declarations. */
+  readonly importantSides?: readonly string[];
   /** The media query guarding this rule, if any. */
   readonly condition?: MediaCondition;
   /** Memo of the last condition evaluation, and the conditions version it was made against. */
@@ -1071,11 +1080,31 @@ class OtherForms {
     return kept;
   }
 
-  /** Once `rule` is applied: where it has both forms, the one it wrote later stands. */
-  within(rule: StyleRule, normal: Record<string, unknown>): void {
-    const sides = this.twin && sided(rule);
-    if (!sides) return;
-    for (const key of writtenEarlier(sides.plain, this.twin!)) delete normal[key];
+  /**
+   * Once `rule` is applied, its deferred values among `deferred`: where it wrote both forms, the
+   * one it wrote later stands, among its plain declarations and among its important ones. The
+   * order is the rule's own, sent with it, since a value settled on device is in another list.
+   */
+  within(
+    rule: StyleRule,
+    normal: Record<string, unknown>,
+    important: Record<string, unknown>,
+    deferred: DeferredDeclaration[] | null,
+  ): DeferredDeclaration[] | null {
+    if (!rule.sides && !rule.importantSides) return deferred;
+    const twin = (this.twin ??= TWIN[this.direction()]);
+    let kept = deferred;
+    const settle = (order: readonly string[], into: Record<string, unknown>, tier: boolean) => {
+      const lost: Record<string, true> = {};
+      for (const key of writtenEarlier(order, twin)) {
+        delete into[key];
+        lost[key] = true;
+      }
+      kept &&= overriddenBy(kept, lost, tier);
+    };
+    if (rule.sides) settle(rule.sides, normal, false);
+    if (rule.importantSides) settle(rule.importantSides, important, true);
+    return kept;
   }
 
   /** An important one stands over the other form wherever that was set, as over its own. */
@@ -1956,7 +1985,6 @@ export class StyleResolver {
     for (const rule of this.layered ? byImportance(matched, this.layerPlaces) : matched) {
       deferred = forms.before(rule, normal, important, deferred);
       Object.assign(normal, rule.declarations);
-      forms.within(rule, normal);
       if (rule.important) {
         Object.assign(important, rule.important);
         hasImportant = true;
@@ -1966,7 +1994,7 @@ export class StyleResolver {
       if (rule.importantTokens) {
         Object.assign((importantTokens ??= {}), pick(rule.tokens!, rule.importantTokens));
       }
-      deferred = carryDeferred(deferred, rule);
+      deferred = forms.within(rule, normal, important, carryDeferred(deferred, rule));
     }
     if (importantTokens) Object.assign(tokens!, importantTokens);
     deferred = forms.after(normal, deferred);
@@ -1985,11 +2013,13 @@ export class StyleResolver {
    */
   overOtherForms(inline: Readonly<Record<string, unknown>>, style: Record<string, unknown>): void {
     let twin: Readonly<Record<string, string>> | null = null;
-    for (const key in inline) {
+    const written = Object.keys(inline);
+    for (const [at, key] of written.entries()) {
       if (!(key in TWIN.ltr)) continue;
       twin ??= TWIN[(style['direction'] ?? this.conditions.direction) === 'rtl' ? 'rtl' : 'ltr'];
       const other = twin[key]!;
-      if (!(other in inline)) delete style[other];
+      // Where the inline style sets both, the one it set later stands.
+      if (written.indexOf(other) < at) delete style[other];
     }
   }
 
