@@ -13,6 +13,7 @@ import {
   inlineInherited,
   setsInherited,
   StyleResolver,
+  usesActive,
   type Conditions,
   type DeferredDeclaration,
   type StyleCache,
@@ -435,6 +436,8 @@ export interface EngineNode extends HostNode {
   styleDirty: boolean;
   /** See `StyleTarget.hasDirty`. */
   hasDirty: boolean;
+  /** See `StyleTarget.stateDirty`. */
+  stateDirty: boolean;
   /** A family left out while it loads. See `loadingFamilies`. */
   heldFamily?: string;
   /** See `StyleTarget.inlineInherits`. */
@@ -1667,6 +1670,7 @@ class RetainedNode {
   fitContainer: string | undefined = undefined;
   heightBasis: boolean | undefined = undefined;
   hasDirty = false;
+  stateDirty = false;
   ownStyle: object | undefined = undefined;
   claimed: true | undefined = undefined;
   dormantHoists: EngineNode[] | null = null;
@@ -2189,6 +2193,7 @@ export class Engine implements HostEngine {
     if (options.tokens) this.styles.setRootTokens(options.tokens);
     this.structuralSheets = options.globalStyles?.structural === true;
     this.watchHas(options.globalStyles);
+    this.watchActive(options.globalStyles);
     this.dev = options.dev ?? (globalThis as { __DEV__?: boolean }).__DEV__ === true;
     if (this.dev) {
       this.styles.onUndefinedToken = (name, props, on) =>
@@ -2254,10 +2259,47 @@ export class Engine implements HostEngine {
     for (let node = from; node; node = node.parent) {
       if (node.active === active) continue;
       node.active = active;
-      this.markProps(node);
+      this.markActive(node);
       changed = true;
     }
     return changed;
+  }
+
+  /** Whether any sheet styles a pressed element, and whether one asks about it from another. */
+  private activeUse = { own: false, other: false };
+
+  /** Note what a sheet in play asks about a pressed element. See `markActive`. */
+  private watchActive(sheet: StyleSheet | null | undefined): void {
+    if (!sheet) return;
+    const use = usesActive(sheet);
+    const first = !this.activeUse.own && !this.activeUse.other && (use.own || use.other);
+    this.activeUse = {
+      own: this.activeUse.own || use.own,
+      other: this.activeUse.other || use.other,
+    };
+    if (!first || this.styles.tracksHas) return;
+    // What a pressed element is compared with is the rules it matched, which no cache kept until
+    // a sheet asked. Nothing is resolved yet when the sheet is the one the engine was made with.
+    this.styles.tracksHas = true;
+    if (!this.root) return;
+    this.root.styleDirty = true;
+    this.markPath(this.root);
+  }
+
+  /**
+   * A press began or ended on `node` or under it, which is all that changed about it. A press
+   * reaches every ancestor up to the root, and marking each as restyled would style the whole
+   * screen again, twice a press. So each is only matched again, and keeps its style and all
+   * that is under it unless it now matches other rules. Where a rule asks about a pressed
+   * element from inside or beside it, what that reaches is not the element alone, and it is
+   * restyled with everything under it as any other change is. With no rule for a pressed
+   * element at all there is nothing to match.
+   */
+  private markActive(node: EngineNode): void {
+    if (this.activeUse.other) return this.markProps(node);
+    if (!this.activeUse.own) return;
+    node.stateDirty = true;
+    this.markPath(node.parent ?? node);
   }
 
   /**
@@ -2279,6 +2321,7 @@ export class Engine implements HostEngine {
     else this.registerSheet(sheet);
     if (sheet.structural) this.structuralSheets = true;
     this.watchHas(sheet);
+    this.watchActive(sheet);
     this.markPath(this.root);
     return true;
   }
@@ -2465,6 +2508,7 @@ export class Engine implements HostEngine {
     node.sheet = sheet;
     if (sheet?.structural) this.structuralSheets = true;
     this.watchHas(sheet);
+    this.watchActive(sheet);
     this.markProps(node);
   }
 
@@ -2511,6 +2555,7 @@ export class Engine implements HostEngine {
     }
     if (sheet?.structural) this.structuralSheets = true;
     this.watchHas(sheet);
+    this.watchActive(sheet);
     if (HOISTS[name]) this.hoisted.add(node);
     return node;
   }

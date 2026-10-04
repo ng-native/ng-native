@@ -598,6 +598,13 @@ export interface StyleTarget {
    * target.
    */
   hasDirty?: boolean;
+  /**
+   * Set by the engine when the node's own interaction state changed and nothing else about it
+   * did: a press began or ended on it or under it. It is matched again, and keeps the style it
+   * has, and everything under it, when it matches the rules it did. Only where no rule asks
+   * about a pressed element from inside or beside it: see `usesActive`.
+   */
+  stateDirty?: boolean;
   /** `:focus`. Set by the engine from the native focus and blur events. */
   focused?: boolean;
   /**
@@ -668,6 +675,35 @@ function drawNoBorder(own: Record<string, unknown>): void {
  * The cost is one integer increment per comparison, against a Set lookup and several property
  * reads, so it does not distort what it measures.
  */
+/**
+ * Whether a sheet has a rule for a pressed element, and whether one asks about a pressed element
+ * from another: `.card:active .title`, `.field:has(:active)`, `.a:active + .b`, or `:active`
+ * inside `:not()` or `:is()`. Only the plain case, `.button:active`, can be answered by matching
+ * the pressed elements alone.
+ */
+export function usesActive(sheet: StyleSheet): { own: boolean; other: boolean } {
+  const known = ACTIVE_USE.get(sheet);
+  if (known) return known;
+  const use = { own: false, other: false };
+  const mentions = (value: unknown): boolean => {
+    if (!value || typeof value !== 'object') return false;
+    if (Array.isArray(value)) return value.some(mentions);
+    return Object.entries(value).some(([key, inside]) =>
+      key === 'pseudo' ? (inside as readonly string[]).includes('active') : mentions(inside),
+    );
+  };
+  for (const rule of sheet.rules) {
+    const subject = rule.compounds.at(-1);
+    if (subject?.pseudo?.includes('active')) use.own = true;
+    const others = rule.compounds.slice(0, -1);
+    const { pseudo: _, ...within } = subject ?? ({} as Compound);
+    if (mentions(others) || mentions(within)) use.other = true;
+  }
+  ACTIVE_USE.set(sheet, use);
+  return use;
+}
+const ACTIVE_USE = new WeakMap<StyleSheet, { own: boolean; other: boolean }>();
+
 export const styleStats = {
   /** Calls to `matchesCompound`, the innermost unit of matching work. */
   compoundTests: 0,
@@ -1669,6 +1705,7 @@ export class StyleResolver {
     node.styleCache = cache;
     node.styleDirty = false;
     node.hasDirty = false;
+    node.stateDirty = false;
     return cache;
   }
 
@@ -1691,7 +1728,7 @@ export class StyleResolver {
   private keptBeneath(node: StyleTarget, parentContext: object, epoch: number): StyleCache | null {
     const cached = node.styleCache;
     const stands =
-      node.hasDirty === true &&
+      (node.hasDirty === true || node.stateDirty === true) &&
       cached?.matched !== undefined &&
       !node.styleDirty &&
       cached.parentContext === parentContext &&
@@ -1702,6 +1739,7 @@ export class StyleResolver {
     const before = cached.matched!;
     if (now.length !== before.length || now.some((rule, i) => rule !== before[i])) return null;
     node.hasDirty = false;
+    node.stateDirty = false;
     cached.epoch = epoch;
     return cached;
   }
@@ -1727,6 +1765,7 @@ export class StyleResolver {
       cached !== null &&
       !node.styleDirty &&
       !node.hasDirty &&
+      !node.stateDirty &&
       cached.parentContext === parentContext &&
       cached.generation === this.generation
     );
