@@ -253,7 +253,14 @@ export const nodeMembers = (core: CoreNode): PropertyDescriptorMap => ({
       return textOf(this);
     },
     function (value) {
-      if (this.kind === 'text') engineOf(this).setText(this, String(value));
+      const engine = engineOf(this);
+      const text = value == null ? '' : String(value);
+      if (this.kind === 'text') return engine.setText(this, text);
+      // An element's text is all it holds: one text node, kept when it is all there already is.
+      const [only] = this.children;
+      if (this.children.length === 1 && only!.kind === 'text') return engine.setText(only!, text);
+      for (const child of [...this.children]) engine.removeChild(this, child);
+      if (text) engine.appendChild(this, engine.createText(text));
     },
   ),
   nodeValue: get(function () {

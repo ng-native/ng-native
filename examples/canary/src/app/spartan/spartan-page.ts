@@ -11,6 +11,7 @@ import { SpartanDialogs } from './spartan-dialogs.ts';
 import { SpartanFeedback } from './spartan-feedback.ts';
 import { SpartanInputs } from './spartan-inputs.ts';
 import { SpartanOverlays } from './spartan-overlays.ts';
+import { SpartanSelects } from './spartan-selects.ts';
 import { SpartanTabs } from './spartan-tabs.ts';
 
 /**
@@ -32,6 +33,7 @@ import { SpartanTabs } from './spartan-tabs.ts';
     SpartanFeedback,
     SpartanInputs,
     SpartanOverlays,
+    SpartanSelects,
     SpartanTabs,
   ],
   template: `
@@ -58,6 +60,8 @@ import { SpartanTabs } from './spartan-tabs.ts';
         <app-spartan-feedback />
         <h2 class="text-lg font-semibold">Popover and tooltip</h2>
         <app-spartan-overlays />
+        <h2 class="text-lg font-semibold">Select</h2>
+        <app-spartan-selects />
         <h2 class="text-lg font-semibold">Toggle, radio group, textarea, avatar</h2>
         <app-spartan-controls />
       </div>

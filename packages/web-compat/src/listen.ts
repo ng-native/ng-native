@@ -26,6 +26,11 @@ export const webListen: RendererExtension = {
   set(node, name, value, engine) {
     // Markup as a string is nothing a native view reads, and an icon's is long.
     if (name === 'innerHTML') return true;
+    // A binding to `textContent` replaces what the element holds with the text.
+    if (name === 'textContent' && documentOf(engine)) {
+      (node as unknown as { textContent: unknown }).textContent = value;
+      return true;
+    }
     // HTML's `hidden`: the element takes no space and draws nothing, whatever its stylesheet says
     // of its display, which is what a browser's own sheet and every reset make of it.
     if (name === 'hidden' && documentOf(engine)) {

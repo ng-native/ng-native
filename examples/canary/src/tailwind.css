@@ -361,6 +361,55 @@
     @apply text-muted-foreground;
   }
 
+  /* MARK: Select */
+  .spartan-select-trigger {
+    @apply border-input data-placeholder:text-muted-foreground dark:bg-input/30 dark:hover:bg-input/50 focus-visible:border-ring focus-visible:ring-ring/50 data-[matches-spartan-invalid=true]:ring-destructive/20 dark:data-[matches-spartan-invalid=true]:ring-destructive/40 data-[matches-spartan-invalid=true]:border-destructive dark:data-[matches-spartan-invalid=true]:border-destructive/50 gap-1.5 rounded-md border bg-transparent py-2 ps-2.5 pe-2 text-sm shadow-xs transition-[color,box-shadow] focus-visible:ring-3 data-[matches-spartan-invalid=true]:ring-3 data-[size=default]:h-9 data-[size=sm]:h-8 *:data-[slot=select-value]:gap-1.5;
+  }
+
+  .spartan-select-trigger-icon {
+    @apply text-muted-foreground text-[length:--spacing(4)];
+  }
+
+  .spartan-select-content {
+    @apply bg-popover no-scrollbar text-popover-foreground data-open:animate-in data-closed:animate-out data-closed:fade-out-0 data-open:fade-in-0 data-closed:zoom-out-95 data-open:zoom-in-95 data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2 ring-foreground/10 max-h-72 min-w-36 flex-col rounded-md shadow-md ring-1 duration-100;
+  }
+
+  .spartan-select-label {
+    @apply text-muted-foreground px-2 py-1.5 text-xs;
+  }
+
+  .spartan-select-item {
+    @apply data-highlighted:bg-accent data-highlighted:text-accent-foreground not-data-[variant=destructive]:data-highlighted:**:text-accent-foreground gap-2 rounded-sm py-1.5 ps-2 pe-8 text-sm *:[span]:last:flex *:[span]:last:items-center *:[span]:last:gap-2;
+  }
+
+  .spartan-select-item-indicator {
+    @apply absolute end-2 flex items-center justify-center text-[length:--spacing(4)];
+  }
+
+  .spartan-select-group {
+    @apply scroll-my-1 p-1;
+  }
+
+  .spartan-select-separator {
+    @apply bg-border -mx-1 my-1 h-px;
+  }
+
+  .spartan-select-scroll-up-button {
+    @apply bg-popover z-10 flex cursor-default items-center justify-center py-1 [&_ng-icon:not([class*='text-'])]:text-[length:--spacing(4)];
+  }
+
+  .spartan-select-scroll-down-button {
+    @apply bg-popover z-10 flex cursor-default items-center justify-center py-1 [&_ng-icon:not([class*='text-'])]:text-[length:--spacing(4)];
+  }
+
+  .spartan-select-placeholder {
+    @apply gap-2 [&_ng-icon:not([class*='text-'])]:text-[length:--spacing(4)];
+  }
+
+  .spartan-select-values-content {
+    @apply gap-2;
+  }
+
   /* MARK: Tooltip */
   .spartan-tooltip-content {
     @apply data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-[state=delayed-open]:animate-in data-[state=delayed-open]:fade-in-0 data-[state=delayed-open]:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95 data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2 rounded-md px-3 py-1.5 text-xs;

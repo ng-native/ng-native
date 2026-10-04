@@ -444,10 +444,12 @@ class Fields {
     <div testID="shown" [hidden]="false" style="opacity: 0.5">One</div>
     <div testID="gone" [hidden]="gone()" style="opacity: 0.5">Two</div>
     <div testID="static" hidden>Three</div>
+    <span testID="label" [textContent]="label()"></span>
   `,
 })
 class Panels {
   readonly gone = signal(true);
+  readonly label = signal<string | null>('Apple');
 }
 
 describe('@ng-native/web-compat location', () => {
@@ -473,6 +475,19 @@ describe('@ng-native/web-compat hidden', () => {
     await settle();
     assert.equal(screen.getByTestId('gone').props['display'] ?? null, null);
     assert.equal(screen.getByTestId('gone').props['opacity'], 0.5);
+  });
+
+  it('draws the text bound to textContent, and follows it', async () => {
+    const app = await render(Panels, { providers: [provideWebCompat()] });
+    assert.equal(screen.getByTestId('label').props['textContent'], undefined);
+    assert.ok(screen.getByText('Apple'));
+    app.instance.label.set('Banana');
+    await settle();
+    assert.ok(screen.getByText('Banana'));
+    assert.equal(screen.queryByText('Apple'), null);
+    app.instance.label.set(null);
+    await settle();
+    assert.equal(screen.queryByText('Banana'), null);
   });
 });
 
