@@ -96,6 +96,11 @@ is the class to search the app for, since the generated sheet's lines move as cl
 [angular-native] .appearance-none (Tailwind): dropped 'appearance': 'appearance' has no React Native equivalent: no style prop of a native view does what it does.
 ```
 
+Cascade layers are resolved the same way. A layer's rules are moved to the layer's place in the
+order, the first one named first and anything in no layer last, so a class of your own in
+`@layer components` gives way to a utility written beside it wherever the rule sits in your
+stylesheet, as it does in a browser.
+
 That is deliberate, not a rough edge - see [what CSS reaches a
 device](/packages/fabric/supported-css) for the full shape of what this compiles to and what it
 drops.

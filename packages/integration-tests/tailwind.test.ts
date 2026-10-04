@@ -62,6 +62,38 @@ describe('flattening Tailwind for the engine', () => {
     assert.match(out, /\.a/);
   });
 
+  it('keeps the order layers give rules, wherever they are written', () => {
+    // A component class written after the utilities, in the components layer: a utility beside
+    // it still wins, as it does in a browser, where the layer's place is what counts.
+    const out = flattenTailwind(`
+      @layer theme, base, components, utilities;
+      @layer utilities { .rounded-full { border-radius: 99px } }
+      .unlayered { border-radius: 1px }
+      @layer components { .card { border-radius: 8px } }
+      @layer base { .reset { border-radius: 0 } }
+      @layer components { .panel { border-radius: 4px } }
+    `);
+    const at = (selector: string) => out.indexOf(selector);
+    assert.ok(at('.reset') < at('.card'), 'base before components');
+    assert.ok(at('.card') < at('.panel'), 'a layer keeps its own order');
+    assert.ok(at('.panel') < at('.rounded-full'), 'components before utilities');
+    assert.ok(at('.rounded-full') < at('.unlayered'), 'what is in no layer comes last, and wins');
+    assert.doesNotMatch(out, /@layer/);
+  });
+
+  it('orders layers by where each is first named, and nested ones inside their own', () => {
+    const out = flattenTailwind(`
+      @layer late { .late { flex: 1 } }
+      @layer early, late;
+      @layer early { .early { flex: 1 } }
+      @layer outer { @layer b { .b { flex: 1 } } @layer a, b; @layer a { .a { flex: 1 } } }
+    `);
+    const at = (selector: string) => out.indexOf(selector);
+    // `late` was named first, by its own block.
+    assert.ok(at('.late') < at('.early'));
+    assert.ok(at('.b') < at('.a'));
+  });
+
   it('unwraps feature detection, which is asking about a browser', () => {
     const out = flattenTailwind('@supports (color: red) { .a { flex: 1 } }');
     assert.doesNotMatch(out, /@supports/);

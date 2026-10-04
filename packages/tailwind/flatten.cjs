@@ -17,7 +17,7 @@
 const { transform, Features } = require('lightningcss');
 const { compileCss, markUnitless } = require('@ng-native/metro/css/compile.cjs');
 
-/** `@layer a, b;` - the statement that orders layers, which is meaningless once they are gone. */
+/** `@layer a, b;` - the statement that orders layers. */
 const LAYER_STATEMENT = /@layer\s+[^;{]+;/g;
 
 /**
@@ -37,6 +37,60 @@ function rewriteAtRule(css, prelude, keepBody) {
     out = out.slice(0, at) + body + out.slice(close + 1);
   }
   return out;
+}
+
+/**
+ * Put a sheet's rules in the order its cascade layers give them, and take the layers away.
+ *
+ * A layer's place in the cascade is where it was first named, not where its rules are written:
+ * `@layer components { .card { ... } }` after the utilities is still under them, so a utility
+ * beside a component's class wins. The engine's cascade is source order, so each layer's rules
+ * are moved to its place, the first named first, and what is in no layer goes last, where it
+ * beats them all. A layer inside a layer is ordered the same way, within it.
+ *
+ * `!important` reverses the order of layers in a browser. It does not here.
+ *
+ * Tailwind's own `properties` layer stays where it is written, at the end: it is the `initial`
+ * every `--tw-*` slot starts from, for a browser with no `@property`, and the passes after this
+ * one read a slot's value from the last place it is declared.
+ */
+function orderLayers(css) {
+  /** Each layer's rules, in the order the layers were first named. */
+  const layers = new Map();
+  const bodyOf = (name) => layers.get(name) ?? layers.set(name, []).get(name);
+  let unlayered = '';
+  let from = 0;
+  let depth = 0;
+  for (let i = 0; i < css.length; i++) {
+    if (css[i] === '{') depth++;
+    else if (css[i] === '}') depth--;
+    if (depth !== 0 || !css.startsWith('@layer', i)) continue;
+    const layer = layerAt(css, i);
+    if (!layer) break;
+    if (layer.names === 'properties') continue;
+    // An anonymous layer is one of its own, where it stands.
+    if (layer.body === undefined) layer.names.split(',').forEach((name) => bodyOf(name.trim()));
+    else bodyOf(layer.names || `\0${layers.size}`).push(orderLayers(layer.body));
+    unlayered += css.slice(from, i);
+    from = layer.end + 1;
+    i = layer.end;
+  }
+  unlayered += css.slice(from);
+  return [...[...layers.values()].flat(), unlayered].join('\n');
+}
+
+/**
+ * The `@layer` at `at`: the names it gives, where it ends, and the body of a block, which the
+ * statement that only orders layers has none of. Nothing when its block never closes.
+ */
+function layerAt(css, at) {
+  const end = css.indexOf(';', at);
+  const open = css.indexOf('{', at);
+  const names = (to) => css.slice(at + '@layer'.length, to).trim();
+  if (end !== -1 && (open === -1 || end < open)) return { names: names(end), end };
+  const close = open === -1 ? -1 : blockEnd(css, open);
+  if (close === -1) return null;
+  return { names: names(open), end: close, body: css.slice(open + 1, close) };
 }
 
 /** The index of the brace that closes the block opened at `open`, or -1. */
@@ -937,9 +991,10 @@ function compiles(selector, declaration) {
 function flattenTailwind(css, { onSettled = () => {} } = {}) {
   // Before any pass of lightningcss here, which reads `m-[3]`'s bare 3 as 3px and hides it from
   // the compiler: see `markUnitless`.
-  let out = childrenOfWhere(
-    markUnitlessReverse(markUnitless(unprefixAncestors(css))).replace(LAYER_STATEMENT, ''),
-  );
+  let out = childrenOfWhere(orderLayers(markUnitlessReverse(markUnitless(unprefixAncestors(css)))));
+  // Any layer left is Tailwind's `properties`, or inside something else, a media query say:
+  // unwrapped where it stands.
+  out = out.replace(LAYER_STATEMENT, '');
   out = rewriteAtRule(out, '@layer', true);
   out = rewriteAtRule(out, '@supports', true);
   out = resetWithoutReverseSlots(out);
