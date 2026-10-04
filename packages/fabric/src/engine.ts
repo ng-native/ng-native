@@ -2755,7 +2755,10 @@ export class Engine implements HostEngine {
   destroyNode(node: EngineNode): void {
     node.listeners?.clear();
     node.listeners = null;
-    node.committed = null;
+    // With what it holds: a node Angular destroys can be put back, as content projected into
+    // an `@if` is, and its children's views would then be handed to the view it is made again
+    // as. Native gives a view one parent for its life, and aborts on a second.
+    if (node.committed) this.forgetCommitted(node);
     node.transitions = undefined;
     if (node.playing) this.stopNative(node, node.playing);
     node.playing = undefined;
