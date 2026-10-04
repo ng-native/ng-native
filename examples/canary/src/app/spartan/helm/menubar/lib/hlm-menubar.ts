@@ -1,0 +1,16 @@
+import { CdkMenuBar } from '@angular/cdk/menu';
+import { Directive } from '@angular/core';
+import { classes } from '../../utils';
+
+@Directive({
+  selector: '[hlmMenubar],hlm-menubar',
+  hostDirectives: [CdkMenuBar],
+  host: {
+    'data-slot': 'menubar',
+  },
+})
+export class HlmMenubar {
+  constructor() {
+    classes(() => 'spartan-menubar flex items-center');
+  }
+}

@@ -881,6 +881,293 @@
     @apply rounded-none border-0 bg-transparent py-2 shadow-none ring-0 focus-visible:ring-0 data-[matches-spartan-invalid=true]:ring-0 dark:bg-transparent;
   }
 
+  /* MARK: Native Select */
+  .spartan-native-select {
+    @apply border-input placeholder:text-muted-foreground selection:bg-primary selection:text-primary-foreground dark:bg-input/30 dark:hover:bg-input/50 focus-visible:border-ring focus-visible:ring-ring/50 data-[matches-spartan-invalid=true]:ring-destructive/20 dark:data-[matches-spartan-invalid=true]:ring-destructive/40 data-[matches-spartan-invalid=true]:border-destructive dark:data-[matches-spartan-invalid=true]:border-destructive/50 h-9 w-full min-w-0 appearance-none rounded-md border bg-transparent py-1 ps-2.5 pe-8 text-sm shadow-xs transition-[color,box-shadow] select-none focus-visible:ring-3 data-[matches-spartan-invalid=true]:ring-3 data-[size=sm]:h-8;
+  }
+
+  .spartan-native-select-icon {
+    @apply text-muted-foreground end-2.5 top-1/2 -translate-y-1/2 text-[length:--spacing(4)];
+  }
+
+  /* MARK: Combobox */
+  .spartan-combobox-content {
+    @apply bg-popover text-popover-foreground data-open:animate-in **:has-[[data-slot=input-group-control]:focus-visible]:border-input data-closed:animate-out data-closed:fade-out-0 data-open:fade-in-0 data-closed:zoom-out-95 data-open:zoom-in-95 data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2 ring-foreground/10 **:data-[slot=input-group]:bg-input/30 **:data-[slot=input-group]:border-input/30 max-h-72 min-w-36 overflow-hidden rounded-md shadow-md ring-1 duration-100 **:has-[[data-slot=input-group-control]:focus-visible]:ring-0 **:data-[slot=input-group]:m-1 **:data-[slot=input-group]:mb-0 **:data-[slot=input-group]:h-8 **:data-[slot=input-group]:shadow-none;
+  }
+
+  .spartan-combobox-label {
+    @apply text-muted-foreground px-2 py-1.5 text-xs;
+  }
+
+  .spartan-combobox-item {
+    @apply data-highlighted:bg-accent data-highlighted:text-accent-foreground not-data-[variant=destructive]:data-highlighted:**:text-accent-foreground gap-2 rounded-sm py-1.5 ps-2 pe-8 text-sm;
+  }
+
+  .spartan-combobox-item-indicator {
+    @apply absolute end-2 flex items-center justify-center text-[length:--spacing(4)];
+  }
+
+  .spartan-combobox-empty {
+    @apply text-muted-foreground hidden w-full items-center justify-center gap-2 py-2 text-center text-sm group-data-empty/combobox-content:flex;
+  }
+
+  .spartan-combobox-list {
+    @apply no-scrollbar max-h-[calc(--spacing(72)---spacing(9))] scroll-py-1 p-1 data-empty:p-0;
+  }
+
+  .spartan-combobox-separator {
+    @apply bg-border -mx-1 my-1 h-px;
+  }
+
+  .spartan-combobox-trigger {
+    @apply data-placeholder:text-muted-foreground;
+  }
+
+  .spartan-combobox-trigger-icon {
+    @apply text-muted-foreground text-[length:--spacing(4)];
+  }
+
+  .spartan-combobox-chips {
+    @apply dark:bg-input/30 border-input focus-within:border-ring focus-within:ring-ring/50 data-[matches-spartan-invalid=true]:ring-destructive/20 dark:data-[matches-spartan-invalid=true]:ring-destructive/40 data-[matches-spartan-invalid=true]:border-destructive dark:data-[matches-spartan-invalid=true]:border-destructive/50 flex min-h-9 flex-wrap items-center gap-1.5 rounded-md border bg-transparent bg-clip-padding px-2.5 py-1.5 text-sm shadow-xs transition-[color,box-shadow] focus-within:ring-3 has-data-[slot=combobox-chip]:px-1.5 data-[matches-spartan-invalid=true]:ring-3;
+  }
+
+  .spartan-combobox-chip {
+    @apply bg-muted text-foreground flex h-[calc(--spacing(5.5))] w-fit items-center justify-center gap-1 rounded-sm px-1.5 text-xs font-medium whitespace-nowrap has-data-[slot=combobox-chip-remove]:pe-0;
+  }
+
+  .spartan-combobox-chip-input {
+    @apply placeholder:text-muted-foreground;
+  }
+
+  .spartan-combobox-chip-remove {
+    @apply -ms-1 opacity-50 hover:opacity-100;
+  }
+
+  .spartan-combobox-placeholder {
+    @apply gap-2 [&_ng-icon:not([class*='text-'])]:text-[length:--spacing(4)];
+  }
+
+  .spartan-combobox-status {
+    @apply text-muted-foreground gap-2 px-3 py-2 text-sm;
+  }
+
+  /* MARK: Menubar */
+  .spartan-menubar {
+    @apply bg-background h-9 gap-1 rounded-md border p-1 shadow-xs;
+  }
+
+  .spartan-menubar-trigger {
+    @apply hover:bg-muted aria-expanded:bg-muted rounded-sm px-2 py-1 text-sm font-medium;
+  }
+
+  .spartan-menubar-content {
+    @apply bg-popover text-popover-foreground data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2 ring-foreground/10 min-w-36 rounded-md p-1 shadow-md ring-1 duration-100;
+  }
+
+  .spartan-menubar-content-logical {
+    @apply data-[side=inline-start]:slide-in-from-right-2 data-[side=inline-end]:slide-in-from-left-2;
+  }
+
+  .spartan-menubar-item {
+    @apply focus:bg-accent focus:text-accent-foreground data-[variant=destructive]:text-destructive data-[variant=destructive]:focus:bg-destructive/10 dark:data-[variant=destructive]:focus:bg-destructive/20 data-[variant=destructive]:focus:text-destructive data-[variant=destructive]:*:[ng-icon]:text-destructive! not-data-[variant=destructive]:focus:**:text-accent-foreground gap-2 rounded-sm px-2 py-1.5 text-sm data-disabled:opacity-50 data-inset:pl-8 [&_ng-icon:not([class*='text-'])]:text-[length:--spacing(4)];
+  }
+
+  .spartan-menubar-checkbox-item {
+    @apply focus:bg-accent focus:text-accent-foreground focus:**:text-accent-foreground gap-2 rounded-md py-1.5 pr-2 pl-8 text-sm data-inset:pl-8;
+  }
+
+  .spartan-menubar-checkbox-item-indicator {
+    @apply start-2 size-4 [&_ng-icon:not([class*='text-'])]:text-[length:--spacing(4)];
+  }
+
+  .spartan-menubar-radio-item {
+    @apply focus:bg-accent focus:text-accent-foreground focus:**:text-accent-foreground gap-2 rounded-md py-1.5 pr-2 pl-8 text-sm data-disabled:opacity-50 data-inset:pl-8 [&_ng-icon:not([class*='text-'])]:text-[length:--spacing(4)];
+  }
+
+  .spartan-menubar-radio-item-indicator {
+    @apply start-2 size-4 [&_ng-icon:not([class*='text-'])]:text-[length:--spacing(4)];
+  }
+
+  .spartan-menubar-label {
+    @apply px-2 py-1.5 text-sm font-medium data-inset:pl-8;
+  }
+
+  .spartan-menubar-separator {
+    @apply bg-border;
+  }
+
+  .spartan-menubar-shortcut {
+    @apply text-muted-foreground group-focus/menubar-item:text-accent-foreground text-xs tracking-widest;
+  }
+
+  .spartan-menubar-sub-trigger {
+    @apply focus:bg-accent focus:text-accent-foreground data-open:bg-accent data-open:text-accent-foreground gap-2 rounded-sm px-2 py-1.5 text-sm data-inset:pl-8 [&_ng-icon:not([class*='text-'])]:text-[length:--spacing(4)];
+  }
+
+  .spartan-menubar-sub-content {
+    @apply bg-popover text-popover-foreground data-open:animate-in data-closed:animate-out data-closed:fade-out-0 data-open:fade-in-0 data-closed:zoom-out-95 data-open:zoom-in-95 data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2 ring-foreground/10 min-w-32 rounded-md p-1 shadow-lg ring-1 duration-100;
+  }
+
+  /* MARK: Date Picker */
+  .spartan-date-picker-trigger {
+    @apply data-placeholder:text-muted-foreground;
+  }
+
+  /* MARK: Field */
+  .spartan-field-set {
+    @apply gap-6 has-[>[data-slot=checkbox-group]]:gap-3 has-[>[data-slot=radio-group]]:gap-3;
+  }
+
+  .spartan-field-legend {
+    @apply mb-3 font-medium data-[variant=label]:text-sm data-[variant=legend]:text-base;
+  }
+
+  .spartan-field-group {
+    @apply gap-7 data-[slot=checkbox-group]:gap-3 *:data-[slot=field-group]:gap-4;
+  }
+
+  .spartan-field {
+    @apply data-[matches-spartan-invalid=true]:text-destructive gap-3;
+  }
+
+  .spartan-field-content {
+    @apply gap-1;
+  }
+
+  .spartan-field-label {
+    @apply has-data-checked:bg-primary/5 has-data-checked:border-primary/30 dark:has-data-checked:border-primary/20 dark:has-data-checked:bg-primary/10 gap-2 leading-snug group-data-[disabled=true]/field:opacity-50 has-[>[data-slot=field]]:rounded-md has-[>[data-slot=field]]:border *:data-[slot=field]:p-3;
+  }
+
+  .spartan-field-title {
+    @apply gap-2 text-sm leading-snug font-medium group-data-[disabled=true]/field:opacity-50;
+  }
+
+  .spartan-field-description {
+    @apply text-muted-foreground text-start text-sm [[data-variant=legend]+&]:-mt-1.5;
+  }
+
+  .spartan-field-separator {
+    @apply -my-2 h-5 text-sm group-data-[variant=outline]/field-group:-mb-2;
+  }
+
+  .spartan-field-separator-content {
+    @apply text-muted-foreground px-2;
+  }
+
+  .spartan-field-error {
+    @apply text-destructive text-sm;
+  }
+
+  /* MARK: Item */
+  .spartan-item {
+    @apply [a]:hover:bg-muted rounded-md border text-sm;
+  }
+
+  .spartan-item-variant-default {
+    @apply border-transparent;
+  }
+
+  .spartan-item-variant-outline {
+    @apply border-border;
+  }
+
+  .spartan-item-variant-muted {
+    @apply bg-muted/50 border-transparent;
+  }
+
+  .spartan-item-size-default {
+    @apply gap-3.5 px-4 py-3.5;
+  }
+
+  .spartan-item-size-sm {
+    @apply gap-2.5 px-3 py-2.5;
+  }
+
+  .spartan-item-size-xs {
+    @apply gap-2 px-2.5 py-2 in-data-[slot=dropdown-menu-content]:p-0;
+  }
+
+  .spartan-item-media {
+    @apply gap-2 group-has-data-[slot=item-description]/item:translate-y-0.5 group-has-data-[slot=item-description]/item:self-start;
+  }
+
+  .spartan-item-media-variant-default {
+    @apply bg-transparent;
+  }
+
+  .spartan-item-media-variant-icon {
+    @apply [&_ng-icon:not([class*='text-'])]:text-[length:--spacing(4)];
+  }
+
+  .spartan-item-media-variant-image {
+    @apply size-10 overflow-hidden rounded-sm group-data-[size=sm]/item:size-8 group-data-[size=xs]/item:size-6 [&_img]:size-full [&_img]:object-cover;
+  }
+
+  .spartan-item-content {
+    @apply gap-1 group-data-[size=xs]/item:gap-0;
+  }
+
+  .spartan-item-title {
+    @apply gap-2 text-sm leading-snug font-medium underline-offset-4;
+  }
+
+  .spartan-item-description {
+    @apply text-muted-foreground text-start text-sm leading-normal group-data-[size=xs]/item:text-xs;
+  }
+
+  .spartan-item-actions {
+    @apply gap-2;
+  }
+
+  .spartan-item-header {
+    @apply gap-2;
+  }
+
+  .spartan-item-footer {
+    @apply gap-2;
+  }
+
+  .spartan-item-group {
+    @apply gap-4 has-data-[size=sm]:gap-2.5 has-data-[size=xs]:gap-2;
+  }
+
+  .spartan-item-separator {
+    @apply my-2;
+  }
+
+  /* MARK: Empty */
+  .spartan-empty {
+    @apply gap-4 rounded-lg border-dashed p-12;
+  }
+
+  .spartan-empty-header {
+    @apply gap-2;
+  }
+
+  .spartan-empty-media {
+    @apply mb-2;
+  }
+
+  .spartan-empty-media-default {
+    @apply bg-transparent;
+  }
+
+  .spartan-empty-media-icon {
+    @apply bg-muted text-foreground flex size-10 shrink-0 items-center justify-center rounded-lg [&_ng-icon:not([class*='text-'])]:text-[length:--spacing(6)];
+  }
+
+  .spartan-empty-title {
+    @apply text-lg font-medium tracking-tight;
+  }
+
+  .spartan-empty-description {
+    @apply text-sm/relaxed;
+  }
+
+  .spartan-empty-content {
+    @apply gap-4 text-sm;
+  }
+
   /* MARK: Tooltip */
   .spartan-tooltip-content {
     @apply data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-[state=delayed-open]:animate-in data-[state=delayed-open]:fade-in-0 data-[state=delayed-open]:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95 data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2 rounded-md px-3 py-1.5 text-xs;

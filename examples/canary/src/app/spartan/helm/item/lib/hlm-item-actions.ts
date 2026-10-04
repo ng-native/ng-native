@@ -1,0 +1,12 @@
+import { Directive } from '@angular/core';
+import { classes } from '../../utils';
+
+@Directive({
+  selector: '[hlmItemActions],hlm-item-actions',
+  host: { 'data-slot': 'item-actions' },
+})
+export class HlmItemActions {
+  constructor() {
+    classes(() => 'spartan-item-actions flex items-center');
+  }
+}
