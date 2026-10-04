@@ -57,6 +57,10 @@ export class Talk {
   }
 }
 
+/** Under a lazy parameter of the first tab, at a url only its loaded routes tell from others. */
+@Component({ selector: 'x-notes', imports: [Text], template: `<text>notes</text>` })
+export class Notes {}
+
 @Component({ selector: 'x-schedule', imports: [Text], template: `<text>schedule</text>` })
 export class Schedule {}
 
@@ -80,6 +84,30 @@ export const routes: Routes = [
         ],
       },
       { path: 'schedule', component: Schedule },
+    ],
+  },
+  { path: 'user/:id', component: User },
+];
+
+/**
+ * The same, with a lazy parameter in the first tab that `/user/1` matches until it is loaded. The
+ * second tab's route comes first, so the parameter never takes `/schedule`.
+ */
+export const routesWithTopics: Routes = [
+  {
+    path: '',
+    component: Bar,
+    children: [
+      { path: 'schedule', component: Schedule },
+      {
+        path: '',
+        component: HomeStack,
+        children: [
+          { path: '', component: Home },
+          { path: '', children: [{ path: 'talks/:id', component: Talk }] },
+          { path: ':topic', loadChildren: () => [{ path: 'notes', component: Notes }] },
+        ],
+      },
     ],
   },
   { path: 'user/:id', component: User },

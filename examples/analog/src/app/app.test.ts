@@ -1,4 +1,5 @@
 import { Router } from '@angular/router';
+import { DeepLinks } from '@ng-native/device';
 import {
   cleanup,
   fireEvent,
@@ -30,6 +31,11 @@ const titles = (fabric: FakeFabric) =>
 /** Queries over the screen on top, which is what the person sees. */
 const front = (fabric: FakeFabric) => within(nodes(fabric, 'RNSScreen').at(-1)!);
 
+/** The key of the tab the tab bar shows. */
+const selectedTab = (fabric: FakeFabric) =>
+  (nodes(fabric, 'RNSTabsHostIOS')[0]!.props['navStateRequest'] as { selectedScreenKey: string })
+    .selectedScreenKey;
+
 /** The value a feature page shows under its label. */
 function shown(fabric: FakeFabric, label: string): string[] {
   const card = front(fabric).getByText(label).parent!;
@@ -42,6 +48,19 @@ async function start() {
   const { componentRef, fabric } = await render(App, appConfig);
   await screen.findByText('Analog Showroom', { exact: false });
   return { fabric, router: componentRef.injector.get(Router) };
+}
+
+/** Starts the app the way a link that launched it would. */
+async function launch(url: string) {
+  const { componentRef, fabric } = await render(App, {
+    providers: [
+      ...appConfig.providers,
+      { provide: DeepLinks, useValue: { initialUrl: () => url, subscribe: () => () => {} } },
+    ],
+  });
+  const router = componentRef.injector.get(Router);
+  await waitFor(() => expect(router.url).toBe(url));
+  return { fabric, router };
 }
 
 /** Opens a feature from the home page, and waits for its page. */
@@ -95,11 +114,34 @@ test('a layout holds its pages on a stack of its own, in a sheet', async () => {
   await waitFor(() => expect(router.url).toBe('/products/drift-chair'));
   expect(titles(fabric)).toEqual(['Analog Showroom', 'Products', 'Product']);
   expect(shown(fabric, 'productId')).toEqual(['drift-chair']);
+  expect(front(fabric).getByText('Drift chair')).toBeTruthy();
 
   await userEvent.press(front(fabric).getByRole('button', { name: 'Done' }));
 
   await waitFor(() => expect(router.url).toBe('/'));
   await waitFor(() => expect(nodes(fabric, 'RNSScreenStack')).toHaveLength(1));
+});
+
+test('the products sheet closes with Done on its list', async () => {
+  const { fabric, router } = await start();
+
+  await openFeature(fabric, router, 'Nested layout', '/products');
+  await userEvent.press(front(fabric).getByRole('button', { name: 'Done' }));
+
+  await waitFor(() => expect(router.url).toBe('/'));
+  await waitFor(() => expect(nodes(fabric, 'RNSScreenStack')).toHaveLength(1));
+});
+
+test('a product a link launched the app on closes with Done', async () => {
+  const { fabric, router } = await launch('/products/aurora-lamp');
+
+  await waitFor(() => expect(shown(fabric, 'productId')).toEqual(['aurora-lamp']));
+  expect(front(fabric).getByText('Aurora lamp')).toBeTruthy();
+
+  await userEvent.press(front(fabric).getByRole('button', { name: 'Done' }));
+
+  await waitFor(() => expect(router.url).toBe('/'));
+  await waitFor(() => expect(titles(fabric)).toEqual(['Analog Showroom']));
 });
 
 test('a catch-all page catches every segment after /docs', async () => {
@@ -148,7 +190,7 @@ test('routeMeta.redirectTo sends an old link home', async () => {
   expect(router.url).toBe('/');
 });
 
-test('routeMeta.canActivate refuses the admin page until Admin access is on', async () => {
+test('routeMeta.canActivate lets the admin page in only while Admin access is on', async () => {
   const { fabric, router } = await start();
   expect(screen.getByText('Blocked')).toBeTruthy();
 
@@ -166,6 +208,13 @@ test('routeMeta.canActivate refuses the admin page until Admin access is on', as
   expect(router.url).toBe('/admin');
   expect(await screen.findByText('Let in')).toBeTruthy();
   expect(titles(fabric).at(-1)).toBe('Admin');
+
+  await router.navigateByUrl('/settings');
+  await fireEvent(await screen.findByRole('switch', { name: 'Admin access' }), 'change', {
+    value: false,
+  });
+  expect(await router.navigateByUrl('/admin')).toBe(false);
+  expect(router.url).toBe('/settings');
 });
 
 test('routeMeta.resolve loads the data before the page shows', async () => {
@@ -205,17 +254,20 @@ test('a tab layout keeps each tab as it was left while the other is in front', a
 
   expect(nodes(fabric, 'RNSTabsScreenIOS')).toHaveLength(2);
   expect(titles(fabric)).toEqual(['Analog Showroom', 'Tabs']);
+  expect(selectedTab(fabric)).toBe('');
   await userEvent.press(screen.getByRole('button', { name: 'Add to COUNTER' }));
   await userEvent.press(screen.getByRole('button', { name: 'Add to COUNTER' }));
   await waitFor(() => expect(shown(fabric, 'COUNTER')).toEqual(['2']));
 
   await router.navigateByUrl('/tabs/laps');
 
+  await waitFor(() => expect(selectedTab(fabric)).toBe('laps'));
   await userEvent.press(await screen.findByRole('button', { name: 'Add to LAPS' }));
   await waitFor(() => expect(shown(fabric, 'LAPS')).toEqual(['1']));
 
   await router.navigateByUrl('/tabs');
 
+  await waitFor(() => expect(selectedTab(fabric)).toBe(''));
   expect(router.url).toBe('/tabs');
   expect(shown(fabric, 'COUNTER')).toEqual(['2']);
   expect(shown(fabric, 'LAPS')).toEqual(['1']);

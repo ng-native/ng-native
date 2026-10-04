@@ -16,11 +16,15 @@ with a routes array as before.
 
 ## Setup
 
-Install the package and Analog's router:
+Install the package, Analog's router, and the native router it routes with:
 
 ```sh
-npm install @ng-native/analog @analogjs/router
+npm install @ng-native/analog @analogjs/router @ng-native/router @angular/router
+npx expo install react-native-screens
 ```
+
+`react-native-screens` is the native side of every stack, header and tab bar; the
+[Router](/packages/router) page says why a development or release build needs it listed.
 
 Add `withAnalog` to the Metro config, after `withAngularNative`:
 
@@ -32,9 +36,29 @@ const { withAnalog } = require('@ng-native/analog/metro');
 module.exports = withAnalog(withAngularNative(getDefaultConfig(__dirname)));
 ```
 
-It turns on `require.context`, which finds the pages, and resolves `@analogjs/content` to an empty
-module unless the app installed it. `@analogjs/router` imports that package for Markdown pages
-only, but Metro resolves every import as it bundles, so without this no bundle builds.
+It turns on `require.context`, which finds the pages, and resolves `@analogjs/router`'s import of
+`@analogjs/content` to an empty module. The router imports that package for Markdown pages only,
+but Metro resolves every import as it bundles, so without this no bundle builds where the package
+is missing, and where it is installed the bundle carries it and its Markdown parser for nothing. An
+import of `@analogjs/content` in the app's own code still resolves to the package.
+
+`@analogjs/content` is a required peer of `@analogjs/router`, so npm and pnpm install it, with
+its own required peers (`marked`, `prismjs`, `front-matter` and the `marked` plugins; its image
+peers, `sharp` and `satori`, are optional and left out). It takes up space in `node_modules` and
+none in the app. To keep it out of `node_modules` too, mark it optional where the package manager
+allows. With pnpm, in `pnpm-workspace.yaml`:
+
+```yaml
+packageExtensions:
+  '@analogjs/router':
+    peerDependenciesMeta:
+      '@analogjs/content':
+        optional: true
+```
+
+npm has no equivalent: an optional peer declared elsewhere, `@ng-native/analog` included, does not
+stop it installing a dependency's required one, and `overrides` can only swap it for another
+package.
 
 Find the pages with `require.context`, in a file of their own so a test can replace it:
 
@@ -63,8 +87,9 @@ export const appConfig = {
 };
 ```
 
-`'lazy'` makes each page a chunk of its own, loaded the first time it is navigated to, as Analog
-loads them on the web. The app's root component holds a `<native-stack-outlet>`.
+`'lazy'` runs each page's code the first time it is navigated to, as Analog loads pages on the
+web. Metro's dev server and a web export serve each page as a file of its own; a native release
+export keeps them all in its one bundle. The app's root component holds a `<native-stack-outlet>`.
 
 ## Pages
 
@@ -105,7 +130,8 @@ Analog's conventions work as they do on the web:
 A layout's template holds the outlet its pages render in. On native that is a
 `<native-stack-outlet>`, a stack of its own. A layout presented as a sheet is the usual place for
 one: a presented screen has no navigation bar, and the stack inside it gives its pages a header,
-and a back button to the page before.
+and a back button to the page before. On Android react-native-screens draws no stack nested in a
+`formSheet`, so present such a layout as a `modal` there, which it does support.
 
 A layout can hold a `<native-tabs-outlet>` instead, with a `<native-tab>` for each page in its
 folder: `tabs/index.page.ts` is the tab at `path=""`, `tabs/laps.page.ts` the tab at `path="laps"`.

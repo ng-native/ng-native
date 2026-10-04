@@ -35,7 +35,8 @@ export class TabsPage {
 part of the path: a `loadChildren` wrapper whose page sits at `''` beneath it, as Analog's file
 routes make, or a group at `''` around the tab's route. A tab can be at `path=""` too, the bar's
 own url, with its pages at urls beside those of routes outside the bar; a page belongs to it when
-its routes lead there. `sfSymbol` (iOS) and `drawable` (Android) are shorthand for the fuller
+its routes lead there, through static and `:param` segments (a `**` route or a custom `matcher` is
+not followed). `sfSymbol` (iOS) and `drawable` (Android) are shorthand for the fuller
 `icon`/`selectedIcon` inputs, and a tab that names both draws each on its own platform. Each
 platform reads only its own, so a tab with just one has no icon on the other, and in development
 that platform logs a warning naming the tab's path. The fuller inputs also take a `require()`d
@@ -81,9 +82,12 @@ real navigation, so the URL and the bar never disagree, and each tab keeps its o
 own stack, if it has one) mounted while another tab is in front. Returning to a tab returns to
 wherever it was left, because the outlet remembers each tab's own url.
 
-A sheet or modal presented in a tab's own stack is the exception. Natively it covers the whole
+A sheet or modal presented in a tab's own stack is the exception. On iOS it covers the whole
 window, the bar included, so it cannot stay up while its tab is behind another: when another tab
-comes in front it is dismissed, and returning to its tab returns to the page beneath it.
+comes in front it is dismissed, and returning to its tab returns to the page beneath it. On Android
+react-native-screens draws it inside the tab's stack (a modal as a push, a form sheet as a bottom
+sheet), so the bar stays visible under it. It is dismissed there too, so a tab comes back on the
+same page on both platforms.
 
 ## Content above the tab bar
 

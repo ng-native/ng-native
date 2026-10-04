@@ -2,8 +2,9 @@ import type { RouteMeta } from '@analogjs/router';
 import { Component, inject } from '@angular/core';
 import { ActivatedRoute } from '@angular/router';
 import { Pressable, ScrollView, Text, View } from '@ng-native/components';
+import { nativePlatform } from '@ng-native/fabric';
 import { NgIcon } from '@ng-native/icons';
-import { NativeHeader, NativeNavigation } from '@ng-native/router';
+import { NativeHeader, NativeNavigation, type StackPresentation } from '@ng-native/router';
 import { AdminAccess } from '../data/admin-access.ts';
 import { ANALOG_LOGO } from '../ui/analog-logo.ts';
 
@@ -62,6 +63,12 @@ const SECTIONS: readonly Section[] = [
   },
 ];
 
+/**
+ * A form sheet on iOS. React Native Screens does not render a nested stack inside an Android form
+ * sheet, and the products layout is one, so Android presents it as a modal.
+ */
+const sheet = (): StackPresentation => (nativePlatform() === 'android' ? 'modal' : 'formSheet');
+
 /** The showroom's front door: the logo, and every feature with the file that makes it. */
 @Component({
   imports: [NativeHeader, NgIcon, Pressable, ScrollView, Text, View],
@@ -116,7 +123,7 @@ export default class HomePage {
 
   protected open(feature: Feature): void {
     void (feature.sheet
-      ? this.navigation.present(feature.url, { as: 'formSheet' })
+      ? this.navigation.present(feature.url, { as: sheet() })
       : this.navigation.push(feature.url));
   }
 }

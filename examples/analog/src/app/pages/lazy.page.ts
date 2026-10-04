@@ -16,7 +16,7 @@ export const routeMeta: RouteMeta = { title: 'Lazy loading' };
       <view class="content">
         <app-feature-note
           file="src/app/pages/lazy.page.ts"
-          explanation="The pages are found with require.context(..., 'lazy'), so Metro makes each one a chunk of its own. This page loaded when you opened it, as Analog loads a page on the web."
+          explanation="The pages are found with require.context(..., 'lazy'), so a page's code runs the first time it is opened, as Analog loads a page on the web. Metro's dev server and a web export serve each page as a file of its own; a native release export keeps them all in its one bundle."
         />
         <view class="card result-row">
           <text class="result-label">LOADED</text>

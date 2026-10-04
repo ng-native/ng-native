@@ -19,6 +19,7 @@ import { NativeNavigation } from '../router/src/native-navigation.ts';
 import { provideNativeRouter, withLinkParent } from '../router/src/provide-native-router.ts';
 import { DeepLinks } from '@ng-native/device';
 import { followLink } from '../router/src/native-links.ts';
+import { IN_TAB, type InTab } from '../router/src/in-tab.ts';
 import { compileFixture } from './compile.ts';
 
 function flatten(nodes: FakeFabricNode[]): FakeFabricNode[] {
@@ -365,6 +366,29 @@ describe('a native stack driven by the router', () => {
       });
     });
 
+    it('builds a second bar pushed over the first with tabs of its own', async () => {
+      await router.navigateByUrl('/wrapped-tabs/schedule');
+      await idle();
+      await tap('speakers');
+      await nav.push('/user/1');
+      await nav.push('/wrapped-tabs/schedule');
+      await idle();
+      assert.equal(router.url, '/wrapped-tabs/schedule');
+      assert.equal(created['Schedule'], 2, 'a new page, not the one the bar beneath keeps');
+      assert.equal(live['Schedule'], 2);
+
+      nav.back();
+      await idle();
+      nav.back();
+      await idle();
+      assert.equal(router.url, '/wrapped-tabs/speakers');
+      await tap('schedule');
+      assert.equal(router.url, '/wrapped-tabs/schedule');
+      assert.equal(live['Schedule'], 1, "the first bar's own page, still there");
+      assert.equal(created['Schedule'], 2);
+      assert.deepEqual(reported, []);
+    });
+
     it('leaves a sheet on the app stack, over the bar, to the router', async () => {
       await router.navigateByUrl('/wrapped-tabs/venues');
       await nav.push('/wrapped-tabs/venues/1');
@@ -529,6 +553,31 @@ describe('a native stack driven by the router', () => {
       assert.deepEqual(paragraphs, [['home'], ['fine']], 'no empty page left in the broken tab');
       assert.deepEqual(reported, [error]);
     });
+  });
+});
+
+describe('a stack inside a tab', () => {
+  let mod: Record<string, unknown>;
+
+  before(async () => {
+    mod = await compileFixture(fileURLToPath(new URL('./fixtures/stack-app.ts', import.meta.url)));
+  });
+
+  afterEach(() => cleanup());
+
+  it('stops hearing its tab go behind once it is destroyed', async () => {
+    const listening = new Set<() => string | null>();
+    const tab: InTab = {
+      onLeave: (leave) => (listening.add(leave), () => listening.delete(leave)),
+    };
+    await render(mod['Shell'] as Type<unknown>, {
+      providers: [provideNativeRouter(mod['routes'] as Routes), { provide: IN_TAB, useValue: tab }],
+    });
+    await idle();
+    assert.equal(listening.size, 1);
+
+    cleanup();
+    assert.equal(listening.size, 0, 'nothing left to call on a stack that is gone');
   });
 });
 

@@ -72,7 +72,8 @@ const pathOnly = (url: string): string => url.split(/[?#]/, 1)[0]!;
 
 /**
  * Whether one of `routes` matches `segments`, whole or up to lazy children not loaded yet, which a
- * route that took a segment of its own is taken to lead to.
+ * route that took a static segment of its own is taken to lead to. A parameter alone is not: it
+ * takes any segment, pages outside the bar included, and its children may match none of the rest.
  */
 function reaches(routes: readonly Route[], segments: readonly string[]): boolean {
   return routes.some((route) => {
@@ -81,7 +82,8 @@ function reaches(routes: readonly Route[], segments: readonly string[]): boolean
     const rest = segments.slice(count);
     if (rest.length === 0) return true;
     if (route.children) return reaches(route.children, rest);
-    return count > 0 && route.loadChildren !== undefined;
+    const named = route.path!.split('/').some((part) => part && !part.startsWith(':'));
+    return named && route.loadChildren !== undefined;
   });
 }
 
@@ -515,7 +517,8 @@ export class NativeTabsOutlet implements RouterOutletContract, AfterContentInit 
   /**
    * The tab `url` is in: the one with the longest url that starts it. A tab at `''` has the bar's
    * own url, which at the root starts every url, pages outside the bar included, so it takes only
-   * a url its routes lead to, as far as they are loaded.
+   * a url its routes lead to, as far as they are loaded. A wildcard or a custom matcher is not
+   * followed, as `taken` follows neither: a page only one of them shows is in no tab.
    */
   private tabOf(url: string): TabEntry | null {
     const path = pathOnly(url);

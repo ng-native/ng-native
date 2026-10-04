@@ -20,6 +20,7 @@
   "nx-migrations": {
     "migrations": "./migrations.json",
     "packageGroup": [
+      "@ng-native/analog",
       "@ng-native/components",
       "@ng-native/device",
       "@ng-native/expo",

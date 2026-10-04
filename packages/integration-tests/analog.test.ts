@@ -179,6 +179,20 @@ describe('withAnalog', () => {
     assert.equal(resolve(metro, '@analogjs/content'), content);
   });
 
+  it("resolves @analogjs/router's own import of an installed @analogjs/content to an empty module", () => {
+    const content = {
+      type: 'sourceFile',
+      filePath: '/app/node_modules/@analogjs/content/index.mjs',
+    };
+    const metro = withAnalog(config({ '@analogjs/content': content }));
+    const router = { originModulePath: '/app/node_modules/@analogjs/router/fesm2022/routes.mjs' };
+    assert.deepEqual(metro.resolver.resolveRequest!(router, '@analogjs/content', 'ios'), {
+      type: 'empty',
+    });
+    const app = { originModulePath: '/app/src/app/pages/post.page.ts' };
+    assert.equal(metro.resolver.resolveRequest!(app, '@analogjs/content', 'ios'), content);
+  });
+
   it('leaves every other import, and its failure, alone', () => {
     const router = { type: 'sourceFile', filePath: '/router.mjs' };
     const metro = withAnalog(config({ '@analogjs/router': router }));
@@ -188,17 +202,33 @@ describe('withAnalog', () => {
 
   it("falls back to Metro's own resolver when the config has none", () => {
     const metro = withAnalog({ transformer: {}, resolver: {} });
+    const content = {
+      type: 'sourceFile',
+      filePath: '/app/node_modules/@analogjs/content/index.mjs',
+    };
     const context = {
       resolveRequest: (_context: object, name: string) => {
+        if (name === '@analogjs/content') return content;
         throw missing(name);
       },
     };
-    assert.deepEqual(metro.resolver.resolveRequest!(context, '@analogjs/content', 'ios'), {
-      type: 'empty',
-    });
+    assert.equal(metro.resolver.resolveRequest!(context, '@analogjs/content', 'ios'), content);
+    assert.throws(
+      () => metro.resolver.resolveRequest!(context, 'not-installed', 'ios'),
+      /Unable to resolve module not-installed/,
+    );
   });
 
   it('turns on require.context, which finds the pages', () => {
     assert.equal(withAnalog(config({})).transformer.unstable_allowRequireContext, true);
+  });
+
+  it("keeps the transformer settings withAngularNative made, the Angular compiler's among them", () => {
+    const babelTransformerPath = '/node_modules/@ng-native/metro/transformer.cjs';
+    const metro = withAnalog({ ...config({}), transformer: { babelTransformerPath } as never });
+    assert.deepEqual(metro.transformer, {
+      babelTransformerPath,
+      unstable_allowRequireContext: true,
+    });
   });
 });

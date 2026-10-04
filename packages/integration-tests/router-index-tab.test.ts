@@ -7,6 +7,7 @@ import { afterEach, before, beforeEach, describe, it } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import type { Type } from '@angular/core';
 import { Router, withComponentInputBinding, type Routes } from '@angular/router';
+import { DeepLinks } from '@ng-native/device';
 import {
   cleanup,
   fireEvent,
@@ -120,5 +121,81 @@ describe('a tab at path ""', () => {
     nav.back();
     await idle();
     assert.equal(router.url, '/schedule');
+  });
+});
+
+describe('a tab at path "" not yet opened', () => {
+  let mod: Record<string, unknown>;
+  let router: Router;
+  let nav: NativeNavigation;
+  let fabric: FakeFabric;
+
+  /** What each screen says, bottom first, across every stack. */
+  const screens = () =>
+    flatten(fabric.committed)
+      .filter((node) => node.viewName === 'RNSScreen')
+      .map((screen) =>
+        flatten(screen.children)
+          .filter((node) => node.viewName !== 'RNSScreen')
+          .map((node) => node.props['text'])
+          .filter((text) => typeof text === 'string')
+          .join(' '),
+      )
+      .filter(Boolean);
+
+  before(async () => {
+    mod = await compileFixture(fileURLToPath(new URL('./fixtures/index-tab.ts', import.meta.url)));
+  });
+
+  /** Launched on the second tab by a link, so the first has never been opened. */
+  beforeEach(async () => {
+    const links = { initialUrl: () => '/schedule', subscribe: () => () => {} };
+    const app = await render(mod['Shell'] as Type<unknown>, {
+      providers: [
+        provideNativeRouter(mod['routes'] as Routes, withComponentInputBinding()),
+        { provide: DeepLinks, useValue: links },
+      ],
+    });
+    fabric = app.fabric;
+    router = app.componentRef.injector.get(Router);
+    nav = app.componentRef.injector.get(NativeNavigation);
+    await idle();
+    assert.equal(router.url, '/schedule');
+  });
+
+  afterEach(() => cleanup());
+
+  it("pushes a page of it over the tab's own first screen, and back lands there", async () => {
+    await nav.push('/talks/7');
+    await idle();
+    assert.equal(router.url, '/talks/7');
+    assert.ok(screens().includes('home'), 'the tab opened on its first screen under the page');
+
+    nav.back();
+    await idle();
+    assert.equal(router.url, '/');
+  });
+
+  it('leaves a page outside the bar alone, though a lazy parameter of the tab could match it', async () => {
+    cleanup();
+    const links = { initialUrl: () => '/schedule', subscribe: () => () => {} };
+    const app = await render(mod['Shell'] as Type<unknown>, {
+      providers: [
+        provideNativeRouter(mod['routesWithTopics'] as Routes, withComponentInputBinding()),
+        { provide: DeepLinks, useValue: links },
+      ],
+    });
+    router = app.componentRef.injector.get(Router);
+    nav = app.componentRef.injector.get(NativeNavigation);
+    await idle();
+    assert.equal(router.url, '/schedule');
+
+    await nav.push('/user/1');
+    await idle();
+    assert.equal(router.url, '/user/1');
+
+    nav.back();
+    await idle();
+    assert.equal(router.url, '/schedule', 'back where the push came from, not the first tab');
   });
 });

@@ -17,12 +17,14 @@ the feature working.
 | `routeMeta` redirect | `old-home.page.ts`                                        | No component: `/old-home` lands on the home page                |
 | `routeMeta` guard    | `admin.page.ts`                                           | Refused until Admin access is turned on in Settings             |
 | `routeMeta` resolver | `resolved.page.ts`                                        | Data a resolver loaded before the page was shown                |
-| Lazy loading         | `lazy.page.ts`                                            | Each page is a chunk of its own, loaded on first open           |
+| Lazy loading         | `lazy.page.ts`                                            | A page's code runs on first open (its own file in dev and web)  |
 | Query parameters     | `search.page.ts`                                          | `?q=` read from `ActivatedRoute`, followed as it changes        |
 
-The home page is `index.page.ts`. The product pages open as a sheet: a presented screen has no
-navigation bar of its own, and the stack in `products.page.ts` gives its pages a header and a back
-button.
+The home page is `index.page.ts`. The product pages open as a sheet (a modal on Android, where React
+Native Screens does not render a nested stack in a form sheet): a presented screen has no navigation
+bar of its own, and the stack in `products.page.ts` gives its pages a header and a back button. A
+link that launches the app opens with the pages it sits under beneath it (`withLinkParent` in
+`app.config.ts`), so a product opened that way has the list and the home page to close back to.
 
 ## Run it
 
@@ -35,9 +37,10 @@ pnpm test      # Vitest in Node, no simulator
 ```
 
 `src/app/app.test.ts` opens each feature from the home page and checks what it demonstrates: the
-parameter's value, the caught segments, the group's URLs, each tab keeping its count, the header title, the redirect landing
-home, the guard refusing and then letting in, the resolved data and the query value. It feeds the
-same pages to the router from `import.meta.glob`, since Vitest has no `require.context`.
+parameter's value, the caught segments, the group's URLs, each tab keeping its count, the header
+title, the redirect landing home, the guard letting in only while Admin access is on, the resolved
+data and the query value, and that a product a link launched the app on closes with Done. It feeds
+the same pages to the router from `import.meta.glob`, since Vitest has no `require.context`.
 
 ## The Analog logo
 

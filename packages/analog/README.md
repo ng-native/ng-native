@@ -8,7 +8,8 @@ Alpha: APIs may change before 1.0.
 ## Install
 
 ```sh
-npm install @ng-native/analog @analogjs/router
+npm install @ng-native/analog @analogjs/router @ng-native/router @angular/router
+npx expo install react-native-screens
 ```
 
 ## Example
@@ -50,7 +51,8 @@ export const appConfig = {
 - `pageRoutes(pages)`: Analog's routes for a `require.context` of the pages, or for the files of an
   `import.meta.glob` in a Vitest test.
 - `withAnalog(config)` in `@ng-native/analog/metro`: turns on `require.context`, and resolves
-  `@analogjs/content`, which only a Markdown page needs, to an empty module unless it is installed.
+  `@analogjs/router`'s import of `@analogjs/content`, which only a Markdown page needs, to an empty
+  module, installed or not.
 
 ## Docs
 

@@ -1,9 +1,12 @@
 /**
  * The tab a page is in, for a stack inside it to hear when another tab comes in front.
  *
- * A sheet or a modal presented in a tab's own stack is shown over the whole window, the tab bar
- * included, so the tab cannot keep it up while it is behind: it would cover the tab in front. The
- * tab's stacks dismiss what they presented instead, and the tab is remembered at the page beneath.
+ * On iOS a sheet or a modal presented in a tab's own stack is shown over the whole window, the tab
+ * bar included, so the tab cannot keep it up while it is behind: it would cover the tab in front.
+ * The tab's stacks dismiss what they presented instead, and the tab is remembered at the page
+ * beneath. On Android react-native-screens draws it inside the tab's own stack, a modal as a push
+ * and a form sheet as a bottom sheet, so the bar stays in reach; it is dismissed there too, so a
+ * tab comes back on the same page on both platforms.
  */
 import { InjectionToken } from '@angular/core';
 

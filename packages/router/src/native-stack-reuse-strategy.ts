@@ -152,9 +152,16 @@ export class NativeStackReuseStrategy extends BaseRouteReuseStrategy {
   override shouldReuseRoute(future: ActivatedRouteSnapshot, curr: ActivatedRouteSnapshot): boolean {
     if (future.routeConfig !== curr.routeConfig) return false;
     const config = curr.routeConfig;
-    if (!isScreenRoute(config) || config?.data?.[REUSE_SCREEN] === true) return true;
-    return keyOf(future) === keyOf(curr);
+    const reuse =
+      !isScreenRoute(config) ||
+      config?.data?.[REUSE_SCREEN] === true ||
+      keyOf(future) === keyOf(curr);
+    if (reuse) this.reused.add(future);
+    return reuse;
   }
+
+  /** The routes the navigation in flight keeps as they are, by the snapshot it is building. */
+  private readonly reused = new WeakSet<ActivatedRouteSnapshot>();
 
   /**
    * Whether the router goes back to a kept screen for this url. Not for a push: a push to a url
@@ -166,12 +173,21 @@ export class NativeStackReuseStrategy extends BaseRouteReuseStrategy {
    * otherwise be handed.
    *
    * A tab is attached for a push too: the push is into the tab's own stack, which is kept with it,
-   * and building the tab again would leave a second stack in the tab's screen.
+   * and building the tab again would leave a second stack in the tab's screen. Only into the bar
+   * already showing, though: a push that builds another bar over it builds its tabs too, and the
+   * one kept at the same url is the bar beneath's.
    */
   override shouldAttach(route: ActivatedRouteSnapshot): boolean {
     if (route.component === null) return false;
-    if (this.pushing() && !isTabRoute(route.routeConfig)) return false;
+    if (this.pushing() && !(isTabRoute(route.routeConfig) && this.inKeptBar(route))) return false;
     return this.retrieve(route) !== null;
+  }
+
+  /** Whether the tab bar above a tab's route is one the navigation keeps rather than builds. */
+  private inKeptBar(route: ActivatedRouteSnapshot): boolean {
+    let bar = route.parent;
+    while (bar && bar.component === null) bar = bar.parent;
+    return bar !== null && this.reused.has(bar);
   }
 
   private pushing(): boolean {
