@@ -97,4 +97,25 @@ describe('view props', () => {
     assert.equal(none.props['nativeForegroundAndroid'], undefined);
     cleanup();
   });
+
+  it("processes a switch's track colours, whose names end in the state they paint", async () => {
+    /*
+     * `trackColorForTrue` and `trackColorForFalse` are colours that do not end in `color`, so the
+     * pass that finds a colour by name misses them. Android's converter takes a number or a
+     * platform-colour map and throws on a string, taking the whole surface down with it.
+     */
+    const mod = await compileFixture(
+      fileURLToPath(new URL('./fixtures/view-props.ts', import.meta.url)),
+    );
+    await render(mod['TrackColorProps'] as Type<unknown>, {
+      processColor: (value) => `processed:${String(value)}`,
+    });
+
+    const toggle = screen.getByTestId('toggle', { includeHiddenElements: true });
+    assert.equal(toggle.props['trackColorForTrue'], 'processed:#0a7cff');
+    assert.equal(toggle.props['trackColorForFalse'], 'processed:#cccccc');
+    // The input is `thumbColor`; the directive sends it under the name each platform reads.
+    assert.equal(toggle.props['thumbTintColor'], 'processed:#ffffff', 'still found by its suffix');
+    cleanup();
+  });
 });

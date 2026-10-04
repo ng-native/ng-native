@@ -1,6 +1,7 @@
 import { Component, signal } from '@angular/core';
 import { View } from '../../components/src/view.ts';
 import { Pressable } from '../../components/src/pressable.ts';
+import { Switch } from '../../components/src/switch.ts';
 import { TextInput } from '../../components/src/text-input.ts';
 
 @Component({
@@ -45,3 +46,21 @@ export class ViewProps {
   `,
 })
 export class RippleProps {}
+
+/**
+ * A switch's per-state track colours, written the way an app writes one so the test can watch
+ * them go through `processColor`.
+ */
+@Component({
+  selector: 'x-track-color-props',
+  imports: [Switch],
+  template: `
+    <switch
+      testID="toggle"
+      [checked]="true"
+      [trackColor]="{ false: '#cccccc', true: '#0a7cff' }"
+      thumbColor="#ffffff"
+    ></switch>
+  `,
+})
+export class TrackColorProps {}

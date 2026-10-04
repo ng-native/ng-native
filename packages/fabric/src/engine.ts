@@ -1748,12 +1748,22 @@ export interface EngineOptions {
  * colours - `shouldRasterizeIOS` is a boolean.
  */
 const IS_COLOR_PROP = /color(android)?$/i;
+/**
+ * Colour props React Native does not name with a `color` suffix: `<switch>`'s pair ends in the
+ * state each one paints - `trackColorForTrue` and `trackColorForFalse`. They are the same type
+ * problem the `Android` suffix causes: Android's `ColorPropConverter` takes a number or a
+ * platform-colour map, refuses a string, and throws rather than approximating one.
+ */
+const STATE_COLOR_PROPS = new Set(['trackColorForTrue', 'trackColorForFalse']);
 /** Answers per key name, once: the regex ran for every prop of every node in every commit. */
 const colorProps = new Map<string, boolean>();
 function isColorProp(key: string): boolean {
   let answer = colorProps.get(key);
   if (answer === undefined) {
-    colorProps.set(key, (answer = IS_COLOR_PROP.test(key) || BRUSH_PROPS.has(key)));
+    colorProps.set(
+      key,
+      (answer = IS_COLOR_PROP.test(key) || STATE_COLOR_PROPS.has(key) || BRUSH_PROPS.has(key)),
+    );
   }
   return answer;
 }
