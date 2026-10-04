@@ -3,12 +3,12 @@ import { BrnSelectSeparator } from '@spartan-ng/brain/select';
 import { classes } from '../../utils';
 
 @Directive({
-	selector: '[hlmSelectSeparator],hlm-select-separator',
-	hostDirectives: [{ directive: BrnSelectSeparator, inputs: ['orientation'] }],
-	host: { 'data-slot': 'select-separator' },
+  selector: '[hlmSelectSeparator],hlm-select-separator',
+  hostDirectives: [{ directive: BrnSelectSeparator, inputs: ['orientation'] }],
+  host: { 'data-slot': 'select-separator' },
 })
 export class HlmSelectSeparator {
-	constructor() {
-		classes(() => 'spartan-select-separator pointer-events-none');
-	}
+  constructor() {
+    classes(() => 'spartan-select-separator pointer-events-none');
+  }
 }

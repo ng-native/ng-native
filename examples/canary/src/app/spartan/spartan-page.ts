@@ -10,6 +10,7 @@ import { SpartanControls } from './spartan-controls.ts';
 import { SpartanDialogs } from './spartan-dialogs.ts';
 import { SpartanFeedback } from './spartan-feedback.ts';
 import { SpartanInputs } from './spartan-inputs.ts';
+import { SpartanMenus } from './spartan-menus.ts';
 import { SpartanOverlays } from './spartan-overlays.ts';
 import { SpartanSelects } from './spartan-selects.ts';
 import { SpartanTabs } from './spartan-tabs.ts';
@@ -32,6 +33,7 @@ import { SpartanTabs } from './spartan-tabs.ts';
     SpartanDialogs,
     SpartanFeedback,
     SpartanInputs,
+    SpartanMenus,
     SpartanOverlays,
     SpartanSelects,
     SpartanTabs,
@@ -62,6 +64,8 @@ import { SpartanTabs } from './spartan-tabs.ts';
         <app-spartan-overlays />
         <h2 class="text-lg font-semibold">Select</h2>
         <app-spartan-selects />
+        <h2 class="text-lg font-semibold">Dropdown menu</h2>
+        <app-spartan-menus />
         <h2 class="text-lg font-semibold">Toggle, radio group, textarea, avatar</h2>
         <app-spartan-controls />
       </div>

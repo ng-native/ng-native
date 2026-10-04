@@ -3,12 +3,12 @@ import { BrnSelectLabel } from '@spartan-ng/brain/select';
 import { classes } from '../../utils';
 
 @Directive({
-	selector: '[hlmSelectLabel],hlm-select-label',
-	hostDirectives: [{ directive: BrnSelectLabel, inputs: ['id'] }],
-	host: { 'data-slot': 'select-label' },
+  selector: '[hlmSelectLabel],hlm-select-label',
+  hostDirectives: [{ directive: BrnSelectLabel, inputs: ['id'] }],
+  host: { 'data-slot': 'select-label' },
 })
 export class HlmSelectLabel {
-	constructor() {
-		classes(() => 'spartan-select-label flex');
-	}
+  constructor() {
+    classes(() => 'spartan-select-label flex');
+  }
 }
