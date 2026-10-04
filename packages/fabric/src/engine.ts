@@ -477,6 +477,12 @@ export interface EngineNode extends HostNode {
    */
   fitContainer?: string;
   /**
+   * Whether this node had a height a percentage could be taken of, when a box beneath it with a
+   * percentage height last asked, as `definiteHeight` says it. Compared on each reconcile so its
+   * children are worked out again when it changes. Unset on every other node.
+   */
+  heightBasis?: boolean;
+  /**
    * Per-property transition state, for every property this node has ever seen a `transition` for.
    * A finished entry stays, because its target is what the next change is measured against.
    */
@@ -879,6 +885,62 @@ function fitContent(node: EngineNode, props: Record<string, unknown>): void {
   if (across && align === 'stretch' && STRETCHES.has(props['alignSelf'] as string)) {
     props['alignSelf'] = 'flex-start';
   }
+}
+
+const isPercent = (value: unknown): boolean => typeof value === 'string' && value.endsWith('%');
+
+/**
+ * Whether a box has a height a percentage can be taken of, as CSS defines one: a height of its
+ * own, or one the layout around it gives it. A box as tall as what it holds has none.
+ *
+ * Asked of each box on the way up, and remembered on it, so a change to any of them works out
+ * again the boxes beneath it. Where the answer is not known for certain it is yes, which leaves
+ * the percentage to Yoga as before: a view native sizes itself, or one placed out of the flow.
+ */
+function definiteHeight(node: EngineNode): boolean {
+  return (node.heightBasis = hasDefiniteHeight(node));
+}
+
+function hasDefiniteHeight(node: EngineNode): boolean {
+  // The root is the screen, and only a plain view is sized by its content alone.
+  if (!node.parent || node.kind !== 'element' || viewNameOf(node) !== 'View') return true;
+  const parent = layoutParent(node);
+  if (!parent) return true;
+  const height = ownLayout(node, 'height');
+  if (isPercent(height)) return definiteHeight(parent);
+  return sizesItself(node, height) || heightFromLayout(node, parent);
+}
+
+const NO_HEIGHT = new Set([undefined, null, 'auto', 'fit-content']);
+
+/** Whether a box has a height from its own style: written, or placed, or kept in proportion. */
+function sizesItself(node: EngineNode, height: unknown): boolean {
+  if (!NO_HEIGHT.has(height as string)) return true;
+  return ownLayout(node, 'position') === 'absolute' || ownLayout(node, 'aspectRatio') != null;
+}
+
+/** Whether the container a box is in gives it a height: a row's, or a share of a column's. */
+function heightFromLayout(node: EngineNode, parent: EngineNode): boolean {
+  const [direction, align] = containerOf(parent).split(' ');
+  if (direction === 'row') {
+    // Stretched across a row, it is as tall as the row.
+    const self = ownLayout(node, 'alignSelf') as string | undefined;
+    return STRETCHES.has(self) && align === 'stretch';
+  }
+  // In a column it has the height it grows to, where the column has one to share out.
+  const grows = Number(ownLayout(node, 'flexGrow') ?? ownLayout(node, 'flex') ?? 0) > 0;
+  return grows && definiteHeight(parent);
+}
+
+/**
+ * `height: 50%` under a parent with no height to take it of, which CSS reads as `auto`. Yoga
+ * takes it of the space on offer, the screen's or everything a scroll view holds, so no height
+ * is sent.
+ */
+function percentHeight(node: EngineNode, props: Record<string, unknown>): void {
+  if (!isPercent(props['height'])) return;
+  const parent = layoutParent(node);
+  if (parent && !definiteHeight(parent)) delete props['height'];
 }
 
 /**
@@ -1539,6 +1601,7 @@ class RetainedNode {
   styleDirty = true;
   styleCommitted: StyleCache | null = null;
   fitContainer: string | undefined = undefined;
+  heightBasis: boolean | undefined = undefined;
   hasDirty = false;
   ownStyle: object | undefined = undefined;
   claimed: true | undefined = undefined;
@@ -2982,6 +3045,7 @@ export class Engine implements HostEngine {
     nativePointerEvents(node, style, resolved);
     // Before an image's own size: `fit-content` is no size, so the image's is what it gets.
     fitContent(node, style);
+    percentHeight(node, style);
     const intrinsic = node.props[INTRINSIC_SIZE] as IntrinsicSize | undefined;
     if (intrinsic) applyIntrinsicSize(style, intrinsic);
     flattenStyle(node.props[STYLE_OVERRIDE], style);
@@ -2997,15 +3061,17 @@ export class Engine implements HostEngine {
 
   /**
    * A container whose direction or alignment changed since a child with a `fit-content` size
-   * read it: those children are merged again. A change to a container marks nothing beneath it,
-   * since neither property is inherited.
+   * read it, or whose height stopped or started being one a percentage is taken of since a child
+   * with a percentage height asked: those children are merged again. A change to a container
+   * marks nothing beneath it, since none of these is inherited.
    */
   private refitChildren(node: EngineNode): void {
-    if (node.fitContainer === undefined) return;
-    const container = containerOf(node);
-    if (container === node.fitContainer) return;
-    node.fitContainer = container;
-    this.refit(node);
+    // Both are asked, and both remembered, before either has the children merged again.
+    const basis = node.heightBasis;
+    const based = basis !== undefined && definiteHeight(node) !== basis;
+    const fitted = node.fitContainer !== undefined && containerOf(node) !== node.fitContainer;
+    if (fitted) node.fitContainer = containerOf(node);
+    if (based || fitted) this.refit(node);
   }
 
   /** Have a container's children merged again, through any `display: contents` among them. */
