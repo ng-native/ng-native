@@ -2272,19 +2272,17 @@ export class Engine implements HostEngine {
     elsewhere: [],
   };
 
-  private readonly activeWatched = new WeakSet<StyleSheet>();
+  /** What each sheet in play asks about a pressed element: `activeUse` is all of them together. */
+  private readonly activeBySheet = new Map<StyleSheet, ReturnType<typeof usesActive>>();
 
   /** Note what a sheet in play asks about a pressed element. See `markActive`. */
   private watchActive(sheet: StyleSheet | null | undefined): void {
     // Asked for every element a component's sheet is given to: noted once a sheet.
-    if (!sheet || this.activeWatched.has(sheet)) return;
-    this.activeWatched.add(sheet);
+    if (!sheet || this.activeBySheet.has(sheet)) return;
     const use = usesActive(sheet);
+    this.activeBySheet.set(sheet, use);
     if (!use.own && !use.elsewhere.length) return;
-    this.activeUse = {
-      own: this.activeUse.own || use.own,
-      elsewhere: [...this.activeUse.elsewhere, ...use.elsewhere],
-    };
+    this.countActive();
     if (this.styles.tracksHas) return;
     // What a pressed element is compared with is the rules it matched, which no cache kept until
     // a sheet asked. Nothing is resolved yet when the sheet is the one the engine was made with.
@@ -2292,6 +2290,19 @@ export class Engine implements HostEngine {
     if (!this.root) return;
     this.root.styleDirty = true;
     this.markPath(this.root);
+  }
+
+  /** A sheet has left play, by a hot swap or by being removed: what it asked goes with it. */
+  private unwatchActive(sheet: StyleSheet): void {
+    if (this.activeBySheet.delete(sheet)) this.countActive();
+  }
+
+  private countActive(): void {
+    const all = [...this.activeBySheet.values()];
+    this.activeUse = {
+      own: all.some((use) => use.own),
+      elsewhere: all.flatMap((use) => use.elsewhere),
+    };
   }
 
   /**
@@ -3334,6 +3345,8 @@ export class Engine implements HostEngine {
    */
   sheetReplaced(sheet: StyleSheet, next: StyleSheet | null): void {
     if (sheet === next && this.knownSheets.has(sheet)) return;
+    this.unwatchActive(sheet);
+    this.watchActive(next);
     const at = this.sheetOrder.indexOf(sheet);
     if (at === -1) {
       this.registerSheet(next);

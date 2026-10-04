@@ -142,6 +142,25 @@ describe('a press', () => {
     assert.ok(all.filter((node, i) => node.styleCache !== before[i]).length <= 1);
   });
 
+  it('stops asking what a sheet asked once the sheet is replaced or removed', () => {
+    const s = scene(BASE);
+    const asks = compileCss('.group:active .label { opacity: 0.3 }') as StyleSheet;
+    const plain = compileCss('.label { opacity: 0.9 }') as StyleSheet;
+    s.engine.addGlobalSheet(asks);
+    s.engine.commit();
+    assert.ok(s.touch('topTouchStart') > 0);
+    s.touch('topTouchEnd');
+    // A hot swap edits the rule away, and then the sheet goes altogether.
+    s.engine.addGlobalSheet(plain, asks);
+    s.engine.commit();
+    assert.equal(s.touch('topTouchStart'), 0);
+    assert.equal(s.touch('topTouchEnd'), 0);
+    s.engine.addGlobalSheet(asks, plain);
+    s.engine.removeGlobalSheet(asks);
+    s.engine.commit();
+    assert.equal(s.touch('topTouchStart'), 0);
+  });
+
   it('styles nothing at all under a stylesheet with no pressed style in it', () => {
     const s = scene(BASE);
     assert.equal(s.touch('topTouchStart'), 0);
