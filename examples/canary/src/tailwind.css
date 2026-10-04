@@ -51,6 +51,11 @@
   flex-direction: row;
 }
 
+/* Spartan's base layer: a border with no colour of its own is the border token's. */
+:where(.spartan, .cdk-overlay-container) * {
+  border-color: var(--border);
+}
+
 /* Spartan's vega style, one component's section at a time, as each is brought up. */
 
 /* MARK: Button */
@@ -211,4 +216,21 @@
 
 .spartan-tabs-content {
   @apply text-sm;
+}
+
+/* MARK: Accordion */
+.spartan-accordion-item {
+  @apply not-last:border-b;
+}
+
+.spartan-accordion-trigger {
+  @apply focus-visible:ring-ring/50 focus-visible:border-ring focus-visible:after:border-ring **:data-[slot=accordion-trigger-icon]:text-muted-foreground! rounded-md py-4 text-start text-sm font-medium hover:underline focus-visible:ring-3 **:data-[slot=accordion-trigger-icon]:ms-auto **:data-[slot=accordion-trigger-icon]:text-[length:--spacing(4)];
+}
+
+.spartan-accordion-content {
+  @apply text-sm;
+}
+
+.spartan-accordion-content-inner {
+  @apply pt-0 pb-4;
 }

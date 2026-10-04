@@ -130,6 +130,10 @@ export const nodeMembers = (core: CoreNode): PropertyDescriptorMap => ({
         ? '#comment'
         : this.name.toUpperCase();
   }),
+  // Upper case, as the DOM has an HTML element's: a library tells a button by `=== 'BUTTON'`.
+  tagName: get(function () {
+    return this.name.toUpperCase();
+  }),
   localName: get(function () {
     return this.name;
   }),

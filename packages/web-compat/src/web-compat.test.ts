@@ -94,6 +94,8 @@ describe('@ng-native/web-compat nodes', () => {
     assert.equal(first.isConnected, true);
     assert.equal(first.nodeType, 1);
     assert.equal(first.localName, 'view');
+    assert.equal(first.tagName, 'VIEW');
+    assert.equal(first.nodeName, 'VIEW');
   });
 
   it('moves and removes nodes through the engine', async () => {

@@ -1,6 +1,7 @@
 import { Component } from '@angular/core';
 import { ScrollView } from '@ng-native/components';
 import { NativeHeader } from '@ng-native/router';
+import { SpartanAccordions } from './spartan-accordions.ts';
 import { SpartanBadges } from './spartan-badges.ts';
 import { SpartanButtons } from './spartan-buttons.ts';
 import { SpartanCards } from './spartan-cards.ts';
@@ -17,6 +18,7 @@ import { SpartanTabs } from './spartan-tabs.ts';
   imports: [
     NativeHeader,
     ScrollView,
+    SpartanAccordions,
     SpartanBadges,
     SpartanButtons,
     SpartanCards,
@@ -40,6 +42,8 @@ import { SpartanTabs } from './spartan-tabs.ts';
         <app-spartan-checks />
         <h2 class="text-lg font-semibold">Tabs</h2>
         <app-spartan-tabs />
+        <h2 class="text-lg font-semibold">Accordion</h2>
+        <app-spartan-accordions />
       </div>
     </scroll-view>
   `,

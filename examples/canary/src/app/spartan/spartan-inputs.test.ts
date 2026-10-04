@@ -35,9 +35,7 @@ test('an input is a bordered text field, as wide as its container', async () => 
   expect(props('name')['borderTopLeftRadius']).toBeCloseTo(8, 4);
 });
 
-// Fails until `::placeholder` reaches an `<input>`: the engine reads it on `<text-input>` alone.
-// When it does, this passes and `fails` flags it.
-test.fails('its placeholder is the muted colour', async () => {
+test('its placeholder is the muted colour', async () => {
   await mount();
   expect(props('name')['placeholderTextColor']).toBe('rgb(106, 114, 130)');
 });
