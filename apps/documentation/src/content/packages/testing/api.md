@@ -132,7 +132,7 @@ getAllByRole if more than one is expected.`
 | `ByText`            | `(text, { exact? })`        | It is a `Paragraph` and its text content matches.                                                                                                                                               |
 | `ByTestId`          | `(testId, { exact? })`      | `testID` or `nativeID` matches.                                                                                                                                                                 |
 | `ByLabelText`       | `(label, { exact? })`       | `accessibilityLabel` matches.                                                                                                                                                                   |
-| `ByPlaceholderText` | `(placeholder, { exact? })` | A text field's `placeholder` matches.                                                                                                                                                           |
+| `ByPlaceholderText` | `(placeholder, { exact? })` | A text field's or the navigation bar's search field's `placeholder` matches.                                                                                                                    |
 | `ByDisplayValue`    | `(value, { exact? })`       | It is a text field and its `text`, the value `<text-input>` binds its model to, matches.                                                                                                        |
 
 Every query reads the props on the committed nodes, which are the props native was sent: what a

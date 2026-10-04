@@ -11,7 +11,7 @@
  * later task, so an event has to be awaited before the tree it changed can be read.
  */
 import { currentOf, ownerOf, settle } from './render.ts';
-import { flatten, isTextInput } from './queries.ts';
+import { flatten, isSearchBar, isTextInput } from './queries.ts';
 import type { FakeFabricNode } from './test-utils.ts';
 
 /** A payload as a handler would see it (`{ nativeEvent }`), or the native event itself. */
@@ -44,9 +44,6 @@ function touch(node: FakeFabricNode, phase: 'start' | 'end'): Record<string, unk
   };
   return { ...point, touches: phase === 'start' ? [point] : [], changedTouches: [point] };
 }
-
-/** The navigation bar's search field, which reports text as `topChangeText` with no count. */
-const isSearchBar = (node: FakeFabricNode): boolean => node.viewName === 'RNSSearchBar';
 
 /** The text field at or under a node, so a query for its wrapper still reaches the input. */
 function fieldOf(node: FakeFabricNode): FakeFabricNode {

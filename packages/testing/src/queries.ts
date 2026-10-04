@@ -125,6 +125,9 @@ export function textContent(node: FakeFabricNode): string {
 /** A text field under any of the names the platforms register it by. */
 export const isTextInput = (node: FakeFabricNode): boolean => /TextInput/.test(node.viewName);
 
+/** The navigation bar's search field, which reports text as `topChangeText` with no count. */
+export const isSearchBar = (node: FakeFabricNode): boolean => node.viewName === 'RNSSearchBar';
+
 type Query = { describe: string; select: (node: FakeFabricNode) => boolean };
 
 /** What a screen reader reads out: the label, or failing that the text inside. */
@@ -162,10 +165,11 @@ const QUERIES: { [K in Name]: (...args: QueryArgs[K]) => Query } = {
   }),
   PlaceholderText: (placeholder, options = {}) => ({
     describe: `placeholder ${show(placeholder)}`,
-    // A text field alone draws a placeholder. A wrapper with a `placeholder` input of its own has
-    // the attribute on its host view too, which nobody sees.
+    // A text field and the navigation bar's search field draw a placeholder. A wrapper with a
+    // `placeholder` input of its own has the attribute on its host view too, which nobody sees.
     select: (node) =>
-      isTextInput(node) && matches(node.props['placeholder'], placeholder, options.exact),
+      (isTextInput(node) || isSearchBar(node)) &&
+      matches(node.props['placeholder'], placeholder, options.exact),
   }),
   // A text field's value is its `text` prop, which is what `<text-input>` binds its model to.
   DisplayValue: (value, options = {}) => ({

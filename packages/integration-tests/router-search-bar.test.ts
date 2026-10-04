@@ -6,7 +6,7 @@ import assert from 'node:assert/strict';
 import { afterEach, before, describe, it } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import type { Type } from '@angular/core';
-import { cleanup, fireEvent, render, userEvent } from '@ng-native/testing';
+import { cleanup, fireEvent, render, screen, userEvent } from '@ng-native/testing';
 import { registerScreenComponents } from '../router/src/screens.ts';
 import { compileFixture } from './compile.ts';
 
@@ -43,6 +43,17 @@ describe('native search bar', () => {
     await userEvent.setup().type(fabric.find('RNSSearchBar')!, 'oak');
 
     assert.equal((instance as { query(): string }).query(), 'oak');
+  });
+
+  it('is found by the placeholder it draws, as a text field is', async () => {
+    const { fabric, instance } = await render(Host);
+
+    const bar = screen.getByPlaceholderText('Search');
+    assert.equal(bar, fabric.find('RNSSearchBar'));
+    assert.equal(screen.queryByPlaceholderText('Find'), null);
+
+    await userEvent.setup().type(bar, 'ash');
+    assert.equal((instance as { query(): string }).query(), 'ash');
   });
 
   const commands = (fabric: { commands: { name: string; args: readonly unknown[] }[] }) =>
