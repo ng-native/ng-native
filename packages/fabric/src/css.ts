@@ -601,8 +601,8 @@ export interface StyleTarget {
   /**
    * Set by the engine when the node's own interaction state changed and nothing else about it
    * did: a press began or ended on it or under it. It is matched again, and keeps the style it
-   * has, and everything under it, when it matches the rules it did. Only where no rule asks
-   * about a pressed element from inside or beside it: see `usesActive`.
+   * has, and everything under it, when it matches the rules it did. Not for an element a rule
+   * asks about from another one, which is restyled: see `usesActive`.
    */
   stateDirty?: boolean;
   /** `:focus`. Set by the engine from the native focus and blur events. */
@@ -676,33 +676,38 @@ function drawNoBorder(own: Record<string, unknown>): void {
  * reads, so it does not distort what it measures.
  */
 /**
- * Whether a sheet has a rule for a pressed element, and whether one asks about a pressed element
- * from another: `.card:active .title`, `.field:has(:active)`, `.a:active + .b`, or `:active`
- * inside `:not()` or `:is()`. Only the plain case, `.button:active`, can be answered by matching
- * the pressed elements alone.
+ * What a sheet asks about a pressed element. `own` is whether a rule styles one, `.button:active`,
+ * which matching the pressed elements again answers. `elsewhere` is each compound that asks about
+ * a pressed element from another one: `.card:active .title`, `.a:active + .b`, or `:active`
+ * inside `:not()`, `:is()` or `:has()`. An element such a compound could be is restyled with
+ * everything under it when it is pressed, as what it changes is not itself alone.
  */
-export function usesActive(sheet: StyleSheet): { own: boolean; other: boolean } {
+export function usesActive(sheet: StyleSheet): ActiveUse {
   const known = ACTIVE_USE.get(sheet);
   if (known) return known;
-  const use = { own: false, other: false };
-  const mentions = (value: unknown): boolean => {
-    if (!value || typeof value !== 'object') return false;
-    if (Array.isArray(value)) return value.some(mentions);
-    return Object.entries(value).some(([key, inside]) =>
-      key === 'pseudo' ? (inside as readonly string[]).includes('active') : mentions(inside),
-    );
+  let own = false;
+  const elsewhere: Compound[] = [];
+  const collect = (value: unknown, subject: unknown): void => {
+    if (!value || typeof value !== 'object') return;
+    if (Array.isArray(value)) return value.forEach((each) => collect(each, subject));
+    const compound = value as Compound;
+    if (value !== subject && compound.pseudo?.includes('active')) elsewhere.push(compound);
+    for (const inside of Object.values(value)) collect(inside, subject);
   };
   for (const rule of sheet.rules) {
     const subject = rule.compounds.at(-1);
-    if (subject?.pseudo?.includes('active')) use.own = true;
-    const others = rule.compounds.slice(0, -1);
-    const { pseudo: _, ...within } = subject ?? ({} as Compound);
-    if (mentions(others) || mentions(within)) use.other = true;
+    if (subject?.pseudo?.includes('active')) own = true;
+    collect(rule.compounds, subject);
   }
+  const use = { own, elsewhere };
   ACTIVE_USE.set(sheet, use);
   return use;
 }
-const ACTIVE_USE = new WeakMap<StyleSheet, { own: boolean; other: boolean }>();
+export interface ActiveUse {
+  readonly own: boolean;
+  readonly elsewhere: readonly Compound[];
+}
+const ACTIVE_USE = new WeakMap<StyleSheet, ActiveUse>();
 
 export const styleStats = {
   /** Calls to `matchesCompound`, the innermost unit of matching work. */

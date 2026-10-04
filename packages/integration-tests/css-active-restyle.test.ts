@@ -81,7 +81,8 @@ describe('a press', () => {
 
   it('styles what is inside a pressed element, where a rule asks about that', () => {
     const s = scene(`${BASE} .group:active .label { opacity: 0.3 }`);
-    s.touch('topTouchStart');
+    // The group and what is under it, and still nothing of the screen around them.
+    assert.ok(s.touch('topTouchStart') <= 3);
     assert.equal(s.props('label')['opacity'], 0.3);
     s.touch('topTouchEnd');
     assert.equal(s.props('label')['opacity'], null);

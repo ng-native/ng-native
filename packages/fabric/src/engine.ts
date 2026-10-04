@@ -14,6 +14,7 @@ import {
   setsInherited,
   StyleResolver,
   usesActive,
+  type Compound,
   type Conditions,
   type DeferredDeclaration,
   type StyleCache,
@@ -2265,19 +2266,22 @@ export class Engine implements HostEngine {
     return changed;
   }
 
-  /** Whether any sheet styles a pressed element, and whether one asks about it from another. */
-  private activeUse = { own: false, other: false };
+  /** Whether any sheet styles a pressed element, and each compound that asks about one from another. */
+  private activeUse: { own: boolean; elsewhere: readonly Compound[] } = {
+    own: false,
+    elsewhere: [],
+  };
 
   /** Note what a sheet in play asks about a pressed element. See `markActive`. */
   private watchActive(sheet: StyleSheet | null | undefined): void {
     if (!sheet) return;
     const use = usesActive(sheet);
-    const first = !this.activeUse.own && !this.activeUse.other && (use.own || use.other);
+    if (!use.own && !use.elsewhere.length) return;
     this.activeUse = {
       own: this.activeUse.own || use.own,
-      other: this.activeUse.other || use.other,
+      elsewhere: [...this.activeUse.elsewhere, ...use.elsewhere],
     };
-    if (!first || this.styles.tracksHas) return;
+    if (this.styles.tracksHas) return;
     // What a pressed element is compared with is the rules it matched, which no cache kept until
     // a sheet asked. Nothing is resolved yet when the sheet is the one the engine was made with.
     this.styles.tracksHas = true;
@@ -2290,14 +2294,19 @@ export class Engine implements HostEngine {
    * A press began or ended on `node` or under it, which is all that changed about it. A press
    * reaches every ancestor up to the root, and marking each as restyled would style the whole
    * screen again, twice a press. So each is only matched again, and keeps its style and all
-   * that is under it unless it now matches other rules. Where a rule asks about a pressed
-   * element from inside or beside it, what that reaches is not the element alone, and it is
-   * restyled with everything under it as any other change is. With no rule for a pressed
-   * element at all there is nothing to match.
+   * that is under it unless it now matches other rules. An element a rule asks about from
+   * inside or beside it, `.card:active .title`, changes more than itself, and is restyled with
+   * everything under it as any other change is. With no rule for a pressed element at all there
+   * is nothing to match.
    */
   private markActive(node: EngineNode): void {
-    if (this.activeUse.other) return this.markProps(node);
-    if (!this.activeUse.own) return;
+    const { own, elsewhere } = this.activeUse;
+    if (!own && !elsewhere.length) return;
+    // By its classes alone: a compound with none could be any element.
+    const asked = elsewhere.some((compound) =>
+      compound.classes.every((name) => node.classes?.has(name)),
+    );
+    if (asked) return this.markProps(node);
     node.stateDirty = true;
     this.markPath(node.parent ?? node);
   }
