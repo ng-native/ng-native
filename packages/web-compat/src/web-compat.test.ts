@@ -4,6 +4,7 @@
  */
 import assert from 'node:assert/strict';
 import { afterEach, describe, it } from 'node:test';
+import { Location } from '@angular/common';
 import { Component, DOCUMENT, ElementRef, Renderer2, inject, signal } from '@angular/core';
 import { Text, View } from '@ng-native/components';
 import { cleanup, fireEvent, render, screen, settle, userEvent } from '@ng-native/testing';
@@ -280,6 +281,9 @@ describe('@ng-native/web-compat document and window', () => {
     const before = globals.document;
     await mount();
     assert.equal(typeof globals.matchMedia, 'function');
+    for (const name of ['scroll', 'scrollTo', 'scrollBy']) {
+      assert.equal(typeof globals[name], 'function', name);
+    }
     assert.equal(typeof globals.ResizeObserver, 'function');
     cleanup();
     assert.equal(globals.document, before);
@@ -374,6 +378,16 @@ class Fields {
 class Panels {
   readonly gone = signal(true);
 }
+
+describe('@ng-native/web-compat location', () => {
+  it('gives Angular a Location in an app with no router', async () => {
+    const { app } = await mount();
+    const location = app.componentRef.injector.get(Location);
+    assert.equal(location.path(), '');
+    const stop = location.onUrlChange(() => {});
+    stop();
+  });
+});
 
 describe('@ng-native/web-compat hidden', () => {
   it('takes a hidden element out of the layout, and puts it back', async () => {

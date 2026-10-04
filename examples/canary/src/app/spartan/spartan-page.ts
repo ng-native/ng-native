@@ -6,6 +6,7 @@ import { SpartanBadges } from './spartan-badges.ts';
 import { SpartanButtons } from './spartan-buttons.ts';
 import { SpartanCards } from './spartan-cards.ts';
 import { SpartanChecks } from './spartan-checks.ts';
+import { SpartanDialogs } from './spartan-dialogs.ts';
 import { SpartanInputs } from './spartan-inputs.ts';
 import { SpartanTabs } from './spartan-tabs.ts';
 
@@ -23,6 +24,7 @@ import { SpartanTabs } from './spartan-tabs.ts';
     SpartanButtons,
     SpartanCards,
     SpartanChecks,
+    SpartanDialogs,
     SpartanInputs,
     SpartanTabs,
   ],
@@ -44,6 +46,8 @@ import { SpartanTabs } from './spartan-tabs.ts';
         <app-spartan-tabs />
         <h2 class="text-lg font-semibold">Accordion</h2>
         <app-spartan-accordions />
+        <h2 class="text-lg font-semibold">Dialog</h2>
+        <app-spartan-dialogs />
       </div>
     </scroll-view>
   `,

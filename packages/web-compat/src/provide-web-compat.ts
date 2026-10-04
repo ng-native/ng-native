@@ -8,9 +8,11 @@ import {
 } from '@angular/core';
 import { Engine, extendNodes } from '@ng-native/fabric';
 import { extendRenderer } from '@ng-native/platform';
+import { PlatformLocation } from '@angular/common';
 import { documentFor } from './document.ts';
 import { registerElements } from './elements.ts';
 import { webListen } from './listen.ts';
+import { StillLocation } from './location.ts';
 import { nodeMembers, type CoreNode } from './node-members.ts';
 import { installWindow } from './window.ts';
 
@@ -49,6 +51,8 @@ function uninstall(): void {
  *   screen for overlays.
  * - The `window` globals a library reads exist, `ResizeObserver` among them.
  * - A `click` listener hears a press.
+ * - Angular's `Location` has a platform to stand on in an app with no router. List this before
+ *   `provideNativeRouter()`, which provides its own.
  *
  * All of it is there while any app that asked for it is up, and gone when the last is destroyed.
  */
@@ -57,6 +61,7 @@ export function provideWebCompat(): EnvironmentProviders {
   removeWindow ??= installWindow();
   return makeEnvironmentProviders([
     { provide: DOCUMENT, useFactory: () => documentFor(inject(Engine)) },
+    { provide: PlatformLocation, useClass: StillLocation },
     {
       provide: ENVIRONMENT_INITIALIZER,
       multi: true,

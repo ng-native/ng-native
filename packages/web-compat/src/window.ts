@@ -50,7 +50,10 @@ const GLOBALS: Readonly<Record<string, unknown>> = {
   }),
   getComputedStyle: (node: { style?: unknown }) => node.style ?? {},
   getSelection: () => null,
+  // All three: the CDK's scroll blocking calls `scroll`, and restores the page with it.
+  scroll: noop,
   scrollTo: noop,
+  scrollBy: noop,
   ResizeObserver: LayoutResizeObserver,
 };
 
