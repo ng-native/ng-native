@@ -620,6 +620,21 @@ describe('@ng-native/web-compat pointer events', () => {
     assert.deepEqual(app.instance.targets, ['range', 'range']);
     assert.equal(app.instance.seen[0], 'pointerdown 1,1 captured');
   });
+
+  it('delivers them to a listener a library adds to the element itself, until it is removed', async () => {
+    const app = await render(Drag, { providers: [provideWebCompat()] });
+    const node = app.componentRef.location.nativeElement.children[0];
+    const heard: string[] = [];
+    const listener = (event: PointerEvent) => heard.push(`${event.type} ${event.clientX}`);
+    node.addEventListener('pointermove', listener);
+    const track = screen.getByTestId('track');
+    await fireEvent(track, 'touchStart', finger(10, 5));
+    await fireEvent(track, 'touchMove', finger(60, 5));
+    node.removeEventListener('pointermove', listener);
+    await fireEvent(track, 'touchMove', finger(70, 5));
+    await fireEvent(track, 'touchEnd', finger(70, 5, false));
+    assert.deepEqual(heard, ['pointermove 60']);
+  });
 });
 
 describe('@ng-native/web-compat markup', () => {

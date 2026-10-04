@@ -2,7 +2,7 @@ import type { Engine, EngineNode } from '@ng-native/fabric';
 import { propOf } from './attribute.ts';
 import { documentOf, ownView } from './document.ts';
 import { setField, valueOf } from './field.ts';
-import { hasCapture } from './listen.ts';
+import { hasCapture, webListen } from './listen.ts';
 import { descendants, matches } from './selector.ts';
 
 /** A node as a library holds one: an engine node with the members below on it. */
@@ -373,7 +373,13 @@ export const nodeMembers = (core: CoreNode): PropertyDescriptorMap => ({
     if (!byListener) byType.set(type, (byListener = new Map()));
     // The DOM adds a listener once, however often it is asked to.
     if (byListener.has(listener)) return;
-    byListener.set(listener, engineOf(this).setEventListener(this, topLevel(type), listener));
+    // What a template's listener is given, a touch as pointer events or a field's typing as
+    // `input`, a listener added here is given too; any other type is the native event of its name.
+    const engine = engineOf(this);
+    const stop =
+      webListen.listen?.(this, type, listener, engine) ??
+      engine.setEventListener(this, topLevel(type), listener);
+    byListener.set(listener, stop);
   }),
   removeEventListener: method(function (type: string, listener: Listener) {
     core.removeEventListener.call(this, type, listener);
