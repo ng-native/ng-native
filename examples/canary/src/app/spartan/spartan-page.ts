@@ -11,10 +11,13 @@ import { SpartanDialogs } from './spartan-dialogs.ts';
 import { SpartanFeedback } from './spartan-feedback.ts';
 import { SpartanInputs } from './spartan-inputs.ts';
 import { SpartanMenus } from './spartan-menus.ts';
+import { SpartanNavigation } from './spartan-navigation.ts';
 import { SpartanOverlays } from './spartan-overlays.ts';
+import { SpartanTables } from './spartan-tables.ts';
 import { SpartanToggleGroups } from './spartan-toggle-groups.ts';
 import { SpartanSheets } from './spartan-sheets.ts';
 import { SpartanSliders } from './spartan-sliders.ts';
+import { SpartanPrompts } from './spartan-prompts.ts';
 import { SpartanSelects } from './spartan-selects.ts';
 import { SpartanTabs } from './spartan-tabs.ts';
 
@@ -37,10 +40,13 @@ import { SpartanTabs } from './spartan-tabs.ts';
     SpartanFeedback,
     SpartanInputs,
     SpartanMenus,
+    SpartanNavigation,
     SpartanOverlays,
+    SpartanPrompts,
     SpartanSelects,
     SpartanSheets,
     SpartanSliders,
+    SpartanTables,
     SpartanToggleGroups,
     SpartanTabs,
   ],
@@ -78,6 +84,12 @@ import { SpartanTabs } from './spartan-tabs.ts';
         <app-spartan-toggle-groups />
         <h2 class="text-lg font-semibold">Sheet</h2>
         <app-spartan-sheets />
+        <h2 class="text-lg font-semibold">Alert dialog, hover card, one-time code</h2>
+        <app-spartan-prompts />
+        <h2 class="text-lg font-semibold">Breadcrumb and pagination</h2>
+        <app-spartan-navigation />
+        <h2 class="text-lg font-semibold">Table and keys</h2>
+        <app-spartan-tables />
         <h2 class="text-lg font-semibold">Toggle, radio group, textarea, avatar</h2>
         <app-spartan-controls />
       </div>

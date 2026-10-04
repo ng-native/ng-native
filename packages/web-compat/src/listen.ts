@@ -112,7 +112,8 @@ function touchedOf(engine: Engine, node: EngineNode): Touched {
     const tell = (type: string, event: unknown) => {
       const told = listeners.get(type);
       if (!told?.size) return;
-      const sent = type === 'click' ? dom(type, node, event) : pointer(type, landed, node, event);
+      // A click is a pointer event too, on the node that took the touch.
+      const sent = pointer(type, type === 'click' ? node : landed, node, event);
       // A copy: a listener may remove itself, or another, as it runs.
       for (const each of [...told]) each(sent);
     };
@@ -191,7 +192,13 @@ function pointer(type: string, target: EngineNode, current: EngineNode, event: u
     pointerType: 'touch',
     isPrimary: true,
     button: 0,
-    buttons: type === 'pointerup' || type === 'pointercancel' ? 0 : 1,
+    buttons: type === 'pointerdown' || type === 'pointermove' ? 1 : 0,
+    // No key is held with a finger: a listener that leaves a modified click to the browser reads
+    // these, as a router's link does.
+    ctrlKey: false,
+    shiftKey: false,
+    altKey: false,
+    metaKey: false,
   };
 }
 

@@ -28,6 +28,28 @@ const TYPES: Readonly<Record<string, Readonly<Record<string, unknown>>>> = {
   url: { keyboardType: 'url', autoCapitalize: 'none' },
   search: { returnKeyType: 'search' },
 };
+/** The keyboard an `inputmode` asks for. One not here, `text` or `none`, is the plain one. */
+const KEYBOARDS: Readonly<Record<string, string>> = {
+  numeric: 'number-pad',
+  decimal: 'decimal-pad',
+  tel: 'phone-pad',
+  email: 'email-address',
+  url: 'url',
+  search: 'web-search',
+};
+/**
+ * What an `autocomplete` has the system offer: iOS reads the first, Android the second. The
+ * tokens a sign-in or a one-time code is written with; one not here offers nothing.
+ */
+const AUTOFILL: Readonly<Record<string, readonly [ios: string, android: string]>> = {
+  'one-time-code': ['oneTimeCode', 'sms-otp'],
+  email: ['emailAddress', 'email'],
+  username: ['username', 'username'],
+  'current-password': ['password', 'password'],
+  'new-password': ['newPassword', 'password-new'],
+  tel: ['telephoneNumber', 'tel'],
+  name: ['name', 'name'],
+};
 /** The input types that are typed into. Any other is a control of another kind. */
 const TEXT_TYPES = new Set(['text', 'email', 'password', 'number', 'tel', 'url', 'search']);
 const TYPE_PROPS = [...new Set(Object.values(TYPES).flatMap(Object.keys))];
@@ -91,6 +113,17 @@ const SETTERS: Readonly<
   readonly(field, node, value, engine) {
     field.readOnly = on(value);
     engine.setProp(node, 'editable', editable(field));
+    return true;
+  },
+  // The keyboard alone: an `inputmode` beside a `type` is the more specific of the two.
+  inputmode(_, node, value, engine) {
+    engine.setProp(node, 'keyboardType', KEYBOARDS[String(value)] ?? null);
+    return true;
+  },
+  autocomplete(_, node, value, engine) {
+    const [ios, android] = AUTOFILL[String(value)] ?? [null, null];
+    engine.setProp(node, 'textContentType', ios);
+    engine.setProp(node, 'autoComplete', android);
     return true;
   },
   maxlength(_, node, value, engine) {

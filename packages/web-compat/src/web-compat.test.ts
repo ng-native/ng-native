@@ -429,9 +429,11 @@ describe('@ng-native/web-compat elements', () => {
     <textarea testID="long"></textarea>
     <input testID="radio" type="radio" value="a" />
     <input testID="check" type="checkbox" />
+    <input testID="code" [inputMode]="mode()" autocomplete="one-time-code" />
   `,
 })
 class Fields {
+  readonly mode = signal<string | null>('numeric');
   readonly value = signal('Ada');
   readonly typed = signal('');
   readonly changed = signal('');
@@ -570,7 +572,7 @@ describe('@ng-native/web-compat inline styles', () => {
       (pointermove)="see($event)"
       (pointerup)="see($event)"
       (pointercancel)="see($event)"
-      (click)="seen.push('click')"
+      (click)="click($event)"
     >
       <div testID="range"></div>
     </div>
@@ -579,6 +581,11 @@ describe('@ng-native/web-compat inline styles', () => {
 class Drag {
   readonly seen: string[] = [];
   readonly targets: unknown[] = [];
+  clicked?: MouseEvent;
+  click(event: MouseEvent): void {
+    this.clicked = event;
+    this.seen.push('click');
+  }
   see(event: PointerEvent): void {
     const target = event.target as unknown as Element & { props: Record<string, unknown> };
     this.targets.push(target.props['testID']);
@@ -611,6 +618,28 @@ describe('@ng-native/web-compat pointer events', () => {
       'click',
     ]);
     assert.equal(node.hasPointerCapture(0), false, 'and let go once it has');
+  });
+
+  it('delivers a click as one of the primary button with no key held, at the finger', async () => {
+    // What a router's link reads before it navigates: any other button or a held key is the
+    // browser's to handle, a new tab or a download.
+    const app = await render(Drag, { providers: [provideWebCompat()] });
+    const track = screen.getByTestId('track');
+    await fireEvent(track, 'touchStart', finger(10, 5));
+    await fireEvent(track, 'touchEnd', finger(12, 6, false));
+    const { button, ctrlKey, shiftKey, altKey, metaKey, clientX, clientY } = app.instance.clicked!;
+    assert.deepEqual(
+      { button, ctrlKey, shiftKey, altKey, metaKey, clientX, clientY },
+      {
+        button: 0,
+        ctrlKey: false,
+        shiftKey: false,
+        altKey: false,
+        metaKey: false,
+        clientX: 12,
+        clientY: 6,
+      },
+    );
   });
 
   it('names the element the touch landed on as the target', async () => {
@@ -694,6 +723,20 @@ describe('@ng-native/web-compat text fields', () => {
     assert.equal(Number(field('name').props['mostRecentEventCount']) > 1, true);
     // `type` leaves the field, which is when a browser reports a change.
     assert.equal(app.instance.changed(), 'Ada!');
+  });
+
+  it('reads an input mode as the keyboard, and an autocomplete as what the system offers', async () => {
+    const app = await fields();
+    assert.equal(field('code').props['keyboardType'], 'number-pad');
+    assert.equal(field('code').props['inputMode'], undefined, 'not set as written');
+    assert.equal(field('code').props['textContentType'], 'oneTimeCode');
+    assert.equal(field('code').props['autoComplete'], 'sms-otp');
+    app.instance.mode.set('decimal');
+    await settle();
+    assert.equal(field('code').props['keyboardType'], 'decimal-pad');
+    app.instance.mode.set(null);
+    await settle();
+    assert.equal(field('code').props['keyboardType'] ?? null, null);
   });
 
   it('reads a type as the keyboard and entry it stands for, and follows it changing', async () => {
