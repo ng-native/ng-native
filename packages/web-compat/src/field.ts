@@ -1,4 +1,4 @@
-import type { Engine, EngineNode } from '@ng-native/fabric';
+import { markComponentHost, type Engine, type EngineNode } from '@ng-native/fabric';
 import { documentOf } from './document.ts';
 
 /** The HTML elements that are the platform's text field. */
@@ -28,6 +28,8 @@ const TYPES: Readonly<Record<string, Readonly<Record<string, unknown>>>> = {
   url: { keyboardType: 'url', autoCapitalize: 'none' },
   search: { returnKeyType: 'search' },
 };
+/** The input types that are typed into. Any other is a control of another kind. */
+const TEXT_TYPES = new Set(['text', 'email', 'password', 'number', 'tel', 'url', 'search']);
 const TYPE_PROPS = [...new Set(Object.values(TYPES).flatMap(Object.keys))];
 
 /** Make an `<input>` or `<textarea>` a text field that keeps up with what is typed into it. */
@@ -67,6 +69,13 @@ const SETTERS: Readonly<
   },
   // Kept as written too: a stylesheet selects on `[type="email"]`.
   type(_, node, value, engine) {
+    // A radio, a checkbox, a file or a hidden input is no text field: a library keeps one out
+    // of sight under a control it draws itself. It is a plain view, as its own host would be.
+    if (!TEXT_TYPES.has(String(value ?? 'text'))) {
+      fields.delete(node);
+      markComponentHost(node);
+      return false;
+    }
     for (const prop of TYPE_PROPS) engine.setProp(node, prop, null);
     for (const [prop, set] of Object.entries(TYPES[String(value)] ?? {})) {
       engine.setProp(node, prop, set);

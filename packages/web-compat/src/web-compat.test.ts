@@ -426,6 +426,8 @@ describe('@ng-native/web-compat elements', () => {
     <input testID="off" [disabled]="off()" />
     <input testID="fixed" readonly maxlength="5" />
     <textarea testID="long"></textarea>
+    <input testID="radio" type="radio" value="a" />
+    <input testID="check" type="checkbox" />
   `,
 })
 class Fields {
@@ -500,6 +502,14 @@ describe('@ng-native/web-compat text fields', () => {
     assert.equal(field('name').props['placeholder'], 'Name');
     assert.match(field('long').viewName, /TextInput$/);
     assert.equal(field('long').props['multiline'], true);
+  });
+
+  it('leaves an input that is not typed into a plain view', async () => {
+    await fields();
+    for (const id of ['radio', 'check']) {
+      assert.equal(field(id).viewName, 'View', id);
+      assert.equal(field(id).props['text'], undefined, id);
+    }
   });
 
   it('shows the value it is given, and the one it is given next', async () => {

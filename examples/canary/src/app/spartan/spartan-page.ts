@@ -6,6 +6,7 @@ import { SpartanBadges } from './spartan-badges.ts';
 import { SpartanButtons } from './spartan-buttons.ts';
 import { SpartanCards } from './spartan-cards.ts';
 import { SpartanChecks } from './spartan-checks.ts';
+import { SpartanControls } from './spartan-controls.ts';
 import { SpartanDialogs } from './spartan-dialogs.ts';
 import { SpartanFeedback } from './spartan-feedback.ts';
 import { SpartanInputs } from './spartan-inputs.ts';
@@ -26,6 +27,7 @@ import { SpartanTabs } from './spartan-tabs.ts';
     SpartanButtons,
     SpartanCards,
     SpartanChecks,
+    SpartanControls,
     SpartanDialogs,
     SpartanFeedback,
     SpartanInputs,
@@ -56,6 +58,8 @@ import { SpartanTabs } from './spartan-tabs.ts';
         <app-spartan-feedback />
         <h2 class="text-lg font-semibold">Popover and tooltip</h2>
         <app-spartan-overlays />
+        <h2 class="text-lg font-semibold">Toggle, radio group, textarea, avatar</h2>
+        <app-spartan-controls />
       </div>
     </scroll-view>
   `,

@@ -377,4 +377,72 @@
   .spartan-tooltip-arrow-logical {
     @apply data-[side=inline-end]:top-1/2! data-[side=inline-end]:-left-1 data-[side=inline-end]:-translate-y-1/2 data-[side=inline-start]:top-1/2! data-[side=inline-start]:-right-1 data-[side=inline-start]:-translate-y-1/2;
   }
+
+  /* MARK: Avatar */
+  .spartan-avatar {
+    @apply size-8 rounded-full after:rounded-full data-[size=lg]:size-10 data-[size=sm]:size-6;
+  }
+
+  .spartan-avatar-fallback {
+    @apply bg-muted text-muted-foreground rounded-full;
+  }
+
+  .spartan-avatar-image {
+    @apply rounded-full;
+  }
+
+  .spartan-avatar-badge {
+    @apply bg-primary text-primary-foreground ring-background;
+  }
+
+  .spartan-avatar-group-count {
+    @apply bg-muted text-muted-foreground size-8 rounded-full text-sm group-has-data-[size=lg]/avatar-group:size-10 group-has-data-[size=sm]/avatar-group:size-6 [&>ng-icon]:text-[length:--spacing(4)] group-has-data-[size=lg]/avatar-group:[&>ng-icon]:text-[length:--spacing(5)] group-has-data-[size=sm]/avatar-group:[&>ng-icon]:text-[length:--spacing(3)];
+  }
+
+  /* MARK: Radio Group */
+  .spartan-radio-group {
+    @apply grid gap-3;
+  }
+
+  .spartan-radio-group-item {
+    @apply border-input dark:bg-input/30 data-checked:bg-primary data-checked:text-primary-foreground dark:data-checked:bg-primary data-checked:border-primary data-[matches-spartan-invalid=true]:aria-checked:border-primary data-[matches-spartan-invalid=true]:border-destructive focus-visible:border-ring focus-visible:ring-ring/50 data-[matches-spartan-invalid=true]:ring-destructive/20 dark:data-[matches-spartan-invalid=true]:ring-destructive/40 dark:data-[matches-spartan-invalid=true]:border-destructive/50 flex size-4 rounded-full focus-visible:ring-3 data-[matches-spartan-invalid=true]:ring-3;
+  }
+
+  .spartan-radio-group-indicator {
+    @apply flex size-4 items-center justify-center;
+  }
+
+  .spartan-radio-group-indicator-icon {
+    @apply bg-primary-foreground absolute start-1/2 top-1/2 size-2 -translate-x-1/2 -translate-y-1/2 rounded-full;
+  }
+
+  /* MARK: Textarea */
+  .spartan-textarea {
+    @apply border-input dark:bg-input/30 focus-visible:border-ring focus-visible:ring-ring/50 data-[matches-spartan-invalid=true]:ring-destructive/20 dark:data-[matches-spartan-invalid=true]:ring-destructive/40 data-[matches-spartan-invalid=true]:border-destructive dark:data-[matches-spartan-invalid=true]:border-destructive/50 rounded-md border bg-transparent px-2.5 py-2 text-base shadow-xs transition-[color,box-shadow] focus-visible:ring-3 data-[matches-spartan-invalid=true]:ring-3 md:text-sm;
+  }
+
+  /* MARK: Toggle */
+  .spartan-toggle {
+    @apply hover:text-foreground aria-pressed:bg-muted focus-visible:border-ring focus-visible:ring-ring/50 data-[matches-spartan-invalid=true]:ring-destructive/20 dark:data-[matches-spartan-invalid=true]:ring-destructive/40 data-[matches-spartan-invalid=true]:border-destructive dark:data-[matches-spartan-invalid=true]:border-destructive/50 gap-1 rounded-md text-sm font-medium transition-[color,box-shadow] [&_ng-icon:not([class*='text-'])]:text-[length:--spacing(4)];
+  }
+
+  .spartan-toggle-variant-default {
+    @apply bg-transparent;
+  }
+
+  .spartan-toggle-variant-outline {
+    @apply border-input hover:bg-muted border bg-transparent shadow-xs;
+  }
+
+  .spartan-toggle-size-default {
+    @apply h-9 min-w-9 px-2.5;
+  }
+
+  .spartan-toggle-size-sm {
+    @apply h-8 min-w-8 px-2.5;
+  }
+
+  .spartan-toggle-size-lg {
+    @apply h-10 min-w-10 px-2.5;
+  }
 }
