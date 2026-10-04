@@ -4,6 +4,7 @@ import { NativeHeader } from '@ng-native/router';
 import { SpartanBadges } from './spartan-badges.ts';
 import { SpartanButtons } from './spartan-buttons.ts';
 import { SpartanCards } from './spartan-cards.ts';
+import { SpartanChecks } from './spartan-checks.ts';
 import { SpartanInputs } from './spartan-inputs.ts';
 
 /**
@@ -12,7 +13,15 @@ import { SpartanInputs } from './spartan-inputs.ts';
  */
 @Component({
   selector: 'app-spartan-page',
-  imports: [NativeHeader, ScrollView, SpartanBadges, SpartanButtons, SpartanCards, SpartanInputs],
+  imports: [
+    NativeHeader,
+    ScrollView,
+    SpartanBadges,
+    SpartanButtons,
+    SpartanCards,
+    SpartanChecks,
+    SpartanInputs,
+  ],
   template: `
     <native-header title="Spartan UI" />
     <scroll-view contentInsetAdjustmentBehavior="automatic">
@@ -25,6 +34,8 @@ import { SpartanInputs } from './spartan-inputs.ts';
         <app-spartan-cards />
         <h2 class="text-lg font-semibold">Input</h2>
         <app-spartan-inputs />
+        <h2 class="text-lg font-semibold">Checkbox and switch</h2>
+        <app-spartan-checks />
       </div>
     </scroll-view>
   `,

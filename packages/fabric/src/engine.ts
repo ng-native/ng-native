@@ -1711,33 +1711,61 @@ const NODE_FIELDS = new Set([
  * taken away: what replaces it has to do what the original did for Angular.
  */
 export function extendNodes(members: PropertyDescriptorMap & ThisType<EngineNode>): () => void {
-  const prototype = RetainedNode.prototype;
   const names = Object.keys(members);
   for (const name of names) {
     if (NODE_FIELDS.has(name)) {
       throw new Error(`[angular-native] extendNodes: '${name}' is a field the engine keeps.`);
     }
   }
-  const replaced = new Map(
-    names.map((name) => [name, Object.getOwnPropertyDescriptor(prototype, name)]),
-  );
-  const restore = () => {
-    for (const [name, original] of replaced) {
-      if (original) Object.defineProperty(prototype, name, original);
-      else Reflect.deleteProperty(prototype, name);
-    }
+  const added: [string, PropertyDescriptor][] = [];
+  const remove = () => {
+    for (const [name, descriptor] of added.splice(0)) removeMember(name, descriptor);
   };
   try {
     for (const name of names) {
       // Configurable whatever the descriptor says, or it could not be taken away again.
-      Object.defineProperty(prototype, name, { ...members[name], configurable: true });
+      const descriptor = { ...members[name], configurable: true };
+      addMember(name, descriptor);
+      added.push([name, descriptor]);
     }
   } catch (error) {
     // A descriptor the runtime refuses: the ones before it do not stay behind.
-    restore();
+    remove();
     throw error;
   }
-  return restore;
+  return remove;
+}
+
+/**
+ * What each extended member was before any extension, and the extensions' own descriptors for it,
+ * oldest first. Two extensions can give the same member, and be taken away in either order: the
+ * newest still there is the one a node has, and the original comes back after the last.
+ */
+const extended = new Map<string, { original?: PropertyDescriptor; stack: PropertyDescriptor[] }>();
+
+function addMember(name: string, descriptor: PropertyDescriptor): void {
+  const prototype = RetainedNode.prototype;
+  const entry = extended.get(name) ?? {
+    original: Object.getOwnPropertyDescriptor(prototype, name),
+    stack: [],
+  };
+  // First, so a descriptor the runtime refuses is never recorded.
+  Object.defineProperty(prototype, name, descriptor);
+  entry.stack.push(descriptor);
+  extended.set(name, entry);
+}
+
+function removeMember(name: string, descriptor: PropertyDescriptor): void {
+  const prototype = RetainedNode.prototype;
+  const entry = extended.get(name);
+  const index = entry?.stack.indexOf(descriptor) ?? -1;
+  if (!entry || index === -1) return;
+  entry.stack.splice(index, 1);
+  const top = entry.stack.at(-1);
+  if (top) return void Object.defineProperty(prototype, name, top);
+  extended.delete(name);
+  if (entry.original) Object.defineProperty(prototype, name, entry.original);
+  else Reflect.deleteProperty(prototype, name);
 }
 
 /**

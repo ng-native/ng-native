@@ -206,3 +206,37 @@ test('an extension takes the attributes and properties it answers for', async ()
     undo();
   }
 });
+
+test('two extensions of one member are taken away in either order', async () => {
+  const { componentRef } = await render(Clicks);
+  const box = componentRef.injector.get(Engine).root.children[0] as EngineNode & {
+    probe?: string;
+    classList: unknown;
+  };
+  const first = () => extendNodes({ probe: { value: 'first' }, classList: { value: 'first' } });
+  const second = () => extendNodes({ probe: { value: 'second' }, classList: { value: 'second' } });
+  const original = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(box), 'classList');
+
+  for (const order of ['newest first', 'oldest first'] as const) {
+    const undoFirst = first();
+    const undoSecond = second();
+    assert.equal(box.probe, 'second', order);
+    if (order === 'newest first') {
+      undoSecond();
+      assert.equal(box.probe, 'first', order);
+      assert.equal(box.classList, 'first', order);
+      undoFirst();
+    } else {
+      undoFirst();
+      assert.equal(box.probe, 'second', 'the later one is not erased');
+      assert.equal(box.classList, 'second', order);
+      undoSecond();
+    }
+    assert.equal(box.probe, undefined, order);
+    assert.deepEqual(
+      Object.getOwnPropertyDescriptor(Object.getPrototypeOf(box), 'classList'),
+      original,
+      `${order}: the engine's own is back`,
+    );
+  }
+});

@@ -8,23 +8,24 @@ import { HlmLabelImports } from './helm/label';
   imports: [HlmInputImports, HlmLabelImports],
   host: { class: 'spartan flex flex-col gap-3' },
   template: `
-    <label hlmLabel testID="label">Name</label>
+    <label hlmLabel testID="label" for="name">Name</label>
     <input
       hlmInput
+      id="name"
       testID="name"
       placeholder="Your name"
       (input)="name.set($any($event.target).value)"
     />
     <p class="text-muted-foreground text-sm">Typed: {{ name() }}</p>
 
-    <label hlmLabel>Email</label>
-    <input hlmInput testID="email" type="email" placeholder="you@example.com" />
+    <label hlmLabel for="email">Email</label>
+    <input hlmInput id="email" testID="email" type="email" placeholder="you@example.com" />
 
-    <label hlmLabel>Password</label>
-    <input hlmInput testID="password" type="password" placeholder="Password" />
+    <label hlmLabel for="password">Password</label>
+    <input hlmInput id="password" testID="password" type="password" placeholder="Password" />
 
-    <label hlmLabel>Disabled</label>
-    <input hlmInput testID="disabled" disabled placeholder="Cannot type here" />
+    <label hlmLabel for="disabled">Disabled</label>
+    <input hlmInput id="disabled" testID="disabled" disabled placeholder="Cannot type here" />
   `,
 })
 export class SpartanInputs {

@@ -361,6 +361,22 @@ class Fields {
   readonly off = signal(true);
 }
 
+describe('@ng-native/web-compat markup', () => {
+  it('hands an icon component an empty box for the markup it sets, and sends none of it', async () => {
+    const { app, card } = await mount();
+    const renderer = app.instance.renderer;
+    // What `@ng-icons/core` does with an icon's SVG.
+    const template = renderer.createElement('template');
+    renderer.setProperty(template, 'innerHTML', '<svg viewBox="0 0 24 24"><path d="M0 0" /></svg>');
+    const svg = template.content.firstElementChild;
+    renderer.appendChild(card, svg);
+    await settle();
+    assert.equal(template.props.innerHTML, undefined);
+    assert.equal(svg.parentNode, card);
+    assert.equal(template.content.firstElementChild, svg, 'the same box each time it is asked');
+  });
+});
+
 describe('@ng-native/web-compat text fields', () => {
   const fields = () => render(Fields, { providers: [provideWebCompat()] });
   const field = (id: string) => screen.getByTestId(id);
@@ -426,5 +442,35 @@ describe('@ng-native/web-compat text fields', () => {
     await render(Fields);
     assert.equal(field('name').viewName, 'View');
     assert.equal(field('name').props['text'], undefined);
+  });
+});
+
+@Component({
+  selector: 'x-labelled',
+  template: `
+    <label testID="label" for="name">Full name</label>
+    <input testID="name" id="name" />
+    <label for="named">Other</label>
+    <input testID="named" id="named" aria-label="Already named" />
+  `,
+})
+class Labelled {}
+
+describe('@ng-native/web-compat labels', () => {
+  it('names the control a label is for, unless it has a name of its own', async () => {
+    await render(Labelled, { providers: [provideWebCompat()] });
+    await settle();
+    assert.equal(screen.getByTestId('name').props['accessibilityLabel'], 'Full name');
+    assert.equal(screen.getByTestId('named').props['accessibilityLabel'], 'Already named');
+  });
+
+  it('focuses the control when its label is pressed', async () => {
+    const app = await render(Labelled, { providers: [provideWebCompat()] });
+    await settle();
+    await userEvent.press(screen.getByTestId('label'));
+    assert.deepEqual(
+      app.fabric.commands.map((command) => [command.name, command.node?.props['testID']]),
+      [['focus', 'name']],
+    );
   });
 });

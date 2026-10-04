@@ -95,6 +95,9 @@ function contentOf(node: EngineNode) {
   return { width: right - own.x, height: bottom - own.y };
 }
 
+/** The empty box each `<template>` hands back as its content. */
+const placeholders = new WeakMap<EngineNode, EngineNode>();
+
 /** What removes each listener `addEventListener` attached, by node, type and function. */
 const listeners = new WeakMap<EngineNode, Map<string, Map<Listener, () => void>>>();
 
@@ -290,6 +293,16 @@ export const nodeMembers = (core: CoreNode): PropertyDescriptorMap => ({
   blur: noop,
   scrollIntoView: noop,
   dispatchEvent: method(() => true),
+
+  // What a library reads back after setting a `<template>`'s `innerHTML`, as an icon component
+  // does with its SVG: an empty box, since markup is not parsed here.
+  // ponytail: nothing of the markup is drawn. Building the SVG from it, with the shapes
+  // `@ng-native/icons` draws, is the upgrade.
+  content: get(function () {
+    let placeholder = placeholders.get(this);
+    if (!placeholder) placeholders.set(this, (placeholder = engineOf(this).createElement('view')));
+    return { firstElementChild: placeholder, firstChild: placeholder, childNodes: [placeholder] };
+  }),
 
   contains: method(function (other: EngineNode | null) {
     for (let at = other; at; at = at.parent) if (at === this) return true;

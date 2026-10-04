@@ -1,6 +1,7 @@
 import type { Engine, EngineNode } from '@ng-native/fabric';
 import type { RendererExtension } from '@ng-native/platform';
 import { documentOf } from './document.ts';
+import { setLabel } from './label.ts';
 import { created } from './elements.ts';
 import { FIELD_EVENTS, createField, isField, setField } from './field.ts';
 
@@ -23,7 +24,16 @@ export const webListen: RendererExtension = {
     if (created(node, engine)) takesPress(engine, node);
     createField(node, engine);
   },
-  set: setField,
+  set(node, name, value, engine) {
+    // Markup as a string is nothing a native view reads, and an icon's is long.
+    if (name === 'innerHTML') return true;
+    // An HTML `id` is the view's `nativeID`, which is where a selector and a lookup read it.
+    if (name === 'id' && documentOf(engine)) {
+      engine.setProp(node, 'nativeID', value);
+      return true;
+    }
+    return setField(node, name, value, engine) || setLabel(node, name, value, engine);
+  },
   listen(target, eventName, callback, engine) {
     const document = documentOf(engine);
     if (!document) return undefined;

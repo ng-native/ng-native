@@ -1,6 +1,6 @@
 import { execFileSync } from 'node:child_process';
 import { provideWebCompat } from '@ng-native/web-compat';
-import { cleanup, fireEvent, render, screen, userEvent } from '@ng-native/testing';
+import { cleanup, fireEvent, render, screen, settle, userEvent } from '@ng-native/testing';
 import { afterEach, beforeAll, expect, test, vi } from 'vitest';
 import { SpartanInputs } from './spartan-inputs.ts';
 
@@ -76,4 +76,13 @@ test('a focused input has its ring', async () => {
       ]),
     }),
   );
+});
+
+test('each input is named by its label, and a press on the label focuses it', async () => {
+  const app = await mount();
+  await settle();
+  expect(props('name')['accessibilityLabel']).toBe('Name');
+  expect(props('email')['accessibilityLabel']).toBe('Email');
+  await userEvent.press(screen.getByTestId('label'));
+  expect(app.fabric.commands.map((command) => command.name)).toEqual(['focus']);
 });
