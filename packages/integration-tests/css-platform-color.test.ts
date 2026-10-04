@@ -26,6 +26,51 @@ after(cleanup);
 const declarationsOf = (css: string): Record<string, unknown> =>
   compileCss(`view { ${css} }`).rules[0].declarations;
 
+describe('compiling a CSS system colour', () => {
+  const canvas = { platformColor: ['systemBackground', '?android:attr/colorBackground'] };
+  const text = { platformColor: ['label', '?android:attr/textColorPrimary'] };
+
+  it("is the platform's colour for the same thing, which follows light and dark", () => {
+    // `Canvas` and `CanvasText` are a browser's page and its text. Left as the keyword, no view
+    // reads either as a colour.
+    assert.deepEqual(declarationsOf('background-color: Canvas; color: CanvasText'), {
+      backgroundColor: canvas,
+      color: text,
+    });
+    assert.deepEqual(declarationsOf('color: GrayText'), {
+      color: { platformColor: ['secondaryLabel', '?android:attr/textColorSecondary'] },
+    });
+    assert.deepEqual(declarationsOf('color: LinkText'), {
+      color: { platformColor: ['link', '?android:attr/textColorLink'] },
+    });
+    assert.deepEqual(declarationsOf('border-top-color: AccentColor'), {
+      borderTopColor: { platformColor: ['tintColor', '?android:attr/colorAccent'] },
+    });
+    assert.deepEqual(declarationsOf('background-color: ButtonFace'), {
+      backgroundColor: {
+        platformColor: ['secondarySystemBackground', '?android:attr/colorButtonNormal'],
+      },
+    });
+  });
+
+  it('reads a field and a button as the page and its text, in any case', () => {
+    assert.deepEqual(declarationsOf('background-color: field; color: FIELDTEXT'), {
+      backgroundColor: canvas,
+      color: text,
+    });
+    assert.deepEqual(declarationsOf('color: ButtonText'), { color: text });
+  });
+
+  it('says so for one with nothing like it, rather than passing the keyword on', () => {
+    assert.throws(() => declarationsOf('background-color: Highlight'), /system colour/);
+    assert.throws(() => declarationsOf('color: SelectedItemText'), /system colour/);
+  });
+
+  it('says so inside a shadow, where the platform resolves no colour by name', () => {
+    assert.throws(() => declarationsOf('box-shadow: 0 0 2px GrayText'), /system colour/);
+  });
+});
+
 describe('compiling a platform colour', () => {
   it('holds the names, because which one is right is a runtime question', () => {
     // The same declaration is `{semantic:[...]}` on iOS and `{resource_paths:[...]}` on Android,

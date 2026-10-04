@@ -12,6 +12,7 @@ const {
   angle,
   camel,
   color,
+  wholeColor,
   keyword,
   length,
   nearestWeight,
@@ -669,7 +670,7 @@ function line(value, prefix, out, context, { style: withStyle = true } = {}) {
  * engine fills in on device. On `color` itself it is the inherited colour, as CSS reads it there.
  */
 function paintColour(value, context) {
-  return value?.type === 'currentcolor' ? CURRENT_COLOUR : color(value, context);
+  return value?.type === 'currentcolor' ? CURRENT_COLOUR : wholeColor(value, context);
 }
 
 /** The colour properties `currentColor` is filled in for on device. */
@@ -1929,7 +1930,7 @@ const FALLBACKS = [
     (property, value, out) => {
       out[rnName(property)] = PAINT_COLOUR.test(property)
         ? paintColour(value, property)
-        : color(value, property);
+        : wholeColor(value, property);
     },
   ],
   [
