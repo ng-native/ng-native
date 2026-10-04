@@ -51,8 +51,11 @@ Inside a tab, the provider's insets stop short of the tab bar: it measures the w
 root, above the bar, so a `<safe-area-view>` there clears the home indicator and nothing more.
 Content pinned to the bottom of a tab uses `<tab-safe-area-view>` from `@ng-native/router`, which
 asks the tab screen what the bar covers - see
-[Content above the tab bar](/packages/router/tabs#content-above-the-tab-bar). The custom
-properties below have the same limit.
+[Content above the tab bar](/packages/router/tabs#content-above-the-tab-bar). Under a clear
+navigation bar it is the same: the provider knows the status bar and not the bar, and a page that
+starts behind it uses `<screen-safe-area-view>` - see
+[A page under the bar](/packages/router/header#a-page-under-the-bar). The custom properties below
+have the same limit.
 
 The same insets are also published as CSS custom properties - `--safe-area-inset-top`, `-right`,
 `-bottom` and `-left` - so a stylesheet can reach for them directly, the native equivalent of

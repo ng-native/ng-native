@@ -179,7 +179,37 @@ bar above, and a header that binds `backgroundColor`, or defaults that give one,
 The bar is over the page rather than above it, so the page is built for that: its scroll view is
 the page's body and takes `contentInsetAdjustmentBehavior="automatic"`, which starts the content
 below the bar and lets it scroll under. A page with anything above its scroll view, or with no
-scroll view, starts behind the bar; give that page's header a `backgroundColor`.
+scroll view, starts behind the bar. Wrap that page in a `<screen-safe-area-view>`, or give its
+header a `backgroundColor`, which turns the glass off for that page.
+
+### A page under the bar
+
+`<screen-safe-area-view>` insets its content by what covers the screen it is on. Under a clear bar
+that is the bar, the search bar under it and the status bar, so a row of controls above a list, a
+toolbar above a map or a centred empty state starts where UIKit would put it, and the bar stays
+glass:
+
+```html
+<native-header title="Planner" />
+<screen-safe-area-view [edges]="['top']" style="flex: 1">
+  <view class="controls"><text>Schedule</text></view>
+  <scroll-view style="flex: 1"><!-- rows --></scroll-view>
+</screen-safe-area-view>
+```
+
+<!-- api: ScreenSafeAreaView -->
+
+`<safe-area-view>` cannot do this: its insets come from the app's `<safe-area-provider>`, at the
+root, which knows the status bar and not the navigation bar. This one asks the screen. It works on
+any page of a stack and on a tab, for any edge, and follows the bar as it changes. The inset is
+applied as margin.
+
+On Android the bar is above the page rather than over it, so under a header that is shown and not
+`translucent` the top edge adds nothing, and the same markup is right on both platforms. With the
+header hidden it insets by the status bar.
+
+`<tab-safe-area-view>` is the same view under the name it has for
+[content above the tab bar](/packages/router/tabs#content-above-the-tab-bar).
 
 ## Defaults for every header
 

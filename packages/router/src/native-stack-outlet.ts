@@ -58,6 +58,7 @@ import { NativePlatformLocation } from './native-platform-location.ts';
 import { PRESENTED, withoutPresented } from './presented-route.ts';
 import { markScreenRoute } from './tab-routes.ts';
 import { ownHost } from './own-host.ts';
+import { SCREEN_HEADER } from './screen-header.ts';
 import { HostEngine, type EngineNode } from '@ng-native/fabric';
 import type { ScreenPresentation } from './screen-presentation.ts';
 import { ActivityState } from './screens.ts';
@@ -891,6 +892,7 @@ export class NativeStackOutlet implements RouterOutletContract, OnInit {
           } satisfies HoldingScreen,
         },
         { provide: ActivatedRoute, useValue: route },
+        { provide: SCREEN_HEADER, useValue: signal(false) },
         {
           provide: ChildrenOutletContexts,
           useValue: this.parentContexts.getOrCreateContext(outlet).children,

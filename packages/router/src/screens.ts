@@ -41,8 +41,9 @@ export const SCREEN_VIEW_NAMES: Record<string, [viewName: string, defaults?: obj
     'RNSScreenStackHeaderSubview',
     { flexDirection: 'row', alignItems: 'center', justifyContent: 'center' },
   ],
-  // Insets by what the screen it is in says is covered, the tab bar included. See
-  // `tab-safe-area-view.ts`. The same name on both platforms.
+  // Insets by what the screen it is in says is covered: a translucent navigation bar, and the tab
+  // bar. See `screen-safe-area-view.ts`. The same name on both platforms.
+  'screen-safe-area-view': ['RNSSafeAreaView'],
   'tab-safe-area-view': ['RNSSafeAreaView'],
 };
 

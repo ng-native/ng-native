@@ -25,13 +25,13 @@
  * `headerRightBarButtonItems` are deliberately absent: native bar button items are data rather
  * than views, and they are a later opt-in rather than the primary API.
  */
-import { Component, computed, input } from '@angular/core';
-import { ElementRef, inject } from '@angular/core';
+import { Component, DestroyRef, ElementRef, computed, effect, inject, input } from '@angular/core';
 import { ColorScheme, OS_VERSION } from '@ng-native/device';
 import { NATIVE_HEADER_DEFAULTS } from './native-bar-defaults.ts';
 import { NATIVE_HEADER_PALETTE } from './native-header-palette.ts';
 import type { EngineNode } from '@ng-native/fabric';
 import { ownHost } from './own-host.ts';
+import { SCREEN_HEADER } from './screen-header.ts';
 import { nativePlatform } from '@ng-native/fabric';
 import { optionalBoolean, optionalNumber } from './transforms.ts';
 
@@ -82,8 +82,7 @@ export type HeaderInterfaceStyle = 'unspecified' | 'light' | 'dark';
     '[blurEffect]': 'blurEffect() ?? defaults().blurEffect',
     '[hidden]': 'hidden()',
     '[hideShadow]': 'hideShadow() ?? defaults().hideShadow ?? isLiquidGlass()',
-    '[translucent]':
-      'translucent() ?? defaults().translucent ?? iosLargeTitle() ?? isLiquidGlass()',
+    '[translucent]': 'isTranslucent()',
     '[direction]': 'direction()',
     '[topInsetEnabled]': 'topInsetEnabled()',
     '[userInterfaceStyle]': 'userInterfaceStyle() ?? defaults().userInterfaceStyle',
@@ -115,8 +114,15 @@ export class NativeHeader {
   /** The app's `withHeaderDefaults`, for whatever this header does not bind itself. */
   protected readonly defaults = inject(NATIVE_HEADER_DEFAULTS);
 
+  /** Told whether this is a bar the page starts below. See `screen-header.ts`. */
+  private readonly above = inject(SCREEN_HEADER, { optional: true });
+
   constructor() {
     ownHost(inject(ElementRef).nativeElement as EngineNode, this.constructor);
+    const above = this.above;
+    if (!above) return;
+    effect(() => above.set(!this.hidden() && !this.isTranslucent()));
+    inject(DestroyRef).onDestroy(() => above.set(false));
   }
 
   /**
@@ -167,6 +173,15 @@ export class NativeHeader {
    * iOS 26 the large title sits in the scroll view, above its content, where a bar with a
    * background paints over it; and over an opaque bar the inline title never fades in.
    */
+  /** Whether the page runs under the bar rather than starting below it. */
+  protected readonly isTranslucent = computed(
+    () =>
+      this.translucent() ??
+      this.defaults().translucent ??
+      this.iosLargeTitle() ??
+      this.isLiquidGlass(),
+  );
+
   protected readonly iosLargeTitle = computed(() =>
     this.largeTitle() && nativePlatform() === 'ios' ? true : undefined,
   );
