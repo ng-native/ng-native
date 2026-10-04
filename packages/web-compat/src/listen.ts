@@ -27,23 +27,8 @@ export const webListen: RendererExtension = {
   set(node, name, value, engine) {
     // Markup as a string is nothing a native view reads, and an icon's is long.
     if (name === 'innerHTML') return true;
-    // A binding to `textContent` replaces what the element holds with the text.
-    if (name === 'textContent' && documentOf(engine)) {
-      (node as unknown as { textContent: unknown }).textContent = value;
-      return true;
-    }
-    // HTML's `hidden`: the element takes no space and draws nothing, whatever its stylesheet says
-    // of its display, which is what a browser's own sheet and every reset make of it.
-    if (name === 'hidden' && documentOf(engine)) {
-      const hidden = value != null && value !== false && value !== 'false';
-      engine.setProp(node, 'style', { ...ownStyle(node), display: hidden ? 'none' : undefined });
-      return true;
-    }
-    // An HTML `id` is the view's `nativeID`, which is where a selector and a lookup read it.
-    if (name === 'id' && documentOf(engine)) {
-      engine.setProp(node, 'nativeID', value);
-      return true;
-    }
+    const own = documentOf(engine) ? SETTERS[name] : undefined;
+    if (own) return own(node, value, engine);
     return setField(node, name, value, engine) || setLabel(node, name, value, engine);
   },
   style(node, name, value, engine) {
@@ -69,6 +54,49 @@ export const webListen: RendererExtension = {
     return onTouch(engine, target, 'click', callback);
   },
 };
+
+/** A boolean HTML attribute or property: present, and not `false`. */
+const on = (value: unknown): boolean => value != null && value !== false && value !== 'false';
+
+/**
+ * What an attribute or a property of any element is set as, in an app that asked for the package.
+ * Each answers whether that is all of it: `false` has it set as written too.
+ */
+const SETTERS: Readonly<
+  Record<string, (node: EngineNode, value: unknown, engine: Engine) => boolean>
+> = {
+  // A binding to `textContent` replaces what the element holds with the text.
+  textContent(node, value) {
+    (node as unknown as { textContent: unknown }).textContent = value;
+    return true;
+  },
+  // HTML's `hidden`: the element takes no space and draws nothing, whatever its stylesheet says
+  // of its display, which is what a browser's own sheet and every reset make of it.
+  hidden(node, value, engine) {
+    engine.setProp(node, 'style', { ...ownStyle(node), display: on(value) ? 'none' : undefined });
+    return true;
+  },
+  // An HTML `id` is the view's `nativeID`, which is where a selector and a lookup read it.
+  id(node, value, engine) {
+    engine.setProp(node, 'nativeID', value);
+    return true;
+  },
+  // HTML's `disabled` is announced, as `aria-disabled` is, beside the element's other states.
+  // Kept as written too: `:disabled` is the attribute, and a press reads it.
+  disabled(node, value, engine) {
+    if (isField(node)) return setField(node, 'disabled', value, engine);
+    const off = on(value);
+    // ponytail: an `aria-disabled` the library wrote itself is replaced, with the same answer
+    // wherever the two agree. Keep the library's apart if one is found that differs.
+    if (off || announced.has(node)) engine.setProp(node, 'aria-disabled', off ? true : null);
+    if (off) announced.add(node);
+    else announced.delete(node);
+    return false;
+  },
+};
+
+/** The elements whose `disabled` this set an `aria-disabled` for, to take it away again. */
+const announced = new WeakSet<EngineNode>();
 
 /** A node's inline style, to add to. */
 const ownStyle = (node: EngineNode) =>

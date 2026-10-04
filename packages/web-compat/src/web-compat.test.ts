@@ -364,9 +364,14 @@ describe('@ng-native/web-compat document and window', () => {
 
 @Component({
   selector: 'x-links',
-  template: `<button testID="button">Save</button><a testID="link" role="tab">More</a>`,
+  template: `
+    <button testID="button">Save</button><a testID="link" role="tab">More</a>
+    <button testID="off" [disabled]="off()" aria-expanded="true">Off</button>
+  `,
 })
-class Links {}
+class Links {
+  readonly off = signal(true);
+}
 
 @Component({
   selector: 'x-table',
@@ -428,6 +433,16 @@ describe('@ng-native/web-compat elements', () => {
     cleanup();
     const without = await reported(() => render(Table));
     assert.match(without.join('\n'), /<table> is not a known element/, 'only where asked for');
+  });
+
+  it('announces a disabled button as disabled, beside its other states, until it is enabled', async () => {
+    const app = await render(Links, { providers: [provideWebCompat()] });
+    const state = () => screen.getByTestId('off').props['accessibilityState'];
+    assert.deepEqual(state(), { disabled: true, expanded: true });
+    app.instance.off.set(false);
+    await settle();
+    assert.deepEqual(state(), { expanded: true });
+    assert.equal(screen.getByTestId('button').props['accessibilityState'], undefined);
   });
 
   it('marks a button a pointer is over, for a hover style', async () => {
