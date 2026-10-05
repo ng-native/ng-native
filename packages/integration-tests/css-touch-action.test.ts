@@ -119,6 +119,30 @@ describe('touch-action', () => {
     }
   });
 
+  it('lets go of a touch that never ended, when the next one starts', () => {
+    const s = scene();
+    s.touch('slider', 'Start');
+    assert.equal(s.swipe(), false);
+    // No end came: the element went while the finger was down, or native sent none.
+    s.touch('button', 'Start');
+    assert.equal(s.swipe(), true, 'a first finger down is a new touch');
+    s.touch('button', 'End');
+    s.touch('map', 'Start');
+    assert.equal(s.swipe(), false, 'and the next is held as any other');
+  });
+
+  it('refuses a keyword that stands alone when it is written beside another', () => {
+    for (const value of ['none pan-x', 'pan-y auto', 'manipulation pan-y']) {
+      const reports: string[] = [];
+      const sheet = compileCss(`.a { touch-action: ${value} }`, 'app.css', {
+        onUnsupported: (m: string) => reports.push(m),
+      });
+      assert.equal(reports.length, 1, value);
+      assert.match(reports[0]!, /touch-action/);
+      assert.equal(JSON.stringify(sheet).includes('touchAction'), false, value);
+    }
+  });
+
   it('leaves a screen whose swipe is off as it is, before and after', () => {
     const s = scene();
     // And one given a distance of its own has it back as it was.
