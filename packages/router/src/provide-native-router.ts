@@ -24,6 +24,7 @@ import {
   type Routes,
 } from '@angular/router';
 import {
+  DestroyRef,
   ErrorHandler,
   computed,
   inject,
@@ -43,9 +44,10 @@ import {
   type TabDefaults,
 } from './native-bar-defaults.ts';
 import { followLink, linkAncestry, type LinkParent } from './native-links.ts';
-import { NativeNavigation } from './native-navigation.ts';
+import { NATIVE_INTENT, NativeNavigation, intentOf } from './native-navigation.ts';
 import { NativePlatformLocation } from './native-platform-location.ts';
 import { NativeStackReuseStrategy } from './native-stack-reuse-strategy.ts';
+import { ROUTE_PARKING, type ParkedPage } from './route-parking.ts';
 import { registerScreenComponents } from './screens.ts';
 
 /** A native-only router option, passed to `provideNativeRouter` beside Angular's own features. */
@@ -132,6 +134,7 @@ function nativeProviders(parentOf: LinkParent | undefined): (Provider | Environm
     // Without this the router never detaches, so a pushed-away screen is destroyed and rebuilt.
     { provide: RouteReuseStrategy, useClass: NativeStackReuseStrategy },
     NativeNavigation,
+    provideEnvironmentInitializer(keepHistoryAcrossReloads),
   ];
   if (!parentOf) {
     return [
@@ -187,6 +190,87 @@ function nativeProviders(parentOf: LinkParent | undefined): (Provider | Environm
     }),
     ...shared,
   ];
+}
+
+/**
+ * A history without its round trips: each page once, reached the way it last was. An app that went
+ * from one tab to another and back has a history three entries long and is one page deep, and the
+ * app that comes back has no use for the detour: gone through at the speed of a reload, the tab
+ * bar is still on its way to the second tab when the third navigation asks for the first.
+ */
+function direct(pages: ParkedPage[]): ParkedPage[] {
+  const route: ParkedPage[] = [];
+  for (const page of pages) {
+    const before = route.findIndex((one) => one.url === page.url);
+    if (before !== -1) route.length = before;
+    route.push(page);
+  }
+  return route;
+}
+
+declare const __DEV__: boolean | undefined;
+
+/** A push's animation, with room to spare: 350ms on iOS, about the same on Android. */
+const PUSH_SETTLES = 450;
+
+/**
+ * In development, come back from a reload on the page it left: see `route-parking.ts`.
+ *
+ * The history a reload left is gone through again once the first navigation has ended, as a
+ * launch link is and for the same reason. The hook is what `mount`'s reload waits on.
+ */
+function keepHistoryAcrossReloads(): void {
+  // The bare identifier, so a release build folds the rest away.
+  if (typeof __DEV__ === 'undefined' || !__DEV__) return;
+  const parking = inject(ROUTE_PARKING);
+  if (!parking) return;
+  const router = inject(Router);
+  const history = inject(PlatformLocation);
+  const errors = inject(ErrorHandler);
+  const scope = globalThis as {
+    __angularNativePark?: () => Promise<void>;
+    __angularNativeRestoring?: Promise<void>;
+  };
+  // A page keeps how it was presented, a sheet or a modal, and nothing else of its navigation:
+  // a replace has already happened to the history, and an app's own state may not survive JSON.
+  const pages = (): ParkedPage[] =>
+    history instanceof NativePlatformLocation
+      ? history.ɵpages().map(({ url, state }) => {
+          const presentation = intentOf(state)?.presentation;
+          return presentation ? { url, presentation } : { url };
+        })
+      : [{ url: router.url }];
+  const park = () => parking.park(direct(pages()));
+  scope.__angularNativePark = park;
+
+  // `mount` keeps the app out of sight until this settles, so the pages arrive unseen.
+  const restoring = parking
+    .collect()
+    .then(async (parked) => {
+      if (!parked) return;
+      await new Promise<void>((resolve) => {
+        if (router.navigated) return resolve();
+        const first = router.events.subscribe((event) => {
+          if (!isEnd(event)) return;
+          first.unsubscribe();
+          resolve();
+        });
+      });
+      let moved = false;
+      for (const { url, presentation } of parked) {
+        if (url === router.url) continue;
+        const state = presentation && { [NATIVE_INTENT]: { stack: 'push', presentation } };
+        moved = (await router.navigateByUrl(url, { state })) || moved;
+      }
+      // The last page is still sliding in when its navigation ends.
+      if (moved) await new Promise((resolve) => setTimeout(resolve, PUSH_SETTLES));
+    })
+    .catch((error: unknown) => errors.handleError(error));
+  scope.__angularNativeRestoring = restoring;
+  inject(DestroyRef).onDestroy(() => {
+    if (scope.__angularNativePark === park) delete scope.__angularNativePark;
+    if (scope.__angularNativeRestoring === restoring) delete scope.__angularNativeRestoring;
+  });
 }
 
 /** A navigation's last event, whichever way it went. */

@@ -143,4 +143,4 @@ function lines(text) {
   return text.split('\n').length;
 }
 
-module.exports = { componentDeclarations };
+module.exports = { componentDeclarations, nodes, pluginsFor };

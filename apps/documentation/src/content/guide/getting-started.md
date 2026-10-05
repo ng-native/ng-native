@@ -168,8 +168,10 @@ browser.
 ## Update templates and styles
 
 Template and stylesheet edits preserve component state through Angular's `ɵɵreplaceMetadata`,
-which the Metro transform embeds in the module. No Angular dev server is involved. Selector, input,
-method and import changes require a full reload; the console logs why.
+which the Metro transform embeds in the module. No Angular dev server is involved. An edited method
+or function is patched onto the running app as well. An edit that cannot be, to a field, a
+constructor or a constant, reloads the app and returns to the page it left; the console logs why.
+[Limitations](/guide/limitations) lists each case.
 
 ## Expo Go or a development build
 

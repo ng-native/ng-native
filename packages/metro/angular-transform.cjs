@@ -17,6 +17,7 @@ const { compileCss } = require('./css/compile.cjs');
 const { assertStylesRead } = require('./styles-expression.cjs');
 const { assertHostRead } = require('./host-expression.cjs');
 const { componentDeclarations } = require('./component-declarations.cjs');
+const { hotShape } = require('./hot-shape.cjs');
 const {
   compileForHmrSync,
   extractComponentMetadataSync,
@@ -25,6 +26,8 @@ const {
 } = require('@oxc-angular/vite/api');
 
 const IS_SOURCE = /\.m?tsx?$/;
+/** TypeScript that is not a declaration file nor something installed. */
+const IS_APP_MODULE = /^(?!.*[\\/]node_modules[\\/])(?!.*\.d\.[cm]?ts$).*\.[cm]?ts$/;
 const HAS_ANGULAR_DECORATOR = /@(Component|Directive|Pipe|Injectable|NgModule|Service)\s*\(/;
 const IS_PARTIAL_COMPILED =
   /ɵɵngDeclare(Component|Directive|Pipe|Injectable|NgModule|Service|Factory)/;
@@ -198,48 +201,60 @@ const hash = (value) => createHash('sha1').update(value).digest('hex').slice(0, 
  * *original* class, which is the one live views still point at, and calls `module.hot.accept()`
  * so Metro stops bubbling there instead of reloading the app.
  *
- * Only the template and the inline styles can be swapped this way. Anything else - a new method,
- * a changed selector, different imports - is not expressible as a metadata replacement, so the
- * block falls back to a full reload. It decides by comparing two hashes: the template and styles,
- * and the file with every template and inline style removed.
+ * A template and the inline styles are swapped this way. It decides by comparing two hashes: the
+ * template and styles, and the file with every template and inline style removed. When that second
+ * one moves, the class itself changed, and the live class is patched from the one the module just
+ * defined: see `PATCH`. What cannot be patched falls back to a full reload.
  *
  * An external template or stylesheet is swapped by its own module instead: see `resourceBlock`.
  */
 function hmrBlock(src, filename, components, resources, options, warn) {
-  if (!components?.length) return '';
+  components ??= [];
 
   // The "shape" is everything a metadata swap cannot express: the file with every template and
   // inline style stripped out. If that moves, only a reload can apply the change.
   const shapeSource = withoutSwappable(src, components);
 
-  const applies = [];
-  const defs = [];
-  for (const component of components) {
-    const template = component.template ?? resources?.templates?.[component.templateUrl];
-    if (template === undefined) continue;
+  // A service or a directive has no template to swap, only a class to patch.
+  const defs = [
+    ...components.map((one) => componentDef(one, src, filename, resources, options, warn)),
+    ...plainClasses(src).map(({ className, decorator }) => ({
+      className,
+      decorator,
+      meta: decorator,
+      fields: `id: ${JSON.stringify(`${filename}@${className}`)}`,
+    })),
+  ].filter(Boolean);
+  const applies = defs.map((def) => def.apply).filter(Boolean);
+  const classes = defs.map((def) => def.className);
+  const decorators = defs.map((def) => def.decorator);
 
-    const update = hotUpdate(template, component, filename, options);
-    if (!update) continue;
-
-    applies.push(update.apply);
-    const parts = componentParts(component, resources, filename, src);
-    const css = parts.map((part) => part.text).join('\n');
-    const sheet = componentSheet(
-      css,
-      filename,
-      component.className,
-      options?.platform,
-      parts,
-      warn,
-    );
-    defs.push(
-      `{ id: ${JSON.stringify(update.id)}, type: ${component.className}, ` +
-        `template: ${JSON.stringify(hash(template))}, styles: ${JSON.stringify(hash(css))}, ` +
-        `sheet: ${sheet ? literal(sheet) : 'null'}, apply: ${update.name} }`,
-    );
-  }
-
-  if (!defs.length) return '';
+  // What a patch cannot apply: see `hot-shape.cjs`. A file that does not parse has nothing to
+  // compare, and reloads for any edit that is not a template's or a style's.
+  const hot = hotShape(src, filename, classes);
+  const functions = hot?.functions ?? [];
+  if (!defs.length && !functions.length) return '';
+  // A class that names a constant function as it builds an instance holds the function itself,
+  // so the two are compared together: an edit to the function is an edit to how it is built.
+  const built = (className) => {
+    const construction = hot?.construction.get(className);
+    if (construction === undefined) return shapeSource;
+    const held = [...hot.constants].filter(([name]) => mentions(construction, [name]));
+    return construction + held.map(([, text]) => text).join('\n');
+  };
+  const records = defs.map(
+    ({ className, meta, fields }) =>
+      `{ ${fields}, type: ${className}, meta: ${JSON.stringify(hash(meta + built(className)))}, ` +
+      `body: ${JSON.stringify(hash(hot?.decorators.get(className) ?? src))}, ` +
+      `rebind: function (live) { ${className} = live; } }`,
+  );
+  // A declared function's binding is handed the function that stays, so the file's own code
+  // calls that one too. A constant's cannot be, and is reached through the exports alone.
+  const handed = functions.map(
+    ({ local, exported, declared }) =>
+      `{ exported: ${JSON.stringify(exported)}, read: function () { return ${local}; }, ` +
+      `write: ${declared ? `function (stays) { ${local} = stays; }` : 'null'} }`,
+  );
 
   return `
 if (typeof ngDevMode === "undefined" || ngDevMode) {
@@ -250,11 +265,16 @@ ${applies.join('\n')}
   var file = ${JSON.stringify(filename)};
   var shape = ${JSON.stringify(hash(shapeSource))};
   var source = ${JSON.stringify(hash(src))};
-  var defs = [${defs.join(', ')}];
+  var init = ${JSON.stringify(hash(hot?.init ?? shapeSource))};
+  var defs = [${records.join(', ')}];
+  var functions = [${handed.join(', ')}];
+  // Whether what calls these classes asks again after a patch: not a library's, whose methods
+  // are called by the thousand and are not what an app edits.
+  var watched = ${!/[\/]node_modules[\/]/.test(filename)};
   var previous = registry.get(file);
   // One line per save, and it says why a reload happened when state gets lost.
   var log = console.log;
-${SWAP}
+${SWAP}${PATCH}
   var reload = false;
 
   if (!previous) {
@@ -264,8 +284,26 @@ ${SWAP}
       types: new Map(defs.map(function (d) { return [d.id, d.type]; })),
       templates: new Map(defs.map(function (d) { return [d.id, d.template]; })),
       styles: new Map(defs.map(function (d) { return [d.id, d.styles]; })),
+      metas: new Map(defs.map(function (d) { return [d.id, d.meta]; })),
+      bodies: new Map(defs.map(function (d) { return [d.id, d.body]; })),
+      hooks: new Map(defs.map(function (d) { return [d.id, hooks(d.type)]; })),
+      members: new Map(),
+      init: init,
+      // The exports every module that imported this file holds, which stay the file's exports.
+      exports: null,
+      cells: [],
+      count: functions.length,
     };
     registry.set(file, entry);
+    if (typeof module !== "undefined") {
+      var exported = functions.some(function (fn) { return fn.exported.length; });
+      entry.exports = exported ? kept(module.exports) : module.exports;
+    }
+    hand(entry);
+    defs.forEach(function (d) {
+      made(d.type);
+      members(entry, d.id, d.type.prototype, d.type.prototype);
+    });
     log("[angular-native] hmr registered", file);
     // An external template's module ran before this one, and may know better. After a reload
     // Metro serves this module from its cache, compiled against the template as it was when this
@@ -281,20 +319,29 @@ ${SWAP}
       if (waiting.source !== source) continue;
       swap(entry, waiting);
     }
+  } else if (previous.source === source && again(previous)) {
+    // The update this file has just applied, sent a second time: nothing to do but accept it.
   } else if (previous.source === source) {
     // This module's own code is unchanged, so we were only re-run as the nearest accepting
     // module for a dependency's update. That is not something a template swap can express.
     log("[angular-native] hmr reload: a dependency changed", file);
     reload = true;
   } else if (previous.shape !== shape) {
-    log("[angular-native] hmr reload: more than the template changed", file);
-    reload = true;
+    if (${patchable(shapeSource, classes, decorators, functions)} && previous.init === init && patchAll(previous)) {
+      previous.shape = shape;
+      previous.source = source;
+    } else {
+      log("[angular-native] hmr reload: more than a class or a function changed", file);
+      reload = true;
+    }
   } else {
     previous.source = source;
     for (var i = 0; i < defs.length; i++) {
       // Siblings in the same file whose template and styles did not move are simply left alone.
       if (!swap(previous, defs[i])) reload = true;
+      previous.bodies.set(defs[i].id, defs[i].body);
     }
+    if (reload) log("[angular-native] hmr reload: a template or style could not be swapped", file);
   }
 
   // Accept only what was actually applied. Accepting an update we could not apply tells Metro the
@@ -302,11 +349,56 @@ ${SWAP}
   // and change nothing. Leaving it unaccepted lets Metro reload the app itself, at the point it
   // knows the new bundle is ready. Reloading from here instead raced that: the app came back
   // holding the bundle from before the edit.
+  if (!reload) {
+    var applied = registry.get(file);
+    applied.at = Date.now();
+    applied.loads = globalThis.__angularNativeHmrLoads;
+  }
   if (reload) (globalThis.__angularNativeReload || function () {})(file);
-  else if (typeof module !== "undefined" && module.hot) module.hot.accept();
+  else if (typeof module !== "undefined") {
+    // A module that imports this file for the first time from here on, a lazy route's, is handed
+    // the exports everyone else holds, with the live classes on them.
+    var kept = registry.get(file).exports;
+    if (kept) module.exports = kept;
+    if (module.hot) module.hot.accept();
+  }
 })();
 }
 `;
+}
+
+/**
+ * A template with a router outlet in it: a stack's, the tabs', or Angular's own. Rendering it again
+ * makes the outlet again, and the screens it held come back beside the ones the router still has:
+ * a page with a Back button to itself. So an edit to such a component reloads, which returns to
+ * the page it left.
+ */
+const HOSTS_OUTLET = /<[\w-]*outlet[\s/>]/;
+
+/** One component's part of the hot update, or null when its template cannot be swapped. */
+function componentDef(component, src, filename, resources, options, warn) {
+  const template = component.template ?? resources?.templates?.[component.templateUrl];
+  const update = template === undefined ? null : hotUpdate(template, component, filename, options);
+  if (!update) return null;
+
+  const parts = componentParts(component, resources, filename, src);
+  const css = parts.map((part) => part.text).join('\n');
+  const sheet = componentSheet(css, filename, component.className, options?.platform, parts, warn);
+  const decorator = src.slice(
+    src.lastIndexOf('@Component', component.spanStart),
+    component.spanStart,
+  );
+  return {
+    className: component.className,
+    apply: update.apply,
+    decorator: withoutLiterals(decorator),
+    meta: '',
+    fields:
+      `id: ${JSON.stringify(update.id)}, ` +
+      `template: ${JSON.stringify(hash(template))}, styles: ${JSON.stringify(hash(css))}, ` +
+      `sheet: ${sheet ? literal(sheet) : 'null'}, apply: ${update.name}, ` +
+      `outlet: ${HOSTS_OUTLET.test(template)}`,
+  };
 }
 
 /**
@@ -392,6 +484,7 @@ const SWAP = `
     var template = entry.templates.get(def.id) !== def.template;
     var styles = "sheet" in def && entry.styles.get(def.id) !== def.styles;
     if (!template && !styles) return true;
+    if (def.outlet) return false;
     if (styles) type["ɵnativeStyles"] = def.sheet || undefined;
     console.log("[angular-native] hot " + (template ? "template" : "style") + " swap", def.id);
     try {
@@ -407,6 +500,272 @@ const SWAP = `
     return true;
   }
 `;
+
+/**
+ * Patch one live class from the class its re-run module just defined: a component when more than
+ * its template moved (a method, a getter, its `imports` or `host`), a service, or a directive.
+ * Not a selector, inputs or outputs, nor a directive's decorator: those reload.
+ *
+ * The live class is the one every other module imported and every live view points at, so it stays
+ * and takes the new one's members: the prototype's, so a live instance runs the edited methods with
+ * the state it has, the statics, and the definition, through the same `ɵɵreplaceMetadata` a
+ * template swap uses. Its factory makes the new class and hands the instance the live prototype,
+ * so a component made after the patch ran the edited constructor and is still an instance of the
+ * class everything else holds.
+ *
+ * A live instance was built by the constructor from before the edit, so an edit to a field or the
+ * constructor is not patched at all: `meta` carries both, and a change to it reloads.
+ *
+ * An exported function is patched too, behind the exports the file's importers hold. What a
+ * patched method or function returned is on screen, or in a `computed`, wherever one was called,
+ * so each reads a count of patches as it runs, and whatever called it works its value out again.
+ *
+ * `ɵɵreplaceMetadata` keeps the definition's `directiveDefs` and `pipeDefs` from before, which
+ * would drop an edit to `imports`, so they are put on the definition it is about to copy them off.
+ */
+/** How long after applying an update the same one may arrive again: see `again` in `PATCH`. */
+const DUPLICATE_WITHIN = 2000;
+
+const PATCH = `
+  var lives = (globalThis.__angularNativeHmrLive ||= new WeakMap());
+  var makers = (globalThis.__angularNativeHmrMakers ||= new WeakMap());
+  // Whether this run is the last one over again. Metro sends an edit once for each bundle the
+  // file is in, the app's and every lazy route's that has loaded, so a file two routes share runs
+  // twice for one save, the second time with the source it has just applied. A dependency's edit
+  // looks the same from here, and has to reload: but it comes later, or after a module with no
+  // update of its own has run, which counts itself in.
+  function again(entry) {
+    return Date.now() - entry.at < ${DUPLICATE_WITHIN} && entry.loads === globalThis.__angularNativeHmrLoads;
+  }
+  // Called from every function and method a patch can change: what is working a value out when
+  // it calls one works it out again after a patch. See hot-epoch.ts in @ng-native/platform.
+  function read() {
+    var hot = globalThis.__angularNativeHot;
+    if (hot) hot.read();
+  }
+  // Make every instance of a class through one factory that stays on it, so a patch can change
+  // what it makes.
+  function made(type) {
+    var first = type["ɵfac"];
+    if (!first || makers.has(type)) return;
+    makers.set(type, first);
+    type["ɵfac"] = function (asked) { return makers.get(type)(asked); };
+    // An injectable's definition holds the factory it was defined with.
+    if (type["ɵprov"]) type["ɵprov"].factory = type["ɵfac"];
+  }
+  // The exports a file with functions is imported by: its own, behind a getter each, so that a
+  // function can be put in place of the one Metro defined, which nothing can write to. Everything
+  // else reads through to the first run's exports, where a class is the live one and a constant
+  // the one its importers read.
+  function kept(exports) {
+    var own = {};
+    Object.getOwnPropertyNames(exports).forEach(function (key) {
+      Object.defineProperty(own, key, {
+        enumerable: Object.getOwnPropertyDescriptor(exports, key).enumerable,
+        configurable: true,
+        get: function () { return exports[key]; },
+      });
+    });
+    return own;
+  }
+  // Put each of the file's functions behind one that stays the same function for good and calls
+  // the latest: as the file's own binding where that can be written, so its own code calls it, and
+  // on the exports its importers hold. A component often keeps an imported function itself, in a
+  // field its template calls, and a closure made before an edit keeps the scope it was made in:
+  // either way the function they hold is this one.
+  function hand(entry) {
+    functions.forEach(function (fn, index) {
+      var cell = entry.cells[index] || (entry.cells[index] = { latest: null, stays: null });
+      cell.latest = fn.read();
+      cell.stays ||= function () {
+        read();
+        return new.target
+          ? Reflect.construct(cell.latest, arguments, new.target)
+          : cell.latest.apply(this, arguments);
+      };
+      if (fn.write) fn.write(cell.stays);
+      if (entry.exports) fn.exported.forEach(function (name) {
+        Object.defineProperty(entry.exports, name, {
+          enumerable: true, configurable: true, writable: true, value: cell.stays,
+        });
+      });
+    });
+  }
+  // Whether every function can be handed on: a constant is reached through the exports alone.
+  function handable(entry) {
+    return !!entry.exports || functions.every(function (fn) { return fn.write || !fn.exported.length; });
+  }
+  // What stays on a prototype for one member, calling the class's latest. Angular keeps a
+  // lifecycle hook as the function it found the first time, and a field or a listener may hold a
+  // method, so the function that is there has to be there for good.
+  function staying(cell, kind, enumerable) {
+    if (kind === "method") return {
+      configurable: true, writable: true, enumerable: enumerable,
+      value: function () { read(); return cell.latest.value.apply(this, arguments); },
+    };
+    return {
+      configurable: true, enumerable: enumerable,
+      get: function () { read(); return cell.latest.get ? cell.latest.get.call(this) : undefined; },
+      set: function (value) { if (cell.latest.set) cell.latest.set.call(this, value); },
+    };
+  }
+  // Give a live prototype the members of the class the file defines now: its own, the first time.
+  // A library's class is not watched and takes them as they are, by the thousand calls a frame.
+  function members(entry, id, from, to) {
+    var cells = entry.members.get(id) || entry.members.set(id, new Map()).get(id);
+    Reflect.ownKeys(to).forEach(function (key) {
+      if (key === "constructor" || Object.prototype.hasOwnProperty.call(from, key)) return;
+      delete to[key];
+      cells.delete(key);
+    });
+    Reflect.ownKeys(from).forEach(function (key) {
+      if (key === "constructor") return;
+      var now = Object.getOwnPropertyDescriptor(from, key);
+      var kind = now.get || now.set ? "accessor" : typeof now.value === "function" ? "method" : "value";
+      var cell = cells.get(key);
+      if (cell && cell.kind === kind) return void (cell.latest = now);
+      cells.delete(key);
+      if (kind === "value" || !watched) return void Object.defineProperty(to, key, now);
+      cell = { kind: kind, latest: now };
+      cells.set(key, cell);
+      Object.defineProperty(to, key, staying(cell, kind, now.enumerable));
+    });
+  }
+  // Statics are only ever added to: Angular keeps its own on the live class, and the id a class
+  // is injected by is one of them. Its definitions stay the ones other modules read.
+  function statics(from, to) {
+    var kept = ["prototype", "length", "name", "ɵcmp", "ɵdir", "ɵprov", "ɵfac", "__NG_ELEMENT_ID__"];
+    Reflect.ownKeys(from).forEach(function (key) {
+      if (kept.indexOf(key) < 0) Object.defineProperty(to, key, Object.getOwnPropertyDescriptor(from, key));
+    });
+  }
+  // The lifecycle hooks a class has. Angular notes which ones when it first renders a view the
+  // class is in, so one added or taken away later would never be called, or go on being.
+  function hooks(type) {
+    return Reflect.ownKeys(type.prototype).filter(function (key) {
+      return typeof key === "string" && /^ng[A-Z]/.test(key);
+    }).sort().join();
+  }
+  // Whether a patch has to make a component's views again: when what it renders changed, its
+  // decorator, template or styles. An edit to what it does, a method or a getter, is on the class
+  // already, and whatever called it asks again. A view made again loses what it held, the state
+  // of every component in it, so it is only made again when it has to be. A library's components
+  // are not watched, and nothing of theirs asks again.
+  function rendersAgain(entry, def) {
+    return !watched || entry.bodies.get(def.id) !== def.body ||
+      entry.templates.get(def.id) !== def.template || entry.styles.get(def.id) !== def.styles;
+  }
+  function patchable(entry, def) {
+    var live = entry.types.get(def.id);
+    if (!live) return false;
+    var now = def.type["ɵcmp"] || def.type["ɵdir"];
+    var was = live["ɵcmp"] || live["ɵdir"];
+    // What a template using the class read when it first rendered, and will not read again. A
+    // directive's decorator is all of that: its host bindings are made once, with its host.
+    var shape = function (d) { return JSON.stringify([d.selectors, d.inputs, d.outputs]); };
+    if (now && (!was || shape(now) !== shape(was))) return false;
+    if (hooks(def.type) !== entry.hooks.get(def.id)) return false;
+    // Nor a component with an outlet in it, which rendering again would make again.
+    if (def.outlet && rendersAgain(entry, def)) return false;
+    // Nor what only runs when an instance is made, which a live one would never see.
+    return entry.metas.get(def.id) === def.meta;
+  }
+  function patch(entry, def) {
+    var live = entry.types.get(def.id);
+    var next = def.type;
+    var make = next["ɵfac"];
+    var cmp = next["ɵcmp"];
+    console.log("[angular-native] hot class patch", def.id);
+    try {
+      members(entry, def.id, next.prototype, live.prototype);
+      statics(next, live);
+      made(live);
+      if (make) makers.set(live, function (asked) {
+        // A subclass asking for its parent's factory is made as itself.
+        if (asked && asked !== live) return make(asked);
+        return Object.setPrototypeOf(make(), live.prototype);
+      });
+      if (cmp && rendersAgain(entry, def)) i0.ɵɵreplaceMetadata(live, function () {
+        var uses = cmp.directiveDefs;
+        // A component in the same file is the class this run defined. Its live class is the one
+        // to render, or its instances would belong to a class no later edit reaches.
+        live["ɵcmp"].directiveDefs = uses && function () {
+          return (typeof uses === "function" ? uses() : uses).map(function (used) {
+            var kept = lives.get(used.type);
+            return kept ? kept["ɵcmp"] || kept["ɵdir"] : used;
+          });
+        };
+        live["ɵcmp"].pipeDefs = cmp.pipeDefs;
+        live["ɵcmp"] = cmp;
+      }, [i0], [], undefined, def.id);
+    } catch (error) {
+      // As for a swap: the view being rebuilt is half made, and only a reload gets it back.
+      console.error("[angular-native] hot class patch failed, reloading", def.id, error);
+      return false;
+    }
+    entry.templates.set(def.id, def.template);
+    entry.styles.set(def.id, def.styles);
+    entry.bodies.set(def.id, def.body);
+    return true;
+  }
+  // Every class in the file, or none: a file half patched is two versions of itself.
+  function patchAll(entry) {
+    if (!defs.every(function (d) { return patchable(entry, d); })) return false;
+    defs.forEach(function (d) { lives.set(d.type, entry.types.get(d.id)); });
+    if (!defs.every(function (d) { return patch(entry, d); })) return false;
+    // From here the file's own code means the live class by each name: what it injects, queries
+    // and makes is what every other module does.
+    defs.forEach(function (d) { d.rebind(entry.types.get(d.id)); });
+    // A function added or taken away moves the others, and one that cannot be handed on would
+    // reach no one.
+    if (functions.length !== entry.count || !handable(entry)) return false;
+    hand(entry);
+    if (functions.length && !defs.length) log("[angular-native] hot function patch", file);
+    // Whatever was worked out by calling the code from before the edit is worked out again.
+    if (globalThis.__angularNativeHot) globalThis.__angularNativeHot.bump();
+    return true;
+  }
+`;
+
+/**
+ * The services and directives a file declares, each with its decorator as written.
+ *
+ * A pipe is left out, and so reloads: a pure pipe's result is kept by every view that showed it,
+ * and nothing would ask the edited one again.
+ */
+function plainClasses(src) {
+  const declared =
+    /(@(?:Injectable|Service|Directive)\s*\([\s\S]*?\))\s*(?:export\s+(?:default\s+)?)?(?:abstract\s+)?class\s+([\w$]+)/g;
+  return [...src.matchAll(declared)].map(([, decorator, className]) => ({ decorator, className }));
+}
+
+/**
+ * Whether a file's classes can be patched where they are, from its source without its templates
+ * and each class's decorator.
+ *
+ * Not when it reads a `#private` member: a method from the new class cannot read one on an
+ * instance the old class made.
+ *
+ * Not when a decorator names a class or a function of the file outside its `imports`, in
+ * `providers` or `hostDirectives`: the definition holds the class this run defined, which is not
+ * the one every other module injects by, and the function as it was when the class was defined.
+ * `imports` are put right by the patch itself.
+ */
+function patchable(src, classes, decorators, functions) {
+  if (/\.#[A-Za-z_$]/.test(src)) return false;
+  const elsewhere = (decorator) => decorator.replace(/\bimports\s*:\s*\[[^\]]*\]/, '');
+  // A function a decorator names, a factory in `providers`, is in the definition as it was.
+  const held = [...classes, ...functions.map((one) => one.local)];
+  return !decorators.some((decorator) => mentions(elsewhere(decorator), held));
+}
+
+/** Whether `text` has one of `names` in it as a whole word that is not a member of something. */
+function mentions(text, names) {
+  if (!names.length) return false;
+  return new RegExp(`(?<![\\w$.])(?:${names.map(escaped).join('|')})(?![\\w$])`).test(text);
+}
+
+const escaped = (name) => name.replaceAll('$', '\\$');
 
 /**
  * One line, run before the compiled class, that keeps a hot swap from reporting NG0912.
@@ -638,7 +997,8 @@ function resourceBlock(src, resource, options) {
         `{ file: ${JSON.stringify(owner.file)}, id: ${JSON.stringify(update.id)}, ` +
           `source: ${JSON.stringify(hash(owner.src))}, ` +
           `template: ${JSON.stringify(hash(template))}, styles: ${JSON.stringify(hash(css))}, ` +
-          `sheet: ${sheet ? literal(sheet) : 'null'}, apply: ${update.name} }`,
+          `sheet: ${sheet ? literal(sheet) : 'null'}, apply: ${update.name}, ` +
+          `outlet: ${HOSTS_OUTLET.test(template)} }`,
       );
     }
   }
@@ -1053,8 +1413,7 @@ function transformAngular(src, filename, options = {}) {
     }
     const warn = buildWarnings();
     const styles = styleBlock(src, filename, components, resources, platform, warn);
-    const hmr = options.dev ? hmrBlock(src, filename, components, resources, options, warn) : '';
-    const quiet = hmr ? collisionQuiet(filename, components) : '';
+    const { quiet, hmr } = hotParts(src, filename, components, resources, options, warn);
     // Dev keeps the emitted CSS: the bundle size does not matter there, and the HMR path is
     // easier to reason about when the compiler's output is untouched.
     const compiled =
@@ -1071,7 +1430,33 @@ function transformAngular(src, filename, options = {}) {
 
   if (IS_PARTIAL_COMPILED.test(src)) return link(src, filename, options);
 
-  return { code: src, dependencies: [] };
+  return { code: src + functionsBlock(src, filename, options), dependencies: [] };
+}
+
+/**
+ * Counts a module with no hot update of its own in as it runs, a table of constants or a route
+ * file: when one runs again, the modules that import it know theirs was not a duplicate.
+ */
+const COUNTS_ITSELF =
+  '\n;globalThis.__angularNativeHmrLoads = (globalThis.__angularNativeHmrLoads || 0) + 1;\n';
+
+/** What a development build adds around a compiled file: before its classes, and after. */
+function hotParts(src, filename, components, resources, options, warn) {
+  if (!options.dev) return { quiet: '', hmr: '' };
+  const block = hmrBlock(src, filename, components, resources, options, warn);
+  return {
+    quiet: block ? collisionQuiet(filename, components) : '',
+    hmr: block || COUNTS_ITSELF,
+  };
+}
+
+/**
+ * The hot update for a module of plain functions, in the app's own source: an edited one is
+ * handed to the modules that call it, where the edit used to reload the app. See `PATCH`.
+ */
+function functionsBlock(src, filename, options) {
+  const hot = options.dev && options.platform !== 'web' && IS_APP_MODULE.test(filename);
+  return hot ? hmrBlock(src, filename, [], null, options) || COUNTS_ITSELF : '';
 }
 
 module.exports = {

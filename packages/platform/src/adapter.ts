@@ -48,6 +48,7 @@ import {
   type StyleSheet,
 } from '@ng-native/fabric';
 import { calmLoadingBanner, type LoadingBanner } from './dev-loading-view.ts';
+import { installHotEpoch } from './hot-epoch.ts';
 
 /**
  * Angular `(touchEnd)` -> Fabric `topTouchEnd`.
@@ -590,32 +591,100 @@ function installReloadHook(): void {
   reloadMetroThroughExpo();
   const scope = globalThis as { __angularNativeReload?: () => void };
   if (scope.__angularNativeReload) return;
-  scope.__angularNativeReload = () => {
-    /*
-     * Expo's reload first, React Native's only as a fallback.
-     *
-     * `DevSettings.reload()` under Expo Go re-runs the bundle the app downloaded when it launched
-     * rather than fetching the current one, so the app comes back holding the code from before
-     * the edit - forever one generation behind, however long you wait. That is worse than not
-     * reloading, because it looks like it worked.
-     *
-     * Required rather than imported, both of them: React Native ships Flow, which Node cannot
-     * parse, and this file has to stay importable by the test suite. Expo is genuinely optional.
-     */
-    try {
-      const expo = require('expo') as { reloadAppAsync?: (reason?: string) => Promise<void> };
-      if (expo.reloadAppAsync) {
-        void expo.reloadAppAsync('angular-native: more than a template changed');
-        return;
-      }
-    } catch {
-      // Not an Expo app. React Native's own reload does re-fetch outside Expo Go.
-    }
-    const devSettings = (
-      require('react-native') as { DevSettings?: { reload(reason?: string): void } }
-    ).DevSettings;
-    devSettings?.reload('angular-native: more than a template changed');
+  scope.__angularNativeReload = () => afterParking(reloadApp);
+}
+
+/**
+ * Reload once the router has left its history with the dev server, for the app that comes back
+ * to open on the page this one was showing. The router sets the hook, in development; with no
+ * router there is nothing to wait for. A history that could not be left is no reason not to reload.
+ */
+function afterParking(reload: () => void): void {
+  const park = (globalThis as { __angularNativePark?: () => Promise<void> }).__angularNativePark;
+  if (!park) return reload();
+  void park().then(reload, reload);
+}
+
+/** Longer than any history takes to go back through; an app is never left out of sight. */
+const RESTORE_PATIENCE = 5000;
+
+/**
+ * Keep the app out of sight while the router goes back through the history a reload left, so it
+ * comes back on the page it was showing rather than on its first page with the others arriving
+ * over it one by one. The router says when it is done, in development; with no router, or on a
+ * start no reload led to, that is at once or never asked.
+ */
+function hideWhileRestoring(hide: (hidden: boolean) => void): void {
+  // The bare identifier, so a release build folds the rest away: see `mount`.
+  if (typeof __DEV__ === 'undefined' || !__DEV__) return;
+  const restoring = (globalThis as { __angularNativeRestoring?: Promise<void> })
+    .__angularNativeRestoring;
+  if (!restoring) return;
+  hide(true);
+  const show = () => hide(false);
+  const patience = new Promise<void>((resolve) => setTimeout(resolve, RESTORE_PATIENCE));
+  void Promise.race([restoring, patience]).then(show, show);
+}
+
+/**
+ * How long after Expo says it reloaded the app that an app still running was not reloaded.
+ * A reload takes the JavaScript runtime with it, so nothing here runs once one has begun.
+ */
+const STILL_HERE = 2000;
+
+/**
+ * Reload through Expo, and through React Native when that does nothing.
+ *
+ * Expo's first. `DevSettings.reload()` under Expo Go on iOS re-runs the bundle the app downloaded
+ * when it launched rather than fetching the current one, so the app comes back holding the code
+ * from before the edit, and without Expo's native modules until Expo Go is relaunched.
+ *
+ * React Native's when Expo's rejects, and when it resolves and the app is still running. Under
+ * Expo Go on Android `reloadAppAsync` resolves and reloads nothing, and the edit that asked for
+ * the reload never arrived: the app went on running the code from before it.
+ */
+function reloadThroughExpo(
+  expo: (reason?: string) => Promise<void>,
+  reason: string,
+  reactNative: () => void,
+): void {
+  let fellBack = false;
+  const fallBack = (why: string, error?: unknown) => {
+    if (fellBack) return;
+    fellBack = true;
+    console.error(`[angular-native] Expo's reload ${why}; reloading through React Native.`, error);
+    reactNative();
   };
+  expo(reason).then(
+    () => setTimeout(() => fallBack('did nothing'), STILL_HERE),
+    (error: unknown) => fallBack('failed', error),
+  );
+}
+
+/**
+ * Required rather than imported, both of them: React Native ships Flow, which Node cannot parse,
+ * and this file has to stay importable by the test suite. Expo is genuinely optional.
+ */
+function reloadApp(): void {
+  const reason = 'angular-native: more than a template changed';
+  const reactNative = () => {
+    try {
+      const { DevSettings } = require('react-native') as {
+        DevSettings?: { reload(reason?: string): void };
+      };
+      DevSettings?.reload(reason);
+    } catch {
+      // No React Native under us: nothing to reload.
+    }
+  };
+  let expo: ((reason?: string) => Promise<void>) | undefined;
+  try {
+    expo = (require('expo') as { reloadAppAsync?: typeof expo }).reloadAppAsync;
+  } catch {
+    // Not an Expo app. React Native's own reload does re-fetch outside Expo Go.
+  }
+  if (expo) reloadThroughExpo(expo, reason, reactNative);
+  else reactNative();
 }
 
 /**
@@ -624,7 +693,7 @@ function installReloadHook(): void {
  * calls `DevSettings.reload()`, and in Expo Go that brings the app back without Expo's native
  * modules (`Cannot find native module 'ExpoFontLoader'`) until Expo Go is relaunched. Expo's
  * reload works in Expo Go and a development build alike, so in an Expo app Metro's goes through
- * it too.
+ * it too. With or without Expo, it waits for the router to park its history: see `afterParking`.
  */
 const THROUGH_EXPO = Symbol.for('ng-native.reloadThroughExpo');
 
@@ -634,25 +703,22 @@ function reloadMetroThroughExpo(): void {
     { performFullRefresh?: ((reason: string) => void) & { [THROUGH_EXPO]?: true } } | undefined;
   const reactNative = refresh?.performFullRefresh;
   if (!refresh || !reactNative || reactNative[THROUGH_EXPO]) return;
+  let reloadAppAsync: ((reason?: string) => Promise<void>) | undefined;
   try {
-    const { reloadAppAsync } = require('expo') as {
-      reloadAppAsync?: (reason?: string) => Promise<void>;
-    };
-    if (!reloadAppAsync) return;
-    // A reload Expo could not do is still a reload the edit needs: React Native's, then.
-    const throughExpo = (reason: string) =>
-      void reloadAppAsync(reason).catch((error: unknown) => {
-        console.error(
-          "[angular-native] Expo's reload failed; reloading through React Native.",
-          error,
-        );
-        reactNative.call(refresh, reason);
-      });
-    throughExpo[THROUGH_EXPO] = true as const;
-    refresh.performFullRefresh = throughExpo;
+    ({ reloadAppAsync } = require('expo') as { reloadAppAsync?: typeof reloadAppAsync });
   } catch {
     // Not an Expo app: React Native's own reload re-fetches the bundle there.
   }
+  const expo = reloadAppAsync;
+  // Either way once the router has parked its history: see `afterParking`.
+  const reload = (reason: string) =>
+    afterParking(() => {
+      const native = () => reactNative.call(refresh, reason);
+      if (expo) reloadThroughExpo(expo, reason, native);
+      else native();
+    });
+  reload[THROUGH_EXPO] = true as const;
+  refresh.performFullRefresh = reload;
 }
 
 /** Dev only, and required rather than imported: React Native ships Flow, which Node cannot parse. */
@@ -732,6 +798,7 @@ export function mount(
   if (typeof __DEV__ !== 'undefined' && __DEV__) {
     warnIfAnimationsAreOff();
     installReloadHook();
+    installHotEpoch();
     calmDevBanner();
   }
   installDeferTriggers();
@@ -811,6 +878,10 @@ export function mount(
   // The app's own `:host` overrides it.
   engine.setDefaultStyle(host, ROOT_HOST_STYLE);
   engine.appendChild(engine.root, host);
+  hideWhileRestoring((hidden) => {
+    engine.setDefaultStyle(host, hidden ? { ...ROOT_HOST_STYLE, opacity: 0 } : ROOT_HOST_STYLE);
+    factory.commitSoon();
+  });
 
   for (const [name, value] of Object.entries(inputs)) componentRef.setInput(name, value);
 

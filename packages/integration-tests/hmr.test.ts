@@ -7,7 +7,7 @@ import { after, afterEach, before, beforeEach, describe, it } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
-import type { Type } from '@angular/core';
+import { Injector, type Type } from '@angular/core';
 import { cleanup, render, type FakeFabric, type FakeFabricNode } from '@ng-native/testing';
 import { compileFixture, compileSource } from './compile.ts';
 import { DevMenu, type DevMenuSource } from '@ng-native/device';
@@ -253,22 +253,716 @@ export class Outer {}
     assert.ok(errors.length > 0, 'and said why');
   });
 
-  it('asks for a reload when the change is not template-only', async () => {
-    const filename = fixture('list.ts');
-    const source = readFileSync(filename, 'utf8');
+  it('patches an edited method onto a live component without losing state', async () => {
+    // A handler's body is the edit made most often after a template, and it reloaded the app:
+    // the state went, and the route with it.
+    const source = inline('template: `<view><text>n {{ count() }}</text></view>`');
+    const { fabric, instance, reloads, edit } = await liveInline(source, 'method-edit');
 
-    await evaluate(source, filename, fixture('list.hmr-a.generated.ts'));
+    await edit(source.replace('c + 1', 'c + 10').replace('<text>n ', '<text>now '));
 
+    assert.deepEqual(reloads, [], 'nothing asked for a reload');
+    assert.equal(instance.count(), 1, 'the component instance survived, with its state');
+    assert.match(fabric.render(), /RawText "now 1"/, 'a template edit in the same save landed');
+    instance.inc();
+    await settle();
+    assert.match(fabric.render(), /RawText "now 11"/, 'and the instance runs the edited method');
+  });
+
+  it('builds a component made after a patch from the edited file', async () => {
+    // The live class is the one every other module holds, so it is what makes the next instance:
+    // with the constructor of the class the file defines now, which reads the file as it is now.
+    const filename = fixture('patched-constructor.ts');
+    const source = inline('template: `<view><text>n {{ count() }}</text></view>`')
+      .replace('@Component', 'function start() {\n  return 0;\n}\n\n@Component')
+      .replace('signal(0)', 'signal(start())');
+    const first = await evaluate(
+      source,
+      filename,
+      fixture('patched-constructor.hmr-a.generated.ts'),
+    );
+    const type = first['Inline'] as Type<{ inc(): void; count(): number }>;
+    const before = await render(type);
     const reloads: unknown[] = [];
     (globalThis as Record<string, unknown>)['__angularNativeReload'] = (id: unknown) =>
       reloads.push(id);
 
-    // A new method is not expressible as a metadata replacement.
-    const edited = source.replace('setItems(', 'brandNewMethod(): void {}\n\n  setItems(');
-    await evaluate(edited, filename, fixture('list.hmr-b.generated.ts'));
+    try {
+      await evaluate(
+        source.replace('return 0', 'return 5').replace('c + 1', 'c + 10'),
+        filename,
+        fixture('patched-constructor.hmr-b.generated.ts'),
+      );
+      await settle();
+    } finally {
+      delete (globalThis as Record<string, unknown>)['__angularNativeReload'];
+    }
+    assert.deepEqual(reloads, [], 'nothing asked for a reload');
+    assert.equal(before.instance.count(), 0, 'a live instance keeps the state it has');
 
-    assert.equal(reloads.length, 1, 'fell back to a reload rather than patching silently');
-    delete (globalThis as Record<string, unknown>)['__angularNativeReload'];
+    const { fabric, instance } = await render(type);
+    assert.equal(instance.count(), 5, 'a new one is built by the file as edited');
+    assert.ok(instance instanceof type, 'and is an instance of the class other modules hold');
+    instance.inc();
+    await settle();
+    assert.match(fabric.render(), /RawText "n 15"/);
+  });
+
+  it('asks for a reload when a field or the constructor changed, which no live instance ran', async () => {
+    // An initialiser runs when an instance is made. Patched, the edit would reach the components
+    // made after it and none of the ones on screen, which reads as an edit that did nothing.
+    const source = inline('template: `<view><text>n {{ count() }}</text></view>`');
+    const edits = [
+      source.replace('signal(0)', 'signal(5)'),
+      source.replace('count = signal(0);', "count = signal(0);\n  label = signal('x');"),
+      source.replace('inc(): void', 'constructor() {\n    this.count.set(3);\n  }\n  inc(): void'),
+    ];
+    for (const [index, edited] of edits.entries()) {
+      const error = console.error;
+      const errors: unknown[] = [];
+      console.error = (...args: unknown[]) => void errors.push(args);
+      try {
+        const { instance, reloads, edit } = await liveInline(source, `built-edit-${index}`);
+        await edit(edited);
+        assert.equal(reloads.length, 1, `edit ${index} fell back to a reload`);
+        assert.equal(instance.count(), 1, 'with nothing patched first');
+        assert.deepEqual(errors, [], 'and nothing half-applied to report');
+      } finally {
+        console.error = error;
+      }
+      await cleanup();
+    }
+  });
+
+  it('asks for a reload when the selector or an input changed, which other templates have read', async () => {
+    // A template that uses the component matched it by selector and bound its inputs when it was
+    // first rendered, and a patch to this class does not render that template again.
+    const source = inline('template: `<view><text>n {{ count() }}</text></view>`');
+    const { reloads, edit } = await liveInline(source, 'selector-edit');
+
+    await edit(source.replace("selector: 'x-inline'", "selector: 'x-renamed'"));
+
+    assert.equal(reloads.length, 1, 'fell back to a reload');
+  });
+
+  it('asks for a reload when the file exports more than its components', async () => {
+    // Every module that imports the file keeps the exports it already read. A class can be
+    // patched where it is; a constant cannot, so the edit would reach this file and no other.
+    const source =
+      inline('template: `<view><text>n {{ count() }}</text></view>`') + 'export const LIMIT = 3;\n';
+    const { reloads, edit } = await liveInline(source, 'other-export');
+
+    await edit(source.replace('LIMIT = 3', 'LIMIT = 4'));
+
+    assert.equal(reloads.length, 1, 'fell back to a reload rather than patching half of it');
+  });
+});
+
+/**
+ * A service and a directive are patched the way a component's class is: the class every other
+ * module holds takes the edited members, and the instances already made keep their state.
+ */
+describe('Angular HMR, for a class that is not a component', () => {
+  const scope = globalThis as Record<string, unknown>;
+  let reloads: unknown[] = [];
+  beforeEach(() => {
+    reloads = [];
+    scope['__angularNativeReload'] = (id: unknown) => reloads.push(id);
+  });
+  afterEach(() => delete scope['__angularNativeReload']);
+
+  const evaluate = (source: string, name: string, pass: string) =>
+    compileSource(source, fixture(`${name}.ts`), fixture(`${name}.hmr-${pass}.generated.ts`), {
+      dev: true,
+    });
+
+  const service = `import { Injectable, signal } from '@angular/core';
+
+function start() {
+  return 0;
+}
+
+@Injectable({ providedIn: 'root' })
+export class Tally {
+  total = signal(start());
+  add(): void {
+    this.total.update((t) => t + 1);
+  }
+}
+`;
+  interface Tally {
+    add(): void;
+    total(): number;
+  }
+
+  it('patches an edited service, keeping the instance an app already injected', async () => {
+    const first = await evaluate(service, 'hmr-tally', 'a');
+    const type = first['Tally'] as Type<Tally> & { ɵprov: { factory(): Tally } };
+    const live = Injector.create({ providers: [type] }).get(type);
+    live.add();
+
+    await evaluate(
+      service.replace('t + 1', 't + 10').replace('return 0', 'return 5'),
+      'hmr-tally',
+      'b',
+    );
+
+    assert.deepEqual(reloads, [], 'nothing asked for a reload');
+    live.add();
+    assert.equal(live.total(), 11, 'the live instance kept its state and runs the edited method');
+    const made = Injector.create({ providers: [type] }).get(type);
+    assert.equal(made.total(), 5, 'one made after the edit is built by the file as edited');
+    assert.ok(made instanceof type);
+    assert.equal(type.ɵprov.factory().total(), 5, 'as does one the root injector has yet to make');
+  });
+
+  it('asks for a reload when a service field changed, which the instance in use never ran', async () => {
+    await evaluate(service, 'hmr-tally-field', 'a');
+
+    await evaluate(
+      service.replace('signal(start())', 'signal(start() + 1)'),
+      'hmr-tally-field',
+      'b',
+    );
+
+    assert.equal(reloads.length, 1);
+  });
+
+  it('asks for a reload when a service file exports a token as well', async () => {
+    const source = service + 'export const LIMIT = 3;\n';
+    await evaluate(source, 'hmr-tally-token', 'a');
+
+    await evaluate(source.replace('LIMIT = 3', 'LIMIT = 4'), 'hmr-tally-token', 'b');
+
+    assert.equal(reloads.length, 1);
+  });
+
+  const directive = `import { Directive } from '@angular/core';
+
+@Directive({ selector: '[xMark]', host: { '[style.opacity]': 'level()' } })
+export class Mark {
+  level(): number {
+    return 1;
+  }
+}
+`;
+
+  it('patches an edited directive method', async () => {
+    const first = await evaluate(directive, 'hmr-mark', 'a');
+    const type = first['Mark'] as new () => { level(): number };
+    const live = new type();
+
+    await evaluate(directive.replace('return 1', 'return 2'), 'hmr-mark', 'b');
+
+    assert.deepEqual(reloads, [], 'nothing asked for a reload');
+    assert.equal(live.level(), 2);
+  });
+
+  it("asks for a reload when a directive's host bindings changed, which no view reads again", async () => {
+    await evaluate(directive, 'hmr-mark-host', 'a');
+
+    await evaluate(directive.replace("'level()'", "'level() / 2'"), 'hmr-mark-host', 'b');
+
+    assert.equal(reloads.length, 1);
+  });
+});
+
+/**
+ * What a patch has to leave true of the app: one class by each name whoever asks, the edit on
+ * screen, and nothing patched that the running app has already read.
+ */
+describe('Angular HMR, across a file and the modules that import it', () => {
+  const scope = globalThis as Record<string, unknown>;
+  const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
+  let reloads: unknown[] = [];
+  beforeEach(() => {
+    reloads = [];
+    scope['__angularNativeReload'] = (id: unknown) => reloads.push(id);
+    // Development, as an app being edited is: `mount` installs what makes a patch show.
+    scope['__DEV__'] = true;
+  });
+  afterEach(async () => {
+    delete scope['__angularNativeReload'];
+    delete scope['__angularNativeHot'];
+    delete scope['__DEV__'];
+    delete scope['module'];
+    await cleanup();
+  });
+
+  const evaluate = (source: string, name: string, pass: string) =>
+    compileSource(source, fixture(`${name}.ts`), fixture(`${name}.hmr-${pass}.generated.ts`), {
+      dev: true,
+    });
+
+  /**
+   * Metro's module object for one run of a file, with exports as it defines them: a getter nothing
+   * can write to for each binding in `names`, read from `bindings` as the app reads it, later. A
+   * function declaration is assigned instead, which the file does for itself in an app.
+   */
+  const metroModule = (
+    bindings: () => Record<string, unknown> = () => ({}),
+    names: string[] = [],
+  ) => {
+    const exports: Record<string, unknown> = {};
+    for (const name of names) {
+      Object.defineProperty(exports, name, { enumerable: true, get: () => bindings()[name] });
+    }
+    const module = { exports, hot: { accept() {} } };
+    scope['module'] = module;
+    return module;
+  };
+
+  const family = `import { Component } from '@angular/core';
+import { Text } from '../../components/src/text.ts';
+import { View } from '../../components/src/view.ts';
+
+@Component({ imports: [Text], selector: 'x-child', template: '<text>child {{ label() }}</text>' })
+export class Child {
+  label(): string {
+    return 'a';
+  }
+}
+
+@Component({ imports: [Child, View], selector: 'x-parent', template: '<view><x-child /></view>' })
+export class Parent {}
+`;
+
+  it('renders a component in the same file from its live class, and exports that class', async () => {
+    // The file's own code names the class its latest run defined. Rendered from that, the child
+    // would belong to a class no other module holds and no later edit reaches.
+    const first = await evaluate(family, 'hmr-family', 'a');
+    const { fabric } = await render(first['Parent'] as Type<unknown>);
+
+    // The parent's template is edited as well, so its definition is the one this run compiled.
+    const edited = family
+      .replace("return 'a'", "return 'b'")
+      .replace('<view><x-child />', '<view><x-child /><x-child />');
+    const second = await evaluate(edited, 'hmr-family', 'b');
+    await settle();
+
+    assert.deepEqual(reloads, [], 'nothing asked for a reload');
+    assert.match(fabric.render(), /RawText "child b"[\s\S]*RawText "child b"/);
+    assert.equal(second['Child'], first['Child'], 'the file exports the class everyone holds');
+    const parent = first['Parent'] as unknown as {
+      ɵcmp: { directiveDefs(): { type: unknown; selectors: string[][] }[] };
+    };
+    const children = parent.ɵcmp
+      .directiveDefs()
+      .filter((def) => def.selectors[0]![0] === 'x-child');
+    assert.deepEqual(
+      children.map((def) => def.type),
+      [first['Child']],
+    );
+  });
+
+  it('makes no view again for an edited method, nor for the component beside it', async () => {
+    // A view made again loses everything in it: the state of each component, and a stack of
+    // screens when it is the shell a page sits in. Here, the child the parent renders.
+    const source = family
+      .replace(
+        'label(): string {',
+        'made = ++(globalThis as unknown as { hmrChildren: number }).hmrChildren;\n  label(): string {',
+      )
+      .replace(
+        "template: '<view><x-child /></view>' })\nexport class Parent {}",
+        "template: '<view><text>{{ title() }}</text><x-child /></view>' })\nexport class Parent {\n  title(): string {\n    return 'p';\n  }\n}",
+      )
+      .replace('imports: [Child, View]', 'imports: [Child, Text, View]');
+    const counts = globalThis as unknown as { hmrChildren?: number };
+    counts.hmrChildren = 0;
+    try {
+      const first = await evaluate(source, 'hmr-beside', 'a');
+      const { fabric } = await render(first['Parent'] as Type<unknown>);
+
+      await evaluate(source.replace("return 'p'", "return 'q'"), 'hmr-beside', 'b');
+      await settle();
+
+      assert.deepEqual(reloads, [], 'nothing asked for a reload');
+      assert.match(fabric.render(), /RawText "q"/, 'the edited method is on screen');
+      assert.equal(counts.hmrChildren, 1, 'in the views that were there');
+    } finally {
+      delete counts.hmrChildren;
+    }
+  });
+
+  it('asks for a reload when the edited component hosts an outlet, whose screens it would lose', async () => {
+    const shell = (extra: string) => `import { Component } from '@angular/core';
+import { NativeStackOutlet } from '../../router/src/native-stack-outlet.ts';
+
+@Component({
+  imports: [NativeStackOutlet],
+  selector: 'x-shell',
+  template: '<native-stack-outlet${extra} />',
+})
+export class Shell {
+  title(): string {
+    return 'a';
+  }
+}
+`;
+    await evaluate(shell(''), 'hmr-shell', 'a');
+    await evaluate(shell(' class="wide"'), 'hmr-shell', 'b');
+    assert.equal(reloads.length, 1, 'for its template');
+
+    await evaluate(shell('').replace('x-shell', 'x-shell-two'), 'hmr-shell-method', 'a');
+    await evaluate(
+      shell('').replace('x-shell', 'x-shell-two').replace("return 'a'", "return 'b'"),
+      'hmr-shell-method',
+      'b',
+    );
+    assert.equal(reloads.length, 1, 'and not for a method, which renders nothing again');
+  });
+
+  it("patches a page that is its file's default export, as a file route's is", async () => {
+    const source = `import { Component } from '@angular/core';
+import { Text } from '../../components/src/text.ts';
+
+@Component({ imports: [Text], selector: 'x-page', template: '<text>page {{ label() }}</text>' })
+export default class Page {
+  label(): string {
+    return 'a';
+  }
+}
+`;
+    const first = await evaluate(source, 'hmr-default', 'a');
+    const { fabric } = await render(first['default'] as Type<unknown>);
+
+    const second = await evaluate(source.replace("return 'a'", "return 'b'"), 'hmr-default', 'b');
+    await settle();
+
+    assert.deepEqual(reloads, [], 'nothing asked for a reload');
+    assert.match(fabric.render(), /RawText "page b"/);
+    assert.equal(second['default'], first['default'], 'and exports the class the router holds');
+  });
+
+  it('carries no hot update in a release build, on the web, or for a file that was installed', () => {
+    const { transformAngular } = createRequire(import.meta.url)(
+      '@ng-native/metro/angular-transform.cjs',
+    );
+    const code = (file: string, options: object) => transformAngular(plain, file, options).code;
+    assert.notEqual(code('/app/src/sums.ts', { dev: true }), plain, 'an app module in development');
+    assert.equal(code('/app/src/sums.ts', { dev: false }), plain);
+    assert.equal(code('/app/src/sums.ts', { dev: true, platform: 'web' }), plain);
+    assert.equal(code('/app/node_modules/sums/index.ts', { dev: true }), plain);
+    assert.equal(code('/app/src/sums.d.ts', { dev: true }), plain);
+  });
+
+  it('applies an update once when Metro sends it twice, and reloads for a dependency', async (t) => {
+    // Metro sends an edit once for each bundle the file is in, so a file two lazy routes share
+    // runs twice for one save. The second run has the source the first applied, which is also
+    // how a dependency's edit looks: that one comes later, or after its own module ran.
+    t.mock.timers.enable({ apis: ['Date'] });
+    const edited = family.replace("return 'a'", "return 'b'");
+    const first = await evaluate(family, 'hmr-twice', 'a');
+    const { fabric } = await render(first['Parent'] as Type<unknown>);
+
+    await evaluate(edited, 'hmr-twice', 'b');
+    await evaluate(edited, 'hmr-twice', 'c');
+    await settle();
+    assert.deepEqual(reloads, [], 'the second time is nothing to reload for');
+    assert.match(fabric.render(), /RawText "child b"/);
+
+    // A module with no update of its own ran in between: a table of constants this file imports.
+    await evaluate('export const TABLE = [1];\n', 'hmr-twice-table', 'a');
+    await evaluate(edited, 'hmr-twice', 'd');
+    assert.equal(reloads.length, 1, 'a dependency ran again');
+
+    await evaluate(edited + '\n', 'hmr-twice', 'e');
+    t.mock.timers.tick(3000);
+    await evaluate(edited + '\n', 'hmr-twice', 'f');
+    assert.equal(reloads.length, 2, 'and so is a run that comes later');
+  });
+
+  it('asks for a reload when a decorator provides a class of the same file', async () => {
+    // The definition holds the class this run defined in its providers, which is not the one
+    // the rest of the app injects by.
+    const source = family
+      .replace('import { Component }', 'import { Component, Injectable }')
+      .replace(
+        '@Component({ imports: [Child, View]',
+        '@Injectable()\nexport class Store {\n  n(): number {\n    return 1;\n  }\n}\n\n@Component({ providers: [Store], imports: [Child, View]',
+      );
+    await evaluate(source, 'hmr-provided', 'a');
+
+    await evaluate(source.replace('return 1', 'return 2'), 'hmr-provided', 'b');
+
+    assert.equal(reloads.length, 1);
+  });
+
+  const mixed = `import { Injectable } from '@angular/core';
+
+export function double(n: number): number {
+  return n * 2;
+}
+
+export const LIMIT = 3;
+
+@Injectable({ providedIn: 'root' })
+export class Sums {
+  twice(n: number): number {
+    return double(n);
+  }
+}
+`;
+
+  it('hands an edited function to the modules that call it, beside a class', async () => {
+    // A module calls an import through the exports it was handed when it loaded, so that is
+    // where the edited function goes, and what the file goes on exporting.
+    let first: Record<string, unknown> = {};
+    const run = metroModule(() => first, ['LIMIT', 'Sums']);
+    first = await evaluate(mixed, 'hmr-mixed', 'a');
+    const held = run.exports;
+    // What a component does with an import its template calls: keeps the function in a field.
+    const kept = held['double'] as (n: number) => number;
+    assert.equal(kept(2), 4);
+
+    let second: Record<string, unknown> = {};
+    const rerun = metroModule(() => second, ['LIMIT', 'Sums']);
+    second = await evaluate(mixed.replace('n * 2', 'n * 3'), 'hmr-mixed', 'b');
+
+    assert.deepEqual(reloads, [], 'nothing asked for a reload');
+    assert.equal((held['double'] as (n: number) => number)(2), 6);
+    assert.equal(kept(2), 6, 'a function kept from before the edit runs the edited one');
+    assert.equal(held['Sums'], first['Sums'], 'the class is still the one they hold');
+    assert.equal(held['LIMIT'], 3, 'and the constant the one they read');
+    assert.deepEqual(Object.keys(held).sort(), ['LIMIT', 'Sums', 'double']);
+    assert.equal(rerun.exports, held, 'and a module that imports the file now is handed the same');
+  });
+
+  it('asks for a reload when a constant beside a class changed, which its importers have read', async () => {
+    await evaluate(mixed, 'hmr-mixed-constant', 'a');
+
+    await evaluate(mixed.replace('LIMIT = 3', 'LIMIT = 4'), 'hmr-mixed-constant', 'b');
+
+    assert.equal(reloads.length, 1);
+  });
+
+  const plain = `export function double(n: number): number {
+  return n * 2;
+}
+
+export const LIMIT = 3;
+`;
+
+  it('hands an edited function on from a module with no class in it', async () => {
+    const run = metroModule();
+    await evaluate(plain, 'hmr-plain', 'a');
+    const held = run.exports;
+
+    metroModule();
+    await evaluate(plain.replace('n * 2', 'n * 3'), 'hmr-plain', 'b');
+
+    assert.deepEqual(reloads, [], 'nothing asked for a reload');
+    assert.equal((held['double'] as (n: number) => number)(2), 6);
+
+    await evaluate(
+      plain.replace('n * 2', 'n * 3').replace('LIMIT = 3', 'LIMIT = 4'),
+      'hmr-plain',
+      'c',
+    );
+    assert.equal(reloads.length, 1, 'and reloads for its constant');
+  });
+
+  it('hands on a function that shares its name with a key the module loads', async () => {
+    // A table with a `double` column is not a call to `double`.
+    const source = plain + 'export const TABLE = [{ double: 1 }, { double: TABLE_SIZE.double }];\n';
+    const table = source.replace(
+      'export const LIMIT',
+      'const TABLE_SIZE = { double: 2 };\nexport const LIMIT',
+    );
+    const run = metroModule();
+    await evaluate(table, 'hmr-plain-key', 'a');
+    const held = run.exports;
+
+    metroModule();
+    await evaluate(table.replace('n * 2', 'n * 3'), 'hmr-plain-key', 'b');
+
+    assert.deepEqual(reloads, [], 'nothing asked for a reload');
+    assert.equal((held['double'] as (n: number) => number)(2), 6);
+  });
+
+  it('asks for a reload when the module called the edited function as it loaded', async () => {
+    // `FOUR` was worked out by the function from before the edit, and read by whoever imports it.
+    const source = plain + 'export const FOUR = double(2);\n';
+    await evaluate(source, 'hmr-plain-called', 'a');
+
+    await evaluate(source.replace('n * 2', 'n * 3'), 'hmr-plain-called', 'b');
+
+    assert.equal(reloads.length, 1);
+  });
+
+  const derived = `import { Component, computed, effect, inject, Injectable } from '@angular/core';
+import { Text } from '../../components/src/text.ts';
+import { View } from '../../components/src/view.ts';
+
+export function shout(word: string): string {
+  return word + '!';
+}
+
+@Injectable({ providedIn: 'root' })
+export class Words {
+  first(): string {
+    return 'one';
+  }
+}
+
+@Component({
+  imports: [Text, View],
+  selector: 'x-derived',
+  template: '<view><text>{{ loud() }}</text><text>{{ word() }}</text></view>',
+})
+export class Derived {
+  private readonly words = inject(Words);
+  protected readonly loud = computed(() => shout('hey'));
+  protected readonly word = computed(() => this.words.first());
+  constructor() {
+    effect(() => {
+      this.words.first();
+      (globalThis as unknown as { hmrEffects: number }).hmrEffects++;
+    });
+  }
+  ngOnDestroy(): void {
+    (globalThis as unknown as { hmrDestroyed: string }).hmrDestroyed = 'old';
+  }
+}
+`;
+
+  it('works a computed out again when a function or a method it called is edited', async () => {
+    // Nothing a `computed` reads changes when the code it calls does, so it kept its answer and
+    // the edit never reached the screen.
+    const counts = globalThis as unknown as { hmrEffects?: number };
+    counts.hmrEffects = 0;
+    try {
+      const first = await evaluate(derived, 'hmr-derived', 'a');
+      const { fabric } = await render(first['Derived'] as Type<unknown>);
+      await settle();
+      assert.match(fabric.render(), /RawText "hey!"[\s\S]*RawText "one"/);
+      const ran = counts.hmrEffects;
+
+      await evaluate(
+        derived.replace("word + '!'", "word + '?'").replace("return 'one'", "return 'two'"),
+        'hmr-derived',
+        'b',
+      );
+      await settle();
+
+      assert.deepEqual(reloads, [], 'nothing asked for a reload');
+      assert.match(fabric.render(), /RawText "hey\?"[\s\S]*RawText "two"/);
+      assert.equal(counts.hmrEffects, ran, 'an effect that called the method does not run again');
+    } finally {
+      delete counts.hmrEffects;
+    }
+  });
+
+  it('asks for a reload when a class keeps a constant function it built an instance with', async () => {
+    // A constant's binding cannot be handed the function that stays, so the closure the live
+    // instance made holds the one from before the edit, and nothing would bring the new one.
+    const counts = globalThis as unknown as { hmrEffects?: number };
+    counts.hmrEffects = 0;
+    const source = derived.replace(
+      "export function shout(word: string): string {\n  return word + '!';\n}",
+      "const shout = (word: string): string => word + '!';",
+    );
+    try {
+      await evaluate(source, 'hmr-derived-constant', 'a');
+
+      await evaluate(source.replace("word + '!'", "word + '?'"), 'hmr-derived-constant', 'b');
+
+      assert.equal(reloads.length, 1);
+    } finally {
+      delete counts.hmrEffects;
+    }
+  });
+
+  it('asks for a reload when a decorator holds an edited function of the file', async () => {
+    const counts = globalThis as unknown as { hmrEffects?: number };
+    counts.hmrEffects = 0;
+    const source = derived.replace(
+      "selector: 'x-derived',",
+      "selector: 'x-derived',\n  providers: [{ provide: 'word', useFactory: shout }],",
+    );
+    try {
+      await evaluate(source, 'hmr-derived-factory', 'a');
+
+      await evaluate(source.replace("word + '!'", "word + '?'"), 'hmr-derived-factory', 'b');
+
+      assert.equal(reloads.length, 1);
+    } finally {
+      delete counts.hmrEffects;
+    }
+  });
+
+  it('runs an edited lifecycle hook, which Angular holds as the function it first found', async () => {
+    const seen = globalThis as unknown as { hmrDestroyed?: string; hmrEffects?: number };
+    seen.hmrEffects = 0;
+    try {
+      const first = await evaluate(derived, 'hmr-hook', 'a');
+      await render(first['Derived'] as Type<unknown>);
+
+      await evaluate(
+        derived.replace("hmrDestroyed = 'old'", "hmrDestroyed = 'new'"),
+        'hmr-hook',
+        'b',
+      );
+      await cleanup();
+
+      assert.deepEqual(reloads, [], 'nothing asked for a reload');
+      assert.equal(seen.hmrDestroyed, 'new');
+    } finally {
+      delete seen.hmrDestroyed;
+      delete seen.hmrEffects;
+    }
+  });
+
+  it('asks for a reload when a lifecycle hook is added, which a live view would never call', async () => {
+    const counts = globalThis as unknown as { hmrEffects?: number };
+    counts.hmrEffects = 0;
+    try {
+      await evaluate(derived, 'hmr-hook-added', 'a');
+
+      await evaluate(
+        derived.replace('ngOnDestroy(): void {', 'ngOnInit(): void {}\n  ngOnDestroy(): void {'),
+        'hmr-hook-added',
+        'b',
+      );
+
+      assert.equal(reloads.length, 1);
+    } finally {
+      delete counts.hmrEffects;
+    }
+  });
+
+  it('renders again a template that calls an edited service, with nothing touched', async () => {
+    // The component did not change and no signal did, so nothing would have asked its template
+    // again: the edit landed and the screen went on showing the old answer.
+    const file = fixture('hmr-label.ts');
+    const service = readFileSync(file, 'utf8');
+    await compileSource(service, file, fixture('hmr-label.generated.ts'), { dev: true });
+    const reader = `import { Component, inject } from '@angular/core';
+import { Text } from '../../components/src/text.ts';
+import { Label } from './hmr-label.ts';
+
+@Component({ imports: [Text], selector: 'x-reader', template: '<text>says {{ label.text() }}</text>' })
+export class Reader {
+  label = inject(Label);
+}
+`;
+    const mod = await evaluate(reader, 'hmr-reader', 'a');
+    const { fabric } = await render(mod['Reader'] as Type<unknown>);
+    assert.match(fabric.render(), /RawText "says one"/);
+
+    await compileSource(
+      service.replace("'one'", "'two'"),
+      file,
+      fixture('hmr-label.hmr-b.generated.ts'),
+      {
+        dev: true,
+      },
+    );
+    await settle();
+
+    assert.deepEqual(reloads, [], 'nothing asked for a reload');
+    assert.match(fabric.render(), /RawText "says two"/);
   });
 });
 
@@ -551,6 +1245,71 @@ describe('the reload hook', () => {
     assert.equal(hook(), undefined);
   });
 
+  it('lets the router park its history before the app goes', async () => {
+    // The reload takes the JavaScript runtime with it, so what the router leaves for the app that
+    // comes back has to have left before then.
+    const scope = globalThis as Record<string, unknown>;
+    const order: string[] = [];
+    scope['__angularNativePark'] = async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      order.push('parked');
+    };
+    scope['__ReactRefresh'] = { performFullRefresh: () => order.push('metro reloaded') };
+    scope['require'] = (id: string) => {
+      if (id === 'react-native') return { DevSettings: { reload: () => order.push('reloaded') } };
+      throw new Error(`Cannot find module '${id}'`);
+    };
+    try {
+      await render(Features);
+      (hook() as () => void)();
+      (scope['__ReactRefresh'] as { performFullRefresh(reason: string): void }).performFullRefresh(
+        'reason',
+      );
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    } finally {
+      delete scope['__angularNativePark'];
+      delete scope['__ReactRefresh'];
+      delete scope['require'];
+    }
+    assert.deepEqual(order, ['parked', 'reloaded', 'parked', 'metro reloaded']);
+  });
+
+  it('keeps the app out of sight until the router has gone back through its history', async () => {
+    // Otherwise a reload comes back on the first page, with the others arriving over it.
+    const scope = globalThis as Record<string, unknown>;
+    let restored!: () => void;
+    scope['__angularNativeRestoring'] = new Promise<void>((resolve) => (restored = resolve));
+    const opacity = (fabric: FakeFabric) => fabric.committed[0]!.props['opacity'];
+    try {
+      const { fabric } = await render(Features);
+      assert.equal(opacity(fabric), 0, 'hidden while the history is gone through');
+      restored();
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      assert.notEqual(opacity(fabric), 0, 'and shown once it has been');
+    } finally {
+      delete scope['__angularNativeRestoring'];
+    }
+  });
+
+  it('reloads all the same when parking fails', async () => {
+    const scope = globalThis as Record<string, unknown>;
+    const order: string[] = [];
+    scope['__angularNativePark'] = () => Promise.reject(new Error('no dev server'));
+    scope['require'] = (id: string) => {
+      if (id === 'react-native') return { DevSettings: { reload: () => order.push('reloaded') } };
+      throw new Error(`Cannot find module '${id}'`);
+    };
+    try {
+      await render(Features);
+      (hook() as () => void)();
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    } finally {
+      delete scope['__angularNativePark'];
+      delete scope['require'];
+    }
+    assert.deepEqual(order, ['reloaded']);
+  });
+
   /**
    * Metro reloads the app itself for an edit nothing accepted, a route file or a service, through
    * React Native's Fast Refresh runtime, which calls `DevSettings.reload()`. In Expo Go that brings
@@ -609,6 +1368,28 @@ describe('the reload hook', () => {
       assert.deepEqual(calls, ['DevSettings.reload: reason'], 'once, after a second mount too');
       const said = errors.filter((args) => /Expo's reload failed/.test(String(args)));
       assert.equal(said.length, 1, 'and says why');
+    });
+
+    it("falls back to React Native's reload when Expo's resolves and reloads nothing", async (t) => {
+      // Expo Go on Android: `reloadAppAsync` resolves, the app goes on running, and the edit that
+      // asked for the reload never arrives. A reload takes this code with it, so still running a
+      // moment later is how it knows.
+      withExpo();
+      await render(Features);
+      const error = console.error;
+      const errors: unknown[] = [];
+      console.error = (...args: unknown[]) => void errors.push(args);
+      t.mock.timers.enable({ apis: ['setTimeout'] });
+      try {
+        refresh()!.performFullRefresh('reason');
+        for (let i = 0; i < 5; i++) await Promise.resolve();
+        assert.deepEqual(calls, ['expo: reason'], "Expo's first");
+        t.mock.timers.tick(2000);
+      } finally {
+        console.error = error;
+      }
+      assert.deepEqual(calls, ['expo: reason', 'DevSettings.reload: reason']);
+      assert.equal(errors.filter((args) => /did nothing/.test(String(args))).length, 1);
     });
 
     it("carries DevMenu.reload() through Expo's reload too", async () => {

@@ -154,15 +154,28 @@ the file it belongs to: on re-evaluation, the embedded block patches the origina
 live views still point at - by calling `ɵɵreplaceMetadata`, and then calls `module.hot.accept()` so
 Metro stops bubbling the change into a full reload.
 
-Only a template or inline `styles` edit can be applied this way. The block decides by hashing the
-file with every component's template and inline styles removed - if that "shape" hash has not moved,
-only those changed and the swap runs, carrying the recompiled rule set for a styles edit; if it has
-(a new method, a different import, a changed selector), it falls back to a full reload through
-`globalThis.__angularNativeReload`, the hook [`mount()` installs in
-development](/packages/platform/bootstrapping). That hook exists because React Native's own Fast
-Refresh accepts an update and reports success even when the actual reload needed a fresh module
-evaluation, so without it an edit that is more than a template would ship, log nothing, and leave
-the app running the code from before the edit while looking like it worked.
+A template or inline `styles` edit is applied this way. The block decides by hashing the file
+with every component's template and inline styles removed: if that "shape" hash has not moved, only
+those changed and the swap runs, carrying the recompiled rule set for a styles edit.
+
+When it has moved, the class or a function changed, and the block patches the running app from
+the file as it is now. The class every other module holds takes the edited methods, getters and
+lifecycle hooks, so each instance keeps its state; a function at the top of the file is replaced
+behind the one its importers hold. Each reads a count of patches as it runs, so a template or a
+`computed` that called one works its value out again, and an `effect` does not. This reaches a
+component, a service, a directive, and a module of plain functions in the app's own source.
+
+What a patch cannot apply falls back to a full reload through `globalThis.__angularNativeReload`,
+the hook [`mount()` installs in development](/packages/platform/bootstrapping): an edit to
+anything that has already run and will not run again, which
+[Limitations](/guide/limitations#hot-reload-has-a-few-full-reload-cases) lists. That hook exists
+because React Native's own Fast Refresh accepts an update and reports success even when the actual
+reload needed a fresh module evaluation, so without it such an edit would ship, log nothing, and
+leave the app running the code from before the edit while looking like it worked.
+
+A reload returns to the page it left. `withAngularNative` adds an address to the dev server,
+`/__ng-native/route`, where the router leaves its history before the app reloads and collects it
+when the app starts: once, within a minute, and one history for each platform.
 
 A template can change shape freely: the swap rebuilds the component's views with the new
 template's own slot and binding counts, so adding or removing elements, bindings, `@if` or `@for`
@@ -190,7 +203,5 @@ than the one it was compiled with is applied first.
 A stylesheet several screens share is swapped on every one of them by the one edit. The ceiling is
 the project: a component in another package of a monorepo that reaches the file across the package
 boundary is not found, and the dev server warns when a template has no component in the project
-using it. An edit to the component's `.ts` file follows the rules above: a changed selector, input,
-method or import is a full reload, whichever file its template lives in. Inline `styles` edits can
-hot-swap too, the same as a template edit - it is a change to selectors, inputs, methods or imports
-that forces a full reload, not which kind of style the edit touched.
+using it. An edit to the component's `.ts` file follows the rules above, whichever file its
+template lives in.

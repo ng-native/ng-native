@@ -125,9 +125,36 @@ view's inline layout style moves with it; class-based layout stays on the inner 
 
 ## Hot reload has a few full-reload cases
 
-Hot reload preserves state when replacing inline templates, `templateUrl`, inline styles or
-`styleUrl`. Other component `.ts` changes (selectors, inputs, methods, imports) require a full
-reload. External templates and stylesheets hot-swap in every component using them within the same
+Hot reload applies an edit to the running app, with its state and its current route, when the
+edit is to:
+
+- a template or a style: inline, `templateUrl` or `styleUrl`,
+- a method, a getter or a lifecycle hook of a component, a service or a directive,
+- a component's `imports` or `host`,
+- a function at the top of a module, exported or not, in the app's own source.
+
+An edited method or function is on screen at once: a template or a `computed` that called it works
+its value out again. An `effect` that called it does not run again.
+
+A full reload follows an edit to:
+
+- a field, a field initialiser or a constructor, which run only when an instance is created,
+- a constant, a route table or anything else a module works out as it loads, and a function the
+  module calls while it does,
+- a function written as a constant, `const format = () => ...`, that a class in the same file
+  reads as it creates an instance,
+- a pipe, or a file that reads a `#private` member,
+- a `selector`, an input or an output, a directive's decorator, or a lifecycle hook added or
+  removed, which Angular has already read,
+- a component whose template holds a router outlet, when the edit is to what it renders,
+- a decorator's `providers` or `hostDirectives` naming a class or a function from the same file.
+
+A full reload makes every component and service again, and comes back on the page it left with
+the pages that led to it beneath, each presented as it was: the router leaves its history with the
+Metro dev server, which `withAngularNative` sets up to hold it. A round trip, one tab to another
+and back, is left out. A reload from the dev menu starts on the first route.
+
+External templates and stylesheets hot-swap in every component using them within the same
 project, including `../` paths. Cross-package monorepo edits appear only after the component's own
 file changes.
 

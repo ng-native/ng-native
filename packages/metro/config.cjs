@@ -383,6 +383,65 @@ function decodedName(file) {
   return outside ? undefined : name;
 }
 
+/** Where an app parks its history: see `withParkedRoute`. */
+const PARKED_ROUTE = '/__ng-native/route';
+/** How long a parked history waits for its app. A reload is back in a few seconds. */
+const PARKED_FOR = 60_000;
+/** More than any history is; the dev server answers anyone on the network. */
+const PARKED_BYTES = 64 * 1024;
+
+/**
+ * Holds the history an app leaves when it reloads itself, for the app that comes back.
+ *
+ * A full reload takes the JavaScript runtime with it, and the router's history is in it, so the
+ * app came back on its first route. Nothing on the device outlives the reload without a native
+ * module an app may not have, and the dev server does: the app posts its history here before it
+ * reloads and asks for it when it starts. See `route-parking.ts` in `@ng-native/router`.
+ *
+ * A history is handed back once, and only within a minute, so an app launched afresh starts where
+ * it always does. One per `app` in the query, which is the platform: an iPhone and an Android
+ * phone on one server each get their own back.
+ */
+function withParkedRoute(config) {
+  const parked = new Map();
+  const enhance = config.server?.enhanceMiddleware;
+  const enhanceMiddleware = (middleware, server) => {
+    const metro = enhance ? enhance(middleware, server) : middleware;
+    return (req, res, next) => {
+      if (!req.url?.startsWith(PARKED_ROUTE)) return metro(req, res, next);
+      const app = new URL(req.url, 'http://localhost').searchParams.get('app') ?? '';
+      const answer = (status, body) => {
+        res.statusCode = status;
+        res.setHeader('Content-Type', 'application/json');
+        res.end(body);
+      };
+      if (req.method !== 'POST') {
+        const left = parked.get(app);
+        parked.delete(app);
+        return answer(200, left && Date.now() - left.at < PARKED_FOR ? left.urls : 'null');
+      }
+      let body = '';
+      req.on('data', (chunk) => {
+        if (body.length <= PARKED_BYTES) body += chunk;
+      });
+      req.on('end', () => {
+        let urls;
+        try {
+          urls = body.length <= PARKED_BYTES ? JSON.parse(body) : null;
+        } catch {
+          // Not JSON: refused below.
+        }
+        if (!Array.isArray(urls) || !urls.every((page) => typeof page?.url === 'string')) {
+          return answer(400, 'null');
+        }
+        parked.set(app, { urls: JSON.stringify(urls), at: Date.now() });
+        answer(204, '');
+      });
+    };
+  };
+  config.server = { ...config.server, enhanceMiddleware };
+}
+
 /**
  * Wraps the server's `rewriteRequestUrl`, Expo's included, so a lazy chunk from a library outside
  * the server root is served: see `chunkOutsideServerRoot`.
@@ -639,6 +698,7 @@ function withAngularNative(config, options = {}) {
   );
 
   withChunksOutsideServerRoot(config);
+  withParkedRoute(config);
 
   foldDevMode(config);
 

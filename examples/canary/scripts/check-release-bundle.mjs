@@ -52,7 +52,15 @@ try {
 
   // The HMR blocks are emitted only when Metro says dev. If one reaches a release build it
   // ships a second copy of every template and a globalThis registry that never gets used.
-  for (const symbol of ['__angularNativeHmr', '_ApplyMetadata', '__angularNativeReload']) {
+  for (const symbol of [
+    '__angularNativeHmr',
+    '_ApplyMetadata',
+    '__angularNativeReload',
+    '__angularNativeHot',
+    '__angularNativePark',
+    '__angularNativeRestoring',
+    '__ng-native/route',
+  ]) {
     check(!text.includes(symbol), `no ${symbol} (dev-only HMR wiring) in the bundle`);
   }
 

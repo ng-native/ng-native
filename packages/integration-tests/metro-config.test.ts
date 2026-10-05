@@ -13,6 +13,7 @@ import { createRequire } from 'node:module';
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
+import { Readable } from 'node:stream';
 import vm from 'node:vm';
 
 const require = createRequire(import.meta.url);
@@ -1109,5 +1110,87 @@ describe("the tsconfig's custom conditions", () => {
     } finally {
       rmSync(dir, { recursive: true });
     }
+  });
+});
+
+/**
+ * The dev server holds the history an app leaves when it reloads itself, for the app that comes
+ * back: nothing in the app outlives the reload. See `route-parking.ts` in `@ng-native/router`.
+ */
+describe('the history a reload parks with the dev server', () => {
+  type Handler = (req: unknown, res: unknown, next: () => void) => void;
+  type Enhanced = MetroConfig & {
+    server: { enhanceMiddleware(middleware: Handler, server: unknown): Handler };
+  };
+
+  const serverOf = (config: MetroConfig = base()) => {
+    const passed: string[] = [];
+    const metro: Handler = (req) => void passed.push((req as { url: string }).url);
+    const handler = (withAngularNative(config) as Enhanced).server.enhanceMiddleware(metro, {});
+    const request = (method: string, url: string, body?: string) =>
+      new Promise<{ status: number; body: string }>((resolve) => {
+        const req = Object.assign(Readable.from(body === undefined ? [] : [body]), { method, url });
+        const res = {
+          statusCode: 200,
+          setHeader() {},
+          end(text = '') {
+            resolve({ status: this.statusCode, body: text });
+          },
+        };
+        handler(req, res, () => resolve({ status: 404, body: '' }));
+      });
+    return { request, passed };
+  };
+  const route = '/__ng-native/route?app=ios';
+
+  it('hands a parked history back once, to the app that parked it', async () => {
+    const { request } = serverOf();
+    const pages = JSON.stringify([{ url: '/' }, { url: '/about' }]);
+    await request('POST', route, pages);
+
+    assert.equal((await request('GET', '/__ng-native/route?app=android')).body, 'null');
+    assert.equal((await request('GET', route)).body, pages);
+    assert.equal((await request('GET', route)).body, 'null', 'a later cold start finds nothing');
+  });
+
+  it('forgets a history nobody came back for', async (t) => {
+    t.mock.timers.enable({ apis: ['Date'] });
+    const { request } = serverOf();
+    await request('POST', route, JSON.stringify([{ url: '/about' }]));
+
+    t.mock.timers.tick(61_000);
+
+    assert.equal((await request('GET', route)).body, 'null');
+  });
+
+  it('refuses a body that is not a list of pages', async () => {
+    const { request } = serverOf();
+
+    assert.equal((await request('POST', route, '{"not":"pages"}')).status, 400);
+    assert.equal((await request('POST', route, '["/about"]')).status, 400);
+    assert.equal((await request('POST', route, 'x'.repeat(70_000))).status, 400);
+    assert.equal((await request('GET', route)).body, 'null');
+  });
+
+  it("leaves every other request to Metro, through the config's own middleware", async () => {
+    const seen: string[] = [];
+    const config = {
+      ...base(),
+      server: {
+        enhanceMiddleware:
+          (middleware: Handler): Handler =>
+          (req, res, next) => {
+            seen.push((req as { url: string }).url);
+            middleware(req, res, next);
+          },
+      },
+    };
+    const { request, passed } = serverOf(config as MetroConfig);
+
+    void request('GET', '/index.bundle?platform=ios');
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    assert.deepEqual(seen, ['/index.bundle?platform=ios']);
+    assert.deepEqual(passed, ['/index.bundle?platform=ios']);
   });
 });

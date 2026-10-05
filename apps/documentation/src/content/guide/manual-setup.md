@@ -249,8 +249,9 @@ See [Theming and Tailwind](/guide/theming) for how classes work without a browse
 
 ## The dev loop
 
-Template and style edits hot-swap on the device, preserving component state. Class bodies,
-selectors, imports and dependencies require a full reload; the console logs why.
+Template and style edits hot-swap on the device, preserving component state, and an edited method
+or function is patched onto the running app. An edit to a field, a constructor, a constant or a
+selector reloads the app and returns to the page it left; the console logs why.
 
 ## Where to go next
 

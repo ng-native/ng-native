@@ -74,6 +74,11 @@ export class NativePlatformLocation implements PlatformLocation {
     return this.entries[this.cursor + offset]?.url ?? null;
   }
 
+  /** The history up to the page showing, oldest first. For parking it across a reload. */
+  ɵpages(): readonly { readonly url: string; readonly state: unknown }[] {
+    return this.entries.slice(0, this.cursor + 1);
+  }
+
   private get current(): HistoryEntry {
     return this.entries[this.cursor]!;
   }
