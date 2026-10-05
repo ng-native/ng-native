@@ -1818,6 +1818,8 @@ function easedByToken(declaration, out, deferred, context) {
   const timed = parts.filter((part) => part.type === 'var');
   // A token alone is the whole transition, or none: not a time, and not this to read.
   if (timed.length !== 1 || meaningful(parts).length < 2 || parts.some(isListOrTime)) return false;
+  // A token in a transition may as well be its easing: one that falls back to a time is the time.
+  if (!fallsBackToTime(timed[0])) return false;
   const rest = parts.map((part) => (part === timed[0] ? PLACEHOLDER_TIME : part));
   const typed = reparsed('transition', cssText(rest, context), context);
   if (typed?.property !== 'transition') return false;
@@ -1827,6 +1829,12 @@ function easedByToken(declaration, out, deferred, context) {
   );
   return true;
 }
+
+const fallsBackToTime = (part) => {
+  const [only, ...more] = meaningful(part.value?.fallback ?? []);
+  if (more.length || !only) return false;
+  return only.type === 'time' || /^(ms|s)$/i.test(only.value?.unit ?? '');
+};
 
 /** A comma, which makes a list of transitions, or a time that is written out. */
 const isListOrTime = (part) =>
