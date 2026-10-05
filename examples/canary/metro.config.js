@@ -1,15 +1,23 @@
 const { getDefaultConfig } = require('expo/metro-config');
 const { withAngularNative } = require('@ng-native/metro/config.cjs');
 const { withTailwind } = require('@ng-native/tailwind/config.cjs');
+const { withWebCompat } = require('@ng-native/web-compat/metro');
 const path = require('node:path');
 
 // The framework packages are workspace members, so their real files live under packages/ rather
 // than inside this app's node_modules. An app installing from npm passes no options at all.
-const config = withTailwind(
-  withAngularNative(getDefaultConfig(__dirname), {
-    workspaceRoot: path.resolve(__dirname, '../..'),
-  }),
-  { input: './src/tailwind.css' },
+// `withWebCompat` last: Spartan UI imports its icon component from `@ng-icons/core`, which is
+// resolved to the one that draws natively.
+const config = withWebCompat(
+  withTailwind(
+    withAngularNative(getDefaultConfig(__dirname), {
+      workspaceRoot: path.resolve(__dirname, '../..'),
+      // Spartan UI's primitives and the CDK they sit on, for src/app/spartan: their components'
+      // own stylesheets are compiled as an app's are.
+      libraryStyles: ['@angular/cdk', '@spartan-ng/brain'],
+    }),
+    { input: './src/tailwind.css' },
+  ),
 );
 
 // The renderer benchmark's instrument. A polyfill because it has to wrap `nativeFabricUIManager`

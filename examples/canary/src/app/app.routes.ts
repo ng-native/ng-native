@@ -190,6 +190,10 @@ export const routes: Routes = [
   { path: 'text', loadComponent: () => import('./css/text.ts').then((m) => m.TextNesting) },
   { path: 'css', loadComponent: () => import('./css/css.ts').then((m) => m.CssPage) },
   {
+    path: 'spartan',
+    loadComponent: () => import('./spartan/spartan-page.ts').then((m) => m.SpartanPage),
+  },
+  {
     path: 'tailwind',
     loadComponent: () => import('./tailwind/tailwind-page.ts').then((m) => m.TailwindPage),
   },

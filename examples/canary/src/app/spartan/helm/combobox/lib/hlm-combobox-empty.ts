@@ -1,0 +1,14 @@
+import { Directive } from '@angular/core';
+import { BrnComboboxEmpty } from '@spartan-ng/brain/combobox';
+import { classes } from '../../utils';
+
+@Directive({
+  selector: '[hlmComboboxEmpty],hlm-combobox-empty',
+  hostDirectives: [BrnComboboxEmpty],
+  host: { 'data-slot': 'combobox-empty' },
+})
+export class HlmComboboxEmpty {
+  constructor() {
+    classes(() => 'spartan-combobox-empty');
+  }
+}

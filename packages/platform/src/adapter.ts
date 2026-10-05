@@ -136,7 +136,9 @@ class NativeRenderer implements Renderer2 {
   destroy(): void {}
 
   createElement(name: string): EngineNode {
-    return this.engine.createElement(name, this.sheet);
+    const node = this.engine.createElement(name, this.sheet);
+    for (const extension of extensions) extension.created?.(node, this.engine);
+    return node;
   }
 
   createComment(): EngineNode {
@@ -192,11 +194,19 @@ class NativeRenderer implements Renderer2 {
       }
       return;
     }
-    this.engine.setProp(el, name, value);
+    this.set(el, name, value);
   }
 
   removeAttribute(el: EngineNode, name: string): void {
-    this.engine.setProp(el, name, null);
+    this.set(el, name, null);
+  }
+
+  /** Set a prop, unless an extension takes the attribute or property it was written as. */
+  private set(el: EngineNode, name: string, value: unknown): void {
+    for (const extension of extensions) {
+      if (extension.set?.(el, name, value, this.engine)) return;
+    }
+    this.engine.setProp(el, name, value);
   }
 
   addClass(el: EngineNode, name: string): void {
@@ -212,7 +222,12 @@ class NativeRenderer implements Renderer2 {
       this.engine.setCustomProperty(el, customPropertyName(style), value);
       return;
     }
-    const key = styleKey(style);
+    if (this.restyled(el, style, value)) return;
+    this.setDeclaration(el, styleKey(style), value);
+  }
+
+  /** Set one declaration of an element's inline style, by the key the view reads. */
+  private setDeclaration(el: EngineNode, key: string, value: unknown): void {
     // A `var()` is for the cascade to settle, with the tokens in scope, not a value of the style.
     if (this.engine.setBoundStyle(el, key, value)) return this.dropStyle(el, key);
     const next = declaredValue(key, value);
@@ -233,9 +248,30 @@ class NativeRenderer implements Renderer2 {
       this.engine.setCustomProperty(el, customPropertyName(style), null);
       return;
     }
-    const key = styleKey(style);
+    if (this.restyled(el, style, null)) return;
+    this.dropDeclaration(el, styleKey(style));
+  }
+
+  private dropDeclaration(el: EngineNode, key: string): void {
     this.engine.setBoundStyle(el, key, null);
     this.dropStyle(el, key);
+  }
+
+  /**
+   * Ask the extensions what a declaration is set as: the first to answer has each of its
+   * declarations set, or removed for a `null`, in place of the one written.
+   */
+  private restyled(el: EngineNode, style: string, value: unknown): boolean {
+    for (const extension of extensions) {
+      const declarations = extension.style?.(el, style, value, this.engine);
+      if (!declarations) continue;
+      for (const [key, next] of Object.entries(declarations)) {
+        if (next == null) this.dropDeclaration(el, key);
+        else this.setDeclaration(el, key, next);
+      }
+      return true;
+    }
+    return false;
   }
 
   /** Takes `key` out of an element's inline style, if it is there. */
@@ -254,7 +290,7 @@ class NativeRenderer implements Renderer2 {
 
   setProperty(el: EngineNode, name: string, value: unknown): void {
     if (this.engine.dev) reportUnboundFormsInput(this.engine, el, name);
-    this.engine.setProp(el, name, value);
+    this.set(el, name, value);
   }
 
   setValue(node: EngineNode, value: string): void {
@@ -266,10 +302,73 @@ class NativeRenderer implements Renderer2 {
     eventName: string,
     callback: (event: unknown) => boolean | void,
   ): () => void {
+    for (const extension of extensions) {
+      const unlisten = extension.listen?.(target, eventName, callback, this.engine);
+      if (unlisten) return unlisten;
+    }
     // Angular's names for a global target, 'window', 'document' and 'body': there is none here.
     if (typeof target === 'string') return () => {};
     return this.engine.setEventListener(target, topLevelType(eventName), callback);
   }
+}
+
+/** What a package outside core changes about how a template is rendered. */
+export interface RendererExtension {
+  /**
+   * Take a listener over: answer what removes it, or nothing to leave it to the renderer. The
+   * target is a node, or the name Angular gives a global one: `'window'`, `'document'`, `'body'`.
+   */
+  listen?(
+    target: EngineNode | string,
+    eventName: string,
+    callback: (event: unknown) => boolean | void,
+    engine: Engine,
+  ): (() => void) | undefined;
+  /**
+   * Told of each element a template creates, before it has attributes or children: where an
+   * element gets what it has for its name alone, as a `button` has its role.
+   */
+  created?(node: EngineNode, engine: Engine): void;
+  /**
+   * Take an attribute or a property over, `null` for one being removed: answer true once it is
+   * set as the props the element's view reads, as an `<input>`'s `value` is a text field's text.
+   */
+  set?(node: EngineNode, name: string, value: unknown, engine: Engine): boolean;
+  /**
+   * Take a bound style over, `null` for one being removed: answer the declarations it is set as,
+   * by the keys the view reads, each `null` to remove it. As CSS's `inset-inline: 4px 8px` is a
+   * `start` and an `end`.
+   */
+  style?(
+    node: EngineNode,
+    name: string,
+    value: unknown,
+    engine: Engine,
+  ): Record<string, unknown> | undefined;
+}
+
+const extensions: RendererExtension[] = [];
+
+/**
+ * Add to what the renderer does, for every app in the process. Returns what takes it away again.
+ *
+ * For a package that renders templates written for another host, as a web-compatibility layer
+ * delivers a `click` from a press and gives `(document:keydown)` something to listen on. The
+ * extensions are asked in the order they were added, and the first to answer takes the listener.
+ */
+export function extendRenderer(extension: RendererExtension): () => void {
+  // An entry of this call's own: the same extension added twice is removed once by each.
+  const entry: RendererExtension = {
+    listen: (...args) => extension.listen?.(...args),
+    created: (...args) => extension.created?.(...args),
+    set: (...args) => extension.set?.(...args) ?? false,
+    style: (...args) => extension.style?.(...args),
+  };
+  extensions.push(entry);
+  return () => {
+    const index = extensions.indexOf(entry);
+    if (index !== -1) extensions.splice(index, 1);
+  };
 }
 
 /**

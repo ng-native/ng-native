@@ -1,0 +1,25 @@
+import { Directive, computed, effect, input, untracked } from '@angular/core';
+import { BrnAlertDialogOverlay } from '@spartan-ng/brain/alert-dialog';
+import { injectCustomClassSettable } from '@spartan-ng/brain/core';
+import { hlm } from '../../utils';
+import type { ClassValue } from 'clsx';
+
+@Directive({
+  selector: '[hlmAlertDialogOverlay],hlm-alert-dialog-overlay',
+  hostDirectives: [BrnAlertDialogOverlay],
+})
+export class HlmAlertDialogOverlay {
+  private readonly _classSettable = injectCustomClassSettable({ optional: true, host: true });
+
+  public readonly userClass = input<ClassValue>('', { alias: 'class' });
+  protected readonly _computedClass = computed(() =>
+    hlm('spartan-alert-dialog-overlay', this.userClass()),
+  );
+
+  constructor() {
+    effect(() => {
+      const classValue = this._computedClass();
+      untracked(() => this._classSettable?.setClassToCustomElement(classValue));
+    });
+  }
+}

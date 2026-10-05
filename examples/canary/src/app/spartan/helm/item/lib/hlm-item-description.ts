@@ -1,0 +1,15 @@
+import { Directive } from '@angular/core';
+import { classes } from '../../utils';
+
+@Directive({
+  selector: '[hlmItemDescription],hlm-item-description',
+  host: { 'data-slot': 'item-description' },
+})
+export class HlmItemDescription {
+  constructor() {
+    classes(
+      () =>
+        'spartan-item-description [&>a:hover]:text-primary line-clamp-2 flex font-normal [&>a]:underline [&>a]:underline-offset-4',
+    );
+  }
+}

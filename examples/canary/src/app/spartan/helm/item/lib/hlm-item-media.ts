@@ -1,0 +1,37 @@
+import { Directive, input } from '@angular/core';
+import { classes } from '../../utils';
+import { cva, type VariantProps } from 'class-variance-authority';
+import { injectHlmItemMediaConfig } from './hlm-item-token';
+
+const itemMediaVariants = cva(
+  'spartan-item-media flex shrink-0 items-center justify-center [&_ng-icon]:pointer-events-none',
+  {
+    variants: {
+      variant: {
+        default: 'spartan-item-media-variant-default',
+        icon: 'spartan-item-media-variant-icon',
+        image: 'spartan-item-media-variant-image',
+      },
+    },
+    defaultVariants: {
+      variant: 'default',
+    },
+  },
+);
+export type ItemMediaVariants = VariantProps<typeof itemMediaVariants>;
+
+@Directive({
+  selector: '[hlmItemMedia],hlm-item-media',
+  host: {
+    'data-slot': 'item-media',
+    '[attr.data-variant]': 'variant()',
+  },
+})
+export class HlmItemMedia {
+  private readonly _config = injectHlmItemMediaConfig();
+  public readonly variant = input<ItemMediaVariants['variant']>(this._config.variant);
+
+  constructor() {
+    classes(() => itemMediaVariants({ variant: this.variant() }));
+  }
+}
