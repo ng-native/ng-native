@@ -1057,14 +1057,44 @@ function fallbacks(varPart, kind, context) {
   const { alternatives, token: converted } = fallbackChain(varPart.value?.fallback, context);
   // `var(--c, currentColor)`: the colour in scope where it is used, which the device fills in.
   const current = kind === 'color' && converted?.keyword?.toLowerCase() === 'currentcolor';
-  const fallback = laidOut(current ? CURRENT_COLOUR : formOf(converted, kind), kind, context);
+  const read = laidOut(current ? CURRENT_COLOUR : formOf(converted, kind), kind, context);
   // One made of other tokens is worked out where it is used, from the tokens in scope there.
   const derived = converted && DERIVED.some((form) => form in converted);
+  const fallback = read ?? (derived ? undefined : sumOf(varPart, kind, context));
   return {
     ...(alternatives.length ? { alternatives } : {}),
     ...(fallback === undefined ? {} : { fallback }),
     ...(derived ? { fallbackToken: converted } : {}),
   };
+}
+
+/**
+ * A fallback that is a `calc()` of a unit the device settles and a length, `calc(100vw - 32px)`,
+ * as the length a declaration of it is: written back out and parsed as one, which is where the
+ * sum is read. Undefined for anything else, a `calc()` with a token in it included.
+ */
+const sumOf = (varPart, kind, context) =>
+  kind === 'length' ? calcLength(varPart.value?.fallback, context) : undefined;
+
+function calcLength(raw, context) {
+  const text = Array.isArray(raw) ? cssText(raw)?.trim() : null;
+  if (!text || !/^calc\(/i.test(text)) return undefined;
+  try {
+    let parsed;
+    require('lightningcss').transform({
+      filename: 'token.css',
+      code: Buffer.from(`a{width:${text}}`),
+      visitor: {
+        Declaration(declaration) {
+          if (declaration.property === 'width') parsed = declaration.value;
+        },
+      },
+    });
+    return parsed === undefined ? undefined : length(parsed, context);
+  } catch {
+    // Not a sum native can settle: no fallback, as before.
+    return undefined;
+  }
 }
 
 /**
