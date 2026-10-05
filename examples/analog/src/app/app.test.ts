@@ -1,3 +1,4 @@
+import type { Provider } from '@angular/core';
 import { Router } from '@angular/router';
 import { DeepLinks } from '@ng-native/device';
 import {
@@ -13,6 +14,7 @@ import {
   type FakeFabricNode,
 } from '@ng-native/testing';
 import { afterEach, expect, test, vi } from 'vitest';
+import { Clipboard } from '@ng-native/expo/clipboard';
 import { App } from './app.ts';
 import { appConfig } from './app.config.ts';
 import { EPISODES } from './data/podcasts.ts';
@@ -56,8 +58,11 @@ function shown(fabric: FakeFabric, label: string): string[] {
     .filter((text): text is string => typeof text === 'string');
 }
 
-async function start() {
-  const { componentRef, fabric } = await render(App, appConfig);
+async function start(extra: { providers?: Provider[] } = {}) {
+  const { componentRef, fabric } = await render(App, {
+    ...appConfig,
+    providers: [...appConfig.providers, ...(extra.providers ?? [])],
+  });
   await screen.findByText('Analog Showroom', { exact: false });
   return { fabric, router: componentRef.injector.get(Router) };
 }
@@ -92,7 +97,7 @@ test('home shows the Analog logo and a row for every feature', async () => {
   const logo = nodes(fabric, 'RNSVGSvgView')[0]!;
   expect(logo.props['vbWidth']).toBe(273);
   expect(flatten([logo]).filter((node) => node.viewName === 'RNSVGPath')).toHaveLength(4);
-  expect(screen.getAllByRole('button')).toHaveLength(18);
+  expect(screen.getAllByRole('button')).toHaveLength(19);
 });
 
 test('a static page is at the URL its file name gives it', async () => {
@@ -401,6 +406,66 @@ test('the second components page recycles, sections, searches and swipes a podca
   } finally {
     vi.unstubAllGlobals();
   }
+});
+
+test('styled Markdown swaps the classes of one document for each look', async () => {
+  const { fabric, router } = await start();
+
+  await openFeature(fabric, router, 'Styled Markdown', '/styled');
+
+  const heading = () => front(fabric).getByRole('header', { name: 'Night of the long reads' });
+  expect(heading().props['className'] ?? '').not.toContain('editorial-h1');
+
+  await userEvent.press(front(fabric).getByRole('tab', { name: 'Editorial' }));
+  await waitFor(() => expect(JSON.stringify(heading().props)).toContain('Georgia'));
+
+  await userEvent.press(front(fabric).getByRole('tab', { name: 'Terminal' }));
+  await waitFor(() => expect(JSON.stringify(heading().props)).toContain('Menlo'));
+});
+
+test('the Markdown editor toolbar adds Markdown, and Clear empties the document', async () => {
+  const { fabric, router } = await start();
+
+  await openFeature(fabric, router, 'Markdown editor', '/editor');
+
+  await userEvent.press(front(fabric).getByRole('button', { name: 'Heading' }));
+  await waitFor(() => expect(front(fabric).getByRole('header', { name: 'Heading' })).toBeTruthy());
+
+  await userEvent.press(front(fabric).getByRole('button', { name: 'Clear' }));
+  await waitFor(() => expect(front(fabric).queryByRole('header', { name: 'Try it' })).toBeNull());
+});
+
+test('the Markdown editor fills in a sample document', async () => {
+  const { fabric, router } = await start();
+
+  await openFeature(fabric, router, 'Markdown editor', '/editor');
+  await userEvent.press(front(fabric).getByRole('button', { name: 'Sample' }));
+
+  await waitFor(() =>
+    expect(front(fabric).getByRole('header', { name: 'Hello from Analog 👋' })).toBeTruthy(),
+  );
+});
+
+test('the Markdown editor pastes Markdown from the clipboard', async () => {
+  const { fabric, router } = await start({
+    providers: [
+      {
+        provide: Clipboard.SOURCE,
+        useValue: {
+          getStringAsync: async () => '# Pasted heading',
+          setStringAsync: async () => true,
+          addClipboardListener: () => ({ remove: () => {} }),
+        },
+      },
+    ],
+  });
+
+  await openFeature(fabric, router, 'Markdown editor', '/editor');
+  await userEvent.press(front(fabric).getByRole('button', { name: 'Paste' }));
+
+  await waitFor(() =>
+    expect(front(fabric).getByRole('header', { name: 'Pasted heading' })).toBeTruthy(),
+  );
 });
 
 test('the Markdown editor draws what is typed as it is typed', async () => {

@@ -23,6 +23,7 @@ the feature working.
 | Query parameters       | `search.page.ts`                                          | `?q=` read from `ActivatedRoute`, followed as it changes        |
 | Markdown               | `markdown.page.ts`                                        | A document drawn natively by `<markdown>`, its links routed     |
 | Markdown editor        | `editor.page.ts`                                          | Markdown typed on the device, drawn as it changes               |
+| Styled Markdown        | `styled.page.ts`                                          | One document in three looks, switched through `[classes]`       |
 | Blog                   | `blog/index.page.ts`, `blog/[slug].page.ts`               | The posts in `src/content`, read with `injectContent`           |
 | Markdown page          | `colophon.md`                                             | A `.md` file as a page, titled by its front matter              |
 

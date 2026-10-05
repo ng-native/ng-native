@@ -3,6 +3,7 @@ import { Component, inject } from '@angular/core';
 import { ActivatedRoute } from '@angular/router';
 import { Pressable, ScrollView, Text, View } from '@ng-native/components';
 import { nativePlatform } from '@ng-native/fabric';
+import { Markdown } from '@ng-native/components/markdown';
 import { NgIcon } from '@ng-native/icons';
 import { NativeHeader, NativeNavigation, type StackPresentation } from '@ng-native/router';
 import { AdminAccess } from '../data/admin-access.ts';
@@ -23,6 +24,14 @@ interface Section {
   readonly title: string;
   readonly features: readonly Feature[];
 }
+
+/** What the showroom is, under its title. */
+const INTRO = `**Every row below is a file**, routed by Analog from \`src/app/pages\`.
+
+- Each screen is drawn as **real UIKit and Android views**
+- **No WebView** in between
+- Each row names the file that makes it
+`;
 
 const SECTIONS: readonly Section[] = [
   {
@@ -77,6 +86,7 @@ const SECTIONS: readonly Section[] = [
     features: [
       { name: 'Markdown', file: 'markdown.page.ts', url: '/markdown' },
       { name: 'Markdown editor', file: 'editor.page.ts', url: '/editor' },
+      { name: 'Styled Markdown', file: 'styled.page.ts', url: '/styled' },
       { name: 'Blog', file: 'blog/index.page.ts', url: '/blog' },
       { name: 'Markdown page', file: 'colophon.md', url: '/colophon' },
     ],
@@ -91,7 +101,7 @@ const sheet = (): StackPresentation => (nativePlatform() === 'android' ? 'modal'
 
 /** The showroom's front door: the logo, and every feature with the file that makes it. */
 @Component({
-  imports: [NativeHeader, NgIcon, Pressable, ScrollView, Text, View],
+  imports: [Markdown, NativeHeader, NgIcon, Pressable, ScrollView, Text, View],
   template: `
     <native-header [title]="title" />
     <scroll-view class="scroll" contentInsetAdjustmentBehavior="automatic">
@@ -102,6 +112,9 @@ const sheet = (): StackPresentation => (nativePlatform() === 'android' ? 'modal'
           <text class="hero-sub"
             >Analog's file routes, running as native iOS and Android views</text
           >
+          <view class="hero-md">
+            <markdown [source]="intro" />
+          </view>
         </view>
         @for (section of sections; track section.title) {
           <text class="section">{{ section.title }}</text>
@@ -132,6 +145,15 @@ const sheet = (): StackPresentation => (nativePlatform() === 'android' ? 'modal'
     </scroll-view>
   `,
   styleUrl: '../ui/page.css',
+  styles: `
+    .hero-md {
+      align-self: stretch;
+      margin-top: 10px;
+      padding: 12px 14px 14px;
+      border-radius: 12px;
+      background-color: light-dark(#f7f7fa, #2a2a2d);
+    }
+  `,
 })
 export default class HomePage {
   private readonly navigation = inject(NativeNavigation);
@@ -140,6 +162,7 @@ export default class HomePage {
   protected readonly title = inject(ActivatedRoute).snapshot.title ?? '';
   protected readonly logo = ANALOG_LOGO;
   protected readonly sections = SECTIONS;
+  protected readonly intro = INTRO;
 
   protected open(feature: Feature): void {
     void (feature.sheet
