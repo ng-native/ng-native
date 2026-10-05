@@ -426,11 +426,17 @@ export type ColourExpression =
         readonly space: MixSpace;
         readonly hue?: HueMethod;
         readonly a: ColourExpression;
-        readonly aPercentage?: number;
+        readonly aPercentage?: MixShare;
         readonly b: ColourExpression;
-        readonly bPercentage?: number;
+        readonly bPercentage?: MixShare;
       };
     };
+
+/**
+ * The share of a colour in a mix: a percentage, or a token multiplied into one, as
+ * `calc(var(--opacity) * 100%)` is the token times a hundred.
+ */
+export type MixShare = number | { readonly reference: string; readonly scale: number };
 
 /** One component's compiled styles, pre-sorted by specificity then source order. */
 /**
@@ -3385,10 +3391,12 @@ function mixSides(
     'mix' in side ? unroundedMix(side.mix, tokens, current) : innerColour(side, tokens, current);
   const first = colour(mix.a);
   const second = colour(mix.b);
-  if (first === undefined || second === undefined) return undefined;
+  const shares = [mix.aPercentage, mix.bPercentage].map((share) => shareOf(share, tokens));
+  // A share that is a token nothing sets: no mix, as CSS has no colour for one.
+  if (first === undefined || second === undefined || shares.includes(null)) return undefined;
   return [
-    { colour: first, percentage: mix.aPercentage },
-    { colour: second, percentage: mix.bPercentage },
+    { colour: first, percentage: shares[0] ?? undefined },
+    { colour: second, percentage: shares[1] ?? undefined },
   ];
 }
 
@@ -3399,6 +3407,16 @@ function unroundedMix(
 ): Rgba | undefined {
   const sides = mixSides(mix, tokens, current);
   return sides && mixChannels(mix.space, ...sides, mix.hue);
+}
+
+/** A share as the percentage it comes to: undefined for none written, null for a token unset. */
+function shareOf(
+  share: MixShare | undefined,
+  tokens: Readonly<Record<string, TokenValue>>,
+): number | null | undefined {
+  if (share === undefined || typeof share === 'number') return share;
+  const factor = tokens[share.reference]?.number;
+  return factor === undefined ? null : factor * share.scale;
 }
 
 /** A length in a structured value that is a token, with the arithmetic around it. */

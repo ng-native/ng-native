@@ -180,17 +180,34 @@ function mixExpression(args, context) {
 
 /** One side of a mix: its colour, and the percentage written before or after it. */
 function mixSide(terms, context) {
-  const isPercentage = (term) => term?.type === 'token' && term.value?.type === 'percentage';
-  const percentages = terms.filter(isPercentage);
-  const colour = terms.filter((term) => !isPercentage(term));
-  if (percentages.length > 1) {
+  const shares = terms.map(shareOf);
+  const written = shares.filter((share) => share !== undefined);
+  const colour = terms.filter((_, i) => shares[i] === undefined);
+  if (written.length > 1) {
     throw new CssUnsupported(`${context}: one percentage per colour in a color-mix()`);
   }
-  return {
-    expression: colourExpression(colour, context),
-    percentage: percentages.length ? round(percentages[0].value.value * 100) : undefined,
-  };
+  return { expression: colourExpression(colour, context), percentage: written[0] };
 }
+
+const isPercentage = (term) => term?.type === 'token' && term.value?.type === 'percentage';
+
+/**
+ * The share written beside a colour in a mix: a percentage, as the number it is, or a token
+ * multiplied into one, `calc(var(--opacity) * 100%)`, as the token and what it is multiplied by,
+ * for the device to work out where the token is read. Undefined for a term that is neither.
+ */
+function shareOf(term) {
+  if (isPercentage(term)) return round(term.value.value * 100);
+  if (term?.type !== 'function' || term.value?.name !== 'calc') return undefined;
+  const [first, times, second, ...more] = meaningful(term.value.arguments);
+  if (more.length || !isTimes(times)) return undefined;
+  const token = [first, second].find((part) => part?.type === 'var');
+  const share = [first, second].find(isPercentage);
+  if (!token || !share) return undefined;
+  return { reference: token.value.name.ident, scale: round(share.value.value * 100) };
+}
+
+const isTimes = (term) => term?.type === 'token' && term.value?.value === '*';
 
 /**
  * `box-shadow` with a `var()` in a colour, as the shadow maps Fabric reads, each colour a marker

@@ -133,6 +133,26 @@ describe('color-mix with a token, on device', () => {
     );
   });
 
+  it('takes a share that is a token, as Material fades a ripple by its state-layer opacity', () => {
+    // `color-mix(in srgb, var(--mat-sys-primary) calc(var(--pressed-opacity) * 100%), transparent)`,
+    // and the same as the fallback of a token nothing sets.
+    const mix = 'color-mix(in srgb, var(--ink) calc(var(--share) * 100%), transparent)';
+    const css =
+      `.t { --ink: rgb(0, 92, 187); --share: 0.12 } .a { background-color: ${mix} } ` +
+      `.b { background-color: var(--unset, ${mix}) } .more { --share: 0.5 }`;
+    const colour = (classes: string[], on: string[]) =>
+      resolvedStyle(css, classes, on)['backgroundColor'];
+    assertSameColour(colour(['a'], ['t']), 'rgba(0, 92, 187, 0.12)', 'a token share');
+    assertSameColour(colour(['b'], ['t']), 'rgba(0, 92, 187, 0.12)', 'in a fallback');
+    assertSameColour(
+      colour(['a'], ['t', 'more']),
+      'rgba(0, 92, 187, 0.5)',
+      'the share where it is read',
+    );
+    // No share to take is no colour, as a browser drops a declaration it cannot work out.
+    assert.equal(colour(['a'], []), undefined);
+  });
+
   it('mixes two tokens', () => {
     const style = resolvedStyle(
       '.theme { --a: #1d4ed8; --b: #be123c } .a { background-color: color-mix(in oklch, var(--a), var(--b)) }',
