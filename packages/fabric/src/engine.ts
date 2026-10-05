@@ -2798,7 +2798,9 @@ export class Engine implements HostEngine {
     // Inline style is applied after the cascade and inherited by nothing, so it cannot change
     // what any node matches or inherits. Every other prop can: `[disabled]` is a selector. An
     // inline `direction` is the exception, because the paragraphs below it align by it.
-    this.markProps(node, key !== 'style' || this.inlineReachesStyle(node));
+    // And a child that takes one of this node's own values, an `inherit`, follows it.
+    const heirs = node.styleCache?.heirs === true;
+    this.markProps(node, key !== 'style' || this.inlineReachesStyle(node) || heirs);
   }
 
   /**

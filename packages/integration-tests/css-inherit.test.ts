@@ -89,6 +89,31 @@ describe('inherit, for a property CSS does not hand down', () => {
   });
 });
 
+describe('inherit, from a parent whose value is set on the element', () => {
+  const CSS = '.wide { width: 80px } .same { width: inherit }';
+
+  it("is the parent's inline value, over the one its rules give it", () => {
+    const s = scene(CSS);
+    const parent = s.element('wide');
+    s.engine.setProp(parent, 'style', { width: 30 });
+    s.element('same', parent);
+    assert.equal(s.props('same')['width'], 30);
+  });
+
+  it('follows the inline value changing, and going', () => {
+    const s = scene(CSS);
+    const parent = s.element('wide');
+    s.element('same', parent);
+    assert.equal(s.props('same')['width'], 80);
+    s.engine.setProp(parent, 'style', { width: 30 });
+    assert.equal(s.props('same')['width'], 30);
+    s.engine.setProp(parent, 'style', { width: 50 });
+    assert.equal(s.props('same')['width'], 50);
+    s.engine.setProp(parent, 'style', null);
+    assert.equal(s.props('same')['width'], 80);
+  });
+});
+
 describe('inherit, for a property CSS hands down anyway', () => {
   it("is the parent's value over one a weaker rule wrote", () => {
     const s = scene('.p { font-size: 12px } .t { font-size: 20px } .t.same { font-size: inherit }');

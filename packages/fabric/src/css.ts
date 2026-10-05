@@ -541,6 +541,12 @@ export interface StyleCache {
    * subtree changed is compared against, to tell whether it has to be restyled.
    */
   matched?: readonly StyleRule[];
+  /**
+   * Set once a child takes a value from this node's own style, an `inherit` for a property CSS
+   * does not hand down: a change to the node's inline style then restyles it, and its children
+   * with it, where otherwise an inline style changes nothing a child resolves to.
+   */
+  heirs?: true;
 }
 
 /** What the matcher needs of a node. The engine's node satisfies this structurally. */
@@ -1751,7 +1757,7 @@ export class StyleResolver {
       node.styled ? ELEMENT_ENTRIES.concat(candidates) : candidates,
     );
     const parentTokens = parent ? parent.tokens : this.tokensOnRoot;
-    this.parentOf = parent;
+    this.heir(node, parent, matched);
     const styled = this.styled(node, matched, parentTokens, parentInherited);
 
     const cache: StyleCache = {
@@ -2267,8 +2273,17 @@ export class StyleResolver {
     }
   }
 
+  /** Note what the node being resolved takes an `inherit` from, and that its parent has an heir. */
+  private heir(node: StyleTarget, parent: StyleCache | null, matched: readonly StyleRule[]): void {
+    this.parentOf = parent;
+    this.parentInline = node.parent?.props['style'];
+    if (parent && matched.some(takesParents)) parent.heirs = true;
+  }
+
   /** What the parent of the node being resolved came to: an `inherit` takes its values from it. */
   private parentOf: StyleCache | null = null;
+  /** That parent's inline style, which is over what its rules gave it. */
+  private parentInline: unknown;
 
   /**
    * `inherit`: each prop as the parent has it, handed down or its own, and gone where the parent
@@ -2280,9 +2295,10 @@ export class StyleResolver {
     parentInherited: Record<string, unknown>,
     important: Record<string, unknown> | null,
   ): void {
+    const inline = this.parentInline ? flattenInline(this.parentInline, {}) : EMPTY;
     for (const prop of declaration.props) {
       if (!declaration.important && important !== null && prop in important) continue;
-      const value = parentInherited[prop] ?? this.parentOf?.style[prop];
+      const value = inline[prop] ?? parentInherited[prop] ?? this.parentOf?.style[prop];
       if (value === undefined) delete own[prop];
       else own[prop] = value;
     }
