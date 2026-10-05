@@ -1525,16 +1525,16 @@ const NO_SHEET: StyleSheet = { rules: [] };
 let generations = 0;
 
 /** What a sheet's rules are written for: the last compound of each, by its class or its name. */
-interface Subjects {
-  readonly classes: ReadonlySet<string>;
-  readonly types: ReadonlySet<string>;
+export interface Subjects {
+  readonly classes: Set<string>;
+  readonly types: Set<string>;
   /**
    * The classes of the boxes that rules for anything are written inside: `.dialog > :first-child`
    * is for any element, but only one that has an element with `dialog` over it.
    */
-  readonly inside: ReadonlySet<string>;
+  readonly inside: Set<string>;
   /** A rule for anything anywhere: no class, no name, and no such box to be in. */
-  readonly any: boolean;
+  any: boolean;
 }
 
 interface Addition {
@@ -1551,17 +1551,142 @@ function subjectsOf(sheet: StyleSheet): Subjects {
   const classes = new Set<string>();
   const types = new Set<string>();
   const inside = new Set<string>();
-  let any = false;
-  for (const rule of sheet.rules) {
-    const subject = rule.compounds.at(-1);
-    // One class of several is enough to ask: a node without it matches none of them.
-    if (subject?.classes.length) classes.add(subject.classes[0]!);
-    else if (boxAround(rule) !== undefined) inside.add(boxAround(rule)!);
-    else if (subject?.type && subject.type !== '*') types.add(subject.type);
-    else any = true;
-  }
-  subjects.set(sheet, (found = { classes, types, inside, any }));
+  const all = { classes, types, inside, any: false };
+  for (const rule of sheet.rules) noteSubject(all, rule);
+  subjects.set(sheet, (found = all));
   return found;
+}
+
+/** Note in `into` what a rule is for. */
+function noteSubject(into: Subjects, rule: StyleRule): void {
+  const subject = rule.compounds.at(-1);
+  // One class of several is enough to ask: a node without it matches none of them.
+  if (subject?.classes.length) into.classes.add(subject.classes[0]!);
+  else if (boxAround(rule) !== undefined) into.inside.add(boxAround(rule)!);
+  else if (subject?.type && subject.type !== '*') into.types.add(subject.type);
+  else into.any = true;
+}
+
+/**
+ * What a class changing on an element can restyle, by the rules that name the class:
+ *
+ * - `true`, the element and all under it and after it: a rule is for the element itself, or
+ *   names the class beside its element or inside `:not()`, `:is()`, `:has()` and the like;
+ * - or the elements under it that rules are for, where every rule that names the class names it
+ *   as what its own element is inside, `.busy .row`: those and no other.
+ *
+ * A class in no rule is in neither, and restyles nothing.
+ */
+type ClassReach = Map<string, true | Subjects>;
+
+interface SheetReach {
+  readonly classes: ClassReach;
+  /** The tests of the `class` attribute itself, which a class in no rule can still answer. */
+  readonly reads: readonly AttributeTest[];
+}
+
+const reaches = new WeakMap<StyleSheet, SheetReach>();
+
+/**
+ * How far each class a sheet's selectors name reaches, and the tests of the `class` attribute
+ * itself that are in them.
+ *
+ * The rules are walked whole for the classes in them, whatever a selector is made of: a part of
+ * one added later counts as a class that reaches everything, without being named here.
+ */
+function classReach(sheet: StyleSheet): SheetReach {
+  let found = reaches.get(sheet);
+  if (found) return found;
+  const classes: ClassReach = new Map();
+  const reads: AttributeTest[] = [];
+  for (const rule of sheet.rules) {
+    const every = new Set<string>();
+    collectClasses(rule, every, reads);
+    const inside = classesInside(rule);
+    for (const name of every) {
+      if (!inside.has(name)) classes.set(name, true);
+      else noteInside(classes, name, rule);
+    }
+  }
+  reaches.set(sheet, (found = { classes, reads }));
+  return found;
+}
+
+/** Note a rule as one that names a class as what its element is inside. */
+function noteInside(found: ClassReach, name: string, rule: StyleRule): void {
+  let subjects = found.get(name);
+  if (subjects === true) return;
+  if (!subjects) found.set(name, (subjects = noSubjects()));
+  noteSubject(subjects, rule);
+}
+
+const noSubjects = (): Subjects => ({
+  classes: new Set(),
+  types: new Set(),
+  inside: new Set(),
+  any: false,
+});
+
+/** Add to `into` what `from` is for. */
+function addSubjects(into: Subjects, from: Subjects): void {
+  for (const name of from.classes) into.classes.add(name);
+  for (const name of from.types) into.types.add(name);
+  for (const name of from.inside) into.inside.add(name);
+  into.any ||= from.any;
+}
+
+/**
+ * The classes a rule names only as what its element is inside: on a compound before the last,
+ * with nothing but `>` and a space between there and the element, and nowhere else in the rule.
+ */
+function classesInside(rule: StyleRule): ReadonlySet<string> {
+  const inside = new Set<string>();
+  const elsewhere = new Set<string>();
+  const last = rule.compounds.length - 1;
+  let under = true;
+  for (let index = last; index >= 0; index--) {
+    const compound = rule.compounds[index]!;
+    if (index < last) {
+      const joined = rule.combinators[index];
+      under &&= joined === 'child' || joined === 'descendant';
+    }
+    const { classes, ...rest } = compound;
+    collectClasses(rest, elsewhere, []);
+    for (const name of classes) (index < last && under ? inside : elsewhere).add(name);
+  }
+  for (const name of elsewhere) inside.delete(name);
+  return inside;
+}
+
+/** What a rule declares, which names no element. */
+const DECLARED = new Set(['declarations', 'important', 'tokens']);
+
+/** Add each class under `value` to `into`, and each test of the `class` attribute to `reads`. */
+function collectClasses(value: unknown, into: Set<string>, reads: AttributeTest[]): void {
+  if (value === null || typeof value !== 'object') return;
+  if (Array.isArray(value)) return value.forEach((inner) => collectClasses(inner, into, reads));
+  const part = value as { classes?: unknown; attributes?: unknown };
+  if (Array.isArray(part.classes)) for (const name of part.classes) into.add(String(name));
+  if (Array.isArray(part.attributes)) {
+    for (const test of part.attributes as AttributeTest[])
+      if (test.name === 'class') reads.push(test);
+  }
+  for (const [key, inner] of Object.entries(value)) {
+    if (!DECLARED.has(key)) collectClasses(inner, into, reads);
+  }
+}
+
+/**
+ * Whether a class coming or going could change what a test of the `class` attribute answers.
+ * One class of the list where the test is for a whole class or for part of one; any class
+ * where it is for how the list starts or ends, or for a part with a space in it.
+ */
+function answers(test: AttributeTest, name: string): boolean {
+  const value = test.value ?? '';
+  const folded = test.insensitive ? name.toLowerCase() : name;
+  if (test.operator === 'includes') return folded === value;
+  if (test.operator === 'substring' && !/\s/.test(value)) return folded.includes(value);
+  return true;
 }
 
 /**
@@ -1813,6 +1938,48 @@ export class StyleResolver {
   /** Whether a sheet could match a node: one of its rules is written for it. */
   couldMatch(sheet: StyleSheet, node: StyleTarget): boolean {
     return writtenFor(subjectsOf(sheet), node);
+  }
+
+  /** How far each class named by the sheets met so far reaches: see `classReach`. */
+  private readonly reach: ClassReach = new Map();
+  /** The tests of the `class` attribute itself in those sheets, which any class may answer. */
+  private readonly classTests: AttributeTest[] = [];
+  private readonly noted = new WeakSet<StyleSheet>();
+
+  /** Read the classes a sheet names, once, as soon as any node is given it. */
+  noteSheet(sheet: StyleSheet | null | undefined): void {
+    if (!sheet || this.noted.has(sheet)) return;
+    this.noted.add(sheet);
+    const { classes, reads } = classReach(sheet);
+    for (const [name, how] of classes) this.noteReach(name, how);
+    this.classTests.push(...reads);
+  }
+
+  private noteReach(name: string, how: true | Subjects): void {
+    const had = this.reach.get(name);
+    if (had === true) return;
+    if (how === true) this.reach.set(name, true);
+    else addSubjects(had ?? (this.reach.set(name, noSubjects()).get(name) as Subjects), how);
+  }
+
+  /**
+   * What classes coming to an element or going from it can restyle: `true` for it and all
+   * under it and after it, as any change to it does; the elements under it to restyle, by what
+   * rules are for; or null, where no rule names any of them and nothing is styled again.
+   */
+  reachOf(classes: Iterable<string>): true | Subjects | null {
+    let under: Subjects | null = null;
+    for (const name of classes) {
+      const how = this.reach.get(name);
+      if (how === true || this.classTests.some((test) => answers(test, name))) return true;
+      if (how) addSubjects((under ??= noSubjects()), how);
+    }
+    return under;
+  }
+
+  /** Whether one of the rules `subjects` stands for could be for a node. */
+  isFor(subjects: Subjects, node: StyleTarget): boolean {
+    return writtenFor(subjects, node);
   }
 
   /**

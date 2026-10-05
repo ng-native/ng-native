@@ -21,6 +21,7 @@ import {
   type DeferredDeclaration,
   type StyleCache,
   type StyleSheet,
+  type Subjects,
   type TokenValue,
 } from './css.ts';
 import { applyAria } from './aria-props.ts';
@@ -2641,6 +2642,7 @@ export class Engine implements HostEngine {
     const sheet = like ? like.sheet : this.ownSheets.get(node);
     if (sheet === undefined || node.sheet === sheet) return;
     node.sheet = sheet;
+    this.styles.noteSheet(sheet);
     if (sheet?.structural) this.structuralSheets = true;
     this.watchHas(sheet);
     this.watchActive(sheet);
@@ -2683,6 +2685,7 @@ export class Engine implements HostEngine {
   createElement(name: string, sheet: StyleSheet | null = null): EngineNode {
     const node = new RetainedNode('element', name, this);
     node.sheet = sheet;
+    this.styles.noteSheet(sheet);
     const html = HTML_ELEMENTS.get(name);
     if (html !== undefined) {
       if (html.role) node.props['accessibilityRole'] = html.role;
@@ -2697,12 +2700,43 @@ export class Engine implements HostEngine {
 
   addClass(node: EngineNode, name: string): void {
     (node.classes ??= new Set()).add(name);
-    this.markProps(node);
+    this.markClasses(node, [name]);
   }
 
   removeClass(node: EngineNode, name: string): void {
     node.classes?.delete(name);
-    this.markProps(node);
+    this.markClasses(node, [name]);
+  }
+
+  /**
+   * Mark a node whose classes changed, by what the rules that name those classes can restyle.
+   *
+   * A class no selector names changes no style: a library's own marker, of an overlay that is
+   * animating or a control that was touched. One named only as what a rule's element is
+   * inside, `.animating .close`, restyles the elements under the node that such rules are for.
+   * Either way a whole subtree is not styled again for a class that has no say in it. Any other
+   * class restyles the node and everything under it, as any other change to it does.
+   *
+   * A sheet that names a class later restyles what it is for as it arrives, and a node not yet
+   * committed is styled when it is, with the class as it is then.
+   */
+  private markClasses(node: EngineNode, changed: Iterable<string>): void {
+    const reach = this.styles.reachOf(changed);
+    if (reach === true) return this.markProps(node);
+    this.markProps(node, false);
+    if (reach) this.markUnder(node, reach);
+  }
+
+  /** Have styled again each element under a node that one of `subjects`' rules could be for. */
+  private markUnder(node: EngineNode, subjects: Subjects): void {
+    for (const child of node.children) {
+      if (child.kind !== 'element') continue;
+      if (this.styles.isFor(subjects, child)) {
+        // And with it all under it, which is styled from it.
+        child.styleDirty = true;
+        this.markPath(child);
+      } else this.markUnder(child, subjects);
+    }
   }
 
   /**
@@ -2713,6 +2747,7 @@ export class Engine implements HostEngine {
   setHostSheet(node: EngineNode, sheet: StyleSheet | null): void {
     if (node.hostSheet === sheet) return;
     node.hostSheet = sheet;
+    this.styles.noteSheet(sheet);
     this.watchActive(sheet);
     this.markProps(node);
   }
@@ -2730,8 +2765,12 @@ export class Engine implements HostEngine {
   /** `class="a b"` from a template. Replaces the set rather than adding to it. */
   setClasses(node: EngineNode, value: string): void {
     const names = value.split(/\s+/).filter(Boolean);
+    const before = node.classes;
     node.classes = names.length ? new Set(names) : null;
-    this.markProps(node);
+    // Each class that came or went: one in both changes nothing.
+    const changed = [...names.filter((name) => !before?.has(name))];
+    for (const name of before ?? []) if (!node.classes?.has(name)) changed.push(name);
+    this.markClasses(node, changed);
   }
 
   /** Angular's `@if`/`@for`/`ViewContainerRef` markers. Ordered, never committed. */
@@ -3470,6 +3509,7 @@ export class Engine implements HostEngine {
   private registerSheet(sheet: StyleSheet | null | undefined): void {
     if (!sheet || this.knownSheets.has(sheet)) return;
     this.knownSheets.add(sheet);
+    this.styles.noteSheet(sheet);
     this.sheetOrder.push(sheet);
     for (const name of Object.keys(sheet.keyframes ?? {})) {
       this.keyframes.set(name, sheet.keyframes![name]!);
@@ -3496,6 +3536,7 @@ export class Engine implements HostEngine {
     this.knownSheets.delete(sheet);
     if (next && !this.knownSheets.has(next)) {
       this.knownSheets.add(next);
+      this.styles.noteSheet(next);
       this.sheetOrder[at] = next;
     } else {
       this.sheetOrder.splice(at, 1);
