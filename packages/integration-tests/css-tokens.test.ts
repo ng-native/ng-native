@@ -478,6 +478,34 @@ describe('tokens', () => {
       assert.deepEqual(sides(resolvedStyle(css, ['a', 'set']), 'margin'), [8, 8, 8, 8]);
     });
 
+    it('gives each corner its own part of a radius that falls back to one per corner', () => {
+      // Material's slider shapes its value pin with `border-radius: var(--..., 50% 50% 50% 0)`.
+      const css =
+        '.a { border-radius: var(--r, 50% 50% 50% 0) } .b { border-radius: var(--r, 2px 4px) } ' +
+        '.set { --r: 8px }';
+      const corners = (style: Record<string, unknown>) =>
+        ['TopLeft', 'TopRight', 'BottomRight', 'BottomLeft'].map(
+          (corner) => style[`border${corner}Radius`],
+        );
+      assert.deepEqual(corners(resolvedStyle(css, ['a'])), ['50%', '50%', '50%', 0]);
+      assert.deepEqual(corners(resolvedStyle(css, ['b'])), [2, 4, 2, 4]);
+      assert.deepEqual(corners(resolvedStyle(css, ['a', 'set'])), [8, 8, 8, 8]);
+    });
+
+    it('takes a list of transforms a token falls back to, where nothing sets the token', () => {
+      // And its pin's place: `transform: var(--..., translateX(-50%) rotate(-45deg))`.
+      const css =
+        '.a { transform: var(--t, translateX(-50%) rotate(-45deg)) } .set { --t: rotateX(10deg) }';
+      assert.deepEqual(resolvedStyle(css, ['a'])['transform'], [
+        { translateX: '-50%' },
+        { rotate: '-45deg' },
+      ]);
+      assert.deepEqual(resolvedStyle(css, ['a', 'set'])['transform'], [{ rotateX: '10deg' }]);
+      const refused: string[] = [];
+      compileCss(css, 'own', { onUnsupported: (message: string) => refused.push(message) });
+      assert.deepEqual(refused, []);
+    });
+
     it('takes a percentage or an em in a side of such a fallback, as it does in a fallback of one', () => {
       const css = '.a { font-size: 10px; margin: var(--m, 2em 25%) }';
       const style = resolvedStyle(css, ['a']);
