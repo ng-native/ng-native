@@ -802,3 +802,67 @@ describe('a transition named with no time, then given one with the change it eas
     assert.deepEqual(ended, [1100]);
   });
 });
+
+describe('a transition shorthand whose time is a token', () => {
+  // A dialog: `transition: opacity linear var(--duration, 0ms)`, with the token set on the box
+  // as it opens. The whole declaration was dropped, so the dialog was there at once.
+  const CSS =
+    'view { opacity: 0; transition: opacity linear var(--duration, 0ms) }' +
+    ' .timed { --duration: 100ms } .open { opacity: 1 }';
+
+  const scene = () => {
+    let now = 1000;
+    const reports: string[] = [];
+    const fabric = createFakeFabric();
+    const engine = new Engine(fabric, 1, {
+      globalStyles: compileCss(CSS, 'app.css', {
+        onUnsupported: (m: string) => reports.push(m),
+      }) as never,
+      now: () => now,
+    });
+    const view = engine.createElement('view');
+    engine.appendChild(engine.root, view);
+    engine.commit();
+    const opacity = () => flatten(fabric.committed)[0]?.props['opacity'];
+    const later = (ms: number) => {
+      now += ms;
+      engine.advanceAnimations();
+      engine.commit();
+    };
+    return { engine, view, opacity, later, reports };
+  };
+
+  it('is eased over the time the token is set to', () => {
+    const s = scene();
+    assert.deepEqual(s.reports, []);
+    s.engine.setClasses(s.view, 'timed open');
+    s.engine.commit();
+    s.later(50);
+    assert.equal(s.opacity(), 0.5);
+    s.later(50);
+    assert.equal(s.opacity(), 1);
+  });
+
+  it('takes a time the token is set to on the element, as a library sets one as it opens', () => {
+    const s = scene();
+    s.engine.setCustomProperty(s.view, '--duration', '100ms');
+    s.engine.setClasses(s.view, 'open');
+    s.engine.commit();
+    s.later(50);
+    assert.equal(s.opacity(), 0.5);
+    // In seconds too.
+    const slow = scene();
+    slow.engine.setCustomProperty(slow.view, '--duration', '0.2s');
+    slow.engine.setClasses(slow.view, 'open');
+    slow.engine.commit();
+    slow.later(50);
+    assert.equal(slow.opacity(), 0.25);
+  });
+
+  it('takes the time it falls back to where nothing sets the token', () => {
+    const s = scene();
+    s.engine.setClasses(s.view, 'open');
+    s.engine.commit();
+    assert.equal(s.opacity(), 1, 'no time to take: there at once');
+  });
+});
