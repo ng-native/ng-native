@@ -181,6 +181,27 @@ function balanced(text: string): boolean {
   return depth === 0;
 }
 
+/** A time as CSS writes one: a number of seconds or milliseconds. */
+const TIME = /^([+-]?(?:\d+\.?\d*|\.\d+))(ms|s)$/i;
+
+/** A number with a unit, as the token each is: a length, a percentage, an angle or a time. */
+function withUnit(text: string): TokenValue | undefined {
+  const px = PX.exec(text);
+  if (px) return { length: Number(px[1]) };
+  // A percentage is a fraction as well, and an angle its degrees, as the build-time conversion
+  // reads them: an hsl() of tokens takes its saturation and its hue so.
+  if (PERCENT.test(text)) return { length: text, number: Number(text.slice(0, -1)) / 100 };
+  const angle = ANGLE.exec(text);
+  if (angle) {
+    const [, value, unit] = angle;
+    return { angle: Number(value) * HUE_DEGREES[unit!.toLowerCase()]!, number: Number(value) };
+  }
+  const time = TIME.exec(text);
+  // In milliseconds, as the build reads a time: what a transition or an animation takes.
+  if (time) return { time: Number(time[1]) * (time[2]!.toLowerCase() === 's' ? 1000 : 1) };
+  return undefined;
+}
+
 /**
  * A value with a token in it: another token, or one made of others, worked out where it is set.
  * Any other shape is a word no use site reads, as a colour function with a `var()` left in it is
@@ -195,16 +216,8 @@ export function tokenFromValue(value: unknown): TokenValue | undefined {
   if (typeof value !== 'string') return undefined;
   const text = cssTrim(value);
   if (!text) return undefined;
-  const px = PX.exec(text);
-  if (px) return { length: Number(px[1]) };
-  // A percentage is a fraction as well, and an angle its degrees, as the build-time conversion
-  // reads them: an hsl() of tokens takes its saturation and its hue so.
-  if (PERCENT.test(text)) return { length: text, number: Number(text.slice(0, -1)) / 100 };
-  const angle = ANGLE.exec(text);
-  if (angle) {
-    const [, value, unit] = angle;
-    return { angle: Number(value) * HUE_DEGREES[unit!.toLowerCase()]!, number: Number(value) };
-  }
+  const measure = withUnit(text);
+  if (measure) return measure;
   if (NUMBER.test(text)) return fromNumber(Number(text));
   if (DERIVED.test(text)) return withTokens(text);
   if (COLOR_FUNCTION.test(text)) return { color: text };

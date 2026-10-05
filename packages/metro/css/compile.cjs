@@ -1803,6 +1803,76 @@ function sideLengths(written, context) {
 }
 
 /**
+ * `transition: opacity linear var(--duration, 0ms)`: one transition whose only time is a token,
+ * which is how a library gives an element the time its opening takes as it opens. Read as the
+ * shorthand with that time left out, and the time as `transition-duration` reads a token, for
+ * the device to settle. Answers whether it was one.
+ *
+ * ponytail: one transition, and one time in it. A list of them, or a token for the delay beside
+ * a written duration, is still refused; read each in turn if a stylesheet writes one.
+ */
+function easedByToken(declaration, out, deferred, context) {
+  if (declaration.property !== 'unparsed') return false;
+  if (declaration.value?.propertyId?.property !== 'transition') return false;
+  const parts = declaration.value.value ?? [];
+  const timed = parts.filter((part) => part.type === 'var');
+  // A token alone is the whole transition, or none: not a time, and not this to read.
+  if (timed.length !== 1 || meaningful(parts).length < 2 || parts.some(isListOrTime)) return false;
+  const rest = parts.map((part) => (part === timed[0] ? PLACEHOLDER_TIME : part));
+  const typed = reparsed('transition', cssText(rest, context), context);
+  if (typed?.property !== 'transition') return false;
+  translate('transition', typed.value, out, context);
+  deferred.push(
+    deferVar({ propertyId: { property: 'transition-duration' }, value: timed }, context),
+  );
+  return true;
+}
+
+/** A comma, which makes a list of transitions, or a time that is written out. */
+const isListOrTime = (part) =>
+  part.type === 'time' || (part.type === 'token' && part.value?.type === 'comma');
+
+const PLACEHOLDER_TIME = { type: 'token', value: { type: 'dimension', unit: 'ms', value: 1 } };
+
+/** A declaration parsed again from text: what lightningcss makes of it, or nothing. */
+function reparsed(property, text, context) {
+  let found;
+  try {
+    lightning.transform({
+      filename: 'declaration.css',
+      code: Buffer.from(`a{${property}:${text}}`),
+      visitor: {
+        Rule(rule) {
+          if (rule.type === 'style') [found] = rule.value.declarations.declarations;
+        },
+      },
+    });
+  } catch {
+    throw new CssUnsupported(`${context}: could not read '${property}: ${text}'`);
+  }
+  return found;
+}
+
+/** Unparsed terms as the CSS they were: words, numbers, lengths and functions of them. */
+function cssText(parts, context) {
+  return parts.map((part) => termText(part, context)).join('');
+}
+
+function termText(part, context) {
+  if (part.type === 'function') {
+    return `${part.value.name}(${cssText(part.value.arguments, context)})`;
+  }
+  const value = part.value ?? {};
+  if (part.type === 'time') return `${value.value}${value.type === 'seconds' ? 's' : 'ms'}`;
+  if (part.type !== 'token') throw new CssUnsupported(`${context}: '${part.type}' in a shorthand`);
+  if (value.type === 'white-space') return ' ';
+  if (value.type === 'comma') return ',';
+  if (value.type === 'dimension') return `${value.value}${value.unit}`;
+  if (value.type === 'percentage') return `${value.value * 100}%`;
+  return String(value.value);
+}
+
+/**
  * Translate one declaration into `out`, or record it as a token or a deferred value.
  *
  * lightningcss reports anything it does not recognise as `custom`, so a genuine custom property
@@ -2454,6 +2524,7 @@ function compileCss(source, context = 'styles', options = {}) {
         },
       });
       for (const declaration of list ?? []) {
+        if (easedByToken(declaration, out, deferred, context)) continue;
         const before = deferred.length;
         declare(declaration, out, tokens, deferred, context, addDeclaration, platforms);
         for (let i = before; i < deferred.length; i++) deferred[i].props.forEach(sides.wrote);
