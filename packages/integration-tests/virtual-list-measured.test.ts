@@ -89,7 +89,7 @@ async function boot(name: string, options: Parameters<typeof render>[1] = {}) {
     }
   };
   const scroll = async (y: number) => fireEvent.scroll(scrollView(), { contentOffset: { y } });
-  const canvas = () => scrollView().children[1]!;
+  const canvas = () => scrollView().children[0]!.children[1]!;
   const scrolls = () => fabric.commands.filter((command) => command.name === 'scrollTo');
 
   return {
@@ -197,8 +197,8 @@ describe('virtual list with measured rows', () => {
     const { instance, scroll, scrolls, scrollView, unmount } = await boot('Measured');
     instance.anchoring.set({ minIndexForVisible: 0, autoscrollToTopThreshold: 20 });
     await settle();
-    // The header wraps the listHeader content; it is the scroll view's first child.
-    const header = () => scrollView().children[0]!;
+    // The header wraps the listHeader content; it is the content view's first child.
+    const header = () => scrollView().children[0]!.children[0]!;
     await fireEvent(header(), 'layout', { layout: { x: 0, y: 0, width: 400, height: 10 } });
     await scroll(10 + 3000);
     const before = scrolls().length;
@@ -218,7 +218,7 @@ describe('virtual list with measured rows', () => {
     const { instance, scroll, scrolls, scrollView, unmount } = await boot('Measured');
     instance.anchoring.set({ minIndexForVisible: 0, autoscrollToTopThreshold: 20 });
     await settle();
-    const header = () => scrollView().children[0]!;
+    const header = () => scrollView().children[0]!.children[0]!;
     await fireEvent(header(), 'layout', { layout: { x: 0, y: 0, width: 400, height: 10 } });
     await scroll(0);
     const before = scrolls().length;

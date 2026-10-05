@@ -452,7 +452,7 @@ describe('virtual list', () => {
     }>('Listing');
     const list = flatten(fabric.committed).find((n) => n.viewName === 'ScrollView')!;
     await fireEvent(list, 'layout', { layout: { height: 100 } });
-    await fireEvent(list.children[0]!, 'layout', { layout: { height: 50 } });
+    await fireEvent(list.children[0]!.children[0]!, 'layout', { layout: { height: 50 } });
 
     // 50pt of header: scrolling to 150 puts row 10 at the top.
     await fireEvent(list, 'scroll', { contentOffset: { y: 150 } });

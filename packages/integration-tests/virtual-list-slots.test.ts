@@ -59,7 +59,7 @@ describe('virtual list separators', () => {
 
   it('puts each at the end of its leading row s slot, where touches pass through it', async () => {
     const { fabric, unmount } = await boot<Separated>('Separated');
-    const canvas = scrollView(fabric).children[1]!;
+    const canvas = scrollView(fabric).children[0]!.children[1]!;
     const second = canvas.children.find((node) => textOf(node) === 'b|c')!.props;
     assert.equal(second['position'], 'absolute');
     assert.equal(second['top'], 40, 'the slot of row 1');
@@ -94,7 +94,7 @@ describe('virtual list separators', () => {
 });
 
 describe('virtual list sticky header', () => {
-  const header = (fabric: FakeFabric) => scrollView(fabric).children[0]!;
+  const header = (fabric: FakeFabric) => scrollView(fabric).children[0]!.children[0]!;
 
   it('leaves the header in flow when it is not sticky', async () => {
     const { fabric, unmount } = await boot<Separated>('Separated');

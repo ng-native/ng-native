@@ -53,8 +53,8 @@ describe('windowed list', () => {
     assert.equal(rendered[0], 'row 0');
   });
 
-  // The header slot comes first; the canvas is the child carrying the list's height.
-  const canvasOf = (scroll: FakeFabricNode) => scroll.children[1]!;
+  // Inside the content view the header slot comes first; the canvas is the child carrying the list's height.
+  const canvasOf = (scroll: FakeFabricNode) => scroll.children[0]!.children[1]!;
 
   it('sizes the canvas to the full list so the scrollbar is honest', () => {
     const canvas = canvasOf(host);
@@ -361,6 +361,28 @@ describe('windowed list options', () => {
     // which holds only absolutely positioned rows, has no height of its own, and every row with it.
     assert.equal(scrollView().props['flexDirection'], 'row');
   });
+
+  // Android's ScrollView throws "ScrollView can host only one direct child" on a second one, and
+  // Fabric flattens the header and footer views away, so their content counts as children too.
+  for (const horizontal of [false, true]) {
+    it(`gives the ${horizontal ? 'horizontal ' : ''}scroll view one child, holding the header, rows and footer`, async () => {
+      await boot({ height: VIEWPORT });
+      instance.horizontal.set(horizontal);
+      await settle();
+      assert.equal(scrollView().children.length, 1);
+      const content = scrollView().children[0]!;
+      assert.equal(content.props['collapsable'], false, 'or Fabric flattens it away again');
+      assert.equal(content.props['flexDirection'], horizontal ? 'row' : undefined);
+      const held = labels(fabric).filter((label) => label.startsWith('list '));
+      assert.deepEqual(held, ['list header', 'list footer']);
+      assert.deepEqual(
+        flatten([content])
+          .map((node) => node.props['text'])
+          .filter((text) => typeof text === 'string' && text.startsWith('list ')),
+        held,
+      );
+    });
+  }
 
   it('flips the list and every row when inverted', async () => {
     await boot({ height: VIEWPORT });

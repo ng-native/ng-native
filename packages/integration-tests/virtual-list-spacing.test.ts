@@ -56,8 +56,8 @@ async function boot(name: string, options: Parameters<typeof render>[1] = {}) {
   await fireEvent(scrollView(), 'layout', { layout: { width: VIEWPORT, height: VIEWPORT } });
   const row = (index: number) =>
     flatten(fabric.committed).find((n) => n.props['nativeID'] === `row${index}`);
-  // The header slot comes first; the canvas is the view carrying the list's extent.
-  const canvas = () => scrollView().children[1]!;
+  // Inside the content view the header slot comes first; the canvas is the view carrying the list's extent.
+  const canvas = () => scrollView().children[0]!.children[1]!;
   const scroll = (y: number) => fireEvent.scroll(scrollView(), { contentOffset: { y } });
   return { fabric, instance, scrollView, row, canvas, scroll };
 }

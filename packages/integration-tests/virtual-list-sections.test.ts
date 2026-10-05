@@ -60,7 +60,7 @@ describe('virtual list with variable row heights', () => {
 
   it('sizes the canvas from the cumulative row heights', () => {
     // 30 sections: one 60px header plus nine 30px items each.
-    const canvas = list.children[1]!;
+    const canvas = list.children[0]!.children[1]!;
     assert.equal(canvas.props['height'], 30 * (60 + 9 * 30));
   });
 

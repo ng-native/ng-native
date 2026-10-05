@@ -226,29 +226,36 @@ interface Span {
   selector: 'virtual-list',
   exportAs: 'virtualList',
   imports: [TemplateSlot, View],
+  // One content view holds the header, the rows and the footer, as ScrollView.js's content
+  // container does: Android's ScrollView takes one child and throws on a second. It is never
+  // collapsed, or Fabric would flatten it away and hand the scroll view all three again.
   // See ScrollView: the canvas carries only a height, so Fabric would flatten it away and drags
   // over the gaps between rows would not scroll. Separators come after the rows so they draw over
   // the slot they share. The spacer is there only when rows are in flow.
   // A refresh control comes first, as the scroll view's own child; see ScrollView.
   template: `
     <ng-content select="refresh-control" />
-    <view [style]="headerStyle()" (layout)="onHeaderLayout($event)"
-      ><ng-content select="[listHeader]"
-    /></view>
-    <view #rows [style]="canvas()" collapsable="false">
-      @if (measuring()) {
-        <view [style]="spacer()"></view>
-      }
-      <ng-content />
-      @if (separator(); as separator) {
-        @for (gap of gaps(); track gap.index) {
-          <view [style]="gap.style"
-            ><ng-container [templateSlot]="separator.template" [templateSlotContext]="gap.context"
-          /></view>
+    <view [style]="content()" collapsable="false">
+      <view [style]="headerStyle()" (layout)="onHeaderLayout($event)"
+        ><ng-content select="[listHeader]"
+      /></view>
+      <view #rows [style]="canvas()" collapsable="false">
+        @if (measuring()) {
+          <view [style]="spacer()"></view>
         }
-      }
+        <ng-content />
+        @if (separator(); as separator) {
+          @for (gap of gaps(); track gap.index) {
+            <view [style]="gap.style"
+              ><ng-container
+                [templateSlot]="separator.template"
+                [templateSlotContext]="gap.context"
+            /></view>
+          }
+        }
+      </view>
+      <view [style]="footerStyle()"><ng-content select="[listFooter]" /></view>
     </view>
-    <view [style]="footerStyle()"><ng-content select="[listFooter]" /></view>
   `,
   host: {
     // ScrollView.js's `baseHorizontal`: a column would stack the header, canvas and footer, and
@@ -480,6 +487,11 @@ export class VirtualList<T> extends ScrollViewProps {
   private stride(): number {
     return (this.itemHeight() as number) + this.rowGap();
   }
+
+  /** ScrollView.js's `contentContainerHorizontal`: the header, rows and footer side by side. */
+  protected readonly content = computed(() =>
+    this.horizontal() ? { flexDirection: 'row' } : undefined,
+  );
 
   protected readonly canvas = computed(() =>
     this.horizontal() ? { width: this.extent(), flexDirection: 'row' } : { height: this.extent() },
