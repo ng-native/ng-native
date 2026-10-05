@@ -10,6 +10,7 @@
 
 import {
   boundDeclaration,
+  faded,
   inlineInherited,
   setsInherited,
   StyleResolver,
@@ -939,6 +940,23 @@ function heightFromLayout(node: EngineNode, parent: EngineNode): boolean {
   // In a column it has the height it grows to, where the column has one to share out.
   const grows = Number(ownLayout(node, 'flexGrow') ?? ownLayout(node, 'flex') ?? 0) > 0;
   return grows && definiteHeight(parent);
+}
+
+/**
+ * A placeholder's opacity, which native has none for, as its colour faded by that share: none of
+ * it at 0, which is how a stylesheet hides a placeholder under a label, and all of it at 1.
+ *
+ * ponytail: with no colour of its own the placeholder is native's default, which is not known
+ * here: hidden at 0 and left as it is above that. Name the platform's default if one is faded.
+ */
+function placeholderFaded(props: Record<string, unknown>): void {
+  const opacity = props['placeholderOpacity'];
+  if (opacity === undefined) return;
+  delete props['placeholderOpacity'];
+  if (typeof opacity !== 'number' || opacity >= 1) return;
+  const colour = props['placeholderTextColor'];
+  if (colour !== undefined) props['placeholderTextColor'] = faded(colour, Math.max(opacity, 0));
+  else if (opacity <= 0) props['placeholderTextColor'] = 'rgba(0, 0, 0, 0)';
 }
 
 /**
@@ -3232,6 +3250,7 @@ export class Engine implements HostEngine {
     // Before an image's own size: `fit-content` is no size, so the image's is what it gets.
     fitContent(node, style);
     percentHeight(node, style);
+    placeholderFaded(style);
     const intrinsic = node.props[INTRINSIC_SIZE] as IntrinsicSize | undefined;
     if (intrinsic) applyIntrinsicSize(style, intrinsic);
     flattenStyle(node.props[STYLE_OVERRIDE], style);

@@ -867,7 +867,7 @@
     "bg-[30deg]",
     "bg-[3]"
   ],
-  "dropped 'background-color': a placeholder takes only a colour on native, not '…'": [
+  "dropped 'background-color': a placeholder takes only a colour and an opacity on native, not '…'": [
     "placeholder:bg-[rgb(1,2,3)]",
     "placeholder:bg-red-500"
   ],
@@ -3124,9 +3124,6 @@
     "opacity-[calc(1rem+2px)]",
     "opacity-[rgb(10,20,30)]"
   ],
-  "dropped 'opacity': a placeholder takes only a colour on native, not '…'": [
-    "placeholder:opacity-50"
-  ],
   "dropped 'order': '…' has no React Native equivalent: no style prop of a native view does what it does. Yoga lays children out in the order they are written: change the order in the template.": [
     "!-order-8",
     "!order-1",
@@ -3287,7 +3284,7 @@
     "py-[0.35]",
     "py-[3]"
   ],
-  "dropped 'padding-bottom': a placeholder takes only a colour on native, not '…'": [
+  "dropped 'padding-bottom': a placeholder takes only a colour and an opacity on native, not '…'": [
     "placeholder:p-4"
   ],
   "dropped 'padding-bottom': arithmetic with tokens in it cannot take '…' here. What the device works out is numbers, points, degrees and var(), with + - * / and brackets; a percentage, an em or a viewport unit beside a token needs layout the device does not do here.": [
@@ -3372,7 +3369,7 @@
     "px-[0.35]",
     "px-[3]"
   ],
-  "dropped 'padding-left': a placeholder takes only a colour on native, not '…'": [
+  "dropped 'padding-left': a placeholder takes only a colour and an opacity on native, not '…'": [
     "placeholder:p-4"
   ],
   "dropped 'padding-right': '…' is not a value native can take": [
@@ -3403,7 +3400,7 @@
     "px-[0.35]",
     "px-[3]"
   ],
-  "dropped 'padding-right': a placeholder takes only a colour on native, not '…'": [
+  "dropped 'padding-right': a placeholder takes only a colour and an opacity on native, not '…'": [
     "placeholder:p-4"
   ],
   "dropped 'padding-top': '…' is not a value native can take": [
@@ -3434,7 +3431,7 @@
     "py-[0.35]",
     "py-[3]"
   ],
-  "dropped 'padding-top': a placeholder takes only a colour on native, not '…'": [
+  "dropped 'padding-top': a placeholder takes only a colour and an opacity on native, not '…'": [
     "placeholder:p-4"
   ],
   "dropped 'padding-top': arithmetic with tokens in it cannot take '…' here. What the device works out is numbers, points, degrees and var(), with + - * / and brackets; a percentage, an em or a viewport unit beside a token needs layout the device does not do here.": [

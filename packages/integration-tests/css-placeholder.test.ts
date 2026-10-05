@@ -49,6 +49,42 @@ const placeholderOf = (css: string, classes = 'f'): unknown => {
   return s.props().find((props) => 'placeholderTextColor' in props)?.['placeholderTextColor'];
 };
 
+describe('::placeholder with an opacity', () => {
+  // A form field hides its placeholder while its label rests where the placeholder would be,
+  // `opacity: 0`, and shows it once the label has floated away, `opacity: 1`.
+  const GREEN = '.f::placeholder { color: rgb(0, 255, 0) }';
+
+  it('draws no placeholder at none, and the colour as it is at one', () => {
+    assert.equal(
+      placeholderOf(`${GREEN} .f::placeholder { opacity: 0 }`),
+      colourOf('rgba(0, 255, 0, 0)'),
+    );
+    assert.equal(
+      placeholderOf(
+        `${GREEN} .f::placeholder { opacity: 0 } .f.shown::placeholder { opacity: 1 }`,
+        'f shown',
+      ),
+      colourOf('rgb(0, 255, 0)'),
+    );
+  });
+
+  it('fades the colour by a share between them', () => {
+    assert.equal(
+      placeholderOf(`${GREEN} .f::placeholder { opacity: 0.5 }`),
+      colourOf('rgba(0, 255, 0, 0.5)'),
+    );
+  });
+
+  it('hides a placeholder with no colour of its own, and sends no opacity to the field', () => {
+    const s = scene('.f::placeholder { opacity: 0 }');
+    s.add('text-input', 'f');
+    const field = s.props().find((props) => 'placeholderTextColor' in props)!;
+    assert.equal(field['placeholderTextColor'], colourOf('transparent'));
+    assert.equal('placeholderOpacity' in field, false);
+    assert.deepEqual(s.reports, []);
+  });
+});
+
 describe('::placeholder, as the text input placeholder colour', () => {
   it('reads a colour as the placeholder colour, as a browser paints it', () => {
     assert.equal(

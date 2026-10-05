@@ -3745,7 +3745,7 @@ const RGB = /^rgba?\(\s*([\d.]+)\s*,\s*([\d.]+)\s*,\s*([\d.]+)\s*(?:,\s*([\d.]+)
  * mix. A value that is not one of ours is returned untouched: it may be a platform colour, and a
  * colour nobody can parse is better painted as it stands than dropped.
  */
-function faded(value: unknown, fraction: number): unknown {
+export function faded(value: unknown, fraction: number): unknown {
   if (typeof value !== 'string') return value;
   const parts = RGB.exec(value);
   if (!parts) return value;

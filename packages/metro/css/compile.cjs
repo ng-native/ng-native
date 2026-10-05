@@ -1378,7 +1378,14 @@ function refuseHasAbove(compounds, context) {
 
 const isPlaceholder = (part) => part?.type === 'pseudo-element' && part.kind === 'placeholder';
 
-const placeholderOf = (from) => ('color' in from ? { placeholderTextColor: from.color } : {});
+/**
+ * What a placeholder rule sets on the field: its colour, and an opacity the engine fades that
+ * colour by, which is how a stylesheet hides a placeholder and shows it again.
+ */
+const placeholderOf = (from) => ({
+  ...('color' in from ? { placeholderTextColor: from.color } : {}),
+  ...('opacity' in from ? { placeholderOpacity: from.opacity } : {}),
+});
 
 const subject = (compiled, placeholder) => (placeholder ? onTextInput(compiled) : compiled);
 
@@ -2346,10 +2353,10 @@ function compileCss(source, context = 'styles', options = {}) {
       ...Object.keys(declarations),
       ...Object.keys(important ?? {}),
       ...(deferred ?? []).flatMap((entry) => entry.props ?? []),
-    ].filter((prop) => prop !== 'color');
+    ].filter((prop) => prop !== 'color' && prop !== 'opacity');
     for (const prop of new Set(unsupported)) {
       const name = prop.replace(/[A-Z]/g, (letter) => `-${letter.toLowerCase()}`);
-      const message = `${context}: a placeholder takes only a colour on native, not '${name}'`;
+      const message = `${context}: a placeholder takes only a colour and an opacity on native, not '${name}'`;
       if (!onUnsupported) throw new CssUnsupported(message);
       onUnsupported(reported(context, `dropped '${name}'`, message));
     }
