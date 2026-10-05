@@ -1502,7 +1502,12 @@ let generations = 0;
 interface Subjects {
   readonly classes: ReadonlySet<string>;
   readonly types: ReadonlySet<string>;
-  /** A rule for anything: no class and no name, or a name every element answers to. */
+  /**
+   * The classes of the boxes that rules for anything are written inside: `.dialog > :first-child`
+   * is for any element, but only one that has an element with `dialog` over it.
+   */
+  readonly inside: ReadonlySet<string>;
+  /** A rule for anything anywhere: no class, no name, and no such box to be in. */
   readonly any: boolean;
 }
 
@@ -1519,22 +1524,38 @@ function subjectsOf(sheet: StyleSheet): Subjects {
   if (found) return found;
   const classes = new Set<string>();
   const types = new Set<string>();
+  const inside = new Set<string>();
   let any = false;
   for (const rule of sheet.rules) {
     const subject = rule.compounds.at(-1);
     // One class of several is enough to ask: a node without it matches none of them.
     if (subject?.classes.length) classes.add(subject.classes[0]!);
+    else if (boxAround(rule) !== undefined) inside.add(boxAround(rule)!);
     else if (subject?.type && subject.type !== '*') types.add(subject.type);
     else any = true;
   }
-  subjects.set(sheet, (found = { classes, types, any }));
+  subjects.set(sheet, (found = { classes, types, inside, any }));
   return found;
+}
+
+/**
+ * A class of the nearest box a rule's subject has to be in: the compound before it, where that
+ * is joined as what holds it and names a class. Nothing where it is a sibling, or has no class.
+ */
+function boxAround(rule: StyleRule): string | undefined {
+  const joined = rule.combinators.at(-1);
+  if (joined !== 'child' && joined !== 'descendant') return undefined;
+  return rule.compounds.at(-2)?.classes[0];
 }
 
 /** Whether a rule among these could be for a node: never no where one is. */
 function writtenFor(of: Subjects, node: StyleTarget): boolean {
   if (of.any || of.types.has(node.name)) return true;
   for (const name of node.classes ?? []) if (of.classes.has(name)) return true;
+  if (!of.inside.size) return false;
+  for (let over = node.parent; over; over = over.parent) {
+    for (const name of over.classes ?? []) if (of.inside.has(name)) return true;
+  }
   return false;
 }
 
