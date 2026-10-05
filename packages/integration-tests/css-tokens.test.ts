@@ -478,6 +478,15 @@ describe('tokens', () => {
       assert.deepEqual(sides(resolvedStyle(css, ['a', 'set']), 'margin'), [8, 8, 8, 8]);
     });
 
+    it('takes a percentage or an em in a side of such a fallback, as it does in a fallback of one', () => {
+      const css = '.a { font-size: 10px; margin: var(--m, 2em 25%) }';
+      const style = resolvedStyle(css, ['a']);
+      assert.deepEqual(
+        ['Top', 'Right', 'Bottom', 'Left'].map((side) => style[`margin${side}`]),
+        [20, '25%', 20, '25%'],
+      );
+    });
+
     it('adds a percentage to a token of one, as Open Props strengthens a shadow', () => {
       // `--shadow-strength-4: calc(var(--shadow-strength) + 3%)`, read as an alpha: 1% + 3%. Chrome
       // draws the card's shadow in rgba(37, 38, 39, 0.04).

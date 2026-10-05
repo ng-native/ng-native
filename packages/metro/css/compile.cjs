@@ -1746,12 +1746,17 @@ function sidedFallback(value, context) {
   }));
 }
 
-/** Two to four lengths written one after the other, in points, or null for anything else. */
+/**
+ * Two to four lengths written one after the other, or null for anything else. Each as a fallback
+ * of one value is read: points, a percentage, or an `em` the device settles.
+ */
 function sideLengths(written, context) {
   const parts = meaningful(written ?? []);
   if (parts.length < 2 || parts.length > 4) return null;
-  const lengths = parts.map((part) => tokenValue([part], context)?.length);
-  return lengths.every((each) => typeof each === 'number') ? lengths : null;
+  const lengths = parts.map(
+    (part) => fallbacks({ value: { fallback: [part] } }, 'length', context).fallback,
+  );
+  return lengths.every((each) => each !== undefined) ? lengths : null;
 }
 
 /**
