@@ -11,6 +11,7 @@
 import {
   boundDeclaration,
   faded,
+  fills,
   inlineInherited,
   setsInherited,
   StyleResolver,
@@ -1450,14 +1451,11 @@ const BOOLEAN_VIEW_PROPS = new Set([
 
 /**
  * Whether `node` holds nothing `:empty` sees besides `moved`: so it was empty before `moved` came,
- * or is now that it has gone. An anchor is a comment on the web, which `:empty` does not see.
+ * or is now that it has gone. What `:empty` does not see is `fills` in css.ts to say.
  */
 function wasOrIsEmptyWithout(node: EngineNode, moved: EngineNode): boolean {
-  if (moved.kind === 'anchor') return false;
-  for (const child of node.children) {
-    if (child !== moved && child.kind !== 'anchor') return false;
-  }
-  return true;
+  if (!fills(moved)) return false;
+  return !node.children.some((child) => child !== moved && fills(child));
 }
 
 /**
@@ -2920,9 +2918,20 @@ export class Engine implements HostEngine {
   }
 
   setText(node: EngineNode, value: string): void {
+    const filled = (node.text === '') !== (value === '');
     node.text = value;
     this.markProps(node);
-    if (node.parent) this.markTextContent(node.parent, node);
+    if (!node.parent) return;
+    this.markTextContent(node.parent, node);
+    // Text of no length is nothing to `:empty`: its first character and its last change what
+    // the element it is in matches, and what comes after that element.
+    if (filled && this.structuralSheets) this.markFilled(node.parent);
+  }
+
+  private markFilled(node: EngineNode): void {
+    node.styleDirty = true;
+    this.markLaterSiblings(node);
+    this.markPath(node);
   }
 
   setEventListener(

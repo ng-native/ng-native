@@ -370,6 +370,15 @@ describe('position among siblings', () => {
     (full!.children as StyleTarget[]).push(node('text', {}, [], full!));
     assert.equal(hits('view:empty', full!), false);
   });
+
+  it('matches :empty over text of no length, which a binding to nothing leaves', () => {
+    const [bound] = family(['view']);
+    const text = { ...node('#text', {}, [], bound!), kind: 'text' as const, text: '' };
+    (bound!.children as StyleTarget[]).push(text);
+    assert.equal(hits('view:empty', bound!), true);
+    text.text = ' ';
+    assert.equal(hits('view:empty', bound!), false);
+  });
 });
 
 describe('the sibling combinators', () => {

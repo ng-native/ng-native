@@ -294,6 +294,34 @@ describe('a position test that is not at the top of its compound', () => {
     assert.equal(lastProps(fabric, list)['opacity'], null, 'no longer empty');
   });
 
+  it('reads text of no length as nothing, and restyles when the text comes and goes', () => {
+    // `<span>{{ label }}</span>` with nothing to show yet: a text node, and no text in it. A
+    // browser's `:empty` matches, which is how a stylesheet keeps the line such a box is on.
+    const fabric = createFakeFabric();
+    const css = '.list:empty { opacity: 0.5 }';
+    const engine = new Engine(fabric, 1, { globalStyles: compileCss(css, 'test') });
+    const list = engine.createElement('view');
+    engine.setClasses(list, 'list');
+    engine.appendChild(engine.root, list);
+    const text = engine.createText('');
+    engine.appendChild(list, text);
+    engine.commit();
+    assert.equal(lastProps(fabric, list)['opacity'], 0.5, 'empty with a text node of no length');
+
+    engine.setText(text, 'One');
+    engine.commit();
+    assert.equal(lastProps(fabric, list)['opacity'], null, 'no longer empty');
+
+    engine.setText(text, '');
+    engine.commit();
+    assert.equal(lastProps(fabric, list)['opacity'], 0.5, 'empty again');
+
+    // A space is text: only no characters at all is nothing.
+    engine.setText(text, ' ');
+    engine.commit();
+    assert.equal(lastProps(fabric, list)['opacity'], null);
+  });
+
   // What a later sibling matches can hang on whether this node is empty, though nothing about the
   // sibling moved: `.box:empty + .spacer`.
   for (const combinator of ['+', '~']) {

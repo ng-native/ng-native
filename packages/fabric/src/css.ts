@@ -557,6 +557,15 @@ export interface StyleCache {
   heirs?: true;
 }
 
+/**
+ * Whether a child is one `:empty` sees. An anchor is a comment on the web, which it does not;
+ * nor text of no length, which a binding to nothing leaves behind.
+ */
+export function fills(child: StyleTarget): boolean {
+  if (child.kind === 'anchor') return false;
+  return child.kind !== 'text' || (child as { text?: string }).text !== '';
+}
+
 /** What the matcher needs of a node. The engine's node satisfies this structurally. */
 export interface StyleTarget {
   readonly name: string;
@@ -841,10 +850,7 @@ function matchesCompound(node: StyleTarget, compound: Compound, sheet: StyleShee
       if (!matchesAttribute(node, test)) return false;
     }
   }
-  // An anchor is a comment on the web, and :empty does not see comments.
-  if (compound.empty !== undefined && node.children?.some((child) => child.kind !== 'anchor')) {
-    return false;
-  }
+  if (compound.empty !== undefined && node.children?.some(fills)) return false;
   if (compound.nth !== undefined) {
     for (const test of compound.nth) {
       if (!matchesNth(node, test)) return false;
