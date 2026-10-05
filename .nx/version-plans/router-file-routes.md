@@ -1,0 +1,5 @@
+---
+__default__: minor
+---
+
+`fileRoutes(pages)` in `@ng-native/router` routes an app by its files, with no Analog: each file in `src/app/pages`, found by Metro's `require.context` or, in a Vitest test, an `import.meta.glob`, is the page at the URL its path names, with Analog's file names (`index.page.ts`, `[id].page.ts`, `[...slug].page.ts` with the rest of the URL as `slug`, `(group)` folders, `blog.[slug].page.ts`, and `products.page.ts` as the layout of `products/`), each page's default export and `routeMeta`, and `.md` pages drawn by the component given as `fileRoutes(pages, { markdownPage })`, which reads its file with `injectMarkdownPage()`. Pages from a lazy context load on their first navigation, static paths are tried before parameters and catch-alls, a `canMatch` that refuses a page passes it over to the next route, and two files at one URL or a malformed name throw at startup, naming the files. `examples/markdown` is routed this way.

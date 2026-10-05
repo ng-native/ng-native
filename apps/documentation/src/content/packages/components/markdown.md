@@ -211,7 +211,9 @@ Vitest to get the file's text instead.
 `examples/markdown` in the repository is a reader built on this page, without Analog: notes that
 are `.md` files imported through Metro and drawn from their tokens, a live editor that parses what
 is typed through `source`, relative links pushed on a native stack with `(linkPress)`, light and
-dark appearance, and a note whose elements take the app's own classes through `classes`.
+dark appearance, a note whose elements take the app's own classes through `classes`, and its
+screens routed from the files in `src/app/pages` by [file routes](/packages/router/file-routes),
+`about.md` among them.
 
 ## With Analog
 

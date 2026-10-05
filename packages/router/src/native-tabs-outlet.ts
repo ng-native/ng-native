@@ -61,7 +61,7 @@ import { bindRouteInputs } from './bind-route-inputs.ts';
 import { NATIVE_TAB_DEFAULTS } from './native-bar-defaults.ts';
 import { NativeBack, isShowing } from './native-back.ts';
 import { optionalBoolean } from './transforms.ts';
-import { NativeTab } from './native-tab.ts';
+import { NativeTab, screenKeyOf } from './native-tab.ts';
 import { ownHost } from './own-host.ts';
 import { markTabRoute } from './tab-routes.ts';
 import { IN_TAB, type InTab } from './in-tab.ts';
@@ -545,7 +545,7 @@ export class NativeTabsOutlet implements RouterOutletContract, AfterContentInit 
 
   private request(entry: TabEntry): void {
     this.renderer.setProperty(this.host.nativeElement, 'navStateRequest', {
-      selectedScreenKey: entry.key,
+      selectedScreenKey: screenKeyOf(entry.key),
       baseProvenance: this.provenance,
     });
   }
@@ -559,7 +559,9 @@ export class NativeTabsOutlet implements RouterOutletContract, AfterContentInit 
     if (!selection) return;
     this.provenance = selection.provenance;
 
-    const entry = this.readTabs().find((tab) => tab.key === selection.selectedScreenKey);
+    const entry = this.readTabs().find(
+      (tab) => screenKeyOf(tab.key) === selection.selectedScreenKey,
+    );
     if (!entry || entry === this.selected) return;
 
     // Returning to a tab returns to the url it was last on, which is the whole point of keeping

@@ -12,7 +12,23 @@ from `createRoutes` in `@analogjs/router` itself, not a copy of it, and go to
 native header.
 
 It is opt-in and separate from the rest of the framework. An app that does not install it routes
-with a routes array as before.
+with a routes array as before, or with [file routes](/packages/router/file-routes) from the router
+itself.
+
+## @ng-native/analog or fileRoutes: which one
+
+Both route the same files, with the same names, to native stacks and tabs.
+
+- **`@ng-native/analog`** routes with `createRoutes` from `@analogjs/router` itself, and reads
+  `src/content` with `@analogjs/content`'s API. Use it to share pages and content with an Analog
+  web app, or to follow Analog's behaviour exactly as it changes.
+- **[`fileRoutes`](/packages/router/file-routes)** from `@ng-native/router` needs no other package
+  and no Metro plugin, and checks the files as the app starts. Start there for an app that is only
+  an app.
+
+A page written for one works in the other. Its `RouteMeta` type comes from the package that
+routes it. [Where it differs from Analog](/packages/router/file-routes#where-it-differs-from-analog)
+lists what `fileRoutes` does differently.
 
 ## Setup
 

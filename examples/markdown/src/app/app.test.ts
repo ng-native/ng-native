@@ -1,4 +1,4 @@
-import { Router } from '@angular/router';
+import { Router, type Routes } from '@angular/router';
 import { DeepLinks } from '@ng-native/device';
 import {
   cleanup,
@@ -13,7 +13,14 @@ import {
 } from '@ng-native/testing';
 import { afterEach, expect, test, vi } from 'vitest';
 import { App } from './app.ts';
+import { ROUTES } from './pages/index.page.ts';
 import { appConfig } from './app.config.ts';
+
+// The same pages, found by Vite rather than by Metro's require.context. The ngNative() plugin makes
+// each .md file the module Metro makes of it.
+vi.mock('./pages.ts', () => ({
+  pages: import.meta.glob(['./pages/**/*.page.ts', './pages/**/*.md']),
+}));
 
 const flatten = (nodes: FakeFabricNode[]): FakeFabricNode[] =>
   nodes.flatMap((node) => [node, ...flatten(node.children)]);
@@ -33,7 +40,7 @@ async function start(open = vi.fn()) {
   const { componentRef, fabric } = await render(App, {
     providers: [...appConfig.providers, { provide: DeepLinks, useValue: deepLinks }],
   });
-  await waitFor(() => expect(titles(fabric)).toEqual(['Markdown Reader']));
+  await waitFor(() => expect(titles(fabric)).toEqual(['Native Pages']));
   await screen.findByText('Welcome');
   return { fabric, router: componentRef.injector.get(Router), open };
 }
@@ -52,8 +59,30 @@ test('the library lists each .md file by the title and summary in its front matt
     front(fabric)
       .getAllByRole('button')
       .map((row) => row.props['accessibilityLabel']),
-  ).toEqual(['Welcome', 'A tour of the formatting', 'Live editor', 'Styled with classes']);
+  ).toEqual([
+    'Welcome',
+    'A tour of the formatting',
+    'Live editor',
+    'Styled with classes',
+    'A Markdown page',
+  ]);
   expect(front(fabric).getByText('What this reader is, and where to go next.')).toBeTruthy();
+});
+
+test('the home screen shows each file in pages/ with the route fileRoutes made of it', async () => {
+  const { fabric, router } = await start();
+
+  const urls = (routes: Routes, base: string): string[] =>
+    routes.flatMap((route) => {
+      const url = [base, route.path].filter(Boolean).join('/');
+      return route.children ? urls(route.children, url) : [`/${url}`];
+    });
+  const made = urls(router.config, '').sort();
+  expect(ROUTES.map((route) => route.url).sort()).toEqual(made);
+  for (const route of ROUTES) {
+    expect(front(fabric).getByText(route.file)).toBeTruthy();
+  }
+  expect(front(fabric).getByText('notes/[slug].page.ts → /notes/welcome')).toBeTruthy();
 });
 
 test('a note is drawn from the tokens Metro lexed, and its relative links are routed', async () => {
@@ -63,7 +92,7 @@ test('a note is drawn from the tokens Metro lexed, and its relative links are ro
   await waitFor(() =>
     expect(front(fabric).getByRole('header', { name: 'A reader for Markdown files' })).toBeTruthy(),
   );
-  expect(titles(fabric)).toEqual(['Markdown Reader', 'Welcome']);
+  expect(titles(fabric)).toEqual(['Native Pages', 'Welcome']);
 
   await fireEvent.press(front(fabric).getByRole('link', { name: 'the formatting tour' }));
 
@@ -107,4 +136,19 @@ test("the styled note's elements take the app's classes, and a link keeps its de
   const link = front(fabric).getByRole('link', { name: 'link' });
   expect(link.props['fontWeight']).toBe('700');
   expect(link.props['textDecorationLine']).toBe('underline');
+});
+
+test('a .md file in pages/ is a screen, titled by its front matter, and its links are routed', async () => {
+  const { fabric, router } = await start();
+  await openRow(fabric, router, 'A Markdown page', '/about');
+
+  await waitFor(() =>
+    expect(front(fabric).getByRole('header', { name: 'Routed by its file name' })).toBeTruthy(),
+  );
+  expect(titles(fabric)).toEqual(['Native Pages', 'About this reader']);
+
+  await fireEvent.press(front(fabric).getByRole('link', { name: 'a note' }));
+
+  await waitFor(() => expect(router.url).toBe('/notes/welcome'));
+  await waitFor(() => expect(titles(fabric).at(-1)).toBe('Welcome'));
 });

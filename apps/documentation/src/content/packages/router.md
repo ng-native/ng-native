@@ -56,6 +56,10 @@ The native options are passed the same way: `withLinkParent` for deep links, and
 `withHeaderDefaults` and `withTabDefaults` for how every [header](/packages/router/header) and
 [tab bar](/packages/router/tabs) looks when a screen does not say.
 
+The routes can come from files instead of an array: `fileRoutes(pages)` routes each file in
+`src/app/pages` by its path, with Analog's file names. See
+[File routes](/packages/router/file-routes).
+
 `withComponentInputBinding()` is opt-in here exactly as it is on the web: with it, a `:id` param,
 a query param or resolved data arrives as the page's `id` input; without it, both outlets leave a
 page's inputs alone, as Angular's `RouterOutlet` does, and the page reads `ActivatedRoute` instead.
@@ -168,3 +172,4 @@ From here, **Screens and navigation** covers everything a URL alone cannot expre
 screen, presenting a modal or sheet, resetting the stack - through `NativeNavigation`. **The
 native header** covers `<native-header>` and the slots `<native-header-item>` places content in.
 **Tabs** covers `<native-tabs-outlet>` and declaring a bar as content rather than as config.
+**File routes** covers `fileRoutes`, the routes made from the files in `src/app/pages`.

@@ -69,10 +69,16 @@ describe('a tab at path ""', () => {
     nav = app.componentRef.injector.get(NativeNavigation);
     await idle();
     assert.equal(router.url, '/');
-    assert.equal(selected(), '');
+    assert.equal(selected(), '/');
   });
 
   afterEach(() => cleanup());
+
+  it('gives the tab a screen key iOS reads as one, since it reads an empty key as none', () => {
+    const keys = host().children.map((screen) => screen.props['screenKey']);
+    assert.ok(keys.includes('/'), `the tab's screen key, among ${JSON.stringify(keys)}`);
+    assert.ok(!keys.includes(''));
+  });
 
   it('presents a page of it from another tab over that tab, and back returns there', async () => {
     await tap('schedule');
@@ -94,7 +100,7 @@ describe('a tab at path ""', () => {
     await nav.push('/talks/7');
     await idle();
     assert.equal(router.url, '/talks/7');
-    assert.equal(selected(), '');
+    assert.equal(selected(), '/');
     assert.equal(created['HomeStack'], 1, 'one stack in the tab, not a second');
     assert.equal(live['HomeStack'], 1);
 
@@ -107,7 +113,7 @@ describe('a tab at path ""', () => {
     await nav.push('/talks/7');
     await idle();
     await tap('schedule');
-    await tap('');
+    await tap('/');
     assert.equal(router.url, '/talks/7');
   });
 

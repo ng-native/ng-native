@@ -194,11 +194,19 @@ function warnIfIconOnOnePlatform(tab: NativeTab): void {
   );
 }
 
+/**
+ * The key native identifies a tab by: its path, or `/` for the tab at path `''`, since iOS reads an
+ * empty key as none and fails on the tap that selects it. No route path starts with `/`.
+ */
+export function screenKeyOf(path: string): string {
+  return path || '/';
+}
+
 @Component({
   selector: 'native-tab',
   template: '',
   host: {
-    '[screenKey]': 'path()',
+    '[screenKey]': 'screenKey()',
     '[title]': 'title()',
     '[badgeValue]': 'badge()',
     '[tabBarItemAccessibilityLabel]': 'accessibilityLabel()',
@@ -240,6 +248,8 @@ export class NativeTab implements OnInit {
    * identifies the tab by it too, so it must be unique in the bar.
    */
   readonly path = input.required<string>();
+
+  protected readonly screenKey = computed(() => screenKeyOf(this.path()));
 
   /** The label under the icon. Absent gives an icon-only item. */
   readonly title = input<string>();

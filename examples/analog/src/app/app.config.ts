@@ -1,5 +1,6 @@
 import { withComponentInputBinding } from '@angular/router';
 import { pageRoutes, provideContentFiles } from '@ng-native/analog';
+import { provideKeyboardController } from '@ng-native/components';
 import { provideNativeRouter, withLinkParent } from '@ng-native/router';
 import { content } from './content.ts';
 import { pages } from './pages.ts';
@@ -20,6 +21,7 @@ function linkParent(url: string): string | null {
  */
 export const appConfig = {
   providers: [
+    provideKeyboardController(),
     provideNativeRouter(
       pageRoutes(pages, { markdownPage: MarkdownPage }),
       withComponentInputBinding(),

@@ -65,10 +65,20 @@ export class App {
 - `nativeRouterLink` - the native equivalent of `routerLink`.
 - `NativeNavigation` - replacing a screen, presenting a modal or sheet, resetting the stack: what a
   URL alone cannot express.
+- `fileRoutes(pages)` - routes made from the files in `src/app/pages`, with Analog's file names
+  (`index.page.ts`, `[id].page.ts`, `[...slug].page.ts`, `(group)` folders, layouts and `.md`
+  pages), found by Metro's `require.context`:
+
+  ```ts
+  const pages = require.context('./pages', true, /\.page\.ts$/, 'lazy');
+
+  provideNativeRouter(fileRoutes(pages), withComponentInputBinding());
+  ```
 
 ## Docs
 
 - [Router](https://ng-native.com/packages/router)
+- [File routes](https://ng-native.com/packages/router/file-routes)
 - [Root README](https://github.com/ng-native/ng-native/blob/main/README.md) and
   [ARCHITECTURE.md](https://github.com/ng-native/ng-native/blob/main/docs/ARCHITECTURE.md)
 

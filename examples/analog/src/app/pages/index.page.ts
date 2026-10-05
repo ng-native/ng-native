@@ -46,6 +46,17 @@ const SECTIONS: readonly Section[] = [
     ],
   },
   {
+    title: 'NATIVE VIEWS',
+    features: [
+      { name: 'Native components', file: 'components.page.ts', url: '/components' },
+      {
+        name: 'More native components',
+        file: 'more-components.page.ts',
+        url: '/more-components',
+      },
+    ],
+  },
+  {
     title: 'ROUTEMETA',
     features: [
       { name: 'Title', file: 'titled.page.ts', url: '/titled' },
@@ -65,6 +76,7 @@ const SECTIONS: readonly Section[] = [
     title: 'CONTENT',
     features: [
       { name: 'Markdown', file: 'markdown.page.ts', url: '/markdown' },
+      { name: 'Markdown editor', file: 'editor.page.ts', url: '/editor' },
       { name: 'Blog', file: 'blog/index.page.ts', url: '/blog' },
       { name: 'Markdown page', file: 'colophon.md', url: '/colophon' },
     ],

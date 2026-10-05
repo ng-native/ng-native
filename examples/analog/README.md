@@ -5,23 +5,26 @@ screen is an Analog page in `src/app/pages`, routed by `createRoutes` from `@ana
 through `@ng-native/analog`, and each one shows the file that made it, what the feature does, and
 the feature working.
 
-| Feature              | File                                                      | What the page shows                                             |
-| -------------------- | --------------------------------------------------------- | --------------------------------------------------------------- |
-| Static page          | `about.page.ts`                                           | A file's path is its URL: `/about`                              |
-| Dynamic parameter    | `products/[productId].page.ts`                            | The `productId` it was opened with, as an input                 |
-| Nested layout        | `products.page.ts`, `products/index.page.ts`              | A list on the layout's own stack, in a sheet, pushing items     |
-| Catch-all            | `docs/[...slug].page.ts`                                  | Every segment after `/docs`, for paths of any depth             |
-| Route group          | `(account)/profile.page.ts`, `(account)/settings.page.ts` | URLs with no `(account)` in them                                |
-| Tabs                 | `tabs.page.ts`, `tabs/index.page.ts`, `tabs/laps.page.ts` | A native tab bar whose tabs are pages, each kept as it was left |
-| `routeMeta` title    | `titled.page.ts`                                          | The native header's title, from `routeMeta.title`               |
-| `routeMeta` redirect | `old-home.page.ts`                                        | No component: `/old-home` lands on the home page                |
-| `routeMeta` guard    | `admin.page.ts`                                           | Refused until Admin access is turned on in Settings             |
-| `routeMeta` resolver | `resolved.page.ts`                                        | Data a resolver loaded before the page was shown                |
-| Lazy loading         | `lazy.page.ts`                                            | A page's code runs on first open (its own file in dev and web)  |
-| Query parameters     | `search.page.ts`                                          | `?q=` read from `ActivatedRoute`, followed as it changes        |
-| Markdown             | `markdown.page.ts`                                        | A document drawn natively by `<markdown>`, its links routed     |
-| Blog                 | `blog/index.page.ts`, `blog/[slug].page.ts`               | The posts in `src/content`, read with `injectContent`           |
-| Markdown page        | `colophon.md`                                             | A `.md` file as a page, titled by its front matter              |
+| Feature                | File                                                      | What the page shows                                             |
+| ---------------------- | --------------------------------------------------------- | --------------------------------------------------------------- |
+| Static page            | `about.page.ts`                                           | A file's path is its URL: `/about`                              |
+| Dynamic parameter      | `products/[productId].page.ts`                            | The `productId` it was opened with, as an input                 |
+| Nested layout          | `products.page.ts`, `products/index.page.ts`              | A list on the layout's own stack, in a sheet, pushing items     |
+| Catch-all              | `docs/[...slug].page.ts`                                  | Every segment after `/docs`, for paths of any depth             |
+| Route group            | `(account)/profile.page.ts`, `(account)/settings.page.ts` | URLs with no `(account)` in them                                |
+| Tabs                   | `tabs.page.ts`, `tabs/index.page.ts`, `tabs/laps.page.ts` | A native tab bar whose tabs are pages, each kept as it was left |
+| Native components      | `components.page.ts`                                      | Inputs, switches, a stepper, photos and a modal, all native     |
+| More native components | `more-components.page.ts`                                 | A podcast library: recycled and sectioned lists, a swiped card  |
+| `routeMeta` title      | `titled.page.ts`                                          | The native header's title, from `routeMeta.title`               |
+| `routeMeta` redirect   | `old-home.page.ts`                                        | No component: `/old-home` lands on the home page                |
+| `routeMeta` guard      | `admin.page.ts`                                           | Refused until Admin access is turned on in Settings             |
+| `routeMeta` resolver   | `resolved.page.ts`                                        | Data a resolver loaded before the page was shown                |
+| Lazy loading           | `lazy.page.ts`                                            | A page's code runs on first open (its own file in dev and web)  |
+| Query parameters       | `search.page.ts`                                          | `?q=` read from `ActivatedRoute`, followed as it changes        |
+| Markdown               | `markdown.page.ts`                                        | A document drawn natively by `<markdown>`, its links routed     |
+| Markdown editor        | `editor.page.ts`                                          | Markdown typed on the device, drawn as it changes               |
+| Blog                   | `blog/index.page.ts`, `blog/[slug].page.ts`               | The posts in `src/content`, read with `injectContent`           |
+| Markdown page          | `colophon.md`                                             | A `.md` file as a page, titled by its front matter              |
 
 The home page is `index.page.ts`. The product pages open as a sheet (a modal on Android, where React
 Native Screens does not render a nested stack in a form sheet): a presented screen has no navigation

@@ -7,8 +7,8 @@ import {
 } from '@ng-native/components/markdown';
 import { NativeHeader, NativeNavigation } from '@ng-native/router';
 import { STYLED_NOTE } from '../note/notes.ts';
+import { SerifTheme } from '../styled/serif-theme.ts';
 import { followLink } from '../ui/follow-link.ts';
-import { SerifTheme } from './serif-theme.ts';
 
 /**
  * Headings, paragraphs and quotes take the app's classes in place of the defaults; a link keeps
@@ -22,7 +22,7 @@ const CLASSES: MarkdownClasses = {
   blockquote: 'serif-quote',
 };
 
-/** A note drawn with `classes`, from a global stylesheet. */
+/** `/styled`: a note drawn with `classes`, from a global stylesheet. */
 @Component({
   imports: [Markdown, NativeHeader, ScrollView, SerifTheme, View],
   template: `
@@ -38,7 +38,7 @@ const CLASSES: MarkdownClasses = {
   `,
   styleUrl: '../ui/page.css',
 })
-export class StyledNote {
+export default class StyledNote {
   private readonly navigation = inject(NativeNavigation);
 
   protected readonly note = STYLED_NOTE;

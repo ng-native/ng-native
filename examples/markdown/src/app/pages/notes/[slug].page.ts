@@ -2,10 +2,13 @@ import { Component, computed, inject, input } from '@angular/core';
 import { ScrollView, Text, View } from '@ng-native/components';
 import { Markdown, type MarkdownLinkPress } from '@ng-native/components/markdown';
 import { NativeHeader, NativeNavigation } from '@ng-native/router';
-import { followLink } from '../ui/follow-link.ts';
-import { noteBySlug } from './notes.ts';
+import { followLink } from '../../ui/follow-link.ts';
+import { noteBySlug } from '../../note/notes.ts';
 
-/** One note, drawn from the tokens Metro lexed as it bundled the app. */
+/**
+ * `/notes/:slug`: one note, drawn from the tokens Metro lexed as it bundled the app. The file's
+ * `[slug]` arrives as the `slug` input.
+ */
 @Component({
   imports: [Markdown, NativeHeader, ScrollView, Text, View],
   template: `
@@ -22,9 +25,9 @@ import { noteBySlug } from './notes.ts';
       </view>
     </scroll-view>
   `,
-  styleUrl: '../ui/page.css',
+  styleUrl: '../../ui/page.css',
 })
-export class NoteScreen {
+export default class NoteScreen {
   private readonly navigation = inject(NativeNavigation);
 
   readonly slug = input<string>();

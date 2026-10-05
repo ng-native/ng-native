@@ -67,4 +67,12 @@ export {
   type SwipeDirection,
 } from './screen-presentation.ts';
 export { ActivityState, type ActivityStateValue } from './screens.ts';
+export {
+  fileRoutes,
+  type FileRoutesOptions,
+  type PageContext,
+  type PageFiles,
+  type RouteMeta,
+} from './file-routes.ts';
+export { injectMarkdownPage, type MarkdownPageFile } from './markdown-page.ts';
 export { FullWindowOverlay } from './full-window-overlay.ts';

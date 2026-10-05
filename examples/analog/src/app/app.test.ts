@@ -3,6 +3,7 @@ import { DeepLinks } from '@ng-native/device';
 import {
   cleanup,
   fireEvent,
+  gestureOf,
   render,
   screen,
   userEvent,
@@ -14,12 +15,17 @@ import {
 import { afterEach, expect, test, vi } from 'vitest';
 import { App } from './app.ts';
 import { appConfig } from './app.config.ts';
+import { EPISODES } from './data/podcasts.ts';
 
 // The same pages and content files, found by Vite rather than by Metro's require.context. The
 // ngNative() plugin makes each .md file the module Metro makes of it.
 vi.mock('./pages.ts', () => ({
   pages: import.meta.glob(['./pages/**/*.page.ts', './pages/**/*.md']),
 }));
+vi.mock(
+  '@ng-native/components/animations',
+  () => import('../../node_modules/@ng-native/components/src/animations-web.ts'),
+);
 vi.mock('./content.ts', () => ({
   content: import.meta.glob('../content/**/*.md', { eager: true }),
 }));
@@ -86,7 +92,7 @@ test('home shows the Analog logo and a row for every feature', async () => {
   const logo = nodes(fabric, 'RNSVGSvgView')[0]!;
   expect(logo.props['vbWidth']).toBe(273);
   expect(flatten([logo]).filter((node) => node.viewName === 'RNSVGPath')).toHaveLength(4);
-  expect(screen.getAllByRole('button')).toHaveLength(15);
+  expect(screen.getAllByRole('button')).toHaveLength(18);
 });
 
 test('a static page is at the URL its file name gives it', async () => {
@@ -260,7 +266,7 @@ test('a tab layout keeps each tab as it was left while the other is in front', a
 
   expect(nodes(fabric, 'RNSTabsScreenIOS')).toHaveLength(2);
   expect(titles(fabric)).toEqual(['Analog Showroom', 'Tabs']);
-  expect(selectedTab(fabric)).toBe('');
+  expect(selectedTab(fabric)).toBe('/');
   await userEvent.press(screen.getByRole('button', { name: 'Add to COUNTER' }));
   await userEvent.press(screen.getByRole('button', { name: 'Add to COUNTER' }));
   await waitFor(() => expect(shown(fabric, 'COUNTER')).toEqual(['2']));
@@ -273,7 +279,7 @@ test('a tab layout keeps each tab as it was left while the other is in front', a
 
   await router.navigateByUrl('/tabs');
 
-  await waitFor(() => expect(selectedTab(fabric)).toBe(''));
+  await waitFor(() => expect(selectedTab(fabric)).toBe('/'));
   expect(router.url).toBe('/tabs');
   expect(shown(fabric, 'COUNTER')).toEqual(['2']);
   expect(shown(fabric, 'LAPS')).toEqual(['1']);
@@ -293,6 +299,123 @@ test('a Markdown page draws its document natively and routes its relative links'
 
   await waitFor(() => expect(router.url).toBe('/about'));
   expect(titles(fabric)).toEqual(['Analog Showroom', 'Markdown', 'About']);
+});
+
+test('the native components page plans a trip from real controls, and books it', async () => {
+  const { fabric, router } = await start();
+
+  await openFeature(fabric, router, 'Native components', '/components');
+
+  const page = () => front(fabric);
+  await userEvent.type(page().getByLabelText('Traveller'), 'Kam');
+  await userEvent.press(page().getByRole('button', { name: 'More guests' }));
+  await userEvent.press(page().getByRole('button', { name: 'Kyoto' }));
+  await fireEvent(page().getByRole('switch', { name: 'Trip insurance' }), 'change', {
+    value: true,
+  });
+
+  await waitFor(() =>
+    expect(page().getByText('Kam + 2 to Kyoto, window seat, insured')).toBeTruthy(),
+  );
+  expect(page().getByText('100% ready')).toBeTruthy();
+
+  await userEvent.press(page().getByRole('button', { name: 'Book trip' }));
+  expect(await screen.findByText('Booked')).toBeTruthy();
+});
+
+test('the second components page recycles, sections, searches and swipes a podcast library', async () => {
+  vi.stubGlobal('requestAnimationFrame', (step: (time: number) => void) =>
+    setTimeout(() => step(performance.now()), 16),
+  );
+  vi.stubGlobal('cancelAnimationFrame', (id: number) => clearTimeout(id));
+  try {
+    const { fabric, router } = await start();
+    await openFeature(fabric, router, 'More native components', '/more-components');
+
+    const page = () => front(fabric);
+    const list = () =>
+      flatten([nodes(fabric, 'RNSScreen').at(-1)!]).find((node) => node.viewName === 'ScrollView')!;
+    const episodeRows = () =>
+      page()
+        .getAllByRole('button')
+        .filter((row) => /^#\d+ /.test(String(row.props['accessibilityLabel'])));
+    const label = (episode: (typeof EPISODES)[number]) => `#${episode.number} ${episode.title}`;
+
+    expect(nodes(fabric, 'RNCMaskedView')).toHaveLength(1);
+    expect(page().getByText('Signal Hour', { exact: false })).toBeTruthy();
+
+    fabric.emit(list(), 'topLayout', { layout: { height: 700 } });
+    await waitFor(() =>
+      expect(page().getByRole('button', { name: label(EPISODES[0]!) })).toBeTruthy(),
+    );
+    const first = episodeRows();
+    expect(first.length).toBeLessThan(30);
+
+    fabric.emit(list(), 'topScroll', { contentOffset: { y: 200 * 76 } });
+    await waitFor(() =>
+      expect(page().getByRole('button', { name: label(EPISODES[200]!) })).toBeTruthy(),
+    );
+    expect(page().queryByRole('button', { name: label(EPISODES[0]!) })).toBeNull();
+    const tags = new Set(first.map((row) => row.reactTag));
+    expect(episodeRows().filter((row) => tags.has(row.reactTag)).length).toBeGreaterThan(0);
+
+    fabric.emit(list(), 'topScroll', { contentOffset: { y: 0 } });
+    const card = await waitFor(() => page().getByLabelText('Up next'));
+    const pan = gestureOf(card, 'Pan').callbacks as Record<string, (event: object) => void>;
+    pan['onUpdate']!({ translationX: 60 });
+    await waitFor(() =>
+      expect(
+        (page().getByLabelText('Up next').props['transform'] as [{ translateX: number }])[0]
+          .translateX,
+      ).toBe(60),
+    );
+    pan['onEnd']!({ translationX: 160, velocityX: 0 });
+    await waitFor(() => expect(page().getByText('1 saved for later')).toBeTruthy());
+    expect(within(page().getByLabelText('Up next')).getByText(EPISODES[2]!.title)).toBeTruthy();
+
+    await userEvent.press(page().getByRole('tab', { name: 'Shows' }));
+    expect(await screen.findByRole('header', { name: 'A' })).toBeTruthy();
+    const shows = () =>
+      flatten([nodes(fabric, 'RNSScreen').at(-1)!]).find((node) => node.viewName === 'ScrollView')!;
+    fabric.emit(shows(), 'topLayout', { layout: { height: 600 } });
+    fabric.emit(shows(), 'topScroll', { contentOffset: { y: 200 } });
+    await waitFor(() =>
+      expect(page().getByRole('header', { name: 'B' }).parent!.props['zIndex']).toBe(1),
+    );
+
+    await userEvent.press(page().getByRole('button', { name: 'Follow After Hours' }));
+    await waitFor(() => expect(page().getByText('Following 2 shows')).toBeTruthy());
+
+    await userEvent.type(page().getByLabelText('Search'), 'night');
+    await waitFor(() => expect(page().queryByRole('header', { name: 'A' })).toBeNull());
+    expect(page().getByText('Night Shift')).toBeTruthy();
+
+    await userEvent.press(page().getByRole('tab', { name: 'Episodes' }));
+    await waitFor(() => expect(page().getByText(/^\d+ RESULTS$/)).toBeTruthy());
+    fabric.emit(list(), 'topLayout', { layout: { height: 700 } });
+    await waitFor(() => expect(episodeRows().length).toBeGreaterThan(0));
+    for (const row of episodeRows()) {
+      const episode = EPISODES.find((each) => label(each) === row.props['accessibilityLabel'])!;
+      expect(`${episode.title} ${episode.show.name}`.toLowerCase()).toContain('night');
+    }
+  } finally {
+    vi.unstubAllGlobals();
+  }
+});
+
+test('the Markdown editor draws what is typed as it is typed', async () => {
+  const { fabric, router } = await start();
+
+  await openFeature(fabric, router, 'Markdown editor', '/editor');
+
+  const page = front(fabric);
+  expect(page.getByRole('header', { name: 'Try it' })).toBeTruthy();
+
+  await userEvent.type(page.getByLabelText('Markdown source'), '\n\n# Typed on the device');
+
+  await waitFor(() =>
+    expect(front(fabric).getByRole('header', { name: 'Typed on the device' })).toBeTruthy(),
+  );
 });
 
 test('the blog lists the posts in src/content, newest first, from their front matter', async () => {
