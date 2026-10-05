@@ -962,6 +962,22 @@ function placeholderFaded(props: Record<string, unknown>): void {
   else if (opacity <= 0) props['placeholderTextColor'] = 'rgba(0, 0, 0, 0)';
 }
 
+/** The least alpha iOS sends a touch to a view at: under a hundredth it is passed over. */
+const TOUCHED_ALPHA = 0.011;
+
+/**
+ * A view that takes a touch and has no opacity, committed with the least there is to be sent
+ * one. A browser sends a press to an element at `opacity: 0`, which is how a see-through
+ * backdrop hears a press outside a menu; iOS passes over a view it would not draw. A hundredth
+ * of what the view draws is not seen.
+ */
+function stillTouched(props: Record<string, unknown>): void {
+  // One told to take no touch is not to be sent one, seen or not.
+  if (props['pointerEvents'] === 'none') return;
+  const opacity = props['opacity'];
+  if (typeof opacity === 'number' && opacity < TOUCHED_ALPHA) props['opacity'] = TOUCHED_ALPHA;
+}
+
 /**
  * A box with `display: none`, out of the flow as well. It takes no room either way, but Yoga
  * reads an item's baseline from its first child that is in the flow, and a hidden one has no
@@ -3284,6 +3300,7 @@ export class Engine implements HostEngine {
     centreSingleLine(viewName, merged, this.fontScale);
     // Last, on what is committed: an override or an animation can hide a box, or place it.
     hiddenOutOfFlow(merged);
+    if (this.responders.has(node)) stillTouched(merged);
     this.movePaint(node, merged);
     return merged;
   }
@@ -4568,9 +4585,12 @@ export class Engine implements HostEngine {
     this.registerEventHandler();
     this.responders.set(node, handlers);
     this.keepNative(node, true);
+    // What it is committed with can hang on whether it takes a touch: see `stillTouched`.
+    this.markProps(node);
     return () => {
       this.responders.delete(node);
       this.keepNative(node, false);
+      this.markProps(node);
       if (this.currentResponder !== node) return;
       // Torn down under the finger: no release is coming, so the chain it marked is cleared
       // here or it stays `:active` for good.
