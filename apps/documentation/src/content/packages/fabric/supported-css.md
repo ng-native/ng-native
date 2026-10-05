@@ -44,8 +44,8 @@ Tailwind's `placeholder:text-gray-400`, sets that colour on a `<text-input>`, a 
 included, and on an element named `input` or `textarea` where an app or a package has
 registered one as a text field. An `opacity` in the rule fades that colour, since native has no
 opacity for a placeholder: `opacity: 0` hides it and `opacity: 1` leaves the colour as it is. With
-no colour in the rule the placeholder is the platform's default, which `opacity: 0` hides and any
-other value leaves alone. A placeholder takes only a colour and an opacity, so anything else in
+no colour in the rule the placeholder is the platform's default, and with `platform-color()` it is
+the platform's to work out: `opacity: 0` hides either and any other value leaves it alone. A placeholder takes only a colour and an opacity, so anything else in
 the rule is dropped with a warning, and the rule matches those three elements only, as a browser's
 matches an input.
 
