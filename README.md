@@ -2,7 +2,7 @@
 
 <!-- prettier-ignore-start -->
 <!-- ALL-CONTRIBUTORS-BADGE:START - Do not remove or modify this section -->
-[![All Contributors](https://img.shields.io/badge/all_contributors-7-orange.svg?style=flat-square)](#contributors-)
+[![All Contributors](https://img.shields.io/badge/all_contributors-8-orange.svg?style=flat-square)](#contributors-)
 <!-- ALL-CONTRIBUTORS-BADGE:END -->
 <!-- prettier-ignore-end -->
 
@@ -168,6 +168,9 @@ Thanks goes to these wonderful people:
       <td align="center" valign="top" width="14.28%"><a href="https://ajitpanigrahi.com"><img src="https://avatars.githubusercontent.com/u/19947758?v=4?s=100" width="100px;" alt="Ajit Panigrahi"/><br /><sub><b>Ajit Panigrahi</b></sub></a><br /><a href="https://github.com/ng-native/ng-native/commits?author=ajitzero" title="Code">💻</a></td>
       <td align="center" valign="top" width="14.28%"><a href="https://github.com/anthonyjuarezsolis"><img src="https://avatars.githubusercontent.com/u/38568593?v=4?s=100" width="100px;" alt="Anthony"/><br /><sub><b>Anthony</b></sub></a><br /><a href="https://github.com/ng-native/ng-native/commits?author=anthonyjuarezsolis" title="Code">💻</a></td>
       <td align="center" valign="top" width="14.28%"><a href="https://github.com/boluwatifee4"><img src="https://avatars.githubusercontent.com/u/87859583?v=4?s=100" width="100px;" alt="Ola Boluwatife"/><br /><sub><b>Ola Boluwatife</b></sub></a><br /><a href="https://github.com/ng-native/ng-native/commits?author=boluwatifee4" title="Code">💻</a></td>
+    </tr>
+    <tr>
+      <td align="center" valign="top" width="14.28%"><a href="http://hangell.org/"><img src="https://avatars.githubusercontent.com/u/53544561?v=4?s=100" width="100px;" alt="Hangell"/><br /><sub><b>Hangell</b></sub></a><br /><a href="https://github.com/ng-native/ng-native/commits?author=Hangell" title="Code">💻</a></td>
     </tr>
   </tbody>
 </table>
