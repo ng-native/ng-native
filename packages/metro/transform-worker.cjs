@@ -59,7 +59,8 @@ function domComponentPage(filename, options) {
  */
 function withLibraryStyles(config, options) {
   const packages = config.angularNativeLibraryStyles;
-  if (!Array.isArray(packages) || !packages.length) return options;
+  // An empty list is carried too: it is the app saying no library's.
+  if (!Array.isArray(packages)) return options;
   return {
     ...options,
     customTransformOptions: {

@@ -53,9 +53,10 @@ ships partial-compiled (see [under the hood](#under-the-hood)):
 ngNative({ inline: [/\/node_modules\/@my-org\//] });
 ```
 
-`libraryStyles` is the list the Metro preset takes by the same name: the npm packages whose
-components' own stylesheets are compiled. Without it a library's components draw with no styles
-in a test, whatever the app's Metro config says:
+A library's own stylesheets are compiled in a test as the Metro preset compiles them: every
+library's, with nothing to configure. `libraryStyles` is the option the preset takes by the same
+name, a list of the only npm packages to compile or `false` for none. Give it what the app's Metro
+config has, so a test draws what the app draws:
 
 ```ts
 ngNative({ inline: [/\/node_modules\/@my-org\//], libraryStyles: ['@my-org/ui'] });

@@ -219,7 +219,7 @@ function asWritten(source, file) {
 }
 
 /**
- * @param {{ inline?: (string | RegExp)[], libraryStyles?: string[] }} [options]
+ * @param {{ inline?: (string | RegExp)[], libraryStyles?: string[] | false }} [options]
  * @returns {import('vitest/config').Plugin}
  */
 export function ngNative(options = {}) {

@@ -93,9 +93,12 @@ constant or a concatenation with `+`, also fails the build, naming the component
 ### A library's component CSS
 
 A component library from npm arrives partial-compiled and goes through Angular's linker, not the
-compiler above, and its CSS stays as it was written: for a browser. By default nothing compiles it,
-so a library's components draw with no styles and no warning. Name the packages whose CSS you want
-compiled, and each of their components gets a sheet the way yours do:
+compiler above, and its CSS stays as it was written: for a browser. The preset compiles it on the
+way through, for every library, so each of a library's components gets a sheet the way yours do,
+with nothing to configure.
+
+`libraryStyles` narrows that. A list names the only npm packages whose component CSS is compiled,
+and `false` compiles none. A library left out draws with no styles and no warning:
 
 ```js
 module.exports = withAngularNative(getDefaultConfig(__dirname), {
@@ -124,9 +127,9 @@ lists for your own CSS. A component the library writes with `ViewEncapsulation.N
 Material writes every one, has its sheet matched as a global one once it renders, as a browser
 applies it: see [the CSS engine](/packages/fabric/css-engine).
 
-The `@ng-native/*` packages are never listed: their components' CSS, such as `<markdown>`'s
-default classes and `<touchable-opacity>`'s fade, is written for the device and always compiled,
-from the workspace or from npm.
+The `@ng-native/*` packages are never listed, and no list leaves them out: their components' CSS,
+such as `<markdown>`'s default classes and `<touchable-opacity>`'s fade, is written for the device
+and always compiled, from the workspace or from npm.
 
 A package is named as its `package.json` names it, `@acme/ui`, and matched by the
 `node_modules/@acme/ui/` on a file's path, or by the `name` in the nearest `package.json` for a

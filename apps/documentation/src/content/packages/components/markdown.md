@@ -119,7 +119,7 @@ Keep the default beside your own, as `a` does above, to change only part of it.
 
 The default classes need nothing in your Metro config, in a workspace or installed from npm: the
 [transformer](/packages/metro/configuration) compiles every `@ng-native/*` package's component CSS
-into native sheets, with no `libraryStyles` entry.
+into native sheets, whatever `libraryStyles` says.
 
 ## Tokens lexed already
 

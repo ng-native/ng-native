@@ -407,11 +407,12 @@ function withChunksOutsideServerRoot(config) {
 
 /**
  * @param {object} config a Metro config, usually from `getDefaultConfig(__dirname)`
- * @param {{ workspaceRoot?: string, projectRoot?: string, libraryStyles?: string[] }} [options]
+ * @param {{ workspaceRoot?: string, projectRoot?: string, libraryStyles?: string[] | false }} [options]
  *   `workspaceRoot` for a monorepo, where the framework packages live outside the app's own
  *   `node_modules` and Metro has to be told to watch them. An app installing from npm needs
- *   neither and should pass nothing. `libraryStyles` names the npm packages whose components'
- *   CSS is compiled into native sheets, as the app's own is; a library not named draws unstyled.
+ *   neither and should pass nothing. Every library's component CSS is compiled into native
+ *   sheets, as the app's own is; `libraryStyles` narrows that to the npm packages it names, and
+ *   `false` to none. A library left out draws unstyled.
  */
 /**
  * A hash of the compiler's own sources.
@@ -478,21 +479,23 @@ function watchCompiler(dir, fingerprint) {
 }
 
 /**
- * The `libraryStyles` list as given, checked, or nothing when there is none.
+ * The `libraryStyles` list as given, checked: nothing when the option is not given, which is
+ * every library, and an empty list for `false`, which is none.
  *
  * It is a list of package names and nothing else, because a wrong shape here would reach the
- * transformer as a list that matches no file, and the library would draw unstyled with no word
- * about why - the silence the option exists to end.
+ * transformer as a list that matches no file, and every library would draw unstyled with no word
+ * about why.
  */
 function libraryStylesOf(options) {
   const { libraryStyles } = options;
   if (libraryStyles === undefined) return undefined;
+  if (libraryStyles === false) return [];
   const names = Array.isArray(libraryStyles)
     ? libraryStyles.every((name) => typeof name === 'string' && name.trim())
     : false;
   if (!names) {
     throw new Error(
-      '[angular-native] libraryStyles must be a list of npm package names, such as ' +
+      '[angular-native] libraryStyles must be a list of npm package names, or false, such as ' +
         `["@acme/ui"]; got ${JSON.stringify(libraryStyles)}.`,
     );
   }
@@ -500,7 +503,7 @@ function libraryStylesOf(options) {
     const wrong = wrongPackageName(name);
     if (wrong) throw new Error(`[angular-native] libraryStyles: '${name}' ${wrong}`);
   }
-  return libraryStyles.length ? [...new Set(libraryStyles)] : undefined;
+  return [...new Set(libraryStyles)];
 }
 
 /**
@@ -532,14 +535,15 @@ function wrongPackageName(name) {
 }
 
 /**
- * A library's component CSS, compiled on the way through the linker. The list travels to the
- * transformer through the worker `withAngularNative` installs, which is the only path there is
- * (see `transform-worker.cjs`), so in front of any other worker the option would quietly do nothing.
+ * A library's component CSS, compiled on the way through the linker: every library's, with
+ * nothing to record, unless the app narrowed them. A list travels to the transformer through the
+ * worker `withAngularNative` installs, which is the only path there is (see
+ * `transform-worker.cjs`), so in front of any other worker the option would quietly do nothing.
  *
  * The list goes into `cacheVersion` as well, as the compiler's fingerprint does. A transform is
  * cached against the file and that version, and the transformer config is in no key of Metro's
- * here - Expo's worker has no `getCacheKey` - so without this, naming a package would leave every
- * file of it cached as it was transformed before, unstyled, until a `--clear`.
+ * here - Expo's worker has no `getCacheKey` - so without this, changing the list would leave every
+ * file cached as it was transformed before, until a `--clear`.
  */
 function recordLibraryStyles(config, options) {
   const libraryStyles = libraryStylesOf(options);
@@ -560,7 +564,7 @@ function recordLibraryStyles(config, options) {
   process.env['ANGULAR_NATIVE_LIBRARY_STYLES'] = libraryStyles.join(',');
   config.transformer.cacheVersion = [
     config.transformer.cacheVersion,
-    `library-styles-${[...libraryStyles].sort().join(',')}`,
+    `library-styles-${[...libraryStyles].sort().join(',') || 'none'}`,
   ]
     .filter(Boolean)
     .join('-');

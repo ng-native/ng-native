@@ -337,7 +337,11 @@ describe('how the list reaches the transformer', () => {
     try {
       const given = { platform: 'ios', customTransformOptions: { dom: 'kept' } };
       assert.equal(run({}, given), given);
-      assert.equal(run({ angularNativeLibraryStyles: [] }, given), given);
+      // An empty list is one: no library's styles, which the transformer has to be told.
+      assert.deepEqual(run({ angularNativeLibraryStyles: [] }, given), {
+        platform: 'ios',
+        customTransformOptions: { dom: 'kept', angularNativeLibraryStyles: [] },
+      });
     } finally {
       cleanup();
     }
@@ -358,7 +362,8 @@ describe('how the list reaches the transformer', () => {
         }).ast,
       ).code as string;
     assert.match(run({ angularNativeLibraryStyles: ['@acme/ui'] }), /\["ɵnativeStyles"\] = /);
-    assert.doesNotMatch(run(undefined), /ɵnativeStyles/);
+    assert.match(run(undefined), /ɵnativeStyles/, 'no list is every library');
+    assert.doesNotMatch(run({ angularNativeLibraryStyles: [] }), /ɵnativeStyles/);
   });
 });
 

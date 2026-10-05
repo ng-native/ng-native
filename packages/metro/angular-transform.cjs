@@ -818,18 +818,18 @@ function compileTwice(src, filename, compilerOptions) {
  * not at build time. A library's component CSS is written for a browser, so only a web build,
  * which has one to read it, or a dev build, which keeps it as the app's own, leaves it in.
  *
- * A library the app opted in with `libraryStyles` gets what the app's own components get: each
- * component's CSS compiled into the sheet on `ɵnativeStyles`, with what native cannot express
- * dropped under a warning. Without the opt-in a library's components draw with no styles and no
- * word about it, which is what the option exists to make loud. An `@ng-native/*` package is always
- * opted in: its CSS is written for this engine, and an app installing it from npm gets the
+ * A library gets what the app's own components get: each component's CSS compiled into the sheet
+ * on `ɵnativeStyles`, with what native cannot express dropped under a warning. Every library,
+ * unless the app narrowed them with `libraryStyles`: a list is the only ones, and `false` or an
+ * empty list is none, whose components then draw with no styles. An `@ng-native/*` package always
+ * has its own: its CSS is written for this engine, and an app installing it from npm gets the
  * published, partial-compiled files rather than the sources a workspace compiles as its own.
  */
 function link(src, filename, options) {
   const owner = options.platform === 'web' ? null : packageOf(filename, options.projectRoot);
   const listed =
     owner !== null &&
-    (owner.name.startsWith('@ng-native/') || options.libraryStyles?.includes(owner.name));
+    (owner.name.startsWith('@ng-native/') || styles(options.libraryStyles, owner.name));
   const { code } = linkAngularPackageSync(
     listed ? withLibrarySheets(src, filename, owner, options.platform) : src,
     filename,
@@ -837,6 +837,10 @@ function link(src, filename, options) {
   const strip = options.dev !== true && options.platform !== 'web';
   return { code: strip ? stripComponentStyles(code, filename) : code, dependencies: [] };
 }
+
+/** Whether a library's styles are compiled: every library's, or the ones the app narrowed to. */
+const styles = (libraryStyles, name) =>
+  libraryStyles === undefined || (Array.isArray(libraryStyles) && libraryStyles.includes(name));
 
 /**
  * The npm package a file belongs to, `{ name, file }` with the file's path inside the package, or

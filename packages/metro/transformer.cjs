@@ -124,26 +124,23 @@ function originalLoc(loc, tracer, lineOffset) {
 
 /**
  * The preset's `libraryStyles`, which the transform worker it installs puts into the bundle's
- * `customTransformOptions`.
+ * `customTransformOptions`. Nothing where the app gave none, which is every library.
  *
- * A config that replaced that worker after `withAngularNative` leaves them out, and the option
- * would do nothing without a word. The preset also leaves the list in the environment its workers
- * inherit, so a file of a listed package that arrives without it is said to, once a build.
+ * A config that replaced that worker after `withAngularNative` leaves the list out, and every
+ * library would be styled without a word, the ones the app left out too. The preset also leaves
+ * the list in the environment its workers inherit, so a file that arrives without it is said
+ * to, once a build.
  */
 function libraryStylesOf(params) {
   const carried = params.options?.customTransformOptions?.angularNativeLibraryStyles;
   if (carried || warnedWorker) return carried;
-  const expected = process.env['ANGULAR_NATIVE_LIBRARY_STYLES']?.split(',').filter(Boolean) ?? [];
-  const listed = expected.find((name) =>
-    params.filename.split(path.sep).join('/').includes(`/node_modules/${name}/`),
-  );
-  if (listed) {
+  if (process.env['ANGULAR_NATIVE_LIBRARY_STYLES'] !== undefined) {
     warnedWorker = true;
     console.warn(
-      `[angular-native] libraryStyles names '${listed}', but ${params.filename} arrived without ` +
-        "the list, so the library's components have no sheets. Metro is running a transform " +
-        'worker other than the one withAngularNative installs, which is the only way the list ' +
-        'reaches the transformer: something set transformerPath after withAngularNative.',
+      `[angular-native] libraryStyles is set, but ${params.filename} arrived without it, so ` +
+        "every library's styles are compiled, those it leaves out too. Metro is running a " +
+        'transform worker other than the one withAngularNative installs, which is the only way ' +
+        'the list reaches the transformer: something set transformerPath after withAngularNative.',
     );
   }
   return carried;
