@@ -859,6 +859,24 @@ describe('a transition shorthand whose time is a token', () => {
     assert.equal(slow.opacity(), 0.25);
   });
 
+  it('refuses a token it cannot tell is the time, as it did', () => {
+    // `var(--ease)` here may be the easing: only a token that falls back to a time is one.
+    for (const css of [
+      'view { transition: opacity var(--ease) }',
+      'view { transition: var(--t) }',
+    ]) {
+      const reports: string[] = [];
+      const sheet = compileCss(css, 'app.css', { onUnsupported: (m: string) => reports.push(m) });
+      assert.match(reports[0] ?? '', /dropped 'transition'/, css);
+      assert.deepEqual(
+        (sheet as { rules: { declarations: object }[] }).rules.flatMap((rule) =>
+          Object.keys(rule.declarations),
+        ),
+        [],
+      );
+    }
+  });
+
   it('takes the time it falls back to where nothing sets the token', () => {
     const s = scene();
     s.engine.setClasses(s.view, 'open');
