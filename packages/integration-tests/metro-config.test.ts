@@ -1153,6 +1153,17 @@ describe('the history a reload parks with the dev server', () => {
     assert.equal((await request('GET', route)).body, 'null', 'a later cold start finds nothing');
   });
 
+  it('hands a history to a GET alone, so a probe does not take it from the app', async () => {
+    const { request } = serverOf();
+    const pages = JSON.stringify([{ url: '/about' }]);
+    await request('POST', route, pages);
+
+    for (const method of ['HEAD', 'OPTIONS', 'PUT', 'DELETE']) {
+      assert.equal((await request(method, route)).status, 405, method);
+    }
+    assert.equal((await request('GET', route)).body, pages);
+  });
+
   it('forgets a history nobody came back for', async (t) => {
     t.mock.timers.enable({ apis: ['Date'] });
     const { request } = serverOf();

@@ -26,8 +26,13 @@ const {
 } = require('@oxc-angular/vite/api');
 
 const IS_SOURCE = /\.m?tsx?$/;
+/**
+ * A path with something installed in it. Metro names a file from the project root, so the
+ * directory is as often the start of the path as a part of it.
+ */
+const INSTALLED = /(?:^|[\\/])node_modules[\\/]/;
 /** TypeScript that is not a declaration file nor something installed. */
-const IS_APP_MODULE = /^(?!.*[\\/]node_modules[\\/])(?!.*\.d\.[cm]?ts$).*\.[cm]?ts$/;
+const isAppModule = (filename) => /(?<!\.d)\.[cm]?ts$/.test(filename) && !INSTALLED.test(filename);
 const HAS_ANGULAR_DECORATOR = /@(Component|Directive|Pipe|Injectable|NgModule|Service)\s*\(/;
 const IS_PARTIAL_COMPILED =
   /ɵɵngDeclare(Component|Directive|Pipe|Injectable|NgModule|Service|Factory)/;
@@ -270,7 +275,7 @@ ${applies.join('\n')}
   var functions = [${handed.join(', ')}];
   // Whether what calls these classes asks again after a patch: not a library's, whose methods
   // are called by the thousand and are not what an app edits.
-  var watched = ${!/[\/]node_modules[\/]/.test(filename)};
+  var watched = ${!INSTALLED.test(filename)};
   var previous = registry.get(file);
   // One line per save, and it says why a reload happened when state gets lost.
   var log = console.log;
@@ -1455,7 +1460,7 @@ function hotParts(src, filename, components, resources, options, warn) {
  * handed to the modules that call it, where the edit used to reload the app. See `PATCH`.
  */
 function functionsBlock(src, filename, options) {
-  const hot = options.dev && options.platform !== 'web' && IS_APP_MODULE.test(filename);
+  const hot = options.dev && options.platform !== 'web' && isAppModule(filename);
   return hot ? hmrBlock(src, filename, [], null, options) || COUNTS_ITSELF : '';
 }
 

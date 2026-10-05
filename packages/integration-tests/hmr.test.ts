@@ -644,6 +644,12 @@ export default class Page {
     assert.equal(code('/app/src/sums.ts', { dev: false }), plain);
     assert.equal(code('/app/src/sums.ts', { dev: true, platform: 'web' }), plain);
     assert.equal(code('/app/node_modules/sums/index.ts', { dev: true }), plain);
+    // Metro names a file from the project root, so an installed one starts with the directory.
+    assert.equal(code('node_modules/sums/index.ts', { dev: true }), plain);
+    // Its classes are patched, and nothing of theirs is asked again after a patch.
+    const installed = transformAngular(mixed, 'node_modules/sums/sums.ts', { dev: true }).code;
+    assert.match(installed, /var watched = false;/);
+    assert.match(transformAngular(mixed, 'src/sums.ts', { dev: true }).code, /var watched = true;/);
     assert.equal(code('/app/src/sums.d.ts', { dev: true }), plain);
   });
 

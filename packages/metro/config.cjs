@@ -415,11 +415,13 @@ function withParkedRoute(config) {
         res.setHeader('Content-Type', 'application/json');
         res.end(body);
       };
-      if (req.method !== 'POST') {
+      // Collecting takes the history away, so only a GET does it: not a probe or a preflight.
+      if (req.method === 'GET') {
         const left = parked.get(app);
         parked.delete(app);
         return answer(200, left && Date.now() - left.at < PARKED_FOR ? left.urls : 'null');
       }
+      if (req.method !== 'POST') return answer(405, 'null');
       let body = '';
       req.on('data', (chunk) => {
         if (body.length <= PARKED_BYTES) body += chunk;
