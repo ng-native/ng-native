@@ -491,6 +491,9 @@ function fold(css) {
       Features.OklabColors |
       Features.LabColors |
       Features.ColorFunction |
+      // `light-dark()` is the compiler's too: a light rule and a dark one. Lowered, it is a pair
+      // of `var()`s no rule sets, and a token written with one is no colour at all.
+      Features.LightDark |
       // `:dir()` is answered from the app's layout direction; lowered, it is a list of languages.
       Features.DirSelector,
   }).code.toString();

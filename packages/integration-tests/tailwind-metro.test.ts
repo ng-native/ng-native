@@ -33,6 +33,8 @@ interface Sheet {
   rules: {
     declarations: Record<string, unknown>;
     deferred?: unknown[];
+    tokens?: Record<string, unknown>;
+    condition?: unknown;
     compounds: { classes: string[] }[];
   }[];
 }
@@ -78,6 +80,29 @@ describe('the generated stylesheet module', () => {
       paddingBottom: 16,
       paddingLeft: 16,
     });
+  });
+
+  it('keeps a light-dark() as the two schemes it names', () => {
+    // Lowered for an older browser it is a pair of `var()`s, which is no colour to the compiler:
+    // a theme written with it, as Angular Material's is, lost every token that has one.
+    const sheet = evaluate(
+      compileSheetModule(
+        '.theme { --surface: light-dark(#ffffff, #000000) } ' +
+          '.card { background-color: var(--surface); color: light-dark(#111111, #eeeeee) }',
+      ),
+    );
+    const sides = (className: string) =>
+      sheet.rules
+        .filter((rule) => rule.compounds.some((c) => c.classes.includes(className)))
+        .map((rule) => ({ dark: rule.condition !== undefined, ...rule.tokens, ...rule.declarations }));
+    assert.deepEqual(sides('theme'), [
+      { dark: false, '--surface': { color: 'rgb(255, 255, 255)' } },
+      { dark: true, '--surface': { color: 'rgb(0, 0, 0)' } },
+    ]);
+    assert.deepEqual(sides('card'), [
+      { dark: false, color: 'rgb(17, 17, 17)' },
+      { dark: true, color: 'rgb(238, 238, 238)' },
+    ]);
   });
 
   it('places inset-x and inset-y on the edges every native view reads', () => {
