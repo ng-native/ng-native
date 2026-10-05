@@ -1074,7 +1074,19 @@ function fallbacks(varPart, kind, context) {
  * sum is read. Undefined for anything else, a `calc()` with a token in it included.
  */
 const sumOf = (varPart, kind, context) =>
-  kind === 'length' ? calcLength(varPart.value?.fallback, context) : undefined;
+  kind === 'length' ? calcLength(lastFallback(varPart.value?.fallback), context) : undefined;
+
+/**
+ * What a fallback comes to once every token in it is unset: `var(--a, var(--b, 4px))` ends in
+ * `4px`. The tokens on the way are tried on the device, as `fallbackChain` lists them.
+ */
+function lastFallback(raw) {
+  if (!Array.isArray(raw)) return raw;
+  const [only, ...more] = raw.filter(
+    (part) => !(part.type === 'token' && part.value?.type === 'white-space'),
+  );
+  return !more.length && only?.type === 'var' ? lastFallback(only.value?.fallback) : raw;
+}
 
 function calcLength(raw, context) {
   const text = Array.isArray(raw) ? cssText(raw)?.trim() : null;
