@@ -1749,8 +1749,9 @@ export class StyleResolver {
     this.merged = new WeakMap();
     const before = this.generation;
     this.generation = ++generations;
-    // One that takes another's place, or names layers, can change what every node comes to.
-    if (at !== -1 || sheet.layers?.length) this.additions.length = 0;
+    // One that takes another's place can change what any node comes to. One that names layers
+    // cannot: a layer has its place from the first sheet to name it, and a new name comes last.
+    if (at !== -1) this.additions.length = 0;
     else this.additions.push({ before, after: this.generation, subjects: subjectsOf(sheet) });
     return true;
   }
@@ -1890,7 +1891,7 @@ export class StyleResolver {
       cached?.matched !== undefined &&
       !node.styleDirty &&
       cached.parentContext === parentContext &&
-      cached.generation === this.generation;
+      this.current(cached, node);
     if (!stands) return null;
     const candidates = this.rulesFor(node);
     const now = this.matched(node, node.styled ? ELEMENT_ENTRIES.concat(candidates) : candidates);
@@ -1925,7 +1926,7 @@ export class StyleResolver {
       !node.styleDirty &&
       !node.hasDirty &&
       cached.parentContext === parentContext &&
-      cached.generation === this.generation &&
+      this.current(cached, node) &&
       (node.anonymous === true || this.hasNoRules(node));
     if (!stands) return null;
     node.stateDirty = false;
