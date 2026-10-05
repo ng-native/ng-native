@@ -83,6 +83,31 @@ describe('::placeholder with an opacity', () => {
     assert.equal('placeholderOpacity' in field, false);
     assert.deepEqual(s.reports, []);
   });
+
+  it('takes an opacity that is important with no colour beside it', () => {
+    assert.equal(
+      placeholderOf(`${GREEN} .f::placeholder { opacity: 0 !important } .f.f { opacity: 1 }`),
+      colourOf('rgba(0, 255, 0, 0)'),
+    );
+  });
+
+  it('takes an opacity that is a token, read where the field is', () => {
+    const s = scene(`${GREEN} .f::placeholder { opacity: var(--shown) } .theme { --shown: 0.5 }`);
+    s.add('text-input', 'f');
+    const field = s.props().find((props) => 'placeholderTextColor' in props)!;
+    assert.equal(field['placeholderTextColor'], colourOf('rgba(0, 255, 0, 0.5)'));
+    assert.equal('placeholderOpacity' in field, false);
+    assert.deepEqual(s.reports, []);
+  });
+
+  it("hides a placeholder whose colour is the platform's to work out", () => {
+    const SYSTEM = '.f::placeholder { color: platform-color(placeholderText) }';
+    assert.equal(
+      placeholderOf(`${SYSTEM} .f::placeholder { opacity: 0 }`),
+      colourOf('transparent'),
+    );
+    assert.notEqual(placeholderOf(SYSTEM), colourOf('transparent'));
+  });
 });
 
 describe('::placeholder, as the text input placeholder colour', () => {

@@ -946,8 +946,9 @@ function heightFromLayout(node: EngineNode, parent: EngineNode): boolean {
  * A placeholder's opacity, which native has none for, as its colour faded by that share: none of
  * it at 0, which is how a stylesheet hides a placeholder under a label, and all of it at 1.
  *
- * ponytail: with no colour of its own the placeholder is native's default, which is not known
- * here: hidden at 0 and left as it is above that. Name the platform's default if one is faded.
+ * ponytail: with no colour of its own the placeholder is native's default, and a platform colour
+ * is native's to resolve: neither is known here, so each is hidden at 0 and left as it is above
+ * that. Name the platform's default, or read the colour back, if one is faded part of the way.
  */
 function placeholderFaded(props: Record<string, unknown>): void {
   const opacity = props['placeholderOpacity'];
@@ -955,7 +956,8 @@ function placeholderFaded(props: Record<string, unknown>): void {
   delete props['placeholderOpacity'];
   if (typeof opacity !== 'number' || opacity >= 1) return;
   const colour = props['placeholderTextColor'];
-  if (colour !== undefined) props['placeholderTextColor'] = faded(colour, Math.max(opacity, 0));
+  if (typeof colour === 'string')
+    props['placeholderTextColor'] = faded(colour, Math.max(opacity, 0));
   else if (opacity <= 0) props['placeholderTextColor'] = 'rgba(0, 0, 0, 0)';
 }
 
