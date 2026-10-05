@@ -133,6 +133,23 @@ describe('a class named only as what an element is inside', () => {
     assert.equal(s.props('cell')['color'], 'rgb(128, 128, 128)');
   });
 
+  it('restyles what such a rule was for when the class goes, where the rule names no element', () => {
+    // `.busy > *` is for anything in a box that has the class: once the class is gone no box
+    // has it, and what was styled by it is still to be styled again.
+    const s = scene(`${CSS} .busy > * { opacity: 0.4 } .loud :first-child { opacity: 0.6 }`);
+    s.engine.addClass(s.panel, 'busy');
+    s.engine.commit();
+    assert.equal(s.props('row')['opacity'], 0.4);
+    assert.ok(s.restyled(() => s.engine.removeClass(s.panel, 'busy')) >= 20);
+    assert.equal(s.props('row')['opacity'] ?? 1, 1);
+    s.engine.setClasses(s.panel, 'panel loud');
+    s.engine.commit();
+    assert.equal(s.props('row')['opacity'], 0.6);
+    s.engine.setClasses(s.panel, 'panel');
+    s.engine.commit();
+    assert.equal(s.props('row')['opacity'] ?? 1, 1);
+  });
+
   it('restyles everything under it once a rule is for the element itself too', () => {
     const s = scene(`${INSIDE} .busy { opacity: 0.9 }`);
     assert.equal(
