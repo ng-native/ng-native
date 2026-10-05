@@ -109,9 +109,13 @@ export class Chip {
     assert.match(code, /"paddingTop":4/);
   });
 
-  it('are left out for a package that is not named, and with no list at all', () => {
+  it('are compiled for every package with no list at all', () => {
+    assert.match(compiled(), /ɵnativeStyles/);
+  });
+
+  it('are left out for a package a list does not name, and for every package for `false`', () => {
     assert.doesNotMatch(compiled({ libraryStyles: ['@acme/other'] }), /ɵnativeStyles/);
-    assert.doesNotMatch(compiled(), /ɵnativeStyles/);
+    assert.doesNotMatch(compiled({ libraryStyles: false }), /ɵnativeStyles/);
   });
 });
 

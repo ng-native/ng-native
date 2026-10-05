@@ -19,7 +19,7 @@ const { transformAngular } = require('@ng-native/metro/angular-transform.cjs') a
   transformAngular: (
     src: string,
     filename: string,
-    options?: { dev?: boolean; platform?: string; libraryStyles?: string[] },
+    options?: { dev?: boolean; platform?: string; libraryStyles?: string[] | false },
   ) => { code: string };
 };
 const { transformAngularFileSync } = require('@oxc-angular/vite/api') as {
@@ -147,16 +147,21 @@ describe("a library's component CSS, opted in", () => {
     assert.equal(await sheetOf(code, 'Chip'), null);
   });
 
-  it('leaves a package that is not on the list as before: linked, stripped, no sheet', async () => {
-    const none = transformAngular(source, FILE, { dev: false, platform: 'ios' }).code;
-    const other = transformAngular(source, FILE, {
-      dev: false,
-      platform: 'ios',
-      libraryStyles: ['@acme/other'],
-    }).code;
-    for (const code of [none, other]) {
+  it('compiles it with no option at all: every library has its styles', async () => {
+    const { code } = transformAngular(source, FILE, { dev: false, platform: 'ios' });
+    const sheet = (await sheetOf(code, 'Chip'))!;
+    assert.ok(sheet.rules.length > 0);
+  });
+
+  it('leaves a package a list leaves out, and every package for `false`: linked, stripped, no sheet', async () => {
+    for (const libraryStyles of [['@acme/other'], [], false as const]) {
+      const { code } = transformAngular(source, FILE, {
+        dev: false,
+        platform: 'ios',
+        libraryStyles,
+      });
       assert.match(code, /ɵɵdefineComponent/);
-      assert.doesNotMatch(code, /ɵnativeStyles/);
+      assert.doesNotMatch(code, /ɵnativeStyles/, JSON.stringify(libraryStyles));
     }
   });
 
@@ -530,36 +535,33 @@ describe("a library file's package, from a path Metro gives relative to the proj
 });
 
 describe('a transform worker that does not carry the list', () => {
-  it('says the option does nothing when the file of a listed package arrives without it', () => {
+  it('says the list is not applied when a file arrives without it', () => {
     // What `withAngularNative` leaves for its workers, which a worker it did not install never
-    // turns into the transform options.
-    process.env['ANGULAR_NATIVE_LIBRARY_STYLES'] = '@acme/ui';
+    // turns into the transform options. Every library is then styled, the ones left out too.
+    const transformer = require('@ng-native/metro/transformer.cjs') as {
+      transform(params: object): unknown;
+    };
+    const run = (filename: string, customTransformOptions?: object) =>
+      warned(() =>
+        transformer.transform({
+          filename,
+          src: partial(CHIP, filename),
+          options: { dev: false, platform: 'ios', projectRoot: '/app', customTransformOptions },
+          plugins: [],
+        }),
+      ).warnings;
+    assert.deepEqual(run(FILE), [], 'no list was given: nothing is missing');
+    // An empty one too, which is what `libraryStyles: false` leaves.
+    process.env['ANGULAR_NATIVE_LIBRARY_STYLES'] = '';
     try {
-      const transformer = require('@ng-native/metro/transformer.cjs') as {
-        transform(params: object): unknown;
-      };
-      const run = (filename: string, customTransformOptions?: object) =>
-        warned(() =>
-          transformer.transform({
-            filename,
-            src: partial(CHIP, filename),
-            options: { dev: false, platform: 'ios', projectRoot: '/app', customTransformOptions },
-            plugins: [],
-          }),
-        ).warnings;
+      assert.deepEqual(run(FILE, { angularNativeLibraryStyles: [] }), []);
       const missing = run(FILE);
       assert.equal(missing.length, 1);
       assert.match(
         missing[0]!,
-        /libraryStyles names '@acme\/ui', but .*acme-ui\.mjs arrived without the list.*transformerPath/,
+        /libraryStyles is set, but .*acme-ui\.mjs arrived without it.*transformerPath/,
       );
       assert.deepEqual(run(FILE), [], 'once a build, not once a file');
-      assert.deepEqual(
-        run('/app/node_modules/x-other/x.mjs'),
-        [],
-        'a package nobody listed is no sign of anything',
-      );
-      assert.deepEqual(run(FILE, { angularNativeLibraryStyles: ['@acme/ui'] }), []);
     } finally {
       delete process.env['ANGULAR_NATIVE_LIBRARY_STYLES'];
     }

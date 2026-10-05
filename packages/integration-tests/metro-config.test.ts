@@ -1015,16 +1015,37 @@ describe("a library's component CSS", () => {
     );
   });
 
-  it('records nothing when no package is named, so the cache key is as it was', () => {
-    for (const options of [{}, { libraryStyles: [] }]) {
+  it('records nothing when the option is not given, so every library is styled', () => {
+    const config = base();
+    config.transformerPath = EXPO;
+    withAngularNative(config, {});
+    assert.equal('angularNativeLibraryStyles' in config.transformer, false);
+    assert.equal(process.env['ANGULAR_NATIVE_LIBRARY_STYLES'], undefined);
+    assert.doesNotMatch(
+      (config.transformer as { cacheVersion?: string }).cacheVersion!,
+      /library-styles/,
+    );
+  });
+
+  it('records an empty list for `false` and for no names, which styles no library', () => {
+    for (const libraryStyles of [false, []] as const) {
       const config = base();
       config.transformerPath = EXPO;
-      withAngularNative(config, options);
-      assert.equal('angularNativeLibraryStyles' in config.transformer, false);
-      assert.doesNotMatch(
-        (config.transformer as { cacheVersion?: string }).cacheVersion!,
-        /library-styles/,
-      );
+      try {
+        withAngularNative(config, { libraryStyles: libraryStyles as never });
+        assert.deepEqual(
+          (config.transformer as { angularNativeLibraryStyles?: string[] })
+            .angularNativeLibraryStyles,
+          [],
+        );
+        assert.equal(process.env['ANGULAR_NATIVE_LIBRARY_STYLES'], '');
+        assert.match(
+          (config.transformer as { cacheVersion?: string }).cacheVersion!,
+          /library-styles-none/,
+        );
+      } finally {
+        delete process.env['ANGULAR_NATIVE_LIBRARY_STYLES'];
+      }
     }
   });
 
@@ -1034,7 +1055,7 @@ describe("a library's component CSS", () => {
       config.transformerPath = EXPO;
       assert.throws(
         () => withAngularNative(config, { libraryStyles: libraryStyles as string[] }),
-        /libraryStyles must be a list of npm package names/,
+        /libraryStyles must be a list of npm package names, or false/,
       );
     }
   });
