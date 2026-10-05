@@ -46,6 +46,15 @@ describe('a var() that falls back to a calc() of a unit the device settles', () 
     assert.equal(s.props()['maxWidth'], 120);
   });
 
+  it('is read at the end of a chain of tokens, where none of them is set', () => {
+    const s = scene(
+      '.a { max-width: var(--max, var(--other, calc(100vw - 32px))) } .set { --other: 90px }',
+    );
+    assert.equal(s.props()['maxWidth'], 368);
+    s.engine.setClasses(s.node, 'a set');
+    assert.equal(s.props()['maxWidth'], 90);
+  });
+
   it('is a share of the font size and a length too', () => {
     const s = scene('.a { font-size: 10px; margin-top: var(--gap, calc(2em + 4px)) }');
     assert.equal(s.props()['marginTop'], 24);
