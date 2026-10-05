@@ -3263,7 +3263,6 @@ export class Engine implements HostEngine {
     fitContent(node, style);
     percentHeight(node, style);
     placeholderFaded(style);
-    hiddenOutOfFlow(style);
     const intrinsic = node.props[INTRINSIC_SIZE] as IntrinsicSize | undefined;
     if (intrinsic) applyIntrinsicSize(style, intrinsic);
     flattenStyle(node.props[STYLE_OVERRIDE], style);
@@ -3274,6 +3273,8 @@ export class Engine implements HostEngine {
     alignMultiline(viewName, style);
     const merged = composeTransform(node, this.animated(node, this.transitioned(node, style)));
     centreSingleLine(viewName, merged, this.fontScale);
+    // Last, on what is committed: an override or an animation can hide a box, or place it.
+    hiddenOutOfFlow(merged);
     this.movePaint(node, merged);
     return merged;
   }

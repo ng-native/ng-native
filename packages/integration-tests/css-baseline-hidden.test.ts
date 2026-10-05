@@ -69,4 +69,14 @@ describe('a hidden box first in an item of a row aligned by baselines', () => {
     s.engine.setProp(s.nodes[0]!, 'style', { height: 80 });
     assert.equal(s.height('item'), 80);
   });
+
+  it('is passed over where a style override is what hides it, or says where it is placed', () => {
+    const s = scene(['shown', 'shown two']);
+    s.engine.setProp(s.nodes[0]!, 'styleOverride', { display: 'none' });
+    assert.equal(s.height('item'), 56);
+    assert.equal(s.height('shown two'), 20);
+    const hidden = scene(['hidden', 'shown']);
+    hidden.engine.setProp(hidden.nodes[0]!, 'styleOverride', { position: 'relative' });
+    assert.equal(hidden.height('item'), 56);
+  });
 });
