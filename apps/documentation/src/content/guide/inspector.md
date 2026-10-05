@@ -1,6 +1,6 @@
 ---
 title: Inspecting an app
-summary: See an app's live components, signals, injectors and stores from a device, in Pangular Inspector.
+summary: See an app's components, signals, injectors and stores on a device, in Pangular Inspector.
 ---
 
 # Inspecting an app
@@ -69,5 +69,6 @@ such as `react-native-url-polyfill`, since React Native's own `URL` is read-only
 The server also speaks MCP, at `http://localhost:9999/__mcp`, so an agent can read the same tree,
 signals and injectors from a running app. See [AI](/guide/ai-assistants).
 
-The inspector's own [Angular Native page](https://pangular-inspector.dev/getting-started/angular-native)
-covers its options, how it works and what to check when a tab stays empty.
+The inspector's own
+[Angular Native page](https://pangular-inspector.dev/getting-started/angular-native) covers its
+options, how it works and what to check when a tab stays empty.
