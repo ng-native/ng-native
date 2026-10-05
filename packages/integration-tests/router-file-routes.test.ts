@@ -5,7 +5,7 @@
 import assert from 'node:assert/strict';
 import { afterEach, before, describe, it } from 'node:test';
 import { fileURLToPath } from 'node:url';
-import type { Provider, Type } from '@angular/core';
+import { inject, type Provider, type Type } from '@angular/core';
 import { Router, withComponentInputBinding, type Route, type Routes } from '@angular/router';
 import {
   cleanup,
@@ -257,6 +257,8 @@ describe('fileRoutes, navigated', () => {
   });
 });
 
+const failing = { unsubscribed: false };
+
 for (const lazy of [true, false]) {
   describe(`fileRoutes, routeMeta of ${lazy ? 'a lazy' : 'an eager'} page`, () => {
     async function withMeta() {
@@ -265,6 +267,7 @@ for (const lazy of [true, false]) {
         resolved: { runs: number };
       };
       resolved.runs = 0;
+      failing.unsubscribed = false;
       const files = {
         'index.page.ts': page('Home'),
         'about.page.ts': page('About'),
@@ -280,6 +283,16 @@ for (const lazy of [true, false]) {
         'secret.page.ts': page('Secret', { canMatch: [() => true, () => false] }),
         'observed.page.ts': page('Secret', { canMatch: [() => of(false)] }),
         'open.page.ts': page('About', { canMatch: [async () => true, () => of(true)] }),
+        'failing.page.ts': page('Secret', {
+          canMatch: [
+            () => ({
+              subscribe(observer: { error(error: unknown): void }) {
+                observer.error(new Error('refused'));
+                return { unsubscribe: () => void (failing.unsubscribed = true) };
+              },
+            }),
+          ],
+        }),
         'old-home.page.ts': { routeMeta: { redirectTo: '/about' } },
         '[...missing].page.ts': page('Missing'),
       };
@@ -324,6 +337,14 @@ for (const lazy of [true, false]) {
       assert.equal(top(), 'about');
     });
 
+    it('lets go of a lazy canMatch that fails as it subscribes', async (t) => {
+      if (!lazy) return t.skip('an eager page hands its canMatch to Angular');
+      const { go, top } = await withMeta();
+      await go('/failing').catch(() => false);
+      assert.equal(top(), 'home');
+      assert.equal(failing.unsubscribed, true);
+    });
+
     it('redirects from a page with redirectTo and no component, matching its whole path', async () => {
       const { go, top, router } = await withMeta();
       assert.equal(await go('/old-home'), true);
@@ -332,6 +353,38 @@ for (const lazy of [true, false]) {
     });
   });
 }
+
+describe('fileRoutes, an index page', () => {
+  for (const lazy of [true, false]) {
+    it(`redirects from its canMatch without running it again for the target, ${lazy ? 'lazy' : 'eager'}`, async () => {
+      let runs = 0;
+      const files = {
+        'index.page.ts': page('Home', {
+          canMatch: [() => (++runs > 20 ? true : inject(Router).parseUrl('/login'))],
+        }),
+        'login.page.ts': page('Login'),
+      };
+      const { top, router } = await start(
+        fileRoutes(lazy ? context(eager(files, './')) : eager(files)),
+      );
+      assert.equal(runs, 1);
+      assert.equal(router.url, '/login');
+      assert.equal(top(), 'login');
+    });
+  }
+
+  it('is not loaded by a navigation to another page beside it', async () => {
+    const pages = context({
+      './index.page.ts': page('Home'),
+      './blog/index.page.ts': page('ProductList'),
+      './blog/[slug].page.ts': page('Post'),
+    });
+    const { go, top } = await start(fileRoutes(pages));
+    await go('/blog/first');
+    assert.equal(top(), 'post first');
+    assert.deepEqual(pages.asked, ['./index.page.ts', './blog/[slug].page.ts']);
+  });
+});
 
 describe('fileRoutes, a lazy page whose load fails', () => {
   it('loads it again on the next navigation', async () => {

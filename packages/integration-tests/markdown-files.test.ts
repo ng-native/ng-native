@@ -5,12 +5,14 @@
  * bundled, and the test runners import it the same way.
  */
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { after, describe, it } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import type { Type } from '@angular/core';
 import { cleanup, render, type FakeFabricNode } from '@ng-native/testing';
 import { lexer, type Token } from 'marked';
+import { markdownBlocks } from '../components/src/markdown-blocks.ts';
 import { compileFixture } from './compile.ts';
 
 const require = createRequire(import.meta.url);
@@ -27,9 +29,19 @@ interface MarkdownFile {
 
 /** The module's default export, as the bundle evaluates it. */
 function evaluate(code: string): MarkdownFile {
-  const match = /^export default (.*);\n$/s.exec(code);
-  assert.ok(match, 'one default export of a literal');
-  return JSON.parse(match[1]!) as MarkdownFile;
+  assert.match(code, /^export default [^\n]*;\n$/, 'one default export on one line');
+  return new Function(code.replace(/^export default /, 'return '))() as MarkdownFile;
+}
+
+/** `tokens` with `raw` left out at every level, as the module keeps them. */
+function withoutRaw(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(withoutRaw);
+  if (value === null || typeof value !== 'object') return value;
+  return Object.fromEntries(
+    Object.entries(value)
+      .filter(([key]) => key !== 'raw')
+      .map(([key, inner]) => [key, withoutRaw(inner)]),
+  );
 }
 
 const fileOf = (src: string, filename = '/app/src/content/post.md') =>
@@ -43,7 +55,7 @@ describe('a .md module', () => {
     const file = fileOf(`---\ntitle: Hello\ntags:\n  - one\n  - two\ndraft: false\n---\n${body}`);
     assert.deepEqual(file.attributes, { title: 'Hello', tags: ['one', 'two'], draft: false });
     assert.equal(file.content, body);
-    assert.deepEqual(file.tokens, JSON.parse(JSON.stringify(lexer(body))));
+    assert.deepEqual(file.tokens, withoutRaw(JSON.parse(JSON.stringify(lexer(body)))));
   });
 
   it('gives a file with no front matter empty attributes and all of its Markdown', () => {
@@ -88,12 +100,37 @@ describe('a .md module', () => {
     );
   });
 
+  it('makes a front matter key named __proto__ an own key, not the prototype', () => {
+    const { attributes } = fileOf('---\n__proto__:\n  polluted: true\ntitle: Odd\n---\n');
+    assert.equal(Object.getPrototypeOf(attributes), Object.prototype);
+    assert.ok(Object.hasOwn(attributes, '__proto__'));
+    assert.deepEqual(Object.getOwnPropertyDescriptor(attributes, '__proto__')?.value, {
+      polluted: true,
+    });
+    assert.equal((attributes as { polluted?: unknown }).polluted, undefined);
+  });
+
+  it('leaves out each token raw, and draws the same blocks as the tokens marked made', () => {
+    const src = readFileSync(fileURLToPath(new URL('../../README.md', import.meta.url)), 'utf8');
+    const extra =
+      '\n<div>raw html</div>\n\n- [x] done\n- [ ] open\n\n> quoted *text*\n\n    indented code\n\n' +
+      'Hard  \nbreak \\* ~~gone~~ <b>inline</b> ![img](https://example.com/a.png) [ref][r]\n\n[r]: /x\n';
+    const code = markdownModule(src + extra, '/app/README.md');
+    const { tokens } = evaluate(code);
+    assert.equal(JSON.stringify(tokens).includes('"raw"'), false);
+    assert.deepEqual(markdownBlocks(tokens), markdownBlocks(lexer(src + extra)));
+    assert.ok(
+      code.length < (src + extra).length * 5,
+      `${code.length} for ${src.length + extra.length}`,
+    );
+  });
+
   it('keeps every token as plain data, a reference link resolved to its target', () => {
     const src =
       '# Title\n\nSee [the docs][docs] and ![a logo](https://example.com/a.png).\n\n' +
       '- [x] done\n- [ ] open\n\n| a | b |\n| - | - |\n| 1 | 2 |\n\n[docs]: https://example.com\n';
     const { tokens } = fileOf(src);
-    assert.deepEqual(tokens, JSON.parse(JSON.stringify(lexer(src))));
+    assert.deepEqual(tokens, withoutRaw(JSON.parse(JSON.stringify(lexer(src)))));
     const paragraph = tokens.find((token) => token.type === 'paragraph') as {
       tokens: { type: string; href?: string }[];
     };
@@ -123,7 +160,7 @@ describe('the Metro transformer', () => {
     });
     const code = generate(result.ast).code;
     assert.match(code, /Through Metro/);
-    assert.match(code, /"type": ?"heading"/);
+    assert.match(code, /JSON.parse\(.*"type":"heading"/);
   });
 
   it('keys its cache on the marked and front-matter it lexes with', () => {

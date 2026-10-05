@@ -17,16 +17,7 @@
 import { createRoutes, type Files } from '@analogjs/router';
 import type { Type } from '@angular/core';
 import type { Routes } from '@angular/router';
-import { MARKDOWN_PAGE, markdownModuleOf, markdownPageFile } from './content.ts';
-
-/**
- * What Metro's `require.context(directory, true, pattern, 'lazy')` returns: the files it found,
- * each keyed by its path from that directory (`./users/[id].page.ts`), and a call that loads one.
- */
-export interface PageContext {
-  keys(): string[];
-  (key: string): Promise<unknown>;
-}
+import { MARKDOWN_PAGE, markdownPageFile, type PageContext } from '@ng-native/router';
 
 /**
  * Each page's file name, with a call that loads it: what `import.meta.glob` returns, and what
@@ -38,7 +29,7 @@ export interface PageRoutesOptions {
   /**
    * The component a `.md` page is drawn with. It reads its file with `injectMarkdownPage()` and
    * draws `tokens` with `<markdown>` from `@ng-native/components/markdown`. Required when the
-   * pages include a `.md` file.
+   * pages include a `.md` file. The same component draws one under `fileRoutes`.
    */
   markdownPage?: Type<unknown>;
 }
@@ -88,8 +79,7 @@ function withMarkdownPages(files: PageFiles, markdownPage: Type<unknown> | undef
       throw new Error(`${name} and ${page} are the same page. Keep one of them.`);
     }
     routed[page] = async () => {
-      const filename = name.replace(/^.*?\/pages\//, '/src/app/pages/');
-      const file = markdownPageFile(filename, markdownModuleOf(await load(), filename));
+      const file = markdownPageFile(name.replace(/^.*?\/pages\//, ''), await load());
       const { title, meta } = file.attributes;
       return {
         default: markdownPage,
@@ -110,7 +100,9 @@ function withMarkdownPages(files: PageFiles, markdownPage: Type<unknown> | undef
  */
 function filesOf(pages: PageContext): PageFiles {
   return Object.fromEntries(
-    pages.keys().map((key) => [`/src/app/pages/${key.replace(/^\.\//, '')}`, () => pages(key)]),
+    pages
+      .keys()
+      .map((key) => [`/src/app/pages/${key.replace(/^\.\//, '')}`, async () => pages(key)]),
   );
 }
 

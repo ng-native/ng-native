@@ -134,17 +134,32 @@ const IMAGE_SCHEMES = new Set(['http', 'https']);
 /**
  * A link's target if it may be followed: `http`, `https`, `mailto`, `tel`, or relative, which is
  * the app's to resolve. Anything else, `javascript:`, `data:`, `vbscript:` and `file:` among
- * them, is null, and the link is drawn as its text.
+ * them, is null, and the link is drawn as its text. The scheme is read after the trim, so
+ * whitespace the trim strips cannot hide one.
  */
 export function linkTarget(href: string): string | null {
-  const scheme = schemeOf(href);
-  return scheme === null || LINK_SCHEMES.has(scheme) ? href.trim() : null;
+  const target = href.trim();
+  const scheme = schemeOf(target);
+  return scheme === null || LINK_SCHEMES.has(scheme) ? target : null;
+}
+
+/** Whether `href` is absolute in a scheme a link may be followed to, and so is opened on press. */
+export function opensOnPress(href: string): boolean {
+  const scheme = schemeOf(href.trim());
+  return scheme !== null && LINK_SCHEMES.has(scheme);
 }
 
 /** An image's address if it may be loaded: `http` or `https` only. */
 export function imageSource(href: string): string | null {
-  const scheme = schemeOf(href);
-  return scheme !== null && IMAGE_SCHEMES.has(scheme) ? href.trim() : null;
+  const source = href.trim();
+  const scheme = schemeOf(source);
+  return scheme !== null && IMAGE_SCHEMES.has(scheme) ? source : null;
+}
+
+/** A link's or an image's target with its entities decoded, or null when it is not a string. */
+function hrefOf(token: Token): string | null {
+  const href: unknown = (token as Tokens.Link).href;
+  return typeof href === 'string' ? decodeEntities(href) : null;
 }
 
 const HEADINGS = ['h1', 'h2', 'h3', 'h4', 'h5', 'h6'] as const;
@@ -236,7 +251,8 @@ function paragraphs(tokens: readonly Token[]): MarkdownBlock[] {
     run = [];
   };
   for (const token of tokens) {
-    const src = token.type === 'image' ? imageSource(decodeEntities(token.href)) : null;
+    const href = token.type === 'image' ? hrefOf(token) : null;
+    const src = href === null ? null : imageSource(href);
     if (src === null) {
       run.push(...inline(token));
       continue;
@@ -276,7 +292,8 @@ const INLINES: Readonly<Record<string, (token: Token) => MarkdownInline[]>> = {
   link: (token) => {
     const link = token as Tokens.Link;
     const children = inlines(link.tokens);
-    const href = linkTarget(decodeEntities(link.href));
+    const decoded = hrefOf(link);
+    const href = decoded === null ? null : linkTarget(decoded);
     if (href === null) return children;
     const title = link.title ? decodeEntities(link.title) : null;
     return [{ kind: 'link', href, title, children }];

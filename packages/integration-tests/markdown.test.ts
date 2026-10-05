@@ -192,6 +192,21 @@ describe('links', () => {
     }
   });
 
+  it('refuses a scheme behind leading Unicode whitespace, which a trim would strip', async () => {
+    for (const href of [
+      '&#160;javascript:alert(1)',
+      '&nbsp;intent://evil#Intent;end',
+      '&#xFEFF;myapp://transfer?to=evil',
+      '&#x2028;file:///etc/passwd',
+      '&#x3000;sms:123',
+    ]) {
+      const { blocks, named, opened } = await show(`before [click](${href}) after`);
+      assert.equal(textOf(blocks()[0]!), 'before click after', href);
+      assert.equal(named('VirtualText').length, 0, href);
+      assert.deepEqual(opened, [], href);
+    }
+  });
+
   it('follows mailto and tel', async () => {
     const { named, opened } = await show('[mail](mailto:a@b.c) [call](tel:123)');
     for (const link of named('VirtualText')) await fireEvent.press(link);
@@ -256,6 +271,16 @@ describe('images', () => {
     assert.equal(named('Image').length, 0);
     assert.equal(textOf(blocks()[0]!), 'local inline rel');
   });
+
+  it('reads an image scheme after the leading Unicode whitespace a trim strips', async () => {
+    const { named } = await show(
+      '![x](&#160;file:///x.png) ![y](&#x3000;https://example.com/y.png)',
+    );
+    assert.deepEqual(
+      named('Image').map((image) => image.props['source']),
+      [[{ uri: 'https://example.com/y.png', scale: 1 }]],
+    );
+  });
 });
 
 describe('inputs', () => {
@@ -281,6 +306,32 @@ describe('inputs', () => {
       blocks().map((node) => [textOf(node), node.props['accessibilityRole']]),
       [['From tokens', 'header']],
     );
+  });
+
+  it('draws a link or an image token with no string href as its text', async () => {
+    const { blocks, app, screen } = await show('ignored');
+    const words = (text: string) => [{ type: 'text', raw: text, text }];
+    screen.tokens.set([
+      {
+        type: 'paragraph',
+        raw: '',
+        text: '',
+        tokens: [
+          {
+            type: 'link',
+            raw: '',
+            href: undefined,
+            title: null,
+            text: 'docs',
+            tokens: words('docs'),
+          },
+          ...words(' and '),
+          { type: 'image', raw: '', href: 42, title: null, text: 'pic' },
+        ],
+      },
+    ] as unknown as Token[]);
+    await app.detectChanges();
+    assert.equal(textOf(blocks()[0]!), 'docs and pic');
   });
 
   it('replaces an element default class with the one given', async () => {

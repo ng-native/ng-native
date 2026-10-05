@@ -21,7 +21,7 @@ Find the pages with Metro's `require.context`, in a file of their own so a test 
 import type { PageContext } from '@ng-native/router';
 
 declare const require: {
-  context(directory: string, recursive: boolean, filter: RegExp, mode: 'lazy'): PageContext;
+  context(directory: string, recursive: boolean, filter: RegExp, mode?: 'lazy'): PageContext;
 };
 
 export const pages = require.context('./pages', true, /\.page\.ts$/, 'lazy');
@@ -199,7 +199,8 @@ provideNativeRouter(fileRoutes(pages, { markdownPage: MarkdownPage }), withCompo
 ```
 
 `injectMarkdownPage()` returns `filename` (the path from the pages folder, `about.md`), `slug`,
-`attributes`, `content` and `tokens`.
+`attributes`, `content` and `tokens`. `pageRoutes` from [`@ng-native/analog`](/packages/analog)
+routes a `.md` page with the same file, so one `markdownPage` component serves both.
 
 ## Mistakes it catches
 

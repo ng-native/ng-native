@@ -1,7 +1,7 @@
 import type { PageContext } from '@ng-native/router';
 
 declare const require: {
-  context(directory: string, recursive: boolean, filter: RegExp, mode: 'lazy'): PageContext;
+  context(directory: string, recursive: boolean, filter: RegExp, mode?: 'lazy'): PageContext;
 };
 
 /**

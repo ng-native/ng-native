@@ -74,5 +74,10 @@ export {
   type PageFiles,
   type RouteMeta,
 } from './file-routes.ts';
-export { injectMarkdownPage, type MarkdownPageFile } from './markdown-page.ts';
+export {
+  MARKDOWN_PAGE,
+  injectMarkdownPage,
+  markdownPageFile,
+  type MarkdownPageFile,
+} from './markdown-page.ts';
 export { FullWindowOverlay } from './full-window-overlay.ts';

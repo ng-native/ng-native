@@ -92,6 +92,13 @@ export default tseslint.config(
               bannedExternalImports: ['lightningcss', '@oxc-angular/*'],
             },
             {
+              // `@ng-native/analog` builds on the router's file routes, so it is the one
+              // Angular-facing package that may import another, and only the router.
+              sourceTag: 'layer:angular-addon',
+              onlyDependOnLibsWithTags: ['layer:runtime', 'layer:device', 'scope:router'],
+              bannedExternalImports: ['lightningcss', '@oxc-angular/*'],
+            },
+            {
               // A test harness for apps, run by Node and never bundled. The fake Fabric needs the
               // engine's node shapes; `render()` mounts through the platform, the way an app
               // boots; and the runner hooks compile through Metro's transform, so a test runs
@@ -152,6 +159,7 @@ export default tseslint.config(
       'packages/integration-tests/dialogs.test.ts',
       'packages/integration-tests/engine-commit.test.ts',
       'packages/integration-tests/expo.test.ts',
+      'packages/integration-tests/markdown-files.test.ts',
       'packages/integration-tests/fabric-facade.test.ts',
       'packages/integration-tests/host-primitives.test.ts',
       'packages/integration-tests/layout-animation.test.ts',

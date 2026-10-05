@@ -1,6 +1,6 @@
 ---
 title: Analog
-summary: Analog's file-based pages and Markdown content in a native app, through createRoutes.
+summary: Use Analog's file-based pages and Markdown content in a native app, through createRoutes.
 ---
 
 # Analog
@@ -56,7 +56,8 @@ It turns on `require.context`, which finds the pages, and resolves `@analogjs/ro
 `@analogjs/content` to an empty module. The router imports that package for Markdown pages only,
 but Metro resolves every import as it bundles, so without this no bundle builds where the package
 is missing, and where it is installed the bundle carries it and its Markdown parser for nothing. An
-import of `@analogjs/content` in the app's own code still resolves to the package.
+import of `@analogjs/content` in the app's own code still resolves to the package, and fails the
+build, naming the package, when it is not installed.
 
 `@analogjs/content` is a required peer of `@analogjs/router`, so npm and pnpm install it, with
 its own required peers (`marked`, `prismjs`, `front-matter` and the `marked` plugins; its image
@@ -215,14 +216,18 @@ export class MarkdownPage {
 
 ```ts
 // src/app/app.config.ts
+import { MarkdownPage } from './markdown-page.ts';
+
 provideNativeRouter(pageRoutes(pages, { markdownPage: MarkdownPage }), withComponentInputBinding());
 ```
 
-`injectMarkdownPage()` returns the page's `ContentFile`: `filename` (`/src/app/pages/colophon.md`),
-`slug`, `attributes`, `content`, `tokens` and `toc`. `pageRoutes` fails at startup when the pages
+`injectMarkdownPage()` returns `filename` (the path from the pages folder, `colophon.md`), `slug`,
+`attributes`, `content` and `tokens`. It is `@ng-native/router`'s, which `@ng-native/analog`
+builds on, so the same component draws a `.md` page under
+[`fileRoutes`](/packages/router/file-routes) too. `pageRoutes` fails at startup when the pages
 include a `.md` file and no `markdownPage` is given, and when `x.md` and `x.page.ts` would be the
-same page. `@ng-native/analog` does not import `@ng-native/components` itself, which is why the
-component is yours: the Angular-facing packages do not depend on each other.
+same page. `@ng-native/analog` does not import `@ng-native/components`, which is why the
+component is yours.
 
 ## Content files
 
@@ -244,12 +249,19 @@ export const content = require.context('../content', true, /\.md$/);
 
 ```ts
 // src/app/app.config.ts
+import { withComponentInputBinding } from '@angular/router';
 import { pageRoutes, provideContentFiles } from '@ng-native/analog';
+import { provideNativeRouter } from '@ng-native/router';
 import { content } from './content.ts';
+import { MarkdownPage } from './markdown-page.ts';
+import { pages } from './pages.ts';
 
 export const appConfig = {
   providers: [
-    provideNativeRouter(pageRoutes(pages), withComponentInputBinding()),
+    provideNativeRouter(
+      pageRoutes(pages, { markdownPage: MarkdownPage }),
+      withComponentInputBinding(),
+    ),
     provideContentFiles(content),
   ],
 };

@@ -17,7 +17,7 @@ import type { ImageLoadEvent } from './events.ts';
 import { Image } from './image.ts';
 import {
   markdownBlocks,
-  schemeOf,
+  opensOnPress,
   type MarkdownBlock,
   type MarkdownElement,
   type MarkdownInline,
@@ -237,8 +237,10 @@ export class Markdown {
     return this.classOf()[element];
   }
 
-  protected sizeImage(src: string, event: ImageLoadEvent): void {
-    const { width, height } = event.nativeEvent.source;
+  protected sizeImage(src: string, event: Partial<ImageLoadEvent>): void {
+    const source = event.nativeEvent?.source;
+    if (!source) return;
+    const { width, height } = source;
     if (!(width > 0 && height > 0)) return;
     this.ratios.update((ratios) => new Map(ratios).set(src, width / height));
   }
@@ -252,6 +254,6 @@ export class Markdown {
         prevented = true;
       },
     });
-    if (!prevented && schemeOf(link.href) !== null) this.injector.get(DeepLinks).open(link.href);
+    if (!prevented && opensOnPress(link.href)) this.injector.get(DeepLinks).open(link.href);
   }
 }

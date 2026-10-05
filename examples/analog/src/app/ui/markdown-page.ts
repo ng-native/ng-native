@@ -39,7 +39,7 @@ export class MarkdownPage {
 
   protected readonly page = injectMarkdownPage<{ title?: string }>();
   protected readonly title = inject(ActivatedRoute).snapshot.title ?? '';
-  protected readonly file = this.page.filename.replace(/^\//, '');
+  protected readonly file = `src/app/pages/${this.page.filename}`;
 
   protected follow(link: MarkdownLinkPress): void {
     followMarkdownLink(this.navigation, link);

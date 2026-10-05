@@ -34,7 +34,10 @@ describe('a .md import', () => {
   it('is the same module under the Vitest plugin, and a ?raw import is left as it is', () => {
     const transform = ngNative().transform as unknown as Transform;
     const result = transform(SOURCE, '/app/src/content/post.md');
-    assert.match(result?.code ?? '', /^export default \{"attributes":\{"title":"Hello"\}/);
+    assert.match(
+      result?.code ?? '',
+      /^export default JSON\.parse\('\{"attributes":\{"title":"Hello"\}/,
+    );
     assert.equal(transform(SOURCE, '/app/src/content/post.md?raw'), null);
   });
 

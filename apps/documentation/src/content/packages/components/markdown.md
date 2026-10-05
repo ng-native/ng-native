@@ -169,16 +169,18 @@ export class ReleaseNotes {
 
 The import is `{ attributes, content, tokens }`:
 
-| Field        | What it holds                                                 |
-| ------------ | ------------------------------------------------------------- |
-| `attributes` | The front matter, parsed as YAML; `{}` when the file has none |
-| `content`    | The Markdown after the front matter                           |
-| `tokens`     | `content` lexed by `marked.lexer`, for `<markdown [tokens]>`  |
+| Field        | What it holds                                                                            |
+| ------------ | ---------------------------------------------------------------------------------------- |
+| `attributes` | The front matter, parsed as YAML; `{}` when the file has none                            |
+| `content`    | The Markdown after the front matter                                                      |
+| `tokens`     | `content` lexed by `marked.lexer`, for `<markdown [tokens]>`, without each token's `raw` |
 
 `marked` has to be installed for the build, as above. The front matter is read with
 [front-matter](https://www.npmjs.com/package/front-matter), the parser `@analogjs/content` uses, and
 must be a mapping of names to values. A date in it arrives as its ISO string,
-`2026-10-04T00:00:00.000Z`, because the module is plain JSON. Front matter that is not valid YAML
+`2026-10-04T00:00:00.000Z`, because the module is plain JSON. A token keeps no `raw`, the source
+text `<markdown>` does not need, which would make the module several times the size of the file;
+read `content` for the source. Front matter that is not valid YAML
 fails the build with the file's name in the message. Windows line endings and an empty file are
 read as you would expect.
 

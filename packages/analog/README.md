@@ -51,13 +51,15 @@ export const appConfig = {
 
 - `pageRoutes(pages, { markdownPage })`: Analog's routes for a `require.context` of the pages, or
   for the files of an `import.meta.glob` in a Vitest test. A `.md` page is drawn by `markdownPage`,
-  which reads its file with `injectMarkdownPage()`.
+  which reads its file with `injectMarkdownPage()`: `@ng-native/router`'s, so the same component
+  draws a `.md` page under its `fileRoutes` too.
 - `provideContentFiles(content)`, `injectContent`, `injectContentFiles`, `contentFilesResource` and
   `contentFileResource`: `@analogjs/content`'s API over a `require.context` of `src/content`, each
   file lexed by Metro, for `<markdown [tokens]>` from `@ng-native/components/markdown`.
 - `withAnalog(config)` in `@ng-native/analog/metro`: turns on `require.context`, and resolves
   `@analogjs/router`'s import of `@analogjs/content`, which only a Markdown page needs, to an empty
-  module, installed or not.
+  module, installed or not. The app's own import of it resolves to the package, and fails the build
+  when it is not installed.
 
 Markdown pages and content files need `marked`, which Metro lexes them with:
 

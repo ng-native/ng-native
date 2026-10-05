@@ -2,9 +2,10 @@
  * A `.md` file routed as a page by `fileRoutes`: the file, as Metro made it a module, handed to the
  * component the app gave as `markdownPage` through its route's data.
  *
- * The router does not draw Markdown, and does not import the package that does: the Angular-facing
- * packages do not depend on each other. The app's component draws `tokens` with `<markdown>` from
- * `@ng-native/components/markdown`.
+ * The router does not draw Markdown, and does not import the package that does, so the app's
+ * component draws `tokens` with `<markdown>` from `@ng-native/components/markdown`. `pageRoutes`
+ * from `@ng-native/analog` routes a `.md` page with this file and this key too, so one
+ * `markdownPage` component draws it under either.
  */
 import { inject } from '@angular/core';
 import { ActivatedRoute } from '@angular/router';
@@ -34,14 +35,15 @@ export interface MarkdownPageFile<Attributes extends Record<string, any> = Recor
 }
 
 /**
- * The route data key a Markdown page's file is under. The same key `@ng-native/analog` uses, so a
- * `markdownPage` component reads its file from either.
+ * The route data key a Markdown page's file is under, for a package that routes `.md` pages itself,
+ * as `pageRoutes` from `@ng-native/analog` does: an app reads the file with `injectMarkdownPage()`.
  */
 export const MARKDOWN_PAGE = 'ngNativeMarkdownPage';
 
 /**
- * The file of the Markdown page this component draws, in the component given to `fileRoutes` as
- * `markdownPage`: `{ filename, slug, attributes, content, tokens }`.
+ * The file of the Markdown page this component draws, in the component given to `fileRoutes`, or
+ * to `pageRoutes` from `@ng-native/analog`, as `markdownPage`:
+ * `{ filename, slug, attributes, content, tokens }`.
  */
 export function injectMarkdownPage<
   Attributes extends Record<string, any> = Record<string, any>,
@@ -50,14 +52,17 @@ export function injectMarkdownPage<
     MarkdownPageFile<Attributes> | undefined;
   if (!file) {
     throw new Error(
-      'injectMarkdownPage() is for the markdownPage component fileRoutes routes a .md page to, ' +
-        'and this route is not one.',
+      'injectMarkdownPage() is for the markdownPage component fileRoutes or pageRoutes routes a ' +
+        '.md page to, and this route is not one.',
     );
   }
   return file;
 }
 
-/** A Markdown page's file, from the module Metro made of it, or that module's namespace. */
+/**
+ * A Markdown page's file, from the module Metro made of it, or that module's namespace, with
+ * `filename` its path from the pages folder. Throws, naming the file, for anything else.
+ */
 export function markdownPageFile(filename: string, loaded: unknown): MarkdownPageFile {
   const module = isMarkdownModule(loaded) ? loaded : (loaded as { default?: unknown })?.default;
   if (!isMarkdownModule(module)) {

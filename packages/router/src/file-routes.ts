@@ -347,14 +347,17 @@ function restOf(name: string): UrlMatcher {
  *
  * `canMatch` is on the outer route, not the page's own: Angular takes a route whose children match
  * none of an empty rest of the URL as matched, so a page refused there would leave an empty screen
- * where the next route that matches should be.
+ * where the next route that matches should be. An index page's outer route matches only the whole
+ * URL, so its guards, and its load when it is lazy, run for no other page's URL: a guard that
+ * redirects would otherwise run again for the URL it sent the router to.
  */
 function pageRoute(
   page: Page,
-  at: Pick<Route, 'path' | 'matcher'>,
+  at: Pick<Route, 'path' | 'matcher' | 'pathMatch'>,
   children: Routes | undefined,
   options: FileRoutesOptions,
 ): Route {
+  if (at.path === '' && !children) at = { ...at, pathMatch: 'full' };
   if (!page.lazy) {
     const { canMatch, ...own } = ownRoute(page, page.load(), children, options);
     return { ...at, ...(canMatch ? { canMatch } : {}), children: [own] };
@@ -416,8 +419,16 @@ function firstOf(result: unknown): Promise<unknown> {
         resolve(value);
         subscription?.unsubscribe();
       },
-      error: reject,
-      complete: () => resolve(false),
+      error: (error: unknown) => {
+        if (done) return;
+        done = true;
+        reject(error);
+      },
+      complete: () => {
+        if (done) return;
+        done = true;
+        resolve(false);
+      },
     });
     if (done) subscription.unsubscribe();
   });

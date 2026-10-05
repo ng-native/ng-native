@@ -1,6 +1,9 @@
 import type { Provider } from '@angular/core';
-import { Router } from '@angular/router';
+import { Router, type Routes } from '@angular/router';
+import { pageRoutes } from '@ng-native/analog';
+import { provideKeyboardController } from '@ng-native/components';
 import { DeepLinks } from '@ng-native/device';
+import { fileRoutes, provideNativeRouter } from '@ng-native/router';
 import {
   cleanup,
   fireEvent,
@@ -18,6 +21,7 @@ import { Clipboard } from '@ng-native/expo/clipboard';
 import { App } from './app.ts';
 import { appConfig } from './app.config.ts';
 import { EPISODES } from './data/podcasts.ts';
+import { MarkdownPage } from './ui/markdown-page.ts';
 
 // The same pages and content files, found by Vite rather than by Metro's require.context. The
 // ngNative() plugin makes each .md file the module Metro makes of it.
@@ -546,4 +550,25 @@ test('a .md file in pages/ is a page, titled by its front matter', async () => {
 
   await waitFor(() => expect(router.url).toBe('/blog'));
   expect(titles(fabric)).toEqual(['Analog Showroom', 'Colophon', 'Blog']);
+});
+
+test("one markdownPage component draws a .md page under the router's fileRoutes too", async () => {
+  const files = import.meta.glob(['./pages/index.page.ts', './pages/colophon.md']);
+  const both: Routes[] = [
+    pageRoutes(files, { markdownPage: MarkdownPage }),
+    fileRoutes(files, { markdownPage: MarkdownPage }),
+  ];
+  for (const routes of both) {
+    const { componentRef, fabric } = await render(App, {
+      providers: [provideKeyboardController(), provideNativeRouter(routes)],
+    });
+    await componentRef.injector.get(Router).navigateByUrl('/colophon');
+
+    await waitFor(() => expect(front(fabric).getByText('src/app/pages/colophon.md')).toBeTruthy());
+    expect(
+      front(fabric).getByRole('header', { name: 'A page that is a Markdown file' }),
+    ).toBeTruthy();
+    expect(titles(fabric).at(-1)).toBe('Colophon');
+    cleanup();
+  }
 });

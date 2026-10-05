@@ -20,6 +20,7 @@ import {
 } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { ActivatedRoute } from '@angular/router';
+import { markdownPageFile } from '@ng-native/router';
 import { defer, map, of, type Observable } from 'rxjs';
 
 /**
@@ -149,9 +150,9 @@ function contentPath(key: string): string {
 
 /**
  * The `{ attributes, content, tokens }` a loaded `.md` module holds, from its namespace or as it
- * is. Exported for `pageRoutes`, which loads Markdown pages the same way.
+ * is, checked as `fileRoutes` checks a Markdown page.
  */
-export function markdownModuleOf(loaded: unknown, filename: string): MarkdownModule {
+function markdownModuleOf(loaded: unknown, filename: string): MarkdownModule {
   if (loaded instanceof Promise || typeof (loaded as { then?: unknown })?.then === 'function') {
     throw new Error(
       `${filename} loaded as a promise. provideContentFiles reads every file as the list is ` +
@@ -159,24 +160,8 @@ export function markdownModuleOf(loaded: unknown, filename: string): MarkdownMod
         '{ eager: true }.',
     );
   }
-  const value = isMarkdownModule(loaded) ? loaded : (loaded as { default?: unknown })?.default;
-  if (!isMarkdownModule(value)) {
-    throw new Error(
-      `${filename} is not the module @ng-native/metro makes of a .md file. Bundle the app with ` +
-        "withAngularNative from '@ng-native/metro/config.cjs', and test it with ngNative() from " +
-        "'@ng-native/testing/vitest'.",
-    );
-  }
-  return value;
-}
-
-function isMarkdownModule(value: unknown): value is MarkdownModule {
-  return (
-    typeof value === 'object' &&
-    value !== null &&
-    typeof (value as MarkdownModule).content === 'string' &&
-    Array.isArray((value as MarkdownModule).tokens)
-  );
+  const { attributes, content, tokens } = markdownPageFile(filename, loaded);
+  return { attributes, content, tokens };
 }
 
 /** A file's slug from its name, as Analog takes it: `post.md` is `post`, `index.md` is `''`. */
@@ -185,14 +170,18 @@ function slugOf(filename: string): string {
   return base === 'index' ? '' : base;
 }
 
-/** A file in the list: its front matter `slug`, or its name's. */
+/** A file's front matter `slug`, or its name's, as written. */
+function rawSlugOf(found: FoundFile): string {
+  const slug = (found.module.attributes as Record<string, unknown>)['slug'];
+  return typeof slug === 'string' && slug ? slug : slugOf(found.filename);
+}
+
+/** A file in the list: its slug encoded for a URL, as Analog lists it. */
 function listed<Attributes extends Record<string, any>>(found: FoundFile): ContentFile<Attributes> {
-  const attributes = found.module.attributes as Attributes;
-  const slug = attributes['slug'];
   return {
     filename: found.filename,
-    attributes,
-    slug: encodeURI(typeof slug === 'string' && slug ? slug : slugOf(found.filename)),
+    attributes: found.module.attributes as Attributes,
+    slug: encodeURI(rawSlugOf(found)),
   };
 }
 
@@ -206,7 +195,7 @@ function filesBySlug(files: readonly FoundFile[]): Map<string, FoundFile> {
   for (const found of files) {
     const parts = found.filename.split('/');
     const folder = parts.slice(0, -1).join('/');
-    const slug = listed(found).slug || 'index';
+    const slug = rawSlugOf(found) || 'index';
     const root = parts.length > 4 ? parts.slice(0, 4).join('/') : '/src/content';
     bySlug.set(`${slug.includes('/') ? root : folder}/${slug}.md`.replace(/\/{2,}/g, '/'), found);
   }
@@ -340,37 +329,4 @@ export function contentFileResource<Attributes extends Record<string, any> = Rec
       return param ? contentFile<Attributes>(files(), '', param, fallback) : NO_SLUG(fallback);
     },
   });
-}
-
-/**
- * A Markdown page's file, for the component given to `pageRoutes` as `markdownPage`:
- * `{ filename, slug, attributes, content, tokens, toc }`.
- */
-export function injectMarkdownPage<
-  Attributes extends Record<string, any> = Record<string, any>,
->(): ContentFile<Attributes> {
-  const file = inject(ActivatedRoute).snapshot.data[MARKDOWN_PAGE] as
-    ContentFile<Attributes> | undefined;
-  if (!file) {
-    throw new Error(
-      'injectMarkdownPage() is for the markdownPage component pageRoutes routes a .md page to, ' +
-        'and this route is not one.',
-    );
-  }
-  return file;
-}
-
-/** The route data key a Markdown page's file is under. */
-export const MARKDOWN_PAGE = 'ngNativeMarkdownPage';
-
-/** A Markdown page's file, from the module Metro made of it. */
-export function markdownPageFile(filename: string, module: MarkdownModule): ContentFile {
-  return {
-    filename,
-    slug: encodeURI(slugOf(filename)),
-    attributes: module.attributes,
-    content: module.content,
-    tokens: module.tokens,
-    toc: tableOfContents(module.tokens),
-  };
 }

@@ -15,7 +15,8 @@
  * an `import()` Metro resolves at build time whether or not a page is Markdown, so without it no
  * bundle builds where the package is not installed, and where it is, as npm installs it for being
  * a peer of the router, the bundle carries it and the Markdown parser behind it for nothing. The
- * app's own imports of it resolve as they do, and to an empty module when it is not installed.
+ * app's own imports of it resolve as they do, and fail to resolve when it is not installed, so the
+ * build names the missing package rather than the app failing at runtime.
  */
 
 /** Marks a resolver this already wrapped, so applying it twice wraps it once. */
@@ -34,13 +35,10 @@ function withAnalog(config) {
   if (next?.[WRAPPED]) return config;
   const resolveRequest = (context, name, platform) => {
     const resolve = next ?? context.resolveRequest;
-    if (name !== '@analogjs/content') return resolve(context, name, platform);
-    if (ANALOG_ROUTER.test(context.originModulePath ?? '')) return { type: 'empty' };
-    try {
-      return resolve(context, name, platform);
-    } catch {
+    if (name === '@analogjs/content' && ANALOG_ROUTER.test(context.originModulePath ?? '')) {
       return { type: 'empty' };
     }
+    return resolve(context, name, platform);
   };
   resolveRequest[WRAPPED] = true;
   config.resolver.resolveRequest = resolveRequest;

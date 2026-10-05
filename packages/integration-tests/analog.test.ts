@@ -166,8 +166,17 @@ describe('withAnalog', () => {
   const resolve = (metro: MetroConfig, name: string) =>
     metro.resolver.resolveRequest!({}, name, 'ios');
 
-  it('resolves @analogjs/content to an empty module when the app has not installed it', () => {
-    assert.deepEqual(resolve(withAnalog(config({})), '@analogjs/content'), { type: 'empty' });
+  it("lets the resolver's error through for the app's own import of a missing @analogjs/content", () => {
+    const metro = withAnalog(config({}));
+    const app = { originModulePath: '/app/src/app/pages/post.page.ts' };
+    assert.throws(
+      () => metro.resolver.resolveRequest!(app, '@analogjs/content', 'ios'),
+      /Unable to resolve module @analogjs\/content/,
+    );
+    const router = { originModulePath: '/app/node_modules/@analogjs/router/fesm2022/routes.mjs' };
+    assert.deepEqual(metro.resolver.resolveRequest!(router, '@analogjs/content', 'ios'), {
+      type: 'empty',
+    });
   });
 
   it('leaves an installed @analogjs/content to resolve as it does', () => {

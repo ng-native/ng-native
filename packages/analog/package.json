@@ -1,6 +1,6 @@
 {
   "name": "@ng-native/analog",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "description": "Analog's file-based pages and content files for Angular Native: src/app/pages, routed by @analogjs/router on a native stack, and src/content read as @analogjs/content reads it.",
   "keywords": [
     "angular",
@@ -41,6 +41,7 @@
     "@analogjs/router": "^2.8.0",
     "@angular/core": "^22.0.0",
     "@angular/router": "^22.0.0",
+    "@ng-native/router": "workspace:*",
     "rxjs": "^7.4.0"
   },
   "devDependencies": {
@@ -49,12 +50,13 @@
     "@angular/core": "22.2.0",
     "@angular/platform-browser": "22.2.0",
     "@angular/router": "22.2.0",
+    "@ng-native/router": "workspace:*",
     "rxjs": "^7.8.2"
   },
   "nx": {
     "tags": [
       "scope:analog",
-      "layer:angular"
+      "layer:angular-addon"
     ]
   },
   "scripts": {

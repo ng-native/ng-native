@@ -6,8 +6,11 @@
  * Markdown after it, and `tokens` is `marked.lexer(content)`, made here so a screen that draws them
  * with `<markdown [tokens]>` parses nothing on the device.
  *
- * The module is a literal of plain JSON. A front matter date, which YAML reads as a `Date`, arrives
- * as its ISO string, and a token is a plain object either way.
+ * The module is plain JSON, read with `JSON.parse`, so a front matter key named `__proto__` is a key
+ * like any other and not the object's prototype. A front matter date, which YAML reads as a `Date`,
+ * arrives as its ISO string, and a token is a plain object either way. A token keeps no `raw`, its
+ * source text, when `<markdown>` draws its type without it: that text, at every level of nesting,
+ * made the module several times the size of the file.
  *
  * `marked` is an optional peer dependency of this package, needed only when the app has a `.md`
  * file in its bundle, and resolved from the app as well as from here.
@@ -56,6 +59,54 @@ function markdownVersions() {
 }
 
 /**
+ * The token types `markdownBlocks` in `@ng-native/components` draws without their `raw`: every
+ * type `marked.lexer` makes. A type not here, from a marked extension, is drawn as its source text,
+ * so it keeps its `raw`.
+ */
+const DRAWN_WITHOUT_RAW = new Set([
+  'space',
+  'code',
+  'heading',
+  'table',
+  'hr',
+  'blockquote',
+  'list',
+  'list_item',
+  'checkbox',
+  'paragraph',
+  'html',
+  'text',
+  'def',
+  'escape',
+  'link',
+  'image',
+  'strong',
+  'em',
+  'codespan',
+  'br',
+  'del',
+]);
+
+/** JSON for `tokens`, each one of a type in `DRAWN_WITHOUT_RAW` without its `raw`. */
+function tokensJson(tokens) {
+  return JSON.stringify(tokens, function (key, inner) {
+    return key === 'raw' && DRAWN_WITHOUT_RAW.has(this.type) ? undefined : inner;
+  });
+}
+
+/**
+ * `json` as a single-quoted JavaScript string: JSON has a double quote in every key and no
+ * control character, so only a backslash, a single quote and the line and paragraph separators
+ * need escaping.
+ */
+function stringLiteral(json) {
+  return `'${json
+    .replace(/[\\']/g, '\\$&')
+    .replace(/\u2028/g, '\\u2028')
+    .replace(/\u2029/g, '\\u2029')}'`;
+}
+
+/**
  * @param {string} src the file as written
  * @param {string} filename for the error messages
  * @returns {string} an ES module whose default export is `{ attributes, content, tokens }`
@@ -86,8 +137,10 @@ function markdownModule(src, filename) {
         'installed. Install it beside the app: npx expo install marked',
     );
   }
-  const module = { attributes, content: body, tokens: lexer(body) };
-  return `export default ${JSON.stringify(module)};\n`;
+  const json =
+    `{"attributes":${JSON.stringify(attributes)},"content":${JSON.stringify(body)},` +
+    `"tokens":${tokensJson(lexer(body))}}`;
+  return `export default JSON.parse(${stringLiteral(json)});\n`;
 }
 
 module.exports = { markdownModule, markdownVersions };

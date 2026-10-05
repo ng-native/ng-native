@@ -21,6 +21,7 @@ import {
   provideContentFiles,
   type ContentContext,
 } from '@ng-native/analog';
+import { injectMarkdownPage as injectRouterMarkdownPage } from '@ng-native/router';
 import { injectService, waitFor } from '@ng-native/testing';
 import { BehaviorSubject, firstValueFrom } from 'rxjs';
 
@@ -32,7 +33,7 @@ const { markdownModule } = require('@ng-native/metro/markdown-module.cjs') as {
 /** What Metro's `require.context` module holds for a `.md` file. */
 function md(src: string): { default: unknown } {
   const code = markdownModule(src, 'test.md');
-  return { default: JSON.parse(code.slice('export default '.length, -2)) as unknown };
+  return { default: new Function(code.replace(/^export default /, 'return '))() as unknown };
 }
 
 const FILES: Record<string, string> = {
@@ -169,6 +170,18 @@ describe('injectContent', () => {
     assert.deepEqual(file.toc, [{ id: 'first', level: 1, text: 'First' }]);
   });
 
+  it('finds a file whose slug has a space or an accent, which the route gives decoded', async () => {
+    const files = { './café.md': '# Café\n', './post.md': '---\nslug: my post\n---\n# Post\n' };
+    const find = (slug: string) => {
+      const { provider } = route({ slug });
+      return firstValueFrom(
+        inContext([...provideContentFiles(context(files)), provider], () => injectContent()),
+      );
+    };
+    assert.equal((await find('café')).content, '# Café\n');
+    assert.equal((await find('my post')).content, '# Post\n');
+  });
+
   it('finds a file by its front matter slug rather than its name', async () => {
     assert.equal((await read(undefined, { slug: 'renamed' })).attributes['title'], 'Second post');
     assert.equal((await read(undefined, { slug: 'second-post' })).slug, '');
@@ -301,7 +314,11 @@ describe('pageRoutes with Markdown pages', () => {
     const { provider } = route();
     assert.throws(
       () => inContext([provider], () => injectMarkdownPage()),
-      /is for the markdownPage component pageRoutes routes a \.md page to/,
+      /is for the markdownPage component fileRoutes or pageRoutes routes a \.md page to/,
     );
+  });
+
+  it("is the router's injectMarkdownPage, so one markdownPage component serves fileRoutes too", () => {
+    assert.equal(injectMarkdownPage, injectRouterMarkdownPage);
   });
 });
