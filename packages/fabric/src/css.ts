@@ -1617,7 +1617,12 @@ function noteInside(found: ClassReach, name: string, rule: StyleRule): void {
   let subjects = found.get(name);
   if (subjects === true) return;
   if (!subjects) found.set(name, (subjects = noSubjects()));
-  noteSubject(subjects, rule);
+  const subject = rule.compounds.at(-1);
+  if (subject?.classes.length) subjects.classes.add(subject.classes[0]!);
+  else if (subject?.type && subject.type !== '*') subjects.types.add(subject.type);
+  // A rule for anything in the box, `.busy > *`: anything under the node the class changed
+  // on. Asking which box has the class finds none once the class has gone from it.
+  else subjects.any = true;
 }
 
 const noSubjects = (): Subjects => ({
