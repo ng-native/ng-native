@@ -962,6 +962,16 @@ function placeholderFaded(props: Record<string, unknown>): void {
 }
 
 /**
+ * A box with `display: none`, out of the flow as well. It takes no room either way, but Yoga
+ * reads an item's baseline from its first child that is in the flow, and a hidden one has no
+ * layout to read: under a row with `align-items: baseline` the baseline is not a number, and
+ * the row comes to no height with nothing in it placed. Out of the flow it is passed over.
+ */
+function hiddenOutOfFlow(props: Record<string, unknown>): void {
+  if (props['display'] === 'none') props['position'] = 'absolute';
+}
+
+/**
  * `height: 50%` under a parent with no height to take it of, which CSS reads as `auto`. Yoga
  * takes it of the space on offer, the screen's or everything a scroll view holds, so no height
  * is sent.
@@ -3253,6 +3263,7 @@ export class Engine implements HostEngine {
     fitContent(node, style);
     percentHeight(node, style);
     placeholderFaded(style);
+    hiddenOutOfFlow(style);
     const intrinsic = node.props[INTRINSIC_SIZE] as IntrinsicSize | undefined;
     if (intrinsic) applyIntrinsicSize(style, intrinsic);
     flattenStyle(node.props[STYLE_OVERRIDE], style);
