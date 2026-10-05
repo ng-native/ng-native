@@ -38,6 +38,9 @@ describe('a transform bound on an element', () => {
       'unknown',
       'third-axis',
       'along-z',
+      'zero-z-unit',
+      'one-of-three',
+      'two-of-three',
     ];
     const props = Object.fromEntries(ids.map((id) => [id, screen.getByTestId(id).props]));
     transform = (id) => props[id]!['transform'];
@@ -57,6 +60,8 @@ describe('a transform bound on an element', () => {
       { translateX: 4 },
       { translateY: 8 },
     ]);
+    // Nothing along z in any unit is still nothing.
+    assert.deepEqual(transform('zero-z-unit'), [{ translateX: 4 }, { translateY: 8 }]);
   });
 
   it('reads a function name in any case', () => {
@@ -77,6 +82,8 @@ describe('a transform bound on an element', () => {
     'nbsp-between',
     'unknown',
     'along-z',
+    'one-of-three',
+    'two-of-three',
   ]) {
     it(`leaves the rule's transform where it cannot read ${id}`, () => {
       assert.deepEqual(transform(id), transform('class-only'));

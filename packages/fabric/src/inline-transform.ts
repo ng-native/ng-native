@@ -47,6 +47,15 @@ function argument(raw: string): number | string {
   return PX.test(raw) ? parseFloat(raw) : raw;
 }
 
+/**
+ * Whether a spelling with a third axis is one a view can have: all three values, as CSS takes no
+ * fewer, and nothing along z for a move, in any unit, since a view has nowhere to go there.
+ */
+function onAView(name: string, raw: readonly string[]): boolean {
+  if (raw.length !== 3) return false;
+  return name !== 'translate3d' || Number.parseFloat(raw[2]!) === 0;
+}
+
 /** Each function and its arguments, or undefined where anything else is in the value. */
 function readCalls(value: string): { name: string; raw: string[] }[] | undefined {
   const calls = [...value.matchAll(FUNCTIONS)].map(([, name, body]) => ({
@@ -58,10 +67,7 @@ function readCalls(value: string): { name: string; raw: string[] }[] | undefined
     calls.length &&
     SPACE.test(value.replace(FUNCTIONS, '')) &&
     calls.every(({ name, raw }) => name && raw.length && raw.every((arg) => ARGUMENT.test(arg)));
-  // Along z a view has nowhere to go: not a transform it can have, as in a stylesheet.
-  const flat = calls.every(
-    ({ name, raw }) => name !== 'translate3d' || Number(argument(raw[2]!)) === 0,
-  );
+  const flat = calls.every(({ name, raw }) => !(name in THREE_D) || onAView(name, raw));
   return readable && flat ? calls : undefined;
 }
 

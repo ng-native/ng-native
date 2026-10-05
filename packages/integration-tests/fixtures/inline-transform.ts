@@ -34,5 +34,8 @@ export class InlineTransform {
     { id: 'unknown', turned: true, value: 'spin(90deg)' },
     { id: 'third-axis', turned: true, value: 'scale3d(0, 0.5, 0) translate3d(4px, 8px, 0)' },
     { id: 'along-z', turned: true, value: 'translate3d(4px, 8px, 2px)' },
+    { id: 'zero-z-unit', turned: true, value: 'translate3d(4px, 8px, 0em)' },
+    { id: 'one-of-three', turned: true, value: 'scale3d(2)' },
+    { id: 'two-of-three', turned: true, value: 'translate3d(4px, 8px)' },
   ];
 }
