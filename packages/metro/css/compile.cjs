@@ -1715,7 +1715,43 @@ function addUnparsed(declaration, out, deferred, context) {
     deferred.push(...expanded.deferred);
     return;
   }
-  deferred.push(deferVar(declaration.value, context));
+  const sided = sidedFallback(declaration.value, context);
+  deferred.push(...(sided ?? [deferVar(declaration.value, context)]));
+}
+
+const SIDES = ['Top', 'Right', 'Bottom', 'Left'];
+
+/**
+ * `margin: var(--m, 0 24px)`: a token for all four sides, and a fallback with a value per side.
+ * One declaration per side, each with its own part of the fallback, where a single one has room
+ * for one value and would have none. Null for anything else, which is left as it was.
+ *
+ * ponytail: the token itself is still one length. One set to two values is not read; give a
+ * token a form per side if a library sets such a token and does not just leave the fallback.
+ */
+function sidedFallback(value, context) {
+  const box = value?.propertyId?.property;
+  if (box !== 'margin' && box !== 'padding') return null;
+  const [only, ...others] = meaningful(value.value ?? []);
+  if (others.length || only?.type !== 'var') return null;
+  const lengths = sideLengths(only.value.fallback, context);
+  if (!lengths) return null;
+  const [top, right, bottom = top, left = right] = lengths;
+  const reference = only.value.name.ident;
+  return [top, right, bottom, left].map((fallback, side) => ({
+    props: [`${box}${SIDES[side]}`],
+    kind: 'length',
+    reference,
+    fallback,
+  }));
+}
+
+/** Two to four lengths written one after the other, in points, or null for anything else. */
+function sideLengths(written, context) {
+  const parts = meaningful(written ?? []);
+  if (parts.length < 2 || parts.length > 4) return null;
+  const lengths = parts.map((part) => tokenValue([part], context)?.length);
+  return lengths.every((each) => typeof each === 'number') ? lengths : null;
 }
 
 /**

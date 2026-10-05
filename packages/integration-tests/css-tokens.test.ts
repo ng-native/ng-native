@@ -465,6 +465,19 @@ describe('tokens', () => {
       assert.deepEqual([style['paddingTop'], style['paddingLeft']], [undefined, 1]);
     });
 
+    it('gives each side its own part of a fallback with a value per side', () => {
+      // Material moves a switch's handle with `margin: var(--..., 0 24px)`, and sets no token.
+      const css =
+        '.a { margin: var(--m, 0 24px) } .b { padding: var(--p, 1px 2px 3px) } ' +
+        '.c { margin: var(--q, 1px 2px 3px 4px) } .set { --m: 8px }';
+      const sides = (style: Record<string, unknown>, box: string) =>
+        ['Top', 'Right', 'Bottom', 'Left'].map((side) => style[`${box}${side}`]);
+      assert.deepEqual(sides(resolvedStyle(css, ['a']), 'margin'), [0, 24, 0, 24]);
+      assert.deepEqual(sides(resolvedStyle(css, ['b']), 'padding'), [1, 2, 3, 2]);
+      assert.deepEqual(sides(resolvedStyle(css, ['c']), 'margin'), [1, 2, 3, 4]);
+      assert.deepEqual(sides(resolvedStyle(css, ['a', 'set']), 'margin'), [8, 8, 8, 8]);
+    });
+
     it('adds a percentage to a token of one, as Open Props strengthens a shadow', () => {
       // `--shadow-strength-4: calc(var(--shadow-strength) + 3%)`, read as an alpha: 1% + 3%. Chrome
       // draws the card's shadow in rgba(37, 38, 39, 0.04).
