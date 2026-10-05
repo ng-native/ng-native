@@ -434,9 +434,11 @@ export type ColourExpression =
 
 /**
  * The share of a colour in a mix: a percentage, or a token multiplied into one, as
- * `calc(var(--opacity) * 100%)` is the token times a hundred.
+ * `calc(var(--opacity) * 100%)` is the token times a hundred, with the number the token falls
+ * back to where it wrote one.
  */
-export type MixShare = number | { readonly reference: string; readonly scale: number };
+export type MixShare =
+  number | { readonly reference: string; readonly scale: number; readonly fallback?: number };
 
 /** One component's compiled styles, pre-sorted by specificity then source order. */
 /**
@@ -3415,7 +3417,7 @@ function shareOf(
   tokens: Readonly<Record<string, TokenValue>>,
 ): number | null | undefined {
   if (share === undefined || typeof share === 'number') return share;
-  const factor = tokens[share.reference]?.number;
+  const factor = tokens[share.reference]?.number ?? share.fallback;
   return factor === undefined ? null : factor * share.scale;
 }
 

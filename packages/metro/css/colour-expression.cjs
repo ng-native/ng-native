@@ -204,7 +204,22 @@ function shareOf(term) {
   const token = [first, second].find((part) => part?.type === 'var');
   const share = [first, second].find(isPercentage);
   if (!token || !share) return undefined;
-  return { reference: token.value.name.ident, scale: round(share.value.value * 100) };
+  const fallback = numberIn(token.value.fallback);
+  // A fallback that is not a number is not a share the device can work out: left to be refused.
+  if (fallback === null) return undefined;
+  return {
+    reference: token.value.name.ident,
+    scale: round(share.value.value * 100),
+    ...(fallback === undefined ? {} : { fallback }),
+  };
+}
+
+/** The one number a token's fallback is: undefined with no fallback, null for anything else. */
+function numberIn(fallback) {
+  if (fallback == null) return undefined;
+  const [only, ...more] = meaningful(fallback);
+  const is = !more.length && only?.type === 'token' && only.value?.type === 'number';
+  return is ? round(only.value.value) : null;
 }
 
 const isTimes = (term) => term?.type === 'token' && term.value?.value === '*';

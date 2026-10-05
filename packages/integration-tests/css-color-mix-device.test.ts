@@ -153,6 +153,14 @@ describe('color-mix with a token, on device', () => {
     assert.equal(colour(['a'], []), undefined);
   });
 
+  it("takes the number a share's token falls back to, where nothing sets the token", () => {
+    const mix = 'color-mix(in srgb, rgb(0, 92, 187) calc(var(--share, 0.12) * 100%), transparent)';
+    const css = `.a { background-color: ${mix} } .more { --share: 0.5 }`;
+    const colour = (on: string[]) => resolvedStyle(css, ['a'], on)['backgroundColor'];
+    assertSameColour(colour([]), 'rgba(0, 92, 187, 0.12)', 'the fallback');
+    assertSameColour(colour(['more']), 'rgba(0, 92, 187, 0.5)', 'the token over it');
+  });
+
   it('mixes two tokens', () => {
     const style = resolvedStyle(
       '.theme { --a: #1d4ed8; --b: #be123c } .a { background-color: color-mix(in oklch, var(--a), var(--b)) }',
