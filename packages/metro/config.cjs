@@ -412,7 +412,8 @@ function withChunksOutsideServerRoot(config) {
  *   `node_modules` and Metro has to be told to watch them. An app installing from npm needs
  *   neither and should pass nothing. Every library's component CSS is compiled into native
  *   sheets, as the app's own is; `libraryStyles` narrows that to the npm packages it names, and
- *   `false` to none. A library left out draws unstyled.
+ *   `false` to none. A library left out draws unstyled. An `@ng-native/*` package's is compiled
+ *   whatever the option says.
  */
 /**
  * A hash of the compiler's own sources.

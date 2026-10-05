@@ -55,8 +55,9 @@ ngNative({ inline: [/\/node_modules\/@my-org\//] });
 
 A library's own stylesheets are compiled in a test as the Metro preset compiles them: every
 library's, with nothing to configure. `libraryStyles` is the option the preset takes by the same
-name, a list of the only npm packages to compile or `false` for none. Give it what the app's Metro
-config has, so a test draws what the app draws:
+name, a list of the only npm packages to compile or `false` for none, beside the `@ng-native/*`
+packages', which are always compiled. Give it what the app's Metro config has, so a test draws what
+the app draws:
 
 ```ts
 ngNative({ inline: [/\/node_modules\/@my-org\//], libraryStyles: ['@my-org/ui'] });

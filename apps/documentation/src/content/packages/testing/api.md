@@ -412,7 +412,8 @@ transform and links every partial-compiled package; tells Vitest to process `@an
 adds a setup file that installs the animation globals; and turns off Vitest's `injectCjsGlobals`.
 Every library's own component stylesheets are compiled, so a test draws a library's components with
 their styles. `libraryStyles` narrows that as the Metro preset's option of the same name does: a
-list of the only npm packages, or `false` for none.
+list of the only npm packages, or `false` for none. The `@ng-native/*` packages' are compiled
+whatever it says.
 [Setup](/packages/testing/setup#under-the-hood) says why each is needed.
 
 ## `@ng-native/testing/register`
