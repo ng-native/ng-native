@@ -243,12 +243,15 @@ keeps React Native's meaning, where `none` is the whole subtree. On Android, tex
 `pointerEvents` of their own, so text written directly inside a `box-none` element still takes
 touches there; put it in a view to keep them off.
 
-`touch-action` is read for one thing: on iOS 26 and later, a touch that starts on an element whose
-`touch-action` keeps a sideways drag for itself (`none`, or `pan-y` with no `pan-x`), or on anything
-inside one, holds the screen's swipe back off until the finger lifts. See
-[Screens](/packages/router/screens). It changes nothing else about how a view takes a touch, and no
-view is given it. Tailwind's `touch-none`, `touch-auto` and `touch-manipulation` are read;
-`touch-pan-x` and the other utilities Tailwind composes from tokens are dropped with a warning.
+`touch-action` is read for a touch that starts on an element whose `touch-action` keeps a sideways
+drag for itself (`none`, or `pan-y` with no `pan-x`), or on anything inside one. Until the finger
+lifts it holds the screen's swipe back off, on iOS 26 and later, and keeps the drag from a
+`<scroll-view>` the element is in: every drag with `none`, and one that sets off sideways with
+`pan-y`. See [Screens](/packages/router/screens). No view is given it, and it does not decide which
+view takes a touch. A keyword that stands alone (`auto`, `none`, `manipulation`) written beside
+another is dropped with a warning. Tailwind's `touch-none`, `touch-auto` and `touch-manipulation`
+are read; `touch-pan-x` and the other utilities Tailwind composes from tokens are dropped with a
+warning.
 
 The logical properties all work: `inset-inline`, `inset-block`, `margin-inline`, `margin-block`,
 `padding-inline` and `padding-block`, with their `-start` and `-end` longhands, and the border

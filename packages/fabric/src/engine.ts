@@ -5013,6 +5013,10 @@ export class Engine implements HostEngine {
   } | null = null;
 
   private holdFrom(target: EngineNode | null, nativeEvent: unknown): void {
+    // A first finger down is a new touch: the last one's end never came where what it was on
+    // went from under the finger.
+    const fingers = (nativeEvent as { touches?: readonly unknown[] } | null)?.touches?.length;
+    if (this.drag && fingers === 1) this.releaseSwipe(null);
     if (this.drag || !target) return;
     const actions = touchActions(target);
     if (!keeps(actions, PANS_ACROSS)) return;

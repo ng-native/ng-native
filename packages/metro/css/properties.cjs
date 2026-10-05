@@ -1429,13 +1429,18 @@ const TRANSLATORS = new Map([
     (property, value, out) => {
       // Kept as written for the engine, which holds a screen's swipe back off for a touch on an
       // element that keeps a sideways drag to itself. No view takes it.
-      const words = Array.isArray(value) ? value : [keyword(value, property)];
+      const words = (Array.isArray(value) ? value : [keyword(value, property)]).map((word) =>
+        String(word).toLowerCase(),
+      );
       for (const word of words) {
-        if (!TOUCH_ACTIONS.has(String(word).toLowerCase())) {
+        if (!TOUCH_ACTIONS.has(word)) {
           throw new CssUnsupported(`${property}: '${word}' is not a touch action`);
         }
+        if (words.length > 1 && !word.startsWith('pan-') && word !== 'pinch-zoom') {
+          throw new CssUnsupported(`${property}: '${word}' stands alone`);
+        }
       }
-      out.touchAction = words.map((word) => String(word).toLowerCase()).join(' ');
+      out.touchAction = words.join(' ');
     },
   ],
   [
