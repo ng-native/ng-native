@@ -61,6 +61,37 @@ describe('a global sheet added while the app runs', () => {
     );
   });
 
+  it('styles nothing again for a sheet that names a layer, which the CDK does for an overlay', () => {
+    const s = scene();
+    const layered = '@layer cdk-overlay { .overlay { position: absolute } }';
+    assert.equal(
+      s.styled(() => s.engine.addGlobalSheet(sheet(layered))),
+      0,
+    );
+    // And a layer is still under what is in none, for what the sheet does match.
+    s.engine.addGlobalSheet(sheet('@layer late { .panel { opacity: 0.2 } } .panel { top: 3px }'));
+    s.engine.addGlobalSheet(sheet('.panel { opacity: 0.7 }'));
+    s.engine.commit();
+    assert.equal(s.props('panel')['opacity'], 0.7);
+    assert.equal(s.props('panel')['top'], 3);
+  });
+
+  it('styles nothing more again where views arrive with the sheet, as an overlay does', () => {
+    // The first menu to open: its views join the tree and its sheet is added in one commit.
+    // Where a rule asks what an element holds, every view over the new ones is asked again, the
+    // root among them, and one styled again takes all under it with it.
+    const s = scene();
+    s.engine.addGlobalSheet(sheet('.list:has(.never) { top: 1px }'));
+    s.engine.commit();
+    const count = s.styled(() => {
+      const overlay = s.engine.createElement('view');
+      s.engine.setClasses(overlay, 'overlay');
+      s.engine.appendChild(s.engine.root, overlay);
+      s.engine.addGlobalSheet(sheet('@layer cdk-overlay { .overlay { position: absolute } }'));
+    });
+    assert.ok(count <= 2, `${count} nodes styled, of the forty there already`);
+  });
+
   it('styles again what a rule of it is written for, and that matches', () => {
     const s = scene();
     const count = s.styled(() => s.engine.addGlobalSheet(sheet('.panel { opacity: 0.5 }')));
