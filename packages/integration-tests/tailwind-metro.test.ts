@@ -94,7 +94,11 @@ describe('the generated stylesheet module', () => {
     const sides = (className: string) =>
       sheet.rules
         .filter((rule) => rule.compounds.some((c) => c.classes.includes(className)))
-        .map((rule) => ({ dark: rule.condition !== undefined, ...rule.tokens, ...rule.declarations }));
+        .map((rule) => ({
+          dark: rule.condition !== undefined,
+          ...rule.tokens,
+          ...rule.declarations,
+        }));
     assert.deepEqual(sides('theme'), [
       { dark: false, '--surface': { color: 'rgb(255, 255, 255)' } },
       { dark: true, '--surface': { color: 'rgb(0, 0, 0)' } },
