@@ -857,10 +857,6 @@
     "bg-clip-content",
     "bg-clip-padding"
   ],
-  "dropped 'background-color': '…' is a CSS-wide keyword, which this cascade does not implement. Write the value it stands for.": [
-    "!bg-inherit",
-    "bg-inherit"
-  ],
   "dropped 'background-color': '…' is not a value native can take": [
     "!bg-[0.35]",
     "!bg-[200ms]",

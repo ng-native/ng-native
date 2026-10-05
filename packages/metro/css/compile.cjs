@@ -1616,6 +1616,42 @@ function onlyWord(parts) {
 /** The CSS-wide keywords, which every property takes and which lightningcss leaves unparsed. */
 const CSS_WIDE = new Set(['inherit', 'initial', 'unset', 'revert', 'revert-layer']);
 
+const CORNERS = ['TopLeft', 'TopRight', 'BottomRight', 'BottomLeft'].map(
+  (corner) => `border${corner}Radius`,
+);
+const FONT = ['fontFamily', 'fontSize', 'fontStyle', 'fontWeight', 'lineHeight'];
+
+/** Take an `inherit` the device can settle as a deferred declaration; false for any other word. */
+function inherited(property, word, deferred) {
+  // `color: inherit` is the parent's colour, which is what currentColor is on `color` itself, so
+  // it is the same marker the device fills in. `unset` is `inherit` on a property CSS inherits.
+  if (property === 'color' && (word === 'inherit' || word === 'unset')) {
+    deferred.push({ props: ['color'], within: CURRENT_COLOUR });
+    return true;
+  }
+  if (word !== 'inherit' || !INHERITS[property]) return false;
+  deferred.push({ props: INHERITS[property], inherit: true });
+  return true;
+}
+
+/**
+ * The properties `inherit` is taken for, and the props it is the parent's values of: the ones
+ * with a value a child can simply have. Any other, a `display` or a `transition`, is refused as
+ * every CSS-wide keyword is.
+ */
+const INHERITS = {
+  'border-radius': CORNERS,
+  font: FONT,
+  ...Object.fromEntries(
+    [
+      ...['top-left', 'top-right', 'bottom-right', 'bottom-left'].map((c) => `border-${c}-radius`),
+      ...['width', 'height', 'min-width', 'min-height', 'max-width', 'max-height'],
+      ...['font-family', 'font-size', 'font-style', 'font-weight', 'line-height'],
+      ...['letter-spacing', 'text-align', 'text-transform', 'background-color', 'opacity'],
+    ].map((property) => [property, [camel(property)]]),
+  ),
+};
+
 /** `box-shadow: none` or `text-shadow: none` written to `out`, and whether `property` was one. */
 function noShadow(property, out) {
   if (property === 'box-shadow') out.boxShadow = [];
@@ -1637,12 +1673,7 @@ function unparsedValue(value, out, deferred, context) {
   const parts = terms(value?.value);
   const word = onlyWord(parts);
   if (word === 'none' && noShadow(property, out)) return;
-  // `color: inherit` is the parent's colour, which is what currentColor is on `color` itself, so
-  // it is the same marker the device fills in. `unset` is `inherit` on a property CSS inherits.
-  if (property === 'color' && (word === 'inherit' || word === 'unset')) {
-    deferred.push({ props: ['color'], within: CURRENT_COLOUR });
-    return;
-  }
+  if (inherited(property, word, deferred)) return;
   if (CSS_WIDE.has(word)) {
     throw new CssUnsupported(
       `${context}: '${property}: ${word}' is a CSS-wide keyword, which this cascade does not ` +

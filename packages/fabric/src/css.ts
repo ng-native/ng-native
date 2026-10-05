@@ -275,6 +275,11 @@ export interface DeferredDeclaration {
    * unambiguous given a single-valued token, so `padding: var(--gap)` writes all four.
    */
   readonly props: readonly string[];
+  /**
+   * `inherit`, written for these props: each is the parent's value for it, or nothing where the
+   * parent has none.
+   */
+  readonly inherit?: true;
   /** The element a bound declaration is on, by name, for a message about it to say. */
   readonly on?: string;
   /** A `var()` reference. Exactly one of this and `compute` is present. */
@@ -980,6 +985,18 @@ function matchAny(
     }
   }
   return false;
+}
+
+const TAKES_PARENTS = new WeakMap<StyleRule, boolean>();
+
+/** Whether a rule has an `inherit` in it, which is settled from the parent's own style. */
+function takesParents(rule: StyleRule): boolean {
+  let takes = TAKES_PARENTS.get(rule);
+  if (takes === undefined) {
+    takes = rule.deferred?.some((declaration) => declaration.inherit) === true;
+    TAKES_PARENTS.set(rule, takes);
+  }
+  return takes;
 }
 
 /** Whether a node is one of the children CSS counts. Text and anchors are children, not elements. */
@@ -1734,6 +1751,7 @@ export class StyleResolver {
       node.styled ? ELEMENT_ENTRIES.concat(candidates) : candidates,
     );
     const parentTokens = parent ? parent.tokens : this.tokensOnRoot;
+    this.parentOf = parent;
     const styled = this.styled(node, matched, parentTokens, parentInherited);
 
     const cache: StyleCache = {
@@ -2005,7 +2023,8 @@ export class StyleResolver {
   ): Styled {
     // Shared between nodes that match alike, unless the node sets something of its own.
     const inline = node.inlineInherits ? inlineInherited(node.props['style']) : null;
-    if (node.customProperties || inline || node.boundStyle) {
+    // Nor one that takes a value from its parent's own style, which two parents differ in.
+    if (node.customProperties || inline || node.boundStyle || matched.some(takesParents)) {
       return this.style(node, matched, parentTokens, parentInherited, inline);
     }
     if (this.sharedGeneration !== this.generation) {
@@ -2225,6 +2244,10 @@ export class StyleResolver {
     important: Record<string, unknown> | null,
   ): void {
     for (const declaration of settlingOrder(deferred)) {
+      if (declaration.inherit) {
+        this.inherit(declaration, own, parentInherited, important);
+        continue;
+      }
       const settled = this.settled(declaration, own, parentInherited, tokens);
       if (settled === undefined && this.onUndefinedToken) {
         this.reportUndefined(declaration, tokens);
@@ -2241,6 +2264,27 @@ export class StyleResolver {
         if (outranked(prop)) continue;
         write(own, prop, value, declaration.line !== undefined);
       }
+    }
+  }
+
+  /** What the parent of the node being resolved came to: an `inherit` takes its values from it. */
+  private parentOf: StyleCache | null = null;
+
+  /**
+   * `inherit`: each prop as the parent has it, handed down or its own, and gone where the parent
+   * has none, which is what a weaker rule's value for it gives way to.
+   */
+  private inherit(
+    declaration: DeferredDeclaration,
+    own: Record<string, unknown>,
+    parentInherited: Record<string, unknown>,
+    important: Record<string, unknown> | null,
+  ): void {
+    for (const prop of declaration.props) {
+      if (!declaration.important && important !== null && prop in important) continue;
+      const value = parentInherited[prop] ?? this.parentOf?.style[prop];
+      if (value === undefined) delete own[prop];
+      else own[prop] = value;
     }
   }
 

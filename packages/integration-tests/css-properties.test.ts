@@ -528,9 +528,9 @@ describe('the keywords that mean the property is off', () => {
 describe('what it refuses, and how it says so', () => {
   it('does not blame var() for a value that has none', () => {
     // A value lightningcss could not parse arrives the way a var() does, and every one of them was
-    // reported as "mixes var() with other values": `font-size: inherit` included.
+    // reported as "mixes var() with other values": `display: inherit` included.
     assert.throws(
-      () => declarationsOf('font-size: inherit'),
+      () => declarationsOf('display: inherit'),
       (error: Error) => {
         assert.match(error.message, /CSS-wide keyword/);
         assert.doesNotMatch(error.message, /var\(\)/);

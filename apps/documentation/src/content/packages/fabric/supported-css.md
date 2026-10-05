@@ -304,8 +304,11 @@ does not do there.
 The keywords that switch a property off - `max-width: none`, `z-index: auto`,
 `letter-spacing: normal`, `filter: none`, `box-shadow: none` - clear it back to native's default.
 The CSS-wide keywords (`inherit`, `initial`, `unset`, `revert`, `revert-layer`) are dropped, and
-the warning says so, except `color: inherit` and `color: unset`, which are the color the element
-inherits.
+the warning says so, with two exceptions. `color: inherit` and `color: unset` are the color the
+element inherits. And `inherit` is the parent's value for `border-radius` and its corners,
+`width`, `height` and their minimums and maximums, `font` and the font properties,
+`letter-spacing`, `text-align`, `text-transform`, `background-color` and `opacity`: the element
+has none where its parent has none.
 
 Layout is Yoga's, which follows CSS flexbox with a few differences worth knowing. An absolutely
 positioned child's percentage size is taken from the width its parent was offered, not the width

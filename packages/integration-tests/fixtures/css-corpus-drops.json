@@ -1,7 +1,7 @@
 {
   "bootstrap": {
-    "rules": 2520,
-    "dropped": 700,
+    "rules": 2523,
+    "dropped": 687,
     "emitted": [
       "$animation",
       "$animationDelay",
@@ -174,12 +174,6 @@
       "border-bottom": {
         "'border-bottom: inherit' is a CSS-wide keyword, which this cascade does not implement. Write the value it stands for.": 1
       },
-      "border-bottom-left-radius": {
-        "'border-bottom-left-radius: inherit' is a CSS-wide keyword, which this cascade does not implement. Write the value it stands for.": 1
-      },
-      "border-bottom-right-radius": {
-        "'border-bottom-right-radius: inherit' is a CSS-wide keyword, which this cascade does not implement. Write the value it stands for.": 1
-      },
       "border-collapse": {
         "'border-collapse' has no React Native equivalent: no style prop of a native view does what it does.": 1
       },
@@ -188,12 +182,6 @@
       },
       "border-top": {
         "'border-top: inherit' is a CSS-wide keyword, which this cascade does not implement. Write the value it stands for.": 1
-      },
-      "border-top-left-radius": {
-        "'border-top-left-radius: inherit' is a CSS-wide keyword, which this cascade does not implement. Write the value it stands for.": 1
-      },
-      "border-top-right-radius": {
-        "'border-top-right-radius: inherit' is a CSS-wide keyword, which this cascade does not implement. Write the value it stands for.": 1
       },
       "caption-side": {
         "'caption-side' has no React Native equivalent: no style prop of a native view does what it does.": 2
@@ -237,9 +225,6 @@
       "float": {
         "'float' has no React Native equivalent: no style prop of a native view does what it does. Lay the row out with flexbox: flex-direction: row on the parent.": 22
       },
-      "font-size": {
-        "'font-size: inherit' is a CSS-wide keyword, which this cascade does not implement. Write the value it stands for.": 3
-      },
       "font-weight": {
         "font-weight: 'bolder' is relative to the inherited weight, and native takes an absolute one. Write the weight: bold, or a number from 100 to 900.": 2,
         "font-weight: 'lighter' is relative to the inherited weight, and native takes an absolute one. Write the weight: bold, or a number from 100 to 900.": 1
@@ -250,9 +235,6 @@
       },
       "line-break": {
         "'line-break' has no React Native equivalent: no style prop of a native view does what it does.": 2
-      },
-      "line-height": {
-        "'line-height: inherit' is a CSS-wide keyword, which this cascade does not implement. Write the value it stands for.": 3
       },
       "list-style": {
         "'list-style' has no React Native equivalent: no style prop of a native view does what it does.": 6
@@ -305,8 +287,7 @@
         "'scroll-behavior' has no React Native equivalent: no style prop of a native view does what it does.": 1
       },
       "text-align": {
-        "'text-align: -webkit-match-parent' is not a value native can take": 1,
-        "'text-align: inherit' is a CSS-wide keyword, which this cascade does not implement. Write the value it stands for.": 3
+        "'text-align: -webkit-match-parent' is not a value native can take": 1
       },
       "text-decoration-color": {
         "'text-decoration-color' mixes var() with other values, which needs a parser on device. calc() of tokens, numbers and points, max(var(--x), <length>), colours and transforms are understood; anything else has to be worked out at build time.": 16
@@ -354,8 +335,8 @@
     }
   },
   "bulma": {
-    "rules": 3018,
-    "dropped": 1860,
+    "rules": 3031,
+    "dropped": 1845,
     "emitted": [
       "$animation",
       "$animationDelay",
@@ -493,8 +474,7 @@
         "'appearance' has no React Native equivalent: no style prop of a native view does what it does.": 8
       },
       "background-color": {
-        "'background-color' mixes var() with other values, which needs a parser on device. calc() of tokens, numbers and points, max(var(--x), <length>), colours and transforms are understood; anything else has to be worked out at build time.": 626,
-        "'background-color: inherit' is a CSS-wide keyword, which this cascade does not implement. Write the value it stands for.": 1
+        "'background-color' mixes var() with other values, which needs a parser on device. calc() of tokens, numbers and points, max(var(--x), <length>), colours and transforms are understood; anything else has to be worked out at build time.": 626
       },
       "background-image": {
         "hsl() with a var() in it is only understood as a whole colour token, inside color-mix(), as rgba(var(--channels), <alpha>) or as an hsl() of tokens. Put the whole colour in the variable instead.": 22
@@ -575,15 +555,6 @@
       "float": {
         "'float' has no React Native equivalent: no style prop of a native view does what it does. Lay the row out with flexbox: flex-direction: row on the parent.": 3
       },
-      "font-size": {
-        "'font-size: inherit' is a CSS-wide keyword, which this cascade does not implement. Write the value it stands for.": 2
-      },
-      "font-style": {
-        "'font-style: inherit' is a CSS-wide keyword, which this cascade does not implement. Write the value it stands for.": 1
-      },
-      "font-weight": {
-        "'font-weight: inherit' is a CSS-wide keyword, which this cascade does not implement. Write the value it stands for.": 2
-      },
       "grid-column-end": {
         "'grid-column-end' mixes var() with other values, which needs a parser on device. calc() of tokens, numbers and points, max(var(--x), <length>), colours and transforms are understood; anything else has to be worked out at build time.": 1
       },
@@ -611,9 +582,6 @@
       },
       "left": {
         "arithmetic with tokens in it cannot take 'percentage' here. What the device works out is numbers, points, degrees and var(), with + - * / and brackets; a percentage, an em or a viewport unit beside a token needs layout the device does not do here.": 1
-      },
-      "line-height": {
-        "'line-height: inherit' is a CSS-wide keyword, which this cascade does not implement. Write the value it stands for.": 1
       },
       "list-style": {
         "'list-style' has no React Native equivalent: no style prop of a native view does what it does.": 3
@@ -661,9 +629,6 @@
       "resize": {
         "'resize' has no React Native equivalent: no style prop of a native view does what it does.": 3
       },
-      "text-align": {
-        "'text-align: inherit' is a CSS-wide keyword, which this cascade does not implement. Write the value it stands for.": 8
-      },
       "text-decoration": {
         "var() cannot be used in the 'text-decoration' shorthand, because which native property the value lands in depends on the value, and there is no CSS parser on device. Use the longhand.": 3
       },
@@ -701,7 +666,7 @@
   },
   "pico": {
     "rules": 462,
-    "dropped": 316,
+    "dropped": 311,
     "emitted": [
       "$animation",
       "$animationDelay",
@@ -753,6 +718,7 @@
       "height",
       "justifyContent",
       "left",
+      "letterSpacing",
       "lineHeight",
       "marginBottom",
       "marginEnd",
@@ -885,23 +851,13 @@
       "float": {
         "'float' has no React Native equivalent: no style prop of a native view does what it does. Lay the row out with flexbox: flex-direction: row on the parent.": 1
       },
-      "font-size": {
-        "'font-size: inherit' is a CSS-wide keyword, which this cascade does not implement. Write the value it stands for.": 1
-      },
       "font-weight": {
         "font-weight: 'bolder' is relative to the inherited weight, and native takes an absolute one. Write the weight: bold, or a number from 100 to 900.": 1
       },
       "grid-template-columns": {
         "'grid-template-columns' has no React Native equivalent: no style prop of a native view does what it does.": 2
       },
-      "height": {
-        "'height: inherit' is a CSS-wide keyword, which this cascade does not implement. Write the value it stands for.": 1
-      },
-      "letter-spacing": {
-        "'letter-spacing: inherit' is a CSS-wide keyword, which this cascade does not implement. Write the value it stands for.": 1
-      },
       "line-height": {
-        "'line-height: inherit' is a CSS-wide keyword, which this cascade does not implement. Write the value it stands for.": 1,
         "'line-height: initial' is a CSS-wide keyword, which this cascade does not implement. Write the value it stands for.": 1
       },
       "list-style": {
@@ -975,15 +931,12 @@
       },
       "vertical-align": {
         "vertical-align: 'baseline' has no native equivalent (auto, top, bottom, middle do)": 4
-      },
-      "width": {
-        "'width: inherit' is a CSS-wide keyword, which this cascade does not implement. Write the value it stands for.": 1
       }
     }
   },
   "open-props": {
     "rules": 72,
-    "dropped": 203,
+    "dropped": 200,
     "emitted": [
       "aspectRatio",
       "backgroundColor",
@@ -1012,6 +965,7 @@
       "flexDirection",
       "fontFamily",
       "fontSize",
+      "fontStyle",
       "fontWeight",
       "height",
       "letterSpacing",
@@ -1086,18 +1040,11 @@
       "filter": {
         "filter: blur() is not drawn on iOS. React Native draws brightness() and opacity() on both platforms and every other filter function on Android only, so this would leave the view unchanged on an iPhone. Scope the rule to Android with a .platform-android ancestor (Tailwind's android: variant), or use brightness() or opacity().": 6
       },
-      "font": {
-        "'font: inherit' is a CSS-wide keyword, which this cascade does not implement. Write the value it stands for.": 1
-      },
       "font-family": {
         "'font-family' mixes var() with other values, which needs a parser on device. calc() of tokens, numbers and points, max(var(--x), <length>), colours and transforms are understood; anything else has to be worked out at build time.": 1
       },
       "font-size": {
-        "'font-size: inherit' is a CSS-wide keyword, which this cascade does not implement. Write the value it stands for.": 1,
         "arithmetic with tokens in it cannot take 'em' here. What the device works out is numbers, points, degrees and var(), with + - * / and brackets; a percentage, an em or a viewport unit beside a token needs layout the device does not do here.": 1
-      },
-      "letter-spacing": {
-        "'letter-spacing: inherit' is a CSS-wide keyword, which this cascade does not implement. Write the value it stands for.": 1
       },
       "max-inline-size": {
         "max-width: expected a length, and 'max-content' is not one": 1
