@@ -113,9 +113,10 @@ export class Chip {
     assert.match(compiled(), /ɵnativeStyles/);
   });
 
-  it('are left out for a package a list does not name, and for every package for `false`', () => {
+  it('are left out for a package a list does not name, and for every package for `false` or an empty list', () => {
     assert.doesNotMatch(compiled({ libraryStyles: ['@acme/other'] }), /ɵnativeStyles/);
     assert.doesNotMatch(compiled({ libraryStyles: false }), /ɵnativeStyles/);
+    assert.doesNotMatch(compiled({ libraryStyles: [] }), /ɵnativeStyles/);
   });
 });
 
