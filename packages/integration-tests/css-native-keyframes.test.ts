@@ -155,6 +155,22 @@ describe('a @keyframes animation of opacity and transforms', () => {
     assert.equal(s.engine.animating, false);
   });
 
+  it('has native write its last frame as it ends, for a view that was not there while it played', () => {
+    // A view is mounted when the task that made it is over. An animation as short as that task
+    // is long is over on native before there is a view to move, and the view is then mounted at
+    // the frame the animation started from, which nothing after would take it off.
+    const s = scene('.a { animation: fade 120ms linear }');
+    const [animation] = s.started();
+    assert.deepEqual(s.rec.named('set'), []);
+    s.finish(animation!.id);
+    const names = s.rec.calls.map(([name]) => name);
+    const set = s.rec.named('set');
+    assert.equal(set.length, 1);
+    assert.equal(set[0]![2], animation!.toValue, 'the end of what it was played to');
+    assert.ok(names.lastIndexOf('set') < names.indexOf('fromView'), 'while the view is its own');
+    assert.equal(s.at(0.5), null, 'and then let go');
+  });
+
   it('ends at its resting style when it does not fill', () => {
     const s = scene('.a { opacity: 0.8; animation: fade 400ms linear }');
     s.finish(s.started()[0]!.id);
