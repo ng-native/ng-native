@@ -6,6 +6,11 @@ export interface NgNativeOptions {
    * ships partial-compiled. `@angular/*`, `@ng-native/*` and `@ng-icons/*` are always included.
    */
   inline?: (string | RegExp)[];
+  /**
+   * The npm packages whose components' own stylesheets are compiled as the app's are: the same
+   * list the Metro preset takes as `libraryStyles`, so a test draws what the app draws.
+   */
+  libraryStyles?: string[];
 }
 
 /** Compile Angular for Vitest: AOT for decorated sources, the linker for partial-compiled packages. */

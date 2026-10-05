@@ -48,7 +48,8 @@ export function needsAngular(source, file) {
  *
  * @param {string} source
  * @param {string} file
- * @param {{ platform?: string }} [options] `platform: 'web'` compiles as Metro does for a web view.
+ * @param {{ platform?: string, libraryStyles?: string[], projectRoot?: string }} [options]
+ *   `platform: 'web'` compiles as Metro does for a web view; `libraryStyles` as Metro's preset.
  * @returns {{ code: string, dependencies: string[], map?: string }}
  */
 export function compileAngular(source, file, options = {}) {

@@ -202,7 +202,7 @@ async function appCopy(context, source, importer, options, root) {
 }
 
 /**
- * @param {{ inline?: (string | RegExp)[] }} [options]
+ * @param {{ inline?: (string | RegExp)[], libraryStyles?: string[] }} [options]
  * @returns {import('vitest/config').Plugin}
  */
 export function ngNative(options = {}) {
@@ -240,7 +240,10 @@ export function ngNative(options = {}) {
         const hidden = hideRequire(code, file);
         return hidden === source ? null : { code: hidden, map: null };
       }
-      const result = compileAngular(code, file);
+      const result = compileAngular(code, file, {
+        libraryStyles: options.libraryStyles,
+        projectRoot: root,
+      });
       for (const dependency of result.dependencies) this.addWatchFile(dependency);
       return { code: hideRequire(result.code, file), map: result.map ?? null };
     },
