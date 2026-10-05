@@ -92,6 +92,33 @@ describe('a global sheet added while the app runs', () => {
     assert.ok(count <= 2, `${count} nodes styled, of the forty there already`);
   });
 
+  it('styles nothing again for a rule for anything inside a box that is nowhere', () => {
+    // `.dialog-content > :first-child`: written for any element, but only one in such a box.
+    const s = scene();
+    const inside =
+      '.dialog > :first-child { top: 4px } .dialog :last-child { left: 5px } .dialog > text { top: 1px }';
+    assert.equal(
+      s.styled(() => s.engine.addGlobalSheet(sheet(inside))),
+      0,
+    );
+  });
+
+  it('styles what is inside such a box, where there is one', () => {
+    const s = scene();
+    s.engine.addGlobalSheet(
+      sheet(
+        '.panel > :first-child { top: 4px } .panel :last-child { left: 5px } .panel > text { right: 6px }',
+      ),
+    );
+    s.engine.commit();
+    assert.equal(s.props('label inside')['top'], 4);
+    assert.equal(s.props('label inside')['left'], 5);
+    assert.equal(s.props('label inside')['right'], 6);
+    // What comes after a box is not in it: a rule by a sibling is for anything.
+    const after = s.styled(() => s.engine.addGlobalSheet(sheet('.never + * { top: 9px }')));
+    assert.ok(after > 20, `${after} nodes styled`);
+  });
+
   it('styles again what a rule of it is written for, and that matches', () => {
     const s = scene();
     const count = s.styled(() => s.engine.addGlobalSheet(sheet('.panel { opacity: 0.5 }')));
