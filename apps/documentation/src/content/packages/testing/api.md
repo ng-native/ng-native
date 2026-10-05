@@ -400,13 +400,15 @@ see `(dismiss)` twice.
 ## `@ng-native/testing/vitest`
 
 ```ts
-function ngNative(options?: { inline?: (string | RegExp)[] }): Plugin;
+function ngNative(options?: { inline?: (string | RegExp)[]; libraryStyles?: string[] }): Plugin;
 ```
 
 The Vite plugin for Vitest. It compiles every decorated `.ts` file with `@ng-native/metro`'s AOT
 transform and links every partial-compiled package; tells Vitest to process `@angular/*`,
 `@ng-native/*` and `@ng-icons/*` itself rather than hand them to Node, plus anything in `inline`;
 adds a setup file that installs the animation globals; and turns off Vitest's `injectCjsGlobals`.
+`libraryStyles` names the npm packages whose components' own stylesheets are compiled, the same
+list the Metro preset takes, so a test draws a library's components with their styles.
 [Setup](/packages/testing/setup#under-the-hood) says why each is needed.
 
 ## `@ng-native/testing/register`

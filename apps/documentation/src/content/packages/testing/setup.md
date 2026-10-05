@@ -46,11 +46,19 @@ Vitest's default `include` finds `*.test.ts` and `*.spec.ts` anywhere in the app
 is Vitest's default, `node`. Do not switch it to `jsdom`: there is no DOM to emulate, and giving
 Angular a `document` only invites it to reach for one.
 
-`ngNative()` takes one option, `inline`, for an Angular library of your own choosing that ships
-partial-compiled (see [under the hood](#under-the-hood)):
+`ngNative()` takes two options. `inline` is for an Angular library of your own choosing that
+ships partial-compiled (see [under the hood](#under-the-hood)):
 
 ```ts
 ngNative({ inline: [/\/node_modules\/@my-org\//] });
+```
+
+`libraryStyles` is the list the Metro preset takes by the same name: the npm packages whose
+components' own stylesheets are compiled. Without it a library's components draw with no styles
+in a test, whatever the app's Metro config says:
+
+```ts
+ngNative({ inline: [/\/node_modules\/@my-org\//], libraryStyles: ['@my-org/ui'] });
 ```
 
 ## node:test

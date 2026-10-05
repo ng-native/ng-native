@@ -90,6 +90,31 @@ it('fails a component whose template the compiler would cut short, rather than r
   );
 });
 
+describe("a library's own component styles", () => {
+  // As npm ships one: partial-compiled, its CSS a string in the declaration.
+  const CHIP = `import * as i0 from '@angular/core';
+export class Chip {
+  static ɵfac = i0.ɵɵngDeclareFactory({ minVersion: "12.0.0", version: "22.0.0", ngImport: i0, type: Chip, deps: [], target: i0.ɵɵFactoryTarget.Component });
+  static ɵcmp = i0.ɵɵngDeclareComponent({ minVersion: "14.0.0", version: "22.0.0", type: Chip, isStandalone: true, selector: "acme-chip", ngImport: i0, template: "<text>chip</text>", isInline: true, styles: [":host { padding: 4px }"] });
+}`;
+  const FILE = '/app/node_modules/@acme/ui/fesm2022/acme-ui.mjs';
+  const compiled = (options?: Parameters<typeof ngNative>[0]): string => {
+    const result = (ngNative(options).transform as unknown as Transform)(CHIP, FILE);
+    return typeof result === 'string' ? result : (result?.code ?? CHIP);
+  };
+
+  it('are compiled for a package named in libraryStyles, as the Metro preset compiles them', () => {
+    const code = compiled({ libraryStyles: ['@acme/ui'] });
+    assert.match(code, /ɵnativeStyles/);
+    assert.match(code, /"paddingTop":4/);
+  });
+
+  it('are left out for a package that is not named, and with no list at all', () => {
+    assert.doesNotMatch(compiled({ libraryStyles: ['@acme/other'] }), /ɵnativeStyles/);
+    assert.doesNotMatch(compiled(), /ɵnativeStyles/);
+  });
+});
+
 it('leaves a module that never mentions require alone', () => {
   const transform = ngNative().transform as unknown as Transform;
   assert.equal(transform('export const a = 1;', '/app/src/a.ts'), null);
