@@ -336,7 +336,7 @@
   },
   "bulma": {
     "rules": 3031,
-    "dropped": 1845,
+    "dropped": 1844,
     "emitted": [
       "$animation",
       "$animationDelay",
@@ -640,9 +640,6 @@
       },
       "top": {
         "arithmetic with tokens in it cannot take 'percentage' here. What the device works out is numbers, points, degrees and var(), with + - * / and brackets; a percentage, an em or a viewport unit beside a token needs layout the device does not do here.": 3
-      },
-      "transform": {
-        "transform: the 'translate3d()' transform is not mapped yet": 1
       },
       "vertical-align": {
         "vertical-align: 'baseline' has no native equivalent (auto, top, bottom, middle do)": 1

@@ -36,6 +36,8 @@ describe('a transform bound on an element', () => {
       'upper',
       'mixed',
       'unknown',
+      'third-axis',
+      'along-z',
     ];
     const props = Object.fromEntries(ids.map((id) => [id, screen.getByTestId(id).props]));
     transform = (id) => props[id]!['transform'];
@@ -46,6 +48,15 @@ describe('a transform bound on an element', () => {
     assert.deepEqual(transform('valid'), [{ rotate: '90deg' }]);
     assert.deepEqual(transform('padded'), [{ rotate: '90deg' }]);
     assert.deepEqual(transform('comma'), [{ translateX: 4 }, { translateY: 8 }]);
+  });
+
+  it('reads the three-dimensional spellings of a flat transform as the flat one', () => {
+    assert.deepEqual(transform('third-axis'), [
+      { scaleX: 0 },
+      { scaleY: 0.5 },
+      { translateX: 4 },
+      { translateY: 8 },
+    ]);
   });
 
   it('reads a function name in any case', () => {
@@ -59,7 +70,14 @@ describe('a transform bound on an element', () => {
     assert.equal(none('upper-none'), 0);
   });
 
-  for (const id of ['nbsp-argument', 'nbsp-none', 'junk-after', 'nbsp-between', 'unknown']) {
+  for (const id of [
+    'nbsp-argument',
+    'nbsp-none',
+    'junk-after',
+    'nbsp-between',
+    'unknown',
+    'along-z',
+  ]) {
     it(`leaves the rule's transform where it cannot read ${id}`, () => {
       assert.deepEqual(transform(id), transform('class-only'));
     });

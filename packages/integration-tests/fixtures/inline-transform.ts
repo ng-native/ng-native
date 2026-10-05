@@ -32,5 +32,7 @@ export class InlineTransform {
     { id: 'upper', turned: true, value: 'ROTATE(90deg)' },
     { id: 'mixed', turned: true, value: 'TranslateX(4px)' },
     { id: 'unknown', turned: true, value: 'spin(90deg)' },
+    { id: 'third-axis', turned: true, value: 'scale3d(0, 0.5, 0) translate3d(4px, 8px, 0)' },
+    { id: 'along-z', turned: true, value: 'translate3d(4px, 8px, 2px)' },
   ];
 }

@@ -601,6 +601,20 @@ function transformList(value, context) {
         out.push({ scaleX: number(op.value[0], context) });
         out.push({ scaleY: number(op.value[1], context) });
         break;
+      // The spellings a browser is given for a layer of its own, with nothing along z: a view
+      // has no depth, so they are the flat transform, and one that does move along z is refused.
+      case 'scale3d':
+        out.push({ scaleX: number(op.value[0], context) });
+        out.push({ scaleY: number(op.value[1], context) });
+        break;
+      case 'translate3d':
+        flat(op.value[2], op.type, context);
+        out.push({ translateX: length(op.value[0], context) });
+        out.push({ translateY: length(op.value[1], context) });
+        break;
+      case 'translateZ':
+        flat(op.value, op.type, context);
+        break;
       case 'scaleX':
         out.push({ scaleX: number(op.value, context) });
         break;
@@ -633,6 +647,14 @@ function transformList(value, context) {
     }
   }
   return out;
+}
+
+/** Refuse a distance along z that is not zero: a view is flat, and has nowhere to go. */
+function flat(distance, name, context) {
+  if (distance?.value?.value === 0) return;
+  throw new CssUnsupported(
+    `${context}: '${name}()' moves a box along z, and a native view is flat. Only 0 is taken.`,
+  );
 }
 
 /**

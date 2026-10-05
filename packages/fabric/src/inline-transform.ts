@@ -25,12 +25,21 @@ const ARGUMENT = /^[+-]?(?:\d+\.?\d*|\.\d+)(?:e[+-]?\d+)?(?:%|[a-z]+)?$/i;
 const SPACE = /^[ \t\n\r\f]*$/;
 const PADDED = /^[ \t\n\r\f]+|[ \t\n\r\f]+$/g;
 const FUNCTIONS = /([a-zA-Z0-9]+)\(([^)]*)\)/g;
+/** The two axes a function is along, and whether it was given a value for each. */
+function axesOf(name: string, given: number) {
+  return { axes: AXES[THREE_D[name] ?? name], both: given === 2 || name in THREE_D };
+}
+
+/** The spellings with a third axis, by the flat one each is on a view. */
+const THREE_D: Readonly<Record<string, string>> = { scale3d: 'scale', translate3d: 'translate' };
 /** The transform functions native has, by their name in any case, as CSS reads one. */
 const NAMES = new Map(
   [
     ...['matrix', 'matrix3d', 'perspective', 'rotate', 'rotateX', 'rotateY', 'rotateZ'],
     ...['scale', 'scaleX', 'scaleY', 'skew', 'skewX', 'skewY'],
     ...['translate', 'translateX', 'translateY'],
+    // A flat transform spelt with a third axis, which a view has nothing along.
+    ...['scale3d', 'translate3d'],
   ].map((name) => [name.toLowerCase(), name]),
 );
 
@@ -49,7 +58,11 @@ function readCalls(value: string): { name: string; raw: string[] }[] | undefined
     calls.length &&
     SPACE.test(value.replace(FUNCTIONS, '')) &&
     calls.every(({ name, raw }) => name && raw.length && raw.every((arg) => ARGUMENT.test(arg)));
-  return readable ? calls : undefined;
+  // Along z a view has nowhere to go: not a transform it can have, as in a stylesheet.
+  const flat = calls.every(
+    ({ name, raw }) => name !== 'translate3d' || Number(argument(raw[2]!)) === 0,
+  );
+  return readable && flat ? calls : undefined;
 }
 
 /**
@@ -63,8 +76,8 @@ export function transformList(value: string): TransformEntry[] | undefined {
   if (!calls) return undefined;
   for (const { name, raw } of calls) {
     const args = raw.map(argument);
-    const axes = AXES[name];
-    if (axes && args.length === 2) {
+    const { axes, both } = axesOf(name, args.length);
+    if (axes && both) {
       out.push({ [axes[0]]: args[0]! }, { [axes[1]]: args[1]! });
     } else if (axes && name !== 'scale') {
       // `translate(4px)` and `skew(10deg)` move along the first axis only; `scale(2)` is both,

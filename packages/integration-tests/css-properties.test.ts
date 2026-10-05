@@ -1090,6 +1090,21 @@ describe('where an error points', () => {
 });
 
 describe('values the build settles on its own', () => {
+  it('reads the three-dimensional spellings of a flat transform as the flat one', () => {
+    // A browser is written these to have a layer of its own, with nothing along z: Material's
+    // ripple grows by `scale3d(0, 0, 0)` to `scale3d(1, 1, 1)`. A view has no depth to scale.
+    assert.deepEqual(declarationsOf('transform: scale3d(0, 0.5, 0)')['transform'], [
+      { scaleX: 0 },
+      { scaleY: 0.5 },
+    ]);
+    assert.deepEqual(declarationsOf('transform: translate3d(4px, 8px, 0) translateZ(0)'), {
+      transform: [{ translateX: 4 }, { translateY: 8 }],
+    });
+    // Along z there is nowhere for a view to go, and that is said.
+    assert.throws(() => declarationsOf('transform: translateZ(10px)'), /translateZ/);
+    assert.throws(() => declarationsOf('transform: translate3d(0, 0, 4px)'), /translate3d/);
+  });
+
   it('splits a two-value translate and scale into both axes, each with its own value', () => {
     assert.deepEqual(declarationsOf('transform: translate(4px, 8px) scale(2, 3)')['transform'], [
       { translateX: 4 },
