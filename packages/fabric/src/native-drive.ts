@@ -262,6 +262,11 @@ export class NativeScrollDriver {
         // Stopped rather than finished is the caller's own doing, and it knows.
         if (!result.finished || state.over) return;
         state.id = 0;
+        // Written once more, to the view as it is now. A view is mounted when the task that
+        // made it is over, and an animation no longer than that task is over before there is a
+        // view to move: the view is then mounted at the frame the animation started from.
+        API.setAnimatedNodeValue(state.value, timing.toValue);
+        this.flush();
         ended();
       });
       this.flush();
