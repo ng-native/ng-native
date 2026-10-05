@@ -765,3 +765,40 @@ describe('interpolating a colour', () => {
     assert.equal(interpolate('#ff000080', '#ff000080', 0), 'rgba(255, 0, 0, 0.502)');
   });
 });
+
+describe('a transition named with no time, then given one with the change it eases', () => {
+  // A ripple: a rule scales a view to nothing and names the transform with 0ms, and one change
+  // sets both the full size and the time to reach it over.
+  const CSS =
+    'view { transition: transform 0ms linear; transform: scale(0) }' +
+    ' .grown { transform: scale(1); transition-duration: 100ms }';
+
+  it('eases from where the rule left it, not straight to the end', () => {
+    let now = 1000;
+    const fabric = createFakeFabric();
+    const engine = new Engine(fabric, 1, {
+      globalStyles: compileCss(CSS) as never,
+      now: () => now,
+    });
+    const view = engine.createElement('view');
+    engine.appendChild(engine.root, view);
+    const ended: unknown[] = [];
+    engine.setEventListener(view, 'topTransitionend', () => ended.push(now));
+    engine.commit();
+    const painted = () => flatten(fabric.committed)[0]?.props['transform'];
+    assert.deepEqual(painted(), [{ scaleX: 0 }, { scaleY: 0 }]);
+
+    engine.setClasses(view, 'grown');
+    engine.commit();
+    now += 50;
+    engine.advanceAnimations();
+    engine.commit();
+    assert.deepEqual(painted(), [{ scaleX: 0.5 }, { scaleY: 0.5 }], 'halfway, not there already');
+    assert.deepEqual(ended, []);
+    now += 50;
+    engine.advanceAnimations();
+    engine.commit();
+    assert.deepEqual(painted(), [{ scaleX: 1 }, { scaleY: 1 }]);
+    assert.deepEqual(ended, [1100]);
+  });
+});

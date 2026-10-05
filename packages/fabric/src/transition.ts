@@ -460,9 +460,15 @@ export function step(
   rule: TransitionSpec | undefined,
   now: number,
 ): boolean {
-  if (!rule || rule.duration <= 0) {
+  if (!rule) {
     // No longer transitioning: forget it, so re-adding the rule later starts fresh.
     state.delete(key);
+    return false;
+  }
+  if (rule.duration <= 0) {
+    // Named, with no time to take: it arrives at once, and where it is stays known. A change
+    // that comes with a duration, as a ripple's style sets both in one go, starts from here.
+    state.set(key, settled(props[key], rule));
     return false;
   }
 
