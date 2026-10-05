@@ -532,17 +532,31 @@ const SLOTTED = {
  * and has every one of them read all the slots, so `blur-sm grayscale` is one list made of two
  * classes, spliced on device.
  */
-function listSlot(part, marker, context) {
+function listSlot(part, marker, context, alone) {
   const fallback = part.value?.fallback;
-  if (fallback && meaningful(fallback).length) {
+  const written = fallback && meaningful(fallback).length;
+  // A list a token falls back to, where the token is the whole value: read as the property
+  // reads one. Beside other slots there is no telling where one fallback's functions end.
+  const entries = written && alone ? slotFallback(alone, fallback, context) : written ? null : [];
+  if (entries === null) {
     throw new CssUnsupported(
       `${context}: a slot's fallback in a list of tokens can only be empty, as in 'var(--x,)'. ` +
         `Put the function in the token instead.`,
     );
   }
   return {
-    [marker]: { reference: part.value?.name?.ident, ...(fallback ? { fallback: [] } : {}) },
+    [marker]: { reference: part.value?.name?.ident, ...(fallback ? { fallback: entries } : {}) },
   };
+}
+
+/** What a property makes of a fallback written out, or null where it makes nothing of it. */
+function slotFallback(property, fallback, context) {
+  const typed = reparsed(property, cssText(fallback, context), context);
+  if (typed?.property !== property) return null;
+  const out = {};
+  translate(property, typed.value, out, context);
+  const [list] = Object.values(out);
+  return Array.isArray(list) ? list : null;
 }
 
 /**
@@ -606,7 +620,8 @@ function deferVar(value, context) {
 
   if (SLOTTED[property] && written.every((part) => part.type === 'var')) {
     const { marker, prop } = SLOTTED[property];
-    const within = written.map((part) => listSlot(part, marker, context));
+    const alone = written.length === 1 && property === 'transform' ? property : undefined;
+    const within = written.map((part) => listSlot(part, marker, context, alone));
     return { props: [prop], within };
   }
 
@@ -1752,14 +1767,19 @@ function addUnparsed(declaration, out, deferred, context) {
   }
   const property = declaration.value?.propertyId?.property;
   if (animationTimeWithTokens(property, declaration.value.value ?? [], out, context)) return;
+  // Before a shorthand is taken apart, which gives every part of it the one fallback.
+  const sided = sidedFallback(declaration.value, context);
+  if (sided) {
+    deferred.push(...sided);
+    return;
+  }
   const expanded = expandShorthand(declaration.value, context, linear);
   if (expanded) {
     Object.assign(out, expanded.declarations);
     deferred.push(...expanded.deferred);
     return;
   }
-  const sided = sidedFallback(declaration.value, context);
-  deferred.push(...(sided ?? [deferVar(declaration.value, context)]));
+  deferred.push(deferVar(declaration.value, context));
 }
 
 const SIDES = ['Top', 'Right', 'Bottom', 'Left'];
@@ -1774,15 +1794,40 @@ const SIDES = ['Top', 'Right', 'Bottom', 'Left'];
  */
 function sidedFallback(value, context) {
   const box = value?.propertyId?.property;
+  if (box === 'border-radius') return corneredFallback(value, context);
   if (box !== 'margin' && box !== 'padding') return null;
-  const [only, ...others] = meaningful(value.value ?? []);
-  if (others.length || only?.type !== 'var') return null;
-  const lengths = sideLengths(only.value.fallback, context);
+  const lone = loneVar(value);
+  const lengths = lone && sideLengths(lone.value.fallback, context);
   if (!lengths) return null;
   const [top, right, bottom = top, left = right] = lengths;
-  const reference = only.value.name.ident;
+  const reference = lone.value.name.ident;
   return [top, right, bottom, left].map((fallback, side) => ({
     props: [`${box}${SIDES[side]}`],
+    kind: 'length',
+    reference,
+    fallback,
+  }));
+}
+
+/** The `var()` a declaration's whole value is, or nothing. */
+function loneVar(value) {
+  const [only, ...others] = meaningful(value?.value ?? []);
+  return others.length || only?.type !== 'var' ? undefined : only;
+}
+
+/**
+ * `border-radius: var(--r, 50% 50% 50% 0)`: a token for every corner, and a fallback with a
+ * radius per corner, as `sidedFallback` reads a margin's. Null for anything else: one radius,
+ * or the two radii of an ellipse after a slash.
+ */
+function corneredFallback(value, context) {
+  const lone = loneVar(value);
+  const radii = lone && sideLengths(lone.value.fallback, context);
+  if (!radii) return null;
+  const [topLeft, topRight, bottomRight = topLeft, bottomLeft = topRight] = radii;
+  const reference = lone.value.name.ident;
+  return [topLeft, topRight, bottomRight, bottomLeft].map((fallback, corner) => ({
+    props: [CORNERS[corner]],
     kind: 'length',
     reference,
     fallback,
@@ -1872,6 +1917,8 @@ function termText(part, context) {
   }
   const value = part.value ?? {};
   if (part.type === 'time') return `${value.value}${value.type === 'seconds' ? 's' : 'ms'}`;
+  if (part.type === 'angle') return `${value.value}${value.type}`;
+  if (part.type === 'length') return `${value.value}${value.unit}`;
   if (part.type !== 'token') throw new CssUnsupported(`${context}: '${part.type}' in a shorthand`);
   if (value.type === 'white-space') return ' ';
   if (value.type === 'comma') return ',';
