@@ -127,6 +127,8 @@ export function ours(style: Style, property: string): unknown {
       return animationSeen(style);
     case 'font-variant-numeric':
       return style['fontVariant'];
+    case 'touch-action':
+      return style['touchAction'];
     case 'vertical-align':
       return style['textAlignVertical'];
     case 'text-decoration-line':

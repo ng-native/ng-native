@@ -137,6 +137,12 @@ const OBJECT_FIT = {
   none: 'none',
 };
 
+/** What `touch-action` takes: every gesture, none, or the ones named. */
+const TOUCH_ACTIONS = new Set([
+  ...['auto', 'none', 'manipulation', 'pinch-zoom'],
+  ...['pan-x', 'pan-y', 'pan-left', 'pan-right', 'pan-up', 'pan-down'],
+]);
+
 /** What native calls a `vertical-align`: RN's own table, from its Text component's JavaScript. */
 const VERTICAL_ALIGN = { auto: 'auto', top: 'top', bottom: 'bottom', middle: 'center' };
 
@@ -1416,6 +1422,20 @@ const TRANSLATORS = new Map([
     'vertical-align',
     (property, value, out) => {
       out.textAlignVertical = renamed(VERTICAL_ALIGN, value, property);
+    },
+  ],
+  [
+    'touch-action',
+    (property, value, out) => {
+      // Kept as written for the engine, which holds a screen's swipe back off for a touch on an
+      // element that keeps a sideways drag to itself. No view takes it.
+      const words = Array.isArray(value) ? value : [keyword(value, property)];
+      for (const word of words) {
+        if (!TOUCH_ACTIONS.has(String(word).toLowerCase())) {
+          throw new CssUnsupported(`${property}: '${word}' is not a touch action`);
+        }
+      }
+      out.touchAction = words.map((word) => String(word).toLowerCase()).join(' ');
     },
   ],
   [

@@ -1,7 +1,7 @@
 {
   "bootstrap": {
-    "rules": 2523,
-    "dropped": 686,
+    "rules": 2524,
+    "dropped": 685,
     "emitted": [
       "$animation",
       "$animationDelay",
@@ -100,6 +100,7 @@
       "textShadowRadius",
       "textTransform",
       "top",
+      "touchAction",
       "transform",
       "transformOrigin",
       "width",
@@ -305,9 +306,6 @@
       },
       "text-underline-offset": {
         "'text-underline-offset' has no React Native equivalent: no style prop of a native view does what it does.": 4
-      },
-      "touch-action": {
-        "'touch-action' is not mapped yet. React Native may well support it; nothing here translates it. Check RN's style types, then add it to css/properties.cjs.": 1
       },
       "transition": {
         "var() cannot be used in the 'transition' shorthand, because which native property the value lands in depends on the value, and there is no CSS parser on device. Use the longhand.": 9
@@ -668,7 +666,7 @@
   },
   "pico": {
     "rules": 462,
-    "dropped": 308,
+    "dropped": 306,
     "emitted": [
       "$animation",
       "$animationDelay",
@@ -762,6 +760,7 @@
       "textDecorationStyle",
       "textTransform",
       "top",
+      "touchAction",
       "transform",
       "width",
       "zIndex"
@@ -926,9 +925,6 @@
       "text-underline-offset": {
         "'text-underline-offset' has no React Native equivalent: no style prop of a native view does what it does.": 2
       },
-      "touch-action": {
-        "'touch-action' is not mapped yet. React Native may well support it; nothing here translates it. Check RN's style types, then add it to css/properties.cjs.": 2
-      },
       "transform": {
         "a keyframe's values are settled at build time, so var(), em and the viewport units cannot be used in one. Write the value in px, rem or %.": 2
       },
@@ -941,8 +937,8 @@
     }
   },
   "open-props": {
-    "rules": 72,
-    "dropped": 199,
+    "rules": 73,
+    "dropped": 198,
     "emitted": [
       "aspectRatio",
       "backgroundColor",
@@ -999,6 +995,7 @@
       "rowGap",
       "textAlign",
       "textDecorationColor",
+      "touchAction",
       "width"
     ],
     "drops": {
@@ -1086,9 +1083,6 @@
       },
       "text-wrap": {
         "'text-wrap' has no React Native equivalent: no style prop of a native view does what it does.": 4
-      },
-      "touch-action": {
-        "'touch-action' is not mapped yet. React Native may well support it; nothing here translates it. Check RN's style types, then add it to css/properties.cjs.": 1
       },
       "white-space": {
         "white-space: pre is not supported: native text has no switch for how spaces and line breaks are kept. nowrap, read as one line, and normal are.": 1

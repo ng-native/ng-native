@@ -256,6 +256,26 @@ its edge:
 void this.nav.push('/mixer', { presentation: { fullScreenSwipeEnabled: false } });
 ```
 
+A view that follows a finger sideways can say so itself with `touch-action`, as it would on the web.
+A touch that starts on an element with `touch-action: pan-y` or `touch-action: none`, or on anything
+inside one, holds the screen's swipe off until the finger lifts, and a touch anywhere else on the
+screen swipes back as before:
+
+```css
+.slider {
+  touch-action: pan-y;
+}
+```
+
+This needs nothing where the screen is navigated to, and works however the screen was opened. The
+screen is told as the finger comes down, so a flick that is already moving fast in its first few
+milliseconds can still be taken by the swipe.
+
+The same touch is kept from a `<scroll-view>` the element is in. With `pan-y`, a drag that sets off
+down the page scrolls it as usual, and one that sets off across is the element's for as long as the
+finger is down, however it wanders after. With `none`, every drag that starts on the element is its
+own.
+
 `gestureResponseDistance` narrows the swipe instead of turning it off. Its four values bound where
 a touch may be for the swipe to start, in points from the screen's leading and top edges:
 `{ end: 40 }` starts it only within 40 points of the leading edge, and `{ top: 300 }` only below

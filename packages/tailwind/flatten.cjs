@@ -311,7 +311,7 @@ function markUnitlessReverse(css) {
 
 /** Properties whose `var()` the engine resolves per node, from the tokens in scope there. */
 const RESOLVED_PER_NODE =
-  /^(translate|scale|rotate|transform|box-shadow|text-shadow|filter|font-variant-numeric)$/;
+  /^(translate|scale|rotate|transform|box-shadow|text-shadow|filter|font-variant-numeric|touch-action)$/;
 
 /**
  * A shadow slot, whose own parts another class may set: `ring-blue-500` its colour,

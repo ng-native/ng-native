@@ -1586,7 +1586,22 @@ function addCustom(declaration, out, tokens, deferred, context) {
     return;
   }
 
+  refuseSlottedTouchAction(name, parts, context);
   addCustomWord(name, parts, out, context);
+}
+
+/**
+ * `touch-pan-x`: Tailwind makes the value of three tokens, each set by a class of its own.
+ *
+ * ponytail: refused, and said. `touch-none` and a `touch-action` written out are read; give the
+ * three slots a form as `font-variant-numeric` has if an app composes them.
+ */
+function refuseSlottedTouchAction(name, parts, context) {
+  if (name !== 'touch-action' || !parts?.some((part) => part.type === 'var')) return;
+  throw new CssUnsupported(
+    `${context}: 'touch-action' made of tokens is not read. Write the value: touch-action: pan-y, ` +
+      `or Tailwind's touch-none.`,
+  );
 }
 
 /**

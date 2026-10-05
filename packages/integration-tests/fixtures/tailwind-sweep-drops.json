@@ -10326,13 +10326,7 @@
     "top-[3]",
     "top-[3]!"
   ],
-  "dropped 'touch-action': '…' is not mapped yet. React Native may well support it; nothing here translates it. Check RN's style types, then add it to css/properties.cjs.": [
-    "touch-auto",
-    "touch-auto!",
-    "touch-manipulation",
-    "touch-manipulation!",
-    "touch-none",
-    "touch-none!",
+  "dropped 'touch-action': '…' made of tokens is not read. Write the value: touch-action: pan-y, or Tailwind's touch-none.": [
     "touch-pan-down",
     "touch-pan-down touch-pan-right",
     "touch-pan-down touch-pinch-zoom",

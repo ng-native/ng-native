@@ -1048,6 +1048,56 @@ const TEXT_ALIGN: Readonly<Record<TextDirection, ReadonlyMap<string, string>>> =
 const MODAL_HOST = 'ModalHostView';
 
 /**
+ * A screen's `gestureResponseDistance` that no touch is within: how far from each edge a swipe
+ * back may start, with -1 for no limit, and none at all from the leading edge. It is what
+ * `react-native-screens` reads as the swipe is about to begin; whether the swipe is enabled it
+ * read when the finger came down, before anything here had heard of the touch.
+ */
+const NO_SWIPE = Object.freeze({ start: -1, end: 0, top: -1, bottom: -1 });
+
+/** A screen of a native stack, which is what the swipe back is a gesture of. */
+const STACK_SCREEN = 'RNSScreen';
+
+/** What an element's `touch-action` is: bound on it, or from the rules it matches. */
+function touchActionOf(node: EngineNode): unknown {
+  const bound = node.props['style'];
+  const inline =
+    bound && typeof bound === 'object' && !Array.isArray(bound)
+      ? (bound as Record<string, unknown>)['touchAction']
+      : undefined;
+  return inline ?? node.styleCache?.style['touchAction'];
+}
+
+/** Where a touch is on the screen: its own point, or its first finger's. */
+function pointOf(nativeEvent: unknown): { x: number; y: number } {
+  const event = (nativeEvent ?? {}) as TouchPayload & { touches?: readonly TouchPayload[] };
+  const touch = event.pageX === undefined ? event.touches?.[0] : event;
+  return { x: touch?.pageX ?? 0, y: touch?.pageY ?? 0 };
+}
+
+/**
+ * What a touch on a node leaves to the browser: the `touch-action` of it, or of the nearest
+ * element over it that says. Nothing where none does, which leaves everything.
+ */
+function touchActions(node: EngineNode): readonly string[] | undefined {
+  for (let up: EngineNode | null = node; up; up = up.parent) {
+    const said = up.kind === 'element' ? touchActionOf(up) : undefined;
+    if (typeof said === 'string') return said.split(' ');
+  }
+  return undefined;
+}
+
+const PANS_ACROSS = ['auto', 'manipulation', 'pan-x', 'pan-left', 'pan-right'];
+const PANS_ALONG = ['auto', 'manipulation', 'pan-y', 'pan-up', 'pan-down'];
+
+/** Whether an element keeps a drag in one direction: its `touch-action` leaves no pan that way. */
+const keeps = (actions: readonly string[] | undefined, pans: readonly string[]): boolean =>
+  actions !== undefined && !actions.some((action) => pans.includes(action));
+
+/** How far a finger moves before a browser has settled which way a drag is going. */
+const DRAG_SLOP = 4;
+
+/**
  * Register a codegen'd third-party Fabric component, e.g.
  * `registerViewName('rns-screen', 'RNSScreen')`, which is how the router reaches
  * react-native-screens.
@@ -3282,6 +3332,12 @@ export class Engine implements HostEngine {
    * return fresh objects, so diffing their output would re-send every image and shadow on every
    * unrelated change.
    */
+  /** What a touch on an element that keeps a drag holds off, while it lasts: see `holdSwipe`. */
+  private heldFor(node: EngineNode, merged: Record<string, unknown>): void {
+    if (node === this.swipeHeld) merged['gestureResponseDistance'] = NO_SWIPE;
+    if (node === this.scrollHeld) merged['scrollEnabled'] = false;
+  }
+
   private mergeProps(node: EngineNode, viewName: string): Record<string, unknown> {
     if (node.kind === 'text') return { text: paragraphText(node) };
     if (this.dev) this.checkProps(node);
@@ -3314,7 +3370,9 @@ export class Engine implements HostEngine {
     centreSingleLine(viewName, merged, this.fontScale);
     // Last, on what is committed: an override or an animation can hide a box, or place it.
     hiddenOutOfFlow(merged);
+    delete merged['touchAction'];
     if (this.responders.has(node)) stillTouched(merged);
+    this.heldFor(node, merged);
     this.movePaint(node, merged);
     return merged;
   }
@@ -4839,7 +4897,9 @@ export class Engine implements HostEngine {
   private tellNative(node: EngineNode, isResponder: boolean): void {
     const handle = node.committed?.handle;
     if (!handle || !this.fabric.setIsJSResponder) return;
-    const block = this.responders.get(node)?.blockNativeResponder ?? false;
+    const asked = this.responders.get(node)?.blockNativeResponder ?? false;
+    // And for a drag an element's `touch-action` keeps from the page: see `holdSwipe`.
+    const block = asked || this.drag?.held === true;
     this.fabric.setIsJSResponder(handle, isResponder, block);
   }
 
@@ -4912,6 +4972,7 @@ export class Engine implements HostEngine {
       if (topLevelType === 'topScroll' && target && this.scrollTimelines.has(target)) {
         this.measuredScroll(target, nativeEvent);
       }
+      this.holdSwipe(target, topLevelType, nativeEvent);
       this.trackFocus(target, topLevelType);
       if (target) this.cancelPressForScroll(target, topLevelType, event as ResponderEvent);
       if (target) this.runResponder(target, topLevelType, event as ResponderEvent);
@@ -4919,6 +4980,110 @@ export class Engine implements HostEngine {
       this.reportEventError(error, topLevelType);
     }
     this.propagate(target, topLevelType, event);
+  }
+
+  /** The screen whose swipe back is held off while a finger is on what keeps a sideways drag. */
+  private swipeHeld: EngineNode | null = null;
+
+  /**
+   * Hold a screen's swipe back off for a touch that starts on an element whose `touch-action`
+   * keeps a drag to the side for itself, and give it back when the last finger lifts. From iOS
+   * 26 the swipe starts anywhere on a screen once a finger has moved a little to the right, and
+   * takes the touch from whatever was following it: a slider's thumb stops and the screen
+   * leaves. The screen is told before the finger has moved that far.
+   */
+  private holdSwipe(target: EngineNode | null, type: string, nativeEvent: unknown): void {
+    if (type === TOUCH_START) this.holdFrom(target, nativeEvent);
+    else if (type === 'topTouchMove') this.settleDrag(nativeEvent);
+    else if (type === 'topTouchEnd' || type === 'topTouchCancel') this.releaseSwipe(nativeEvent);
+  }
+
+  /**
+   * A touch on an element that keeps a drag to the side: where it began, and whether native's
+   * own gestures are held off for it. Held from the start where the element keeps a drag down
+   * the page too (`none`); from the moment the finger sets off across where it leaves that one
+   * to the page (`pan-y`), and never for that touch where it sets off down.
+   */
+  private drag: {
+    x: number;
+    y: number;
+    settled: boolean;
+    held: boolean;
+    on: EngineNode;
+  } | null = null;
+
+  private holdFrom(target: EngineNode | null, nativeEvent: unknown): void {
+    if (this.drag || !target) return;
+    const actions = touchActions(target);
+    if (!keeps(actions, PANS_ACROSS)) return;
+    const all = keeps(actions, PANS_ALONG);
+    this.drag = { ...pointOf(nativeEvent), settled: all, held: all, on: target };
+    if (all) this.holdScroll(target);
+    const screen = this.screenOf(target);
+    if (!screen) return;
+    this.swipeHeld = screen;
+    this.tellScreen(screen);
+  }
+
+  /** The scroll view whose scrolling is off while a drag over it is an element's own. */
+  private scrollHeld: EngineNode | null = null;
+
+  /**
+   * Stop the scroll view a node is in from scrolling, until the touch ends. Telling native who
+   * holds the touch does this on Android. On iOS a scroll view is held off only by a responder
+   * that is over it, never one inside it, so it is told not to scroll.
+   */
+  private holdScroll(node: EngineNode): void {
+    for (let up = node.parent; up; up = up.parent) {
+      if (up.kind !== 'element' || !SCROLL_VIEWS.has(viewNameOf(up))) continue;
+      this.scrollHeld = up;
+      this.tellScreen(up);
+      return;
+    }
+  }
+
+  /** Settle which way a drag set off, and hold native's own off one that set off across. */
+  private settleDrag(nativeEvent: unknown): void {
+    const drag = this.drag;
+    if (!drag || drag.settled) return;
+    const at = pointOf(nativeEvent);
+    const [across, along] = [Math.abs(at.x - drag.x), Math.abs(at.y - drag.y)];
+    if (Math.max(across, along) < DRAG_SLOP) return;
+    drag.settled = true;
+    drag.held = across > along;
+    if (!drag.held) return;
+    if (this.currentResponder) this.tellNative(this.currentResponder, true);
+    this.holdScroll(drag.on);
+  }
+
+  /** Give the swipe back once the last finger has lifted. */
+  private releaseSwipe(nativeEvent: unknown): void {
+    const left = (nativeEvent as { touches?: readonly unknown[] } | null)?.touches?.length ?? 0;
+    if (left > 0) return;
+    this.drag = null;
+    for (const held of [this.scrollHeld, this.swipeHeld]) {
+      if (held === this.scrollHeld) this.scrollHeld = null;
+      else this.swipeHeld = null;
+      if (held) this.tellScreen(held);
+    }
+  }
+
+  /**
+   * Commit a screen or a scroll view again now, not with whatever next changes: the swipe begins
+   * once the finger has moved ten points or so, which is a frame or two after it came down.
+   */
+  private tellScreen(screen: EngineNode): void {
+    // Its props alone: nothing a selector reads moved, so nothing under it is styled again.
+    this.markProps(screen, false);
+    this.commit();
+  }
+
+  /** The screen of a native stack a node is on, or nothing where it is on none. */
+  private screenOf(node: EngineNode): EngineNode | null {
+    for (let up: EngineNode | null = node; up; up = up.parent) {
+      if (up.kind === 'element' && viewNameOf(up) === STACK_SCREEN) return up;
+    }
+    return null;
   }
 
   /** A presented modal host has finished leaving, so a hidden one can come out of the tree. */
