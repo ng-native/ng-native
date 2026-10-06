@@ -16,8 +16,8 @@ import {
   setsInherited,
   StyleResolver,
   usesActive,
-  asksPastEnds,
   elementsAtEnd,
+  siblingReach,
   type Compound,
   type Conditions,
   type DeferredDeclaration,
@@ -2369,8 +2369,10 @@ export class Engine implements HostEngine {
    * does, a child list can move without anything else needing to be looked at again.
    */
   private structuralSheets = false;
-  /** Whether one of them asks more than which element is first and last. See `asksPastEnds`. */
-  private structuralPastEnds = false;
+  /** Whether one of them reaches the children after a change in a list. See `siblingReach`. */
+  private structuralAfter = false;
+  /** Whether one of them reaches the children before it. */
+  private structuralBefore = false;
   /** Whether any sheet uses `:has()`. See `markBeneath`. */
   private hasSheets = false;
   private readonly resolveAssetSource: (value: unknown) => unknown;
@@ -2883,7 +2885,7 @@ export class Engine implements HostEngine {
     child.parent = parent;
     parent.children.push(child);
     if (child.dormantHoists) this.wakeHoists(child);
-    this.markStructure(parent, child);
+    this.markStructure(parent, child, parent.children.length - 1);
     this.markTextContent(parent, child);
   }
 
@@ -2894,7 +2896,7 @@ export class Engine implements HostEngine {
     if (at < 0) parent.children.push(child);
     else parent.children.splice(at, 0, child);
     if (child.dormantHoists) this.wakeHoists(child);
-    this.markStructure(parent, child);
+    this.markStructure(parent, child, at < 0 ? parent.children.length - 1 : at);
     this.markTextContent(parent, child);
   }
 
@@ -2906,7 +2908,7 @@ export class Engine implements HostEngine {
     target.children.splice(at, 1);
     child.parent = null;
     this.removedSinceCommit.add(child);
-    this.markStructure(target, child);
+    this.markStructure(target, child, at);
     this.markTextContent(target, child);
   }
 
@@ -3224,14 +3226,14 @@ export class Engine implements HostEngine {
     }
   }
 
-  /** `node`'s child list changed: `moved` came into it or went out of it. */
-  private markStructure(node: EngineNode, moved: EngineNode): void {
+  /** `node`'s child list changed: `moved` came into it at `at`, or went out of it from there. */
+  private markStructure(node: EngineNode, moved: EngineNode, at: number): void {
     node.structureDirty = true;
     // A child list that moved changes what its members match, though nothing about them did:
     // the old last row is no longer the last. Only sheets that ask about position pay for this.
     if (this.structuralSheets) {
       moved.styleDirty = true;
-      for (const child of this.repositioned(node)) child.styleDirty = true;
+      this.markRepositioned(node.children, at);
       // What the node itself matches hangs on its child list only through `:empty`, which only
       // its first child arriving or its last one leaving changes: and then what a later sibling
       // matches can too, `.box:empty + .spacer`. Styled again for any other change, everything
@@ -3246,21 +3248,28 @@ export class Engine implements HostEngine {
   }
 
   /**
-   * The children whose place in a changed child list a sheet could read differently: all of
-   * them where some sheet counts or asks about the one beside, and otherwise the two at each
-   * end, which are the old first and last and the new. Styling one again resolves everything
-   * under it again, so a long list gaining a row is not the whole list.
+   * Mark the children whose place in a child list that changed at `at` a sheet could read
+   * differently. The two at each end always, which are the old first and last and the new. Those
+   * from `at` on where some sheet counts from the start or asks about the one before, since a
+   * child's place from the start hangs only on those before it; and those before `at` where one
+   * counts from the end. Styling one again resolves everything under it again, so a long list
+   * gaining a row at its end is not the whole list.
    */
-  private repositioned(node: EngineNode): readonly EngineNode[] {
-    if (this.structuralPastEnds) return node.children;
-    return [...elementsAtEnd(node.children, 2, false), ...elementsAtEnd(node.children, 2, true)];
+  private markRepositioned(children: readonly EngineNode[], at: number): void {
+    for (const child of elementsAtEnd(children, 2, false)) child.styleDirty = true;
+    for (const child of elementsAtEnd(children, 2, true)) child.styleDirty = true;
+    const from = this.structuralBefore ? 0 : at;
+    const to = this.structuralAfter ? children.length : at;
+    for (let i = from; i < to; i++) children[i]!.styleDirty = true;
   }
 
-  /** Note what a sheet coming into play asks about a child list. Neither is unset: see `structural`. */
+  /** Note what a sheet coming into play asks about a child list. None is unset: see `structural`. */
   private watchStructure(sheet: StyleSheet | null | undefined): void {
     if (!sheet?.structural) return;
     this.structuralSheets = true;
-    if (asksPastEnds(sheet)) this.structuralPastEnds = true;
+    const reach = siblingReach(sheet);
+    if (reach.after) this.structuralAfter = true;
+    if (reach.before) this.structuralBefore = true;
   }
 
   /** Walk up until we hit a node already known to have a dirty subtree. */

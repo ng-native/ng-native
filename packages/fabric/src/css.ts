@@ -1062,40 +1062,69 @@ export function elementsAtEnd<T extends StyleTarget>(
   return found;
 }
 
-const PAST_ENDS = new WeakMap<StyleSheet, boolean>();
+/**
+ * Which way from a change in a child list a sheet's rules can match differently, past the
+ * elements at its two ends. An element's place from the start hangs on the elements before it
+ * and on none after, so a change moves the ones after it; its place from the end is the other
+ * way about.
+ */
+export interface SiblingReach {
+  /** It counts from the start (`:nth-child(odd)`), or asks about an element before (`+`, `~`). */
+  readonly after: boolean;
+  /** It counts from the end (`:nth-last-child(2)`). */
+  readonly before: boolean;
+}
+
+const REACH = new WeakMap<StyleSheet, SiblingReach>();
 
 /**
- * Whether a sheet asks more about a child list than which element is first and which is last:
- * it counts (`:nth-child(odd)`, `:nth-last-child(2)`), or it asks about the element beside
- * (`+`, `~`). A list that changes then changes what any element in it matches. Where no sheet
- * asks that much, only the elements at the two ends can match differently.
+ * How far a sheet asks about a child list beyond which element is first and which is last.
+ * Where no sheet reaches either way, only the elements at the two ends can match differently.
  */
-export function asksPastEnds(sheet: StyleSheet): boolean {
-  let known = PAST_ENDS.get(sheet);
+export function siblingReach(sheet: StyleSheet): SiblingReach {
+  let known = REACH.get(sheet);
   if (known === undefined) {
-    known = sheet.rules.some(
-      (rule) =>
-        rule.combinators.some((one) => one === 'next-sibling' || one === 'later-sibling') ||
-        rule.compounds.some(countsSiblings),
-    );
-    PAST_ENDS.set(sheet, known);
+    const reach = { after: false, before: false };
+    for (const rule of sheet.rules) {
+      if (rule.combinators.some((one) => one === 'next-sibling' || one === 'later-sibling')) {
+        reach.after = true;
+      }
+      for (const compound of rule.compounds) countSiblings(compound, reach, false);
+    }
+    known = reach;
+    REACH.set(sheet, known);
   }
   return known;
 }
 
-/** Whether a compound, or one nested in it, counts its siblings further than the first or last. */
-function countsSiblings(compound: Compound): boolean {
-  if (compound.nth?.some((test) => test.a !== 0 || test.b !== 1)) return true;
-  const nested = [
-    ...(compound.not ?? []),
-    ...(compound.is ?? []).flat(),
-    ...(compound.ancestors ?? []),
-    ...(compound.parents ?? []),
-    ...(compound.hostContext ?? []),
-    ...(compound.has ?? []).flatMap((test) => test.any),
-  ];
-  return nested.some(countsSiblings);
+/**
+ * Note in `reach` which end a compound, or one nested in it, counts its siblings from, further
+ * than the first or last. A count inside a `:has()` is read as both: what it is asked of is
+ * matched again by other means, and which way it reaches is not worked out.
+ */
+function countSiblings(
+  compound: Compound,
+  reach: { after: boolean; before: boolean },
+  withinHas: boolean,
+): void {
+  // Which is first and which is last is the ends, and no count.
+  const counts = (compound.nth ?? []).filter((test) => test.a !== 0 || test.b !== 1);
+  if (counts.some((test) => withinHas || !test.fromEnd)) reach.after = true;
+  if (counts.some((test) => withinHas || test.fromEnd)) reach.before = true;
+  for (const inner of nestedCompounds(compound)) countSiblings(inner, reach, withinHas);
+  for (const test of compound.has ?? []) {
+    for (const inner of test.any) countSiblings(inner, reach, true);
+  }
 }
+
+/** The compounds nested in one, a `:has()`'s apart. */
+const nestedCompounds = (compound: Compound): Compound[] => [
+  ...(compound.not ?? []),
+  ...(compound.is ?? []).flat(),
+  ...(compound.ancestors ?? []),
+  ...(compound.parents ?? []),
+  ...(compound.hostContext ?? []),
+];
 
 /** The element before this one, skipping everything that is not one. */
 function previousElement(node: StyleTarget): StyleTarget | null {
