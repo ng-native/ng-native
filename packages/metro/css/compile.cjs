@@ -842,6 +842,16 @@ function mediaCondition(condition, context) {
         ],
       };
     }
+    if (feature.type === 'boolean' && PLAIN_FEATURES.has(feature.name)) {
+      // With no value a feature is true for any value but its "none": for the motion asked for
+      // that is `reduce`, the one value it has beside `no-preference`.
+      if (feature.name === 'prefers-reduced-motion')
+        return { feature: feature.name, value: 'reduce' };
+      throw new CssUnsupported(
+        `${context}: '${feature.name}' with no value is not read: write the value it is to have, ` +
+          `as in (${feature.name}: ${feature.name === 'orientation' ? 'portrait' : 'dark'})`,
+      );
+    }
     if (feature.type === 'range' || feature.type === 'boolean') {
       const op = RANGE_OPS[feature.operator];
       if (!op || !measured) {
