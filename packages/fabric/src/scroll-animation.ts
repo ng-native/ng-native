@@ -119,7 +119,11 @@ export function clockChannels(
   return { channels: { ...opacity, transform }, held: out.held, span: 2 };
 }
 
-/** One transform group's entries, each driven along the scroll; null if their shapes differ. */
+/**
+ * One transform group's entries, each driven along the scroll; null if their shapes differ. A
+ * frame, or the element at rest, with fewer functions than the longest is that list with the
+ * rest at their identity, which is how CSS eases a list into a longer one that starts the same.
+ */
 function drivenGroup(
   track: Track,
   resting: unknown,
@@ -129,8 +133,11 @@ function drivenGroup(
     rest: number,
   ) => ScrollRange | null,
 ): TransformChannel[] | null {
-  const shapes = track.map((point) => (Array.isArray(point.value) ? point.value : null));
-  const shape = shapes.find((entries) => entries?.length) ?? [];
+  const shapes = track.map((point) => (Array.isArray(point.value) ? point.value : []));
+  if (Array.isArray(resting)) shapes.push(resting);
+  const shape = shapes.reduce((longest, entries) =>
+    entries.length > longest.length ? entries : longest,
+  );
   const keys = shape.map((entry) => Object.keys(entry as object)[0]!);
   const channels: TransformChannel[] = [];
   for (const [index, key] of keys.entries()) {
@@ -139,7 +146,9 @@ function drivenGroup(
       const entries = Array.isArray(value) ? value : null;
       if (!entries?.length) return identity;
       const entry = entries[index] as Record<string, unknown> | undefined;
-      return entry && key in entry ? amount(key, entry[key]) : null;
+      // Past the end of a shorter list. Where it differs before its end, an earlier entry says.
+      if (!entry) return identity;
+      return key in entry ? amount(key, entry[key]) : null;
     };
     const range = along(track, pick, restingAmount(resting, index, key, identity));
     if (!range) return null;
