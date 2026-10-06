@@ -3366,6 +3366,7 @@ export class Engine implements HostEngine {
       this.fabric.appendChildToSet(set, this.reconcileUnder(this.root, child));
     }
     this.clearFlags(this.root);
+    this.announceCommit();
     this.fabric.completeRoot(this.rootTag, set);
 
     const elapsed = now() - started;
@@ -3385,6 +3386,27 @@ export class Engine implements HostEngine {
     if (this.awaitingKeyframes.size) this.settleKeyframes();
     if (facesAdded) this.rematchFonts();
     return true;
+  }
+
+  private beforeCommit: (() => void) | null = null;
+
+  private announceCommit(): void {
+    const run = this.beforeCommit;
+    this.beforeCommit = null;
+    run?.();
+  }
+
+  /**
+   * Run `run` once, as the next commit hands its tree to the host and before the host has it: the
+   * moment for something the host applies to its next commit, which is only this one from here.
+   * A pass that changes nothing commits nothing and runs nothing, so a request waits until it is
+   * taken back with the function returned. A later request replaces an earlier one.
+   */
+  beforeNextCommit(run: () => void): () => void {
+    this.beforeCommit = run;
+    return () => {
+      if (this.beforeCommit === run) this.beforeCommit = null;
+    };
   }
 
   /** The first commit whose new views have not been drawn yet, while `commitUnseen` runs. */

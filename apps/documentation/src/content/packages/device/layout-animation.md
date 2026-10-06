@@ -33,10 +33,17 @@ value to transition from. The web solves this with FLIP, measuring before and af
 native solves it in the shadow tree, which is where the two layouts both exist. So `animate()` is
 not a nicer `transition` - it is the only way to say the thing at all.
 
-`animate(change, options?)` takes the change to make as a function, because the two have to be
-adjacent: a configured animation with nothing after it animates whatever commit happens next, which
-may be an unrelated screen appearing. It resolves when the animation ends, or once the duration has
-passed where the platform does not report an end, so nothing waits on it forever.
+`animate(change, options?)` takes the change to make as a function, because the platform animates
+whatever commit comes next and only `animate()` can make that the change's own. It runs the change,
+runs change detection and commits before it returns, and configures the animation as that commit is
+handed over, so a frame of a CSS transition or animation playing elsewhere cannot take it. A change
+that commits nothing configures nothing: no later commit, such as an unrelated screen appearing, is
+animated in its place, and the promise resolves at once. Otherwise it resolves when the animation
+ends, or once the duration has passed where the platform does not report an end, so nothing waits
+on it forever.
+
+Because the change commits inside `animate()`, make every change that belongs to the animation
+inside the function. One made after `animate()` returns lands in a later commit, without it.
 
 `LayoutChange` takes `duration` (300ms default), `easing` (`'spring' | 'linear' | 'easeInEaseOut' |
 'easeIn' | 'easeOut' | 'keyboard'`, default `'easeInEaseOut'`; `'spring'` is the platform's own and

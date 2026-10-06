@@ -9,11 +9,13 @@
  *
  * So this is not a nicer `LayoutAnimation` - it is the only way to say the thing at all. What it
  * adds is the promise, and the scope: `configureNext` applies to the next commit *whenever that
- * happens*, so a call that is not immediately followed by a change animates whatever change comes
- * next, which may be an unrelated screen appearing.
+ * happens* and whatever makes it, a frame of a CSS animation or an unrelated screen appearing as
+ * much as the change meant. Here the animation is configured as the change's own commit is handed
+ * over, and not at all when the change commits nothing.
  */
 
-import { InjectionToken, Service, inject } from '@angular/core';
+import { ApplicationRef, InjectionToken, Service, inject } from '@angular/core';
+import { Engine } from '@ng-native/fabric';
 import { reactNative } from './react-native.ts';
 
 /**
@@ -47,6 +49,9 @@ const DEFAULTS = { duration: 300, easing: 'easeInEaseOut' as LayoutEasing };
  */
 const COMPLETION_GRACE_MS = 50;
 
+/** Angular's NG0101, `ApplicationRef.tick()` called while it is running. */
+const RECURSIVE_TICK = 101;
+
 /**
  * `inject(LayoutAnimation).animate(() => this.rows.update(...))`.
  *
@@ -62,30 +67,66 @@ export class LayoutAnimation {
   );
 
   private readonly native = inject(LayoutAnimation.SOURCE);
+  private readonly engine = inject(Engine, { optional: true });
+  private readonly application = inject(ApplicationRef, { optional: true });
 
   /**
-   * Animate the layout the next commit produces, and run `change` to cause it.
+   * Run `change` and animate the layout its commit produces.
    *
-   * The change is taken rather than left to the caller because the two have to be adjacent: a
-   * `configureNext` with nothing after it animates whatever commit happens next, which may be a
-   * different screen entirely. Resolves when the animation ends, or once its duration has passed
-   * where the platform does not report that.
+   * The change is taken rather than left to the caller because the platform animates whatever
+   * commit comes next, and only this can make that the change's own: change detection runs and
+   * the change commits before `animate` returns, with the animation configured as that commit is
+   * handed over. A frame of another animation cannot land in between and take it, and a change
+   * that commits nothing configures nothing, so no later commit is animated in its place. Resolves
+   * when the animation ends, once its duration has passed where the platform does not report
+   * that, or at once when there was nothing to animate.
    */
   async animate(change: () => void, options: LayoutChange = {}): Promise<void> {
-    if (!this.native) {
+    const native = this.native;
+    if (!native) {
       change();
       return;
     }
 
-    const done = new Promise<void>((resolve) => {
-      this.native!.configureNext(config(options), resolve);
+    let configured = false;
+    let finish!: () => void;
+    const done = new Promise<void>((resolve) => (finish = resolve));
+    const configure = (): void => {
+      configured = true;
+      native.configureNext(config(options), finish);
       // React Native calls no completion where animations are disabled, so nothing should wait
       // on it forever.
-      setTimeout(resolve, (options.duration ?? DEFAULTS.duration) + COMPLETION_GRACE_MS);
-    });
+      setTimeout(finish, (options.duration ?? DEFAULTS.duration) + COMPLETION_GRACE_MS);
+    };
 
-    change();
-    await done;
+    // With no engine there is no commit to wait for: a service built on its own, as in a test.
+    if (!this.engine) {
+      configure();
+      change();
+      return done;
+    }
+
+    const withdraw = this.engine.beforeNextCommit(configure);
+    try {
+      change();
+      this.detectChanges();
+    } finally {
+      // Called from inside a pass, the commit is that pass's own, which ends before any microtask.
+      queueMicrotask(() => {
+        withdraw();
+        if (!configured) finish();
+      });
+    }
+    return done;
+  }
+
+  /** Run change detection now, unless a pass is already running and will reach the change. */
+  private detectChanges(): void {
+    try {
+      this.application?.tick();
+    } catch (error) {
+      if ((error as { code?: number }).code !== RECURSIVE_TICK) throw error;
+    }
   }
 }
 
