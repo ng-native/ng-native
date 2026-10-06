@@ -154,6 +154,23 @@ describe('tokens in an animation’s timing', () => {
     assert.equal((playing() as { duration: number }).duration, 400);
   });
 
+  it('takes the duration in the shorthand itself: a time multiplied by a token', () => {
+    // Material slows every spinner and bar by one multiplier:
+    // `animation: spin calc(1333ms * var(--multiplier)) cubic-bezier(0.4, 0, 0.2, 1) infinite both`.
+    const { playing } = spec(
+      `${GROW} .a { --m: 2; animation: grow calc(200ms * var(--m)) cubic-bezier(0.4, 0, 0.2, 1) infinite both; }`,
+    );
+    const now = playing() as {
+      duration: number;
+      easing: number[];
+      iterations: unknown;
+      fill: string;
+    };
+    assert.equal(now.duration, 400);
+    assert.deepEqual(now.easing, [0.4, 0, 0.2, 1]);
+    assert.equal(now.iterations ?? null, null);
+  });
+
   it('takes a duration or delay that is a token of time', () => {
     const { playing } = spec(
       `${GROW} .a { --slow: 0.6s; --wait: 90ms; animation: grow 1s both; animation-duration: var(--slow); animation-delay: var(--wait); }`,
