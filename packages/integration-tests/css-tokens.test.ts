@@ -506,6 +506,21 @@ describe('tokens', () => {
       assert.deepEqual(refused, []);
     });
 
+    it('reads such a token wherever its rule sets it, and the last of them where it sets two', () => {
+      // A declaration reads the rule's token whatever order the two were written in.
+      const after = '.l { transform: var(--move); --move: translateY(calc(var(--h, 56px) * -1)) }';
+      assert.deepEqual(resolvedStyle(after, ['l'])['transform'], [{ translateY: -56 }]);
+      const twice =
+        '.l { --move: translateY(calc(var(--h, 56px) * -1)); transform: var(--move); ' +
+        '--move: translateY(calc(var(--h, 56px) * 2)) }';
+      assert.deepEqual(resolvedStyle(twice, ['l'])['transform'], [{ translateY: 112 }]);
+      const refused: string[] = [];
+      for (const css of [after, twice]) {
+        compileCss(css, 'own', { onUnsupported: (message: string) => refused.push(message) });
+      }
+      assert.deepEqual(refused, []);
+    });
+
     it('reads a token no form holds where its own rule uses it, as the value written there', () => {
       // Material keeps a floating label's transform in a token beside the declaration that
       // reads it, with a token and a sum inside: no one form for a token, and a transform the
