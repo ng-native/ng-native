@@ -237,3 +237,40 @@ describe('the ways a media query can be written', () => {
     assert.equal(holdsAt('(width < 40rem)', 639), true);
   });
 });
+
+describe('a media feature written with no value', () => {
+  const sheet = (query: string) => {
+    const refused: string[] = [];
+    const compiled = compileCss(`@media ${query} { .a { opacity: 0.5 } }`, 'app.css', {
+      onUnsupported: (message: string) => refused.push(message),
+    }) as { rules: unknown[] };
+    return { rules: compiled.rules, refused };
+  };
+
+  it('is reduced motion asked for: true for any value but no-preference', () => {
+    // The CDK's overlay stylesheet writes `@media (prefers-reduced-motion)`.
+    const bare = sheet('(prefers-reduced-motion)');
+    assert.deepEqual(bare.refused, []);
+    assert.equal(bare.rules.length, 1);
+    assert.deepEqual(bare.rules, sheet('(prefers-reduced-motion: reduce)').rules);
+    assert.deepEqual(
+      sheet('(prefers-reduced-motion) and (width >= 100px)').rules,
+      sheet('(prefers-reduced-motion: reduce) and (width >= 100px)').rules,
+    );
+  });
+
+  it('is refused for any other feature, and says it is the missing value that is not read', () => {
+    for (const feature of ['prefers-color-scheme', 'orientation']) {
+      const { rules, refused } = sheet(`(${feature})`);
+      assert.deepEqual(rules, []);
+      assert.equal(refused.length, 1);
+      assert.match(refused[0]!, new RegExp(`'${feature}' with no value`));
+      assert.doesNotMatch(refused[0]!, /is not a media feature a device can answer/);
+    }
+    // One a device cannot answer is still said to be that.
+    assert.match(
+      sheet('(hover)').refused[0]!,
+      /'hover' is not a media feature a device can answer/,
+    );
+  });
+});
