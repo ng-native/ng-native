@@ -633,6 +633,9 @@ export interface StyleTarget {
    * did: a press began or ended on it or under it. It is matched again, and keeps the style it
    * has, and everything under it, when it matches the rules it did. Not for an element a rule
    * asks about from another one, which is restyled: see `usesActive`.
+   *
+   * Set as well when its place among its siblings changed and nothing else about it did, which
+   * is the same case: what it is asked about from another element is `placeReadElsewhere`.
    */
   stateDirty?: boolean;
   /** `:focus`. Set by the engine from the native focus and blur events. */
@@ -1134,6 +1137,66 @@ function countSiblings(
   for (const test of compound.has ?? []) {
     for (const inner of test.any) countSiblings(inner, reach, true);
   }
+}
+
+const PLACE_ELSEWHERE = new WeakMap<StyleSheet, readonly Compound[]>();
+
+/**
+ * Each compound in a sheet whose element's place among its siblings is read from another
+ * element: one with something under it in the rule, `.row:nth-child(odd) .label` and
+ * `.a + .b .c`, or one an `:is()` or `:host-context()` looks for above the element styled.
+ *
+ * An element whose place changed is matched again, and where it matches the rules it did, it
+ * and everything under it are left as they were: its own rules are all that its place can
+ * change. Not an element one of these could be. What is under that one can match differently
+ * though it matches the same, so it is styled again with everything under it.
+ *
+ * A place read by the element a rule styles, or by the elements before it that the rule steps
+ * from (`.a:first-child + .b`), is that element's own: the rules it matches say.
+ */
+export function placeReadElsewhere(sheet: StyleSheet): readonly Compound[] {
+  let known = PLACE_ELSEWHERE.get(sheet);
+  if (known === undefined) {
+    const elsewhere: Compound[] = [];
+    for (const rule of sheet.rules) {
+      // A run of compounds joined by `+` and `~` is one child list. Every run but the last is
+      // above the element styled, and its last compound is the element the rest hangs under.
+      let start = 0;
+      rule.compounds.forEach((compound, at) => {
+        placeReadAbove(compound, elsewhere);
+        const joined = rule.combinators[at];
+        if (joined === 'next-sibling' || joined === 'later-sibling') return;
+        const run = rule.compounds.slice(start, at + 1);
+        start = at + 1;
+        const above = at < rule.compounds.length - 1;
+        if (above && (run.length > 1 || run.some(readsPlace))) elsewhere.push(compound);
+      });
+    }
+    known = elsewhere;
+    PLACE_ELSEWHERE.set(sheet, known);
+  }
+  return known;
+}
+
+/** Whether a compound, or one nested in it at any depth, asks about a place in a child list. */
+function readsPlace(compound: Compound): boolean {
+  if (compound.nth?.length) return true;
+  const within = (compound.has ?? []).flatMap((test) => test.any);
+  return [...nestedCompounds(compound), ...within].some(readsPlace);
+}
+
+/**
+ * Collect the compounds nested in one that are matched against an element above the one it is
+ * matched against, and ask about that element's place: `:is(.group:first-child *)`.
+ */
+function placeReadAbove(compound: Compound, elsewhere: Compound[]): void {
+  const above = [
+    ...(compound.ancestors ?? []),
+    ...(compound.parents ?? []),
+    ...(compound.hostContext ?? []),
+  ];
+  for (const inner of above) if (readsPlace(inner)) elsewhere.push(inner);
+  for (const inner of nestedCompounds(compound)) placeReadAbove(inner, elsewhere);
 }
 
 /** The compounds nested in one, a `:has()`'s apart. */
@@ -2149,6 +2212,10 @@ export class StyleResolver {
       return cached;
     }
     const kept = this.kept(node, parentContext, epoch);
+    // The rules it was just found to match, where they are not the ones it did. Taken here
+    // whether or not they are used, so that none is left for the next node resolved.
+    const found = this.justMatched;
+    this.justMatched = null;
     if (kept) return kept;
 
     const parentInherited = parent ? parent.inherited : EMPTY;
@@ -2160,23 +2227,12 @@ export class StyleResolver {
 
     styleStats.nodesResolved++;
 
-    const candidates = this.rulesFor(node);
-    const matched = this.matched(
-      node,
-      node.styled ? ELEMENT_ENTRIES.concat(candidates) : candidates,
-    );
+    const matched = found ?? this.matchedBy(node);
     const parentTokens = parent ? parent.tokens : this.tokensOnRoot;
     this.heir(node, parent, matched);
     const styled = this.styled(node, matched, parentTokens, parentInherited);
 
-    const cache: StyleCache = {
-      epoch,
-      generation: this.generation,
-      context: {},
-      parentContext,
-      ...styled,
-      ...this.record(matched),
-    };
+    const cache = this.cached(epoch, parentContext, styled, matched);
     node.styleCache = cache;
     node.styleDirty = false;
     node.hasDirty = false;
@@ -2184,14 +2240,31 @@ export class StyleResolver {
     return cache;
   }
 
-  /** The rules a node matched, for its cache to keep, while a sheet uses `:has()`. */
-  private record(matched: readonly StyleRule[]): { matched?: readonly StyleRule[] } {
-    return this.tracksHas ? { matched } : {};
+  /**
+   * A cache of a node just styled, with a context of its own. It keeps the rules the node
+   * matched, for the node to be compared with, once a sheet has a use for them: see `tracksHas`.
+   */
+  private cached(
+    epoch: number,
+    parentContext: object,
+    styled: Styled,
+    matched: readonly StyleRule[],
+  ): StyleCache {
+    const cache: StyleCache = {
+      epoch,
+      generation: this.generation,
+      context: {},
+      parentContext,
+      ...styled,
+    };
+    if (this.tracksHas) cache.matched = matched;
+    return cache;
   }
 
   /**
-   * Set by the engine once a sheet uses `:has()`. Until then no cache keeps the rules it matched,
-   * so an app that never asks pays nothing for it.
+   * Set by the engine once a sheet uses `:has()`, styles a pressed element or asks about a place
+   * in a child list. Until then no cache keeps the rules it matched, so an app that never asks
+   * pays nothing for it.
    */
   tracksHas = false;
 
@@ -2209,15 +2282,30 @@ export class StyleResolver {
       cached.parentContext === parentContext &&
       this.current(cached, node);
     if (!stands) return null;
-    const candidates = this.rulesFor(node);
-    const now = this.matched(node, node.styled ? ELEMENT_ENTRIES.concat(candidates) : candidates);
+    const now = this.matchedBy(node);
     const before = cached.matched!;
-    if (now.length !== before.length || now.some((rule, i) => rule !== before[i])) return null;
+    if (now.length !== before.length || now.some((rule, i) => rule !== before[i])) {
+      // It is styled again next, from the rules just found rather than from finding them twice.
+      this.justMatched = now;
+      return null;
+    }
     node.hasDirty = false;
     node.stateDirty = false;
     cached.epoch = epoch;
     return cached;
   }
+
+  /** The rules a node matches now, weakest first. */
+  private matchedBy(node: StyleTarget): readonly StyleRule[] {
+    const candidates = this.rulesFor(node);
+    return this.matched(node, node.styled ? ELEMENT_ENTRIES.concat(candidates) : candidates);
+  }
+
+  /**
+   * The rules `keptBeneath` found the node being resolved to match, where they are other than
+   * it matched before: it is styled from them next, rather than matched a second time.
+   */
+  private justMatched: readonly StyleRule[] | null = null;
 
   /** A cache that still stands for a node marked for its subtree or its state alone. */
   private kept(node: StyleTarget, parentContext: object, epoch: number): StyleCache | null {
@@ -2337,6 +2425,7 @@ export class StyleResolver {
     };
     node.styleCache = passthrough;
     node.styleDirty = false;
+    node.stateDirty = false;
     return passthrough;
   }
 

@@ -17,6 +17,7 @@ import {
   StyleResolver,
   usesActive,
   elementsAtEnd,
+  placeReadElsewhere,
   siblingReach,
   type Compound,
   type Conditions,
@@ -2373,6 +2374,10 @@ export class Engine implements HostEngine {
   private structuralAfter = 0;
   /** Whether one of them reaches the children before it. */
   private structuralBefore = false;
+  /** The compounds of theirs that read an element's place from under it. See `markPlace`. */
+  private readonly placeElsewhere = new Set<Compound>();
+  /** The sheets `watchStructure` has read, which it is asked about once an element. */
+  private readonly watchedStructure = new WeakSet<StyleSheet>();
   /** Whether any sheet uses `:has()`. See `markBeneath`. */
   private hasSheets = false;
   private readonly resolveAssetSource: (value: unknown) => unknown;
@@ -3263,25 +3268,55 @@ export class Engine implements HostEngine {
   private markRepositioned(children: readonly EngineNode[], at: number, moved: EngineNode): void {
     const steps = this.structuralAfter;
     const pastFirst = steps === Infinity ? 0 : steps;
-    for (const child of elementsAtEnd(children, 2 + pastFirst, false)) child.styleDirty = true;
-    for (const child of elementsAtEnd(children, 2, true)) child.styleDirty = true;
-    if (this.structuralBefore) for (let i = 0; i < at; i++) children[i]!.styleDirty = true;
+    for (const child of elementsAtEnd(children, 2 + pastFirst, false)) this.markPlace(child);
+    for (const child of elementsAtEnd(children, 2, true)) this.markPlace(child);
+    if (this.structuralBefore) for (let i = 0; i < at; i++) this.markPlace(children[i]!);
     // The elements after the change, not counting the one that came, which is marked already.
     let left = steps;
     for (let i = at; i < children.length && left > 0; i++) {
       const child = children[i]!;
-      child.styleDirty = true;
+      this.markPlace(child);
       if (child.kind === 'element' && child !== moved) left--;
     }
   }
 
+  /**
+   * A child's place in its list changed, which is all that changed about it. It is matched
+   * again, and keeps its style and all that is under it unless it now matches other rules: its
+   * place is read by the rules that style it and by no other. Not where a rule reads the place
+   * of an element like it from under it, `.row:nth-child(odd) .label`: that changes more than
+   * the element itself, which is then styled again with everything under it, as is a child
+   * that is no element.
+   */
+  private markPlace(child: EngineNode): void {
+    if (child.kind !== 'element' || this.placeReadFromUnder(child)) child.styleDirty = true;
+    else child.stateDirty = true;
+  }
+
+  /**
+   * Whether a rule could read this element's place from another element. By its classes alone,
+   * which every such compound it could be asks for: a compound with none could be any element.
+   */
+  private placeReadFromUnder(node: EngineNode): boolean {
+    for (const compound of this.placeElsewhere) {
+      if (compound.classes.every((name) => node.classes?.has(name))) return true;
+    }
+    return false;
+  }
+
   /** Note what a sheet coming into play asks about a child list. None is unset: see `structural`. */
   private watchStructure(sheet: StyleSheet | null | undefined): void {
-    if (!sheet?.structural) return;
+    if (!sheet?.structural || this.watchedStructure.has(sheet)) return;
+    this.watchedStructure.add(sheet);
     this.structuralSheets = true;
     const reach = siblingReach(sheet);
     this.structuralAfter = Math.max(this.structuralAfter, reach.after);
     if (reach.before) this.structuralBefore = true;
+    for (const compound of placeReadElsewhere(sheet)) this.placeElsewhere.add(compound);
+    // What a child whose place changed is compared with is the rules it matched, which a cache
+    // keeps from here on. One made before has none, and is styled again the first time, as it
+    // was before any sheet asked.
+    this.styles.tracksHas = true;
   }
 
   /** Walk up until we hit a node already known to have a dirty subtree. */
