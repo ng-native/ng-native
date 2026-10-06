@@ -791,10 +791,10 @@ const blockEdge = (
 
 /**
  * A multiline field's `rows` as its height, where it was given none: that many lines of its
- * line height, inside its padding and border, as a browser sizes a `<textarea>`. A native field
+ * line height at the system text size, inside its padding and border, as a browser sizes a `<textarea>`. A native field
  * is as tall as its text, which is one line before anything is typed.
  */
-function rowsTall(props: Record<string, unknown>): void {
+function rowsTall(props: Record<string, unknown>, fontScale: number | undefined): void {
   const rows = Number(props['rows']);
   const line = props['lineHeight'];
   if (props['multiline'] !== true || !(rows > 0) || typeof line !== 'number') return;
@@ -805,7 +805,9 @@ function rowsTall(props: Record<string, unknown>): void {
       ? []
       : [...blockEdge(props, 'Top', 'Start'), ...blockEdge(props, 'Bottom', 'End')];
   if (!edges.every((part) => typeof part === 'number')) return;
-  props['height'] = rows * line + edges.reduce<number>((sum, part) => sum + (part as number), 0);
+  // At the system text size, which the field's lines are drawn at.
+  const lines = rows * line * textScale(props, fontScale);
+  props['height'] = edges.reduce<number>((sum, part) => sum + (part as number), lines);
 }
 
 /**
@@ -3432,7 +3434,7 @@ export class Engine implements HostEngine {
     if (viewName === PARAGRAPH) alignText(style, this.directionOf(node, style));
     if (this.fontsRefreshed) this.capForFonts(node, style);
     alignMultiline(viewName, style);
-    rowsTall(style);
+    rowsTall(style, this.fontScale);
     const merged = composeTransform(node, this.animated(node, this.transitioned(node, style)));
     centreSingleLine(viewName, merged, this.fontScale);
     // Last, on what is committed: an override or an animation can hide a box, or place it.
