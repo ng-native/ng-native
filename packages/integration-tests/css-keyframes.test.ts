@@ -960,4 +960,37 @@ describe('an animation with no fill, at its end', () => {
     }
     assert.deepEqual(s.seen, [0.5, 1]);
   });
+
+  it('goes back to rest where the one listening throws, and the rest still hear it', () => {
+    const s = leaving();
+    const reported: unknown[] = [];
+    s.engine.setOnError((error) => reported.push(error));
+    let heard = 0;
+    s.engine.setEventListener(s.view, 'topAnimationend', () => {
+      throw new Error('listener');
+    });
+    s.engine.setEventListener(s.view, 'topAnimationend', () => heard++);
+    s.engine.setClasses(s.view, 'a out');
+    s.engine.commit();
+    for (let i = 0; i < 3; i++) {
+      s.frame(50);
+      s.look();
+    }
+    assert.deepEqual(s.seen, [0.5, 0, 1], 'held for the commit it ended in, and let go after');
+    assert.equal(heard, 1);
+    assert.equal(reported.length, 1);
+  });
+
+  it('is back at rest at once where the one that listened has stopped', () => {
+    const s = leaving();
+    const stop = s.engine.setEventListener(s.view, 'topAnimationend', () => {});
+    stop();
+    s.engine.setClasses(s.view, 'a out');
+    s.engine.commit();
+    for (let i = 0; i < 2; i++) {
+      s.frame(50);
+      s.look();
+    }
+    assert.deepEqual(s.seen, [0.5, 1]);
+  });
 });
