@@ -85,6 +85,13 @@ describe('a percentage height', () => {
     assert.equal(scene(css).props()['height'], '100%');
   });
 
+  it('is kept on a box placed out of the flow, which takes it of the box that holds it', () => {
+    // Laid out before the box is, so its height is there to take a share of: Chrome makes a
+    // `height: 100%` handle track 32 under a switch as tall as its 32 track, with none written.
+    const absolute = scene(`.c { position: absolute; height: 100% }`);
+    assert.equal(absolute.props()['height'], '100%');
+  });
+
   it('is kept at the top of the app, where the parent is the screen', () => {
     const fabric = createFakeFabric();
     const engine = new Engine(fabric, 1, { globalStyles: compileCss(FULL, 'a.css') as never });
