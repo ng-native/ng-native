@@ -222,6 +222,41 @@ describe('HTML elements in a template', () => {
       });
     });
 
+    it('is a view around a text element it holds alone, which is its one item', () => {
+      // A tab's label: `<span class="content"><span class="label">First</span></span>`, the
+      // outer a flex container that centres the inner in the height of the tab.
+      const outer = engine.createElement(
+        'span',
+        compileCss(`${CENTRED} .c { height: 48px }`, 'flex'),
+      );
+      engine.setClasses(outer, 'c');
+      const inner = engine.createElement('span');
+      engine.appendChild(inner, engine.createText('First'));
+      engine.appendChild(outer, inner);
+      const committed = commit(outer);
+      assert.deepEqual(shape(committed), { View: [{ Paragraph: ['"First"'] }] });
+      assert.equal(committed.props['alignItems'], 'center');
+      assert.equal(committed.props['height'], 48);
+      assert.equal(committed.children[0]!.props['height'], undefined);
+    });
+
+    it('is one paragraph again once it stops centring, and a view once it centres again', () => {
+      const outer = engine.createElement('span', compileCss(CENTRED, 'flex'));
+      engine.setClasses(outer, 'c');
+      const inner = engine.createElement('span');
+      engine.appendChild(inner, engine.createText('First'));
+      engine.appendChild(outer, inner);
+      commit(outer);
+      const now = () => {
+        engine.commit();
+        return shape(fabric.committed[0]!);
+      };
+      engine.setClasses(outer, '');
+      assert.deepEqual(now(), { Paragraph: [{ VirtualText: ['"First"'] }] });
+      engine.setClasses(outer, 'c');
+      assert.deepEqual(now(), { View: [{ Paragraph: ['"First"'] }] });
+    });
+
     it('leaves a <text> a paragraph, whose own it is to lay out', () => {
       assert.deepEqual(shape(commit(styled(CENTRED, 'text'))), { Paragraph: ['"AH"'] });
     });
