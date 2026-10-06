@@ -3931,11 +3931,16 @@ export class Engine implements HostEngine {
     for (const [node, props] of waiting) {
       const running = node.playing;
       if (!running || running.done || running.native || !this.playing.has(node)) continue;
+      // Native plays it from its first frame, so its clock starts here: but only where native
+      // takes it. Left in JavaScript, it goes on from the clock it started on.
+      const started = running.start;
       running.start = this.now();
       if (this.playNatively(node, running, props)) {
         this.playing.delete(node);
         // `collapsable`, which keeps a view for native to move, is in what it holds now.
         this.markProps(node, false);
+      } else {
+        running.start = started;
       }
     }
     // One with no size after its commit is not laid out at all, and is played from JavaScript.
