@@ -659,6 +659,215 @@ describe('transitioning a transform', () => {
   });
 });
 
+/**
+ * A share of the box eased into a length, which is how Material's label floats: it rests at
+ * `translateY(-50%)` and floats to `translateY(-34px) scale(0.75)`. Chrome eases the two as a sum,
+ * `calc(-25% - 17px)` halfway, and two translates along one axis add up to the same thing whatever
+ * size the box is, so the frames between are written as that pair.
+ */
+describe('transitioning a translate between a percentage and a length', () => {
+  /** A box 40pt high, as the page Chrome was asked about had it. */
+  const HEIGHT = 40;
+
+  /** Where a transform list puts the box and how large, as Chrome's `matrix()` reports it. */
+  function placed(transform: unknown): { y: number; scale: number } {
+    let y = 0;
+    let scale = 1;
+    let across = 1;
+    for (const entry of transform as Record<string, number | string>[]) {
+      const [name, value] = Object.entries(entry)[0]!;
+      if (name === 'translateY') {
+        y += scale * (typeof value === 'string' ? (parseFloat(value) / 100) * HEIGHT : value);
+      } else if (name === 'scaleY') scale *= value as number;
+      else if (name === 'scaleX') across *= value as number;
+      else if (name === 'scale') [scale, across] = [scale * +value, across * +value];
+      else assert.fail(`${name} is not an operation these cases write`);
+    }
+    assert.equal(across, scale, 'scaled alike both ways');
+    return { y, scale };
+  }
+
+  function scene(css: string) {
+    let now = 1000;
+    const fabric = createFakeFabric();
+    const engine = new Engine(fabric, 1, {
+      globalStyles: compileCss(css) as never,
+      now: () => now,
+    });
+    const view = engine.createElement('view');
+    engine.appendChild(engine.root, view);
+    engine.commit();
+    return {
+      engine,
+      view,
+      painted: () => flatten(fabric.committed)[0]?.props['transform'],
+      classes(value: string) {
+        engine.setClasses(view, value);
+        engine.commit();
+      },
+      tick(ms: number) {
+        now += ms;
+        engine.advanceAnimations();
+        engine.commit();
+      },
+    };
+  }
+
+  const label = `
+    view { transition: transform 100ms linear; transform: translateY(-50%) }
+    view.up { transform: translateY(-34px) scale(0.75) }
+  `;
+
+  it('eases the label up where Chrome does, and lands on what the rule wrote', () => {
+    const s = scene(label);
+    s.classes('up');
+    assert.equal(s.engine.animating, true, 'eased, not stepped');
+
+    // Chrome 154: matrix(0.9375, 0, 0, 0.9375, 0, -23.5), then matrix(0.875, 0, 0, 0.875, 0, -27).
+    s.tick(25);
+    assert.deepEqual(placed(s.painted()), { y: -23.5, scale: 0.9375 });
+    s.tick(25);
+    assert.deepEqual(placed(s.painted()), { y: -27, scale: 0.875 });
+    assert.deepEqual(s.painted(), [
+      { translateY: '-25%' },
+      { translateY: -17 },
+      { scaleX: 0.875 },
+      { scaleY: 0.875 },
+    ]);
+
+    s.tick(50);
+    assert.deepEqual(
+      s.painted(),
+      [{ translateY: -34 }, { scaleX: 0.75 }, { scaleY: 0.75 }],
+      'the rule, as written',
+    );
+    assert.equal(s.engine.animating, false);
+  });
+
+  it('eases it back down', () => {
+    const s = scene(label);
+    s.classes('up');
+    s.tick(100);
+    s.classes('');
+
+    // Chrome 154: matrix(0.8125, 0, 0, 0.8125, 0, -30.5) a quarter of the way back.
+    s.tick(25);
+    assert.deepEqual(placed(s.painted()), { y: -30.5, scale: 0.8125 });
+    s.tick(75);
+    assert.deepEqual(s.painted(), [{ translateY: '-50%' }]);
+  });
+
+  it('turns round part way from where it had got to, in either direction', () => {
+    const s = scene(label);
+    s.classes('up');
+    s.tick(50);
+    s.classes('');
+    assert.deepEqual(placed(s.painted()), { y: -27, scale: 0.875 }, 'no jump as it turns');
+    s.tick(50);
+    assert.deepEqual(placed(s.painted()), { y: -23.5, scale: 0.9375 }, 'halfway back from there');
+
+    // And up again from part way down: the frame it is on is a pair, and the rule one length.
+    s.classes('up');
+    assert.deepEqual(placed(s.painted()), { y: -23.5, scale: 0.9375 }, 'no jump this way either');
+    s.tick(50);
+    assert.deepEqual(placed(s.painted()), { y: -28.75, scale: 0.84375 });
+    s.tick(50);
+    assert.deepEqual(s.painted(), [{ translateY: -34 }, { scaleX: 0.75 }, { scaleY: 0.75 }]);
+  });
+
+  it('eases a length into a percentage along the other axis too', () => {
+    const s = scene(`
+      view { transition: transform 100ms linear; transform: translateX(10px) }
+      view.over { transform: translateX(100%) }
+    `);
+    s.classes('over');
+    s.tick(25);
+    assert.deepEqual(s.painted(), [{ translateX: '25%' }, { translateX: 7.5 }]);
+  });
+
+  it('eases a percentage to a zero written with no unit, one translate all the way', () => {
+    // A sheet that slides in from below its own height: nothing of a length is in any frame.
+    const s = scene(`
+      view { transition: transform 100ms linear; transform: translateY(100%) }
+      view.in { transform: translateY(0) }
+    `);
+    s.classes('in');
+    s.tick(50);
+    assert.deepEqual(s.painted(), [{ translateY: '50%' }]);
+    s.tick(50);
+    assert.deepEqual(s.painted(), [{ translateY: 0 }]);
+  });
+
+  it('eases each axis of a translate on its own, and back from part way', () => {
+    const s = scene(`
+      view { transition: transform 100ms linear; transform: translate(-50%, -50%) }
+      view.over { transform: translate(10px, 20px) rotate(90deg) }
+    `);
+    s.classes('over');
+    s.tick(50);
+    assert.deepEqual(s.painted(), [
+      { translateX: '-25%' },
+      { translateX: 5 },
+      { translateY: '-25%' },
+      { translateY: 10 },
+      { rotate: '45deg' },
+    ]);
+    s.classes('');
+    s.tick(50);
+    assert.deepEqual(s.painted(), [
+      { translateX: '-37.5%' },
+      { translateX: 2.5 },
+      { translateY: '-37.5%' },
+      { translateY: 5 },
+      { rotate: '22.5deg' },
+    ]);
+  });
+
+  it('eases the translate property as it eases the function', () => {
+    const s = scene(`
+      view { transition: translate 100ms linear; translate: 0 -50% }
+      view.up { translate: 0 -34px }
+    `);
+    s.classes('up');
+    s.tick(50);
+    assert.deepEqual(s.painted(), [{ translateX: 0 }, { translateY: '-25%' }, { translateY: -17 }]);
+    s.tick(50);
+    assert.deepEqual(s.painted(), [{ translateX: 0 }, { translateY: -34 }]);
+  });
+
+  it('eases a bound transform as it eases one a rule sets', () => {
+    const s = scene('view { transition: transform 100ms linear }');
+    s.engine.setProp(s.view, 'style', { transform: 'translateY(-50%)' });
+    s.engine.commit();
+    s.tick(100);
+    assert.deepEqual(s.painted(), [{ translateY: '-50%' }], 'at rest where the binding put it');
+    s.engine.setProp(s.view, 'style', { transform: 'translateY(-34px) scale(0.75)' });
+    s.engine.commit();
+    s.tick(50);
+    assert.deepEqual(placed(s.painted()), { y: -27, scale: 0.875 });
+  });
+
+  it('plays keyframes that go from one to the other, each end as it was written', () => {
+    const s = scene(`
+      @keyframes rise { from { transform: translateY(100%) } to { transform: translateY(10px) } }
+      view.up { animation: rise 100ms linear both }
+    `);
+    s.classes('up');
+    assert.deepEqual(s.painted(), [{ translateY: '100%' }]);
+    s.tick(50);
+    assert.deepEqual(s.painted(), [{ translateY: '50%' }, { translateY: 5 }]);
+    s.tick(50);
+    assert.deepEqual(s.painted(), [{ translateY: 10 }]);
+  });
+
+  it('still steps a rotation written in two units, which do not add up', () => {
+    assert.deepEqual(interpolate([{ rotate: '0deg' }], [{ rotate: '1rad' }], 0.5), [
+      { rotate: '0deg' },
+    ]);
+    assert.deepEqual(interpolate([{ scale: 1 }], [{ scale: '50%' }], 0.5), [{ scale: 1 }]);
+  });
+});
+
 describe('transitioning a transform that is a style binding', () => {
   // A bound transform is the CSS string, which the engine reads as the list a rule compiles to.
   for (const [what, from, to, halfway, there] of [
