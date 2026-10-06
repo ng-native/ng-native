@@ -653,6 +653,23 @@ export default class Page {
     assert.equal(code('/app/src/sums.d.ts', { dev: true }), plain);
   });
 
+  it("carries no hot update for the framework's own packages, built from source beside an app", () => {
+    // A workspace that builds `@ng-native/*` from source, as this repository's examples do, has
+    // their files outside `node_modules`. Patched like an app's, every function of the engine is
+    // called through the function that stays: thousands of calls a commit, each one slower.
+    const { transformAngular } = createRequire(import.meta.url)(
+      '@ng-native/metro/angular-transform.cjs',
+    );
+    const engine = fileURLToPath(new URL('../fabric/src/sums.ts', import.meta.url));
+    const code = (source: string) => transformAngular(source, engine, { dev: true }).code;
+    assert.equal(code(plain), plain);
+    assert.doesNotMatch(code(mixed), /__angularNativeHmr\b/);
+    // The same two files in an app's own source are patched: it is whose they are that decides.
+    const own = fileURLToPath(new URL('./fixtures/sums.ts', import.meta.url));
+    assert.notEqual(transformAngular(plain, own, { dev: true }).code, plain);
+    assert.match(transformAngular(mixed, own, { dev: true }).code, /__angularNativeHmr\b/);
+  });
+
   it('applies an update once when Metro sends it twice, and reloads for a dependency', async (t) => {
     // Metro sends an edit once for each bundle the file is in, so a file two lazy routes share
     // runs twice for one save. The second run has the source the first applied, which is also
