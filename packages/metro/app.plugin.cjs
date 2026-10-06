@@ -274,7 +274,12 @@ const LAYOUT_ANIMATIONS = `    // React Native leaves layout animations off on A
 `;
 
 function enableLayoutAnimations(contents) {
-  if (contents.includes('enableLayoutAnimationsOnAndroid')) return contents;
+  if (contents.includes(LAYOUT_ANIMATIONS)) return contents;
+  if (contents.includes('enableLayoutAnimationsOnAndroid')) {
+    throw new Error(
+      '[angular-native] MainApplication.kt already overrides enableLayoutAnimationsOnAndroid, so layout animations were not turned on for Android. Remove that override, or the android.layoutAnimations option.',
+    );
+  }
   if (!LOAD_REACT_NATIVE.test(contents)) {
     throw new Error(
       "[angular-native] MainApplication.kt does not load React Native the way Expo's template does, so layout animations were not turned on for Android. Override the enableLayoutAnimationsOnAndroid feature flag by hand.",

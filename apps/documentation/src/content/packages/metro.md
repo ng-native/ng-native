@@ -55,9 +55,9 @@ writes, keeping every other flag as the app's React Native release level sets it
 React Native ships that flag off, and with it off
 [`LayoutAnimation`](/packages/device/layout-animation) makes its change on Android without
 animating it. With the option on, a prebuild fails when `MainApplication` is not the Kotlin class
-Expo's template writes, and says so. Without it the plugin leaves the Android project as
-`expo prebuild` wrote it. A prebuild after the option is removed writes `MainApplication.kt` again
-without the override.
+Expo's template writes, or already overrides the flag some other way, and says so. Without it the
+plugin leaves the Android project as `expo prebuild` wrote it. A prebuild after the option is
+removed writes `MainApplication.kt` again without the override.
 
 One preset, no options in the common case, because every part of it is built to fail quietly on its
 own if you leave it out - which is exactly why it exists as a preset rather than a page of manual

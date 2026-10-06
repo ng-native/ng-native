@@ -178,6 +178,50 @@ describe('the config plugin', () => {
     assert.equal(enabled.slice(0, at) + enabled.slice(at + added), expoMainApplication);
   });
 
+  it('refuses an application class that already overrides the flag some other way', () => {
+    // One that turns it off, or on by other means: left as it is, the option would do nothing
+    // and the prebuild would say nothing.
+    const off = expoMainApplication.replace(
+      '    loadReactNative(this)\n',
+      '    loadReactNative(this)\n    flags { override fun enableLayoutAnimationsOnAndroid(): Boolean = false }\n',
+    );
+    assert.throws(
+      () => enableLayoutAnimations(off),
+      /already overrides enableLayoutAnimationsOnAndroid/,
+    );
+    assert.throws(
+      () =>
+        enableLayoutAnimations(
+          expoMainApplication + '\n// enableLayoutAnimationsOnAndroid is set elsewhere\n',
+        ),
+      /already overrides enableLayoutAnimationsOnAndroid/,
+    );
+  });
+
+  it('shows in the docs the override it writes, for an app that writes its own application class', () => {
+    const page = readFileSync(
+      new URL(
+        '../../apps/documentation/src/content/packages/device/layout-animation.md',
+        import.meta.url,
+      ),
+      'utf8',
+    );
+    const shown = /```kotlin\n([\s\S]*?)```/.exec(page)?.[1] ?? '';
+    const enabled = enableLayoutAnimations(expoMainApplication);
+    const written = enabled.slice(
+      enabled.indexOf('loadReactNative(this)\n') + 'loadReactNative(this)\n'.length,
+      enabled.indexOf('    ApplicationLifecycleDispatcher.onApplicationCreate(this)'),
+    );
+    const code = (source: string) =>
+      source
+        .split('\n')
+        .map((line) => line.trim())
+        .filter((line) => line && !line.startsWith('//'))
+        .join(' ')
+        .replace(/\s+/g, ' ');
+    assert.equal(code(shown), code(written));
+  });
+
   it('names every class in full, so it compiles whatever the file imports', () => {
     const bare = enableLayoutAnimations(
       'class MainApplication {\n  fun onCreate() {\n    loadReactNative(this)\n  }\n}\n',

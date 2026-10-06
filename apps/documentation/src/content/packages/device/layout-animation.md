@@ -73,11 +73,20 @@ Expo Go on Android cannot animate a layout change. It is built with the flag off
 an app changes that.
 
 An app that writes its own `MainApplication` overrides the flag itself, after React Native has
-loaded:
+loaded, keeping every other flag as its React Native release level sets it. This is what the plugin
+writes:
 
 ```kotlin
-ReactNativeFeatureFlags.dangerouslyForceOverride(
-  object : ReactNativeFeatureFlagsProvider by ReactNativeFeatureFlagsOverrides_RNOSS_Stable_Android() {
+com.facebook.react.internal.featureflags.ReactNativeFeatureFlags.dangerouslyForceOverride(
+  object : com.facebook.react.internal.featureflags.ReactNativeFeatureFlagsProvider by
+    when (com.facebook.react.defaults.DefaultNewArchitectureEntryPoint.releaseLevel) {
+      com.facebook.react.common.ReleaseLevel.EXPERIMENTAL ->
+        com.facebook.react.internal.featureflags.ReactNativeFeatureFlagsOverrides_RNOSS_Experimental_Android()
+      com.facebook.react.common.ReleaseLevel.CANARY ->
+        com.facebook.react.internal.featureflags.ReactNativeFeatureFlagsOverrides_RNOSS_Canary_Android()
+      else ->
+        com.facebook.react.internal.featureflags.ReactNativeFeatureFlagsOverrides_RNOSS_Stable_Android()
+    } {
     override fun enableLayoutAnimationsOnAndroid(): Boolean = true
   }
 )
