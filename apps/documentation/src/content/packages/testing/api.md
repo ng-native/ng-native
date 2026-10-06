@@ -158,11 +158,13 @@ by default commits one without you writing it, the way `<switch>` commits `acces
 - In `ByRole`, the role itself is always an exact match, and `exact` applies to `name`.
 
 **Hidden elements** are left out, as React Native Testing Library leaves them out by default: a view
-with `display: none`, `accessibilityElementsHidden`, `aria-hidden` or `importantForAccessibility:
-'no-hide-descendants'` hides itself and everything under it. `{ includeHiddenElements: true }` finds
-them as well. A node scrolled off screen is not hidden; the fake has no layout to say it is. A
-`<virtual-list>` keeps a few recycled rows hidden this way, still showing their last item, so a
-query does not find those either.
+with `accessibilityElementsHidden`, `aria-hidden` or `importantForAccessibility:
+'no-hide-descendants'` hides itself and everything under it, and so does one with `opacity: 0` that
+takes no touch (`pointerEvents: 'none'`). `{ includeHiddenElements: true }` finds them as well. An
+element that is `display: none` has no view, so no query finds it, with the option or without. A
+node scrolled off screen is not hidden; the fake has no layout to say it is. A `<virtual-list>`
+keeps a few recycled rows as views with no opacity that take no touch, still showing their last
+item, so a query does not find those either.
 
 A node a query returns has `parent`: the node it is under as of that query, and `null` at the top.
 Query again after a change rather than keep a node and read its `parent` later.

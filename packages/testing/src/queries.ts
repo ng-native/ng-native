@@ -100,12 +100,14 @@ export function withParents(
 
 /**
  * A view that takes itself and everything under it out of sight or out of the accessibility tree,
- * as React Native Testing Library's `isHiddenFromAccessibility` decides it.
+ * as React Native Testing Library's `isHiddenFromAccessibility` decides it. And one with no
+ * opacity that takes no touch, which nobody can see or reach: a row a list keeps to use again.
+ * An element that is `display: none` has no view to ask about.
  */
 function hides(node: FakeFabricNode): boolean {
   const props = node.props;
   return (
-    props['display'] === 'none' ||
+    (props['opacity'] === 0 && props['pointerEvents'] === 'none') ||
     props['accessibilityElementsHidden'] === true ||
     props['aria-hidden'] === true ||
     props['importantForAccessibility'] === 'no-hide-descendants'

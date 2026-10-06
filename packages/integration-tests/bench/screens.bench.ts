@@ -373,7 +373,7 @@ async function feed(): Promise<void> {
     let reported = 0;
     for (const node of flatten(fabric.committed)) {
       const id = node.props['nativeID'];
-      if (typeof id !== 'string' || !id.startsWith('row-p') || node.props['display'] === 'none')
+      if (typeof id !== 'string' || !id.startsWith('row-p') || node.props['opacity'] === 0)
         continue;
       if (measured.has(id)) continue;
       measured.add(id);

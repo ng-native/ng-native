@@ -4367,8 +4367,25 @@ export class Engine implements HostEngine {
    * when it is shown again, as Modal.js creates it afresh. Committed again, it ignores every touch.
    */
   private withheld(child: EngineNode): boolean {
+    if (this.undisplayed(child)) return true;
     if (child.props['visible'] !== false || child.presented) return false;
     if (viewNameOf(child) !== MODAL_HOST) return false;
+    if (child.committed) this.forgetCommitted(child);
+    return true;
+  }
+
+  /**
+   * Whether an element is `display: none`, which has no box and so no view, nor has anything
+   * in it. A view that is committed and not displayed looks the same, but Yoga marks one as
+   * laid out each time it measures what holds it, and React Native clears the mark only where it
+   * reads that parent's layout: a debug build stops at the mark, on a later commit that has the
+   * parent's layout already. Shown again it is made again, as an element put back in the tree
+   * is: what its views held of their own, a scroll offset, is not kept.
+   */
+  private undisplayed(child: EngineNode): boolean {
+    if (child.kind !== 'element') return false;
+    this.styles.resolve(child, this.styleEpoch);
+    if (ownLayout(child, 'display') !== 'none') return false;
     if (child.committed) this.forgetCommitted(child);
     return true;
   }

@@ -200,7 +200,11 @@ line-clamp idiom compiles; `-webkit-box-orient` without it is ignored, as a brow
 which keep spaces and line breaks, are dropped. `font-variant-numeric` takes `tabular-nums`,
 `proportional-nums`, `lining-nums` and `oldstyle-nums`, as `fontVariant`.
 
-`display` takes `flex`, `none`, `block` and `contents`. Every native view is already a flex
+`display` takes `flex`, `none`, `block` and `contents`. An element that is `display: none` has no
+native view, nor has anything inside it: its views are made when it is displayed and go when it is
+not, so what a view holds of its own, a scroll offset, is not kept across a spell of
+`display: none`. To keep a view while it is out of sight, take it out of the flow and give it no
+opacity. Every native view is already a flex
 container stacking its children in a column, which is what a block does with its own, so `block` is
 read as `flex`: that is what lets `.d-none` followed by `.d-md-block` show an element again at a
 breakpoint. `inline-flex` is read as `flex` for the same reason. `inline` and `inline-block` are

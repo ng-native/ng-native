@@ -81,11 +81,12 @@ views, of one that has scrolled out, and only its bindings are updated. On a fas
 most of the work a frame does.
 
 A slot whose item leaves the window is not destroyed at once: up to six per row type are kept
-rendered but hidden (`display: none`, marked `row.parked`, and always last in `window()`), so the
-next row to arrive reuses their views however many passes later, as a `UITableView` reuse queue
-does. When rows come in different kinds - a text post and a photo post, a message and a date
-divider - `itemType` (a function of the item and its index) keeps a pool per kind, so a slot is
-only recycled into a row of its own kind and its views fit without being rebuilt.
+rendered but hidden (out of the flow with no opacity and taking no touch, marked `row.parked`, and
+always last in `window()`), so the next row to arrive reuses their views however many passes later,
+as a `UITableView` reuse queue does. When rows come in different kinds - a text post and a photo
+post, a message and a date divider - `itemType` (a function of the item and its index) keeps a pool
+per kind, so a slot is only recycled into a row of its own kind and its views fit without being
+rebuilt.
 
 A recycled row's components keep their fields, as a reused `UITableViewCell` does, so state held
 in a row component passes to whichever item arrives in its slot. Keep per-item state outside the

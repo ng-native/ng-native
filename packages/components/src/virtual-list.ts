@@ -131,8 +131,16 @@ interface Gap<T> {
   readonly context: VirtualListSeparatorContext<T>;
 }
 
-/** A parked slot: out of layout, out of sight, and out of the accessibility tree. */
-const PARKED: Record<string, unknown> = Object.freeze({ display: 'none' });
+/**
+ * A parked slot: out of the flow, out of sight and out of reach, with its view kept to be used
+ * again. Not `display: none`, which is an element with no view. A screen reader passes over a
+ * view with no opacity, and `VirtualListRow` says so outright where a row uses it.
+ */
+const PARKED: Record<string, unknown> = Object.freeze({
+  position: 'absolute',
+  opacity: 0,
+  pointerEvents: 'none',
+});
 
 /** How many hidden slots of each row type are kept ready for reuse. */
 const PARK_LIMIT = 6;
@@ -1349,6 +1357,8 @@ function holds(style: Record<string, unknown>, props: Record<string, unknown>): 
   selector: '[virtualListRow]',
   host: {
     '[style]': 'row().style',
+    // A parked row is not read out: see `PARKED`.
+    '[attr.aria-hidden]': 'row().parked ? true : null',
     '(layout)': 'onLayout($event)',
   },
 })
