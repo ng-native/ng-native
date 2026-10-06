@@ -1442,20 +1442,25 @@ const ALIGNS = new Set(['center', 'flex-end', 'space-around', 'space-evenly']);
  * A browser makes the run a flex item and places it. A paragraph's text is its content, which no
  * alignment moves, so such an element commits as a view, and its text as the paragraph any view's
  * loose text is. Read from the node's own style on each reconcile, which a change to it brings
- * about, so nothing is kept to go stale. A `<text>` is a paragraph whatever its style, and an
+ * about, so nothing is kept to go stale. The run can be a text element of its own, a label in a
+ * span, which is then the item placed. A `<text>` is a paragraph whatever its style, and an
  * element holding more than the one run is left as it was.
  */
 function aligningText(node: EngineNode): boolean {
   if (node.kind !== 'element' || node.name === 'text' || !TEXT_ELEMENTS.has(node.name)) {
     return false;
   }
-  if (node.children.length !== 1 || node.children[0]!.kind !== 'text') return false;
+  if (node.children.length !== 1 || !oneRun(node.children[0]!)) return false;
   if (isTextElement(node.parent) || ownLayout(node, 'display') !== 'flex') return false;
   return (
     ALIGNS.has(ownLayout(node, 'alignItems') as string) ||
     ALIGNS.has(ownLayout(node, 'justifyContent') as string)
   );
 }
+
+/** One run of text to place: text itself, or a text element around some, a label in a span. */
+const oneRun = (child: EngineNode): boolean =>
+  child.kind === 'text' || (child.kind === 'element' && TEXT_ELEMENTS.has(child.name));
 
 /** The view a node is committed as: `viewNameOf`, but for a text element that aligns its text. */
 const committedViewName = (node: EngineNode): string =>
@@ -1486,8 +1491,19 @@ export function viewNameOf(node: ViewNameNode): string {
   }
   // The paragraph the engine makes for a view's loose text is under a view, whatever the name
   // of the element that view is.
-  return !node.anonymous && isTextElement(node.parent) ? VIRTUAL_TEXT : PARAGRAPH;
+  return nestedText(node) ? VIRTUAL_TEXT : PARAGRAPH;
 }
+
+/**
+ * Whether a text element is a span of the paragraph above it: under another text element, but
+ * not one that is a view for placing this one (see `aligningText`), nor the engine's own box.
+ */
+const nestedText = (node: ViewNameNode): boolean =>
+  !node.anonymous && isTextElement(node.parent) && !placesText(node.parent);
+
+/** Whether a node's parent is a text element committed as a view, to place the run it holds. */
+const placesText = (parent: ViewNameNode | null | undefined): boolean =>
+  parent != null && 'props' in parent && aligningText(parent as unknown as EngineNode);
 
 /**
  * The props every native view reads as a boolean: the `bool` fields of React Native's
