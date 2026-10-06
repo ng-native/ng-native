@@ -3015,7 +3015,31 @@ function tokensInScope(
   custom: Readonly<Record<string, TokenValue>> | null | undefined,
 ): Readonly<Record<string, TokenValue>> {
   const own = custom ? { ...ruleTokens, ...custom } : ruleTokens;
-  return own ? resolveAliases(own, { ...parentTokens, ...own }, parentTokens) : parentTokens;
+  if (!own || changesNothing(own, parentTokens)) return parentTokens;
+  return resolveAliases(own, { ...parentTokens, ...own }, parentTokens);
+}
+
+/**
+ * Whether a node's own definitions leave every token as its parent has it: each is the value the
+ * parent has already, from the same rule, or a CSS-wide keyword that comes to what is in scope.
+ * Tailwind writes `--tw-translate-x: 0`, `--tw-blur: initial` and forty more like them on every
+ * element, so on nearly every node this is all there is, and the parent's map is handed on as it
+ * is where a copy of it, a few hundred tokens, would be made.
+ */
+function changesNothing(
+  own: Readonly<Record<string, TokenValue>>,
+  parentTokens: Readonly<Record<string, TokenValue>>,
+): boolean {
+  for (const name in own) {
+    const value = own[name]!;
+    // The very value its parent has: the one rule gave it to both, as `*` gives every element.
+    if (parentTokens[name] === value) continue;
+    const word = value.keyword;
+    if (word === undefined || !CSS_WIDE.has(word)) return false;
+    // `inherit` and `unset` are the parent's value whatever it is; the rest are no value at all.
+    if (word !== 'inherit' && word !== 'unset' && parentTokens[name] !== undefined) return false;
+  }
+  return true;
 }
 
 function resolveAliases(
