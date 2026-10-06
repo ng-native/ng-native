@@ -1900,6 +1900,25 @@ const fallsBackToTime = (part) => {
 const isListOrTime = (part) =>
   part.type === 'time' || (part.type === 'token' && part.value?.type === 'comma');
 
+/**
+ * `animation: spin calc(1333ms * var(--multiplier)) linear infinite`: the shorthand with a
+ * duration that is arithmetic on a token, which is how a library slows all its animations by one
+ * setting. Read as the shorthand with that time left out, and the time as the longhand
+ * `animation-duration` reads one, for the device to settle. Answers whether it was one.
+ */
+function timedByToken(declaration, out, context) {
+  if (declaration.property !== 'unparsed') return false;
+  if (declaration.value?.propertyId?.property !== 'animation') return false;
+  const parts = declaration.value.value ?? [];
+  const timed = parts.filter((part) => part.type === 'function' && part.value?.name === 'calc');
+  if (timed.length !== 1 || parts.some((part) => part.type === 'var')) return false;
+  const rest = parts.map((part) => (part === timed[0] ? PLACEHOLDER_TIME : part));
+  const typed = reparsed('animation', cssText(rest, context), context);
+  if (typed?.property !== 'animation') return false;
+  translate('animation', typed.value, out, context);
+  return animationTimeWithTokens('animation-duration', timed, out, context);
+}
+
 const PLACEHOLDER_TIME = { type: 'token', value: { type: 'dimension', unit: 'ms', value: 1 } };
 
 /** A declaration parsed again from text: what lightningcss makes of it, or nothing. */
@@ -2595,6 +2614,7 @@ function compileCss(source, context = 'styles', options = {}) {
       });
       for (const declaration of list ?? []) {
         if (easedByToken(declaration, out, deferred, context)) continue;
+        if (timedByToken(declaration, out, context)) continue;
         const before = deferred.length;
         declare(declaration, out, tokens, deferred, context, addDeclaration, platforms);
         for (let i = before; i < deferred.length; i++) deferred[i].props.forEach(sides.wrote);
