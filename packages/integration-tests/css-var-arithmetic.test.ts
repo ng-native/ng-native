@@ -154,6 +154,19 @@ describe('tokens in an animation’s timing', () => {
     assert.equal((playing() as { duration: number }).duration, 400);
   });
 
+  it('drops the shorthand alone where its time is a sum the device cannot work out', () => {
+    const refused: string[] = [];
+    const sheet = compileCss(
+      `${GROW} .a { color: red; animation: grow calc(200ms * sin(var(--m))) linear }`,
+      'app.css',
+      { onUnsupported: (message: string) => refused.push(message) },
+    ) as { rules: { declarations: Record<string, unknown> }[] };
+    // The rule keeps what else it declares, and nothing of the animation it could not read.
+    assert.deepEqual(sheet.rules[0]!.declarations, { color: 'rgb(255, 0, 0)' });
+    assert.equal(refused.length, 1);
+    assert.match(refused[0]!, /dropped 'animation'/);
+  });
+
   it('takes the duration in the shorthand itself: a time multiplied by a token', () => {
     // Material slows every spinner and bar by one multiplier:
     // `animation: spin calc(1333ms * var(--multiplier)) cubic-bezier(0.4, 0, 0.2, 1) infinite both`.
