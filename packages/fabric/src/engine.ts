@@ -4386,8 +4386,25 @@ export class Engine implements HostEngine {
     if (child.kind !== 'element') return false;
     this.styles.resolve(child, this.styleEpoch);
     if (ownLayout(child, 'display') !== 'none') return false;
-    if (child.committed) this.forgetCommitted(child);
+    if (child.committed) {
+      this.forgetCommitted(child);
+      // A field in it has no view to send its blur from.
+      if (isWithin(this.focusedNode, child)) this.setFocused(null);
+    }
     return true;
+  }
+
+  /**
+   * Whether a node hoisted into `target` is not displayed where it was written: it, or a box
+   * between it and the child of `target` it was written in. That child is asked before this is.
+   */
+  private undisplayedUnder(target: EngineNode, written: EngineNode): boolean {
+    for (let at: EngineNode | null = written; at && at.parent !== target; at = at.parent) {
+      if (!this.undisplayed(at)) continue;
+      if (written.committed) this.forgetCommitted(written);
+      return true;
+    }
+    return false;
   }
 
   /**
@@ -4410,7 +4427,9 @@ export class Engine implements HostEngine {
       if (this.hoisted.has(child)) direct.push(child);
       else handles.push(this.reconcileUnder(node, child, context));
       const moved = hoisted?.get(child);
-      if (moved) for (const written of moved) handles.push(this.land(node, written, landed));
+      for (const written of moved ?? []) {
+        if (!this.undisplayedUnder(node, written)) handles.push(this.land(node, written, landed));
+      }
     }
     for (const child of direct) handles.push(this.land(node, child, landed));
     if (node.kept) this.standIn(node, landed, handles);

@@ -134,12 +134,15 @@ interface Gap<T> {
 /**
  * A parked slot: out of the flow, out of sight and out of reach, with its view kept to be used
  * again. Not `display: none`, which is an element with no view. A screen reader passes over a
- * view with no opacity, and `VirtualListRow` says so outright where a row uses it.
+ * view with no opacity, and `VirtualListRow` says so outright where a row uses it. Moved off the
+ * list as well, since `pointer-events: none` is CSS's: something inside a row with a
+ * `pointer-events` of its own would still take a touch where the row was left.
  */
 const PARKED: Record<string, unknown> = Object.freeze({
   position: 'absolute',
   opacity: 0,
   pointerEvents: 'none',
+  transform: 'translateX(-100000px)',
 });
 
 /** How many hidden slots of each row type are kept ready for reuse. */
