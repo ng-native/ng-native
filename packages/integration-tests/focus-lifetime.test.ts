@@ -92,4 +92,18 @@ describe('the focused node', () => {
     s.engine.commit();
     assert.equal(s.engine.focused, null, 'native dropped its focus when the view went');
   });
+
+  it('is not told it has the focus a second time', () => {
+    // Native answering a focus that was already dispatched here: one focus, so one event.
+    const s = scene();
+    let heard = 0;
+    s.engine.setEventListener(s.input, 'topFocus', () => heard++);
+    const node = s.fabric.committed[0]!.children[0]!;
+    s.fabric.emit(node, 'topFocus', {});
+    s.fabric.emit(node, 'topFocus', {});
+    assert.equal(heard, 1);
+    s.fabric.emit(node, 'topBlur', {});
+    s.fabric.emit(node, 'topFocus', {});
+    assert.equal(heard, 2, 'and it hears the focus coming back after a blur');
+  });
 });
