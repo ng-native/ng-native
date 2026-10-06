@@ -16,6 +16,8 @@ import {
   setsInherited,
   StyleResolver,
   usesActive,
+  asksPastEnds,
+  elementsAtEnd,
   type Compound,
   type Conditions,
   type DeferredDeclaration,
@@ -2367,6 +2369,8 @@ export class Engine implements HostEngine {
    * does, a child list can move without anything else needing to be looked at again.
    */
   private structuralSheets = false;
+  /** Whether one of them asks more than which element is first and last. See `asksPastEnds`. */
+  private structuralPastEnds = false;
   /** Whether any sheet uses `:has()`. See `markBeneath`. */
   private hasSheets = false;
   private readonly resolveAssetSource: (value: unknown) => unknown;
@@ -2379,7 +2383,7 @@ export class Engine implements HostEngine {
     this.viewportSize = { width: conditions.width, height: conditions.height };
     this.fontScale = conditions.fontScale;
     if (options.tokens) this.styles.setRootTokens(options.tokens);
-    this.structuralSheets = options.globalStyles?.structural === true;
+    this.watchStructure(options.globalStyles);
     this.watchHas(options.globalStyles);
     this.watchActive(options.globalStyles);
     this.dev = options.dev ?? (globalThis as { __DEV__?: boolean }).__DEV__ === true;
@@ -2530,7 +2534,7 @@ export class Engine implements HostEngine {
     if (!this.styles.addGlobalSheet(sheet, replacing)) return false;
     if (replacing) this.sheetReplaced(replacing, sheet);
     else this.registerSheet(sheet);
-    if (sheet.structural) this.structuralSheets = true;
+    this.watchStructure(sheet);
     this.watchHas(sheet);
     this.watchActive(sheet);
     this.markPath(this.root);
@@ -2732,7 +2736,7 @@ export class Engine implements HostEngine {
     if (sheet === undefined || node.sheet === sheet) return;
     node.sheet = sheet;
     this.styles.noteSheet(sheet);
-    if (sheet?.structural) this.structuralSheets = true;
+    this.watchStructure(sheet);
     this.watchHas(sheet);
     this.watchActive(sheet);
     this.markProps(node);
@@ -2780,7 +2784,7 @@ export class Engine implements HostEngine {
       if (html.role) node.props['accessibilityRole'] = html.role;
       node.styled = html.styled;
     }
-    if (sheet?.structural) this.structuralSheets = true;
+    this.watchStructure(sheet);
     this.watchHas(sheet);
     this.watchActive(sheet);
     if (HOISTS[name]) this.hoisted.add(node);
@@ -3225,14 +3229,37 @@ export class Engine implements HostEngine {
     // A child list that moved changes what its members match, though nothing about them did:
     // the old last row is no longer the last. Only sheets that ask about position pay for this.
     if (this.structuralSheets) {
-      node.styleDirty = true;
-      for (const child of node.children) child.styleDirty = true;
-      // `.box:empty + .spacer`: what a later sibling matches can hang on whether this node is
-      // empty, which only its first child arriving or its last one leaving changes.
-      if (wasOrIsEmptyWithout(node, moved)) this.markLaterSiblings(node);
+      moved.styleDirty = true;
+      for (const child of this.repositioned(node)) child.styleDirty = true;
+      // What the node itself matches hangs on its child list only through `:empty`, which only
+      // its first child arriving or its last one leaving changes: and then what a later sibling
+      // matches can too, `.box:empty + .spacer`. Styled again for any other change, everything
+      // under it would be resolved again with it.
+      if (wasOrIsEmptyWithout(node, moved)) {
+        node.styleDirty = true;
+        this.markLaterSiblings(node);
+      }
     }
     if (this.hasSheets) this.markBeneath(node);
     this.markPath(node.parent);
+  }
+
+  /**
+   * The children whose place in a changed child list a sheet could read differently: all of
+   * them where some sheet counts or asks about the one beside, and otherwise the two at each
+   * end, which are the old first and last and the new. Styling one again resolves everything
+   * under it again, so a long list gaining a row is not the whole list.
+   */
+  private repositioned(node: EngineNode): readonly EngineNode[] {
+    if (this.structuralPastEnds) return node.children;
+    return [...elementsAtEnd(node.children, 2, false), ...elementsAtEnd(node.children, 2, true)];
+  }
+
+  /** Note what a sheet coming into play asks about a child list. Neither is unset: see `structural`. */
+  private watchStructure(sheet: StyleSheet | null | undefined): void {
+    if (!sheet?.structural) return;
+    this.structuralSheets = true;
+    if (asksPastEnds(sheet)) this.structuralPastEnds = true;
   }
 
   /** Walk up until we hit a node already known to have a dirty subtree. */

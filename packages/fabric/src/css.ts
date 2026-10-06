@@ -1048,6 +1048,55 @@ function takesParents(rule: StyleRule): boolean {
 /** Whether a node is one of the children CSS counts. Text and anchors are children, not elements. */
 const isElement = (node: StyleTarget) => node.kind === undefined || node.kind === 'element';
 
+/** A node's first `count` elements, or its last, skipping everything that is not one. */
+export function elementsAtEnd<T extends StyleTarget>(
+  siblings: readonly T[],
+  count: number,
+  fromEnd: boolean,
+): T[] {
+  const found: T[] = [];
+  for (let step = 0; step < siblings.length && found.length < count; step++) {
+    const sibling = siblings[fromEnd ? siblings.length - 1 - step : step]!;
+    if (isElement(sibling)) found.push(sibling);
+  }
+  return found;
+}
+
+const PAST_ENDS = new WeakMap<StyleSheet, boolean>();
+
+/**
+ * Whether a sheet asks more about a child list than which element is first and which is last:
+ * it counts (`:nth-child(odd)`, `:nth-last-child(2)`), or it asks about the element beside
+ * (`+`, `~`). A list that changes then changes what any element in it matches. Where no sheet
+ * asks that much, only the elements at the two ends can match differently.
+ */
+export function asksPastEnds(sheet: StyleSheet): boolean {
+  let known = PAST_ENDS.get(sheet);
+  if (known === undefined) {
+    known = sheet.rules.some(
+      (rule) =>
+        rule.combinators.some((one) => one === 'next-sibling' || one === 'later-sibling') ||
+        rule.compounds.some(countsSiblings),
+    );
+    PAST_ENDS.set(sheet, known);
+  }
+  return known;
+}
+
+/** Whether a compound, or one nested in it, counts its siblings further than the first or last. */
+function countsSiblings(compound: Compound): boolean {
+  if (compound.nth?.some((test) => test.a !== 0 || test.b !== 1)) return true;
+  const nested = [
+    ...(compound.not ?? []),
+    ...(compound.is ?? []).flat(),
+    ...(compound.ancestors ?? []),
+    ...(compound.parents ?? []),
+    ...(compound.hostContext ?? []),
+    ...(compound.has ?? []).flatMap((test) => test.any),
+  ];
+  return nested.some(countsSiblings);
+}
+
 /** The element before this one, skipping everything that is not one. */
 function previousElement(node: StyleTarget): StyleTarget | null {
   const siblings = node.parent?.children;
