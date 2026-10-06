@@ -506,6 +506,27 @@ describe('tokens', () => {
       assert.deepEqual(refused, []);
     });
 
+    it('reads a token no form holds where its own rule uses it, as the value written there', () => {
+      // Material keeps a floating label's transform in a token beside the declaration that
+      // reads it, with a token and a sum inside: no one form for a token, and a transform the
+      // compiler reads where it is written.
+      const css =
+        '.l { --move: translateY(calc(calc(6px + var(--h, 56px) / 2) * -1)) scale(var(--s, 0.75)); ' +
+        'transform: var(--move) } .tall { --h: 100px }';
+      assert.deepEqual(resolvedStyle(css, ['l'])['transform'], [
+        { translateY: -34 },
+        { scaleX: 0.75 },
+        { scaleY: 0.75 },
+      ]);
+      assert.deepEqual((resolvedStyle(css, ['l', 'tall'])['transform'] as object[])[0], {
+        translateY: -56,
+      });
+      // And says nothing of the token it could not hold, which was read all the same.
+      const refused: string[] = [];
+      compileCss(css, 'own', { onUnsupported: (message: string) => refused.push(message) });
+      assert.deepEqual(refused, []);
+    });
+
     it('takes a percentage or an em in a side of such a fallback, as it does in a fallback of one', () => {
       const css = '.a { font-size: 10px; margin: var(--m, 2em 25%) }';
       const style = resolvedStyle(css, ['a']);
