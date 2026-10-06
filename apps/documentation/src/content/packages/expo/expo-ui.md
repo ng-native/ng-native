@@ -102,6 +102,8 @@ error. `expo-ui-components.ts` has thin typed components for the views an app re
   **`UiSpacer`** for the room left over in one.
 - **`UiZStack`** - SwiftUI's `ZStack`: its children drawn over one another, the first at the back,
   placed by `alignment`.
+- **`UiGroup`** - SwiftUI's `Group`, iOS only: its children as they are, for `modifiers` that
+  belong to several views at once.
 - **`UiRectangle`**, **`UiRoundedRectangle`**, **`UiUnevenRoundedRectangle`**, **`UiCapsule`**,
   **`UiCircle`** and **`UiEllipse`** - SwiftUI's shapes, iOS only, coloured with the
   `foregroundStyle` modifier. **`UiAccessoryWidgetBackground`** is the system's backdrop for a lock
@@ -131,6 +133,9 @@ error. `expo-ui-components.ts` has thin typed components for the views an app re
   takes ISO text on iOS.
 - **`UiPicker`** - a SwiftUI `Picker`, iOS only, and a Signal Forms field. `options` draws the
   choices; see [Choices: `UiPicker`](#choices-uipicker) below.
+- **`UiBottomSheet`** - the system's sheet on both platforms, opened by its `open` model, with the
+  app's own components as its content. It needs no `ui-host`; see
+  [A bottom sheet](#a-bottom-sheet) below.
 
 Each input goes straight through to the node as a prop, `modifiers` included -
 `UiModifier` is one SwiftUI modifier, shaped exactly as `@expo/ui`'s own modifier functions build
@@ -167,10 +172,10 @@ a modifier it does not know, silently, and knows few of SwiftUI's: `frame`, `fon
 only `start`, `top`, `end` and `bottom`. Choose the modifiers by platform, with `nativePlatform()`
 from `@ng-native/fabric`, where a view needs them on both.
 
-`UiDatePicker` already takes both platforms, as described above. The rest of the typed components
-are SwiftUI's. On Android a text field, a menu and an image are different controls rather than
-renamed ones, and `UiPicker`, `UiList`, `UiForm`, `UiSection` and the others have no Compose view
-at all; use Compose's own names for those.
+`UiDatePicker` and `UiBottomSheet` already take both platforms, as described under each. The rest
+of the typed components are SwiftUI's. On Android a text field, a menu and an image are different
+controls rather than renamed ones, and `UiPicker`, `UiList`, `UiForm`, `UiSection` and the others
+have no Compose view at all; use Compose's own names for those.
 
 Still call `registerExpoUiViews` alongside importing these. The component supplies the types; the
 registration is what makes the element commit as the SwiftUI or Compose view. Add a component here
@@ -348,10 +353,92 @@ whose `selection` is neither a string nor a number is ignored.
 app that runs on both needs another control for the choice there. Like every `ui-*` view, it
 sits inside a `<ui-host>`.
 
+## A bottom sheet
+
+**`UiBottomSheet`** is the system's sheet, sliding up over the screen it is opened from: SwiftUI's
+on iOS and Material's on Android. It is opened from a component, with no route:
+
+```ts
+import { Component, signal } from '@angular/core';
+import { Pressable, Text, View } from '@ng-native/components';
+import { UiBottomSheet } from '@ng-native/expo/expo-ui-components';
+
+@Component({
+  selector: 'app-results',
+  imports: [Pressable, Text, UiBottomSheet, View],
+  template: `
+    <pressable (press)="sorting.set(true)"><text>Sort</text></pressable>
+
+    <ui-bottom-sheet [(open)]="sorting" fitToContents (dismissed)="search()">
+      <view class="sheet">
+        <pressable (press)="sortBy('price')"><text>Price</text></pressable>
+        <pressable (press)="sortBy('distance')"><text>Distance</text></pressable>
+      </view>
+    </ui-bottom-sheet>
+  `,
+})
+export class Results {
+  protected readonly sorting = signal(false);
+  protected readonly order = signal('price');
+
+  protected sortBy(order: string): void {
+    this.order.set(order);
+    this.sorting.set(false);
+  }
+
+  protected search(): void {
+    // Runs once the sheet has gone, however it was closed.
+  }
+}
+```
+
+What is written inside the element is the sheet's content, and it is the app's own components,
+laid out and pressed as anywhere else. `<ui-bottom-sheet>` needs no `<ui-host>` around it, takes no
+room where it is written, and can be written anywhere in a template: the sheet covers the screen
+whichever view it is inside.
+
+- **`open`** - whether the sheet is on screen. Setting it true presents the sheet and setting it
+  false dismisses it. A swipe down, a tap outside the sheet and Android's back button dismiss it
+  too, and write false back, so bind it both ways: `[(open)]`.
+- **`fitToContents`** - the sheet is as tall as its content. Without it the sheet rests at half
+  the screen's height and drags up to all of it. It is read as the sheet opens, so a change while
+  the sheet is open applies the next time.
+- **`showDragIndicator`** - whether the grabber shows at the top of the sheet. It does unless this
+  is false.
+- **`dismissed`** - the sheet has finished closing, whether the user dismissed it or `open` was set
+  false. It is emitted after the sheet has slid away, which is when another sheet or a dialog can
+  be presented.
+
+The content is in the tree from when the sheet opens until it has finished closing, and out of it
+the rest of the time. Its components are created with the page, as projected content always is:
+wrap the content in `@if (sorting())` where it should be created as the sheet opens instead.
+
+With `fitToContents` the content is laid out at the window's width and its own height. Without it
+the content fills the sheet.
+
+The two platforms drive a sheet differently, and the component is where that ends. SwiftUI's
+`BottomSheetView` stays in the tree and is presented by its `isPresented` prop; it reports
+`isPresentedChange` when the user dismisses it and `dismiss` once it has gone. Compose's
+`ModalBottomSheetView` shows for as long as it is in the tree and reports `dismissRequest`; when
+`open` turns false the component calls the view's `hide()` and takes it out of the tree once it
+has slid away. The grabber is SwiftUI's `presentationDragIndicator` modifier and Compose's
+`showDragHandle` prop. Inside the element the sheet is wrapped as `@expo/ui`'s own component wraps
+it: a `ui-host`, the sheet, on iOS a `ui-group` carrying the presentation modifiers, and a
+`ui-view-host` holding one view around the content.
+
+The sheet's own native events stop at the component. A `(dismiss)` listener on a view around it
+hears nothing from the sheet.
+
+`registerExpoUiViews` registers the sheet's native view a second time as `ui-bottom-sheet-view`,
+the name the component's template uses for it, since `ui-bottom-sheet` there would be the
+component again. A template that does not import `UiBottomSheet` still gets the native view from
+`<ui-bottom-sheet>`, with each platform's own props.
+
 ## Without the module
 
 An element registered for `@expo/ui` when it is not installed commits as nothing
-(`UnimplementedNativeView`). `nativeState()` returns null.
+(`UnimplementedNativeView`). `nativeState()` returns null. A `UiBottomSheet` shows nothing, and
+closes without waiting for a sheet to slide away.
 
 ## Reference
 
@@ -368,6 +455,7 @@ An element registered for `@expo/ui` when it is not installed commits as nothing
 <!-- api: UiHStack -->
 <!-- api: UiSpacer -->
 <!-- api: UiZStack -->
+<!-- api: UiGroup -->
 <!-- api: UiRectangle -->
 <!-- api: UiRoundedRectangle -->
 <!-- api: UiUnevenRoundedRectangle -->
@@ -392,3 +480,4 @@ An element registered for `@expo/ui` when it is not installed commits as nothing
 <!-- api: UiText -->
 <!-- api: UiDatePicker -->
 <!-- api: UiPicker -->
+<!-- api: UiBottomSheet -->

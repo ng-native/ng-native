@@ -80,6 +80,9 @@ export {
   type UiDateChangeEvent,
   type UiPickerOption,
   type UiModifier,
+  UiBottomSheet,
+  type UiBottomSheetViewFunctions,
+  UiGroup,
 } from './expo-ui-components.ts';
 export { ExpoImage, type ExpoImageContentFit, type ExpoImageSource } from './expo-image.ts';
 export {

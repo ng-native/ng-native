@@ -2,6 +2,7 @@ import { Component, computed, signal } from '@angular/core';
 import { pickerStyle, tag } from '@expo/ui/swift-ui/modifiers';
 import {
   nativeState,
+  UiBottomSheet,
   UiButton,
   UiChart,
   UiColorPicker,
@@ -66,6 +67,7 @@ import { page } from '../screen-styles.ts';
     ScrollView,
     Section,
     Text,
+    UiBottomSheet,
     UiButton,
     UiChart,
     UiColorPicker,
@@ -87,6 +89,7 @@ import { page } from '../screen-styles.ts';
     UiTextField,
     UiToggle,
     UiVStack,
+    View,
   ],
   // Views registered by name, with no component behind them: see registerExpoView.
   template: `
@@ -377,6 +380,44 @@ import { page } from '../screen-styles.ts';
         </x-example>
       </x-section>
 
+      <x-section
+        title="Presentation"
+        note="The system's sheet, opened from this page with no route."
+      >
+        <x-example
+          title="Bottom sheet"
+          note="SwiftUI's sheet stays in the tree and is presented by a prop; Compose's shows for
+                as long as it is in the tree. One element is both, and what is written inside it
+                is this app's own views. Dismissed counts each time the sheet has gone."
+          code='<ui-bottom-sheet [(open)]="open" fitToContents>...</ui-bottom-sheet>'
+        >
+          <pressable [style]="sheetButton" testID="sheet-fitted" (press)="openSheet(true)">
+            <text [style]="sheetButtonLabel">Open, as tall as its content</text>
+          </pressable>
+          <pressable [style]="sheetButton" testID="sheet-detents" (press)="openSheet(false)">
+            <text [style]="sheetButtonLabel">Open at half height</text>
+          </pressable>
+          <text class="body" testID="sheet-state">
+            {{ sheetOpen() ? 'Open' : 'Closed' }}, dismissed {{ sheetDismissals() }} times
+          </text>
+          <ui-bottom-sheet
+            [(open)]="sheetOpen"
+            [fitToContents]="sheetFits()"
+            (dismissed)="sheetDismissals.set(sheetDismissals() + 1)"
+          >
+            <view [style]="sheetBody">
+              <text [style]="sheetTitle">A sheet of the app's own views</text>
+              <pressable [style]="sheetButton" testID="sheet-count" (press)="taps.set(taps() + 1)">
+                <text [style]="sheetButtonLabel">Pressed {{ taps() }} times</text>
+              </pressable>
+              <pressable [style]="sheetButton" testID="sheet-close" (press)="sheetOpen.set(false)">
+                <text [style]="sheetButtonLabel">Close</text>
+              </pressable>
+            </view>
+          </ui-bottom-sheet>
+        </x-example>
+      </x-section>
+
       <text class="hint">
         Fifty-five SwiftUI elements are registered, and these are the ones worth looking at. The
         rest are the same idea: a name, and the props the SwiftUI view declares.
@@ -398,6 +439,25 @@ export class ExpoUiPage {
     { x: 'Thu', y: Math.round(this.level() * 10) },
   ]);
   protected readonly size = signal('Medium');
+
+  protected readonly sheetOpen = signal(false);
+  protected readonly sheetFits = signal(true);
+  protected readonly sheetDismissals = signal(0);
+
+  protected readonly sheetBody = { padding: 24, gap: 12 };
+  protected readonly sheetTitle = { fontSize: 17, fontWeight: '600' };
+  protected readonly sheetButton = {
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 10,
+    backgroundColor: '#0a84ff',
+  };
+  protected readonly sheetButtonLabel = { color: '#ffffff', fontWeight: '600' };
+
+  protected openSheet(fits: boolean): void {
+    this.sheetFits.set(fits);
+    this.sheetOpen.set(true);
+  }
 
   protected pickSize(selection: string | number): void {
     this.size.set(String(selection));

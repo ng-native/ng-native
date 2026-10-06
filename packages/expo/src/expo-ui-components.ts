@@ -28,23 +28,36 @@ import {
   DestroyRef,
   forwardRef,
   ElementRef,
+  InjectionToken,
+  Injector,
+  type Signal,
+  afterNextRender,
   booleanAttribute,
   computed,
+  effect,
   inject,
   input,
+  linkedSignal,
   model,
   output,
   signal,
+  untracked,
+  viewChild,
 } from '@angular/core';
 import type { NativeState } from './native-state.ts';
 import {
+  Engine,
+  type EngineNode,
   HostEngine,
   type HostNode,
   type NativeSyntheticEvent,
   keepNativeView,
   nativePlatform,
 } from '@ng-native/fabric';
+import { optional } from './native.ts';
 import { optionalBoolean, optionalNumber } from './transforms.ts';
+import { UiBottomSheetContent } from './ui-bottom-sheet-content.ts';
+import { type UiBottomSheetPresentedEvent, UiBottomSheetView } from './ui-bottom-sheet-view.ts';
 
 /** One SwiftUI modifier, as `@expo/ui`'s modifier functions build them: `{ $type: 'frame', ... }`. */
 export interface UiModifier {
@@ -1091,4 +1104,259 @@ export class UiSection {
   protected readonly nativeView = nativeView();
   readonly title = input<string>();
   readonly modifiers = input<readonly UiModifier[]>();
+}
+
+/**
+ * A SwiftUI `Group`, iOS only: its children as they are, with no layout of its own. What it is for
+ * is `modifiers` that belong to several views at once, or to content that takes none itself, as a
+ * sheet's presentation modifiers go on a group around a `ui-view-host`.
+ */
+@Component({
+  selector: 'ui-group',
+  template: '<ng-content />',
+  host: { '[modifiers]': 'modifiers()' },
+})
+export class UiGroup {
+  protected readonly nativeView = nativeView();
+  readonly modifiers = input<readonly UiModifier[]>();
+}
+
+/** The functions `@expo/ui` defines on Compose's sheet, called with the view's tag as `this`. */
+export interface UiBottomSheetViewFunctions {
+  /** Slides the sheet away, answering once it has gone. */
+  hide?(this: { nativeTag: number }): Promise<void>;
+}
+
+/** The window's width as the engine knows it, or undefined before the platform has said. */
+function windowWidth(): Signal<number | undefined> {
+  const node = inject(ElementRef).nativeElement as HostNode;
+  const engine = (node.host ?? inject(HostEngine)) as Partial<
+    Pick<Engine, 'viewport' | 'watchViewport'>
+  >;
+  const read = () => engine.viewport?.width || undefined;
+  const width = signal(read());
+  const stop = engine.watchViewport?.(() => width.set(read()));
+  if (stop) inject(DestroyRef).onDestroy(stop);
+  return width;
+}
+
+/**
+ * A sheet that slides up from the bottom of the screen, opened from any component: SwiftUI's on
+ * iOS, Material's on Android.
+ *
+ * ```html
+ * <ui-bottom-sheet [(open)]="sorting" fitToContents>
+ *   <app-sort-options (done)="sorting.set(false)" />
+ * </ui-bottom-sheet>
+ * ```
+ *
+ * `open` presents and dismisses it, and is written back when the user dismisses it. Its content is
+ * what is written inside it, the app's own components, in the tree while the sheet is on screen.
+ *
+ * The two platforms drive a sheet differently, and this is where that difference ends. SwiftUI's
+ * stays in the tree and is presented by `isPresented`, reporting `isPresentedChange` and
+ * `dismiss`. Compose's shows for as long as it is in the tree, and reports `dismissRequest`.
+ *
+ * Unlike the other components here, the element this is mounted on is a plain view, which takes
+ * no room and needs no `ui-host` around it. The sheet is inside it, wrapped as `@expo/ui`'s own
+ * React component wraps one: a `ui-host`, the sheet, on iOS a `ui-group` that carries the
+ * presentation modifiers, and a `ui-view-host` holding the one view the content goes in.
+ */
+@Component({
+  selector: 'ui-bottom-sheet',
+  imports: [UiBottomSheetContent, UiBottomSheetView, UiGroup, UiHost, UiViewHost],
+  template: `
+    <ng-template #content><ng-content /></ng-template>
+    @if (swiftUI) {
+      <ui-host style="position: absolute" pointerEvents="none" [style.width.px]="width()">
+        <ui-bottom-sheet-view
+          #sheet
+          [isPresented]="open()"
+          [fitToContents]="fits()"
+          (isPresentedChange)="presented($event)"
+          (dismiss)="gone($event)"
+        >
+          @if (mounted()) {
+            <ui-group [modifiers]="presentation()">
+              <ui-view-host layoutRoot [matchContents]="fits() || undefined">
+                <ui-bottom-sheet-content [style]="body()" [content]="content" />
+              </ui-view-host>
+            </ui-group>
+          }
+        </ui-bottom-sheet-view>
+      </ui-host>
+    } @else if (mounted()) {
+      <ui-host style="position: absolute" pointerEvents="none" [style.width.px]="width()">
+        <ui-bottom-sheet-view
+          #sheet
+          [showDragHandle]="showDragIndicator()"
+          [skipPartiallyExpanded]="fits()"
+          (dismissRequest)="dismissRequested($event)"
+        >
+          <ui-view-host layoutRoot [matchContents]="fits() || undefined">
+            <ui-bottom-sheet-content [style]="body()" [content]="content" />
+          </ui-view-host>
+        </ui-bottom-sheet-view>
+      </ui-host>
+    }
+  `,
+  host: { '[style.position]': '"absolute"' },
+})
+export class UiBottomSheet {
+  /** Overridden in a test to hide a sheet without a device. */
+  static readonly SOURCE = new InjectionToken<UiBottomSheetViewFunctions | null>(
+    'angular-native.bottomSheetSource',
+    {
+      factory: () =>
+        optional(() => {
+          const core = require('expo-modules-core') as typeof import('expo-modules-core');
+          const module = core.requireOptionalNativeModule<{
+            ViewPrototypes?: Record<string, UiBottomSheetViewFunctions>;
+          }>('ExpoUI');
+          return module?.ViewPrototypes?.['ExpoUI_ModalBottomSheetView'] ?? null;
+        }),
+    },
+  );
+
+  private readonly functions = inject(UiBottomSheet.SOURCE);
+  private readonly engine = inject(Engine, { optional: true });
+  private readonly injector = inject(Injector);
+  private readonly sheet = viewChild<unknown, ElementRef<EngineNode>>('sheet', {
+    read: ElementRef,
+  });
+
+  /** Whether the sheet is on screen. Written back as false when the user dismisses it. */
+  readonly open = model(false);
+  /**
+   * The sheet is as tall as its content. Without it the sheet rests at half the screen's height
+   * and drags up to all of it. Read as the sheet opens.
+   */
+  readonly fitToContents = input(false, { transform: booleanAttribute });
+  /** Whether the grabber shows at the top of the sheet. */
+  readonly showDragIndicator = input(true, { transform: booleanAttribute });
+  /**
+   * The sheet has finished closing, whether the user dismissed it or `open` was set false: the
+   * moment another sheet or a dialog can be presented.
+   */
+  readonly dismissed = output<void>();
+
+  /** SwiftUI's sheet stays in the tree; anywhere else it is there while it shows. */
+  protected readonly swiftUI = nativePlatform() === 'ios';
+  protected readonly width = windowWidth();
+
+  /**
+   * Whether the content is in the tree: from when the sheet opens until it has gone, which is
+   * after `open` turns false, so that it slides away with its content still in it.
+   */
+  protected readonly mounted = linkedSignal<boolean, boolean>({
+    source: this.open,
+    computation: (open, previous) => open || (previous?.value ?? false),
+  });
+
+  /** `fitToContents` as the sheet opened: a view host takes its sizing once, as it mounts. */
+  protected readonly fits = computed(() => {
+    this.mounted();
+    return untracked(this.fitToContents);
+  });
+
+  /** SwiftUI reads how a sheet is presented from modifiers on its content, not from props. */
+  protected readonly presentation = computed<readonly UiModifier[]>(() => [
+    this.fits()
+      ? { $type: 'presentationSizing', sizing: 'fitted' }
+      : { $type: 'presentationDetents', detents: ['medium', 'large'] },
+    {
+      $type: 'presentationDragIndicator',
+      visibility: this.showDragIndicator() ? 'visible' : 'hidden',
+    },
+  ]);
+
+  /**
+   * The one view a view host holds. Sized to its content it needs a width of its own, the
+   * window's; otherwise it fills the height the sheet gives it.
+   */
+  protected readonly body = computed(() =>
+    this.fits() ? { width: this.width() } : { flexGrow: 1, height: 0 },
+  );
+
+  /** Whether `open` has turned false on a sheet that has yet to go. */
+  private closing = false;
+  /** Whether Compose is sliding the sheet away. */
+  private hiding = false;
+
+  constructor() {
+    effect(() => {
+      if (!this.open()) untracked(() => this.close());
+    });
+  }
+
+  protected presented(event: UiBottomSheetPresentedEvent): void {
+    if (!this.own(event)) return;
+    const isPresented: unknown = event.nativeEvent?.isPresented;
+    if (typeof isPresented === 'boolean') this.open.set(isPresented);
+  }
+
+  protected dismissRequested(event: NativeSyntheticEvent): void {
+    if (this.own(event)) this.open.set(false);
+  }
+
+  /**
+   * SwiftUI has finished dismissing the sheet. After a swipe it says so before it reports that the
+   * sheet is no longer presented, so a sheet that has gone while `open`, and was not closing, is
+   * one the user dismissed.
+   */
+  protected gone(event: NativeSyntheticEvent): void {
+    if (!this.own(event)) return;
+    if (!this.closing) this.open.set(false);
+    this.finish();
+  }
+
+  /**
+   * Whether an event is this sheet's own, which it then stops. Events bubble, so a `dismiss` from
+   * a modal in the content arrives here too, and the sheet's own would go on to a listener around
+   * it.
+   */
+  private own(event: NativeSyntheticEvent): boolean {
+    const target = event.target;
+    if (target != null && target !== this.sheet()?.nativeElement) return false;
+    event.stopPropagation();
+    return true;
+  }
+
+  /**
+   * `open` turned false. SwiftUI dismisses its sheet on the prop, and says when it has gone.
+   * Compose shows a sheet for as long as it is in the tree, so one taken out is gone at once:
+   * its `hide` slides it away first, as `@expo/ui`'s own component calls it before unmounting.
+   */
+  private close(): void {
+    if (!this.mounted()) return;
+    this.closing = true;
+    if (this.swiftUI || this.hiding) return;
+    const node = this.sheet()?.nativeElement;
+    const nativeTag = node ? (this.engine?.tagOf(node) ?? null) : null;
+    const hidden =
+      nativeTag === null ? undefined : optional(() => this.functions?.hide?.call({ nativeTag }));
+    if (!hidden) return this.finish();
+    this.hiding = true;
+    const done = () => {
+      this.hiding = false;
+      this.finish();
+    };
+    hidden.then(done, done);
+  }
+
+  /** The sheet has gone: its content leaves the tree. */
+  private finish(): void {
+    this.closing = false;
+    if (!this.mounted()) return;
+    if (!this.open()) {
+      this.mounted.set(false);
+      this.dismissed.emit();
+      return;
+    }
+    // Opened again before it had gone. SwiftUI presents the sheet it still has; Compose hid the
+    // one it was asked to, and shows a sheet only as it enters the tree.
+    if (this.swiftUI) return;
+    this.mounted.set(false);
+    afterNextRender(() => this.mounted.set(this.open()), { injector: this.injector });
+  }
 }

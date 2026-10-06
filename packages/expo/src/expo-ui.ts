@@ -43,6 +43,11 @@ export const EXPO_UI_VIEWS: Readonly<Record<string, readonly [string | null, str
   'badged-box': [null, 'BadgedBoxView'],
   'basic-alert-dialog': [null, 'BasicAlertDialogView'],
   'bottom-sheet': ['BottomSheetView', 'ModalBottomSheetView'],
+  /**
+   * The same sheet under a second name, for `UiBottomSheet`: its own element is `ui-bottom-sheet`,
+   * and a component's template takes its own selector to be the component again.
+   */
+  'bottom-sheet-view': ['BottomSheetView', 'ModalBottomSheetView'],
   button: ['Button', 'Button'],
   capsule: ['CapsuleView', null],
   chart: ['ChartView', null],
