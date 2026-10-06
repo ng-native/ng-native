@@ -2369,8 +2369,8 @@ export class Engine implements HostEngine {
    * does, a child list can move without anything else needing to be looked at again.
    */
   private structuralSheets = false;
-  /** Whether one of them reaches the children after a change in a list. See `siblingReach`. */
-  private structuralAfter = false;
+  /** How many children after a change in a list one of them reaches. See `siblingReach`. */
+  private structuralAfter = 0;
   /** Whether one of them reaches the children before it. */
   private structuralBefore = false;
   /** Whether any sheet uses `:has()`. See `markBeneath`. */
@@ -3233,7 +3233,7 @@ export class Engine implements HostEngine {
     // the old last row is no longer the last. Only sheets that ask about position pay for this.
     if (this.structuralSheets) {
       moved.styleDirty = true;
-      this.markRepositioned(node.children, at);
+      this.markRepositioned(node.children, at, moved);
       // What the node itself matches hangs on its child list only through `:empty`, which only
       // its first child arriving or its last one leaving changes: and then what a later sibling
       // matches can too, `.box:empty + .spacer`. Styled again for any other change, everything
@@ -3250,17 +3250,29 @@ export class Engine implements HostEngine {
   /**
    * Mark the children whose place in a child list that changed at `at` a sheet could read
    * differently. The two at each end always, which are the old first and last and the new. Those
-   * from `at` on where some sheet counts from the start or asks about the one before, since a
+   * from `at` on where some sheet counts from the start or asks about any one before, since a
    * child's place from the start hangs only on those before it; and those before `at` where one
    * counts from the end. Styling one again resolves everything under it again, so a long list
    * gaining a row at its end is not the whole list.
+   *
+   * Where the sheets ask no further than the element just before (`+`), a rule steps a known
+   * number of elements along from one whose own match changed, and those are all there is to
+   * mark: that many after the change, and that many after the two at the start, either of which
+   * may have stopped or started being first. Nothing comes after the two at the end.
    */
-  private markRepositioned(children: readonly EngineNode[], at: number): void {
-    for (const child of elementsAtEnd(children, 2, false)) child.styleDirty = true;
+  private markRepositioned(children: readonly EngineNode[], at: number, moved: EngineNode): void {
+    const steps = this.structuralAfter;
+    const pastFirst = steps === Infinity ? 0 : steps;
+    for (const child of elementsAtEnd(children, 2 + pastFirst, false)) child.styleDirty = true;
     for (const child of elementsAtEnd(children, 2, true)) child.styleDirty = true;
-    const from = this.structuralBefore ? 0 : at;
-    const to = this.structuralAfter ? children.length : at;
-    for (let i = from; i < to; i++) children[i]!.styleDirty = true;
+    if (this.structuralBefore) for (let i = 0; i < at; i++) children[i]!.styleDirty = true;
+    // The elements after the change, not counting the one that came, which is marked already.
+    let left = steps;
+    for (let i = at; i < children.length && left > 0; i++) {
+      const child = children[i]!;
+      child.styleDirty = true;
+      if (child.kind === 'element' && child !== moved) left--;
+    }
   }
 
   /** Note what a sheet coming into play asks about a child list. None is unset: see `structural`. */
@@ -3268,7 +3280,7 @@ export class Engine implements HostEngine {
     if (!sheet?.structural) return;
     this.structuralSheets = true;
     const reach = siblingReach(sheet);
-    if (reach.after) this.structuralAfter = true;
+    this.structuralAfter = Math.max(this.structuralAfter, reach.after);
     if (reach.before) this.structuralBefore = true;
   }
 

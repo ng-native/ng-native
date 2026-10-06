@@ -1069,8 +1069,13 @@ export function elementsAtEnd<T extends StyleTarget>(
  * way about.
  */
 export interface SiblingReach {
-  /** It counts from the start (`:nth-child(odd)`), or asks about an element before (`+`, `~`). */
-  readonly after: boolean;
+  /**
+   * How many elements after a change it reaches. All of them, `Infinity`, where it counts from
+   * the start (`:nth-child(odd)`) or asks about any element before (`~`). Where it asks only
+   * about the element just before (`+`), as many as its longest run of them steps along: one for
+   * `.a + .b`, two for `.a + .b + .c`. Zero where it asks none of these.
+   */
+  readonly after: number;
   /** It counts from the end (`:nth-last-child(2)`). */
   readonly before: boolean;
 }
@@ -1084,11 +1089,9 @@ const REACH = new WeakMap<StyleSheet, SiblingReach>();
 export function siblingReach(sheet: StyleSheet): SiblingReach {
   let known = REACH.get(sheet);
   if (known === undefined) {
-    const reach = { after: false, before: false };
+    const reach = { after: 0, before: false };
     for (const rule of sheet.rules) {
-      if (rule.combinators.some((one) => one === 'next-sibling' || one === 'later-sibling')) {
-        reach.after = true;
-      }
+      reach.after = Math.max(reach.after, stepsAlong(rule.combinators));
       for (const compound of rule.compounds) countSiblings(compound, reach, false);
     }
     known = reach;
@@ -1098,18 +1101,34 @@ export function siblingReach(sheet: StyleSheet): SiblingReach {
 }
 
 /**
+ * How many elements on from one a rule's combinators read: every later one for a `~`, and
+ * otherwise its longest run of `+`. A run ends at a descendant or child combinator, which steps
+ * out of the list.
+ */
+function stepsAlong(combinators: readonly Combinator[]): number {
+  let longest = 0;
+  let run = 0;
+  for (const one of combinators) {
+    if (one === 'later-sibling') return Infinity;
+    run = one === 'next-sibling' ? run + 1 : 0;
+    longest = Math.max(longest, run);
+  }
+  return longest;
+}
+
+/**
  * Note in `reach` which end a compound, or one nested in it, counts its siblings from, further
  * than the first or last. A count inside a `:has()` is read as both: what it is asked of is
  * matched again by other means, and which way it reaches is not worked out.
  */
 function countSiblings(
   compound: Compound,
-  reach: { after: boolean; before: boolean },
+  reach: { after: number; before: boolean },
   withinHas: boolean,
 ): void {
   // Which is first and which is last is the ends, and no count.
   const counts = (compound.nth ?? []).filter((test) => test.a !== 0 || test.b !== 1);
-  if (counts.some((test) => withinHas || !test.fromEnd)) reach.after = true;
+  if (counts.some((test) => withinHas || !test.fromEnd)) reach.after = Infinity;
   if (counts.some((test) => withinHas || test.fromEnd)) reach.before = true;
   for (const inner of nestedCompounds(compound)) countSiblings(inner, reach, withinHas);
   for (const test of compound.has ?? []) {
