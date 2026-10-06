@@ -398,7 +398,8 @@ describe('what a child list changing has styled again', () => {
     for (const node of rows) engine.appendChild(parent, node);
     engine.commit();
     /** Which of the rows there now are marked to be styled again, before the commit that does it. */
-    const marked = () => parent.children.map((child) => (child.styleDirty ? 'x' : '.')).join('');
+    const marked = () =>
+      parent.children.map((child) => (child.styleDirty || child.stateDirty ? 'x' : '.')).join('');
     const widths = () => {
       engine.commit();
       return fabric.committed[0]!.children.map((view) => view.props['borderTopWidth'] ?? 0);
@@ -485,7 +486,10 @@ describe('what a child list changing has styled again', () => {
     s.engine.commit();
     s.engine.appendChild(s.parent, s.row());
     const elements = s.parent.children.filter((child) => child.kind === 'element');
-    assert.equal(elements.map((child) => (child.styleDirty ? 'x' : '.')).join(''), 'xx..xx');
+    assert.equal(
+      elements.map((child) => (child.styleDirty || child.stateDirty ? 'x' : '.')).join(''),
+      'xx..xx',
+    );
   });
 
   it('is the rows after the change where a sheet counts from the start, with the ends', () => {
@@ -715,6 +719,157 @@ describe('what a child list changing has styled again', () => {
 });
 
 /**
+ * A row whose place changed is matched again. Where it matches the rules it did, it keeps its
+ * style and what is under it is not looked at: its place is read by its own rules and no other.
+ * Where a rule reads the place of a row like it from under it, the row is styled again with
+ * everything under it, since what is under it can change though the row matches the same.
+ */
+describe('what a row whose place changed keeps', () => {
+  /** Ten rows, every third one `.on`, each holding a label. */
+  function list(css: string) {
+    const fabric = createFakeFabric();
+    const engine = new Engine(fabric, 1, { globalStyles: compileCss(css, 'app.css') as never });
+    const parent = engine.createElement('view');
+    engine.appendChild(engine.root, parent);
+    let made = 0;
+    const row = () => {
+      const node = engine.createElement('view');
+      engine.setClasses(node, made++ % 3 === 0 ? 'row on' : 'row');
+      const label = engine.createElement('view');
+      engine.setClasses(label, 'label');
+      engine.appendChild(node, label);
+      return node;
+    };
+    const rows = Array.from({ length: 10 }, row);
+    for (const node of rows) engine.appendChild(parent, node);
+    engine.commit();
+    return {
+      engine,
+      parent,
+      rows,
+      row,
+      /** Each row before the commit: `x` to be styled again, `m` matched again, `.` left. */
+      marks: () =>
+        parent.children
+          .map((child) => (child.styleDirty ? 'x' : child.stateDirty ? 'm' : '.'))
+          .join(''),
+      /** How many nodes the commit styled, a row or a label, rather than kept as they were. */
+      styled() {
+        const all = () => parent.children.flatMap((node) => [node, ...node.children]);
+        const before = new Map(all().map((node) => [node, node.styleCache]));
+        engine.commit();
+        return all().filter((node) => node.styleCache !== before.get(node)).length;
+      },
+      widths: () => fabric.committed[0]!.children.map((view) => view.props['borderTopWidth'] ?? 0),
+      labels: () =>
+        fabric.committed[0]!.children.map((view) => view.children[0]!.props['opacity'] ?? 1),
+    };
+  }
+
+  it('leaves what is under each row that matches as it did, a row put first in the list', () => {
+    const s = list('.row ~ .row { border-top-width: 3px }');
+    s.engine.insertBefore(s.parent, s.row(), s.rows[0]!);
+    assert.equal(s.marks(), 'xmmmmmmmmmm', 'the row that came is styled, the rest matched');
+    // The row that came and the one that was first, which now has a row before it, and the
+    // label in each. Nine rows match as they did, and their labels are not looked at.
+    assert.equal(s.styled(), 4);
+    assert.deepEqual(s.widths(), [0, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3]);
+  });
+
+  it('styles again the rows a count now names and no longer names, and no others', () => {
+    const s = list('.row:nth-child(3) { border-top-width: 3px }');
+    s.engine.insertBefore(s.parent, s.row(), s.rows[0]!);
+    assert.equal(s.marks(), 'xmmmmmmmmmm');
+    // The row that came, the old second and the old third, with their labels.
+    assert.equal(s.styled(), 6);
+    assert.deepEqual(s.widths(), [0, 0, 3, 0, 0, 0, 0, 0, 0, 0, 0]);
+    s.engine.removeChild(s.parent, s.parent.children[0]!);
+    assert.equal(s.styled(), 4, 'and back: the two rows the count moved between');
+    assert.deepEqual(s.widths(), [0, 0, 3, 0, 0, 0, 0, 0, 0, 0]);
+  });
+
+  it('styles every row again where each one matches differently, as stripes do', () => {
+    const s = list('.row:nth-child(odd) { border-top-width: 3px }');
+    s.engine.insertBefore(s.parent, s.row(), s.rows[0]!);
+    assert.equal(s.styled(), 22);
+    assert.deepEqual(s.widths(), [3, 0, 3, 0, 3, 0, 3, 0, 3, 0, 3]);
+  });
+
+  it('styles a row again with all under it where a rule reads its place from under it', () => {
+    for (const css of [
+      '.row:nth-child(3) .label { opacity: 0.5 }',
+      '.row:nth-child(3) > .label { opacity: 0.5 }',
+      '.label:is(.row:nth-child(3) *) { opacity: 0.5 }',
+      '.label:is(.row:nth-child(3) > *) { opacity: 0.5 }',
+    ]) {
+      const s = list(css);
+      s.engine.insertBefore(s.parent, s.row(), s.rows[0]!);
+      assert.equal(s.marks(), 'xxxxxxxxxxx', css);
+      s.engine.commit();
+      assert.deepEqual(s.labels(), [1, 1, 0.5, 1, 1, 1, 1, 1, 1, 1, 1], css);
+    }
+  });
+
+  it('styles a row again with all under it where a rule steps to it and reads on from under it', () => {
+    // No count at all: whether `.on` is just before a row is its place, read by its label.
+    const s = list('.on + .row .label { opacity: 0.5 }');
+    assert.deepEqual(s.labels(), [1, 0.5, 1, 1, 0.5, 1, 1, 0.5, 1, 1]);
+    s.engine.insertBefore(s.parent, s.row(), s.rows[1]!);
+    assert.equal(s.marks(), 'xxx......xx', 'the row that came, the one after it, and the ends');
+    s.engine.commit();
+    assert.deepEqual(s.labels(), [1, 0.5, 1, 1, 1, 0.5, 1, 1, 0.5, 1, 1]);
+  });
+
+  it('asks it only of the rows a rule could mean, by their classes', () => {
+    const s = list(
+      '.on:nth-child(3) .label { opacity: 0.5 } .row ~ .row { border-top-width: 3px }',
+    );
+    s.engine.insertBefore(s.parent, s.row(), s.rows[0]!);
+    // The rows made `.on` are the first, fourth, seventh and tenth, and the one that came.
+    assert.equal(s.marks(), 'xxmmxmmxmmx');
+    s.engine.commit();
+    assert.deepEqual(s.labels(), [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]);
+    s.engine.insertBefore(s.parent, s.row(), s.rows[0]!);
+    s.engine.commit();
+    assert.deepEqual(s.labels(), [1, 1, 0.5, 1, 1, 1, 1, 1, 1, 1, 1, 1]);
+  });
+
+  it('styles a row again that changed in another way in the same commit', () => {
+    const s = list(
+      '.row ~ .row { border-top-width: 3px } .row.wide.wide { border-top-width: 7px }',
+    );
+    s.engine.insertBefore(s.parent, s.row(), s.rows[0]!);
+    s.engine.setClasses(s.rows[4]!, 'row wide');
+    assert.equal(s.marks()[5], 'x', 'a class a rule styles it by');
+    // A class arriving marks the rows after it too, for a rule that steps from it: it and the
+    // five after, the row that came and the old first, each with its label.
+    assert.equal(s.styled(), 16);
+    assert.deepEqual(s.widths(), [0, 3, 3, 3, 3, 7, 3, 3, 3, 3, 3]);
+  });
+
+  it('leaves a row matched again where a class changed that only what is under it reads', () => {
+    // The class is no rule's for the row itself: the label it is for is styled, and no more.
+    const s = list('.row ~ .row { border-top-width: 3px } .wide .label { opacity: 0.5 }');
+    s.engine.insertBefore(s.parent, s.row(), s.rows[0]!);
+    s.engine.setClasses(s.rows[4]!, 'row wide');
+    assert.equal(s.marks()[5], 'm');
+    s.engine.commit();
+    assert.deepEqual(s.labels(), [1, 1, 1, 1, 1, 0.5, 1, 1, 1, 1, 1]);
+  });
+
+  it('keeps as much once a sheet that asks is added to a list already styled', () => {
+    const s = list('.row { border-bottom-width: 1px }');
+    s.engine.addGlobalSheet(
+      compileCss('.row ~ .row { border-top-width: 3px }', 'later.css') as never,
+    );
+    s.engine.commit();
+    s.engine.insertBefore(s.parent, s.row(), s.rows[0]!);
+    assert.equal(s.styled(), 4);
+    assert.deepEqual(s.widths(), [0, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3]);
+  });
+});
+
+/**
  * The marks above are a saving, and a row left unmarked that should have been styled again shows
  * as nothing at all: a stripe on the wrong row. So every change to a list is held to the same
  * list built from nothing, which styles every row.
@@ -740,7 +895,12 @@ describe('a child list changed a row at a time, beside the same list built fresh
   /** What a list holds: a row by its number, or a text, which is no element and is not counted. */
   type Item = number | 'text';
 
-  function scene(css: string, items: readonly Item[]) {
+  /**
+   * A list of rows, each a view holding a label that holds a title, a text with words in it, so
+   * that what a row hands down, a colour or a custom property, shows two levels under it.
+   * `later` is a second sheet, added once the list is committed.
+   */
+  function sceneOf(css: string, items: readonly Item[], later?: string) {
     const fabric = createFakeFabric();
     const engine = new Engine(fabric, 1, { globalStyles: compileCss(css, 'app.css') as never });
     const parent = engine.createElement('view');
@@ -757,12 +917,20 @@ describe('a child list changed a row at a time, beside the same list built fresh
         const label = engine.createElement('view');
         engine.setClasses(label, 'label');
         engine.appendChild(found, label);
+        const title = engine.createElement('text');
+        engine.setClasses(title, 'title');
+        engine.appendChild(title, engine.createText(`row ${item}`));
+        engine.appendChild(label, title);
       }
       made.set(item, found);
       return found;
     };
     for (const item of items) engine.appendChild(parent, node(item));
     engine.commit();
+    if (later !== undefined) {
+      engine.addGlobalSheet(compileCss(later, 'later.css') as never);
+      engine.commit();
+    }
     // A prop a view no longer has travels as null, which a view that never had it does not carry.
     const styled = (view: FakeFabricNode): unknown => ({
       name: view.viewName,
@@ -785,7 +953,7 @@ describe('a child list changed a row at a time, beside the same list built fresh
   interface Step {
     readonly what: string;
     readonly after: readonly Item[];
-    apply(s: ReturnType<typeof scene>): void;
+    apply(s: ReturnType<typeof sceneOf>): void;
   }
 
   /** Every way to put one item in, take one out or move one along, from `items`. */
@@ -828,7 +996,8 @@ describe('a child list changed a row at a time, beside the same list built fresh
    * so a list is not only ever one step from fresh: after a commit between the two for half of
    * those, and with both in one commit for the rest.
    */
-  function holdToFresh(css: string, start: readonly Item[], every: number): void {
+  function holdToFresh(css: string, start: readonly Item[], every: number, later?: string): void {
+    const scene = (sheet: string, items: readonly Item[]) => sceneOf(sheet, items, later);
     for (const [index, step] of steps(start, 99).entries()) {
       const s = scene(css, start);
       step.apply(s);
@@ -872,8 +1041,45 @@ describe('a child list changed a row at a time, beside the same list built fresh
     it(`commits what a fresh long list would, under ${css}`, () => holdToFresh(css, LONG, 90));
   }
 
+  /**
+   * Sheets where a row's place reaches what is under it: by a rule that reads the place from
+   * below, by a colour or a custom property a placed row hands down, through `:has()`, and by
+   * rules that read it only for the row itself, beside ones that read other things from below.
+   * A row that matches the rules it did keeps what is under it, so these are where that could
+   * leave a title or a label as it was when it should have changed.
+   */
+  const BENEATH = [
+    '.row:nth-child(3) { color: rgb(255, 0, 0); font-size: 20px } .row:nth-last-child(2) { color: rgb(0, 0, 255) }',
+    '.row:nth-child(3) { --c: 0.5 } .label { opacity: var(--c, 1) } .row:nth-last-child(2) { --w: 3px } .title { border-top-width: var(--w, 0) }',
+    '.row:first-child .label { opacity: 0.5 } .row:last-child > .label > .title { border-top-width: 3px }',
+    '.row:nth-child(2) .title { border-top-width: 3px } .row:nth-last-child(odd) > .label { opacity: 0.5 }',
+    '.label:is(.on:first-child *) { opacity: 0.5 } .label:is(.row:nth-last-child(2) > *) { border-top-width: 3px }',
+    '.title:is(.row:nth-child(even) *) { border-top-width: 3px } .row:nth-child(even) { opacity: 0.5 }',
+    '.row:nth-child(2):has(> .label) { opacity: 0.5 } .list:has(> .on:last-child) { border-top-width: 3px } .row ~ .row { border-top-width: 1px }',
+    '.on ~ .row .title { border-top-width: 3px } .row:nth-child(4) ~ .on > .label { opacity: 0.5 }',
+    '.r1 + .r2 .label { opacity: 0.5 } .r4 + .row > .label > .title { border-top-width: 3px } .row:nth-child(n + 3) { border-top-width: 3px }',
+    '.row ~ .on { border-top-width: 3px } .row:not(:first-child) { opacity: 0.5 } .on .title { color: rgb(255, 0, 0) }',
+    '.row:nth-child(3) { color: rgb(255, 0, 0) } .title { color: inherit } .row:nth-child(2) > .label { color: rgb(0, 0, 255) }',
+    '.row:not(.on):nth-child(odd) .label { opacity: 0.5 } .on:nth-child(odd) { border-top-width: 3px }',
+    '.row:not(:nth-child(2)) > .label { opacity: 0.5 } .row:is(:nth-last-child(2), .r9) .title { border-top-width: 3px }',
+  ];
+
+  for (const css of BENEATH) {
+    it(`commits what a fresh list would beneath its rows, under ${css}`, () =>
+      holdToFresh(css, START, 6));
+  }
+
+  it('commits what a fresh list would under a sheet added once the list is there', () => {
+    // The rows were styled before any sheet asked about their place, and are asked from then on.
+    const first = '.row { border-bottom-width: 1px } .label { opacity: 0.75 }';
+    for (const later of [...BENEATH, ...SHEETS.slice(0, 7), ...STEPPING.slice(0, 3)]) {
+      holdToFresh(first, START, 24, later);
+    }
+  });
+
   it('commits what a fresh list would as a short list empties and fills again', () => {
-    for (const css of [...SHEETS, ...STEPPING]) {
+    for (const css of [...SHEETS, ...STEPPING, ...BENEATH]) {
+      const scene = sceneOf;
       const s = scene(css, [0, 1]);
       s.engine.removeChild(s.parent, s.node(0));
       assert.deepEqual(s.committed(), scene(css, [1]).committed(), css);

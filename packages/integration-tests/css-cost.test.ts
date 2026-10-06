@@ -12,10 +12,11 @@
  */
 import assert from 'node:assert/strict';
 import { before, describe, it } from 'node:test';
+import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import type { Type } from '@angular/core';
 import { mount } from '@ng-native/platform';
-import { StyleResolver, type StyleSheet, type StyleTarget } from '@ng-native/fabric';
+import { Engine, StyleResolver, type StyleSheet, type StyleTarget } from '@ng-native/fabric';
 import { resetStyleStats, styleStats } from '../fabric/src/css.ts';
 import { createFakeFabric } from '@ng-native/testing';
 import { compileFixture } from './compile.ts';
@@ -166,5 +167,28 @@ describe('what CSS costs', () => {
       Math.abs(deep - shallow) < 1,
       `per-node cost must not track depth, got ${shallow.toFixed(1)} vs ${deep.toFixed(1)}`,
     );
+  });
+
+  it('matches a row once where its place changed and it comes to be styled again', () => {
+    // A row whose place changed is matched to see whether it can keep its style. Under stripes
+    // none can, and each is then styled from the rules just found, not matched a second time.
+    const { compileCss } = createRequire(import.meta.url)('@ng-native/metro/css/compile.cjs');
+    const engine = new Engine(createFakeFabric(), 1, {
+      globalStyles: compileCss('.row:nth-child(odd) { border-top-width: 3px }', 'app.css'),
+    });
+    const list = engine.createElement('view');
+    engine.appendChild(engine.root, list);
+    const row = () => {
+      const node = engine.createElement('view');
+      engine.setClasses(node, 'row');
+      return node;
+    };
+    for (let i = 0; i < 10; i++) engine.appendChild(list, row());
+    engine.commit();
+
+    engine.insertBefore(list, row(), list.children[0]!);
+    resetStyleStats();
+    engine.commit();
+    assert.equal(styleStats.ruleTests, 11, 'the one rule, tried against each of eleven rows');
   });
 });
