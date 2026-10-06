@@ -3913,6 +3913,9 @@ export class Engine implements HostEngine {
     reframed.values = finished && !holds ? {} : values;
     this.playedFrames.set(reframed, frames);
     node.playing = reframed;
+    // One that had nothing to paint was let go of: with frames that say something it plays on.
+    const stopped = reframed.done || reframed.pausedAt !== undefined || reframed.native;
+    if (!stopped) this.playing.add(node);
   }
 
   /**
@@ -4140,11 +4143,12 @@ export class Engine implements HostEngine {
     // Frames that say nothing paint nothing: a keyframe's one declaration refused at build time
     // leaves these. No frame of it is committed, and one that never ends has nothing left to do.
     const idle = running.tracks.size === 0;
-    if (idle && running.spec.iterations === null) {
+    const { values, finished } = sample(running, now);
+    // One of no time is finished already, endless or not, and ends as any other does.
+    if (idle && !finished && running.spec.iterations === null) {
       this.playing.delete(node);
       return;
     }
-    const { values, finished } = sample(running, now);
     // Without a forwards fill a finished animation stops holding anything, and the element falls
     // back to whatever the cascade gives it. 'backwards' fills the start only.
     const holds = running.spec.fill === 'forwards' || running.spec.fill === 'both';
