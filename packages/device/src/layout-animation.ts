@@ -40,8 +40,10 @@ const DEFAULTS = { duration: 300, easing: 'easeInEaseOut' as LayoutEasing };
 
 /**
  * How long past its duration an animation is given before `animate` resolves without its
- * completion, which Android never calls: a few frames of slack, so that on iOS its own completion,
- * which lands at the end of the duration, is the one that resolves it.
+ * completion: a few frames of slack, so that the completion is the one that resolves it wherever
+ * one comes. React Native calls it at the end of the animation, or from a timer of its own a frame
+ * after the duration where native reports nothing, as on Android with layout animations off. It
+ * calls nothing at all where animations are disabled.
  */
 const COMPLETION_GRACE_MS = 50;
 
@@ -66,8 +68,8 @@ export class LayoutAnimation {
    *
    * The change is taken rather than left to the caller because the two have to be adjacent: a
    * `configureNext` with nothing after it animates whatever commit happens next, which may be a
-   * different screen entirely. Resolves when the animation ends, or immediately where the platform
-   * does not report that.
+   * different screen entirely. Resolves when the animation ends, or once its duration has passed
+   * where the platform does not report that.
    */
   async animate(change: () => void, options: LayoutChange = {}): Promise<void> {
     if (!this.native) {
@@ -77,7 +79,8 @@ export class LayoutAnimation {
 
     const done = new Promise<void>((resolve) => {
       this.native!.configureNext(config(options), resolve);
-      // Android does not call the completion, so nothing should wait on it forever.
+      // React Native calls no completion where animations are disabled, so nothing should wait
+      // on it forever.
       setTimeout(resolve, (options.duration ?? DEFAULTS.duration) + COMPLETION_GRACE_MS);
     });
 

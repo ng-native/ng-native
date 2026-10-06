@@ -251,13 +251,67 @@ function adoptInfoPlist(plist) {
   };
 }
 
+// The call in Expo's MainApplication that loads React Native and gives its feature flags the
+// values of the app's release level.
+const LOAD_REACT_NATIVE = /^[ \t]*loadReactNative\(this\)[ \t]*\r?\n/m;
+
+const LAYOUT_ANIMATIONS = `    // React Native leaves layout animations off on Android, where Fabric then never hands a commit
+    // to the driver that plays them and every layout change snaps. Its flags are set once, by
+    // loadReactNative above, so this replaces them with the same ones and this one turned on.
+    com.facebook.react.internal.featureflags.ReactNativeFeatureFlags.dangerouslyForceOverride(
+      object : com.facebook.react.internal.featureflags.ReactNativeFeatureFlagsProvider by
+        when (com.facebook.react.defaults.DefaultNewArchitectureEntryPoint.releaseLevel) {
+          com.facebook.react.common.ReleaseLevel.EXPERIMENTAL ->
+            com.facebook.react.internal.featureflags.ReactNativeFeatureFlagsOverrides_RNOSS_Experimental_Android()
+          com.facebook.react.common.ReleaseLevel.CANARY ->
+            com.facebook.react.internal.featureflags.ReactNativeFeatureFlagsOverrides_RNOSS_Canary_Android()
+          else ->
+            com.facebook.react.internal.featureflags.ReactNativeFeatureFlagsOverrides_RNOSS_Stable_Android()
+        } {
+        override fun enableLayoutAnimationsOnAndroid(): Boolean = true
+      }
+    )
+`;
+
+function enableLayoutAnimations(contents) {
+  if (contents.includes('enableLayoutAnimationsOnAndroid')) return contents;
+  if (!LOAD_REACT_NATIVE.test(contents)) {
+    throw new Error(
+      "[angular-native] MainApplication.kt does not load React Native the way Expo's template does, so layout animations were not turned on for Android. Override the enableLayoutAnimationsOnAndroid feature flag by hand.",
+    );
+  }
+  return contents.replace(LOAD_REACT_NATIVE, (line) => line + LAYOUT_ANIMATIONS);
+}
+
 function configPlugins(config) {
   const root = config._internal?.projectRoot ?? process.cwd();
   return require(require.resolve('expo/config-plugins', { paths: [path.resolve(root)] }));
 }
 
-function withAngularNative(config) {
-  const { withAppDelegate, withInfoPlist } = configPlugins(config);
+/** Whether the app asked for layout animations on Android: `{ android: { layoutAnimations } }`. */
+function wantsLayoutAnimations(options) {
+  const asked = options?.android?.layoutAnimations;
+  if (asked !== undefined && typeof asked !== 'boolean') {
+    throw new Error(
+      `[angular-native] android.layoutAnimations must be true or false, and is ${JSON.stringify(asked)}.`,
+    );
+  }
+  return asked === true;
+}
+
+function withAngularNative(config, options) {
+  const { withAppDelegate, withInfoPlist, withMainApplication } = configPlugins(config);
+  if (wantsLayoutAnimations(options)) {
+    config = withMainApplication(config, (mod) => {
+      if (mod.modResults.language !== 'kt') {
+        throw new Error(
+          '[angular-native] MainApplication is not Kotlin, so layout animations were not turned on for Android. Override the enableLayoutAnimationsOnAndroid feature flag by hand.',
+        );
+      }
+      mod.modResults.contents = enableLayoutAnimations(mod.modResults.contents);
+      return mod;
+    });
+  }
   config = withAppDelegate(config, (mod) => {
     if (mod.modResults.language === 'swift') {
       mod.modResults.contents = adoptScenes(mod.modResults.contents);
@@ -273,3 +327,4 @@ function withAngularNative(config) {
 module.exports = withAngularNative;
 module.exports.adoptScenes = adoptScenes;
 module.exports.adoptInfoPlist = adoptInfoPlist;
+module.exports.enableLayoutAnimations = enableLayoutAnimations;

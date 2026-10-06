@@ -39,6 +39,26 @@ writes, which an app built with the iOS 27 SDK needs to launch at all. It also h
 to view controllers: that SDK ignores the app-wide setters React Native's status bar module calls,
 so without it [`StatusBar`](/packages/device/status-bar) changes nothing on iOS 27.
 
+It takes one option, off by default. `android.layoutAnimations` turns on React Native's
+`enableLayoutAnimationsOnAndroid` feature flag in the `MainApplication.kt` that `expo prebuild`
+writes, keeping every other flag as the app's React Native release level sets it:
+
+```json
+// app.json
+{
+  "expo": {
+    "plugins": [["@ng-native/metro", { "android": { "layoutAnimations": true } }]]
+  }
+}
+```
+
+React Native ships that flag off, and with it off
+[`LayoutAnimation`](/packages/device/layout-animation) makes its change on Android without
+animating it. With the option on, a prebuild fails when `MainApplication` is not the Kotlin class
+Expo's template writes, and says so. Without it the plugin leaves the Android project as
+`expo prebuild` wrote it. A prebuild after the option is removed writes `MainApplication.kt` again
+without the override.
+
 One preset, no options in the common case, because every part of it is built to fail quietly on its
 own if you leave it out - which is exactly why it exists as a preset rather than a page of manual
 wiring.

@@ -80,6 +80,11 @@ the `AppDelegate.swift` that `expo prebuild` writes does not. The plugin starts 
 scene delegate instead, passing on the links the app is opened with, and answers the status bar
 from view controllers, which is the only way that SDK still lets an app change it.
 
+On Android the plugin changes nothing unless asked. React Native ships layout animations off
+there, so [`LayoutAnimation`](/packages/device/layout-animation) makes its change without animating
+it; passing `["@ng-native/metro", { "android": { "layoutAnimations": true } }]` turns them on in
+the `MainApplication.kt` that `expo prebuild` writes.
+
 ## Configure TypeScript
 
 ```json

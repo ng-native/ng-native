@@ -35,9 +35,8 @@ not a nicer `transition` - it is the only way to say the thing at all.
 
 `animate(change, options?)` takes the change to make as a function, because the two have to be
 adjacent: a configured animation with nothing after it animates whatever commit happens next, which
-may be an unrelated screen appearing. It resolves when the animation ends, or immediately where the
-platform does not report that - Android does not call the completion, so nothing waits on it
-forever.
+may be an unrelated screen appearing. It resolves when the animation ends, or once the duration has
+passed where the platform does not report an end, so nothing waits on it forever.
 
 `LayoutChange` takes `duration` (300ms default), `easing` (`'spring' | 'linear' | 'easeInEaseOut' |
 'easeIn' | 'easeOut' | 'keyboard'`, default `'easeInEaseOut'`; `'spring'` is the platform's own and
@@ -48,6 +47,43 @@ appearing or leaving does.
 It animates whatever the next layout pass happens to move, so it is a blunt instrument by design.
 Where you want one specific property animated, a CSS `transition` or a
 [worklet style](/packages/components/animation) says so precisely and costs less.
+
+## On Android
+
+On Android `animate()` runs the change without animating it unless the app turns layout animations
+on. React Native ships them off there: its `enableLayoutAnimationsOnAndroid` feature flag is false,
+and with it false the layout lands in one step. The promise still resolves once the duration has
+passed.
+
+The [`@ng-native/metro` config plugin](/packages/metro) turns the flag on when asked:
+
+```json
+// app.json
+{
+  "expo": {
+    "plugins": [["@ng-native/metro", { "android": { "layoutAnimations": true } }]]
+  }
+}
+```
+
+Run `npx expo prebuild` and build the app again afterwards: the plugin writes the override into
+`MainApplication.kt`, so it takes effect in a build of the app's own.
+
+Expo Go on Android cannot animate a layout change. It is built with the flag off, and no setting in
+an app changes that.
+
+An app that writes its own `MainApplication` overrides the flag itself, after React Native has
+loaded:
+
+```kotlin
+ReactNativeFeatureFlags.dangerouslyForceOverride(
+  object : ReactNativeFeatureFlagsProvider by ReactNativeFeatureFlagsOverrides_RNOSS_Stable_Android() {
+    override fun enableLayoutAnimationsOnAndroid(): Boolean = true
+  }
+)
+```
+
+iOS animates with no setup, in Expo Go as well.
 
 ## Off a device
 
