@@ -308,6 +308,12 @@ a weaker rule set, as on the web, where a `var()` that cannot be substituted giv
 initial value; `flex-grow`, `flex-shrink` and `flex-basis` take theirs the same way. Yoga's own
 shrink is 0, so this is the one place an unset token writes something rather than nothing.
 
+A `flex-basis` that is a length or a percentage is committed as the size it is along its
+container's main axis: a `width` in a row and a `height` in a column, over one written for that
+axis. React Native reads a `flexBasis` once for a view and not again when it changes, where a size
+is read on every layout, and the two come to the same box. A basis of `0`, which `flex: 1` sets,
+is committed as a basis, and so is `auto`.
+
 A length needs a unit, as in a browser: `margin-top: 3` is dropped with a warning, and so is a
 token holding a bare number where a length is read. `0` needs none, a bare number is a factor
 inside `calc()`, and `line-height` takes a ratio. An `opacity` outside 0 to 1 is clamped into it,

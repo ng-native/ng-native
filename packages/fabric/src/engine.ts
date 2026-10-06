@@ -930,6 +930,42 @@ function fitContent(node: EngineNode, props: Record<string, unknown>): void {
 
 const isPercent = (value: unknown): boolean => typeof value === 'string' && value.endsWith('%');
 
+/** Whether a `flex-basis` is a length or a percentage of something: not zero, and not `auto`. */
+const isSizedBasis = (basis: unknown): boolean =>
+  isPercent(basis)
+    ? Number.parseFloat(basis as string) !== 0
+    : typeof basis === 'number' && basis !== 0;
+
+/**
+ * A `flex-basis` that is a length or a percentage, as the size it is along its container's main
+ * axis: a width in a row and a height in a column, over one written for that axis.
+ *
+ * Yoga works a `flexBasis` out once for a view and keeps the answer, and React Native never has
+ * it forgotten when the view's props change (`computedFlexBasis`, cleared only by
+ * `markDirtyAndPropagate`). A basis that changes after the first layout is not read again, and
+ * a percentage does not follow the box it is a share of. A size is worked out on every pass, and
+ * with no basis Yoga takes the size along the main axis as the basis: the same sum.
+ *
+ * A basis of zero is left as it is, which is every `flex: 1`: under a container with no size on
+ * its main axis Yoga passes over a basis and sizes the box by its content, where a size of zero
+ * would be zero. A box out of the flow is no flex item, and keeps its own size.
+ */
+function basisAsSize(node: EngineNode, props: Record<string, unknown>): void {
+  const basis = props['flexBasis'];
+  if (!isSizedBasis(basis) || props['position'] === 'absolute') return;
+  const parent = layoutParent(node);
+  if (!parent) return;
+  const container = containerOf(parent);
+  // Remembered on the container, so the box is merged again when the direction changes.
+  parent.fitContainer = container;
+  delete props['flexBasis'];
+  if (container.startsWith('row')) props['width'] = basis;
+  else {
+    props['height'] = basis;
+    percentHeight(node, props);
+  }
+}
+
 /**
  * Whether a box has a height a percentage can be taken of, as CSS defines one: a height of its
  * own, or one the layout around it gives it. A box as tall as what it holds has none.
@@ -3461,6 +3497,8 @@ export class Engine implements HostEngine {
     rowsTall(style, this.fontScale);
     const merged = composeTransform(node, this.animated(node, this.transitioned(node, style)));
     centreSingleLine(viewName, merged, this.fontScale);
+    // After a transition, which eases the basis as the basis it was written as.
+    basisAsSize(node, merged);
     // Last, on what is committed: an override or an animation can hide a box, or place it.
     hiddenOutOfFlow(merged);
     delete merged['touchAction'];
