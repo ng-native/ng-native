@@ -125,6 +125,34 @@ describe('a @keyframes animation of opacity and transforms', () => {
     assert.deepEqual(s.events, ['animationstart']);
   });
 
+  it('plays a transform that a frame adds a function to, from where the shorter list rests', () => {
+    // A buffering bar's dots: `from` moves them back, and the end is the element's own transform,
+    // a list one function shorter. CSS eases the missing function from where it is at rest.
+    const marching =
+      '@keyframes march { from { transform: rotate(180deg) translateX(-10px) } } ' +
+      '.a { transform: rotate(180deg); animation: march 250ms linear infinite }';
+    const s = scene(marching);
+    assert.equal(s.started().length, 1);
+    assert.equal(s.engine.animating, false);
+    assert.deepEqual(s.at(0), { rotate: round(Math.PI), translateX: -10 });
+    assert.deepEqual(s.at(0.5), { rotate: round(Math.PI), translateX: -5 });
+    assert.deepEqual(s.at(1), { rotate: round(Math.PI), translateX: 0 });
+    // And the other way: a frame with a function fewer than the one before it.
+    const settling =
+      '@keyframes settle { from { transform: translateX(8px) scale(2) } to { transform: translateX(0) } } ' +
+      '.a { animation: settle 250ms linear infinite }';
+    assert.deepEqual(scene(settling).at(0.5), { translateX: 4, scaleX: 1.5, scaleY: 1.5 });
+  });
+
+  it('plays from JavaScript a transform whose frames start with different functions', () => {
+    const mixed =
+      '@keyframes mixed { from { transform: rotate(90deg) } to { transform: translateX(8px) scale(2) } } ' +
+      '.a { animation: mixed 250ms linear infinite }';
+    const s = scene(mixed);
+    assert.equal(s.started().length, 0);
+    assert.equal(s.engine.animating, true);
+  });
+
   it('plays an eased animation as the curve, sampled into what native interpolates between', () => {
     const s = scene('.a { animation: fade 1s ease-in infinite }');
     // Slow at first: well under halfway at the middle, and exact at the ends.
