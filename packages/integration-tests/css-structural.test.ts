@@ -381,3 +381,112 @@ describe('a position test that is not at the top of its compound', () => {
     assert.equal(lastProps(fabric, list)['opacity'], 0.5);
   });
 });
+
+describe('what a child list changing has styled again', () => {
+  /** A list of five rows under `css`, committed, and what each row is committed with. */
+  function list(css: string) {
+    const fabric = createFakeFabric();
+    const engine = new Engine(fabric, 1, { globalStyles: compileCss(css, 'app.css') as never });
+    const parent = engine.createElement('view');
+    engine.appendChild(engine.root, parent);
+    const row = () => {
+      const node = engine.createElement('view');
+      engine.setClasses(node, 'row');
+      return node;
+    };
+    const rows = Array.from({ length: 5 }, row);
+    for (const node of rows) engine.appendChild(parent, node);
+    engine.commit();
+    /** Which of the rows there now are marked to be styled again, before the commit that does it. */
+    const marked = () => parent.children.map((child) => (child.styleDirty ? 'x' : '.')).join('');
+    const widths = () => {
+      engine.commit();
+      return fabric.committed[0]!.children.map((view) => view.props['borderTopWidth'] ?? 0);
+    };
+    return { engine, parent, rows, row, marked, widths };
+  }
+
+  const ENDS =
+    '.row:first-child { border-top-width: 1px } .row:last-child { border-top-width: 9px } ' +
+    '.row:not(:last-child):not(:first-child) { border-top-width: 5px }';
+
+  it('is the rows at each end, where every sheet asks only which is first and which last', () => {
+    const s = list(ENDS);
+    assert.deepEqual(s.widths(), [1, 5, 5, 5, 9]);
+    s.engine.appendChild(s.parent, s.row());
+    assert.equal(s.marked(), 'xx..xx', 'the two at each end, and none between');
+    assert.deepEqual(s.widths(), [1, 5, 5, 5, 5, 9]);
+    s.engine.insertBefore(s.parent, s.row(), s.parent.children[0]!);
+    assert.equal(s.marked(), 'xx...xx');
+    assert.deepEqual(s.widths(), [1, 5, 5, 5, 5, 5, 9]);
+  });
+
+  it('leaves the list itself as it was styled, unless it stops or starts being empty', () => {
+    // Styled again, everything under it would be resolved again with it: every row of a list.
+    const s = list(`${ENDS} .list:empty { opacity: 0.5 }`);
+    s.engine.setClasses(s.parent, 'list');
+    s.engine.commit();
+    s.engine.appendChild(s.parent, s.row());
+    assert.equal(s.parent.styleDirty, false);
+    s.engine.commit();
+    for (const node of [...s.parent.children]) s.engine.removeChild(s.parent, node);
+    assert.equal(s.parent.styleDirty, true, 'its last row has gone');
+    s.engine.commit();
+    assert.equal(s.engine.root.children[0], s.parent);
+    s.engine.appendChild(s.parent, s.row());
+    assert.equal(s.parent.styleDirty, true, 'and its first has come');
+  });
+
+  it('follows a row leaving either end, and one put in the middle', () => {
+    const s = list(ENDS);
+    s.engine.removeChild(s.parent, s.rows[4]!);
+    assert.deepEqual(s.widths(), [1, 5, 5, 9]);
+    s.engine.removeChild(s.parent, s.rows[0]!);
+    assert.deepEqual(s.widths(), [1, 5, 9]);
+    s.engine.insertBefore(s.parent, s.row(), s.rows[2]!);
+    assert.equal(s.marked(), 'xxxx', 'the row put in is styled, with the ends');
+    assert.deepEqual(s.widths(), [1, 5, 5, 9]);
+  });
+
+  it('follows a list coming down to one row, which is first and last, and to none', () => {
+    const s = list('.row:only-child { border-top-width: 7px }');
+    for (const node of s.rows.slice(1)) s.engine.removeChild(s.parent, node);
+    assert.deepEqual(s.widths(), [7]);
+    s.engine.appendChild(s.parent, s.row());
+    assert.deepEqual(s.widths(), [0, 0]);
+  });
+
+  it('passes over what is not an element at an end: text is no first child', () => {
+    const s = list(ENDS);
+    s.engine.insertBefore(s.parent, s.engine.createText('x'), s.parent.children[0]!);
+    s.engine.commit();
+    s.engine.appendChild(s.parent, s.row());
+    const elements = s.parent.children.filter((child) => child.kind === 'element');
+    assert.equal(elements.map((child) => (child.styleDirty ? 'x' : '.')).join(''), 'xx..xx');
+  });
+
+  it('is every row where a sheet counts them, or asks about the one beside', () => {
+    for (const css of [
+      '.row:nth-child(odd) { border-top-width: 3px }',
+      '.row:nth-last-child(2) { border-top-width: 3px }',
+      '.row + .row { border-top-width: 3px }',
+      '.row ~ .row { border-top-width: 3px }',
+      '.row:not(:nth-child(2n)) { border-top-width: 3px }',
+    ]) {
+      const s = list(css);
+      s.engine.insertBefore(s.parent, s.row(), s.parent.children[0]!);
+      assert.equal(s.marked(), 'xxxxxx', css);
+    }
+    const counted = list('.row:nth-child(odd) { border-top-width: 3px }');
+    counted.engine.insertBefore(counted.parent, counted.row(), counted.parent.children[0]!);
+    assert.deepEqual(counted.widths(), [3, 0, 3, 0, 3, 0]);
+  });
+
+  it('is every row once a sheet that counts them is added to one that does not', () => {
+    const s = list(ENDS);
+    s.engine.addGlobalSheet(compileCss('.row:nth-child(2) { opacity: 0.5 }', 'more.css') as never);
+    s.engine.commit();
+    s.engine.appendChild(s.parent, s.row());
+    assert.equal(s.marked(), 'xxxxxx');
+  });
+});
