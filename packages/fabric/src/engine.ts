@@ -873,6 +873,22 @@ function centreSingleLine(
   props['minHeight'] = Math.max(own as number, Math.min(content, max as number));
 }
 
+const NO_STYLE: Readonly<Record<string, unknown>> = {};
+
+/**
+ * An element's inline style, less each property a rule it matches declared `!important`: an
+ * inline style is the last of the plain declarations, under every important one.
+ *
+ * ponytail: by the name a property is committed under, so an inline `padding` is not taken out
+ * by an important `padding-top`. Expand the inline shorthand here if one is ever written so.
+ */
+function inlineOf(node: EngineNode): Readonly<Record<string, unknown>> {
+  if (!node.props['style']) return NO_STYLE;
+  const inline = flattenStyle(node.props['style'], {});
+  for (const key of node.styleCache?.important ?? []) delete inline[key];
+  return inline;
+}
+
 /**
  * What a container's own style says for `key`, in the order `mergeProps` applies them: a
  * component's override, inline, a prop, its stylesheet, its default.
@@ -880,7 +896,7 @@ function centreSingleLine(
 function ownLayout(node: EngineNode, key: string): unknown {
   return (
     flattenStyle(node.props[STYLE_OVERRIDE], {})[key] ??
-    flattenStyle(node.props['style'], {})[key] ??
+    inlineOf(node)[key] ??
     node.props[key] ??
     node.styleCache?.style[key] ??
     node.defaultStyle?.[key]
@@ -3590,7 +3606,8 @@ export class Engine implements HostEngine {
   /**
    * Everything a node renders with, unprocessed. Precedence, weakest first: native defaults, the
    * node's `defaultStyle`, matched CSS, explicit props, inline style, a component's
-   * `styleOverride`. Inline wins over CSS for the same reason it does on the web.
+   * `styleOverride`. Inline wins over CSS as it does on the web, but for a declaration marked
+   * `!important`, which stands over it: see `inlineOf`.
    *
    * Raw, because this is what the next commit diffs against. Colours and asset ids are converted
    * on the way out instead (`processed`), and only for the keys that changed: the converters
@@ -3614,10 +3631,9 @@ export class Engine implements HostEngine {
     writeOwnProps(node.props, props, node.attributeOnly);
     withTextContent(node, viewName, props);
     const cascaded = props['transform'];
-    const style = boundTransform(node, flattenStyle(node.props['style'], props), cascaded);
-    if (node.props['style']) {
-      this.styles.overOtherForms(flattenStyle(node.props['style'], {}), style);
-    }
+    const inline = inlineOf(node);
+    const style = boundTransform(node, Object.assign(props, inline), cascaded);
+    if (inline !== NO_STYLE) this.styles.overOtherForms(inline, style);
     nativePointerEvents(node, style, resolved);
     // Before an image's own size: `fit-content` is no size, so the image's is what it gets.
     fitContent(node, style);

@@ -520,7 +520,7 @@ export interface StyleSheet {
  * set. Keeping the two apart is what lets resolution go downwards.
  */
 /** What a node's matched rules come to: shared between nodes that match the same way. */
-type Styled = Pick<StyleCache, 'style' | 'inherited' | 'tokens'>;
+type Styled = Pick<StyleCache, 'style' | 'inherited' | 'tokens' | 'important'>;
 
 export interface StyleCache {
   epoch: number;
@@ -557,6 +557,11 @@ export interface StyleCache {
    * with it, where otherwise an inline style changes nothing a child resolves to.
    */
   heirs?: true;
+  /**
+   * The properties a rule declared `!important`, where any did: an inline style is the last of
+   * the plain declarations, so for these what the rules say stands over it.
+   */
+  important?: ReadonlySet<string>;
 }
 
 /**
@@ -1725,6 +1730,13 @@ export function candidateRules(
   return offered;
 }
 
+/** The properties the rules matching a node declared `!important`, or nothing where none did. */
+function importantNames(result: CascadeResult): ReadonlySet<string> | undefined {
+  const deferred = result.deferred?.filter((one) => one.important) ?? [];
+  if (!result.important && !deferred.length) return undefined;
+  return new Set([...Object.keys(result.important ?? {}), ...deferred.flatMap((one) => one.props)]);
+}
+
 /** What the rules matching one node add up to. */
 interface CascadeResult {
   readonly declarations: Record<string, unknown>;
@@ -2685,7 +2697,9 @@ export class StyleResolver {
     // `pointer-events: inherit` won the cascade: what the parent hands down stands.
     if (own['pointerEvents'] === 'inherit') delete own['pointerEvents'];
     const style = { ...parentInherited, ...own };
-    return { style, inherited: decorate(style, inheritFrom(parentInherited, own), own), tokens };
+    const inherited = decorate(style, inheritFrom(parentInherited, own), own);
+    const important = importantNames(result);
+    return important ? { style, inherited, tokens, important } : { style, inherited, tokens };
   }
 
   /** The rules that apply to a node, weakest first. */
