@@ -22,6 +22,7 @@ interface Fixture {
   readonly open: Writable<boolean>;
   readonly fit: Writable<boolean>;
   readonly grabber: Writable<boolean>;
+  readonly detents: Writable<readonly unknown[] | undefined>;
   readonly second: Writable<string>;
   dismissed(): number;
   heard(): number;
@@ -77,7 +78,9 @@ async function boot<T = Fixture>(
   const fabric = createFakeFabric();
   const app = mount(1, (options.fixture ?? Sheet) as Type<T>, fabric, {
     conditions: { width: 390, height: 844, colorScheme: 'light' },
-    providers: [{ provide: UiBottomSheet.SOURCE, useValue: options.functions ?? null }],
+    providers: [
+      { provide: UiBottomSheet.SOURCE, useValue: 'functions' in options ? options.functions : {} },
+    ],
   });
   await settled();
   const every = (pattern: RegExp) => all(fabric.committed).filter((n) => pattern.test(n.viewName));
@@ -338,6 +341,102 @@ describe('a bottom sheet on iOS, which SwiftUI presents by a prop', () => {
     assert.equal(instance.heard(), 2, 'the sheet s own events are not the app s to hear');
   });
 
+  const detentsOf = (group: FakeFabricNode) =>
+    modifiersOf(group)['presentationDetents']?.['detents'];
+
+  for (const detents of [
+    ['medium'],
+    [{ fraction: 0.4 }, 'large'],
+    [{ height: 320 }, { fraction: 0.8 }],
+  ] as const) {
+    it(`rests at the detents it is given: ${JSON.stringify(detents)}`, async () => {
+      const { named, instance, pass } = await boot('ios');
+      instance.detents.set(detents);
+      instance.open.set(true);
+      await pass();
+      assert.deepEqual(modifiersOf(named(/ExpoUI_GroupView$/)!)['presentationDetents'], {
+        $type: 'presentationDetents',
+        detents,
+      });
+      assert.equal(named(/ExpoUI_BottomSheetView$/)!.props['fitToContents'], false);
+      const hosted = named(/ExpoUI_RNHostView$/)!;
+      assert.ok(!hosted.props['matchContents'], 'the content fills the detent');
+      assert.equal(hosted.children[0]!.props['flexGrow'], 1);
+    });
+  }
+
+  it('rests at its detents rather than fitting its content, where it is given both', async () => {
+    const { named, instance, pass } = await boot('ios');
+    instance.fit.set(true);
+    instance.detents.set(['medium']);
+    instance.open.set(true);
+    await pass();
+    const modifiers = modifiersOf(named(/ExpoUI_GroupView$/)!);
+    assert.deepEqual(modifiers['presentationDetents']?.['detents'], ['medium']);
+    assert.equal('presentationSizing' in modifiers, false);
+    assert.equal(named(/ExpoUI_BottomSheetView$/)!.props['fitToContents'], false);
+    assert.ok(!named(/ExpoUI_RNHostView$/)!.props['matchContents']);
+  });
+
+  it('follows its detents while it is open, back to half and full when they go', async () => {
+    const { named, instance, pass } = await boot('ios');
+    instance.detents.set(['medium']);
+    instance.open.set(true);
+    await pass();
+    const host = named(/ExpoUI_RNHostView$/)!.reactTag;
+
+    instance.detents.set([{ fraction: 0.3 }, 'large']);
+    await pass();
+    assert.deepEqual(detentsOf(named(/ExpoUI_GroupView$/)!), [{ fraction: 0.3 }, 'large']);
+    assert.equal(named(/ExpoUI_RNHostView$/)!.reactTag, host, 'the content stays as it is');
+
+    instance.detents.set(undefined);
+    await pass();
+    assert.deepEqual(detentsOf(named(/ExpoUI_GroupView$/)!), ['medium', 'large']);
+
+    instance.detents.set(['large']);
+    await pass();
+    assert.deepEqual(detentsOf(named(/ExpoUI_GroupView$/)!), ['large']);
+
+    instance.detents.set([]);
+    await pass();
+    assert.deepEqual(detentsOf(named(/ExpoUI_GroupView$/)!), ['medium', 'large'], 'none is unset');
+  });
+
+  it('decides between its content and its detents as it opens, not while open', async () => {
+    const { fabric, named, instance, pass } = await boot('ios');
+    const reopen = async () => {
+      instance.open.set(false);
+      await pass();
+      fabric.emit(named(/ExpoUI_BottomSheetView$/)!, 'topDismiss', {});
+      await pass();
+      instance.open.set(true);
+      await pass();
+    };
+    instance.fit.set(true);
+    instance.open.set(true);
+    await pass();
+
+    instance.detents.set(['medium']);
+    await pass();
+    assert.equal(named(/ExpoUI_BottomSheetView$/)!.props['fitToContents'], true);
+    assert.equal(detentsOf(named(/ExpoUI_GroupView$/)!), undefined, 'still sized to its content');
+    assert.equal(named(/ExpoUI_RNHostView$/)!.props['matchContents'], true);
+
+    await reopen();
+    assert.equal(named(/ExpoUI_BottomSheetView$/)!.props['fitToContents'], false);
+    assert.deepEqual(detentsOf(named(/ExpoUI_GroupView$/)!), ['medium']);
+
+    instance.detents.set(undefined);
+    await pass();
+    assert.equal(named(/ExpoUI_BottomSheetView$/)!.props['fitToContents'], false);
+    assert.deepEqual(detentsOf(named(/ExpoUI_GroupView$/)!), ['medium', 'large']);
+
+    await reopen();
+    assert.equal(named(/ExpoUI_BottomSheetView$/)!.props['fitToContents'], true, 'fitted again');
+    assert.equal(detentsOf(named(/ExpoUI_GroupView$/)!), undefined);
+  });
+
   it('shows the grabber unless told not to', async () => {
     const { named, instance, pass } = await boot('ios');
     instance.open.set(true);
@@ -545,6 +644,40 @@ describe('a bottom sheet on Android, which Compose shows while it is in the tree
     assert.equal(fitted.children[0]!.props['width'], 390);
   });
 
+  for (const fit of [false, true]) {
+    it(`takes detents and commits nothing for them, ${fit ? 'fitted' : 'at half height'}`, async () => {
+      const committed = async (detents: readonly unknown[] | undefined) => {
+        const { named, every, instance, pass } = await boot('android');
+        instance.fit.set(fit);
+        instance.detents.set(detents);
+        instance.open.set(true);
+        await pass();
+        const sheet = () => {
+          const hosted = named(/ExpoUI_RNHostView$/)!;
+          return [
+            named(/ExpoUI_HostView$/)!.props,
+            named(/ExpoUI_ModalBottomSheetView$/)!.props,
+            hosted.props,
+            hosted.children[0]!.props,
+            every(/ExpoUI_/).map((n) => n.viewName.replace(/^.*ExpoUI_/, '')),
+          ];
+        };
+        return { sheet, instance, pass };
+      };
+      const without = await committed(undefined);
+      const withDetents = await committed(['large', { fraction: 0.4 }]);
+      assert.deepEqual(withDetents.sheet(), without.sheet());
+      assert.equal(JSON.stringify(withDetents.sheet()).includes('etent'), false);
+
+      const before = JSON.stringify(withDetents.sheet());
+      withDetents.instance.detents.set(['medium']);
+      await withDetents.pass();
+      withDetents.instance.detents.set(undefined);
+      await withDetents.pass();
+      assert.equal(JSON.stringify(withDetents.sheet()), before, 'nor for a change while open');
+    });
+  }
+
   it('shows the drag handle unless told not to, under Compose s name for it', async () => {
     const { named, instance, pass } = await boot('android');
     instance.open.set(true);
@@ -581,6 +714,17 @@ describe('a bottom sheet with its options left alone', () => {
 });
 
 describe('a bottom sheet where @expo/ui is not installed', () => {
+  it('closes on iOS without the dismissal no view is there to report', async () => {
+    const { byId, instance, pass } = await boot('ios', { functions: null });
+    instance.open.set(true);
+    await pass();
+    instance.open.set(false);
+    await pass();
+    await pass();
+    assert.equal(byId('first'), undefined, 'the content does not stay in the tree');
+    assert.equal(instance.dismissed(), 1);
+  });
+
   it('has no way to hide a sheet to look for, and closes without one', async () => {
     registerPlatformComponents('android');
     registerExpoUiViews('android');

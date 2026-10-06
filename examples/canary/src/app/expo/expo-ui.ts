@@ -14,6 +14,7 @@ import {
   UiHost,
   UiLabeledContent,
   UiPicker,
+  type UiPresentationDetent,
   UiProgress,
   UiSection,
   UiSlider,
@@ -394,8 +395,15 @@ import { page } from '../screen-styles.ts';
           <pressable [style]="sheetButton" testID="sheet-fitted" (press)="openSheet(true)">
             <text [style]="sheetButtonLabel">Open, as tall as its content</text>
           </pressable>
-          <pressable [style]="sheetButton" testID="sheet-detents" (press)="openSheet(false)">
+          <pressable [style]="sheetButton" testID="sheet-half" (press)="openSheet(false)">
             <text [style]="sheetButtonLabel">Open at half height</text>
+          </pressable>
+          <pressable
+            [style]="sheetButton"
+            testID="sheet-detents"
+            (press)="openSheet(false, thirdAndFull)"
+          >
+            <text [style]="sheetButtonLabel">Open at a third, iOS only</text>
           </pressable>
           <text class="body" testID="sheet-state">
             {{ sheetOpen() ? 'Open' : 'Closed' }}, dismissed {{ sheetDismissals() }} times
@@ -403,6 +411,7 @@ import { page } from '../screen-styles.ts';
           <ui-bottom-sheet
             [(open)]="sheetOpen"
             [fitToContents]="sheetFits()"
+            [detents]="sheetDetents()"
             (dismissed)="sheetDismissals.set(sheetDismissals() + 1)"
           >
             <view [style]="sheetBody">
@@ -454,8 +463,12 @@ export class ExpoUiPage {
   };
   protected readonly sheetButtonLabel = { color: '#ffffff', fontWeight: '600' };
 
-  protected openSheet(fits: boolean): void {
+  protected readonly sheetDetents = signal<readonly UiPresentationDetent[] | undefined>(undefined);
+  protected readonly thirdAndFull: readonly UiPresentationDetent[] = [{ fraction: 0.3 }, 'large'];
+
+  protected openSheet(fits: boolean, detents?: readonly UiPresentationDetent[]): void {
     this.sheetFits.set(fits);
+    this.sheetDetents.set(detents);
     this.sheetOpen.set(true);
   }
 

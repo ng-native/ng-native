@@ -82,6 +82,7 @@ export {
   type UiModifier,
   UiBottomSheet,
   type UiBottomSheetViewFunctions,
+  type UiPresentationDetent,
   UiGroup,
 } from './expo-ui-components.ts';
 export { ExpoImage, type ExpoImageContentFit, type ExpoImageSource } from './expo-image.ts';

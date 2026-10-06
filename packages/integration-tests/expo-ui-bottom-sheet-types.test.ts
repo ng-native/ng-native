@@ -98,6 +98,27 @@ describe('a bottom sheet in a strictly checked template, through ngc', () => {
     );
   });
 
+  it('takes the detents SwiftUI has, and no other', () => {
+    assert.equal(
+      check(
+        `<ui-bottom-sheet [(open)]="open" [detents]="['medium', 'large', { fraction: 0.4 }, { height: 320 }]" />`,
+      ),
+      '',
+    );
+    assert.match(
+      check(`<ui-bottom-sheet [(open)]="open" [detents]="['small']" />`),
+      /is not assignable to type/,
+    );
+    assert.match(
+      check(`<ui-bottom-sheet [(open)]="open" [detents]="[{ fraction: '0.4' }]" />`),
+      /is not assignable to type/,
+    );
+    assert.match(
+      check(`<ui-bottom-sheet [(open)]="open" detents="medium" />`),
+      /is not assignable to type/,
+    );
+  });
+
   it('refuses an input the component does not have', () => {
     assert.match(
       check('<ui-bottom-sheet [(open)]="open" [isPresented]="true" />'),

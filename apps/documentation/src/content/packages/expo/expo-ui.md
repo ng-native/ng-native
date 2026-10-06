@@ -398,11 +398,20 @@ room where it is written, and can be written anywhere in a template: the sheet c
 whichever view it is inside.
 
 - **`open`** - whether the sheet is on screen. Setting it true presents the sheet and setting it
-  false dismisses it. A swipe down, a tap outside the sheet and Android's back button dismiss it
-  too, and write false back, so bind it both ways: `[(open)]`.
+  false dismisses it. A swipe down dismisses it too, as do a tap outside the sheet and the back
+  button on Android, and each writes false back, so bind it both ways: `[(open)]`.
 - **`fitToContents`** - the sheet is as tall as its content. Without it the sheet rests at half
-  the screen's height and drags up to all of it. It is read as the sheet opens, so a change while
-  the sheet is open applies the next time.
+  the screen's height and drags up to all of it. Whether a sheet is sized to its content is read as
+  it opens, so a change to this while the sheet is open applies the next time.
+- **`detents`** - the heights the sheet rests at, **on iOS only**: a list of
+  `UiPresentationDetent`s, each `'medium'` (about half the screen), `'large'` (all of it),
+  `{ fraction: 0.4 }` (a fraction of the screen's height, from 0 to 1) or `{ height: 320 }`
+  (points). They are SwiftUI's
+  `presentationDetents`, named and shaped as `@expo/ui`'s. The sheet opens at the first and drags
+  between them, and a change while it is open is followed. On iOS a sheet given detents rests at
+  them rather than at the height of its content, whatever `fitToContents` says. Android takes no
+  notice of `detents`: Compose's sheet has a half and a full height and no others, so there the
+  sheet opens as `fitToContents` alone says. None, or an empty list, is the sheet without them.
 - **`showDragIndicator`** - whether the grabber shows at the top of the sheet. It does unless this
   is false.
 - **`dismissed`** - the sheet has finished closing, whether the user dismissed it or `open` was set

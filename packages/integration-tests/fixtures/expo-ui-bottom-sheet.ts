@@ -1,5 +1,5 @@
 import { Component, input, signal } from '@angular/core';
-import { UiBottomSheet } from '../../expo/src/expo-ui-components.ts';
+import { UiBottomSheet, type UiPresentationDetent } from '../../expo/src/expo-ui-components.ts';
 
 // The class as this file's templates have it, for a test to provide its `SOURCE`.
 export { UiBottomSheet };
@@ -25,6 +25,7 @@ export class SheetRow {
       <ui-bottom-sheet
         [(open)]="open"
         [fitToContents]="fit()"
+        [detents]="detents()"
         [showDragIndicator]="grabber()"
         (dismissed)="dismissed.set(dismissed() + 1)"
       >
@@ -38,6 +39,7 @@ export class ExpoUiBottomSheetFixture {
   readonly open = signal(false);
   readonly fit = signal(false);
   readonly grabber = signal(true);
+  readonly detents = signal<readonly UiPresentationDetent[] | undefined>(undefined);
   readonly second = signal('Two');
   readonly dismissed = signal(0);
   /** The sheet's native events, as a listener around it hears them. */

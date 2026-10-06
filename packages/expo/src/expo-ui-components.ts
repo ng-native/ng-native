@@ -1121,6 +1121,16 @@ export class UiGroup {
   readonly modifiers = input<readonly UiModifier[]>();
 }
 
+/**
+ * A height a SwiftUI sheet rests at, as `@expo/ui`'s `PresentationDetent`: about half the screen,
+ * all of it, a fraction of it from 0 to 1, or a height in points.
+ */
+export type UiPresentationDetent =
+  'medium' | 'large' | { readonly fraction: number } | { readonly height: number };
+
+/** The detents of a sheet given none and not sized to its content. */
+const HALF_AND_FULL: readonly UiPresentationDetent[] = ['medium', 'large'];
+
 /** The functions `@expo/ui` defines on Compose's sheet, called with the view's tag as `this`. */
 export interface UiBottomSheetViewFunctions {
   /** Slides the sheet away, answering once it has gone. */
@@ -1203,7 +1213,10 @@ function windowWidth(): Signal<number | undefined> {
   host: { '[style.position]': '"absolute"' },
 })
 export class UiBottomSheet {
-  /** Overridden in a test to hide a sheet without a device. */
+  /**
+   * The functions of Compose's sheet, none of them on iOS, or null where `@expo/ui` is not in the
+   * build and there is no sheet. Overridden in a test to hide a sheet without a device.
+   */
   static readonly SOURCE = new InjectionToken<UiBottomSheetViewFunctions | null>(
     'angular-native.bottomSheetSource',
     {
@@ -1213,7 +1226,7 @@ export class UiBottomSheet {
           const module = core.requireOptionalNativeModule<{
             ViewPrototypes?: Record<string, UiBottomSheetViewFunctions>;
           }>('ExpoUI');
-          return module?.ViewPrototypes?.['ExpoUI_ModalBottomSheetView'] ?? null;
+          return module ? (module.ViewPrototypes?.['ExpoUI_ModalBottomSheetView'] ?? {}) : null;
         }),
     },
   );
@@ -1232,6 +1245,13 @@ export class UiBottomSheet {
    * and drags up to all of it. Read as the sheet opens.
    */
   readonly fitToContents = input(false, { transform: booleanAttribute });
+  /**
+   * The heights the sheet rests at, iOS only: SwiftUI's `presentationDetents`. Compose's sheet has
+   * a half and a full height and no others, so Android takes no notice of this. On iOS a sheet
+   * given detents rests at them rather than at the height of its content, whatever `fitToContents`
+   * says, as `@expo/ui`'s own sheets do. None, or an empty list, is the sheet without them.
+   */
+  readonly detents = input<readonly UiPresentationDetent[]>();
   /** Whether the grabber shows at the top of the sheet. */
   readonly showDragIndicator = input(true, { transform: booleanAttribute });
   /**
@@ -1253,17 +1273,26 @@ export class UiBottomSheet {
     computation: (open, previous) => open || (previous?.value ?? false),
   });
 
-  /** `fitToContents` as the sheet opened: a view host takes its sizing once, as it mounts. */
+  /**
+   * Whether the sheet is sized to its content, as it opened: a view host takes its sizing once,
+   * as it mounts. SwiftUI's sheet is not where it has detents to rest at.
+   */
   protected readonly fits = computed(() => {
     this.mounted();
-    return untracked(this.fitToContents);
+    return untracked(() => this.fitToContents() && !(this.swiftUI && this.detents()?.length));
   });
 
-  /** SwiftUI reads how a sheet is presented from modifiers on its content, not from props. */
+  /**
+   * SwiftUI reads how a sheet is presented from modifiers on its content, not from props. The
+   * detents of a sheet not sized to its content are followed while it is open.
+   */
   protected readonly presentation = computed<readonly UiModifier[]>(() => [
     this.fits()
       ? { $type: 'presentationSizing', sizing: 'fitted' }
-      : { $type: 'presentationDetents', detents: ['medium', 'large'] },
+      : {
+          $type: 'presentationDetents',
+          detents: this.detents()?.length ? this.detents() : HALF_AND_FULL,
+        },
     {
       $type: 'presentationDragIndicator',
       visibility: this.showDragIndicator() ? 'visible' : 'hidden',
@@ -1329,6 +1358,8 @@ export class UiBottomSheet {
    */
   private close(): void {
     if (!this.mounted()) return;
+    // No `@expo/ui` in the build: no sheet is there to slide away, or to say that it has.
+    if (!this.functions) return this.finish();
     this.closing = true;
     if (this.swiftUI || this.hiding) return;
     const node = this.sheet()?.nativeElement;
