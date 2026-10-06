@@ -996,6 +996,8 @@ function hiddenOutOfFlow(props: Record<string, unknown>): void {
  */
 function percentHeight(node: EngineNode, props: Record<string, unknown>): void {
   if (!isPercent(props['height'])) return;
+  // Out of the flow, it is of the box that holds it, which is laid out first and has a height.
+  if (props['position'] === 'absolute') return;
   const parent = layoutParent(node);
   if (parent && !definiteHeight(parent)) delete props['height'];
 }
