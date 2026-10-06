@@ -63,7 +63,14 @@ export type FabricNode = { readonly __fabricNode: unique symbol } | object;
 
 /** Where a node is, in the window's coordinates. What `Engine.measure` reports. */
 import type { HostEngine, HostNode, Settling } from './host.ts';
-import { clockChannels, firstFrame, rangeOf, scrollChannels } from './scroll-animation.ts';
+import {
+  clockChannels,
+  firstFrame,
+  movesByShare,
+  rangeOf,
+  scrollChannels,
+  sharesAsPoints,
+} from './scroll-animation.ts';
 import { FontFaces } from './font-faces.ts';
 import { premultipliedStops } from './premultiplied-stops.ts';
 
@@ -3380,6 +3387,7 @@ export class Engine implements HostEngine {
     }
 
     this.flushTransitionEvents();
+    this.playSized();
     this.scrollDriver?.afterCommit();
     // Read first: the commit that settles keyframes starts by clearing it.
     const facesAdded = this.facesAdded;
@@ -3881,14 +3889,68 @@ export class Engine implements HostEngine {
    * runs it frame by frame, and JavaScript hears of it again when it ends. Anything else is
    * played from here, a commit a frame. See `NativeScrollDriver.play`.
    */
+  /**
+   * The nodes whose animation moves them by a share of their own size and had no size yet when
+   * it started, each with the style it rests at: asked again once the commit has laid them out.
+   */
+  private readonly unsized = new Map<EngineNode, Record<string, unknown>>();
+
+  /**
+   * An animation's frames as native can interpolate them: a move by a share of the box,
+   * `translateX(200%)`, as the points that is of the size the view is laid out at. Nothing where
+   * the view has no size yet, which is every view until its first commit: it is played from
+   * JavaScript, and handed over once that commit has laid it out. See `playSized`.
+   *
+   * ponytail: the size it had when it started. A box that changes size goes on moving by the
+   * points of the old one until the animation starts again; restart it from the box's layout
+   * event if a bar that resizes mid-animation comes up.
+   */
+  private sized(
+    node: EngineNode,
+    running: RunningAnimation,
+    props: Record<string, unknown>,
+  ): { tracks: RunningAnimation['tracks']; resting: Record<string, unknown> } | null {
+    // One that waits, or takes no time, is played from here whatever it moves by.
+    if (running.spec.delay !== 0 || running.spec.duration <= 0) return null;
+    if (!movesByShare(running.tracks, props)) return { tracks: running.tracks, resting: props };
+    let size: { width: number; height: number } | undefined;
+    this.measure(node, (frame) => (size = frame));
+    if (size) return sharesAsPoints(running.tracks, props, size);
+    this.unsized.set(node, props);
+    return null;
+  }
+
+  /**
+   * Hand to native each animation that was waiting for its view to have a size. The commit just
+   * made painted its first frame, so its clock starts here: no frame of it has been seen move.
+   */
+  private playSized(): void {
+    if (!this.unsized.size) return;
+    const waiting = [...this.unsized];
+    this.unsized.clear();
+    for (const [node, props] of waiting) {
+      const running = node.playing;
+      if (!running || running.done || running.native || !this.playing.has(node)) continue;
+      running.start = this.now();
+      if (this.playNatively(node, running, props)) {
+        this.playing.delete(node);
+        // `collapsable`, which keeps a view for native to move, is in what it holds now.
+        this.markProps(node, false);
+      }
+    }
+    // One with no size after its commit is not laid out at all, and is played from JavaScript.
+    this.unsized.clear();
+  }
+
   private playNatively(
     node: EngineNode,
     running: RunningAnimation,
     props: Record<string, unknown>,
   ): boolean {
     const { spec } = running;
-    if (!this.scrollDriver || spec.delay !== 0 || spec.duration <= 0) return false;
-    const { channels, held, span } = clockChannels(running.tracks, spec, props);
+    const sized = this.scrollDriver ? this.sized(node, running, props) : null;
+    if (!this.scrollDriver || !sized) return false;
+    const { channels, held, span } = clockChannels(sized.tracks, spec, sized.resting);
     if (held.length || !(channels.opacity || channels.transform.length)) return false;
     // There and back is one native animation: an odd number of ways has no whole number of them.
     const count = spec.iterations === null ? -1 : spec.iterations / span;

@@ -185,6 +185,67 @@ const RADIANS: Record<string, number> = {
   turn: 2 * Math.PI,
 };
 
+/** The side of a box each move by a share is a share of. */
+const SHARED: Readonly<Record<string, 'width' | 'height'>> = {
+  translateX: 'width',
+  translateY: 'height',
+};
+
+const isShare = (value: unknown): value is string =>
+  typeof value === 'string' && value.endsWith('%');
+
+const sharesIn = (value: unknown): boolean =>
+  Array.isArray(value) &&
+  value.some((entry) =>
+    Object.entries(entry as object).some(([key, to]) => key in SHARED && isShare(to)),
+  );
+
+/** Whether an animation moves a box by a share of its own size, in a frame or at rest. */
+export function movesByShare(
+  tracks: ReadonlyMap<string, Track>,
+  resting: Readonly<Record<string, unknown>>,
+): boolean {
+  return GROUPS.some(
+    (group) =>
+      sharesIn(resting[group]) ||
+      tracks.get(group)?.some((point) => sharesIn(point.value)) === true,
+  );
+}
+
+/** A transform list with each move by a share as the points it is of a box of `size`. */
+function inPoints(value: unknown, size: { width: number; height: number }): unknown {
+  if (!sharesIn(value)) return value;
+  return (value as Record<string, unknown>[]).map((entry) => {
+    const [key, to] = Object.entries(entry)[0]!;
+    const side = SHARED[key];
+    return side && isShare(to) ? { [key]: (size[side] * Number.parseFloat(to)) / 100 } : entry;
+  });
+}
+
+/**
+ * An animation's tracks and resting style with every move by a share of the box as points, which
+ * is what native interpolates: `translateX(200%)` of a box 300 wide is 600.
+ */
+export function sharesAsPoints<T extends Track>(
+  tracks: ReadonlyMap<string, T>,
+  resting: Readonly<Record<string, unknown>>,
+  size: { width: number; height: number },
+): { tracks: Map<string, T>; resting: Record<string, unknown> } {
+  const sized = new Map(tracks);
+  const rest = { ...resting };
+  for (const group of GROUPS) {
+    const track = tracks.get(group);
+    if (track) {
+      sized.set(
+        group,
+        track.map((point) => ({ ...point, value: inPoints(point.value, size) })) as never,
+      );
+    }
+    if (group in rest) rest[group] = inPoints(rest[group], size);
+  }
+  return { tracks: sized, resting: rest };
+}
+
 /**
  * A transform entry's amount as native's transform node takes it: points, a factor, or an angle
  * in radians. Null for what it cannot take, a percentage translate.
