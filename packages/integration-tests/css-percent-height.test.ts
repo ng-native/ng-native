@@ -68,9 +68,15 @@ describe('a percentage height', () => {
     assert.equal('height' in scene(`.p { flex: 1 } ${FULL}`).props(), false);
   });
 
-  it('is kept under a parent stretched across a row', () => {
-    const css = `.g { flex-direction: row } ${FULL}`;
+  it('is kept under a parent stretched across a row that has a height', () => {
+    const css = `.g { flex-direction: row; height: 200px } ${FULL}`;
     assert.equal(scene(css).props()['height'], '100%');
+  });
+
+  it('is no height under a parent stretched across a row as tall as its content', () => {
+    // A tab group's body: Yoga makes it the 800 of the screen, where Chrome makes it the 20 of
+    // the content that sized the row.
+    assert.equal('height' in scene(`.g { flex-direction: row } ${FULL}`).props(), false);
   });
 
   it('is no height under a parent a row does not stretch', () => {
