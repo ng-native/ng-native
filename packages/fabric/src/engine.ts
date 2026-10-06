@@ -1451,7 +1451,9 @@ function aligningText(node: EngineNode): boolean {
     return false;
   }
   if (node.children.length !== 1 || !oneRun(node.children[0]!)) return false;
-  if (isTextElement(node.parent) || ownLayout(node, 'display') !== 'flex') return false;
+  // Under a text element it is a span of that paragraph, unless that one is a view placing it.
+  if (isTextElement(node.parent) && !aligningText(node.parent as EngineNode)) return false;
+  if (ownLayout(node, 'display') !== 'flex') return false;
   return (
     ALIGNS.has(ownLayout(node, 'alignItems') as string) ||
     ALIGNS.has(ownLayout(node, 'justifyContent') as string)
