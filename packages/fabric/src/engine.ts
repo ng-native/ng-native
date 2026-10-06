@@ -2841,6 +2841,7 @@ export class Engine implements HostEngine {
     if (node.hostSheet === sheet) return;
     node.hostSheet = sheet;
     this.styles.noteSheet(sheet);
+    this.watchStructure(sheet);
     this.watchActive(sheet);
     this.markProps(node);
   }
