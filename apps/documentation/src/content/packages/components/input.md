@@ -87,6 +87,10 @@ default centres it, so there a multiline field commits `textAlignVertical: 'top'
 `textAlignVertical` input or a CSS `vertical-align` says otherwise. Both are Android-only: iOS
 always starts a multiline field at the top and centres a single-line one.
 
+`rows` on a multiline field with a `line-height` and no height of its own is its height: that many
+lines, with its padding and border, as a browser sizes a `<textarea rows="3">`. A height written
+for the field wins, and a single-line field ignores `rows`.
+
 `<text-input>` exposes `focus()`, `blur()`, `clear()`, `setSelection(start, end?)` and
 `isFocused()` as methods, reachable through a template reference or `nativeRef`. `(changeText)`
 carries just the new string, matching React Native's `onChangeText`; `(change)`, `(focus)`,
