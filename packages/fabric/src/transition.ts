@@ -375,6 +375,21 @@ function operation(entry: unknown): string | null {
 }
 
 /**
+ * Two lists as lists of one length: the shorter with the operations the longer goes on to, each
+ * at rest, which is how CSS blends `translateY(4px)` into `translateY(8px) scale(0.5)`. Where the
+ * two start differently the caller finds nothing between them.
+ */
+function sameLength(
+  a: readonly unknown[],
+  b: readonly unknown[],
+): [readonly unknown[], readonly unknown[]] {
+  if (a.length === b.length) return [a, b];
+  const [short, long] = a.length < b.length ? [a, b] : [b, a];
+  const padded = [...short, ...atRest(long.slice(short.length))];
+  return a.length < b.length ? [padded, b] : [a, padded];
+}
+
+/**
  * Two transform lists blended operation by operation.
  *
  * Matched by position *and* name: blending a translate into a scale would mean decomposing a
@@ -389,9 +404,10 @@ function interpolateTransform(from: unknown, to: unknown, t: number): unknown[] 
   const shape = hasOperations(to) ? to : hasOperations(from) ? from : null;
   if (!shape) return null;
 
-  const start = hasOperations(from) ? from : atRest(shape);
-  const end = hasOperations(to) ? to : atRest(shape);
-  if (start.length !== end.length) return null;
+  const [start, end] = sameLength(
+    hasOperations(from) ? from : atRest(shape),
+    hasOperations(to) ? to : atRest(shape),
+  );
 
   const out: unknown[] = [];
   for (let i = 0; i < end.length; i++) {
