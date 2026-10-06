@@ -60,3 +60,31 @@ describe('a var() that falls back to a calc() of a unit the device settles', () 
     assert.equal(s.props()['marginTop'], 24);
   });
 });
+
+describe('a side of a shorthand that is a calc() of more than one step around a var()', () => {
+  // A stepper's header: `padding: calc((var(--header-height, 72px) - 24px) / 2) 24px`, which
+  // is half of what its height leaves over a line. The longhand takes the same sum.
+  const CSS = '.a { padding: calc((var(--h, 72px) - 24px) / 2) 24px } .short { --h: 56px }';
+
+  it('is worked out from the fallback where nothing sets the token', () => {
+    const s = scene(CSS);
+    const { paddingTop, paddingBottom, paddingLeft, paddingRight } = s.props();
+    assert.deepEqual([paddingTop, paddingRight, paddingBottom, paddingLeft], [24, 24, 24, 24]);
+    assert.deepEqual(s.reports, []);
+  });
+
+  it('follows the token being set and unset', () => {
+    const s = scene(CSS);
+    s.engine.setClasses(s.node, 'a short');
+    assert.equal(s.props()['paddingTop'], 16);
+    assert.equal(s.props()['paddingLeft'], 24);
+    s.engine.setClasses(s.node, 'a');
+    assert.equal(s.props()['paddingBottom'], 24);
+  });
+
+  it('is the same in a pair, and beside a plain var()', () => {
+    const s = scene('.a { --w: 8px; margin: calc((var(--h, 40px) + 4px) * 2) var(--w) }');
+    const { marginTop, marginBottom, marginLeft } = s.props();
+    assert.deepEqual([marginTop, marginBottom, marginLeft], [88, 88, 8]);
+  });
+});
