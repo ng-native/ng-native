@@ -1426,11 +1426,13 @@ function isTextElement(node: ViewNameNode | null): boolean {
   return !TEXT_ELEMENTS.has(node.name) || holdsOnlyText(node);
 }
 
+/** Whether a text element holds text and nothing else. One that holds nothing holds no text. */
 function holdsOnlyText(node: ViewNameNode): boolean {
-  for (const child of node.children ?? []) {
+  const children = node.children ?? [];
+  for (const child of children) {
     if (child.kind === 'element' && !isTextElement(child)) return false;
   }
-  return true;
+  return children.length > 0;
 }
 
 const ALIGNS = new Set(['center', 'flex-end', 'space-around', 'space-evenly']);
