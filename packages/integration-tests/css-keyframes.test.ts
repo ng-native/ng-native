@@ -817,3 +817,51 @@ describe("a keyframe's own timing function", () => {
     assert.equal(Math.round(width()), 50, 'halfway down the linear stretch');
   });
 });
+
+describe('an animation none of whose frames says anything', () => {
+  // A keyframe whose only declaration was refused at build time, as one with a `var()` in it is.
+  const EMPTY = '@keyframes idle { from { transform: translateX(var(--x)) } }';
+
+  function idle(animation: string) {
+    let now = 1000;
+    const fabric = createFakeFabric();
+    const sheet = compileCss(`${EMPTY} .a { animation: ${animation} }`, 'app.css', {
+      onUnsupported: () => {},
+    });
+    const engine = new Engine(fabric, 1, { globalStyles: sheet as never, now: () => now });
+    const view = engine.createElement('view');
+    engine.setClasses(view, 'a');
+    engine.appendChild(engine.root, view);
+    const events: string[] = [];
+    for (const name of ['topAnimationstart', 'topAnimationend']) {
+      engine.setEventListener(view, name, () => void events.push(name.slice(3).toLowerCase()));
+    }
+    engine.commit();
+    const frame = (ms: number) => {
+      now += ms;
+      engine.advanceAnimations();
+      engine.commit();
+    };
+    return { engine, fabric, events, frame };
+  }
+
+  it('commits no frame of it, and is over with at once where it never ends', () => {
+    const s = idle('idle 250ms linear infinite');
+    assert.deepEqual(s.events, ['animationstart']);
+    const commits = s.fabric.calls.completeRoot;
+    for (let i = 0; i < 5; i++) s.frame(16);
+    assert.equal(s.fabric.calls.completeRoot, commits);
+    assert.equal(s.engine.animating, false, 'nothing left for a frame loop to run for');
+  });
+
+  it('still ends when its time is up, having committed nothing on the way', () => {
+    const s = idle('idle 100ms linear');
+    const commits = s.fabric.calls.completeRoot;
+    s.frame(50);
+    assert.equal(s.engine.animating, true);
+    assert.equal(s.fabric.calls.completeRoot, commits);
+    s.frame(60);
+    assert.deepEqual(s.events, ['animationstart', 'animationend']);
+    assert.equal(s.engine.animating, false);
+  });
+});
