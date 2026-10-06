@@ -54,6 +54,28 @@ describe('HTML elements in a template', () => {
     return fabric.committed[0]!;
   };
 
+  it('draws a text element with nothing in it as a view, which is a box a stylesheet draws', () => {
+    // `<span class="dot"></span>`: a paragraph with no text is no box to size or paint.
+    const dot = el('span');
+    assert.deepEqual(shape(commit(dot)), 'View');
+    const now = () => {
+      engine.commit();
+      return shape(fabric.committed[0]!);
+    };
+    // Given text it is a paragraph, and a view again once the text goes.
+    const text = engine.createText('Hello');
+    engine.appendChild(dot, text);
+    assert.deepEqual(now(), { Paragraph: ['"Hello"'] });
+    engine.removeChild(dot, text);
+    assert.deepEqual(now(), 'View');
+  });
+
+  it('draws an empty text element among text as a box beside it, not as a span of it', () => {
+    assert.deepEqual(shape(commit(el('p', 'a', el('span'), 'b'))), {
+      View: [{ Paragraph: ['"a"'] }, 'View', { Paragraph: ['"b"'] }],
+    });
+  });
+
   it('draws a text element that holds only text as a paragraph', () => {
     assert.deepEqual(shape(commit(el('p', 'Hello'))), { Paragraph: ['"Hello"'] });
     assert.deepEqual(errors, []);
