@@ -85,7 +85,7 @@ const PUBLISHED = [
  */
 const caches = mkdtempSync(path.join(tmpdir(), 'angular-native-caches-'));
 
-const run = (cmd, args, cwd, quiet = true) =>
+const run = (cmd, args, cwd, quiet = true, env = {}) =>
   execFileSync(cmd, args, {
     cwd,
     encoding: 'utf8',
@@ -102,6 +102,7 @@ const run = (cmd, args, cwd, quiet = true) =>
       TMPDIR: caches,
       // Off, as it is on CI already: a daemon outlives the workspace it was started in.
       NX_DAEMON: 'false',
+      ...env,
     },
   });
 
@@ -328,8 +329,15 @@ async function nxWorkspace(
     dir,
     // Not quiet: this and the two below are installs of minutes, and the log should show them.
     false,
+    // create-nx-workspace 23.2.1 allows only nx's build script in the pnpm-workspace.yaml a preset
+    // writes, and pnpm 11 fails an install over any other: ERR_PNPM_IGNORED_BUILDS, for the
+    // esbuild and lmdb Angular brings. That is Nx's to fix, and it would stop this before
+    // `nx add @ng-native/nx`, which is what is checked here.
+    { pnpm_config_strict_dep_builds: 'false' },
   );
   const workspace = path.join(dir, 'monorepo');
+  // What pnpm tells someone stopped by that to run, and every later install fails without it.
+  if (pm === 'pnpm') run('pnpm', ['approve-builds', '--all'], workspace);
   writeFileSync(path.join(workspace, '.npmrc'), `registry=${REGISTRY}\n`);
   run('npx', ['nx', 'add', '@ng-native/nx@local'], workspace, false);
   run('npx', ['nx', 'g', '@ng-native/nx:app', 'apps/mobile', '--no-interactive'], workspace, false);
