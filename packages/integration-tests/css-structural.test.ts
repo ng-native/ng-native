@@ -437,6 +437,42 @@ describe('what a child list changing has styled again', () => {
     assert.equal(s.parent.styleDirty, true, 'and its first has come');
   });
 
+  it('styles what comes after a box again when what the box holds changes a :has() beside it', () => {
+    const css =
+      '.box:has(> .active) + .spacer { border-top-width: 3px } .row:last-child { opacity: 1 }';
+    const fabric = createFakeFabric();
+    const engine = new Engine(fabric, 1, { globalStyles: compileCss(css, 'app.css') as never });
+    const make = (classes: string, parent = engine.root) => {
+      const node = engine.createElement('view');
+      engine.setClasses(node, classes);
+      engine.appendChild(parent, node);
+      return node;
+    };
+    const box = make('box');
+    make('spacer');
+    make('row', box);
+    const spacer = () => {
+      engine.commit();
+      return fabric.committed[1]!.props['borderTopWidth'] ?? 0;
+    };
+    assert.equal(spacer(), 0);
+    const active = make('active', box);
+    assert.equal(spacer(), 3, 'the box is not empty before or after, and what follows it changed');
+    engine.removeChild(box, active);
+    assert.equal(spacer(), 0);
+  });
+
+  it('is every row for a host whose own sheet counts, given while it was out of the tree', () => {
+    const s = list(ENDS);
+    const host = s.row();
+    s.engine.setHostSheet(
+      host,
+      compileCss(':host(:nth-child(2)) { opacity: 0.5 }', 'host') as never,
+    );
+    s.engine.insertBefore(s.parent, host, s.parent.children[0]!);
+    assert.equal(s.marked(), 'xxxxxx');
+  });
+
   it('follows a row leaving either end, and one put in the middle', () => {
     const s = list(ENDS);
     s.engine.removeChild(s.parent, s.rows[4]!);
