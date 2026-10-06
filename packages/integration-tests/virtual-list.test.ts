@@ -197,8 +197,16 @@ describe('windowed list, recycled by slot', () => {
     // back to its new end and bring rows in.)
     rows.set(rows().slice(0, 911));
     await settle();
-    const hidden = flatten(fabric.committed).filter((n) => n.props['display'] === 'none');
+    // Kept as views, to be used again: out of the flow, unseen and untouched, which a screen
+    // reader passes over as it does anything with no opacity. Not
+    // `display: none`, which is no view at all.
+    const hidden = flatten(fabric.committed).filter((n) => n.props['opacity'] === 0);
     assert.ok(hidden.length > 0, 'the slots that left are kept, out of sight');
+    for (const slot of hidden) {
+      assert.equal(slot.props['position'], 'absolute');
+      assert.equal(slot.props['pointerEvents'], 'none');
+      assert.notEqual(slot.props['display'], 'none');
+    }
 
     const created = fabric.calls.createNode;
     rows.set(Array.from({ length: 1000 }, (_, i) => ({ id: i, label: `row ${i}` })));

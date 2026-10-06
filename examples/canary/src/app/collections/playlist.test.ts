@@ -27,7 +27,8 @@ function shown(fabric: FakeFabric): { key: string; tag: number; text: string }[]
   const rows: { key: string; tag: number; text: string }[] = [];
   const walk = (nodes: readonly FakeFabricNode[]) => {
     for (const node of nodes) {
-      if (node.props['display'] === 'none') continue;
+      // A row the list has parked for reuse: a view kept, out of the flow and unseen.
+      if (node.props['opacity'] === 0 && node.props['pointerEvents'] === 'none') continue;
       const id = node.props['nativeID'];
       if (typeof id === 'string' && id.startsWith('row-k')) {
         rows.push({ key: id.slice(4), tag: node.reactTag, text: textOf(node) });

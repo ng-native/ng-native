@@ -50,7 +50,8 @@ describe('media queries', () => {
   it('shows a hidden element again at a breakpoint that asks for display: block', async () => {
     // Bootstrap's .d-none .d-md-block. Refusing block left the element hidden at every width.
     await boot({ width: 320, height: 640 });
-    assert.equal(byId('toggle').props['display'], 'none');
+    // Not displayed, which is no view to find.
+    assert.equal(queries.queryByTestId('toggle', { includeHiddenElements: true }), null);
 
     await boot({ width: 800, height: 640 });
     assert.equal(byId('toggle').props['display'], 'flex');

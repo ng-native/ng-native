@@ -295,9 +295,11 @@ describe('running a transition', () => {
     engine.commit();
 
     const painted = (prop: string) =>
-      engine.tagOf(view) !== null ? flatten(fabric.committed)[0]!.props[prop] : undefined;
+      engine.tagOf(view) !== null ? flatten(fabric.committed)[0]?.props[prop] : undefined;
+    const views = () => flatten(fabric.committed).length;
 
     return {
+      views,
       engine,
       view,
       painted,
@@ -354,9 +356,12 @@ describe('running a transition', () => {
       view.gone { display: none; flex-direction: column; }
     `);
     s.classes('gone');
-    assert.equal(s.painted('display'), 'none');
-    assert.equal(s.painted('flexDirection'), 'column');
+    // Not displayed is no view at all, at once.
+    assert.equal(s.painted('display'), undefined);
+    assert.equal(s.views(), 0);
     assert.equal(s.engine.animating, false);
+    s.classes('');
+    assert.equal(s.painted('flexDirection'), 'row', 'and back as it was, at once');
   });
 
   it('transitions every side a shorthand names', () => {

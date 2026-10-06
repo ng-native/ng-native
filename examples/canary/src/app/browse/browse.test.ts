@@ -22,7 +22,10 @@ const flatten = (nodes: readonly FakeFabricNode[]): FakeFabricNode[] =>
 
 const visible = (nodes: readonly FakeFabricNode[]): FakeFabricNode[] =>
   nodes.flatMap((node) =>
-    node.props['display'] === 'none' ? [] : [node, ...visible(node.children)],
+    // A row the list has parked for reuse is a view kept, out of the flow and unseen.
+    node.props['opacity'] === 0 && node.props['pointerEvents'] === 'none'
+      ? []
+      : [node, ...visible(node.children)],
   );
 
 const scrollViews = (fabric: FakeFabric) =>

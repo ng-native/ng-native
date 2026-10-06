@@ -30,7 +30,11 @@ function tree(css: string, parent: string[] = [], dev = false) {
   engine.appendChild(outer, node);
   engine.appendChild(engine.root, outer);
   engine.commit();
-  const display = () => fabric.committed[0]!.children[0]!.props['display'];
+  // An element that is not displayed has no view: that is what `none` is here.
+  const display = () => {
+    const view = fabric.committed[0]!.children[0];
+    return view ? view.props['display'] : 'none';
+  };
   return { engine, outer, node, display, warnings };
 }
 
