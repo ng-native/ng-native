@@ -1227,6 +1227,30 @@ function packageOf(filename, root = process.cwd()) {
   return name === null ? null : { name, file: path.relative(directory, absolute) };
 }
 
+/**
+ * Whether a file is one of the framework's own, built from source beside the app: a published
+ * `@ng-native/*` package that is not installed, as each is in a workspace that links them. Such
+ * a file carries no hot update, and an edit to one reloads. Patched like an app's own, every
+ * function of the engine would be called through the function that stays, thousands of times a
+ * commit, and a development build would measure the patching and not the engine.
+ */
+const FRAMEWORKS = new Map();
+
+function isFrameworks(filename, root = process.cwd()) {
+  if (INSTALLED.test(filename)) return false;
+  const directory = projectRoot(path.resolve(root, filename));
+  if (FRAMEWORKS.has(directory)) return FRAMEWORKS.get(directory);
+  let own = false;
+  try {
+    const manifest = JSON.parse(readFileSync(path.join(directory, 'package.json'), 'utf8'));
+    own = String(manifest.name).startsWith('@ng-native/') && manifest.private !== true;
+  } catch {
+    // No manifest, or not JSON: nobody's package, and so not the framework's.
+  }
+  FRAMEWORKS.set(directory, own);
+  return own;
+}
+
 /** The `name` in a directory's `package.json`, read once per directory, or null without one. */
 const MANIFEST_NAMES = new Map();
 
@@ -1447,7 +1471,7 @@ const COUNTS_ITSELF =
 
 /** What a development build adds around a compiled file: before its classes, and after. */
 function hotParts(src, filename, components, resources, options, warn) {
-  if (!options.dev) return { quiet: '', hmr: '' };
+  if (!options.dev || isFrameworks(filename, options.projectRoot)) return { quiet: '', hmr: '' };
   const block = hmrBlock(src, filename, components, resources, options, warn);
   return {
     quiet: block ? collisionQuiet(filename, components) : '',
@@ -1460,7 +1484,11 @@ function hotParts(src, filename, components, resources, options, warn) {
  * handed to the modules that call it, where the edit used to reload the app. See `PATCH`.
  */
 function functionsBlock(src, filename, options) {
-  const hot = options.dev && options.platform !== 'web' && isAppModule(filename);
+  const hot =
+    options.dev &&
+    options.platform !== 'web' &&
+    isAppModule(filename) &&
+    !isFrameworks(filename, options.projectRoot);
   return hot ? hmrBlock(src, filename, [], null, options) || COUNTS_ITSELF : '';
 }
 
