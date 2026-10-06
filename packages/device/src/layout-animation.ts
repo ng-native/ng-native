@@ -110,6 +110,10 @@ export class LayoutAnimation {
     try {
       change();
       this.detectChanges();
+    } catch (error) {
+      // Nothing was changed, so nothing is to be animated, not even a commit made in this turn.
+      withdraw();
+      throw error;
     } finally {
       // Called from inside a pass, the commit is that pass's own, which ends before any microtask.
       queueMicrotask(() => {

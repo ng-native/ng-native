@@ -28,6 +28,8 @@ interface Scene {
   /** A frame arrives: every callback waiting on one runs. */
   frame(): void;
   frames: unknown[];
+  /** A change-detection pass, run now. */
+  pass(): void;
 }
 
 const settle = (ms = 0) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -81,7 +83,13 @@ describe('the commit a layout animation lands on', () => {
       const frame = () => {
         for (const callback of frames.splice(0)) callback(Date.now());
       };
-      await run({ instance: app.componentRef.instance as Fixture, order, frame, frames });
+      await run({
+        instance: app.componentRef.instance as Fixture,
+        order,
+        frame,
+        frames,
+        pass: () => app.applicationRef.tick(),
+      });
     } finally {
       app.applicationRef.destroy();
       if (real === undefined) delete scope.requestAnimationFrame;
@@ -119,6 +127,21 @@ describe('the commit a layout animation lands on', () => {
 
       assert.ok(order.includes('commit, bar 300'), 'the later change commits');
       assert.ok(!order.includes('configure'), `nothing was configured: ${order.join(' | ')}`);
+    });
+  });
+
+  it('is no commit at all when the change throws, however soon the next one comes', async () => {
+    await scene(async ({ instance, order, pass }) => {
+      order.length = 0;
+      const failed = instance.toggle(() => {
+        throw new Error('no change');
+      });
+      // In the same turn, before anything queued can run.
+      instance.wide.set(true);
+      pass();
+
+      await assert.rejects(failed, /no change/);
+      assert.deepEqual(order, ['commit, bar 300']);
     });
   });
 
