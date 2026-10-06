@@ -666,7 +666,7 @@
   },
   "pico": {
     "rules": 462,
-    "dropped": 306,
+    "dropped": 304,
     "emitted": [
       "$animation",
       "$animationDelay",
@@ -894,9 +894,6 @@
       },
       "overflow-x": {
         "'overflow-x': native has one overflow for both axes. Write 'overflow'.": 1
-      },
-      "padding": {
-        "'calc()' is not arithmetic on one var() that can be settled here, so it needs evaluating on device": 2
       },
       "position": {
         "position: fixed is not supported. Yoga has no viewport to fix to and no scroll container to stick within. Use `position: absolute` inside the element you meant to pin to; for a header that should stay put, put it outside the scroll view rather than inside it.": 1

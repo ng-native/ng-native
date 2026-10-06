@@ -20,6 +20,7 @@ const {
   fallbacks,
   tokenValue,
 } = require('./values.cjs');
+const { calcWithTokens } = require('./token-arithmetic.cjs');
 
 const SIDES = ['Top', 'Right', 'Bottom', 'Left'];
 
@@ -180,6 +181,10 @@ function positional(property, list, context, linear) {
 function arithmetic(part, prop, context, linear) {
   const found = linear(part, context);
   if (!found) {
+    // More than one step around the token, `calc((var(--h) - 24px) / 2)`: the sum the same
+    // `calc()` is in a longhand, worked out on the device.
+    const sum = calcWithTokens([part], 'length', context);
+    if (sum !== null) return { props: [prop], within: sum };
     throw new CssUnsupported(
       `${context}: '${part.value?.name}()' is not arithmetic on one var() that can be settled ` +
         `here, so it needs evaluating on device`,
