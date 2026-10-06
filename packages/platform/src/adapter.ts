@@ -521,13 +521,23 @@ export class NativeRendererFactory implements RendererFactory2 {
     });
   }
 
+  /** How many change-detection passes are under way, one inside another. */
+  private passes = 0;
+
   begin(): void {
+    if (this.passes++ > 0) return;
     this.rendering = true;
     this.renderStarted = globalThis.performance?.now?.() ?? Date.now();
   }
 
-  /** The single commit point: at most one commit per change-detection pass. */
+  /**
+   * The single commit point: at most one commit per change-detection pass. A pass begun inside
+   * another, a `detectChanges()` called from a lifecycle hook, is part of the one around it and
+   * commits with it: a library that calls it from every `ngAfterViewInit` would otherwise commit
+   * the screen once for each of its components as the screen is first built.
+   */
   end(): void {
+    if (this.passes > 0 && --this.passes > 0) return;
     this.rendering = false;
     const before = this.engine.stats.commits;
     if (this.engine.commit()) this.settleUnseen(before);
