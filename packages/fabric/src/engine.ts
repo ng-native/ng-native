@@ -935,9 +935,11 @@ function sizesItself(node: EngineNode, height: unknown): boolean {
 function heightFromLayout(node: EngineNode, parent: EngineNode): boolean {
   const [direction, align] = containerOf(parent).split(' ');
   if (direction === 'row') {
-    // Stretched across a row, it is as tall as the row.
+    // Stretched across a row, it is as tall as the row, where the row has a height to be. One
+    // as tall as its content gives none: Yoga takes the percentage of the space on offer there
+    // too, the screen's, where a browser takes it of the row once its content has sized it.
     const self = ownLayout(node, 'alignSelf') as string | undefined;
-    return STRETCHES.has(self) && align === 'stretch';
+    return STRETCHES.has(self) && align === 'stretch' && definiteHeight(parent);
   }
   // In a column it has the height it grows to, where the column has one to share out.
   const grows = Number(ownLayout(node, 'flexGrow') ?? ownLayout(node, 'flex') ?? 0) > 0;
