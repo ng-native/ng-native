@@ -5002,6 +5002,9 @@ export class Engine implements HostEngine {
   dispatchEvent(instanceHandle: unknown, topLevelType: string, nativeEvent: unknown): void {
     const target = instanceHandle as EngineNode | null;
     this.trace(target, topLevelType);
+    // What has the focus does not take it again: native answering a focus it was told of, where
+    // whoever asked has already said so.
+    if (topLevelType === 'topFocus' && target !== null && this.focusedNode === target) return;
 
     // Listeners get RN's documented shape, `{nativeEvent}`. Fabric hands us the payload bare;
     // React wraps it in a synthetic event and every RN API is written against `event.nativeEvent`,
