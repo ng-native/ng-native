@@ -865,6 +865,10 @@ describe('transitioning a translate between a percentage and a length', () => {
       { rotate: '0deg' },
     ]);
     assert.deepEqual(interpolate([{ scale: 1 }], [{ scale: '50%' }], 0.5), [{ scale: 1 }]);
+    // Nor does a length in a unit that is not points, which nothing here can turn into them.
+    assert.deepEqual(interpolate([{ translateX: '50%' }], [{ translateX: '2em' }], 0.5), [
+      { translateX: '50%' },
+    ]);
   });
 });
 

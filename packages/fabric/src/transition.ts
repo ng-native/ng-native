@@ -342,8 +342,9 @@ export function tween(from: unknown, to: unknown, t: number): unknown {
 
   const a = UNIT.exec(from);
   const b = UNIT.exec(to);
-  // Matching units only. Converting between them needs a table, and for the pairs anybody
-  // actually writes - `0deg` to `1turn`, `0%` to `10px` - the answer would be a guess.
+  // Matching units only. Converting between them needs a table, and for a pair anybody actually
+  // writes, `0deg` to `1turn`, the answer would be a guess. A translate by a percentage and by a
+  // length is the pair with an answer, and `interpolateTransform` gives it: see `summed`.
   if (!a || !b || a[2] !== b[2]) return null;
 
   const value = Number(a[1]) + (Number(b[1]) - Number(a[1])) * t;
@@ -389,12 +390,77 @@ function sameLength(
   return a.length < b.length ? [padded, b] : [a, padded];
 }
 
+/** The translates: the operations whose amount may be a share of the box, a length, or both. */
+const TRANSLATES = new Set(['translateX', 'translateY']);
+
+/** A translate's amount as a share of the box and a number of points, added together. */
+type Sum = readonly [percent: number, points: number];
+
+function sumOf(value: unknown): Sum | null {
+  if (Array.isArray(value)) return value as unknown as Sum;
+  if (typeof value === 'number') return [0, value];
+  const percent = typeof value === 'string' ? PERCENTAGE.exec(value) : null;
+  return percent ? [Number(percent[1]), 0] : null;
+}
+
+/** Whether a translate by a percentage is followed at once by one by points along the same axis. */
+function isSum(before: unknown, entry: unknown): boolean {
+  const name = operation(entry);
+  if (name === null || !TRANSLATES.has(name) || operation(before) !== name) return false;
+  const percent = (before as Record<string, unknown>)[name];
+  const points = (entry as Record<string, unknown>)[name];
+  return typeof points === 'number' && typeof percent === 'string' && PERCENTAGE.test(percent);
+}
+
+/**
+ * A list with each such pair read as the one translate it comes to, its amount a `Sum`.
+ *
+ * `translateY(-25%) translateY(-17px)` is how a frame between `translateY(-50%)` and
+ * `translateY(-34px)` is written: CSS eases the two as `calc(-25% - 17px)`, and two translates
+ * along one axis add up to that whatever size the box is, which nothing here knows. A transition
+ * turned round part way starts from such a frame, so the pair has to pair with one translate.
+ */
+function summed(list: readonly unknown[]): readonly unknown[] {
+  if (!list.some((entry, i) => i > 0 && isSum(list[i - 1], entry))) return list;
+  const out: unknown[] = [];
+  for (const entry of list) {
+    const before = out.at(-1);
+    if (!isSum(before, entry)) {
+      out.push(entry);
+      continue;
+    }
+    const name = operation(entry)!;
+    const percent = (before as Record<string, string>)[name]!;
+    out[out.length - 1] = {
+      [name]: [parseFloat(percent), (entry as Record<string, number>)[name]],
+    };
+  }
+  return out;
+}
+
+/** A translate part way between two amounts `tween` cannot blend, as its pair; null if not one. */
+function tweenSum(name: string, from: unknown, to: unknown, t: number): unknown[] | null {
+  const a = TRANSLATES.has(name) ? sumOf(from) : null;
+  const b = a && sumOf(to);
+  if (!a || !b) return null;
+  const percent = Math.round((a[0] + (b[0] - a[0]) * t) * 1000) / 1000;
+  const points = a[1] + (b[1] - a[1]) * t;
+  // At an end one of the two is nothing, and the frame is the one translate that was written.
+  if (percent === 0) return [{ [name]: points }];
+  return points === 0
+    ? [{ [name]: `${percent}%` }]
+    : [{ [name]: `${percent}%` }, { [name]: points }];
+}
+
 /**
  * Two transform lists blended operation by operation.
  *
  * Matched by position *and* name: blending a translate into a scale would mean decomposing a
  * matrix, which is a great deal of arithmetic for a case an author can always write out. Anything
  * that does not line up returns null and steps instead, which is what CSS falls back to.
+ *
+ * A translate by a share of the box and one by a length do line up, and the frame between them is
+ * two translates: see `summed`.
  *
  * A missing side is the ordinary case rather than the exception - `.slider` to
  * `.slider-end { transform: translateX(180px) }`, and the same again when the class comes off -
@@ -405,21 +471,20 @@ function interpolateTransform(from: unknown, to: unknown, t: number): unknown[] 
   if (!shape) return null;
 
   const [start, end] = sameLength(
-    hasOperations(from) ? from : atRest(shape),
-    hasOperations(to) ? to : atRest(shape),
+    summed(hasOperations(from) ? from : atRest(shape)),
+    summed(hasOperations(to) ? to : atRest(shape)),
   );
 
   const out: unknown[] = [];
   for (let i = 0; i < end.length; i++) {
     const name = operation(end[i]);
     if (name === null || name !== operation(start[i])) return null;
-    const value = tween(
-      (start[i] as Record<string, unknown>)[name],
-      (end[i] as Record<string, unknown>)[name],
-      t,
-    );
-    if (value === null) return null;
-    out.push({ [name]: value });
+    const a = (start[i] as Record<string, unknown>)[name];
+    const b = (end[i] as Record<string, unknown>)[name];
+    const value = tween(a, b, t);
+    const entries = value === null ? tweenSum(name, a, b, t) : [{ [name]: value }];
+    if (entries === null) return null;
+    out.push(...entries);
   }
   return out;
 }
