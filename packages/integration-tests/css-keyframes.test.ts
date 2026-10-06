@@ -842,7 +842,7 @@ describe('an animation none of whose frames says anything', () => {
       engine.advanceAnimations();
       engine.commit();
     };
-    return { engine, fabric, events, frame };
+    return { engine, fabric, events, frame, sheet };
   }
 
   it('commits no frame of it, and is over with at once where it never ends', () => {
@@ -863,5 +863,30 @@ describe('an animation none of whose frames says anything', () => {
     s.frame(60);
     assert.deepEqual(s.events, ['animationstart', 'animationend']);
     assert.equal(s.engine.animating, false);
+  });
+
+  it('ends at once where it takes no time, endless or not', () => {
+    const s = idle('idle 0s linear infinite');
+    s.frame(16);
+    assert.deepEqual(s.events, ['animationstart', 'animationend']);
+    assert.equal(s.engine.animating, false);
+  });
+
+  it('plays on once a hot swap gives its keyframes something to say', () => {
+    const s = idle('idle 250ms linear infinite');
+    s.frame(16);
+    assert.equal(s.engine.animating, false);
+    const edited = compileCss(
+      '@keyframes idle { from { opacity: 0 } } .a { animation: idle 250ms linear infinite }',
+      'app.css',
+    );
+    s.engine.addGlobalSheet(edited as never, s.sheet as never);
+    s.engine.commit();
+    assert.equal(s.engine.animating, true);
+    const opacity = () => s.fabric.committed[0]!.props['opacity'];
+    s.frame(50);
+    const first = opacity();
+    s.frame(50);
+    assert.notEqual(opacity(), first, 'a frame further on, not the one the swap committed');
   });
 });
