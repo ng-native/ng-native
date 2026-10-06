@@ -1913,10 +1913,21 @@ function timedByToken(declaration, out, context) {
   const timed = parts.filter((part) => part.type === 'function' && part.value?.name === 'calc');
   if (timed.length !== 1 || parts.some((part) => part.type === 'var')) return false;
   const rest = parts.map((part) => (part === timed[0] ? PLACEHOLDER_TIME : part));
-  const typed = reparsed('animation', cssText(rest, context), context);
-  if (typed?.property !== 'animation') return false;
-  translate('animation', typed.value, out, context);
-  return animationTimeWithTokens('animation-duration', timed, out, context);
+  // Read aside, and written only once all of it is read: a time the device cannot work out
+  // leaves nothing of the placeholder behind, and the declaration is refused as any other is.
+  const read = {};
+  try {
+    const typed = reparsed('animation', cssText(rest, context), context);
+    if (typed?.property !== 'animation') return false;
+    translate('animation', typed.value, read, context);
+    animationTimeWithTokens('animation-duration', timed, read, context);
+  } catch (error) {
+    if (!(error instanceof CssUnsupported)) throw error;
+    return false;
+  }
+  // The shorthand sets every part, so what a longhand before it set goes, symbol keys and all.
+  Object.assign(out, read);
+  return true;
 }
 
 const PLACEHOLDER_TIME = { type: 'token', value: { type: 'dimension', unit: 'ms', value: 1 } };
