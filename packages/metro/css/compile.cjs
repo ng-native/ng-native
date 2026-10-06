@@ -1083,15 +1083,12 @@ const DARK = { feature: 'prefers-color-scheme', value: 'dark' };
  * stronger one for the same element, is not followed; give a token a form for a deferred
  * transform if a stylesheet does that.
  */
-function ownToken(declaration, raw, read) {
+function ownToken(declaration, raw) {
   const value = declaration.value;
-  if (declaration.property === 'custom' && String(value?.name).startsWith('--')) {
+  if (declaration.property === 'custom') {
     // Only one a declaration beside it reads: any other is refused as it was, and said so.
-    if (!read.has(value.name) || !unheld(value.value)) return declaration;
-    raw.set(value.name, value.value);
-    return null;
+    return raw.has(value?.name) && unheld(value.value) ? null : declaration;
   }
-  if (declaration.property !== 'unparsed') return declaration;
   const own = raw.get(aloneIn(declaration));
   return own ? { ...declaration, value: { ...value, value: own } } : declaration;
 }
@@ -1103,8 +1100,21 @@ function aloneIn(declaration) {
   return others.length || only?.type !== 'var' ? undefined : only.value.name.ident;
 }
 
-/** The tokens a rule's declarations read whole. */
-const readAlone = (list) => new Set(list.map(aloneIn).filter(Boolean));
+/**
+ * The custom properties of a list of declarations that no one form holds and a declaration of
+ * the list reads whole, by name, as their value was written: the last of each name, which is the
+ * one the cascade has, wherever in the list it is read.
+ */
+function ownTokens(list) {
+  const read = new Set(list.map(aloneIn).filter(Boolean));
+  const raw = new Map();
+  for (const { property, value } of list) {
+    if (property !== 'custom' || !read.has(value?.name)) continue;
+    if (unheld(value.value)) raw.set(value.name, value.value);
+    else raw.delete(value.name);
+  }
+  return raw;
+}
 
 /** Whether a custom property's value is transform functions with a token inside one of them. */
 function unheld(parts) {
@@ -2630,9 +2640,6 @@ function compileCss(source, context = 'styles', options = {}) {
     const tokens = {};
     const deferred = [];
 
-    /** The rule's custom properties no one form holds, by name, as their value was written. */
-    const raw = new Map();
-
     /** Translate one list of declarations, collecting tokens and deferred values as it goes. */
     const build = (list, sides) => {
       const written = {};
@@ -2644,9 +2651,9 @@ function compileCss(source, context = 'styles', options = {}) {
           return true;
         },
       });
-      const read = readAlone(list ?? []);
+      const raw = ownTokens(list ?? []);
       for (const stated of list ?? []) {
-        const declaration = ownToken(stated, raw, read);
+        const declaration = ownToken(stated, raw);
         if (declaration === null) continue;
         if (easedByToken(declaration, out, deferred, context)) continue;
         const before = deferred.length;
