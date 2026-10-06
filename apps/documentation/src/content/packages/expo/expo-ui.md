@@ -419,8 +419,20 @@ whichever view it is inside.
   be presented.
 
 The content is in the tree from when the sheet opens until it has finished closing, and out of it
-the rest of the time. Its components are created with the page, as projected content always is:
-wrap the content in `@if (sorting())` where it should be created as the sheet opens instead.
+the rest of the time. Its components are created with the page, as projected content always is.
+Where they should be created as the sheet opens instead, wrap the content in an `@if` on a signal
+of its own, set as the sheet opens and cleared in `(dismissed)`:
+
+```html
+<ui-bottom-sheet [(open)]="sorting" (dismissed)="options.set(false)">
+  @if (options()) {
+  <app-sort-options />
+  }
+</ui-bottom-sheet>
+```
+
+An `@if` on the signal bound to `open` would destroy the content the moment the sheet starts to
+close, and the sheet would slide away empty.
 
 With `fitToContents` the content is laid out at the window's width and its own height. Without it
 the content fills the sheet.
