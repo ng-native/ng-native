@@ -890,3 +890,74 @@ describe('an animation none of whose frames says anything', () => {
     assert.notEqual(opacity(), first, 'a frame further on, not the one the swap committed');
   });
 });
+
+describe('an animation with no fill, at its end', () => {
+  const FADE = '@keyframes leave { from { opacity: 1 } to { opacity: 0 } } .a { opacity: 1 }';
+
+  function leaving() {
+    let now = 1000;
+    const fabric = createFakeFabric();
+    const engine = new Engine(fabric, 1, {
+      globalStyles: compileCss(
+        `${FADE} .out { animation: leave 100ms linear }`,
+        'app.css',
+      ) as never,
+      now: () => now,
+    });
+    const view = engine.createElement('view');
+    engine.setClasses(view, 'a');
+    engine.appendChild(engine.root, view);
+    engine.commit();
+    const frame = (ms: number) => {
+      now += ms;
+      engine.advanceAnimations();
+      engine.commit();
+    };
+    /** The opacity of each frame committed while the view is there, and `gone` once it is not. */
+    const seen: unknown[] = [];
+    const look = () =>
+      seen.push(fabric.committed[0] ? fabric.committed[0].props['opacity'] : 'gone');
+    return { engine, view, frame, seen, look };
+  }
+
+  it('stays at its last frame until its animationend is heard, and is taken away from there', () => {
+    // A browser runs the listener before it paints again, so an overlay that fades out and is
+    // removed on `animationend` is never seen back at rest. One frame at rest is a flash.
+    const s = leaving();
+    s.engine.setEventListener(s.view, 'topAnimationend', () =>
+      s.engine.removeChild(s.engine.root, s.view),
+    );
+    s.engine.setClasses(s.view, 'a out');
+    s.engine.commit();
+    for (let i = 0; i < 4; i++) {
+      s.frame(50);
+      s.look();
+    }
+    assert.deepEqual(s.seen, [0.5, 0, 'gone', 'gone']);
+  });
+
+  it('goes back to rest once the listener has run and left it there', () => {
+    const s = leaving();
+    let heard = 0;
+    s.engine.setEventListener(s.view, 'topAnimationend', () => heard++);
+    s.engine.setClasses(s.view, 'a out');
+    s.engine.commit();
+    for (let i = 0; i < 3; i++) {
+      s.frame(50);
+      s.look();
+    }
+    assert.equal(heard, 1);
+    assert.deepEqual(s.seen, [0.5, 0, 1]);
+  });
+
+  it('is back at rest at once where nothing listens for its end', () => {
+    const s = leaving();
+    s.engine.setClasses(s.view, 'a out');
+    s.engine.commit();
+    for (let i = 0; i < 2; i++) {
+      s.frame(50);
+      s.look();
+    }
+    assert.deepEqual(s.seen, [0.5, 1]);
+  });
+});
