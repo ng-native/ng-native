@@ -20,6 +20,8 @@ interface Fixture {
   wide: { (): boolean; set(value: boolean): void };
   toggle(change?: () => void): Promise<void>;
   toggleInPass(): void;
+  toggleTwiceInPass(): void;
+  together: Promise<void>[];
 }
 
 interface Scene {
@@ -30,6 +32,9 @@ interface Scene {
   frames: unknown[];
   /** A change-detection pass, run now. */
   pass(): void;
+  /** Have native keep what ends its animations for the test to call, in `ends`. */
+  hold(): void;
+  ends: (() => void)[];
 }
 
 const settle = (ms = 0) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -69,10 +74,13 @@ describe('the commit a layout animation lands on', () => {
       complete(...args);
       order.push(`commit, bar ${String(find('bar')?.props['width'])}`);
     };
+    let held = false;
+    const ends: (() => void)[] = [];
     const native: NativeLayoutAnimation = {
       configureNext: (_config, done) => {
         order.push('configure');
-        done?.();
+        if (held) ends.push(() => done?.());
+        else done?.();
       },
     };
     const app = mount(1, Component, fabric, {
@@ -89,6 +97,8 @@ describe('the commit a layout animation lands on', () => {
         frame,
         frames,
         pass: () => app.applicationRef.tick(),
+        hold: () => void (held = true),
+        ends,
       });
     } finally {
       app.applicationRef.destroy();
@@ -153,6 +163,25 @@ describe('the commit a layout animation lands on', () => {
       await Promise.all([nothing, something]);
 
       assert.deepEqual(order, ['configure', 'commit, bar 300']);
+    });
+  });
+
+  it('ends every change one pass commits together when the animation of that commit ends', async () => {
+    await scene(async ({ instance, order, hold, ends }) => {
+      order.length = 0;
+      hold();
+      instance.toggleTwiceInPass();
+      await settle(5);
+      assert.deepEqual(order, ['configure', 'commit, bar 300']);
+
+      const ended = [false, false];
+      instance.together.forEach((change, at) => void change.then(() => (ended[at] = true)));
+      await settle(5);
+      assert.deepEqual(ended, [false, false], 'the animation is still playing');
+
+      ends[0]!();
+      await settle();
+      assert.deepEqual(ended, [true, true]);
     });
   });
 

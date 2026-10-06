@@ -88,11 +88,13 @@ export class LayoutAnimation {
       return;
     }
 
-    let configured = false;
-    let finish!: () => void;
-    const done = new Promise<void>((resolve) => (finish = resolve));
+    const own: Waiting = { configured: false, finish: () => {} };
+    const done = new Promise<void>((resolve) => (own.finish = resolve));
     const configure = (): void => {
-      configured = true;
+      // Every change still waiting is in this commit: one a pass makes together with this one.
+      const together = new Set([...this.waiting, own]);
+      const finish = (): void => together.forEach((change) => change.finish());
+      for (const change of together) change.configured = true;
       native.configureNext(config(options), finish);
       // React Native calls no completion where animations are disabled, so nothing should wait
       // on it forever.
@@ -107,31 +109,48 @@ export class LayoutAnimation {
     }
 
     const withdraw = this.engine.beforeNextCommit(configure);
+    const settle = (): void => {
+      withdraw();
+      this.waiting.delete(own);
+      if (!own.configured) own.finish();
+    };
+    this.waiting.add(own);
     try {
       change();
-      this.detectChanges();
+      // Called from inside a pass, the commit is that pass's own, which ends before any microtask.
+      if (this.detectChanges()) settle();
+      else queueMicrotask(settle);
     } catch (error) {
       // Nothing was changed, so nothing is to be animated, not even a commit made in this turn.
       withdraw();
+      this.waiting.delete(own);
       throw error;
-    } finally {
-      // Called from inside a pass, the commit is that pass's own, which ends before any microtask.
-      queueMicrotask(() => {
-        withdraw();
-        if (!configured) finish();
-      });
     }
     return done;
   }
 
-  /** Run change detection now, unless a pass is already running and will reach the change. */
-  private detectChanges(): void {
+  /** The changes whose commit has not come yet: more than one only inside a pass. */
+  private readonly waiting = new Set<Waiting>();
+
+  /**
+   * Run change detection now and say so, or say that a pass is already running and will reach
+   * the change.
+   */
+  private detectChanges(): boolean {
     try {
       this.application?.tick();
+      return true;
     } catch (error) {
       if ((error as { code?: number }).code !== RECURSIVE_TICK) throw error;
+      return false;
     }
   }
+}
+
+/** One `animate()` call: whether its commit was configured, and what resolves it. */
+interface Waiting {
+  configured: boolean;
+  finish: () => void;
 }
 
 /**

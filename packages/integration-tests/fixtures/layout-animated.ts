@@ -38,12 +38,23 @@ export class LayoutAnimated {
   }
 
   private readonly asked = signal(0);
+  private readonly askedTwice = signal(0);
+  /** The two changes one pass last made, the second of which changes nothing of its own. */
+  together: Promise<void>[] = [];
 
   constructor() {
     // As a component's effect calls it: inside a change-detection pass.
     effect(() => {
       if (this.asked() > 0) untracked(() => void this.toggle());
     });
+    effect(() => {
+      if (this.askedTwice() === 0) return;
+      untracked(() => (this.together = [this.toggle(), this.toggle(() => {})]));
+    });
+  }
+
+  toggleTwiceInPass(): void {
+    this.askedTwice.update((asked) => asked + 1);
   }
 
   toggleInPass(): void {
