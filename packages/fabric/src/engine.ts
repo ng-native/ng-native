@@ -3541,8 +3541,13 @@ export class Engine implements HostEngine {
   private flushTransitionEvents(): void {
     if (this.transitionEvents.length === 0) return;
     for (const { node, type, property } of this.transitionEvents.splice(0)) {
+      // One listener that throws stops neither the rest nor the node being let go.
       for (const listener of [...(node.listeners?.get(type) ?? [])]) {
-        listener(animationEvent(type, node, property));
+        try {
+          listener(animationEvent(type, node, property));
+        } catch (error) {
+          this.reportEventError(error, type);
+        }
       }
       if (type === 'topAnimationend') this.letGo(node);
     }
@@ -4260,7 +4265,8 @@ export class Engine implements HostEngine {
    */
   private keeps(node: EngineNode, running: RunningAnimation): boolean {
     if (running.spec.fill === 'forwards' || running.spec.fill === 'both') return true;
-    if (node.listeners?.has('topAnimationend') !== true) return false;
+    // One that listened and has stopped leaves an empty set behind: nobody to hear it.
+    if (!node.listeners?.get('topAnimationend')?.size) return false;
     this.lettingGo.add(node);
     return true;
   }
