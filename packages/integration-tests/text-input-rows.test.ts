@@ -12,9 +12,12 @@ import { createFakeFabric } from '@ng-native/testing';
 const require = createRequire(import.meta.url);
 const { compileCss } = require('@ng-native/metro/css/compile.cjs');
 
-function field(css: string, props: Record<string, unknown>) {
+function field(css: string, props: Record<string, unknown>, fontScale = 1) {
   const fabric = createFakeFabric();
-  const engine = new Engine(fabric, 1, { globalStyles: compileCss(css, 'app.css') as never });
+  const engine = new Engine(fabric, 1, {
+    globalStyles: compileCss(css, 'app.css') as never,
+    conditions: { width: 400, height: 800, colorScheme: 'light', fontScale },
+  });
   const input = engine.createElement('text-input');
   for (const [key, value] of Object.entries(props)) engine.setProp(input, key, value);
   engine.appendChild(engine.root, input);
@@ -57,5 +60,15 @@ describe('rows on a multiline text input', () => {
     assert.equal(area.height(), 80);
     area.engine.setProp(area.input, 'rows', null);
     assert.equal(area.height(), null);
+  });
+
+  it('counts its lines at the system text size, as the field draws them', () => {
+    const padded = `${LINES} text-input { padding: 4px 0 }`;
+    assert.equal(field(padded, { multiline: true, rows: 3 }, 1.5).height(), 98);
+    // Not for a field that does not scale, nor past the most one scales by.
+    const fixed = { multiline: true, rows: 3, allowFontScaling: false };
+    assert.equal(field(padded, fixed, 1.5).height(), 68);
+    const capped = { multiline: true, rows: 3, maxFontSizeMultiplier: 1.2 };
+    assert.equal(field(padded, capped, 1.5).height(), 80);
   });
 });
