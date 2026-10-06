@@ -689,6 +689,31 @@ describe('transitioning a transform that is a style binding', () => {
 });
 
 describe('interpolating a transform', () => {
+  it('eases a list into a longer one that starts the same, the rest from where it is at rest', () => {
+    // CSS pads the shorter list with the longer one's operations at rest: a label that moves and
+    // then, floated, moves and shrinks.
+    assert.deepEqual(
+      interpolate(
+        [{ translateY: 10 }],
+        [{ translateY: 20 }, { scaleX: 0.5 }, { scaleY: 0.5 }],
+        0.5,
+      ),
+      [{ translateY: 15 }, { scaleX: 0.75 }, { scaleY: 0.75 }],
+    );
+    assert.deepEqual(
+      interpolate(
+        [{ translateY: 20 }, { scaleX: 0.5 }, { scaleY: 0.5 }],
+        [{ translateY: 10 }],
+        0.5,
+      ),
+      [{ translateY: 15 }, { scaleX: 0.75 }, { scaleY: 0.75 }],
+    );
+    // Lists that start differently have nothing between them, and step.
+    assert.deepEqual(interpolate([{ rotate: '10deg' }], [{ translateY: 20 }, { scaleX: 2 }], 0.5), [
+      { rotate: '10deg' },
+    ]);
+  });
+
   it('eases toward none, an empty list, as it does toward no transform at all', () => {
     // `animate-bounce`'s 50% keyframe is `transform: none`. Read as a list of another length, the
     // bounce held its top frame and jumped to the bottom, where it should fall.
@@ -740,9 +765,13 @@ describe('interpolating a transform', () => {
     ]);
   });
 
-  it('steps when the list it leaves has more operations than the one it goes to', () => {
+  it('eases out of the operations it leaves behind, toward each at rest', () => {
+    // As CSS pads the shorter list: see the longer one above.
     const from = [{ translateX: 0 }, { scale: 2 }];
-    assert.deepEqual(interpolate(from, [{ translateX: 10 }], 0.5), from);
+    assert.deepEqual(interpolate(from, [{ translateX: 10 }], 0.5), [
+      { translateX: 5 },
+      { scale: 1.5 },
+    ]);
   });
 
   it('steps when the two lists are not the same shape, as CSS does', () => {
