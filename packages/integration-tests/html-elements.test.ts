@@ -240,6 +240,19 @@ describe('HTML elements in a template', () => {
       assert.equal(committed.children[0]!.props['height'], undefined);
     });
 
+    it('lets the text element it holds place its own text in turn', () => {
+      const sheet = compileCss(CENTRED, 'flex');
+      const outer = engine.createElement('span', sheet);
+      engine.setClasses(outer, 'c');
+      const inner = engine.createElement('span', sheet);
+      engine.setClasses(inner, 'c');
+      engine.appendChild(inner, engine.createText('First'));
+      engine.appendChild(outer, inner);
+      const committed = commit(outer);
+      assert.deepEqual(shape(committed), { View: [{ View: [{ Paragraph: ['"First"'] }] }] });
+      assert.equal(committed.children[0]!.props['alignItems'], 'center');
+    });
+
     it('is one paragraph again once it stops centring, and a view once it centres again', () => {
       const outer = engine.createElement('span', compileCss(CENTRED, 'flex'));
       engine.setClasses(outer, 'c');
