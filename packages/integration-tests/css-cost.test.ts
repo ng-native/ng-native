@@ -63,7 +63,7 @@ describe('what CSS costs', () => {
     // The resolver returns on `!sheet` before doing anything, so an app that writes no CSS pays
     // literally zero. This is also why every scale and device number recorded before this test
     // says nothing about CSS: they were all measured on this path.
-    assert.deepEqual(stats, { compoundTests: 0, ruleTests: 0, nodesResolved: 0 });
+    assert.deepEqual(stats, { compoundTests: 0, ruleTests: 0, nodesResolved: 0, rulesFiled: 0 });
   });
 
   it('prices a 1000 row mount with and without a stylesheet', async () => {

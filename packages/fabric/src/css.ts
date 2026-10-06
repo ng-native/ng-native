@@ -810,12 +810,15 @@ export const styleStats = {
   ruleTests: 0,
   /** Nodes cascaded, as opposed to handed back from the memo. */
   nodesResolved: 0,
+  /** Rules filed by key selector: each sheet's once, however many sheets come after it. */
+  rulesFiled: 0,
 };
 
 export function resetStyleStats(): void {
   styleStats.compoundTests = 0;
   styleStats.ruleTests = 0;
   styleStats.nodesResolved = 0;
+  styleStats.rulesFiled = 0;
 }
 
 /** A prop's value as an attribute test compares it: in lower case, under the i flag. */
@@ -1585,72 +1588,141 @@ interface RuleEntry {
  * is offered to everything, because the alternative is a rule that silently stops applying.
  */
 export function ruleKey(rule: StyleRule): string {
+  return ruleKeys(rule)[0]!;
+}
+
+/**
+ * Every bucket a rule is filed under. One, but for a rule whose rightmost compound is only an
+ * `:is()` of compounds that each have a key: it is filed under each of theirs, since a node it
+ * matches has one of them.
+ *
+ * A rule that says nothing of the node's own name can still say whose child it is, `.row > *`.
+ * It is filed under the parent's class, and offered to the children of an element that has it.
+ */
+export function ruleKeys(rule: StyleRule): readonly string[] {
   const key = rule.compounds[rule.compounds.length - 1];
-  if (!key) return UNIVERSAL;
-  if (key.classes.length) return `class:${key.classes[0]}`;
-  if (key.id !== undefined) return `id:${key.id}`;
-  if (key.type !== undefined) return `type:${key.type}`;
-  return UNIVERSAL;
+  if (!key) return EVERY_NODE;
+  if (key.classes.length) return [`class:${key.classes[0]}`];
+  if (key.id !== undefined) return [`id:${key.id}`];
+  if (key.type !== undefined) return [`type:${key.type}`];
+  const held = parentClass(rule, key);
+  if (held !== undefined) return [`in:${held}`];
+  return alternativeKeys(key) ?? EVERY_NODE;
+}
+
+/** A class the node's parent has to have for the rule to match, where its selector says one. */
+function parentClass(rule: StyleRule, key: Compound): string | undefined {
+  const written = key.parents?.find((compound) => compound.classes.length > 0);
+  if (written) return written.classes[0];
+  if (rule.combinators[rule.combinators.length - 1] !== 'child') return undefined;
+  return rule.compounds[rule.compounds.length - 2]?.classes[0];
+}
+
+/** The keys of each compound a bare `:is()` takes, or nothing where one of them has none. */
+function alternativeKeys(key: Compound): string[] | undefined {
+  const any = key.is?.[0];
+  if (!any?.length) return undefined;
+  const keys: string[] = [];
+  for (const one of any) {
+    if (one.classes.length) keys.push(`class:${one.classes[0]}`);
+    else if (one.id !== undefined) keys.push(`id:${one.id}`);
+    else if (one.type !== undefined) keys.push(`type:${one.type}`);
+    else return undefined;
+  }
+  return keys;
 }
 
 const UNIVERSAL = '*';
+const EVERY_NODE: readonly string[] = [UNIVERSAL];
 
-/** Where a rule sits in the merged, weight-sorted list. The cascade depends on that order. */
+/**
+ * Where each kind of sheet is filed, as a multiple of the room one sheet's rules are given: the
+ * global sheet first, then a host's own, its creator's, and each added sheet after those.
+ */
+const SHEET_ROOM = 1_000_000;
+const HOSTS = 1;
+const CREATED = 2;
+const ADDED = 3;
+
+/** A rule in an index, and where it comes among rules of the same weight: the order it was written in. */
 interface IndexedEntry {
   readonly entry: RuleEntry;
   readonly at: number;
 }
 
 export interface RuleIndex {
-  readonly buckets: ReadonlyMap<string, readonly IndexedEntry[]>;
-  readonly universal: readonly IndexedEntry[];
-}
-
-/** File a merged, sorted rule list by key selector. Done once per sheet pair, not per node. */
-export function indexRules(entries: readonly RuleEntry[]): RuleIndex {
-  const buckets = new Map<string, IndexedEntry[]>();
-  const universal: IndexedEntry[] = [];
-  entries.forEach((entry, at) => {
-    const key = ruleKey(entry.rule);
-    if (key === UNIVERSAL) {
-      universal.push({ entry, at });
-      return;
-    }
-    let bucket = buckets.get(key);
-    if (!bucket) buckets.set(key, (bucket = []));
-    bucket.push({ entry, at });
-  });
-  return { buckets, universal };
+  readonly buckets: Map<string, IndexedEntry[]>;
+  readonly universal: IndexedEntry[];
 }
 
 /**
- * The rules worth trying against a node, in the order they were merged in.
- *
- * Each bucket is already in order, so the collected list only needs sorting when more than one
- * contributed - which for a node with one class and a name is the common case, and cheap: the
- * lists are short by construction, which is the entire point of the index.
+ * File rules by key selector, each at `from` and on: its place among every rule there is, which
+ * settles the order of two of the same weight. Into an index there already where one is given,
+ * so a sheet that arrives later is added to what is filed and nothing is filed again.
  */
-export function candidateRules(node: StyleTarget, index: RuleIndex): RuleEntry[] {
-  const found: IndexedEntry[][] = [];
-  if (index.universal.length) found.push(index.universal as IndexedEntry[]);
-  const byName = index.buckets.get(`type:${node.name}`);
-  if (byName) found.push(byName as IndexedEntry[]);
-  const id = node.props['nativeID'];
-  if (typeof id === 'string') {
-    const byId = index.buckets.get(`id:${id}`);
-    if (byId) found.push(byId as IndexedEntry[]);
-  }
-  if (node.classes) {
-    for (const name of node.classes) {
-      const byClass = index.buckets.get(`class:${name}`);
-      if (byClass) found.push(byClass as IndexedEntry[]);
+export function indexRules(
+  entries: readonly RuleEntry[],
+  into: RuleIndex = { buckets: new Map(), universal: [] },
+  from = 0,
+): RuleIndex {
+  styleStats.rulesFiled += entries.length;
+  entries.forEach((entry, n) => {
+    const indexed = { entry, at: from + n };
+    for (const key of ruleKeys(entry.rule)) {
+      if (key === UNIVERSAL) {
+        into.universal.push(indexed);
+        continue;
+      }
+      const bucket = into.buckets.get(key);
+      if (bucket) bucket.push(indexed);
+      else into.buckets.set(key, [indexed]);
     }
+  });
+  return into;
+}
+
+/** Rules in the order they were filed in, which is the order of a list sorted before it was. */
+const byPlace = (a: IndexedEntry, b: IndexedEntry): number => a.at - b.at;
+
+/** Add to `found` what one index holds in the buckets a node's name, id and classes reach. */
+function reach(node: StyleTarget, index: RuleIndex, found: IndexedEntry[]): void {
+  const take = (key: string): void => {
+    const bucket = index.buckets.get(key);
+    if (bucket) found.push(...bucket);
+  };
+  if (index.universal.length) found.push(...index.universal);
+  take(`type:${node.name}`);
+  const id = node.props['nativeID'];
+  if (typeof id === 'string') take(`id:${id}`);
+  if (node.classes) for (const name of node.classes) take(`class:${name}`);
+  // What is written for any child of an element with one of the parent's classes.
+  const around = node.parent?.classes;
+  if (around) for (const name of around) take(`in:${name}`);
+}
+
+/**
+ * The rules worth trying against a node, in cascade order: `order` says which of two comes
+ * first, and with none it is the order they were filed in.
+ *
+ * From each index, only the buckets the node's name, id and classes reach, which is the entire
+ * point of the index: the lists are short by construction, so sorting them is cheap.
+ */
+export function candidateRules(
+  node: StyleTarget,
+  indexes: RuleIndex | readonly RuleIndex[],
+  order: (a: IndexedEntry, b: IndexedEntry) => number = byPlace,
+): RuleEntry[] {
+  const found: IndexedEntry[] = [];
+  const all = Array.isArray(indexes) ? (indexes as readonly RuleIndex[]) : [indexes as RuleIndex];
+  for (const index of all) reach(node, index, found);
+  if (found.length < 2) return found.map((indexed) => indexed.entry);
+  found.sort(order);
+  // A rule filed under two keys the node has is offered once.
+  const offered: RuleEntry[] = [];
+  for (let i = 0; i < found.length; i++) {
+    if (found[i] !== found[i - 1]) offered.push(found[i]!.entry);
   }
-  if (!found.length) return [];
-  if (found.length === 1) return found[0]!.map((indexed) => indexed.entry);
-  const merged = found.flat();
-  merged.sort((a, b) => a.at - b.at);
-  return merged.map((indexed) => indexed.entry);
+  return offered;
 }
 
 /** What the rules matching one node add up to. */
@@ -1673,9 +1745,6 @@ const ROOT_CONTEXT: object = {};
 
 /** Shared empty token map, for the overwhelmingly common case of a subtree defining none. */
 const NO_TOKENS: Readonly<Record<string, TokenValue>> = {};
-
-/** Stands in for "created by a component with no sheet" as a cache key. */
-const NO_SHEET: StyleSheet = { rules: [] };
 
 /**
  * Conditions generations are unique across every resolver in the process, not merely
@@ -2007,7 +2076,12 @@ export class StyleResolver {
    * selector. Keyed by the creating sheet and then the hosted one, so a component's nodes share a
    * single index.
    */
-  private merged = new WeakMap<StyleSheet, Map<StyleSheet | null, RuleIndex>>();
+  /** The global sheet and every sheet added to it, filed by key selector. See `rulesFor`. */
+  private filed: RuleIndex | null = null;
+  /** How many of the added sheets `filed` holds: one added since is filed at the next read. */
+  private filedAdded = 0;
+  /** A component's own sheet, indexed once for each place it can take: a host's, or its creator's. */
+  private readonly ownIndexes = new WeakMap<StyleSheet, (RuleIndex | undefined)[]>();
   /**
    * Whether any sheet merged so far has a rule in a cascade layer. Until one does, rules are
    * ordered by weight alone and the cascade does not look for layers, which is nearly every app.
@@ -2083,7 +2157,8 @@ export class StyleResolver {
     const at = replacing ? this.addedSheets.indexOf(replacing) : -1;
     if (at === -1) this.addedSheets.push(sheet);
     else this.addedSheets[at] = sheet;
-    this.merged = new WeakMap();
+    // One added at the end is filed after what is there. One in another's place files them all again.
+    if (at !== -1) this.filed = null;
     const before = this.generation;
     this.generation = ++generations;
     // One that takes another's place can change what any node comes to. One that names layers
@@ -2171,7 +2246,7 @@ export class StyleResolver {
     const at = this.addedSheets.indexOf(sheet);
     if (at === -1) return false;
     this.addedSheets.splice(at, 1);
-    this.merged = new WeakMap();
+    this.filed = null;
     this.additions.length = 0;
     this.generation = ++generations;
     return true;
@@ -2430,56 +2505,72 @@ export class StyleResolver {
   }
 
   /**
-   * The rules worth trying against a node.
+   * The rules worth trying against a node, in cascade order.
    *
-   * The merged list is built once per (creating sheet, hosted sheet) pair and indexed by key
-   * selector; what comes back here is only the buckets this node can reach. For a component's own
-   * sheet that changes little, but a global utility sheet is hundreds of rules and a screen is a
-   * thousand nodes, and the difference is between a million match attempts and a few thousand.
-   */
-  private rulesFor(node: StyleTarget): readonly RuleEntry[] {
-    const creator = node.sheet ?? NO_SHEET;
-    let byHost = this.merged.get(creator);
-    if (!byHost) this.merged.set(creator, (byHost = new Map()));
-    let index = byHost.get(node.hostSheet);
-    if (!index) {
-      byHost.set(node.hostSheet, (index = indexRules(this.merge(node.sheet, node.hostSheet))));
-    }
-    return candidateRules(node, index);
-  }
-
-  /**
-   * Weakest first. A host node is matched against two component sheets: the one belonging to the
-   * component it hosts, whose `:host` rules exist to reach exactly this node, and the one that
-   * created it. Both carry the bump; the creator comes later and so wins a tie, as the outer
-   * document does over `:host` on the web. The sort is stable, so within one sheet source order
-   * survives and a later sheet wins equal weight.
+   * Every sheet is filed once, by key selector: the app's global sheet and each sheet added to it
+   * in one index, and a component's own in one of its own. What comes back is only the buckets
+   * this node can reach. A global utility sheet is hundreds of rules and a screen is a thousand
+   * nodes, and the difference is between a million match attempts and a few thousand. A library
+   * adds a sheet for each of its components as the component first renders, dozens on one
+   * screen, so one more is added to what is filed and nothing is filed again.
+   *
+   * Sheets are filed in the order a document holds them, which is the order of two rules of the
+   * same weight, and where a layer gets its place: the app's global sheet, the host's own, the
+   * creating component's, then each added sheet as it came. The component layers get a small
+   * specificity bump, so the encapsulation attribute Angular adds on the web does not have to
+   * be written.
    *
    * A sheet added with `addGlobalSheet` comes last, with no bump: a browser adds a None
    * component's CSS when the component first renders, after the styles of the components around
    * it, so it loses to their extra attribute and wins a tie with them.
    */
-  private merge(sheet: StyleSheet | null, hostSheet: StyleSheet | null): RuleEntry[] {
-    const entries: RuleEntry[] = [];
-    const add = (from: StyleSheet | null, bump: number): void => {
-      if (!from) return;
-      this.placeLayers(from);
-      for (const rule of from.rules) {
-        entries.push({ rule, sheet: from, weight: rule.specificity + bump });
-      }
-    };
-    add(this.globalSheet, 0);
-    add(hostSheet, COMPONENT_SPECIFICITY_BUMP);
-    add(sheet, COMPONENT_SPECIFICITY_BUMP);
-    for (const added of this.addedSheets) add(added, 0);
-    if (!entries.some((entry) => entry.rule.layer !== undefined)) {
-      return entries.sort((a, b) => a.weight - b.weight);
+  private rulesFor(node: StyleTarget): readonly RuleEntry[] {
+    if (this.globalSheet) this.placeLayers(this.globalSheet);
+    const indexes: RuleIndex[] = [];
+    if (node.hostSheet) indexes.push(this.ownIndex(node.hostSheet, HOSTS));
+    if (node.sheet) indexes.push(this.ownIndex(node.sheet, CREATED));
+    indexes.push(this.sharedIndex());
+    return candidateRules(node, indexes, this.cascadeOrder);
+  }
+
+  /** Weakest first: by layer where any sheet has one, then by weight, then as they were filed. */
+  private readonly cascadeOrder = (a: IndexedEntry, b: IndexedEntry): number => {
+    const layers = this.layered
+      ? layerOrder(this.layerPlaces.get(a.entry.rule), this.layerPlaces.get(b.entry.rule))
+      : 0;
+    return layers || a.entry.weight - b.entry.weight || a.at - b.at;
+  };
+
+  /** A component's sheet as the rules of a host or of a creator, which differ only in their place. */
+  private ownIndex(sheet: StyleSheet, role: typeof HOSTS | typeof CREATED): RuleIndex {
+    let roles = this.ownIndexes.get(sheet);
+    if (!roles) this.ownIndexes.set(sheet, (roles = []));
+    return (roles[role] ??= indexRules(
+      this.entries(sheet, COMPONENT_SPECIFICITY_BUMP),
+      undefined,
+      role * SHEET_ROOM,
+    ));
+  }
+
+  /** The app's global sheet and every sheet added to it, with any added since the last read. */
+  private sharedIndex(): RuleIndex {
+    if (!this.filed) {
+      this.filed = { buckets: new Map(), universal: [] };
+      this.filedAdded = 0;
+      if (this.globalSheet) indexRules(this.entries(this.globalSheet, 0), this.filed, 0);
     }
-    this.layered = true;
-    const places = this.layerPlaces;
-    return entries.sort(
-      (a, b) => layerOrder(places.get(a.rule), places.get(b.rule)) || a.weight - b.weight,
-    );
+    for (; this.filedAdded < this.addedSheets.length; this.filedAdded++) {
+      const from = (ADDED + this.filedAdded) * SHEET_ROOM;
+      indexRules(this.entries(this.addedSheets[this.filedAdded]!, 0), this.filed, from);
+    }
+    return this.filed;
+  }
+
+  /** A sheet's rules at their weight here, with its layers given their places. */
+  private entries(sheet: StyleSheet, bump: number): RuleEntry[] {
+    this.placeLayers(sheet);
+    if (sheet.rules.some((rule) => rule.layer !== undefined)) this.layered = true;
+    return sheet.rules.map((rule) => ({ rule, sheet, weight: rule.specificity + bump }));
   }
 
   /**
