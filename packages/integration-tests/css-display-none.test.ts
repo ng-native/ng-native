@@ -9,7 +9,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { createRequire } from 'node:module';
-import { Engine, type EngineNode } from '@ng-native/fabric';
+import { Engine, registerHoist, type EngineNode } from '@ng-native/fabric';
 import { createFakeFabric, type FakeFabricNode } from '@ng-native/testing';
 
 const require = createRequire(import.meta.url);
@@ -84,5 +84,53 @@ describe('an element that is display: none', () => {
     s.engine.commit();
     s.engine.dispatchEvent(s.inside, 'topLayout', {});
     assert.equal(heard, 1);
+  });
+
+  it('takes the focus from a field in it, which has no view to blur', () => {
+    // `Engine.focused` is what a scroll view reads to decide a touch dismisses the keyboard: a
+    // field with no view, still focused, has every tap after it swallowed.
+    const s = scene();
+    s.engine.setClasses(s.panel, 'box');
+    const field = s.engine.createElement('text-input');
+    s.engine.appendChild(s.inside, field);
+    const outside = s.engine.createElement('text-input');
+    s.engine.appendChild(s.before, outside);
+    s.engine.commit();
+    s.engine.dispatchEvent(field, 'topFocus', {});
+    s.engine.setClasses(s.panel, 'box gone');
+    s.engine.commit();
+    assert.equal(s.engine.focused, null);
+
+    s.engine.dispatchEvent(outside, 'topFocus', {});
+    s.engine.setClasses(s.panel, 'box');
+    s.engine.commit();
+    s.engine.setClasses(s.panel, 'box gone');
+    s.engine.commit();
+    assert.equal(s.engine.focused, outside, 'a field outside it keeps the focus');
+  });
+
+  it('keeps back what is hoisted out of it, and lets it land once it is displayed', () => {
+    registerHoist('hidden-config', 'hidden-host');
+    const s = scene();
+    const host = s.engine.createElement('hidden-host');
+    s.engine.setProp(host, 'nativeID', 'host');
+    const wrapper = s.engine.createElement('view');
+    s.engine.setProp(wrapper, 'nativeID', 'wrapper');
+    const config = s.engine.createElement('hidden-config');
+    s.engine.setProp(config, 'nativeID', 'config');
+    s.engine.appendChild(s.page, host);
+    s.engine.appendChild(host, wrapper);
+    s.engine.appendChild(wrapper, s.panel);
+    s.engine.appendChild(s.panel, config);
+    const underHost = () => (s.tree()[0] as unknown[]).at(-1);
+    // The wrapper is displayed, and the panel between it and the config is not.
+    assert.deepEqual(underHost(), ['host', ['wrapper']]);
+    s.engine.setClasses(s.panel, 'box');
+    assert.deepEqual(underHost(), ['host', ['wrapper', ['panel', ['inside']]], ['config']]);
+    s.engine.setClasses(s.panel, 'box gone');
+    assert.deepEqual(underHost(), ['host', ['wrapper']]);
+    s.engine.setClasses(s.panel, 'box');
+    s.engine.setProp(config, 'style', { display: 'none' });
+    assert.deepEqual(underHost(), ['host', ['wrapper', ['panel', ['inside']]]]);
   });
 });

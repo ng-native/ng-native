@@ -206,6 +206,9 @@ describe('windowed list, recycled by slot', () => {
       assert.equal(slot.props['position'], 'absolute');
       assert.equal(slot.props['pointerEvents'], 'none');
       assert.notEqual(slot.props['display'], 'none');
+      // And off the list altogether: `pointer-events: none` is CSS's, which something inside
+      // a row can opt back out of with a `pointer-events` of its own.
+      assert.deepEqual(slot.props['transform'], [{ translateX: -100000 }]);
     }
 
     const created = fabric.calls.createNode;
