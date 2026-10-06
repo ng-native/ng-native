@@ -17,6 +17,9 @@ import {
   candidateRules,
   indexRules,
   ruleKey,
+  ruleKeys,
+  styleStats,
+  StyleResolver,
   type StyleSheet,
   type StyleTarget,
 } from '../fabric/src/css.ts';
@@ -70,6 +73,27 @@ describe('the key selector a rule is bucketed by', () => {
   });
 });
 
+describe('a rule that names no key of its own', () => {
+  const keysOf = (css: string) => sheetOf(css).rules.map((rule) => ruleKeys(rule));
+
+  it('is filed under the class of the parent it has to be a child of', () => {
+    // `.row > *` says nothing of the node and everything of its parent: offered to the children
+    // of an element with the class, where the universal bucket offers it to every node there is.
+    assert.deepEqual(keysOf('.row > * { flex: 1 }'), [['in:row']]);
+    assert.deepEqual(keysOf('.row > [data-open] { flex: 1 }'), [['in:row']]);
+    // A name of its own is still the better key, and a descendant is not a child.
+    assert.deepEqual(keysOf('.row > view { flex: 1 }'), [['type:view']]);
+    assert.deepEqual(keysOf('.row * { flex: 1 }'), [['*']]);
+    assert.deepEqual(keysOf('view > * { flex: 1 }'), [['*']]);
+  });
+
+  it('is filed under each compound a bare :is() takes, where every one has a key', () => {
+    assert.deepEqual(keysOf(':is(.a, #b, text) { flex: 1 }'), [['class:a', 'id:b', 'type:text']]);
+    // One of them could be any node, so the rule could be any node's.
+    assert.deepEqual(keysOf(':is(.a, [data-open]) { flex: 1 }'), [['*']]);
+  });
+});
+
 describe('the candidates a node is offered', () => {
   const entriesOf = (css: string) => {
     const sheet = sheetOf(css);
@@ -117,6 +141,36 @@ describe('the candidates a node is offered', () => {
     );
   });
 
+  it('offers a rule filed under the class of its parent to that element\u2019s children alone', () => {
+    const index = indexRules(entriesOf('.row > * { flex: 1 } .other { flex: 2 }'));
+    const row = target('view', ['row']);
+    const child = { ...target('view', []), parent: row } as StyleTarget;
+    assert.equal(candidateRules(child, index).length, 1);
+    assert.equal(candidateRules(row, index).length, 0, 'not the element itself');
+    assert.equal(
+      candidateRules(target('view', []), index).length,
+      0,
+      'nor anybody else\u2019s child',
+    );
+  });
+
+  it('offers a rule filed under two keys once to a node that has both', () => {
+    const index = indexRules(entriesOf(':is(.a, .b) { flex: 1 }'));
+    assert.equal(candidateRules(target('view', ['a', 'b']), index).length, 1);
+    assert.equal(candidateRules(target('view', ['b']), index).length, 1);
+  });
+
+  it('puts the rules of several indexes in the order it is given for them', () => {
+    const first = indexRules(entriesOf('.a { width: 1px } .a { width: 2px }'));
+    const second = indexRules(entriesOf('.a { width: 3px }'), undefined, 100);
+    const heaviest = candidateRules(target('view', ['a']), [second, first]);
+    // By place with no order given: each index was filed from where it was told to start.
+    assert.deepEqual(
+      heaviest.map((entry) => entry.rule.declarations['width']),
+      [1, 2, 3],
+    );
+  });
+
   it('offers a rule once, however many of its selectors could reach the node', () => {
     const entries = entriesOf('.a, .b { flex: 1 }');
     const offered = candidateRules(target('view', ['a', 'b']), indexRules(entries));
@@ -146,5 +200,52 @@ describe('a rule that translated to nothing', () => {
     // Empty of declarations, but not empty: the tokens are the point of the rule.
     const sheet = compileCss(':root { --brand: red }', 'test', { onUnsupported: () => {} });
     assert.equal(sheet.rules.length, 1);
+  });
+});
+
+describe('a sheet added after others are filed', () => {
+  const node = (_resolver: StyleResolver, classes: string[]): StyleTarget =>
+    ({
+      name: 'view',
+      kind: 'element',
+      parent: null,
+      children: [],
+      classes: new Set(classes),
+      props: {},
+      sheet: null,
+      hostSheet: null,
+      styleCache: null,
+      styleDirty: true,
+    }) as unknown as StyleTarget;
+
+  it('is filed on its own: nothing filed before it is filed again', () => {
+    // A library adds a sheet for each of its components as the component first renders, dozens
+    // on one screen. Filing every sheet again for each was most of what a first render cost.
+    const global = sheetOf(
+      Array.from({ length: 50 }, (_, i) => `.g${i} { width: ${i}px }`).join(' '),
+    );
+    const resolver = new StyleResolver(global, { width: 400, height: 800, colorScheme: 'light' });
+    resolver.resolve(node(resolver, ['g1']), 1);
+    const before = styleStats.rulesFiled;
+    resolver.addGlobalSheet(sheetOf('.late { width: 7px } .later { width: 8px }'));
+    const late = resolver.resolve(node(resolver, ['late', 'g1']), 2);
+    assert.equal(styleStats.rulesFiled - before, 2);
+    assert.equal(late.style['width'], 7, 'and it wins a tie, as the sheet that came last');
+  });
+
+  it('files them all again when it takes the place of one that was there', () => {
+    const resolver = new StyleResolver(sheetOf('.g { width: 1px }'), {
+      width: 400,
+      height: 800,
+      colorScheme: 'light',
+    });
+    const first = sheetOf('.a { width: 2px }');
+    resolver.addGlobalSheet(first);
+    assert.equal(resolver.resolve(node(resolver, ['a']), 1).style['width'], 2);
+    const second = sheetOf('.a { width: 3px }');
+    resolver.addGlobalSheet(second, first);
+    assert.equal(resolver.resolve(node(resolver, ['a']), 2).style['width'], 3);
+    resolver.removeGlobalSheet(second);
+    assert.equal(resolver.resolve(node(resolver, ['a']), 3).style['width'], undefined);
   });
 });
