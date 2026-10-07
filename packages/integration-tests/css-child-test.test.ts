@@ -68,6 +68,23 @@ describe(':is(<compound> > *)', () => {
     assert.deepEqual(scoped.reports, []);
   });
 
+  it('matches a compound that is under another, with no child or descendant asked for', () => {
+    // A class written inside a scope and then named by a variant: `:is(.scope .item)`, which is
+    // the element itself where it is somewhere under the scope.
+    const s = scene('.x:is(.p .x) { opacity: 0.5 }');
+    assert.equal(s.opacity('child'), 0.5);
+    assert.equal(s.opacity('grandchild'), 0.5);
+    assert.equal(s.opacity('parent'), undefined);
+    assert.deepEqual(s.reports, []);
+    assert.equal(scene('.x:is(.q .x) { opacity: 0.5 }').opacity('child'), undefined);
+    // And with what the selector says of the element around it.
+    const around = scene(
+      ':where([testID]) :is(:where(.p) .x)[testID="grandchild"] { opacity: 0.5 }',
+    );
+    assert.equal(around.opacity('grandchild'), 0.5);
+    assert.equal(around.opacity('child'), undefined);
+  });
+
   it('is as specific as the compound, in :is(), and weighs nothing in :where()', () => {
     // Two classes against one, then one against one with the later rule winning.
     const is = scene('.x:is(.p > *) { opacity: 0.5 } .x { opacity: 1 }');
