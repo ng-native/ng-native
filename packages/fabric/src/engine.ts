@@ -3699,7 +3699,11 @@ export class Engine implements HostEngine {
     const set = this.fabric.createChildSet(this.rootTag);
     let handles = this.rootHandles();
     // Again, where transitions it laid out where they end are to be eased from JavaScript.
-    if (this.layOut()) handles = this.rootHandles();
+    if (this.layOut()) {
+      handles = this.rootHandles();
+      // What that found resized is the transitions themselves, at the frame they are eased to.
+      this.movesOthers = false;
+    }
     for (const handle of handles) this.fabric.appendChildToSet(set, handle);
     this.clearFlags(this.root);
     this.announceCommit();

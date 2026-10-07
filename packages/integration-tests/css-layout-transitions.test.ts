@@ -20,6 +20,7 @@ const { compileCss } = require('@ng-native/metro/css/compile.cjs');
 const CSS = `
   .a { width: 10px; transition: width 200ms ease-in-out }
   .a.on { width: 30px }
+  .a.far { width: 50px }
   .a.straight { transition-timing-function: linear }
   .a.brief { transition-duration: 20ms }
   .b.tall { height: 40px }
@@ -122,11 +123,11 @@ describe('a transition of a width', () => {
     s.engine.setClasses(s.b, 'b tall');
     s.engine.commit();
     assert.equal(s.asked.length, 0);
-    // Sent back at once, in a commit that resizes nothing else.
-    s.engine.setClasses(s.a, 'a straight');
+    // Sent somewhere else at once, in a commit that resizes nothing else.
+    s.engine.setClasses(s.a, 'a straight far');
     s.engine.commit();
     assert.equal(s.asked.length, 1);
-    assert.equal(s.width(), 10);
+    assert.equal(s.width(), 50);
   });
 
   it('is sent another way from where it has got to, with native asked again', () => {
