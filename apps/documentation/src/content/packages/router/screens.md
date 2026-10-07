@@ -59,8 +59,8 @@ it the way it was asked for. That holds when the user is on `/login` already: th
 navigation to the url it is showing, and the screens under the sign-in page still go, as they do for
 a `reset()` to that url without a guard. It resolves `false` then, as the router does. A `reset()`
 that lands on the screen on top by another url, such as `/login?next=home` or a route that
-redirects to `login`, keeps that screen and takes the ones under it off too. A `replace()` that lands
-there leaves the stack as it is, since the screen it would swap in is the one already on top.
+redirects to `login`, keeps that screen and takes the ones under it off too. A `replace()` that
+lands there leaves the stack as it is, since the screen it would swap in is the one already on top.
 
 A push or a presentation asked for while the app's first screen is still loading, such as a
 lazily loaded root route waiting on its import when a notification is tapped at launch, waits for
