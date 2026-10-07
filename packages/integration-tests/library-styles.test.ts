@@ -123,7 +123,15 @@ describe("a library's component CSS, opted in", () => {
     );
     assert.deepEqual(
       sheet.rules[0]!.deferred,
-      [{ props: ['backgroundColor'], kind: 'color', reference: '--surface' }],
+      [
+        {
+          // The shorthand's token may hold the images as well as the colour.
+          props: ['backgroundColor', 'experimental_backgroundImage'],
+          kind: 'color',
+          reference: '--surface',
+          layers: true,
+        },
+      ],
       "a token in the library's background is read on device",
     );
   });

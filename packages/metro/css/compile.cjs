@@ -674,8 +674,19 @@ function deferVar(value, context) {
     ...(arithmetic?.adjust ? { adjust: arithmetic.adjust } : {}),
     ...fallbacks(varPart, kind, context),
     ...(property in UNSET ? { unset: UNSET[property] } : {}),
+    ...(property === 'background' ? backgroundLayers() : {}),
   };
 }
+
+/**
+ * What only the `background` shorthand's token has: it may hold the images as well as the colour,
+ * where `background-color`'s never does. The image is named among its props so that it is ranked
+ * in the cascade by itself, against a `background-image` another rule declares.
+ */
+const backgroundLayers = () => ({
+  props: ['backgroundColor', 'experimental_backgroundImage'],
+  layers: true,
+});
 
 /** The motion a token can be read into whole, and the key and token form each reads it as. */
 const MOTION_FROM_TOKEN = {
