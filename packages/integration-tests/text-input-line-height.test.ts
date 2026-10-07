@@ -372,6 +372,37 @@ describe('a single-line iOS text input in a row aligned by baseline', () => {
     assert.equal(moved['paddingTop'], 8);
   });
 
+  it('is left as it was once its box is moved out and the row it was in is taken away', () => {
+    // The row is not there to be committed again and say so: the field is asked.
+    const { engine, row, fabric } = inRow({ alignItems: 'baseline' });
+    const other = engine.createElement('view');
+    engine.setProp(other, 'style', { flexDirection: 'row', alignItems: 'center' });
+    engine.appendChild(engine.root, other);
+    const infix = row.children[0]!;
+    engine.removeChild(row, infix);
+    engine.appendChild(other, infix);
+    engine.removeChild(engine.root, row);
+    engine.commit();
+    const moved = fabric.committed[0]!.children[0]!.children[0]!.props;
+    assert.equal(moved['paddingTop'], 8);
+  });
+
+  it('is left as it is where it is placed out of the row, which takes no baseline from it', () => {
+    const fabric = createFakeFabric();
+    const engine = new Engine(fabric, 1, {
+      conditions: { width: 390, height: 844, colorScheme: 'light' },
+    });
+    const row = engine.createElement('view');
+    engine.setProp(row, 'style', { flexDirection: 'row', alignItems: 'baseline' });
+    const input = engine.createElement('text-input', sheet);
+    engine.addClass(input, 'field');
+    engine.setProp(input, 'style', { position: 'absolute' });
+    engine.appendChild(row, input);
+    engine.appendChild(engine.root, row);
+    engine.commit();
+    assert.equal(fabric.committed[0]!.children[0]!.props['paddingTop'], 8);
+  });
+
   it('follows the row coming to be aligned by baseline, and no longer', () => {
     const { engine, row, props } = inRow({ alignItems: 'center' });
     engine.setProp(row, 'style', { flexDirection: 'row', alignItems: 'baseline' });
