@@ -1,6 +1,6 @@
 ---
 title: The native header
-summary: NativeHeader, its items and search bar, NativeToolbar, colors, and withHeaderDefaults.
+summary: A native navigation bar for a screen, with its search field, bottom toolbar and colors.
 ---
 
 # The native header
