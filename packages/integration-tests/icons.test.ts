@@ -525,6 +525,8 @@ describe('an icon in the tree', () => {
     assert.equal(byId('in-rem').props['width'], 24);
     // One it cannot read is left the size of the text around it, and never NaN.
     assert.equal(byId('unread').props['width'], 16);
+    // Nor one whose number is not a number, which matched as rem and came to NaN.
+    assert.equal(byId('unread-rem').props['width'], 16);
   });
 
   it('finds the icon through provideIcons, by the name a web app uses', () => {
