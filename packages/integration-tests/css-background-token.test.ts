@@ -114,6 +114,89 @@ describe('background: var()', () => {
     assert.equal(background(), 'rgb(0, 128, 0)');
   });
 
+  const RED_TO_BLUE = 'linear-gradient(to right, rgb(255, 0, 0), rgb(0, 0, 255))';
+  const BLUE_TO_GREEN = [
+    {
+      type: 'linear-gradient',
+      direction: { type: 'angle', value: 180 },
+      colorStops: [
+        { color: 'rgb(0, 0, 255)', position: null },
+        { color: 'rgb(0, 128, 0)', position: null },
+      ],
+    },
+  ];
+  /** The direction of each gradient committed: 90 for the token's, 180 for a rule's own. */
+  const directions = (image: unknown) =>
+    ((image ?? []) as { direction: { value: number } }[]).map((layer) => layer.direction.value);
+
+  it('ranks the gradient with the image and its colour with the colour, each on its own', () => {
+    // An important colour is no reason to drop the image the shorthand's token holds.
+    const colour = tree('.a { background: var(--bg) } .a { background-color: #0f0 !important }');
+    colour.engine.setCustomProperty(colour.node, '--bg', `${RED_TO_BLUE}, rgb(255, 0, 0)`);
+    colour.engine.commit();
+    assert.deepEqual(directions(colour.image()), [90], "the token's gradient is drawn");
+    assert.equal(colour.background(), 'rgb(0, 255, 0)', 'under the important colour');
+
+    // An important image stands over the token's.
+    const image = tree(
+      '.a { background: var(--bg) } .a { background-image: linear-gradient(blue, green) !important }',
+    );
+    image.engine.setCustomProperty(image.node, '--bg', `${RED_TO_BLUE}, rgb(255, 0, 0)`);
+    image.engine.commit();
+    assert.deepEqual(image.image(), BLUE_TO_GREEN);
+    assert.equal(image.background(), 'rgb(255, 0, 0)', "and the token's colour is still read");
+  });
+
+  it('gives way to an image a later rule declares, and stands over an earlier one', () => {
+    const later = tree(
+      '.a { background: var(--bg) } .a { background-image: linear-gradient(blue, green) }',
+    );
+    later.engine.setCustomProperty(later.node, '--bg', RED_TO_BLUE);
+    later.engine.commit();
+    assert.deepEqual(later.image(), BLUE_TO_GREEN, 'the later declaration wins the cascade');
+
+    const earlier = tree(
+      '.a { background-image: linear-gradient(blue, green) } .a { background: var(--bg) }',
+    );
+    earlier.engine.setCustomProperty(earlier.node, '--bg', RED_TO_BLUE);
+    earlier.engine.commit();
+    assert.deepEqual(directions(earlier.image()), [90]);
+
+    // Important, the shorthand stands over a later image that is not.
+    const important = tree(
+      '.a { background: var(--bg) !important } .a { background-image: linear-gradient(blue, green) }',
+    );
+    important.engine.setCustomProperty(important.node, '--bg', RED_TO_BLUE);
+    important.engine.commit();
+    assert.deepEqual(directions(important.image()), [90]);
+  });
+
+  it('draws no image for background-color, whose token holding a gradient is no colour', () => {
+    const { engine, node, background, image } = tree('.a { background-color: var(--bg) }');
+    engine.setCustomProperty(node, '--bg', RED_TO_BLUE);
+    engine.commit();
+    assert.equal(image() ?? null, null, 'a colour declaration sets no image');
+    assert.equal(background() ?? null, null);
+  });
+
+  it('reads the gradient from the token the declaration settles on, the first that is set', () => {
+    const { engine, node, image } = tree('.a { background: var(--missing, var(--backup)) }');
+    engine.setCustomProperty(node, '--backup', RED_TO_BLUE);
+    engine.commit();
+    assert.deepEqual(directions(image()), [90]);
+  });
+
+  it('reads a gradient written in capitals, as CSS does', () => {
+    const { engine, node, image } = tree('.a { background: var(--bg) }');
+    engine.setCustomProperty(
+      node,
+      '--bg',
+      'LINEAR-GRADIENT(TO RIGHT, RGB(255, 0, 0), RGB(0, 0, 255))',
+    );
+    engine.commit();
+    assert.deepEqual(directions(image()), [90]);
+  });
+
   it('draws nothing for a gradient native has none of, and none for one it cannot read', () => {
     const { engine, node, background, image } = tree('.a { background: var(--bg) }');
     for (const unread of [
