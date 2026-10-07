@@ -1035,6 +1035,8 @@ const STRETCHES = new Set([undefined, null, 'auto', 'stretch']);
  * kept, since it stops the stretch already.
  */
 function fitContent(node: EngineNode, props: Record<string, unknown>): void {
+  capAtContent(props, 'width', 'maxWidth');
+  capAtContent(props, 'height', 'maxHeight');
   const width = props['width'] === 'fit-content';
   const height = props['height'] === 'fit-content';
   if (!width && !height) return;
@@ -1048,6 +1050,22 @@ function fitContent(node: EngineNode, props: Record<string, unknown>): void {
   const across = direction === 'row' ? height : width;
   if (across && align === 'stretch' && STRETCHES.has(props['alignSelf'] as string)) {
     props['alignSelf'] = 'flex-start';
+  }
+}
+
+/**
+ * `max-width: max-content`, and the same of a height: no bigger than its content, which for a
+ * box that would fill its container is `fit-content`. Yoga has no such cap.
+ *
+ * ponytail: a size in points is left as it is, since nothing here knows how big the content
+ * is. Measure it if a box is ever given both.
+ */
+function capAtContent(props: Record<string, unknown>, size: string, cap: string): void {
+  if (props[cap] !== 'max-content') return;
+  delete props[cap];
+  const own = props[size];
+  if (own == null || own === 'auto' || (typeof own === 'string' && own.endsWith('%'))) {
+    props[size] = 'fit-content';
   }
 }
 

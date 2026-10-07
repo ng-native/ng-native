@@ -228,11 +228,13 @@ describe('height: fit-content', () => {
 
 describe('the other intrinsic sizes', () => {
   it('are still refused, by name', () => {
-    for (const value of ['max-content', 'min-content']) {
-      const s = scene(`.c { width: ${value} }`);
-      s.props();
-      assert.equal(s.reports.length, 1, value);
-    }
+    // As narrow as its longest word: nothing a box here is laid out as.
+    const narrow = scene('.c { width: min-content }');
+    narrow.props();
+    assert.equal(narrow.reports.length, 1);
+    const least = scene('.c { min-width: max-content }');
+    least.props();
+    assert.equal(least.reports.length, 1);
     const s = scene('.c { max-width: fit-content }');
     s.props();
     assert.equal(s.reports.length, 1);

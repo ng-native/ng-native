@@ -1,7 +1,7 @@
 {
   "bootstrap": {
     "rules": 2524,
-    "dropped": 685,
+    "dropped": 684,
     "emitted": [
       "$animation",
       "$animationDelay",
@@ -319,9 +319,6 @@
       },
       "visibility": {
         "'visibility' has no React Native equivalent: no style prop of a native view does what it does. Use opacity: 0 to hide a box and keep its space, or display: none to remove it.": 20
-      },
-      "width": {
-        "width: expected a length, and 'max-content' is not one": 1
       },
       "word-break": {
         "'word-break' has no React Native equivalent: no style prop of a native view does what it does.": 4
@@ -935,7 +932,7 @@
   },
   "open-props": {
     "rules": 73,
-    "dropped": 198,
+    "dropped": 197,
     "emitted": [
       "aspectRatio",
       "backgroundColor",
@@ -1050,9 +1047,6 @@
       },
       "font-size": {
         "arithmetic with tokens in it cannot take 'em' here. What the device works out is numbers, points, degrees and var(), with + - * / and brackets; a percentage, an em or a viewport unit beside a token needs layout the device does not do here.": 1
-      },
-      "max-inline-size": {
-        "max-width: expected a length, and 'max-content' is not one": 1
       },
       "min-block-size": {
         "min-height: unit 'lh' has no meaning on native (px, rem, em, %, vw, vh, vmin and vmax are)": 1

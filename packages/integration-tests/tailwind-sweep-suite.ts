@@ -692,7 +692,17 @@ const COMPONENT_PROPS = new Set(['nativeID', 'accessible', 'pointerEvents', 'col
  * that stretches: no size, and across the column no stretch. What the engine does is tested in
  * `css-fit-content.test.ts`; this is what checks that doing it puts the box where Chrome does.
  */
-function fitted(style: Record<string, unknown>): Record<string, unknown> {
+function fitted(committed: Record<string, unknown>): Record<string, unknown> {
+  const style = { ...committed };
+  // A cap at its content, on a box with no size in points, is the same `fit-content`.
+  for (const [size, cap] of [
+    ['width', 'maxWidth'],
+    ['height', 'maxHeight'],
+  ] as const) {
+    if (style[cap] !== 'max-content') continue;
+    delete style[cap];
+    if (typeof style[size] !== 'number') style[size] = 'fit-content';
+  }
   const { width, height, ...rest } = style;
   if (width !== 'fit-content' && height !== 'fit-content') return style;
   if (width !== 'fit-content') rest['width'] = width;

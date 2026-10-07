@@ -2008,6 +2008,12 @@ const FALLBACKS = [
         out[rnName(property)] = 'fit-content';
         return;
       }
+      // As big as its content, which a box here never exceeds: the same as `fit-content` for a
+      // size, and for a cap the engine reads beside the size it caps.
+      if (value?.type === 'max-content' && property in MAX_CONTENT) {
+        out[rnName(property)] = MAX_CONTENT[property];
+        return;
+      }
       const settled = length(value, property);
       // A font size in percent is a share of the inherited one, which is what an em is: native's
       // fontSize takes points, so it is worked out where the inherited size is known.
@@ -2095,6 +2101,14 @@ const INSTEAD = {
   order: 'Yoga lays children out in the order they are written: change the order in the template.',
   float: 'Lay the row out with flexbox: flex-direction: row on the parent.',
   clear: 'Lay the row out with flexbox: flex-direction: row on the parent.',
+};
+
+/** What `max-content` is set as for each property that takes it. */
+const MAX_CONTENT = {
+  width: 'fit-content',
+  height: 'fit-content',
+  'max-width': 'max-content',
+  'max-height': 'max-content',
 };
 
 /**

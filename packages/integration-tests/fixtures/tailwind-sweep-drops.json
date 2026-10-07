@@ -2586,8 +2586,6 @@
     "block-[3]!"
   ],
   "dropped 'block-size': height: expected a length, and '…' is not one": [
-    "block-max",
-    "block-max!",
     "block-min",
     "block-min!"
   ],
@@ -4776,12 +4774,8 @@
     "size-[3]!"
   ],
   "dropped 'height': height: expected a length, and '…' is not one": [
-    "h-max",
-    "h-max!",
     "h-min",
     "h-min!",
-    "size-max",
-    "size-max!",
     "size-min",
     "size-min!"
   ],
@@ -4838,8 +4832,6 @@
     "inline-[3]!"
   ],
   "dropped 'inline-size': width: expected a length, and '…' is not one": [
-    "inline-max",
-    "inline-max!",
     "inline-min",
     "inline-min!"
   ],
@@ -7682,8 +7674,6 @@
   "dropped 'max-block-size': max-height: expected a length, and '…' is not one": [
     "max-block-fit",
     "max-block-fit!",
-    "max-block-max",
-    "max-block-max!",
     "max-block-min",
     "max-block-min!"
   ],
@@ -7716,8 +7706,6 @@
   "dropped 'max-height': max-height: expected a length, and '…' is not one": [
     "max-h-fit",
     "max-h-fit!",
-    "max-h-max",
-    "max-h-max!",
     "max-h-min",
     "max-h-min!"
   ],
@@ -7756,8 +7744,6 @@
   "dropped 'max-inline-size': max-width: expected a length, and '…' is not one": [
     "max-inline-fit",
     "max-inline-fit!",
-    "max-inline-max",
-    "max-inline-max!",
     "max-inline-min",
     "max-inline-min!"
   ],
@@ -7788,8 +7774,6 @@
   "dropped 'max-width': max-width: expected a length, and '…' is not one": [
     "max-w-fit",
     "max-w-fit!",
-    "max-w-max",
-    "max-w-max!",
     "max-w-min",
     "max-w-min!"
   ],
@@ -10676,12 +10660,8 @@
     "w-[3]!"
   ],
   "dropped 'width': width: expected a length, and '…' is not one": [
-    "size-max",
-    "size-max!",
     "size-min",
     "size-min!",
-    "w-max",
-    "w-max!",
     "w-min",
     "w-min!"
   ],
