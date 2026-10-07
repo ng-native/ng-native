@@ -42,6 +42,7 @@ import {
   type EasedNatively,
   type Keyframe,
   type RunningAnimation,
+  type TrackPoint,
   type Transition,
   type TransitionSpec,
 } from './transition.ts';
@@ -67,6 +68,7 @@ export type FabricNode = { readonly __fabricNode: unique symbol } | object;
 import type { HostEngine, HostNode, Settling } from './host.ts';
 import {
   clockChannels,
+  colourChannels,
   firstFrame,
   movesByShare,
   rangeOf,
@@ -1880,8 +1882,35 @@ function repaint(node: EngineNode): void {
 
 /** A sixtieth of a second: how far apart the frames native is given for an animation are. */
 const NATIVE_FRAME = 1000 / 60;
+/**
+ * What native eases a set of transitions on one clock by: a colour by its own channels, opacity
+ * and a transform as an animation of them is. Nothing where any of them is no value native can
+ * ease, which leaves them all to JavaScript.
+ */
+function easedChannels(
+  tracks: ReadonlyMap<string, readonly TrackPoint[]>,
+  spec: AnimationSpec,
+  props: Record<string, unknown>,
+): DrivenChannels | null {
+  const tinted = new Map([...tracks].filter(([key]) => EASED_COLOURS.has(key)));
+  const moved = new Map([...tracks].filter(([key]) => !EASED_COLOURS.has(key)));
+  const colors = colourChannels(tinted, spec);
+  const { channels, held } = clockChannels(moved, spec, props);
+  if (!colors || held.length) return null;
+  const any = channels.opacity || channels.transform.length || tinted.size;
+  return any ? { ...channels, colors } : null;
+}
+
 /** The properties of a transition native can play: see `easeNatively`. */
-const NATIVELY_EASED = new Set(['opacity', 'transform']);
+const EASED_COLOURS = new Set([
+  'backgroundColor',
+  'borderColor',
+  'borderTopColor',
+  'borderRightColor',
+  'borderBottomColor',
+  'borderLeftColor',
+]);
+const NATIVELY_EASED = new Set(['opacity', 'transform', ...EASED_COLOURS]);
 
 /** The style keys that are a view's background. */
 const PAINT_KEYS = [
@@ -4668,8 +4697,8 @@ export class Engine implements HostEngine {
       iterations: 1,
       fill: 'both',
     };
-    const { channels, held } = clockChannels(tracks, spec, props);
-    if (held.length || !(channels.opacity || channels.transform.length)) return;
+    const channels = easedChannels(tracks, spec, props);
+    if (!channels) return;
     const length = Math.max(2, Math.round(first.duration / NATIVE_FRAME) + 1);
     const frames = Array.from({ length }, (_, i) => i / (length - 1));
     const clock: { keys: readonly string[]; stop(): void } = { keys, stop: () => undefined };

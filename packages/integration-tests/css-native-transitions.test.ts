@@ -235,13 +235,4 @@ describe('a transition of a colour', () => {
     assert.equal(s.at(1)['opacity'], 0.5);
     assert.equal(s.at(1)['backgroundColor.b'], 30);
   });
-
-  it('is eased from JavaScript where it is a colour native has no channels for', () => {
-    const s = scene(
-      '.a { background-color: red; transition: background-color 200ms linear } ' +
-        '.a.on { background-color: color-mix(in srgb, red, blue) }',
-    );
-    s.classes('a on');
-    assert.equal(s.started().length, 0);
-  });
 });

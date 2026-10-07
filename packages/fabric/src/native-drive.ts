@@ -306,6 +306,14 @@ export class NativeScrollDriver {
     };
     const style: Record<string, number> = {};
     if (channels.opacity) style['opacity'] = interpolation(channels.opacity);
+    for (const [property, parts] of Object.entries(channels.colors ?? {})) {
+      const [r, g, b, a] = parts.map(interpolation);
+      const colour = this.native.generateNewNodeTag();
+      API.createAnimatedNode(colour, { type: 'color', r, g, b, a });
+      for (const part of [r, g, b, a]) API.connectAnimatedNodes(part!, colour);
+      style[property] = colour;
+      made.push(colour);
+    }
     if (channels.transform.length) {
       const transforms = channels.transform.map((channel) =>
         'range' in channel
