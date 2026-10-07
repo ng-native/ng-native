@@ -153,6 +153,7 @@ export class NativeStackOutlet implements RouterOutletContract, OnInit {
   private readonly engine = inject(HostEngine, { optional: true });
 
   private readonly errors = inject(ErrorHandler);
+  private readonly back = inject(NativeBack);
   /** The screen this stack sits in, when it is a stack inside a page of another. */
   private readonly holder = inject(HOLDING_SCREEN, { optional: true });
   /** What the holder's own `preventNativeDismiss` was, while this stack's top screen refuses. */
@@ -181,7 +182,7 @@ export class NativeStackOutlet implements RouterOutletContract, OnInit {
     // Not yet verified on a device: whether react-native-screens' own Android back handling
     // (`nativeBackButtonDismissalEnabled`) also pops the screen, which would make one press pop
     // twice. If a back press ever skips a screen on Android, look here first.
-    const back = inject(NativeBack);
+    const back = this.back;
     const unsubscribeBack = back.handle((from) =>
       from === 'button' && this.refusesButton() ? true : this.goBack(),
     );
@@ -405,6 +406,7 @@ export class NativeStackOutlet implements RouterOutletContract, OnInit {
     // else the page's style set - a background colour, say - still merges and stays.
     this.fillScreen(screen);
 
+    this.back.stacked(navigation);
     if (intent?.stack === 'reset') this.supersede(this.entries.slice(), navigation);
     else if (intent?.stack === 'replace' && this.top) this.supersede([this.top], navigation);
     this.entries.push({
@@ -529,6 +531,7 @@ export class NativeStackOutlet implements RouterOutletContract, OnInit {
       entry.unbind = this.bindInputs(ref, route);
     }
 
+    this.back.stacked(this.navigationId());
     // Resume change detection for the screen the user is coming back to.
     ref.hostView.reattach();
   }

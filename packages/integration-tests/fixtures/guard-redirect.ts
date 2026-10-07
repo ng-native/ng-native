@@ -34,5 +34,10 @@ export const guardedRoutes: Routes = [
     component: GuardedHome,
     canActivate: [() => session.signedIn || inject(Router).parseUrl('/login')],
   },
+  {
+    path: 'account',
+    component: GuardedHome,
+    canActivate: [() => session.signedIn || inject(Router).parseUrl('/login?next=account')],
+  },
   { path: 'sign-in', redirectTo: 'login' },
 ];

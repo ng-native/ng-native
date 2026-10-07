@@ -153,3 +153,72 @@ it('resets the stack to the page on top for a reset to its own url', async () =>
   assert.equal(router.url, '/b');
   assert.deepEqual(pages(app), ['B']);
 });
+
+/** The app with `A`, `B` and `Login` on the stack, at `/login`. */
+async function onLogin() {
+  const deep = await twoDeep();
+  await deep.router.navigateByUrl('/login');
+  await turns();
+  assert.deepEqual(pages(deep.app), ['A', 'B', 'Login']);
+  return deep;
+}
+
+it("resets the stack to the page on top when the route config's redirect lands there", async () => {
+  const { app, nav, router } = await onLogin();
+  assert.equal(await nav.reset('/sign-in'), true);
+  await turns();
+  assert.equal(router.url, '/login');
+  assert.deepEqual(pages(app), ['Login']);
+});
+
+it('resets the stack to the page on top for a reset to its url with another query', async () => {
+  const { app, nav, router } = await onLogin();
+  assert.equal(await nav.reset('/login?x=1'), true);
+  await turns();
+  assert.equal(router.url, '/login?x=1');
+  assert.deepEqual(pages(app), ['Login']);
+  assert.equal(nav.back(), undefined);
+  await turns();
+  assert.deepEqual(pages(app), ['Login'], 'nothing under it to go back to');
+});
+
+it('resets the stack to the page on top when a guard redirects a reset to another url of it', async () => {
+  const { app, nav, router } = await onLogin();
+  assert.equal(await nav.reset('/account'), true);
+  await turns();
+  assert.equal(router.url, '/login?next=account');
+  assert.deepEqual(pages(app), ['Login']);
+});
+
+it('leaves the stack alone for a replace that lands on the page on top', async () => {
+  const { app, nav, router } = await onLogin();
+  assert.equal(await nav.replace('/login?x=1'), true);
+  await turns();
+  assert.equal(router.url, '/login?x=1');
+  assert.deepEqual(pages(app), ['A', 'B', 'Login']);
+});
+
+it('resets to another page as before, and leaves a later navigation to the page on top alone', async () => {
+  const { app, nav, router } = await onLogin();
+  await nav.reset('/a');
+  await turns();
+  assert.deepEqual(pages(app), ['A']);
+
+  await router.navigateByUrl('/b');
+  await turns();
+  await router.navigateByUrl('/b?x=1');
+  await turns();
+  assert.equal(router.url, '/b?x=1');
+  assert.deepEqual(pages(app), ['A', 'B'], 'not reset by the earlier one');
+});
+
+it('leaves a later navigation to the page on top alone after a reset onto it', async () => {
+  const { app, nav, router } = await onLogin();
+  await nav.reset('/login?x=1');
+  await turns();
+  await router.navigateByUrl('/b');
+  await turns();
+  await router.navigateByUrl('/b?y=2');
+  await turns();
+  assert.deepEqual(pages(app), ['Login', 'B'], 'not reset by the earlier one');
+});

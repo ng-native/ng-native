@@ -91,8 +91,9 @@ export function navigationIntent(
  * Hand a navigation's intent on to the one its guard redirects it to. The router schedules that
  * navigation as soon as it has reported the cancel, so it takes the next id.
  *
- * A reset to the url already showing, its own or the one a guard sends it to, is one the router
- * skips: no outlet activates anything for it, so the stack is reset here, to the screen on top.
+ * A reset that lands on the screen already on top, its own url or the one a redirect sends it to,
+ * is one no outlet activates anything for: the router skips the url already showing, and reuses
+ * the screen for another url of it. So the stack is reset here, to the screen on top.
  */
 export function carryIntentAcrossRedirects(): void {
   const router = inject(Router);
@@ -102,16 +103,24 @@ export function carryIntentAcrossRedirects(): void {
       carryPast(router, event.id);
       return;
     }
-    if (
-      event instanceof NavigationSkipped &&
-      event.code === NavigationSkippedCode.IgnoredSameUrlNavigation &&
-      intentAt(router, event.id)?.stack === 'reset'
-    ) {
+    if (keptTop(event, outlets) && intentAt(router, event.id)?.stack === 'reset') {
       outlets.resetToTop();
     }
     if (ended(event) && redirected.get(router)?.id === event.id) redirected.delete(router);
   });
   inject(DestroyRef).onDestroy(() => events.unsubscribe());
+}
+
+/**
+ * Whether the navigation `event` ends left the screen on top where it was: one the router skipped
+ * for the url already showing, or one no stack put a screen on top for, such as a url with another
+ * query, or one a redirect sends to the page on top.
+ */
+function keptTop(event: unknown, outlets: NativeBack): event is { readonly id: number } {
+  if (event instanceof NavigationSkipped) {
+    return event.code === NavigationSkippedCode.IgnoredSameUrlNavigation;
+  }
+  return event instanceof NavigationEnd && !outlets.stackedIn(event.id);
 }
 
 /** The intent of the navigation in progress, when it is the one with `id`. */

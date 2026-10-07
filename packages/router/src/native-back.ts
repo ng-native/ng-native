@@ -100,11 +100,27 @@ export class NativeBack {
 
   /**
    * Take the screens under the top of the innermost stack in front that has any off it, leaving
-   * the top one: a reset to the url already showing, which the router skips. False when no stack
-   * in front had any.
+   * the top one: a reset that lands on the screen already on top, which no stack activates
+   * anything for. False when no stack in front had any.
    */
   resetToTop(): boolean {
     return [...this.stacks].reverse().some((stack) => stack.showing() && stack.dropUnderTop());
+  }
+
+  /** The id of the last navigation a stack put a screen on top for. */
+  private lastStacked: number | undefined;
+
+  /** A stack put a screen on top, a new one or one it kept, for the navigation with that id. */
+  stacked(navigation: number | undefined): void {
+    if (navigation !== undefined) this.lastStacked = navigation;
+  }
+
+  /**
+   * Whether a stack put a screen on top for the navigation with that id. One that put none left
+   * the screen on top where it was, as a navigation to it with another query does.
+   */
+  stackedIn(navigation: number): boolean {
+    return this.lastStacked === navigation;
   }
 
   /** Pop the innermost stack in front that has a screen at `url` below its top, down to it. */
