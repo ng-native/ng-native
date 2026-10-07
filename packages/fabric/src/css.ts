@@ -2906,6 +2906,14 @@ export class StyleResolver {
   /** That parent's inline style, which is over what its rules gave it. */
   private parentInline: unknown;
 
+  /** What the parent's inline style sets, under what its rules marked important, as on the parent. */
+  private parentSet(): Readonly<Record<string, unknown>> {
+    if (!this.parentInline) return EMPTY;
+    const inline = flattenInline(this.parentInline, {});
+    for (const prop of this.parentOf?.important ?? []) delete inline[prop];
+    return inline;
+  }
+
   /**
    * `inherit`: each prop as the parent has it, handed down or its own, and gone where the parent
    * has none, which is what a weaker rule's value for it gives way to.
@@ -2916,7 +2924,7 @@ export class StyleResolver {
     parentInherited: Record<string, unknown>,
     important: Record<string, unknown> | null,
   ): void {
-    const inline = this.parentInline ? flattenInline(this.parentInline, {}) : EMPTY;
+    const inline = this.parentSet();
     for (const prop of declaration.props) {
       if (!declaration.important && important !== null && prop in important) continue;
       const value = inline[prop] ?? parentInherited[prop] ?? this.parentOf?.style[prop];
