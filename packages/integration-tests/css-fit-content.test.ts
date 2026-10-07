@@ -100,6 +100,54 @@ describe('width: fit-content', () => {
   });
 });
 
+describe('max-content', () => {
+  // As big as its content, which is what a box is along its container's main axis already and
+  // what `fit-content` makes it across: a box here is never wider than its content needs.
+  it('is read as fit-content where it is a width or a height', () => {
+    for (const size of ['width', 'height']) {
+      const s = scene(
+        `.p { flex-direction: ${size === 'width' ? 'column' : 'row'} } .c { ${size}: max-content }`,
+      );
+      const props = s.props();
+      assert.equal(props['alignSelf'], 'flex-start', size);
+      assert.equal(size in props, false, size);
+      assert.deepEqual(s.reports, [], size);
+    }
+  });
+
+  it('keeps a box that fills its container to its content, as a max-width', () => {
+    // Tailwind's `max-w-max`: a bar that would stretch is no wider than what is in it.
+    for (const width of ['', 'width: 100%;', 'width: auto;']) {
+      const s = scene(`.c { ${width} max-width: max-content }`);
+      const props = s.props();
+      assert.equal(props['alignSelf'], 'flex-start', width);
+      assert.equal('width' in props, false, width);
+      assert.equal('maxWidth' in props, false, width);
+      assert.deepEqual(s.reports, [], width);
+    }
+  });
+
+  it('leaves a width in points as it is, with nothing to cap it by', () => {
+    const props = scene('.c { width: 120px; max-width: max-content }').props();
+    assert.equal(props['width'], 120);
+    assert.equal('maxWidth' in props, false);
+    assert.equal('alignSelf' in props, false);
+  });
+
+  it('caps a height the same way, across a row', () => {
+    const props = scene('.p { flex-direction: row } .c { max-height: max-content }').props();
+    assert.equal(props['alignSelf'], 'flex-start');
+    assert.equal('maxHeight' in props, false);
+  });
+
+  it('goes when the rule no longer applies', () => {
+    const s = scene('.c { max-width: max-content }');
+    assert.equal(s.props()['alignSelf'], 'flex-start');
+    s.engine.removeClass(s.inner, 'c');
+    assert.equal(s.props()['alignSelf'] ?? null, null);
+  });
+});
+
 describe('fit-content and the rest of what a node is merged from', () => {
   it('reads the alignment a component overrides its container with', () => {
     const s = scene(FIT);
