@@ -4363,7 +4363,7 @@ export class Engine implements HostEngine {
     const state = (node.transitions ??= new Map());
     const now = this.now();
 
-    for (const key of steppedKeys(props, spec)) {
+    for (const key of steppedKeys(props, spec, state)) {
       if (step(state, key, props, spec?.[key] ?? spec?.['all'], now)) {
         this.running.add(node);
         this.emitTransition(node, 'topTransitionstart', key);

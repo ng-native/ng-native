@@ -537,6 +537,25 @@ describe('running a transition', () => {
     assert.equal(s.painted('opacity'), 0.5, 'halfway from 1');
   });
 
+  it('stops a fade whose transition and opacity both go away at once', () => {
+    // Neither the element nor a transition names the property any more, and it is still one in
+    // flight: left alone it ran on with no rule, and ended with an event nobody asked for.
+    const s = scene(
+      `
+      .eased { transition: all 100ms linear; }
+      .closed { opacity: 0; }
+    `,
+      'eased',
+    );
+    s.classes('eased closed');
+    s.tick(50);
+    assert.equal(s.painted('opacity'), 0.5);
+    s.classes('');
+    s.tick(10);
+    assert.equal(s.engine.animating, false, 'nothing left in flight');
+    assert.equal(s.painted('opacity') ?? null, null);
+  });
+
   it('does the same where a property is named beside all', () => {
     const s = scene(`
       view { transition: all 100ms linear, width 200ms linear; }

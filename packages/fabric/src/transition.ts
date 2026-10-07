@@ -779,13 +779,15 @@ const INITIAL: Record<string, unknown> = {
  * settling, and one that does not exist is never seen - so `transition: transform` with no
  * transform until a class adds one would arrive instantly, which is the commonest way to write
  * one. `all` names none of them, but it does cover the ones with an initial value to ease from:
- * an opacity nothing set is still 1.
+ * an opacity nothing set is still 1. And the ones already in `state`, so one whose rule and value
+ * both went away is forgotten rather than left running.
  */
 export function steppedKeys(
   props: Record<string, unknown>,
   spec: Record<string, TransitionSpec> | undefined,
+  state: ReadonlyMap<string, Transition>,
 ): Set<string> {
-  const keys = new Set(Object.keys(props));
+  const keys = new Set([...Object.keys(props), ...state.keys()]);
   if (!spec) return keys;
   for (const key of Object.keys(spec)) if (key !== 'all') keys.add(key);
   if (spec['all']) for (const key of Object.keys(INITIAL)) keys.add(key);
