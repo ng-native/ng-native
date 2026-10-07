@@ -88,6 +88,16 @@ describe('a press', () => {
     assert.equal(s.props('label')['opacity'], null);
   });
 
+  it('styles what is inside a pressed element named in :is(), and not the screen', () => {
+    // How Tailwind writes `group-active:`: the group is named inside `:is()`, and the compound
+    // that asks has no class of its own, which is not the same as being any element.
+    const s = scene(`${BASE} :is(.group):active .label { opacity: 0.3 }`);
+    assert.ok(s.touch('topTouchStart') <= 3);
+    assert.equal(s.props('label')['opacity'], 0.3);
+    assert.ok(s.touch('topTouchEnd') <= 3);
+    assert.equal(s.props('label')['opacity'], null);
+  });
+
   it('styles an element that holds a pressed one, where a rule asks about that', () => {
     const s = scene(`${BASE} .outer:has(.btn:active) { opacity: 0.7 }`);
     s.touch('topTouchStart');
