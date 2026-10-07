@@ -107,8 +107,11 @@ describe(':is(<compound> > *)', () => {
   });
 
   it('still refuses a longer selector inside', () => {
-    const s = scene('.x:is(.a .p > *) { opacity: 0.5 }');
-    assert.equal(s.reports.length, 1);
+    // Two compounds over the parent, or a parent of the parent: a longer walk than one ancestor.
+    for (const longer of ['.a .b .p > *', '.a > .p > *', '.a ~ .p > *']) {
+      const s = scene(`.x:is(${longer}) { opacity: 0.5 }`);
+      assert.equal(s.reports.length, 1, longer);
+    }
   });
 });
 

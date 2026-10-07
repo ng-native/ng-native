@@ -1258,7 +1258,11 @@ function parentArgument(argument) {
   return aboveArgument(argument, 'child');
 }
 
-/** `<compound> <combinator> *`, as the compound, or null. */
+/**
+ * `<compound> <combinator> *`, as the compound, or null. The compound may be under one other,
+ * `<scope> <compound> > *`, which is the same test of a compound that has an ancestor of its
+ * own: a `*:` variant written inside a scope. The scope is kept on the parts as `under`.
+ */
 function aboveArgument(argument, relation) {
   if (argument.length < 3) return null;
   const last = argument[argument.length - 1];
@@ -1266,7 +1270,10 @@ function aboveArgument(argument, relation) {
   if (last?.type !== 'universal') return null;
   if (combinator?.type !== 'combinator' || combinator.value !== relation) return null;
   const rest = argument.slice(0, -2);
-  return rest.some((piece) => piece.type === 'combinator') ? null : rest;
+  const joins = rest.flatMap((piece, at) => (piece.type === 'combinator' ? [at] : []));
+  if (!joins.length) return rest;
+  if (joins.length > 1 || rest[joins[0]].value !== 'descendant') return null;
+  return Object.assign(rest.slice(joins[0] + 1), { under: rest.slice(0, joins[0]) });
 }
 
 /**
@@ -1354,7 +1361,7 @@ function functionalPseudo(part, context) {
   for (const argument of part.selectors) {
     const { list, parts } = functionalArgument(part, argument, context);
     const built = compound(parts, context);
-    found[list].push(built.compound);
+    found[list].push(under(built.compound, parts.under, context));
     // The single most specific argument wins, taken whole. Not the maximum of each component
     // independently: `:is(.a, #b)` is as specific as `#b`, not as `#b.a`.
     if (weight(built) > weight(top)) top = built;
@@ -1364,6 +1371,13 @@ function functionalPseudo(part, context) {
 }
 
 const weight = (built) => pack(built.ids, built.classes, built.types);
+
+/** A compound that is itself under another, where its argument said so: see `aboveArgument`. */
+function under(tested, scope, context) {
+  if (!scope) return tested;
+  const ancestors = [...(tested.ancestors ?? []), compound(scope, context).compound];
+  return { ...tested, ancestors };
+}
 
 /**
  * One argument of `:is()`, `:where()` or `:not()`: the compound it tests, and which of the node,
