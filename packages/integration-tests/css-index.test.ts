@@ -75,6 +75,16 @@ describe('the key selector a rule is bucketed by', () => {
     assert.deepEqual(keys('.a[data-open] { flex: 1 }'), ['class:a']);
   });
 
+  it('files a rule for anything inside an element with a class under that class', () => {
+    // `.item:focus *`, and Tailwind's `group-focus:` on an element with no class of its own:
+    // tried against every element of the screen, each one walks to the root to find no `.item`.
+    assert.deepEqual(keys('.row * { flex: 1 }'), ['under:row']);
+    assert.deepEqual(keys(':is(.group:focus *) { flex: 1 }'), ['under:group']);
+    const either = sheetOf(':is(:is(.s, .t) *) { flex: 1 }').rules.map((rule) => ruleKeys(rule));
+    assert.deepEqual(either, [['under:s', 'under:t']]);
+    assert.deepEqual(keys('view * { flex: 1 }'), ['*']);
+  });
+
   it('gives every selector in a list its own bucket', () => {
     // A selector list compiles to one rule each, and the compiler emits them in specificity
     // order - `view` before `.a` - which is the order the cascade wants anyway.
@@ -92,7 +102,7 @@ describe('a rule that names no key of its own', () => {
     assert.deepEqual(keysOf('.row > [data-open] { flex: 1 }'), [['in:row']]);
     // A name of its own is still the better key, and a descendant is not a child.
     assert.deepEqual(keysOf('.row > view { flex: 1 }'), [['type:view']]);
-    assert.deepEqual(keysOf('.row * { flex: 1 }'), [['*']]);
+    assert.deepEqual(keysOf('view * { flex: 1 }'), [['*']]);
     assert.deepEqual(keysOf('view > * { flex: 1 }'), [['*']]);
   });
 
@@ -144,6 +154,17 @@ describe('the candidates a node is offered', () => {
     const shut = { ...target('view', []), props: { 'data-open': false } } as StyleTarget;
     assert.equal(candidateRules(open, index).length, 1);
     assert.equal(candidateRules(shut, index).length, 0);
+    assert.equal(candidateRules(target('view', []), index).length, 0);
+  });
+
+  it('offers a rule filed under an ancestor\u2019s class to what is inside one, however deep', () => {
+    const index = indexRules(entriesOf('.row * { flex: 1 } .other { flex: 2 }'));
+    const row = target('view', ['row']);
+    const child = { ...target('view', []), parent: row } as StyleTarget;
+    const deep = { ...target('view', []), parent: child } as StyleTarget;
+    assert.equal(candidateRules(deep, index).length, 1);
+    assert.equal(candidateRules(child, index).length, 1);
+    assert.equal(candidateRules(row, index).length, 0, 'not the element itself');
     assert.equal(candidateRules(target('view', []), index).length, 0);
   });
 
