@@ -1074,7 +1074,8 @@ function withoutGrowth(props: Record<string, unknown>): void {
 /**
  * `max-width: max-content`, and the same of a height: no bigger than its content, which for a
  * box that would fill its container is `fit-content`. Yoga has no such cap. Answers whether the
- * box was one that would.
+ * box is the size of its content for it: one that would fill, or one that was `fit-content` as
+ * written.
  *
  * ponytail: a size in points is left as it is, since nothing here knows how big the content
  * is. Measure it if a box is ever given both.
@@ -1085,7 +1086,7 @@ function capAtContent(props: Record<string, unknown>, size: string, cap: string)
   const own = props[size];
   const fills = own == null || own === 'auto' || (typeof own === 'string' && own.endsWith('%'));
   if (fills) props[size] = 'fit-content';
-  return fills;
+  return fills || own === 'fit-content';
 }
 
 const isPercent = (value: unknown): boolean => typeof value === 'string' && value.endsWith('%');
