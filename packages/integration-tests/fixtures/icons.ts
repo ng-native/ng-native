@@ -30,6 +30,9 @@ export const lucideTarget =
     <ng-icon nativeID="raw" [svg]="raw" [strokeWidth]="3" />
     <ng-icon nativeID="labelled" [svg]="odd()" accessibilityLabel="Target" />
     <ng-icon nativeID="static" [svg]="raw" size="32" />
+    <ng-icon nativeID="in-px" [svg]="raw" size="18px" />
+    <ng-icon nativeID="in-rem" [svg]="raw" size="1.5rem" />
+    <ng-icon nativeID="unread" [svg]="raw" size="big" />
     <ng-icon nativeID="inherited" name="constructor" />
     <div class="big"><ng-icon nativeID="by-font" [svg]="raw" /></div>
   `,

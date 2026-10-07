@@ -517,6 +517,16 @@ describe('an icon in the tree', () => {
     assert.equal(byId('static').props['bbWidth'], 32);
   });
 
+  it('takes a size written with a unit, as a web app writes one', () => {
+    // `size="18px"` is what `@ng-icons/core` documents: read as a number alone it is not one,
+    // and the icon had no size at all.
+    assert.equal(byId('in-px').props['width'], 18);
+    assert.equal(byId('in-px').props['bbWidth'], 18);
+    assert.equal(byId('in-rem').props['width'], 24);
+    // One it cannot read is left the size of the text around it, and never NaN.
+    assert.equal(byId('unread').props['width'], 16);
+  });
+
   it('finds the icon through provideIcons, by the name a web app uses', () => {
     const paths = flatten([byId('named')]).filter((n) => n.viewName === 'RNSVGPath');
     assert.equal(paths.length, 1, 'the heroicon drew');
