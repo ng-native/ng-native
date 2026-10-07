@@ -159,6 +159,25 @@ describe('max-content', () => {
     assert.equal(across['alignSelf'], 'flex-start');
   });
 
+  it('stops one that is its content size already, by fit-content or max-content, growing too', () => {
+    // The size says how big it starts and the cap how big it may get: both are its content, and
+    // a browser's item with `flex-grow: 1` stays that wide.
+    for (const size of ['fit-content', 'max-content']) {
+      const row = scene(
+        `.p { flex-direction: row } .c { flex-grow: 1; width: ${size}; max-width: max-content }`,
+      ).props();
+      assert.equal(row['flexGrow'] ?? 0, 0, `width: ${size}`);
+      assert.equal('width' in row, false, `width: ${size}`);
+      assert.equal('maxWidth' in row, false, `width: ${size}`);
+      const column = scene(`.c { flex-grow: 1; height: ${size}; max-height: max-content }`).props();
+      assert.equal(column['flexGrow'] ?? 0, 0, `height: ${size}`);
+      assert.equal('height' in column, false, `height: ${size}`);
+    }
+    // With no cap the size is only where it starts from, and it grows as written.
+    const uncapped = scene('.p { flex-direction: row } .c { flex-grow: 1; width: fit-content }');
+    assert.equal(uncapped.props()['flexGrow'], 1);
+  });
+
   it('goes when the rule no longer applies', () => {
     const s = scene('.c { max-width: max-content }');
     assert.equal(s.props()['alignSelf'], 'flex-start');
