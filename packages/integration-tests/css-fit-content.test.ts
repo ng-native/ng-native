@@ -140,6 +140,25 @@ describe('max-content', () => {
     assert.equal('maxHeight' in props, false);
   });
 
+  it('stops a box growing along its container past its content', () => {
+    // A growing item is clamped by its maximum in a browser. There is no cap to hand Yoga, so
+    // the box does not grow: it starts from its content and may still shrink.
+    for (const grows of ['flex-grow: 1', 'flex: 1', 'flex: 2 1 0%']) {
+      const row = scene(`.p { flex-direction: row } .c { ${grows}; max-width: max-content }`);
+      const props = row.props();
+      assert.equal(props['flexGrow'] ?? 0, 0, grows);
+      assert.equal(props['flex'] ?? null, null, grows);
+      assert.equal(props['flexBasis'] ?? 'auto', 'auto', grows);
+      assert.equal('maxWidth' in props, false, grows);
+    }
+    const column = scene('.c { flex-grow: 1; max-height: max-content }').props();
+    assert.equal(column['flexGrow'] ?? 0, 0);
+    // Across its container it is not growing, and what it shares along it is its own.
+    const across = scene('.c { flex-grow: 1; max-width: max-content }').props();
+    assert.equal(across['flexGrow'], 1);
+    assert.equal(across['alignSelf'], 'flex-start');
+  });
+
   it('goes when the rule no longer applies', () => {
     const s = scene('.c { max-width: max-content }');
     assert.equal(s.props()['alignSelf'], 'flex-start');
