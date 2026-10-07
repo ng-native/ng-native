@@ -136,6 +136,12 @@ error. `expo-ui-components.ts` has thin typed components for the views an app re
 - **`UiBottomSheet`** - the system's sheet on both platforms, opened by its `open` model, with the
   app's own components as its content. It needs no `ui-host`; see
   [A bottom sheet](#a-bottom-sheet) below.
+- **`UiNavigationStack`**, **`UiToolbar`** and **`UiToolbarItem`** - SwiftUI's navigation bar and
+  the items in it, iOS only. A toolbar's children are the view it belongs to, and its items go in
+  `<ui-slot name="content">`, each a `<ui-toolbar-item>` with a `placement`. A `UiButton` with
+  `role="close"` and no label is the system's own close button, from iOS 26. They need `@expo/ui`
+  57.0.20 or later in the native build. See
+  [The system's close button](#the-systems-close-button) for one in a sheet.
 
 Each input goes straight through to the node as a prop, `modifiers` included -
 `UiModifier` is one SwiftUI modifier, shaped exactly as `@expo/ui`'s own modifier functions build
@@ -436,6 +442,39 @@ close, and the sheet would slide away empty.
 
 With `fitToContents` the content is laid out at the window's width and its own height. Without it
 the content fills the sheet.
+
+### The system's close button
+
+A `<ui-toolbar-item>` written inside a sheet is not part of its content. On iOS it goes in a
+toolbar of the sheet's own, in a bar across the top of the sheet, which is where the system's close
+button belongs:
+
+```html
+<ui-bottom-sheet [(open)]="sorting">
+  <ui-toolbar-item placement="cancellationAction">
+    <ui-button role="close" (buttonPress)="sorting.set(false)" />
+  </ui-toolbar-item>
+  <app-sort-options />
+</ui-bottom-sheet>
+```
+
+An item holds SwiftUI content, as everything inside a `ui-host` is: a `ui-button`, or a `ui-text`
+as a title with `placement="principal"`. `placement` takes SwiftUI's `ToolbarItemPlacement` names,
+and an item with none is placed by SwiftUI. The button does not close the sheet by itself: its
+`(buttonPress)` sets `open`.
+
+With an item in it, the sheet's content is in a `ui-toolbar` inside a `ui-navigation-stack`, under
+the group that carries the presentation modifiers. A sheet with no item has neither. Adding the
+first item to a sheet that is open, or removing the last, makes its content again.
+
+A sheet with a toolbar is not sized to its content on iOS, whatever `fitToContents` says: the bar
+is no part of the content. It rests at half and full height, or at its `detents`, so give it a
+`{ height }` detent where it should be shorter.
+
+Compose's sheet has no toolbar, so Android draws no item: give an Android sheet a close button in
+its content. An iOS build whose `@expo/ui` is older than 57.0.20 has no toolbar either, which
+includes Expo Go until its own copy catches up. There the sheet warns once in the console and is
+shown without the item.
 
 The two platforms drive a sheet differently, and the component is where that ends. SwiftUI's
 `BottomSheetView` stays in the tree and is presented by its `isPresented` prop; it reports

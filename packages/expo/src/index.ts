@@ -84,6 +84,10 @@ export {
   type UiBottomSheetViewFunctions,
   type UiPresentationDetent,
   UiGroup,
+  UiNavigationStack,
+  UiToolbar,
+  UiToolbarItem,
+  type UiToolbarItemPlacement,
 } from './expo-ui-components.ts';
 export { ExpoImage, type ExpoImageContentFit, type ExpoImageSource } from './expo-image.ts';
 export {

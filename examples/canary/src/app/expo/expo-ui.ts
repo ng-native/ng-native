@@ -24,6 +24,7 @@ import {
   UiText,
   UiTextField,
   UiToggle,
+  UiToolbarItem,
   UiVStack,
 } from '@ng-native/expo';
 import { Pressable, ScrollView, Text, View } from '@ng-native/components';
@@ -89,6 +90,7 @@ import { page } from '../screen-styles.ts';
     UiText,
     UiTextField,
     UiToggle,
+    UiToolbarItem,
     UiVStack,
     View,
   ],
@@ -405,6 +407,13 @@ import { page } from '../screen-styles.ts';
           >
             <text [style]="sheetButtonLabel">Open at a third, iOS only</text>
           </pressable>
+          <pressable
+            [style]="sheetButton"
+            testID="sheet-toolbar"
+            (press)="openSheet(false, undefined, true)"
+          >
+            <text [style]="sheetButtonLabel">Open with the system's close button, iOS only</text>
+          </pressable>
           <text class="body" testID="sheet-state">
             {{ sheetOpen() ? 'Open' : 'Closed' }}, dismissed {{ sheetDismissals() }} times
           </text>
@@ -414,6 +423,11 @@ import { page } from '../screen-styles.ts';
             [detents]="sheetDetents()"
             (dismissed)="sheetDismissals.set(sheetDismissals() + 1)"
           >
+            @if (sheetToolbar()) {
+              <ui-toolbar-item placement="cancellationAction">
+                <ui-button role="close" (buttonPress)="sheetOpen.set(false)" />
+              </ui-toolbar-item>
+            }
             <view [style]="sheetBody">
               <text [style]="sheetTitle">A sheet of the app's own views</text>
               <pressable [style]="sheetButton" testID="sheet-count" (press)="taps.set(taps() + 1)">
@@ -466,9 +480,17 @@ export class ExpoUiPage {
   protected readonly sheetDetents = signal<readonly UiPresentationDetent[] | undefined>(undefined);
   protected readonly thirdAndFull: readonly UiPresentationDetent[] = [{ fraction: 0.3 }, 'large'];
 
-  protected openSheet(fits: boolean, detents?: readonly UiPresentationDetent[]): void {
+  /** Whether the sheet has a toolbar, which holds the system's close button. */
+  protected readonly sheetToolbar = signal(false);
+
+  protected openSheet(
+    fits: boolean,
+    detents?: readonly UiPresentationDetent[],
+    toolbar = false,
+  ): void {
     this.sheetFits.set(fits);
     this.sheetDetents.set(detents);
+    this.sheetToolbar.set(toolbar);
     this.sheetOpen.set(true);
   }
 

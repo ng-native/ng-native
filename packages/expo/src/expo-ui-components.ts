@@ -34,6 +34,7 @@ import {
   afterNextRender,
   booleanAttribute,
   computed,
+  contentChildren,
   effect,
   inject,
   input,
@@ -180,7 +181,8 @@ export class UiContextMenu {
 
 /**
  * A SwiftUI `Button`, as a menu item or on its own, or Compose's on Android, which draws `label` as
- * text inside it. `systemImage` and `role` are SwiftUI's alone.
+ * text inside it. `systemImage` and `role` are SwiftUI's alone. A `close` button with no label and
+ * no content is the system's own close button, from iOS 26.
  */
 @Component({
   selector: 'ui-button',
@@ -204,7 +206,7 @@ export class UiButton {
   readonly label = input<string>();
   /** An SF Symbol name. */
   readonly systemImage = input<string>();
-  readonly role = input<'default' | 'cancel' | 'destructive'>();
+  readonly role = input<'default' | 'cancel' | 'destructive' | 'close'>();
   /**
    * In a home-screen widget's layout, what a tap on it records for the app: see
    * `@ng-native/expo/widget`.
@@ -1122,6 +1124,81 @@ export class UiGroup {
 }
 
 /**
+ * A SwiftUI `NavigationStack`, iOS only: the bar a `ui-toolbar` inside it puts its items in, and
+ * that a `navigationTitle` modifier on its content titles.
+ */
+@Component({
+  selector: 'ui-navigation-stack',
+  template: '<ng-content />',
+  host: { '[modifiers]': 'modifiers()' },
+})
+export class UiNavigationStack {
+  protected readonly nativeView = nativeView();
+  readonly modifiers = input<readonly UiModifier[]>();
+}
+
+/**
+ * SwiftUI's `toolbar`, iOS only. Its children are the view the toolbar belongs to, and its items go
+ * in `<ui-slot name="content">`, each a `ui-toolbar-item`. It shows in the bar of the
+ * `ui-navigation-stack` around it.
+ */
+@Component({
+  selector: 'ui-toolbar',
+  template: '<ng-content />',
+  host: { '[modifiers]': 'modifiers()' },
+})
+export class UiToolbar {
+  protected readonly nativeView = nativeView();
+  readonly modifiers = input<readonly UiModifier[]>();
+}
+
+/** Where a `ui-toolbar-item` sits, as SwiftUI's `ToolbarItemPlacement` names them. */
+export type UiToolbarItemPlacement =
+  | 'automatic'
+  | 'principal'
+  | 'navigation'
+  | 'primaryAction'
+  | 'secondaryAction'
+  | 'status'
+  | 'confirmationAction'
+  | 'cancellationAction'
+  | 'destructiveAction'
+  | 'keyboard'
+  | 'topBarLeading'
+  | 'topBarTrailing'
+  | 'topBarPinnedTrailing'
+  | 'largeTitle'
+  | 'bottomBar';
+
+/**
+ * One item of a `ui-toolbar`, SwiftUI's `ToolbarItem`: a `ui-button`, or a `ui-text` as a title
+ * with `placement="principal"`. Unplaced, SwiftUI places it. A placement the OS does not have is
+ * read as `automatic`.
+ *
+ * Written inside a `ui-bottom-sheet` it goes in the sheet's own toolbar, which is how a sheet
+ * shows the system's close button.
+ */
+@Component({
+  selector: 'ui-toolbar-item',
+  template: '<ng-content />',
+  host: { '[name]': '"item"', '[extraProps]': 'extraProps()' },
+})
+export class UiToolbarItem {
+  protected readonly nativeView = nativeView();
+  readonly placement = input<UiToolbarItemPlacement>();
+  /** How readily the item gives up its place when the bar runs out of room, from iOS 27. */
+  readonly visibilityPriority = input<'automatic' | 'low' | 'high'>();
+
+  /** What the slot tells the toolbar about itself: only what is set, so SwiftUI decides the rest. */
+  protected readonly extraProps = computed(() => {
+    const placement = this.placement();
+    const visibilityPriority = this.visibilityPriority();
+    if (!placement && !visibilityPriority) return undefined;
+    return { ...(placement && { placement }), ...(visibilityPriority && { visibilityPriority }) };
+  });
+}
+
+/**
  * A height a SwiftUI sheet rests at, as `@expo/ui`'s `PresentationDetent`: about half the screen,
  * all of it, a fraction of it from 0 to 1, or a height in points.
  */
@@ -1163,6 +1240,21 @@ function windowWidth(): Signal<number | undefined> {
  * `open` presents and dismisses it, and is written back when the user dismisses it. Its content is
  * what is written inside it, the app's own components, in the tree while the sheet is on screen.
  *
+ * A `ui-toolbar-item` written inside it is not content: on iOS it goes in a toolbar of the sheet's
+ * own, in a bar across its top, which is where the system's close button belongs.
+ *
+ * ```html
+ * <ui-bottom-sheet [(open)]="sorting">
+ *   <ui-toolbar-item placement="cancellationAction">
+ *     <ui-button role="close" (buttonPress)="sorting.set(false)" />
+ *   </ui-toolbar-item>
+ *   <app-sort-options />
+ * </ui-bottom-sheet>
+ * ```
+ *
+ * Compose's sheet has no toolbar, so Android draws no item. Nor does an iOS build whose `@expo/ui`
+ * is older than 57.0.20, which Expo Go's can be: it warns, and shows the sheet without one.
+ *
  * The two platforms drive a sheet differently, and this is where that difference ends. SwiftUI's
  * stays in the tree and is presented by `isPresented`, reporting `isPresentedChange` and
  * `dismiss`. Compose's shows for as long as it is in the tree, and reports `dismissRequest`.
@@ -1170,11 +1262,21 @@ function windowWidth(): Signal<number | undefined> {
  * Unlike the other components here, the element this is mounted on is a plain view, which takes
  * no room and needs no `ui-host` around it. The sheet is inside it, wrapped as `@expo/ui`'s own
  * React component wraps one: a `ui-host`, the sheet, on iOS a `ui-group` that carries the
- * presentation modifiers, and a `ui-view-host` holding the one view the content goes in.
+ * presentation modifiers, and a `ui-view-host` holding the one view the content goes in. With
+ * toolbar items, the view host is in a `ui-toolbar` in a `ui-navigation-stack`, under the group.
  */
 @Component({
   selector: 'ui-bottom-sheet',
-  imports: [UiBottomSheetContent, UiBottomSheetView, UiGroup, UiHost, UiViewHost],
+  imports: [
+    UiBottomSheetContent,
+    UiBottomSheetView,
+    UiGroup,
+    UiHost,
+    UiNavigationStack,
+    UiSlot,
+    UiToolbar,
+    UiViewHost,
+  ],
   template: `
     <ng-template #content><ng-content /></ng-template>
     @if (swiftUI) {
@@ -1188,9 +1290,20 @@ function windowWidth(): Signal<number | undefined> {
         >
           @if (mounted()) {
             <ui-group [modifiers]="presentation()">
-              <ui-view-host layoutRoot [matchContents]="fits() || undefined">
-                <ui-bottom-sheet-content [style]="body()" [content]="content" />
-              </ui-view-host>
+              @if (toolbar()) {
+                <ui-navigation-stack>
+                  <ui-toolbar>
+                    <ui-view-host layoutRoot [matchContents]="fits() || undefined">
+                      <ui-bottom-sheet-content [style]="body()" [content]="content" />
+                    </ui-view-host>
+                    <ui-slot name="content"><ng-content select="ui-toolbar-item" /></ui-slot>
+                  </ui-toolbar>
+                </ui-navigation-stack>
+              } @else {
+                <ui-view-host layoutRoot [matchContents]="fits() || undefined">
+                  <ui-bottom-sheet-content [style]="body()" [content]="content" />
+                </ui-view-host>
+              }
             </ui-group>
           }
         </ui-bottom-sheet-view>
@@ -1231,7 +1344,24 @@ export class UiBottomSheet {
     },
   );
 
+  /**
+   * Whether the build has SwiftUI's toolbar. `@expo/ui` has had it since 57.0.20, and Expo Go has
+   * the version its SDK shipped with. A SwiftUI view under one the build lacks is a crash, so a
+   * sheet there leaves its toolbar out. Overridden in a test.
+   */
+  static readonly TOOLBAR = new InjectionToken<boolean>('angular-native.bottomSheetToolbar', {
+    factory: () => {
+      const expo = (
+        globalThis as { expo?: { getViewConfig?(module: string, view: string): unknown } }
+      ).expo;
+      return ['NavigationStackView', 'ToolbarView'].every(
+        (view) => optional(() => expo?.getViewConfig?.('ExpoUI', view)) != null,
+      );
+    },
+  });
+
   private readonly functions = inject(UiBottomSheet.SOURCE);
+  private readonly toolbarInBuild = inject(UiBottomSheet.TOOLBAR);
   private readonly engine = inject(Engine, { optional: true });
   private readonly injector = inject(Injector);
   private readonly sheet = viewChild<unknown, ElementRef<EngineNode>>('sheet', {
@@ -1242,7 +1372,8 @@ export class UiBottomSheet {
   readonly open = model(false);
   /**
    * The sheet is as tall as its content. Without it the sheet rests at half the screen's height
-   * and drags up to all of it. Read as the sheet opens.
+   * and drags up to all of it. Read as the sheet opens. A sheet with a toolbar on iOS is not
+   * sized to its content: it rests at its `detents`, or at half and full height.
    */
   readonly fitToContents = input(false, { transform: booleanAttribute });
   /**
@@ -1260,6 +1391,13 @@ export class UiBottomSheet {
    */
   readonly dismissed = output<void>();
 
+  /** The toolbar items written inside the sheet, which give it a bar to hold them. */
+  private readonly toolbarItems = contentChildren(UiToolbarItem);
+  /** Whether the sheet has a toolbar: it has items for one, and the build has the views. */
+  protected readonly toolbar = computed(
+    () => this.toolbarInBuild && this.toolbarItems().length > 0,
+  );
+
   /** SwiftUI's sheet stays in the tree; anywhere else it is there while it shows. */
   protected readonly swiftUI = nativePlatform() === 'ios';
   protected readonly width = windowWidth();
@@ -1275,11 +1413,14 @@ export class UiBottomSheet {
 
   /**
    * Whether the sheet is sized to its content, as it opened: a view host takes its sizing once,
-   * as it mounts. SwiftUI's sheet is not where it has detents to rest at.
+   * as it mounts. SwiftUI's sheet is not where it has detents to rest at, nor where it has a
+   * toolbar: a navigation stack fills what it is given, and the bar is no part of the content.
    */
   protected readonly fits = computed(() => {
     this.mounted();
-    return untracked(() => this.fitToContents() && !(this.swiftUI && this.detents()?.length));
+    return untracked(
+      () => this.fitToContents() && !(this.swiftUI && (this.detents()?.length || this.toolbar())),
+    );
   });
 
   /**
@@ -1316,6 +1457,17 @@ export class UiBottomSheet {
     effect(() => {
       if (!this.open()) untracked(() => this.close());
     });
+    if (this.swiftUI && !this.toolbarInBuild) {
+      const warned = effect(() => {
+        if (!this.toolbarItems().length) return;
+        console.warn(
+          '[angular-native] A ui-toolbar-item in a ui-bottom-sheet needs @expo/ui 57.0.20 or ' +
+            'later in the native build. This build has no SwiftUI toolbar, as Expo Go may not, ' +
+            'so the sheet is shown without the item.',
+        );
+        warned.destroy();
+      });
+    }
   }
 
   protected presented(event: UiBottomSheetPresentedEvent): void {

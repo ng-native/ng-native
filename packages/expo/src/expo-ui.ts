@@ -92,6 +92,7 @@ export const EXPO_UI_VIEWS: Readonly<Record<string, readonly [string | null, str
   'multi-choice-segmented-button-row': [null, 'MultiChoiceSegmentedButtonRowView'],
   'navigation-bar': [null, 'NavigationBarView'],
   'navigation-bar-item': [null, 'NavigationBarItemView'],
+  'navigation-stack': ['NavigationStackView', null],
   overlay: ['OverlayView', null],
   pager: [null, 'HorizontalPagerView'],
   picker: ['PickerView', null],
@@ -135,6 +136,9 @@ export const EXPO_UI_VIEWS: Readonly<Record<string, readonly [string | null, str
   'text-field': ['TextFieldView', null],
   'time-picker-dialog': [null, 'TimePickerDialogView'],
   toggle: ['ToggleView', 'SwitchView'],
+  toolbar: ['ToolbarView', null],
+  /** A slot under another name: SwiftUI's toolbar reads each of its items from a slot named `item`. */
+  'toolbar-item': ['SlotView', null],
   'tooltip-box': [null, 'TooltipBoxView'],
   'tri-state-checkbox': [null, 'TriStateCheckboxView'],
   'uneven-rounded-rectangle': ['UnevenRoundedRectangleView', null],
