@@ -1057,6 +1057,17 @@ function stillTouched(props: Record<string, unknown>): void {
 }
 
 /**
+ * Leave `aspect-ratio` out for a box with both a width and a height. CSS takes the ratio only
+ * for a size that is `auto`; Yoga takes it over one of two that are given, the height in a
+ * column and the width in a row.
+ */
+function ratioForAutoSize(props: Record<string, unknown>): void {
+  if (!isSet(props['aspectRatio'])) return;
+  const given = (size: unknown) => isSet(size) && size !== 'auto';
+  if (given(props['width']) && given(props['height'])) delete props['aspectRatio'];
+}
+
+/**
  * A box with `display: none`, out of the flow as well. It takes no room either way, but Yoga
  * reads an item's baseline from its first child that is in the flow, and a hidden one has no
  * layout to read: under a row with `align-items: baseline` the baseline is not a number, and
@@ -3636,6 +3647,8 @@ export class Engine implements HostEngine {
     centreSingleLine(viewName, merged, this.fontScale);
     // After a transition, which eases the basis as the basis it was written as.
     basisAsSize(node, merged);
+    // After the basis, which is a size given where it is committed as one.
+    ratioForAutoSize(merged);
     // Last, on what is committed: an override or an animation can hide a box, or place it.
     hiddenOutOfFlow(merged);
     delete merged['touchAction'];
