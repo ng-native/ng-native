@@ -36,6 +36,7 @@ import {
   readsInheritedColour,
   sample,
   step,
+  steppedKeys,
   tracksOf,
   type AnimationSpec,
   type Keyframe,
@@ -4362,13 +4363,7 @@ export class Engine implements HostEngine {
     const state = (node.transitions ??= new Map());
     const now = this.now();
 
-    // The properties a transition *names*, even where the node has none yet. A property is only
-    // transitioned once it has been seen settling, and one that does not exist is never seen - so
-    // `transition: transform` with no transform until a class adds one would arrive instantly,
-    // which is the commonest way to write one. `all` names nothing, so it keeps the old rule.
-    const named = spec ? Object.keys(spec).filter((key) => key !== 'all') : [];
-
-    for (const key of new Set([...Object.keys(props), ...named])) {
+    for (const key of steppedKeys(props, spec)) {
       if (step(state, key, props, spec?.[key] ?? spec?.['all'], now)) {
         this.running.add(node);
         this.emitTransition(node, 'topTransitionstart', key);

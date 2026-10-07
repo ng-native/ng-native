@@ -537,6 +537,16 @@ describe('running a transition', () => {
     assert.equal(s.painted('opacity'), 0.5, 'halfway from 1');
   });
 
+  it('does the same where a property is named beside all', () => {
+    const s = scene(`
+      view { transition: all 100ms linear, width 200ms linear; }
+      view.closed { opacity: 0; }
+    `);
+    s.classes('closed');
+    s.tick(50);
+    assert.equal(s.painted('opacity'), 0.5);
+  });
+
   it('fades back to it under transition: all, and out again', () => {
     const s = scene(
       `

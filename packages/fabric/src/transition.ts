@@ -576,10 +576,11 @@ export function step(
 
   // Nothing to interpolate when one end is missing: `null` here is `auto`, or a property the
   // element no longer sets at all and that has no initial value worth easing to, and there is no
-  // value halfway between a number and "whatever this works out to be". CSS refuses the same transition. Interpolating anyway held the old
-  // value for the whole duration, which is how a section that opened to a height nothing had
-  // measured stayed shut - and clearing a height is also what stops the layout that would have
-  // corrected it, so it stayed shut rather than catching up a frame later.
+  // value halfway between a number and "whatever this works out to be". CSS refuses the same
+  // transition. Interpolating anyway held the old value for the whole duration, which is how a
+  // section that opened to a height nothing had measured stayed shut - and clearing a height is
+  // also what stops the layout that would have corrected it, so it stayed shut rather than
+  // catching up a frame later.
   //
   // The same goes for a pair with nothing between them at all, a keyword such as `display` or
   // `flex-direction`: CSS changes it at once rather than transitioning it, and `transition: all`
@@ -771,6 +772,25 @@ const INITIAL: Record<string, unknown> = {
   rotate: '0deg',
   backgroundColor: 'transparent',
 };
+
+/**
+ * The properties to step for an element: the ones it has, and the ones its transition *names*,
+ * even where the element has none yet. A property is only transitioned once it has been seen
+ * settling, and one that does not exist is never seen - so `transition: transform` with no
+ * transform until a class adds one would arrive instantly, which is the commonest way to write
+ * one. `all` names none of them, but it does cover the ones with an initial value to ease from:
+ * an opacity nothing set is still 1.
+ */
+export function steppedKeys(
+  props: Record<string, unknown>,
+  spec: Record<string, TransitionSpec> | undefined,
+): Set<string> {
+  const keys = new Set(Object.keys(props));
+  if (!spec) return keys;
+  for (const key of Object.keys(spec)) if (key !== 'all') keys.add(key);
+  if (spec['all']) for (const key of Object.keys(INITIAL)) keys.add(key);
+  return keys;
+}
 
 /**
  * Where an animation has got to, as the properties to paint.
