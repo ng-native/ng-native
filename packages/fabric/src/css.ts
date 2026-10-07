@@ -13,6 +13,7 @@ import {
   mixChannels,
   mixColours,
 } from './color-mix.ts';
+import { type BackgroundLayers, backgroundLayers } from './background-layers.ts';
 import { ELEMENT_STYLES } from './element-styles.ts';
 import { type Channel, relativeColour } from './relative-colour.ts';
 import type { Keyframe } from './transition.ts';
@@ -2941,7 +2942,7 @@ export class StyleResolver {
       if (unread && this.onUnreadDisplay && !outranked('display')) {
         this.reportDisplay(declaration, tokens);
       }
-      const value = settled ?? declaration.unset;
+      const value = settled ?? layered(declaration, tokens, own, outranked('backgroundColor'));
       for (const prop of declaration.props) {
         if (outranked(prop)) continue;
         write(own, prop, value, declaration.line !== undefined);
@@ -3715,6 +3716,40 @@ function displayOf(value: unknown): string | undefined {
 function tokenForm(token: TokenValue, kind: TokenKind): unknown {
   const value = formOf(token, kind);
   return value === undefined && kind === 'color' && isCurrentColour(token) ? CURRENT_COLOUR : value;
+}
+
+/**
+ * What a declaration is set as where its token settled to nothing: the colour under the
+ * gradients a `background: var()` holds, which are written here, or what it unsets to.
+ */
+function layered(
+  declaration: DeferredDeclaration,
+  tokens: Readonly<Record<string, TokenValue>>,
+  own: Record<string, unknown>,
+  outranked: boolean,
+): unknown {
+  const layers = layersOf(declaration, tokens);
+  if (!layers) return declaration.unset;
+  if (!outranked) {
+    write(own, 'experimental_backgroundImage', layers.images, declaration.line !== undefined);
+  }
+  return layers.color ?? declaration.unset;
+}
+
+/**
+ * The gradients a `background: var()` reads where its token is no colour: see `backgroundLayers`.
+ * Only where the token is set as text on an element, which is where a library sets one as the app
+ * runs; a stylesheet's is refused where it is written.
+ */
+function layersOf(
+  declaration: DeferredDeclaration,
+  tokens: Readonly<Record<string, TokenValue>>,
+): BackgroundLayers | undefined {
+  if (declaration.kind !== 'color' || !declaration.props.includes('backgroundColor')) {
+    return undefined;
+  }
+  const text = declaration.reference ? tokens[declaration.reference]?.keyword : undefined;
+  return text?.includes('gradient(') ? backgroundLayers(text) : undefined;
 }
 
 const BOUND_NUMBERS = new Set([
