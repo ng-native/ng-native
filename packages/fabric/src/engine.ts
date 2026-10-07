@@ -768,6 +768,10 @@ const DEFAULT_VIEW = 'View';
 /** A top-level text, the one view that aligns its lines. A nested text is a `VirtualText`. */
 const PARAGRAPH = 'Paragraph';
 
+/** Whether a child is a box Yoga lays out in the flow of its parent. */
+const inFlow = (child: EngineNode): boolean =>
+  child.kind === 'element' && ownLayout(child, 'position') !== 'absolute';
+
 type TextDirection = 'ltr' | 'rtl';
 
 const textDirection = (value: unknown): TextDirection | undefined =>
@@ -4519,6 +4523,31 @@ export class Engine implements HostEngine {
   }
 
   /**
+   * Have the text a row aligned by baseline takes a baseline from measured again, where that
+   * text is inside one of the row's boxes and the row is committed again. React Native keeps
+   * what a paragraph measured on the one copy of its node that was measured, and Yoga copies a
+   * node it lays out around: a row that is laid out again asks a box for its baseline, the box
+   * asks the paragraph in it, and a copy that was never measured works it out then, on a node
+   * that is by then not to be changed. A debug build stops there. Committed to be measured
+   * again (`remeasure`), the paragraph is measured in this commit and has the answer.
+   *
+   * ponytail: the first box in the flow at each level, which is the one Yoga asks unless
+   * another is aligned by baseline itself. A row a commit lays out again without the engine
+   * cloning it, as its room changing does, is not reached: clone on a layout event if one is
+   * seen to stop there.
+   */
+  private freshBaselines(row: EngineNode): void {
+    if (!row.committed || ownLayout(row, 'alignItems') !== 'baseline') return;
+    for (const item of row.children) {
+      let at: EngineNode | undefined = item.children?.find(inFlow);
+      while (at?.committed && committedViewName(at) !== PARAGRAPH) at = at.children.find(inFlow);
+      if (!at?.committed) continue;
+      at.remeasure = true;
+      for (let up: EngineNode | null = at; up && up !== row; up = up.parent) up.subtreeDirty = true;
+    }
+  }
+
+  /**
    * Copy a list of gradients, running every stop's colour through the host's converter.
    *
    * A stop's colour is a colour like any other, but it is two levels down and nothing else looks
@@ -4561,6 +4590,7 @@ export class Engine implements HostEngine {
 
     const viewName = committedViewName(node);
     this.forgetRenamed(node, viewName);
+    this.freshBaselines(node);
     const childHandles = this.reconcileChildren(node, viewName, style);
     noteTouches(node, style);
     const previous = node.committed;
