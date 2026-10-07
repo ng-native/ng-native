@@ -313,7 +313,7 @@ describe('a single-line iOS text input in a row aligned by baseline', () => {
     engine.appendChild(engine.root, row);
     engine.commit();
     const props = () => fabric.committed[0]!.children[0]!.children[0]!.props;
-    return { engine, row, props };
+    return { engine, row, props, fabric };
   }
   // A line of 24 over a font of 16, which is 19.04 tall: 2.48 over and under.
   const HALF = (24 - 16 * 1.19) / 2;
@@ -341,6 +341,35 @@ describe('a single-line iOS text input in a row aligned by baseline', () => {
     const { props } = inRow({ alignItems: 'center' });
     assert.equal(props()['paddingTop'], 8);
     assert.equal(props()['minHeight'], 41);
+  });
+
+  it('does the same in a field a height sizes, which stays that height', () => {
+    // Forty-four tall with 8 and 6 of padding and 1 and 2 of border: 27 for the text, of
+    // which the font takes 19.04, so 3.98 over and under.
+    const half = (44 - 8 - 6 - 1 - 2 - 16 * 1.19) / 2;
+    const { props } = inRow({ alignItems: 'baseline' }, { height: 44 });
+    near(props()['paddingTop'], 8 + half);
+    near(props()['paddingBottom'], 6 + half);
+    assert.equal(props()['height'], 44);
+    // Its content alone is the height of a content-box field, less what is now padding.
+    const content = inRow({ alignItems: 'baseline' }, { height: 44, boxSizing: 'content-box' });
+    const inner = (44 - 16 * 1.19) / 2;
+    near(content.props()['paddingTop'], 8 + inner);
+    near(content.props()['height'], 44 - 2 * inner);
+    assert.equal(inRow({ alignItems: 'center' }, { height: 44 }).props()['paddingTop'], 8);
+  });
+
+  it('is left as it was once its box is moved to a row aligned another way', () => {
+    const { engine, row, fabric } = inRow({ alignItems: 'baseline' });
+    const other = engine.createElement('view');
+    engine.setProp(other, 'style', { flexDirection: 'row', alignItems: 'center' });
+    engine.appendChild(engine.root, other);
+    const infix = row.children[0]!;
+    engine.removeChild(row, infix);
+    engine.appendChild(other, infix);
+    engine.commit();
+    const moved = fabric.committed[1]!.children[0]!.children[0]!.props;
+    assert.equal(moved['paddingTop'], 8);
   });
 
   it('follows the row coming to be aligned by baseline, and no longer', () => {
