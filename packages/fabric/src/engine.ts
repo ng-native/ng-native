@@ -768,9 +768,19 @@ const DEFAULT_VIEW = 'View';
 /** A top-level text, the one view that aligns its lines. A nested text is a `VirtualText`. */
 const PARAGRAPH = 'Paragraph';
 
-/** Whether a child is a box Yoga lays out in the flow of its parent. */
-const inFlow = (child: EngineNode): boolean =>
-  child.kind === 'element' && ownLayout(child, 'position') !== 'absolute';
+/**
+ * The box Yoga takes a view's baseline from where the view has none of its own: its first child
+ * that is laid out in its flow. Words written straight into the view are the paragraph the
+ * engine makes around them, and a child that is not displayed has no view to ask.
+ */
+function firstInFlow(node: EngineNode): EngineNode | undefined {
+  for (const child of node.children ?? []) {
+    if (child.kind === 'text' && child.box) return child.box;
+    if (child.kind !== 'element' || ownLayout(child, 'display') === 'none') continue;
+    if (ownLayout(child, 'position') !== 'absolute') return child;
+  }
+  return undefined;
+}
 
 type TextDirection = 'ltr' | 'rtl';
 
@@ -4539,8 +4549,8 @@ export class Engine implements HostEngine {
   private freshBaselines(row: EngineNode): void {
     if (!row.committed || ownLayout(row, 'alignItems') !== 'baseline') return;
     for (const item of row.children) {
-      let at: EngineNode | undefined = item.children?.find(inFlow);
-      while (at?.committed && committedViewName(at) !== PARAGRAPH) at = at.children.find(inFlow);
+      let at = firstInFlow(item);
+      while (at?.committed && committedViewName(at) !== PARAGRAPH) at = firstInFlow(at);
       if (!at?.committed) continue;
       at.remeasure = true;
       for (let up: EngineNode | null = at; up && up !== row; up = up.parent) up.subtreeDirty = true;
