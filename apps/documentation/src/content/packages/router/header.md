@@ -1,6 +1,6 @@
 ---
 title: The native header
-summary: NativeHeader, NativeHeaderItem, NativeSearchBar, default colors, and withHeaderDefaults.
+summary: NativeHeader, its items and search bar, NativeToolbar, colors, and withHeaderDefaults.
 ---
 
 # The native header
@@ -135,6 +135,89 @@ a scope is a segmented control under the header, and a token is text.
 In a test, the field is found by its view name, `fabric.find('RNSSearchBar')`, and takes typing
 from `fireEvent.changeText` or `userEvent.type` like a text field. The commands it sends, such as
 `setText` for a query set from code, are on `fabric.commands`.
+
+## A bottom toolbar
+
+`<native-toolbar>` is the screen's toolbar on iOS: the bar a navigation controller floats over the
+content and the tab bar, where Mail has its filter, its search field and its compose button. Each
+`<native-toolbar-item>` in it is a button, a spacer, or the place the search field goes:
+
+<!-- api: NativeToolbarItem -->
+
+```ts
+import { Component, signal } from '@angular/core';
+import { ScrollView, Text } from '@ng-native/components';
+import {
+  NativeHeader,
+  NativeHeaderItem,
+  NativeSearchBar,
+  NativeToolbar,
+  NativeToolbarItem,
+} from '@ng-native/router';
+
+@Component({
+  selector: 'x-inbox',
+  imports: [
+    NativeHeader,
+    NativeHeaderItem,
+    NativeSearchBar,
+    NativeToolbar,
+    NativeToolbarItem,
+    ScrollView,
+    Text,
+  ],
+  template: `
+    <native-header title="Inbox" [largeTitle]="true">
+      <native-header-item type="searchBar">
+        <native-search-bar placeholder="Search" [(query)]="query" />
+      </native-header-item>
+    </native-header>
+    <native-toolbar>
+      <native-toolbar-item
+        systemImageName="line.3.horizontal.decrease"
+        accessibilityLabel="Filter"
+        (press)="unread.set(!unread())"
+      />
+      <native-toolbar-item type="searchBar" />
+      <native-toolbar-item
+        systemImageName="square.and.pencil"
+        accessibilityLabel="Compose"
+        (press)="drafts.set(drafts() + 1)"
+      />
+    </native-toolbar>
+    <scroll-view contentInsetAdjustmentBehavior="automatic">
+      <text>{{ unread() ? 'Unread' : 'All mail' }}, {{ drafts() }} drafts</text>
+    </scroll-view>
+  `,
+})
+export class Inbox {
+  protected readonly query = signal('');
+  protected readonly unread = signal(false);
+  protected readonly drafts = signal(0);
+}
+```
+
+An item with no `type` is a button, drawn from `systemImageName`, an SF Symbol, or from `title`,
+and `(press)` is a tap on it. A button with a symbol and no title needs an `accessibilityLabel`
+for a screen reader to say. `barButtonItemStyle="prominent"` is the filled style iOS 26 gives a
+screen's main action, and `tintColor`, `disabled` and `hidden` do what they say.
+
+`type="fluidSpacer"` takes all the room there is, so what follows it sits at the trailing edge,
+and `type="fixedSpacer"` is a gap of `width` points. `type="searchBar"` is where the screen's
+`<native-search-bar>` goes once iOS 26 integrates it into the toolbar, which puts buttons either
+side of the field. On iOS 26 the items beside one another share one glass background:
+`hidesSharedBackground` draws an item with none, and `[sharesBackground]="false"` gives it glass of
+its own.
+
+react-native-screens has no toolbar, so these commit as Expo Router's native toolbar views. An app
+that uses them installs `expo-router` for that native half, with `npx expo install expo-router`.
+None of its JavaScript is imported, and Expo Go has it built in. Without it the elements commit as
+nothing (`UnimplementedNativeView`).
+
+The toolbar needs iOS 18, and the search field's place in it needs iOS 26. It is the toolbar of
+the screen it is written in, wherever in the page that is, and it goes when the element does. A
+presented screen has no navigation controller, so no toolbar. Android has no such bar, and draws
+nothing for either element.
 
 ## Colors
 

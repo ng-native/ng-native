@@ -87,6 +87,20 @@ export const ActivityState = {
 export type ActivityStateValue = (typeof ActivityState)[keyof typeof ActivityState];
 
 /**
+ * The Fabric name of one of `ExpoRouterToolbarModule`'s views, as `requireNativeView` in
+ * `expo-modules-core` computes it. Expo Go runs many projects in one binary and names every view
+ * after the one it is running; a build of the app's own has no such suffix.
+ *
+ * `@ng-native/expo` derives the same name for its own views. The Angular-facing packages do not
+ * import each other, and this is three lines.
+ */
+function expoRouterToolbarView(view: string): string {
+  const identifier = (globalThis as { expo?: { __expo_app_identifier__?: string } }).expo
+    ?.__expo_app_identifier__;
+  return `ViewManagerAdapter_ExpoRouterToolbarModule_${view}${identifier ? `_${identifier}` : ''}`;
+}
+
+/**
  * Call once at startup, before the first navigation.
  *
  * The app must also have `react-native-screens` installed so the native side registers these
@@ -106,6 +120,16 @@ export function registerScreenComponents(): void {
   for (const [element, [ios, android, defaults]] of Object.entries(TAB_VIEW_NAMES)) {
     registerViewName(element, { ios, android }, defaults as Record<string, unknown>);
   }
+  // A screen's bottom toolbar is Expo Router's, which react-native-screens has none of: see
+  // `native-toolbar.ts`. Android has no such bar, so the elements are plain views there.
+  registerViewName('native-toolbar', {
+    ios: expoRouterToolbarView('RouterToolbarHostView'),
+    android: 'RCTView',
+  });
+  registerViewName('native-toolbar-item', {
+    ios: expoRouterToolbarView('RouterToolbarItemView'),
+    android: 'RCTView',
+  });
   // `findHeaderConfig` in `RNSScreen.mm` looks at the screen's direct children and no deeper, so
   // a header a page wrote inside a `safe-area-view` or a component of its own commits beside it.
   // Nothing in `RNSScreen.mm` updates the bar when its config is unmounted, so a header an `@if`
