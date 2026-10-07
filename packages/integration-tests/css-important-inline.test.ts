@@ -107,6 +107,18 @@ describe('an important declaration and an inline style', () => {
     assert.equal(fabric.committed[0]!.props['textAlign'], 'right');
   });
 
+  it('is what a child that says inherit takes, over what the element sets', () => {
+    const css =
+      '.m { width: 10px !important; height: 20px } .child { width: inherit; height: inherit }';
+    const s = scene(css, 'm', { width: 50, height: 60 });
+    assert.equal(s.childProps()['width'], 10);
+    assert.equal(
+      s.childProps()['height'],
+      60,
+      'and what the element sets where it is not important',
+    );
+  });
+
   it('is what lays out the boxes inside, where it says which way they run', () => {
     // A basis is committed as the size along its container's main axis.
     const css = '.m { flex-direction: row !important } .child { flex-basis: 80px }';
