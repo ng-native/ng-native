@@ -1067,6 +1067,21 @@ function ratioForAutoSize(props: Record<string, unknown>): void {
   if (given(props['width']) && given(props['height'])) delete props['aspectRatio'];
 }
 
+const OUTLINE_KEYS = ['outlineWidth', 'outlineStyle', 'outlineColor', 'outlineOffset'];
+
+/**
+ * Send nothing for an outline of no width, which is what `outline: none` is: it draws nothing,
+ * and a view with no outline is the same view. Sent, it is an update that is not one, and on
+ * Android a text field given an outline prop after it is first drawn has its background set
+ * again, with which the padding Android gives a text field comes back over the padding it was
+ * laid out with: a field as tall as its line clips its text away. A stylesheet takes a
+ * browser's focus ring off a field with `outline: none` for the focused field alone.
+ */
+function noOutline(props: Record<string, unknown>): void {
+  if (props['outlineWidth'] !== 0) return;
+  for (const key of OUTLINE_KEYS) delete props[key];
+}
+
 /**
  * A box with `display: none`, out of the flow as well. It takes no room either way, but Yoga
  * reads an item's baseline from its first child that is in the flow, and a hidden one has no
@@ -3649,6 +3664,7 @@ export class Engine implements HostEngine {
     basisAsSize(node, merged);
     // After the basis, which is a size given where it is committed as one.
     ratioForAutoSize(merged);
+    noOutline(merged);
     // Last, on what is committed: an override or an animation can hide a box, or place it.
     hiddenOutOfFlow(merged);
     delete merged['touchAction'];

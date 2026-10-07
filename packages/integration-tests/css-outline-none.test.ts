@@ -63,7 +63,7 @@ describe('an outline of no width', () => {
       outlineStyle: 'solid',
       outlineColor: 'rgb(255, 0, 0)',
     });
-    s.engine.setClasses(s.box, 'ring none');
+    s.engine.setClasses(s.box, 'ring off');
     assert.deepEqual(s.outline(), {});
     s.engine.setClasses(s.box, 'ring');
     assert.equal(s.outline()['outlineWidth'], 2);
