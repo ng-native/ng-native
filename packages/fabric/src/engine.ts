@@ -2431,12 +2431,14 @@ function sameHandles(a: readonly FabricNode[], b: readonly FabricNode[]): boolea
 
 /**
  * Whether a node could be the element a compound is written for, by its classes alone: its own,
- * and those of an alternative in its `:is()`, which is where Tailwind names a group or a peer.
- * A compound with no class in either could be any element.
+ * and those of one alternative of each `:is()` on it, which is where Tailwind names a group or
+ * a peer. A compound with no class in either could be any element.
  */
 function couldBe(compound: Compound, node: EngineNode): boolean {
   if (!compound.classes.every((name) => node.classes?.has(name))) return false;
-  return !compound.is?.length || compound.is.some((chain) => couldBe(chain.at(-1)!, node));
+  return (compound.is ?? []).every((alternatives) =>
+    alternatives.some((option) => couldBe(option, node)),
+  );
 }
 
 /** Dev-time commit accounting, so a slow frame can be attributed rather than guessed at. */
