@@ -749,7 +749,8 @@ describe('a keyframe list that anchors to nothing', () => {
     s.engine.setClasses(s.view, 'flashing');
     s.engine.commit();
     s.tick(250);
-    assert.match(String(s.painted('backgroundColor')), /^rgba\(\d+, 0, 0, 0\.5\)$/, 'half opaque');
+    // Mixed with its alpha multiplied in, as a browser does: red at half strength, not a dark red.
+    assert.equal(s.painted('backgroundColor'), 'rgba(255, 0, 0, 0.5)');
   });
 });
 
