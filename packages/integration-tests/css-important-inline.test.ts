@@ -68,6 +68,44 @@ describe('an important declaration and an inline style', () => {
     assert.equal(s.props()['width'], 70);
   });
 
+  it('stands where it defines a custom property the element sets too', () => {
+    const s = scene('.m { --w: 10px !important; width: var(--w) }', 'm', {});
+    s.engine.setCustomProperty(s.box, '--w', '50px');
+    assert.equal(s.props()['width'], 10);
+    const plain = scene('.m { --w: 10px; width: var(--w) }', 'm', {});
+    plain.engine.setCustomProperty(plain.box, '--w', '50px');
+    assert.equal(plain.props()['width'], 50, 'and is under it where it is not important');
+  });
+
+  it('stands over the other form of the same edge, logical or physical', () => {
+    const physical = scene('.m { margin-left: 10px !important }', 'm', { marginStart: 20 });
+    assert.equal(physical.props()['marginLeft'], 10);
+    assert.equal(physical.props()['marginStart'], undefined);
+    const logical = scene('.m { margin-inline-start: 10px !important }', 'm', { marginLeft: 20 });
+    assert.equal(logical.props()['marginStart'], 10);
+    assert.equal(logical.props()['marginLeft'], undefined);
+    const mirrored = scene('.m { direction: rtl; margin-right: 10px !important }', 'm', {
+      marginStart: 20,
+      marginLeft: 5,
+    });
+    assert.equal(mirrored.props()['marginRight'], 10);
+    assert.equal(mirrored.props()['marginStart'], undefined);
+    assert.equal(mirrored.props()['marginLeft'], 5, 'and leaves the edge across from it');
+  });
+
+  it('is the direction text is aligned by, over one the element sets', () => {
+    const fabric = createFakeFabric();
+    const css = '.m { direction: rtl !important; text-align: start }';
+    const engine = new Engine(fabric, 1, { globalStyles: compileCss(css, 'app.css') as never });
+    const text = engine.createElement('text');
+    engine.setClasses(text, 'm');
+    engine.setProp(text, 'style', { direction: 'ltr' });
+    engine.appendChild(text, engine.createText('One'));
+    engine.appendChild(engine.root, text);
+    engine.commit();
+    assert.equal(fabric.committed[0]!.props['textAlign'], 'right');
+  });
+
   it('is what lays out the boxes inside, where it says which way they run', () => {
     // A basis is committed as the size along its container's main axis.
     const css = '.m { flex-direction: row !important } .child { flex-basis: 80px }';
