@@ -49,6 +49,25 @@ describe(':is(<compound> > *)', () => {
     assert.deepEqual(s.reports, []);
   });
 
+  it('matches a child of a compound that is itself under another', () => {
+    // A `*:` variant written inside a scope: `:is(.scope .list > *)`. The parent is the list,
+    // and the list is somewhere under the scope.
+    const under = scene('.x:is(.p .x > *) { opacity: 0.5 }');
+    assert.equal(under.opacity('grandchild'), 0.5);
+    assert.equal(under.opacity('child'), undefined, 'whose parent is under nothing');
+    assert.deepEqual(under.reports, []);
+    const elsewhere = scene('.x:is(.q .x > *) { opacity: 0.5 }');
+    assert.equal(elsewhere.opacity('grandchild'), undefined);
+    // And the same of an ancestor: under a compound that is under another.
+    const deep = scene('.x:is(.p .x *) { opacity: 0.5 }');
+    assert.equal(deep.opacity('grandchild'), 0.5);
+    assert.equal(deep.opacity('child'), undefined);
+    // A scope written with `:where()`, which is how a stylesheet keeps it from weighing anything.
+    const scoped = scene(':is(:where(.p) .x > *)[testID] { opacity: 0.5 }');
+    assert.equal(scoped.opacity('grandchild'), 0.5);
+    assert.deepEqual(scoped.reports, []);
+  });
+
   it('is as specific as the compound, in :is(), and weighs nothing in :where()', () => {
     // Two classes against one, then one against one with the later rule winning.
     const is = scene('.x:is(.p > *) { opacity: 0.5 } .x { opacity: 1 }');
