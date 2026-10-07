@@ -1259,6 +1259,20 @@ function parentArgument(argument) {
 }
 
 /**
+ * `<scope> <compound>`: the element itself, where it is somewhere under the scope. A class
+ * written inside a scope and then named by a variant. The scope is kept on the parts as `under`.
+ *
+ * @returns the compound, or null if this is not that shape.
+ */
+function underArgument(argument) {
+  const joins = argument.flatMap((piece, at) => (piece.type === 'combinator' ? [at] : []));
+  if (joins.length !== 1 || argument[joins[0]].value !== 'descendant') return null;
+  const tested = argument.slice(joins[0] + 1);
+  if (!tested.length || tested.at(-1).type === 'universal') return null;
+  return Object.assign(tested, { under: argument.slice(0, joins[0]) });
+}
+
+/**
  * `<compound> <combinator> *`, as the compound, or null. The compound may be under one other,
  * `<scope> <compound> > *`, which is the same test of a compound that has an ancestor of its
  * own: a `*:` variant written inside a scope. The scope is kept on the parts as `under`.
@@ -1389,6 +1403,8 @@ function functionalArgument(part, argument, context) {
   if (ancestor) return { list: 'ancestors', parts: ancestor };
   const parent = above && parentArgument(argument);
   if (parent) return { list: 'parents', parts: parent };
+  const scoped = above && underArgument(argument);
+  if (scoped) return { list: 'compounds', parts: scoped };
   if (argument.some((piece) => piece.type === 'combinator')) {
     throw new CssUnsupported(
       `${context}: ':${part.kind}()' cannot contain a combinator, only a compound selector, ` +

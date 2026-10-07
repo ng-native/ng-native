@@ -113,8 +113,10 @@ describe(':is, :where and :not', () => {
     assert.equal(hits('view:not(.a[disabled])', node('view', {}, ['a'])), true);
   });
 
-  it('refuses a combinator inside, which would need a second matching pass', () => {
-    assert.throws(() => compileCss('view:is(.a .b) { color: red }'), /combinator/i);
+  it('refuses a longer selector inside, which would need a second matching pass', () => {
+    // One compound under another is an ancestor test of that compound: see css-child-test.
+    assert.throws(() => compileCss('view:is(.a > .b) { color: red }'), /combinator/i);
+    assert.throws(() => compileCss('view:is(.a .b .c) { color: red }'), /combinator/i);
   });
 });
 
