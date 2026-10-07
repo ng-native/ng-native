@@ -19,6 +19,12 @@ export interface TransitionSpec {
   readonly easing: readonly number[];
 }
 
+/** Transitions of one element native plays on one clock: what stops it, and which they are. */
+export interface EasedNatively {
+  stop(): void;
+  readonly keys: readonly string[];
+}
+
 export interface Transition {
   from: unknown;
   to: unknown;
@@ -28,6 +34,11 @@ export interface Transition {
   easing: readonly number[];
   /** What the node paints right now. Also the value a redirected transition starts from. */
   current: unknown;
+  /**
+   * The clock native plays it on, with the others started beside it, while it does. Nothing of
+   * it runs in JavaScript then, and `current` is where it started from.
+   */
+  native?: EasedNatively;
   done: boolean;
   /**
    * The value a change back is a reversal to, and the share of the full duration this one takes:

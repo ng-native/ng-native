@@ -39,6 +39,7 @@ import {
   steppedKeys,
   tracksOf,
   type AnimationSpec,
+  type EasedNatively,
   type Keyframe,
   type RunningAnimation,
   type Transition,
@@ -1879,6 +1880,8 @@ function repaint(node: EngineNode): void {
 
 /** A sixtieth of a second: how far apart the frames native is given for an animation are. */
 const NATIVE_FRAME = 1000 / 60;
+/** The properties of a transition native can play: see `easeNatively`. */
+const NATIVELY_EASED = new Set(['opacity', 'transform']);
 
 /** The style keys that are a view's background. */
 const PAINT_KEYS = [
@@ -3257,6 +3260,7 @@ export class Engine implements HostEngine {
     // an `@if` is, and its children's views would then be handed to the view it is made again
     // as. Native gives a view one parent for its life, and aborts on a second.
     if (node.committed) this.forgetCommitted(node);
+    this.stopEased(node);
     node.transitions = undefined;
     if (node.playing) this.stopNative(node, node.playing);
     node.playing = undefined;
@@ -4141,13 +4145,16 @@ export class Engine implements HostEngine {
       this.emitTransition(node, 'topAnimationcancel', running.spec.name);
   }
 
-  /** Stop on native each animation whose view has left the tree. */
+  /** Stop on native each animation and transition whose view has left the tree. */
   private releasePlayedNatively(): void {
     for (const node of [...this.playedNatively]) {
       if (this.topOf(node) === this.root) continue;
       this.stopNative(node, node.playing!);
       node.playing = undefined;
       this.markProps(node, false);
+    }
+    for (const node of [...this.easedNatively]) {
+      if (this.topOf(node) !== this.root) this.stopEased(node);
     }
   }
 
@@ -4559,24 +4566,196 @@ export class Engine implements HostEngine {
   }
 
   private transitioned(node: EngineNode, props: Record<string, unknown>): Record<string, unknown> {
-    // Nobody saw what the last commit gave a view it created, so this is where the view starts.
-    if (node.bornIn! >= this.unseen) node.transitions = undefined;
+    this.unseenTransitions(node);
     const spec = transitionSpec(props);
     if (!spec && !node.transitions) return props;
     if (spec) keepForTransition(node, props, spec);
 
     const state = (node.transitions ??= new Map());
     const now = this.now();
+    this.takeBackEased(node, state, props, spec, now);
+    const started: string[] = [];
 
     for (const key of steppedKeys(props, spec, state)) {
       if (step(state, key, props, spec?.[key] ?? spec?.['all'], now)) {
         this.running.add(node);
+        started.push(key);
         this.emitTransition(node, 'topTransitionstart', key);
       }
     }
+    this.easeNatively(node, state, started, props, now);
 
     if (state.size === 0) node.transitions = undefined;
     return props;
+  }
+
+  /** Nobody saw what the last commit gave a view it created, so this is where the view starts. */
+  private unseenTransitions(node: EngineNode): void {
+    if (node.bornIn! < this.unseen) return;
+    this.stopEased(node);
+    node.transitions = undefined;
+  }
+
+  /** The elements native is playing a transition of. */
+  private readonly easedNatively = new Set<EngineNode>();
+
+  /**
+   * Hand to native each transition that just started and that it can play: opacity and
+   * transforms, with no wait before they start. Those that start together, take as long and ease
+   * alike share a clock. Nothing of them runs in JavaScript until native says they have ended:
+   * a press that fades or slides something is a commit to start it and a commit to end it.
+   *
+   * ponytail: a colour is eased from JavaScript still, a commit a frame, and so is anything
+   * that waits. Native has a colour node for the first; give the driver a channel for it.
+   */
+  private easeNatively(
+    node: EngineNode,
+    state: Map<string, Transition>,
+    started: readonly string[],
+    props: Record<string, unknown>,
+    now: number,
+  ): void {
+    if (started.length) this.startEased(node, state, started, props, now);
+    // As Animated does: Fabric flattens a view that only lays out, and then there is no native
+    // view for a transition to move.
+    if (this.easedNatively.has(node)) props['collapsable'] = false;
+  }
+
+  private startEased(
+    node: EngineNode,
+    state: Map<string, Transition>,
+    started: readonly string[],
+    props: Record<string, unknown>,
+    now: number,
+  ): void {
+    if (!this.scrollDriver) return;
+    const clocks = new Map<string, string[]>();
+    for (const key of started) {
+      const eased = state.get(key)!;
+      if (!NATIVELY_EASED.has(key) || eased.start > now || eased.duration <= 0) continue;
+      const clock = `${eased.duration} ${eased.easing.join()}`;
+      clocks.set(clock, [...(clocks.get(clock) ?? []), key]);
+    }
+    for (const keys of clocks.values()) this.playEased(node, state, keys, props);
+    const inScript = [...state.values()].some((eased) => !eased.done && !eased.native);
+    if (!inScript) this.running.delete(node);
+  }
+
+  private playEased(
+    node: EngineNode,
+    state: Map<string, Transition>,
+    keys: readonly string[],
+    props: Record<string, unknown>,
+  ): void {
+    const first = state.get(keys[0]!)!;
+    const tracks = new Map(
+      keys.map((key) => {
+        const { current, to, easing } = state.get(key)!;
+        return [
+          key,
+          [
+            { offset: 0, value: current, easing },
+            { offset: 1, value: to },
+          ],
+        ] as const;
+      }),
+    );
+    const spec: AnimationSpec = {
+      name: '',
+      duration: first.duration,
+      delay: 0,
+      easing: first.easing,
+      iterations: 1,
+      fill: 'both',
+    };
+    const { channels, held } = clockChannels(tracks, spec, props);
+    if (held.length || !(channels.opacity || channels.transform.length)) return;
+    const length = Math.max(2, Math.round(first.duration / NATIVE_FRAME) + 1);
+    const frames = Array.from({ length }, (_, i) => i / (length - 1));
+    const clock: { keys: readonly string[]; stop(): void } = { keys, stop: () => undefined };
+    const native = this.scrollDriver!.play(
+      node,
+      channels,
+      { frames, toValue: 1, iterations: 1 },
+      (view) => this.tagOf(view as EngineNode),
+      () => this.endedEased(node, clock),
+    );
+    if (!native) return;
+    clock.stop = () => native.stop();
+    for (const key of keys) state.get(key)!.native = clock;
+    this.easedNatively.add(node);
+  }
+
+  /**
+   * Native reached the end of the transitions on one clock. Where they end is committed before
+   * the view is let go, so nothing shows of where they started, which is what it was committed
+   * with.
+   */
+  private endedEased(node: EngineNode, clock: EasedNatively): void {
+    const state = node.transitions;
+    const keys = clock.keys.filter((key) => state?.get(key)?.native === clock);
+    for (const key of keys) {
+      const eased = state!.get(key)!;
+      Object.assign(eased, { current: eased.to, done: true, native: undefined });
+      this.emitTransition(node, 'topTransitionend', key);
+      this.tick(node, [key]);
+    }
+    this.forgetEased(node);
+    if (keys.length) this.commit();
+    clock.stop();
+  }
+
+  /** No longer one native is easing, once none of its transitions is native's. */
+  private forgetEased(node: EngineNode): void {
+    for (const eased of node.transitions?.values() ?? []) if (eased.native) return;
+    this.easedNatively.delete(node);
+  }
+
+  /**
+   * Take back from native each transition it can no longer play as it was started: one sent
+   * another way, one whose rule has gone, any of a view that was made again. Each is brought to
+   * where its clock has got to, which is where it goes on from, here or on native again.
+   */
+  private takeBackEased(
+    node: EngineNode,
+    state: Map<string, Transition>,
+    props: Record<string, unknown>,
+    spec: Record<string, TransitionSpec> | undefined,
+    now: number,
+  ): void {
+    if (!this.easedNatively.has(node)) return;
+    const remade = node.committed === null;
+    for (const [key, eased] of state) {
+      if (!eased.native) continue;
+      const kept = spec?.[key] ?? spec?.['all'];
+      if (remade || !kept || !Object.is(eased.to, props[key]))
+        this.backToScriptEased(node, eased.native, now);
+    }
+  }
+
+  /** Stop a clock native runs, and go on from JavaScript with each transition it was playing. */
+  private backToScriptEased(node: EngineNode, clock: EasedNatively, now: number): void {
+    for (const key of clock.keys) {
+      const eased = node.transitions?.get(key);
+      if (eased?.native !== clock) continue;
+      eased.native = undefined;
+      const progress = Math.min(1, Math.max(0, (now - eased.start) / eased.duration));
+      eased.current = interpolate(eased.from, eased.to, bezier(eased.easing, progress));
+      this.running.add(node);
+    }
+    clock.stop();
+    this.forgetEased(node);
+  }
+
+  /** Let go of what native is easing on an element that is going, or gone. */
+  private stopEased(node: EngineNode): void {
+    if (!this.easedNatively.delete(node)) return;
+    const clocks = new Set<EasedNatively>();
+    for (const eased of node.transitions?.values() ?? []) {
+      if (eased.native) clocks.add(eased.native);
+      eased.native = undefined;
+    }
+    for (const clock of clocks) clock.stop();
   }
 
   /**
