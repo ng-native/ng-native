@@ -220,7 +220,7 @@ export function compare(property: string, browser: string, style: Style, box: nu
   // A size the engine reads where the container is known, kept as the keyword until then.
   if (browser === 'fit-content') return verdict(value === 'fit-content');
   // As big as its content: a size is the same keyword, and a cap is read beside what it caps.
-  if (browser === 'max-content')
+  if (browser === 'max-content' && /^(max-)?(width|height)$/.test(property))
     return verdict(value === (property.startsWith('max-') ? 'max-content' : 'fit-content'));
   if (LENGTH.test(property)) return verdict(sameLength(browser, value));
   if (NUMBER.test(property))
