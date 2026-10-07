@@ -1858,6 +1858,8 @@ interface SheetReach {
   readonly classes: ClassReach;
   /** The tests of the `class` attribute itself, which a class in no rule can still answer. */
   readonly reads: readonly AttributeTest[];
+  /** Every attribute a selector of the sheet asks about, by name. */
+  readonly named: ReadonlySet<string>;
 }
 
 const reaches = new WeakMap<StyleSheet, SheetReach>();
@@ -1874,16 +1876,17 @@ function classReach(sheet: StyleSheet): SheetReach {
   if (found) return found;
   const classes: ClassReach = new Map();
   const reads: AttributeTest[] = [];
+  const named = new Set<string>();
   for (const rule of sheet.rules) {
     const every = new Set<string>();
-    collectClasses(rule, every, reads);
+    collectClasses(rule, every, reads, named);
     const inside = classesInside(rule);
     for (const name of every) {
       if (!inside.has(name)) classes.set(name, true);
       else noteInside(classes, name, rule);
     }
   }
-  reaches.set(sheet, (found = { classes, reads }));
+  reaches.set(sheet, (found = { classes, reads, named }));
   return found;
 }
 
@@ -1941,18 +1944,30 @@ function classesInside(rule: StyleRule): ReadonlySet<string> {
 /** What a rule declares, which names no element. */
 const DECLARED = new Set(['declarations', 'important', 'tokens']);
 
-/** Add each class under `value` to `into`, and each test of the `class` attribute to `reads`. */
-function collectClasses(value: unknown, into: Set<string>, reads: AttributeTest[]): void {
+/**
+ * Add each class under `value` to `into`, each test of the `class` attribute to `reads`, and the
+ * name of every attribute asked about to `named`.
+ */
+function collectClasses(
+  value: unknown,
+  into: Set<string>,
+  reads: AttributeTest[],
+  named?: Set<string>,
+): void {
   if (value === null || typeof value !== 'object') return;
-  if (Array.isArray(value)) return value.forEach((inner) => collectClasses(inner, into, reads));
+  if (Array.isArray(value)) {
+    return value.forEach((inner) => collectClasses(inner, into, reads, named));
+  }
   const part = value as { classes?: unknown; attributes?: unknown };
   if (Array.isArray(part.classes)) for (const name of part.classes) into.add(String(name));
   if (Array.isArray(part.attributes)) {
-    for (const test of part.attributes as AttributeTest[])
+    for (const test of part.attributes as AttributeTest[]) {
+      named?.add(test.name);
       if (test.name === 'class') reads.push(test);
+    }
   }
   for (const [key, inner] of Object.entries(value)) {
-    if (!DECLARED.has(key)) collectClasses(inner, into, reads);
+    if (!DECLARED.has(key)) collectClasses(inner, into, reads, named);
   }
 }
 
@@ -2285,9 +2300,21 @@ export class StyleResolver {
   noteSheet(sheet: StyleSheet | null | undefined): void {
     if (!sheet || this.noted.has(sheet)) return;
     this.noted.add(sheet);
-    const { classes, reads } = classReach(sheet);
+    const { classes, reads, named } = classReach(sheet);
     for (const [name, how] of classes) this.noteReach(name, how);
     this.classTests.push(...reads);
+    for (const name of named) this.named.add(name);
+  }
+
+  /** The props a selector of some sheet asks about: an id, and each attribute by its name. */
+  private readonly named = new Set<string>(['nativeID']);
+
+  /**
+   * Whether a prop changing can change what any element matches: only where a selector of a
+   * sheet that was ever loaded names it. A sheet loaded later has every element matched again.
+   */
+  reads(prop: string): boolean {
+    return this.named.has(prop);
   }
 
   private noteReach(name: string, how: true | Subjects): void {

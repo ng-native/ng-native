@@ -3298,7 +3298,10 @@ export class Engine implements HostEngine {
     // inline `direction` is the exception, because the paragraphs below it align by it.
     // And a child that takes one of this node's own values, an `inherit`, follows it.
     const heirs = node.styleCache?.heirs === true;
-    this.markProps(node, key !== 'style' || this.inlineReachesStyle(node) || heirs);
+    // And only a prop some selector names: `aria-valuenow` on every tick of a progress bar, a
+    // field's text on every key, match nothing they did not.
+    const read = key === 'style' ? this.inlineReachesStyle(node) : this.styles.reads(key);
+    this.markProps(node, read || heirs);
   }
 
   /**
