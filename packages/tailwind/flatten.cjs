@@ -586,32 +586,6 @@ function combine(a, b, op) {
 }
 
 /**
- * Turn a unitless `line-height` into a length, using the font size beside it.
- *
- * CSS reads `line-height: 1.5` as a ratio of the element's font size, and inherits the *ratio*;
- * React Native's `lineHeight` is a number of points and there is no ratio to inherit. Tailwind
- * always emits the two together - `.text-lg` is a size and its leading - so the multiplication can
- * be done here, once, where both are in the same rule. A ratio with no font size beside it is left
- * alone for the compiler to refuse, because guessing an inherited size would be worse than saying
- * nothing.
- */
-function resolveUnitlessLineHeight(css) {
-  return css.replace(/\{([^{}]*)\}/g, (whole, body) => {
-    const ratio = /(^|;)\s*line-height\s*:\s*([0-9]*\.?[0-9]+)\s*(?=;|$)/.exec(body);
-    if (!ratio) return whole;
-    const size = /(^|;)\s*font-size\s*:\s*([0-9]*\.?[0-9]+)(rem|px)\s*(?=;|$)/.exec(body);
-    if (!size) return whole;
-    // In points, rounded there: a ratio rounded at build time and then multiplied by 16 again,
-    // as a height in rem is, came out at 31.99984 where a browser draws 32.
-    const points = Number(size[2]) * Number(ratio[2]) * (size[3] === 'rem' ? REM : 1);
-    return whole.replace(
-      ratio[0],
-      `${ratio[1]} line-height: ${Math.round(points * 1000) / 1000}px`,
-    );
-  });
-}
-
-/**
  * Five decimal places, as the compiler keeps. Three is finer than a point on any screen, but not
  * for a line height that is a factor a font size multiplies back up: `calc(1.25 / .875)` at three
  * made `text-sm` 20.006 points tall rather than 20.
@@ -1063,7 +1037,9 @@ function flattenTailwind(css, { onSettled = () => {} } = {}) {
   out = dropRedundantBorderStyles(out);
   out = dropEmptyDeclarations(out);
   return settleWhereRefused(
-    resolveUnitlessLineHeight(fold(out)),
+    // A unitless line-height is left as the number it is: the compiler has the device work it
+    // out against the element's own font size, which another rule may give.
+    fold(out),
     theme,
     settled,
     runtime,
