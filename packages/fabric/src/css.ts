@@ -1730,11 +1730,20 @@ export function candidateRules(
   return offered;
 }
 
-/** The properties the rules matching a node declared `!important`, or nothing where none did. */
-function importantNames(result: CascadeResult): ReadonlySet<string> | undefined {
+/**
+ * The properties the rules matching a node declared `!important`, or nothing where none did:
+ * each by its own name and by the other form of it, so `margin-left` stands over an inline
+ * `marginStart` as it does over an inline `marginLeft`.
+ */
+function importantNames(
+  result: CascadeResult,
+  twin: () => Readonly<Record<string, string>>,
+): ReadonlySet<string> | undefined {
   const deferred = result.deferred?.filter((one) => one.important) ?? [];
   if (!result.important && !deferred.length) return undefined;
-  return new Set([...Object.keys(result.important ?? {}), ...deferred.flatMap((one) => one.props)]);
+  const names = [...Object.keys(result.important ?? {}), ...deferred.flatMap((one) => one.props)];
+  const sided = names.filter((name) => name in TWIN.ltr);
+  return new Set(sided.length ? [...names, ...sided.map((name) => twin()[name]!)] : names);
 }
 
 /** What the rules matching one node add up to. */
@@ -1743,6 +1752,8 @@ interface CascadeResult {
   /** The important declarations alone, which a deferred value that is not important cannot beat. */
   readonly important: Record<string, unknown> | null;
   readonly tokens: Record<string, TokenValue> | null;
+  /** The custom properties among `tokens` declared `!important`, which the element's own do not take. */
+  readonly importantTokens: Record<string, TokenValue> | null;
   readonly deferred: DeferredDeclaration[] | null;
 }
 
@@ -2687,7 +2698,12 @@ export class StyleResolver {
 
     // Tokens are in scope for this node's own declarations as well as its descendants', so they
     // are merged before any `var()` here is resolved.
-    const tokens = tokensInScope(parentTokens, result.tokens, node.customProperties);
+    const tokens = tokensInScope(
+      parentTokens,
+      result.tokens,
+      node.customProperties,
+      result.importantTokens,
+    );
 
     const own = result.declarations;
     if (result.deferred) {
@@ -2698,7 +2714,8 @@ export class StyleResolver {
     if (own['pointerEvents'] === 'inherit') delete own['pointerEvents'];
     const style = { ...parentInherited, ...own };
     const inherited = decorate(style, inheritFrom(parentInherited, own), own);
-    const important = importantNames(result);
+    const rtl = (style['direction'] ?? this.conditions.direction) === 'rtl';
+    const important = importantNames(result, () => TWIN[rtl ? 'rtl' : 'ltr']);
     return important ? { style, inherited, tokens, important } : { style, inherited, tokens };
   }
 
@@ -2745,6 +2762,7 @@ export class StyleResolver {
       declarations: hasImportant ? { ...normal, ...important } : normal,
       important: hasImportant ? important : null,
       tokens,
+      importantTokens,
       deferred,
     };
   }
@@ -3118,8 +3136,10 @@ function tokensInScope(
   parentTokens: Readonly<Record<string, TokenValue>>,
   ruleTokens: Readonly<Record<string, TokenValue>> | null,
   custom: Readonly<Record<string, TokenValue>> | null | undefined,
+  important: Readonly<Record<string, TokenValue>> | null = null,
 ): Readonly<Record<string, TokenValue>> {
-  const own = custom ? { ...ruleTokens, ...custom } : ruleTokens;
+  // What the element sets is over its rules' definitions, but for the ones marked important.
+  const own = custom ? { ...ruleTokens, ...custom, ...important } : ruleTokens;
   if (!own || changesNothing(own, parentTokens)) return parentTokens;
   return resolveAliases(own, { ...parentTokens, ...own }, parentTokens);
 }

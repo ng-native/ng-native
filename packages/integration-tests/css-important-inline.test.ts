@@ -95,7 +95,8 @@ describe('an important declaration and an inline style', () => {
 
   it('is the direction text is aligned by, over one the element sets', () => {
     const fabric = createFakeFabric();
-    const css = '.m { direction: rtl !important; text-align: start }';
+    // A physical side is the other one to a native paragraph laid out right to left.
+    const css = '.m { direction: rtl !important; text-align: left }';
     const engine = new Engine(fabric, 1, { globalStyles: compileCss(css, 'app.css') as never });
     const text = engine.createElement('text');
     engine.setClasses(text, 'm');

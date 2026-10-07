@@ -1156,12 +1156,7 @@ const STACK_SCREEN = 'RNSScreen';
 
 /** What an element's `touch-action` is: bound on it, or from the rules it matches. */
 function touchActionOf(node: EngineNode): unknown {
-  const bound = node.props['style'];
-  const inline =
-    bound && typeof bound === 'object' && !Array.isArray(bound)
-      ? (bound as Record<string, unknown>)['touchAction']
-      : undefined;
-  return inline ?? node.styleCache?.style['touchAction'];
+  return inlineOf(node)['touchAction'] ?? node.styleCache?.style['touchAction'];
 }
 
 /** Where a touch is on the screen: its own point, or its first finger's. */
@@ -3669,9 +3664,7 @@ export class Engine implements HostEngine {
     if (node.paintsOn) for (const key of PAINT_KEYS) delete merged[key];
     const from = node.parent?.paintsOn === node ? node.parent : null;
     if (!from) return;
-    const paint = flattenStyle(from.props['style'], {
-      ...this.styles.resolve(from, this.styleEpoch).style,
-    });
+    const paint = { ...this.styles.resolve(from, this.styleEpoch).style, ...inlineOf(from) };
     for (const key of PAINT_KEYS) if (paint[key] !== undefined) merged[key] = paint[key];
   }
 
@@ -3727,7 +3720,7 @@ export class Engine implements HostEngine {
     const own = textDirection(props['direction']);
     if (!this.inlineDirection) return own;
     for (let at: EngineNode | null = node; at; at = at.parent) {
-      const inline = textDirection(flattenStyle(at.props['style'], {})['direction']);
+      const inline = textDirection(inlineOf(at)['direction']);
       if (inline) return inline;
       const cascaded = textDirection(at.styleCache?.style['direction']);
       if (cascaded && cascaded !== textDirection(at.parent?.styleCache?.style['direction'])) {
