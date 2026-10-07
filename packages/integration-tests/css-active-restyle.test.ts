@@ -98,6 +98,17 @@ describe('a press', () => {
     assert.equal(s.props('label')['opacity'], null);
   });
 
+  it('styles what is inside a pressed element named as any alternative of :is()', () => {
+    // Each alternative is the element itself: the group is one whichever it is written as.
+    for (const named of [':is(.group, .other)', ':is(.other, .group)', ':is(.other, .inner)']) {
+      const s = scene(`${BASE} ${named}:active .label { opacity: 0.3 }`);
+      assert.ok(s.touch('topTouchStart') <= 3, named);
+      assert.equal(s.props('label')['opacity'], 0.3, named);
+      s.touch('topTouchEnd');
+      assert.equal(s.props('label')['opacity'], null, named);
+    }
+  });
+
   it('styles an element that holds a pressed one, where a rule asks about that', () => {
     const s = scene(`${BASE} .outer:has(.btn:active) { opacity: 0.7 }`);
     s.touch('topTouchStart');
