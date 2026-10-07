@@ -1035,8 +1035,10 @@ const STRETCHES = new Set([undefined, null, 'auto', 'stretch']);
  * kept, since it stops the stretch already.
  */
 function fitContent(node: EngineNode, props: Record<string, unknown>): void {
-  capAtContent(props, 'width', 'maxWidth');
-  capAtContent(props, 'height', 'maxHeight');
+  const capped = {
+    row: capAtContent(props, 'width', 'maxWidth'),
+    column: capAtContent(props, 'height', 'maxHeight'),
+  };
   const width = props['width'] === 'fit-content';
   const height = props['height'] === 'fit-content';
   if (!width && !height) return;
@@ -1047,6 +1049,7 @@ function fitContent(node: EngineNode, props: Record<string, unknown>): void {
   const container = containerOf(parent);
   parent.fitContainer = container;
   const [direction, align] = container.split(' ');
+  if (capped[direction === 'row' ? 'row' : 'column']) withoutGrowth(props);
   const across = direction === 'row' ? height : width;
   if (across && align === 'stretch' && STRETCHES.has(props['alignSelf'] as string)) {
     props['alignSelf'] = 'flex-start';
@@ -1054,19 +1057,35 @@ function fitContent(node: EngineNode, props: Record<string, unknown>): void {
 }
 
 /**
+ * A box capped at its content along its container's main axis, where it would grow: a browser
+ * clamps a growing item by its maximum, and there is no such cap to hand Yoga. So it does not
+ * grow, and starts from its content, which is as far as the cap would let it get. It may still
+ * shrink.
+ */
+function withoutGrowth(props: Record<string, unknown>): void {
+  if (typeof props['flex'] === 'number' && props['flex'] > 0) {
+    delete props['flex'];
+    props['flexShrink'] ??= 1;
+  }
+  delete props['flexGrow'];
+  delete props['flexBasis'];
+}
+
+/**
  * `max-width: max-content`, and the same of a height: no bigger than its content, which for a
- * box that would fill its container is `fit-content`. Yoga has no such cap.
+ * box that would fill its container is `fit-content`. Yoga has no such cap. Answers whether the
+ * box was one that would.
  *
  * ponytail: a size in points is left as it is, since nothing here knows how big the content
  * is. Measure it if a box is ever given both.
  */
-function capAtContent(props: Record<string, unknown>, size: string, cap: string): void {
-  if (props[cap] !== 'max-content') return;
+function capAtContent(props: Record<string, unknown>, size: string, cap: string): boolean {
+  if (props[cap] !== 'max-content') return false;
   delete props[cap];
   const own = props[size];
-  if (own == null || own === 'auto' || (typeof own === 'string' && own.endsWith('%'))) {
-    props[size] = 'fit-content';
-  }
+  const fills = own == null || own === 'auto' || (typeof own === 'string' && own.endsWith('%'));
+  if (fills) props[size] = 'fit-content';
+  return fills;
 }
 
 const isPercent = (value: unknown): boolean => typeof value === 'string' && value.endsWith('%');
