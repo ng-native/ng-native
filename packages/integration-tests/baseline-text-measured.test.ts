@@ -17,10 +17,10 @@ const { compileCss } = require('@ng-native/metro/css/compile.cjs');
 
 const CSS =
   '.row { flex-direction: row; align-items: baseline } .plain { flex-direction: row } ' +
-  '.on { opacity: 0.5 } .out { position: absolute }';
+  '.on { opacity: 0.5 } .out { position: absolute } .gone { display: none }';
 
 /** A row holding a box with words in it and a box beside it, which a class is put on. */
-function scene(row: string, lead = '') {
+function scene(row: string, lead = '', loose = false) {
   const fabric = createFakeFabric();
   const engine = new Engine(fabric, 1, { globalStyles: compileCss(CSS, 'app.css') as never });
   const view = (classes: string, parent: EngineNode) => {
@@ -32,8 +32,10 @@ function scene(row: string, lead = '') {
   const outer = view(row, engine.root);
   const prefix = view('', outer);
   if (lead) view(lead, prefix);
-  const text = engine.createElement('text');
-  engine.appendChild(text, engine.createText('£'));
+  // In a text element, or written straight into the box, which is a paragraph the engine makes.
+  const words = engine.createText('£');
+  const text = loose ? words : engine.createElement('text');
+  if (!loose) engine.appendChild(text, words);
   engine.appendChild(prefix, text);
   const beside = view('', outer);
   engine.commit();
@@ -63,5 +65,14 @@ describe('text a row aligned by baseline takes a baseline from', () => {
 
   it('is the first box in the flow, past one that is out of it', () => {
     assert.equal(scene('row', 'out').copied(), true);
+  });
+
+  it('is past a box that is not displayed, which has no view to ask', () => {
+    assert.equal(scene('row', 'gone').copied(), true);
+  });
+
+  it('is the paragraph made around words written straight into the box', () => {
+    assert.equal(scene('row', '', true).copied(), true);
+    assert.equal(scene('plain', '', true).copied(), false);
   });
 });
