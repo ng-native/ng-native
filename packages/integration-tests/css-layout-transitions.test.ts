@@ -115,6 +115,20 @@ describe('a transition of a width', () => {
     assert.deepEqual(s.events, ['start', 'end']);
   });
 
+  it('is laid out by native again in the commit after one that was not', () => {
+    // The frames JavaScript eases it by are a box resized, and are no other box's.
+    const s = scene();
+    s.engine.setClasses(s.a, 'a straight on');
+    s.engine.setClasses(s.b, 'b tall');
+    s.engine.commit();
+    assert.equal(s.asked.length, 0);
+    // Sent back at once, in a commit that resizes nothing else.
+    s.engine.setClasses(s.a, 'a straight');
+    s.engine.commit();
+    assert.equal(s.asked.length, 1);
+    assert.equal(s.width(), 10);
+  });
+
   it('is sent another way from where it has got to, with native asked again', () => {
     const s = scene();
     s.engine.setClasses(s.a, 'a straight on');
