@@ -1318,6 +1318,85 @@ describe('a transition shorthand whose time is a token', () => {
   });
 });
 
+describe('a view with a transition', () => {
+  // React Native gives a view a native view of its own for an opacity under 1 and for little
+  // else, and takes it away when the reason goes: `ViewShadowNode.cpp`. A wrapper that fades in
+  // was a native view for the length of the fade and none after it, and Fabric moved what was
+  // inside it to the view above as the fade ended, which takes a focused field out of the window
+  // for a moment and loses it its focus.
+  function scene(css: string, element = 'view') {
+    let now = 1000;
+    const fabric = createFakeFabric();
+    const engine = new Engine(fabric, 1, {
+      globalStyles: compileCss(css) as StyleSheet,
+      now: () => now,
+    });
+    const node = engine.createElement(element);
+    engine.appendChild(engine.root, node);
+    engine.commit();
+    return {
+      engine,
+      node,
+      props: () => fabric.committed[0]!.props,
+      classes(value: string) {
+        engine.setClasses(node, value);
+        engine.commit();
+      },
+      tick(ms: number) {
+        now += ms;
+        engine.advanceAnimations();
+        engine.commit();
+      },
+    };
+  }
+
+  const FADE = '.fade { transition: opacity 200ms linear } .hidden { opacity: 0 }';
+
+  it('stays a native view before, through and after the transition', () => {
+    const s = scene(FADE);
+    s.classes('fade hidden');
+    assert.equal(s.props()['collapsable'], false, 'at rest');
+    s.classes('fade');
+    s.tick(100);
+    assert.equal(s.props()['opacity'], 0.5);
+    assert.equal(s.props()['collapsable'], false, 'part way');
+    s.tick(100);
+    assert.equal(s.props()['opacity'] ?? null, null, 'the fade is over, and the opacity gone');
+    assert.equal(s.props()['collapsable'], false, 'and it is a view still');
+  });
+
+  it('is left to React Native again once it has no transition', () => {
+    const s = scene(FADE);
+    s.classes('fade');
+    assert.equal(s.props()['collapsable'], false);
+    s.classes('');
+    assert.equal(s.props()['collapsable'] ?? null, null);
+    s.classes('fade');
+    assert.equal(s.props()['collapsable'], false, 'and kept again with one');
+  });
+
+  it('is not kept for transition: none, which transitions nothing', () => {
+    const s = scene('.still { transition: none }');
+    s.classes('still');
+    assert.equal(s.props()['collapsable'] ?? null, null);
+  });
+
+  it('leaves a collapsable someone wrote alone', () => {
+    const s = scene(FADE);
+    s.engine.setProp(s.node, 'collapsable', true);
+    s.classes('fade');
+    assert.equal(s.props()['collapsable'], true);
+  });
+
+  it('marks only a plain view, since a text or a field is a native view already', () => {
+    for (const element of ['text', 'text-input']) {
+      const s = scene(FADE, element);
+      s.classes('fade');
+      assert.equal(s.props()['collapsable'] ?? null, null, element);
+    }
+  });
+});
+
 describe('a transition it cannot compile', () => {
   // The transition is put together once the rule is read, and a step easing refused there took the
   // whole rule with it, where a declaration it cannot compile costs only itself.
