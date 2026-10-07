@@ -50,7 +50,12 @@ function check(template: string, imports = 'UiBottomSheet'): string {
   writeFileSync(
     path.join(root, 'page.ts'),
     `import { Component, signal } from '@angular/core';
-import { UiBottomSheet, UiHost } from '@ng-native/expo/expo-ui-components';
+import {
+  UiBottomSheet,
+  UiButton,
+  UiHost,
+  UiToolbarItem,
+} from '@ng-native/expo/expo-ui-components';
 
 @Component({
   selector: 'sheet-page',
@@ -117,6 +122,21 @@ describe('a bottom sheet in a strictly checked template, through ngc', () => {
       check(`<ui-bottom-sheet [(open)]="open" detents="medium" />`),
       /is not assignable to type/,
     );
+  });
+
+  it('takes a toolbar item with a placement SwiftUI has, and a button that closes', () => {
+    const sheet = (placement: string, role: string) =>
+      check(
+        `<ui-bottom-sheet [(open)]="open">
+          <ui-toolbar-item placement="${placement}">
+            <ui-button role="${role}" (buttonPress)="open.set(false)" />
+          </ui-toolbar-item>
+        </ui-bottom-sheet>`,
+        'UiBottomSheet, UiButton, UiToolbarItem',
+      );
+    assert.equal(sheet('cancellationAction', 'close'), '');
+    assert.match(sheet('middle', 'close'), /is not assignable to type/);
+    assert.match(sheet('cancellationAction', 'shut'), /is not assignable to type/);
   });
 
   it('refuses an input the component does not have', () => {

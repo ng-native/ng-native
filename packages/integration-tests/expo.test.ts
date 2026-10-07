@@ -511,6 +511,14 @@ describe('the SwiftUI and Compose views', () => {
 
     assert.equal(EXPO_UI_VIEWS['gauge']?.[1], null, 'and Android is given nothing to register');
   });
+
+  it("registers SwiftUI's navigation stack and toolbar for iOS alone, an item as a slot", () => {
+    for (const element of ['navigation-stack', 'toolbar', 'toolbar-item']) {
+      assert.ok(EXPO_UI_VIEWS[element]?.[0], `${element} is a view on iOS`);
+      assert.equal(EXPO_UI_VIEWS[element]?.[1], null, `${element} is none on Android`);
+    }
+    assert.equal(EXPO_UI_VIEWS['toolbar-item']?.[0], 'SlotView', 'which is what SwiftUI reads');
+  });
 });
 
 describe('the typed SwiftUI and segmented-control components', () => {
