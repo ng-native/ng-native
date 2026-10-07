@@ -59,17 +59,26 @@ describe('the key selector a rule is bucketed by', () => {
   });
 
   it('falls back to the universal bucket for anything not keyed on a name', () => {
-    // An attribute test, `:host`, and `*` can match a node whose classes say nothing, so they
-    // have to be offered to every node or they would silently stop applying.
-    assert.deepEqual(keys('[data-open] { flex: 1 }'), ['*']);
+    // `:host` and `*` can match a node whose classes say nothing, so they have to be offered to
+    // every node or they would silently stop applying. So is a test of the `class` attribute,
+    // which is no prop of the node's to look it up by.
+    assert.deepEqual(keys('[class~="a"] { flex: 1 }'), ['*']);
     assert.deepEqual(keys(':host { flex: 1 }'), ['*']);
     assert.deepEqual(keys('* { flex: 1 }'), ['*']);
+  });
+
+  it('files a rule that names its element by an attribute alone under the attribute', () => {
+    // A headless library styles by attribute and never by class: `[ngpButton]`. In the universal
+    // bucket every one of its rules is tried against every element of the screen.
+    assert.deepEqual(keys('[data-open] { flex: 1 }'), ['attr:data-open']);
+    assert.deepEqual(keys('[ngpButton][data-press] { flex: 1 }'), ['attr:ngpButton']);
+    assert.deepEqual(keys('.a[data-open] { flex: 1 }'), ['class:a']);
   });
 
   it('gives every selector in a list its own bucket', () => {
     // A selector list compiles to one rule each, and the compiler emits them in specificity
     // order - `view` before `.a` - which is the order the cascade wants anyway.
-    assert.deepEqual(keys('.a, view, [x] { flex: 1 }'), ['type:view', 'class:a', '*']);
+    assert.deepEqual(keys('.a, view, [x] { flex: 1 }'), ['type:view', 'class:a', 'attr:x']);
   });
 });
 
@@ -127,6 +136,15 @@ describe('the candidates a node is offered', () => {
     const offered = candidateRules(target('view', []), indexRules(entries));
     assert.equal(offered.length, 1);
     assert.equal(ruleKey(offered[0]!.rule), '*');
+  });
+
+  it('offers a rule filed under an attribute to the elements that have it, and no other', () => {
+    const index = indexRules(entriesOf('[data-open] { flex: 1 } .other { flex: 2 }'));
+    const open = { ...target('view', []), props: { 'data-open': '' } } as StyleTarget;
+    const shut = { ...target('view', []), props: { 'data-open': false } } as StyleTarget;
+    assert.equal(candidateRules(open, index).length, 1);
+    assert.equal(candidateRules(shut, index).length, 0);
+    assert.equal(candidateRules(target('view', []), index).length, 0);
   });
 
   it('keeps the order the rules were merged in, across buckets', () => {
