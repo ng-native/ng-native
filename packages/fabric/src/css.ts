@@ -1635,7 +1635,17 @@ export function ruleKeys(rule: StyleRule): readonly string[] {
   if (key.type !== undefined) return [`type:${key.type}`];
   const held = parentClass(rule, key);
   if (held !== undefined) return [`in:${held}`];
-  return alternativeKeys(key) ?? EVERY_NODE;
+  return alternativeKeys(key) ?? attributeKey(key) ?? EVERY_NODE;
+}
+
+/**
+ * The bucket of a rule that names its element by an attribute and nothing else, `[ngpButton]`:
+ * a prop the element has to have, which is how a headless library names every element it
+ * styles. Not `class`, which is no prop of the element's to find the bucket by.
+ */
+function attributeKey(key: Compound): string[] | undefined {
+  const named = key.attributes?.find((test) => test.name !== 'class');
+  return named ? [`attr:${named.name}`] : undefined;
 }
 
 /** A class the node's parent has to have for the rule to match, where its selector says one. */
@@ -1681,6 +1691,8 @@ interface IndexedEntry {
 export interface RuleIndex {
   readonly buckets: Map<string, IndexedEntry[]>;
   readonly universal: IndexedEntry[];
+  /** Whether any rule is filed under an attribute, which a node's props are then looked up for. */
+  attributes?: boolean;
 }
 
 /**
@@ -1701,6 +1713,7 @@ export function indexRules(
         into.universal.push(indexed);
         continue;
       }
+      if (key.startsWith('attr:')) into.attributes = true;
       const bucket = into.buckets.get(key);
       if (bucket) bucket.push(indexed);
       else into.buckets.set(key, [indexed]);
@@ -1726,6 +1739,16 @@ function reach(node: StyleTarget, index: RuleIndex, found: IndexedEntry[]): void
   // What is written for any child of an element with one of the parent's classes.
   const around = node.parent?.classes;
   if (around) for (const name of around) take(`in:${name}`);
+  if (index.attributes) reachByAttribute(node, take);
+}
+
+/** The buckets of the attributes a node has: a prop of its own that is set. */
+function reachByAttribute(node: StyleTarget, take: (key: string) => void): void {
+  for (const name in node.props) {
+    const value = node.props[name];
+    // As `matchesAttribute` has it: a prop that is false is an attribute that is not there.
+    if (value !== undefined && value !== null && value !== false) take(`attr:${name}`);
+  }
 }
 
 /**
