@@ -196,6 +196,34 @@ describe('a transition of opacity or a transform', () => {
   });
 });
 
+describe('a transition native is playing, on an element merged again', () => {
+  // Another prop of the element changes while native plays: the element is merged again, and
+  // where the transition is going is what it was. Taken back to JavaScript for that, it stays
+  // there, a commit a frame for the rest of it.
+  it('is left to native where it is going to the value it has when nothing sets one', () => {
+    const s = scene('.a { transition: opacity 200ms linear } .a.dim { opacity: 0.5 }');
+    s.classes('a dim');
+    s.finish(s.started()[0]!);
+    s.classes('a');
+    assert.equal(s.started().length, 2);
+    s.engine.setProp(s.view, 'accessibilityLabel', 'beside');
+    s.engine.commit();
+    assert.equal(s.rec.named('stop').length, 0);
+    assert.equal(s.engine.animating, false);
+  });
+
+  it('is left to native where it is going to a transform written the same again', () => {
+    const s = scene(
+      '.a { transform: scale(1); transition: transform 200ms linear } .a.on { transform: scale(2) }',
+    );
+    s.classes('a on');
+    s.engine.setProp(s.view, 'accessibilityLabel', 'beside');
+    s.engine.commit();
+    assert.equal(s.rec.named('stop').length, 0);
+    assert.equal(s.engine.animating, false);
+  });
+});
+
 describe('a transition of a colour', () => {
   // What a press changes of a button, more often than anything: its background, for the time
   // the finger is down and again as it lifts.
@@ -214,12 +242,13 @@ describe('a transition of a colour', () => {
       'backgroundColor.b': 0,
       'backgroundColor.a': 1,
     });
-    assert.deepEqual(s.at(0.5), {
-      'backgroundColor.r': 100,
-      'backgroundColor.g': 50,
-      'backgroundColor.b': 25,
-      'backgroundColor.a': 0.75,
-    });
+    // Half way in premultiplied alpha, as a browser mixes two colours and as JavaScript does:
+    // the more opaque of the two counts for more. A channel at a time it would be 100, 50, 25.
+    const half = s.at(0.5);
+    assert.ok(Math.abs(half['backgroundColor.r']! - 133) <= 1, `red ${half['backgroundColor.r']}`);
+    assert.ok(Math.abs(half['backgroundColor.g']! - 33) <= 1, `green ${half['backgroundColor.g']}`);
+    assert.ok(Math.abs(half['backgroundColor.b']! - 17) <= 1, `blue ${half['backgroundColor.b']}`);
+    assert.equal(half['backgroundColor.a'], 0.75);
     s.finish(s.started()[0]!);
     assert.equal(s.props()['backgroundColor'], 'rgba(0, 100, 50, 0.5)');
     assert.deepEqual(s.events, ['start backgroundColor', 'end backgroundColor']);
