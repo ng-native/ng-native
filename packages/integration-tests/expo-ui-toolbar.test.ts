@@ -154,6 +154,33 @@ describe('a toolbar item written in a bottom sheet', () => {
     assert.equal(every('RNHostView')[0]!.props['matchContents'], undefined);
   });
 
+  it('stops being sized to its content when its first item arrives while it is open', async () => {
+    const { fabric, every, instance, pass } = await boot('ios', Sheet);
+    instance.open.set(false);
+    await pass();
+    fabric.emit(every('BottomSheetView')[0]!, 'topDismiss', {});
+    await pass();
+    instance.closable.set(false);
+    instance.fit.set(true);
+    instance.open.set(true);
+    await pass();
+    assert.equal(every('BottomSheetView')[0]!.props['fitToContents'], true, 'fitted, with no bar');
+    assert.equal(every('RNHostView')[0]!.props['matchContents'], true);
+
+    instance.closable.set(true);
+    await pass();
+    assert.equal(every('NavigationStackView').length, 1);
+    assert.notEqual(every('BottomSheetView')[0]!.props['fitToContents'], true);
+    const modifiers = every('GroupView')[0]!.props['modifiers'] as { $type: string }[];
+    assert.ok(modifiers.some((modifier) => modifier.$type === 'presentationDetents'));
+    assert.equal(every('RNHostView')[0]!.props['matchContents'], undefined);
+
+    instance.closable.set(false);
+    await pass();
+    assert.equal(every('BottomSheetView')[0]!.props['fitToContents'], true, 'and is again without');
+    assert.equal(every('RNHostView')[0]!.props['matchContents'], true);
+  });
+
   it('closes the sheet from its close button', async () => {
     const { fabric, every, byId, instance, pass } = await boot('ios', Sheet);
     fabric.emit(byId('close')!, 'topButtonPress', {});

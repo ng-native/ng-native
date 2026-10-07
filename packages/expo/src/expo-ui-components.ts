@@ -1415,11 +1415,14 @@ export class UiBottomSheet {
    * Whether the sheet is sized to its content, as it opened: a view host takes its sizing once,
    * as it mounts. SwiftUI's sheet is not where it has detents to rest at, nor where it has a
    * toolbar: a navigation stack fills what it is given, and the bar is no part of the content.
+   * A toolbar that comes or goes while the sheet is open is followed, since the view host is made
+   * again around it.
    */
   protected readonly fits = computed(() => {
     this.mounted();
+    const toolbar = this.toolbar();
     return untracked(
-      () => this.fitToContents() && !(this.swiftUI && (this.detents()?.length || this.toolbar())),
+      () => this.fitToContents() && !(this.swiftUI && (this.detents()?.length || toolbar)),
     );
   });
 
