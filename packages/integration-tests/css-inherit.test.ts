@@ -122,6 +122,38 @@ describe('inherit, for a property CSS hands down anyway', () => {
   });
 });
 
+describe('inherit, written for a background', () => {
+  // A table's rows and cells are `background: inherit`, each from the one around it, so that a
+  // header that stays over the rows as they scroll covers them with the table's own colour.
+  const CSS =
+    '.table { background-color: rgb(250, 249, 253) } .row { background: inherit } ' +
+    '.cell { background: inherit } .tinted { background-color: rgb(1, 2, 3) }';
+
+  it("is the parent's colour, handed on through each box that says it", () => {
+    const s = scene(CSS);
+    const row = s.element('row', s.element('table'));
+    s.element('cell', row);
+    assert.equal(s.props('row')['backgroundColor'], 'rgb(250, 249, 253)');
+    assert.equal(s.props('cell')['backgroundColor'], 'rgb(250, 249, 253)');
+  });
+
+  it('follows the colour above changing, and is none where there is none', () => {
+    const s = scene(CSS);
+    const table = s.element('table');
+    s.element('cell', s.element('row', table));
+    s.engine.setClasses(table, 'table tinted');
+    assert.equal(s.props('cell')['backgroundColor'], 'rgb(1, 2, 3)');
+    s.engine.setClasses(table, '');
+    assert.equal(s.props('cell')['backgroundColor'], undefined);
+  });
+
+  it('is told of nothing it leaves out', () => {
+    const said: string[] = [];
+    compileCss('.row { background: inherit }', 'app.css', { onUnsupported: (m) => said.push(m) });
+    assert.deepEqual(said, []);
+  });
+});
+
 describe('inherit, for a property with no one value to take', () => {
   it('is refused, and said so', () => {
     const dropped: string[] = [];
