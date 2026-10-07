@@ -789,6 +789,10 @@ function firstInFlow(node: EngineNode): EngineNode | undefined {
 
 const isNode = (node: EngineNode | undefined): node is EngineNode => node !== undefined;
 
+/** Whether a row lays a child out among its others, and so can take its baseline from it. */
+const inFlow = (child: EngineNode): boolean =>
+  child.kind === 'element' && ownLayout(child, 'position') !== 'absolute';
+
 /** The text field a row's box takes its baseline from: itself, or the first in its flow down. */
 function fieldOnBaseline(item: EngineNode): EngineNode | undefined {
   let at: EngineNode | undefined = item;
@@ -3763,7 +3767,9 @@ export class Engine implements HostEngine {
     rowsTall(style, this.fontScale);
     const merged = composeTransform(node, this.animated(node, this.transitioned(node, style)));
     // On iOS: Android's field says the baseline of the line it is sized and centred by.
-    const onBaseline = node.onBaseline !== undefined && viewName === 'TextInput';
+    // Still under the row that marked it: a row taken away is not committed again to unmark it.
+    const row = node.onBaseline;
+    const onBaseline = viewName === 'TextInput' && row !== undefined && isWithin(node, row);
     centreSingleLine(viewName, merged, this.fontScale, onBaseline);
     // After a transition, which eases the basis as the basis it was written as.
     basisAsSize(node, merged);
@@ -4620,7 +4626,9 @@ export class Engine implements HostEngine {
     const aligned = ownLayout(row, 'alignItems') === 'baseline';
     const before = row.baselineFields;
     if (!aligned && !before) return;
-    const now = new Set(aligned ? row.children.map(fieldOnBaseline).filter(isNode) : []);
+    const now = new Set(
+      aligned ? row.children.filter(inFlow).map(fieldOnBaseline).filter(isNode) : [],
+    );
     // One that is no longer this row's, and that no other row has marked since.
     for (const field of before ?? []) {
       if (!now.has(field) && field.onBaseline === row) this.onBaselineOf(field, undefined);
