@@ -71,10 +71,11 @@ function toPropertyName(name: string): string {
  */
 function pointsOf(value: number | string | undefined): number | undefined {
   if (value === undefined || value === '') return undefined;
-  const rem = typeof value === 'string' ? /^([\d.]+)rem$/.exec(value.trim()) : null;
-  if (rem) return Number(rem[1]) * 16;
-  const px = typeof value === 'string' ? /^([\d.]+)px$/.exec(value.trim()) : null;
-  const points = numberAttribute(px ? px[1] : value, Number.NaN);
+  const text = typeof value === 'string' ? value.trim() : '';
+  const rem = /^([\d.]+)rem$/.exec(text);
+  const px = /^([\d.]+)px$/.exec(text);
+  // `..rem` fits the pattern and is no number: NaN either way, and so no size.
+  const points = rem ? Number(rem[1]) * 16 : numberAttribute(px ? px[1] : value, Number.NaN);
   return Number.isNaN(points) ? undefined : points;
 }
 
