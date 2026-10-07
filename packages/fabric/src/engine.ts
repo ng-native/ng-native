@@ -30,6 +30,7 @@ import {
 import { applyAria } from './aria-props.ts';
 import { STYLED_ELEMENTS } from './element-styles.ts';
 import {
+  aimsElsewhere,
   animationEvent,
   bezier,
   interpolate,
@@ -4757,8 +4758,9 @@ export class Engine implements HostEngine {
     for (const [key, eased] of state) {
       if (!eased.native) continue;
       const kept = spec?.[key] ?? spec?.['all'];
-      if (remade || !kept || !Object.is(eased.to, props[key]))
+      if (remade || !kept || aimsElsewhere(eased, key, props)) {
         this.backToScriptEased(node, eased.native, now);
+      }
     }
   }
 

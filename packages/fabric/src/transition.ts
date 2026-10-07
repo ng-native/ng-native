@@ -650,6 +650,19 @@ export function settled(value: unknown, rule: TransitionSpec): Transition {
   };
 }
 
+/**
+ * Whether a transition is no longer going where a commit's props say: by the value a property
+ * has when nothing sets one, and by what two values are and not which objects, as `step` reads
+ * them. What native plays is taken back only for a target that is another.
+ */
+export function aimsElsewhere(
+  transition: Transition,
+  key: string,
+  props: Record<string, unknown>,
+): boolean {
+  return !sameValue(transition.to, props[key] ?? INITIAL[key]);
+}
+
 /** Whether two values are the same, a transform list by what is in it rather than by identity. */
 function sameValue(a: unknown, b: unknown): boolean {
   if (Object.is(a, b)) return true;

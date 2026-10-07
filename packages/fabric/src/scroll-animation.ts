@@ -8,7 +8,14 @@
  * native can animate this way is opacity and the transforms; anything else holds its first frame.
  */
 import type { ScrollRange } from './native-drive.ts';
-import { at, parseColor, type AnimationSpec, type TrackPoint } from './transition.ts';
+import {
+  at,
+  bezier,
+  interpolate,
+  parseColor,
+  type AnimationSpec,
+  type TrackPoint,
+} from './transition.ts';
 
 type Track = readonly { offset: number; value: unknown }[];
 
@@ -87,10 +94,15 @@ export function scrollChannels(
   };
 }
 
+/** How many stretches a colour's way is cut into: each is straight on native. */
+const COLOUR_STEPS = 16;
+
 /**
- * The channels for each colour of an animation played by the clock from nothing to one: its red,
- * green, blue and alpha, each a range of its own, which is how native has a colour. Nothing for
- * the tracks where a frame is no colour that splits into them, a `color-mix()` say.
+ * The channels for each colour eased by the clock from nothing to one: its red, green, blue and
+ * alpha, each a range of its own, which is how native has a colour. Sampled along the way as
+ * JavaScript mixes the two, in premultiplied alpha and by the curve: native mixes a channel at
+ * a time and in a straight line, which is another colour half way between two of different
+ * alpha. Nothing for a track that is not two colours.
  */
 export function colourChannels(
   tracks: ReadonlyMap<string, Track>,
@@ -98,11 +110,18 @@ export function colourChannels(
 ): Record<string, ColourRanges> | null {
   const colors: Record<string, ColourRanges> = {};
   for (const [property, track] of tracks) {
-    const part = (at: number) =>
-      laid(track, (value) => parseColor(value)?.[at] ?? null, 0, { ...spec, fill: 'both' }, [0, 1]);
-    const ranges = [part(0), part(1), part(2), part(3)];
-    if (ranges.some((range) => range === null)) return null;
-    colors[property] = ranges as unknown as ColourRanges;
+    const [from, to] = track;
+    if (track.length !== 2 || !parseColor(from!.value) || !parseColor(to!.value)) return null;
+    const input: number[] = [];
+    const parts: number[][] = [[], [], [], []];
+    for (let step = 0; step <= COLOUR_STEPS; step++) {
+      const along = step / COLOUR_STEPS;
+      const mixed = parseColor(interpolate(from!.value, to!.value, bezier(spec.easing, along)));
+      if (!mixed) return null;
+      input.push(along);
+      mixed.forEach((part, at) => parts[at]!.push(round(part)));
+    }
+    colors[property] = parts.map((output) => ({ input, output })) as unknown as ColourRanges;
   }
   return colors;
 }
