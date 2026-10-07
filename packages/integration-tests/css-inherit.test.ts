@@ -144,7 +144,7 @@ describe('inherit, written for a background', () => {
     s.engine.setClasses(table, 'table tinted');
     assert.equal(s.props('cell')['backgroundColor'], 'rgb(1, 2, 3)');
     s.engine.setClasses(table, '');
-    assert.equal(s.props('cell')['backgroundColor'], undefined);
+    assert.equal(s.props('cell')['backgroundColor'] ?? null, null);
   });
 
   it('is told of nothing it leaves out', () => {

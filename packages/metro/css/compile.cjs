@@ -1751,6 +1751,8 @@ function inherited(property, word, deferred) {
  */
 const INHERITS = {
   'border-radius': CORNERS,
+  // The colour, which is the part of a background a view has a value of to hand on.
+  background: ['backgroundColor'],
   font: FONT,
   ...Object.fromEntries(
     [
