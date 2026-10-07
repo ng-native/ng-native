@@ -778,6 +778,27 @@ const PARAGRAPH = 'Paragraph';
  * that is laid out in its flow. Words written straight into the view are the paragraph the
  * engine makes around them, and a child that is not displayed has no view to ask.
  */
+/**
+ * A view with a transition is a native view for as long as it has one, as an `Animated.View` is.
+ *
+ * React Native gives a view a native view of its own for an opacity under 1, a transform or a
+ * background, and takes it away when the last such reason goes. A wrapper that fades in was one
+ * for the length of the fade and none after, and Fabric moved everything inside it to the view
+ * above as the fade ended. Being moved takes a focused field out of the window for a moment, and
+ * it lost its focus: a field focused as its container faded in blurred when the fade finished.
+ *
+ * A floor, as `keepNative` is: a `collapsable` written on the element is left alone. Not for
+ * `transition: none`, which transitions nothing.
+ */
+function keepForTransition(
+  node: EngineNode,
+  props: Record<string, unknown>,
+  spec: Readonly<Record<string, unknown>>,
+): void {
+  if (viewNameOf(node) !== DEFAULT_VIEW || props['collapsable'] !== undefined) return;
+  if (Object.keys(spec).length > 0) props['collapsable'] = false;
+}
+
 function firstInFlow(node: EngineNode): EngineNode | undefined {
   for (const child of node.children ?? []) {
     // Not the paragraph itself, which holds the words it was made around.
@@ -4488,6 +4509,7 @@ export class Engine implements HostEngine {
     if (node.bornIn! >= this.unseen) node.transitions = undefined;
     const spec = transitionSpec(props);
     if (!spec && !node.transitions) return props;
+    if (spec) keepForTransition(node, props, spec);
 
     const state = (node.transitions ??= new Map());
     const now = this.now();

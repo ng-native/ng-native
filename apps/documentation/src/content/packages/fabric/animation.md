@@ -29,6 +29,12 @@ A transition that changes target part way starts from the value it has reached. 
 where it came from is shortened by how far it had got, as in a browser: a press fade released half
 way to its end takes half its duration to come back, not all of it.
 
+A plain view with a transition is a native view for as long as it has one, as an `Animated.View`
+is in React Native. Left to itself React Native makes a native view of one only while its opacity
+is under 1, or it has a transform or a background, and moves what is inside it to the view above
+when that ends, which costs a focused field its focus. `collapsable` written on the element is
+left as written.
+
 A duration, a delay or a curve can be a token in the longhands: `transition-property: opacity`
 with `transition-duration: var(--duration-fast)`. The `transition` shorthand does not take one:
 `transition: opacity var(--duration-fast) ease-out` is dropped whole, with a build warning, and the
