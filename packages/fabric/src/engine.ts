@@ -2349,6 +2349,16 @@ function sameHandles(a: readonly FabricNode[], b: readonly FabricNode[]): boolea
   return a.length === b.length && a.every((handle, i) => handle === b[i]);
 }
 
+/**
+ * Whether a node could be the element a compound is written for, by its classes alone: its own,
+ * and those of an alternative in its `:is()`, which is where Tailwind names a group or a peer.
+ * A compound with no class in either could be any element.
+ */
+function couldBe(compound: Compound, node: EngineNode): boolean {
+  if (!compound.classes.every((name) => node.classes?.has(name))) return false;
+  return !compound.is?.length || compound.is.some((chain) => couldBe(chain.at(-1)!, node));
+}
+
 /** Dev-time commit accounting, so a slow frame can be attributed rather than guessed at. */
 export interface EngineStats {
   commits: number;
@@ -2576,11 +2586,7 @@ export class Engine implements HostEngine {
   private markActive(node: EngineNode): void {
     const { own, elsewhere } = this.activeUse;
     if (!own && !elsewhere.length) return;
-    // By its classes alone: a compound with none could be any element.
-    const asked = elsewhere.some((compound) =>
-      compound.classes.every((name) => node.classes?.has(name)),
-    );
-    if (asked) return this.markProps(node);
+    if (elsewhere.some((compound) => couldBe(compound, node))) return this.markProps(node);
     node.stateDirty = true;
     this.markPath(node.parent ?? node);
   }
