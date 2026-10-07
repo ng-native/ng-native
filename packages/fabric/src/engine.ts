@@ -820,6 +820,9 @@ function rowsTall(props: Record<string, unknown>, fontScale: number | undefined)
   props['height'] = edges.reduce<number>((sum, part) => sum + (part as number), lines);
 }
 
+/** A field's own minimum height: none where it says `auto`, which a web element starts with. */
+const ownMinimum = (minHeight: unknown): unknown => (minHeight === 'auto' ? 0 : (minHeight ?? 0));
+
 /**
  * Centre the text of a single-line text field that has a line height, as Chrome centres an
  * input's, keeping the height the line height gives it.
@@ -861,7 +864,7 @@ function centreSingleLine(
     blockEdge(props, side, logical);
   const line = lineHeight * textScale(props, fontScale);
   const box = [line, ...edge('Top', 'Start'), ...edge('Bottom', 'End')];
-  const own = props['minHeight'] ?? 0;
+  const own = ownMinimum(props['minHeight']);
   const max = props['maxHeight'] ?? Infinity;
   if (![...box, own, max].every((part) => typeof part === 'number')) return;
   delete props['lineHeight'];
