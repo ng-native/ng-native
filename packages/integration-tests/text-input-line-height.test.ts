@@ -105,6 +105,17 @@ describe('a single-line text input with a line height', () => {
     assert.equal(props()['lineHeight'], undefined);
   });
 
+  it('reads a minHeight of auto as none of its own, which it is for a field', () => {
+    // What a web element starts with, and what `min-height: auto` says: the field is still
+    // sized by its line, and its text still centred in it.
+    const { props } = commitInput((engine, input) => {
+      engine.addClass(input, 'field');
+      engine.setProp(input, 'style', { minHeight: 'auto' });
+    });
+    assert.equal(props()['lineHeight'], undefined);
+    assert.equal(props()['minHeight'], 41);
+  });
+
   it('takes the height a line height larger than the font gives, as Chrome and Android do', () => {
     // `line-height: 40px` on a 16px font, or Tailwind's `leading-10`: 40 + 8 + 8 + 1 + 1.
     const { props } = commitInput((engine, input) =>
