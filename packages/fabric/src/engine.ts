@@ -4727,7 +4727,7 @@ export class Engine implements HostEngine {
       const eased = state!.get(key)!;
       Object.assign(eased, { current: eased.to, done: true, native: undefined });
       this.emitTransition(node, 'topTransitionend', key);
-      this.tick(node, [key]);
+      this.markProps(node, false);
     }
     this.forgetEased(node);
     if (keys.length) this.commit();

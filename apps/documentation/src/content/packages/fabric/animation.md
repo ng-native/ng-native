@@ -13,22 +13,32 @@ which the engine plays independently of the other two.
 ## Transitions
 
 React Native has no CSS transition of its own, so a `transition` property compiles to a spec the
-engine drives in JavaScript: it notices a transitioning value change between two commits, holds the
-old value, and interpolates toward the new one on a `requestAnimationFrame` loop, committing a
-frame at a time until nothing is left running. Numbers interpolate directly; colors interpolate
-in premultiplied alpha, as in a browser, so `transparent` to red is red fading in rather than a
-dark red; a length or an angle interpolates as long as both ends share the same unit
-(`translateY(10%)` to `translateY(100%)` works, `10%` to `20px` does not, because converting between
-them would be a guess). A named color (`'red'`) interpolates as well: the compiler emits `rgb()` for
-one in a stylesheet, and one bound straight into a style is looked up by name. An `opacity`, a
-`background-color`, a padding, a margin or a `border-radius` that nothing sets eases from or to its
-initial value, 1, `transparent` or 0, as in a browser, and a `@keyframes` list that leaves out its
-first or last frame starts or ends there too. A size that nothing sets is `auto`, and changes at
-once. So does a border width nothing sets, which is 0 on a native view but `medium` in a browser.
+engine drives: it notices a transitioning value change between two commits, holds the old value, and
+interpolates toward the new one, on native where native can and otherwise on a
+`requestAnimationFrame` loop, committing a frame at a time until nothing is left running. Numbers
+interpolate directly; colors interpolate in premultiplied alpha, as in a browser, so `transparent`
+to red is red fading in rather than a dark red; a length or an angle interpolates as long as both
+ends share the same unit (`translateY(10%)` to `translateY(100%)` works, `10%` to `20px` does not,
+because converting between them would be a guess). A named color (`'red'`) interpolates as well: the
+compiler emits `rgb()` for one in a stylesheet, and one bound straight into a style is looked up by
+name. An `opacity`, a `background-color`, a padding, a margin or a `border-radius` that nothing sets
+eases from or to its initial value, 1, `transparent` or 0, as in a browser, and a `@keyframes` list
+that leaves out its first or last frame starts or ends there too. A size that nothing sets is
+`auto`, and changes at once. So does a border width nothing sets, which is 0 on a native view but
+`medium` in a browser.
 
 A transition that changes target part way starts from the value it has reached. One turned back to
 where it came from is shortened by how far it had got, as in a browser: a press fade released half
 way to its end takes half its duration to come back, not all of it.
+
+A transition of `opacity`, a transform, a `background-color` or a border color is played by
+native: its two values and its curve are handed to React Native's animated module when it starts,
+and nothing runs in JavaScript until it ends. A press that fades or tints a button is a commit to
+start it and a commit to end it. Those that start together, take as long and ease alike share
+one clock. Any other transition is eased from JavaScript, a commit on every frame: one of a size,
+a text `color` or a shadow, one with a `transition-delay`, and every transition where the
+animated module is absent. One native is playing is taken back to JavaScript, from where its
+clock has got to, when it is sent another way.
 
 A plain view with a transition is a native view for as long as it has one, as an `Animated.View`
 is in React Native. Left to itself React Native makes a native view of one only while its opacity
