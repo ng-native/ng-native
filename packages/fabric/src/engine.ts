@@ -553,10 +553,10 @@ export interface EngineNode extends HostNode {
   committedUnder: EngineNode | null;
   /** The hoisted views this node keeps committed for, by element name. See `HoistOptions`. */
   kept?: Map<string, KeptHoist>;
-  /** Set on a text field a row aligned by baseline takes a baseline from: see `lineBaseline`. */
-  onBaseline?: true;
-  /** Set on a row that has marked such fields, so it clears them when it is aligned otherwise. */
-  baselineRow?: true;
+  /** On a text field, the row aligned by baseline that takes a baseline from it: `lineBaseline`. */
+  onBaseline?: EngineNode;
+  /** On such a row, the fields it has marked, which it unmarks when they are no longer its own. */
+  baselineFields?: Set<EngineNode>;
   /** Commit this node again with its children so Fabric measures it again. `remeasureText`. */
   remeasure?: true;
   /**
@@ -787,6 +787,8 @@ function firstInFlow(node: EngineNode): EngineNode | undefined {
   return undefined;
 }
 
+const isNode = (node: EngineNode | undefined): node is EngineNode => node !== undefined;
+
 /** The text field a row's box takes its baseline from: itself, or the first in its flow down. */
 function fieldOnBaseline(item: EngineNode): EngineNode | undefined {
   let at: EngineNode | undefined = item;
@@ -869,6 +871,26 @@ function lineBox(
 }
 
 /**
+ * `lineBaseline` for a field a height sizes: the room is what the height leaves its text, and
+ * the field stays that height. A content-box field's height is its content's, so what is now
+ * padding comes out of it.
+ */
+function heightBaseline(
+  props: Record<string, unknown>,
+  height: number,
+  onBaseline: boolean,
+  fontScale: number | undefined,
+): void {
+  if (!onBaseline) return;
+  const edges = [...blockEdge(props, 'Top', 'Start'), ...blockEdge(props, 'Bottom', 'End')];
+  if (!edges.every((part) => typeof part === 'number')) return;
+  const content = props['boxSizing'] === 'content-box';
+  const room = content ? height : (edges as number[]).reduce((left, part) => left - part, height);
+  const half = lineBaseline(props, room, [room, ...(edges as number[])], fontScale);
+  if (content) props['height'] = height - 2 * half;
+}
+
+/**
  * Give a field with its line height left out the baseline of a paragraph in a line as tall, for
  * a field in a row aligned by baseline: half the room the line has over the font is kept as
  * padding over and under the text. React Native says a field's baseline from its text and its
@@ -924,6 +946,7 @@ function centreSingleLine(
   const height = props['height'];
   if (typeof height === 'number') {
     delete props['lineHeight'];
+    heightBaseline(props, height, onBaseline, fontScale);
     return;
   }
   // A percentage is a fixed height only where the parent's is definite, known at layout alone.
@@ -3739,7 +3762,9 @@ export class Engine implements HostEngine {
     alignMultiline(viewName, style);
     rowsTall(style, this.fontScale);
     const merged = composeTransform(node, this.animated(node, this.transitioned(node, style)));
-    centreSingleLine(viewName, merged, this.fontScale, node.onBaseline === true);
+    // On iOS: Android's field says the baseline of the line it is sized and centred by.
+    const onBaseline = node.onBaseline !== undefined && viewName === 'TextInput';
+    centreSingleLine(viewName, merged, this.fontScale, onBaseline);
     // After a transition, which eases the basis as the basis it was written as.
     basisAsSize(node, merged);
     // After the basis, which is a size given where it is committed as one.
@@ -4593,14 +4618,20 @@ export class Engine implements HostEngine {
    */
   private noteBaselineFields(row: EngineNode): void {
     const aligned = ownLayout(row, 'alignItems') === 'baseline';
-    if (!aligned && !row.baselineRow) return;
-    row.baselineRow = aligned || undefined;
-    for (const item of row.children) {
-      const field = fieldOnBaseline(item);
-      if (!field || field.onBaseline === row.baselineRow) continue;
-      field.onBaseline = row.baselineRow;
-      this.markProps(field, false);
+    const before = row.baselineFields;
+    if (!aligned && !before) return;
+    const now = new Set(aligned ? row.children.map(fieldOnBaseline).filter(isNode) : []);
+    // One that is no longer this row's, and that no other row has marked since.
+    for (const field of before ?? []) {
+      if (!now.has(field) && field.onBaseline === row) this.onBaselineOf(field, undefined);
     }
+    for (const field of now) if (field.onBaseline !== row) this.onBaselineOf(field, row);
+    row.baselineFields = now.size ? now : undefined;
+  }
+
+  private onBaselineOf(field: EngineNode, row: EngineNode | undefined): void {
+    field.onBaseline = row;
+    this.markProps(field, false);
   }
 
   /**
