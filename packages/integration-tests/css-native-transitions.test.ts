@@ -63,6 +63,12 @@ function scene(css: string) {
     for (const propsTag of live) {
       const style = configs.get((configs.get(propsTag)!['props'] as { style: unknown }).style)!;
       for (const [key, tag] of Object.entries(style['style'] as Record<string, unknown>)) {
+        const colour = configs.get(tag)!;
+        if (colour.type === 'color') {
+          for (const part of ['r', 'g', 'b', 'a'])
+            out[`${key}.${part}`] = round(evaluate(colour[part]));
+          continue;
+        }
         if (key !== 'transform') {
           out[key] = round(evaluate(tag));
           continue;
@@ -172,7 +178,9 @@ describe('a transition of opacity or a transform', () => {
   });
 
   it('is eased from JavaScript where it waits before it starts', () => {
-    const s = scene('.a { opacity: 1; transition: opacity 200ms linear 100ms } .a.gone { opacity: 0 }');
+    const s = scene(
+      '.a { opacity: 1; transition: opacity 200ms linear 100ms } .a.gone { opacity: 0 }',
+    );
     s.classes('a gone');
     assert.equal(s.started().length, 0);
     assert.equal(s.engine.animating, true);
@@ -185,5 +193,55 @@ describe('a transition of opacity or a transform', () => {
     s.engine.commit();
     assert.equal(s.rec.named('stop').length, 1);
     assert.equal(s.rec.named('fromView').length, 1);
+  });
+});
+
+describe('a transition of a colour', () => {
+  // What a press changes of a button, more often than anything: its background, for the time
+  // the finger is down and again as it lifts.
+  const TINT =
+    '.a { background-color: rgb(200, 0, 0); transition: background-color 200ms linear } ' +
+    '.a.on { background-color: rgba(0, 100, 50, 0.5) }';
+
+  it('is played by native too, a channel at a time', () => {
+    const s = scene(TINT);
+    s.classes('a on');
+    assert.equal(s.started().length, 1);
+    assert.equal(s.engine.animating, false);
+    assert.deepEqual(s.at(0), {
+      'backgroundColor.r': 200,
+      'backgroundColor.g': 0,
+      'backgroundColor.b': 0,
+      'backgroundColor.a': 1,
+    });
+    assert.deepEqual(s.at(0.5), {
+      'backgroundColor.r': 100,
+      'backgroundColor.g': 50,
+      'backgroundColor.b': 25,
+      'backgroundColor.a': 0.75,
+    });
+    s.finish(s.started()[0]!);
+    assert.equal(s.props()['backgroundColor'], 'rgba(0, 100, 50, 0.5)');
+    assert.deepEqual(s.events, ['start backgroundColor', 'end backgroundColor']);
+  });
+
+  it('shares a clock with an opacity that starts with it and eases alike', () => {
+    const s = scene(
+      '.a { opacity: 1; background-color: rgb(0, 0, 0); transition: all 200ms linear } ' +
+        '.a.on { opacity: 0.5; background-color: rgb(10, 20, 30) }',
+    );
+    s.classes('a on');
+    assert.equal(s.started().length, 1);
+    assert.equal(s.at(1)['opacity'], 0.5);
+    assert.equal(s.at(1)['backgroundColor.b'], 30);
+  });
+
+  it('is eased from JavaScript where it is a colour native has no channels for', () => {
+    const s = scene(
+      '.a { background-color: red; transition: background-color 200ms linear } ' +
+        '.a.on { background-color: color-mix(in srgb, red, blue) }',
+    );
+    s.classes('a on');
+    assert.equal(s.started().length, 0);
   });
 });
