@@ -23,6 +23,7 @@ export const FABRIC_METHODS = [
   'cloneNodeWithNewProps',
   'cloneNodeWithNewChildrenAndProps',
   'appendChild',
+  'configureNextLayoutAnimation',
   'createChildSet',
   'appendChildToSet',
   'completeRoot',

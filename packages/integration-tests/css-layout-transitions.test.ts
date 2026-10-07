@@ -51,7 +51,7 @@ function scene() {
   }
   engine.commit();
   engine.advanceAnimations();
-  const width = () => fabric.committed[0]!.props['width'];
+  const width = () => Math.round(Number(fabric.committed[0]!.props['width']) * 100) / 100;
   const later = (ms: number) => {
     now += ms;
     const live = engine.advanceAnimations();
@@ -84,6 +84,7 @@ describe('a transition of a width', () => {
     s.engine.setClasses(s.a, 'a brief on');
     s.engine.commit();
     assert.deepEqual(s.events, ['start']);
+    assert.equal(s.asked.at(-1)?.duration, 20);
     await new Promise((done) => setTimeout(done, 60));
     assert.deepEqual(s.events, ['start', 'end']);
   });
