@@ -39,9 +39,18 @@ function scene() {
 
 it('matches nothing again for a prop no selector names', () => {
   const s = scene();
-  assert.equal(s.resolved(() => s.engine.setProp(s.a, 'accessibilityValue', { now: 5 })), 0);
-  assert.equal(s.resolved(() => s.engine.setProp(s.a, 'testID', 'bar')), 0);
-  assert.equal(s.resolved(() => s.engine.setProp(s.a, 'testID', null)), 0);
+  assert.equal(
+    s.resolved(() => s.engine.setProp(s.a, 'accessibilityValue', { now: 5 })),
+    0,
+  );
+  assert.equal(
+    s.resolved(() => s.engine.setProp(s.a, 'testID', 'bar')),
+    0,
+  );
+  assert.equal(
+    s.resolved(() => s.engine.setProp(s.a, 'testID', null)),
+    0,
+  );
 });
 
 it('matches again for one a selector names, wherever in the selector, and for an id', () => {
