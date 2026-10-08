@@ -1190,3 +1190,31 @@ describe('an animation it cannot compile', () => {
     });
   });
 });
+
+describe('keyframes two components each name the same', () => {
+  it("plays each component's own for its elements, as Angular scopes them in a browser", () => {
+    // An accordion and a collapsible each write `@keyframes slideDown`, to a height of their
+    // own. The last sheet read would otherwise have both play its frames.
+    const sheet = (to: number) =>
+      compileCss(
+        `@keyframes k { from { opacity: 0 } to { opacity: ${to} } } .a { animation: k 100ms linear forwards }`,
+        `to-${to}.css`,
+      );
+    let now = 1000;
+    const fabric = createFakeFabric();
+    const engine = new Engine(fabric, 1, { now: () => now });
+    for (const to of [0.4, 0.8]) {
+      const view = engine.createElement('view', sheet(to) as never);
+      engine.setClasses(view, 'a');
+      engine.appendChild(engine.root, view);
+    }
+    engine.commit();
+    now += 100;
+    engine.advanceAnimations();
+    engine.commit();
+    assert.deepEqual(
+      fabric.committed.map((view) => view.props['opacity']),
+      [0.4, 0.8],
+    );
+  });
+});
