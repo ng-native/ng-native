@@ -198,19 +198,35 @@ function commaSeparated(terms) {
   return groups.map(meaningful);
 }
 
-/** What a function writes across and down, once its depth has been read. */
-const flat = (written) => written;
+/**
+ * What `translate3d()` writes: across and down, where it moves nothing along the depth a view
+ * has none of. A depth that is not nothing, or is a token and may not be, is refused, as it is
+ * for one written with no token.
+ */
+function flatMove(a, context) {
+  if (a('length', 2) !== 0) {
+    throw new CssUnsupported(
+      `${context}: translate3d() with a token in it moves along the depth, and a view has none. ` +
+        `Write a depth of 0, or translate().`,
+    );
+  }
+  return [{ translateX: a('length', 0) }, { translateY: a('length', 1) }];
+}
+
+/** What `scale3d()` writes: across and down. Its depth is read, and scales nothing drawn. */
+function flatScale(a) {
+  a('number', 2);
+  return [{ scaleX: a('number', 0) }, { scaleY: a('number', 1) }];
+}
 
 /** What each transform function writes, from its arguments' slots. */
 const FUNCTIONS = {
   translatex: (a) => [{ translateX: a('length', 0) }],
   translatey: (a) => [{ translateY: a('length', 0) }],
   translate: (a, n) => [{ translateX: a('length', 0) }, { translateY: n > 1 ? a('length', 1) : 0 }],
-  // Across and down: a view has no depth to move in, or to scale. The third is read all the
-  // same, since one that is missing or no value is no transform, and is left out.
-  translate3d: (a) =>
-    flat([{ translateX: a('length', 0) }, { translateY: a('length', 1) }], a('length', 2)),
-  scale3d: (a) => flat([{ scaleX: a('number', 0) }, { scaleY: a('number', 1) }], a('number', 2)),
+  // Across and down: a view has no depth to move in, or to scale.
+  translate3d: (a, _, context) => flatMove(a, context),
+  scale3d: (a) => flatScale(a),
   scale: (a, n) => [{ scaleX: a('number', 0) }, { scaleY: a('number', n > 1 ? 1 : 0) }],
   scalex: (a) => [{ scaleX: a('number', 0) }],
   scaley: (a) => [{ scaleY: a('number', 0) }],
@@ -238,7 +254,7 @@ function transformList(parts, context) {
       if (args[index]?.length !== 1) throw unreadable(context, `leaves ${name}() short`);
       return slot(args[index][0], kind, context);
     };
-    return write(arg, args.length);
+    return write(arg, args.length, context);
   });
 }
 
