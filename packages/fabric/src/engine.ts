@@ -4678,7 +4678,8 @@ export class Engine implements HostEngine {
 
   /** Nobody saw what the last commit gave a view it created, so this is where the view starts. */
   private unseenTransitions(node: EngineNode): void {
-    if (node.bornIn! < this.unseen) return;
+    // One with no commit it was born in has been seen, whatever was committed since.
+    if (node.bornIn === undefined || node.bornIn < this.unseen) return;
     this.stopEased(node);
     node.transitions = undefined;
   }
