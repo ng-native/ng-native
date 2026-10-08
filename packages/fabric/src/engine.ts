@@ -1934,6 +1934,25 @@ const MOVES_BOXES = new Set([
   ...['numberOfLines', 'start', 'end'],
 ]);
 
+/** Whether native is moving a view to a prop's value, by a transition or an animation it laid out. */
+function laidByNative(node: EngineNode, key: string): boolean {
+  const eased = node.transitions?.get(key);
+  if (eased?.laid && !eased.done) return true;
+  return node.playing?.laid === true && node.playing.tracks.has(key);
+}
+
+/** Whether an animation plays once through, forwards, with no wait before it. */
+const playedOnce = (spec: AnimationSpec): boolean =>
+  spec.delay === 0 && spec.duration > 0 && spec.iterations === 1 && !spec.direction;
+
+/** Whether a track is two frames on one curve, the first of them where the view is drawn. */
+function fromWhereDrawn(track: readonly TrackPoint[], drawn: unknown): boolean {
+  const [first, last] = track;
+  if (track.length !== 2 || first!.easing || last!.value == null) return false;
+  // One that ends where it starts moves nothing: there is nothing for native to lay out.
+  return Object.is(first!.value, drawn) && !Object.is(first!.value, last!.value);
+}
+
 /** The curves a layout animation has, as the timing function each is. */
 const LAYOUT_CURVES: readonly (readonly [string, readonly number[]])[] = [
   ['linear', [0, 0, 1, 1]],
@@ -4437,7 +4456,7 @@ export class Engine implements HostEngine {
       this.playedFrames.set(started, frames);
       node.playing = started;
       if (spec.paused) started.pausedAt = this.now();
-      else if (!this.playNatively(node, started, props)) this.playing.add(node);
+      else this.playSomewhere(node, started, props);
       this.emitTransition(node, 'topAnimationstart', spec.name);
       return;
     }
@@ -4449,6 +4468,16 @@ export class Engine implements HostEngine {
       this.reframe(node, current, frames, props, inherited);
     }
     this.playOrPause(node, node.playing!, spec);
+  }
+
+  /** Play an animation that has just started: by native's layout, by native's driver, or here. */
+  private playSomewhere(
+    node: EngineNode,
+    started: RunningAnimation,
+    props: Record<string, unknown>,
+  ): void {
+    if (this.layPlayed(node, started)) this.laidPlayed.push({ node, running: started });
+    else if (!this.playNatively(node, started, props)) this.playing.add(node);
   }
 
   /**
@@ -4474,7 +4503,8 @@ export class Engine implements HostEngine {
     inherited: unknown,
   ): void {
     const tracks = tracksOf(frames, props, inherited);
-    const reframed: RunningAnimation = { ...current, tracks, inherited };
+    // One native was laying out goes on from JavaScript, by the clock it started on.
+    const reframed: RunningAnimation = { ...current, tracks, inherited, laid: undefined };
     const { values, finished } = sample(reframed, current.pausedAt ?? this.now());
     const holds = current.spec.fill === 'forwards' || current.spec.fill === 'both';
     reframed.values = finished && !holds ? {} : values;
@@ -4778,28 +4808,94 @@ export class Engine implements HostEngine {
     for (const [key, eased] of state) if (eased.laid && !eased.done) props[key] = eased.to;
   }
 
+  /** The animations this commit lays out at their last frame, for native to move the views to. */
+  private laidPlayed: { node: EngineNode; running: RunningAnimation }[] = [];
+
   /**
-   * Before a commit is handed over: ask native to move what it lays out, or take the
-   * transitions back to ease them from JavaScript where the commit moves anything else, and
-   * where they would not all take as long. Answers whether the tree has to be reconciled again.
+   * Whether an animation that has just started is one native can play by laying the view out
+   * at its last frame: two frames of sizes or places, played once from where the view is drawn
+   * now, which is where native moves it from. It is then committed at that frame; see `layOut`.
+   */
+  private layPlayed(node: EngineNode, running: RunningAnimation): boolean {
+    const drawn = node.committed?.props;
+    const { spec, tracks } = running;
+    if (!this.fabric.configureNextLayoutAnimation || !drawn || !tracks.size) return false;
+    if (!playedOnce(spec)) return false;
+    for (const [key, track] of tracks) {
+      if (!LAID_OUT.has(key) || !fromWhereDrawn(track, drawn[key])) return false;
+    }
+    running.laid = true;
+    running.values = Object.fromEntries([...tracks].map(([key, track]) => [key, track[1]!.value]));
+    return true;
+  }
+
+  /** Go on from JavaScript with an animation native was to lay out, by the clock it started on. */
+  private playLaidHere(node: EngineNode, running: RunningAnimation): void {
+    running.laid = undefined;
+    running.values = sample(running, this.now()).values;
+    this.playing.add(node);
+  }
+
+  /** An animation native laid out has had its time: it is at its last frame, and says so. */
+  private endLaidPlayed(node: EngineNode, running: RunningAnimation): void {
+    if (!running.laid || running.done || node.playing !== running) return;
+    Object.assign(running, { done: true, laid: undefined });
+    if (!this.keeps(node, running)) {
+      running.values = {};
+      this.markProps(node, false);
+    }
+    this.emitTransition(node, 'topAnimationend', running.spec.name);
+    this.flushTransitionEvents();
+    if (this.pending) this.commit();
+  }
+
+  /**
+   * Before a commit is handed over: ask native to move what it lays out, and take back to
+   * ease from JavaScript whatever it cannot: all of it where the commit moves anything else,
+   * and otherwise what would not take as long as the longest. Answers whether the tree has to
+   * be reconciled again.
    */
   private layOut(): boolean {
     const laying = this.laying;
+    const played = this.laidPlayed.filter(({ node, running }) => node.playing === running);
     const others = this.movesOthers;
     this.laying = [];
+    this.laidPlayed = [];
     this.movesOthers = false;
-    if (!laying.length) return false;
-    const [first] = laying;
-    const alike = laying.every(({ eased }) => eased.duration === first!.eased.duration);
-    if (others || !alike) {
-      for (const { node, eased } of laying) {
-        eased.laid = undefined;
-        this.running.add(node);
-      }
-      for (const { node } of laying) this.markProps(node, false);
-      return true;
+    if (!laying.length && !played.length) return false;
+    // Native takes one length of time for a commit: the longest asked of it, and whatever
+    // would take another is eased from JavaScript. None of it, where anything else moves.
+    const longest = Math.max(
+      ...laying.map(({ eased }) => eased.duration),
+      ...played.map(({ running }) => running.spec.duration),
+    );
+    const kept = (duration: number) => !others && duration === longest;
+    const back: EngineNode[] = [];
+    for (const { node, eased } of laying) {
+      if (kept(eased.duration)) continue;
+      eased.laid = undefined;
+      this.running.add(node);
+      back.push(node);
     }
-    const { duration, easing } = first!.eased;
+    for (const { node, running } of played) {
+      if (kept(running.spec.duration)) continue;
+      this.playLaidHere(node, running);
+      back.push(node);
+    }
+    for (const node of back) this.markProps(node, false);
+    if (!others) this.askLayout(laying, played, longest);
+    return back.length > 0;
+  }
+
+  /** Ask native to move what the commit lays out over `duration`, and end each when it is up. */
+  private askLayout(
+    laying: readonly { node: EngineNode; key: string; eased: Transition }[],
+    played: readonly { node: EngineNode; running: RunningAnimation }[],
+    duration: number,
+  ): void {
+    const easing =
+      laying.find(({ eased }) => eased.laid)?.eased.easing ??
+      played.find(({ running }) => running.laid)!.running.spec.easing;
     const nothing = () => undefined;
     this.fabric.configureNextLayoutAnimation!(
       { duration, update: { type: layoutCurve(easing) } },
@@ -4807,9 +4903,11 @@ export class Engine implements HostEngine {
       nothing,
     );
     for (const { node, key, eased } of laying) {
-      setTimeout(() => this.endLaid(node, key, eased), duration);
+      if (eased.laid) setTimeout(() => this.endLaid(node, key, eased), duration);
     }
-    return false;
+    for (const { node, running } of played) {
+      if (running.laid) setTimeout(() => this.endLaidPlayed(node, running), duration);
+    }
   }
 
   /**
@@ -4825,8 +4923,7 @@ export class Engine implements HostEngine {
     if (this.movesOthers) return;
     if (resized) this.movesOthers = true;
     for (const key in payload) {
-      const eased = node.transitions?.get(key);
-      if (eased?.laid && !eased.done) continue;
+      if (laidByNative(node, key)) continue;
       // Text as long as it was is taken to be as wide, as a grid takes it: see `shapeOf`.
       const longer = key === 'text' && String(payload[key]).length !== String(words).length;
       if (MOVES_BOXES.has(key) || longer) this.movesOthers = true;

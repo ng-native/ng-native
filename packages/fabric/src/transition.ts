@@ -764,6 +764,11 @@ export interface RunningAnimation {
   native?: { stop(): void };
   /** The properties left out of what native plays, as a rule declared them `!important`. */
   pinned?: readonly string[];
+  /**
+   * Set while native moves the view to its last frame by a layout animation, with no frame of it
+   * in JavaScript. `values` is then that last frame, which is what the view is committed with.
+   */
+  laid?: true;
 }
 
 /**

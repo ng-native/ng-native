@@ -47,9 +47,10 @@ transition's own curve is played as the nearest of them. A layout animation move
 commit changes, so it is used where the only boxes that commit resizes or moves are the ones in
 transition; where another box is resized in the same commit, text comes to another length, or an
 element is added or removed, the transition is eased from JavaScript, a commit on every frame, by
-its own curve. So is one with a `transition-delay`, several that start together and take different
-times, and every such transition on a host with no layout animation. `transitionend` is sent when
-the transition's time is up.
+its own curve. So is one with a `transition-delay`, and every such transition on a host with no
+layout animation. Native takes one length of time for a commit: of several that start together
+and take different times, the longest is the one it plays, and the others are eased from
+JavaScript. `transitionend` is sent when the transition's time is up.
 
 A plain view with a transition is a native view for as long as it has one, as an `Animated.View`
 is in React Native. Left to itself React Native makes a native view of one only while its opacity
@@ -145,6 +146,13 @@ JavaScript, a commit on every frame: one that sets a color or a size, one with a
 `animation-delay`, one that repeats a fractional number of times, and every animation where the
 animated module is absent. An animation native is playing is handed back to JavaScript, at the
 frame it has reached, when it is paused or its keyframes change.
+
+An animation of two frames that sets only sizes and places, a panel that slides open from
+`height: 0`, is played as a transition of one is: committed once at its last frame, with native
+moving the views there by a layout animation. It has to play once, forwards, with no delay, and
+start at the size the view is drawn at; where it does not, or where anything else in the commit
+is resized, it is played from JavaScript, a commit on every frame. `animationend` is sent when its
+time is up.
 
 `animation-name: none` (or `animation: none`) stops an animation a weaker rule started, and a rule
 with durations but no name plays nothing on its own, as in a browser. A few real constraints come
