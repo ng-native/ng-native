@@ -126,6 +126,16 @@ describe('a transition of opacity or a transform', () => {
     assert.deepEqual(s.events, ['start opacity']);
   });
 
+  it('runs for a view that was told it has been seen, as one whose style was read back is', () => {
+    // A library that makes an element, reads its style and then changes it means the change
+    // to be a transition, and the read marks the element as no longer new.
+    const s = scene(FADE);
+    s.view.bornIn = undefined;
+    s.classes('a gone');
+    assert.equal(s.started().length, 1);
+    assert.deepEqual(s.events, ['start opacity']);
+  });
+
   it('is committed where it ends when native says it has, and says so itself', () => {
     const s = scene(FADE);
     s.classes('a gone');
