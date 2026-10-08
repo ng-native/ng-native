@@ -108,6 +108,19 @@ describe('tokens in transform functions', () => {
     assert.equal(dropped('.a { transform: translate3d(var(--x), var(--y), 0); }'), 0);
   });
 
+  it('refuses a move along the depth a view has none of, written out or a token', () => {
+    const dropped = (css: string) => {
+      const said: string[] = [];
+      compileCss(css, 'app.css', { onUnsupported: (message: string) => said.push(message) });
+      return said;
+    };
+    assert.match(dropped('.a { transform: translate3d(var(--x), 0px, 10px); }')[0]!, /depth/);
+    assert.match(dropped('.a { transform: translate3d(var(--x), 0px, var(--z)); }')[0]!, /depth/);
+    assert.deepEqual(dropped('.a { transform: translate3d(var(--x), 0px, 0px); }'), []);
+    // A scale along it scales nothing that is drawn, as one written out is taken.
+    assert.deepEqual(dropped('.a { transform: scale3d(var(--s), var(--s), 2); }'), []);
+  });
+
   it('an angle that falls back to a zero with no unit, which is an angle of none', () => {
     assert.deepEqual(transformOf('.a { transform: rotate(var(--r, 0)); }'), [{ rotate: '0deg' }]);
     assert.deepEqual(transformOf('.a { --r: 30deg; transform: rotate(var(--r, 0)); }'), [
