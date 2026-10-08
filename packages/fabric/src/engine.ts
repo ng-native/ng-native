@@ -4238,7 +4238,7 @@ export class Engine implements HostEngine {
   /** Each node's frames as they settle on it, kept for as long as they settle the same. */
   private readonly settledFrames = new WeakMap<
     EngineNode,
-    { of: readonly Keyframe[]; key: string; frames: readonly Keyframe[] }
+    { of: readonly Keyframe[]; styled: unknown; key: string; frames: readonly Keyframe[] }
   >();
 
   /**
@@ -4249,19 +4249,25 @@ export class Engine implements HostEngine {
    */
   private framesFor(node: EngineNode, frames: readonly Keyframe[]): readonly Keyframe[] {
     if (!frames.some((frame) => frame.deferred)) return frames;
+    const kept = this.settledFrames.get(node);
+    // Styled as it was, it settles as it did: a commit a frame asks, and most change nothing.
+    const styled = node.styleCache;
+    if (kept?.of === frames && kept.styled === styled) return kept.frames;
     const settled = frames.map(
       (frame) => frame.deferred && this.styles.settleFor(node, frame.deferred, this.styleEpoch),
     );
     const key = JSON.stringify(settled);
-    const kept = this.settledFrames.get(node);
-    if (kept?.of === frames && kept.key === key) return kept.frames;
+    if (kept?.of === frames && kept.key === key) {
+      kept.styled = styled;
+      return kept.frames;
+    }
     const made = frames.map((frame, at) => {
       const values = Object.entries(settled[at] ?? {}).filter(([, value]) => value !== undefined);
       return values.length
         ? { ...frame, declarations: { ...frame.declarations, ...Object.fromEntries(values) } }
         : frame;
     });
-    this.settledFrames.set(node, { of: frames, key, frames: made });
+    this.settledFrames.set(node, { of: frames, styled, key, frames: made });
     return made;
   }
 
