@@ -31,14 +31,25 @@ A transition that changes target part way starts from the value it has reached. 
 where it came from is shortened by how far it had got, as in a browser: a press fade released half
 way to its end takes half its duration to come back, not all of it.
 
-A transition of `opacity`, a transform, a `background-color` or a border color is played by
-native: its two values and its curve are handed to React Native's animated module when it starts,
-and nothing runs in JavaScript until it ends. A press that fades or tints a button is a commit to
-start it and a commit to end it. Those that start together, take as long and ease alike share
-one clock. Any other transition is eased from JavaScript, a commit on every frame: one of a size,
-a text `color` or a shadow, one with a `transition-delay`, and every transition where the
-animated module is absent. One native is playing is taken back to JavaScript, from where its
-clock has got to, when it is sent another way.
+A transition of `opacity`, a transform, a `background-color` or a border color is played by native:
+its two values and its curve are handed to React Native's animated module when it starts, and
+nothing runs in JavaScript until it ends. A press that fades or tints a button is a commit to start
+it and a commit to end it. Those that start together, take as long and ease alike share one clock. A
+text `color` or a shadow is eased from JavaScript, a commit on every frame, and so is any of these
+with a `transition-delay` or where the animated module is absent. One native is playing is taken
+back to JavaScript, from where its clock has got to, when it is sent another way.
+
+A transition of a size or a place (`width`, `height`, their minimums and maximums, the insets, the
+margins and `flex-basis`) is committed once, where it ends, and native moves each view whose frame
+changed there over the transition's time: React Native's layout animation. Nothing of it runs in
+JavaScript. Native has four curves for it, linear, ease-in, ease-out and ease-in-out, and the
+transition's own curve is played as the nearest of them. A layout animation moves every frame its
+commit changes, so it is used where the only boxes that commit resizes or moves are the ones in
+transition; where another box is resized in the same commit, text comes to another length, or an
+element is added or removed, the transition is eased from JavaScript, a commit on every frame, by
+its own curve. So is one with a `transition-delay`, several that start together and take different
+times, and every such transition on a host with no layout animation. `transitionend` is sent when
+the transition's time is up.
 
 A plain view with a transition is a native view for as long as it has one, as an `Animated.View`
 is in React Native. Left to itself React Native makes a native view of one only while its opacity

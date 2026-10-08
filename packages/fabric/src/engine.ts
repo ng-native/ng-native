@@ -190,6 +190,15 @@ export interface FabricUIManager {
   /** Clone with the given props and the given children (omitting them means none). */
   cloneNodeWithNewChildrenAndProps(node: FabricNode, newProps: object): FabricNode;
   appendChild(parent: FabricNode, child: FabricNode): FabricNode;
+  /**
+   * Have native move each view whose frame the next commit changes to where it ends up, over a
+   * time and by one of its own curves, with no frame of it in JavaScript.
+   */
+  configureNextLayoutAnimation?(
+    config: { duration: number; update: { type: string } },
+    ended: () => void,
+    failed: () => void,
+  ): void;
   createChildSet(rootTag: number): FabricNodeSet;
   appendChildToSet(set: FabricNodeSet, child: FabricNode): void;
   completeRoot(rootTag: number, set: FabricNodeSet): void;
@@ -1900,6 +1909,46 @@ function easedChannels(
   if (!colors || held.length) return null;
   const any = channels.opacity || channels.transform.length || tinted.size;
   return any ? { ...channels, colors } : null;
+}
+
+/** The sides a length is written for, and the two it is written for at once. */
+const EDGES = ['', 'Top', 'Right', 'Bottom', 'Left', 'Horizontal', 'Vertical'];
+/**
+ * The properties of a transition that resize or move a box, which native eases by laying the
+ * view out where it ends: see `layEased`.
+ */
+const LAID_OUT = new Set([
+  ...['width', 'height', 'minWidth', 'minHeight', 'maxWidth', 'maxHeight'],
+  ...['top', 'right', 'bottom', 'left', 'flexBasis'],
+  ...EDGES.map((edge) => `margin${edge}`),
+]);
+/** Every prop that can resize or move a box, a view's own or another's. */
+const MOVES_BOXES = new Set([
+  ...LAID_OUT,
+  ...EDGES.map((edge) => `padding${edge}`),
+  ...['borderWidth', 'borderTopWidth', 'borderRightWidth', 'borderBottomWidth', 'borderLeftWidth'],
+  ...['flex', 'flexGrow', 'flexShrink', 'flexDirection', 'flexWrap', 'alignItems', 'alignSelf'],
+  ...['alignContent', 'justifyContent', 'gap', 'rowGap', 'columnGap', 'display', 'position'],
+  ...['aspectRatio', 'fontSize', 'lineHeight', 'fontFamily', 'fontWeight', 'letterSpacing'],
+  ...['numberOfLines', 'start', 'end'],
+]);
+
+/** The curves a layout animation has, as the timing function each is. */
+const LAYOUT_CURVES: readonly (readonly [string, readonly number[]])[] = [
+  ['linear', [0, 0, 1, 1]],
+  ['easeIn', [0.42, 0, 1, 1]],
+  ['easeOut', [0, 0, 0.58, 1]],
+  ['easeInEaseOut', [0.42, 0, 0.58, 1]],
+];
+
+/** The curve of a layout animation nearest a timing function, by where each is along the way. */
+function layoutCurve(easing: readonly number[]): string {
+  const along = [0.2, 0.4, 0.6, 0.8];
+  const apart = (curve: readonly number[]) =>
+    along.reduce((sum, at) => sum + (bezier(curve, at) - bezier(easing, at)) ** 2, 0);
+  let nearest = LAYOUT_CURVES[0]!;
+  for (const curve of LAYOUT_CURVES) if (apart(curve[1]) < apart(nearest[1])) nearest = curve;
+  return nearest[0];
 }
 
 /** The properties of a transition native can play: see `easeNatively`. */
@@ -3648,10 +3697,14 @@ export class Engine implements HostEngine {
     // Faces registered before the walk, the global sheet's among them, reach every node in it.
     this.facesAdded = false;
     const set = this.fabric.createChildSet(this.rootTag);
-    for (const child of this.visibleChildren(this.root)) {
-      if (this.withheld(child)) continue;
-      this.fabric.appendChildToSet(set, this.reconcileUnder(this.root, child));
+    let handles = this.rootHandles();
+    // Again, where transitions it laid out where they end are to be eased from JavaScript.
+    if (this.layOut()) {
+      handles = this.rootHandles();
+      // What that found resized is the transitions themselves, at the frame they are eased to.
+      this.movesOthers = false;
     }
+    for (const handle of handles) this.fabric.appendChildToSet(set, handle);
     this.clearFlags(this.root);
     this.announceCommit();
     this.fabric.completeRoot(this.rootTag, set);
@@ -4607,6 +4660,7 @@ export class Engine implements HostEngine {
     const state = (node.transitions ??= new Map());
     const now = this.now();
     this.takeBackEased(node, state, props, spec, now);
+    this.takeBackLaid(state, props, spec, now);
     const started: string[] = [];
 
     for (const key of steppedKeys(props, spec, state)) {
@@ -4649,9 +4703,138 @@ export class Engine implements HostEngine {
     now: number,
   ): void {
     if (started.length) this.startEased(node, state, started, props, now);
+    this.layEased(node, state, started, props, now);
+    const inScript = [...state.values()].some(
+      (eased) => !eased.done && !eased.native && !eased.laid,
+    );
+    if (!inScript) this.running.delete(node);
     // As Animated does: Fabric flattens a view that only lays out, and then there is no native
     // view for a transition to move.
     if (this.easedNatively.has(node)) props['collapsable'] = false;
+  }
+
+  /** The root's children as the views they are committed as, each reconciled. */
+  private rootHandles(): FabricNode[] {
+    const handles: FabricNode[] = [];
+    for (const child of this.visibleChildren(this.root)) {
+      if (!this.withheld(child)) handles.push(this.reconcileUnder(this.root, child));
+    }
+    return handles;
+  }
+
+  /** The transitions this commit lays out where they end, for native to move the views to. */
+  private laying: { node: EngineNode; key: string; eased: Transition }[] = [];
+  /** Whether this commit resizes or moves a box that is in no such transition. */
+  private movesOthers = false;
+
+  /**
+   * Commit where it ends each transition of a size or a place that just started, for native to
+   * move the view there: a layout animation, which the commit asks for once it is known that
+   * nothing else in it moves. One still on its way is committed where it ends too.
+   *
+   * A width eased from JavaScript is a commit a frame, and a commit lays the whole screen out.
+   */
+  private layEased(
+    node: EngineNode,
+    state: Map<string, Transition>,
+    started: readonly string[],
+    props: Record<string, unknown>,
+    now: number,
+  ): void {
+    if (!this.fabric.configureNextLayoutAnimation) return;
+    for (const key of started) {
+      const eased = state.get(key)!;
+      if (!LAID_OUT.has(key) || eased.start > now || eased.duration <= 0) continue;
+      eased.laid = true;
+      this.laying.push({ node, key, eased });
+    }
+    for (const [key, eased] of state) if (eased.laid && !eased.done) props[key] = eased.to;
+  }
+
+  /**
+   * Before a commit is handed over: ask native to move what it lays out, or take the
+   * transitions back to ease them from JavaScript where the commit moves anything else, and
+   * where they would not all take as long. Answers whether the tree has to be reconciled again.
+   */
+  private layOut(): boolean {
+    const laying = this.laying;
+    const others = this.movesOthers;
+    this.laying = [];
+    this.movesOthers = false;
+    if (!laying.length) return false;
+    const [first] = laying;
+    const alike = laying.every(({ eased }) => eased.duration === first!.eased.duration);
+    if (others || !alike) {
+      for (const { node, eased } of laying) {
+        eased.laid = undefined;
+        this.running.add(node);
+      }
+      for (const { node } of laying) this.markProps(node, false);
+      return true;
+    }
+    const { duration, easing } = first!.eased;
+    const nothing = () => undefined;
+    this.fabric.configureNextLayoutAnimation!(
+      { duration, update: { type: layoutCurve(easing) } },
+      nothing,
+      nothing,
+    );
+    for (const { node, key, eased } of laying) {
+      setTimeout(() => this.endLaid(node, key, eased), duration);
+    }
+    return false;
+  }
+
+  /**
+   * Note a commit that resizes or moves a box in no transition native lays out: a prop of one
+   * that moves boxes, children that came or went, text longer or shorter than it was.
+   */
+  private noteMoved(
+    node: EngineNode,
+    payload: Record<string, unknown> | null,
+    resized: boolean,
+    words: unknown,
+  ): void {
+    if (this.movesOthers) return;
+    if (resized) this.movesOthers = true;
+    for (const key in payload) {
+      const eased = node.transitions?.get(key);
+      if (eased?.laid && !eased.done) continue;
+      // Text as long as it was is taken to be as wide, as a grid takes it: see `shapeOf`.
+      const longer = key === 'text' && String(payload[key]).length !== String(words).length;
+      if (MOVES_BOXES.has(key) || longer) this.movesOthers = true;
+    }
+  }
+
+  /** A transition native laid out has had its time: it is where it ends, and says so. */
+  private endLaid(node: EngineNode, key: string, eased: Transition): void {
+    if (!eased.laid || eased.done || node.transitions?.get(key) !== eased) return;
+    Object.assign(eased, { current: eased.to, done: true, laid: undefined });
+    this.emitTransition(node, 'topTransitionend', key);
+    // No commit comes of it, which is what tells listeners otherwise: it is where it ends.
+    this.flushTransitionEvents();
+    // And what a listener did, taking away an element that has left, is committed.
+    if (this.pending) this.commit();
+  }
+
+  /**
+   * Bring a transition native laid out to where its clock has got to, where it is sent another
+   * way or its rule has gone: that is where it goes on from.
+   */
+  private takeBackLaid(
+    state: Map<string, Transition>,
+    props: Record<string, unknown>,
+    spec: Record<string, TransitionSpec> | undefined,
+    now: number,
+  ): void {
+    for (const [key, eased] of state) {
+      if (!eased.laid || eased.done) continue;
+      const kept = spec?.[key] ?? spec?.['all'];
+      if (kept && !aimsElsewhere(eased, key, props)) continue;
+      const progress = Math.min(1, Math.max(0, (now - eased.start) / eased.duration));
+      eased.current = interpolate(eased.from, eased.to, bezier(eased.easing, progress));
+      eased.laid = undefined;
+    }
   }
 
   private startEased(
@@ -4670,8 +4853,6 @@ export class Engine implements HostEngine {
       clocks.set(clock, [...(clocks.get(clock) ?? []), key]);
     }
     for (const keys of clocks.values()) this.playEased(node, state, keys, props);
-    const inScript = [...state.values()].some((eased) => !eased.done && !eased.native);
-    if (!inScript) this.running.delete(node);
   }
 
   private playEased(
@@ -5059,6 +5240,12 @@ export class Engine implements HostEngine {
     const propsPayload = propsMoved ? this.propsPayload(node, previous.props, props) : null;
 
     const childrenChanged = this.childrenMoved(node, childHandles, previous.childHandles);
+    this.noteMoved(
+      node,
+      propsPayload,
+      childHandles.length !== previous.childHandles.length,
+      previous.props['text'],
+    );
 
     let handle = previous.handle;
     if (childrenChanged || propsPayload) {

@@ -39,6 +39,11 @@ export interface Transition {
    * it runs in JavaScript then, and `current` is where it started from.
    */
   native?: EasedNatively;
+  /**
+   * Committed where it ends, with native moving the view there by a layout animation: see
+   * `layEased` in the engine. `current` is where it started from.
+   */
+  laid?: true;
   done: boolean;
   /**
    * The value a change back is a reversal to, and the share of the full duration this one takes:
