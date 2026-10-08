@@ -152,6 +152,20 @@ describe('a transition of opacity or a transform', () => {
     assert.deepEqual(untouched.at(1), { opacity: 0 });
   });
 
+  it('takes a fade back from native where the view comes to take a touch part way', () => {
+    // Native was given the fade to nothing before the view had a responder, and would end it
+    // there: it is eased from JavaScript from where it has got to, and committed short of it.
+    const s = scene(FADE);
+    s.classes('a gone');
+    s.later(50);
+    s.engine.setResponder(s.view, {});
+    s.engine.commit();
+    assert.equal(s.rec.named('stop').length, 1);
+    assert.equal(s.props()['opacity'], 0.75);
+    s.later(200);
+    assert.equal(s.props()['opacity'], 0.011);
+  });
+
   it('is committed where it ends when native says it has, and says so itself', () => {
     const s = scene(FADE);
     s.classes('a gone');
