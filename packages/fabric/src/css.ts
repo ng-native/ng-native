@@ -2063,6 +2063,17 @@ function writtenFor(of: Subjects, node: StyleTarget): boolean {
   return false;
 }
 
+/**
+ * Whether a node has its answer for this commit already. Not one marked since it was given the
+ * one cache every box with nothing to style shares, see `unstyled`: another of them resolved in
+ * this commit has set that cache's epoch, and it is not this node's answer.
+ */
+function resolvedIn(epoch: number, cache: StyleCache | null, node: StyleTarget): boolean {
+  return (
+    cache !== null && cache.epoch === epoch && (!node.styleDirty || cache.context !== ROOT_CONTEXT)
+  );
+}
+
 function emptyCacheFor(epoch: number, generation: number): StyleCache {
   return {
     epoch,
@@ -2454,7 +2465,7 @@ export class StyleResolver {
     const cached = node.styleCache;
     // Within one commit a node is asked for its inherited map once per descendant, so this is the
     // hot path and it must not walk anywhere.
-    if (cached !== null && cached.epoch === epoch) return cached;
+    if (resolvedIn(epoch, cached, node)) return cached!;
 
     const parent = node.parent ? this.resolve(node.parent, epoch) : null;
     const parentContext = parent ? parent.context : ROOT_CONTEXT;
@@ -2599,6 +2610,15 @@ export class StyleResolver {
    */
   holds(node: StyleTarget, parentContext: object): boolean {
     return this.reusable(node.styleCache, node, parentContext);
+  }
+
+  /**
+   * Whether a node was last styled under a box holding the one cache shared by every box with
+   * nothing to style. Such boxes hand the same `context` down, so the node cannot tell one from
+   * another by it: moved under another box, it has to be told.
+   */
+  styledUnderShared(node: StyleTarget): boolean {
+    return node.styleCache !== null && node.styleCache.parentContext === ROOT_CONTEXT;
   }
 
   /**

@@ -3230,6 +3230,7 @@ export class Engine implements HostEngine {
   }
 
   appendChild(parent: EngineNode, child: EngineNode): void {
+    this.markAdopted(child, parent);
     this.detach(child);
     child.parent = parent;
     parent.children.push(child);
@@ -3239,6 +3240,7 @@ export class Engine implements HostEngine {
   }
 
   insertBefore(parent: EngineNode, child: EngineNode, ref: EngineNode | null): void {
+    this.markAdopted(child, parent);
     this.detach(child);
     child.parent = parent;
     const at = ref ? parent.children.indexOf(ref) : -1;
@@ -3247,6 +3249,16 @@ export class Engine implements HostEngine {
     if (child.dormantHoists) this.wakeHoists(child);
     this.markStructure(parent, child, at < 0 ? parent.children.length - 1 : at);
     this.markTextContent(parent, child);
+  }
+
+  /**
+   * A node coming under a parent other than the one it is under, or under any once it has been
+   * taken out: what is over it may be other than it was styled under. The resolver sees that for
+   * itself by the parent's cache, except between two boxes that share one, where it is told here.
+   * Moved within its own parent, a row of a list reordered, it is styled as it was.
+   */
+  private markAdopted(child: EngineNode, parent: EngineNode): void {
+    if (child.parent !== parent && this.styles.styledUnderShared(child)) child.styleDirty = true;
   }
 
   removeChild(parent: EngineNode | null, child: EngineNode): void {
