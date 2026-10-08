@@ -83,6 +83,26 @@ describe('tokens in transform functions', () => {
     assert.deepEqual(transformOf(css), [{ translateX: 2 }, { translateY: 3 }]);
   });
 
+  it('translate3d() and scale3d(), across and down: a view has no depth to move or scale in', () => {
+    // How an animation library writes a move it means the compositor to take.
+    const css =
+      '.a { --x: 2px; --y: 3px; --s: 0.95; transform: translate3d(var(--x), var(--y), 0)' +
+      ' scale3d(var(--s), var(--s), var(--s)); }';
+    assert.deepEqual(transformOf(css), [
+      { translateX: 2 },
+      { translateY: 3 },
+      { scaleX: 0.95 },
+      { scaleY: 0.95 },
+    ]);
+  });
+
+  it('an angle that falls back to a zero with no unit, which is an angle of none', () => {
+    assert.deepEqual(transformOf('.a { transform: rotate(var(--r, 0)); }'), [{ rotate: '0deg' }]);
+    assert.deepEqual(transformOf('.a { --r: 30deg; transform: rotate(var(--r, 0)); }'), [
+      { rotate: '30deg' },
+    ]);
+  });
+
   it('beside functions with none', () => {
     const css = '.a { --r: 45deg; transform: translateX(10px) rotate(var(--r)); }';
     assert.deepEqual(transformOf(css), [{ translateX: 10 }, { rotate: '45deg' }]);
