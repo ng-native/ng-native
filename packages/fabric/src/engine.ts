@@ -5768,6 +5768,10 @@ export class Engine implements HostEngine {
   setResponder(node: EngineNode, handlers: ResponderHandlers): () => void {
     this.registerEventHandler();
     this.responders.set(node, handlers);
+    // A fade native is playing was given to it as a view that takes no touch fades: to
+    // nothing. From here it is eased to where the view is committed.
+    const fade = node.transitions?.get('opacity')?.native;
+    if (fade) this.backToScriptEased(node, fade, this.now());
     this.keepNative(node, true);
     // What it is committed with can hang on whether it takes a touch: see `stillTouched`.
     this.markProps(node);
