@@ -1276,11 +1276,12 @@ const TOUCHED_ALPHA = 0.011;
  * backdrop hears a press outside a menu; iOS passes over a view it would not draw. A hundredth
  * of what the view draws is not seen.
  */
-function stillTouched(props: Record<string, unknown>): void {
+function stillTouched(props: Record<string, unknown>): Record<string, unknown> {
   // One told to take no touch is not to be sent one, seen or not.
-  if (props['pointerEvents'] === 'none') return;
+  if (props['pointerEvents'] === 'none') return props;
   const opacity = props['opacity'];
   if (typeof opacity === 'number' && opacity < TOUCHED_ALPHA) props['opacity'] = TOUCHED_ALPHA;
+  return props;
 }
 
 /**
@@ -4875,14 +4876,18 @@ export class Engine implements HostEngine {
     props: Record<string, unknown>,
   ): void {
     const first = state.get(keys[0]!)!;
+    // Where the view is committed: one that takes a touch stops short of no opacity.
+    const touched = this.responders.has(node);
+    const seen = (key: string, value: unknown) =>
+      touched && key === 'opacity' ? stillTouched({ ...props, opacity: value })['opacity'] : value;
     const tracks = new Map(
       keys.map((key) => {
         const { current, to, easing } = state.get(key)!;
         return [
           key,
           [
-            { offset: 0, value: current, easing },
-            { offset: 1, value: to },
+            { offset: 0, value: seen(key, current), easing },
+            { offset: 1, value: seen(key, to) },
           ],
         ] as const;
       }),
