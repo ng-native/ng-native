@@ -4204,7 +4204,7 @@ export class Engine implements HostEngine {
       return props;
     }
 
-    const frames = this.keyframes.get(spec.name);
+    const frames = this.keyframesOf(node, spec.name);
     if (!frames) {
       // Keyframes a hot swap deleted, from under an animation that was playing them, or ones a
       // sheet later in this commit has: see `settleKeyframes`.
@@ -4218,6 +4218,19 @@ export class Engine implements HostEngine {
     if (spec.timeline) return this.scrollAnimated(node, spec, frames, props);
     this.startPlaying(node, spec, frames, props);
     return Object.assign(props, playedOver(node));
+  }
+
+  /**
+   * The keyframes a node's animation names: those of its own component's sheet where it has
+   * some by that name, as Angular scopes a component's keyframes in a browser, and otherwise
+   * whichever sheet has them, since any other is global.
+   *
+   * ponytail: a host is asked of the sheet it is written in before its own component's, so
+   * a `:host` animation is played by its parent's frames where both have the name.
+   */
+  private keyframesOf(node: EngineNode, name: string): readonly Keyframe[] | undefined {
+    const own = node.sheet?.keyframes?.[name] ?? node.hostSheet?.keyframes?.[name];
+    return own ?? this.keyframes.get(name);
   }
 
   /**
