@@ -2012,6 +2012,55 @@ function easedByToken(declaration, out, deferred, context) {
   return true;
 }
 
+/**
+ * `animation: enter var(--duration, 0.15s) var(--ease, ease) var(--delay, 0s) ...`: one
+ * animation whose parts are tokens that each fall back to what the part is, which is how an
+ * animation utility lets the utilities beside it time it. Read as the shorthand with each
+ * token's fallback in its place, and then its two times as `animation-duration` and
+ * `animation-delay` read a token, for the device to settle. Answers whether it was one.
+ *
+ * ponytail: the times follow their tokens. The easing, the count, the direction and the fill
+ * are the ones fallen back to, whatever sets their tokens; read each as the times are if a
+ * stylesheet is seen to set one.
+ */
+function animatedByTokens(declaration, add, context) {
+  if (declaration.property !== 'unparsed') return false;
+  if (declaration.value?.propertyId?.property !== 'animation') return false;
+  const parts = meaningful(declaration.value.value ?? []);
+  const tokens = parts.filter((part) => part.type === 'var');
+  if (!tokens.length || parts.some(isComma)) return false;
+  const written = parts.map((part) => (part.type === 'var' ? fallenBackTo(part) : [part]));
+  // Each token one part of it: a token that is the whole animation is read as one elsewhere.
+  if (written.some((one) => one?.length !== 1)) return false;
+  const text = written.map((one) => cssText(one, context)).join(' ');
+  const typed = reparsed('animation', text, context);
+  if (typed?.property !== 'animation') return false;
+  add(typed);
+  const times = tokens.filter((part) => isTime(fallenBackTo(part)));
+  ['animation-duration', 'animation-delay'].forEach((property, at) => {
+    if (times[at])
+      add({ property: 'unparsed', value: { propertyId: { property }, value: [times[at]] } });
+  });
+  return true;
+}
+
+/** A declaration as it is written, or as the animation of tokens it is: see `animatedByTokens`. */
+function declareOrAnimate(declaration, add, context) {
+  if (!animatedByTokens(declaration, add, context)) add(declaration);
+}
+
+/** What a token falls back to in the end, through any token it falls back to; null for none. */
+function fallenBackTo(part) {
+  const fallback = meaningful(part.value?.fallback ?? []);
+  if (!fallback.length) return null;
+  const [only] = fallback;
+  return fallback.length === 1 && only.type === 'var' ? fallenBackTo(only) : fallback;
+}
+
+const isComma = (part) => part.type === 'token' && part.value?.type === 'comma';
+const isTime = (parts) =>
+  parts?.length === 1 && (parts[0].type === 'time' || /^(ms|s)$/i.test(parts[0].value?.unit ?? ''));
+
 const fallsBackToTime = (part) => {
   const [only, ...more] = meaningful(part.value?.fallback ?? []);
   if (more.length || !only) return false;
@@ -2770,7 +2819,9 @@ function compileCss(source, context = 'styles', options = {}) {
         if (easedByToken(declaration, out, deferred, context)) continue;
         if (timedByToken(declaration, out, context)) continue;
         const before = deferred.length;
-        declare(declaration, out, tokens, deferred, context, addDeclaration, platforms);
+        const add = (one) =>
+          declare(one, out, tokens, deferred, context, addDeclaration, platforms);
+        declareOrAnimate(declaration, add, context);
         for (let i = before; i < deferred.length; i++) deferred[i].props.forEach(sides.wrote);
       }
       // The transition longhands are meaningless one at a time: a duration list is sized by the

@@ -260,6 +260,12 @@ const RUNTIME_SUPPLIED =
  * per node: a transform, a shadow or a filter, or a part of a shadow slot, as `ring-blue-500` sets
  * the colour of `ring-2`'s. Anything else stays settled here.
  */
+/** Whether a property of the rule with this selector has its `var()` resolved per node. */
+function perNodeIn(selector) {
+  const framed = KEYFRAME.test(selector);
+  return (property) => framed || RESOLVED_PER_NODE.test(property) || SHADOW_SLOT.test(property);
+}
+
 function crossRuleVariables(css) {
   const set = new Set();
   const setWithoutReading = new Set();
@@ -269,8 +275,9 @@ function crossRuleVariables(css) {
     if (selectorList(selector).some((one) => one.trim() === '*')) continue;
     const declared = new Set([...body.matchAll(/(--tw-[\w-]+)\s*:/g)].map((match) => match[1]));
     const read = new Set();
+    const settles = perNodeIn(selector);
     for (const [, property, value] of body.matchAll(/(-?-?[\w-]+)\s*:\s*([^;]+)/g)) {
-      const perNode = RESOLVED_PER_NODE.test(property) || SHADOW_SLOT.test(property);
+      const perNode = settles(property);
       for (const [, name] of value.matchAll(/var\(\s*(--tw-[\w-]+)/g)) {
         if (perNode || REVERSE_SLOT.test(name)) read.add(name);
       }
@@ -310,8 +317,13 @@ function markUnitlessReverse(css) {
 }
 
 /** Properties whose `var()` the engine resolves per node, from the tokens in scope there. */
+// An animation's times among them, and every property of a keyframe, which is settled against
+// the element that plays it: `duration-300` times `animate-in`, and `fade-in-0` says where from.
 const RESOLVED_PER_NODE =
-  /^(translate|scale|rotate|transform|box-shadow|text-shadow|filter|font-variant-numeric|touch-action)$/;
+  /^(translate|scale|rotate|transform|box-shadow|text-shadow|filter|font-variant-numeric|touch-action|animation)$/;
+
+/** The selector of a keyframe: `from`, `to`, or the percentages it is at. */
+const KEYFRAME = /^\s*(from|to|[\d.]+%)(\s*,\s*(from|to|[\d.]+%))*\s*$/;
 
 /**
  * A shadow slot, whose own parts another class may set: `ring-blue-500` its colour,
@@ -352,6 +364,9 @@ function substituteInRules(css, values, runtime) {
   });
 }
 
+/** A value put in a token's place, apart from what is written straight after it: `var(--a)var(--b)` is two values. */
+const apartFrom = (value, next) => (/[\w.#(%-]/.test(next ?? '') ? `${value} ` : value);
+
 function substituteVariables(css, values, runtime) {
   let out = css;
   for (let pass = 0; pass < 5; pass++) {
@@ -378,8 +393,9 @@ function substituteVariables(css, values, runtime) {
         from = found.end;
         continue;
       }
-      out = out.slice(0, found.at) + value + out.slice(found.end);
-      from = found.at + value.length;
+      const apart = apartFrom(value, out[found.end]);
+      out = out.slice(0, found.at) + apart + out.slice(found.end);
+      from = found.at + apart.length;
       changed = true;
     }
     if (!changed) break;

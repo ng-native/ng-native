@@ -122,6 +122,12 @@ A duration or delay can be a token, or `calc()` with tokens in it, which is how 
 its rows: `animation-delay: calc(var(--i) * 60ms)` with `[style.--i]="$index"` on each. A token of
 time is read in milliseconds whatever unit it was written in.
 
+The `animation` shorthand can be written with a token for each part, each falling back to what
+the part is, which is how `tw-animate-css` writes `animate-in` and `animate-out`:
+`animation: enter var(--tw-duration, 0.15s) var(--tw-ease, ease) var(--tw-animation-delay, 0s)`.
+Its duration and delay follow their tokens, so `duration-300` beside `animate-in` times it. Its
+curve, count, direction and fill are the ones it falls back to, whatever sets their tokens.
+
 A keyframe's value can be a token too, or an `em` or a viewport unit: it is settled against the
 element that plays the frame, as in a browser, so `to { height: var(--panel-height) }` opens each
 panel to the height set on it. A token that changes while the animation plays moves the frame,
