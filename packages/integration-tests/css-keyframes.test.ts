@@ -1274,3 +1274,65 @@ describe('a keyframe that is written with a var()', () => {
     assert.equal(s.height(), 30);
   });
 });
+
+describe('an animation whose every part is a token, as tw-animate-css writes one', () => {
+  // `animate-in fade-in-0 zoom-in-95 duration-300`: one shorthand that reads each part from a
+  // token, and one `@keyframes enter` whose first frame reads where it comes in from. The
+  // utilities beside it set the tokens.
+  const CSS = `
+    @keyframes enter {
+      from {
+        opacity: var(--tw-enter-opacity,1);
+        transform: translate3d(var(--tw-enter-translate-x,0),var(--tw-enter-translate-y,0),0)scale3d(var(--tw-enter-scale,1),var(--tw-enter-scale,1),var(--tw-enter-scale,1))rotate(var(--tw-enter-rotate,0));
+      }
+    }
+    .in { animation: enter var(--tw-animation-duration,var(--tw-duration,.15s))var(--tw-ease,ease)var(--tw-animation-delay,0s)var(--tw-animation-iteration-count,1)var(--tw-animation-direction,normal)var(--tw-animation-fill-mode,none); }
+    .fade { --tw-enter-opacity: 0; }
+    .zoom { --tw-enter-scale: .5; }
+    .slow { --tw-duration: 300ms; }
+    .late { --tw-animation-delay: 100ms; }
+  `;
+
+  function entering(classes: string) {
+    let now = 1000;
+    const dropped: string[] = [];
+    const sheet = compileCss(CSS, 'app.css', { onUnsupported: (m: string) => dropped.push(m) });
+    const fabric = createFakeFabric();
+    const engine = new Engine(fabric, 1, { globalStyles: sheet as never, now: () => now });
+    const view = engine.createElement('view');
+    engine.setClasses(view, classes);
+    engine.appendChild(engine.root, view);
+    engine.commit();
+    const frame = (ms: number) => {
+      now += ms;
+      engine.advanceAnimations();
+      engine.commit();
+    };
+    const props = () => fabric.committed[0]!.props;
+    return { dropped, frame, props, sheet };
+  }
+
+  it('compiles, with nothing of it dropped', () => {
+    assert.deepEqual(entering('in').dropped, []);
+  });
+
+  it('comes in from what the utilities beside it say, over the time they say', () => {
+    const s = entering('in fade zoom slow');
+    assert.equal(s.props()['opacity'], 0);
+    const moved = s.props()['transform'] as unknown[];
+    assert.deepEqual(moved.slice(2, 4), [{ scaleX: 0.5 }, { scaleY: 0.5 }]);
+    s.frame(300);
+    assert.equal(s.props()['opacity'] ?? 1, 1);
+  });
+
+  it('takes the time it falls back to where no utility sets one, and waits where one says to', () => {
+    const quick = entering('in fade');
+    quick.frame(150);
+    assert.equal(quick.props()['opacity'] ?? 1, 1, 'over in 150ms');
+    const late = entering('in fade late');
+    late.frame(100);
+    assert.equal(late.props()['opacity'], 0, 'held through its delay');
+    late.frame(150);
+    assert.equal(late.props()['opacity'] ?? 1, 1);
+  });
+});

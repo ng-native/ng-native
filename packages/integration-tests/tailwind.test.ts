@@ -717,3 +717,71 @@ describe('real Tailwind output, end to end', () => {
     }
   });
 });
+
+describe('tw-animate-css, as Tailwind writes it out', () => {
+  // `animate-in fade-in-0 zoom-in-95 duration-300`: the animation reads its time from a slot
+  // the duration utility sets, and its first frame reads where it comes in from, from the slots
+  // the fade and the zoom set. Each is another rule's to set, on the element that wears both.
+  const CSS = `
+    *, ::before, ::after { --tw-duration: initial; --tw-ease: initial; --tw-animation-delay: 0s;
+      --tw-enter-opacity: 1; --tw-enter-scale: 1; --tw-enter-translate-x: 0; --tw-enter-translate-y: 0; }
+    .animate-in { animation: enter var(--tw-animation-duration,var(--tw-duration,.15s))var(--tw-ease,ease)var(--tw-animation-delay,0s)var(--tw-animation-iteration-count,1)var(--tw-animation-direction,normal)var(--tw-animation-fill-mode,none); }
+    .fade-in-0 { --tw-enter-opacity: 0; }
+    .zoom-in-50 { --tw-enter-scale: .5; }
+    .duration-300 { --tw-duration: .3s; transition-duration: .3s; }
+    @keyframes enter {
+      from {
+        opacity: var(--tw-enter-opacity,1);
+        transform: translate3d(var(--tw-enter-translate-x,0),var(--tw-enter-translate-y,0),0)scale3d(var(--tw-enter-scale,1),var(--tw-enter-scale,1),var(--tw-enter-scale,1))rotate(var(--tw-enter-rotate,0));
+      }
+    }
+  `;
+
+  function entering(classes: string) {
+    let now = 1000;
+    const dropped: string[] = [];
+    const sheet = compileCss(flattenTailwind(CSS), 'tailwind', {
+      onUnsupported: (message) => dropped.push(message),
+    });
+    const fabric = createFakeFabric();
+    const engine = new Engine(fabric, 1, { globalStyles: sheet, now: () => now });
+    const view = engine.createElement('view');
+    engine.setClasses(view, classes);
+    engine.appendChild(engine.root, view);
+    engine.commit();
+    const frame = (ms: number) => {
+      now += ms;
+      engine.advanceAnimations();
+      engine.commit();
+    };
+    return { dropped, frame, props: () => fabric.committed[0]!.props };
+  }
+
+  it('is compiled, the animation and its frames', () => {
+    const { dropped } = entering('animate-in');
+    assert.deepEqual(
+      dropped.filter((message) => /animation|transform|opacity/.test(message)),
+      [],
+    );
+  });
+
+  it('comes in from where the utilities beside it say, over the time the duration says', () => {
+    const s = entering('animate-in fade-in-0 zoom-in-50 duration-300');
+    assert.equal(s.props()['opacity'], 0);
+    const moved = s.props()['transform'] as Record<string, number>[];
+    assert.equal(moved.find((one) => 'scaleX' in one)?.['scaleX'], 0.5);
+    s.frame(150);
+    assert.ok(Number(s.props()['opacity']) > 0.2 && Number(s.props()['opacity']) < 0.9);
+    s.frame(150);
+    assert.equal(s.props()['opacity'] ?? 1, 1);
+  });
+
+  it('comes in over its own time where no utility sets one, from nowhere where none says where', () => {
+    const s = entering('animate-in fade-in-0');
+    assert.equal(s.props()['opacity'], 0);
+    s.frame(150);
+    assert.equal(s.props()['opacity'] ?? 1, 1);
+    const plain = entering('animate-in');
+    assert.equal(plain.props()['opacity'] ?? 1, 1);
+  });
+});
