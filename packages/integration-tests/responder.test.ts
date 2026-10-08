@@ -4,6 +4,7 @@
  */
 import assert from 'node:assert/strict';
 import { beforeEach, describe, it } from 'node:test';
+import { createRequire } from 'node:module';
 import { Engine, type EngineNode } from '@ng-native/fabric';
 import {
   cleanup,
@@ -298,5 +299,34 @@ describe('a responder torn down mid-gesture', () => {
     assert.equal(outer.active, false, 'and every ancestor it had marked');
     assert.equal(fabric.calls.completeRoot, commits + 1, 'committed, since no binding moved');
     assert.equal(engine.responder, null);
+  });
+});
+
+describe('a press let go', () => {
+  it('is committed as no longer pressed before its handler is told', () => {
+    // What a handler makes is for the render pass after it to commit whole. Committed with
+    // the press, a dialog it opens is drawn a frame before anything has placed it.
+    const require = createRequire(import.meta.url);
+    const { compileCss } = require('@ng-native/metro/css/compile.cjs');
+    const fabric = createFakeFabric();
+    const engine = new Engine(fabric, 1, {
+      globalStyles: compileCss('.p { opacity: 1 } .p:active { opacity: 0.5 }', 'app.css'),
+    });
+    const button = engine.createElement('pressable');
+    engine.setClasses(button, 'p');
+    engine.appendChild(engine.root, button);
+    engine.commit();
+    engine.setResponder(button, {
+      onStartShouldSetResponder: () => true,
+      onResponderRelease: () => engine.appendChild(engine.root, engine.createElement('view')),
+    });
+    engine.dispatchEvent(button, 'topTouchStart', {});
+    assert.equal(fabric.committed[0]!.props['opacity'], 0.5);
+    engine.dispatchEvent(button, 'topTouchEnd', {});
+    assert.equal(fabric.committed[0]!.props['opacity'], 1);
+    assert.equal(fabric.committed.length, 1, 'what the handler made waits for its own commit');
+    assert.equal(engine.pending, true);
+    engine.commit();
+    assert.equal(fabric.committed.length, 2);
   });
 });
