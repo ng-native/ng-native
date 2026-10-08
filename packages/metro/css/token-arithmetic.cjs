@@ -47,6 +47,14 @@ function arithmetic(terms, kind, context) {
   return parsed.value;
 }
 
+/** Whether an angle's fallback is a zero with no unit, which is an angle of none as it is a length of none. */
+const zeroAngle = (kind, nested, rest) =>
+  kind === 'angle' && !rest.length && nested?.value?.type === 'number' && nested.value.value === 0;
+
+/** The number a token falls back to, where it falls back to one. */
+const fallbackOf = (term, kind, nested, rest, context) =>
+  zeroAngle(kind, nested, rest) ? 0 : fallbacks(term, kind, context).fallback;
+
 function leaf(term, kind, context) {
   // A fallback that is another `var()` or arithmetic of its own is a tree too, worked out if the
   // token is not set: `var(--a, var(--b, 3px))`, `var(--a, calc(var(--gap) * 2))`.
@@ -55,7 +63,7 @@ function leaf(term, kind, context) {
   if (nested && !rest.length && (nested.type === 'var' || MATH.has(name))) {
     return { reference: term.value.name.ident, fallback: tree(nested, kind, context) };
   }
-  const { fallback } = fallbacks(term, kind, context);
+  const fallback = fallbackOf(term, kind, nested, rest, context);
   if (typeof fallback !== 'number') return { reference: term.value.name.ident };
   // A percentage stays one, as a percentage written in the arithmetic does.
   const percentage = kind === 'number' && fractionOf(nested) !== undefined;
@@ -195,6 +203,9 @@ const FUNCTIONS = {
   translatex: (a) => [{ translateX: a('length', 0) }],
   translatey: (a) => [{ translateY: a('length', 0) }],
   translate: (a, n) => [{ translateX: a('length', 0) }, { translateY: n > 1 ? a('length', 1) : 0 }],
+  // Across and down: a view has no depth to move in, or to scale.
+  translate3d: (a) => [{ translateX: a('length', 0) }, { translateY: a('length', 1) }],
+  scale3d: (a) => [{ scaleX: a('number', 0) }, { scaleY: a('number', 1) }],
   scale: (a, n) => [{ scaleX: a('number', 0) }, { scaleY: a('number', n > 1 ? 1 : 0) }],
   scalex: (a) => [{ scaleX: a('number', 0) }],
   scaley: (a) => [{ scaleY: a('number', 0) }],

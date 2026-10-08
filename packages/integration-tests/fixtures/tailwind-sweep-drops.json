@@ -10397,7 +10397,7 @@
     "transform-[rgb(10,20,30)]",
     "transform-[rgb(10,20,30)]!"
   ],
-  "dropped 'transform': a transform with a token in it takes translatex, translatey, translate, scale, scalex, scaley, rotate, rotatez, rotatex, rotatey, skewx, skewy; '…' is not one of them": [
+  "dropped 'transform': a transform with a token in it takes translatex, translatey, translate, translateNd, scaleNd, scale, scalex, scaley, rotate, rotatez, rotatex, rotatey, skewx, skewy; '…' is not one of them": [
     "transform-gpu",
     "transform-gpu -skew-x-0",
     "transform-gpu -skew-y-0",
