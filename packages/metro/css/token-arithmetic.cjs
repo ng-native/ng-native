@@ -198,14 +198,19 @@ function commaSeparated(terms) {
   return groups.map(meaningful);
 }
 
+/** What a function writes across and down, once its depth has been read. */
+const flat = (written) => written;
+
 /** What each transform function writes, from its arguments' slots. */
 const FUNCTIONS = {
   translatex: (a) => [{ translateX: a('length', 0) }],
   translatey: (a) => [{ translateY: a('length', 0) }],
   translate: (a, n) => [{ translateX: a('length', 0) }, { translateY: n > 1 ? a('length', 1) : 0 }],
-  // Across and down: a view has no depth to move in, or to scale.
-  translate3d: (a) => [{ translateX: a('length', 0) }, { translateY: a('length', 1) }],
-  scale3d: (a) => [{ scaleX: a('number', 0) }, { scaleY: a('number', 1) }],
+  // Across and down: a view has no depth to move in, or to scale. The third is read all the
+  // same, since one that is missing or no value is no transform, and is left out.
+  translate3d: (a) =>
+    flat([{ translateX: a('length', 0) }, { translateY: a('length', 1) }], a('length', 2)),
+  scale3d: (a) => flat([{ scaleX: a('number', 0) }, { scaleY: a('number', 1) }], a('number', 2)),
   scale: (a, n) => [{ scaleX: a('number', 0) }, { scaleY: a('number', n > 1 ? 1 : 0) }],
   scalex: (a) => [{ scaleX: a('number', 0) }],
   scaley: (a) => [{ scaleY: a('number', 0) }],
