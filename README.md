@@ -2,7 +2,7 @@
 
 <!-- prettier-ignore-start -->
 <!-- ALL-CONTRIBUTORS-BADGE:START - Do not remove or modify this section -->
-[![All Contributors](https://img.shields.io/badge/all_contributors-8-orange.svg?style=flat-square)](#contributors-)
+[![All Contributors](https://img.shields.io/badge/all_contributors-9-orange.svg?style=flat-square)](#contributors-)
 <!-- ALL-CONTRIBUTORS-BADGE:END -->
 <!-- prettier-ignore-end -->
 
@@ -171,6 +171,7 @@ Thanks goes to these wonderful people:
     </tr>
     <tr>
       <td align="center" valign="top" width="14.28%"><a href="http://hangell.org/"><img src="https://avatars.githubusercontent.com/u/53544561?v=4?s=100" width="100px;" alt="Hangell"/><br /><sub><b>Hangell</b></sub></a><br /><a href="https://github.com/ng-native/ng-native/commits?author=Hangell" title="Code">💻</a></td>
+      <td align="center" valign="top" width="14.28%"><a href="https://www.linkedin.com/in/gabesilvadev/"><img src="https://avatars.githubusercontent.com/u/96894950?v=4?s=100" width="100px;" alt="Gabriel Silva"/><br /><sub><b>Gabriel Silva</b></sub></a><br /><a href="https://github.com/ng-native/ng-native/commits?author=GabeSilvaDev" title="Code">💻</a></td>
     </tr>
   </tbody>
 </table>
