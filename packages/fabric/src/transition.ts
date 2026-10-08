@@ -11,6 +11,8 @@
  * JavaScript-driven `Animated` value has.
  */
 
+import type { DeferredDeclaration } from './css.ts';
+
 /** What the CSS compiler emits per transitioning property. Durations are in milliseconds. */
 export interface TransitionSpec {
   readonly duration: number;
@@ -740,6 +742,11 @@ export interface Keyframe {
   readonly declarations: Record<string, unknown>;
   /** The `animation-timing-function` written in this keyframe, easing it to the next. */
   readonly easing?: readonly number[];
+  /**
+   * The declarations that wait for the element playing the frame, a `var()` it sets: settled by
+   * the engine as it plays.
+   */
+  readonly deferred?: readonly DeferredDeclaration[];
 }
 
 export interface RunningAnimation {

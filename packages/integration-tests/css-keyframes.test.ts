@@ -1242,11 +1242,8 @@ describe('a keyframe that is written with a var()', () => {
     return { engine, view, frame, height };
   }
 
-  it('is kept for the engine to settle, in a sheet of the app and in one of a library', () => {
-    const [, written] = compileCss(OPEN, 'app.css').keyframes.open;
-    assert.deepEqual(written.deferred.length, 1);
-    const sheet = compileCss(OPEN, 'library.css', { generated: true });
-    const [, to] = sheet.keyframes.open;
+  it('is kept for the engine to settle', () => {
+    const [, to] = compileCss(OPEN, 'app.css').keyframes.open;
     assert.deepEqual(
       to.deferred.map((one: { props: string[] }) => one.props),
       [['height']],

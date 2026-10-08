@@ -2149,32 +2149,29 @@ function holdsMarker(value) {
 }
 
 /**
- * One declaration in a keyframe. A frame is played as it was compiled, with no node's cascade to
- * settle a value against, so a var(), an em or a viewport unit is refused here: each used to leave
- * the frame empty, and the animation ran without moving. `color: currentColor` and `color: inherit`
- * are the one exception: the colour the node inherits, which the engine fills in as it plays.
+ * One declaration in a keyframe. A value that waits for a node, a `var()`, an em or a viewport
+ * unit, is kept for the engine to settle against the element that plays the frame, as a browser
+ * does: a library opens a panel to the height it measured, `to { height: var(--panel-height) }`.
+ * `color: currentColor` and `color: inherit` are the colour the node inherits, which the engine
+ * fills in as it plays; `currentColor` on any other property is the element's own colour, which
+ * the same frames can be animating, and is refused.
  */
-function addFrameDeclaration(declaration, out, tokens, _deferred, context) {
-  const deferred = [];
-  addDeclaration(declaration, out, tokens, deferred, context);
-  const [only] = deferred;
-  if (deferred.length === 1 && only.props.join() === 'color' && only.within === CURRENT_COLOUR) {
+function addFrameDeclaration(declaration, out, tokens, deferred, context) {
+  const waiting = [];
+  addDeclaration(declaration, out, tokens, waiting, context);
+  const [only] = waiting;
+  if (waiting.length === 1 && only.props.join() === 'color' && only.within === CURRENT_COLOUR) {
     out.color = CURRENT_COLOUR;
     return;
   }
-  if (deferred.length) {
-    for (const one of deferred) for (const prop of one.props) delete out[prop];
-    if (deferred.some((one) => namesCurrentColour(one.within))) {
-      throw new CssUnsupported(
-        `${context}: currentColor in a keyframe is the element's own colour, which the same ` +
-          `frames can be animating, so only color can take it. Write the colour out.`,
-      );
-    }
+  if (waiting.some((one) => namesCurrentColour(one.within))) {
+    for (const one of waiting) for (const prop of one.props) delete out[prop];
     throw new CssUnsupported(
-      `${context}: a keyframe's values are settled at build time, so var(), em and the ` +
-        `viewport units cannot be used in one. Write the value in px, rem or %.`,
+      `${context}: currentColor in a keyframe is the element's own colour, which the same ` +
+        `frames can be animating, so only color can take it. Write the colour out.`,
     );
   }
+  deferred.push(...waiting);
 }
 
 /** Whether a deferred value is, or is worked out from, the colour in scope. */
@@ -2840,8 +2837,10 @@ function compileCss(source, context = 'styles', options = {}) {
   /** One `{ ... }` inside a keyframes block. Several offsets can share it: `0%, 100% { ... }`. */
   function keyframeBlock(frame, context) {
     const declarations = {};
+    // What waits for the element that plays the frame, kept for the engine to settle.
+    const deferred = [];
     for (const declaration of frame.declarations?.declarations ?? []) {
-      declare(declaration, declarations, {}, [], context, addFrameDeclaration, targets);
+      declare(declaration, declarations, {}, deferred, context, addFrameDeclaration, targets);
     }
     finishBox(declarations, context);
     const easing = frameEasing(declarations, context);
@@ -2849,6 +2848,7 @@ function compileCss(source, context = 'styles', options = {}) {
       offset: keyframeOffset(selector),
       declarations,
       ...(easing ? { easing } : {}),
+      ...(deferred.length ? { deferred } : {}),
     }));
   }
 

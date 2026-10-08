@@ -3021,6 +3021,22 @@ export class StyleResolver {
    * A declaration with no token and no usable fallback is dropped rather than written as
    * undefined, which is what a browser does with a value it cannot resolve.
    */
+  /**
+   * What declarations that wait for a node's tokens come to on it, where no rule of the node's
+   * carries them: a keyframe's, which is settled against the element that plays it.
+   */
+  settleFor(
+    node: StyleTarget,
+    deferred: readonly DeferredDeclaration[],
+    epoch: number,
+  ): Record<string, unknown> {
+    const { tokens } = this.resolve(node, epoch);
+    const above = node.parent ? this.resolve(node.parent, epoch).inherited : EMPTY;
+    const own: Record<string, unknown> = {};
+    this.applyDeferred(deferred, own, tokens, above, null);
+    return own;
+  }
+
   private applyDeferred(
     deferred: readonly DeferredDeclaration[],
     own: Record<string, unknown>,

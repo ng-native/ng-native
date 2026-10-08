@@ -664,7 +664,7 @@
   },
   "pico": {
     "rules": 462,
-    "dropped": 304,
+    "dropped": 302,
     "emitted": [
       "$animation",
       "$animationDelay",
@@ -919,9 +919,6 @@
       },
       "text-underline-offset": {
         "'text-underline-offset' has no React Native equivalent: no style prop of a native view does what it does.": 2
-      },
-      "transform": {
-        "a keyframe's values are settled at build time, so var(), em and the viewport units cannot be used in one. Write the value in px, rem or %.": 2
       },
       "transition": {
         "'transition' mixes var() with other values, which needs a parser on device. calc() of tokens, numbers and points, max(var(--x), <length>), colours and transforms are understood; anything else has to be worked out at build time.": 11

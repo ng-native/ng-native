@@ -4205,7 +4205,8 @@ export class Engine implements HostEngine {
       return props;
     }
 
-    const frames = this.keyframesOf(node, spec.name);
+    const written = this.keyframesOf(node, spec.name);
+    const frames = written && this.framesFor(node, written);
     if (!frames) {
       // Keyframes a hot swap deleted, from under an animation that was playing them, or ones a
       // sheet later in this commit has: see `settleKeyframes`.
@@ -4232,6 +4233,36 @@ export class Engine implements HostEngine {
   private keyframesOf(node: EngineNode, name: string): readonly Keyframe[] | undefined {
     const own = node.sheet?.keyframes?.[name] ?? node.hostSheet?.keyframes?.[name];
     return own ?? this.keyframes.get(name);
+  }
+
+  /** Each node's frames as they settle on it, kept for as long as they settle the same. */
+  private readonly settledFrames = new WeakMap<
+    EngineNode,
+    { of: readonly Keyframe[]; key: string; frames: readonly Keyframe[] }
+  >();
+
+  /**
+   * An animation's frames for the node playing it: those with a value that waits for the node,
+   * a `var()` it sets, settled against it. The same frames are answered while they settle the
+   * same, and others once a variable changes, which is what an animation under way is played
+   * on from: see `reframe`.
+   */
+  private framesFor(node: EngineNode, frames: readonly Keyframe[]): readonly Keyframe[] {
+    if (!frames.some((frame) => frame.deferred)) return frames;
+    const settled = frames.map(
+      (frame) => frame.deferred && this.styles.settleFor(node, frame.deferred, this.styleEpoch),
+    );
+    const key = JSON.stringify(settled);
+    const kept = this.settledFrames.get(node);
+    if (kept?.of === frames && kept.key === key) return kept.frames;
+    const made = frames.map((frame, at) => {
+      const values = Object.entries(settled[at] ?? {}).filter(([, value]) => value !== undefined);
+      return values.length
+        ? { ...frame, declarations: { ...frame.declarations, ...Object.fromEntries(values) } }
+        : frame;
+    });
+    this.settledFrames.set(node, { of: frames, key, frames: made });
+    return made;
   }
 
   /**

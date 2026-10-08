@@ -121,6 +121,12 @@ A duration or delay can be a token, or `calc()` with tokens in it, which is how 
 its rows: `animation-delay: calc(var(--i) * 60ms)` with `[style.--i]="$index"` on each. A token of
 time is read in milliseconds whatever unit it was written in.
 
+A keyframe's value can be a token too, or an `em` or a viewport unit: it is settled against the
+element that plays the frame, as in a browser, so `to { height: var(--panel-height) }` opens each
+panel to the height set on it. A token that changes while the animation plays moves the frame,
+and the animation goes on from where its clock has got to. `currentColor` is taken by `color`
+alone, as the colour the element inherits.
+
 An `animation-timing-function` written inside a keyframe eases from that keyframe to the next, as in
 CSS, over the animation's own: Tailwind's `animate-bounce` falls on one curve and rises on another.
 A keyframe that sets `transform: none` eases to the identity of the translate, scale, rotate and
