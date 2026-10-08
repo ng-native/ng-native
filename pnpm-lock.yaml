@@ -192,8 +192,8 @@ importers:
         specifier: workspace:*
         version: link:../../template
       '@oxc-angular/vite':
-        specifier: 0.0.38
-        version: 0.0.38(vite@8.3.1(@types/node@26.6.3)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.51.2)(yaml@2.9.1))
+        specifier: 0.0.40
+        version: 0.0.40(vite@8.3.1(@types/node@26.6.3)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.51.2)(yaml@2.9.1))
       '@playwright/test':
         specifier: 1.63.0
         version: 1.63.0
@@ -1546,8 +1546,8 @@ importers:
         specifier: workspace:*
         version: link:../web
       '@oxc-angular/vite':
-        specifier: 0.0.38
-        version: 0.0.38(vite@8.3.1(@types/node@26.6.3)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.51.2)(yaml@2.9.1))
+        specifier: 0.0.40
+        version: 0.0.40(vite@8.3.1(@types/node@26.6.3)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.51.2)(yaml@2.9.1))
       '@picocss/pico':
         specifier: 2.1.1
         version: 2.1.1
@@ -1669,8 +1669,8 @@ importers:
         specifier: ^0.3.25
         version: 0.3.31
       '@oxc-angular/vite':
-        specifier: 0.0.38
-        version: 0.0.38(vite@8.3.1(@types/node@26.6.3)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.51.2)(yaml@2.9.1))
+        specifier: 0.0.40
+        version: 0.0.40(vite@8.3.1(@types/node@26.6.3)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.51.2)(yaml@2.9.1))
       front-matter:
         specifier: ^4.0.2
         version: 4.0.2
@@ -1856,8 +1856,8 @@ importers:
         specifier: workspace:*
         version: link:../fabric
       '@oxc-angular/vite':
-        specifier: 0.0.38
-        version: 0.0.38(vite@8.3.1(@types/node@26.6.3)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.51.2)(yaml@2.9.1))
+        specifier: 0.0.40
+        version: 0.0.40(vite@8.3.1(@types/node@26.6.3)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.51.2)(yaml@2.9.1))
     devDependencies:
       '@angular/common':
         specifier: 22.2.0
@@ -3574,52 +3574,52 @@ packages:
   '@nx/workspace@23.2.1':
     resolution: {integrity: sha512-lC5NdIQUK7tmz4SeJE0zJ+DTDTAYvbs88gZJQZBwAqkky20ZlRnJiebrOXHlhhVn6Cn35XVLmEkhEsZVda1R0A==}
 
-  '@oxc-angular/binding-darwin-arm64@0.0.38':
-    resolution: {integrity: sha512-cThJX0un3k26MWAncsrEZdyZMBpP73HJax6VdN9Ghw43Og/Ymin0ln2+M35HMsdLRIPka15o6DbawmnkMVuMMg==}
+  '@oxc-angular/binding-darwin-arm64@0.0.40':
+    resolution: {integrity: sha512-oVQJ3/PmOD0R0OdivTxfA7X1aEnXoXQPGBVXZ2G7d7iAfSZgR0n1ME2+HnKysM/HDafn5TDZCQqXyUeWgsqVIg==}
     cpu: [arm64]
     os: [darwin]
 
-  '@oxc-angular/binding-darwin-x64@0.0.38':
-    resolution: {integrity: sha512-zjqw8GyfWQVnNcLhro3wv4/l28RYVFlNzsap6F1shrDYkdXF5omSae3KvhEqG/uxNVmQq0C+iMng2GHraLIiYg==}
+  '@oxc-angular/binding-darwin-x64@0.0.40':
+    resolution: {integrity: sha512-ktkmH+CWS77Xin3nvA7npxPRuWmQqswpbderCl15lJ9WyniHYFKriSwJ1RyIqJAD/mi16JRB4SHyHg9YbXy/3Q==}
     cpu: [x64]
     os: [darwin]
 
-  '@oxc-angular/binding-linux-arm64-gnu@0.0.38':
-    resolution: {integrity: sha512-BHXPDZUHgG3bsOOz2ZXZdLgmJalRFdUI2afva/cx72Q+GZnM2TWOegIuxLR1n1wKaVC5fSBd7QCgotsgd6IGXg==}
+  '@oxc-angular/binding-linux-arm64-gnu@0.0.40':
+    resolution: {integrity: sha512-mtc8tMKFr6Ii1ucOBY6/vV0br8hNHiIdDJpK5SgU2PETnFcfa2Y6gZpSPG5+K34ZKHcogYMVcz62uTTqEzBLqg==}
     cpu: [arm64]
     os: [linux]
     libc: [glibc]
 
-  '@oxc-angular/binding-linux-arm64-musl@0.0.38':
-    resolution: {integrity: sha512-zVAP5lhaGrRCHj8UmbAY00YDmG93PeZmJHOhFGoJ9h/UmqYtIy32ICUR30G+J+FW2bzf+lnXP7jBZz8Rqy1OWQ==}
+  '@oxc-angular/binding-linux-arm64-musl@0.0.40':
+    resolution: {integrity: sha512-xgta5kYljpHzayzzGvlA1m5wY/BBSJFF57+om+6ldf5iznNpIb9O5KfmoELVwPwLUzFVBVr5KsB3wGT1J0gvYw==}
     cpu: [arm64]
     os: [linux]
     libc: [musl]
 
-  '@oxc-angular/binding-linux-x64-gnu@0.0.38':
-    resolution: {integrity: sha512-CAr1SPQv9go3lhJ/NzjKWDjm3UL5T/YdhCd7drkxzi+RMRhFLqB4PFFD6JAfcDYDn2pXpi2IMN2ngsWPVMFHlA==}
+  '@oxc-angular/binding-linux-x64-gnu@0.0.40':
+    resolution: {integrity: sha512-av7LPRHrYDLZ/+GnqUQYRV7V/5q5X09puV1SUgf54tIVjhPG/YN3FszPV7KhCPOlUWfZTytkuIpXn1/2OW7/Dw==}
     cpu: [x64]
     os: [linux]
     libc: [glibc]
 
-  '@oxc-angular/binding-linux-x64-musl@0.0.38':
-    resolution: {integrity: sha512-dFfbllANkvRLUUW4x035OyDssJZ6J8uMke93dunqO5Nth9pkpl6L+dObm1J+JzxIFA3zYuh5w+kv8I1Iyb585w==}
+  '@oxc-angular/binding-linux-x64-musl@0.0.40':
+    resolution: {integrity: sha512-WB6qolmIHeF9uk6axElbBCyON6cwDNQNTy8h2sAVifpRUQg2B/FkRW85M3zNS5MX1fk/nwlU5RdRwvUBUc+v2w==}
     cpu: [x64]
     os: [linux]
     libc: [musl]
 
-  '@oxc-angular/binding-win32-arm64-msvc@0.0.38':
-    resolution: {integrity: sha512-NHf/5kPJFEToxdna/xo1KKPcgYsjkGZhFXyL7gg/bbBV32vVdCsSCVoASQZNC90Q5hGyOahhkONAjNdo20fvlw==}
+  '@oxc-angular/binding-win32-arm64-msvc@0.0.40':
+    resolution: {integrity: sha512-h9UiK8hjUOQcKotsM5QrXHLxQHkknNpeJJpwYrGn786jdIcG4gw2bPKOYtKwRB98NPf806FMwIpWGX2gyPO3Jw==}
     cpu: [arm64]
     os: [win32]
 
-  '@oxc-angular/binding-win32-x64-msvc@0.0.38':
-    resolution: {integrity: sha512-CJzolJla8PpVSei6BoH4FAId8GtUEHakIfNK/5vLuJofKCqpwVXNqGKOLOzjPOqamtMwyvF6MT+U6Jo694okQA==}
+  '@oxc-angular/binding-win32-x64-msvc@0.0.40':
+    resolution: {integrity: sha512-qYtflz/kRejksaKMqOEpeoIb0VsfZHdYyOMmgws37csmxf/XXN7hfLYSReVbpkFU58SZ8Ex5TuAZXVy3aN2k0Q==}
     cpu: [x64]
     os: [win32]
 
-  '@oxc-angular/vite@0.0.38':
-    resolution: {integrity: sha512-FjFA/zXIO6OHiMABvdtJCKLWSwx/kx4LGyo45p9Ak83zdObgNUQqJYt5gPDXzpGA8fR0Ni61HGY63w8msEIF6g==}
+  '@oxc-angular/vite@0.0.40':
+    resolution: {integrity: sha512-V9iCpw+WWotHEx6rxvL6YuzVGZB5wd2g2vYiaQdAW1XETnxm3k/X5P88NZwTkIDSAWb+fpc9PSa4obr3OqVzdg==}
     peerDependencies:
       vite: '>=8.0.0'
 
@@ -7016,6 +7016,10 @@ packages:
     resolution: {integrity: sha512-4a+OsYv9UktOJKE+l1A4OufDgdRF9PifWj+tJnHURo/P+WOxpG4GzUFL9qCalmWauao6ogiG+QvnCovwPoyAWA==}
     engines: {node: '>=12.20.0'}
 
+  obug@3.0.0:
+    resolution: {integrity: sha512-5vvB5+W7ePv+p3uqxi+RcW1XAzLW0/hxt3/4X4Lc4qHudzOhmBiBwOY6DRob4WnanAEGvNcLjF+KNOufrUoEQw==}
+    engines: {node: '>=12.20.0'}
+
   on-finished@2.3.0:
     resolution: {integrity: sha512-ikqdkGAAyf/X/gPhXGvfgAytDZtDbr+bkNUJ0N9h5MI/dmdgCs3l6hoHrcUv41sRKew3jIwrp4qQDXiK99Utww==}
     engines: {node: '>= 0.8'}
@@ -10323,43 +10327,43 @@ snapshots:
       - '@swc/core'
       - typescript
 
-  '@oxc-angular/binding-darwin-arm64@0.0.38':
+  '@oxc-angular/binding-darwin-arm64@0.0.40':
     optional: true
 
-  '@oxc-angular/binding-darwin-x64@0.0.38':
+  '@oxc-angular/binding-darwin-x64@0.0.40':
     optional: true
 
-  '@oxc-angular/binding-linux-arm64-gnu@0.0.38':
+  '@oxc-angular/binding-linux-arm64-gnu@0.0.40':
     optional: true
 
-  '@oxc-angular/binding-linux-arm64-musl@0.0.38':
+  '@oxc-angular/binding-linux-arm64-musl@0.0.40':
     optional: true
 
-  '@oxc-angular/binding-linux-x64-gnu@0.0.38':
+  '@oxc-angular/binding-linux-x64-gnu@0.0.40':
     optional: true
 
-  '@oxc-angular/binding-linux-x64-musl@0.0.38':
+  '@oxc-angular/binding-linux-x64-musl@0.0.40':
     optional: true
 
-  '@oxc-angular/binding-win32-arm64-msvc@0.0.38':
+  '@oxc-angular/binding-win32-arm64-msvc@0.0.40':
     optional: true
 
-  '@oxc-angular/binding-win32-x64-msvc@0.0.38':
+  '@oxc-angular/binding-win32-x64-msvc@0.0.40':
     optional: true
 
-  '@oxc-angular/vite@0.0.38(vite@8.3.1(@types/node@26.6.3)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.51.2)(yaml@2.9.1))':
+  '@oxc-angular/vite@0.0.40(vite@8.3.1(@types/node@26.6.3)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.51.2)(yaml@2.9.1))':
     dependencies:
-      obug: 2.1.4
+      obug: 3.0.0
       vite: 8.3.1(@types/node@26.6.3)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.51.2)(yaml@2.9.1)
     optionalDependencies:
-      '@oxc-angular/binding-darwin-arm64': 0.0.38
-      '@oxc-angular/binding-darwin-x64': 0.0.38
-      '@oxc-angular/binding-linux-arm64-gnu': 0.0.38
-      '@oxc-angular/binding-linux-arm64-musl': 0.0.38
-      '@oxc-angular/binding-linux-x64-gnu': 0.0.38
-      '@oxc-angular/binding-linux-x64-musl': 0.0.38
-      '@oxc-angular/binding-win32-arm64-msvc': 0.0.38
-      '@oxc-angular/binding-win32-x64-msvc': 0.0.38
+      '@oxc-angular/binding-darwin-arm64': 0.0.40
+      '@oxc-angular/binding-darwin-x64': 0.0.40
+      '@oxc-angular/binding-linux-arm64-gnu': 0.0.40
+      '@oxc-angular/binding-linux-arm64-musl': 0.0.40
+      '@oxc-angular/binding-linux-x64-gnu': 0.0.40
+      '@oxc-angular/binding-linux-x64-musl': 0.0.40
+      '@oxc-angular/binding-win32-arm64-msvc': 0.0.40
+      '@oxc-angular/binding-win32-x64-msvc': 0.0.40
 
   '@oxc-parser/binding-android-arm-eabi@0.127.0':
     optional: true
@@ -13894,6 +13898,8 @@ snapshots:
   object-hash@3.0.0: {}
 
   obug@2.1.4: {}
+
+  obug@3.0.0: {}
 
   on-finished@2.3.0:
     dependencies:

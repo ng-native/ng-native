@@ -77,36 +77,7 @@ function assertTemplatesCompiled(code, src, filename, components) {
 }
 
 /**
- * `@oxc-angular/vite` (through 0.0.39, the newest release as this was written) mis-emits an
- * object method shorthand found inside decorator metadata - `providers: [{ useValue: {
- * attach() {} } }]`, or the same shape in `host` - dropping the `function`/`async`/`get` keyword
- * the shorthand implies. The compiler reports zero errors; the result is not valid JavaScript,
- * so it only fails later, cryptically, wherever the module is parsed.
- *
- * `identifier:(params) {` is never valid output otherwise: a real function value always carries
- * either `function` before the parameter list or `=>` after it, and a class's own method syntax
- * has no colon before the parameter list. Turn the silent bad output into a clear, immediate
- * build failure naming the fix, rather than a `SyntaxError` with no context downstream.
- */
-const BROKEN_METHOD_SHORTHAND = /([A-Za-z_$][\w$]*)\s*:\s*\(([^()]*)\)\s*\{/;
-
-function assertNoBrokenMethodShorthand(code, filename) {
-  const match = BROKEN_METHOD_SHORTHAND.exec(code);
-  if (!match) return;
-
-  const [, key, params] = match;
-  throw new Error(
-    `${filename}: a method shorthand inside this component's decorator metadata (for example, ` +
-      `in "providers" or "host") compiled to invalid code: "${key}:(${params}) {" is not valid ` +
-      'JavaScript. This is a known @oxc-angular/vite bug (confirmed through 0.0.39): it drops the ' +
-      '"function"/"async"/"get" keyword when re-emitting a method shorthand found in decorator ' +
-      `metadata. Work around it by writing the value explicitly instead of shorthand - ` +
-      `"${key}: function (${params}) { ... }" rather than "${key}(${params}) { ... }".`,
-  );
-}
-
-/**
- * `@oxc-angular/vite` (through 0.0.39) resolves a template arrow function's own parameter against
+ * `@oxc-angular/vite` (through 0.0.40) resolves a template arrow function's own parameter against
  * the component: `(o) => !o` compiles to `(o) => !ctx.o`, which reads `undefined` at runtime with
  * no error from the compiler. Angular itself scopes the parameter correctly.
  *
@@ -128,7 +99,7 @@ function assertNoShadowedArrowParameters(code, filename) {
     throw new Error(
       `${filename}: an arrow function in this component's template reads its own parameter ` +
         `"${parameter}", and it compiled as the component's "${parameter}" instead. This is a known ` +
-        '@oxc-angular/vite bug (confirmed through 0.0.39). Move the logic into a component ' +
+        '@oxc-angular/vite bug (confirmed through 0.0.40). Move the logic into a component ' +
         'method and call that from the template.',
     );
   }
@@ -814,7 +785,7 @@ function collisionQuiet(filename, components) {
  * The update-metadata function for one component's template, named for it.
  *
  * The compiler's update function spreads the live definition and replaces the template, but
- * leaves `decls`, `vars` and `ngContentSelectors` as they were (`@oxc-angular/vite` 0.0.38). Those
+ * leaves `decls`, `vars` and `ngContentSelectors` as they were (`@oxc-angular/vite` 0.0.40). Those
  * size the view the swap rebuilds, so a template that gained an element or a binding ran off the
  * end of a view laid out for the one before it: an assertion halfway through the swap, and a
  * half-built view left in the tree. So they are read off a full compile of the same template and
@@ -828,19 +799,15 @@ function collisionQuiet(filename, components) {
  * longer a form control (NG01914).
  */
 function hotUpdate(template, component, filename, options) {
-  // The compiler builds a `path@ClassName` id and reads the class name back from the first `@`,
-  // so a scoped package's `node_modules/@scope/...` path named the update function after the
-  // path. The id only has to agree with itself, so the `@` goes.
-  const file = filename.replaceAll('@', '_');
   const result = compileForHmrSync(
     template,
     component.className,
-    file,
+    filename,
     component.styles ?? null,
     options,
   );
   if (result.errors.length) return null;
-  const layout = templateLayout(template, component.className, file, options);
+  const layout = templateLayout(template, component.className, filename, options);
   const spread = `...${component.className}.ɵcmp,`;
   if (!layout || !result.hmrModule.includes(spread)) return null;
   const name = `${component.className}_ApplyMetadata`;
@@ -1429,7 +1396,6 @@ function transformAngular(src, filename, options = {}) {
     };
 
     const { result, dependencies, resources } = compileTwice(src, filename, compilerOptions);
-    assertNoBrokenMethodShorthand(result.code, filename);
     assertNoShadowedArrowParameters(result.code, filename);
     // Not guarded: a failure here used to fall back to "no components", which compiled the file
     // with no stylesheet and no HMR block and said nothing. A dropped sheet is the one failure
@@ -1517,10 +1483,9 @@ module.exports = {
   takeResourcesRead,
   isResource,
   // Exported for `apps/documentation/vite.config.ts`'s own small Vite plugin, which runs the same
-  // two checks against `@oxc-angular/vite`'s Vite output - the docs site compiles its own Angular
+  // check against `@oxc-angular/vite`'s Vite output - the docs site compiles its own Angular
   // straight out of `@ng-native/components`' source rather than through this Metro pipeline, and
-  // is exposed to the same two compiler bugs. Shared rather than copied, so a third confirmed bug
-  // in the compiler is one fix rather than two.
-  assertNoBrokenMethodShorthand,
+  // is exposed to the same compiler bug. Shared rather than copied, so another confirmed bug in
+  // the compiler is one fix rather than two.
   assertNoShadowedArrowParameters,
 };

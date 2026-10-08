@@ -37,27 +37,27 @@ Reanimated worklets (`WorkletStyle`, `WorkletScroll`) for anything driven by a g
 every frame. Both need the Metro preset's polyfills, which `withAngularNative` installs
 automatically - see [Metro](/packages/metro).
 
-## i18n is partial
+## i18n is runtime only
 
-Angular i18n translates at runtime using template `i18n`, TypeScript `$localize`,
-`localize-extract` over the Metro bundle, and `loadTranslations()` before mount. See
-[Localization](/guide/localization). The Metro preset's template compiler has two gaps:
-
-- **Plurals and selects** (`{count, plural, =1 {one item} other {...}}`) throw
-  `Unable to parse ICU expression` when the component first renders. The compiler drops the ICU's
-  placeholders.
-- **`i18n-` attributes** (`i18n-accessibilityLabel`) lose their source text: in the source language
-  the attribute is empty, and so is the extracted message.
+Angular i18n translates at runtime using template `i18n` and `i18n-` attributes, plurals and
+selects, TypeScript `$localize`, `localize-extract` over the Metro bundle, and `loadTranslations()`
+before mount. See [Localization](/guide/localization).
 
 Loading a language after rendering does not update existing templates; switching language requires
 an app reload. Metro has no build-time translation (`localize-translate`), and `ng extract-i18n`
 cannot build native apps.
 
-**Workaround:** the `i18nPlural` pipe with a `$localize` string per form for a plural, `@switch`
-with an `i18n` message per case for a select, and a bound `$localize` string
-(`[accessibilityLabel]="closeLabel"`) for an attribute. Install `@babel/core@^7` next to
-`@angular/localize`, which depends on Babel 8: without it React Native's unranged Babel peer can
-resolve to 8, and a worklets bundle then fails.
+Plurals and selects work on iOS and Android. On the [web host](/packages/web) one throws in a
+development build, and picks its case by the rules of `en-US` whatever the `LOCALE_ID`; use the
+`i18nPlural` pipe and `@switch` there.
+
+A case of a plural or select holds text and interpolations. Angular keeps an element inside a case
+only when it is on its HTML allowlist, which no native element is, so `<text>` inside a case is
+left out along with its content.
+
+**Workaround:** style a whole plural or select from the element around it. Install `@babel/core@^7`
+next to `@angular/localize`, which depends on Babel 8: without it React Native's unranged Babel
+peer can resolve to 8, and a worklets bundle then fails.
 
 ## Angular DevTools does not attach
 
@@ -158,19 +158,6 @@ External templates and stylesheets hot-swap in every component using them within
 project, including `../` paths. Cross-package monorepo edits appear only after the component's own
 file changes.
 
-## No method shorthand inside decorator metadata
-
-ES2015 method shorthand in decorator metadata, such as
-`providers: [{ provide: X, useValue: { attach() {} } }]` or an equivalent `host` object, fails to
-build. An `@oxc-angular/vite` bug, confirmed through 0.0.39, drops the implied
-`function`/`async`/`get` keyword when re-emitting the object. The compiler reports no error, but
-Angular Native catches the invalid JavaScript and reports the property and file, preventing a later
-unexplained `SyntaxError`.
-
-**Workaround:** write `useValue: { attach: function ()
-{} } }` instead of `useValue: { attach() {} } }`. An arrow (`attach: () => {}`) also works if it
-does not need its own `this`.
-
 ## No spread or constant as a component's `host`
 
 A component's `host` is read at build time as an object literal written out in the decorator: each
@@ -187,7 +174,7 @@ listeners never fire and the attributes never appear.
 
 A template arrow that reads its parameter, such as `(press)="open.update((was) => !was)"`, compiles
 as though the parameter were a component property and reads `undefined`. The compiler reports no
-error. This `@oxc-angular/vite` bug is confirmed through 0.0.39; Angular Native catches it at build
+error. This `@oxc-angular/vite` bug is confirmed through 0.0.40; Angular Native catches it at build
 time and names the file and parameter. Parameterless arrows such as `() => !open()` work.
 
 **Workaround:** move the logic into a component method, such as `toggle()`, and call that from the
@@ -195,8 +182,8 @@ template.
 
 ## A malformed control-flow block is caught by a second parse
 
-`@oxc-angular/vite` (0.0.38) silently drops the rest of a template after an unclosed control-flow
-parameter list such as `@if (on() {`, or a `@let` without a closing semicolon. Angular Native
+`@oxc-angular/vite` (0.0.40) silently drops the rest of a template after an unclosed control-flow
+parameter list such as `@if (on() {`. Angular Native
 parses every template again with Angular's parser and fails with its message, line and column.
 Errors point to the component file for inline templates or the template file for `templateUrl`.
 The check runs in tests, production builds and hot reload, which preserves the previous template

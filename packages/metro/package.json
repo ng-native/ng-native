@@ -21,7 +21,7 @@
     "@angular/compiler": "^22.0.0",
     "@babel/parser": "^7.29.0",
     "@jridgewell/trace-mapping": "^0.3.25",
-    "@oxc-angular/vite": "0.0.38",
+    "@oxc-angular/vite": "0.0.40",
     "front-matter": "^4.0.2",
     "lightningcss": "^1.30.2"
   },

@@ -23,7 +23,7 @@ The output for the snippets in [Localization](/guide/localization), trimmed:
   "translations": {
     "home.title": "Your basket",
     "home.greeting": "Hello, {$INTERPOLATION}!",
-    "home.hint": "Tap {$STARTTAGTEXT}the basket{$CLOSETAGTEXT} to check out",
+    "home.hint": "Tap {$START_TAG_TEXT}the basket{$CLOSE_TAG_TEXT} to check out",
     "editor.save": "Save",
     "basket.other": "# items"
   }
@@ -41,7 +41,7 @@ Extraction includes template messages and `$localize` strings from app code only
   "translations": {
     "home.title": "Votre panier",
     "home.greeting": "Bonjour, {$INTERPOLATION} !",
-    "home.hint": "Touchez {$STARTTAGTEXT}le panier{$CLOSETAGTEXT} pour payer",
+    "home.hint": "Touchez {$START_TAG_TEXT}le panier{$CLOSE_TAG_TEXT} pour payer",
     "editor.save": "Enregistrer",
     "basket.other": "# articles"
   }

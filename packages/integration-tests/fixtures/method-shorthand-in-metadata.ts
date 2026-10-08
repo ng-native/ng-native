@@ -1,8 +1,7 @@
 import { Component } from '@angular/core';
 
-// Deliberately wrong: method shorthand inside decorator metadata is an @oxc-angular/vite bug
-// (confirmed through 0.0.39) - it compiles to invalid JavaScript with zero reported errors.
-// Guard fixture; see apps/documentation/src/content/guide/limitations.md.
+// A method shorthand inside decorator metadata, which @oxc-angular/vite compiled to invalid
+// JavaScript through 0.0.39, with no error reported.
 class Token {}
 
 @Component({

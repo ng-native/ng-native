@@ -14,6 +14,16 @@ import { Text, View } from '../../components/src/index.ts';
         >Tap <text nativeID="inner">here</text> to start</text
       >
       <text nativeID="save" [accessibilityLabel]="saveLabel">{{ saveLabel }}</text>
+      <text
+        nativeID="close"
+        i18n-accessibilityLabel="@@closeLabel"
+        accessibilityLabel="Close"
+      ></text>
+      <text nativeID="basket" i18n="@@basketCount">{count(), plural,
+        =0 {No items}
+        one {One item}
+        other {{{ count() }} items}
+      }</text>
       @switch (author()) {
         @case ('me') {
           <text nativeID="reply" i18n="@@reply.mine">You replied</text>
@@ -28,6 +38,7 @@ import { Text, View } from '../../components/src/index.ts';
 export class Messages {
   readonly name = signal('Ada');
   readonly author = signal('me');
+  readonly count = signal(0);
   protected readonly saveLabel = $localize`:@@saveButton:Save`;
 }
 
@@ -38,6 +49,10 @@ export class Messages {
   template: `
     <view>
       <text nativeID="items">{{ count() | i18nPlural: items }}</text>
+      <text nativeID="found" i18n="@@found">{count(), plural,
+        one {{{ count() }} result}
+        other {{{ count() }} results}
+      }</text>
       <text nativeID="date">{{ when | date: 'longDate' }}</text>
       <text nativeID="number">{{ 1234567.891 | number: '1.0-2' }}</text>
       <text nativeID="price">{{ 1234.5 | currency: 'EUR' }}</text>

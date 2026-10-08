@@ -84,9 +84,9 @@ uses the same text-and-meaning hash as `localize-extract`. Changing the English 
 orphaning its translations. Prefer custom IDs.
 
 Interpolations become placeholders (`{$INTERPOLATION}`). Nested elements produce paired
-placeholders (`{$STARTTAGTEXT}` and `{$CLOSETAGTEXT}`), letting translations move styled text to
-suit their grammar. Use names from the extracted file, which match this compiler's runtime, rather
-than Angular's documentation.
+placeholders named for the element (`{$START_TAG_TEXT}` and `{$CLOSE_TAG_TEXT}` for a `<text>`),
+letting translations move styled text to suit their grammar. Use the names from the extracted
+file: a block inside a message has a pair too, such as `{$START_BLOCK_IF}`.
 
 ### In TypeScript
 
@@ -109,30 +109,54 @@ remain in the source language.
 
 ### Attributes
 
-Bind a `$localize` string rather than marking the attribute with `i18n-`:
+`i18n-` before an attribute's name marks its value as a message, with the same
+`meaning|description@@id` format:
 
 ```html
 <pressable
   accessibilityRole="button"
-  [accessibilityLabel]="closeLabel"
+  i18n-accessibilityLabel="@@dialog.close"
+  accessibilityLabel="Close the dialog"
   (press)="close()"
 ></pressable>
 ```
 
-```ts
-protected readonly closeLabel = $localize`:@@dialog.close:Close the dialog`;
-```
-
-`i18n-accessibilityLabel` compiles but loses its source text. The extracted message is empty;
-without a translation, the label is also empty. A screen reader reading nothing is worse than
-one reading English.
+A label built in code is a `$localize` string, bound as any other value:
+`[accessibilityLabel]="closeLabel"`.
 
 ### Plurals and selects
 
-ICU expressions (`{count, plural, =0 {...} other {...}}`) lose their placeholders during compilation
-and throw `Unable to parse ICU expression` on first render. Use these alternatives.
+An ICU expression chooses between messages by a number or a string, on iOS and Android; for the
+web host see [Known limitations](/guide/limitations#i18n-is-runtime-only). Give it an element of
+its own, so the whole expression is one message under your ID:
 
-For a plural, Angular's `i18nPlural` pipe, with each form as a message of its own:
+```html
+<text i18n="@@basket.count"
+  >{count(), plural, =0 {Your basket is empty} one {One item} other {{{ count() }} items}}</text
+>
+<text i18n="@@reply.author">{reply().author, select, me {You replied} other {They replied}}</text>
+```
+
+A plural takes an exact `=N` case first. Otherwise `LOCALE_ID` selects a category using Angular's
+locale data, not `Intl`. Include every category your languages need: English uses `one` and
+`other`; Polish also uses `few` and `many`. Missing categories fall back to `other`.
+
+The translation is the same expression with its cases translated. The value it chooses by is
+`VAR_PLURAL` or `VAR_SELECT`, and an interpolation in a case is `{INTERPOLATION}`:
+
+```json
+"basket.count": "{VAR_PLURAL, plural, =0 {Votre panier est vide} one {Un article} other {{INTERPOLATION} articles}}"
+```
+
+A case holds text and interpolations. An element inside a case, such as `<text>`, is left out with
+its content; see [Known limitations](/guide/limitations#i18n-is-runtime-only). A case is read as
+HTML, so write `&amp;` and `&lt;` for `&` and `<` in a translation. Numeric character references
+are read, and of the named ones only `&amp;`, `&lt;`, `&gt;`, `&quot;`, `&apos;` and `&nbsp;`.
+
+With text beside the expression in the same element, Angular extracts the expression as a second
+message under a computed ID.
+
+For a plural in TypeScript, use Angular's `i18nPlural` pipe with a `$localize` string per form:
 
 ```ts
 import { Component, input } from '@angular/core';
@@ -154,36 +178,10 @@ export class BasketCount {
 }
 ```
 
-An exact `=N` key takes precedence. Otherwise, `LOCALE_ID` selects a category using Angular's locale
-data, not `Intl`; `#` becomes the number. That is also the way to choose a category in code: Hermes
-has `Intl.NumberFormat` and `Intl.DateTimeFormat` but no `Intl.PluralRules`, so
-`new Intl.PluralRules(...)` throws on device. `inject(NgLocalization).getPluralCategory(count)` from
-`@angular/common` answers the same question from the locale data you registered. Include every
-category your languages need: English uses `one` and `other`; Polish also uses `few` and `many`.
-Missing categories fall back to `other`. Repeat the English text for categories without a distinct
-English form.
-
-For selects, use `@switch` with an `i18n` message per case:
-
-```ts
-@Component({
-  selector: 'app-reply-line',
-  imports: [Text],
-  template: `
-    @switch (reply().author) {
-      @case ('me') {
-        <text i18n="@@reply.mine">You replied</text>
-      }
-      @default {
-        <text i18n="@@reply.theirs">{{ reply().name }} replied</text>
-      }
-    }
-  `,
-})
-export class ReplyLine {
-  readonly reply = input.required<{ author: string; name: string }>();
-}
-```
+`#` becomes the number. To choose a category in code, use
+`inject(NgLocalization).getPluralCategory(count)` from `@angular/common`: Hermes has
+`Intl.NumberFormat` and `Intl.DateTimeFormat` but no `Intl.PluralRules`, so
+`new Intl.PluralRules(...)` throws on device.
 
 ## Recipes
 
@@ -197,12 +195,9 @@ export class ReplyLine {
 
 ## What does not work yet
 
-- **ICU plurals and selects** throw on first render. Use `i18nPlural` and `@switch`.
-- **`i18n-` attributes** lose their source text. Bind a `$localize` string.
 - **Build-time translation** (`localize-translate`, one bundle per language) has no Metro
   integration or verification. Use runtime translation.
 - **`ng extract-i18n`** requires an unsupported browser build. Use `localize-extract` on the Metro
   bundle; see [Extracting messages](/guide/localization-extraction).
 
-The first two gaps affect the Metro preset's template compiler; see
-[Known limitations](/guide/limitations#i18n-is-partial).
+See [Known limitations](/guide/limitations#i18n-is-runtime-only).

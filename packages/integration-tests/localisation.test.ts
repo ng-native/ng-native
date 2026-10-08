@@ -47,8 +47,12 @@ const TITLE_ID = ɵcomputeMsgId('Welcome', 'home screen');
 const FRENCH = {
   greeting: 'Bonjour, {$INTERPOLATION} !',
   [TITLE_ID]: 'Bienvenue',
-  startHint: 'Touchez {$STARTTAGTEXT}ici{$CLOSETAGTEXT} pour commencer',
+  startHint: 'Touchez {$START_TAG_TEXT}ici{$CLOSE_TAG_TEXT} pour commencer',
   saveButton: 'Enregistrer',
+  closeLabel: 'Fermer',
+  basketCount:
+    '{VAR_PLURAL, plural, =0 {Aucun article&#1114112;} one {Un article} other {{INTERPOLATION} articles &amp; plus}}',
+  found: '{VAR_PLURAL, plural, one {{INTERPOLATION} résultat} other {{INTERPOLATION} résultats}}',
   'reply.mine': 'Vous avez répondu',
   'reply.theirs': '{$INTERPOLATION} a répondu',
   'basket.empty': 'Votre panier est vide',
@@ -90,7 +94,25 @@ describe('marking text, with a translation loaded before the first render', () =
     assert.equal(screen.getByTestId('save').props['accessibilityLabel'], 'Enregistrer');
   });
 
-  it('selects between messages with @switch, in place of an ICU select', async () => {
+  it('translates an attribute marked with i18n-', async () => {
+    await render(fixture['Messages'] as Type<unknown>);
+    assert.equal(screen.getByTestId('close').props['accessibilityLabel'], 'Fermer');
+  });
+
+  it('translates a plural, reading a character reference in a case as the character', async () => {
+    const { instance } = await render(fixture['Messages'] as Type<unknown>);
+    // One past the last code point: U+FFFD as HTML makes it, where `fromCodePoint` threw.
+    assert.equal(textOf('basket'), 'Aucun article\ufffd');
+    const count = (instance as { count: { set(n: number): void } }).count;
+    count.set(1);
+    await settle();
+    assert.equal(textOf('basket'), 'Un article');
+    count.set(3);
+    await settle();
+    assert.equal(textOf('basket'), '3 articles & plus');
+  });
+
+  it('selects between messages with @switch', async () => {
     const { instance } = await render(fixture['Messages'] as Type<unknown>);
     assert.equal(textOf('reply'), 'Vous avez répondu');
     (instance as { author: { set(v: string): void } }).author.set('them');
@@ -177,6 +199,15 @@ describe('choosing the language from the device, before the root renders', () =>
     assert.equal(textOf('price'), '1 234,50 €');
   });
 
+  it('picks the case of a template plural by the rules of LOCALE_ID, not of en-US', async () => {
+    // Zero is `one` in French and `other` in English. The i18n runtime reads the locale Angular's
+    // own bootstrap tells it, which nothing told it here: every language was counted in English.
+    await render(fixture['Formatted'] as Type<unknown>, {
+      providers: [deviceIn('fr-FR'), provideLocalisation({ fr: FRENCH })],
+    });
+    assert.equal(textOf('found'), '0 résultat');
+  });
+
   it('picks a plural form by the language rules, with an exact match first', async () => {
     const { instance } = await render(fixture['Formatted'] as Type<unknown>, {
       providers: [deviceIn('fr-FR'), provideLocalisation({ fr: FRENCH })],
@@ -246,8 +277,13 @@ describe('extracting messages with localize-extract', () => {
 
   it('finds template messages and $localize strings, with their placeholders', () => {
     assert.equal(messages['greeting'], 'Hello, {$INTERPOLATION}!');
-    assert.equal(messages['startHint'], 'Tap {$STARTTAGTEXT}here{$CLOSETAGTEXT} to start');
+    assert.equal(messages['startHint'], 'Tap {$START_TAG_TEXT}here{$CLOSE_TAG_TEXT} to start');
     assert.equal(messages['saveButton'], 'Save');
+    assert.equal(messages['closeLabel'], 'Close');
+    assert.equal(
+      messages['basketCount'],
+      '{VAR_PLURAL, plural, =0 {No items} one {One item} other {{INTERPOLATION} items}}',
+    );
     assert.equal(messages['basket.other'], '# items');
   });
 

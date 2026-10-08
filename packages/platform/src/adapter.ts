@@ -12,6 +12,7 @@ import {
   ApplicationRef,
   DOCUMENT,
   ErrorHandler,
+  LOCALE_ID,
   Renderer2,
   RendererFactory2,
   createComponent,
@@ -27,8 +28,11 @@ import {
   ɵcreateOrReusePlatformInjector as createOrReusePlatformInjector,
   ɵINJECTOR_SCOPE as INJECTOR_SCOPE,
   ɵprovideZonelessChangeDetectionInternal as provideZonelessChangeDetectionInternal,
+  ɵsetDocument as setDocument,
+  ɵsetLocaleId as setLocaleId,
 } from '@angular/core';
 import { installDateParse } from './date-parse.ts';
+import { inertImplementation } from './inert-document.ts';
 import { PLATFORM_NATIVE_ID } from './platform-id.ts';
 import {
   Engine,
@@ -827,7 +831,17 @@ export function mount(
   // reaches for the moment one is created. Without it every resource in an app throws
   // `doc.getElementById is not a function` before its loader has run - which is a long way from
   // anything a stylesheet does, and is why the stub is not as thin as it looks.
-  const documentStub = { head: undefined, body: undefined, getElementById: () => null };
+  //
+  // `implementation` is what the i18n runtime parses the cases of a plural or select with. It asks
+  // Angular's own `getDocument()` rather than the injector, which answers the global `document`
+  // the Metro polyfills define for animations until it is told of this one.
+  const documentStub = {
+    head: undefined,
+    body: undefined,
+    getElementById: () => null,
+    implementation: inertImplementation,
+  };
+  setDocument(documentStub as unknown as Document);
 
   // Parent the app injector to the platform injector, exactly as `internalCreateApplication`
   // does. Some Angular services are `providedIn: 'platform'` - `Console` among them - and with a
@@ -868,6 +882,9 @@ export function mount(
   }
 
   runInitializers(injector);
+  // The locale a template's plural picks its case by. Angular's own bootstrap tells the i18n
+  // runtime the `LOCALE_ID`, and without it every language is counted by the rules of `en-US`.
+  setLocaleId(injector.get(LOCALE_ID) || 'en-US');
 
   // What `@ng-native/tailwind`'s `ios:` and `android:` variants match beneath. On the root so
   // they work with nothing to set up; an app that had to add it itself, and did not, got platform

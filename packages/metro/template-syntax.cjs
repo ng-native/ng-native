@@ -1,11 +1,11 @@
 /**
  * A template read by Angular's own parser, for the errors `@oxc-angular/vite` does not report.
  *
- * Through 0.0.38 it compiles a block whose parameters never close (`@if (on() {`) or a `@let` with
- * no semicolon without an error: everything before the block compiles and the rest of the
- * template is dropped, so a screen shows only what came before it, in a hot reload, under a test
- * and in a production export alike. Angular reports both, with a position, from the lexer and
- * tree builder alone, so that is all this runs: no expression parsing and no code generation.
+ * Through 0.0.40 it compiles a block whose parameters never close (`@if (on() {`) without an
+ * error: everything before the block compiles and the rest of the template is dropped, so a
+ * screen shows only what came before it, in a hot reload, under a test and in a production export
+ * alike. Angular reports it, with a position, from the lexer and tree builder alone, so that is
+ * all this runs: no expression parsing and no code generation.
  *
  * Only asked once the compiler has reported nothing, so an error it does report is still the one
  * a reader sees, and this is one parse of a template per compile.

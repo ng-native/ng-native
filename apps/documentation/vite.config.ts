@@ -13,7 +13,7 @@
  * service in the workspace out of its own source so the reference pages cannot drift from the code
  * they describe. `exampleSources()` does the same for the example apps' code browser, reading each
  * app's files out of `examples/`. `angularGuards()`, placed after `angular()`, fails the build on
- * the same two confirmed `@oxc-angular/vite` bugs `packages/metro/angular-transform.cjs` guards
+ * the same confirmed `@oxc-angular/vite` bug `packages/metro/angular-transform.cjs` guards
  * against - see that file for why an unrelated build otherwise picks up a mis-compiled component
  * with no error.
  */

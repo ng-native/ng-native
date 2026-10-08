@@ -54,9 +54,9 @@ new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Tokyo', timeStyle: 'short' })
 
 Hermes supports only part of `Intl`, affecting direct callers. The iOS Hermes framework used here
 provides `Intl.Collator`, `Intl.DateTimeFormat` and `Intl.NumberFormat`, but no `Intl.PluralRules`,
-`Intl.RelativeTimeFormat` or `Intl.ListFormat`. Hence
-[Localization](/guide/localization#plurals-and-selects) uses `i18nPlural`. Check missing APIs before
-using them, for example `'PluralRules' in Intl`.
+`Intl.RelativeTimeFormat` or `Intl.ListFormat`. Angular's
+[plurals](/guide/localization#plurals-and-selects) read its own locale data instead. Check missing
+APIs before using them, for example `'PluralRules' in Intl`.
 
 Angular's locale data excludes user clock and calendar preferences; an English speaker may use a
 24-hour clock. `Locale.calendars()` exposes `uses24hourClock`, `firstWeekday` and `timeZone` to

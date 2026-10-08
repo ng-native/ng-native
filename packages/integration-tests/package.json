@@ -59,7 +59,7 @@
     "@ng-native/tailwind": "workspace:*",
     "@ng-native/testing": "workspace:*",
     "@ng-native/web": "workspace:*",
-    "@oxc-angular/vite": "0.0.38",
+    "@oxc-angular/vite": "0.0.40",
     "@picocss/pico": "2.1.1",
     "@storybook/html-vite": "10.6.1",
     "@tailwindcss/cli": "^4.3.3",

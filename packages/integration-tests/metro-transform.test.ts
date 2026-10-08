@@ -52,18 +52,15 @@ describe('the transform chain', () => {
     );
   });
 
-  it('fails the build on a method shorthand inside decorator metadata, which oxc-angular mis-compiles', async () => {
-    // The upstream trap this guards: @oxc-angular/vite (through 0.0.39) drops the
-    // "function"/"async"/"get" keyword when it re-emits an object method shorthand found in
-    // decorator metadata (providers, host, ...), with zero reported errors and invalid JS output.
-    await assert.rejects(
-      () => compileFixture(fixture('method-shorthand-in-metadata.ts')),
-      /attach:\(\) \{.*not valid JavaScript.*attach: function \(\)/s,
-    );
+  it('compiles a method shorthand inside decorator metadata to a module that loads', async () => {
+    // @oxc-angular/vite through 0.0.39 dropped the "function"/"async"/"get" keyword when it
+    // re-emitted the shorthand, with no error: the module was not valid JavaScript.
+    const module = await compileFixture(fixture('method-shorthand-in-metadata.ts'));
+    assert.equal(typeof module['MethodShorthandInMetadata'], 'function');
   });
 
   it('fails the build on a template arrow function that reads its own parameter, which oxc-angular mis-compiles', () => {
-    // @oxc-angular/vite (through 0.0.39) resolves an arrow's parameter against the component:
+    // @oxc-angular/vite (through 0.0.40) resolves an arrow's parameter against the component:
     // "(o) => !o" in a template compiles to "(o) => !ctx.o", which reads undefined at runtime.
     const { transformAngular } = require('@ng-native/metro/angular-transform.cjs');
     const component = (handler: string) =>
@@ -582,9 +579,10 @@ describe('a template error, which the compiler reports with no position', () => 
 });
 
 describe('a template the compiler cuts short without an error', () => {
-  // `@oxc-angular/vite` (0.0.38) reports no error for a block whose parameters never close, or a
-  // @let with no semicolon: it compiles everything before it and drops the rest. The screen showed
-  // only what came before the block, in hot reload, under Vitest and in a production export.
+  // `@oxc-angular/vite` (0.0.40) reports no error for a block whose parameters never close: it
+  // compiles everything before it and drops the rest. The screen showed only what came before the
+  // block, in hot reload, under Vitest and in a production export. It reports a @let with no
+  // semicolon itself.
   type Located = Error & { loc?: { line: number; column: number } };
   const failure = (run: () => unknown): Located => {
     try {

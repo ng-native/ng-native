@@ -54,7 +54,7 @@
   "devDependencies": {
     "@ng-native/router": "workspace:*",
     "@ng-native/template": "workspace:*",
-    "@oxc-angular/vite": "0.0.38",
+    "@oxc-angular/vite": "0.0.40",
     "@playwright/test": "1.63.0",
     "@tailwindcss/vite": "^4.3.3",
     "pagefind": "^1.5.2",
