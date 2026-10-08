@@ -963,8 +963,8 @@ function lineBaseline(
  * out on both platforms: on Android, `EditText` centres a line box taller than the font's own
  * about 1.7pt high of centre in a 44pt field, and centres the font's own exactly. A percentage
  * height sizes the field only where its parent's height is definite, which is known at layout
- * alone, so such a field is left as it was. Elsewhere Android sizes the field by the line height
- * and centres the text in it itself, and keeps it.
+ * alone, so on Android such a field is left as it was. Elsewhere Android sizes the field by the
+ * line height and centres the text in it itself, and keeps it.
  *
  * On iOS, React Native's field sets `lineHeight` as the paragraph's minimum and maximum line
  * height and, unlike a paragraph (`RCTApplyBaselineOffset`), never offsets the baseline, so the
@@ -990,9 +990,9 @@ function centreSingleLine(
     heightBaseline(props, height, onBaseline, fontScale);
     return;
   }
-  // A percentage is a fixed height only where the parent's is definite, known at layout alone.
-  if (isSet(height) && height !== 'auto') return;
-  // Android sizes the field by its line height, and centres the text in it, itself.
+  // Android sizes the field by its line height, and centres the text in it, itself. A
+  // percentage is a fixed height only where the parent's is definite, known at layout alone:
+  // there too the line height is left out on iOS, and kept as the least the field is tall.
   if (viewName !== 'TextInput') return;
   const edge = (side: 'Top' | 'Bottom', logical: 'Start' | 'End') =>
     blockEdge(props, side, logical);
