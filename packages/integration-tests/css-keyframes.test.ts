@@ -864,21 +864,20 @@ describe('a keyframe with a declaration it cannot compile', () => {
     assert.match(dropped[0]!, /dropped 'float'/);
   });
 
-  it('refuses a value only the device can settle, rather than dropping it without a word', () => {
-    // A frame has no node to settle a var(), an em or a viewport unit against, and one of these
-    // compiled to an empty frame: the animation ran and never moved.
-    assert.throws(() => compileCss('@keyframes k { to { width: 10vw } }'), /keyframe/);
-    assert.throws(() => compileCss('@keyframes k { to { opacity: var(--o) } }'), /keyframe/);
-    assert.throws(
-      () => compileCss('@keyframes k { to { transform: translateX(1em) } }'),
-      /keyframe/,
+  it('keeps a value only the device can settle, for the element that plays the frame', () => {
+    // A var(), an em or a viewport unit is settled against a node, and a frame has the one
+    // that plays it: each used to leave the frame empty, and the animation ran without moving.
+    const kept = (css: string) =>
+      compileCss(css).keyframes.k[0].deferred.map((one: { props: string[] }) => one.props);
+    assert.deepEqual(kept('@keyframes k { to { width: 10vw } }'), [['width']]);
+    assert.deepEqual(kept('@keyframes k { to { opacity: var(--o) } }'), [['opacity']]);
+    assert.deepEqual(kept('@keyframes k { to { transform: translateX(1em) } }'), [['transform']]);
+    const [frame] = compileCss('@keyframes k { to { opacity: 1; padding-top: 1em } }').keyframes.k;
+    assert.deepEqual(frame.declarations, { opacity: 1 });
+    assert.deepEqual(
+      frame.deferred.map((one: { props: string[] }) => one.props),
+      [['paddingTop']],
     );
-    const dropped: string[] = [];
-    const sheet = compileCss('@keyframes k { to { opacity: 1; padding-top: 1em } }', 'frames', {
-      onUnsupported: (message: string) => dropped.push(message),
-    });
-    assert.deepEqual(sheet.keyframes.k, [{ offset: 1, declarations: { opacity: 1 } }]);
-    assert.match(dropped[0]!, /dropped 'padding-top'/);
   });
 });
 
@@ -935,8 +934,8 @@ describe("a keyframe's own timing function", () => {
 });
 
 describe('an animation none of whose frames says anything', () => {
-  // A keyframe whose only declaration was refused at build time, as one with a `var()` in it is.
-  const EMPTY = '@keyframes idle { from { transform: translateX(var(--x)) } }';
+  // A keyframe whose only declaration was refused at build time, as one native has no prop for is.
+  const EMPTY = '@keyframes idle { from { float: left } }';
 
   function idle(animation: string) {
     let now = 1000;
@@ -1216,5 +1215,65 @@ describe('keyframes two components each name the same', () => {
       fabric.committed.map((view) => view.props['opacity']),
       [0.4, 0.8],
     );
+  });
+});
+
+describe('a keyframe that is written with a var()', () => {
+  // A panel that opens to the height its library measured: `to { height: var(--h) }`. A
+  // browser settles the frame against the element that plays it, and so does the engine.
+  const OPEN =
+    '@keyframes open { from { height: 0 } to { height: var(--h) } }' +
+    ' .a { height: 0; animation: open 200ms linear forwards }';
+
+  function opened() {
+    let now = 1000;
+    const fabric = createFakeFabric();
+    const sheet = compileCss(OPEN, 'app.css');
+    const engine = new Engine(fabric, 1, { globalStyles: sheet as never, now: () => now });
+    const view = engine.createElement('view');
+    engine.setClasses(view, 'a');
+    engine.appendChild(engine.root, view);
+    const frame = (ms: number) => {
+      now += ms;
+      engine.advanceAnimations();
+      engine.commit();
+    };
+    const height = () => fabric.committed[0]!.props['height'];
+    return { engine, view, frame, height };
+  }
+
+  it('is kept for the engine to settle, in a sheet of the app and in one of a library', () => {
+    const [, written] = compileCss(OPEN, 'app.css').keyframes.open;
+    assert.deepEqual(written.deferred.length, 1);
+    const sheet = compileCss(OPEN, 'library.css', { generated: true });
+    const [, to] = sheet.keyframes.open;
+    assert.deepEqual(
+      to.deferred.map((one: { props: string[] }) => one.props),
+      [['height']],
+    );
+  });
+
+  it('plays to the value its element has for the variable', () => {
+    const s = opened();
+    s.engine.setCustomProperty(s.view, '--h', '58px');
+    s.engine.commit();
+    assert.equal(s.height(), 0);
+    s.frame(100);
+    assert.equal(s.height(), 29);
+    s.frame(100);
+    assert.equal(s.height(), 58);
+  });
+
+  it('follows a variable set once it is under way, and one that changes', () => {
+    const s = opened();
+    s.engine.commit();
+    s.frame(50);
+    assert.equal(s.height(), 0, 'nowhere to go yet');
+    s.engine.setCustomProperty(s.view, '--h', '80px');
+    s.frame(50);
+    assert.equal(s.height(), 40, 'halfway, by the clock it started on');
+    s.engine.setCustomProperty(s.view, '--h', '40px');
+    s.frame(50);
+    assert.equal(s.height(), 30);
   });
 });
