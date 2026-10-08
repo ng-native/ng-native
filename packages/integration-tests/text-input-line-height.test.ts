@@ -144,18 +144,28 @@ describe('a single-line text input with a line height', () => {
     }
   });
 
-  it('leaves a field whose height is a percentage as it was, on both platforms', () => {
-    // A percentage of a parent with no definite height is auto, in Yoga as in CSS, and then the
-    // line height is what sizes the field. Whether it resolves is known only at layout.
-    for (const platform of ['ios', 'android']) {
-      registerPlatformComponents(platform);
-      const { props } = commitInput((engine, input) => {
-        engine.addClass(input, 'field');
-        engine.setProp(input, 'style', { height: '50%' });
-      });
-      assert.equal(props()['lineHeight'], 24, platform);
-      assert.equal(props()['minHeight'], undefined, platform);
-    }
+  it('centres the text of a field whose height is a percentage too, on iOS', () => {
+    // A field that fills the box its library draws around it: `height: 100%`. Its line box is
+    // taller than the font, and iOS sits the glyphs at the bottom of it, low in the field. A
+    // percentage of a parent with no definite height is auto, in Yoga as in CSS, and then the
+    // line height is what sizes the field: kept as the least it is tall, as with no height.
+    const { props } = commitInput((engine, input) => {
+      engine.addClass(input, 'field');
+      engine.setProp(input, 'style', { height: '50%' });
+    });
+    assert.equal(props()['lineHeight'], undefined);
+    assert.equal(props()['height'], '50%');
+    assert.equal(props()['minHeight'], 41);
+  });
+
+  it('leaves a field whose height is a percentage as it was on Android', () => {
+    registerPlatformComponents('android');
+    const { props } = commitInput((engine, input) => {
+      engine.addClass(input, 'field');
+      engine.setProp(input, 'style', { height: '50%' });
+    });
+    assert.equal(props()['lineHeight'], 24);
+    assert.equal(props()['minHeight'], undefined);
   });
 
   it('reads a null height as no height, as React Native does', () => {
