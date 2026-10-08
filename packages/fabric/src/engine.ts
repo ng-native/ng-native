@@ -5996,9 +5996,11 @@ export class Engine implements HostEngine {
     this.currentResponder = null;
     this.tellNative(node, false);
     const handlers = this.responders.get(node);
+    // Before the handler is told: what it does is for the render pass after it to commit
+    // whole, and not to be drawn part made with the view no longer pressed.
+    if (changed) this.commit();
     if (terminated) handlers?.onResponderTerminate?.(event);
     else handlers?.onResponderRelease?.(event);
-    if (changed) this.commit();
   }
 
   private tellNative(node: EngineNode, isResponder: boolean): void {
