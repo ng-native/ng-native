@@ -5,7 +5,7 @@ so every screen has something to show on first launch.
 
 | Screen                                              | What it shows                                                                                                                           |
 | --------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
-| Today (`src/app/today/today.ts`)                    | A progress bar for the day, and a checklist done a tap or a long press, with a CSS `@keyframes` animation and a haptic on completion    |
+| Today (`src/app/today/today.ts`)                    | A progress bar for the day, and a checklist done with a tap or a long press, with a CSS `@keyframes` animation and a haptic on completion    |
 | Habit (`src/app/habit-detail/habit-detail.ts`)      | A streak count and a calendar grid of the last ten weeks, laid out in CSS, with edit and delete                                         |
 | New/edit habit (`src/app/habit-form/habit-form.ts`) | A Signal Form over a name (required and unique), a colour and a reminder time, presented as a modal                                     |
 | Settings (`src/app/settings/settings.ts`)           | Daily reminders through `expo-notifications`, with `Permission` covering the request and the denied state, and every streak at a glance |
