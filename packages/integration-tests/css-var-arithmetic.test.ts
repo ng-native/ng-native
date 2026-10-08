@@ -96,6 +96,18 @@ describe('tokens in transform functions', () => {
     ]);
   });
 
+  it('refuses a move or a scale in three dimensions that is short of its third', () => {
+    // No depth is drawn, and one that is missing is still not a transform a browser reads.
+    const dropped = (css: string) => {
+      const said: string[] = [];
+      compileCss(css, 'app.css', { onUnsupported: (message: string) => said.push(message) });
+      return said.length;
+    };
+    assert.equal(dropped('.a { transform: translate3d(var(--x), var(--y)); }'), 1);
+    assert.equal(dropped('.a { transform: scale3d(var(--s), var(--s)); }'), 1);
+    assert.equal(dropped('.a { transform: translate3d(var(--x), var(--y), 0); }'), 0);
+  });
+
   it('an angle that falls back to a zero with no unit, which is an angle of none', () => {
     assert.deepEqual(transformOf('.a { transform: rotate(var(--r, 0)); }'), [{ rotate: '0deg' }]);
     assert.deepEqual(transformOf('.a { --r: 30deg; transform: rotate(var(--r, 0)); }'), [
