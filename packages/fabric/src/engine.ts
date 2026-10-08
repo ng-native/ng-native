@@ -464,6 +464,8 @@ export interface EngineNode extends HostNode {
   styleCache: StyleCache | null;
   /** Set when something that could change what this node matches has changed. */
   styleDirty: boolean;
+  /** See `StyleTarget.ownDirty`. */
+  ownDirty: boolean;
   /** See `StyleTarget.hasDirty`. */
   hasDirty: boolean;
   /** See `StyleTarget.stateDirty`. */
@@ -2181,6 +2183,7 @@ class RetainedNode {
   customProperties: Record<string, TokenValue> | null = null;
   styleCache: StyleCache | null = null;
   styleDirty = true;
+  ownDirty = false;
   styleCommitted: StyleCache | null = null;
   fitContainer: string | undefined = undefined;
   heightBasis: boolean | undefined = undefined;
@@ -3151,30 +3154,41 @@ export class Engine implements HostEngine {
    * Mark a node whose classes changed, by what the rules that name those classes can restyle.
    *
    * A class no selector names changes no style: a library's own marker, of an overlay that is
-   * animating or a control that was touched. One named only as what a rule's element is
-   * inside, `.animating .close`, restyles the elements under the node that such rules are for.
-   * Either way a whole subtree is not styled again for a class that has no say in it. Any other
-   * class restyles the node and everything under it, as any other change to it does.
+   * animating or a control that was touched. One a rule is for the element of, `.on`, has that
+   * element matched again, and one named as what a rule's element is inside, `.animating .close`
+   * or `.close:is(.animating *)`, the elements under the node that such rules are for. What is
+   * under any of those is styled again from the rules it matched, for what it inherits: a `dark`
+   * class on the root finds no rule again for an element no `dark` rule is for. Any other class
+   * has the node and everything under it matched again, as any other change to it does.
    *
    * A sheet that names a class later restyles what it is for as it arrives, and a node not yet
    * committed is styled when it is, with the class as it is then.
    */
   private markClasses(node: EngineNode, changed: Iterable<string>): void {
+    // An element still being built, in no tree and never styled: nothing is styled by it yet,
+    // and it is styled when it is committed, with the classes it has then. Every element of a
+    // screen is given its classes this way, so what they reach is not asked for each.
+    if (node.parent === null && node.styleCache === null) return this.markProps(node, false);
     const reach = this.styles.reachOf(changed);
     if (reach === true) return this.markProps(node);
     this.markProps(node, false);
-    if (reach) this.markUnder(node, reach);
+    if (!reach) return;
+    if (reach.own) node.ownDirty = true;
+    if (this.styles.reachesUnder(reach)) this.markUnder(node, reach);
   }
 
-  /** Have styled again each element under a node that one of `subjects`' rules could be for. */
+  /**
+   * Have matched again each element under a node that one of `subjects`' rules could be for. One
+   * under another is marked too: what is under an element marked this way keeps its rules.
+   */
   private markUnder(node: EngineNode, subjects: Subjects): void {
     for (const child of node.children) {
       if (child.kind !== 'element') continue;
       if (this.styles.isFor(subjects, child)) {
-        // And with it all under it, which is styled from it.
-        child.styleDirty = true;
+        child.ownDirty = true;
         this.markPath(child);
-      } else this.markUnder(child, subjects);
+      }
+      this.markUnder(child, subjects);
     }
   }
 
@@ -3492,7 +3506,10 @@ export class Engine implements HostEngine {
     } else {
       node.customProperties = { ...current, [name]: token };
     }
-    this.markProps(node);
+    // In scope for the node's own rules and for what is under it, and read by no selector: the
+    // node is styled again, and those under it from the rules they matched.
+    this.markProps(node, false);
+    node.ownDirty = true;
   }
 
   setText(node: EngineNode, value: string): void {

@@ -751,7 +751,7 @@ describe('what a row whose place changed keeps', () => {
       /** Each row before the commit: `x` to be styled again, `m` matched again, `.` left. */
       marks: () =>
         parent.children
-          .map((child) => (child.styleDirty ? 'x' : child.stateDirty ? 'm' : '.'))
+          .map((child) => (child.styleDirty || child.ownDirty ? 'x' : child.stateDirty ? 'm' : '.'))
           .join(''),
       /** How many nodes the commit styled, a row or a label, rather than kept as they were. */
       styled() {
@@ -841,9 +841,9 @@ describe('what a row whose place changed keeps', () => {
     s.engine.insertBefore(s.parent, s.row(), s.rows[0]!);
     s.engine.setClasses(s.rows[4]!, 'row wide');
     assert.equal(s.marks()[5], 'x', 'a class a rule styles it by');
-    // A class arriving marks the rows after it too, for a rule that steps from it: it and the
-    // five after, the row that came and the old first, each with its label.
-    assert.equal(s.styled(), 16);
+    // It, the row that came and the old first, each with its label. The rows after it are left
+    // as they are: no rule steps from the class that came, only from `row`.
+    assert.equal(s.styled(), 6);
     assert.deepEqual(s.widths(), [0, 3, 3, 3, 3, 7, 3, 3, 3, 3, 3]);
   });
 

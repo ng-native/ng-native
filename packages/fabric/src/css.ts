@@ -548,6 +548,18 @@ export interface StyleCache {
   context: object;
   /** The parent's `context` this was computed from. */
   parentContext: object;
+  /**
+   * Identity token standing for what an element under this node could match differently: minted
+   * when the node is styled for a change that can alter that, and kept when it is styled again
+   * for one that cannot, a custom property of its own or an inherited value from above. An
+   * element whose parent's is the one it was last styled under matches the rules it did, so it
+   * is styled from those it kept and they are not found again.
+   */
+  scope: object;
+  /** The parent's `scope` this was computed from. */
+  parentScope: object;
+  /** The rules the node matched, for a styling that finds its parent's `scope` as it was. */
+  rules?: readonly StyleRule[];
   /** The conditions version this was resolved under. */
   generation: number;
   style: Record<string, unknown>;
@@ -638,6 +650,12 @@ export interface StyleTarget {
   styleCache: StyleCache | null;
   /** Set when something that could change what this node matches has changed. */
   styleDirty: boolean;
+  /**
+   * Set when what this node matches, or a custom property it holds, may have changed, and nothing
+   * that an element under it is matched by: the node is matched and styled again, and those under
+   * it are styled from the rules they matched. Absent on a hand-built target.
+   */
+  ownDirty?: boolean;
   /**
    * Set when something beneath this node changed and a sheet uses `:has()`: the node is matched
    * again, and restyled only if the rules it matches came out different. Absent on a hand-built
@@ -1846,6 +1864,13 @@ const EMPTY: Record<string, unknown> = {};
 
 /** Stands in for the parent of a root node, so the comparison needs no null case. */
 const ROOT_CONTEXT: object = {};
+/** The `scope` over a node with no parent. */
+const ROOT_SCOPE: object = {};
+/**
+ * The `scope` of the one cache every node with nothing to style shares. It is no one node's, so
+ * nothing styled under it, or holding it, is taken to match what it did.
+ */
+const SHARED_SCOPE: object = {};
 
 /** Shared empty token map, for the overwhelmingly common case of a subtree defining none. */
 const NO_TOKENS: Readonly<Record<string, TokenValue>> = {};
@@ -1868,6 +1893,11 @@ export interface Subjects {
   readonly inside: Set<string>;
   /** A rule for anything anywhere: no class, no name, and no such box to be in. */
   any: boolean;
+  /**
+   * In what a class reaches: a rule is for the element that has the class, `.on`, which is then
+   * matched again itself. Unset where the rules are only for elements under it.
+   */
+  own?: boolean;
 }
 
 interface Addition {
@@ -1903,10 +1933,12 @@ function noteSubject(into: Subjects, rule: StyleRule): void {
 /**
  * What a class changing on an element can restyle, by the rules that name the class:
  *
- * - `true`, the element and all under it and after it: a rule is for the element itself, or
- *   names the class beside its element or inside `:not()`, `:is()`, `:has()` and the like;
- * - or the elements under it that rules are for, where every rule that names the class names it
- *   as what its own element is inside, `.busy .row`: those and no other.
+ * - `true`, the element and all under it and after it, each matched again: a rule names the
+ *   class beside its element, inside `:has()`, or on a box its element is under by more than the
+ *   box's own classes, `.box:not(.busy) .row`;
+ * - or the element itself, `own`, where a rule is for the element that has the class, and the
+ *   elements under it that rules are for, where a rule names it as what its own element is
+ *   inside, `.busy .row` or `.row:is(.busy *)`: those and no other are matched again.
  *
  * A class in no rule is in neither, and restyles nothing.
  */
@@ -1938,14 +1970,23 @@ function classReach(sheet: StyleSheet): SheetReach {
   for (const rule of sheet.rules) {
     const every = new Set<string>();
     collectClasses(rule, every, reads, named);
-    const inside = classesInside(rule);
+    const { own, inside } = classPlaces(rule);
     for (const name of every) {
-      if (!inside.has(name)) classes.set(name, true);
-      else noteInside(classes, name, rule);
+      if (!own.has(name) && !inside.has(name)) classes.set(name, true);
+      if (own.has(name)) noteOwn(classes, name);
+      if (inside.has(name)) noteInside(classes, name, rule);
     }
   }
   reaches.set(sheet, (found = { classes, reads, named }));
   return found;
+}
+
+/** Note a rule as one for the element that has a class. */
+function noteOwn(found: ClassReach, name: string): void {
+  const subjects = found.get(name);
+  if (subjects === true) return;
+  if (subjects) subjects.own = true;
+  else found.set(name, { ...noSubjects(), own: true });
 }
 
 /** Note a rule as one that names a class as what its element is inside. */
@@ -1968,35 +2009,89 @@ const noSubjects = (): Subjects => ({
   any: false,
 });
 
+/** The reach of classes that rules are for the element of, and for nothing under it. */
+const OWN_ALONE: Subjects = { ...noSubjects(), own: true };
+
 /** Add to `into` what `from` is for. */
 function addSubjects(into: Subjects, from: Subjects): void {
   for (const name of from.classes) into.classes.add(name);
   for (const name of from.types) into.types.add(name);
   for (const name of from.inside) into.inside.add(name);
   into.any ||= from.any;
+  if (from.own) into.own = true;
 }
 
 /**
- * The classes a rule names only as what its element is inside: on a compound before the last,
- * with nothing but `>` and a space between there and the element, and nowhere else in the rule.
+ * Where a rule names each class it names, for the classes it names in no other place than these:
+ *
+ * - `own`, on the element the rule is for: its own classes, and those in `:is()` and `:not()` of
+ *   it, which are asked of that element;
+ * - `inside`, as what that element is inside: the classes of a compound before the last, with
+ *   nothing but `>` and a space between there and the element, and those of what `:is(.box *)`
+ *   and `:is(.box > *)` put over it.
+ *
+ * A class named anywhere else in the rule is in neither, whatever else names it: beside the
+ * element, inside `:has()` or `:host-context()`, or in `:not()` of a box the element is in.
  */
-function classesInside(rule: StyleRule): ReadonlySet<string> {
+function classPlaces(rule: StyleRule): { own: ReadonlySet<string>; inside: ReadonlySet<string> } {
+  const own = new Set<string>();
   const inside = new Set<string>();
   const elsewhere = new Set<string>();
   const last = rule.compounds.length - 1;
   let under = true;
   for (let index = last; index >= 0; index--) {
     const compound = rule.compounds[index]!;
-    if (index < last) {
-      const joined = rule.combinators[index];
-      under &&= joined === 'child' || joined === 'descendant';
+    if (index === last) {
+      placeClasses(compound, own, inside, elsewhere);
+      continue;
     }
+    const joined = rule.combinators[index];
+    under &&= joined === 'child' || joined === 'descendant';
     const { classes, ...rest } = compound;
     collectClasses(rest, elsewhere, []);
-    for (const name of classes) (index < last && under ? inside : elsewhere).add(name);
+    for (const name of classes) (under ? inside : elsewhere).add(name);
   }
-  for (const name of elsewhere) inside.delete(name);
-  return inside;
+  for (const name of elsewhere) {
+    own.delete(name);
+    inside.delete(name);
+  }
+  return { own, inside };
+}
+
+/**
+ * The classes of a compound asked of the element a rule is for, into `at`, and of the compounds
+ * it puts over that element, into `inside`. What any other part of it names goes `elsewhere`:
+ * a part read here by name is one this knows the reach of, and one added later is not.
+ */
+function placeClasses(
+  compound: Compound,
+  at: Set<string>,
+  inside: Set<string>,
+  elsewhere: Set<string>,
+): void {
+  const {
+    classes,
+    is,
+    not,
+    ancestors,
+    parents,
+    type: _t,
+    id: _i,
+    root: _r,
+    pseudo: _p,
+    ...rest
+  } = compound;
+  for (const name of classes) at.add(name);
+  for (const alternatives of is ?? []) {
+    for (const option of alternatives) placeClasses(option, at, inside, elsewhere);
+  }
+  for (const excluded of not ?? []) placeClasses(excluded, at, inside, elsewhere);
+  // What is over the element is over it whichever of these said so, and what is over that is too.
+  for (const above of [...(ancestors ?? []), ...(parents ?? [])]) {
+    placeClasses(above, inside, inside, elsewhere);
+  }
+  // `attributes` among them: a test of the `class` attribute is answered through `classTests`.
+  collectClasses(rest, elsewhere, []);
 }
 
 /** What a rule declares, which names no element. */
@@ -2069,6 +2164,8 @@ function emptyCacheFor(epoch: number, generation: number): StyleCache {
     generation,
     context: ROOT_CONTEXT,
     parentContext: ROOT_CONTEXT,
+    scope: SHARED_SCOPE,
+    parentScope: SHARED_SCOPE,
     style: EMPTY,
     inherited: EMPTY,
     tokens: NO_TOKENS,
@@ -2382,18 +2479,36 @@ export class StyleResolver {
     else addSubjects(had ?? (this.reach.set(name, noSubjects()).get(name) as Subjects), how);
   }
 
+  /** Whether a class's reach names any element under the one that has it. */
+  reachesUnder(subjects: Subjects): boolean {
+    return (
+      subjects.any ||
+      subjects.classes.size > 0 ||
+      subjects.types.size > 0 ||
+      subjects.inside.size > 0
+    );
+  }
+
   /**
    * What classes coming to an element or going from it can restyle: `true` for it and all
-   * under it and after it, as any change to it does; the elements under it to restyle, by what
-   * rules are for; or null, where no rule names any of them and nothing is styled again.
+   * under it and after it, as any change to it does; the element itself, where `own`, and the
+   * elements under it to match again, by what rules are for; or null, where no rule names any
+   * of them and nothing is styled again.
    */
   reachOf(classes: Iterable<string>): true | Subjects | null {
     let under: Subjects | null = null;
+    let own = false;
     for (const name of classes) {
       const how = this.reach.get(name);
       if (how === true || this.classTests.some((test) => answers(test, name))) return true;
-      if (how) addSubjects((under ??= noSubjects()), how);
+      if (!how) continue;
+      own ||= how.own === true;
+      // Made only for a class that reaches under: most are a rule's own, and this is asked for
+      // every element as it is given its classes.
+      if (this.reachesUnder(how)) addSubjects((under ??= noSubjects()), how);
     }
+    if (!under) return own ? OWN_ALONE : null;
+    if (own) under.own = true;
     return under;
   }
 
@@ -2473,26 +2588,64 @@ export class StyleResolver {
     this.justMatched = null;
     if (kept) return kept;
 
+    return this.styledAgain(node, epoch, parent, found);
+  }
+
+  /** A node styled now, from the rules found for it or from those it kept: see `matchesStand`. */
+  private styledAgain(
+    node: StyleTarget,
+    epoch: number,
+    parent: StyleCache | null,
+    found: readonly StyleRule[] | null,
+  ): StyleCache {
+    const cached = node.styleCache;
+    const parentContext = parent ? parent.context : ROOT_CONTEXT;
     const parentInherited = parent ? parent.inherited : EMPTY;
+    const parentScope = parent ? parent.scope : ROOT_SCOPE;
+    const stands = this.matchesStand(cached, node, parentScope);
+    // The scope it keeps, or none: it then has a new one, which its new `context` serves as.
+    const scope = stands ? cached!.scope : null;
 
     // A box the engine made around loose text is in no template, so no rule matches it.
     if (node.anonymous || this.hasNoRules(node)) {
-      return this.unstyled(node, epoch, parent, parentContext, parentInherited);
+      return this.unstyled(node, epoch, parent, parentInherited, scope, parentScope);
     }
 
     styleStats.nodesResolved++;
 
-    const matched = found ?? this.matchedBy(node);
+    // Its own rules are found again for a change of its own, and not for one above it.
+    const rules = stands && !node.ownDirty ? cached!.rules : undefined;
+    const matched = found ?? rules ?? this.matchedBy(node);
     const parentTokens = parent ? parent.tokens : this.tokensOnRoot;
     this.heir(node, parent, matched);
     const styled = this.styled(node, matched, parentTokens, parentInherited);
 
-    const cache = this.cached(epoch, parentContext, styled, matched);
+    const cache = this.cached(epoch, parentContext, styled, matched, scope, parentScope);
     node.styleCache = cache;
     node.styleDirty = false;
+    node.ownDirty = false;
     node.hasDirty = false;
     node.stateDirty = false;
     return cache;
+  }
+
+  /**
+   * Whether what an element could match is as it was when it was last styled: nothing that can
+   * change it was marked on the element, its parent's `scope` is the one it was styled under,
+   * and no sheet that could match it has come since. It is being styled again all the same, for
+   * a change of its own that alters nothing under it, or for what it inherits.
+   */
+  private matchesStand(cached: StyleCache | null, node: StyleTarget, parentScope: object): boolean {
+    return (
+      cached !== null &&
+      !node.styleDirty &&
+      !node.hasDirty &&
+      !node.stateDirty &&
+      cached.scope !== SHARED_SCOPE &&
+      parentScope !== SHARED_SCOPE &&
+      cached.parentScope === parentScope &&
+      this.current(cached, node)
+    );
   }
 
   /**
@@ -2504,12 +2657,18 @@ export class StyleResolver {
     parentContext: object,
     styled: Styled,
     matched: readonly StyleRule[],
+    scope: object | null,
+    parentScope: object,
   ): StyleCache {
+    const context = {};
     const cache: StyleCache = {
       epoch,
       generation: this.generation,
-      context: {},
+      context,
       parentContext,
+      scope: scope ?? context,
+      parentScope,
+      rules: matched,
       ...styled,
     };
     if (this.tracksHas) cache.matched = matched;
@@ -2534,6 +2693,7 @@ export class StyleResolver {
       (node.hasDirty === true || node.stateDirty === true) &&
       cached?.matched !== undefined &&
       !node.styleDirty &&
+      !node.ownDirty &&
       cached.parentContext === parentContext &&
       this.current(cached, node);
     if (!stands) return null;
@@ -2583,6 +2743,7 @@ export class StyleResolver {
       node.stateDirty === true &&
       cached !== null &&
       !node.styleDirty &&
+      !node.ownDirty &&
       !node.hasDirty &&
       cached.parentContext === parentContext &&
       this.current(cached, node) &&
@@ -2613,6 +2774,7 @@ export class StyleResolver {
     return (
       cached !== null &&
       !node.styleDirty &&
+      !node.ownDirty &&
       !node.hasDirty &&
       !node.stateDirty &&
       cached.parentContext === parentContext &&
@@ -2649,39 +2811,47 @@ export class StyleResolver {
     node: StyleTarget,
     epoch: number,
     parent: StyleCache | null,
-    parentContext: object,
     parentInherited: Record<string, unknown>,
+    scope: object | null,
+    parentScope: object,
   ): StyleCache {
     const tokens = parent ? parent.tokens : this.tokensOnRoot;
+    const parentContext = parent ? parent.context : ROOT_CONTEXT;
     // What inline style sets is inherited too, with no rule to read it against.
     const inline = node.inlineInherits ? inlineInherited(node.props['style']) : null;
-    if (
+    const nothing =
       !inline &&
       parentInherited === EMPTY &&
       parentContext === ROOT_CONTEXT &&
-      tokens === NO_TOKENS &&
-      !node.styleDirty
-    ) {
-      if (this.emptyCache.epoch !== epoch || this.emptyCache.generation !== this.generation) {
-        this.emptyCache = emptyCacheFor(epoch, this.generation);
-      }
-      node.styleCache = this.emptyCache;
-      return this.emptyCache;
-    }
+      tokens === NO_TOKENS;
+    if (nothing && !node.styleDirty && !node.ownDirty) return this.sharedEmpty(node, epoch);
 
+    const context = {};
     const passthrough: StyleCache = {
       epoch,
       generation: this.generation,
-      context: {},
+      context,
       parentContext,
+      scope: scope ?? context,
+      parentScope,
       style: unstyledStyle(parentInherited, inline),
       inherited: inline ? inheritFrom(parentInherited, inline) : parentInherited,
       tokens,
     };
     node.styleCache = passthrough;
     node.styleDirty = false;
+    node.ownDirty = false;
     node.stateDirty = false;
     return passthrough;
+  }
+
+  /** The one cache of every node with nothing to style and nothing to hand down, given to one more. */
+  private sharedEmpty(node: StyleTarget, epoch: number): StyleCache {
+    if (this.emptyCache.epoch !== epoch || this.emptyCache.generation !== this.generation) {
+      this.emptyCache = emptyCacheFor(epoch, this.generation);
+    }
+    node.styleCache = this.emptyCache;
+    return this.emptyCache;
   }
 
   /**
