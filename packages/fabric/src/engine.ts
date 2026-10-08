@@ -88,7 +88,7 @@ import { premultipliedStops } from './premultiplied-stops.ts';
 function animationOf(props: Record<string, unknown>): AnimationSpec | undefined {
   let spec = props['$animation'] as AnimationSpec | undefined;
   if (spec !== undefined) delete props['$animation'];
-  for (const [key, field] of Object.entries(ANIMATION_PARTS)) {
+  for (const [key, field] of ANIMATION_ENTRIES) {
     if (!(key in props)) continue;
     const value = props[key];
     delete props[key];
@@ -106,6 +106,8 @@ const ANIMATION_PARTS = {
   $animationFill: 'fill',
   $playState: 'paused',
 } as const;
+/** Listed once: `animationOf` reads them for every node that commits. */
+const ANIMATION_ENTRIES = Object.entries(ANIMATION_PARTS);
 
 function animationPart(
   field: (typeof ANIMATION_PARTS)[keyof typeof ANIMATION_PARTS],
@@ -2468,6 +2470,8 @@ const TRANSITION_TIMING = {
   $transitionDelay: 'delay',
   $transitionEasing: 'easing',
 } as const;
+/** Listed once, as `ANIMATION_ENTRIES` is. */
+const TRANSITION_ENTRIES = Object.entries(TRANSITION_TIMING);
 
 /**
  * The transition spec, with any timing set by a rule of its own laid over it: `.duration-700`
@@ -2483,7 +2487,7 @@ function transitionSpec(
   // Keyed `$transition` by the compiler, so a view's own `transition` prop reaches it.
   let spec = props['$transition'] as Record<string, TransitionSpec> | undefined;
   if (spec !== undefined) delete props['$transition'];
-  for (const [key, part] of Object.entries(TRANSITION_TIMING)) {
+  for (const [key, part] of TRANSITION_ENTRIES) {
     if (!(key in props)) continue;
     const value = props[key];
     delete props[key];
