@@ -163,3 +163,124 @@ describe('a transition of a width', () => {
     assert.equal(fabric.committed[0]!.props['width'], 20);
   });
 });
+
+describe('a @keyframes animation of a height', () => {
+  // A panel that slides open: two frames of a height, which is layout, and a commit a frame
+  // from JavaScript. As a transition of one is, it is the one commit to where it ends, with
+  // native asked to move the views there, where nothing else in the commit moves.
+  const PANEL = `
+    @keyframes open { from { height: 0 } to { height: 40px } }
+    @keyframes shut { from { height: 40px } to { height: 0 } }
+    @keyframes grow { from { height: 10px } to { height: 40px } }
+    .p { height: 0 }
+    .p.open { height: 40px; animation: open 200ms ease-in-out forwards }
+    .p.shut { animation: shut 200ms ease-in-out forwards }
+    .p.grow { animation: grow 200ms linear forwards }
+    .p.brief { height: 40px; animation: open 20ms linear }
+    .b.tall { height: 40px }
+    .c { width: 10px; transition: width 150ms linear }
+    .c.wide { width: 30px }
+  `;
+
+  function panel() {
+    const fabric = createFakeFabric();
+    const asked: { duration: number; update: { type: string } }[] = [];
+    Object.assign(fabric, {
+      configureNextLayoutAnimation: (config: (typeof asked)[number]) => void asked.push(config),
+    });
+    let now = 0;
+    const engine = new Engine(fabric, 1, {
+      globalStyles: compileCss(PANEL) as StyleSheet,
+      now: () => now,
+    });
+    const make = (classes: string): EngineNode => {
+      const view = engine.createElement('view');
+      engine.setClasses(view, classes);
+      engine.appendChild(engine.root, view);
+      return view;
+    };
+    const p = make('p');
+    const b = make('b');
+    const events: string[] = [];
+    for (const name of ['topAnimationstart', 'topAnimationend']) {
+      engine.setEventListener(p, name, () => void events.push(name.slice(12)));
+    }
+    engine.commit();
+    engine.advanceAnimations();
+    const height = () => Math.round(Number(fabric.committed[0]!.props['height']) * 100) / 100;
+    const classes = (names: string) => {
+      engine.setClasses(p, names);
+      engine.commit();
+    };
+    const later = (ms: number) => {
+      now += ms;
+      const live = engine.advanceAnimations();
+      engine.commit();
+      return live;
+    };
+    return { engine, p, b, asked, events, height, classes, later };
+  }
+
+  it('is the one commit, to its last frame, with native asked to move the view there', () => {
+    const s = panel();
+    s.classes('p open');
+    assert.deepEqual(s.asked, [{ duration: 200, update: { type: 'easeInEaseOut' } }]);
+    assert.equal(s.height(), 40);
+    assert.equal(s.engine.animating, false);
+    assert.deepEqual(s.events, ['start']);
+  });
+
+  it('says it has ended when its time is up, and gives back what it held where it does not fill', async () => {
+    const s = panel();
+    s.classes('p brief');
+    assert.equal(s.asked.length, 1);
+    await new Promise((resolve) => setTimeout(resolve, 60));
+    assert.deepEqual(s.events, ['start', 'end']);
+    assert.equal(s.height(), 40);
+  });
+
+  it('is played the other way by native too, from where the first left it', () => {
+    const s = panel();
+    s.classes('p open');
+    s.classes('p shut');
+    assert.equal(s.asked.length, 2);
+    assert.equal(s.height(), 0);
+  });
+
+  it('is the one native lays out where a shorter transition starts in the commit with it', () => {
+    // Native takes one length of time for a commit. A bar that ticks along beside the panel
+    // is eased from JavaScript for that tick, and the panel is not given up for it.
+    const s = panel();
+    const c = s.engine.createElement('view');
+    s.engine.setClasses(c, 'c');
+    s.engine.appendChild(s.engine.root, c);
+    s.engine.commit();
+    s.engine.advanceAnimations();
+    s.engine.setClasses(c, 'c wide');
+    s.classes('p open');
+    assert.deepEqual(s.asked, [{ duration: 200, update: { type: 'easeInEaseOut' } }]);
+    assert.equal(s.height(), 40);
+    assert.equal(s.engine.animating, true, 'the bar, from JavaScript');
+    assert.equal(s.engine.root.children[2]!.committed!.props['width'], 10);
+  });
+
+  it('is played from JavaScript where another box is resized in the commit', () => {
+    const s = panel();
+    s.engine.setClasses(s.b, 'b tall');
+    s.classes('p open');
+    assert.deepEqual(s.asked, []);
+    assert.equal(s.height(), 0);
+    assert.equal(s.engine.animating, true);
+    s.later(100);
+    assert.equal(s.height(), 20);
+  });
+
+  it('is played from JavaScript where its first frame is not where the view is', () => {
+    // Native moves a view from where it is drawn, which is then not where the animation starts.
+    const s = panel();
+    s.classes('p grow');
+    assert.deepEqual(s.asked, []);
+    assert.equal(s.height(), 10);
+    assert.equal(s.engine.animating, true);
+  });
+});
