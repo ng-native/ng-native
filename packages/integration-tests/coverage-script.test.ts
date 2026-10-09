@@ -177,8 +177,23 @@ describe('coverage script integrity', () => {
   it('rejects a report containing no shipped source lines', () =>
     workspace((root) => {
       for (const report of reports)
-        writeFileSync(path.join(root, 'coverage', report), lcov(1, 'fixture.ts'));
+        writeFileSync(path.join(root, 'coverage', report), lcov(1, '../../scripts/fixture.mjs'));
       rejects(root, /no.*(shipped|source|line)/i);
+    }));
+
+  it('counts what a package ships beside its package.json, and not what the tests are made of', () =>
+    workspace((root) => {
+      // Each path is from the directory its suite runs in: `packages/integration-tests` here.
+      const measured = ['../metro/css/compile.cjs', 'compile.ts', '../web/register-linker.mjs'];
+      writeFileSync(
+        path.join(root, 'coverage/native.info'),
+        measured.map((f) => lcov(1, f)).join(''),
+      );
+      assert.equal(cli(root).status, 0);
+      const files = summary(root).files.map((entry) => entry.file);
+      assert.ok(files.includes('packages/metro/css/compile.cjs'), 'Metro has no src directory');
+      assert.ok(!files.some((file) => file.startsWith('packages/integration-tests/')));
+      assert.ok(!files.some((file) => file.endsWith('register-linker.mjs')), 'a suite hook');
     }));
 
   for (const minimum of [undefined, '', 'NaN', '-1', '101', 'Infinity']) {
