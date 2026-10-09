@@ -286,9 +286,11 @@ other per-side shorthands set that side's width and color, and take `solid` (nat
 `none` as their style. Any other style there, as in `border-top: 1px dashed red`, is drawn solid
 with its width and color, and the build says so. A side styled `none`, by its shorthand or by
 `border-right-style` and the other three, has no width whatever width another rule gives it, as CSS
-computes it, until a rule styles that side again. A border shorthand with no color, such as `border:
-2px solid`, is drawn in the element's text color, its own or inherited, as on the web, and so is a
-border color of `currentColor`, which is what Tailwind's `border-current` writes. An outline with no
+computes it, until a rule styles that side again. A border with no color is drawn in the element's
+text color, its own or inherited, as on the web: `border: 2px solid`, a `border-width` with no
+`border-color`, and a side with a width that no rule gave a color. So is a border color of
+`currentColor`, which is what Tailwind's `border-current` writes. Where no text color is set
+either, the border is black. An outline with no
 color, an `outline-color`, a `background-color` and a `text-decoration-color` of `currentColor`, a
 `var()` that falls back to `currentColor` and a custom property that holds it take the text color
 the same way, where they are used. `color: currentColor` and `color: inherit` are the color the

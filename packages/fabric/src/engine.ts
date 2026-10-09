@@ -1306,6 +1306,14 @@ function ratioForAutoSize(props: Record<string, unknown>): void {
 
 const OUTLINE_KEYS = ['outlineWidth', 'outlineStyle', 'outlineColor', 'outlineOffset'];
 
+/** Each side a border has, with the logical side React Native also takes a colour for. */
+const BORDER_SIDES = [
+  ['Top', 'BlockStart'],
+  ['Right', 'End'],
+  ['Bottom', 'BlockEnd'],
+  ['Left', 'Start'],
+] as const;
+
 /**
  * Send nothing for an outline of no width, which is what `outline: none` is: it draws nothing,
  * and a view with no outline is the same view. Sent, it is an update that is not one, and on
@@ -4109,6 +4117,7 @@ export class Engine implements HostEngine {
     // After the basis, which is a size given where it is committed as one.
     ratioForAutoSize(merged);
     noOutline(merged);
+    this.borderInText(node, merged);
     // Last, on what is committed: an override or an animation can hide a box, or place it.
     hiddenOutOfFlow(merged);
     delete merged['touchAction'];
@@ -4148,6 +4157,25 @@ export class Engine implements HostEngine {
     if (raised === node.raised) return;
     node.raised = raised;
     node.propsDirty = true;
+  }
+
+  /**
+   * Draw a border that has a width and no colour in the colour of the text, as a browser does:
+   * `border-color` starts as `currentColor`, and native starts it as black. Each side with a
+   * width, where nothing gave that side a colour. Left to native where there is no text colour
+   * to take, which is black in a browser too.
+   */
+  private borderInText(node: EngineNode, props: Record<string, unknown>): void {
+    let text: unknown;
+    for (const [side, logical] of BORDER_SIDES) {
+      const width = props[`border${side}Width`] ?? props['borderWidth'];
+      if (typeof width !== 'number' || width <= 0) continue;
+      const given = [`border${side}Color`, `border${logical}Color`, 'borderColor'];
+      if (given.some((key) => props[key] != null)) continue;
+      text ??= props['color'] ?? this.styles.resolve(node, this.styleEpoch).inherited['color'];
+      if (text == null) return;
+      props[`border${side}Color`] = text;
+    }
   }
 
   /**
