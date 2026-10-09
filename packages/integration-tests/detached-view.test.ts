@@ -8,7 +8,6 @@
  */
 import assert from 'node:assert/strict';
 import { afterEach, before, describe, it } from 'node:test';
-import { fileURLToPath } from 'node:url';
 import type { Type } from '@angular/core';
 import { cleanup, render, userEvent } from '@ng-native/testing';
 import { compileFixture } from './compile.ts';
@@ -21,9 +20,7 @@ describe('a view detached before its first check', () => {
   let Component: Type<Detached>;
 
   before(async () => {
-    const mod = await compileFixture(
-      fileURLToPath(new URL('./fixtures/detached.ts', import.meta.url)),
-    );
+    const mod = await compileFixture('fixtures/detached.ts');
     Component = mod['Detached'] as Type<Detached>;
   });
 

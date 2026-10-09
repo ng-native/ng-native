@@ -13,7 +13,6 @@
 import assert from 'node:assert/strict';
 import { after, before, describe, it } from 'node:test';
 import { createRequire } from 'node:module';
-import { fileURLToPath } from 'node:url';
 import type { Type } from '@angular/core';
 import { Engine } from '@ng-native/fabric';
 import {
@@ -178,9 +177,7 @@ describe('matching one', () => {
   let host: { count: { set(value: number): void } };
 
   before(async () => {
-    const mod = await compileFixture(
-      fileURLToPath(new URL('./fixtures/structural.ts', import.meta.url)),
-    );
+    const mod = await compileFixture('fixtures/structural.ts');
     Host = mod['StructuralHost'] as Type<{ count: { set(value: number): void } }>;
   });
 

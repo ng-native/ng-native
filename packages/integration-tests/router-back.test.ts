@@ -9,7 +9,6 @@
  */
 import assert from 'node:assert/strict';
 import { afterEach, before, beforeEach, describe, it } from 'node:test';
-import { fileURLToPath } from 'node:url';
 import type { Type } from '@angular/core';
 import { NavigationEnd, Router, type Routes } from '@angular/router';
 import { HardwareBack } from '@ng-native/device';
@@ -47,7 +46,7 @@ describe('going back in an app with tabs', () => {
   };
 
   before(async () => {
-    mod = await compileFixture(fileURLToPath(new URL('./fixtures/tab-stacks.ts', import.meta.url)));
+    mod = await compileFixture('fixtures/tab-stacks.ts');
   });
 
   beforeEach(async () => {

@@ -9,7 +9,6 @@
  */
 import assert from 'node:assert/strict';
 import { after, before, describe, it } from 'node:test';
-import { fileURLToPath } from 'node:url';
 import type { Type } from '@angular/core';
 import type { Role } from '@ng-native/components';
 import { cleanup, render, settle, type FakeFabricNode } from '@ng-native/testing';
@@ -19,9 +18,7 @@ let app: Awaited<ReturnType<typeof render<{ label: { set(value: string | undefin
 const node = (id: string): FakeFabricNode => app.getByTestId(id);
 
 before(async () => {
-  const mod = await compileFixture(
-    fileURLToPath(new URL('./fixtures/aria-anywhere.ts', import.meta.url)),
-  );
+  const mod = await compileFixture('fixtures/aria-anywhere.ts');
   app = await render(
     mod['AriaAnywhere'] as Type<{ label: { set(value: string | undefined): void } }>,
   );

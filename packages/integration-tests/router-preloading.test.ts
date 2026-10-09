@@ -5,7 +5,6 @@
  */
 import assert from 'node:assert/strict';
 import { afterEach, before, it } from 'node:test';
-import { fileURLToPath } from 'node:url';
 import type { Type } from '@angular/core';
 import { PreloadAllModules, withPreloading, type Routes } from '@angular/router';
 import { cleanup, render, settle } from '@ng-native/testing';
@@ -16,9 +15,7 @@ afterEach(cleanup);
 
 let mod: Record<string, unknown>;
 before(async () => {
-  mod = await compileFixture(
-    fileURLToPath(new URL('./fixtures/guarded-sheet.ts', import.meta.url)),
-  );
+  mod = await compileFixture('fixtures/guarded-sheet.ts');
 });
 
 async function lazyLoadsAfterStart(...features: ReturnType<typeof withPreloading>[]) {

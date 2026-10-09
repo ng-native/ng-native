@@ -4,7 +4,6 @@
  */
 import assert from 'node:assert/strict';
 import { after, before, it } from 'node:test';
-import { fileURLToPath } from 'node:url';
 import type { Type } from '@angular/core';
 import { cleanup, render, settle, type FakeFabricNode } from '@ng-native/testing';
 import { compileFixture } from './compile.ts';
@@ -16,9 +15,7 @@ const symbol = (id: string) =>
   flatten(app.fabric.committed).find((node) => node.props['nativeID'] === id)!;
 
 before(async () => {
-  const mod = await compileFixture(
-    fileURLToPath(new URL('./fixtures/symbol-tint.ts', import.meta.url)),
-  );
+  const mod = await compileFixture('fixtures/symbol-tint.ts');
   app = await render(mod['SymbolTint'] as Type<{ accent: { set(value: string): void } }>);
 });
 after(cleanup);

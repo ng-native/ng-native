@@ -8,7 +8,6 @@
  */
 import assert from 'node:assert/strict';
 import { after, afterEach, before, beforeEach, describe, it } from 'node:test';
-import { fileURLToPath } from 'node:url';
 import {
   EnvironmentInjector,
   ErrorHandler,
@@ -119,7 +118,7 @@ describe('native tabs outlet', () => {
 
   before(async () => {
     registerScreenComponents();
-    mod = await compileFixture(fileURLToPath(new URL('./fixtures/tabs.ts', import.meta.url)));
+    mod = await compileFixture('fixtures/tabs.ts');
   });
 
   beforeEach(async () => {
@@ -624,9 +623,7 @@ describe('tabs and a header written the less usual ways', () => {
 
   before(async () => {
     registerScreenComponents();
-    mod = await compileFixture(
-      fileURLToPath(new URL('./fixtures/tab-variants.ts', import.meta.url)),
-    );
+    mod = await compileFixture('fixtures/tab-variants.ts');
   });
 
   afterEach(() => cleanup());

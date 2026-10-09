@@ -3,7 +3,6 @@
  */
 import assert from 'node:assert/strict';
 import { before, beforeEach, describe, it } from 'node:test';
-import { fileURLToPath } from 'node:url';
 import type { Type } from '@angular/core';
 import {
   fireEvent,
@@ -33,9 +32,7 @@ describe('windowed list', () => {
   let host: FakeFabricNode;
 
   before(async () => {
-    const mod = await compileFixture(
-      fileURLToPath(new URL('./fixtures/virtual.ts', import.meta.url)),
-    );
+    const mod = await compileFixture('fixtures/virtual.ts');
     Component = mod['Virtual'] as Type<unknown>;
   });
 
@@ -111,9 +108,7 @@ describe('windowed list, when its items are replaced', () => {
     Array.from({ length: count }, (_, i) => ({ id: i, label: `${prefix} ${i}` }));
 
   beforeEach(async () => {
-    const mod = await compileFixture(
-      fileURLToPath(new URL('./fixtures/virtual.ts', import.meta.url)),
-    );
+    const mod = await compileFixture('fixtures/virtual.ts');
     const rendered = await render(mod['Virtual'] as Type<unknown>);
     fabric = rendered.fabric;
     instance = rendered.instance as typeof instance;
@@ -160,9 +155,7 @@ describe('windowed list, checking the end and what is on screen without a scroll
   const scrollView = () => flatten(fabric.committed).find((n) => n.viewName === 'ScrollView')!;
 
   before(async () => {
-    const mod = await compileFixture(
-      fileURLToPath(new URL('./fixtures/virtual.ts', import.meta.url)),
-    );
+    const mod = await compileFixture('fixtures/virtual.ts');
     Component = mod['VirtualFeed'] as Type<unknown>;
   });
 
@@ -251,9 +244,7 @@ describe('windowed list, recycled by slot', () => {
   };
 
   beforeEach(async () => {
-    const mod = await compileFixture(
-      fileURLToPath(new URL('./fixtures/virtual.ts', import.meta.url)),
-    );
+    const mod = await compileFixture('fixtures/virtual.ts');
     const { instance, ...rendered } = await render(mod['VirtualRecycled'] as Type<unknown>);
     fabric = rendered.fabric;
     host = flatten(fabric.committed).find((n) => n.viewName === 'ScrollView')!;
@@ -329,9 +320,7 @@ describe('windowed list, recycled by slot', () => {
 
 describe('native default props', () => {
   it('lets a caller override a default prop', async () => {
-    const mod = await compileFixture(
-      fileURLToPath(new URL('./fixtures/virtual.ts', import.meta.url)),
-    );
+    const mod = await compileFixture('fixtures/virtual.ts');
     const { fabric, unmount } = await render(mod['Virtual'] as Type<unknown>);
 
     const host = flatten(fabric.committed).find((n) => n.viewName === 'ScrollView')!;
@@ -345,9 +334,7 @@ describe('native default props', () => {
 
 describe('windowed list, as a scroll view', () => {
   it('passes the scroll view s own props to the native scroll view', async () => {
-    const mod = await compileFixture(
-      fileURLToPath(new URL('./fixtures/virtual.ts', import.meta.url)),
-    );
+    const mod = await compileFixture('fixtures/virtual.ts');
     const { fabric } = await render(mod['VirtualCarousel'] as Type<unknown>);
     const props = flatten(fabric.committed).find((n) => n.viewName === 'ScrollView')!.props;
     assert.equal(props['pagingEnabled'], true);
@@ -365,9 +352,7 @@ describe('windowed list, as a scroll view', () => {
 
 describe('windowed list cost', () => {
   it('does not re-render for a scroll that leaves the window unchanged', async () => {
-    const mod = await compileFixture(
-      fileURLToPath(new URL('./fixtures/virtual.ts', import.meta.url)),
-    );
+    const mod = await compileFixture('fixtures/virtual.ts');
     const { fabric, unmount } = await render(mod['Virtual'] as Type<unknown>);
     const host = flatten(fabric.committed).find((n) => n.viewName === 'ScrollView')!;
     await fireEvent(host, 'layout', { layout: { height: 400 } });
@@ -406,9 +391,7 @@ describe('windowed list options', () => {
   };
 
   before(async () => {
-    const mod = await compileFixture(
-      fileURLToPath(new URL('./fixtures/virtual.ts', import.meta.url)),
-    );
+    const mod = await compileFixture('fixtures/virtual.ts');
     Component = mod['VirtualOptions'] as Type<unknown>;
   });
 
@@ -649,9 +632,7 @@ describe('windowed list with mixed row heights', () => {
   let Component: Type<unknown>;
 
   before(async () => {
-    const mod = await compileFixture(
-      fileURLToPath(new URL('./fixtures/virtual.ts', import.meta.url)),
-    );
+    const mod = await compileFixture('fixtures/virtual.ts');
     Component = mod['VirtualMixed'] as Type<unknown>;
   });
 

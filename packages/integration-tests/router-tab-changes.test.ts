@@ -4,7 +4,6 @@
  */
 import assert from 'node:assert/strict';
 import { afterEach, before, beforeEach, describe, it } from 'node:test';
-import { fileURLToPath } from 'node:url';
 import type { Type, WritableSignal } from '@angular/core';
 import { Router, type Routes } from '@angular/router';
 import {
@@ -47,9 +46,7 @@ describe('a tab added after start', () => {
   };
 
   before(async () => {
-    mod = await compileFixture(
-      fileURLToPath(new URL('./fixtures/tab-changes.ts', import.meta.url)),
-    );
+    mod = await compileFixture('fixtures/tab-changes.ts');
     betaEnabled = mod['betaEnabled'] as WritableSignal<boolean>;
   });
 

@@ -8,7 +8,6 @@
  */
 import assert from 'node:assert/strict';
 import { before, beforeEach, describe, it } from 'node:test';
-import { fileURLToPath } from 'node:url';
 import type { Type } from '@angular/core';
 import { cleanup, fireEvent, render, screen, type RenderResult } from '@ng-native/testing';
 import { compileFixture } from './compile.ts';
@@ -18,9 +17,7 @@ describe('press tolerance', () => {
   let result: RenderResult<{ presses: number }>;
 
   before(async () => {
-    const mod = await compileFixture(
-      fileURLToPath(new URL('./fixtures/active.ts', import.meta.url)),
-    );
+    const mod = await compileFixture('fixtures/active.ts');
     Component = mod['Active'] as Type<unknown>;
   });
 
@@ -76,9 +73,7 @@ describe('press retention is not symmetric', () => {
   let result: RenderResult<{ presses: number }>;
 
   before(async () => {
-    const mod = await compileFixture(
-      fileURLToPath(new URL('./fixtures/active.ts', import.meta.url)),
-    );
+    const mod = await compileFixture('fixtures/active.ts');
     Component = mod['Active'] as Type<unknown>;
   });
 
@@ -119,9 +114,7 @@ describe('pressables configured the less usual ways', () => {
   let result: RenderResult<{ counts: Record<string, number> }>;
 
   before(async () => {
-    const mod = await compileFixture(
-      fileURLToPath(new URL('./fixtures/press-options.ts', import.meta.url)),
-    );
+    const mod = await compileFixture('fixtures/press-options.ts');
     Component = mod['PressOptions'] as Type<unknown>;
   });
 

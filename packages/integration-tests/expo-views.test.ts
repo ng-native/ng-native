@@ -6,7 +6,6 @@
  */
 import assert from 'node:assert/strict';
 import { afterEach, describe, it } from 'node:test';
-import { fileURLToPath } from 'node:url';
 import type { Type } from '@angular/core';
 import { liquidGlassAvailable, registerExpoViews } from '@ng-native/expo';
 import { mount } from '@ng-native/platform';
@@ -17,9 +16,7 @@ const all = (nodes: readonly FakeFabricNode[]): FakeFabricNode[] =>
   nodes.flatMap((node) => [node, ...all(node.children)]);
 
 async function render() {
-  const mod = await compileFixture(
-    fileURLToPath(new URL('./fixtures/expo-views.ts', import.meta.url)),
-  );
+  const mod = await compileFixture('fixtures/expo-views.ts');
   registerExpoViews('expo-glass', 'expo-glass-container', 'expo-symbol', 'apple-sign-in-button');
   const fabric = createFakeFabric();
   const app = mount(1, mod['ExpoViewsFixture'] as Type<unknown>, fabric);

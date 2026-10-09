@@ -1229,9 +1229,7 @@ describe('the reload hook', () => {
 
   let Features: Type<unknown>;
   before(async () => {
-    const mod = await compileFixture(
-      fileURLToPath(new URL('./fixtures/features.ts', import.meta.url)),
-    );
+    const mod = await compileFixture('fixtures/features.ts');
     Features = mod['Features'] as Type<unknown>;
   });
 

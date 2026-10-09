@@ -5,7 +5,6 @@
  */
 import assert from 'node:assert/strict';
 import { after, afterEach, before, describe, it } from 'node:test';
-import { fileURLToPath } from 'node:url';
 import type { Type } from '@angular/core';
 import { cleanup, render, type FakeFabricNode } from '@ng-native/testing';
 import { compileFixture } from './compile.ts';
@@ -19,9 +18,7 @@ describe('a custom property nothing defines', () => {
   const warn = console.warn;
 
   before(async () => {
-    const mod = await compileFixture(
-      fileURLToPath(new URL('./fixtures/undefined-token.ts', import.meta.url)),
-    );
+    const mod = await compileFixture('fixtures/undefined-token.ts');
     Host = mod['UndefinedToken'] as Type<unknown>;
     console.warn = (...args: unknown[]) => warnings.push(args.map(String).join(' '));
   });

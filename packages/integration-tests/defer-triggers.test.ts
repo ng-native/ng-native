@@ -9,7 +9,6 @@
  */
 import assert from 'node:assert/strict';
 import { after, afterEach, before, describe, it } from 'node:test';
-import { fileURLToPath } from 'node:url';
 import type { Type } from '@angular/core';
 import { Engine, EngineIntersectionObserver, type EngineNode } from '@ng-native/fabric';
 import {
@@ -30,9 +29,7 @@ describe('@defer on a DOM trigger', () => {
   const original = { error: console.error, warn: console.warn };
 
   before(async () => {
-    mod = await compileFixture(
-      fileURLToPath(new URL('./fixtures/defer-triggers.ts', import.meta.url)),
-    );
+    mod = await compileFixture('fixtures/defer-triggers.ts');
     console.error = (...args: unknown[]) => errors.push(args.map(String).join(' '));
     console.warn = (...args: unknown[]) => warnings.push(args.map(String).join(' '));
   });

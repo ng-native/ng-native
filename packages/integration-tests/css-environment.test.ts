@@ -12,7 +12,6 @@
 import assert from 'node:assert/strict';
 import { after, before, describe, it } from 'node:test';
 import { createRequire } from 'node:module';
-import { fileURLToPath } from 'node:url';
 import type { Type } from '@angular/core';
 import { Engine } from '@ng-native/fabric';
 import { cleanup, createFakeFabric, render, settle, type BoundQueries } from '@ng-native/testing';
@@ -31,9 +30,7 @@ describe('tokens the device supplies', () => {
   let completeRootCalls: () => number;
 
   before(async () => {
-    const mod = await compileFixture(
-      fileURLToPath(new URL('./fixtures/device-tokens.ts', import.meta.url)),
-    );
+    const mod = await compileFixture('fixtures/device-tokens.ts');
     Host = mod['DeviceTokenHost'] as Type<unknown>;
   });
 

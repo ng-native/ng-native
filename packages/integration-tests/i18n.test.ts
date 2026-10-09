@@ -12,7 +12,6 @@
 import '@angular/localize/init';
 import assert from 'node:assert/strict';
 import { after, before, describe, it } from 'node:test';
-import { fileURLToPath } from 'node:url';
 import type { Type } from '@angular/core';
 import { cleanup, screen, render, settle } from '@ng-native/testing';
 import type { FakeFabricNode } from '@ng-native/testing';
@@ -26,7 +25,7 @@ describe('i18n', () => {
   };
 
   before(async () => {
-    const mod = await compileFixture(fileURLToPath(new URL('./fixtures/i18n.ts', import.meta.url)));
+    const mod = await compileFixture('fixtures/i18n.ts');
     const rendered = await render(mod['I18nHost'] as Type<unknown>);
     host = rendered.instance as typeof host;
   });

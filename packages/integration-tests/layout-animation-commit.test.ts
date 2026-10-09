@@ -8,7 +8,6 @@
  */
 import assert from 'node:assert/strict';
 import { before, describe, it } from 'node:test';
-import { fileURLToPath } from 'node:url';
 import type { Type } from '@angular/core';
 import { mount } from '@ng-native/platform';
 import { LayoutAnimation, type NativeLayoutAnimation } from '@ng-native/device';
@@ -43,9 +42,7 @@ describe('the commit a layout animation lands on', () => {
   let Component: Type<Fixture>;
 
   before(async () => {
-    const mod = await compileFixture(
-      fileURLToPath(new URL('./fixtures/layout-animated.ts', import.meta.url)),
-    );
+    const mod = await compileFixture('fixtures/layout-animated.ts');
     Component = mod['LayoutAnimated'] as Type<Fixture>;
   });
 

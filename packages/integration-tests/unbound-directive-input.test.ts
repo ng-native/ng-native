@@ -8,7 +8,6 @@
  */
 import assert from 'node:assert/strict';
 import { before, describe, it } from 'node:test';
-import { fileURLToPath } from 'node:url';
 import type { Type } from '@angular/core';
 import { mount } from '@ng-native/platform';
 import { createFakeFabric } from '@ng-native/testing';
@@ -32,9 +31,7 @@ describe('a forms directive input with no directive to take it', () => {
   let mod: Record<string, unknown>;
 
   before(async () => {
-    mod = await compileFixture(
-      fileURLToPath(new URL('./fixtures/signal-form.ts', import.meta.url)),
-    );
+    mod = await compileFixture('fixtures/signal-form.ts');
   });
 
   const run = (name: string, dev: boolean) =>

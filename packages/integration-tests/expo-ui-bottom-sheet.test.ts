@@ -5,7 +5,6 @@
  */
 import assert from 'node:assert/strict';
 import { after, before, describe, it } from 'node:test';
-import { fileURLToPath } from 'node:url';
 import type { InjectionToken, Type } from '@angular/core';
 import { registerPlatformComponents } from '@ng-native/fabric';
 import { mount } from '@ng-native/platform';
@@ -39,9 +38,7 @@ let UiBottomSheet: { readonly SOURCE: InjectionToken<unknown> };
 let Defaults: Type<{ readonly open: Writable<boolean> }>;
 
 before(async () => {
-  const mod = await compileFixture(
-    fileURLToPath(new URL('./fixtures/expo-ui-bottom-sheet.ts', import.meta.url)),
-  );
+  const mod = await compileFixture('fixtures/expo-ui-bottom-sheet.ts');
   Sheet = mod['ExpoUiBottomSheetFixture'] as Type<Fixture>;
   UiBottomSheet = mod['UiBottomSheet'] as typeof UiBottomSheet;
   Defaults = mod['ExpoUiBottomSheetDefaultsFixture'] as typeof Defaults;

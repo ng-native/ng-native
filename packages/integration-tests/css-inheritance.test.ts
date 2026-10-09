@@ -8,7 +8,6 @@
  */
 import assert from 'node:assert/strict';
 import { after, before, beforeEach, describe, it } from 'node:test';
-import { fileURLToPath } from 'node:url';
 import type { Type } from '@angular/core';
 import {
   cleanup,
@@ -34,9 +33,7 @@ describe('inheritance across a component boundary', () => {
   let fabric: FakeFabric;
 
   before(async () => {
-    const mod = await compileFixture(
-      fileURLToPath(new URL('./fixtures/cross-component.ts', import.meta.url)),
-    );
+    const mod = await compileFixture('fixtures/cross-component.ts');
     Parent = mod['CrossParent'] as Type<unknown>;
   });
 
@@ -73,9 +70,7 @@ describe('inheritance across a component boundary', () => {
 
 describe('re-resolving inherited style when only an ancestor changes', () => {
   it('updates a child that is not itself dirty', async () => {
-    const mod = await compileFixture(
-      fileURLToPath(new URL('./fixtures/inherit-update.ts', import.meta.url)),
-    );
+    const mod = await compileFixture('fixtures/inherit-update.ts');
     const { fabric, instance, rerender } = await render(
       mod['InheritUpdate'] as Type<{ dark: { set(v: boolean): void } }>,
     );
@@ -95,9 +90,7 @@ describe('re-resolving inherited style when only an ancestor changes', () => {
     // The harder half of the same problem. `.wrap.dark .deep` changes what a descendant matches
     // while nothing inheritable moves at all, so watching the inherited map is not enough: the
     // invalidation token has to stand for the whole ancestor chain's matchable state.
-    const mod = await compileFixture(
-      fileURLToPath(new URL('./fixtures/inherit-update.ts', import.meta.url)),
-    );
+    const mod = await compileFixture('fixtures/inherit-update.ts');
     const { fabric, instance, rerender } = await render(
       mod['InheritUpdate'] as Type<{ dark: { set(v: boolean): void } }>,
     );

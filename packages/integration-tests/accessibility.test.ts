@@ -8,7 +8,6 @@
  */
 import assert from 'node:assert/strict';
 import { after, before, describe, it } from 'node:test';
-import { fileURLToPath } from 'node:url';
 import type { Type } from '@angular/core';
 import { cleanup, render, type FakeFabricNode } from '@ng-native/testing';
 import { compileFixture } from './compile.ts';
@@ -16,9 +15,7 @@ import { compileFixture } from './compile.ts';
 let node: (id: string) => FakeFabricNode;
 
 before(async () => {
-  const mod = await compileFixture(
-    fileURLToPath(new URL('./fixtures/accessibility.ts', import.meta.url)),
-  );
+  const mod = await compileFixture('fixtures/accessibility.ts');
   const { getByTestId } = await render(mod['Accessible'] as Type<unknown>);
   node = (id) => getByTestId(id);
 });
@@ -27,9 +24,7 @@ after(cleanup);
 
 describe('accessibility state that a component owns', () => {
   it("keeps up when the component's own input changes, not just at mount", async () => {
-    const mod = await compileFixture(
-      fileURLToPath(new URL('./fixtures/accessibility.ts', import.meta.url)),
-    );
+    const mod = await compileFixture('fixtures/accessibility.ts');
     const { instance, getByTestId, rerender } = await render(
       mod['Accessible'] as Type<{ off: { set(value: boolean): void } }>,
     );
@@ -52,9 +47,7 @@ describe('a prop an input stops asking for', () => {
   type Toggles = { busy: { set(value: boolean): void } };
 
   it('clears a prop whose binding went back to undefined', async () => {
-    const mod = await compileFixture(
-      fileURLToPath(new URL('./fixtures/accessibility.ts', import.meta.url)),
-    );
+    const mod = await compileFixture('fixtures/accessibility.ts');
     const { instance, getByTestId, rerender } = await render(mod['Accessible'] as Type<Toggles>);
     assert.equal(getByTestId('busy').props['pointerEvents'], 'none');
     instance.busy.set(false);

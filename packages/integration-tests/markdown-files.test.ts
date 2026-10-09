@@ -218,9 +218,7 @@ describe('importing a .md file', () => {
   });
 
   it('draws the tokens of a .md file a plain app imports', async () => {
-    const mod = await compileFixture(
-      fileURLToPath(new URL('./fixtures/markdown-file.ts', import.meta.url)),
-    );
+    const mod = await compileFixture('fixtures/markdown-file.ts');
     const app = await render(mod['MarkdownFileScreen'] as Type<unknown>);
     const header = flatten(app.fabric.committed).find(
       (node) => node.props['accessibilityRole'] === 'header',

@@ -13,7 +13,6 @@
  */
 import assert from 'node:assert/strict';
 import { before, describe, it } from 'node:test';
-import { fileURLToPath } from 'node:url';
 import { signal, type Type } from '@angular/core';
 import { ColorScheme, OS_VERSION, type Scheme } from '@ng-native/device';
 import { registerPlatformComponents } from '@ng-native/fabric';
@@ -26,9 +25,7 @@ describe('a header nobody gave a colour', () => {
   let mod: Record<string, unknown>;
 
   before(async () => {
-    mod = await compileFixture(
-      fileURLToPath(new URL('./fixtures/header-colours.ts', import.meta.url)),
-    );
+    mod = await compileFixture('fixtures/header-colours.ts');
   });
 
   const bar = async (name: string, scheme: Scheme, palette?: unknown) => {
@@ -81,9 +78,7 @@ describe('a header in an app that asks for the Liquid Glass bar', () => {
   let mod: Record<string, unknown>;
 
   before(async () => {
-    mod = await compileFixture(
-      fileURLToPath(new URL('./fixtures/header-colours.ts', import.meta.url)),
-    );
+    mod = await compileFixture('fixtures/header-colours.ts');
   });
 
   const bar = async (name: string, version: number | null, defaults: object | null) => {
@@ -173,9 +168,7 @@ describe('a large title nobody configured', () => {
   let mod: Record<string, unknown>;
 
   before(async () => {
-    mod = await compileFixture(
-      fileURLToPath(new URL('./fixtures/header-colours.ts', import.meta.url)),
-    );
+    mod = await compileFixture('fixtures/header-colours.ts');
   });
 
   const bar = async (name: string) => {

@@ -13,7 +13,6 @@
 import assert from 'node:assert/strict';
 import { before, describe, it } from 'node:test';
 import { createRequire } from 'node:module';
-import { fileURLToPath } from 'node:url';
 import type { Type } from '@angular/core';
 import { mount } from '@ng-native/platform';
 import { Engine, StyleResolver, type StyleSheet, type StyleTarget } from '@ng-native/fabric';
@@ -50,12 +49,8 @@ describe('what CSS costs', () => {
   let Styled: Type<unknown>;
 
   before(async () => {
-    Plain = (await compileFixture(fileURLToPath(new URL('./fixtures/scale.ts', import.meta.url))))[
-      'Scale'
-    ] as Type<unknown>;
-    Styled = (
-      await compileFixture(fileURLToPath(new URL('./fixtures/scale-styled.ts', import.meta.url)))
-    )['ScaleStyled'] as Type<unknown>;
+    Plain = (await compileFixture('fixtures/scale.ts'))['Scale'] as Type<unknown>;
+    Styled = (await compileFixture('fixtures/scale-styled.ts'))['ScaleStyled'] as Type<unknown>;
   });
 
   it('costs nothing at all when a component has no stylesheet', async () => {

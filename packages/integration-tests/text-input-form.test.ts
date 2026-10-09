@@ -10,7 +10,6 @@
 import assert from 'node:assert/strict';
 import { before, describe, it } from 'node:test';
 import { createRequire } from 'node:module';
-import { fileURLToPath } from 'node:url';
 import type { Type } from '@angular/core';
 import { fireEvent, render, screen } from '@ng-native/testing';
 import { compileFixture } from './compile.ts';
@@ -35,9 +34,7 @@ describe('a text input as a Signal Forms control', () => {
   };
 
   before(async () => {
-    const mod = await compileFixture(
-      fileURLToPath(new URL('./fixtures/text-input-form.ts', import.meta.url)),
-    );
+    const mod = await compileFixture('fixtures/text-input-form.ts');
     const { instance } = await render(mod['TextInputForm'] as Type<unknown>, {
       globalStyles: compileCss(SHEET, 'global'),
     });

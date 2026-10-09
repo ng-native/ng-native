@@ -1,6 +1,5 @@
 import assert from 'node:assert/strict';
 import { after, before, describe, it } from 'node:test';
-import { fileURLToPath } from 'node:url';
 import type { Type } from '@angular/core';
 import { registerPlatformComponents } from '@ng-native/fabric';
 import { mount } from '@ng-native/platform';
@@ -28,9 +27,7 @@ let TextContent: Type<{ us: { set(value: string): void } }>;
 let OwnButton: Type<unknown>;
 
 before(async () => {
-  const mod = await compileFixture(
-    fileURLToPath(new URL('./fixtures/expo-ui-platforms.ts', import.meta.url)),
-  );
+  const mod = await compileFixture('fixtures/expo-ui-platforms.ts');
   Platforms = mod['ExpoUiPlatformsFixture'] as Type<Fixture>;
   Defaults = mod['ExpoUiPlatformDefaultsFixture'] as Type<DefaultsFixture>;
   TextContent = mod['ExpoUiTextContentFixture'] as typeof TextContent;

@@ -10,7 +10,6 @@
  */
 import assert from 'node:assert/strict';
 import { before, beforeEach, afterEach, describe, it } from 'node:test';
-import { fileURLToPath } from 'node:url';
 import type { Type } from '@angular/core';
 import { cleanup, render, screen, type FakeFabric } from '@ng-native/testing';
 import { compileFixture } from './compile.ts';
@@ -23,9 +22,7 @@ describe('a press in a list that scrolls', () => {
   let host: { taps: () => number };
 
   before(async () => {
-    const mod = await compileFixture(
-      fileURLToPath(new URL('./fixtures/scroll-press.ts', import.meta.url)),
-    );
+    const mod = await compileFixture('fixtures/scroll-press.ts');
     Component = mod['ScrollPress'] as Type<unknown>;
   });
 

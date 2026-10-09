@@ -1,6 +1,5 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { fileURLToPath } from 'node:url';
 import type { Type } from '@angular/core';
 import { mount } from '@ng-native/platform';
 import { createFakeFabric } from '@ng-native/testing';
@@ -10,9 +9,7 @@ const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
 
 describe('ngOnChanges and a signal input', () => {
   it('fires for a signal input, on the first value and on every change', async () => {
-    const mod = await compileFixture(
-      fileURLToPath(new URL('./fixtures/signal-onchanges.ts', import.meta.url)),
-    );
+    const mod = await compileFixture('fixtures/signal-onchanges.ts');
     const calls = mod['calls'] as number[];
     const fabric = createFakeFabric();
     const app = mount(1, mod['ProbeHost'] as Type<unknown>, fabric, {});

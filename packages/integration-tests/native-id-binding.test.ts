@@ -17,7 +17,6 @@
  */
 import assert from 'node:assert/strict';
 import { after, before, describe, it } from 'node:test';
-import { fileURLToPath } from 'node:url';
 import type { Type } from '@angular/core';
 import { cleanup, render, screen, settle } from '@ng-native/testing';
 import type { FakeFabric, FakeFabricNode } from '@ng-native/testing';
@@ -31,9 +30,7 @@ describe('a prop written by a route that is not an input of ViewBase', () => {
   let host: { off: { set(v: boolean): void } };
 
   before(async () => {
-    const mod = await compileFixture(
-      fileURLToPath(new URL('./fixtures/native-id-binding.ts', import.meta.url)),
-    );
+    const mod = await compileFixture('fixtures/native-id-binding.ts');
     const rendered = await render(mod['NativeIdHost'] as Type<unknown>);
     fabric = rendered.fabric;
     host = rendered.instance as typeof host;

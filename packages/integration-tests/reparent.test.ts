@@ -6,7 +6,6 @@
  */
 import assert from 'node:assert/strict';
 import { afterEach, before, it } from 'node:test';
-import { fileURLToPath } from 'node:url';
 import type { Type } from '@angular/core';
 import { Engine } from '@ng-native/fabric';
 import { cleanup, createFakeFabric, render, screen, settle } from '@ng-native/testing';
@@ -16,7 +15,7 @@ afterEach(cleanup);
 
 let mod: Record<string, unknown>;
 before(async () => {
-  mod = await compileFixture(fileURLToPath(new URL('./fixtures/reparent.ts', import.meta.url)));
+  mod = await compileFixture('fixtures/reparent.ts');
 });
 
 it('creates projected content again when its container is mounted again', async () => {

@@ -4,7 +4,6 @@
  */
 import assert from 'node:assert/strict';
 import { before, beforeEach, afterEach, describe, it } from 'node:test';
-import { fileURLToPath } from 'node:url';
 import type { Type } from '@angular/core';
 import {
   cleanup,
@@ -43,9 +42,7 @@ describe('signal forms over native controls', () => {
   let host: Host;
 
   before(async () => {
-    const mod = await compileFixture(
-      fileURLToPath(new URL('./fixtures/signal-form.ts', import.meta.url)),
-    );
+    const mod = await compileFixture('fixtures/signal-form.ts');
     Component = mod['SignalForm'] as Type<unknown>;
   });
 
@@ -114,9 +111,7 @@ describe('a switch as a Signal Forms control', () => {
   it('marks its field touched when the user flips it, and publishes it for a stylesheet', async () => {
     // A switch has no blur, so the flip is the moment the user has dealt with it: what a form that
     // shows its errors once a field is touched waits for.
-    const mod = await compileFixture(
-      fileURLToPath(new URL('./fixtures/signal-form.ts', import.meta.url)),
-    );
+    const mod = await compileFixture('fixtures/signal-form.ts');
     const { fabric, instance } = await render(mod['SignalForm'] as Type<unknown>, {
       globalStyles: compileCss('[data-touched] { opacity: 0.5 }', 'global'),
     });
@@ -134,9 +129,7 @@ describe('a switch as a Signal Forms control', () => {
 
 describe('focusing a text input from code', () => {
   it('sends the focus and blur commands to the committed native node', async () => {
-    const mod = await compileFixture(
-      fileURLToPath(new URL('./fixtures/signal-form.ts', import.meta.url)),
-    );
+    const mod = await compileFixture('fixtures/signal-form.ts');
     const { fabric, instance } = await render(mod['SignalForm'] as Type<unknown>);
 
     const field = (instance as { input(): { focus(): void; blur(): void } }).input();

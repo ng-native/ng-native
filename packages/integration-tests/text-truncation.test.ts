@@ -11,7 +11,6 @@
 import assert from 'node:assert/strict';
 import { before, describe, it } from 'node:test';
 import { createRequire } from 'node:module';
-import { fileURLToPath } from 'node:url';
 import type { Type } from '@angular/core';
 import { render, screen } from '@ng-native/testing';
 import { compileFixture } from './compile.ts';
@@ -30,9 +29,7 @@ describe('truncated text', () => {
   let Host: Type<unknown>;
 
   before(async () => {
-    const mod = await compileFixture(
-      fileURLToPath(new URL('./fixtures/truncated-text.ts', import.meta.url)),
-    );
+    const mod = await compileFixture('fixtures/truncated-text.ts');
     Host = mod['Truncated'] as Type<unknown>;
   });
 
@@ -116,9 +113,7 @@ describe('truncation written in CSS', () => {
     let Host: Type<unknown>;
 
     before(async () => {
-      const mod = await compileFixture(
-        fileURLToPath(new URL('./fixtures/truncated-by-css.ts', import.meta.url)),
-      );
+      const mod = await compileFixture('fixtures/truncated-by-css.ts');
       Host = mod['TruncatedByCss'] as Type<unknown>;
     });
 

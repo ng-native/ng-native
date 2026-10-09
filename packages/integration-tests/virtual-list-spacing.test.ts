@@ -13,7 +13,6 @@
  */
 import assert from 'node:assert/strict';
 import { before, describe, it } from 'node:test';
-import { fileURLToPath } from 'node:url';
 import type { Type } from '@angular/core';
 import {
   fireEvent,
@@ -43,9 +42,7 @@ interface Instance {
 
 let mod: Record<string, unknown>;
 before(async () => {
-  mod = await compileFixture(
-    fileURLToPath(new URL('./fixtures/virtual-spaced.ts', import.meta.url)),
-  );
+  mod = await compileFixture('fixtures/virtual-spaced.ts');
 });
 
 async function boot(name: string, options: Parameters<typeof render>[1] = {}) {

@@ -9,7 +9,6 @@
  */
 import assert from 'node:assert/strict';
 import { afterEach, before, beforeEach, describe, it } from 'node:test';
-import { fileURLToPath } from 'node:url';
 import type { Type } from '@angular/core';
 import { Engine, type NativeSyntheticEvent } from '@ng-native/fabric';
 import { cleanup, createFakeFabric, fireEvent, render, screen } from '@ng-native/testing';
@@ -88,9 +87,7 @@ describe('a pressable row with a delete button inside it', () => {
   let host: { log: string[]; stop: boolean };
 
   before(async () => {
-    const mod = await compileFixture(
-      fileURLToPath(new URL('./fixtures/propagation.ts', import.meta.url)),
-    );
+    const mod = await compileFixture('fixtures/propagation.ts');
     Component = mod['Propagation'] as Type<unknown>;
   });
 

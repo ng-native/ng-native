@@ -9,7 +9,6 @@
  */
 import assert from 'node:assert/strict';
 import { before, describe, it } from 'node:test';
-import { fileURLToPath } from 'node:url';
 import type { Type } from '@angular/core';
 import { Engine } from '@ng-native/fabric';
 import { render, settle, type FakeFabricNode } from '@ng-native/testing';
@@ -27,7 +26,7 @@ interface Binding {
 
 let mod: Record<string, unknown>;
 before(async () => {
-  mod = await compileFixture(fileURLToPath(new URL('./fixtures/worklet.ts', import.meta.url)));
+  mod = await compileFixture('fixtures/worklet.ts');
 });
 
 async function boot() {

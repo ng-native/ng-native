@@ -5,7 +5,6 @@
  */
 import assert from 'node:assert/strict';
 import { afterEach, before, it } from 'node:test';
-import { fileURLToPath } from 'node:url';
 import type { Type } from '@angular/core';
 import { Router, type Routes } from '@angular/router';
 import { cleanup, fireEvent, render, settle, type FakeFabricNode } from '@ng-native/testing';
@@ -17,7 +16,7 @@ afterEach(cleanup);
 
 let mod: Record<string, unknown>;
 before(async () => {
-  mod = await compileFixture(fileURLToPath(new URL('./fixtures/repeat-push.ts', import.meta.url)));
+  mod = await compileFixture('fixtures/repeat-push.ts');
 });
 
 const flatten = (nodes: readonly FakeFabricNode[]): FakeFabricNode[] =>

@@ -7,7 +7,6 @@
  */
 import assert from 'node:assert/strict';
 import { before, describe, it } from 'node:test';
-import { fileURLToPath } from 'node:url';
 import type { Type } from '@angular/core';
 import { cleanup, render, screen } from '@ng-native/testing';
 import { compileFixture } from './compile.ts';
@@ -16,9 +15,7 @@ describe('a quoted font-family on an element', () => {
   let family: (id: string) => unknown;
 
   before(async () => {
-    const mod = await compileFixture(
-      fileURLToPath(new URL('./fixtures/quoted-font-family.ts', import.meta.url)),
-    );
+    const mod = await compileFixture('fixtures/quoted-font-family.ts');
     await render(mod['QuotedFontFamily'] as Type<unknown>);
     const ids = [
       'sheet',

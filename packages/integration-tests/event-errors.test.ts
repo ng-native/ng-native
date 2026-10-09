@@ -10,7 +10,6 @@
  */
 import assert from 'node:assert/strict';
 import { afterEach, before, describe, it } from 'node:test';
-import { fileURLToPath } from 'node:url';
 import { ErrorHandler, type Type } from '@angular/core';
 import { Engine } from '@ng-native/fabric';
 import { cleanup, createFakeFabric, fireEvent, render, screen } from '@ng-native/testing';
@@ -90,9 +89,7 @@ describe('errors thrown during event dispatch, in an app', () => {
   let Component: Type<unknown>;
 
   before(async () => {
-    const mod = await compileFixture(
-      fileURLToPath(new URL('./fixtures/event-errors.ts', import.meta.url)),
-    );
+    const mod = await compileFixture('fixtures/event-errors.ts');
     Component = mod['EventErrors'] as Type<unknown>;
   });
 

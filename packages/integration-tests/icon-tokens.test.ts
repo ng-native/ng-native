@@ -5,7 +5,6 @@
  */
 import assert from 'node:assert/strict';
 import { after, before, describe, it } from 'node:test';
-import { fileURLToPath } from 'node:url';
 import type { Type } from '@angular/core';
 import { cleanup, render, settle, type FakeFabricNode } from '@ng-native/testing';
 import { compileFixture } from './compile.ts';
@@ -27,9 +26,7 @@ const path = (id: string): FakeFabricNode => {
 const solid = (colour: string) => ({ type: 0, payload: colour });
 
 before(async () => {
-  const mod = await compileFixture(
-    fileURLToPath(new URL('./fixtures/icon-tokens.ts', import.meta.url)),
-  );
+  const mod = await compileFixture('fixtures/icon-tokens.ts');
   console.warn = (...args: unknown[]) => warnings.push(args.map(String).join(' '));
   app = await render(mod['IconTokens'] as Type<Tokens>, { dev: true });
 });

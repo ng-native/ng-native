@@ -11,7 +11,6 @@
  */
 import assert from 'node:assert/strict';
 import { afterEach, before, describe, it } from 'node:test';
-import { fileURLToPath } from 'node:url';
 import type { Type } from '@angular/core';
 import { registerPlatformComponents, registerViewName } from '@ng-native/fabric';
 import { cleanup, fireEvent, render, screen, type FakeFabric } from '@ng-native/testing';
@@ -21,9 +20,7 @@ afterEach(cleanup);
 
 let mod: Record<string, unknown>;
 before(async () => {
-  mod = await compileFixture(
-    fileURLToPath(new URL('./fixtures/controlled-inputs.ts', import.meta.url)),
-  );
+  mod = await compileFixture('fixtures/controlled-inputs.ts');
 });
 
 async function boot<T>(name: string): Promise<{ fabric: FakeFabric; instance: T }> {

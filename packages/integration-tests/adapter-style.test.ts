@@ -5,7 +5,6 @@
  */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { fileURLToPath } from 'node:url';
 import type { Type } from '@angular/core';
 import { mount } from '@ng-native/platform';
 import { createFakeFabric } from '@ng-native/testing';
@@ -15,9 +14,7 @@ const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
 
 describe('style bindings through the renderer', () => {
   it('normalises dash-case names and px units into what Fabric reads', async () => {
-    const mod = await compileFixture(
-      fileURLToPath(new URL('./fixtures/style-bindings.ts', import.meta.url)),
-    );
+    const mod = await compileFixture('fixtures/style-bindings.ts');
     const fabric = createFakeFabric();
     mount(1, mod['StyleBindings'] as Type<unknown>, fabric);
     await settle();

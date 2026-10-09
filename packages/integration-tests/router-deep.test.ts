@@ -4,7 +4,6 @@
  */
 import assert from 'node:assert/strict';
 import { before, beforeEach, describe, it } from 'node:test';
-import { fileURLToPath } from 'node:url';
 import type { Type } from '@angular/core';
 import { Router, withComponentInputBinding, type Routes } from '@angular/router';
 import { cleanup, render, settle, type FakeFabric, type FakeFabricNode } from '@ng-native/testing';
@@ -33,7 +32,7 @@ const stack = (fabric: FakeFabric) =>
 let mod: Record<string, unknown>;
 let created: Record<string, number>;
 before(async () => {
-  mod = await compileFixture(fileURLToPath(new URL('./fixtures/stack-app.ts', import.meta.url)));
+  mod = await compileFixture('fixtures/stack-app.ts');
   created = mod['created'] as Record<string, number>;
 });
 

@@ -6,7 +6,6 @@
  */
 import assert from 'node:assert/strict';
 import { afterEach, before, beforeEach, it } from 'node:test';
-import { fileURLToPath } from 'node:url';
 import type { Type } from '@angular/core';
 import { Router, type Routes } from '@angular/router';
 import {
@@ -25,9 +24,7 @@ afterEach(cleanup);
 
 let mod: Record<string, unknown>;
 before(async () => {
-  mod = await compileFixture(
-    fileURLToPath(new URL('./fixtures/guard-redirect.ts', import.meta.url)),
-  );
+  mod = await compileFixture('fixtures/guard-redirect.ts');
 });
 
 beforeEach(() => {

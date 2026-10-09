@@ -6,7 +6,6 @@
  */
 import assert from 'node:assert/strict';
 import { after, before, describe, it } from 'node:test';
-import { fileURLToPath } from 'node:url';
 import type { Type } from '@angular/core';
 import { DeepLinks, type DeepLinkSource } from '@ng-native/device';
 import { cleanup, fireEvent, render, type FakeFabricNode } from '@ng-native/testing';
@@ -31,7 +30,7 @@ const textOf = (node: FakeFabricNode): string =>
 
 let mod: Record<string, unknown>;
 before(async () => {
-  mod = await compileFixture(fileURLToPath(new URL('./fixtures/markdown.ts', import.meta.url)));
+  mod = await compileFixture('fixtures/markdown.ts');
 });
 after(cleanup);
 

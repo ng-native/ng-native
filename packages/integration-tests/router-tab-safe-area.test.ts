@@ -7,7 +7,6 @@
  */
 import assert from 'node:assert/strict';
 import { afterEach, before, beforeEach, describe, it } from 'node:test';
-import { fileURLToPath } from 'node:url';
 import type { Type, WritableSignal } from '@angular/core';
 import { registerPlatformComponents } from '@ng-native/fabric';
 import { provideNativeRouter } from '../router/src/provide-native-router.ts';
@@ -21,9 +20,7 @@ describe('the tab safe area', () => {
 
   before(async () => {
     registerScreenComponents();
-    mod = await compileFixture(
-      fileURLToPath(new URL('./fixtures/tab-safe-area.ts', import.meta.url)),
-    );
+    mod = await compileFixture('fixtures/tab-safe-area.ts');
   });
 
   beforeEach(async () => {
@@ -80,9 +77,7 @@ describe('the screen safe area', () => {
 
   before(async () => {
     registerScreenComponents();
-    mod = await compileFixture(
-      fileURLToPath(new URL('./fixtures/tab-safe-area.ts', import.meta.url)),
-    );
+    mod = await compileFixture('fixtures/tab-safe-area.ts');
   });
 
   beforeEach(async () => {
@@ -128,9 +123,7 @@ describe('the screen safe area under a header', () => {
 
   before(async () => {
     registerScreenComponents();
-    mod = await compileFixture(
-      fileURLToPath(new URL('./fixtures/tab-safe-area.ts', import.meta.url)),
-    );
+    mod = await compileFixture('fixtures/tab-safe-area.ts');
   });
 
   afterEach(() => {

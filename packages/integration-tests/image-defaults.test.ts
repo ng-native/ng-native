@@ -8,7 +8,6 @@ import { cleanup, render, screen, type FakeFabricNode } from '@ng-native/testing
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
 import { before, describe, it } from 'node:test';
-import { fileURLToPath } from 'node:url';
 import { compileFixture } from './compile.ts';
 
 const require = createRequire(import.meta.url);
@@ -20,9 +19,7 @@ describe('an image', () => {
   let Host: Type<unknown>;
 
   before(async () => {
-    const mod = await compileFixture(
-      fileURLToPath(new URL('./fixtures/rounded-image.ts', import.meta.url)),
-    );
+    const mod = await compileFixture('fixtures/rounded-image.ts');
     Host = mod['RoundedImage'] as Type<unknown>;
   });
 
@@ -34,9 +31,7 @@ describe('an image', () => {
   });
 
   it('asks native for load events once one is listened for', async () => {
-    const mod = await compileFixture(
-      fileURLToPath(new URL('./fixtures/rounded-image.ts', import.meta.url)),
-    );
+    const mod = await compileFixture('fixtures/rounded-image.ts');
     await render(mod['ListenedImage'] as Type<unknown>);
     // `Image.android.js` sets this alongside any load handler; without it Android's image view
     // never emits load, loadStart, loadEnd or error, and the handler silently never runs.
@@ -56,9 +51,7 @@ describe("an image's intrinsic size", () => {
   let size: (id: string) => Record<string, unknown>;
 
   before(async () => {
-    const mod = await compileFixture(
-      fileURLToPath(new URL('./fixtures/intrinsic-image.ts', import.meta.url)),
-    );
+    const mod = await compileFixture('fixtures/intrinsic-image.ts');
     Host = mod['IntrinsicImage'] as Type<unknown>;
     await render(Host, {
       globalStyles: compileCss('.global-size { width: 32px; height: 32px }', 'global'),
@@ -116,9 +109,7 @@ describe('an image background', () => {
     // RN's ImageBackground gives its image the outer style's size, and a class-sized background
     // has none in its style. Absolutely placed with no size of its own, the image would otherwise
     // fall back to the picture's 600 by 300 and overhang the 320 by 160 box.
-    const mod = await compileFixture(
-      fileURLToPath(new URL('./fixtures/intrinsic-image.ts', import.meta.url)),
-    );
+    const mod = await compileFixture('fixtures/intrinsic-image.ts');
     const { fabric } = await render(mod['IntrinsicBackground'] as Type<unknown>);
     const image = flatten(fabric.committed).find((node) => node.viewName === 'Image');
     assert.equal(image?.props['width'], '100%');

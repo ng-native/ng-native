@@ -13,7 +13,6 @@
 import assert from 'node:assert/strict';
 import { after, describe, it } from 'node:test';
 import { createRequire } from 'node:module';
-import { fileURLToPath } from 'node:url';
 import type { Type } from '@angular/core';
 import { StyleResolver, type StyleTarget } from '@ng-native/fabric';
 import { cleanup, render } from '@ng-native/testing';
@@ -269,9 +268,7 @@ describe('a gradient in the background shorthand', () => {
 
 describe('a gradient on a device', () => {
   it('runs its colours through the host converter, as any other colour is', async () => {
-    const mod = await compileFixture(
-      fileURLToPath(new URL('./fixtures/gradient.ts', import.meta.url)),
-    );
+    const mod = await compileFixture('fixtures/gradient.ts');
     const { getByTestId } = await render(mod['GradientHost'] as Type<unknown>, {
       processColor: (value) => `processed(${String(value)})`,
     });
@@ -319,9 +316,7 @@ describe('resolving a gradient template', () => {
   let Host: Type<unknown>;
 
   const paint = async (globalCss: string) => {
-    const mod = await compileFixture(
-      fileURLToPath(new URL('./fixtures/gradient.ts', import.meta.url)),
-    );
+    const mod = await compileFixture('fixtures/gradient.ts');
     Host ??= mod['ThemedGradient'] as Type<unknown>;
     const { getByTestId } = await render(mod['ThemedGradient'] as Type<unknown>, {
       globalStyles: compileCss(globalCss, 'global', { onUnsupported: () => {} }),
@@ -627,9 +622,7 @@ describe('a gradient through a stop at no opacity', () => {
 
   for (const [id, pixels] of Object.entries(CHROME)) {
     it(`paints #${id} as Chrome does`, async () => {
-      const mod = await compileFixture(
-        fileURLToPath(new URL('./fixtures/gradient.ts', import.meta.url)),
-      );
+      const mod = await compileFixture('fixtures/gradient.ts');
       const { getByTestId } = await render(mod['FadingGradients'] as Type<unknown>, {
         globalStyles: compileCss(':root { --surface: white; --veil: rgb(0 0 0 / 0.1) }', 'global'),
       });
@@ -649,9 +642,7 @@ describe('a gradient through a stop at no opacity', () => {
   }
 
   const stopsOf = async (id: string) => {
-    const mod = await compileFixture(
-      fileURLToPath(new URL('./fixtures/gradient.ts', import.meta.url)),
-    );
+    const mod = await compileFixture('fixtures/gradient.ts');
     const { getByTestId } = await render(mod['FadingGradients'] as Type<unknown>);
     return (getByTestId(id).props['experimental_backgroundImage'] as Linear[])[0]!.colorStops;
   };
@@ -677,9 +668,7 @@ describe('a gradient through a stop at no opacity', () => {
   });
 
   it('adds no stops between two at the same opacity, which native already paints as CSS does', async () => {
-    const mod = await compileFixture(
-      fileURLToPath(new URL('./fixtures/gradient.ts', import.meta.url)),
-    );
+    const mod = await compileFixture('fixtures/gradient.ts');
     const { getByTestId } = await render(mod['FadingGradients'] as Type<unknown>);
     const [gradient] = getByTestId('even').props['experimental_backgroundImage'] as Linear[];
     assert.deepEqual(gradient!.colorStops, [

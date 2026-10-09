@@ -8,7 +8,6 @@
  */
 import assert from 'node:assert/strict';
 import { before, describe, it } from 'node:test';
-import { fileURLToPath } from 'node:url';
 import { PLATFORM_ID, type Type } from '@angular/core';
 import { isPlatformBrowser, isPlatformServer } from '@angular/common';
 import { PLATFORM_NATIVE_ID, isPlatformNative, mount } from '@ng-native/platform';
@@ -19,9 +18,7 @@ describe('PLATFORM_ID on a device', () => {
   let Counter: Type<unknown>;
 
   before(async () => {
-    const mod = await compileFixture(
-      fileURLToPath(new URL('./fixtures/counter.ts', import.meta.url)),
-    );
+    const mod = await compileFixture('fixtures/counter.ts');
     Counter = mod['Counter'] as Type<unknown>;
   });
 

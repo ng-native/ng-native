@@ -6,7 +6,6 @@
  */
 import assert from 'node:assert/strict';
 import { afterEach, before, beforeEach, describe, it } from 'node:test';
-import { fileURLToPath } from 'node:url';
 import { EnvironmentInjector, inject, type ComponentRef, type Type } from '@angular/core';
 import { PlatformLocation } from '@angular/common';
 import {
@@ -127,7 +126,7 @@ describe('native stack outlet', () => {
 
   before(async () => {
     registerScreenComponents();
-    mod = await compileFixture(fileURLToPath(new URL('./fixtures/stack.ts', import.meta.url)));
+    mod = await compileFixture('fixtures/stack.ts');
     ScreenA = mod['ScreenA'] as Type<unknown>;
     ScreenB = mod['ScreenB'] as Type<unknown>;
     ScreenStyled = mod['ScreenStyled'] as Type<unknown>;
@@ -726,9 +725,7 @@ describe('a named native stack outlet', () => {
 
   it('registers under its name, for routes with that outlet', async () => {
     registerScreenComponents();
-    const mod = await compileFixture(
-      fileURLToPath(new URL('./fixtures/stack.ts', import.meta.url)),
-    );
+    const mod = await compileFixture('fixtures/stack.ts');
     const app = await render(mod['NamedStackHost'] as Type<unknown>, {
       providers: [
         {

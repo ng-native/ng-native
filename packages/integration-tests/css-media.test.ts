@@ -6,7 +6,6 @@
  */
 import assert from 'node:assert/strict';
 import { after, before, describe, it } from 'node:test';
-import { fileURLToPath } from 'node:url';
 import type { Type } from '@angular/core';
 import { Engine, StyleResolver, type StyleTarget } from '@ng-native/fabric';
 import { createRequire } from 'node:module';
@@ -24,9 +23,7 @@ describe('media queries', () => {
   let engine: Engine;
 
   before(async () => {
-    const mod = await compileFixture(
-      fileURLToPath(new URL('./fixtures/responsive.ts', import.meta.url)),
-    );
+    const mod = await compileFixture('fixtures/responsive.ts');
     Component = mod['Responsive'] as Type<unknown>;
   });
 

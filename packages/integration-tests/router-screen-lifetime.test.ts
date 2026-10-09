@@ -13,7 +13,6 @@
  */
 import assert from 'node:assert/strict';
 import { after, before, beforeEach, describe, it } from 'node:test';
-import { fileURLToPath } from 'node:url';
 import { createRequire } from 'node:module';
 import { setFlagsFromString } from 'node:v8';
 import { runInNewContext } from 'node:vm';
@@ -55,9 +54,7 @@ describe('a screen that has gone', () => {
   let live: WritableSignal<number>;
 
   before(async () => {
-    mod = await compileFixture(
-      fileURLToPath(new URL('./fixtures/screen-lifetime.ts', import.meta.url)),
-    );
+    mod = await compileFixture('fixtures/screen-lifetime.ts');
     hosts = mod['hosts'] as EngineNode[];
     live = mod['live'] as WritableSignal<number>;
   });

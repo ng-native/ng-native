@@ -8,7 +8,6 @@
 import assert from 'node:assert/strict';
 import { after, before, describe, it } from 'node:test';
 import { createRequire } from 'node:module';
-import { fileURLToPath } from 'node:url';
 import type { Type } from '@angular/core';
 import { cleanup, render, type BoundQueries } from '@ng-native/testing';
 import { compileFixture } from './compile.ts';
@@ -28,9 +27,7 @@ describe('position pseudo-classes in the global sheet', () => {
   let Rows: Type<unknown>;
 
   before(async () => {
-    const mod = await compileFixture(
-      fileURLToPath(new URL('./fixtures/global-styled.ts', import.meta.url)),
-    );
+    const mod = await compileFixture('fixtures/global-styled.ts');
     Rows = mod['GlobalRows'] as Type<unknown>;
   });
 
@@ -91,9 +88,7 @@ describe('the global sheet', () => {
   };
 
   before(async () => {
-    const mod = await compileFixture(
-      fileURLToPath(new URL('./fixtures/global-styled.ts', import.meta.url)),
-    );
+    const mod = await compileFixture('fixtures/global-styled.ts');
     Component = mod['GlobalStyled'] as Type<unknown>;
   });
 
@@ -151,9 +146,7 @@ describe('the global sheet', () => {
  */
 describe('the platform class on the root', () => {
   it('lets a platform-scoped rule match with no class added by the app', async () => {
-    const mod = await compileFixture(
-      fileURLToPath(new URL('./fixtures/global-styled.ts', import.meta.url)),
-    );
+    const mod = await compileFixture('fixtures/global-styled.ts');
     const { getAllByTestId } = await render(mod['GlobalRows'] as Type<unknown>, {
       globalStyles: compileCss(
         '.platform-ios .row { padding-top: 8px } .platform-android .row { padding-top: 30px }',

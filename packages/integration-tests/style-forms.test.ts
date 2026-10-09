@@ -13,7 +13,6 @@
  */
 import assert from 'node:assert/strict';
 import { before, describe, it } from 'node:test';
-import { fileURLToPath } from 'node:url';
 import type { Type } from '@angular/core';
 import { cleanup, render, screen } from '@ng-native/testing';
 import { compileFixture } from './compile.ts';
@@ -22,9 +21,7 @@ describe('the four ways to write a style', () => {
   let props: Record<string, Record<string, unknown>>;
 
   before(async () => {
-    const mod = await compileFixture(
-      fileURLToPath(new URL('./fixtures/style-forms.ts', import.meta.url)),
-    );
+    const mod = await compileFixture('fixtures/style-forms.ts');
     await render(mod['StyleForms'] as Type<unknown>);
     props = Object.fromEntries(
       ['static', 'bound-string', 'bound-object', 'single'].map((id) => [

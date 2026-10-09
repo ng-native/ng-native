@@ -5,7 +5,6 @@
  */
 import assert from 'node:assert/strict';
 import { before, beforeEach, describe, it } from 'node:test';
-import { fileURLToPath } from 'node:url';
 import type { Type } from '@angular/core';
 import { mount, type MountResult } from '@ng-native/platform';
 import { createFakeFabric, type FakeFabric, type FakeFabricNode } from '@ng-native/testing';
@@ -40,7 +39,7 @@ describe('incremental commit', () => {
   let instance: List;
 
   before(async () => {
-    const mod = await compileFixture(fileURLToPath(new URL('./fixtures/list.ts', import.meta.url)));
+    const mod = await compileFixture('fixtures/list.ts');
     Component = mod['List'] as Type<unknown>;
   });
 

@@ -4,16 +4,13 @@
  */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { fileURLToPath } from 'node:url';
 import type { Type } from '@angular/core';
 import { cleanup, render, screen, settle } from '@ng-native/testing';
 import { compileFixture } from './compile.ts';
 
 describe('view props', () => {
   it('forwards typed inputs, transforms attribute strings and maps aria aliases', async () => {
-    const mod = await compileFixture(
-      fileURLToPath(new URL('./fixtures/view-props.ts', import.meta.url)),
-    );
+    const mod = await compileFixture('fixtures/view-props.ts');
     const { instance } = await render(mod['ViewProps'] as Type<unknown>);
 
     const root = screen.getByTestId('root', { includeHiddenElements: true });
@@ -49,9 +46,7 @@ describe('view props', () => {
      * the theme's own highlight. The failure is silent and looks like "the ripple is the wrong
      * colour", so the processing is asserted rather than assumed.
      */
-    const mod = await compileFixture(
-      fileURLToPath(new URL('./fixtures/view-props.ts', import.meta.url)),
-    );
+    const mod = await compileFixture('fixtures/view-props.ts');
     await render(mod['RippleProps'] as Type<unknown>, {
       processColor: (value) => `processed:${String(value)}`,
     });
@@ -104,9 +99,7 @@ describe('view props', () => {
      * pass that finds a colour by name misses them. Android's converter takes a number or a
      * platform-colour map and throws on a string, taking the whole surface down with it.
      */
-    const mod = await compileFixture(
-      fileURLToPath(new URL('./fixtures/view-props.ts', import.meta.url)),
-    );
+    const mod = await compileFixture('fixtures/view-props.ts');
     await render(mod['TrackColorProps'] as Type<unknown>, {
       processColor: (value) => `processed:${String(value)}`,
     });

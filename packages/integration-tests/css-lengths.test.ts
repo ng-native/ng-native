@@ -8,7 +8,6 @@
 import assert from 'node:assert/strict';
 import { after, before, describe, it } from 'node:test';
 import { createRequire } from 'node:module';
-import { fileURLToPath } from 'node:url';
 import type { Type } from '@angular/core';
 import { Engine, StyleResolver, type StyleTarget } from '@ng-native/fabric';
 import { cleanup, render, settle, type BoundQueries } from '@ng-native/testing';
@@ -114,9 +113,7 @@ describe('viewport and font-relative lengths', () => {
   let engine: Engine;
 
   before(async () => {
-    const mod = await compileFixture(
-      fileURLToPath(new URL('./fixtures/relative-lengths.ts', import.meta.url)),
-    );
+    const mod = await compileFixture('fixtures/relative-lengths.ts');
     Component = mod['RelativeLengths'] as Type<unknown>;
   });
 

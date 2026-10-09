@@ -9,7 +9,6 @@
  */
 import assert from 'node:assert/strict';
 import { after, afterEach, before, describe, it } from 'node:test';
-import { fileURLToPath } from 'node:url';
 import type { Type } from '@angular/core';
 import { cleanup, render } from '@ng-native/testing';
 import { compileFixture } from './compile.ts';
@@ -26,9 +25,7 @@ describe('DatePipe timezones on Hermes', () => {
   let Zones: Type<unknown>;
 
   before(async () => {
-    const mod = await compileFixture(
-      fileURLToPath(new URL('./fixtures/date-zones.ts', import.meta.url)),
-    );
+    const mod = await compileFixture('fixtures/date-zones.ts');
     Zones = mod['DateZones'] as Type<unknown>;
     Date.parse = hermesParse;
     console.warn = (...args: unknown[]) => warnings.push(args.map(String).join(' '));

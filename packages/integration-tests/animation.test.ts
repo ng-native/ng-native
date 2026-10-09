@@ -8,7 +8,6 @@
  */
 import assert from 'node:assert/strict';
 import { after, before, describe, it } from 'node:test';
-import { fileURLToPath } from 'node:url';
 import type { Type } from '@angular/core';
 import { Engine } from '@ng-native/fabric';
 import { cleanup, render, settle, type FakeFabricNode } from '@ng-native/testing';
@@ -54,7 +53,7 @@ class FakeProps implements AnimatedPropsHandle {
 
 let mod: Record<string, unknown>;
 before(async () => {
-  mod = await compileFixture(fileURLToPath(new URL('./fixtures/animation.ts', import.meta.url)));
+  mod = await compileFixture('fixtures/animation.ts');
 });
 
 async function boot() {
@@ -137,9 +136,7 @@ describe('animated style', () => {
  */
 describe('a keyframe animation from a component stylesheet', () => {
   it('runs on an element that had the class from the start', async (t) => {
-    const mod = await compileFixture(
-      fileURLToPath(new URL('./fixtures/animation.ts', import.meta.url)),
-    );
+    const mod = await compileFixture('fixtures/animation.ts');
     // The engine's clock, stepped by hand, so every frame is sampled at a known time however
     // slow the machine running the test.
     let now = 1000;

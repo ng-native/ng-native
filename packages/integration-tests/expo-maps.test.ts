@@ -8,7 +8,6 @@
  */
 import assert from 'node:assert/strict';
 import { before, describe, it } from 'node:test';
-import { fileURLToPath } from 'node:url';
 import type { Type } from '@angular/core';
 import { mount } from '@ng-native/platform';
 import { Engine } from '@ng-native/fabric';
@@ -35,9 +34,7 @@ describe('the map view', () => {
   let Fixture: Type<unknown>;
 
   before(async () => {
-    const mod = await compileFixture(
-      fileURLToPath(new URL('./fixtures/expo-map.ts', import.meta.url)),
-    );
+    const mod = await compileFixture('fixtures/expo-map.ts');
     Fixture = mod['ExpoMapFixture'] as Type<unknown>;
   });
 

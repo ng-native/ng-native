@@ -6,7 +6,6 @@
  */
 import assert from 'node:assert/strict';
 import { afterEach, before, it } from 'node:test';
-import { fileURLToPath } from 'node:url';
 import type { Type } from '@angular/core';
 import type { Routes } from '@angular/router';
 import { cleanup, render, settle } from '@ng-native/testing';
@@ -18,7 +17,7 @@ afterEach(cleanup);
 
 let mod: Record<string, unknown>;
 before(async () => {
-  mod = await compileFixture(fileURLToPath(new URL('./fixtures/late-outlet.ts', import.meta.url)));
+  mod = await compileFixture('fixtures/late-outlet.ts');
 });
 
 const shell = async () => {

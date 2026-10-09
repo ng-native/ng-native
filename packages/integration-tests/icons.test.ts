@@ -9,7 +9,6 @@
  */
 import assert from 'node:assert/strict';
 import { after, before, describe, it } from 'node:test';
-import { fileURLToPath } from 'node:url';
 import type { Type } from '@angular/core';
 import { provideIcons } from '@ng-icons/core';
 import { parseSvg } from '../icons/src/parse-svg.ts';
@@ -210,9 +209,7 @@ describe('a wordmark in the tree', () => {
 
   before(async () => {
     registerSvgComponents();
-    const mod = await compileFixture(
-      fileURLToPath(new URL('./fixtures/icon-wordmark.ts', import.meta.url)),
-    );
+    const mod = await compileFixture('fixtures/icon-wordmark.ts');
     const warn = console.warn;
     console.warn = (message: unknown) => warnings.push(String(message));
     try {
@@ -470,7 +467,7 @@ describe('an icon in the tree', () => {
 
   before(async () => {
     registerSvgComponents();
-    mod = await compileFixture(fileURLToPath(new URL('./fixtures/icons.ts', import.meta.url)));
+    mod = await compileFixture('fixtures/icons.ts');
     const warn = console.warn;
     console.warn = (message: unknown) => warnings.push(String(message));
     try {

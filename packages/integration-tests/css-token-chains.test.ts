@@ -9,7 +9,6 @@
 import assert from 'node:assert/strict';
 import { after, before, describe, it } from 'node:test';
 import { createRequire } from 'node:module';
-import { fileURLToPath } from 'node:url';
 import type { Type } from '@angular/core';
 import { Engine, type StyleSheet } from '@ng-native/fabric';
 import {
@@ -65,9 +64,7 @@ describe('a custom property set on an element to another var()', () => {
   const fill = (id: string) => props(id)['backgroundColor'];
 
   before(async () => {
-    const mod = await compileFixture(
-      fileURLToPath(new URL('./fixtures/token-chain.ts', import.meta.url)),
-    );
+    const mod = await compileFixture('fixtures/token-chain.ts');
     Host = mod['TokenChain'] as Type<Fixture>;
   });
 

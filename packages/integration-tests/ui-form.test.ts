@@ -6,7 +6,6 @@
  */
 import assert from 'node:assert/strict';
 import { afterEach, before, describe, it } from 'node:test';
-import { fileURLToPath } from 'node:url';
 import type { Type } from '@angular/core';
 import { registerPlatformComponents } from '@ng-native/fabric';
 import { cleanup, fireEvent, render, screen, type FakeFabricNode } from '@ng-native/testing';
@@ -22,7 +21,7 @@ afterEach(() => {
 let mod: Record<string, unknown>;
 before(async () => {
   registerExpoUiViews('ios');
-  mod = await compileFixture(fileURLToPath(new URL('./fixtures/ui-form.ts', import.meta.url)));
+  mod = await compileFixture('fixtures/ui-form.ts');
 });
 
 const settle = () => new Promise((resolve) => setTimeout(resolve, 0));

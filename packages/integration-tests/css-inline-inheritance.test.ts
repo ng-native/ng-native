@@ -9,7 +9,6 @@
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
 import { describe, it } from 'node:test';
-import { fileURLToPath } from 'node:url';
 import type { Type } from '@angular/core';
 import { Engine, type StyleSheet } from '@ng-native/fabric';
 import { cleanup, createFakeFabric, render, screen } from '@ng-native/testing';
@@ -86,9 +85,7 @@ describe('an inherited property set by inline style', () => {
   });
 
   it('is inherited from a binding, as it changes, in an app with no stylesheet', async () => {
-    const mod = await compileFixture(
-      fileURLToPath(new URL('./fixtures/inline-colour.ts', import.meta.url)),
-    );
+    const mod = await compileFixture('fixtures/inline-colour.ts');
     const { fixture } = await render(mod['InlineColour'] as Type<unknown>);
     assert.equal(screen.getByTestId('inside').props['color'], RED);
     (fixture.componentInstance as { colour: { set(v: string): void } }).colour.set(

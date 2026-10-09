@@ -9,7 +9,6 @@
  */
 import assert from 'node:assert/strict';
 import { before, describe, it } from 'node:test';
-import { fileURLToPath } from 'node:url';
 import type { Type } from '@angular/core';
 import { Engine, markComponentHost } from '@ng-native/fabric';
 import { mount } from '@ng-native/platform';
@@ -71,9 +70,7 @@ describe('an element nothing accounts for, in an app', () => {
   let mod: Record<string, unknown>;
 
   before(async () => {
-    mod = await compileFixture(
-      fileURLToPath(new URL('./fixtures/unknown-element.ts', import.meta.url)),
-    );
+    mod = await compileFixture('fixtures/unknown-element.ts');
   });
 
   it('reports a typo on first commit, once', async () => {

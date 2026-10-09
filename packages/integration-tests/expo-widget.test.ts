@@ -1,6 +1,5 @@
 import assert from 'node:assert/strict';
 import { before, describe, it } from 'node:test';
-import { fileURLToPath } from 'node:url';
 import {
   ApplicationRef,
   EnvironmentInjector,
@@ -73,9 +72,7 @@ function fakeEvents() {
 
 let root: EnvironmentInjector;
 before(async () => {
-  const mod = await compileFixture(
-    fileURLToPath(new URL('./fixtures/counter.ts', import.meta.url)),
-  );
+  const mod = await compileFixture('fixtures/counter.ts');
   root = mount(1, mod['Counter'] as Type<unknown>, createFakeFabric()).componentRef.injector.get(
     EnvironmentInjector,
   );

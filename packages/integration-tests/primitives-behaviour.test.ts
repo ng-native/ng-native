@@ -5,7 +5,6 @@
  */
 import assert from 'node:assert/strict';
 import { afterEach, before, describe, it } from 'node:test';
-import { fileURLToPath } from 'node:url';
 import type { Type } from '@angular/core';
 import { Keyboard } from '@ng-native/device';
 import {
@@ -30,7 +29,7 @@ const touch = (node: FakeFabricNode, type: string, x = 0, y = 0) =>
 
 let mod: Record<string, unknown>;
 before(async () => {
-  mod = await compileFixture(fileURLToPath(new URL('./fixtures/behaviours.ts', import.meta.url)));
+  mod = await compileFixture('fixtures/behaviours.ts');
 });
 
 async function boot<T>(

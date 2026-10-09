@@ -13,7 +13,6 @@
  */
 import assert from 'node:assert/strict';
 import { afterEach, before, beforeEach, describe, it } from 'node:test';
-import { fileURLToPath } from 'node:url';
 import type { Type } from '@angular/core';
 import { ActivatedRoute, Router } from '@angular/router';
 import { NATIVE_INTENT, NativeNavigation, intentOf } from '../router/src/native-navigation.ts';
@@ -201,9 +200,7 @@ describe('nativeRouterLink', () => {
   const here = { snapshot: {} } as unknown as ActivatedRoute;
 
   before(async () => {
-    mod = await compileFixture(
-      fileURLToPath(new URL('./fixtures/router-link.ts', import.meta.url)),
-    );
+    mod = await compileFixture('fixtures/router-link.ts');
   });
 
   beforeEach(async () => {

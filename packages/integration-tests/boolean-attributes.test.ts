@@ -5,7 +5,6 @@
  */
 import assert from 'node:assert/strict';
 import { before, describe, it } from 'node:test';
-import { fileURLToPath } from 'node:url';
 import type { Type } from '@angular/core';
 import { mount } from '@ng-native/platform';
 import { createFakeFabric, type FakeFabricNode } from '@ng-native/testing';
@@ -20,9 +19,7 @@ describe('a boolean prop written as an attribute', () => {
   let props: (id: string) => Record<string, unknown>;
 
   before(async () => {
-    const mod = await compileFixture(
-      fileURLToPath(new URL('./fixtures/boolean-attributes.ts', import.meta.url)),
-    );
+    const mod = await compileFixture('fixtures/boolean-attributes.ts');
     const fabric = createFakeFabric();
     mount(1, mod['BooleanAttributesFixture'] as Type<unknown>, fabric);
     const all = (nodes: readonly FakeFabricNode[]): FakeFabricNode[] =>

@@ -7,7 +7,6 @@
  */
 import assert from 'node:assert/strict';
 import { afterEach, before, beforeEach, describe, it } from 'node:test';
-import { fileURLToPath } from 'node:url';
 import { ErrorHandler, InjectionToken, inject, signal, type Type } from '@angular/core';
 import { Router, withNavigationErrorHandler, type Routes } from '@angular/router';
 import { cleanup, fireEvent, render, settle, type FakeFabricNode } from '@ng-native/testing';
@@ -34,7 +33,7 @@ describe('a page whose code fails to load', () => {
   let arrive: (url: string) => void;
 
   before(async () => {
-    mod = await compileFixture(fileURLToPath(new URL('./fixtures/tab-stacks.ts', import.meta.url)));
+    mod = await compileFixture('fixtures/tab-stacks.ts');
   });
 
   beforeEach(() => {

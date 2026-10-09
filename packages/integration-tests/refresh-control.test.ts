@@ -6,7 +6,6 @@
  */
 import assert from 'node:assert/strict';
 import { after, before, describe, it } from 'node:test';
-import { fileURLToPath } from 'node:url';
 import type { Type } from '@angular/core';
 import { registerPlatformComponents, registerViewName } from '@ng-native/fabric';
 import {
@@ -40,7 +39,7 @@ interface ScrollRefresh {
 
 let mod: Record<string, unknown>;
 before(async () => {
-  mod = await compileFixture(fileURLToPath(new URL('./fixtures/refresh.ts', import.meta.url)));
+  mod = await compileFixture('fixtures/refresh.ts');
 });
 
 async function boot<T>(name: string): Promise<{ fabric: FakeFabric; instance: T }> {

@@ -9,7 +9,6 @@
  */
 import assert from 'node:assert/strict';
 import { before, beforeEach, describe, it } from 'node:test';
-import { fileURLToPath } from 'node:url';
 import { ErrorHandler, type Type } from '@angular/core';
 import { mount } from '@ng-native/platform';
 import { createFakeFabric, type FakeFabric, type FakeFabricNode } from '@ng-native/testing';
@@ -44,9 +43,7 @@ describe('a DOM component in the app', () => {
   const post = (message: unknown, url?: string | null) => postRaw(JSON.stringify(message), url);
 
   before(async () => {
-    const mod = await compileFixture(
-      fileURLToPath(new URL('./fixtures/dom-component.ts', import.meta.url)),
-    );
+    const mod = await compileFixture('fixtures/dom-component.ts');
     Fixture = mod['DomComponentFixture'] as Type<unknown>;
   });
 
@@ -194,9 +191,7 @@ describe('a DOM component in a release build', () => {
   let Fixture: Type<unknown>;
 
   before(async () => {
-    const mod = await compileFixture(
-      fileURLToPath(new URL('./fixtures/dom-component.ts', import.meta.url)),
-    );
+    const mod = await compileFixture('fixtures/dom-component.ts');
     Fixture = mod['DomComponentFixture'] as Type<unknown>;
   });
 

@@ -4,7 +4,6 @@
  */
 import assert from 'node:assert/strict';
 import { before, describe, it } from 'node:test';
-import { fileURLToPath } from 'node:url';
 import {
   APP_BOOTSTRAP_LISTENER,
   ApplicationInitStatus,
@@ -27,9 +26,7 @@ const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
 
 describe('bootstrap registers the root component with ApplicationRef', () => {
   it('runs listeners with a ref the router will accept', async () => {
-    const mod = await compileFixture(
-      fileURLToPath(new URL('./fixtures/counter.ts', import.meta.url)),
-    );
+    const mod = await compileFixture('fixtures/counter.ts');
     const seen: ComponentRef<unknown>[] = [];
 
     const app = mount(ROOT_TAG, mod['Counter'] as Type<unknown>, createFakeFabric(), {
@@ -60,9 +57,7 @@ describe('bootstrap runs the app initializers', () => {
   let Counter: Type<unknown>;
 
   before(async () => {
-    const mod = await compileFixture(
-      fileURLToPath(new URL('./fixtures/counter.ts', import.meta.url)),
-    );
+    const mod = await compileFixture('fixtures/counter.ts');
     Counter = mod['Counter'] as Type<unknown>;
   });
 

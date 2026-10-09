@@ -7,7 +7,6 @@
  */
 import assert from 'node:assert/strict';
 import { before, describe, it } from 'node:test';
-import { fileURLToPath } from 'node:url';
 import type { Type, WritableSignal } from '@angular/core';
 import { mount } from '@ng-native/platform';
 import { createFakeFabric } from '@ng-native/testing';
@@ -19,9 +18,7 @@ describe('a change-detection pass begun inside another', () => {
   let Component: Type<unknown>;
 
   before(async () => {
-    const mod = await compileFixture(
-      fileURLToPath(new URL('./fixtures/nested-detect.ts', import.meta.url)),
-    );
+    const mod = await compileFixture('fixtures/nested-detect.ts');
     Component = mod['NestedDetect'] as Type<unknown>;
   });
 

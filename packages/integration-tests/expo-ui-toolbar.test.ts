@@ -6,7 +6,6 @@
  */
 import assert from 'node:assert/strict';
 import { after, before, describe, it } from 'node:test';
-import { fileURLToPath } from 'node:url';
 import type { InjectionToken, Type } from '@angular/core';
 import { registerExpoUiViews } from '@ng-native/expo';
 import { registerPlatformComponents } from '@ng-native/fabric';
@@ -38,9 +37,7 @@ let UiBottomSheet: {
 };
 
 before(async () => {
-  const mod = await compileFixture(
-    fileURLToPath(new URL('./fixtures/expo-ui-toolbar.ts', import.meta.url)),
-  );
+  const mod = await compileFixture('fixtures/expo-ui-toolbar.ts');
   Toolbar = mod['ExpoUiToolbarFixture'] as Type<unknown>;
   Sheet = mod['ExpoUiSheetToolbarFixture'] as Type<SheetFixture>;
   UiBottomSheet = mod['UiBottomSheet'] as typeof UiBottomSheet;

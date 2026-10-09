@@ -102,9 +102,7 @@ describe('text that names no colour', () => {
   let sheet: StyleSheet;
 
   before(async () => {
-    const mod = await compileFixture(
-      fileURLToPath(new URL('./fixtures/theme-foreground.ts', import.meta.url)),
-    );
+    const mod = await compileFixture('fixtures/theme-foreground.ts');
     light = mod['ThemeForegroundLight'] as Type<unknown>;
     dark = mod['ThemeForegroundDark'] as Type<unknown>;
     // `withTailwind` runs the flatten as part of the Metro transform, so what reaches `compileCss`

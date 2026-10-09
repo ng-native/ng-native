@@ -298,9 +298,7 @@ describe('platform view names', () => {
 
 describe('modal and assets', () => {
   it('gives the modal host its position and children a container view', async () => {
-    const mod = await compileFixture(
-      fileURLToPath(new URL('./fixtures/modal.ts', import.meta.url)),
-    );
+    const mod = await compileFixture('fixtures/modal.ts');
     const { fabric } = await render(mod['ModalHost'] as Type<unknown>);
 
     const hosts = flatten(fabric.committed).filter((n) => n.viewName === 'ModalHostView');
@@ -326,9 +324,7 @@ describe('modal and assets', () => {
   it('pins the container to the trailing edge in a right-to-left layout', async () => {
     // RN's Modal.js computes `[side]: 0` once, from I18nManager, rather than `left: 0` always:
     // in RTL the container has to hug the right edge, or the backdrop starts from the wrong side.
-    const mod = await compileFixture(
-      fileURLToPath(new URL('./fixtures/modal.ts', import.meta.url)),
-    );
+    const mod = await compileFixture('fixtures/modal.ts');
     const { fabric } = await render(mod['ModalHost'] as Type<unknown>, {
       providers: [
         {
@@ -538,9 +534,7 @@ describe('modal and assets', () => {
   });
 
   it('runs image sources through resolveAssetSource', async () => {
-    const mod = await compileFixture(
-      fileURLToPath(new URL('./fixtures/modal.ts', import.meta.url)),
-    );
+    const mod = await compileFixture('fixtures/modal.ts');
     const seen: unknown[] = [];
     const { fabric } = await render(mod['ModalHost'] as Type<unknown>, {
       // Stands in for RN's resolver: numbers are asset ids, objects pass through.

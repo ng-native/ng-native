@@ -10,7 +10,6 @@ import assert from 'node:assert/strict';
 import { after, before, describe, it } from 'node:test';
 import type { Type } from '@angular/core';
 import type { HttpClient } from '@angular/common/http';
-import { fileURLToPath } from 'node:url';
 import { firstValueFrom } from 'rxjs';
 import { mount } from '@ng-native/platform';
 import { provideNativeHttpClient } from '@ng-native/platform/http';
@@ -76,7 +75,7 @@ describe('provideNativeHttpClient', () => {
 
   before(async () => {
     (globalThis as { XMLHttpRequest?: unknown }).XMLHttpRequest = FakeXhr;
-    const mod = await compileFixture(fileURLToPath(new URL('./fixtures/http.ts', import.meta.url)));
+    const mod = await compileFixture('fixtures/http.ts');
     const app = mount(1, mod['HttpHost'] as Type<unknown>, createFakeFabric(), {
       providers: [provideNativeHttpClient()],
     });

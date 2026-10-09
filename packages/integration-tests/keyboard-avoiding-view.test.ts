@@ -4,7 +4,6 @@
  */
 import assert from 'node:assert/strict';
 import { before, describe, it } from 'node:test';
-import { fileURLToPath } from 'node:url';
 import type { Type } from '@angular/core';
 import { mount } from '@ng-native/platform';
 import {
@@ -23,9 +22,7 @@ describe('keyboard-avoiding-view', () => {
   let emitKeyboard: (metrics: KeyboardMetrics) => void = () => {};
 
   before(async () => {
-    const mod = await compileFixture(
-      fileURLToPath(new URL('./fixtures/sections.ts', import.meta.url)),
-    );
+    const mod = await compileFixture('fixtures/sections.ts');
     Component = mod['Sections'] as Type<unknown>;
   });
 
@@ -197,9 +194,7 @@ describe('keyboard-avoiding-view under a navigation bar', () => {
   let Editor: Type<unknown>;
 
   before(async () => {
-    const mod = await compileFixture(
-      fileURLToPath(new URL('./fixtures/keyboard-editor.ts', import.meta.url)),
-    );
+    const mod = await compileFixture('fixtures/keyboard-editor.ts');
     Editor = mod['KeyboardEditor'] as Type<unknown>;
   });
 
@@ -294,9 +289,7 @@ describe('keyboard-avoiding-view over a style of its own', () => {
   let Styled: Type<unknown>;
 
   before(async () => {
-    const mod = await compileFixture(
-      fileURLToPath(new URL('./fixtures/keyboard-styled.ts', import.meta.url)),
-    );
+    const mod = await compileFixture('fixtures/keyboard-styled.ts');
     Styled = mod['KeyboardStyled'] as Type<unknown>;
   });
 

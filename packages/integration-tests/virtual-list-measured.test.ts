@@ -9,7 +9,6 @@
  */
 import assert from 'node:assert/strict';
 import { before, describe, it, mock } from 'node:test';
-import { fileURLToPath } from 'node:url';
 import type { Type } from '@angular/core';
 import {
   fireEvent,
@@ -51,9 +50,7 @@ let mod: Record<string, unknown>;
 let posts: (from: number, count: number) => Post[];
 
 before(async () => {
-  mod = await compileFixture(
-    fileURLToPath(new URL('./fixtures/virtual-measured.ts', import.meta.url)),
-  );
+  mod = await compileFixture('fixtures/virtual-measured.ts');
   posts = mod['posts'] as typeof posts;
 });
 

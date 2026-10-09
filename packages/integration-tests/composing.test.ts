@@ -5,7 +5,6 @@
  */
 import assert from 'node:assert/strict';
 import { before, describe, it } from 'node:test';
-import { fileURLToPath } from 'node:url';
 import type { Type } from '@angular/core';
 import { cleanup, fireEvent, render, screen } from '@ng-native/testing';
 import { compileFixture } from './compile.ts';
@@ -22,9 +21,7 @@ describe('a control composed from the host behaviours', () => {
   let Composing: Type<{ on: { (): boolean }; locked: { set(v: boolean): void } }>;
 
   before(async () => {
-    const mod = await compileFixture(
-      fileURLToPath(new URL('./fixtures/composing.ts', import.meta.url)),
-    );
+    const mod = await compileFixture('fixtures/composing.ts');
     Composing = mod['Composing'] as typeof Composing;
   });
 

@@ -12,7 +12,6 @@
 import assert from 'node:assert/strict';
 import { after, describe, it } from 'node:test';
 import { createRequire } from 'node:module';
-import { fileURLToPath } from 'node:url';
 import type { Type } from '@angular/core';
 import { StyleResolver, type StyleTarget } from '@ng-native/fabric';
 import { cleanup, render, type FakeFabricNode } from '@ng-native/testing';
@@ -727,9 +726,7 @@ describe('colours nested inside a style value', () => {
     // knows what a colour is. That conversion keys off a `*color` property name, so a colour
     // living inside a `boxShadow` array is invisible to it. With `enableNativeCSSParsing` off,
     // Fabric will not parse a colour string either, so an unprocessed one is simply lost.
-    const mod = await compileFixture(
-      fileURLToPath(new URL('./fixtures/shadowed.ts', import.meta.url)),
-    );
+    const mod = await compileFixture('fixtures/shadowed.ts');
     const { fabric } = await render(mod['Shadowed'] as Type<unknown>, {
       processColor: (value) => `processed(${String(value)})`,
     });

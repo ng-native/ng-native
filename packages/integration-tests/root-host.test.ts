@@ -9,7 +9,6 @@
  */
 import assert from 'node:assert/strict';
 import { after, before, describe, it } from 'node:test';
-import { fileURLToPath } from 'node:url';
 import type { Type } from '@angular/core';
 import { cleanup, render, type FakeFabricNode } from '@ng-native/testing';
 import { compileFixture } from './compile.ts';
@@ -26,9 +25,7 @@ describe("the root component's host", () => {
   let RootSized: Type<unknown>;
 
   before(async () => {
-    const mod = await compileFixture(
-      fileURLToPath(new URL('./fixtures/root-host.ts', import.meta.url)),
-    );
+    const mod = await compileFixture('fixtures/root-host.ts');
     RootStyled = mod['RootStyled'] as Type<unknown>;
     RootBare = mod['RootBare'] as Type<unknown>;
     RootSized = mod['RootSized'] as Type<unknown>;

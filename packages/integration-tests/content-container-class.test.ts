@@ -6,7 +6,6 @@
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
 import { after, before, describe, it } from 'node:test';
-import { fileURLToPath } from 'node:url';
 import type { Type } from '@angular/core';
 import type { StyleSheet } from '@ng-native/fabric';
 import { cleanup, render, type FakeFabricNode } from '@ng-native/testing';
@@ -26,9 +25,7 @@ type Fixture = {
 let ContentContainerClass: Type<Fixture>;
 
 before(async () => {
-  const mod = await compileFixture(
-    fileURLToPath(new URL('./fixtures/content-container-class.ts', import.meta.url)),
-  );
+  const mod = await compileFixture('fixtures/content-container-class.ts');
   ContentContainerClass = mod['ContentContainerClass'] as Type<Fixture>;
 });
 

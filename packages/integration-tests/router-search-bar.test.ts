@@ -4,7 +4,6 @@
  */
 import assert from 'node:assert/strict';
 import { afterEach, before, describe, it } from 'node:test';
-import { fileURLToPath } from 'node:url';
 import type { Type } from '@angular/core';
 import { cleanup, fireEvent, render, screen, userEvent } from '@ng-native/testing';
 import { registerScreenComponents } from '../router/src/screens.ts';
@@ -15,9 +14,7 @@ describe('native search bar', () => {
 
   before(async () => {
     registerScreenComponents();
-    const mod = await compileFixture(
-      fileURLToPath(new URL('./fixtures/search-bar.ts', import.meta.url)),
-    );
+    const mod = await compileFixture('fixtures/search-bar.ts');
     Host = mod['SearchHost'] as Type<unknown>;
   });
 
@@ -69,9 +66,7 @@ describe('native search bar', () => {
   });
 
   it('puts a query the page starts with in the field', async () => {
-    const mod = await compileFixture(
-      fileURLToPath(new URL('./fixtures/search-bar.ts', import.meta.url)),
-    );
+    const mod = await compileFixture('fixtures/search-bar.ts');
     const { fabric } = await render(mod['SearchRestored'] as Type<unknown>);
     await settle();
     assert.deepEqual(commands(fabric), [['setText', 'oak']]);

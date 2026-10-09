@@ -8,7 +8,6 @@
  */
 import assert from 'node:assert/strict';
 import { after, afterEach, before, describe, it } from 'node:test';
-import { fileURLToPath } from 'node:url';
 import type { Type } from '@angular/core';
 import { Engine } from '@ng-native/fabric';
 import { cleanup, render, settle, type FakeFabric, type FakeFabricNode } from '@ng-native/testing';
@@ -54,7 +53,7 @@ const flatten = (n: FakeFabricNode[]): FakeFabricNode[] =>
 
 let mod: Record<string, unknown>;
 before(async () => {
-  mod = await compileFixture(fileURLToPath(new URL('./fixtures/leave.ts', import.meta.url)));
+  mod = await compileFixture('fixtures/leave.ts');
 });
 
 after(cleanup);
@@ -211,9 +210,7 @@ describe('animate.enter on a transition', () => {
 /** A transform bound as a style eases under a transition as one a class sets does. */
 describe('a bound transform under a transition', () => {
   it('eases beside the one a rule sets, and arrives with it', async () => {
-    const bound = await compileFixture(
-      fileURLToPath(new URL('./fixtures/bound-transform.ts', import.meta.url)),
-    );
+    const bound = await compileFixture('fixtures/bound-transform.ts');
     const time = clock();
     const app = await render(bound['Slide'] as Type<{ on: { set(v: boolean): void } }>, {
       now: time.now,

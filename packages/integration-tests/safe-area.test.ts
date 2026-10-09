@@ -7,7 +7,6 @@
  */
 import assert from 'node:assert/strict';
 import { afterEach, before, beforeEach, describe, it } from 'node:test';
-import { fileURLToPath } from 'node:url';
 import type { Type } from '@angular/core';
 import { SafeArea } from '@ng-native/device';
 import { cleanup, fireEvent, render, screen, type RenderResult } from '@ng-native/testing';
@@ -18,7 +17,7 @@ describe('the safe area', () => {
   let app: RenderResult<{ edges: { set(value: readonly ('top' | 'bottom')[]): void } }>;
 
   before(async () => {
-    mod = await compileFixture(fileURLToPath(new URL('./fixtures/safe-area.ts', import.meta.url)));
+    mod = await compileFixture('fixtures/safe-area.ts');
   });
 
   beforeEach(async () => {

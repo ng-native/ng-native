@@ -8,7 +8,6 @@
  */
 import assert from 'node:assert/strict';
 import { after, before, describe, it } from 'node:test';
-import { fileURLToPath } from 'node:url';
 import type { Type } from '@angular/core';
 import { cleanup, fireEvent, render } from '@ng-native/testing';
 import { compileFixture } from './compile.ts';
@@ -18,9 +17,7 @@ type Fixture = { off: { set(value: boolean): void }; pressed: string[] };
 let AriaDisabledPress: Type<Fixture>;
 
 before(async () => {
-  const mod = await compileFixture(
-    fileURLToPath(new URL('./fixtures/aria-disabled-press.ts', import.meta.url)),
-  );
+  const mod = await compileFixture('fixtures/aria-disabled-press.ts');
   AriaDisabledPress = mod['AriaDisabledPress'] as Type<Fixture>;
 });
 

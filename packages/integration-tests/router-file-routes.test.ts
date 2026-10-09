@@ -4,7 +4,6 @@
  */
 import assert from 'node:assert/strict';
 import { afterEach, before, describe, it } from 'node:test';
-import { fileURLToPath } from 'node:url';
 import { inject, type Provider, type Type } from '@angular/core';
 import { Router, withComponentInputBinding, type Route, type Routes } from '@angular/router';
 import {
@@ -25,7 +24,7 @@ const component = (name: string) => mod[name] as Type<unknown>;
 const page = (name: string, routeMeta?: object) => ({ default: component(name), routeMeta });
 
 before(async () => {
-  mod = await compileFixture(fileURLToPath(new URL('./fixtures/file-routes.ts', import.meta.url)));
+  mod = await compileFixture('fixtures/file-routes.ts');
 });
 
 afterEach(() => cleanup());

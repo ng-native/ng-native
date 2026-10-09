@@ -4,7 +4,6 @@
  */
 import assert from 'node:assert/strict';
 import { afterEach, before, beforeEach, describe, it } from 'node:test';
-import { fileURLToPath } from 'node:url';
 import { ErrorHandler, type Type } from '@angular/core';
 import { Router, withComponentInputBinding, type Routes } from '@angular/router';
 import {
@@ -56,7 +55,7 @@ describe('a native stack driven by the router', () => {
   let reported: unknown[];
 
   before(async () => {
-    mod = await compileFixture(fileURLToPath(new URL('./fixtures/stack-app.ts', import.meta.url)));
+    mod = await compileFixture('fixtures/stack-app.ts');
     live = mod['live'] as Record<string, number>;
     created = mod['created'] as Record<string, number>;
   });
@@ -577,7 +576,7 @@ describe('a stack inside a tab', () => {
   let mod: Record<string, unknown>;
 
   before(async () => {
-    mod = await compileFixture(fileURLToPath(new URL('./fixtures/stack-app.ts', import.meta.url)));
+    mod = await compileFixture('fixtures/stack-app.ts');
   });
 
   afterEach(() => cleanup());
@@ -608,7 +607,7 @@ describe('a deep link opened beneath its parent screen', () => {
   let reported: unknown[];
 
   before(async () => {
-    mod = await compileFixture(fileURLToPath(new URL('./fixtures/stack-app.ts', import.meta.url)));
+    mod = await compileFixture('fixtures/stack-app.ts');
   });
 
   async function launch(initial: string | null, parented = true) {

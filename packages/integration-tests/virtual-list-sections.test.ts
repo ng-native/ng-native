@@ -4,7 +4,6 @@
  */
 import assert from 'node:assert/strict';
 import { afterEach, before, beforeEach, describe, it } from 'node:test';
-import { fileURLToPath } from 'node:url';
 import type { Type } from '@angular/core';
 import { Keyboard, type KeyboardMetrics } from '@ng-native/device';
 import {
@@ -30,9 +29,7 @@ describe('virtual list with variable row heights', () => {
   let emitKeyboard: (metrics: KeyboardMetrics) => void = () => {};
 
   before(async () => {
-    const mod = await compileFixture(
-      fileURLToPath(new URL('./fixtures/sections.ts', import.meta.url)),
-    );
+    const mod = await compileFixture('fixtures/sections.ts');
     Component = mod['Sections'] as Type<unknown>;
   });
 

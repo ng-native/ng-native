@@ -13,7 +13,6 @@
 import assert from 'node:assert/strict';
 import { after, before, describe, it } from 'node:test';
 import { createRequire } from 'node:module';
-import { fileURLToPath } from 'node:url';
 import type { Type } from '@angular/core';
 import { cleanup, render, type BoundQueries } from '@ng-native/testing';
 import { compileFixture } from './compile.ts';
@@ -28,9 +27,7 @@ describe('color-mix with a token', () => {
   let queries: BoundQueries;
 
   before(async () => {
-    const mod = await compileFixture(
-      fileURLToPath(new URL('./fixtures/mixed.ts', import.meta.url)),
-    );
+    const mod = await compileFixture('fixtures/mixed.ts');
     Host = mod['MixHost'] as Type<unknown>;
   });
 

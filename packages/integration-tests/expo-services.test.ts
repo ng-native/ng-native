@@ -7,7 +7,6 @@
  */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { fileURLToPath } from 'node:url';
 import { runInInjectionContext, signal, type Type } from '@angular/core';
 import { mount } from '@ng-native/platform';
 import { createFakeFabric } from '@ng-native/testing';
@@ -352,9 +351,7 @@ describe('assets', () => {
 
   /** An injection context from a real mount, which is what an app's resources are created in. */
   async function inApp() {
-    const mod = await compileFixture(
-      fileURLToPath(new URL('./fixtures/counter.ts', import.meta.url)),
-    );
+    const mod = await compileFixture('fixtures/counter.ts');
     const app = mount(1, mod['Counter'] as Type<unknown>, createFakeFabric());
     return app.componentRef.injector;
   }

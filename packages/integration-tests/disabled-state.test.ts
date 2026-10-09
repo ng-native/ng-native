@@ -9,7 +9,6 @@
 import assert from 'node:assert/strict';
 import { after, before, describe, it } from 'node:test';
 import { createRequire } from 'node:module';
-import { fileURLToPath } from 'node:url';
 import type { Type } from '@angular/core';
 import type { StyleSheet } from '@ng-native/fabric';
 import { cleanup, render } from '@ng-native/testing';
@@ -33,9 +32,7 @@ type Toggles = { off: { set(value: boolean): void } };
 let Control: Type<Toggles>;
 
 before(async () => {
-  const mod = await compileFixture(
-    fileURLToPath(new URL('./fixtures/disabled-control.ts', import.meta.url)),
-  );
+  const mod = await compileFixture('fixtures/disabled-control.ts');
   Control = mod['DisabledControl'] as Type<Toggles>;
 });
 

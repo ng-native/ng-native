@@ -9,7 +9,6 @@
 import assert from 'node:assert/strict';
 import { after, before, beforeEach, describe, it } from 'node:test';
 import { createRequire } from 'node:module';
-import { fileURLToPath } from 'node:url';
 import type { Type } from '@angular/core';
 import { cleanup, fireEvent, render, settle, type BoundQueries } from '@ng-native/testing';
 import { compileFixture } from './compile.ts';
@@ -24,9 +23,7 @@ describe('pseudo-state', () => {
   let queries: BoundQueries;
 
   before(async () => {
-    const mod = await compileFixture(
-      fileURLToPath(new URL('./fixtures/stateful.ts', import.meta.url)),
-    );
+    const mod = await compileFixture('fixtures/stateful.ts');
     Component = mod['Stateful'] as Type<unknown>;
   });
 
@@ -71,9 +68,7 @@ describe('pseudo-state', () => {
 
 describe(':active through the responder system', () => {
   it('applies while a press is held and clears when it ends', async () => {
-    const mod = await compileFixture(
-      fileURLToPath(new URL('./fixtures/active.ts', import.meta.url)),
-    );
+    const mod = await compileFixture('fixtures/active.ts');
     const { fabric, getByTestId } = await render(mod['Active'] as Type<unknown>);
     const id = (name: string) => getByTestId(name);
 

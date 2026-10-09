@@ -7,7 +7,6 @@
  */
 import assert from 'node:assert/strict';
 import { after, before, describe, it } from 'node:test';
-import { fileURLToPath } from 'node:url';
 import type { Type } from '@angular/core';
 import { cleanup, render, settle } from '@ng-native/testing';
 import { compileFixture } from './compile.ts';
@@ -20,9 +19,7 @@ let app: Awaited<ReturnType<typeof render<Vars>>>;
 const props = (id: string) => app.getByTestId(id).props;
 
 before(async () => {
-  const mod = await compileFixture(
-    fileURLToPath(new URL('./fixtures/bound-style-var.ts', import.meta.url)),
-  );
+  const mod = await compileFixture('fixtures/bound-style-var.ts');
   app = await render(mod['BoundVars'] as Type<Vars>);
 });
 
@@ -91,9 +88,7 @@ describe('a var() in a bound style declaration', () => {
 
 describe('a bound var() nothing defines', () => {
   it('is said in development, naming the property and the element', async () => {
-    const mod = await compileFixture(
-      fileURLToPath(new URL('./fixtures/bound-style-var.ts', import.meta.url)),
-    );
+    const mod = await compileFixture('fixtures/bound-style-var.ts');
     const warn = console.warn;
     const said: string[] = [];
     console.warn = (...args: unknown[]) => said.push(args.map(String).join(' '));

@@ -8,7 +8,6 @@
  */
 import assert from 'node:assert/strict';
 import { before, describe, it } from 'node:test';
-import { fileURLToPath } from 'node:url';
 import type { Type } from '@angular/core';
 import { cleanup, render, screen } from '@ng-native/testing';
 import { compileFixture } from './compile.ts';
@@ -17,9 +16,7 @@ describe('a transform bound on an element', () => {
   let transform: (id: string) => unknown;
 
   before(async () => {
-    const mod = await compileFixture(
-      fileURLToPath(new URL('./fixtures/inline-transform.ts', import.meta.url)),
-    );
+    const mod = await compileFixture('fixtures/inline-transform.ts');
     await render(mod['InlineTransform'] as Type<unknown>);
     const ids = [
       'class-only',

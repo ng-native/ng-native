@@ -9,7 +9,6 @@
  */
 import assert from 'node:assert/strict';
 import { afterEach, before, describe, it } from 'node:test';
-import { fileURLToPath } from 'node:url';
 import type { Type } from '@angular/core';
 import { Router, type Routes } from '@angular/router';
 import { ColorScheme, type Scheme } from '@ng-native/device';
@@ -29,9 +28,7 @@ describe('app-wide defaults for native bars', () => {
   let switchTo: (scheme: Scheme) => Promise<void>;
 
   before(async () => {
-    mod = await compileFixture(
-      fileURLToPath(new URL('./fixtures/router-defaults.ts', import.meta.url)),
-    );
+    mod = await compileFixture('fixtures/router-defaults.ts');
   });
 
   afterEach(() => cleanup());

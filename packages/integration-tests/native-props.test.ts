@@ -21,9 +21,7 @@ describe('a prop the native view does not declare', () => {
   const warn = console.warn;
 
   before(async () => {
-    mod = await compileFixture(
-      fileURLToPath(new URL('./fixtures/native-props.ts', import.meta.url)),
-    );
+    mod = await compileFixture('fixtures/native-props.ts');
     console.warn = (...args: unknown[]) => warnings.push(args.map(String).join(' '));
   });
 

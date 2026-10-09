@@ -83,8 +83,11 @@ function emit(file: string, seen: Set<string>): string {
   return out;
 }
 
+/** A path given relative to this directory, as `fixtures/button.ts`. An absolute one is kept. */
+const fromHere = (file: string): string => path.resolve(import.meta.dirname, file);
+
 export async function compileFixture(file: string): Promise<Record<string, unknown>> {
-  return import(pathToFileURL(emit(file, new Set())).href);
+  return import(pathToFileURL(emit(fromHere(file), new Set())).href);
 }
 
 /**
@@ -93,7 +96,8 @@ export async function compileFixture(file: string): Promise<Record<string, unkno
  * imports carry no styles, so they are the native copies `compileFixture` writes, and a test that
  * renders both ways renders the same component classes.
  */
-export async function compileFixtureForWeb(file: string): Promise<Record<string, unknown>> {
+export async function compileFixtureForWeb(relative: string): Promise<Record<string, unknown>> {
+  const file = fromHere(relative);
   const out = file.replace(/\.ts$/, '.web.generated.ts');
   const { code } = transformAngular(readFileSync(file, 'utf8'), file, { platform: 'web' });
   writeAtomically(out, rewriteImports(code, file, new Set()));

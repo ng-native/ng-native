@@ -4,7 +4,6 @@
  */
 import assert from 'node:assert/strict';
 import { after, before, describe, it } from 'node:test';
-import { fileURLToPath } from 'node:url';
 import { RendererFactory2, type Type } from '@angular/core';
 import { mount, type MountResult } from '@ng-native/platform';
 import type { EngineNode } from '@ng-native/fabric';
@@ -35,9 +34,7 @@ describe('the renderer', () => {
   let instance: Features;
 
   before(async () => {
-    const mod = await compileFixture(
-      fileURLToPath(new URL('./fixtures/features.ts', import.meta.url)),
-    );
+    const mod = await compileFixture('fixtures/features.ts');
     fabric = createFakeFabric();
     app = mount(1, mod['Features'] as Type<unknown>, fabric);
     instance = app.componentRef.instance as Features;
@@ -120,9 +117,7 @@ describe('taking a node out through the renderer', () => {
   it('takes it out of the parent it has, whatever parent it is handed', async () => {
     // Angular's DOM renderer does: it is handed a parent for the sake of an older one that did
     // not, and a library passes whatever it has to hand, the document for a node in the head.
-    const mod = await compileFixture(
-      fileURLToPath(new URL('./fixtures/features.ts', import.meta.url)),
-    );
+    const mod = await compileFixture('fixtures/features.ts');
     const mounted = mount(1, mod['Features'] as Type<unknown>, createFakeFabric());
     await settle();
     const renderer = mounted.componentRef.injector.get(RendererFactory2).createRenderer(null, null);
@@ -147,9 +142,7 @@ describe('taking a node out through the renderer', () => {
 describe('taking a class or style attribute off through the renderer', () => {
   // What `[attr.class]` and `[attr.style]` do when their value becomes null.
   async function renderer() {
-    const mod = await compileFixture(
-      fileURLToPath(new URL('./fixtures/features.ts', import.meta.url)),
-    );
+    const mod = await compileFixture('fixtures/features.ts');
     const mounted = mount(1, mod['Features'] as Type<unknown>, createFakeFabric());
     await settle();
     const made = mounted.componentRef.injector.get(RendererFactory2).createRenderer(null, null);
@@ -188,9 +181,7 @@ describe('taking a class or style attribute off through the renderer', () => {
 
 describe('golden parity', () => {
   it('commits a stable golden tree for a given template', async () => {
-    const mod = await compileFixture(
-      fileURLToPath(new URL('./fixtures/features.ts', import.meta.url)),
-    );
+    const mod = await compileFixture('fixtures/features.ts');
     const fabric = createFakeFabric();
     const app = mount(1, mod['Features'] as Type<unknown>, fabric);
     await settle();

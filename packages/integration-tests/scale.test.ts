@@ -4,7 +4,6 @@
  */
 import assert from 'node:assert/strict';
 import { before, beforeEach, describe, it } from 'node:test';
-import { fileURLToPath } from 'node:url';
 import type { Type } from '@angular/core';
 import { mount, type MountResult } from '@ng-native/platform';
 import type { EngineNode } from '@ng-native/fabric';
@@ -32,9 +31,7 @@ describe('engine at scale', () => {
   let instance: Scale;
 
   before(async () => {
-    const mod = await compileFixture(
-      fileURLToPath(new URL('./fixtures/scale.ts', import.meta.url)),
-    );
+    const mod = await compileFixture('fixtures/scale.ts');
     Component = mod['Scale'] as Type<unknown>;
   });
 

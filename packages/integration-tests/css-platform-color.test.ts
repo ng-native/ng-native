@@ -12,7 +12,6 @@
 import assert from 'node:assert/strict';
 import { after, afterEach, describe, it } from 'node:test';
 import { createRequire } from 'node:module';
-import { fileURLToPath } from 'node:url';
 import type { Type } from '@angular/core';
 import { cleanup, render } from '@ng-native/testing';
 import { registerPlatformComponents } from '@ng-native/fabric';
@@ -146,9 +145,7 @@ describe('resolving one on a device', () => {
   afterEach(() => registerPlatformComponents('ios'));
 
   it('becomes the shape the platform reads, and goes through processColor like any colour', async () => {
-    const mod = await compileFixture(
-      fileURLToPath(new URL('./fixtures/platform-color.ts', import.meta.url)),
-    );
+    const mod = await compileFixture('fixtures/platform-color.ts');
 
     registerPlatformComponents('ios');
     const { getByTestId } = await render(mod['PlatformColorHost'] as Type<unknown>, {
@@ -160,9 +157,7 @@ describe('resolving one on a device', () => {
   });
 
   it('names the resource Android reads instead', async () => {
-    const mod = await compileFixture(
-      fileURLToPath(new URL('./fixtures/platform-color.ts', import.meta.url)),
-    );
+    const mod = await compileFixture('fixtures/platform-color.ts');
 
     registerPlatformComponents('android');
     const { getByTestId } = await render(mod['PlatformColorHost'] as Type<unknown>, {

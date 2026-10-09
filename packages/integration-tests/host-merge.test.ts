@@ -13,7 +13,6 @@
 import assert from 'node:assert/strict';
 import { after, before, describe, it } from 'node:test';
 import { createRequire } from 'node:module';
-import { fileURLToPath } from 'node:url';
 import type { Type } from '@angular/core';
 import { cleanup, render } from '@ng-native/testing';
 import type { FakeFabricNode } from '@ng-native/testing';
@@ -44,9 +43,7 @@ describe('a caller styling a component that styles its own host', () => {
   let props: Record<string, Record<string, unknown>>;
 
   before(async () => {
-    const mod = await compileFixture(
-      fileURLToPath(new URL('./fixtures/host-merge.ts', import.meta.url)),
-    );
+    const mod = await compileFixture('fixtures/host-merge.ts');
     const { fabric } = await render(mod['HostMerge'] as Type<unknown>, {
       globalStyles: compileCss(SHEET, 'global'),
     });

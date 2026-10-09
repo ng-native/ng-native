@@ -4,7 +4,6 @@
  */
 import assert from 'node:assert/strict';
 import { afterEach, before, beforeEach, describe, it, mock } from 'node:test';
-import { fileURLToPath } from 'node:url';
 import { ApplicationRef, type Type } from '@angular/core';
 import { render, type FakeFabric, type FakeFabricNode } from '@ng-native/testing';
 import { compileFixture } from './compile.ts';
@@ -27,9 +26,7 @@ describe('a scroll view or virtual list at zero height, in development', () => {
   let warnings: string[];
 
   before(async () => {
-    const mod = await compileFixture(
-      fileURLToPath(new URL('./fixtures/zero-height.ts', import.meta.url)),
-    );
+    const mod = await compileFixture('fixtures/zero-height.ts');
     ZeroScroll = mod['ZeroScroll'] as Type<unknown>;
     ZeroList = mod['ZeroList'] as Type<unknown>;
     ZeroEmptyList = mod['ZeroEmptyList'] as Type<unknown>;

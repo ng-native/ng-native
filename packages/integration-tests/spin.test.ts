@@ -1,6 +1,5 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { fileURLToPath } from 'node:url';
 import type { Type } from '@angular/core';
 import { mount } from '@ng-native/platform';
 import { createFakeFabric, type FakeFabricNode } from '@ng-native/testing';
@@ -11,9 +10,7 @@ const flat = (n: FakeFabricNode[]): FakeFabricNode[] => n.flatMap((x) => [x, ...
 
 describe('activity indicator sizing', () => {
   it('sizes every instance, with or without a template style', async () => {
-    const mod = await compileFixture(
-      fileURLToPath(new URL('./fixtures/spinner.ts', import.meta.url)),
-    );
+    const mod = await compileFixture('fixtures/spinner.ts');
     const fabric = createFakeFabric();
     const app = mount(1, mod['Spinner'] as Type<unknown>, fabric);
     await settle();

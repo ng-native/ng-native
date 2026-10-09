@@ -9,7 +9,6 @@
  */
 import assert from 'node:assert/strict';
 import { afterEach, before, beforeEach, describe, it } from 'node:test';
-import { fileURLToPath } from 'node:url';
 import { ErrorHandler, InjectionToken, type Type } from '@angular/core';
 import { Engine } from '@ng-native/fabric';
 import { mount } from '@ng-native/platform';
@@ -119,9 +118,7 @@ describe('an expo view in the tree', () => {
  */
 describe('the shape every service uses', () => {
   it('constructs on first injection, once, for the life of the app', async () => {
-    const mod = await compileFixture(
-      fileURLToPath(new URL('./fixtures/counter.ts', import.meta.url)),
-    );
+    const mod = await compileFixture('fixtures/counter.ts');
 
     let subscribed = 0;
     const app = mount(1, mod['Counter'] as Type<unknown>, createFakeFabric(), {
@@ -534,9 +531,7 @@ describe('the typed SwiftUI and segmented-control components', () => {
   const errors: unknown[] = [];
 
   before(async () => {
-    const mod = await compileFixture(
-      fileURLToPath(new URL('./fixtures/expo-ui.ts', import.meta.url)),
-    );
+    const mod = await compileFixture('fixtures/expo-ui.ts');
     Fixture = mod['ExpoUiFixture'] as Type<unknown>;
   });
 
@@ -642,9 +637,7 @@ describe('the typed SwiftUI list', () => {
     n.flatMap((x) => [x, ...all(x.children)]);
 
   it('passes a row s swipe actions and layout through as props', async () => {
-    const mod = await compileFixture(
-      fileURLToPath(new URL('./fixtures/expo-ui.ts', import.meta.url)),
-    );
+    const mod = await compileFixture('fixtures/expo-ui.ts');
     registerExpoUiViews('ios');
     const fabric = createFakeFabric();
     const app = mount(1, mod['ExpoUiListFixture'] as Type<unknown>, fabric);
@@ -683,9 +676,7 @@ describe('the typed SwiftUI controls and expo-image', () => {
     n.flatMap((x) => [x, ...all(x.children)]);
 
   it('passes each input through as the prop of the same name, and events to the outputs', async () => {
-    const mod = await compileFixture(
-      fileURLToPath(new URL('./fixtures/expo-ui.ts', import.meta.url)),
-    );
+    const mod = await compileFixture('fixtures/expo-ui.ts');
     registerExpoUiViews('ios');
     registerExpoViews('expo-image');
     const fabric = createFakeFabric();
@@ -725,9 +716,7 @@ describe('the typed SwiftUI controls and expo-image', () => {
   });
 
   it('puts a section and a labelled row content in the content slot, which SwiftUI draws', async () => {
-    const mod = await compileFixture(
-      fileURLToPath(new URL('./fixtures/expo-ui.ts', import.meta.url)),
-    );
+    const mod = await compileFixture('fixtures/expo-ui.ts');
     registerExpoUiViews('ios');
     registerExpoViews('expo-image');
     const fabric = createFakeFabric();

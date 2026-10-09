@@ -10,7 +10,6 @@
  */
 import assert from 'node:assert/strict';
 import { after, afterEach, before, describe, it } from 'node:test';
-import { fileURLToPath } from 'node:url';
 import type { Type } from '@angular/core';
 import { registerPlatformComponents, registerViewName } from '@ng-native/fabric';
 import { cleanup, fireEvent, render } from '@ng-native/testing';
@@ -21,9 +20,7 @@ type Fixture = { off: { set(value: boolean): void }; events: string[] };
 let ClickPress: Type<Fixture>;
 
 before(async () => {
-  const mod = await compileFixture(
-    fileURLToPath(new URL('./fixtures/click-press.ts', import.meta.url)),
-  );
+  const mod = await compileFixture('fixtures/click-press.ts');
   ClickPress = mod['ClickPress'] as Type<Fixture>;
   registerPlatformComponents('android');
 });

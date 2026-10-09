@@ -6,7 +6,6 @@
  */
 import assert from 'node:assert/strict';
 import { afterEach, before, describe, it } from 'node:test';
-import { fileURLToPath } from 'node:url';
 import type { Provider, Type } from '@angular/core';
 import { Keyboard, SafeArea, type KeyboardMetrics } from '@ng-native/device';
 import { registerPlatformComponents } from '@ng-native/fabric';
@@ -21,9 +20,7 @@ afterEach(() => {
 
 let mod: Record<string, unknown>;
 before(async () => {
-  mod = await compileFixture(
-    fileURLToPath(new URL('./fixtures/keyboard-dock.ts', import.meta.url)),
-  );
+  mod = await compileFixture('fixtures/keyboard-dock.ts');
 });
 
 const settle = () => new Promise((resolve) => setTimeout(resolve, 0));

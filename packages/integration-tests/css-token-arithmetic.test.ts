@@ -9,7 +9,6 @@
 import assert from 'node:assert/strict';
 import { after, before, describe, it } from 'node:test';
 import { createRequire } from 'node:module';
-import { fileURLToPath } from 'node:url';
 import type { Type } from '@angular/core';
 import { Engine, type StyleSheet } from '@ng-native/fabric';
 import {
@@ -58,9 +57,7 @@ describe('a custom property set on an element to a value with a var() inside it'
   };
 
   before(async () => {
-    const mod = await compileFixture(
-      fileURLToPath(new URL('./fixtures/token-arithmetic.ts', import.meta.url)),
-    );
+    const mod = await compileFixture('fixtures/token-arithmetic.ts');
     Host = mod['TokenArithmetic'] as Type<Fixture>;
   });
 

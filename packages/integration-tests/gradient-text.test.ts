@@ -8,7 +8,6 @@
 import assert from 'node:assert/strict';
 import { afterEach, before, describe, it } from 'node:test';
 import { createRequire } from 'node:module';
-import { fileURLToPath } from 'node:url';
 import type { Type } from '@angular/core';
 import { cleanup, render, screen, type FakeFabricNode } from '@ng-native/testing';
 import { compileFixture } from './compile.ts';
@@ -31,9 +30,7 @@ describe('gradient text', () => {
   };
 
   before(async () => {
-    mod = await compileFixture(
-      fileURLToPath(new URL('./fixtures/gradient-text.ts', import.meta.url)),
-    );
+    mod = await compileFixture('fixtures/gradient-text.ts');
   });
   afterEach(cleanup);
 

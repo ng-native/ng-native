@@ -4,7 +4,6 @@
  */
 import assert from 'node:assert/strict';
 import { afterEach, before, it } from 'node:test';
-import { fileURLToPath } from 'node:url';
 import type { Type } from '@angular/core';
 import { Router, type Routes } from '@angular/router';
 import { cleanup, render, screen } from '@ng-native/testing';
@@ -16,7 +15,7 @@ afterEach(cleanup);
 
 let mod: Record<string, unknown>;
 before(async () => {
-  mod = await compileFixture(fileURLToPath(new URL('./fixtures/about-pages.ts', import.meta.url)));
+  mod = await compileFixture('fixtures/about-pages.ts');
 });
 
 const linkParent: LinkParent = (url) => (url.startsWith('/about/') ? '/about' : null);

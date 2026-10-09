@@ -10,7 +10,6 @@
  */
 import assert from 'node:assert/strict';
 import { afterEach, before, describe, it } from 'node:test';
-import { fileURLToPath } from 'node:url';
 import type { Type } from '@angular/core';
 import { createRequire } from 'node:module';
 import { Engine } from '@ng-native/fabric';
@@ -28,9 +27,7 @@ describe('text in a direction subtree', () => {
   let Component: Type<Fixture>;
 
   before(async () => {
-    const mod = await compileFixture(
-      fileURLToPath(new URL('./fixtures/text-direction.ts', import.meta.url)),
-    );
+    const mod = await compileFixture('fixtures/text-direction.ts');
     Component = mod['TextDirection'] as Type<Fixture>;
   });
 

@@ -4,7 +4,6 @@
  */
 import assert from 'node:assert/strict';
 import { after, before, describe, it } from 'node:test';
-import { fileURLToPath } from 'node:url';
 import type { Type } from '@angular/core';
 import { registerExpoUiViews } from '@ng-native/expo';
 import { registerPlatformComponents } from '@ng-native/fabric';
@@ -21,9 +20,7 @@ const all = (nodes: readonly FakeFabricNode[]): FakeFabricNode[] =>
 
 let Shapes: Type<Fixture>;
 before(async () => {
-  const mod = await compileFixture(
-    fileURLToPath(new URL('./fixtures/expo-ui-shapes.ts', import.meta.url)),
-  );
+  const mod = await compileFixture('fixtures/expo-ui-shapes.ts');
   Shapes = mod['ExpoUiShapesFixture'] as Type<Fixture>;
 });
 

@@ -10,7 +10,6 @@
  */
 import assert from 'node:assert/strict';
 import { after, afterEach, before, describe, it } from 'node:test';
-import { fileURLToPath } from 'node:url';
 import type { Type } from '@angular/core';
 import {
   cleanup,
@@ -54,9 +53,7 @@ function nativeFonts(failing: readonly string[] = []): NativeFonts {
 let LateFonts: Type<unknown>;
 
 before(async () => {
-  const mod = await compileFixture(
-    fileURLToPath(new URL('./fixtures/late-fonts.ts', import.meta.url)),
-  );
+  const mod = await compileFixture('fixtures/late-fonts.ts');
   LateFonts = mod['LateFonts'] as Type<unknown>;
 });
 

@@ -4,7 +4,6 @@
  */
 import assert from 'node:assert/strict';
 import { afterEach, before, beforeEach, describe, it } from 'node:test';
-import { fileURLToPath } from 'node:url';
 import type { Type } from '@angular/core';
 import { Router, withComponentInputBinding, type Routes } from '@angular/router';
 import { DeepLinks } from '@ng-native/device';
@@ -54,7 +53,7 @@ describe('a tab at path ""', () => {
     );
 
   before(async () => {
-    mod = await compileFixture(fileURLToPath(new URL('./fixtures/index-tab.ts', import.meta.url)));
+    mod = await compileFixture('fixtures/index-tab.ts');
     created = mod['created'] as Record<string, number>;
     live = mod['live'] as Record<string, number>;
   });
@@ -150,7 +149,7 @@ describe('a tab at path "" not yet opened', () => {
       .filter(Boolean);
 
   before(async () => {
-    mod = await compileFixture(fileURLToPath(new URL('./fixtures/index-tab.ts', import.meta.url)));
+    mod = await compileFixture('fixtures/index-tab.ts');
   });
 
   /** Launched on the second tab by a link, so the first has never been opened. */

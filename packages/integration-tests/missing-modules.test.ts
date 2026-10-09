@@ -98,9 +98,7 @@ const factoryOf =
 /** An injection context from a real mount, which a resource needs. */
 let app: Injector;
 before(async () => {
-  const mod = await compileFixture(
-    fileURLToPath(new URL('./fixtures/counter.ts', import.meta.url)),
-  );
+  const mod = await compileFixture('fixtures/counter.ts');
   app = mount(1, mod['Counter'] as Type<unknown>, createFakeFabric()).componentRef.injector;
 });
 

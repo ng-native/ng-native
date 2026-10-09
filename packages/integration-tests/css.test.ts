@@ -4,7 +4,6 @@
 import assert from 'node:assert/strict';
 import { afterEach, before, beforeEach, describe, it } from 'node:test';
 import { createRequire } from 'node:module';
-import { fileURLToPath } from 'node:url';
 import type { Type } from '@angular/core';
 import { cleanup, render, settle, type FakeFabric, type FakeFabricNode } from '@ng-native/testing';
 import { compileFixture } from './compile.ts';
@@ -62,9 +61,7 @@ describe('CSS at runtime', () => {
   let instance: { raised: { set(v: boolean): void } };
 
   before(async () => {
-    const mod = await compileFixture(
-      fileURLToPath(new URL('./fixtures/styled.ts', import.meta.url)),
-    );
+    const mod = await compileFixture('fixtures/styled.ts');
     Component = mod['Styled'] as typeof Component;
   });
 

@@ -5,7 +5,6 @@
  */
 import assert from 'node:assert/strict';
 import { afterEach, before, describe, it } from 'node:test';
-import { fileURLToPath } from 'node:url';
 import type { Type } from '@angular/core';
 import { cleanup, fireEvent, render, settle } from '@ng-native/testing';
 import { compileFixture } from './compile.ts';
@@ -17,9 +16,7 @@ interface Host {
 }
 let mod: Record<string, unknown>;
 before(async () => {
-  mod = await compileFixture(
-    fileURLToPath(new URL('./fixtures/press-disable-while.ts', import.meta.url)),
-  );
+  mod = await compileFixture('fixtures/press-disable-while.ts');
 });
 afterEach(cleanup);
 

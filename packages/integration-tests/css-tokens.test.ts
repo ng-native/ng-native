@@ -9,7 +9,6 @@
 import assert from 'node:assert/strict';
 import { after, before, describe, it } from 'node:test';
 import { createRequire } from 'node:module';
-import { fileURLToPath } from 'node:url';
 import type { Type } from '@angular/core';
 import { Engine, StyleResolver, type StyleTarget } from '@ng-native/fabric';
 import { cleanup, createFakeFabric, render, type BoundQueries } from '@ng-native/testing';
@@ -51,9 +50,7 @@ describe('tokens', () => {
   let queries: BoundQueries;
 
   before(async () => {
-    const mod = await compileFixture(
-      fileURLToPath(new URL('./fixtures/tokened.ts', import.meta.url)),
-    );
+    const mod = await compileFixture('fixtures/tokened.ts');
     Host = mod['TokenHost'] as Type<unknown>;
   });
 

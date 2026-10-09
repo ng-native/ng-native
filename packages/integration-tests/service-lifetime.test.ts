@@ -9,7 +9,6 @@
  */
 import assert from 'node:assert/strict';
 import { before, describe, it } from 'node:test';
-import { fileURLToPath } from 'node:url';
 import type { Provider, Type } from '@angular/core';
 import { mount } from '@ng-native/platform';
 import { createFakeFabric } from '@ng-native/testing';
@@ -233,9 +232,7 @@ const cases: readonly { name: string; service: Type<unknown>; providers: Provide
 describe('a root service with a native listener', () => {
   let Counter: Type<unknown>;
   before(async () => {
-    const mod = await compileFixture(
-      fileURLToPath(new URL('./fixtures/counter.ts', import.meta.url)),
-    );
+    const mod = await compileFixture('fixtures/counter.ts');
     Counter = mod['Counter'] as Type<unknown>;
   });
 

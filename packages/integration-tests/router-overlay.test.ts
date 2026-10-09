@@ -6,7 +6,6 @@
  */
 import assert from 'node:assert/strict';
 import { after, before, describe, it } from 'node:test';
-import { fileURLToPath } from 'node:url';
 import type { Type } from '@angular/core';
 import { Screen } from '@ng-native/device';
 import { registerPlatformComponents } from '@ng-native/fabric';
@@ -19,9 +18,7 @@ const flatten = (nodes: FakeFabricNode[]): FakeFabricNode[] =>
 
 let Overlaid: Type<{ shown: { set(value: boolean): void } }>;
 before(async () => {
-  const mod = await compileFixture(
-    fileURLToPath(new URL('./fixtures/full-window-overlay.ts', import.meta.url)),
-  );
+  const mod = await compileFixture('fixtures/full-window-overlay.ts');
   Overlaid = mod['Overlaid'] as typeof Overlaid;
 });
 

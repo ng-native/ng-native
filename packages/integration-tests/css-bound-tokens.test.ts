@@ -9,7 +9,6 @@
  */
 import assert from 'node:assert/strict';
 import { after, before, describe, it } from 'node:test';
-import { fileURLToPath } from 'node:url';
 import type { Type } from '@angular/core';
 import { createRequire } from 'node:module';
 import { Engine } from '@ng-native/fabric';
@@ -48,9 +47,7 @@ describe('a custom property set on an element', () => {
   };
 
   before(async () => {
-    const mod = await compileFixture(
-      fileURLToPath(new URL('./fixtures/style-custom-property.ts', import.meta.url)),
-    );
+    const mod = await compileFixture('fixtures/style-custom-property.ts');
     Host = mod['StyleCustomProperty'] as Type<Fixture>;
   });
 

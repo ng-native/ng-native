@@ -17,7 +17,6 @@ const require = createRequire(import.meta.url);
 const { compileCss } = require('@ng-native/metro/css/compile.cjs');
 const { transformAngular } = require('@ng-native/metro/angular-transform.cjs');
 
-import { fileURLToPath } from 'node:url';
 import type { Type } from '@angular/core';
 import { expoFonts, FontRegistry, Fonts, loadFonts, registrationsFor } from '@ng-native/expo/fonts';
 import { Engine, styleSheetOf, type StyleSheet } from '@ng-native/fabric';
@@ -301,9 +300,7 @@ describe('reaching expo-font itself', () => {
       isLoaded: (family: string) => registered.has(family),
       getLoadedFonts: () => [...registered],
     };
-    const mod = await compileFixture(
-      fileURLToPath(new URL('./fixtures/counter.ts', import.meta.url)),
-    );
+    const mod = await compileFixture('fixtures/counter.ts');
     const app = mount(1, mod['Counter'] as Type<unknown>, createFakeFabric());
     const fonts = withExpoFont(expoFont, () => app.componentRef.injector.get(Fonts));
     assert.deepEqual(fonts.families(), []);

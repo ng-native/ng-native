@@ -9,7 +9,6 @@
  */
 import assert from 'node:assert/strict';
 import { after, before, describe, it } from 'node:test';
-import { fileURLToPath } from 'node:url';
 import { createRequire } from 'node:module';
 import type { Type, WritableSignal } from '@angular/core';
 import { Engine, type StyleSheet } from '@ng-native/fabric';
@@ -32,9 +31,7 @@ describe('a ViewEncapsulation.None component', () => {
   let App: Type<App>;
 
   before(async () => {
-    const mod = await compileFixture(
-      fileURLToPath(new URL('./fixtures/encapsulation-none.ts', import.meta.url)),
-    );
+    const mod = await compileFixture('fixtures/encapsulation-none.ts');
     App = mod['EncapsulationNone'] as Type<App>;
   });
 

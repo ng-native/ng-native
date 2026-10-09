@@ -5,7 +5,6 @@
  */
 import assert from 'node:assert/strict';
 import { after, before, describe, it } from 'node:test';
-import { fileURLToPath } from 'node:url';
 import type { Type } from '@angular/core';
 import { mount, type MountResult } from '@ng-native/platform';
 import { createFakeFabric, type FakeFabric } from '@ng-native/testing';
@@ -22,9 +21,7 @@ describe('the seam, end to end', () => {
   const processed: string[] = [];
 
   before(async () => {
-    const mod = await compileFixture(
-      fileURLToPath(new URL('./fixtures/counter.ts', import.meta.url)),
-    );
+    const mod = await compileFixture('fixtures/counter.ts');
     fabric = createFakeFabric();
     app = mount(ROOT_TAG, mod['Counter'] as Type<unknown>, fabric, {
       processColor: (value) => {

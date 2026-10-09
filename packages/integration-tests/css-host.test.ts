@@ -7,7 +7,6 @@
  */
 import assert from 'node:assert/strict';
 import { after, before, describe, it } from 'node:test';
-import { fileURLToPath } from 'node:url';
 import type { Type } from '@angular/core';
 import { createRequire } from 'node:module';
 import { StyleResolver, matches, type StyleTarget } from '@ng-native/fabric';
@@ -34,9 +33,7 @@ describe(':host', () => {
   };
 
   before(async () => {
-    const mod = await compileFixture(
-      fileURLToPath(new URL('./fixtures/host-styles.ts', import.meta.url)),
-    );
+    const mod = await compileFixture('fixtures/host-styles.ts');
     Parent = mod['HostParent'] as Type<{ dark: { set(v: boolean): void } }>;
   });
 
