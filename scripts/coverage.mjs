@@ -358,13 +358,25 @@ function mergeSuites() {
   return totals;
 }
 
+/**
+ * Whether a measured file is one a package ships. Not only what is under `src`: Metro, the
+ * migrations and the Tailwind preset keep their code beside their `package.json`, and a floor
+ * that left them out said nothing about the CSS compiler. The tests' own package is the
+ * instrument, and so is the hook a suite is started with.
+ */
+function isShipped(file) {
+  const [packages, name] = path.relative(ROOT, file).split(path.sep);
+  return (
+    packages === 'packages' &&
+    name !== 'integration-tests' &&
+    path.basename(file) !== 'register-linker.mjs'
+  );
+}
+
 /** Every measured file, as plain counts. */
 function filesIn(merged) {
   return [...merged.entries()]
-    .filter(
-      ([file]) =>
-        file.startsWith(path.join(ROOT, 'packages')) && file.includes(`${path.sep}src${path.sep}`),
-    )
+    .filter(([file]) => isShipped(file))
     .map(([file, data]) => {
       const lines = [...data.lines.values()];
       const branches = [...data.branches.values()];
