@@ -1934,8 +1934,7 @@ function noteSubject(into: Subjects, rule: StyleRule): void {
  * What a class changing on an element can restyle, by the rules that name the class:
  *
  * - `true`, the element and all under it and after it, each matched again: a rule names the
- *   class beside its element, inside `:has()`, or on a box its element is under by more than the
- *   box's own classes, `.box:not(.busy) .row`;
+ *   class beside its element, or inside `:has()` or `:host-context()`;
  * - or the element itself, `own`, where a rule is for the element that has the class, and the
  *   elements under it that rules are for, where a rule names it as what its own element is
  *   inside, `.busy .row` or `.row:is(.busy *)`: those and no other are matched again.
@@ -2047,9 +2046,10 @@ function classPlaces(rule: StyleRule): { own: ReadonlySet<string>; inside: Reado
     }
     const joined = rule.combinators[index];
     under &&= joined === 'child' || joined === 'descendant';
-    const { classes, ...rest } = compound;
-    collectClasses(rest, elsewhere, []);
-    for (const name of classes) (under ? inside : elsewhere).add(name);
+    // A box the element is under, by its classes and by those it is asked to have or not to,
+    // `.box:not(.busy) .row`: each is asked of that box, as its own are.
+    const over = under ? inside : elsewhere;
+    placeClasses(compound, over, over, elsewhere);
   }
   for (const name of elsewhere) {
     own.delete(name);

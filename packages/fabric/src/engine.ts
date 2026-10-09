@@ -3237,7 +3237,8 @@ export class Engine implements HostEngine {
    */
   setDefaultStyle(node: EngineNode, style: Readonly<Record<string, unknown>> | undefined): void {
     node.defaultStyle = style;
-    this.markProps(node);
+    // Under what the cascade comes to, and read by no selector: nothing is matched again.
+    this.markProps(node, false);
   }
 
   /**
