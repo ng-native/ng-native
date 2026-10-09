@@ -134,7 +134,7 @@ export class Dialogs {
             cancelButtonIndex: cancelIndex,
             ...(destructiveAt >= 0 ? { destructiveButtonIndex: destructiveAt } : {}),
           },
-          (index) => resolve(index === cancelIndex && cancelAt < 0 ? null : index),
+          (index) => resolve(index === cancelIndex ? null : index),
         );
         return;
       }

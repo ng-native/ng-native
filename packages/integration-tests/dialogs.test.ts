@@ -156,6 +156,22 @@ describe('offering a choice', () => {
     assert.equal(await chosen, null);
   });
 
+  it('reports a cancel the caller supplied as no choice either, as Android does', async () => {
+    // iOS answers with the cancel's index for its button and for a tap outside the sheet alike.
+    const choices = [{ label: 'Camera' }, { label: 'Not now', style: 'cancel' }] as const;
+    const native = ios();
+    const dialogs = serviceWith(Dialogs.SOURCE, native, () => new Dialogs());
+
+    const declined = dialogs.choose('Photo', choices);
+    assert.deepEqual((native.shown as { options: string[] }).options, ['Camera', 'Not now']);
+    native.pick(1);
+    assert.equal(await declined, null);
+
+    const chosen = dialogs.choose('Photo', choices);
+    native.pick(0);
+    assert.equal(await chosen, 0);
+  });
+
   it('is a dialog on Android, because that is what Android means by this', async () => {
     const native = android();
     const dialogs = serviceWith(Dialogs.SOURCE, native as never, () => new Dialogs());
