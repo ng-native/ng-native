@@ -496,6 +496,39 @@ describe('tokens', () => {
       assert.deepEqual(sides(resolvedStyle(css, ['wide', 'a'])), [10, 20, 30, 40]);
     });
 
+    it('reads each part of such a token that is a token itself', () => {
+      // A dialog's: `--content-padding: 0 var(--modal-padding) var(--modal-padding)
+      // var(--modal-padding)`, where the one length is set once for every overlay.
+      const css =
+        ':root { --modal: 20px; --pad: 0 var(--modal) var(--modal) var(--modal); ' +
+        '--pair: var(--modal) 0.5rem; --back: 1px var(--none, 6px) } ' +
+        '.a { padding: var(--pad) } .b { margin: var(--pair) } .c { padding: var(--back) } ' +
+        '.roomy { --modal: 32px }';
+      const sides = (style: Record<string, unknown>, box = 'padding') =>
+        ['Top', 'Right', 'Bottom', 'Left'].map((side) => style[`${box}${side}`]);
+      assert.deepEqual(sides(resolvedStyle(css, ['a'])), [0, 20, 20, 20]);
+      assert.deepEqual(sides(resolvedStyle(css, ['b']), 'margin'), [20, 8, 20, 8]);
+      // A part that is unset takes its fallback.
+      assert.deepEqual(sides(resolvedStyle(css, ['c'])), [1, 6, 1, 6]);
+      // And follows the part where an element sets it: the token is worked out where it is
+      // defined, on the root, so the element that would change it defines it again.
+      const again = `${css} .again { --pad: 0 var(--modal) var(--modal) var(--modal) }`;
+      assert.deepEqual(sides(resolvedStyle(again, ['roomy', 'again', 'a'])), [0, 32, 32, 32]);
+    });
+
+    it('leaves the shorthand unset where a part of such a token is unset, or reads itself', () => {
+      // Invalid at computed-value time, as a browser has it: no side is written, and the
+      // `padding: 1px` before it does not show through.
+      const unset = ':root { --pad: 0 var(--none) } .a { padding: 1px; padding: var(--pad) }';
+      assert.equal(resolvedStyle(unset, ['a'])['paddingRight'], undefined);
+      const cycle =
+        ':root { --x: 0 var(--y); --y: var(--x) } .a { padding: 1px; padding: var(--x) }';
+      assert.equal(resolvedStyle(cycle, ['a'])['paddingRight'], undefined);
+      // A part that is itself several lengths is no one length.
+      const nested = ':root { --two: 1px 2px; --pad: 0 var(--two) } .a { padding: var(--pad) }';
+      assert.equal(resolvedStyle(nested, ['a'])['paddingRight'], undefined);
+    });
+
     it('leaves a single length unset by a token of several', () => {
       // Invalid at computed-value time, as a browser has it: the property is as if never written.
       // ponytail: so is a shorthand of two, `gap` and `padding-inline`, which a browser gives a
