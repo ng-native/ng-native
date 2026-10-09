@@ -3627,9 +3627,9 @@ export class Engine implements HostEngine {
   private markLaterSiblings(node: EngineNode): void {
     const siblings = node.parent?.children;
     if (!siblings) return;
-    for (let i = siblings.indexOf(node) + 1; i < siblings.length; i++) {
-      siblings[i]!.styleDirty = true;
-    }
+    // Each matched again, and left as it was with all under it where it matches what it did:
+    // see `markPlace`.
+    for (let i = siblings.indexOf(node) + 1; i < siblings.length; i++) this.markPlace(siblings[i]!);
   }
 
   /** `node`'s child list changed: `moved` came into it at `at`, or went out of it from there. */
