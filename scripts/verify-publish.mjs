@@ -53,6 +53,16 @@ import { fileURLToPath } from 'node:url';
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const REGISTRY = process.env.REGISTRY ?? 'http://localhost:4873';
 
+// Before anything is made or built: a flag nobody reads is a check that did not run, and a typo
+// in a workflow would go green having checked less than it was asked to.
+const FLAGS = [/^--scenario=/, /^--generators(=|$)/, /^--storybook$/, /^--web$/];
+const unread = process.argv.slice(2).filter((arg) => !FLAGS.some((flag) => flag.test(arg)));
+if (unread.length) {
+  throw new Error(
+    `No such option: ${unread.join(' ')}. There are --scenario=<name>, --generators[=<name>], --storybook and --web.`,
+  );
+}
+
 /** Every package that would go to npm, plus the template. */
 const PUBLISHED = [
   'packages/analog',
