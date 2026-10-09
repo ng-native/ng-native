@@ -224,21 +224,33 @@ describe('a gradient in the background shorthand', () => {
     assert.deepEqual(styleOf(short), styleOf(long));
   });
 
-  it('takes an image away where it writes none, as a colour alone does', () => {
-    assert.deepEqual(
-      styleOf('background: red'),
-      styleOf('background-image: none; background-color: red'),
-    );
+  it('takes an image away where it writes none, and the rest back to where it starts', () => {
+    const none =
+      'background-image: none; background-position: 0% 0%; background-size: auto; ' +
+      'background-repeat: repeat';
+    assert.deepEqual(styleOf('background: red'), styleOf(`${none}; background-color: red`));
     assert.deepEqual(
       styleOf('background: none'),
-      styleOf('background-image: none; background-color: transparent'),
+      styleOf(`${none}; background-color: transparent`),
     );
-    // Over a rule before it: a flat button of a kind that has a gradient has none.
+    // Over the rules before it: a flat button of a kind that has a gradient has none, and a
+    // gradient a later rule gives it is placed as a gradient starts, not as the first rule said.
     const sheet = compileCss(
-      '.a { background-image: linear-gradient(red, blue) } .flat { background: red }',
+      '.a { background-image: linear-gradient(red, blue); background-position: right bottom; ' +
+        'background-size: cover; background-repeat: no-repeat } .flat { background: red } ' +
+        '.lit { background-image: linear-gradient(red, blue) }',
     );
-    const merged = { ...sheet.rules[0].declarations, ...sheet.rules[1].declarations };
-    assert.deepEqual(merged['experimental_backgroundImage'], []);
+    const [first, flat, lit] = sheet.rules.map(
+      (rule: { declarations: Record<string, unknown> }) => rule.declarations,
+    );
+    const merged = { ...first, ...flat, ...lit };
+    assert.deepEqual({ ...first, ...flat }['experimental_backgroundImage'], []);
+    const initial = styleOf(`background-image: linear-gradient(red, blue); ${INITIAL}`);
+    for (const key of ['Position', 'Size', 'Repeat'].map(
+      (part) => `experimental_background${part}`,
+    )) {
+      assert.deepEqual(merged[key], initial[key], key);
+    }
   });
 });
 
