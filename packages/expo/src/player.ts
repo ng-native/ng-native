@@ -34,6 +34,8 @@ export interface NativePlayer {
   timeUpdateEventInterval?: number;
   /** Read directly rather than from an event: `expo-audio`'s status carries no volume field. */
   readonly volume?: number;
+  /** `expo-video` only, where an event says it only once it changes. */
+  readonly muted?: boolean;
 }
 
 /**
@@ -87,7 +89,12 @@ export function watchPlayer(
   player: NativePlayer | null,
   options: { timeUpdate?: number } = {},
 ): { state: Signal<PlayerState>; stop: () => void } {
-  const state = signal(INITIAL);
+  // Both are the player's own, set where it was made: no event says either until it changes.
+  const state = signal({
+    ...INITIAL,
+    muted: player?.muted ?? INITIAL.muted,
+    volume: player?.volume ?? INITIAL.volume,
+  });
   if (!player) return { state: state.asReadonly(), stop: () => {} };
 
   const patch = (change: Partial<PlayerState>) => state.update((last) => ({ ...last, ...change }));
@@ -102,7 +109,10 @@ export function watchPlayer(
     listen(player, 'timeUpdate', ({ currentTime }: { currentTime: number }) =>
       patch({ currentTime }),
     ),
-    listen(player, 'sourceChange', () => patch({ ...INITIAL, status: 'loading' })),
+    // What was the old source's starts over. Muted and volume are the player's, and it keeps them.
+    listen(player, 'sourceChange', () =>
+      patch({ status: 'loading', playing: false, currentTime: 0, duration: 0, ended: false }),
+    ),
     // The only event that says how long the video is: nothing else carries a duration.
     listen(player, 'sourceLoad', ({ duration }: { duration: number }) => patch({ duration })),
   ];

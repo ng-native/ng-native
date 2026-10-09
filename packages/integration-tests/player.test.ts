@@ -27,10 +27,13 @@ function withModule<T>(id: string, native: unknown, run: () => T): T {
   }
 }
 
+const muteOf = ({ muted, volume }: { muted: boolean; volume: number }) => ({ muted, volume });
+
 /** A player that records what was listened to and can emit. */
-function player() {
+function player(own: { muted?: boolean; volume?: number } = {}) {
   const listeners = new Map<string, ((payload: unknown) => void)[]>();
   const api = {
+    ...own,
     released: false,
     timeUpdateEventInterval: 0,
     addListener(event: string, listener: (payload: never) => void) {
@@ -61,6 +64,34 @@ describe('watching a player', () => {
     const { state } = watchPlayer(player());
     assert.equal(state().status, 'idle');
     assert.equal(state().playing, false);
+  });
+
+  it("starts with the player's own muted and volume, which no event says until they change", () => {
+    assert.deepEqual(muteOf(watchPlayer(player({ muted: true, volume: 0.3 })).state()), {
+      muted: true,
+      volume: 0.3,
+    });
+    assert.deepEqual(muteOf(watchPlayer(player()).state()), { muted: false, volume: 1 });
+  });
+
+  it('keeps muted and volume across a new source, as the player does', () => {
+    const native = player();
+    const { state } = watchPlayer(native);
+    native.emit('mutedChange', { muted: true });
+    native.emit('volumeChange', { volume: 0.5 });
+    native.emit('playingChange', { isPlaying: true });
+    native.emit('sourceLoad', { duration: 42.5, videoSource: null });
+
+    native.emit('sourceChange');
+    assert.deepEqual(state(), {
+      status: 'loading',
+      playing: false,
+      currentTime: 0,
+      duration: 0,
+      muted: true,
+      volume: 0.5,
+      ended: false,
+    });
   });
 
   it('follows the events the player emits', () => {
