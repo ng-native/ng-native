@@ -2028,7 +2028,8 @@ function animatedByTokens(declaration, add, context) {
   if (declaration.value?.propertyId?.property !== 'animation') return false;
   const parts = meaningful(declaration.value.value ?? []);
   const tokens = parts.filter((part) => part.type === 'var');
-  if (!tokens.length || parts.some(isComma)) return false;
+  // Beside one part at least: a token alone is the whole animation, read where it is set.
+  if (!tokens.length || parts.length < 2 || parts.some(isComma)) return false;
   const written = parts.map((part) => (part.type === 'var' ? fallenBackTo(part) : [part]));
   // Each token one part of it: a token that is the whole animation is read as one elsewhere.
   if (written.some((one) => one?.length !== 1)) return false;
@@ -2036,10 +2037,11 @@ function animatedByTokens(declaration, add, context) {
   const typed = reparsed('animation', text, context);
   if (typed?.property !== 'animation') return false;
   add(typed);
-  const times = tokens.filter((part) => isTime(fallenBackTo(part)));
+  // The first time is how long and the second the wait, written out or a token.
+  const times = parts.filter((_, at) => isTime(written[at]));
   ['animation-duration', 'animation-delay'].forEach((property, at) => {
-    if (times[at])
-      add({ property: 'unparsed', value: { propertyId: { property }, value: [times[at]] } });
+    if (times[at]?.type !== 'var') return;
+    add({ property: 'unparsed', value: { propertyId: { property }, value: [times[at]] } });
   });
   return true;
 }
