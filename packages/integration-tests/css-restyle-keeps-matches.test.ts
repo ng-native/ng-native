@@ -298,6 +298,10 @@ const RANDOM_CSS = `
   [class*="da"] .g { height: 3px }
   .a:empty { min-width: 2px }
   .p:not(.x) > .g { column-gap: 2px }
+  .t:not(.u) .y .c { min-height: 3px }
+  :is(.x, .late) .h { left: 9px }
+  .a ~ .d .f { top: 7px }
+  .p > :first-child:not(.x) .c { bottom: 2px }
 `;
 /** The same with no rule that asks about a sibling, a place, `:has()` or `:empty`. */
 const PLAIN_CSS = RANDOM_CSS.split('\n')
@@ -546,4 +550,40 @@ describe('a tree changed at random, a few changes a commit', () => {
       assert.ok(changes > SEEDS * COMMITS, `${changes} changes were made and compared`);
     });
   }
+});
+describe('a default style given to an element that is styled already', () => {
+  // What a package gives an element as a browser's own default: a table's cell its share of the
+  // row, each time the table is measured. No selector reads it, and nothing inherits it.
+  it('is committed with no rule tried, for it or for what is under it', () => {
+    const s = scene('.row { row-gap: 2px } .title { color: rgb(1, 1, 1) }');
+    const tried = s.tried(() => s.engine.setDefaultStyle(s.rows[0]!, { height: 30, rowGap: 9 }));
+    assert.equal(tried, 0);
+    assert.equal(s.props('row0')['height'], 30);
+    // A rule's declaration still stands over it.
+    assert.equal(s.props('row0')['rowGap'], 2);
+    s.engine.setDefaultStyle(s.rows[0]!, undefined);
+    s.engine.commit();
+    assert.ok(s.props('row0')['height'] == null);
+  });
+});
+
+describe('a class a rule asks a box not to have', () => {
+  // `.field:not(.disabled) .label`: a library writes its states this way, and the class comes
+  // and goes on a box with a screen of other things under it.
+  const NOT =
+    '.panel { row-gap: 1px } .row { row-gap: 2px } .title { color: rgb(1, 1, 1) } ' +
+    '.detail { opacity: 0.5 } .badge { opacity: 0.25 } ' +
+    '.panel:not(.busy) .title { color: rgb(9, 9, 9) }';
+
+  it('has the elements the rule is for matched again, and no other under the box', () => {
+    const s = scene(NOT);
+    const before = s.props('title7')['color'];
+    const tried = s.tried(() => s.engine.addClass(s.panel, 'busy'));
+    // Each of twenty titles, against the two rules for a title.
+    assert.equal(tried, 20 * 2);
+    assert.notDeepEqual(s.props('title7')['color'], before);
+    s.engine.removeClass(s.panel, 'busy');
+    s.engine.commit();
+    assert.deepEqual(s.props('title7')['color'], before);
+  });
 });

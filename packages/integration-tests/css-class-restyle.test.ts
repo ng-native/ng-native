@@ -199,7 +199,13 @@ describe('a class a stylesheet does mention', () => {
     for (const selector of ['.panel:not(.quiet) .cell', ':is(.loud, .other) .cell']) {
       const name = selector.includes('quiet') ? 'quiet' : 'loud';
       const s = scene(`${CSS} ${selector} { color: red }`);
-      assert.ok(s.restyled(() => s.engine.addClass(s.panel, name)) > 100, selector);
+      s.engine.commit();
+      const before = s.props('cell')['color'];
+      assert.ok(s.restyled(() => s.engine.addClass(s.panel, name)) > 0, selector);
+      assert.notDeepEqual(s.props('cell')['color'], before, selector);
+      s.engine.removeClass(s.panel, name);
+      s.engine.commit();
+      assert.deepEqual(s.props('cell')['color'], before, selector);
     }
   });
 });
