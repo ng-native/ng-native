@@ -3416,6 +3416,11 @@ export class Engine implements HostEngine {
     if (node.playing) this.stopNative(node, node.playing);
     node.playing = undefined;
     this.stopScrolled(node);
+    // And what follows it, where it is the scroll view: each starts again if it is put back.
+    for (const follower of this.scrollTimelines.get(node) ?? []) {
+      this.stopScrolled(follower);
+      this.markProps(follower, false);
+    }
     this.running.delete(node);
     this.playing.delete(node);
     this.hoisted.delete(node);
@@ -4687,7 +4692,7 @@ export class Engine implements HostEngine {
   /** Every node playing a scroll-driven animation, by the scroll view that plays it. */
   private readonly scrollTimelines = new Map<EngineNode, Set<EngineNode>>();
   /** How far each such scroll view scrolls, along each axis, once one of its events has said. */
-  private readonly scrollExtents = new Map<EngineNode, { x: number; y: number }>();
+  private readonly scrollExtents = new WeakMap<EngineNode, { x: number; y: number }>();
 
   /**
    * An animation played by the nearest scroll view's offset: `animation-timeline: scroll()`.
@@ -4794,7 +4799,11 @@ export class Engine implements HostEngine {
     if (!scrolled) return;
     node.scrolled = undefined;
     scrolled.drive?.stop();
-    if (scrolled.source) this.scrollTimelines.get(scrolled.source)?.delete(node);
+    const playing = scrolled.source && this.scrollTimelines.get(scrolled.source);
+    if (!playing) return;
+    playing.delete(node);
+    // The last to follow this scroll view: a key left here keeps it, and all it is linked to.
+    if (!playing.size) this.scrollTimelines.delete(scrolled.source!);
   }
 
   /**

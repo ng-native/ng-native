@@ -261,6 +261,24 @@ describe('a scroll-driven animation on the native side', () => {
     assert.equal(at(0), null);
   });
 
+  it('forgets a scroll view once nothing animates by it, and one that is destroyed', () => {
+    // A scroll view kept is every node it is linked to kept: the screen it was on, for good.
+    const followed = (engine: Engine) =>
+      (engine as unknown as { scrollTimelines: Map<EngineNode, unknown> }).scrollTimelines;
+
+    const stopped = scene(css);
+    assert.equal(followed(stopped.engine).size, 1);
+    stopped.engine.removeChild(stopped.scroll, stopped.view);
+    stopped.engine.destroyNode(stopped.view);
+    assert.equal(followed(stopped.engine).size, 0, 'the node animating by it went');
+
+    const gone = scene(css);
+    gone.engine.removeChild(gone.engine.root, gone.scroll);
+    gone.engine.destroyNode(gone.scroll);
+    assert.equal(followed(gone.engine).size, 0, 'the scroll view itself went');
+    assert.equal(gone.at(0), null, 'and what followed it has stopped');
+  });
+
   it('outside a scroll view, shows its first frame and says why it does not move', () => {
     const { view, errors } = scene(css, 'a', { inScroll: false });
     assert.equal(view.committed?.props['opacity'], 1);
