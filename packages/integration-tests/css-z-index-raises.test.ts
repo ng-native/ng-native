@@ -34,10 +34,11 @@ function scene() {
   };
   const all = (nodes: readonly FakeFabricNode[]): FakeFabricNode[] =>
     nodes.flatMap((node) => [node, ...all(node.children)]);
-  /** The committed z-index of the view called `id`. */
+  /** The committed z-index of the view called `id`: a prop taken away is committed as null. */
   const z = (id: string): unknown => {
     engine.commit();
-    return all(fabric.committed).find((node) => node.props['testID'] === id)?.props['zIndex'];
+    const view = all(fabric.committed).find((node) => node.props['testID'] === id);
+    return view?.props['zIndex'] ?? undefined;
   };
   return { engine, el, z };
 }

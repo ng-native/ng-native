@@ -580,6 +580,8 @@ export interface EngineNode extends HostNode {
   baselineFields?: Set<EngineNode>;
   /** Commit this node again with its children so Fabric measures it again. `remeasureText`. */
   remeasure?: true;
+  /** The z-index this view is drawn at for a box in it, where it has none: `Engine.raise`. */
+  raised?: number;
   /**
    * A modal host committed as visible on iOS whose dismissal native has not yet reported. It
    * stays committed after `visible` goes false until `topDismiss`, as React Native's Modal.js
@@ -2222,6 +2224,7 @@ class RetainedNode {
   committedUnder: EngineNode | null = null;
   kept: Map<string, KeptHoist> | undefined = undefined;
   remeasure: true | undefined = undefined;
+  raised: number | undefined = undefined;
   propsDirty = false;
   structureDirty = false;
   subtreeDirty = false;
@@ -4057,7 +4060,39 @@ export class Engine implements HostEngine {
     if (this.responders.has(node)) stillTouched(merged);
     this.heldFor(node, merged);
     this.movePaint(node, merged);
+    if (node.raised !== undefined) merged['zIndex'] ??= node.raised;
     return merged;
+  }
+
+  /**
+   * The z-index a view is drawn at for the boxes in it: the highest of theirs. A browser draws a
+   * box with a z-index over what follows the boxes it is in, and a native view is ordered among
+   * the views beside it and no further, so each view the box is in is raised as far. Read from
+   * what its children committed, which for a raised child is what raised it. A child with a
+   * z-index of its own answers with that and nothing from inside it, as the stacking context it
+   * is. Only a plain view is raised: a scroll view clips what is in it, and a screen is ordered
+   * by its stack.
+   *
+   * ponytail: a z-index is the one thing read as making a stacking context. Opacity and a
+   * transform make one in a browser too; read them here if a box is ever raised past one.
+   */
+  private raisedBy(node: EngineNode, viewName: string): number | undefined {
+    if (viewName !== DEFAULT_VIEW) return undefined;
+    let over = 0;
+    for (const child of node.children) {
+      const z = child.committed?.props['zIndex'];
+      if (typeof z !== 'number' || z <= over) continue;
+      if (!this.committedElsewhere(child) && !this.withheld(child)) over = z;
+    }
+    return over || undefined;
+  }
+
+  /** Read how far a view is raised, once its children are committed: its props are, if it moved. */
+  private raise(node: EngineNode, viewName: string): void {
+    const raised = this.raisedBy(node, viewName);
+    if (raised === node.raised) return;
+    node.raised = raised;
+    node.propsDirty = true;
   }
 
   /**
@@ -5432,6 +5467,7 @@ export class Engine implements HostEngine {
     this.noteBaselineFields(node);
     this.freshBaselines(node);
     const childHandles = this.reconcileChildren(node, viewName, style);
+    this.raise(node, viewName);
     noteTouches(node, style);
     const previous = node.committed;
     this.notePresented(node, viewName);

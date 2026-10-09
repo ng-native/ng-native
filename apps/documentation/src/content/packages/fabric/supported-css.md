@@ -356,6 +356,13 @@ Three more:
 - A percentage `gap` in a box with no fixed size along that axis grows the box by the gap. A
   browser resolves the percentage against the size the box ends up with.
 
+A box with a `z-index` above 0 is drawn over what follows the boxes it is in, as in a browser: a
+menu written in one card opens over the next card. A native view is ordered among the views
+beside it only, so each view the box is in is given its `z-index`, up to a view with a `z-index`
+of its own or one that is not a plain view, a scroll view say. Two differences follow. A view
+raised this way is drawn whole over what follows it, its background too, where a browser raises
+the box alone. And `opacity` and `transform` do not stop a box being raised past them.
+
 Transitions, `animate.enter`/`animate.leave`, `@keyframes` and `animation` are their own page: see
 [Animation](/packages/fabric/animation).
 
