@@ -1705,12 +1705,11 @@ const TRANSLATORS = new Map([
       out.backgroundColor =
         last?.color === undefined ? 'transparent' : paintColour(last.color, property);
       const images = layers.map((layer) => layer.image ?? { type: 'none' });
-      if (images.every((image) => image.type === 'none')) {
-        // Nothing for a position, a size or a repeat to be of.
-        out.experimental_backgroundImage = [];
-        return;
-      }
-      out.experimental_backgroundImage = backgroundImage(images, property);
+      // No image is said too, and where one would be placed: an image a later rule gives is
+      // placed as this says, and not as a rule before it did.
+      out.experimental_backgroundImage = images.every((image) => image.type === 'none')
+        ? []
+        : backgroundImage(images, property);
       out.experimental_backgroundPosition = backgroundPosition(
         layers.map((layer) => layer.position),
         property,

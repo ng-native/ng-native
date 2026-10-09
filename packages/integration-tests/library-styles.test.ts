@@ -14,6 +14,14 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
+/** What the `background` shorthand says of an image where it writes none. */
+const NO_IMAGE = {
+  experimental_backgroundImage: [],
+  experimental_backgroundPosition: [{ left: '0%', top: '0%' }],
+  experimental_backgroundSize: [{ x: 'auto', y: 'auto' }],
+  experimental_backgroundRepeat: [{ x: 'repeat', y: 'repeat' }],
+};
+
 const require = createRequire(import.meta.url);
 const { transformAngular } = require('@ng-native/metro/angular-transform.cjs') as {
   transformAngular: (
@@ -110,7 +118,7 @@ describe("a library's component CSS, opted in", () => {
         // `background: <colour>` as the library wrote it, which says there is no image too.
         {
           backgroundColor: 'rgb(250, 115, 25)',
-          experimental_backgroundImage: [],
+          ...NO_IMAGE,
           color: 'rgb(255, 255, 255)',
         },
       ],

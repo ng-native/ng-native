@@ -6,6 +6,14 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { createRequire } from 'node:module';
 
+/** What the `background` shorthand says of an image where it writes none. */
+const NO_IMAGE = {
+  experimental_backgroundImage: [],
+  experimental_backgroundPosition: [{ left: '0%', top: '0%' }],
+  experimental_backgroundSize: [{ x: 'auto', y: 'auto' }],
+  experimental_backgroundRepeat: [{ x: 'repeat', y: 'repeat' }],
+};
+
 const require = createRequire(import.meta.url);
 const { compileCss } = require('@ng-native/metro/css/compile.cjs');
 
@@ -122,10 +130,7 @@ describe('@layer', () => {
     assert.deepEqual(
       layered.map((rule) => rule.declarations),
       // The shorthand says there is no image too: see `a gradient in the background shorthand`.
-      [
-        { zIndex: 1000 },
-        { backgroundColor: 'rgba(0, 0, 0, 0.32)', experimental_backgroundImage: [] },
-      ],
+      [{ zIndex: 1000 }, { backgroundColor: 'rgba(0, 0, 0, 0.32)', ...NO_IMAGE }],
     );
   });
 });
