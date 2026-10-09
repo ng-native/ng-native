@@ -610,6 +610,8 @@ describe('the elements after one that changed', () => {
     s.engine.setProp(s.rows[0]!, 'aria-busy', undefined);
     s.engine.commit();
     assert.deepEqual(colour(), before);
+  });
+});
 
 describe('a default style given to an element that is styled already', () => {
   // What a package gives an element as a browser's own default: a table's cell its share of the
