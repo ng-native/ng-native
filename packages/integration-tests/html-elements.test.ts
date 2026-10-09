@@ -236,6 +236,15 @@ describe('HTML elements in a template', () => {
       assert.deepEqual(errors, []);
     });
 
+    it('has its text laid out again for a face that registers after it was drawn', () => {
+      // The element names the family and is no paragraph: the one its text is in has to be reached.
+      commit(styled(`${CENTRED} .c { font-family: Inter-600 }`));
+      const cap = () => fabric.committed[0]!.children[0]!.props['maxFontSizeMultiplier'];
+      const before = cap();
+      engine.fontsRegistered(new Set(['Inter-600']));
+      assert.notEqual(cap(), before);
+    });
+
     it('stays a paragraph where it aligns nothing, or is not a flex container', () => {
       assert.deepEqual(shape(commit(styled('.c { display: flex }'))), { Paragraph: ['"AH"'] });
       engine = new Engine((fabric = createFakeFabric()), 1);

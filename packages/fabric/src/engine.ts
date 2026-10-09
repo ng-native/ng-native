@@ -3030,7 +3030,8 @@ export class Engine implements HostEngine {
   fontsRegistered(families: ReadonlySet<string>): void {
     /** Lay `node` out again where it is text naming one of the families, saying whether it was. */
     const refresh = (node: EngineNode): boolean => {
-      const viewName = viewNameOf(node);
+      // As it is drawn: a text element placing its text is a view, with the paragraph inside it.
+      const viewName = committedViewName(node);
       const input = TEXT_INPUTS.has(viewName);
       const named = (viewName === PARAGRAPH || input) && namesFamily(node, families);
       if (!node.committed || !named) return false;
