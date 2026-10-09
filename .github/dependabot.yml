@@ -1,6 +1,6 @@
 version: 2
 updates:
-  # The actions the workflows and .github/actions pin to a commit: one pull request a week.
+  # The actions the workflows and .github/actions pin to a commit, grouped by directory, weekly.
   - package-ecosystem: github-actions
     directories:
       - /
