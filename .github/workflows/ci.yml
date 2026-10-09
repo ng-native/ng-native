@@ -40,7 +40,7 @@ jobs:
       # and it takes under a second.
       - run: pnpm run format:check
 
-      - uses: nrwl/nx-set-shas@v5
+      - uses: nrwl/nx-set-shas@afb73a62d26e41464e9254689e1fd6122ee683c1 # v5.0.1
 
       # Through Nx, always: `@nx/enforce-module-boundaries` needs the project graph and skips
       # itself with only a warning when there is none, which is silent enforcement of nothing.
@@ -79,7 +79,7 @@ jobs:
 
       - uses: ./.github/actions/setup
 
-      - uses: nrwl/nx-set-shas@v5
+      - uses: nrwl/nx-set-shas@afb73a62d26e41464e9254689e1fd6122ee683c1 # v5.0.1
 
       # Coverage runs the integration and web suites. The remaining test targets include the
       # generators, docs, examples, template, and testing's own Vitest runner checks.
@@ -135,7 +135,7 @@ jobs:
     outputs:
       published: ${{ steps.filter.outputs.published }}
     steps:
-      - uses: dorny/paths-filter@v4
+      - uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4.0.3
         id: filter
         with:
           filters: |
@@ -169,7 +169,7 @@ jobs:
 
       - name: Start a local registry
         run: |
-          npx --yes verdaccio@6 --config verdaccio.yaml --listen 4873 > verdaccio.log 2>&1 &
+          npx --yes verdaccio@6.10.5 --config verdaccio.yaml --listen 4873 > verdaccio.log 2>&1 &
           for _ in $(seq 1 60); do curl -sf localhost:4873/-/ping > /dev/null && break; sleep 1; done
           # Publishing needs a user. Verdaccio creates one on this request and returns its token.
           token=$(curl -sf -XPUT -H 'Content-Type: application/json' \

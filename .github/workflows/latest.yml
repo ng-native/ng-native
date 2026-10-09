@@ -44,7 +44,7 @@ jobs:
 
       - name: Start a local registry
         run: |
-          npx --yes verdaccio@6 --config verdaccio.yaml --listen 4873 > verdaccio.log 2>&1 &
+          npx --yes verdaccio@6.10.5 --config verdaccio.yaml --listen 4873 > verdaccio.log 2>&1 &
           for _ in $(seq 1 60); do curl -sf localhost:4873/-/ping > /dev/null && break; sleep 1; done
           # Publishing needs a user. Verdaccio creates one on this request and returns its token.
           token=$(curl -sf -XPUT -H 'Content-Type: application/json' \
