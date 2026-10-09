@@ -1316,6 +1316,45 @@ describe('an animation whose every part is a token, as tw-animate-css writes one
     assert.deepEqual(entering('in').dropped, []);
   });
 
+  it('gives a token the time its place says: the first is how long, the second the wait', () => {
+    // Beside a time that is written out, the token after it is the delay.
+    const css =
+      '@keyframes k { from { opacity: 0 } } .a { animation: k 1s var(--wait, 100ms) }' +
+      ' .b { animation: k var(--long, 1s) 100ms } .slow { --wait: 300ms; --long: 2s }';
+    const spec = (classes: string) => {
+      const fabric = createFakeFabric();
+      const engine = new Engine(fabric, 1, { globalStyles: compileCss(css) as never });
+      const view = engine.createElement('view');
+      engine.setClasses(view, classes);
+      engine.appendChild(engine.root, view);
+      engine.commit();
+      const { duration, delay } = view.playing!.spec;
+      return [duration, delay];
+    };
+    assert.deepEqual(spec('a'), [1000, 100]);
+    assert.deepEqual(spec('a slow'), [1000, 300]);
+    assert.deepEqual(spec('b'), [1000, 100]);
+    assert.deepEqual(spec('b slow'), [2000, 100]);
+  });
+
+  it('leaves a token that is the whole animation to be read where it is set', () => {
+    // `animation: var(--motion, none)`: what the token holds is the animation, name and all.
+    const css =
+      '@keyframes k { from { opacity: 0 } } .a { animation: var(--motion, none) }' +
+      ' .on { --motion: k 200ms linear }';
+    const playing = (classes: string) => {
+      const fabric = createFakeFabric();
+      const engine = new Engine(fabric, 1, { globalStyles: compileCss(css) as never });
+      const view = engine.createElement('view');
+      engine.setClasses(view, classes);
+      engine.appendChild(engine.root, view);
+      engine.commit();
+      return view.playing?.spec.name;
+    };
+    assert.equal(playing('a'), undefined);
+    assert.equal(playing('a on'), 'k');
+  });
+
   it('comes in from what the utilities beside it say, over the time they say', () => {
     const s = entering('in fade zoom slow');
     assert.equal(s.props()['opacity'], 0);
