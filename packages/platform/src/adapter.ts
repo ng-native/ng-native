@@ -162,7 +162,9 @@ class NativeRenderer implements Renderer2 {
   }
 
   removeChild(parent: EngineNode | null, oldChild: EngineNode): void {
-    this.engine.removeChild(parent, oldChild);
+    // From the parent it has, as Angular's DOM renderer takes a node out: the parent it is
+    // handed is whatever the caller had, and a library's may be no parent of it at all.
+    this.engine.removeChild(oldChild.parent ?? parent, oldChild);
   }
 
   selectRootElement(selectorOrNode: string | EngineNode): EngineNode {
