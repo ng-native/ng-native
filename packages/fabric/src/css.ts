@@ -1103,6 +1103,8 @@ function matchAny(
 type Bits = readonly [number, number];
 
 const BIT_OF = new Map<string, number>();
+/** Past this many names the bits are worked out again: ids made per row would be kept for ever. */
+const BITS_KEPT = 4096;
 
 /** The bit a class, a name or an id has among the sixty-four. */
 function bitOf(kind: string, name: string): number {
@@ -1112,6 +1114,8 @@ function bitOf(kind: string, name: string): number {
     let hash = 0;
     for (let at = 0; at < key.length; at++) hash = (Math.imul(hash, 31) + key.charCodeAt(at)) | 0;
     bit = (hash ^ (hash >>> 16)) & 63;
+    // A bit is its name's hash, so one forgotten is the same when it is asked for again.
+    if (BIT_OF.size >= BITS_KEPT) BIT_OF.clear();
     BIT_OF.set(key, bit);
   }
   return bit;
