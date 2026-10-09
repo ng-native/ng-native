@@ -4075,11 +4075,7 @@ function referenced(
   // property unset rather than trying the next, or the fallback.
   const names = [declaration.reference!, ...(declaration.alternatives ?? [])];
   const token = firstSet(names, tokens);
-  let value = token ? tokenForm(token, declaration.kind!) : fallbackOf(declaration, tokens);
-  // A token of several lengths, for a shorthand that takes one a side: see `writeSettled`.
-  if (value === undefined && token?.lengths && declaration.kind === 'length') {
-    return declaration.adjust ? undefined : new EachSide(token.lengths);
-  }
+  let value = token ? formFor(token, declaration) : fallbackOf(declaration, tokens);
   // `calc(var(--n) * 1px)`: the arithmetic gives a unitless token its unit, which is the usual
   // way to turn a count into a length. So it reads the bare number, and a length is no such thing.
   if (token && declaration.adjust?.number && declaration.kind === 'length') {
@@ -4163,6 +4159,17 @@ class EachSide {
     const index = placeOf(prop);
     return this.lengths[index] ?? this.lengths[index - 2] ?? this.lengths[0];
   }
+}
+
+/**
+ * A set token's value in the form a declaration wants, or its several lengths where it wants a
+ * length and the token has no one: for a shorthand that takes one a side, see `writeSettled`.
+ * Not with arithmetic on it, which is of one length.
+ */
+function formFor(token: TokenValue, declaration: DeferredDeclaration): unknown {
+  const value = tokenForm(token, declaration.kind!);
+  if (value !== undefined || !token.lengths || declaration.kind !== 'length') return value;
+  return declaration.adjust ? undefined : new EachSide(token.lengths);
 }
 
 /** What a deferred declaration settled to, written to one of its props. */
