@@ -8,14 +8,16 @@
  * degrees, or a number. A single `var()` with arithmetic around it that is linear in it keeps
  * its cheaper path (`linear` in `compile.cjs`); this is for everything past that.
  */
-const { CssUnsupported, fallbacks, length, round } = require('./values.cjs');
-
-const PER_TURN = { deg: 1, grad: 0.9, rad: 180 / Math.PI, turn: 360 };
-
-const isSpace = (term) => term?.type === 'token' && term.value?.type === 'white-space';
-const meaningful = (terms) => (terms ?? []).filter((term) => !isSpace(term));
-const operatorOf = (term) =>
-  term?.type === 'token' && term.value?.type === 'delim' ? term.value.value : undefined;
+const {
+  CssUnsupported,
+  PER_TURN,
+  arithmeticTree,
+  commaSeparated,
+  fallbacks,
+  length,
+  meaningful,
+  round,
+} = require('./values.cjs');
 
 /** Whether a term, or anything inside it, is a `var()`. */
 function mentionsVar(term) {
@@ -34,7 +36,7 @@ function tree(term, kind, context) {
   // `max(var(--safe-area-inset-top, 0px), calc(var(--spacing) * 4))`, which is `pt-safe-or-4`.
   if (name === 'max' || name === 'min') {
     const sides = commaSeparated(term.value.arguments).map((side) =>
-      arithmetic(side, kind, context),
+      arithmetic(meaningful(side), kind, context),
     );
     return sides.reduce((a, b) => [name, a, b]);
   }
@@ -42,7 +44,12 @@ function tree(term, kind, context) {
 }
 
 function arithmetic(terms, kind, context) {
-  const parsed = sum(terms, 0, kind, context);
+  const parsed = arithmeticTree(
+    terms,
+    0,
+    (term) => tree(term, kind, context),
+    (why) => unreadable(context, why),
+  );
   if (parsed.next !== terms.length) throw unreadable(context, 'is not arithmetic');
   return parsed.value;
 }
@@ -130,41 +137,6 @@ const unreadable = (context, why) =>
       `unit beside a token needs layout the device does not do here.`,
   );
 
-function sum(terms, start, kind, context) {
-  let { value, next } = product(terms, start, kind, context);
-  while (operatorOf(terms[next]) === '+' || operatorOf(terms[next]) === '-') {
-    const op = operatorOf(terms[next]);
-    const right = product(terms, next + 1, kind, context);
-    value = [op, value, right.value];
-    next = right.next;
-  }
-  return { value, next };
-}
-
-function product(terms, start, kind, context) {
-  let { value, next } = factor(terms, start, kind, context);
-  while (operatorOf(terms[next]) === '*' || operatorOf(terms[next]) === '/') {
-    const op = operatorOf(terms[next]);
-    const right = factor(terms, next + 1, kind, context);
-    value = [op, value, right.value];
-    next = right.next;
-  }
-  return { value, next };
-}
-
-function factor(terms, start, kind, context) {
-  const term = terms[start];
-  if (term?.type === 'token' && term.value?.type === 'parenthesis-block') {
-    const inner = sum(terms, start + 1, kind, context);
-    if (terms[inner.next]?.value?.type !== 'close-parenthesis') {
-      throw unreadable(context, 'has an unclosed bracket');
-    }
-    return { value: inner.value, next: inner.next + 1 };
-  }
-  if (!term) throw unreadable(context, 'ends too soon');
-  return { value: tree(term, kind, context), next: start + 1 };
-}
-
 /** A slot's value for the device: settled if it has no token in it, a `__calc` marker if it has. */
 function slot(term, kind, context) {
   const written = tree(term, kind, context);
@@ -187,17 +159,6 @@ function calcWithTokens(parts, kind, context) {
 }
 
 const MATH = new Set(['calc', 'max', 'min']);
-
-/** Split a list of terms on commas. */
-function commaSeparated(terms) {
-  /** @type {any[][]} */
-  const groups = [[]];
-  for (const term of terms) {
-    if (term?.type === 'token' && term.value?.type === 'comma') groups.push([]);
-    else groups[groups.length - 1].push(term);
-  }
-  return groups.map(meaningful);
-}
 
 /**
  * What `translate3d()` writes: across and down, where it moves nothing along the depth a view
@@ -250,7 +211,7 @@ function transformList(parts, context) {
           `'${name ?? part.type}' is not one of them`,
       );
     }
-    const args = commaSeparated(part.value.arguments ?? []);
+    const args = commaSeparated(part.value.arguments ?? []).map(meaningful);
     const arg = (kind, index) => {
       if (args[index]?.length !== 1) throw unreadable(context, `leaves ${name}() short`);
       return slot(args[index][0], kind, context);

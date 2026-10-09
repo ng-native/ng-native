@@ -10,7 +10,6 @@ const {
   colourExpression,
   isRelative,
   isRelativeFunction,
-  meaningful,
   mentionsLightDark,
   schemeSide,
   shadowsWithColourTokens,
@@ -23,6 +22,8 @@ const {
   formOf,
   length,
   keyword,
+  meaningful,
+  PER_TURN,
   round,
   withRefusals,
 } = require('./values.cjs');
@@ -75,8 +76,8 @@ function linear(part, context) {
 
   const value =
     name === 'max'
-      ? floored(terms(args), reference, context)
-      : evaluateLinear(terms(args), reference, context);
+      ? floored(meaningful(args), reference, context)
+      : evaluateLinear(meaningful(args), reference, context);
   return value?.scale ? { reference, adjust: trim(value) } : null;
 }
 
@@ -95,11 +96,6 @@ function variables(node) {
   if (node?.type === 'var') return [node];
   const args = node?.value?.arguments;
   return Array.isArray(args) ? args.flatMap(variables) : [];
-}
-
-/** The meaningful arguments of a math function: whitespace separates nothing here. */
-function terms(args) {
-  return (args ?? []).filter((arg) => !(arg.type === 'token' && arg.value?.type === 'white-space'));
 }
 
 /** The delimiter a term is, if it is one: `+`, `-`, `*`, `/` or `comma`. */
@@ -205,7 +201,7 @@ function leaf(term, reference, context) {
       return null;
     case 'function':
       return term.value?.name === 'calc'
-        ? evaluateLinear(terms(term.value.arguments), reference, context)
+        ? evaluateLinear(meaningful(term.value.arguments), reference, context)
         : null;
     case 'token':
       return term.value?.type === 'number' ? constant(term.value.value) : null;
@@ -301,7 +297,7 @@ function deferChannels(part, property, context) {
 
 /** A colour function's channels and alpha, with the commas and the slash between them gone. */
 function channelArguments(part) {
-  return terms(part.value.arguments).filter((arg) => {
+  return meaningful(part.value.arguments).filter((arg) => {
     const op = operator(arg);
     return op !== 'comma' && op !== '/';
   });
@@ -344,7 +340,7 @@ function deferHslToken(parts) {
   const name = part?.type === 'function' ? part.value?.name?.toLowerCase() : null;
   if (name !== 'hsl' && name !== 'hsla') return null;
 
-  const all = terms(part.value.arguments);
+  const all = meaningful(part.value.arguments);
   const legacy = all.some((arg) => operator(arg) === 'comma');
   const args = all.filter((arg) => {
     const op = operator(arg);
@@ -431,7 +427,7 @@ const HSL_SLOTS = ['hue', 'percentage', 'percentage', 'alpha'];
  */
 function hslChannel(term, slot, legacy) {
   if (term?.type === 'var') {
-    const literal = terms(term.value?.fallback ?? [])[0];
+    const literal = meaningful(term.value?.fallback ?? [])[0];
     const fallback = literal ? hslLiteral(literal, slot, legacy) : undefined;
     return {
       reference: term.value.name.ident,
@@ -442,13 +438,12 @@ function hslChannel(term, slot, legacy) {
 }
 
 /** Degrees per unit, so a hue written in any angle unit reads as the degrees hslToRgb expects. */
-const HUE_UNITS = { deg: 1, grad: 0.9, rad: 180 / Math.PI, turn: 360 };
 
 /** A hue lightningcss has already parsed as an angle: `221deg`, the shape it prefers as an hsl()'s first argument. */
 function angleLiteral(term) {
   if (term?.type !== 'angle') return undefined;
   const unit = term.value?.type;
-  return round(term.value.value * (HUE_UNITS[unit] ?? 1));
+  return round(term.value.value * (PER_TURN[unit] ?? 1));
 }
 
 /** A number, a percentage, or a hue left as a raw dimension token rather than parsed as an angle. */
@@ -1869,7 +1864,7 @@ function noShadow(property, out) {
  */
 function unparsedValue(value, out, deferred, context) {
   const property = value?.propertyId?.property ?? 'a property';
-  const parts = terms(value?.value);
+  const parts = meaningful(value?.value);
   const word = onlyWord(parts);
   if (word === 'none' && noShadow(property, out)) return;
   if (inherited(property, word, deferred)) return;

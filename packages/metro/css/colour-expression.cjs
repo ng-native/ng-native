@@ -7,26 +7,20 @@
  * or a colour property that mixes from a token arrives as tokens. What can be settled here is: the
  * literal colours, the space and hue method, the percentages. Only the token itself waits.
  */
-const { CssUnsupported, color, length, round } = require('./values.cjs');
+const {
+  CssUnsupported,
+  PER_TURN,
+  arithmeticTree,
+  color,
+  commaSeparated,
+  length,
+  meaningful,
+  round,
+} = require('./values.cjs');
 
 /** The spaces the device mixes in, which are the ones this compiler also folds a literal mix in. */
 const MIX_SPACES = new Set(['srgb', 'oklab', 'oklch', 'lab', 'lch', 'hsl', 'hwb']);
 const HUE_METHODS = new Set(['shorter', 'longer', 'increasing', 'decreasing']);
-
-/** Tokens that carry meaning: white space dropped. */
-const meaningful = (terms) =>
-  (terms ?? []).filter((term) => !(term?.type === 'token' && term.value?.type === 'white-space'));
-
-/** The terms between commas. */
-function commaSeparated(terms) {
-  /** @type {any[][]} */
-  const groups = [[]];
-  for (const term of terms) {
-    if (term?.type === 'token' && term.value?.type === 'comma') groups.push([]);
-    else groups[groups.length - 1].push(term);
-  }
-  return groups;
-}
 
 /** Whether a term, or anything inside it, is a `var()`. */
 function mentionsVar(term) {
@@ -385,9 +379,6 @@ const RELATIVE = {
   oklch: { space: 'oklch', keywords: ['l', 'c', 'h'], full: [1, 0.4, null] },
 };
 
-/** An angle in degrees, the unit a hue is a number of. */
-const DEGREES = { deg: 1, grad: 0.9, rad: 180 / Math.PI, turn: 360 };
-
 /** lightningcss reads numbers as 32-bit floats: 0.1 arrives as 0.10000000149011612. */
 const exact = (value) => Math.round(value * 1e6) / 1e6;
 
@@ -439,14 +430,19 @@ function relativeExpression(part, context) {
 function channelOf(term, place) {
   const { full, context } = place;
   if (term.type === 'angle' && full === null) {
-    return exact(term.value.value * (DEGREES[term.value.type] ?? NaN));
+    return exact(term.value.value * (PER_TURN[term.value.type] ?? NaN));
   }
   if (term.type === 'token' && term.value?.type === 'percentage' && full !== null) {
     return exact(term.value.value * full);
   }
   if (term.type === 'function' && term.value?.name === 'calc') {
     const terms = meaningful(term.value.arguments);
-    const parsed = arithmetic(terms, 0, place);
+    const parsed = arithmeticTree(
+      terms,
+      0,
+      (inner) => operand(inner, place),
+      (why) => badChannel(place, why),
+    );
     if (parsed.next !== terms.length) throw badChannel(place, 'is not arithmetic');
     return parsed.value;
   }
@@ -471,46 +467,6 @@ const badChannel = ({ context, name }, why) =>
     `${context}: a channel of a relative ${name}() colour ${why}. Its keywords are numbers, so ` +
       `arithmetic on them is numbers and keywords; a percentage or an angle stands alone.`,
   );
-
-const operatorOf = (term) =>
-  term?.type === 'token' && term.value?.type === 'delim' ? term.value.value : undefined;
-
-/** `a + b - c`, each side a product. Returns the tree and where it stopped reading. */
-function arithmetic(terms, start, place) {
-  let { value, next } = product(terms, start, place);
-  while (operatorOf(terms[next]) === '+' || operatorOf(terms[next]) === '-') {
-    const op = operatorOf(terms[next]);
-    const right = product(terms, next + 1, place);
-    value = [op, value, right.value];
-    next = right.next;
-  }
-  return { value, next };
-}
-
-/** `a * b / c`, each side a number, a keyword, or arithmetic in brackets. */
-function product(terms, start, place) {
-  let { value, next } = factor(terms, start, place);
-  while (operatorOf(terms[next]) === '*' || operatorOf(terms[next]) === '/') {
-    const op = operatorOf(terms[next]);
-    const right = factor(terms, next + 1, place);
-    value = [op, value, right.value];
-    next = right.next;
-  }
-  return { value, next };
-}
-
-function factor(terms, start, place) {
-  const term = terms[start];
-  if (term?.type === 'token' && term.value?.type === 'parenthesis-block') {
-    const inner = arithmetic(terms, start + 1, place);
-    if (terms[inner.next]?.value?.type !== 'close-parenthesis') {
-      throw badChannel(place, 'has an unclosed bracket');
-    }
-    return { value: inner.value, next: inner.next + 1 };
-  }
-  if (!term) throw badChannel(place, 'ends too soon');
-  return { value: operand(term, place), next: start + 1 };
-}
 
 /** Whether a parsed value has a `light-dark()` anywhere in it, in either of lightningcss's forms. */
 function mentionsLightDark(value) {
@@ -552,9 +508,7 @@ module.exports = {
   isRelativeFunction,
   mentionsLightDark,
   schemeSide,
-  commaSeparated,
   isDeferred,
-  meaningful,
   mentionsVar,
   shadowsWithColourTokens,
 };

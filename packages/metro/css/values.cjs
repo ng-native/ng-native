@@ -423,6 +423,55 @@ function keyword(value, context) {
 /** Degrees per unit, for the angle units CSS allows. RN only understands deg and rad. */
 const PER_TURN = { deg: 1, grad: 0.9, rad: 180 / Math.PI, turn: 360 };
 
+/** Tokens that carry meaning: white space dropped. */
+const meaningful = (terms) =>
+  (terms ?? []).filter((term) => !(term?.type === 'token' && term.value?.type === 'white-space'));
+
+/** The terms between commas. */
+function commaSeparated(terms) {
+  /** @type {any[][]} */
+  const groups = [[]];
+  for (const term of terms) {
+    if (term?.type === 'token' && term.value?.type === 'comma') groups.push([]);
+    else groups[groups.length - 1].push(term);
+  }
+  return groups;
+}
+
+const operatorOf = (term) =>
+  term?.type === 'token' && term.value?.type === 'delim' ? term.value.value : undefined;
+
+/**
+ * `a + b * (c - d)` read from `start` as a tree of `[op, a, b]`, with where it stopped reading.
+ * `leaf` reads one operand, and `fail` makes the error for what is wrong with the arithmetic.
+ */
+function arithmeticTree(terms, start, leaf, fail) {
+  const chain = (at, operators, side) => {
+    let { value, next } = side(at);
+    while (operators.includes(operatorOf(terms[next]))) {
+      const right = side(next + 1);
+      value = [operatorOf(terms[next]), value, right.value];
+      next = right.next;
+    }
+    return { value, next };
+  };
+  const sum = (at) => chain(at, ['+', '-'], product);
+  const product = (at) => chain(at, ['*', '/'], factor);
+  const factor = (at) => {
+    const term = terms[at];
+    if (term?.type === 'token' && term.value?.type === 'parenthesis-block') {
+      const inner = sum(at + 1);
+      if (terms[inner.next]?.value?.type !== 'close-parenthesis') {
+        throw fail('has an unclosed bracket');
+      }
+      return { value: inner.value, next: inner.next + 1 };
+    }
+    if (!term) throw fail('ends too soon');
+    return { value: leaf(term), next: at + 1 };
+  };
+  return sum(start);
+}
+
 /** An angle, as the `'45deg'` string RN's transform operations take. */
 function angle(value, context) {
   if (typeof value === 'number') return `${value}deg`;
@@ -823,10 +872,9 @@ function rgbChannels(channels) {
 }
 
 /** Degrees per unit of a hue, as lightningcss types an angle inside a custom property. */
-const HUE_UNITS = { deg: 1, grad: 0.9, rad: 180 / Math.PI, turn: 360 };
 
 function hslChannels([hue, saturation, lightness], spaced) {
-  const degrees = isNumber(hue) ? hue.value : hue?.value * HUE_UNITS[hue?.type];
+  const degrees = isNumber(hue) ? hue.value : hue?.value * PER_TURN[hue?.type];
   const fraction = (value) =>
     isPercentage(value) ? value.value : spaced && isNumber(value) ? value.value / 100 : NaN;
   const s = fraction(saturation);
@@ -1146,4 +1194,8 @@ module.exports = {
   nearestWeight,
   REM,
   CURRENT_COLOUR,
+  PER_TURN,
+  meaningful,
+  commaSeparated,
+  arithmeticTree,
 };

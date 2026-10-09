@@ -10,11 +10,16 @@
  * The prop is `experimental_backgroundImage`. The name is React Native's warning about its
  * stability, not ours, and it is the name Fabric's props parser matches on.
  */
-const { CssUnsupported, color, length, round } = require('./values.cjs');
+const {
+  CssUnsupported,
+  PER_TURN,
+  color,
+  commaSeparated,
+  length,
+  meaningful,
+  round,
+} = require('./values.cjs');
 const { colourExpression } = require('./colour-expression.cjs');
-
-/** A CSS angle in degrees, which is the only form the gradient direction takes. */
-const DEGREES = { deg: 1, grad: 0.9, rad: 180 / Math.PI, turn: 360 };
 
 /**
  * `background-image`, as a list of layers.
@@ -113,7 +118,7 @@ function direction(value, context) {
 function degrees(value, context) {
   const unit = value?.type;
   if (typeof value === 'number') return round(value);
-  if (unit && unit in DEGREES) return round(value.value * DEGREES[unit]);
+  if (unit && unit in PER_TURN) return round(value.value * PER_TURN[unit]);
   throw new CssUnsupported(`${context}: expected an angle for the gradient direction`);
 }
 
@@ -232,7 +237,7 @@ const GRADIENTS = new Set(['linear-gradient', 'radial-gradient']);
  */
 function deferGradient(part, context) {
   const name = part.value?.name;
-  const args = split(meaningful(part.value?.arguments), 'comma');
+  const args = commaSeparated(meaningful(part.value?.arguments));
   const prelude = isPrelude(args[0]) ? args.shift() : [];
 
   const template =
@@ -421,20 +426,5 @@ function positionToken(term, context) {
 
 const ident = (term) =>
   term?.type === 'token' && term.value?.type === 'ident' ? term.value.value : null;
-
-/** Whitespace separates nothing in an argument list, and is dropped before anything is read. */
-const meaningful = (terms) =>
-  (terms ?? []).filter((term) => !(term.type === 'token' && term.value?.type === 'white-space'));
-
-/** Split an argument list on commas, which is where one stop ends and the next begins. */
-function split(terms, on) {
-  /** @type {any[][]} */
-  const parts = [[]];
-  for (const term of terms) {
-    if (term.type === 'token' && term.value?.type === on) parts.push([]);
-    else parts[parts.length - 1].push(term);
-  }
-  return parts;
-}
 
 module.exports = { backgroundImage, deferGradient, GRADIENTS };

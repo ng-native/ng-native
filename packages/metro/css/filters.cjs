@@ -5,10 +5,7 @@
  * part of it is malformed - which is web behaviour, and is why a value that cannot be expressed
  * is refused here rather than half-translated.
  */
-const { CssUnsupported, color, length, number, round } = require('./values.cjs');
-
-/** Degrees per unit, for the one filter that takes an angle. */
-const DEGREES = { deg: 1, grad: 0.9, rad: 180 / Math.PI, turn: 360 };
+const { CssUnsupported, PER_TURN, color, length, number, round } = require('./values.cjs');
 
 /** CSS name -> the key native looks the primitive up by. Everything else it has no name for. */
 const PRIMITIVES = {
@@ -77,7 +74,7 @@ function primitiveValue(name, value, context) {
 
 function degrees(value, context) {
   const unit = value?.type;
-  if (unit && unit in DEGREES) return round(value.value * DEGREES[unit]);
+  if (unit && unit in PER_TURN) return round(value.value * PER_TURN[unit]);
   // `0` alone is a legal angle and the only unitless one.
   if (unit === 'number' && value.value === 0) return 0;
   throw new CssUnsupported(`${context}: expected an angle for hue-rotate()`);
