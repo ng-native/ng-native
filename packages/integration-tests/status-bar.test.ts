@@ -88,6 +88,43 @@ describe('the status bar', () => {
     assert.deepEqual(calls, [['style', ['dark', undefined]]]);
   });
 
+  it('shows the bar again when the claim that hid it is dropped', () => {
+    // Nothing underneath names `hidden`, so there is no value to put back but the platform's own.
+    const { calls, source } = recorder();
+    const bar = build(source);
+
+    const claim = bar.push({ hidden: true });
+    calls.length = 0;
+
+    claim();
+    assert.deepEqual(calls, [['hidden', [false, undefined]]]);
+  });
+
+  it("puts back the platform's style and translucency when the only claim naming them drops", () => {
+    const { calls, source } = recorder();
+    const bar = build(source);
+
+    const claim = bar.push({ style: 'light', translucent: true });
+    calls.length = 0;
+
+    claim();
+    assert.deepEqual(calls, [
+      ['style', ['default', undefined]],
+      ['translucent', false],
+    ]);
+  });
+
+  it('puts a dropped property back once, not on every later change', () => {
+    const { calls, source } = recorder();
+    const bar = build(source);
+
+    bar.push({ hidden: true })();
+    calls.length = 0;
+
+    bar.set({ style: 'dark' });
+    assert.deepEqual(calls, [['style', ['dark', undefined]]]);
+  });
+
   it('keeps a property the claim above says nothing about', () => {
     // A modal that only wants light text should not un-hide a bar the screen below hid.
     const { source } = recorder();

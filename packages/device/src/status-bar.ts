@@ -139,21 +139,36 @@ export class StatusBar {
     };
   }
 
+  /** The properties a claim has had the platform change, which no claim names any more. */
+  private readonly changed = new Set<'style' | 'hidden' | 'translucent'>();
+
   /**
    * Push the merged state at the platform.
    *
-   * Written whole rather than diffed: the platform's own setters are the cheap part, and a diff
-   * would have to know which properties a *dropped* claim had been holding. Read untracked, so an
-   * effect that sets the bar does not also subscribe to it and run again on every later claim.
+   * Written whole rather than diffed: the platform's own setters are the cheap part. A property
+   * the last claim to name it has dropped goes back to the platform's own, once. Not the
+   * background color, whose own the theme decides. Read untracked, so an effect that sets the bar
+   * does not also subscribe to it and run again on every later claim.
    */
   private apply(): void {
     const { style, hidden, animated, backgroundColor, translucent } = untracked(this.state);
-    if (style !== undefined) {
-      this.source.setStyle(resolve(style, untracked(this.scheme.current)), animated);
+    if (this.changes('style', style)) {
+      this.source.setStyle(resolve(style ?? 'default', untracked(this.scheme.current)), animated);
     }
-    if (hidden !== undefined) this.source.setHidden(hidden, animated ? 'fade' : undefined);
+    if (this.changes('hidden', hidden)) {
+      this.source.setHidden(hidden ?? false, animated ? 'fade' : undefined);
+    }
     if (backgroundColor !== undefined) this.source.setBackgroundColor(backgroundColor, animated);
-    if (translucent !== undefined) this.source.setTranslucent(translucent);
+    if (this.changes('translucent', translucent)) {
+      this.source.setTranslucent(translucent ?? false);
+    }
+  }
+
+  /** Whether to tell the platform: a claim names `property`, or the last one to has dropped. */
+  private changes(property: 'style' | 'hidden' | 'translucent', value: unknown): boolean {
+    if (value === undefined) return this.changed.delete(property);
+    this.changed.add(property);
+    return true;
   }
 }
 
