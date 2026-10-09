@@ -127,6 +127,7 @@ Analog's file-based routing (`analog`).
 | `@ng-native/web`        | A DOM renderer for the same components, with a Vite preset.                        |
 | `@ng-native/schematics` | `ng add` and `ng generate` for Angular CLI workspaces.                             |
 | `@ng-native/nx`         | `nx add` and an app generator for Nx workspaces.                                   |
+| `@ng-native/migrate`    | The migrations that update an app to a new release.                                |
 | `@ng-native/fabric`     | The framework-agnostic retained tree and commit engine the renderer is built on.   |
 
 ## Requirements
