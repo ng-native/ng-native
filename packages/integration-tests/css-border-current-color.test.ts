@@ -15,9 +15,12 @@ const { compileCss } = require('@ng-native/metro/css/compile.cjs');
 
 const SIDES = ['Top', 'Right', 'Bottom', 'Left'];
 
-function scene(css: string) {
+function scene(css: string, direction: 'ltr' | 'rtl' = 'ltr') {
   const fabric = createFakeFabric();
-  const engine = new Engine(fabric, 1, { globalStyles: compileCss(css, 'app.css') as never });
+  const engine = new Engine(fabric, 1, {
+    globalStyles: compileCss(css, 'app.css') as never,
+    conditions: { width: 400, height: 800, colorScheme: 'light', direction },
+  });
   const el = (id: string, classes: string, parent: EngineNode = engine.root): EngineNode => {
     const node = engine.createElement('view');
     engine.setClasses(node, classes);
@@ -27,6 +30,13 @@ function scene(css: string) {
   };
   const all = (nodes: readonly FakeFabricNode[]): FakeFabricNode[] =>
     nodes.flatMap((node) => [node, ...all(node.children)]);
+  /** The colour the view called `id` was committed with for the side a line of text starts at. */
+  const start = (id: string): unknown => {
+    engine.commit();
+    return all(fabric.committed).find((each) => each.props['testID'] === id)!.props[
+      'borderStartColor'
+    ];
+  };
   /** The committed colour of each side of the border of the view called `id`. */
   const edges = (id: string): unknown[] => {
     engine.commit();
@@ -35,7 +45,7 @@ function scene(css: string) {
       (side) => view.props[`border${side}Color`] ?? view.props['borderColor'] ?? null,
     );
   };
-  return { engine, el, edges };
+  return { engine, el, edges, start };
 }
 
 const SLATE = 'rgb(51, 65, 85)';
@@ -68,6 +78,23 @@ describe('a border with a width and no colour', () => {
     assert.deepEqual(s.edges('under'), [null, null, SLATE, null]);
     // Black, which is native's own and what a browser starts text as.
     assert.deepEqual(s.edges('plain'), [null, null, null, null]);
+  });
+
+  it('leaves the side a logical colour is for, which is the other side read right to left', () => {
+    // Native reads a side's own colour before the logical one: written over the start's side,
+    // the text colour would take the place of the colour the rule gave it.
+    const css = `${BOX} .ink { color: ${SLATE} } .lead { border-inline-start-color: red } .rtl { direction: rtl }`;
+    const ltr = scene(css);
+    ltr.el('box', 'box ink lead');
+    assert.deepEqual(ltr.edges('box'), [SLATE, SLATE, SLATE, null]);
+    assert.equal(ltr.start('box'), 'rgb(255, 0, 0)');
+    const rtl = scene(css, 'rtl');
+    rtl.el('box', 'box ink lead');
+    assert.deepEqual(rtl.edges('box'), [SLATE, null, SLATE, SLATE]);
+    // And by a direction of its own, in an app read the other way.
+    const own = scene(css);
+    own.el('box', 'box ink lead rtl');
+    assert.deepEqual(own.edges('box'), [SLATE, null, SLATE, SLATE]);
   });
 
   it('follows the text colour changing above it, the border going, and one written on it', () => {
