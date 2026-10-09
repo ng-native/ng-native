@@ -144,6 +144,48 @@ describe('taking a node out through the renderer', () => {
   });
 });
 
+describe('taking a class or style attribute off through the renderer', () => {
+  // What `[attr.class]` and `[attr.style]` do when their value becomes null.
+  async function renderer() {
+    const mod = await compileFixture(
+      fileURLToPath(new URL('./fixtures/features.ts', import.meta.url)),
+    );
+    const mounted = mount(1, mod['Features'] as Type<unknown>, createFakeFabric());
+    await settle();
+    const made = mounted.componentRef.injector.get(RendererFactory2).createRenderer(null, null);
+    return { mounted, made, node: made.createElement('view') as EngineNode };
+  }
+  const classesOf = (node: EngineNode) => [...(node.classes ?? [])];
+  const styleOf = (node: EngineNode) => ({ ...(node.props['style'] as object | undefined) });
+
+  it('takes the classes the attribute gave it', async () => {
+    const { mounted, made, node } = await renderer();
+    made.setAttribute(node, 'class', 'a b');
+    assert.deepEqual(classesOf(node), ['a', 'b']);
+    made.removeAttribute(node, 'class');
+    assert.deepEqual(classesOf(node), []);
+    mounted.applicationRef.destroy();
+  });
+
+  it('takes the styles the attribute gave it, and leaves one bound beside it', async () => {
+    const { mounted, made, node } = await renderer();
+    made.setStyle(node, 'opacity', 0.5);
+    made.setAttribute(node, 'style', 'width: 10px; height: 5px');
+    assert.deepEqual(styleOf(node), { opacity: 0.5, width: 10, height: 5 });
+    made.removeAttribute(node, 'style');
+    assert.deepEqual(styleOf(node), { opacity: 0.5 });
+    mounted.applicationRef.destroy();
+  });
+
+  it('takes a declaration the attribute no longer has when it is set again', async () => {
+    const { mounted, made, node } = await renderer();
+    made.setAttribute(node, 'style', 'width: 10px; height: 5px');
+    made.setAttribute(node, 'style', 'height: 6px');
+    assert.deepEqual(styleOf(node), { height: 6 });
+    mounted.applicationRef.destroy();
+  });
+});
+
 describe('golden parity', () => {
   it('commits a stable golden tree for a given template', async () => {
     const mod = await compileFixture(

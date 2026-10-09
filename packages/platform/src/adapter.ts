@@ -124,6 +124,9 @@ function parseStyleAttribute(css: string): Record<string, unknown> {
   return out;
 }
 
+/** The declarations each element's `style` attribute made, to take out when it changes or goes. */
+const attributeStyles = new WeakMap<EngineNode, readonly string[]>();
+
 class NativeRenderer implements Renderer2 {
   readonly data: { [key: string]: unknown } = Object.create(null);
   destroyNode: (node: EngineNode) => void;
@@ -195,16 +198,31 @@ class NativeRenderer implements Renderer2 {
      * was doing nothing at all.
      */
     if (name === 'style') {
-      for (const [key, next] of Object.entries(parseStyleAttribute(value))) {
-        this.setStyle(el, key, next);
-      }
+      const declared = parseStyleAttribute(value);
+      this.dropAttributeStyles(el, declared);
+      for (const [key, next] of Object.entries(declared)) this.setStyle(el, key, next);
+      attributeStyles.set(el, Object.keys(declared));
       return;
     }
     this.engine.setProp(el, name, value);
   }
 
   removeAttribute(el: EngineNode, name: string): void {
+    // What `setAttribute` made of each is what goes: neither was ever a prop.
+    if (name === 'class') return this.engine.setClasses(el, '');
+    if (name === 'style') {
+      this.dropAttributeStyles(el, {});
+      attributeStyles.delete(el);
+      return;
+    }
     this.engine.setProp(el, name, null);
+  }
+
+  /** Takes out what an element's `style` attribute declared and `kept` does not. */
+  private dropAttributeStyles(el: EngineNode, kept: Record<string, unknown>): void {
+    for (const key of attributeStyles.get(el) ?? []) {
+      if (!(key in kept)) this.removeStyle(el, key);
+    }
   }
 
   addClass(el: EngineNode, name: string): void {
