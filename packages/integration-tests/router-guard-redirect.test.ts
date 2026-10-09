@@ -16,8 +16,9 @@ import {
   type FakeFabricNode,
   type RenderResult,
 } from '@ng-native/testing';
+import { DeepLinks } from '@ng-native/device';
 import { NativeNavigation } from '../router/src/native-navigation.ts';
-import { provideNativeRouter } from '../router/src/provide-native-router.ts';
+import { provideNativeRouter, withLinkParent } from '../router/src/provide-native-router.ts';
 import { compileFixture } from './compile.ts';
 
 afterEach(cleanup);
@@ -258,4 +259,20 @@ it('leaves a later navigation to the page on top alone after a reset onto it', a
   await router.navigateByUrl('/b?y=2');
   await turns();
   assert.deepEqual(pages(app), ['Login', 'B'], 'not reset by the earlier one');
+});
+
+it('follows a link the app launched with over the page a guard sent its parent to', async () => {
+  // The first navigation is cancelled for the redirect's, which is the one that shows a page.
+  const app = await render(mod['GuardedShell'] as Type<unknown>, {
+    providers: [
+      provideNativeRouter(
+        mod['guardedRoutes'] as Routes,
+        withLinkParent((url) => (url === '/b' ? '/home' : null)),
+      ),
+      { provide: DeepLinks, useValue: { initialUrl: () => '/b', subscribe: () => () => {} } },
+    ],
+  });
+  await turns();
+  assert.equal(app.componentRef.injector.get(Router).url, '/b');
+  assert.deepEqual(pages(app), ['Login', 'B']);
 });

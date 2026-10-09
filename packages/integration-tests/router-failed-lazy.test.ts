@@ -64,7 +64,10 @@ describe('a page whose code fails to load', () => {
         provideNativeRouter(
           failing,
           withNavigationErrorHandler((error) => void heard.push(error.error)),
-          withLinkParent((url) => (url.startsWith('/broken/') ? '/home' : null)),
+          withLinkParent((url) => {
+            if (url.startsWith('/broken/')) return '/home';
+            return url.startsWith('/detail/') ? '/search' : null;
+          }),
         ),
         { provide: ErrorHandler, useValue: { handleError: (e: unknown) => reported.push(e) } },
         {
@@ -159,5 +162,17 @@ describe('a page whose code fails to load', () => {
     once();
     reportedOnce();
     assert.equal(router.url, '/home');
+  });
+
+  it('under a parent that fails: not followed later, after some other navigation', async () => {
+    // The link waits for the page it goes over. That page never showed, so the link has nothing
+    // to go over, and the next page to show is not the one it was waiting for.
+    const { router } = await launch('/detail/1');
+    once();
+
+    await router.navigateByUrl('/home');
+    await idle();
+    assert.equal(router.url, '/home');
+    once();
   });
 });
