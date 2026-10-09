@@ -3664,12 +3664,21 @@ export class Engine implements HostEngine {
     this.changedBeneath.clear();
   }
 
+  /**
+   * What `node` matches changed, which the elements after it can read: as many of them as a rule
+   * steps along from one, every one for a `~`, and none where no sheet steps at all.
+   */
   private markLaterSiblings(node: EngineNode): void {
-    const siblings = node.parent?.children;
+    let left = this.structuralAfter;
+    const siblings = left > 0 ? node.parent?.children : undefined;
     if (!siblings) return;
     // Each matched again, and left as it was with all under it where it matches what it did:
     // see `markPlace`.
-    for (let i = siblings.indexOf(node) + 1; i < siblings.length; i++) this.markPlace(siblings[i]!);
+    for (let i = siblings.indexOf(node) + 1; i < siblings.length && left > 0; i++) {
+      const sibling = siblings[i]!;
+      this.markPlace(sibling);
+      if (sibling.kind === 'element') left--;
+    }
   }
 
   /** `node`'s child list changed: `moved` came into it at `at`, or went out of it from there. */

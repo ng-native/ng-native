@@ -716,6 +716,51 @@ describe('what a child list changing has styled again', () => {
     s.engine.insertBefore(s.parent, s.row(), s.parent.children[3]!);
     assert.equal(s.marked(), 'xx.xxxxxxx');
   });
+
+  describe("and a row's own classes changing", () => {
+    // What a later row matches hangs on an earlier one's classes only through `+` and `~`: as
+    // far along as a rule steps, and no further.
+    const on = (s: ReturnType<typeof list>, at: number) =>
+      s.engine.setClasses(s.rows[at]!, 'row on');
+
+    it('is that row alone where every sheet asks only which is first and which last', () => {
+      const s = list(`${ENDS} [class~="on"] { opacity: 0.5 }`, 10);
+      on(s, 2);
+      assert.equal(s.marked(), '..x.......');
+      assert.deepEqual(s.widths(), [1, 5, 5, 5, 5, 5, 5, 5, 5, 9]);
+    });
+
+    it('is the one row after it where a sheet asks only about the row just before', () => {
+      const s = list('.on + .row { border-top-width: 3px }', 10);
+      on(s, 2);
+      assert.equal(s.marked(), '..xx......');
+      assert.deepEqual(s.widths(), [0, 0, 0, 3, 0, 0, 0, 0, 0, 0]);
+    });
+
+    it('is as many rows after it as a rule steps, passing over a text between them', () => {
+      const s = list('.on + .row + .row { border-top-width: 3px }', 10);
+      s.engine.insertBefore(s.parent, s.engine.createText('between'), s.rows[3]!);
+      s.widths();
+      on(s, 2);
+      assert.equal(s.marked(), '..xxxx.....', 'the text, and the two rows');
+      assert.deepEqual(s.widths(), [0, 0, 0, 0, 0, 3, 0, 0, 0, 0, 0]);
+    });
+
+    it('is every row after it where a sheet asks about any row before', () => {
+      const s = list('.on ~ .row { border-top-width: 3px }', 10);
+      on(s, 2);
+      assert.equal(s.marked(), '..xxxxxxxx');
+      assert.deepEqual(s.widths(), [0, 0, 0, 3, 3, 3, 3, 3, 3, 3]);
+    });
+
+    it('follows a row that stops or starts being empty as far as a rule steps from it', () => {
+      const s = list('.row:empty + .row { border-top-width: 3px }', 10);
+      assert.deepEqual(s.widths(), [0, 3, 3, 3, 3, 3, 3, 3, 3, 3]);
+      s.engine.appendChild(s.rows[2]!, s.engine.createElement('view'));
+      assert.equal(s.marked(), '..xx......');
+      assert.deepEqual(s.widths(), [0, 3, 3, 0, 3, 3, 3, 3, 3, 3]);
+    });
+  });
 });
 
 /**
