@@ -769,15 +769,6 @@ const isLayer = (rule) => rule.type === 'layer-block' || rule.type === 'layer-st
 /** Rule types whose at-rule is spelled differently in a stylesheet. */
 const AT_RULE_NAMES = { 'layer-block': 'layer', 'layer-statement': 'layer' };
 
-/** The pseudo-classes that count siblings by element type, which the matcher does not track. */
-const OF_TYPE = new Set([
-  'first-of-type',
-  'last-of-type',
-  'only-of-type',
-  'nth-of-type',
-  'nth-last-of-type',
-]);
-
 /** Range operators, as the runtime spells them. */
 const RANGE_OPS = {
   'greater-than': 'gt',
@@ -1175,12 +1166,6 @@ const CONTROL_STATE = new Set(['checked', 'indeterminate', 'default']);
 
 /** Why a pseudo-class the matcher has no answer for is refused, said for the one it is. */
 function refusedPseudoClass(part, name, context) {
-  if (OF_TYPE.has(part.kind)) {
-    return new CssUnsupported(
-      `${context}: ':${name}' is not supported yet. It counts the siblings of one element type, ` +
-        `which the matcher does not track; ':nth-child()' it does.`,
-    );
-  }
   if (part.kind === 'nth-child' || part.kind === 'nth-last-child') {
     return new CssUnsupported(
       `${context}: ':${name}()' with 'of <selector>' is not supported: counting only the siblings ` +
@@ -3368,6 +3353,28 @@ function positionTests(part) {
       const test = { a: part.a, b: part.b };
       return [part.kind === 'nth-last-child' ? { ...test, fromEnd: true } : test];
     }
+    default:
+      return ofTypeTests(part);
+  }
+}
+
+/**
+ * The same family among the siblings of one element name: `:first-of-type` is the first of its
+ * name from the start, and `:only-of-type` that from both ends. Each test is one of `ofType`.
+ */
+function ofTypeTests(part) {
+  const first = { a: 0, b: 1, ofType: true };
+  switch (part.kind) {
+    case 'first-of-type':
+      return [first];
+    case 'last-of-type':
+      return [{ ...first, fromEnd: true }];
+    case 'only-of-type':
+      return [first, { ...first, fromEnd: true }];
+    case 'nth-of-type':
+      return [{ a: part.a, b: part.b, ofType: true }];
+    case 'nth-last-of-type':
+      return [{ a: part.a, b: part.b, ofType: true, fromEnd: true }];
     default:
       return null;
   }

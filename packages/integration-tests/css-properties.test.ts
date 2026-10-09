@@ -968,9 +968,9 @@ describe('messages for things that are refused', () => {
 
   it('does not blame the missing hover cascade for a structural pseudo-class', () => {
     assert.throws(
-      () => compileCss('.a:first-of-type { color: red }'),
+      () => compileCss('.a:nth-child(2 of .b) { color: red }'),
       (error: Error) => {
-        assert.match(error.message, /':first-of-type' is not supported yet/);
+        assert.match(error.message, /':nth-child\(\)' with 'of <selector>' is not supported/);
         assert.doesNotMatch(error.message, /hover/);
         return true;
       },

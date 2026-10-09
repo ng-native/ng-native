@@ -78,6 +78,8 @@ export interface NthTest {
   readonly a: number;
   readonly b: number;
   readonly fromEnd?: true;
+  /** Counted among the siblings with the node's own element name: `:nth-of-type()`. */
+  readonly ofType?: true;
 }
 
 export type Combinator = 'descendant' | 'child' | 'next-sibling' | 'later-sibling';
@@ -1273,8 +1275,9 @@ function countSiblings(
   reach: { after: number; before: boolean },
   withinHas: boolean,
 ): void {
-  // Which is first and which is last is the ends, and no count.
-  const counts = (compound.nth ?? []).filter((test) => test.a !== 0 || test.b !== 1);
+  // Which is first and which is last is the ends, and no count. Not of one name: the first of
+  // its name is wherever the others of it are not.
+  const counts = (compound.nth ?? []).filter((test) => test.a !== 0 || test.b !== 1 || test.ofType);
   if (counts.some((test) => withinHas || !test.fromEnd)) reach.after = Infinity;
   if (counts.some((test) => withinHas || test.fromEnd)) reach.before = true;
   for (const inner of nestedCompounds(compound)) countSiblings(inner, reach, withinHas);
@@ -1387,11 +1390,11 @@ function matchesNth(node: StyleTarget, test: NthTest): boolean {
   const siblings = node.parent?.children;
   if (!siblings) return false;
 
-  if (test.a === 0 && test.b === 1) {
+  if (test.a === 0 && test.b === 1 && !test.ofType) {
     return (test.fromEnd ? lastElement(siblings) : firstElement(siblings)) === node;
   }
 
-  const from = countPosition(node, siblings, test.fromEnd === true);
+  const from = countPosition(node, siblings, test.fromEnd === true, test.ofType === true);
   if (from === 0) return false;
   // `an + b` for some whole number of steps, which is what CSS counts from.
   if (test.a === 0) return from === test.b;
@@ -1654,11 +1657,12 @@ function countPosition(
   node: StyleTarget,
   siblings: readonly StyleTarget[],
   fromEnd: boolean,
+  ofType: boolean,
 ): number {
   let position = 0;
   let seen = 0;
   for (const sibling of siblings) {
-    if (!isElement(sibling)) continue;
+    if (!isElement(sibling) || (ofType && sibling.name !== node.name)) continue;
     seen++;
     if (sibling === node) position = seen;
   }

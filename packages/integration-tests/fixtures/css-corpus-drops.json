@@ -1,7 +1,7 @@
 {
   "bootstrap": {
-    "rules": 2524,
-    "dropped": 684,
+    "rules": 2531,
+    "dropped": 677,
     "emitted": [
       "$animation",
       "$animationDelay",
@@ -114,11 +114,9 @@
         "':-moz-focusring' is not supported. Nothing on native answers it; bind a class or an attribute from the state it stands for, and select on that.": 1,
         "':autofill' is not supported. Nothing on native answers it; bind a class or an attribute from the state it stands for, and select on that.": 1,
         "':checked' has no state on native to read: whether a control is checked is an input of its component, not a prop a selector can see. Bind an attribute from the same signal, such as [attr.data-checked], and select on that.": 5,
-        "':first-of-type' is not supported yet. It counts the siblings of one element type, which the matcher does not track; ':nth-child()' it does.": 3,
         "':focus-visible' is not supported. Native has no hover or focus cascade: use ':active' or ':focus', which the engine tracks, or a bound attribute such as [attr.data-hover].": 5,
         "':hover' is not supported. Native has no hover or focus cascade: use ':active' or ':focus', which the engine tracks, or a bound attribute such as [attr.data-hover].": 11,
         "':indeterminate' has no state on native to read: whether a control is checked is an input of its component, not a prop a selector can see. Bind an attribute from the same signal, such as [attr.data-checked], and select on that.": 1,
-        "':last-of-type' is not supported yet. It counts the siblings of one element type, which the matcher does not track; ':nth-child()' it does.": 3,
         "pseudo-elements like ::before are never supported. They would mean synthesising nodes no template declares, which puts the style engine in the business of creating view hierarchy.": 63,
         "the 'print' media type has no meaning on a device": 1
       },
@@ -130,7 +128,6 @@
         "':hover' is not supported. Native has no hover or focus cascade: use ':active' or ':focus', which the engine tracks, or a bound attribute such as [attr.data-hover].": 36,
         "':invalid' is not supported. Nothing on native answers it; bind a class or an attribute from the state it stands for, and select on that.": 16,
         "':is()' cannot contain a combinator, only a compound selector, '<compound> *', which is an ancestor test, '<compound> > *', a parent test, or '<compound> ~ *', a sibling test.": 1,
-        "':nth-of-type' is not supported yet. It counts the siblings of one element type, which the matcher does not track; ':nth-child()' it does.": 1,
         "':placeholder-shown' is not supported. Nothing on native answers it; bind a class or an attribute from the state it stands for, and select on that.": 6,
         "':valid' is not supported. Nothing on native answers it; bind a class or an attribute from the state it stands for, and select on that.": 16,
         "pseudo-elements like ::before are never supported. They would mean synthesising nodes no template declares, which puts the style engine in the business of creating view hierarchy.": 50
@@ -666,8 +663,8 @@
     }
   },
   "pico": {
-    "rules": 462,
-    "dropped": 302,
+    "rules": 472,
+    "dropped": 292,
     "emitted": [
       "$animation",
       "$animationDelay",
@@ -775,11 +772,9 @@
         "':-moz-focusring' is not supported. Nothing on native answers it; bind a class or an attribute from the state it stands for, and select on that.": 1,
         "':-moz-ui-invalid' is not supported. Nothing on native answers it; bind a class or an attribute from the state it stands for, and select on that.": 1,
         "':checked' has no state on native to read: whether a control is checked is an input of its component, not a prop a selector can see. Bind an attribute from the same signal, such as [attr.data-checked], and select on that.": 3,
-        "':first-of-type' is not supported yet. It counts the siblings of one element type, which the matcher does not track; ':nth-child()' it does.": 1,
         "':focus-visible' is not supported. Native has no hover or focus cascade: use ':active' or ':focus', which the engine tracks, or a bound attribute such as [attr.data-hover].": 4,
         "':hover' is not supported. Native has no hover or focus cascade: use ':active' or ':focus', which the engine tracks, or a bound attribute such as [attr.data-hover].": 2,
         "':indeterminate' has no state on native to read: whether a control is checked is an input of its component, not a prop a selector can see. Bind an attribute from the same signal, such as [attr.data-checked], and select on that.": 5,
-        "':last-of-type' is not supported yet. It counts the siblings of one element type, which the matcher does not track; ':nth-child()' it does.": 1,
         "'@moz-document' is not supported. Media queries, keyframes, font faces and cascade layers are the only at-rules with a runtime meaning here.": 1,
         "'@supports' is not supported. Media queries, keyframes, font faces and cascade layers are the only at-rules with a runtime meaning here.": 1,
         "'hover' is not a media feature a device can answer (width, height, orientation, prefers-color-scheme and prefers-reduced-motion are)": 1,
@@ -787,12 +782,10 @@
       },
       "(selector)": {
         "':checked' has no state on native to read: whether a control is checked is an input of its component, not a prop a selector can see. Bind an attribute from the same signal, such as [attr.data-checked], and select on that.": 39,
-        "':first-of-type' is not supported yet. It counts the siblings of one element type, which the matcher does not track; ':nth-child()' it does.": 4,
         "':focus-visible' is not supported. Native has no hover or focus cascade: use ':active' or ':focus', which the engine tracks, or a bound attribute such as [attr.data-hover].": 3,
         "':focus-within' is not supported. Native has no hover or focus cascade: use ':active' or ':focus', which the engine tracks, or a bound attribute such as [attr.data-hover].": 1,
         "':hover' is not supported. Native has no hover or focus cascade: use ':active' or ':focus', which the engine tracks, or a bound attribute such as [attr.data-hover].": 3,
         "':invalid' is not supported. Nothing on native answers it; bind a class or an attribute from the state it stands for, and select on that.": 1,
-        "':last-of-type' is not supported yet. It counts the siblings of one element type, which the matcher does not track; ':nth-child()' it does.": 4,
         "pseudo-elements like ::before are never supported. They would mean synthesising nodes no template declares, which puts the style engine in the business of creating view hierarchy.": 31
       },
       "--*": {
@@ -932,8 +925,8 @@
     }
   },
   "open-props": {
-    "rules": 74,
-    "dropped": 196,
+    "rules": 75,
+    "dropped": 195,
     "emitted": [
       "aspectRatio",
       "backgroundColor",
@@ -999,7 +992,6 @@
         "':where()' cannot contain a combinator, only a compound selector, '<compound> *', which is an ancestor test, '<compound> > *', a parent test, or '<compound> ~ *', a sibling test.": 2
       },
       "(rule)": {
-        "':first-of-type' is not supported yet. It counts the siblings of one element type, which the matcher does not track; ':nth-child()' it does.": 1,
         "':focus-visible' is not supported. Native has no hover or focus cascade: use ':active' or ':focus', which the engine tracks, or a bound attribute such as [attr.data-hover].": 4,
         "':hover' is not supported. Native has no hover or focus cascade: use ':active' or ':focus', which the engine tracks, or a bound attribute such as [attr.data-hover].": 1,
         "':visited' is not supported. Nothing on native answers it; bind a class or an attribute from the state it stands for, and select on that.": 2,

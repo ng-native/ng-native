@@ -10841,12 +10841,6 @@
     "enabled:opacity-50",
     "enabled:p-4"
   ],
-  "dropped a rule: ':first-of-type' is not supported yet. It counts the siblings of one element type, which the matcher does not track; '…' it does.": [
-    "first-of-type:bg-[rgb(1,2,3)]",
-    "first-of-type:bg-red-500",
-    "first-of-type:opacity-50",
-    "first-of-type:p-4"
-  ],
   "dropped a rule: ':focus-within' is not supported. Native has no hover or focus cascade: use '…' or '…', which the engine tracks, or a bound attribute such as [attr.data-hover].": [
     "focus-within:bg-[rgb(1,2,3)]",
     "focus-within:bg-red-500",
@@ -10876,18 +10870,6 @@
     "peer-midnight:bg-red-500",
     "peer-midnight:opacity-50",
     "peer-midnight:p-4"
-  ],
-  "dropped a rule: ':last-of-type' is not supported yet. It counts the siblings of one element type, which the matcher does not track; '…' it does.": [
-    "last-of-type:bg-[rgb(1,2,3)]",
-    "last-of-type:bg-red-500",
-    "last-of-type:opacity-50",
-    "last-of-type:p-4"
-  ],
-  "dropped a rule: ':only-of-type' is not supported yet. It counts the siblings of one element type, which the matcher does not track; '…' it does.": [
-    "only-of-type:bg-[rgb(1,2,3)]",
-    "only-of-type:bg-red-500",
-    "only-of-type:opacity-50",
-    "only-of-type:p-4"
   ],
   "dropped a rule: ':optional' is not supported. Nothing on native answers it; bind a class or an attribute from the state it stands for, and select on that.": [
     "optional:bg-[rgb(1,2,3)]",

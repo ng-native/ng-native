@@ -21,7 +21,9 @@ ancestor test its `group-*` variants compile to, `<compound> > *`, the parent te
 compiles to, and `<compound> ~ *` or `<compound> + *`, the sibling test its `peer-*` variants
 compile to, which is read as the sibling combinator it means. `:host`
 and `:host(<compound>)`. `:host-context(<compound>)`. `:first-child`, `:last-child`, `:only-child`,
-`:nth-child()` and `:nth-last-child()` (the `of <selector>` form is not supported). `:empty`.
+`:nth-child()` and `:nth-last-child()` (the `of <selector>` form is not supported).
+`:first-of-type`, `:last-of-type`, `:only-of-type`, `:nth-of-type()` and `:nth-last-of-type()`,
+which count the siblings with the element's own name. `:empty`.
 `:root`. `:disabled` (answered from the element's own `disabled` prop). `:focus` and `:active`,
 which the engine tracks itself from native focus, blur and press events. Every combinator CSS has
 works too: descendant (` `), child (`>`), next-sibling (`+`) and later-sibling (`~`).
