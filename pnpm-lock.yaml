@@ -1778,16 +1778,10 @@ importers:
       '@ng-native/migrate':
         specifier: workspace:*
         version: link:../migrate
-      semver:
-        specifier: ^7.7.0
-        version: 7.8.5
     devDependencies:
       '@schematics/angular':
         specifier: 22.1.9
         version: 22.1.9(chokidar@5.0.0)
-      '@types/semver':
-        specifier: ^7.7.0
-        version: 7.8.0
 
   packages/tailwind:
     dependencies:
