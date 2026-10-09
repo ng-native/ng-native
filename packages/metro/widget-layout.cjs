@@ -176,7 +176,9 @@ class LayoutError extends Error {
   constructor(file, span, message, at = { line: 0, col: 0 }) {
     const line = span && span.start.line + at.line;
     const col = span && span.start.col + (span.start.line === 0 ? at.col : 0);
-    const where = span ? `${file}:${line + 1}:${col + 1}` : file;
+    const where = span
+      ? `${file}:${/** @type {number} */ (line) + 1}:${/** @type {number} */ (col) + 1}`
+      : file;
     super(`${where}: ${message}`);
     this.name = 'LayoutError';
   }
@@ -300,7 +302,7 @@ class Compiler {
     if (node instanceof ng.TmplAstForLoopBlock) {
       this.fail(node, '@for draws a list of views here; put it in a ui-vstack or ui-hstack.');
     } else if (node instanceof ng.TmplAstIfBlock) {
-      if (always && node.branches.at(-1).expression !== null) {
+      if (always && /** @type {any} */ (node.branches.at(-1)).expression !== null) {
         this.fail(node, 'A widget always draws a view: give this @if an @else.');
       }
       for (const branch of node.branches) this.oneView(branch.children, always);
@@ -441,6 +443,7 @@ class Compiler {
     return `function(){return Object.assign({},props,${change},{taps:(${taps}).concat([${target}])});}`;
   }
 
+  /** @param {string | null} [event] an output the view does take */
   refuseUnsupported(node, event = null) {
     for (const output of node.outputs) {
       if (output.name === event) continue;

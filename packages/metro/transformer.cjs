@@ -23,7 +23,7 @@ function expoTransformer() {
   try {
     return require(id);
   } catch (error) {
-    if (error.code !== 'MODULE_NOT_FOUND') throw error;
+    if (/** @type {any} */ (error).code !== 'MODULE_NOT_FOUND') throw error;
     const expo = path.dirname(require.resolve('expo/package.json', { paths: [process.cwd()] }));
     return require(require.resolve(id, { paths: [expo] }));
   }
@@ -170,7 +170,7 @@ function angularOrSyntaxError(params) {
     try {
       upstream.transform(params);
     } catch (syntaxError) {
-      if (syntaxError?.loc) throw syntaxError;
+      if (/** @type {any} */ (syntaxError)?.loc) throw syntaxError;
     }
     throw error;
   }

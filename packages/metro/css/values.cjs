@@ -211,7 +211,10 @@ function namedColor(word) {
     code: Buffer.from(`a{color:${word}}`),
     visitor: {
       Declaration(declaration) {
-        if (declaration.property === 'color' && declaration.value?.type === 'rgb') {
+        if (
+          declaration.property === 'color' &&
+          /** @type {any} */ (declaration.value)?.type === 'rgb'
+        ) {
           resolved = declaration.value;
         }
       },
@@ -845,6 +848,7 @@ function easingForm(part) {
   const text = cssText([part]);
   if (text === null) return undefined;
   try {
+    /** @type {any} */
     let parsed;
     require('lightningcss').transform({
       filename: 'token.css',

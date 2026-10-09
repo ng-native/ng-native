@@ -584,7 +584,8 @@ function wrongPackageName(name) {
   }
   if (/^@[^/]*\/?$/.test(name))
     return `is a scope. Name a package in it, as '${name.replace(/\/$/, '')}/ui'.`;
-  const [, scope, rest] = /^(@[^/]+\/)?(.*)$/.exec(name);
+  // Every part is optional, so it matches any name.
+  const [, scope, rest] = /** @type {RegExpExecArray} */ (/^(@[^/]+\/)?(.*)$/.exec(name));
   if (rest.includes('/')) {
     const root = (scope ?? '') + rest.split('/')[0];
     return (

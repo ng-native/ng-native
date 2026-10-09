@@ -233,7 +233,9 @@ function hmrBlock(src, filename, components, resources, options, warn) {
   const built = (className) => {
     const construction = hot?.construction.get(className);
     if (construction === undefined) return shapeSource;
-    const held = [...hot.constants].filter(([name]) => mentions(construction, [name]));
+    const held = [.../** @type {NonNullable<typeof hot>} */ (hot).constants].filter(([name]) =>
+      mentions(construction, [name]),
+    );
     return construction + held.map(([, text]) => text).join('\n');
   };
   const records = defs.map(
@@ -954,7 +956,10 @@ function resourceBlock(src, resource, options) {
       // This module is the only transform an edit to the template reaches, so a template the
       // compiler would cut short without a word has to be caught here as well.
       if (component.template == null) {
-        const at = path.resolve(path.dirname(owner.file), component.templateUrl);
+        const at = path.resolve(
+          path.dirname(owner.file),
+          /** @type {string} */ (component.templateUrl),
+        );
         if (at === path.resolve(resource)) {
           assertTemplateFileParses(template, resource, component.className);
         }
@@ -1189,7 +1194,12 @@ function compileTwice(src, filename, compilerOptions) {
   let resources = null;
   if (dependencies.length) {
     resources = readResources(dependencies, filename);
-    result = transformAngularFileSync(src, filename, compilerOptions, resources);
+    result = transformAngularFileSync(
+      src,
+      filename,
+      compilerOptions,
+      /** @type {any} */ (resources),
+    );
   }
 
   fail(result, src, filename, resources);

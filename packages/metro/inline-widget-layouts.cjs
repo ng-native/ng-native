@@ -43,7 +43,7 @@ function inlineWidgetLayouts(src, filename) {
   const layouts = new Map();
   for (const call of calls(program, callees, namespaces)) {
     const argument = call.arguments[1];
-    const found = layoutOf(filename, program, call, argument);
+    const found = /** @type {any} */ (layoutOf(filename, program, call, argument));
     if (!layouts.has(found.statement))
       layouts.set(found.statement, compileLayout(filename, found, modifiers));
     edits.push({
@@ -60,7 +60,11 @@ function inlineWidgetLayouts(src, filename) {
   return applyEdits(src, edits);
 }
 
-/** The module has TypeScript syntax, and JSX too in a `.tsx` file. */
+/**
+ * The module has TypeScript syntax, and JSX too in a `.tsx` file.
+ *
+ * @returns {import('@babel/parser').ParserPlugin[]}
+ */
 function pluginsFor(filename) {
   return /\.[cm]?tsx$/.test(filename)
     ? ['typescript', 'jsx', 'decorators-legacy']
@@ -98,7 +102,7 @@ function compileLayout(filename, { statement, name, decorator, body }, modifiers
       `${name} is exported, but the build removes a layout class: keep it to this file.`,
     );
   }
-  const template = templateOf(filename, decorator);
+  const template = /** @type {any} */ (templateOf(filename, decorator));
   return compileWidgetLayout(template.cooked, {
     file: filename,
     at: { line: template.loc.start.line - 1, col: template.loc.start.column },
@@ -138,7 +142,7 @@ function isPropertyName(parent, key) {
 function walk(root, visit) {
   const stack = [[root, null, null]];
   while (stack.length) {
-    const [node, parent, key] = stack.pop();
+    const [node, parent, key] = /** @type {any[]} */ (stack.pop());
     if (parent) visit(node, parent, key);
     for (const child of Object.keys(node)) {
       if (child === 'loc' || child.endsWith('Comments')) continue;

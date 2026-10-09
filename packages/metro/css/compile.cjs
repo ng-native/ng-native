@@ -111,6 +111,7 @@ function operator(term) {
 
 /** Split a term list on one operator, dropping it. */
 function split(list, on) {
+  /** @type {any[][]} */
   const parts = [[]];
   for (const term of list) {
     if (operator(term) === on) parts.push([]);
@@ -215,7 +216,11 @@ function leaf(term, reference, context) {
   }
 }
 
-/** The adjustment, with the parts that say nothing left out, so a plain `var()` stays plain. */
+/**
+ * The adjustment, with the parts that say nothing left out, so a plain `var()` stays plain.
+ *
+ * @param {{ scale?: number, offset?: number, floor?: number, number?: boolean }} adjustment
+ */
 function trim({ scale, offset, floor, number }) {
   return {
     ...(scale === 1 ? {} : { scale }),
@@ -408,7 +413,7 @@ function deferCalcToken(parts, context) {
   const markers = [];
   for (const kind of ['length', 'number']) {
     try {
-      const slot = calcWithTokens(parts, kind, context);
+      const slot = /** @type {any} */ (calcWithTokens(parts, kind, context));
       if (slot?.__calc) markers.push(slot.__calc);
     } catch (error) {
       if (!(error instanceof CssUnsupported)) throw error;
@@ -923,7 +928,7 @@ const ATTR_OPERATORS = {
  */
 // eslint-disable-next-line complexity -- a dispatch table: one flat case per CSS form
 function compound(parts, context) {
-  const out = { classes: [] };
+  const out = { classes: /** @type {string[]} */ ([]) };
   let ids = 0;
   let classes = 0;
   let types = 0;
@@ -2134,6 +2139,7 @@ const PLACEHOLDER_TIME = { type: 'token', value: { type: 'dimension', unit: 'ms'
 
 /** A declaration parsed again from text: what lightningcss makes of it, or nothing. */
 function reparsed(property, text, context) {
+  /** @type {any} */
   let found;
   try {
     lightning.transform({

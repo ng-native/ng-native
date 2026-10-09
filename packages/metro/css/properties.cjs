@@ -1236,6 +1236,7 @@ function finishAnimation(out, context, refuse) {
     out['$animation'] = null;
     return;
   }
+  /** @type {Record<string, any>} */
   const spec = animationSpec(name, first, context);
   if (parts.timeline === 'x' || parts.timeline === 'y') {
     spec.timeline = parts.timeline;
@@ -1962,6 +1963,7 @@ function absoluteWeight(property, value) {
  * What `translate` tries, in order, for a property `TRANSLATORS` has no handler for: each entry is
  * `[matches, handler]`, and the first whose `matches(property, value)` holds writes the value.
  */
+/** @type {[Function, Function][]} */
 const FALLBACKS = [
   [
     (property, value) => property === 'line-height' && value?.type === 'normal',

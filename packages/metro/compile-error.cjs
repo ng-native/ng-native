@@ -170,7 +170,9 @@ function compileError(errors, filename, src, components, externals) {
     template.file === filename
       ? `${filename}: ${first.message} (${loc.line}:${loc.column})`
       : `${filename}: ${first.message}\n  at ${template.file}:${loc.line}:${loc.column + 1}`;
-  const error = new Error([`${head}\n\n${frame}`, ...rest].join('\n\n'));
+  const error = /** @type {Error & { loc?: unknown }} */ (
+    new Error([`${head}\n\n${frame}`, ...rest].join('\n\n'))
+  );
   if (template.file === filename) error.loc = loc;
   return error;
 }

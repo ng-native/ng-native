@@ -113,6 +113,7 @@ const MATHS = new Set(['calc', 'min', 'max', 'clamp']);
 
 /** A value's components, split where CSS splits a shorthand: on whitespace. */
 function components(parts) {
+  /** @type {any[][]} */
   const out = [[]];
   for (const part of parts) {
     if (part?.type === 'token' && part.value?.type === 'white-space') {

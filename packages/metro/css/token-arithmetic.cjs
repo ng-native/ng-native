@@ -190,6 +190,7 @@ const MATH = new Set(['calc', 'max', 'min']);
 
 /** Split a list of terms on commas. */
 function commaSeparated(terms) {
+  /** @type {any[][]} */
   const groups = [[]];
   for (const term of terms) {
     if (term?.type === 'token' && term.value?.type === 'comma') groups.push([]);

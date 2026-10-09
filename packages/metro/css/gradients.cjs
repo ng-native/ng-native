@@ -428,6 +428,7 @@ const meaningful = (terms) =>
 
 /** Split an argument list on commas, which is where one stop ends and the next begins. */
 function split(terms, on) {
+  /** @type {any[][]} */
   const parts = [[]];
   for (const term of terms) {
     if (term.type === 'token' && term.value?.type === on) parts.push([]);

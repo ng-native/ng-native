@@ -16,7 +16,7 @@
  * file in its bundle, and resolved from the app as well as from here.
  */
 const path = require('node:path');
-const frontMatter = require('front-matter');
+const frontMatter = /** @type {any} */ (require('front-matter'));
 
 /** @type {{ lexer(src: string): unknown[] } | undefined} */
 let marked;
@@ -32,7 +32,7 @@ function loadMarked() {
       marked = require(require.resolve('marked', { paths }));
       return marked;
     } catch (error) {
-      if (error.code !== 'MODULE_NOT_FOUND') throw error;
+      if (/** @type {any} */ (error).code !== 'MODULE_NOT_FOUND') throw error;
     }
   }
   return undefined;
@@ -119,7 +119,7 @@ function markdownModule(src, filename) {
     parsed = frontMatter(src.replace(/\r\n?/g, '\n'));
   } catch (error) {
     throw new Error(
-      `${filename}: the front matter of ${name} is not valid YAML. ${error.message}`,
+      `${filename}: the front matter of ${name} is not valid YAML. ${/** @type {Error} */ (error).message}`,
       { cause: error },
     );
   }

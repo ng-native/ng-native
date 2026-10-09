@@ -57,7 +57,11 @@ function componentDeclarations(code, filename, callee) {
   return found;
 }
 
-/** The compiler leaves TypeScript syntax in an app's file; a library ships plain JavaScript. */
+/**
+ * The compiler leaves TypeScript syntax in an app's file; a library ships plain JavaScript.
+ *
+ * @returns {import('@babel/parser').ParserPlugin[]}
+ */
 function pluginsFor(filename) {
   if (/\.[cm]?tsx$/.test(filename)) return ['typescript', 'jsx', 'decorators-legacy'];
   if (/\.[cm]?ts$/.test(filename)) return ['typescript', 'decorators-legacy'];

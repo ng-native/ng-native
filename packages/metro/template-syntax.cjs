@@ -54,7 +54,9 @@ function assertTemplatesParse(src, filename, components, resources) {
 /** The error for an inline template, at its place in the file and with the `loc` Metro reads. */
 function inlineError(head, src, offset) {
   const loc = position(src, offset);
-  const error = new Error(`${head} (${loc.line}:${loc.column})\n\n${codeFrame(src, loc)}`);
+  const error = /** @type {Error & { loc?: unknown }} */ (
+    new Error(`${head} (${loc.line}:${loc.column})\n\n${codeFrame(src, loc)}`)
+  );
   error.loc = loc;
   return error;
 }

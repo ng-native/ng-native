@@ -68,7 +68,7 @@ function labToXyz([l, a, b]) {
   const z = fz ** 3 > epsilon ? fz ** 3 : (116 * fz - 16) / kappa;
   return times(
     D50_TO_D65,
-    [x, y, z].map((c, i) => c * D50_WHITE[i]),
+    /** @type {[number, number, number]} */ ([x, y, z].map((c, i) => c * D50_WHITE[i])),
   );
 }
 
@@ -123,7 +123,12 @@ function gamutMap(oklab) {
       continue;
     }
     clipped = clip(converted);
-    const error = deltaEOK(srgbToOklab(clipped), rectangular(current));
+    const error = deltaEOK(
+      srgbToOklab(clipped),
+      /** @type {[number, number, number]} */ (
+        rectangular(/** @type {[number, number, number]} */ (current))
+      ),
+    );
     if (error < JND) {
       if (JND - error < EPSILON) return clipped;
       minInGamut = false;
@@ -158,7 +163,13 @@ function toSrgb(value) {
       oklab = xyzToOklab(labToXyz([n(value.l), n(value.a), n(value.b)]));
       break;
     case 'lch':
-      oklab = xyzToOklab(labToXyz(rectangular([n(value.l), n(value.c), n(value.h)])));
+      oklab = xyzToOklab(
+        labToXyz(
+          /** @type {[number, number, number]} */ (
+            rectangular([n(value.l), n(value.c), n(value.h)])
+          ),
+        ),
+      );
       break;
     default:
       return null;

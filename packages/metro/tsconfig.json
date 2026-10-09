@@ -3,6 +3,7 @@
   "include": ["*.cjs", "*.d.ts", "css/*.cjs"],
   "compilerOptions": {
     "allowJs": true,
-    "checkJs": false
+    "checkJs": true,
+    "noImplicitAny": false
   }
 }
