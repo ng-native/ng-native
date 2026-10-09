@@ -547,3 +547,42 @@ describe('a tree changed at random, a few changes a commit', () => {
     });
   }
 });
+
+describe('the elements after one that changed', () => {
+  // A rule can read an element from one after it, `.row[aria-busy] ~ .note`, so those after are
+  // matched again. Where they match what they did, what is under them is left: only a rule that
+  // goes on under, and names them, reads that far.
+  const AFTER =
+    '.row { row-gap: 2px } .title { color: rgb(1, 1, 1) } .detail { opacity: 0.5 } ' +
+    '.badge { opacity: 0.25 } .row[aria-busy] ~ .note { opacity: 0.5 }';
+
+  it('are matched again themselves, and not what is under them', () => {
+    const s = scene(AFTER);
+    const last = s.tried(() => s.engine.setProp(s.rows[19]!, 'aria-busy', 'true'));
+    const first = s.tried(() => s.engine.setProp(s.rows[0]!, 'aria-busy', 'true'));
+    // Nineteen rows after the first, each tried against the one rule a row can match.
+    assert.equal(first, last + 19);
+  });
+
+  it('are styled again where they match another rule, and again where they no longer do', () => {
+    const s = scene(`${AFTER} .row[aria-busy] ~ .row { opacity: 0.75 }`);
+    s.engine.setProp(s.rows[0]!, 'aria-busy', 'true');
+    s.engine.commit();
+    assert.equal(s.props('row7')['opacity'], 0.75);
+    s.engine.setProp(s.rows[0]!, 'aria-busy', undefined);
+    s.engine.commit();
+    assert.ok(s.props('row7')['opacity'] == null);
+  });
+
+  it('are styled again with what is under them where a rule goes on under them', () => {
+    const s = scene(`${AFTER} .row[aria-busy] ~ .row .title { color: rgb(9, 9, 9) }`);
+    const colour = () => s.props('title7')['color'];
+    const before = colour();
+    s.engine.setProp(s.rows[0]!, 'aria-busy', 'true');
+    s.engine.commit();
+    assert.notDeepEqual(colour(), before);
+    s.engine.setProp(s.rows[0]!, 'aria-busy', undefined);
+    s.engine.commit();
+    assert.deepEqual(colour(), before);
+  });
+});
