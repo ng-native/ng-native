@@ -1704,22 +1704,26 @@ const TRANSLATORS = new Map([
       const last = layers[layers.length - 1];
       out.backgroundColor =
         last?.color === undefined ? 'transparent' : paintColour(last.color, property);
-      const images = layers.map((layer) => layer.image ?? { type: 'none' });
-      // No image is said too, and where one would be placed: an image a later rule gives is
-      // placed as this says, and not as a rule before it did.
-      out.experimental_backgroundImage = images.every((image) => image.type === 'none')
-        ? []
-        : backgroundImage(images, property);
+      // A layer of no image paints nothing, so one beside a layer that paints is passed over,
+      // with where it would have been placed. Where no layer paints, no image is said too, and
+      // where one would be placed: an image a later rule gives is placed as this says, and not
+      // as a rule before it did.
+      const painted = layers.filter((layer) => layer.image && layer.image.type !== 'none');
+      const placed = painted.length ? painted : layers;
+      out.experimental_backgroundImage = backgroundImage(
+        painted.map((layer) => layer.image),
+        property,
+      );
       out.experimental_backgroundPosition = backgroundPosition(
-        layers.map((layer) => layer.position),
+        placed.map((layer) => layer.position),
         property,
       );
       out.experimental_backgroundSize = backgroundSize(
-        layers.map((layer) => layer.size),
+        placed.map((layer) => layer.size),
         property,
       );
       out.experimental_backgroundRepeat = backgroundRepeat(
-        layers.map((layer) => layer.repeat),
+        placed.map((layer) => layer.repeat),
         property,
       );
     },

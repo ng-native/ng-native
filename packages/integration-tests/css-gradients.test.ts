@@ -252,6 +252,19 @@ describe('a gradient in the background shorthand', () => {
       assert.deepEqual(merged[key], initial[key], key);
     }
   });
+
+  it('passes over a layer that writes none beside one that paints', () => {
+    // A layer of no image draws nothing, and where it would be placed places nothing.
+    const one = styleOf('background: linear-gradient(red, blue) center / cover no-repeat');
+    assert.deepEqual(
+      styleOf('background: none, linear-gradient(red, blue) center / cover no-repeat'),
+      one,
+    );
+    assert.deepEqual(
+      styleOf('background: linear-gradient(red, blue) center / cover no-repeat, none'),
+      one,
+    );
+  });
 });
 
 describe('a gradient on a device', () => {
