@@ -137,6 +137,9 @@ describe('taking a node out through the renderer', () => {
     // And what is no node at all, as a document is not.
     renderer.removeChild({}, second);
     assert.deepEqual(holder!.children, []);
+    // And one that is in nothing is left as it is, whatever it is said to be in.
+    assert.doesNotThrow(() => renderer.removeChild({}, second));
+    assert.doesNotThrow(() => renderer.removeChild(holder, second));
     mounted.applicationRef.destroy();
   });
 });

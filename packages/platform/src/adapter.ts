@@ -161,10 +161,11 @@ class NativeRenderer implements Renderer2 {
     this.engine.insertBefore(parent, newChild, refChild);
   }
 
-  removeChild(parent: EngineNode | null, oldChild: EngineNode): void {
+  removeChild(_parent: EngineNode | null, oldChild: EngineNode): void {
     // From the parent it has, as Angular's DOM renderer takes a node out: the parent it is
-    // handed is whatever the caller had, and a library's may be no parent of it at all.
-    this.engine.removeChild(oldChild.parent ?? parent, oldChild);
+    // handed is whatever the caller had, and a library's may be no parent of it at all. One in
+    // no parent is out already.
+    if (oldChild.parent) this.engine.removeChild(oldChild.parent, oldChild);
   }
 
   selectRootElement(selectorOrNode: string | EngineNode): EngineNode {
