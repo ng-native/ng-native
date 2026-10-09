@@ -5,7 +5,7 @@
 import assert from 'node:assert/strict';
 import { after, before, describe, it } from 'node:test';
 import { fileURLToPath } from 'node:url';
-import type { Type } from '@angular/core';
+import { RendererFactory2, type Type } from '@angular/core';
 import { mount, type MountResult } from '@ng-native/platform';
 import type { EngineNode } from '@ng-native/fabric';
 import { createFakeFabric, type FakeFabric } from '@ng-native/testing';
@@ -113,6 +113,31 @@ describe('the renderer', () => {
 
     assert.equal(pressable.listeners, null, 'destroyNode cleared the listeners');
     assert.equal(findEngineNode(app.engine.root, 'pressable'), undefined, 'node detached');
+  });
+});
+
+describe('taking a node out through the renderer', () => {
+  it('takes it out of the parent it has, whatever parent it is handed', async () => {
+    // Angular's DOM renderer does: it is handed a parent for the sake of an older one that did
+    // not, and a library passes whatever it has to hand, the document for a node in the head.
+    const mod = await compileFixture(
+      fileURLToPath(new URL('./fixtures/features.ts', import.meta.url)),
+    );
+    const mounted = mount(1, mod['Features'] as Type<unknown>, createFakeFabric());
+    await settle();
+    const renderer = mounted.componentRef.injector.get(RendererFactory2).createRenderer(null, null);
+    const [holder, other, child, second] = ['view', 'view', 'view', 'view'].map(
+      (name) => renderer.createElement(name) as EngineNode,
+    );
+    renderer.appendChild(holder, child);
+    renderer.appendChild(holder, second);
+    renderer.removeChild(other, child);
+    assert.deepEqual(holder!.children, [second]);
+    assert.equal(child!.parent, null);
+    // And what is no node at all, as a document is not.
+    renderer.removeChild({}, second);
+    assert.deepEqual(holder!.children, []);
+    mounted.applicationRef.destroy();
   });
 });
 
