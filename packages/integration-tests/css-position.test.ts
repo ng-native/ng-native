@@ -16,10 +16,7 @@
  */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { createRequire } from 'node:module';
-
-const require = createRequire(import.meta.url);
-const { compileCss } = require('@ng-native/metro/css/compile.cjs');
+import { compileCss } from '@ng-native/testing';
 
 /** The property as it reaches a node, or the message explaining why it did not. */
 function compile(declaration: string): { value?: unknown; dropped?: string } {

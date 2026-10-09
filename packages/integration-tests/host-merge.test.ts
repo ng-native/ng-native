@@ -12,14 +12,10 @@
  */
 import assert from 'node:assert/strict';
 import { after, before, describe, it } from 'node:test';
-import { createRequire } from 'node:module';
 import type { Type } from '@angular/core';
-import { cleanup, render } from '@ng-native/testing';
+import { cleanup, compileCss, render } from '@ng-native/testing';
 import type { FakeFabricNode } from '@ng-native/testing';
 import { compileFixture } from './compile.ts';
-
-const require = createRequire(import.meta.url);
-const { compileCss } = require('@ng-native/metro/css/compile.cjs');
 
 const flatten = (n: FakeFabricNode[]): FakeFabricNode[] =>
   n.flatMap((x) => [x, ...flatten(x.children)]);

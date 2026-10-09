@@ -13,12 +13,8 @@
  */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { createRequire } from 'node:module';
 import { Engine, type EngineNode } from '@ng-native/fabric';
-import { createFakeFabric } from '@ng-native/testing';
-
-const require = createRequire(import.meta.url);
-const { compileCss } = require('@ng-native/metro/css/compile.cjs');
+import { compileCss, createFakeFabric } from '@ng-native/testing';
 
 /** `.g` holding `.p` holding `.c`, under `css`, with the child's committed props. */
 function scene(css: string, classes: { g?: string; p?: string; c?: string } = {}) {

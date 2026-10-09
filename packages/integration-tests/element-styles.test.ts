@@ -4,11 +4,8 @@
  */
 import assert from 'node:assert/strict';
 import { it } from 'node:test';
-import { createRequire } from 'node:module';
 import { ELEMENT_STYLES, ELEMENT_STYLES_CSS } from '@ng-native/fabric';
-
-const require = createRequire(import.meta.url);
-const { compileCss } = require('@ng-native/metro/css/compile.cjs');
+import { compileCss } from '@ng-native/testing';
 
 it('ELEMENT_STYLES is ELEMENT_STYLES_CSS, compiled', () => {
   const warnings: string[] = [];

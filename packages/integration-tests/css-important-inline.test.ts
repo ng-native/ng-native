@@ -6,12 +6,8 @@
  */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { createRequire } from 'node:module';
 import { Engine } from '@ng-native/fabric';
-import { createFakeFabric } from '@ng-native/testing';
-
-const require = createRequire(import.meta.url);
-const { compileCss } = require('@ng-native/metro/css/compile.cjs');
+import { compileCss, createFakeFabric } from '@ng-native/testing';
 
 /** A box with `classes` and an inline `style`, holding one child, under `css`. */
 function scene(css: string, classes: string, style: Record<string, unknown>) {

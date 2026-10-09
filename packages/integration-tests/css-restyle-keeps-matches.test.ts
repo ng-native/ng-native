@@ -11,13 +11,10 @@
  */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { createRequire } from 'node:module';
 import { Engine, type EngineNode, type StyleSheet } from '@ng-native/fabric';
 import { resetStyleStats, styleStats } from '../fabric/src/css.ts';
-import { createFakeFabric, type FakeFabricNode } from '@ng-native/testing';
+import { compileCss, createFakeFabric, type FakeFabricNode } from '@ng-native/testing';
 
-const require = createRequire(import.meta.url);
-const { compileCss } = require('@ng-native/metro/css/compile.cjs');
 const sheet = (css: string): StyleSheet => {
   const refused: string[] = [];
   const compiled = compileCss(css, 'app.css', {

@@ -7,13 +7,10 @@
  * but nothing names it.
  */
 import assert from 'node:assert/strict';
-import { createRequire } from 'node:module';
 import { describe, it } from 'node:test';
 import { Engine, type StyleSheet } from '@ng-native/fabric';
-import { createFakeFabric, type FakeFabricNode } from '@ng-native/testing';
+import { compileCss, createFakeFabric, type FakeFabricNode } from '@ng-native/testing';
 
-const require = createRequire(import.meta.url);
-const { compileCss } = require('@ng-native/metro/css/compile.cjs');
 const flatten = (n: FakeFabricNode[]): FakeFabricNode[] =>
   n.flatMap((x) => [x, ...flatten(x.children)]);
 

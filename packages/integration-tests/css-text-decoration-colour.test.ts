@@ -7,13 +7,9 @@
  * were read from Chrome, from the pixels of each line in a screenshot of the same markup.
  */
 import assert from 'node:assert/strict';
-import { createRequire } from 'node:module';
 import { describe, it } from 'node:test';
 import { Engine, type StyleSheet } from '@ng-native/fabric';
-import { createFakeFabric } from '@ng-native/testing';
-
-const require = createRequire(import.meta.url);
-const { compileCss } = require('@ng-native/metro/css/compile.cjs');
+import { compileCss, createFakeFabric } from '@ng-native/testing';
 
 const GREEN = 'rgb(0, 160, 0)';
 const BLUE = 'rgb(0, 0, 255)';

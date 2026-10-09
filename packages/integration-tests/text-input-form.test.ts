@@ -9,13 +9,9 @@
  */
 import assert from 'node:assert/strict';
 import { before, describe, it } from 'node:test';
-import { createRequire } from 'node:module';
 import type { Type } from '@angular/core';
-import { fireEvent, render, screen } from '@ng-native/testing';
+import { compileCss, fireEvent, render, screen } from '@ng-native/testing';
 import { compileFixture } from './compile.ts';
-
-const require = createRequire(import.meta.url);
-const { compileCss } = require('@ng-native/metro/css/compile.cjs');
 
 const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
 

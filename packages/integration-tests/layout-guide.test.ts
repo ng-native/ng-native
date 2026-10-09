@@ -5,16 +5,18 @@
  */
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import { afterEach, before, describe, it } from 'node:test';
 import type { Type } from '@angular/core';
-import { cleanup, render, type FakeFabricNode, type RenderOptions } from '@ng-native/testing';
+import {
+  cleanup,
+  render,
+  type FakeFabricNode,
+  type RenderOptions,
+  compileCss,
+} from '@ng-native/testing';
 import { compileSource } from './compile.ts';
 import { layOutTree } from './layout.ts';
-
-const require = createRequire(import.meta.url);
-const { compileCss } = require('@ng-native/metro/css/compile.cjs');
 
 const SCREEN = { width: 400, height: 800 };
 const LINE = 20;

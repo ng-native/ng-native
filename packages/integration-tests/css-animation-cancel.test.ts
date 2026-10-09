@@ -6,13 +6,9 @@
  * one that had already ended. The sequences were recorded from Chromium with the same rules.
  */
 import assert from 'node:assert/strict';
-import { createRequire } from 'node:module';
 import { describe, it } from 'node:test';
 import { Engine, type StyleSheet } from '@ng-native/fabric';
-import { createFakeFabric } from '@ng-native/testing';
-
-const require = createRequire(import.meta.url);
-const { compileCss } = require('@ng-native/metro/css/compile.cjs');
+import { compileCss, createFakeFabric } from '@ng-native/testing';
 
 const CSS =
   '@keyframes a { to { opacity: 0 } } @keyframes b { to { opacity: 0.5 } } ' +

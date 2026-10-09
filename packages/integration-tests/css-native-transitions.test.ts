@@ -7,13 +7,9 @@
  */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { createRequire } from 'node:module';
 import { Engine, type StyleSheet } from '@ng-native/fabric';
-import { createFakeFabric } from '@ng-native/testing';
+import { compileCss, createFakeFabric } from '@ng-native/testing';
 import { recorder } from './native-animated.ts';
-
-const require = createRequire(import.meta.url);
-const { compileCss } = require('@ng-native/metro/css/compile.cjs');
 
 type Config = Record<string, unknown> & { type: string };
 

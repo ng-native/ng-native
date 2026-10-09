@@ -6,13 +6,9 @@
  */
 import assert from 'node:assert/strict';
 import { it } from 'node:test';
-import { createRequire } from 'node:module';
 import { Engine } from '@ng-native/fabric';
 import { resetStyleStats, styleStats } from '../fabric/src/css.ts';
-import { createFakeFabric } from '@ng-native/testing';
-
-const require = createRequire(import.meta.url);
-const { compileCss } = require('@ng-native/metro/css/compile.cjs');
+import { compileCss, createFakeFabric } from '@ng-native/testing';
 
 const CSS =
   '.a { color: red } [data-on] .b { width: 1px } .a:not([aria-busy]) .b { height: 2px } #named { opacity: 0.5 }';

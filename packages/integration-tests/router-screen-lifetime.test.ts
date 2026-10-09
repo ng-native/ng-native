@@ -13,21 +13,25 @@
  */
 import assert from 'node:assert/strict';
 import { after, before, beforeEach, describe, it } from 'node:test';
-import { createRequire } from 'node:module';
 import { setFlagsFromString } from 'node:v8';
 import { runInNewContext } from 'node:vm';
 import type { Type, WritableSignal } from '@angular/core';
 import type { Routes } from '@angular/router';
 import { Engine, registerHoist, type EngineNode } from '@ng-native/fabric';
-import { cleanup, createFakeFabric, render, settle, type FakeFabricNode } from '@ng-native/testing';
+import {
+  cleanup,
+  createFakeFabric,
+  render,
+  settle,
+  type FakeFabricNode,
+  compileCss,
+} from '@ng-native/testing';
 import { NativeNavigation } from '../router/src/native-navigation.ts';
 import { provideNativeRouter } from '../router/src/provide-native-router.ts';
 import { compileFixture } from './compile.ts';
 
 setFlagsFromString('--expose-gc');
 const gc = runInNewContext('gc') as () => void;
-const require = createRequire(import.meta.url);
-const { compileCss } = require('@ng-native/metro/css/compile.cjs');
 
 /** A macrotask between each pass, because a `WeakRef` holds its target until the job ends. */
 async function collect(): Promise<void> {

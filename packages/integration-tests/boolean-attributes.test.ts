@@ -7,13 +7,9 @@ import assert from 'node:assert/strict';
 import { before, describe, it } from 'node:test';
 import type { Type } from '@angular/core';
 import { mount } from '@ng-native/platform';
-import { createFakeFabric, type FakeFabricNode } from '@ng-native/testing';
-import { createRequire } from 'node:module';
+import { compileCss, createFakeFabric, type FakeFabricNode } from '@ng-native/testing';
 import { Engine } from '@ng-native/fabric';
 import { compileFixture } from './compile.ts';
-
-const require = createRequire(import.meta.url);
-const { compileCss } = require('@ng-native/metro/css/compile.cjs');
 
 describe('a boolean prop written as an attribute', () => {
   let props: (id: string) => Record<string, unknown>;

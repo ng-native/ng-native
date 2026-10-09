@@ -9,12 +9,13 @@
  */
 import assert from 'node:assert/strict';
 import { afterEach, beforeEach, describe, it } from 'node:test';
-import { createRequire } from 'node:module';
 import { Engine, type EngineNode } from '@ng-native/fabric';
-import { createFakeFabric, type FakeFabric, type FakeFabricNode } from '@ng-native/testing';
-
-const require = createRequire(import.meta.url);
-const { compileCss } = require('@ng-native/metro/css/compile.cjs');
+import {
+  compileCss,
+  createFakeFabric,
+  type FakeFabric,
+  type FakeFabricNode,
+} from '@ng-native/testing';
 
 /** A committed subtree as nested view names, with a text's content in quotes. */
 function shape(node: FakeFabricNode): unknown {

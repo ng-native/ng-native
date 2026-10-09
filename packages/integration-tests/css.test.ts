@@ -3,13 +3,16 @@
  */
 import assert from 'node:assert/strict';
 import { afterEach, before, beforeEach, describe, it } from 'node:test';
-import { createRequire } from 'node:module';
 import type { Type } from '@angular/core';
-import { cleanup, render, settle, type FakeFabric, type FakeFabricNode } from '@ng-native/testing';
+import {
+  cleanup,
+  render,
+  settle,
+  type FakeFabric,
+  type FakeFabricNode,
+  compileCss,
+} from '@ng-native/testing';
 import { compileFixture } from './compile.ts';
-
-const require = createRequire(import.meta.url);
-const { compileCss } = require('@ng-native/metro/css/compile.cjs');
 
 // No query by arbitrary prop presence or bare view name in the shared query matrix, so `card()`
 // and `label()` keep a local `flatten` over the committed tree.

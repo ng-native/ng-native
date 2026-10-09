@@ -8,12 +8,8 @@
  */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { createRequire } from 'node:module';
 import { Engine } from '@ng-native/fabric';
-import { createFakeFabric } from '@ng-native/testing';
-
-const require = createRequire(import.meta.url);
-const { compileCss } = require('@ng-native/metro/css/compile.cjs');
+import { compileCss, createFakeFabric } from '@ng-native/testing';
 
 const RED = 'rgb(255, 0, 0)';
 const BLUE = 'rgb(0, 0, 255)';

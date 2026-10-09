@@ -11,11 +11,8 @@
  */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { createRequire } from 'node:module';
 import { StyleResolver, type StyleTarget } from '@ng-native/fabric';
-
-const require = createRequire(import.meta.url);
-const { compileCss } = require('@ng-native/metro/css/compile.cjs');
+import { compileCss } from '@ng-native/testing';
 
 function resolvedStyle(css: string): Record<string, unknown> {
   const target = (parent: StyleTarget | null, own: string[]): StyleTarget => ({

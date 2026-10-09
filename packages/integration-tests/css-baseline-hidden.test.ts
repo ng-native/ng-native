@@ -6,13 +6,9 @@
  */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { createRequire } from 'node:module';
 import { Engine, type EngineNode } from '@ng-native/fabric';
-import { createFakeFabric, type FakeFabricNode } from '@ng-native/testing';
+import { compileCss, createFakeFabric, type FakeFabricNode } from '@ng-native/testing';
 import { layOutTree } from './layout.ts';
-
-const require = createRequire(import.meta.url);
-const { compileCss } = require('@ng-native/metro/css/compile.cjs');
 
 const CSS =
   '.row { display: flex; flex-direction: row; align-items: baseline; width: 300px }' +

@@ -4,16 +4,13 @@
  * picture, which stays square.
  */
 import type { Type } from '@angular/core';
-import { cleanup, render, screen, type FakeFabricNode } from '@ng-native/testing';
+import { cleanup, render, screen, type FakeFabricNode, compileCss } from '@ng-native/testing';
 import assert from 'node:assert/strict';
-import { createRequire } from 'node:module';
 import { before, describe, it } from 'node:test';
 import { compileFixture } from './compile.ts';
 
-const require = createRequire(import.meta.url);
 const flatten = (nodes: FakeFabricNode[]): FakeFabricNode[] =>
   nodes.flatMap((node) => [node, ...flatten(node.children)]);
-const { compileCss } = require('@ng-native/metro/css/compile.cjs');
 
 describe('an image', () => {
   let Host: Type<unknown>;

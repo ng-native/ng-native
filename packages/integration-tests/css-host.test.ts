@@ -8,13 +8,15 @@
 import assert from 'node:assert/strict';
 import { after, before, describe, it } from 'node:test';
 import type { Type } from '@angular/core';
-import { createRequire } from 'node:module';
 import { StyleResolver, matches, type StyleTarget } from '@ng-native/fabric';
-import { cleanup, render, type FakeFabric, type FakeFabricNode } from '@ng-native/testing';
+import {
+  cleanup,
+  render,
+  type FakeFabric,
+  type FakeFabricNode,
+  compileCss,
+} from '@ng-native/testing';
 import { compileFixture } from './compile.ts';
-
-const require = createRequire(import.meta.url);
-const { compileCss } = require('@ng-native/metro/css/compile.cjs');
 
 const flatten = (n: FakeFabricNode[]): FakeFabricNode[] =>
   n.flatMap((x) => [x, ...flatten(x.children)]);

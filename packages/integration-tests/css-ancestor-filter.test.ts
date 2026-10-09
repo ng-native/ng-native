@@ -12,13 +12,9 @@
  */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { createRequire } from 'node:module';
 import { Engine, type EngineNode } from '@ng-native/fabric';
-import { createFakeFabric } from '@ng-native/testing';
+import { compileCss, createFakeFabric } from '@ng-native/testing';
 import { resetStyleStats, styleStats } from '../fabric/src/css.ts';
-
-const require = createRequire(import.meta.url);
-const { compileCss } = require('@ng-native/metro/css/compile.cjs');
 
 const OTHERS = Array.from({ length: 20 }, (_, at) => `.x${at} .c { width: ${at + 1}px }`).join(' ');
 

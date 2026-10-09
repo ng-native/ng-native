@@ -7,15 +7,11 @@
  * the same rules and inline style.
  */
 import assert from 'node:assert/strict';
-import { createRequire } from 'node:module';
 import { describe, it } from 'node:test';
 import type { Type } from '@angular/core';
 import { Engine, type StyleSheet } from '@ng-native/fabric';
-import { cleanup, createFakeFabric, render, screen } from '@ng-native/testing';
+import { cleanup, compileCss, createFakeFabric, render, screen } from '@ng-native/testing';
 import { compileFixture } from './compile.ts';
-
-const require = createRequire(import.meta.url);
-const { compileCss } = require('@ng-native/metro/css/compile.cjs');
 
 const SHEET =
   '.outer { color: rgb(0, 0, 1); font-size: 10px } .inherit { color: inherit } ' +

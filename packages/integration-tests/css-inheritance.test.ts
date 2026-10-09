@@ -15,13 +15,10 @@ import {
   render,
   type FakeFabric,
   type FakeFabricNode,
+  compileCss,
 } from '@ng-native/testing';
 import { Engine, type StyleSheet } from '@ng-native/fabric';
-import { createRequire } from 'node:module';
 import { compileFixture } from './compile.ts';
-
-const require = createRequire(import.meta.url);
-const { compileCss } = require('@ng-native/metro/css/compile.cjs');
 
 const flatten = (n: FakeFabricNode[]): FakeFabricNode[] =>
   n.flatMap((x) => [x, ...flatten(x.children)]);

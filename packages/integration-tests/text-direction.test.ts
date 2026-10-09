@@ -11,13 +11,9 @@
 import assert from 'node:assert/strict';
 import { afterEach, before, describe, it } from 'node:test';
 import type { Type } from '@angular/core';
-import { createRequire } from 'node:module';
 import { Engine } from '@ng-native/fabric';
-import { cleanup, createFakeFabric, render, settle } from '@ng-native/testing';
+import { cleanup, compileCss, createFakeFabric, render, settle } from '@ng-native/testing';
 import { compileFixture } from './compile.ts';
-
-const require = createRequire(import.meta.url);
-const { compileCss } = require('@ng-native/metro/css/compile.cjs');
 
 interface Fixture {
   inline: { set(value: Record<string, string>): void };

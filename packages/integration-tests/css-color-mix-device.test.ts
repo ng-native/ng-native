@@ -11,11 +11,8 @@
  */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { createRequire } from 'node:module';
 import { StyleResolver, type StyleTarget } from '@ng-native/fabric';
-
-const require = createRequire(import.meta.url);
-const { compileCss } = require('@ng-native/metro/css/compile.cjs');
+import { compileCss } from '@ng-native/testing';
 
 /** What an element wearing `classes` under a root wearing `rootClasses` resolves to. */
 function resolvedStyle(css: string, classes: string[], rootClasses: string[] = []) {

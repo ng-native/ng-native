@@ -4,7 +4,6 @@
  */
 import assert from 'node:assert/strict';
 import { beforeEach, describe, it } from 'node:test';
-import { createRequire } from 'node:module';
 import { Engine, type EngineNode } from '@ng-native/fabric';
 import {
   cleanup,
@@ -13,6 +12,7 @@ import {
   render,
   screen,
   type FakeFabric,
+  compileCss,
 } from '@ng-native/testing';
 
 describe('responder negotiation', () => {
@@ -300,8 +300,6 @@ describe('a press let go', () => {
   it('is committed as no longer pressed before its handler is told', () => {
     // What a handler makes is for the render pass after it to commit whole. Committed with
     // the press, a dialog it opens is drawn a frame before anything has placed it.
-    const require = createRequire(import.meta.url);
-    const { compileCss } = require('@ng-native/metro/css/compile.cjs');
     const fabric = createFakeFabric();
     const engine = new Engine(fabric, 1, {
       globalStyles: compileCss('.p { opacity: 1 } .p:active { opacity: 0.5 }', 'app.css'),
