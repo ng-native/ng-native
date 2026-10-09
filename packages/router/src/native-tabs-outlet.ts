@@ -37,9 +37,11 @@ import {
   computed,
   contentChildren,
   createComponent,
+  effect,
   inject,
   input,
   signal,
+  untracked,
   type AfterContentInit,
   type ComponentRef,
   type EnvironmentInjector,
@@ -181,6 +183,13 @@ export class NativeTabsOutlet implements RouterOutletContract, AfterContentInit 
       'tabSelected',
       (event: { nativeEvent?: TabSelection }) => this.onNativeSelect(event?.nativeEvent),
     );
+
+    // An `@if` that takes a tab away and brings it back makes a new element: its page follows it
+    // at once, since the tab may be the one showing, with no tap or navigation to read them on.
+    effect(() => {
+      this.declared();
+      if (this.entries.length > 0) untracked(() => this.readTabs());
+    });
 
     // A push inside a tab's own stack reuses the tab's route, so this outlet is never activated
     // for it; the router's navigation is the only sign. Without this, coming back to the tab

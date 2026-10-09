@@ -36,6 +36,11 @@ describe('a tab added after start', () => {
   const host = () => flatten(fabric.committed).find((node) => node.viewName === 'RNSTabsHostIOS')!;
   const selected = () =>
     (host().props['navStateRequest'] as { selectedScreenKey: string }).selectedScreenKey;
+  /** The text nodes of the page in the tab the bar has for `key`. */
+  const pageOf = (key: string) =>
+    flatten(host().children.filter((screen) => screen.props['screenKey'] === key)).filter(
+      (node) => node.viewName === 'RawText',
+    );
   const tap = async (key: string) => {
     await fireEvent(host(), 'tabSelected', { selectedScreenKey: key, provenance: ++provenance });
     await idle();
@@ -72,10 +77,6 @@ describe('a tab added after start', () => {
   });
 
   it('shows the page of a tab taken away and added again, in the tab it has now', async () => {
-    const pageOf = (key: string) =>
-      flatten(host().children.filter((screen) => screen.props['screenKey'] === key)).filter(
-        (node) => node.viewName === 'RawText',
-      );
     await tap('beta');
     assert.equal(pageOf('beta').length, 1);
     await tap('home');
@@ -87,6 +88,16 @@ describe('a tab added after start', () => {
     await tap('beta');
     assert.equal(router.url, '/beta');
     assert.equal(pageOf('beta').length, 1, 'the page is in the tab that is in the bar');
+  });
+
+  it('shows the page of the tab in front, taken away and added again while it is showing', async () => {
+    await tap('beta');
+    betaEnabled.set(false);
+    await idle();
+    betaEnabled.set(true);
+    await idle();
+    assert.equal(router.url, '/beta');
+    assert.equal(pageOf('beta').length, 1, 'with no tap or navigation to read the tabs again');
   });
 
   it('opens a tab a flag added after start, on a navigation', async () => {
