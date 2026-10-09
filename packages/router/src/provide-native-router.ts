@@ -18,6 +18,7 @@ import {
   NavigationCancellationCode,
   NavigationEnd,
   NavigationError,
+  NavigationSkipped,
   RouteReuseStrategy,
   Router,
   provideRouter,
@@ -309,6 +310,8 @@ function isEnd(event: unknown): boolean {
   return (
     event instanceof NavigationEnd ||
     event instanceof NavigationCancel ||
-    event instanceof NavigationError
+    event instanceof NavigationError ||
+    // A url the app's `UrlHandlingStrategy` leaves to something else: it ends with no page.
+    event instanceof NavigationSkipped
   );
 }
