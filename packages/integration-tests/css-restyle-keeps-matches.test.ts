@@ -564,6 +564,28 @@ describe('the elements after one that changed', () => {
     assert.equal(first, last + 19);
   });
 
+  it('keep what is under them where a rule reads a place from under an element they are not in', () => {
+    // A library's rule for the first thing in its own list, whatever that is, names no class
+    // an element could be told from: it is told from the list it would have to be in.
+    const s = scene(`${AFTER} .list > :first-child:not(.x) .title { color: rgb(9, 9, 9) }`);
+    const last = s.tried(() => s.engine.setProp(s.rows[19]!, 'aria-busy', 'true'));
+    const first = s.tried(() => s.engine.setProp(s.rows[0]!, 'aria-busy', 'true'));
+    assert.equal(first, last + 19);
+  });
+
+  it('are styled again with what is under them in the list such a rule is for', () => {
+    const s = scene(
+      `${AFTER} .panel > :not(.x):first-child .title { color: rgb(9, 9, 9) } ` +
+        '.panel > [aria-busy] ~ :not(.x) .detail { opacity: 0.75 }',
+    );
+    s.engine.setProp(s.rows[0]!, 'aria-busy', 'true');
+    s.engine.commit();
+    assert.equal(s.props('detail7')['opacity'], 0.75);
+    s.engine.setProp(s.rows[0]!, 'aria-busy', undefined);
+    s.engine.commit();
+    assert.equal(s.props('detail7')['opacity'], 0.5);
+  });
+
   it('are styled again where they match another rule, and again where they no longer do', () => {
     const s = scene(`${AFTER} .row[aria-busy] ~ .row { opacity: 0.75 }`);
     s.engine.setProp(s.rows[0]!, 'aria-busy', 'true');
