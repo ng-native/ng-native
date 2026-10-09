@@ -101,6 +101,25 @@ function expoRouterToolbarView(view: string): string {
 }
 
 /**
+ * Ask React Native for react-native-screens' native module, which is what makes it.
+ *
+ * `ScreensModule` on Android installs, as it is made, the listener that starts a removed screen's
+ * transition before its views are unmounted: without it a sheet is emptied and then slides away,
+ * and a popped screen leaves as a blank one. React Native makes a module when JavaScript first
+ * asks, and react-native-screens asks as its own JavaScript is imported (`fabric/
+ * NativeScreensModule`), none of which is imported here. Through the two globals React Native's
+ * own `TurboModuleRegistry` reads, in its order, so nothing of React Native is imported either:
+ * the second is the only one there is without the bridge.
+ */
+function loadScreensModule(): void {
+  const host = globalThis as {
+    __turboModuleProxy?: (name: string) => unknown;
+    nativeModuleProxy?: Record<string, unknown>;
+  };
+  void (host.__turboModuleProxy?.('RNSModule') ?? host.nativeModuleProxy?.['RNSModule']);
+}
+
+/**
  * Call once at startup, before the first navigation.
  *
  * The app must also have `react-native-screens` installed so the native side registers these
@@ -110,6 +129,7 @@ function expoRouterToolbarView(view: string): string {
  * it declared the dependency at all, and why an app that forgets it fails only once it ships.
  */
 export function registerScreenComponents(): void {
+  loadScreensModule();
   for (const [element, [viewName, defaults]] of Object.entries(SCREEN_VIEW_NAMES)) {
     registerViewName(element, viewName, defaults as Record<string, unknown> | undefined);
   }
