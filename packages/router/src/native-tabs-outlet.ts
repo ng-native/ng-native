@@ -88,7 +88,8 @@ function reaches(routes: readonly Route[], segments: readonly string[]): boolean
 }
 
 interface TabEntry {
-  readonly tab: NativeTab;
+  /** The element in the bar now: an `@if` can take it away and bring another back. */
+  tab: NativeTab;
   /** The key native identifies this tab by: its path, unique among the bar's items. */
   readonly key: string;
   /** The url this tab was last on, so returning to it returns where the user left. */
@@ -232,7 +233,7 @@ export class NativeTabsOutlet implements RouterOutletContract, AfterContentInit 
     else this.activateWith(context.route, context.injector);
   }
 
-  /** The tabs in the bar, in template order. Exposed for tests. */
+  /** The tabs in the bar, in the order they were first in it. Exposed for tests. */
   get tabKeys(): string[] {
     return this.readTabs().map((entry) => entry.key);
   }
@@ -385,7 +386,8 @@ export class NativeTabsOutlet implements RouterOutletContract, AfterContentInit 
 
   /**
    * Take the bar from the `<native-tab>` elements in the content, adding any that appeared since
-   * the last read, as one an `@if` shows once a feature flag turns on.
+   * the last read, as one an `@if` shows once a feature flag turns on, and following one that was
+   * taken away and brought back.
    *
    * On demand rather than in a lifecycle hook, because the router activates a child route during
    * this component's creation, before any hook has run - but after the content nodes themselves
@@ -396,7 +398,11 @@ export class NativeTabsOutlet implements RouterOutletContract, AfterContentInit 
     const children = this.route.routeConfig?.children ?? [];
     for (const tab of this.declared()) {
       const key = tab.path();
-      if (this.entries.some((entry) => entry.key === key)) continue;
+      const known = this.entries.find((entry) => entry.key === key);
+      if (known) {
+        this.move(known, tab);
+        continue;
+      }
       this.entries.push({
         tab,
         key,
@@ -426,6 +432,17 @@ export class NativeTabsOutlet implements RouterOutletContract, AfterContentInit 
     // Before the first navigation nothing is selected, which is not a state a tab bar has.
     if (first) this.request(this.entries[0]!);
     return this.entries;
+  }
+
+  /**
+   * Give an entry the `<native-tab>` now declared for its path, when that is not the one it was
+   * read with: an `@if` that took the tab away and brought it back made a new element, with a new
+   * screen. The page goes over to that screen as it is, so the tab comes back where it was left.
+   */
+  private move(entry: TabEntry, tab: NativeTab): void {
+    if (entry.tab === tab) return;
+    entry.tab = tab;
+    if (entry.ref) this.renderer.appendChild(tab.screen, entry.ref.location.nativeElement);
   }
 
   /**

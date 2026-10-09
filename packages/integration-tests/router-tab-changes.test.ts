@@ -71,6 +71,24 @@ describe('a tab added after start', () => {
     assert.equal(selected(), 'beta');
   });
 
+  it('shows the page of a tab taken away and added again, in the tab it has now', async () => {
+    const pageOf = (key: string) =>
+      flatten(host().children.filter((screen) => screen.props['screenKey'] === key)).filter(
+        (node) => node.viewName === 'RawText',
+      );
+    await tap('beta');
+    assert.equal(pageOf('beta').length, 1);
+    await tap('home');
+
+    betaEnabled.set(false);
+    await idle();
+    betaEnabled.set(true);
+    await idle();
+    await tap('beta');
+    assert.equal(router.url, '/beta');
+    assert.equal(pageOf('beta').length, 1, 'the page is in the tab that is in the bar');
+  });
+
   it('opens a tab a flag added after start, on a navigation', async () => {
     assert.equal(await router.navigateByUrl('/beta'), true);
     await idle();
