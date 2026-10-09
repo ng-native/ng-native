@@ -12,6 +12,7 @@
     "test": "nx run-many -t test",
     "check:bundle": "nx run canary:check-bundle",
     "affected": "nx affected -t lint typecheck test",
+    "verify": "pnpm format:check && nx affected -t lint typecheck build test check-bundle --exclude=documentation",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "coverage": "node scripts/coverage.mjs --min 95",

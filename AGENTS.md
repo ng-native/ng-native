@@ -27,6 +27,7 @@ pnpm lint                         # through Nx, never bare eslint
 pnpm typecheck
 pnpm test
 pnpm affected                     # lint, typecheck and test for what a change can have broken
+pnpm verify                       # that, with the format check, builds and bundle check CI runs
 pnpm format:check
 pnpm nx run <project>:<target>    # one project, e.g. @ng-native/integration-tests:test
 pnpm export                       # release bundles of every example, after CSS or Metro changes

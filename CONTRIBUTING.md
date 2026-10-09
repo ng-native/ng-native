@@ -25,8 +25,13 @@ pnpm coverage       # same, with a 95% coverage floor enforced
 pnpm format         # prettier --write .
 pnpm format:check   # prettier --check ., what CI runs
 pnpm affected       # lint, typecheck and test for what a change can have broken
+pnpm verify         # that, with the format check, the builds and the release bundle check CI runs
 pnpm export         # a release bundle of every example for iOS and Android, one at a time
 ```
+
+`pnpm verify` is the one to run before opening a pull request: it is every check CI makes of a
+change but `pnpm coverage` and the native builds. `pnpm coverage` runs the browser suite too, which
+needs Chromium once: `pnpm --filter @ng-native/web exec playwright install chromium`.
 
 Lint must go through `nx run-many -t lint` (what `pnpm lint` does): `@nx/enforce-module-boundaries`
 needs the project graph and silently enforces nothing without it, so running `eslint` bare will not
