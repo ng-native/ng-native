@@ -20,6 +20,7 @@ import {
   placeReadElsewhere,
   siblingReach,
   type Compound,
+  type PlaceReader,
   type Conditions,
   type DeferredDeclaration,
   type StyleCache,
@@ -2104,6 +2105,9 @@ function noteTouches(node: EngineNode, style: StyleCache | null): void {
   if (value === 'none') node.propsDirty = true;
 }
 
+const hasClasses = (node: EngineNode, names: readonly string[]): boolean =>
+  names.every((name) => node.classes?.has(name));
+
 /** Whether `node` is `ancestor` or somewhere under it. */
 function isWithin(node: EngineNode | null, ancestor: EngineNode): boolean {
   for (let at = node; at; at = at.parent) if (at === ancestor) return true;
@@ -2745,7 +2749,7 @@ export class Engine implements HostEngine {
   /** Whether one of them reaches the children before it. */
   private structuralBefore = false;
   /** The compounds of theirs that read an element's place from under it. See `markPlace`. */
-  private readonly placeElsewhere = new Set<Compound>();
+  private readonly placeElsewhere = new Set<PlaceReader>();
   /** The sheets `watchStructure` has read, which it is asked about once an element. */
   private readonly watchedStructure = new WeakSet<StyleSheet>();
   /** Whether any sheet uses `:has()`. See `markBeneath`. */
@@ -3628,9 +3632,9 @@ export class Engine implements HostEngine {
   private markLaterSiblings(node: EngineNode): void {
     const siblings = node.parent?.children;
     if (!siblings) return;
-    for (let i = siblings.indexOf(node) + 1; i < siblings.length; i++) {
-      siblings[i]!.styleDirty = true;
-    }
+    // Each matched again, and left as it was with all under it where it matches what it did:
+    // see `markPlace`.
+    for (let i = siblings.indexOf(node) + 1; i < siblings.length; i++) this.markPlace(siblings[i]!);
   }
 
   /** `node`'s child list changed: `moved` came into it at `at`, or went out of it from there. */
@@ -3700,8 +3704,13 @@ export class Engine implements HostEngine {
    * which every such compound it could be asks for: a compound with none could be any element.
    */
   private placeReadFromUnder(node: EngineNode): boolean {
-    for (const compound of this.placeElsewhere) {
-      if (compound.classes.every((name) => node.classes?.has(name))) return true;
+    for (const { compound, above, child } of this.placeElsewhere) {
+      if (!hasClasses(node, compound.classes)) continue;
+      // And by what the rule has it in, which a compound with no class is told from.
+      if (!above?.length) return true;
+      for (let up = node.parent; up; up = child ? null : up.parent) {
+        if (hasClasses(up, above)) return true;
+      }
     }
     return false;
   }

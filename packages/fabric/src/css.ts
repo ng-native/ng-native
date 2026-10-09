@@ -1195,7 +1195,17 @@ function countSiblings(
   }
 }
 
-const PLACE_ELSEWHERE = new WeakMap<StyleSheet, readonly Compound[]>();
+/**
+ * A compound whose element's place is read from another element, with the classes the rule asks
+ * of what that element is in: its parent's where `child`, and otherwise of anything above it.
+ */
+export interface PlaceReader {
+  readonly compound: Compound;
+  readonly above?: readonly string[];
+  readonly child?: boolean;
+}
+
+const PLACE_ELSEWHERE = new WeakMap<StyleSheet, readonly PlaceReader[]>();
 
 /**
  * Each compound in a sheet whose element's place among its siblings is read from another
@@ -1210,10 +1220,10 @@ const PLACE_ELSEWHERE = new WeakMap<StyleSheet, readonly Compound[]>();
  * A place read by the element a rule styles, or by the elements before it that the rule steps
  * from (`.a:first-child + .b`), is that element's own: the rules it matches say.
  */
-export function placeReadElsewhere(sheet: StyleSheet): readonly Compound[] {
+export function placeReadElsewhere(sheet: StyleSheet): readonly PlaceReader[] {
   let known = PLACE_ELSEWHERE.get(sheet);
   if (known === undefined) {
-    const elsewhere: Compound[] = [];
+    const elsewhere: PlaceReader[] = [];
     for (const rule of sheet.rules) {
       // A run of compounds joined by `+` and `~` is one child list. Every run but the last is
       // above the element styled, and its last compound is the element the rest hangs under.
@@ -1223,9 +1233,13 @@ export function placeReadElsewhere(sheet: StyleSheet): readonly Compound[] {
         const joined = rule.combinators[at];
         if (joined === 'next-sibling' || joined === 'later-sibling') return;
         const run = rule.compounds.slice(start, at + 1);
+        // What the run is in: the compound before it, which every element of it is under.
+        const list = rule.compounds[start - 1];
+        const child = rule.combinators[start - 1] === 'child';
         start = at + 1;
         const above = at < rule.compounds.length - 1;
-        if (above && (run.length > 1 || run.some(readsPlace))) elsewhere.push(compound);
+        if (above && (run.length > 1 || run.some(readsPlace)))
+          elsewhere.push({ compound, above: list?.classes, child });
       });
     }
     known = elsewhere;
@@ -1245,13 +1259,13 @@ function readsPlace(compound: Compound): boolean {
  * Collect the compounds nested in one that are matched against an element above the one it is
  * matched against, and ask about that element's place: `:is(.group:first-child *)`.
  */
-function placeReadAbove(compound: Compound, elsewhere: Compound[]): void {
+function placeReadAbove(compound: Compound, elsewhere: PlaceReader[]): void {
   const above = [
     ...(compound.ancestors ?? []),
     ...(compound.parents ?? []),
     ...(compound.hostContext ?? []),
   ];
-  for (const inner of above) if (readsPlace(inner)) elsewhere.push(inner);
+  for (const inner of above) if (readsPlace(inner)) elsewhere.push({ compound: inner });
   for (const inner of nestedCompounds(compound)) placeReadAbove(inner, elsewhere);
 }
 
