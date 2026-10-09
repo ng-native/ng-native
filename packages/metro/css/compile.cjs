@@ -1694,7 +1694,28 @@ function customToken(name, parts, context) {
   if (value === null || Object.keys(value).length === 0) {
     throw new CssUnsupported(`${context}: '${name}' has a value native cannot express in any form`);
   }
-  return value;
+  const lengths = lengthsOf(parts, context);
+  return lengths ? { ...value, lengths } : value;
+}
+
+/**
+ * A value of two to four lengths, each as a single length is read: `0.5rem 0.75rem`, which a
+ * design token holds for a `padding` or a `border-width` to take a value a side from. Nothing
+ * where any part of it is anything but a length the device has without working it out.
+ */
+function lengthsOf(parts, context) {
+  const each = (parts ?? []).filter((part) => part?.value?.type !== 'white-space');
+  if (each.length < 2 || each.length > 4 || each.length * 2 - 1 !== parts.length) return null;
+  const lengths = each.map((part) => {
+    try {
+      return tokenValue([part], context)?.length;
+    } catch {
+      return undefined;
+    }
+  });
+  return lengths.every((length) => typeof length === 'number' || typeof length === 'string')
+    ? lengths
+    : null;
 }
 
 /** A `--x` definition, or a property lightningcss does not know but React Native supports. */

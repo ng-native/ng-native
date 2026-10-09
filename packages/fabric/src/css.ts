@@ -180,6 +180,11 @@ export interface TokenValue {
    * length is read from `length` instead.
    */
   readonly lineHeight?: { readonly __defer: DeferredDeclaration['compute'] };
+  /**
+   * Two to four lengths, which a shorthand of sides or corners takes a value each from:
+   * `padding: var(--list-padding)` of `--list-padding: 0.25rem 0.5rem`.
+   */
+  readonly lengths?: readonly (number | string)[];
   /** A whole shadow list, in the processed shape `boxShadow` takes. */
   readonly shadow?: readonly unknown[];
   /** One filter function, as the one-entry list `filter` takes: a slot of Tailwind's filters. */
@@ -4071,6 +4076,10 @@ function referenced(
   const names = [declaration.reference!, ...(declaration.alternatives ?? [])];
   const token = firstSet(names, tokens);
   let value = token ? tokenForm(token, declaration.kind!) : fallbackOf(declaration, tokens);
+  // A token of several lengths, for a shorthand that takes one a side: see `writeSettled`.
+  if (value === undefined && token?.lengths && declaration.kind === 'length') {
+    return declaration.adjust ? undefined : new EachSide(token.lengths);
+  }
   // `calc(var(--n) * 1px)`: the arithmetic gives a unitless token its unit, which is the usual
   // way to turn a count into a length. So it reads the bare number, and a length is no such thing.
   if (token && declaration.adjust?.number && declaration.kind === 'length') {
@@ -4122,6 +4131,40 @@ function tokenForm(token: TokenValue, kind: TokenKind): unknown {
   return value === undefined && kind === 'color' && isCurrentColour(token) ? CURRENT_COLOUR : value;
 }
 
+/** A corner's place among four as CSS writes them, before a side's: `borderTopLeftRadius`. */
+const PLACES: readonly (readonly [RegExp, number])[] = [
+  [/TopLeft|TopStart|StartStart/, 0],
+  [/TopRight|TopEnd|StartEnd/, 1],
+  [/BottomRight|BottomEnd|EndEnd/, 2],
+  [/BottomLeft|BottomStart|EndStart/, 3],
+  [/Top/, 0],
+  [/Right|End/, 1],
+  [/Bottom/, 2],
+  [/Left|Start/, 3],
+];
+
+/** Where a side or a corner comes in a shorthand of four, whatever order its props are kept in. */
+const placeOf = (prop: string): number => PLACES.find(([named]) => named.test(prop))?.[1] ?? 0;
+
+/** The lengths of a token that holds several, for the props of a shorthand to take one each. */
+class EachSide {
+  readonly lengths: readonly (number | string)[];
+  constructor(lengths: readonly (number | string)[]) {
+    this.lengths = lengths;
+  }
+
+  /**
+   * The length for one of a shorthand's four props, as CSS gives them: two are a pair repeated,
+   * and of three the left takes the right's. Nothing for a property that is not such a
+   * shorthand: a token of several lengths is no value for it, and it is unset.
+   */
+  at(props: readonly string[], prop: string): number | string | undefined {
+    if (props.length !== 4) return undefined;
+    const index = placeOf(prop);
+    return this.lengths[index] ?? this.lengths[index - 2] ?? this.lengths[0];
+  }
+}
+
 /** What a deferred declaration settled to, written to one of its props. */
 function writeSettled(
   own: Record<string, unknown>,
@@ -4130,7 +4173,8 @@ function writeSettled(
   settled: unknown,
   layers: BackgroundLayers | undefined,
 ): void {
-  const value = settled ?? declaration.unset;
+  const one = settled instanceof EachSide ? settled.at(declaration.props, prop) : settled;
+  const value = one ?? declaration.unset;
   if (declaration.layers) writeLayer(own, prop, value, layers);
   else write(own, prop, value, declaration.line !== undefined);
 }
