@@ -3011,12 +3011,15 @@ export class Engine implements HostEngine {
    */
   fontsSettled(families: ReadonlySet<string>): void {
     let held = false;
+    const release = (node: EngineNode | undefined): void => {
+      if (node?.heldFamily === undefined || !families.has(node.heldFamily)) return;
+      this.markProps(node, false);
+      held = true;
+    };
     const visit = (node: EngineNode): void => {
       for (const child of node.children) {
-        if (child.heldFamily !== undefined && families.has(child.heldFamily)) {
-          this.markProps(child, false);
-          held = true;
-        }
+        // The paragraph of a run of text written straight into a view is kept on the text.
+        release(child.kind === 'text' ? child.box : child);
         visit(child);
       }
     };
@@ -3025,19 +3028,23 @@ export class Engine implements HostEngine {
   }
 
   fontsRegistered(families: ReadonlySet<string>): void {
+    /** Lay `node` out again where it is text naming one of the families, saying whether it was. */
+    const refresh = (node: EngineNode): boolean => {
+      const viewName = viewNameOf(node);
+      const input = TEXT_INPUTS.has(viewName);
+      const named = (viewName === PARAGRAPH || input) && namesFamily(node, families);
+      if (!node.committed || !named) return false;
+      this.fontRefreshes.set(node, (this.fontRefreshes.get(node) ?? 0) + 1);
+      if (input) this.fontResends.add(node);
+      this.fontsRefreshed = true;
+      this.markProps(node, false);
+      return true;
+    };
     const visit = (node: EngineNode): void => {
       for (const child of node.children) {
-        if (child.kind !== 'element') continue;
-        const viewName = viewNameOf(child);
-        const input = TEXT_INPUTS.has(viewName);
-        if (child.committed && (viewName === PARAGRAPH || input) && namesFamily(child, families)) {
-          this.fontRefreshes.set(child, (this.fontRefreshes.get(child) ?? 0) + 1);
-          if (input) this.fontResends.add(child);
-          this.fontsRefreshed = true;
-          this.markProps(child, false);
-        } else {
-          visit(child);
-        }
+        // The paragraph of a run of text written straight into a view is kept on the text.
+        if (child.kind === 'text' && child.box) refresh(child.box);
+        if (child.kind === 'element' && !refresh(child)) visit(child);
       }
     };
     visit(this.root);

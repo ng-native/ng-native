@@ -128,6 +128,15 @@ describe('a face registered after its text was laid out', () => {
     assert.deepEqual(paragraph(fabric, 'Title').props, before['Title']!.props);
   });
 
+  it('reaches text written straight into a view, which has a paragraph of its own', async () => {
+    const { fabric } = await render(LateFonts);
+    const bare = { ...paragraph(fabric, 'Bare').props };
+
+    await new FontRegistry(nativeFonts()).load({ 'Inter-600': 1 });
+
+    assert.ok(laidOutAgain(bare, paragraph(fabric, 'Bare')));
+  });
+
   it('asks for something new each time, so a second face is not answered from the cache', async () => {
     const { fabric } = await render(LateFonts);
 
@@ -217,6 +226,7 @@ describe('a face still loading when its text is first laid out', () => {
     const loading = new FontRegistry(native).load({ 'Inter-600': 1 });
     const { fabric } = await render(LateFonts);
     assert.equal(paragraph(fabric, 'Title').props['fontFamily'], undefined, 'held while loading');
+    assert.equal(paragraph(fabric, 'Bare').props['fontFamily'], undefined, 'bare text too');
     assert.equal(paragraph(fabric, 'code line').props['fontFamily'], 'JetBrains Mono');
 
     finish();
@@ -227,6 +237,7 @@ describe('a face still loading when its text is first laid out', () => {
       (node) => node.props['fontFamily'] !== undefined,
     );
     assert.equal(span?.props['fontFamily'], 'Inter-600', 'a span inside a paragraph too');
+    assert.equal(paragraph(fabric, 'Bare').props['fontFamily'], 'Inter-600', 'and bare text');
   });
 
   it('gives the text its family back when the face fails to load', async () => {
