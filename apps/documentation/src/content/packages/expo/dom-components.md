@@ -126,6 +126,10 @@ In native code the import is not the component. The build replaces the whole fil
 to its page, so none of the web code, and nothing it imports, ends up in the native bundle. The
 element registers itself: importing `DomComponent` is all the setup there is.
 
+A test of the native component gets the same reference, under `ngNative()` and under
+`@ng-native/testing/register` alike, so the page and its web-only imports are never loaded in
+Node. Test the page's own component in a browser.
+
 `<dom-component>` is a native view like any other, so size it like one - a height, or `flex-1` in a
 container that has one. It does not grow to fit what the page draws.
 

@@ -86,6 +86,26 @@ export function compileMarkdown(source, file) {
   return markdownModule(source, file);
 }
 
+/** @type {typeof import('@ng-native/metro/dom-component.cjs') | undefined} */
+let domComponent;
+
+/**
+ * What native code gets for a DOM component's file, as Metro hands it over: a reference to the
+ * page a web view loads, and none of the page. A test is native code. Evaluated instead, the
+ * file's `mountInWebView` reads `window` as it is imported, and its web-only imports load too.
+ *
+ * @param {string} source
+ * @param {string} file
+ * @returns {string | null} an ES module, or nothing for any other file
+ */
+export function domComponentReference(source, file) {
+  // A package's own files are never an app's DOM component.
+  if (file.includes('/node_modules/') || !source.includes('use dom')) return null;
+  domComponent ??= require('@ng-native/metro/dom-component.cjs');
+  if (!domComponent.isAngularDomComponent(source)) return null;
+  return domComponent.domComponentReference(file, { dev: true }).code;
+}
+
 /**
  * `require('./logo.png')`, which Metro turns into an asset id. An ES module has no `require` under
  * Vitest or under Node, so the module would throw as it is evaluated; it gets `{ testUri }`

@@ -40,6 +40,47 @@ it('shadows an injected require in a module that probes for one', () => {
 });
 
 /**
+ * Metro hands native code a reference to a DOM component's page in place of the file, so none of
+ * the page reaches the bundle. A test evaluated the file instead, and `mountInWebView` failed as
+ * it was imported with "window is not defined".
+ */
+describe("a 'use dom' file", () => {
+  const transform = ngNative().transform as unknown as Transform;
+  const code = (source: string, id: string): string => {
+    const result = transform(source, id);
+    return typeof result === 'string' ? result : (result?.code ?? source);
+  };
+
+  it('is a reference to its page, as in a native bundle, and none of the page is loaded', () => {
+    const source = [
+      '// A chart.',
+      "'use dom';",
+      "import { Chart } from 'a-charting-library';",
+      "import { mountInWebView } from '@ng-native/web/web-view';",
+      'export default mountInWebView(Chart);',
+    ].join('\n');
+    const out = code(source, '/app/src/web/chart.dom.ts');
+    assert.doesNotMatch(out, /mountInWebView|a-charting-library/);
+    const exports: { default?: { domComponent: string } } = {};
+    new Function('exports', out.replace('export default', 'exports.default ='))(exports);
+    assert.equal(
+      exports.default?.domComponent,
+      'chart.dom.ts?file=file:///app/src/web/chart.dom.ts',
+    );
+  });
+
+  it("is left alone when it mounts nothing, which is a React DOM component and Expo's", () => {
+    const source = "'use dom';\nexport default function Chart() { return null; }";
+    assert.equal(code(source, '/app/src/web/chart.js'), source);
+  });
+
+  it('is left alone when the directive is not its first statement', () => {
+    const source = "export const dom = 'use dom';\nexport const mount = () => mountInWebView(1);";
+    assert.equal(code(source, '/app/src/web/chart.js'), source);
+  });
+});
+
+/**
  * A published `@ng-native/*` package is built `.js` in a `"type": "module"` package, and one a
  * test imports from `node_modules` went unshadowed, so `<text-input>`, which injects a device
  * service, failed with "Unexpected token 'typeof'" under Vitest 4.

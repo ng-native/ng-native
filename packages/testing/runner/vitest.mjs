@@ -1,7 +1,7 @@
 /**
  * `ngNative()`: the Vite plugin that lets Vitest run Angular Native code in Node, with no DOM.
  *
- * Six things, each of which Vitest would otherwise get wrong on its own:
+ * Seven things, each of which Vitest would otherwise get wrong on its own:
  *
  * - It compiles. Every decorated `.ts` goes through `@ng-native/metro`'s AOT transform and every
  *   partial-compiled package through the linker (see `compile.mjs`), before Vite strips types.
@@ -13,6 +13,8 @@
  * - It stubs assets. With no `require`, an app's `require('./logo.png')` would throw; it becomes
  *   `{ testUri }` instead. And it stands in for the gesture and animation entry points, whose
  *   React Native source Node cannot load (`STAND_INS`).
+ * - It imports a DOM component's file as native code does under Metro: as a reference to its
+ *   page (`domComponentReference`), so no test loads the page.
  * - It imports a `.md` file as Metro does, as `{ attributes, content, tokens }`, unless a plugin
  *   ahead of it already made the file a module.
  * - It resolves as Metro does. A workspace library's copy of a package at the app's version
@@ -26,7 +28,13 @@ import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { defaultClientConditions, defaultServerConditions } from 'vite';
-import { compileAngular, compileMarkdown, needsAngular, stubAssets } from './compile.mjs';
+import {
+  compileAngular,
+  compileMarkdown,
+  domComponentReference,
+  needsAngular,
+  stubAssets,
+} from './compile.mjs';
 
 const SETUP = fileURLToPath(new URL('./setup.mjs', import.meta.url));
 
@@ -219,6 +227,25 @@ function asWritten(source, file) {
 }
 
 /**
+ * A script as a test runs it: assets stubbed, Angular compiled, `require` hidden.
+ *
+ * @param {import('vite').Rollup.TransformPluginContext} context
+ * @param {string} source
+ * @param {string} file
+ * @param {{ libraryStyles?: string[] | false, projectRoot: string }} options
+ */
+function compiled(context, source, file, options) {
+  const code = file.includes('/node_modules/') ? source : stubAssets(source);
+  if (!needsAngular(code, file)) {
+    const hidden = hideRequire(code, file);
+    return hidden === source ? null : { code: hidden, map: null };
+  }
+  const result = compileAngular(code, file, options);
+  for (const dependency of result.dependencies) context.addWatchFile(dependency);
+  return { code: hideRequire(result.code, file), map: result.map ?? null };
+}
+
+/**
  * @param {{ inline?: (string | RegExp)[], libraryStyles?: string[] | false }} [options]
  * @returns {import('vitest/config').Plugin}
  */
@@ -255,17 +282,12 @@ export function ngNative(options = {}) {
         return asWritten(source, file) ? { code: compileMarkdown(source, file), map: null } : null;
       }
       if (file.startsWith('\0') || !/\.m?[jt]s$/.test(file)) return null;
-      const code = file.includes('/node_modules/') ? source : stubAssets(source);
-      if (!needsAngular(code, file)) {
-        const hidden = hideRequire(code, file);
-        return hidden === source ? null : { code: hidden, map: null };
-      }
-      const result = compileAngular(code, file, {
+      const reference = domComponentReference(source, file);
+      if (reference) return { code: reference, map: null };
+      return compiled(this, source, file, {
         libraryStyles: options.libraryStyles,
         projectRoot: root,
       });
-      for (const dependency of result.dependencies) this.addWatchFile(dependency);
-      return { code: hideRequire(result.code, file), map: result.map ?? null };
     },
   };
 }

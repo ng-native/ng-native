@@ -18,7 +18,13 @@
 import { readFileSync } from 'node:fs';
 import { stripTypeScriptTypes } from 'node:module';
 import { fileURLToPath } from 'node:url';
-import { compileAngular, compileMarkdown, needsAngular, stubAssets } from './compile.mjs';
+import {
+  compileAngular,
+  compileMarkdown,
+  domComponentReference,
+  needsAngular,
+  stubAssets,
+} from './compile.mjs';
 
 /** @type {string[]} */
 let skip = [];
@@ -71,10 +77,13 @@ export async function load(url, context, nextLoad) {
  */
 function loadTypeScript(file, installed) {
   const read = readFileSync(file, 'utf8');
+  const platform = web.some((part) => file.includes(part)) ? 'web' : undefined;
+  // Native code gets a reference to a DOM component's page; a file compiled for the web is it.
+  const reference = platform ? null : domComponentReference(read, file);
+  if (reference) return { format: 'module', source: reference, shortCircuit: true };
   const source = installed ? read : stubAssets(read);
   const decorated = needsAngular(source, file);
   if (!decorated && !installed && source === read) return null;
-  const platform = web.some((part) => file.includes(part)) ? 'web' : undefined;
   const code = decorated ? compileAngular(source, file, { platform }).code : source;
   return {
     format: 'module',
