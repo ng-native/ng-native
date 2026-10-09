@@ -107,6 +107,33 @@ describe('declaring a face', () => {
     assert.equal(sheet.fonts.length, 1);
   });
 
+  it('takes the file a device loads from a face that names several', () => {
+    // An icon font as its package ships it: a file for Internet Explorer first, then a list
+    // from the newest format to the oldest, a browser taking the first it knows. A device
+    // loads TrueType and OpenType.
+    const face =
+      "@font-face { font-family: Icons; src: url('./icons.eot'); " +
+      "src: url('./icons.eot?#iefix') format('embedded-opentype'), " +
+      "url('./icons.woff2') format('woff2'), url('./icons.woff') format('woff'), " +
+      "url('./icons.ttf') format('truetype'), url('./icons.svg?#icons') format('svg') }";
+    assert.deepEqual(compileCss(face, 'test').fonts, [
+      { family: 'Icons', source: { asset: './icons.ttf' } },
+    ]);
+  });
+
+  it('tells such a file by its name where the face gives no format', () => {
+    const face =
+      "@font-face { font-family: Icons; src: url('./icons.woff2'), url('./icons.otf?v=2') }";
+    assert.equal(compileCss(face, 'test').fonts[0].source.asset, './icons.otf?v=2');
+  });
+
+  it('keeps the first file of a face that names none a device is known to load', () => {
+    const face =
+      "@font-face { font-family: Icons; src: url('./icons.woff2') format('woff2'), " +
+      "url('./icons.woff') format('woff') }";
+    assert.equal(compileCss(face, 'test').fonts[0].source.asset, './icons.woff2');
+  });
+
   it('refuses a face with no family or no source, which could only fail at runtime', () => {
     assert.throws(() => compileCss("@font-face { src: url('./x.ttf') }", 'test'), /family/);
     assert.throws(() => compileCss('@font-face { font-family: Inter }', 'test'), /src/);
