@@ -858,6 +858,14 @@ export class NativeStackOutlet implements RouterOutletContract, OnInit {
   private popToEntry(index: number): Promise<boolean> {
     const url = this.urlOf(this.entries[index]!);
     const steps = this.entries.length - 1 - index;
+    // The url the router is on already, where the same one is on the stack twice: a navigation
+    // to it is skipped, and would pop nothing. The screen on top is showing it, so that one
+    // stays and the ones under it go, down to the one asked for.
+    if (url === this.router!.url) {
+      for (const entry of this.entries.slice(index, -1)) this.remove(entry);
+      if (this.historyUrl(-steps) === url) this.location.historyGo(-steps);
+      return Promise.resolve(true);
+    }
     if (this.historyUrl(-steps) === url) {
       const arrived = this.nextNavigation();
       this.location.historyGo(-steps);

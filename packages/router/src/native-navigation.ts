@@ -233,8 +233,9 @@ export class NativeNavigation {
   /**
    * Pop straight back to the screen at `commands`, taking every screen above it off the stack at
    * once - `popToViewController`. The screen is the one already there, with its state, not a new
-   * one. Resolves false, doing nothing, when no screen below the top of a stack in front is
-   * showing that url; a push is the way to a screen that is not there.
+   * one; where that url is also the one showing, the screen on top is the one kept. Resolves
+   * false, doing nothing, when no screen below the top of a stack in front is showing that url; a
+   * push is the way to a screen that is not there.
    */
   popTo(commands: NavigationCommands): Promise<boolean> {
     const tree =

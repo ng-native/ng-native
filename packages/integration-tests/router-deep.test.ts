@@ -96,6 +96,27 @@ describe('a deep stack', () => {
     assert.equal(router.url, '/user/2');
   });
 
+  it('pops to an earlier screen showing the url of the one on top', async () => {
+    // A customer, one of its jobs, the customer again: the same url twice on one stack.
+    await nav.push('/user/2');
+    await idle();
+    assert.equal(stack(fabric).length, 7);
+
+    const popped = await Promise.race([
+      nav.popTo('/user/2'),
+      new Promise<'never'>((resolve) => setTimeout(() => resolve('never'), 500)),
+    ]);
+    await idle();
+    assert.equal(popped, true);
+    assert.deepEqual(stack(fabric), ['home', 'user 1', 'user 2']);
+    assert.equal(router.url, '/user/2');
+
+    nav.back();
+    await idle();
+    assert.deepEqual(stack(fabric), ['home', 'user 1'], 'and goes back from there');
+    assert.equal(router.url, '/user/1');
+  });
+
   it('pops straight to the root, keeping the root screen', async () => {
     await nav.popToRoot();
     await idle();
