@@ -3613,10 +3613,7 @@ export class Engine implements HostEngine {
   /** Start matching ancestors again on a change, once a sheet that uses `:has()` is in play. */
   private watchHas(sheet: StyleSheet | null | undefined): void {
     if (!sheet?.has) return;
-    if (!this.watchedHas.has(sheet)) {
-      this.watchedHas.add(sheet);
-      this.hasReaders.push(...hasAbove(sheet));
-    }
+    if (!this.hasReaders.has(sheet)) this.hasReaders.set(sheet, hasAbove(sheet));
     if (this.hasSheets) return;
     this.hasSheets = true;
     this.styles.tracksHas = true;
@@ -3635,13 +3632,15 @@ export class Engine implements HostEngine {
   private markBeneath(from: EngineNode | null): void {
     for (let node = from; node; node = node.parent) {
       node.hasDirty = true;
-      if (this.hasReaders.length) this.changedBeneath.add(node);
+      if (this.hasReaders.size) this.changedBeneath.add(node);
     }
   }
 
-  private readonly watchedHas = new WeakSet<StyleSheet>();
-  /** The boxes rules ask `:has()` of above the node they style: `.card:has(.x) .title`. */
-  private readonly hasReaders: HasAbove[] = [];
+  /**
+   * The boxes rules ask `:has()` of above the node they style, `.card:has(.x) .title`, by the
+   * sheet that asks: a sheet replaced or taken away asks no more.
+   */
+  private readonly hasReaders = new Map<StyleSheet, readonly HasAbove[]>();
   /** The nodes something changed beneath since the last commit, where any sheet has such a rule. */
   private readonly changedBeneath = new Set<EngineNode>();
 
@@ -3653,8 +3652,10 @@ export class Engine implements HostEngine {
   private markUnderHas(): void {
     if (!this.changedBeneath.size) return;
     for (const node of this.changedBeneath) {
-      for (const { classes, subjects } of this.hasReaders) {
-        if (classes.every((name) => node.classes?.has(name))) this.markUnder(node, subjects);
+      for (const readers of this.hasReaders.values()) {
+        for (const { classes, subjects } of readers) {
+          if (classes.every((name) => node.classes?.has(name))) this.markUnder(node, subjects);
+        }
       }
     }
     this.changedBeneath.clear();
@@ -4200,6 +4201,8 @@ export class Engine implements HostEngine {
    */
   sheetReplaced(sheet: StyleSheet, next: StyleSheet | null): void {
     if (sheet === next && this.knownSheets.has(sheet)) return;
+    this.hasReaders.delete(sheet);
+    this.watchHas(next);
     this.unwatchActive(sheet);
     this.watchActive(next);
     const at = this.sheetOrder.indexOf(sheet);

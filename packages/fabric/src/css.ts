@@ -2034,17 +2034,31 @@ const asksBeneath = (compound: Compound): boolean =>
   compound.has !== undefined ||
   [...(compound.not ?? []), ...(compound.is ?? []).flat()].some(asksBeneath);
 
+/**
+ * The boxes above the styled node that a compound asks `:has()` of: the compound's own node,
+ * where that is not the styled one, and each box it is asked to be inside,
+ * `.body:is(.card:has(.x) *) .title`.
+ */
+function* boxesAsked(compound: Compound, styled: boolean): Generator<Compound> {
+  if (!styled && asksBeneath(compound)) yield compound;
+  for (const key of ['ancestors', 'parents', 'hostContext'] as const) {
+    for (const outer of compound[key] ?? []) yield* boxesAsked(outer, false);
+  }
+}
+
 /** Each box a sheet's rules ask `:has()` of above the node they style. */
 export function hasAbove(sheet: StyleSheet): readonly HasAbove[] {
   let known = HAS_ABOVE.get(sheet);
   if (known === undefined) {
     const found: HasAbove[] = [];
     for (const rule of sheet.rules) {
-      for (const compound of rule.compounds.slice(0, -1)) {
-        if (!asksBeneath(compound)) continue;
-        const subjects = noSubjects();
-        noteSubject(subjects, rule);
-        found.push({ classes: compound.classes, subjects });
+      const last = rule.compounds.length - 1;
+      for (const [at, compound] of rule.compounds.entries()) {
+        for (const box of boxesAsked(compound, at === last)) {
+          const subjects = noSubjects();
+          noteSubject(subjects, rule);
+          found.push({ classes: box.classes, subjects });
+        }
       }
     }
     HAS_ABOVE.set(sheet, (known = found));
