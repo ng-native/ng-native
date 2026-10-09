@@ -190,6 +190,33 @@ describe(':has() on a box the styled node is in', () => {
     assert.equal(s.opacity('title'), 0.25);
   });
 
+  it('follows what is in a box that a box above the node is asked to be inside', () => {
+    // `.body:is(.card:has(.action) *) .title`: the box asked is one the body is in.
+    const s = titled('.body:is(.card:has(.action) *) .title { opacity: 0.5 }');
+    assert.deepEqual(s.reports, []);
+    assert.equal(s.opacity('title'), undefined);
+    const button = s.el('button', s.card);
+    assert.equal(s.opacity('title'), undefined);
+    s.engine.addClass(button, 'action');
+    assert.equal(s.opacity('title'), 0.5);
+    s.engine.removeClass(button, 'action');
+    assert.equal(s.opacity('title') ?? null, null);
+  });
+
+  it('asks nothing more once the sheet that asked is taken away', () => {
+    const s = titled('.unused { opacity: 1 }');
+    const sheet = compileCss(ABOVE, 'more.css', { onUnsupported: () => {} });
+    s.engine.addGlobalSheet(sheet);
+    s.el('action', s.card);
+    assert.equal(s.opacity('title'), 0.5);
+    s.engine.removeGlobalSheet(sheet);
+    assert.equal(s.opacity('title') ?? null, null);
+    const before = s.title.styleCache;
+    s.el('action', s.card);
+    s.engine.commit();
+    assert.equal(s.title.styleCache, before, 'nothing under the box was matched again');
+  });
+
   it('styles again only what such a rule is for, of all that is in the box', () => {
     const s = titled();
     const other = s.el('other', s.body);
