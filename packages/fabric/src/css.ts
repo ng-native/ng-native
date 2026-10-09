@@ -1092,6 +1092,80 @@ function matchAny(
   return false;
 }
 
+/**
+ * An ancestor filter, as a browser has one. A selector of several parts is matched leftwards
+ * from the node, up through its ancestors: a node a dozen boxes down is asked of a dozen
+ * ancestors for each rule its last part fits, and almost every such rule names an ancestor it
+ * has not got. So what a node's ancestors are, their classes, names and ids, is gathered once
+ * as sixty-four bits, and a rule that names one of them whose bit is not there is passed over
+ * without a walk. Two names can share a bit: that is a walk that finds nothing, as before.
+ */
+type Bits = readonly [number, number];
+
+const BIT_OF = new Map<string, number>();
+
+/** The bit a class, a name or an id has among the sixty-four. */
+function bitOf(kind: string, name: string): number {
+  const key = kind + name;
+  let bit = BIT_OF.get(key);
+  if (bit === undefined) {
+    let hash = 0;
+    for (let at = 0; at < key.length; at++) hash = (Math.imul(hash, 31) + key.charCodeAt(at)) | 0;
+    bit = (hash ^ (hash >>> 16)) & 63;
+    BIT_OF.set(key, bit);
+  }
+  return bit;
+}
+
+const NAMED_ABOVE = new WeakMap<StyleRule, Bits | null>();
+
+/**
+ * The classes, names and ids a rule names of the node's ancestors: of each part joined to what
+ * is on its right by a descendant or a child combinator. One joined by a sibling combinator is
+ * no ancestor of the node, though the parts to its left that are ancestors of it are ancestors
+ * of the node as well. Null where it names none, a rule of one part among them.
+ */
+function namedAbove(rule: StyleRule): Bits | null {
+  let named = NAMED_ABOVE.get(rule);
+  if (named !== undefined) return named;
+  let [low, high] = [0, 0];
+  const add = (bit: number) => {
+    if (bit < 32) low |= 1 << bit;
+    else high |= 1 << (bit - 32);
+  };
+  for (let at = 0; at < rule.compounds.length - 1; at++) {
+    const joined = rule.combinators[at];
+    if (joined === 'next-sibling' || joined === 'later-sibling') continue;
+    const compound = rule.compounds[at]!;
+    for (const className of compound.classes) add(bitOf('.', className));
+    if (compound.type !== undefined) add(bitOf('<', compound.type));
+    if (compound.id !== undefined) add(bitOf('#', compound.id));
+  }
+  named = low === 0 && high === 0 ? null : [low, high];
+  NAMED_ABOVE.set(rule, named);
+  return named;
+}
+
+/** The classes, names and ids of a node's ancestors, as bits. */
+function bitsAbove(node: StyleTarget): Bits {
+  let [low, high] = [0, 0];
+  const add = (bit: number) => {
+    if (bit < 32) low |= 1 << bit;
+    else high |= 1 << (bit - 32);
+  };
+  for (let up = node.parent; up; up = up.parent) {
+    if (up.classes) for (const className of up.classes) add(bitOf('.', className));
+    if (up.name !== undefined) add(bitOf('<', up.name));
+    const id = up.props?.['nativeID'];
+    if (typeof id === 'string') add(bitOf('#', id));
+  }
+  return [low, high];
+}
+
+/** Whether what is above a node lacks something a rule names there. */
+const lacks = (above: Bits, named: Bits): boolean =>
+  (named[0] & ~above[0]) !== 0 || (named[1] & ~above[1]) !== 0;
+
 const TAKES_PARENTS = new WeakMap<StyleRule, boolean>();
 
 /** Whether a rule has an `inherit` in it, which is settled from the parent's own style. */
@@ -3070,8 +3144,13 @@ export class StyleResolver {
   /** The rules that apply to a node, weakest first. */
   private matched(node: StyleTarget, entries: readonly RuleEntry[]): StyleRule[] {
     const out: StyleRule[] = [];
+    // What the node's ancestors are, gathered for the first rule that names one.
+    let above: Bits | undefined;
     for (const { rule, sheet } of entries) {
-      if (this.conditionHolds(rule) && matches(node, rule, sheet)) out.push(rule);
+      if (!this.conditionHolds(rule)) continue;
+      const named = namedAbove(rule);
+      if (named && lacks((above ??= bitsAbove(node)), named)) continue;
+      if (matches(node, rule, sheet)) out.push(rule);
     }
     return out;
   }

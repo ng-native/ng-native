@@ -152,6 +152,7 @@ export default tseslint.config(
       'packages/integration-tests/tailwind.test.ts',
       'packages/integration-tests/tailwind-metro.test.ts',
       // Tests of internals the package entry points do not export, which have no other way in.
+      'packages/integration-tests/css-ancestor-filter.test.ts',
       'packages/integration-tests/css-attribute-reach.test.ts',
       'packages/integration-tests/css-cost.test.ts',
       'packages/integration-tests/css-global-sheet-added.test.ts',
