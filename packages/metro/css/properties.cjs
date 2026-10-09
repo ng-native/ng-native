@@ -967,11 +967,13 @@ function finishTiming(parts, out, context, refuse) {
  * different name in React Native, or none at all, answers for itself.
  *
  * A shorthand is every prop it compiles to, since those are the names the engine sees change:
- * `padding` is four sides, and `background` is `backgroundColor`.
+ * `padding` is four sides. `background` is `backgroundColor` alone, though it compiles to an
+ * image too: a browser eases the colour, and a gradient changes at once.
  */
 function propNames(property, context) {
   // A probe value of 0 is not a rotation, and would be named after the CSS spelling.
   if (Object.hasOwn(INDIVIDUAL_TRANSFORMS, property)) return [INDIVIDUAL_TRANSFORMS[property]];
+  if (property === 'background') return ['backgroundColor'];
   const probe = {};
   try {
     translate(property, 0, probe, context);
@@ -1694,24 +1696,33 @@ const TRANSLATORS = new Map([
   [
     'background',
     (property, value, out) => {
-      // A list of layers, not one object. The colour is the only part native has, and CSS only
-      // lets the final layer carry one. `image: none` and the initial position, repeat, size,
-      // attachment, origin and clip are no-ops, so they pass silently; a real image is routed to
-      // the `background-image` message rather than dropped.
+      // A list of layers, each with an image, and a colour on the last of them. The shorthand
+      // says all of a background at once, so what it leaves out is back at its initial value:
+      // no colour is transparent, and no image takes away one a rule before it gave. Honouring
+      // half of it is the kind of quiet half-application this compiler exists to prevent.
       const layers = Array.isArray(value) ? value : [value];
-      // The shorthand's image is not routed to `background-image`: a shorthand also resets the
-      // colour, the position and the rest, and honouring only half of it is the kind of quiet
-      // half-application this compiler exists to prevent. The longhand says it exactly.
-      for (const layer of layers) {
-        if (layer.image && layer.image.type !== 'none') {
-          throw new CssUnsupported(
-            `${property}: background images are not part of this shorthand here. Write ` +
-              `background-image, which takes linear-gradient() and radial-gradient().`,
-          );
-        }
-      }
       const last = layers[layers.length - 1];
-      if (last?.color !== undefined) out.backgroundColor = paintColour(last.color, property);
+      out.backgroundColor =
+        last?.color === undefined ? 'transparent' : paintColour(last.color, property);
+      const images = layers.map((layer) => layer.image ?? { type: 'none' });
+      if (images.every((image) => image.type === 'none')) {
+        // Nothing for a position, a size or a repeat to be of.
+        out.experimental_backgroundImage = [];
+        return;
+      }
+      out.experimental_backgroundImage = backgroundImage(images, property);
+      out.experimental_backgroundPosition = backgroundPosition(
+        layers.map((layer) => layer.position),
+        property,
+      );
+      out.experimental_backgroundSize = backgroundSize(
+        layers.map((layer) => layer.size),
+        property,
+      );
+      out.experimental_backgroundRepeat = backgroundRepeat(
+        layers.map((layer) => layer.repeat),
+        property,
+      );
     },
   ],
   // The shorthand is uniform by definition, so the unsided RN props say it in three keys rather

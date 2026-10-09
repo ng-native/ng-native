@@ -121,7 +121,11 @@ describe('@layer', () => {
     );
     assert.deepEqual(
       layered.map((rule) => rule.declarations),
-      [{ zIndex: 1000 }, { backgroundColor: 'rgba(0, 0, 0, 0.32)' }],
+      // The shorthand says there is no image too: see `a gradient in the background shorthand`.
+      [
+        { zIndex: 1000 },
+        { backgroundColor: 'rgba(0, 0, 0, 0.32)', experimental_backgroundImage: [] },
+      ],
     );
   });
 });

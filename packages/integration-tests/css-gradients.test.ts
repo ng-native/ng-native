@@ -184,8 +184,11 @@ describe('what a gradient cannot be', () => {
 describe('a gradient in the background shorthand', () => {
   // The shorthand says all of a background at once: what it does not write is back at its
   // initial value, the colour among it. Each case is the longhands that say the same.
-  const styleOf = (declarations: string): Record<string, unknown> =>
-    compileCss(`view { ${declarations} }`).rules[0].style;
+  const styleOf = (declarations: string): Record<string, unknown> => {
+    const style = compileCss(`.a { ${declarations} }`).rules[0].declarations;
+    assert.ok(style['backgroundColor'] !== undefined, declarations);
+    return style;
+  };
   const INITIAL =
     'background-position: 0% 0%; background-size: auto; background-repeat: repeat; ' +
     'background-color: transparent';
@@ -232,9 +235,9 @@ describe('a gradient in the background shorthand', () => {
     );
     // Over a rule before it: a flat button of a kind that has a gradient has none.
     const sheet = compileCss(
-      'view { background-image: linear-gradient(red, blue) } .flat { background: red }',
+      '.a { background-image: linear-gradient(red, blue) } .flat { background: red }',
     );
-    const merged = { ...sheet.rules[0].style, ...sheet.rules[1].style };
+    const merged = { ...sheet.rules[0].declarations, ...sheet.rules[1].declarations };
     assert.deepEqual(merged['experimental_backgroundImage'], []);
   });
 });

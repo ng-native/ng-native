@@ -107,7 +107,12 @@ describe("a library's component CSS, opted in", () => {
       sheet.rules.map((rule) => rule.declarations),
       [
         { display: 'flex', paddingTop: 4, paddingRight: 8, paddingBottom: 4, paddingLeft: 8 },
-        { backgroundColor: 'rgb(250, 115, 25)', color: 'rgb(255, 255, 255)' },
+        // `background: <colour>` as the library wrote it, which says there is no image too.
+        {
+          backgroundColor: 'rgb(250, 115, 25)',
+          experimental_backgroundImage: [],
+          color: 'rgb(255, 255, 255)',
+        },
       ],
     );
     assert.deepEqual(

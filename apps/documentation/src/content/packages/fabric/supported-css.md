@@ -113,6 +113,12 @@ can be a token too (`at var(--x) 30%`), with a fallback after its name. `backgro
 gradients only - a `url()` in `background-image` is dropped, because there is no image loader
 behind that prop; put an image in an `<image>` element instead.
 
+The `background` shorthand takes the same gradients, one or several, with a position, size,
+repeat and color beside them: `background: linear-gradient(red, blue) center / cover no-repeat`.
+What it leaves out is back at its initial value, as in a browser: `background: red` takes away a
+gradient an earlier rule gave, and `background: linear-gradient(red, blue)` a color. A shorthand
+that is a token, `background: var(--surface)`, is the exception described below.
+
 `background-clip: text` is not a value any native view takes. It marks its rule as one for
 [`<gradient-text>`](/packages/components/text#gradient-text), the element that draws a background
 through its letters: the rule applies to that element alone, and one written for another element

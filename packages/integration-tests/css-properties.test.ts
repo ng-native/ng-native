@@ -45,8 +45,11 @@ const declarationsOf = (css: string): Record<string, unknown> =>
   );
 
 describe('shorthands that every stylesheet uses', () => {
-  it('background, taking the colour and ignoring the initial layers', () => {
-    assert.deepEqual(declarationsOf('background: red'), { backgroundColor: 'rgb(255, 0, 0)' });
+  it('background, taking the colour, and saying there is no image where it writes none', () => {
+    assert.deepEqual(declarationsOf('background: red'), {
+      backgroundColor: 'rgb(255, 0, 0)',
+      experimental_backgroundImage: [],
+    });
   });
 
   it('border, which sets width, style and colour on every side at once', () => {
@@ -1139,6 +1142,7 @@ describe('values the build settles on its own', () => {
   it('takes the colour of a layered background from its last layer, where CSS puts it', () => {
     assert.deepEqual(declarationsOf('background: none, blue'), {
       backgroundColor: 'rgb(0, 0, 255)',
+      experimental_backgroundImage: [],
     });
   });
 
