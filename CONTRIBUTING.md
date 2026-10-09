@@ -31,7 +31,8 @@ pnpm export         # a release bundle of every example for iOS and Android, one
 
 `pnpm verify` is the one to run before opening a pull request: it is every check CI makes of a
 change but `pnpm coverage` and the native builds. `pnpm coverage` runs the browser suite too, which
-needs Chromium once: `pnpm --filter @ng-native/web exec playwright install chromium`.
+needs Chromium once, and on Linux the system libraries it links:
+`pnpm --filter @ng-native/web exec playwright install --with-deps chromium`.
 
 Lint must go through `nx run-many -t lint` (what `pnpm lint` does): `@nx/enforce-module-boundaries`
 needs the project graph and silently enforces nothing without it, so running `eslint` bare will not
