@@ -301,8 +301,10 @@ mix `var()`s and written values: `padding: var(--y) var(--x)`,
 `border: var(--width) solid var(--colour)`. A token of two to four lengths gives a shorthand of
 four sides or corners a value each, as a component library's design tokens do:
 `padding: var(--list-padding)` of `--list-padding: 0.25rem 0.5rem`, and the same for `margin`,
-`border-width` and `border-radius`. Any other length property is unset by such a token, `gap` and
-`padding-inline` among them. `background: var(--surface)` is read as
+`border-width` and `border-radius`. A part of such a token can be a token itself,
+`--content-padding: 0 var(--modal-padding) var(--modal-padding)`, but not a `calc()`. Any other
+length property is unset by such a token, `gap` and `padding-inline` among them.
+`background: var(--surface)` is read as
 `background-color`, the one part of that shorthand native has, and so are
 `rgba(var(--channels), <alpha>)`, `color-mix()`, `light-dark()` and a relative colour of a token
 written there. A token is read as one value, so one that is no colour unsets it: an unset token, a

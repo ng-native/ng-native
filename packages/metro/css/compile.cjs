@@ -1700,28 +1700,31 @@ function customToken(name, parts, context) {
   if (value === null || Object.keys(value).length === 0) {
     throw new CssUnsupported(`${context}: '${name}' has a value native cannot express in any form`);
   }
-  const lengths = lengthsOf(parts, context);
-  return lengths ? { ...value, lengths } : value;
+  const several = lengthsOf(parts, context);
+  return several ? { ...value, ...several } : value;
 }
 
 /**
  * A value of two to four lengths, each as a single length is read: `0.5rem 0.75rem`, which a
- * design token holds for a `padding` or a `border-width` to take a value a side from. Nothing
- * where any part of it is anything but a length the device has without working it out.
+ * design token holds for a `padding` or a `border-width` to take a value a side from. As
+ * `lengths` where each is a length the device has without working it out, and as
+ * `deferredLengths` where a part is a `var()`, which is followed where the token is defined:
+ * `0 var(--modal-padding) var(--modal-padding)`. Nothing where a part is anything else.
  */
 function lengthsOf(parts, context) {
   const each = (parts ?? []).filter((part) => part?.value?.type !== 'white-space');
   if (each.length < 2 || each.length > 4 || each.length * 2 - 1 !== parts.length) return null;
-  const lengths = each.map((part) => {
+  const isLength = (value) => typeof value === 'number' || typeof value === 'string';
+  const read = each.map((part) => {
     try {
-      return tokenValue([part], context)?.length;
+      const token = tokenValue([part], context);
+      return token?.alias ? token : token?.length;
     } catch {
       return undefined;
     }
   });
-  return lengths.every((length) => typeof length === 'number' || typeof length === 'string')
-    ? lengths
-    : null;
+  if (!read.every((value) => isLength(value) || value?.alias)) return null;
+  return read.every(isLength) ? { lengths: read } : { deferredLengths: read };
 }
 
 /** A `--x` definition, or a property lightningcss does not know but React Native supports. */

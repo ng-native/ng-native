@@ -185,6 +185,11 @@ export interface TokenValue {
    * `padding: var(--list-padding)` of `--list-padding: 0.25rem 0.5rem`.
    */
   readonly lengths?: readonly (number | string)[];
+  /**
+   * The same where a part is a `var()`, each such part as the alias a token that is one is:
+   * `0 var(--modal-padding) var(--modal-padding)`. Worked out into `lengths` where it is defined.
+   */
+  readonly deferredLengths?: readonly (number | string | TokenValue)[];
   /** A whole shadow list, in the processed shape `boxShadow` takes. */
   readonly shadow?: readonly unknown[];
   /** One filter function, as the one-entry list `filter` takes: a slot of Tailwind's filters. */
@@ -3814,6 +3819,11 @@ function workedOut(
 function substitutable(token: TokenValue, tokens: Readonly<Record<string, TokenValue>>): boolean {
   if (token.hsl) return hslSubstitutable(token.hsl, tokens);
   if (token.deferredColour) return colourSubstitutable(token.deferredColour, tokens);
+  if (token.deferredLengths) {
+    return token.deferredLengths.every(
+      (part) => typeof part !== 'object' || substitutedIn(part, tokens) !== undefined,
+    );
+  }
   // Each marker is one reading of the same text, and a fallback one cannot read is dropped from it.
   return token.deferredCalc!.some((marker) => calcSubstitutable(marker.expression, tokens));
 }
@@ -3916,7 +3926,9 @@ function inCycles(
 
 /** Whether a token is made of others, and so worked out where it is defined. */
 function isDerived(token: TokenValue | undefined): boolean {
-  return Boolean(token?.hsl || token?.deferredColour || token?.deferredCalc);
+  return Boolean(
+    token?.hsl || token?.deferredColour || token?.deferredCalc || token?.deferredLengths,
+  );
 }
 
 /** A token made of others, worked out from the tokens in scope. */
@@ -3926,7 +3938,27 @@ function derived(
 ): TokenValue | undefined {
   if (token.hsl) return colourToken(resolveHsl(token.hsl, tokens));
   if (token.deferredColour) return colourToken(resolveColour(token.deferredColour, tokens));
+  if (token.deferredLengths) return lengthsToken(token, tokens);
   return calcToken(token.deferredCalc!, tokens);
+}
+
+/**
+ * A token of several lengths with each part that is a `var()` followed. Where a part comes to
+ * no length the token is what else it reads as, a shadow whose colour is a token being several
+ * lengths and a `var()` too, or nothing where it reads as nothing else.
+ */
+function lengthsToken(
+  token: TokenValue,
+  tokens: Readonly<Record<string, TokenValue>>,
+): TokenValue | undefined {
+  const { deferredLengths, ...rest } = token;
+  const lengths = deferredLengths!.map((part) =>
+    typeof part === 'object' ? substitutedIn(part, tokens)?.length : part,
+  );
+  if (lengths.every((length) => length !== undefined)) {
+    return { ...rest, lengths: lengths as (number | string)[] };
+  }
+  return Object.keys(rest).length ? rest : undefined;
 }
 
 /**

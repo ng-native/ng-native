@@ -529,6 +529,17 @@ describe('tokens', () => {
       assert.equal(resolvedStyle(nested, ['a'])['paddingRight'], undefined);
     });
 
+    it('still reads a shadow whose colour is a token, which is lengths and a var() too', () => {
+      // Tailwind's: `--tw-shadow: 0 2px 6px var(--tw-shadow-color, rgb(0 0 0 / 0.2))`.
+      const css =
+        '.a { --shade: 0 2px 6px var(--tint, rgb(0 0 0 / 0.2)); box-shadow: var(--shade) }';
+      const [shadow] = resolvedStyle(css, ['a'])['boxShadow'] as Record<string, unknown>[];
+      assert.deepEqual(
+        [shadow!['offsetY'], shadow!['blurRadius'], shadow!['color']],
+        [2, 6, 'rgba(0, 0, 0, 0.2)'],
+      );
+    });
+
     it('leaves a single length unset by a token of several', () => {
       // Invalid at computed-value time, as a browser has it: the property is as if never written.
       // ponytail: so is a shorthand of two, `gap` and `padding-inline`, which a browser gives a
