@@ -3072,7 +3072,10 @@ function fontFace(value, context) {
     family,
     // Replaced with a `require` by the transformer. A plain string here would be a path the
     // bundler never sees and a font that is missing on device with nothing to say why.
-    source: { asset: fontUrl(read('source'), family, context) },
+    // The last `src` a face writes is the one it has, as of any property written twice.
+    source: {
+      asset: fontUrl(properties.findLast((p) => p.type === 'source')?.value, family, context),
+    },
     ...(typeof weight === 'number' ? { weight } : {}),
     ...(Array.isArray(weight) ? { weightRange: weight } : {}),
     ...(style && style !== 'normal' ? { style } : {}),
@@ -3098,13 +3101,23 @@ function faceWeight(value) {
 /** The file a face comes from. Anything but a `url()` is a font the bundle would not contain. */
 function fontUrl(sources, family, context) {
   const list = sources ?? [];
-  const url = list.find((source) => source.type === 'url')?.value?.url?.url;
+  const files = list.filter((source) => source.type === 'url').map((source) => source.value);
+  // A browser takes the first format it knows, and a face lists the newest first. A device
+  // loads TrueType and OpenType, so that one is taken where the face has it.
+  const url = (files.find(loadsOnADevice) ?? files[0])?.url?.url;
   if (url) return url;
 
   const what = list.length ? `'${list[0].type}()' is not a file this can bundle` : 'none';
   throw new CssUnsupported(
     `${context}: @font-face '${family}' needs a src: url() naming a file in the app (${what}).`,
   );
+}
+
+/** Whether a source of a face is a TrueType or OpenType file, by its format or else its name. */
+function loadsOnADevice(source) {
+  const format = source.format?.type;
+  if (format) return format === 'truetype' || format === 'opentype';
+  return /\.(ttf|otf)([?#]|$)/i.test(source.url?.url ?? '');
 }
 
 /**
