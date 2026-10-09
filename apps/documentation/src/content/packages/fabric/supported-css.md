@@ -63,15 +63,18 @@ select on that.
 
 `:has()` styles a node by what is beneath it. Its argument is one compound selector, for a
 descendant (`.card:has(.action)`), or one after `>`, for a child (`.card:has(> img)`), and a list of
-either. It is read on the node the rule styles: `.card:has(.action) .title`, where the node with
-`:has()` is an ancestor of the one styled, is dropped with a warning, and so is a longer selector or
-a sibling one inside it (`:has(.a .b)`, `:has(+ .next)`). Tailwind's `has-[...]` and
-`has-data-[...]` variants are supported. `group-has-*` and `peer-has-*` put `:has()` on an ancestor
-or a sibling of the node they style, so they are dropped with a warning.
+either. It is read on the node the rule styles and on a box that node is in:
+`.card:has(.action) .title` styles the titles in a card that has an action, and
+`.field:has(.input:focus) > .label` a field's own label. On a node beside the one styled, or beside
+a box it is in, it is dropped with a warning (`.card:has(.action) + .title`), and so is a longer
+selector or a sibling one inside it (`:has(.a .b)`, `:has(+ .next)`). Tailwind's `has-[...]` and
+`has-data-[...]` variants are supported. `group-has-*` and `peer-has-*` are dropped with a warning:
+they ask it inside `:is()`, and of a sibling.
 
 A sheet that uses `:has()` has the engine match a changed node's ancestors again on each change,
-and restyle one only where the rules it matches came out different. A sheet that does not use it
-costs nothing.
+and restyle one only where the rules it matches came out different. Where a rule asks it of a box
+the styled node is in, the nodes under that box that such a rule is for are matched again too,
+once for a commit. A sheet that does not use it costs nothing.
 
 ## Everything else CSS can paint
 

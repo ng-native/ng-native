@@ -1492,12 +1492,18 @@ function asksBeneath(compound) {
 }
 
 /**
- * `:has()` is read on the node a rule styles. On an ancestor of it, `.card:has(.x) .title`, the
- * title's style would hang on a change the title is nowhere near, and nothing restyles it.
+ * `:has()` is read on the node a rule styles, and on a box that node is in: `.card:has(.x)
+ * .title`, where the engine has the titles under a card matched again as what is in the card
+ * changes. Not on a node beside the one styled, `.card:has(.x) + .title`, or beside a box it is
+ * in: nothing under the card is the title then, and nothing restyles it.
  */
-function refuseHasAbove(compounds, context) {
+function refuseHasAbove(compounds, combinators, context) {
   const subject = compounds.at(-1);
-  const above = compounds.slice(0, -1).some(asksBeneath);
+  // From the last sibling combinator back, a compound is beside the node or a box it is in.
+  const beside = combinators.findLastIndex(
+    (joined) => joined === 'next-sibling' || joined === 'later-sibling',
+  );
+  const above = compounds.slice(0, beside + 1).some(asksBeneath);
   const within = [
     ...(subject?.ancestors ?? []),
     ...(subject?.parents ?? []),
@@ -1505,8 +1511,8 @@ function refuseHasAbove(compounds, context) {
   ].some(asksBeneath);
   if (above || within) {
     throw new CssUnsupported(
-      `${context}: ':has()' is supported on the node the rule styles, not on an ancestor or a ` +
-        `sibling of it. Put a class on that node from the state it depends on.`,
+      `${context}: ':has()' is supported on the node the rule styles and on a box it is in, ` +
+        `not on a sibling of either. Put a class on that node from the state it depends on.`,
     );
   }
 }
@@ -1599,7 +1605,7 @@ function selector(parts, context) {
     }
   }
   flush();
-  refuseHasAbove(compounds, context);
+  refuseHasAbove(compounds, combinators, context);
 
   return { compounds, combinators, specificity: pack(ids, classes, types) };
 }
