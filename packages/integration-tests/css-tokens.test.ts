@@ -465,6 +465,49 @@ describe('tokens', () => {
       assert.deepEqual([style['paddingTop'], style['paddingLeft']], [undefined, 1]);
     });
 
+    it('gives each side its own part of a token with a value per side', () => {
+      // A component library's design tokens: `--list-padding: 0.25rem 0.5rem`, read by
+      // `padding: var(--list-padding)`. The number of values is the token's to say.
+      const css =
+        ':root { --two: 4px 8px; --three: 1px 2px 3px; --four: 0 18px 18px 18px; --rem: 0.5rem 0.75rem } ' +
+        '.a { padding: var(--two) } .b { margin: var(--three) } .c { padding: var(--four) } ' +
+        '.d { border-width: var(--two) } .e { border-radius: var(--two) } .f { padding: var(--rem) }';
+      const sides = (style: Record<string, unknown>, box: string, end = '') =>
+        ['Top', 'Right', 'Bottom', 'Left'].map((side) => style[`${box}${side}${end}`]);
+      assert.deepEqual(sides(resolvedStyle(css, ['a']), 'padding'), [4, 8, 4, 8]);
+      assert.deepEqual(sides(resolvedStyle(css, ['b']), 'margin'), [1, 2, 3, 2]);
+      assert.deepEqual(sides(resolvedStyle(css, ['c']), 'padding'), [0, 18, 18, 18]);
+      assert.deepEqual(sides(resolvedStyle(css, ['d']), 'border', 'Width'), [4, 8, 4, 8]);
+      assert.deepEqual(sides(resolvedStyle(css, ['f']), 'padding'), [8, 12, 8, 12]);
+      const e = resolvedStyle(css, ['e']);
+      assert.deepEqual(
+        ['TopLeft', 'TopRight', 'BottomRight', 'BottomLeft'].map((at) => e[`border${at}Radius`]),
+        [4, 8, 4, 8],
+      );
+    });
+
+    it('follows such a token through another that names it, and where an element sets it', () => {
+      const css =
+        ':root { --base: 2px 6px; --list: var(--base) } .a { padding: var(--list) } ' +
+        '.wide { --list: 10px 20px 30px 40px }';
+      const sides = (style: Record<string, unknown>) =>
+        ['Top', 'Right', 'Bottom', 'Left'].map((side) => style[`padding${side}`]);
+      assert.deepEqual(sides(resolvedStyle(css, ['a'])), [2, 6, 2, 6]);
+      assert.deepEqual(sides(resolvedStyle(css, ['wide', 'a'])), [10, 20, 30, 40]);
+    });
+
+    it('leaves a single length unset by a token of several', () => {
+      // Invalid at computed-value time, as a browser has it: the property is as if never written.
+      // ponytail: so is a shorthand of two, `gap` and `padding-inline`, which a browser gives a
+      // value each. Each of its two is deferred by itself; pair them if a library writes one so.
+      const css =
+        ':root { --two: 4px 8px } .a { width: var(--two) } .b { gap: var(--two) } ' +
+        '.c { padding-top: var(--two) }';
+      assert.equal(resolvedStyle(css, ['a'])['width'], undefined);
+      assert.equal(resolvedStyle(css, ['b'])['rowGap'], undefined);
+      assert.equal(resolvedStyle(css, ['c'])['paddingTop'], undefined);
+    });
+
     it('gives each side its own part of a fallback with a value per side', () => {
       // Material moves a switch's handle with `margin: var(--..., 0 24px)`, and sets no token.
       const css =
