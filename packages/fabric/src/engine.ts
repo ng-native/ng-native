@@ -1306,13 +1306,17 @@ function ratioForAutoSize(props: Record<string, unknown>): void {
 
 const OUTLINE_KEYS = ['outlineWidth', 'outlineStyle', 'outlineColor', 'outlineOffset'];
 
-/** Each side a border has, with the logical side React Native also takes a colour for. */
+/** Each side a border has: its width, its colour, and the logical colour React Native takes too. */
 const BORDER_SIDES = [
   ['Top', 'BlockStart'],
   ['Right', 'End'],
   ['Bottom', 'BlockEnd'],
   ['Left', 'Start'],
-] as const;
+].map(([side, logical]) => ({
+  width: `border${side}Width`,
+  color: `border${side}Color`,
+  logical: `border${logical}Color`,
+}));
 
 /**
  * Send nothing for an outline of no width, which is what `outline: none` is: it draws nothing,
@@ -4167,14 +4171,14 @@ export class Engine implements HostEngine {
    */
   private borderInText(node: EngineNode, props: Record<string, unknown>): void {
     let text: unknown;
-    for (const [side, logical] of BORDER_SIDES) {
-      const width = props[`border${side}Width`] ?? props['borderWidth'];
+    for (const side of BORDER_SIDES) {
+      const width = props[side.width] ?? props['borderWidth'];
       if (typeof width !== 'number' || width <= 0) continue;
-      const given = [`border${side}Color`, `border${logical}Color`, 'borderColor'];
-      if (given.some((key) => props[key] != null)) continue;
+      if (props[side.color] != null || props[side.logical] != null) continue;
+      if (props['borderColor'] != null) continue;
       text ??= props['color'] ?? this.styles.resolve(node, this.styleEpoch).inherited['color'];
       if (text == null) return;
-      props[`border${side}Color`] = text;
+      props[side.color] = text;
     }
   }
 
