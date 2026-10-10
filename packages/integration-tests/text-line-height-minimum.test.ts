@@ -155,5 +155,10 @@ describe('the least height of text', () => {
     // Until it says it does.
     s.engine.setProp(inner, 'allowFontScaling', true);
     assert.equal(s.least('still'), 64);
+    // And follows a line height bound on the run.
+    s.engine.setProp(inner, 'style', { lineHeight: 40 });
+    assert.equal(s.least('still'), 80);
+    s.engine.setProp(inner, 'style', null);
+    assert.equal(s.least('still'), 64);
   });
 });
