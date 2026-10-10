@@ -28,6 +28,12 @@ which count the siblings with the element's own name. `:empty`.
 which the engine tracks itself from native focus, blur and press events. Every combinator CSS has
 works too: descendant (` `), child (`>`), next-sibling (`+`) and later-sibling (`~`).
 
+`::ng-deep` is read where something is written before it: `:host ::ng-deep .inner` and
+`.panel ::ng-deep .inner` style `.inner` anywhere under that host, or under that element of the
+component, in the views of the components it holds as well. Written first, with nothing before
+it, it is a rule for the whole app in a component's sheet, and is dropped with a warning: put
+such a rule in the global sheet.
+
 `html` means the top of the tree, exactly as `:root` does: there is no element called `html` on
 native, and a stylesheet written for the web puts its tokens there.
 

@@ -919,17 +919,16 @@ describe('messages for things that are refused', () => {
     assert.throws(() => compileCss('.a::before { color: red }'), /::before.*never/s);
   });
 
-  it('says ::ng-deep has no encapsulation to pierce, rather than calling it a pseudo-element', () => {
+  it('says what a ::ng-deep with nothing before it is, rather than calling it a pseudo-element', () => {
+    // Under a host or an element of its component it is read: see css-ng-deep.test.ts.
     for (const css of [
-      ':host ::ng-deep .inner { color: red }',
       '::ng-deep .inner { color: red }',
-      '.a ::ng-deep .b { color: red }',
+      '.a ::ng-deep .b ::ng-deep .c { color: red }',
     ]) {
       assert.throws(
         () => compileCss(css),
         (error: Error) => {
           assert.match(error.message, /'::ng-deep'/);
-          assert.match(error.message, /no encapsulation to pierce/);
           assert.doesNotMatch(error.message, /::before/);
           return true;
         },

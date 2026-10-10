@@ -1,23 +1,26 @@
-import { Component, signal } from '@angular/core';
+import { Component, input, signal } from '@angular/core';
 import { View } from '../../components/src/view.ts';
 
 @Component({
   selector: 'x-deep-kid',
   imports: [View],
-  template: `<view class="inner mark" [class.lit]="lit()" [attr.testID]="'inner-' + name"></view>`,
+  template: `<view
+    class="inner mark"
+    [class.lit]="lit()"
+    [attr.testID]="'inner-' + name()"
+  ></view>`,
 })
 export class DeepKid {
-  static count = 0;
-  readonly name = ++DeepKid.count;
-  readonly lit = signal(false);
+  readonly name = input('');
+  readonly lit = input(false);
 }
 
 @Component({
   selector: 'x-deep-frame',
   imports: [DeepKid, View],
   template: `
-    <view class="wrap"><x-deep-kid /></view>
-    <view class="plain"><x-deep-kid /></view>
+    <view class="wrap"><x-deep-kid name="a" [lit]="lit()" /></view>
+    <view class="plain"><x-deep-kid name="b" /></view>
   `,
   styles: `
     :host ::ng-deep .inner {
@@ -35,14 +38,16 @@ export class DeepKid {
     }
   `,
 })
-export class DeepFrame {}
+export class DeepFrame {
+  readonly lit = signal(false);
+}
 
 @Component({
   selector: 'x-deep-page',
   imports: [DeepFrame, DeepKid],
   template: `
     <x-deep-frame />
-    <x-deep-kid />
+    <x-deep-kid name="c" />
   `,
 })
 export class DeepPage {}

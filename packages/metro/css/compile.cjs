@@ -915,6 +915,8 @@ const ATTR_OPERATORS = {
 // eslint-disable-next-line complexity -- a dispatch table: one flat case per CSS form
 function compound(parts, context) {
   const out = { classes: /** @type {string[]} */ ([]) };
+  // What a `::ng-deep` is written after: an element of the component the sheet is of.
+  if (parts.some((part) => part.ownAnchor)) out.own = true;
   let ids = 0;
   let classes = 0;
   let types = 0;
@@ -1050,10 +1052,8 @@ function compound(parts, context) {
       case 'pseudo-element':
         if (part.name === 'ng-deep') {
           throw new CssUnsupported(
-            `${context}: '::ng-deep' lets a browser's rule past Angular's emulated encapsulation, ` +
-              `and a sheet here has no encapsulation to pierce: applied as written it would reach ` +
-              `whatever matches the rest of the selector. Style the inner element from its own ` +
-              `component's sheet, or from the global sheet.`,
+            `${context}: '::ng-deep' is read once in a selector, between what it is under and ` +
+              `what it styles: ':host ::ng-deep .inner'.`,
           );
         }
         throw new CssUnsupported(
@@ -1542,7 +1542,41 @@ function onTextInput(compiled) {
   };
 }
 
-function selector(parts, context) {
+const isDeep = (part) => part.type === 'pseudo-element' && part.name === 'ng-deep';
+
+/**
+ * A selector with `::ng-deep` taken out of it, and whether it had one. What is written before
+ * it, a host or an element of the component, is marked as the component's own: the rule is for
+ * what is under that, in the views of the components it holds as well, which is what it is for
+ * in a browser. With nothing before it the rule would be one for the whole app, and is refused.
+ */
+function pierced(parts, context) {
+  const at = parts.findIndex(isDeep);
+  if (at === -1) return { parts, deep: false };
+  const before = parts.slice(0, at);
+  // `:host ::ng-deep .x` is the host, a space, the mark by itself, a space, and `.x`: the mark
+  // goes with one of the two spaces. `:host::ng-deep .x` has it on the host.
+  const alone = before.at(-1)?.type === 'combinator';
+  const anchor = before.findLast((part) => part.type !== 'combinator');
+  if (!anchor) {
+    throw new CssUnsupported(
+      `${context}: '::ng-deep' with nothing before it is a rule for the whole app, written in ` +
+        `a component: say what it is under, ':host ::ng-deep .inner', or write it in the global ` +
+        `sheet.`,
+    );
+  }
+  const after = parts.slice(at + 1);
+  const rest = alone && after[0]?.type === 'combinator' ? after.slice(1) : after;
+  // No more than a mark on a copy: the parts are lightningcss's own.
+  const kept = before.map((part) => (part === anchor ? { ...part, ownAnchor: true } : part));
+  return {
+    parts: [...(rest.length ? kept : kept.slice(0, alone ? -1 : undefined)), ...rest],
+    deep: true,
+  };
+}
+
+function selector(written, context) {
+  const { parts, deep } = pierced(written, context);
   const compounds = [];
   const combinators = [];
   let current = [];
@@ -1592,7 +1626,12 @@ function selector(parts, context) {
   flush();
   refuseHasAbove(compounds, combinators, context);
 
-  return { compounds, combinators, specificity: pack(ids, classes, types) };
+  return {
+    compounds,
+    combinators,
+    specificity: pack(ids, classes, types),
+    ...(deep ? { deep: true } : {}),
+  };
 }
 
 /**

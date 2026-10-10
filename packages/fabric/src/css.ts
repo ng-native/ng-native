@@ -62,6 +62,11 @@ export interface Compound {
   readonly nth?: readonly NthTest[];
   /** `:empty`: no children at all, text included. */
   readonly empty?: true;
+  /**
+   * What a `::ng-deep` is written after: an element of the component the sheet is of, or its
+   * host. A rule with one is for what is under it, in other components' views too.
+   */
+  readonly own?: true;
   /** `:has()`: every one of these must find a match beneath the node. */
   readonly has?: readonly HasTest[];
 }
@@ -89,6 +94,8 @@ export interface StyleRule {
   /** Between compounds; length is `compounds.length - 1`. */
   readonly combinators: readonly Combinator[];
   readonly specificity: number;
+  /** Written with `::ng-deep`: for what is under its component, in other components' views too. */
+  readonly deep?: true;
   /**
    * The cascade layer the rule is in, as its place in its sheet's `layers`, or nothing for a rule
    * in no layer, which beats every layered one whatever their specificity.
@@ -936,6 +943,7 @@ function matchesCompound(node: StyleTarget, compound: Compound, sheet: StyleShee
     }
   }
   if (compound.type !== undefined && compound.type !== node.name) return false;
+  if (compound.own !== undefined && node.sheet !== sheet && node.hostSheet !== sheet) return false;
   if (compound.id !== undefined && node.props['nativeID'] !== compound.id) return false;
   for (const className of compound.classes) {
     if (!node.classes?.has(className)) return false;
@@ -2616,11 +2624,18 @@ export class StyleResolver {
   /** The tests of the `class` attribute itself in those sheets, which any class may answer. */
   private readonly classTests: AttributeTest[] = [];
   private readonly noted = new WeakSet<StyleSheet>();
+  /**
+   * The sheets with a rule written with `::ng-deep`, which is for what is under the component
+   * in the views of the components it holds. None in most apps, and nothing is asked then.
+   */
+  private readonly deepSheets = new Set<StyleSheet>();
+  private readonly deepIndexes = new WeakMap<StyleSheet, RuleIndex>();
 
   /** Read the classes a sheet names, once, as soon as any node is given it. */
   noteSheet(sheet: StyleSheet | null | undefined): void {
     if (!sheet || this.noted.has(sheet)) return;
     this.noted.add(sheet);
+    if (sheet.rules.some((rule) => rule.deep)) this.deepSheets.add(sheet);
     const { classes, reads, named } = classReach(sheet);
     for (const [name, how] of classes) this.noteReach(name, how);
     this.classTests.push(...reads);
@@ -2965,6 +2980,7 @@ export class StyleResolver {
     return (
       node.sheet === null &&
       node.hostSheet === null &&
+      this.deepSheets.size === 0 &&
       this.globalSheet === null &&
       this.addedSheets.length === 0 &&
       !node.customProperties &&
@@ -3054,8 +3070,31 @@ export class StyleResolver {
     const indexes: RuleIndex[] = [];
     if (node.hostSheet) indexes.push(this.ownIndex(node.hostSheet, HOSTS));
     if (node.sheet) indexes.push(this.ownIndex(node.sheet, CREATED));
+    if (this.deepSheets.size) this.reachedFromAbove(node, indexes);
     indexes.push(this.sharedIndex());
     return candidateRules(node, indexes, this.cascadeOrder);
+  }
+
+  /**
+   * Add the `::ng-deep` rules of each component a node is in whose sheet is not the node's own:
+   * a node is tried against its own component's rules already, those among them.
+   */
+  private reachedFromAbove(node: StyleTarget, indexes: RuleIndex[]): void {
+    for (let up = node.parent; up; up = up.parent) {
+      const sheet = up.hostSheet;
+      if (!sheet || sheet === node.sheet || sheet === node.hostSheet) continue;
+      if (this.deepSheets.has(sheet)) indexes.push(this.deepIndex(sheet));
+    }
+  }
+
+  /** A sheet's `::ng-deep` rules alone, filed as a component's own are. */
+  private deepIndex(sheet: StyleSheet): RuleIndex {
+    let index = this.deepIndexes.get(sheet);
+    if (!index) {
+      const deep = this.entries(sheet, COMPONENT_SPECIFICITY_BUMP).filter(({ rule }) => rule.deep);
+      this.deepIndexes.set(sheet, (index = indexRules(deep, undefined, HOSTS * SHEET_ROOM)));
+    }
+    return index;
   }
 
   /** Weakest first: by layer where any sheet has one, then by weight, then as they were filed. */

@@ -509,15 +509,16 @@ describe('how much a library says', () => {
   it('prints one line a file by default, counting what it dropped and why', () => {
     const { warnings } = shipped('acme-extras.mjs');
     assert.deepEqual(warnings, [
-      '[angular-native] @acme/extras (fesm2022/acme-extras.mjs): 3 sheets, 3 declarations and ' +
-        "rules dropped: a pseudo-element 1, '::ng-deep' 1, CSS that does not parse 1. Set " +
+      // Its `:host ::ng-deep` rule is read, and is not among them.
+      '[angular-native] @acme/extras (fesm2022/acme-extras.mjs): 3 sheets, 2 declarations and ' +
+        'rules dropped: a pseudo-element 1, CSS that does not parse 1. Set ' +
         'ANGULAR_NATIVE_LIBRARY_WARNINGS=all to see each one.',
     ]);
   });
 
   it('lists each one with ANGULAR_NATIVE_LIBRARY_WARNINGS=all', async () => {
     const { warnings } = await everyWarning(() => shipped('acme-extras.mjs'));
-    assert.equal(warnings.length, 3);
+    assert.equal(warnings.length, 2);
     for (const warning of warnings) {
       assert.match(
         warning,

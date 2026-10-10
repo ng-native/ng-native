@@ -14,16 +14,15 @@ after(cleanup);
 
 describe('::ng-deep under a component', () => {
   let Page: Type<unknown>;
-  let Kid: { count: number };
+  let Frame: Type<{ lit: { set(value: boolean): void } }>;
 
   before(async () => {
     const mod = await compileFixture('fixtures/ng-deep.ts');
     Page = mod['DeepPage'] as Type<unknown>;
-    Kid = mod['DeepKid'] as unknown as { count: number };
+    Frame = mod['DeepFrame'] as typeof Frame;
   });
 
   const page = async () => {
-    Kid.count = 0;
     const app = await render(Page);
     await settle();
     return app;
@@ -32,37 +31,38 @@ describe('::ng-deep under a component', () => {
 
   it('styles what is under the host, through the views of the components in it', async () => {
     await page();
-    assert.equal(props('inner-1')['opacity'], 0.5);
-    assert.equal(props('inner-2')['opacity'], 0.5);
+    assert.equal(props('inner-a')['opacity'], 0.5);
+    assert.equal(props('inner-b')['opacity'], 0.5);
   });
 
   it('styles nothing outside the host, though it matches the rest of the selector', async () => {
     await page();
-    assert.equal(props('inner-3')['opacity'], undefined);
-    assert.equal(props('inner-3')['paddingTop'], undefined);
+    assert.equal(props('inner-c')['opacity'], undefined);
+    assert.equal(props('inner-c')['paddingTop'], undefined);
   });
 
   it('is anchored by an element of the component, as well as by its host', async () => {
     // `.wrap ::ng-deep .mark`: under the frame's own `.wrap`, and not under its `.plain`.
     await page();
-    assert.equal(props('inner-1')['paddingTop'], 7);
-    assert.equal(props('inner-2')['paddingTop'], undefined);
+    assert.equal(props('inner-a')['paddingTop'], 7);
+    assert.equal(props('inner-b')['paddingTop'], undefined);
   });
 
   it('leaves a rule with no piercing to the elements of the component it is written in', async () => {
     await page();
-    assert.equal(props('inner-1')['marginTop'], undefined);
+    assert.equal(props('inner-a')['marginTop'], undefined);
   });
 
   it('follows a class changing on what it styles', async () => {
-    const app = await page();
-    const kid = app.fixture.debugElement.query((each) => each.name === 'x-deep-kid');
-    (kid.componentInstance as { lit: { set(value: boolean): void } }).lit.set(true);
+    const app = await render(Frame);
+    await settle();
+    assert.equal(props('inner-a')['opacity'], 0.5);
+    app.instance.lit.set(true);
     await app.rerender();
-    assert.equal(props('inner-1')['opacity'], 0.25);
-    (kid.componentInstance as { lit: { set(value: boolean): void } }).lit.set(false);
+    assert.equal(props('inner-a')['opacity'], 0.25);
+    app.instance.lit.set(false);
     await app.rerender();
-    assert.equal(props('inner-1')['opacity'], 0.5);
+    assert.equal(props('inner-a')['opacity'], 0.5);
   });
 });
 
