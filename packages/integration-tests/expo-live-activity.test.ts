@@ -14,6 +14,7 @@ import {
   createWidget,
   liveActivity,
   type LiveActivityFactory,
+  type LiveActivityOptions,
   type NativeLiveActivity,
 } from '@ng-native/expo/live-activity';
 import { WIDGET_EVENTS, type WidgetTap } from '@ng-native/expo/widget';
@@ -32,12 +33,17 @@ function fakeActivities(options: { running?: number; refuse?: boolean } = {}) {
   const calls: [string, ...unknown[]][] = [];
   const instances: NativeLiveActivity<Score>[] = [];
   const tokenListeners = new Set<(event: { pushToken: string }) => void>();
+  /** The stale date each start and update was given, in order. */
+  const stale: (Date | undefined)[] = [];
   let next = 0;
   const create = (): NativeLiveActivity<Score> => {
     const id = `activity-${next++}`;
     const activity: NativeLiveActivity<Score> = {
       getId: () => id,
-      update: async (props) => void calls.push(['update', id, props]),
+      update: async (props, staleDate) => {
+        calls.push(['update', id, props]);
+        stale.push(staleDate);
+      },
       end: async (dismissal, props) => {
         calls.push(['end', id, dismissal, props]);
         instances.splice(instances.indexOf(activity), 1);
@@ -53,10 +59,11 @@ function fakeActivities(options: { running?: number; refuse?: boolean } = {}) {
   };
   for (let i = 0; i < (options.running ?? 0); i++) create();
   const factory: LiveActivityFactory<Score> = {
-    start: (props, url) => {
+    start: (props, url, staleDate) => {
       if (options.refuse) throw new Error('Live Activities are turned off');
       const activity = create();
       calls.push(['start', activity.getId(), props, url]);
+      stale.push(staleDate);
       return activity;
     },
     getInstances: () => [...instances],
@@ -64,6 +71,7 @@ function fakeActivities(options: { running?: number; refuse?: boolean } = {}) {
   return {
     factory,
     calls,
+    stale,
     instances,
     pushToken: (token: string) =>
       tokenListeners.forEach((listener) => listener({ pushToken: token })),
@@ -82,10 +90,13 @@ before(async () => {
 function withActivity(
   fake: ReturnType<typeof fakeActivities>,
   initial: Score = { us: '0', them: '0' },
+  options?: LiveActivityOptions,
 ) {
   const injector = createEnvironmentInjector([], root);
   const score = signal(initial);
-  const activity = runInInjectionContext(injector, () => liveActivity(fake.factory, score));
+  const activity = runInInjectionContext(injector, () =>
+    liveActivity(fake.factory, score, options),
+  );
   const flush = async () => {
     root.get(ApplicationRef).tick();
     await settle();
@@ -199,6 +210,86 @@ describe('liveActivity', () => {
     destroy();
     assert.equal(fake.listening(), 0);
     assert.equal(fake.instances.length, 1, 'a Live Activity outlives the app that started it');
+  });
+});
+
+describe("liveActivity's stale date", () => {
+  const first = new Date('2026-01-01T10:00:00Z');
+  const second = new Date('2026-01-01T10:05:00Z');
+
+  it('gives the start, and each update, the date the option answers then', async () => {
+    const fake = fakeActivities();
+    const dates = [first, second];
+    const { activity, score, flush } = withActivity(fake, undefined, {
+      staleDate: () => dates.shift(),
+    });
+    await flush();
+    activity.start();
+    score.set({ us: '15', them: '0' });
+    await flush();
+    assert.deepEqual(fake.stale, [first, second]);
+  });
+
+  it('gives an activity it picks up the date, with the props it writes it', async () => {
+    const fake = fakeActivities({ running: 1 });
+    const { activity, flush } = withActivity(fake, undefined, { staleDate: () => first });
+    await flush();
+    activity.start();
+    await flush();
+    assert.ok(fake.stale.length);
+    assert.ok(fake.stale.every((date) => date === first));
+  });
+
+  it('gives none where the option answers null, or there is no option', async () => {
+    for (const options of [{ staleDate: () => null }, undefined]) {
+      const fake = fakeActivities();
+      const { activity, score, flush } = withActivity(fake, undefined, options);
+      activity.start();
+      score.set({ us: '15', them: '0' });
+      await flush();
+      assert.deepEqual(fake.stale, [undefined, undefined]);
+    }
+  });
+
+  it('keeps a start whose date cannot be had as a refused one, and an update as a failed one', async () => {
+    const fake = fakeActivities({ running: 1 });
+    const handled: unknown[] = [];
+    const failure = new Error('no date');
+    let fail = false;
+    const injector = createEnvironmentInjector(
+      [
+        {
+          provide: ErrorHandler,
+          useValue: { handleError: (error: unknown) => handled.push(error) },
+        },
+      ],
+      root,
+    );
+    const score = signal<Score>({ us: '0', them: '0' });
+    const activity = runInInjectionContext(injector, () =>
+      liveActivity(fake.factory, score, {
+        staleDate: () => {
+          if (fail) throw failure;
+          return first;
+        },
+      }),
+    );
+    fail = true;
+    score.set({ us: '15', them: '0' });
+    root.get(ApplicationRef).tick();
+    await settle();
+    assert.equal(activity.error(), failure);
+    assert.deepEqual(handled, [failure]);
+
+    const none = fakeActivities();
+    const refused = withActivity(none, undefined, {
+      staleDate: () => {
+        throw failure;
+      },
+    });
+    assert.equal(refused.activity.start(), false);
+    assert.equal(refused.activity.error(), failure);
+    assert.equal(none.instances.length, 0);
   });
 });
 

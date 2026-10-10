@@ -120,6 +120,12 @@ export interface LiveActivityOptions {
    * rejects, goes to the `ErrorHandler`.
    */
   readonly onTaps?: (taps: readonly string[]) => void;
+  /**
+   * When what the activity shows is out of date, unless it is written again first: asked at the
+   * start and at each update, which replaces the date before it. iOS then draws the activity with
+   * its layout's `environment().isStale` true. Null, or no option, is never.
+   */
+  readonly staleDate?: () => Date | null | undefined;
 }
 
 /** A Live Activity kept in step with a signal. */
@@ -159,6 +165,7 @@ export function liveActivity<T extends object>(
 ): LiveActivityRef {
   const errors = inject(ErrorHandler);
   const { onTaps } = options;
+  const staleDate = () => options.staleDate?.() ?? undefined;
   const active = signal(false);
   const id = signal<string | null>(null);
   const pushToken = signal<string | null>(null);
@@ -201,13 +208,17 @@ export function liveActivity<T extends object>(
     );
   };
 
+  /** Rejects where the stale date cannot be had, as where the write fails. */
+  const write = async (activity: NativeLiveActivity<T>, value: T) =>
+    activity.update(value, staleDate());
+
   const existing = running()[0];
   if (existing) adopt(existing);
 
   effect(() => {
     const next = props();
     const activity = current;
-    if (activity) untracked(() => activity.update(next).catch(report));
+    if (activity) untracked(() => write(activity, next).catch(report));
   });
 
   const stopTaps = onTaps && listenForTaps(onTaps);
@@ -253,13 +264,13 @@ export function liveActivity<T extends object>(
       const value = untracked(props);
       try {
         const already = running()[0];
-        const activity = already ?? factory.start(value, options.url);
+        const activity = already ?? factory.start(value, options.url, staleDate());
         if (!activity.getId()) {
           error.set(new Error('Live Activities are only on iOS.'));
           return false;
         }
         adopt(activity);
-        if (already) already.update(value).catch(report);
+        if (already) write(already, value).catch(report);
         return true;
       } catch (failure) {
         error.set(failure);

@@ -89,7 +89,8 @@ of the wrong type fails `ngc`. The slots are `banner`, for the lock screen, and 
 
 The extension runs the layout with no Angular and no instance of the class, so:
 
-- **The class** holds its `props` input, members set to a modifier from
+- **The class** holds its `props` input, an [`environment` input](#where-it-is-drawn), members set
+  to a modifier from
   `@expo/ui/swift-ui/modifiers`, and members set to a literal: a string, number, boolean, `null`,
   or an array or object of them. A method, another input, or any other value is a build error
   naming the member and its line. The build removes the class, so it is not exported, and nothing
@@ -158,6 +159,40 @@ class RestLayout {
 
 The same inputs work in a home-screen widget, and on a `ui-text` or a `ui-progress` in an app on
 iOS. Compose has no such text or bar, so on Android they are not sent.
+
+### Where it is drawn
+
+An `environment` input beside `props` holds what the activity is being drawn in, so one layout can
+draw differently there:
+
+```ts
+import type { LiveActivityEnvironment } from 'expo-widgets';
+
+@Component({
+  selector: 'score-activity',
+  imports: [UiText],
+  template: `
+    <ng-template #banner>
+      @if (environment().isStale) {
+        <ui-text>Waiting for the score</ui-text>
+      } @else {
+        <ui-text>Us {{ props().us }} - {{ props().them }} Them</ui-text>
+      }
+    </ng-template>
+  `,
+})
+class ScoreLayout {
+  readonly props = input.required<Scoreline>();
+  readonly environment = input.required<LiveActivityEnvironment>();
+}
+```
+
+- **`colorScheme`** is `'light'` or `'dark'`.
+- **`isLuminanceReduced`** is true while an always-on display is dimmed.
+- **`isStale`** is true once the activity is past its [`staleDate`](#what-it-does).
+- **`isActivityFullscreen`** is true where the activity fills the screen, as in StandBy.
+- **`activityFamily`** is `'small'` where the activity is drawn small, and `'medium'` elsewhere.
+  It is set from iOS 18.
 
 ### Buttons
 
@@ -272,6 +307,11 @@ Call it in an injection context, such as a field of a component or service.
   that ends one and can start the next wants `'immediate'`.
 - **`active`**, **`id`** and **`pushToken`** are signals. The push token is for updating the
   activity from a server through APNs.
+- **`staleDate`**, in the options, answers when what the activity shows is out of date unless it
+  is written again first, or null for never. It is asked at the start and at each update, so
+  `() => new Date(Date.now() + 5 * 60_000)` is five minutes after the last write. iOS then draws
+  the layout with [`environment().isStale`](#where-it-is-drawn) true. It marks activities stale on
+  its own schedule, which can be a minute or two after the date.
 - **`onTaps`**, in the options, is called with the `target` of each
   [button](#buttons) tapped on a running activity of this kind. A handler that throws, or rejects,
   goes to the `ErrorHandler`.
