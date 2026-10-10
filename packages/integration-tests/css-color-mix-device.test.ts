@@ -90,6 +90,29 @@ describe('color-mix with a token, on device', () => {
     );
   });
 
+  it('mixes a grey, a black and each way round the hue circle as Chromium does', () => {
+    // What Chromium 154 computes for each, read back through `color-mix(in srgb, x, x)`.
+    const chromium: [string, string, string, string][] = [
+      ['hsl', 'rgb(128, 128, 128)', 'rgb(0, 255, 0)', 'rgb(64, 191, 64)'],
+      ['oklch', 'rgb(128, 128, 128)', 'rgb(0, 255, 0)', 'rgb(109, 192, 103)'],
+      ['lab', 'rgb(0, 0, 0)', 'rgb(0, 0, 255)', 'rgb(34, 16, 120)'],
+      ['lch', 'rgb(0, 0, 0)', 'rgb(0, 0, 255)', 'rgb(34, 16, 120)'],
+      ['hsl longer hue', 'rgb(255, 255, 255)', 'rgb(255, 0, 0)', 'rgb(159, 223, 223)'],
+      ['hsl longer hue', 'rgb(255, 255, 0)', 'rgb(0, 255, 255)', 'rgb(255, 0, 255)'],
+      ['hsl increasing hue', 'rgb(255, 0, 0)', 'rgb(255, 0, 0)', 'rgb(255, 0, 0)'],
+      ['hsl decreasing hue', 'rgb(255, 0, 0)', 'rgb(255, 0, 0)', 'rgb(255, 0, 0)'],
+      ['hwb increasing hue', 'rgb(0, 128, 0)', 'rgb(255, 0, 255)', 'rgb(0, 96, 191)'],
+    ];
+    for (const [space, token, partner, expected] of chromium) {
+      const style = resolvedStyle(
+        `.theme { --x: ${token} } .a { color: color-mix(in ${space}, var(--x), ${partner}) }`,
+        ['a'],
+        ['theme'],
+      );
+      assertSameColour(style['color'], expected, `in ${space}: ${token} with ${partner}`);
+    }
+  });
+
   for (const [space, token, partner] of cases) {
     it(`mixes in ${space} as the literal mix would: ${token} with ${partner}`, () => {
       const style = resolvedStyle(
