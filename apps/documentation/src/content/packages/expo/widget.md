@@ -125,8 +125,8 @@ Call it in an injection context, such as a field of a component or service.
 - **The widget follows the signal.** A write replaces the props the widget holds, `taps` included,
   so each one comes after the taps are read, and nothing is written while they cannot be.
 - **Taps reach `onTaps` once each,** oldest first, after the write that clears them: at once while
-  the app is running, when it comes back to the foreground, and as it starts. A handler that throws
-  goes to the `ErrorHandler`, and its taps are still cleared.
+  the app is running, when it comes back to the foreground, and as it starts. A handler that
+  throws, or rejects, goes to the `ErrorHandler`, and its taps are still cleared.
 - **`error`** holds why the last sync did not happen: the taps could not be read, or the widget not
   written. It also goes to the `ErrorHandler`, and is null again once a sync works.
 - **iOS redraws a widget on its own schedule,** so the home screen can show the last version for a

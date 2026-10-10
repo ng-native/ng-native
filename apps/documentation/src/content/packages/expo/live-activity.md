@@ -226,8 +226,8 @@ Call it in an injection context, such as a field of a component or service.
 - **`active`**, **`id`** and **`pushToken`** are signals. The push token is for updating the
   activity from a server through APNs.
 - **`onTaps`**, in the options, is called with the `target` of each
-  [button](#buttons) tapped on a running activity of this kind. A handler that throws goes to the
-  `ErrorHandler`.
+  [button](#buttons) tapped on a running activity of this kind. A handler that throws, or rejects,
+  goes to the `ErrorHandler`.
 - **`error`** holds why the last start or update failed, for example Live Activities turned off in
   Settings. A refused start is only kept there; an update that fails also goes to the
   `ErrorHandler`.
