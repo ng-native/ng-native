@@ -324,3 +324,129 @@ describe('widget', () => {
     assert.equal(events.listening(), 0);
   });
 });
+
+describe("widget's timeline", () => {
+  const later = new Date('2030-01-01T12:00:00Z');
+
+  /** A widget that keeps each timeline written, and can be tapped while it shows any entry. */
+  function timelineWidget(withTimeline = true) {
+    const written: WidgetEntry<Score>[][] = [];
+    const snapshots: Score[] = [];
+    let timeline: WidgetEntry<Score>[] = [];
+    const native: NativeWidget<Score> = {
+      updateSnapshot: (props) => {
+        snapshots.push(props);
+        timeline = [{ date: new Date(), props }];
+      },
+      getTimeline: async () => timeline,
+      reload: () => {},
+    };
+    if (withTimeline) {
+      native.updateTimeline = (entries) => {
+        written.push([...entries]);
+        timeline = [...entries];
+      };
+    }
+    return {
+      native,
+      written,
+      snapshots,
+      tapWhileShowing: (index: number, target: string) => {
+        const entry = timeline[index]!;
+        timeline[index] = {
+          ...entry,
+          props: { ...entry.props, taps: [...(entry.props.taps ?? []), target] },
+        };
+      },
+    };
+  }
+
+  function follow(
+    fake: ReturnType<typeof timelineWidget>,
+    timeline: (props: Score) => readonly WidgetEntry<Score>[],
+    handled: unknown[] = [],
+  ) {
+    const events = fakeEvents();
+    const received: string[][] = [];
+    const injector = createEnvironmentInjector(
+      [
+        { provide: WIDGET_EVENTS, useValue: events.events },
+        {
+          provide: ErrorHandler,
+          useValue: { handleError: (error: unknown) => handled.push(error) },
+        },
+      ],
+      root,
+    );
+    const score = signal<Score>({ us: '0', them: '0' });
+    const ref = runInInjectionContext(injector, () =>
+      widget(fake.native, score, { timeline, onTaps: (taps) => received.push([...taps]) }),
+    );
+    const flush = async () => {
+      await settle();
+      root.get(ApplicationRef).tick();
+      await settle();
+    };
+    return { events, received, score, ref, flush };
+  }
+
+  const final = (props: Score) => [{ date: later, props: { ...props, them: 'final' } }];
+
+  it("writes the signal's props for now, and then the entries the option answers for them", async () => {
+    const fake = timelineWidget();
+    const { score, flush } = follow(fake, final);
+    await flush();
+    score.set({ us: '15', them: '0' });
+    await flush();
+    const last = fake.written.at(-1)!;
+    assert.deepEqual(
+      last.map((entry) => entry.props),
+      [
+        { us: '15', them: '0' },
+        { us: '15', them: 'final' },
+      ],
+    );
+    assert.equal(last[1]!.date, later);
+    assert.ok(last[0]!.date.getTime() <= Date.now());
+    assert.deepEqual(fake.snapshots, [], 'a timeline is written whole, not as a snapshot');
+  });
+
+  it('collects the taps made while any entry was showing, oldest entry first', async () => {
+    const fake = timelineWidget();
+    const { received, events, flush } = follow(fake, final);
+    await flush();
+    fake.tapWhileShowing(1, 'them');
+    fake.tapWhileShowing(0, 'us');
+    events.foreground();
+    await flush();
+    assert.deepEqual(received, [['us', 'them']]);
+    assert.ok(
+      fake.written.at(-1)!.every((entry) => !entry.props.taps),
+      'the write after it clears them',
+    );
+  });
+
+  it("writes only the signal's props where the widget takes no timeline", async () => {
+    const fake = timelineWidget(false);
+    const { flush } = follow(fake, final);
+    await flush();
+    assert.deepEqual(fake.snapshots, [{ us: '0', them: '0' }]);
+  });
+
+  it('writes nothing where the option throws, and says why', async () => {
+    const fake = timelineWidget();
+    const handled: unknown[] = [];
+    const failure = new Error('no entries');
+    const { ref, flush } = follow(
+      fake,
+      () => {
+        throw failure;
+      },
+      handled,
+    );
+    await flush();
+    assert.deepEqual(fake.written, []);
+    assert.equal(ref.error(), failure);
+    assert.deepEqual(handled, [failure]);
+  });
+});

@@ -30,6 +30,8 @@ export interface WidgetEntry<T extends object> {
 /** What `createWidget` answers. */
 export interface NativeWidget<T extends object> {
   updateSnapshot(props: T): void;
+  /** Replaces the timeline: each entry's props are shown from its date. */
+  updateTimeline?(entries: readonly WidgetEntry<T>[]): void;
   getTimeline(): Promise<readonly WidgetEntry<T>[]>;
   reload(): void;
 }
@@ -57,13 +59,19 @@ export interface WidgetEvents {
   onBackground(listener: () => void): () => void;
 }
 
-export interface WidgetOptions {
+export interface WidgetOptions<T extends object = object> {
   /**
    * Called with the targets of the buttons tapped since the last call, oldest first, once the write
    * that clears them from the widget has worked, so a tap is handed over once. A handler that throws, or rejects,
    * goes to the `ErrorHandler`, and its taps are still cleared.
    */
   readonly onTaps?: (taps: readonly string[]) => void;
+  /**
+   * What the widget shows later, with the app not running: the entries after now, each the props
+   * to show from its date. Asked at every write with the signal's props, which are shown until the
+   * first of them.
+   */
+  readonly timeline?: (props: T) => readonly WidgetEntry<T>[];
 }
 
 /** A home screen widget kept in step with a signal. */
@@ -124,14 +132,24 @@ export const WIDGET_EVENTS = new InjectionToken<WidgetEvents>('angular-native.wi
 export function widget<T extends object>(
   native: NativeWidget<T>,
   props: Signal<T>,
-  options: WidgetOptions = {},
+  options: WidgetOptions<T> = {},
 ): WidgetRef {
   const errors = inject(ErrorHandler);
   const events = inject(WIDGET_EVENTS);
   const error = signal<unknown>(null);
   let syncing: Promise<void> | null = null;
 
-  const queued = async () => (await native.getTimeline()).at(-1)?.props.taps ?? [];
+  /** A tap is recorded in the entry that was showing, which a timeline has several of. */
+  const queued = async () =>
+    (await native.getTimeline()).flatMap((entry) => entry.props.taps ?? []);
+
+  const write = (now: T) => {
+    if (options.timeline && native.updateTimeline) {
+      native.updateTimeline([{ date: new Date(), props: now }, ...options.timeline(now)]);
+    } else {
+      native.updateSnapshot(now);
+    }
+  };
 
   /** The taps, read again until no more land, since the write after it clears them. */
   const collect = async () => {
@@ -153,7 +171,7 @@ export function widget<T extends object>(
   const run = async () => {
     try {
       const taps = await collect();
-      native.updateSnapshot(untracked(props));
+      untracked(() => write(props()));
       error.set(null);
       if (taps.length) hand(taps);
     } catch (failure) {

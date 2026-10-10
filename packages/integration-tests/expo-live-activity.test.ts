@@ -390,6 +390,7 @@ describe('createLiveActivity and createWidget', () => {
   it('answer a widget that draws nothing in Node, which widget() can still keep in step', async () => {
     const widget = createWidget('Score', 'function(){}' as never);
     widget.updateSnapshot({});
+    widget.updateTimeline([{ date: new Date(), props: {} }]);
     widget.reload();
     assert.deepEqual(await widget.getTimeline(), []);
   });
