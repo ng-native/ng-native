@@ -1392,14 +1392,24 @@ function alignMultiline(viewName: string, props: Record<string, unknown>): void 
  * around the text and inside the height Yoga gives a view, its padding and border above and
  * below, but for a content box. Only where a line height is a length, and nothing gives the
  * paragraph a height of its own.
+ *
+ * The line is as the system text size draws it: native scales a line height with the text, so
+ * a line held to its points at a smaller size is shorter than its box and sits at the top of
+ * it, over what a row centres it beside.
  */
-function lineTall(props: Record<string, unknown>, run: number): void {
+function lineTall(
+  props: Record<string, unknown>,
+  run: number,
+  fontScale: number | undefined,
+): void {
   const own = props['lineHeight'];
-  const line = Math.max(typeof own === 'number' ? own : 0, run);
+  const line = Math.max(typeof own === 'number' ? own : 0, run) * textScale(props, fontScale);
   if (line <= 0) return;
   const unset = (value: unknown): boolean => value == null || value === 'auto';
   if (!unset(props['height']) || !unset(props['minHeight'])) return;
-  props['minHeight'] = line + (props['boxSizing'] === 'content-box' ? 0 : aroundALine(props));
+  const around = props['boxSizing'] === 'content-box' ? 0 : aroundALine(props);
+  // To a thousandth of a point: a product of two fractions is rarely the number it reads as.
+  props['minHeight'] = Math.round((line + around) * 1000) / 1000;
 }
 
 /** The points of padding and border above and below a view's content, where each is a length. */
@@ -4196,7 +4206,7 @@ export class Engine implements HostEngine {
     if (viewName === PARAGRAPH) {
       alignText(style, this.directionOf(node, style));
       this.wholeWords(node, style);
-      lineTall(style, this.tallestRun(node, 0));
+      lineTall(style, this.tallestRun(node, 0), this.fontScale);
     }
     if (this.fontsRefreshed) this.capForFonts(node, style);
     alignMultiline(viewName, style);
