@@ -1545,8 +1545,8 @@ function onTextInput(compiled) {
 const isDeep = (part) => part.type === 'pseudo-element' && part.name === 'ng-deep';
 
 /**
- * A selector with `::ng-deep` taken out of it, and whether it had one. What is written before
- * it, a host or an element of the component, is marked as the component's own: the rule is for
+ * A selector with `::ng-deep` taken out of it, and whether it had one. All that is written
+ * before it, a host or elements of the component, is marked as the component's own: the rule is for
  * what is under that, in the views of the components it holds as well, which is what it is for
  * in a browser. With nothing before it the rule would be one for the whole app, and is refused.
  */
@@ -1568,7 +1568,9 @@ function pierced(parts, context) {
   const after = parts.slice(at + 1);
   const rest = alone && after[0]?.type === 'combinator' ? after.slice(1) : after;
   // No more than a mark on a copy: the parts are lightningcss's own.
-  const kept = before.map((part) => (part === anchor ? { ...part, ownAnchor: true } : part));
+  const kept = before.map((part) =>
+    part.type === 'combinator' ? part : { ...part, ownAnchor: true },
+  );
   return {
     parts: [...(rest.length ? kept : kept.slice(0, alone ? -1 : undefined)), ...rest],
     deep: true,

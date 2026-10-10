@@ -926,6 +926,16 @@ function matchesValue(
   }
 }
 
+/**
+ * Whether a node is one a compound written before `::ng-deep` may be: an element of the view of
+ * the component the sheet is of. Its host is one only where the compound says `:host`, which is
+ * asked of it already: a class a parent gives the host is no anchor.
+ */
+function ownedBy(node: StyleTarget, compound: Compound, sheet: StyleSheet | null): boolean {
+  if (compound.host !== undefined || compound.hostContext !== undefined) return true;
+  return node.sheet === sheet;
+}
+
 /*
  * Exempt from the complexity limit deliberately. This is a flat conjunction of independent
  * guards, not nested logic: cyclomatic complexity scores the two the same, and they are not the
@@ -943,7 +953,7 @@ function matchesCompound(node: StyleTarget, compound: Compound, sheet: StyleShee
     }
   }
   if (compound.type !== undefined && compound.type !== node.name) return false;
-  if (compound.own !== undefined && node.sheet !== sheet && node.hostSheet !== sheet) return false;
+  if (compound.own !== undefined && !ownedBy(node, compound, sheet)) return false;
   if (compound.id !== undefined && node.props['nativeID'] !== compound.id) return false;
   for (const className of compound.classes) {
     if (!node.classes?.has(className)) return false;
