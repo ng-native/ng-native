@@ -56,6 +56,7 @@ import {
   UiButton,
   UiChart,
   UiHStack,
+  UiImage,
   UiLink,
   UiProgress,
   UiRoundedRectangle,
@@ -79,6 +80,7 @@ interface Scoreline {
     UiButton,
     UiChart,
     UiHStack,
+    UiImage,
     UiLink,
     UiProgress,
     UiRoundedRectangle,
@@ -159,6 +161,21 @@ describe("a widget layout's template, through ngc", () => {
     assert.match(
       check(`<ui-chart [data]="props().games" [barStyle]="{ cornerRadius: 'big' }" />`),
       /'string' is not assignable to type 'number/,
+    );
+  });
+
+  it('type-checks an image by symbol, asset and file', () => {
+    assert.equal(
+      check(`<ui-hstack>
+        <ui-image systemName="tennisball.fill" />
+        <ui-image assetName="court" />
+        <ui-image [uiImage]="props().us" />
+      </ui-hstack>`),
+      '',
+    );
+    assert.match(
+      check('<ui-image [assetName]="props().done" />'),
+      /'number' is not assignable to type 'string/,
     );
   });
 
