@@ -1384,22 +1384,35 @@ function alignMultiline(viewName: string, props: Record<string, unknown>): void 
   props['textAlignVertical'] ??= 'top';
 }
 
+/** The props of a run of text that change how tall its line is drawn. */
+const SIZES_A_RUN = new Set(['style', 'allowFontScaling', 'maxFontSizeMultiplier']);
+
 /**
  * Keep a paragraph as tall as one of its lines, as a browser's line box is whatever holds it.
  * Yoga measures an item no taller than the room inside its container, and the text view cuts
  * its letters off there: a 24 point line in a row with 16 points between its paddings. The
- * line is the paragraph's own or a taller one of a run in it, `run`. With it goes what is
+ * line is the paragraph's own or a taller one of a run in it, `run`, which is scaled already. With it goes what is
  * around the text and inside the height Yoga gives a view, its padding and border above and
  * below, but for a content box. Only where a line height is a length, and nothing gives the
  * paragraph a height of its own.
+ *
+ * The line is as the system text size draws it: native scales a line height with the text, so
+ * a line held to its points at a smaller size is shorter than its box and sits at the top of
+ * it, over what a row centres it beside.
  */
-function lineTall(props: Record<string, unknown>, run: number): void {
+function lineTall(
+  props: Record<string, unknown>,
+  run: number,
+  fontScale: number | undefined,
+): void {
   const own = props['lineHeight'];
-  const line = Math.max(typeof own === 'number' ? own : 0, run);
+  const line = Math.max(typeof own === 'number' ? own * textScale(props, fontScale) : 0, run);
   if (line <= 0) return;
   const unset = (value: unknown): boolean => value == null || value === 'auto';
   if (!unset(props['height']) || !unset(props['minHeight'])) return;
-  props['minHeight'] = line + (props['boxSizing'] === 'content-box' ? 0 : aroundALine(props));
+  const around = props['boxSizing'] === 'content-box' ? 0 : aroundALine(props);
+  // To a thousandth of a point: a product of two fractions is rarely the number it reads as.
+  props['minHeight'] = Math.round((line + around) * 1000) / 1000;
 }
 
 /** The points of padding and border above and below a view's content, where each is a length. */
@@ -3569,6 +3582,17 @@ export class Engine implements HostEngine {
     // field's text on every key, match nothing they did not.
     const read = key === 'style' ? this.inlineReachesStyle(node) : this.styles.reads(key);
     this.markProps(node, read || heirs);
+    if (SIZES_A_RUN.has(key)) this.markParagraph(node);
+  }
+
+  /**
+   * Have the paragraph a run of text is in merged again: it is as tall as the tallest line of
+   * its runs, by a line height or a text scaling set on one of them. See `lineTall`.
+   */
+  private markParagraph(run: EngineNode): void {
+    let paragraph = run;
+    while (paragraph.parent && isTextElement(paragraph.parent)) paragraph = paragraph.parent;
+    if (paragraph !== run) this.markProps(paragraph, false);
   }
 
   /**
@@ -3627,6 +3651,7 @@ export class Engine implements HostEngine {
    */
   styleChanged(node: EngineNode): void {
     this.markProps(node, this.inlineReachesStyle(node));
+    this.markParagraph(node);
   }
 
   /**
@@ -4196,7 +4221,7 @@ export class Engine implements HostEngine {
     if (viewName === PARAGRAPH) {
       alignText(style, this.directionOf(node, style));
       this.wholeWords(node, style);
-      lineTall(style, this.tallestRun(node, 0));
+      lineTall(style, this.tallestRun(node, style, 0), this.fontScale);
     }
     if (this.fontsRefreshed) this.capForFonts(node, style);
     alignMultiline(viewName, style);
@@ -4274,17 +4299,24 @@ export class Engine implements HostEngine {
     }
   }
 
-  /** The tallest line height, in points, of the runs of text in a paragraph: none is 0. */
-  private tallestRun(node: EngineNode, tallest: number): number {
+  /**
+   * The tallest line, as the system text size draws it, of the runs of text in a paragraph:
+   * none is 0. A run scales as what it is in does, `within`, but for what it says of that
+   * itself: one that does not scale, or stops at a size, beside text that does.
+   */
+  private tallestRun(node: EngineNode, within: Record<string, unknown>, tallest: number): number {
     for (const child of node.children) {
       if (!isTextElement(child)) continue;
+      const scaling = {
+        allowFontScaling: child.props['allowFontScaling'] ?? within['allowFontScaling'],
+        maxFontSizeMultiplier:
+          child.props['maxFontSizeMultiplier'] ?? within['maxFontSizeMultiplier'],
+      };
       const line =
         inlineOf(child)['lineHeight'] ??
         this.styles.resolve(child, this.styleEpoch).style['lineHeight'];
-      tallest = this.tallestRun(
-        child,
-        typeof line === 'number' ? Math.max(tallest, line) : tallest,
-      );
+      const drawn = typeof line === 'number' ? line * textScale(scaling, this.fontScale) : 0;
+      tallest = this.tallestRun(child, scaling, Math.max(tallest, drawn));
     }
     return tallest;
   }
