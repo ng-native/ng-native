@@ -307,7 +307,7 @@ Call it in an injection context, such as a field of a component or service.
   the lock screen, with its final value, for up to four hours, above any started after it; a button
   that ends one and can start the next wants `'immediate'`.
 - **`active`**, **`id`** and **`pushToken`** are signals. The push token is for updating the
-  activity from a server through APNs.
+  activity [from a server](#from-a-server) through APNs.
 - **`staleDate`**, in the options, answers when what the activity shows is out of date unless it
   is written again first, or null for never. It is asked at the start and at each update, so
   `() => new Date(Date.now() + 5 * 60_000)` is five minutes after the last write. iOS then draws
@@ -328,6 +328,71 @@ screen until it is ended or the system removes it.
 An activity runs for up to eight hours. iOS then ends it, and keeps the ended activity on the lock
 screen for up to four hours more before removing it.
 
+To carry on past that, end the activity and start another: from the app, or
+[from a server](#from-a-server) while the app is closed.
+
+## From a server
+
+A server can update a running activity, and start one while the app is closed, by sending to APNs.
+Both need `enablePushNotifications` in the plugin's config, and a rebuild:
+
+```json
+["expo-widgets", { "enablePushNotifications": true }]
+```
+
+- **`pushToken`**, on what `liveActivity()` answers, is the token of that one activity. A push to
+  it updates or ends the activity.
+- **`pushToStartToken()`** is the token a push starts an activity with. The app has one, for every
+  kind of activity it has. It is a signal: null until iOS issues a token, then the latest, as iOS
+  can issue another at any time. Call it in an injection context, and send each one to your server:
+
+```ts
+import { effect, inject } from '@angular/core';
+import { pushToStartToken } from '@ng-native/expo/live-activity';
+
+export class Scoreboard {
+  private readonly server = inject(Server);
+  private readonly startToken = pushToStartToken();
+
+  constructor() {
+    effect(() => {
+      const token = this.startToken();
+      if (token) this.server.keepStartToken(token);
+    });
+  }
+}
+```
+
+A push that starts an activity names its kind and gives its props in the `content-state`: `name` is
+the name passed to `createLiveActivity`, and `props` is the props as a JSON string. Its
+`attributes-type` is `LiveActivityAttributes`, and `attributes` can hold the `url` a tap opens the
+app at:
+
+```json
+{
+  "aps": {
+    "timestamp": 1760000000,
+    "event": "start",
+    "attributes-type": "LiveActivityAttributes",
+    "attributes": {},
+    "content-state": { "name": "Score", "props": "{\"us\":\"0\",\"them\":\"0\"}" },
+    "alert": { "title": "Match started", "body": "Us 0 - 0 Them" }
+  }
+}
+```
+
+The request to APNs carries the headers `apns-push-type: liveactivity` and
+`apns-topic: <bundle identifier>.push-type.liveactivity`, for a start as for an update.
+
+- **Starting from a server needs iOS 17.2.** Before it, with Live Activities turned off in
+  Settings, and on Android and the web, `pushToStartToken()` stays null.
+- **The extension draws the layout the app last stored**, which it does each time it runs
+  `createLiveActivity`. A push draws that one, so it reaches an app that has run since it was
+  installed, as an app with a token to send has.
+- **`liveActivity()` picks up an activity a push started.** One started while the app was closed is
+  followed from when `liveActivity()` is next called, and one started while the app is running from
+  the next `start()`.
+
 ## Only on iOS
 
 Live Activities need iOS 16.4 or newer, the oldest version `expo-widgets` and Expo build for. On
@@ -342,4 +407,5 @@ A layout file imports in a Vitest test as it is: with no `expo-widgets` to hand 
 `getInstances()`.
 To tap a button, provide `WIDGET_EVENTS` from `@ng-native/expo/widget` with a stand-in whose
 `onTap` keeps the listener, and call it with the activity's id as `source`, the button's
-`target` and a `timestamp`.
+`target` and a `timestamp`. For a start token, give the stand-in a `pushToStartToken` that answers
+a signal.

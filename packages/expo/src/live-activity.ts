@@ -128,6 +128,18 @@ export interface LiveActivityOptions {
   readonly staleDate?: () => Date | null | undefined;
 }
 
+const NO_TOKEN = signal<string | null>(null).asReadonly();
+
+/**
+ * The token a server starts a Live Activity with over APNs, with the app not running: null until
+ * iOS issues one, then the latest. The app has one, for every kind of activity; the push names the
+ * kind. It needs iOS 17.2, and `enablePushNotifications` in the `expo-widgets` plugin's config. Call
+ * it in an injection context.
+ */
+export function pushToStartToken(): Signal<string | null> {
+  return inject(WIDGET_EVENTS).pushToStartToken?.() ?? NO_TOKEN;
+}
+
 /** A Live Activity kept in step with a signal. */
 export interface LiveActivityRef {
   /** Whether an activity of this kind is running and following the signal. */
