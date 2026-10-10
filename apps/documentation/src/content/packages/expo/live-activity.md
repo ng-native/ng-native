@@ -114,8 +114,9 @@ The extension runs the layout with no Angular and no instance of the class, so:
 
 ### Buttons
 
-A `ui-button` in a slot is a button on the lock screen or in the expanded Dynamic Island. Give it
-a `target`, and `liveActivity()` hands that to `onTaps` when it is tapped:
+A `ui-button` in a slot is a button on the lock screen or in the expanded Dynamic Island. Import
+`UiButton` beside the layout's other views, give the button a `target`, and `liveActivity()` hands
+that to `onTaps` when it is tapped:
 
 ```ts
 template: `
