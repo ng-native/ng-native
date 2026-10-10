@@ -16,6 +16,8 @@
  *   read as that component's transform reads it.
  * - A `ui-text`'s content is its text, as in an app: each run of whitespace collapsed to one space,
  *   as Angular collapses it, and the space at the two ends dropped.
+ * - A `ui-text`'s `date`, and a `timerInterval`'s two ends, become the `Date`s the extension's
+ *   components take, so the text or the bar keeps time with no update from the app.
  * - `props()` and `environment()` are the function's parameters, a member standing for a modifier
  *   is the extension's global of that name, and a constant member is inlined.
  * - `@if`, `@for` (with `@empty` and the contextual names), `@switch` and `@let` are expressions.
@@ -37,17 +39,30 @@ const ng = require('@angular/compiler');
  */
 const HELPERS =
   'function ɵflat(list){var out=[];(function add(v){if(Array.isArray(v))v.forEach(add);else if(v!==undefined&&v!==null&&v!==false)out.push(v);})(list);return out.length===0?undefined:out.length===1?out[0]:out;}' +
-  'function ɵstr(v){return v===undefined||v===null?"":String(v);}';
+  'function ɵstr(v){return v===undefined||v===null?"":String(v);}' +
+  'function ɵdate(v){var d=v===undefined||v===null?NaN:new Date(v);return isNaN(d)?undefined:d;}' +
+  'function ɵrange(v){var l=v&&ɵdate(v.lower),u=v&&ɵdate(v.upper);return l&&u?{lower:l,upper:u}:undefined;}';
 
 /**
  * The views the widget extension draws (`DynamicView.swift`) that have a typed `ui-*` component, by
  * element: the `@expo/ui` component that draws it, and the inputs of the typed component with how a
  * static attribute is read for each. A view with no typed component is left out, since `ngc`
  * refuses its element in the layout's own template. A `label` input is a string in an app; the extension's component takes a view there, so the string
- * is drawn as a `Text`.
+ * is drawn as a `Text`. A `date` input, and each end of a `range`, is a `Date` there, made from
+ * what the props hold: milliseconds, or the string JSON makes of a `Date`.
  */
 const VIEWS = {
-  text: { component: 'Text', inputs: { text: 'string', modifiers: 'any' } },
+  text: {
+    component: 'Text',
+    inputs: {
+      text: 'string',
+      date: 'date',
+      dateStyle: 'string',
+      timerInterval: 'range',
+      countsDown: 'boolean',
+      modifiers: 'any',
+    },
+  },
   hstack: {
     component: 'HStack',
     inputs: { alignment: 'string', spacing: 'number', modifiers: 'any' },
@@ -109,7 +124,10 @@ const VIEWS = {
       modifiers: 'any',
     },
   },
-  progress: { component: 'ProgressView', inputs: { value: 'number', modifiers: 'any' } },
+  progress: {
+    component: 'ProgressView',
+    inputs: { value: 'number', timerInterval: 'range', countsDown: 'boolean', modifiers: 'any' },
+  },
   spacer: { component: 'Spacer', inputs: { modifiers: 'any' } },
   gauge: {
     component: 'Gauge',
@@ -143,6 +161,13 @@ const VIEWS = {
       modifiers: 'any',
     },
   },
+};
+
+/** The kinds of input the extension's component takes as something other than the app's value. */
+const CONVERTED = {
+  label: (value) => `_jsx(Text,{children:${value}})`,
+  date: (value) => `ɵdate(${value})`,
+  range: (value) => `ɵrange(${value})`,
 };
 
 /** The slots a Live Activity's layout fills: the lock screen banner and the Dynamic Island. */
@@ -392,7 +417,8 @@ class Compiler {
       props.set(input.name, this.expression(input.value, scope));
     }
     for (const [key, value] of props) {
-      if (view.inputs?.[key] === 'label') props.set(key, `_jsx(Text,{children:${value}})`);
+      const convert = CONVERTED[view.inputs?.[key]];
+      if (convert) props.set(key, convert(value));
     }
     const children = this.content(node, name, props, scope);
     if (children !== null) props.set('children', children);
