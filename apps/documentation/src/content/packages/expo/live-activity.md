@@ -247,5 +247,5 @@ A layout file imports in a Vitest test as it is: with no `expo-widgets` to hand 
 `liveActivity` a stand-in for the factory instead, an object with `start(props)` and
 `getInstances()`.
 To tap a button, provide `WIDGET_EVENTS` from `@ng-native/expo/widget` with a stand-in whose
-`onTap` keeps the listener, and call it with the activity's id as `source` and the button's
-`target`.
+`onTap` keeps the listener, and call it with the activity's id as `source`, the button's
+`target` and a `timestamp`.
