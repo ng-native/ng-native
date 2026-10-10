@@ -1,7 +1,10 @@
 {
-  "platforms": ["apple"],
+  "platforms": ["apple", "android"],
   "apple": {
     "modules": ["LiveActivityTapsModule"],
     "appDelegateSubscribers": ["LiveActivityTapsObserver"]
+  },
+  "android": {
+    "modules": ["dev.ngnative.expo.OngoingNotificationModule"]
   }
 }

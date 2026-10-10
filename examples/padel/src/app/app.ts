@@ -9,6 +9,7 @@ import {
   View,
 } from '@ng-native/components';
 import { liveActivity } from '@ng-native/expo/live-activity';
+import { ongoingNotification } from '@ng-native/expo/ongoing-notification';
 import { Watch } from '@ng-native/expo/watch';
 import { widget } from '@ng-native/expo/widget';
 import { scoreActivity } from './live/score-activity.ts';
@@ -85,7 +86,7 @@ import { pointLabel, type Score, type Team } from './match/match.ts';
           <pressable
             accessibilityRole="button"
             class="lock-screen"
-            [class.live]="lockScreen.active()"
+            [class.live]="showing()"
             (press)="toggleLockScreen()"
           >
             <text class="lock-screen-text">{{ lockScreenLabel() }}</text>
@@ -323,6 +324,25 @@ export class App {
     computed(() => scoreline(this.match.score())),
     { onTaps: (taps) => taps.forEach((side) => this.scoreFromWidget(side)) },
   );
+  /** The same score on Android, where there is no Live Activity: a notification that stays. */
+  protected readonly notification = ongoingNotification(
+    computed(() => {
+      const score = scoreline(this.match.score());
+      return {
+        title: `Us ${score.us} - ${score.them} Them`,
+        text: score.winner ? `${score.winner} win` : `Sets ${score.sets} Games ${score.games}`,
+        chip: `${score.us}-${score.them}`,
+        actions: TEAMS.map((name) => ({ target: name.toLowerCase(), title: `Point ${name}` })),
+      };
+    }),
+    {
+      channel: { id: 'match', name: 'Match score' },
+      onTaps: (taps) => taps.forEach((side) => this.scoreFromWidget(side)),
+    },
+  );
+  protected readonly showing = computed(
+    () => this.lockScreen.active() || this.notification.active(),
+  );
 
   protected readonly over = computed(() => this.match.score().winner !== null);
 
@@ -375,7 +395,7 @@ export class App {
   }
 
   protected readonly lockScreenLabel = computed(() =>
-    this.lockScreen.active() ? 'On the lock screen' : 'Show on lock screen',
+    this.showing() ? 'On the lock screen' : 'Show on lock screen',
   );
 
   private scoreFromWidget(side: string): void {
@@ -385,8 +405,12 @@ export class App {
 
   protected toggleLockScreen(): void {
     // Gone at once: an ended activity iOS keeps on the lock screen would sit over the next one.
-    if (this.lockScreen.active()) void this.lockScreen.end('immediate');
-    else this.lockScreen.start();
+    if (this.showing()) {
+      void this.lockScreen.end('immediate');
+      this.notification.end();
+    } else if (!this.lockScreen.start()) {
+      void this.notification.start();
+    }
   }
 }
 

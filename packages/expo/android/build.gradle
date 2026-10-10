@@ -1,0 +1,20 @@
+plugins {
+  id 'com.android.library'
+  id 'expo-module-gradle-plugin'
+}
+
+group = 'dev.ngnative.expo'
+version = '1.0.0'
+
+android {
+  namespace "dev.ngnative.expo"
+  defaultConfig {
+    versionCode 1
+    versionName '1.0.0'
+  }
+}
+
+dependencies {
+  // The first version with ProgressStyle and promoted ongoing notifications in NotificationCompat.
+  implementation 'androidx.core:core:1.17.0'
+}

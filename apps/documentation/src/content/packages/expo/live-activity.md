@@ -238,6 +238,7 @@ screen until it is ended or the system removes it.
 
 Live Activities need iOS 16.4 or newer, the oldest version `expo-widgets` and Expo build for. On
 Android and the web, `expo-widgets` answers with a stand-in, and `start()` answers false.
+Android's counterpart is an [ongoing notification](/packages/expo/ongoing-notification).
 
 ## Testing
 
