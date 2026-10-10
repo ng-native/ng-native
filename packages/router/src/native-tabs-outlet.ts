@@ -107,10 +107,12 @@ interface TabEntry {
   readonly leaving: Set<() => string | null>;
 }
 
-/** What `tabSelected` carries. Only two fields matter here; the rest is diagnostics. */
+/** What `tabSelected` carries. Only these fields matter here; the rest is diagnostics. */
 interface TabSelection {
   readonly selectedScreenKey: string;
   readonly provenance: number;
+  /** `'user'` for a tap. Native reports the changes it was asked for too, under other names. */
+  readonly actionOrigin?: string;
 }
 
 @Component({
@@ -589,7 +591,7 @@ export class NativeTabsOutlet implements RouterOutletContract, AfterContentInit 
     const entry = this.readTabs().find(
       (tab) => screenKeyOf(tab.key) === selection.selectedScreenKey,
     );
-    if (!entry || entry === this.selected) return;
+    if (!entry || (entry === this.selected && !this.tappedBack(selection))) return;
 
     // Returning to a tab returns to the url it was last on, which is the whole point of keeping
     // it mounted. A tab never visited starts at its own path.
@@ -604,6 +606,15 @@ export class NativeTabsOutlet implements RouterOutletContract, AfterContentInit 
         this.revertUnless(false);
       },
     );
+  }
+
+  /**
+   * Whether the user tapped the tab in front while a navigation is running: back from the tab that
+   * navigation is still loading, so the tab in front is where it is to end. A selection native
+   * reports because the outlet asked for it is not a tap, and cancels nothing.
+   */
+  private tappedBack(selection: TabSelection): boolean {
+    return selection.actionOrigin === 'user' && !!this.router?.getCurrentNavigation();
   }
 
   /**
