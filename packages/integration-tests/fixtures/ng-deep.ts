@@ -32,6 +32,14 @@ export class DeepKid {
     :host ::ng-deep .inner.lit {
       opacity: 0.25;
     }
+    /* An anchor is an element of the frame's own view: not its host, whatever class that is given. */
+    .framed ::ng-deep .inner {
+      margin-left: 5px;
+    }
+    /* And so is everything written before it: an .outer above the frame is none of its own. */
+    .outer .wrap ::ng-deep .inner {
+      margin-right: 6px;
+    }
     /* The frame's own, with no piercing: a kid's elements are not its to style. */
     .mark {
       margin-top: 9px;
@@ -44,9 +52,9 @@ export class DeepFrame {
 
 @Component({
   selector: 'x-deep-page',
-  imports: [DeepFrame, DeepKid],
+  imports: [DeepFrame, DeepKid, View],
   template: `
-    <x-deep-frame />
+    <view class="outer"><x-deep-frame class="framed" /></view>
     <x-deep-kid name="c" />
   `,
 })

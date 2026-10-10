@@ -53,6 +53,14 @@ describe('::ng-deep under a component', () => {
     assert.equal(props('inner-a')['marginTop'], undefined);
   });
 
+  it('takes no anchor from outside the component: its host by a class, or a box above it', async () => {
+    // The page gives the frame's host the class `framed` and puts it in an `.outer`. Neither is
+    // an element of the frame's own view, which is what is written before `::ng-deep`.
+    await page();
+    assert.equal(props('inner-a')['marginLeft'], undefined);
+    assert.equal(props('inner-a')['marginRight'], undefined);
+  });
+
   it('follows a class changing on what it styles', async () => {
     const app = await render(Frame);
     await settle();
