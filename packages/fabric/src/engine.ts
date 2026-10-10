@@ -3651,6 +3651,7 @@ export class Engine implements HostEngine {
    */
   styleChanged(node: EngineNode): void {
     this.markProps(node, this.inlineReachesStyle(node));
+    this.markParagraph(node);
   }
 
   /**
