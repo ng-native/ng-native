@@ -221,8 +221,19 @@ describe('ongoingNotification', () => {
     assert.deepEqual(handled, [], 'a refusal is the user’s choice, not a fault');
   });
 
+  it('forgets why a start was refused once one works', async () => {
+    const allowed = { refuse: true };
+    const { ref } = setup(fakeNative(allowed));
+    assert.equal(await ref.start(), false);
+    assert.match(String(ref.error()), /turned off/);
+    allowed.refuse = false;
+    assert.equal(await ref.start(), true);
+    assert.equal(ref.error(), null);
+  });
+
   it('does not start off Android, where the module is absent', async () => {
     const { ref } = setup(null);
+    assert.equal(ref.active(), false);
     assert.equal(await ref.start(), false);
     assert.match(String(ref.error()), /needs Android, and an app built since/);
     ref.end();

@@ -179,6 +179,13 @@ describe('Tailwind 3', () => {
     );
   });
 
+  it('gives an hsl() colour the channels a browser prints, where one falls on a half', () => {
+    // hsl(300 100% 25%) is purple, rgb(128, 0, 128): two of its channels are 127.5 exactly.
+    const app = { theme: { extend: { colors: { purple: 'hsl(300 100% 25%)' } } } };
+    const sheet = sheetFor('bg-purple bg-opacity-50', app);
+    assert.equal(render(sheet, 'bg-purple').parent['backgroundColor'], 'rgb(128, 0, 128)');
+  });
+
   it('fades text, border and divider colours by their opacity utilities', () => {
     const sheet = sheetFor(
       'text-rose-500 text-opacity-50 border border-zinc-200 border-opacity-25 ' +
