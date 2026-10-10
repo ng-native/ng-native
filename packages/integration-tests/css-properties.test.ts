@@ -274,6 +274,23 @@ describe('the per-side border shorthands', () => {
 });
 
 describe('properties React Native supports that we were rejecting', () => {
+  it('sets both block sides from border-block, with no style of the whole box', () => {
+    assert.deepEqual(declarationsOf('border-block: 2px solid red'), {
+      borderTopWidth: 2,
+      borderTopColor: 'rgb(255, 0, 0)',
+      borderBottomWidth: 2,
+      borderBottomColor: 'rgb(255, 0, 0)',
+    });
+  });
+
+  it('leaves a token in a border side its width and colour, where the style is written', () => {
+    const [rule] = compileCss('view { border-top: var(--w) solid }').rules;
+    assert.deepEqual(
+      (rule.deferred as { line: { roles: string[] } }[]).map((entry) => entry.line.roles),
+      [['width', 'color']],
+    );
+  });
+
   it('transform, as the array of single-key objects Fabric expects', () => {
     assert.deepEqual(declarationsOf('transform: translateX(10px) rotate(45deg) scale(2)'), {
       transform: [{ translateX: 10 }, { rotate: '45deg' }, { scaleX: 2 }, { scaleY: 2 }],

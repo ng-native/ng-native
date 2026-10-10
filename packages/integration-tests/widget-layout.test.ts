@@ -90,6 +90,14 @@ describe('a widget layout', () => {
     assert.deepEqual(render('<ui-spacer />'), { type: 'Spacer', props: {} });
   });
 
+  it('lets a slot draw nothing, where a widget has to draw a view', () => {
+    assert.deepEqual(
+      render('<ng-template #banner>@if (props().on) {<ui-spacer />}</ng-template>', { on: true }),
+      { banner: { type: 'Spacer', props: {} } },
+    );
+    fails('@if (props().on) {<ui-spacer />}', /always draws a view/);
+  });
+
   it('is one view per slot, for a Live Activity', () => {
     assert.deepEqual(
       render(`
