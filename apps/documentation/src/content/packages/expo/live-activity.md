@@ -145,6 +145,7 @@ can read one directory, which `expo-widgets` names `widgetsDirectory`: copy the 
 give its URL to the layout in the props.
 
 ```ts
+import { inject } from '@angular/core';
 import { FileSystem } from '@ng-native/expo/file-system';
 import { widgetsDirectory } from 'expo-widgets';
 
@@ -154,7 +155,7 @@ export class Scoreboard {
   /** Copies the crest where the extension can read it, and answers its URL for a `ui-image`. */
   private async share(downloaded: string): Promise<string> {
     const shared = this.files.file(widgetsDirectory + 'crest.png');
-    if (!shared.exists) this.files.write(shared, await this.files.file(downloaded).bytes());
+    this.files.write(shared, await this.files.file(downloaded).bytes());
     return shared.uri;
   }
 }

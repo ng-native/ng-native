@@ -138,6 +138,8 @@ readonly environment = input.required<WidgetEnvironment<{ side: 'us' | 'them'; s
 }
 ```
 
+- **A widget with settings needs iOS 17.** Before it, the widget is not offered at all, with its
+  defaults or otherwise.
 - **A parameter's `type`** is `string`, `number`, `boolean` or `enum`, and each has a `default`.
 - **Each widget on the home screen has its own choices,** so two of one kind can show different
   things from the same props.
