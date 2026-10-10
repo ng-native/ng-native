@@ -65,6 +65,38 @@ describe('the least height of text', () => {
     assert.equal(s.least('tall'), 40);
   });
 
+  it('is its line and what is around it, where its size is its border box', () => {
+    // A paragraph's own padding and border are inside the height Yoga gives it: with only the
+    // line as its least, 8 points of padding above and below left the line 8 points to be in.
+    const s = scene(
+      '.pad { line-height: 24px; padding: 8px 4px; border-top-width: 1px } .content { box-sizing: content-box }',
+    );
+    s.say('pad', 'pad');
+    s.say('content', 'pad content');
+    assert.equal(s.least('pad'), 41);
+    assert.equal(s.least('content'), 24);
+  });
+
+  it('is the tallest line of the text in it, a run with a line height of its own among them', () => {
+    const s = scene(
+      '.line { line-height: 24px } .big { line-height: 32px } .small { line-height: 12px }',
+    );
+    const text = s.say('text', 'line', 'A ');
+    const run = (classes: string) => {
+      const inner = s.engine.createElement('text');
+      s.engine.setClasses(inner, classes);
+      s.engine.appendChild(inner, s.engine.createText('run'));
+      s.engine.appendChild(text, inner);
+      return inner;
+    };
+    run('small');
+    assert.equal(s.least('text'), 24);
+    const big = run('big');
+    assert.equal(s.least('text'), 32);
+    s.engine.removeChild(text, big);
+    assert.equal(s.least('text'), 24);
+  });
+
   it('follows the line height changing, and going', () => {
     const s = scene('.line { line-height: 24px } .big { line-height: 32px }');
     const text = s.say('text', 'line');
