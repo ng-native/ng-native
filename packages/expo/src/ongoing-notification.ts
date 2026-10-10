@@ -18,6 +18,7 @@ import {
   untracked,
   type Signal,
 } from '@angular/core';
+import { isolated } from './native.ts';
 
 /** A moment: a `Date`, or milliseconds since the epoch. */
 type Moment = Date | number;
@@ -62,7 +63,8 @@ export interface OngoingNotificationOptions {
   readonly url?: string;
   /**
    * Called with the targets of the actions tapped since the last call, oldest first, including
-   * those tapped while the app was not running. A handler that throws goes to the `ErrorHandler`.
+   * those tapped while the app was not running. A handler that throws, or rejects, goes to the
+   * `ErrorHandler`.
    */
   readonly onTaps?: (taps: readonly string[]) => void;
 }
@@ -228,11 +230,10 @@ export function ongoingNotification(
     const taps = native!.takeTaps(id);
     if (untracked(active) && !native!.isActive(id)) forget();
     if (!taps.length) return;
-    try {
-      options.onTaps?.(taps);
-    } catch (failure) {
-      errors.handleError(failure);
-    }
+    isolated(
+      () => options.onTaps?.(taps),
+      (failure) => errors.handleError(failure),
+    );
     // Not left to the effect: React Native runs no timers while the app is in the background, so
     // the pass that would run it waits until the app is back in front.
     follow(untracked(content));

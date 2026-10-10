@@ -298,6 +298,19 @@ describe("ongoingNotification's actions", () => {
     assert.deepEqual(seen, ['bad', 'us']);
   });
 
+  it('hands an asynchronous onTaps that rejects to the ErrorHandler', async () => {
+    const fake = fakeNative();
+    const { ref, handled } = setup(fake, {
+      onTaps: async () => {
+        throw new Error('bad tap, later');
+      },
+    });
+    await ref.start();
+    fake.tap('match', 'us');
+    await Promise.resolve();
+    assert.match(String(handled[0]), /bad tap, later/);
+  });
+
   it('stops listening when destroyed, and leaves the notification showing', async () => {
     const fake = fakeNative();
     const { ref, destroy } = setup(fake);
