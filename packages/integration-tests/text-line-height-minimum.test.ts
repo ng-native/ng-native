@@ -39,11 +39,16 @@ function scene(css: string) {
 
 describe('the least height of text', () => {
   it('is one line, where its line height is a length', () => {
-    const s = scene('.line { line-height: 24px } .rem { line-height: 1.5rem }');
+    const s = scene(
+      '.line { line-height: 24px } .rem { line-height: 1.5rem } .auto { min-height: auto; height: auto }',
+    );
     s.say('line', 'line');
     s.say('rem', 'rem');
+    s.say('auto', 'line auto');
     assert.equal(s.least('line'), 24);
     assert.equal(s.least('rem'), 24);
+    // `auto` is what a browser starts both at, and is no height of its own.
+    assert.equal(s.least('auto'), 24);
   });
 
   it('is left alone with no line height, a height of its own, or a least height of its own', () => {

@@ -1385,6 +1385,19 @@ function alignMultiline(viewName: string, props: Record<string, unknown>): void 
 }
 
 /**
+ * Keep a paragraph as tall as one of its lines, as a browser's line box is whatever holds it.
+ * Yoga measures an item no taller than the room inside its container, and the text view cuts
+ * its letters off there: a 24 point line in a row with 16 points between its paddings. Only
+ * where the line height is a length, and nothing gives the paragraph a height of its own.
+ */
+function lineTall(props: Record<string, unknown>): void {
+  const line = props['lineHeight'];
+  if (typeof line !== 'number' || line <= 0) return;
+  const unset = (value: unknown): boolean => value == null || value === 'auto';
+  if (unset(props['height']) && unset(props['minHeight'])) props['minHeight'] = line;
+}
+
+/**
  * Where a line may break: at a space, after a hyphen, and anywhere in a script written without
  * spaces. A soft hyphen and a zero-width space are places to break that draw nothing.
  */
@@ -4161,6 +4174,7 @@ export class Engine implements HostEngine {
     if (viewName === PARAGRAPH) {
       alignText(style, this.directionOf(node, style));
       this.wholeWords(node, style);
+      lineTall(style);
     }
     if (this.fontsRefreshed) this.capForFonts(node, style);
     alignMultiline(viewName, style);
