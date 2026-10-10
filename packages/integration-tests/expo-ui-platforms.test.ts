@@ -25,6 +25,7 @@ let Platforms: Type<Fixture>;
 let Defaults: Type<DefaultsFixture>;
 let TextContent: Type<{ us: { set(value: string): void } }>;
 let OwnButton: Type<unknown>;
+let Time: Type<unknown>;
 
 before(async () => {
   const mod = await compileFixture('fixtures/expo-ui-platforms.ts');
@@ -32,6 +33,7 @@ before(async () => {
   Defaults = mod['ExpoUiPlatformDefaultsFixture'] as Type<DefaultsFixture>;
   TextContent = mod['ExpoUiTextContentFixture'] as typeof TextContent;
   OwnButton = mod['ExpoUiOwnButtonFixture'] as Type<unknown>;
+  Time = mod['ExpoUiTimeFixture'] as Type<unknown>;
 });
 
 after(() => {
@@ -69,6 +71,36 @@ describe('the typed SwiftUI controls on iOS', () => {
     assert.equal(named(/ExpoUI_VStackView$/).props['spacing'], 8);
     assert.equal(named(/ExpoUI_VStackView$/).props['alignment'], 'leading');
     assert.equal(named(/ExpoUI_SlotView$/).props['name'], 'label');
+  });
+});
+
+describe('text and progress that keep time by themselves', () => {
+  it('sends SwiftUI each date as milliseconds, as @expo/ui does', async () => {
+    const { every, named } = await boot('ios', Time);
+    const [at, timer] = every(/ExpoUI_TextView$/);
+    assert.equal(at!.props['date'], 1000);
+    assert.equal(at!.props['dateStyle'], 'relative');
+    assert.deepEqual(timer!.props['timerInterval'], { lower: 1000, upper: 60000 });
+    assert.equal(timer!.props['countsDown'], false);
+    const progress = named(/ExpoUI_ProgressView$/);
+    assert.deepEqual(progress.props['timerInterval'], { lower: 1000, upper: 60000 });
+    assert.equal(progress.props['countsDown'], false);
+  });
+
+  it('sends no date and no timer for a moment that is not one, so the text is drawn', async () => {
+    const { every } = await boot('ios', Time);
+    const soon = every(/ExpoUI_TextView$/)[2]!;
+    assert.equal(soon.props['date'], undefined);
+    assert.equal(soon.props['timerInterval'], undefined);
+    assert.equal(soon.props['text'], 'Soon');
+  });
+
+  it('sends Compose none of it, which has no such text or progress', async () => {
+    const { named } = await boot('android', Time);
+    const progress = named(/ExpoUI_LinearProgressIndicatorView$/);
+    assert.equal('timerInterval' in progress.props, false);
+    assert.equal('countsDown' in progress.props, false);
+    assert.equal('date' in named(/ExpoUI_TextView$/).props, false);
   });
 });
 
