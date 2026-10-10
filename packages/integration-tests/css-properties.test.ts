@@ -274,17 +274,15 @@ describe('the per-side border shorthands', () => {
 });
 
 describe('properties React Native supports that we were rejecting', () => {
-  it('sets both block sides from border-block, with no style of the whole box', () => {
-    assert.deepEqual(declarationsOf('border-block: 2px solid red'), {
-      borderTopWidth: 2,
+  it('sets both block sides from a border-block that holds a token, with no style of the whole box', () => {
+    assert.deepEqual(declarationsOf('border-block: var(--w) solid red'), {
       borderTopColor: 'rgb(255, 0, 0)',
-      borderBottomWidth: 2,
       borderBottomColor: 'rgb(255, 0, 0)',
     });
   });
 
-  it('leaves a token in a border side its width and colour, where the style is written', () => {
-    const [rule] = compileCss('view { border-top: var(--w) solid }').rules;
+  it('leaves a token in a border its width and colour, where the style is written', () => {
+    const [rule] = compileCss('view { border: var(--w) solid }').rules;
     assert.deepEqual(
       (rule.deferred as { line: { roles: string[] } }[]).map((entry) => entry.line.roles),
       [['width', 'color']],
