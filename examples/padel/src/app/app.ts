@@ -321,6 +321,7 @@ export class App {
   protected readonly lockScreen = liveActivity(
     scoreActivity,
     computed(() => scoreline(this.match.score())),
+    { onTaps: (taps) => taps.forEach((side) => this.scoreFromWidget(side)) },
   );
 
   protected readonly over = computed(() => this.match.score().winner !== null);

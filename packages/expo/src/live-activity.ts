@@ -16,6 +16,7 @@ import {
   type Type,
 } from '@angular/core';
 import { expoModule } from './native.ts';
+import { WIDGET_EVENTS } from './widget.ts';
 
 /** A widget layout: an Angular component whose `props` input the layout draws from. */
 export type WidgetLayout<T extends object> = Type<{ readonly props: InputSignal<T> }>;
@@ -111,6 +112,16 @@ export interface LiveActivityFactory<T extends object> {
   getInstances(): NativeLiveActivity<T>[];
 }
 
+export interface LiveActivityOptions {
+  /**
+   * Called with the target of a `ui-button` tapped on a running activity of this kind, as `widget`
+   * hands over a widget's. iOS runs the tap in the app, starting it in the background if it has
+   * to, and the tap is not kept: one that starts the app is over before this is listening. A
+   * handler that throws goes to the `ErrorHandler`.
+   */
+  readonly onTaps?: (taps: readonly string[]) => void;
+}
+
 /** A Live Activity kept in step with a signal. */
 export interface LiveActivityRef {
   /** Whether an activity of this kind is running and following the signal. */
@@ -138,13 +149,16 @@ export interface LiveActivityRef {
  * Keeps a Live Activity of the factory's kind in step with `props`: once started, every change to the
  * signal updates it. One left running from before the app started is picked up rather than started
  * again, since iOS caps how many an app runs. Destroying the injector stops the updates and leaves
- * the activity running, as it outlives the app. Call it in an injection context.
+ * the activity running, as it outlives the app. Taps on its buttons go to `onTaps`. Call it in an
+ * injection context.
  */
 export function liveActivity<T extends object>(
   factory: LiveActivityFactory<T>,
   props: Signal<T>,
+  options: LiveActivityOptions = {},
 ): LiveActivityRef {
   const errors = inject(ErrorHandler);
+  const { onTaps } = options;
   const active = signal(false);
   const id = signal<string | null>(null);
   const pushToken = signal<string | null>(null);
@@ -196,7 +210,20 @@ export function liveActivity<T extends object>(
     if (activity) untracked(() => activity.update(next).catch(report));
   });
 
+  // Every widget's and activity's taps arrive here: an activity's names it by its id.
+  const stopTaps =
+    onTaps &&
+    inject(WIDGET_EVENTS).onTap((tap) => {
+      if (!running().some((activity) => activity.getId() === tap.source)) return;
+      try {
+        onTaps([tap.target]);
+      } catch (failure) {
+        errors.handleError(failure);
+      }
+    });
+
   inject(DestroyRef).onDestroy(() => {
+    stopTaps?.();
     tokenSubscription?.remove();
     tokenSubscription = null;
   });

@@ -91,8 +91,8 @@ class ScoreWidget {
 export const scoreWidget = createWidget('Score', ScoreWidget);
 ```
 
-The name passed to `createWidget` is the one in `app.json`. A Live Activity has nowhere to record
-a tap, so a button there is a build error.
+The name passed to `createWidget` is the one in `app.json`. A Live Activity's button has no
+`(buttonPress)`: its tap goes [straight to the app](/packages/expo/live-activity#buttons).
 
 ## Keep it in step from Angular
 

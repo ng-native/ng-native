@@ -34,10 +34,18 @@ export interface NativeWidget<T extends object> {
   reload(): void;
 }
 
+/** A tap on a button, as `expo-widgets` reports it while the app is running. */
+export interface WidgetTap {
+  /** The widget's name, or the id of the Live Activity. */
+  readonly source: string;
+  /** The button's `target`. */
+  readonly target: string;
+}
+
 /** When to collect taps, and when to ask iOS to redraw the widget. */
 export interface WidgetEvents {
-  /** A widget button was tapped while the app was running. */
-  onTap(listener: () => void): () => void;
+  /** A button of a widget or a Live Activity was tapped while the app was running. */
+  onTap(listener: (tap: WidgetTap) => void): () => void;
   onForeground(listener: () => void): () => void;
   onBackground(listener: () => void): () => void;
 }
@@ -67,7 +75,7 @@ export interface WidgetRef {
 
 type ReactNative = typeof import('react-native');
 type ExpoWidgets = {
-  addUserInteractionListener(listener: () => void): { remove(): void };
+  addUserInteractionListener(listener: (tap: WidgetTap) => void): { remove(): void };
 };
 
 /** Overridden in a test to tap a widget that is not there. */

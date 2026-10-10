@@ -455,6 +455,36 @@ describe('buttons', () => {
     assert.deepEqual((view.props['onPress'] as Press)(), { us: '30', them: '0', taps: ['us'] });
   });
 
+  it('send only their target from a Live Activity, where the tap goes to the app', () => {
+    assert.deepEqual(
+      render(
+        `
+        <ng-template #banner>
+          <ui-hstack>
+            <ui-button target="us" label="Us" />
+            <ui-button [target]="props().side"><ui-spacer /></ui-button>
+          </ui-hstack>
+        </ng-template>
+      `,
+        { side: 'them' },
+      ),
+      {
+        banner: {
+          type: 'HStack',
+          props: {
+            children: [
+              { type: 'Button', props: { target: 'us', label: 'Us' } },
+              {
+                type: 'Button',
+                props: { target: 'them', children: { type: 'Spacer', props: {} } },
+              },
+            ],
+          },
+        },
+      },
+    );
+  });
+
   it('keep the taps their (buttonPress) did not mean to replace', () => {
     const view = render('<ui-button target="us" (buttonPress)="{ taps: [] }" />', {
       taps: ['them'],
@@ -471,10 +501,19 @@ describe('a layout the compiler refuses', () => {
     );
   });
 
-  it('refuses a button in a Live Activity, which has nowhere to record its tap', () => {
+  it('refuses a (buttonPress) in a Live Activity, whose props only the app changes', () => {
     fails(
-      '<ng-template #banner><ui-button target="a" label="Point" /></ng-template>',
-      /<ui-button> records its tap.*home-screen widget/,
+      `<ng-template #banner>
+        <ui-button target="a" (buttonPress)="{ us: 1 }" label="Point" />
+      </ng-template>`,
+      /layout\.ts:2:31: \(buttonPress\) changes a home-screen widget's props.*Live Activity/,
+    );
+  });
+
+  it('refuses a Live Activity button with no target, which the app could not tell from the others', () => {
+    fails(
+      '<ng-template #banner><ui-button label="Point" /></ng-template>',
+      /layout\.ts:1:22: <ui-button> needs a target/,
     );
   });
 
