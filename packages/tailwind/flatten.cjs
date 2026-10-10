@@ -753,7 +753,7 @@ function hslChannels(h, s, l) {
     return p;
   };
   // A channel on a half, 127.5, is a hair under it in floating point: the hair goes first.
-  return [hue + 1 / 3, hue, hue - 1 / 3].map((t) => Math.round(+(channel(t) * 255).toFixed(6)));
+  return [hue + 1 / 3, hue, hue - 1 / 3].map((t) => Math.round(+(channel(t) * 255).toFixed(10)));
 }
 
 /**

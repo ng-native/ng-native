@@ -184,6 +184,12 @@ describe('Tailwind 3', () => {
     const app = { theme: { extend: { colors: { purple: 'hsl(300 100% 25%)' } } } };
     const sheet = sheetFor('bg-purple bg-opacity-50', app);
     assert.equal(render(sheet, 'bg-purple').parent['backgroundColor'], 'rgb(128, 0, 128)');
+    // A hair under the half is under it: only what floating point adds is taken off.
+    const under = { theme: { extend: { colors: { under: 'hsl(300 100% 24.99999995%)' } } } };
+    assert.equal(
+      render(sheetFor('bg-under bg-opacity-50', under), 'bg-under').parent['backgroundColor'],
+      'rgb(127, 0, 127)',
+    );
   });
 
   it('fades text, border and divider colours by their opacity utilities', () => {
