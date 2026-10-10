@@ -203,6 +203,9 @@ Truncation is a paragraph's props on native, not a style, and CSS's three ways o
 compile to them: `white-space: nowrap` to `numberOfLines: 1`, `line-clamp` or `-webkit-line-clamp`
 to that many lines, and `text-overflow` to `ellipsizeMode` (`ellipsis` is `tail`, the default, and
 `clip` is drawn on iOS only). `line-clamp: none`, `unset` and `white-space: normal` clear the limit.
+Text that is one word, with no space or hyphen to break at, is one line whatever its box, cut at
+the edge where no `text-overflow` says otherwise: a browser does not break a word inside, and
+native breaks one between any two letters. A `line-clamp` or a `[numberOfLines]` of its own wins.
 They apply to the `<text>` the rule matches, where the props are read: on a `<view>` around the
 text they do nothing, so put the class on the text itself. `display: -webkit-box` is read as the
 flex box native already is, laid out along the axis `-webkit-box-orient` names, so the whole

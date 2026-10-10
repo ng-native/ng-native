@@ -582,6 +582,8 @@ export interface EngineNode extends HostNode {
   baselineFields?: Set<EngineNode>;
   /** Commit this node again with its children so Fabric measures it again. `remeasureText`. */
   remeasure?: true;
+  /** On a paragraph, whether its text was one word when it was last merged: `wholeWords`. */
+  oneWord?: boolean;
   /** The z-index this view is drawn at for a box in it, where it has none: `Engine.raise`. */
   raised?: number;
   /**
@@ -1380,6 +1382,26 @@ function percentHeight(node: EngineNode, props: Record<string, unknown>): void {
 function alignMultiline(viewName: string, props: Record<string, unknown>): void {
   if (viewName !== 'AndroidTextInput' || props['multiline'] !== true) return;
   props['textAlignVertical'] ??= 'top';
+}
+
+/**
+ * Where a line may break: at a space, after a hyphen, and anywhere in a script written without
+ * spaces. A soft hyphen and a zero-width space are places to break that draw nothing.
+ */
+const BREAKS = /[\s\-\u00ad\u200b\u2010\u2e80-\u9fff\uac00-\ud7af\uf900-\ufaff\uff00-\uffef]/;
+
+/** Whether a paragraph's text, all its runs together, is one word: something, with no break. */
+function unbroken(node: EngineNode): boolean {
+  let text = '';
+  const collect = (from: EngineNode): void => {
+    for (const child of from.children) {
+      if (child.kind === 'text') text += child.text;
+      else if (isTextElement(child)) collect(child);
+    }
+  };
+  collect(node);
+  const words = trimEnds(text);
+  return words !== '' && !BREAKS.test(words);
 }
 
 /**
@@ -2254,6 +2276,7 @@ class RetainedNode {
   committedUnder: EngineNode | null = null;
   kept: Map<string, KeptHoist> | undefined = undefined;
   remeasure: true | undefined = undefined;
+  oneWord: boolean | undefined = undefined;
   raised: number | undefined = undefined;
   propsDirty = false;
   structureDirty = false;
@@ -3362,7 +3385,20 @@ export class Engine implements HostEngine {
    * changes it too, by keeping or dropping the space before it.
    */
   private markTextContent(parent: EngineNode, child: EngineNode): void {
-    if (child.kind !== 'anchor' && takesTextAsProp(parent)) this.markProps(parent);
+    if (child.kind === 'anchor') return;
+    if (takesTextAsProp(parent)) this.markProps(parent);
+    else if (isTextElement(parent)) this.markWords(parent);
+  }
+
+  /**
+   * Text came, went or changed in a paragraph: where it has become one word, or stopped being
+   * one, the paragraph is merged again, since that is one line or as many as it takes. Asked
+   * of the paragraph's outermost element, which is the view; any other change leaves it be.
+   */
+  private markWords(within: EngineNode): void {
+    let root = within;
+    while (isTextElement(root.parent)) root = root.parent!;
+    if (root.oneWord !== undefined && unbroken(root) !== root.oneWord) this.markProps(root, false);
   }
 
   /** A subtree that went out of the tree is back in: its hoisted nodes commit again. */
@@ -4122,7 +4158,10 @@ export class Engine implements HostEngine {
     flattenStyle(node.props[STYLE_OVERRIDE], style);
     this.fontFaces.apply(style);
     holdLoadingFamily(node, style);
-    if (viewName === PARAGRAPH) alignText(style, this.directionOf(node, style));
+    if (viewName === PARAGRAPH) {
+      alignText(style, this.directionOf(node, style));
+      this.wholeWords(node, style);
+    }
     if (this.fontsRefreshed) this.capForFonts(node, style);
     alignMultiline(viewName, style);
     rowsTall(style, this.fontScale);
@@ -4197,6 +4236,20 @@ export class Engine implements HostEngine {
       if (text == null) return;
       props[side.color] = text;
     }
+  }
+
+  /**
+   * Keep a paragraph whose text has nowhere to wrap on one line, as a browser does: a word is
+   * not broken inside, and what does not fit is past the edge. Native breaks a word wider than
+   * its line between any two letters. Cut at the edge, where no rule says how it ends.
+   */
+  private wholeWords(node: EngineNode, props: Record<string, unknown>): void {
+    // Remembered, for its text changing to be told from its text changing what this answers.
+    node.oneWord = props['numberOfLines'] == null ? unbroken(node) : undefined;
+    if (!node.oneWord) return;
+    props['numberOfLines'] = 1;
+    const ended = [this.styles.resolve(node, this.styleEpoch).style, node.props, inlineOf(node)];
+    if (ended.every((from) => from['ellipsizeMode'] == null)) props['ellipsizeMode'] = 'clip';
   }
 
   /**

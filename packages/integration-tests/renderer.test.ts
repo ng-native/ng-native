@@ -194,7 +194,8 @@ describe('golden parity', () => {
         'View {"height":"100%"}',
         '  Paragraph {"accessible":true,"ellipsizeMode":"tail"}',
         '    RawText "mode a"',
-        '  Paragraph {"accessible":true,"ellipsizeMode":"tail"}',
+        // One word, which is not broken inside: one line, cut at the edge.
+        '  Paragraph {"accessible":true,"ellipsizeMode":"clip","numberOfLines":1}',
         '    RawText "placeholder"',
         '  View',
         '    View',
@@ -211,7 +212,7 @@ describe('golden parity', () => {
         // will not dispatch a pointer event to a view whose props have not asked for one.
         '  View {"accessible":true,"collapsable":false,"focusable":true,"onLayout":true,' +
           '"onPointerEnter":true,"onPointerLeave":true}',
-        '    Paragraph {"accessible":true,"ellipsizeMode":"tail"}',
+        '    Paragraph {"accessible":true,"ellipsizeMode":"clip","numberOfLines":1}',
         '      RawText "listener"',
       ].join('\n'),
     );

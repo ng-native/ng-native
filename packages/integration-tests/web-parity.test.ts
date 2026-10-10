@@ -73,6 +73,8 @@ const NOT_STYLE = new Set([
   'focusable',
   'collapsable',
   'ellipsizeMode',
+  // One line for text with nowhere to wrap, which a browser's text is with no style to say so.
+  'numberOfLines',
   'onLayout',
   'onPointerEnter',
   'onPointerLeave',
