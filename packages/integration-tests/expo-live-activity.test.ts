@@ -159,6 +159,39 @@ describe('liveActivity', () => {
     assert.equal(activity.id(), 'activity-2');
   });
 
+  it('does nothing when started while it is live', () => {
+    const fake = fakeActivities();
+    const { activity } = withActivity(fake);
+    activity.start();
+    assert.equal(activity.start(), true);
+    assert.deepEqual(
+      fake.calls.map(([call]) => call),
+      ['start'],
+    );
+    assert.equal(fake.listening(), 1, 'one listener for the push token, not one a start');
+  });
+
+  it('forgets the push token when it ends', async () => {
+    const fake = fakeActivities();
+    const { activity } = withActivity(fake);
+    activity.start();
+    fake.pushToken('abc');
+    assert.equal(activity.pushToken(), 'abc');
+    await activity.end();
+    assert.equal(activity.pushToken(), null);
+  });
+
+  it('forgets why a start was refused once one works', () => {
+    const allowed = { refuse: true };
+    const fake = fakeActivities(allowed);
+    const { activity } = withActivity(fake);
+    assert.equal(activity.start(), false);
+    assert.match(String(activity.error()), /turned off/);
+    allowed.refuse = false;
+    assert.equal(activity.start(), true);
+    assert.equal(activity.error(), null);
+  });
+
   it('reports a start the system refuses, and stays not live', () => {
     const fake = fakeActivities({ refuse: true });
     const { activity } = withActivity(fake);

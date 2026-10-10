@@ -103,6 +103,19 @@ describe('a widget layout', () => {
     );
   });
 
+  it('takes a bannerSmall slot beside the banner, for where the activity is drawn small', () => {
+    assert.deepEqual(
+      render(`
+        <ng-template #banner><ui-spacer /></ng-template>
+        <ng-template #bannerSmall><ui-divider /></ng-template>
+      `),
+      {
+        banner: { type: 'Spacer', props: {} },
+        bannerSmall: { type: 'Divider', props: {} },
+      },
+    );
+  });
+
   it('nests views as children, one or several', () => {
     assert.deepEqual(render('<ui-vstack><ui-spacer /></ui-vstack>'), {
       type: 'VStack',

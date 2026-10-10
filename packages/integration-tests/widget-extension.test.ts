@@ -338,6 +338,21 @@ describe('a layout through the widget extension', () => {
     );
   });
 
+  it("draws a Live Activity's small banner as its JSX does, beside the banner", () => {
+    same(
+      `<ng-template #banner><ui-text>Us {{ props().us }} - {{ props().them }} Them</ui-text></ng-template>
+      <ng-template #bannerSmall><ui-text>{{ props().us }}-{{ props().them }}</ui-text></ng-template>`,
+      `(score) => {
+        'widget';
+        return {
+          banner: <Text>{\`Us \${score.us} - \${score.them} Them\`}</Text>,
+          bannerSmall: <Text>{\`\${score.us}-\${score.them}\`}</Text>,
+        };
+      }`,
+      [{ props: { us: '30', them: '15' } }],
+    );
+  });
+
   it('repeats a view by @for as a map does, and draws @empty in its place', () => {
     same(
       `<ui-vstack>

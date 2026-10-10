@@ -274,6 +274,18 @@ describe('the per-side border shorthands', () => {
 });
 
 describe('properties React Native supports that we were rejecting', () => {
+  it('reads an angle in turns, radians and gradians as the degrees native takes', () => {
+    assert.deepEqual(declarationsOf('transform: rotate(0.5turn)'), {
+      transform: [{ rotate: '180deg' }],
+    });
+    assert.deepEqual(declarationsOf('transform: rotate(100grad)'), {
+      transform: [{ rotate: '90deg' }],
+    });
+    assert.deepEqual(declarationsOf('transform: rotate(1rad)'), {
+      transform: [{ rotate: '57.296deg' }],
+    });
+  });
+
   it('transform, as the array of single-key objects Fabric expects', () => {
     assert.deepEqual(declarationsOf('transform: translateX(10px) rotate(45deg) scale(2)'), {
       transform: [{ translateX: 10 }, { rotate: '45deg' }, { scaleX: 2 }, { scaleY: 2 }],
