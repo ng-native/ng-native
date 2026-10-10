@@ -18,7 +18,7 @@ import {
   untracked,
   type Signal,
 } from '@angular/core';
-import { optional } from './native.ts';
+import { isolated, optional } from './native.ts';
 
 /** One entry of a widget's timeline, as `expo-widgets` stores it. */
 export interface WidgetEntry<T extends object> {
@@ -34,10 +34,18 @@ export interface NativeWidget<T extends object> {
   reload(): void;
 }
 
+/** A tap on a button, as `expo-widgets` reports it while the app is running. */
+export interface WidgetTap {
+  /** The widget's name, or the id of the Live Activity. */
+  readonly source: string;
+  /** The button's `target`. */
+  readonly target: string;
+}
+
 /** When to collect taps, and when to ask iOS to redraw the widget. */
 export interface WidgetEvents {
-  /** A widget button was tapped while the app was running. */
-  onTap(listener: () => void): () => void;
+  /** A button of a widget or a Live Activity was tapped while the app was running. */
+  onTap(listener: (tap: WidgetTap) => void): () => void;
   onForeground(listener: () => void): () => void;
   onBackground(listener: () => void): () => void;
 }
@@ -45,7 +53,7 @@ export interface WidgetEvents {
 export interface WidgetOptions {
   /**
    * Called with the targets of the buttons tapped since the last call, oldest first, once the write
-   * that clears them from the widget has worked, so a tap is handed over once. A handler that throws
+   * that clears them from the widget has worked, so a tap is handed over once. A handler that throws, or rejects,
    * goes to the `ErrorHandler`, and its taps are still cleared.
    */
   readonly onTaps?: (taps: readonly string[]) => void;
@@ -67,7 +75,7 @@ export interface WidgetRef {
 
 type ReactNative = typeof import('react-native');
 type ExpoWidgets = {
-  addUserInteractionListener(listener: () => void): { remove(): void };
+  addUserInteractionListener(listener: (tap: WidgetTap) => void): { remove(): void };
 };
 
 /** Overridden in a test to tap a widget that is not there. */
@@ -122,13 +130,11 @@ export function widget<T extends object>(
     return taps;
   };
 
-  const hand = (taps: readonly string[]) => {
-    try {
-      options.onTaps?.(taps);
-    } catch (failure) {
-      errors.handleError(failure);
-    }
-  };
+  const hand = (taps: readonly string[]) =>
+    isolated(
+      () => options.onTaps?.(taps),
+      (failure) => errors.handleError(failure),
+    );
 
   const run = async () => {
     try {

@@ -208,8 +208,8 @@ export class UiButton {
   readonly systemImage = input<string>();
   readonly role = input<'default' | 'cancel' | 'destructive' | 'close'>();
   /**
-   * In a home-screen widget's layout, what a tap on it records for the app: see
-   * `@ng-native/expo/widget`.
+   * In a home-screen widget's or a Live Activity's layout, what a tap on it hands the app: see
+   * `@ng-native/expo/widget` and `@ng-native/expo/live-activity`.
    */
   readonly target = input<string>();
   readonly modifiers = input<readonly UiModifier[]>();

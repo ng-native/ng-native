@@ -112,10 +112,11 @@ The extension runs the layout with no Angular and no instance of the class, so:
   not found there, and a name that is not found draws nothing. `uiImage` is a `file://` URL the
   extension reads when it draws, so the file is one the extension can reach, such as one in the app
   group's shared container.
-- **A home-screen widget's `ui-button`** records its `target` when tapped, for the app to collect
-  with [`widget()`](/packages/expo/widget#the-layout); its `(buttonPress)` is an object of the props
-  to change at once. A Live Activity has nowhere to record a tap, so a button there is a build
-  error.
+- **A `ui-button`** needs a `target`, which is what its tap hands the app: see [Buttons](#buttons).
+  In a home-screen widget it records the target for the app to collect with
+  [`widget()`](/packages/expo/widget#the-layout), and its `(buttonPress)` is an object of the props
+  to change at once. A Live Activity's props are the app's to change, so a `(buttonPress)` there is
+  a build error.
 - **Any other event, pipes, references, content projection, and class, style or attribute
   bindings** are build errors, with the line and column in the file.
 
@@ -157,6 +158,45 @@ class RestLayout {
 
 The same inputs work in a home-screen widget, and on a `ui-text` or a `ui-progress` in an app on
 iOS. Compose has no such text or bar, so on Android they are not sent.
+
+### Buttons
+
+A `ui-button` in a slot is a button on the lock screen or in the expanded Dynamic Island. Import
+`UiButton` beside the layout's other views, give the button a `target`, and `liveActivity()` hands
+that to `onTaps` when it is tapped:
+
+```ts
+template: `
+  <ng-template #banner>
+    <ui-hstack>
+      <ui-text>Us {{ props().us }} - {{ props().them }} Them</ui-text>
+      <ui-button target="us" label="Point us" />
+      <ui-button target="them"><ui-text>Point them</ui-text></ui-button>
+    </ui-hstack>
+  </ng-template>
+`,
+```
+
+```ts
+protected readonly lockScreen = liveActivity(
+  scoreActivity,
+  computed(() => ({ us: this.match.us(), them: this.match.them() })),
+  { onTaps: (taps) => taps.forEach((side) => this.match.point(side)) },
+);
+```
+
+The tap runs in your app, not in the extension: iOS wakes the app in the background, without
+opening it, and the app changes the signal, which updates the activity.
+
+- **Buttons need iOS 17.** Before it the button is drawn, and its tap does not reach `onTaps`.
+- **A tap is not kept.** It reaches `onTaps` while the app is running or suspended. When iOS has
+  to start the app to run the tap, the tap is over before the app is listening, and that one is
+  lost; the next one arrives. For a tap that must not be lost, use a `ui-link`: it opens the app at
+  its `destination`, which a cold start still receives.
+- **A press can run while the phone is locked.** The app is then woken with the phone still
+  locked, when a keychain item stored as readable only while unlocked cannot be read. Store what
+  `onTaps` needs as readable after the first unlock.
+- **There is no toggle.** The extension draws buttons and links, and no `ui-toggle`.
 
 ### Home-screen widgets
 
@@ -231,6 +271,9 @@ Call it in an injection context, such as a field of a component or service.
   that ends one and can start the next wants `'immediate'`.
 - **`active`**, **`id`** and **`pushToken`** are signals. The push token is for updating the
   activity from a server through APNs.
+- **`onTaps`**, in the options, is called with the `target` of each
+  [button](#buttons) tapped on a running activity of this kind. A handler that throws, or rejects,
+  goes to the `ErrorHandler`.
 - **`error`** holds why the last start or update failed, for example Live Activities turned off in
   Settings. A refused start is only kept there; an update that fails also goes to the
   `ErrorHandler`.
@@ -254,3 +297,6 @@ A layout file imports in a Vitest test as it is: with no `expo-widgets` to hand 
 `createLiveActivity` answers an activity that never starts. To check what the app sends, pass
 `liveActivity` a stand-in for the factory instead, an object with `start(props)` and
 `getInstances()`.
+To tap a button, provide `WIDGET_EVENTS` from `@ng-native/expo/widget` with a stand-in whose
+`onTap` keeps the listener, and call it with the activity's id as `source` and the button's
+`target`.

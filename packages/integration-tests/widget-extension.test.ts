@@ -293,6 +293,31 @@ describe('a layout through the widget extension', () => {
     assert.deepEqual(extensionPress(angular, { us: 2 }, 'them'), { us: 2, taps: ['them'] });
   });
 
+  it("draws a Live Activity's buttons as their JSX does, each with the target its tap carries", () => {
+    same(
+      `<ng-template #banner>
+        <ui-hstack>
+          <ui-button target="us" label="Us" systemImage="plus" />
+          <ui-button [target]="props().side" role="destructive"><ui-text>Them</ui-text></ui-button>
+        </ui-hstack>
+      </ng-template>
+      <ng-template #expandedBottom><ui-button target="undo" label="Undo" /></ng-template>`,
+      `(props) => {
+        'widget';
+        return {
+          banner: (
+            <HStack>
+              <Button target="us" label="Us" systemImage="plus" />
+              <Button target={props.side} role="destructive"><Text>Them</Text></Button>
+            </HStack>
+          ),
+          expandedBottom: <Button target="undo" label="Undo" />,
+        };
+      }`,
+      [{ props: { side: 'them' } }],
+    );
+  });
+
   it('repeats a view by @for as a map does, and draws @empty in its place', () => {
     same(
       `<ui-vstack>

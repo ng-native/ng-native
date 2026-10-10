@@ -26,6 +26,8 @@
  * - A home-screen widget's `ui-button` records its `target` in the props' `taps` when it is
  *   tapped, since the extension runs the tap while the app may be suspended; `@ng-native/expo/widget`
  *   hands the taps to the app. Its `(buttonPress)` is the props to change at once, as an object.
+ *   A Live Activity's `ui-button` only carries its `target`: iOS runs its tap in the app, which
+ *   `liveActivity` hands it to.
  *
  * Anything a layout cannot do is an error naming the file, line and column, rather than a view the
  * extension draws as an error box on the lock screen.
@@ -422,7 +424,7 @@ class Compiler {
     }
     const children = this.content(node, name, props, scope);
     if (children !== null) props.set('children', children);
-    if (name === 'button') props.set('onPress', this.press(node, props, scope));
+    if (name === 'button') this.press(node, props, scope);
     const entries = [...props].map(([key, value]) => `${JSON.stringify(key)}:${value}`);
     return `_jsx(${view.component},{${entries.join(',')}})`;
   }
@@ -440,22 +442,26 @@ class Compiler {
   }
 
   /**
-   * A button's tap, as the function the extension runs: the props it answers replace the widget's,
+   * A button's tap, as the `onPress` the extension runs: the props it answers replace the widget's,
    * with its target added to `taps`. What `(buttonPress)` answers is merged in first, so the widget
-   * can show the tap at once; the taps it holds are kept whatever that answers.
+   * can show the tap at once; the taps it holds are kept whatever that answers. A Live Activity's
+   * button has none, and runs nothing in the extension: its tap reaches the app with its target.
    */
   press(node, props, scope) {
-    if (this.inSlot) {
-      this.fail(
-        node,
-        '<ui-button> records its tap in the props, which only a home-screen widget keeps: a Live Activity cannot.',
-      );
-    }
     const target = props.get('target');
     if (target === undefined) {
       this.fail(node, '<ui-button> needs a target, for the app to tell its taps from the others.');
     }
     const [event] = node.outputs;
+    if (this.inSlot) {
+      if (event) {
+        this.fail(
+          event,
+          "(buttonPress) changes a home-screen widget's props; a Live Activity's button sends its target to the app, which updates the activity.",
+        );
+      }
+      return;
+    }
     let change = '{}';
     if (event) {
       if (event.handler.ast instanceof ng.Chain) {
@@ -467,7 +473,10 @@ class Compiler {
       change = this.expression(event.handler, scope);
     }
     const taps = 'Array.isArray(props.taps)?props.taps:[]';
-    return `function(){return Object.assign({},props,${change},{taps:(${taps}).concat([${target}])});}`;
+    props.set(
+      'onPress',
+      `function(){return Object.assign({},props,${change},{taps:(${taps}).concat([${target}])});}`,
+    );
   }
 
   /** @param {string | null} [event] an output the view does take */

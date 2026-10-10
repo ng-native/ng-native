@@ -16,6 +16,7 @@ import {
   type LiveActivityFactory,
   type NativeLiveActivity,
 } from '@ng-native/expo/live-activity';
+import { WIDGET_EVENTS, type WidgetTap } from '@ng-native/expo/widget';
 import { mount } from '@ng-native/platform';
 import { createFakeFabric } from '@ng-native/testing';
 import { compileFixture } from './compile.ts';
@@ -198,6 +199,126 @@ describe('liveActivity', () => {
     destroy();
     assert.equal(fake.listening(), 0);
     assert.equal(fake.instances.length, 1, 'a Live Activity outlives the app that started it');
+  });
+});
+
+/** Stands in for `expo-widgets`' interaction events, which carry every widget's and activity's taps. */
+function fakeTaps() {
+  const listeners = new Set<(tap: WidgetTap) => void>();
+  const none = () => () => {};
+  return {
+    events: {
+      onTap: (listener: (tap: WidgetTap) => void) => (
+        listeners.add(listener),
+        () => listeners.delete(listener)
+      ),
+      onForeground: none,
+      onBackground: none,
+    },
+    tap: (source: string, target: string) =>
+      listeners.forEach((listener) => listener({ source, target })),
+    listening: () => listeners.size,
+  };
+}
+
+describe("liveActivity's buttons", () => {
+  function withTaps(
+    fake: ReturnType<typeof fakeActivities>,
+    onTaps: (taps: readonly string[]) => void,
+  ) {
+    const taps = fakeTaps();
+    const handled: unknown[] = [];
+    const injector = createEnvironmentInjector(
+      [
+        { provide: WIDGET_EVENTS, useValue: taps.events },
+        {
+          provide: ErrorHandler,
+          useValue: { handleError: (error: unknown) => handled.push(error) },
+        },
+      ],
+      root,
+    );
+    const activity = runInInjectionContext(injector, () =>
+      liveActivity(fake.factory, signal<Score>({ us: '0', them: '0' }), { onTaps }),
+    );
+    return { activity, taps, handled, destroy: () => injector.destroy() };
+  }
+
+  it('hands a tap on one of its buttons to onTaps, by its target', () => {
+    const received: string[][] = [];
+    const { activity, taps } = withTaps(fakeActivities(), (targets) => received.push([...targets]));
+    activity.start();
+    taps.tap('activity-0', 'us');
+    taps.tap('activity-0', 'them');
+    assert.deepEqual(received, [['us'], ['them']]);
+  });
+
+  it('hands over a tap on any running activity of its kind, started here or not', () => {
+    const received: string[][] = [];
+    const { taps } = withTaps(fakeActivities({ running: 2 }), (targets) =>
+      received.push([...targets]),
+    );
+    taps.tap('activity-1', 'us');
+    assert.deepEqual(received, [['us']]);
+  });
+
+  it("leaves a widget's tap, and another kind of activity's, to whoever it belongs to", () => {
+    const received: string[][] = [];
+    const { activity, taps } = withTaps(fakeActivities(), (targets) => received.push([...targets]));
+    activity.start();
+    taps.tap('ScoreWidget', 'us');
+    taps.tap('activity-of-another-kind', 'us');
+    assert.deepEqual(received, []);
+  });
+
+  it('leaves a tap on an activity that has ended', async () => {
+    const received: string[][] = [];
+    const { activity, taps } = withTaps(fakeActivities(), (targets) => received.push([...targets]));
+    activity.start();
+    await activity.end('immediate');
+    taps.tap('activity-0', 'us');
+    assert.deepEqual(received, []);
+  });
+
+  it('hands an onTaps that throws to the ErrorHandler, and keeps listening', () => {
+    const received: string[] = [];
+    const { activity, taps, handled } = withTaps(fakeActivities(), ([target]) => {
+      received.push(target!);
+      if (target === 'bad') throw new Error('bad tap');
+    });
+    activity.start();
+    taps.tap('activity-0', 'bad');
+    taps.tap('activity-0', 'us');
+    assert.match(String(handled[0]), /bad tap/);
+    assert.deepEqual(received, ['bad', 'us']);
+  });
+
+  it('hands an asynchronous onTaps that rejects to the ErrorHandler', async () => {
+    const { activity, taps, handled } = withTaps(fakeActivities(), async () => {
+      throw new Error('bad tap, later');
+    });
+    activity.start();
+    taps.tap('activity-0', 'us');
+    await Promise.resolve();
+    assert.match(String(handled[0]), /bad tap, later/);
+  });
+
+  it('stops listening when destroyed, and never listens with no onTaps', () => {
+    const { taps, destroy } = withTaps(fakeActivities(), () => {});
+    assert.equal(taps.listening(), 1);
+    destroy();
+    assert.equal(taps.listening(), 0);
+
+    const unused = fakeTaps();
+    const injector = createEnvironmentInjector(
+      [{ provide: WIDGET_EVENTS, useValue: unused.events }],
+      root,
+    );
+    runInInjectionContext(injector, () =>
+      liveActivity(fakeActivities().factory, signal<Score>({ us: '0', them: '0' })),
+    );
+    assert.equal(unused.listening(), 0);
+    injector.destroy();
   });
 });
 
