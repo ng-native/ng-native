@@ -85,8 +85,8 @@ of the wrong type fails `ngc`. The slots are `banner`, for the lock screen, and 
 `compactTrailing`, `minimal`, `expandedLeading`, `expandedTrailing`, `expandedCenter` and
 `expandedBottom`, for the Dynamic Island.
 
-The activity is also drawn small: in the Smart Stack of a paired Apple Watch from iOS 18, and in
-CarPlay from iOS 26. A `bannerSmall` slot is what is drawn there; a layout without one is drawn
+The activity is also drawn small: in the Smart Stack of a paired Apple Watch from iOS 18 with
+watchOS 11, and in CarPlay from iOS 26. A `bannerSmall` slot is what is drawn there; a layout without one is drawn
 there by its `banner`.
 
 ### What a layout can hold
