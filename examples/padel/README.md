@@ -11,6 +11,7 @@ from.
 | Scoring (`src/app/match/match.ts`)               | Deuce and advantage or golden point, sets to 6 by two, a tiebreak at 6-6, best of three                                                                                        |
 | Watch link (`src/app/match/match-store.ts`)      | `Watch` from `@ng-native/expo/watch`: the phone keeps the score, and the watch sends it points                                                                                 |
 | Live Activity (`src/app/live/score-activity.ts`) | The lock screen banner and Dynamic Island layout, an Angular template compiled for the widget extension, kept in step by `liveActivity()` from `@ng-native/expo/live-activity` |
+| Notification (`src/app/app.ts`)                  | On Android, the score in a notification that stays, with a button for each side, kept in step by `ongoingNotification()` from `@ng-native/expo/ongoing-notification`           |
 | Widget (`src/app/live/score-widget.ts`)          | A home screen widget with a button for each side, an Angular template compiled for the widget extension, kept in step by `widget()` from `@ng-native/expo/widget`              |
 | Watch app (`targets/watch/PadelWatchApp.swift`)  | A SwiftUI app with a button for each side, a haptic on every tap, and a queue for when the phone is away                                                                       |
 
