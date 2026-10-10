@@ -340,6 +340,9 @@ app at:
 }
 ```
 
+The request to APNs carries the headers `apns-push-type: liveactivity` and
+`apns-topic: <bundle identifier>.push-type.liveactivity`, for a start as for an update.
+
 - **Starting from a server needs iOS 17.2.** Before it, with Live Activities turned off in
   Settings, and on Android and the web, `pushToStartToken()` stays null.
 - **The extension draws the layout the app last stored**, which it does each time it runs
