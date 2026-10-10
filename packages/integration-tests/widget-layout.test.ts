@@ -452,6 +452,18 @@ describe('control flow', () => {
     assert.deepEqual(render(template, { family: 'systemLarge' }), { type: 'Divider', props: {} });
   });
 
+  it('reads the environment a Live Activity is drawn in, in a slot', () => {
+    const banner = `<ng-template #banner>
+      @if (environment().isStale) { <ui-text>Out of date</ui-text> } @else { <ui-text>{{ props().us }}</ui-text> }
+    </ng-template>`;
+    assert.deepEqual(render(banner, { us: '15' }, { isStale: true }), {
+      banner: { type: 'Text', props: { children: 'Out of date' } },
+    });
+    assert.deepEqual(render(banner, { us: '15' }, { isStale: false }), {
+      banner: { type: 'Text', props: { children: '15' } },
+    });
+  });
+
   it('reads the environment a home-screen widget is drawn in', () => {
     assert.deepEqual(
       render('<ui-text>{{ environment().family }}</ui-text>', {}, { family: 'systemSmall' }),

@@ -318,6 +318,26 @@ describe('a layout through the widget extension', () => {
     );
   });
 
+  it('draws a Live Activity by its environment, as its JSX does', () => {
+    same(
+      `<ng-template #banner>
+        @if (environment().isStale) { <ui-text>Out of date</ui-text> } @else { <ui-text>{{ props().us }}</ui-text> }
+      </ng-template>
+      <ng-template #minimal><ui-text>{{ environment().colorScheme }}</ui-text></ng-template>`,
+      `(props, environment) => {
+        'widget';
+        return {
+          banner: environment.isStale ? <Text>Out of date</Text> : <Text>{props.us}</Text>,
+          minimal: <Text>{environment.colorScheme}</Text>,
+        };
+      }`,
+      [
+        { props: { us: '15' }, environment: { isStale: true, colorScheme: 'dark' } },
+        { props: { us: '15' }, environment: { isStale: false, colorScheme: 'light' } },
+      ],
+    );
+  });
+
   it("draws a Live Activity's small banner as its JSX does, beside the banner", () => {
     same(
       `<ng-template #banner><ui-text>Us {{ props().us }} - {{ props().them }} Them</ui-text></ng-template>
