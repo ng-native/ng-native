@@ -377,18 +377,53 @@ export class UiImage {
   readonly modifiers = input<readonly UiModifier[]>();
 }
 
+/** A moment: a `Date`, milliseconds since the epoch, or a string `Date` reads. */
+export type UiDate = Date | number | string;
+
+/** The start and end of a timer. */
+export interface UiTimerInterval {
+  readonly lower: UiDate;
+  readonly upper: UiDate;
+}
+
+/** A moment as SwiftUI takes it, in milliseconds since the epoch. */
+function milliseconds(value: UiDate | undefined): number | undefined {
+  return value === undefined ? undefined : new Date(value).getTime();
+}
+
+function timerMilliseconds(value: UiTimerInterval | undefined) {
+  return value && { lower: milliseconds(value.lower), upper: milliseconds(value.upper) };
+}
+
 /**
  * A SwiftUI `Text`, or Compose's on Android. Its text is what is written inside it,
  * `<ui-text>Us {{ score }}</ui-text>`, as `<text>` takes its own, or `text`, which wins over it.
+ *
+ * On iOS it can keep time by itself instead, with no update from the app: `date` is drawn by
+ * `dateStyle`, as the time since or until it for `'relative'`, `'offset'` and `'timer'`, and
+ * `timerInterval` is a timer running from its `lower` to its `upper`, down unless `countsDown` is
+ * false.
  */
 @Component({
   selector: 'ui-text',
   template: '<ng-content />',
-  host: { '[text]': 'text()', '[modifiers]': 'modifiers()' },
+  host: {
+    '[text]': 'text()',
+    '[date]': 'android ? undefined : date()',
+    '[dateStyle]': 'android ? undefined : dateStyle()',
+    '[timerInterval]': 'android ? undefined : timerInterval()',
+    '[countsDown]': 'android ? undefined : countsDown()',
+    '[modifiers]': 'modifiers()',
+  },
 })
 export class UiText {
   protected readonly nativeView = nativeView();
+  protected readonly android = nativePlatform() === 'android';
   readonly text = input<string>();
+  readonly date = input(undefined, { transform: milliseconds });
+  readonly dateStyle = input<'timer' | 'relative' | 'offset' | 'date' | 'time'>();
+  readonly timerInterval = input(undefined, { transform: timerMilliseconds });
+  readonly countsDown = input<boolean>(undefined, { transform: optionalBoolean });
   readonly modifiers = input<readonly UiModifier[]>();
 }
 
@@ -829,6 +864,8 @@ export class UiChart {
 /**
  * A SwiftUI `ProgressView`: a bar filled to `value`, from 0 to 1, or a spinner without one. On
  * Android, Compose's `LinearProgressIndicator`, a moving bar rather than a spinner without a value.
+ * On iOS, `timerInterval` has the bar keep time by itself from its `lower` to its `upper`, emptying
+ * unless `countsDown` is false.
  */
 @Component({
   selector: 'ui-progress',
@@ -836,6 +873,8 @@ export class UiChart {
   host: {
     '[value]': 'android ? undefined : value()',
     '[progress]': 'android ? value() : undefined',
+    '[timerInterval]': 'android ? undefined : timerInterval()',
+    '[countsDown]': 'android ? undefined : countsDown()',
     '[modifiers]': 'modifiers()',
   },
 })
@@ -843,6 +882,8 @@ export class UiProgress {
   protected readonly nativeView = nativeView();
   protected readonly android = nativePlatform() === 'android';
   readonly value = input<number>(undefined, { transform: optionalNumber });
+  readonly timerInterval = input(undefined, { transform: timerMilliseconds });
+  readonly countsDown = input<boolean>(undefined, { transform: optionalBoolean });
   readonly modifiers = input<readonly UiModifier[]>();
 }
 

@@ -351,6 +351,48 @@ describe('a layout through the widget extension', () => {
     );
   });
 
+  it('draws text and progress that keep time by themselves as their JSX does', () => {
+    same(
+      `<ui-vstack>
+        <ui-text [date]="props().startedAt" dateStyle="timer" />
+        <ui-text [timerInterval]="{ lower: props().startedAt, upper: props().endsAt }" countsDown="false" />
+        <ui-progress [timerInterval]="{ lower: props().startedAt, upper: props().endsAt }" [countsDown]="false" />
+      </ui-vstack>`,
+      `(props) => {
+        'widget';
+        const timerInterval = { lower: new Date(props.startedAt), upper: new Date(props.endsAt) };
+        return (
+          <VStack>
+            <Text date={new Date(props.startedAt)} dateStyle="timer" />
+            <Text timerInterval={timerInterval} countsDown={false} />
+            <ProgressView timerInterval={timerInterval} countsDown={false} />
+          </VStack>
+        );
+      }`,
+      [
+        { props: { startedAt: 1791633600000, endsAt: 1791637200000 } },
+        // As a Date in the app's props reaches the extension: JSON has made a string of it.
+        {
+          props: {
+            startedAt: '2026-10-10T12:00:00.000Z',
+            endsAt: '2026-10-10T13:00:00.000Z',
+          },
+        },
+      ],
+    );
+  });
+
+  it('hands native a date as the milliseconds an app hands it', () => {
+    const angular = compileWidgetLayout('<ui-text [date]="props().at" dateStyle="relative" />', {
+      file: 'layout.ts',
+      members: MEMBERS,
+    });
+    assert.deepEqual(extensionRender(angular, { at: '2026-10-10T12:00:00.000Z' }), {
+      type: 'TextView',
+      props: { date: 1791633600000, dateStyle: 'relative' },
+    });
+  });
+
   it('draws a ui-chart as its JSX does, with every style it takes', () => {
     same(
       `<ui-chart

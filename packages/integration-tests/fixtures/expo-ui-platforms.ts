@@ -83,6 +83,21 @@ export class ExpoUiTextContentFixture {
   readonly them = signal('0');
 }
 
+@Component({
+  selector: 'expo-ui-time',
+  imports: [UiHost, UiProgress, UiText],
+  template: `
+    <ui-host>
+      <ui-text [date]="started" dateStyle="relative" />
+      <ui-text [timerInterval]="{ lower: started, upper: 60000 }" countsDown="false" />
+      <ui-progress [timerInterval]="{ lower: started, upper: 60000 }" countsDown="false" />
+    </ui-host>
+  `,
+})
+export class ExpoUiTimeFixture {
+  readonly started = new Date(1000);
+}
+
 /** An app's own component, under a selector `@expo/ui` has a view for. */
 @Component({
   selector: 'ui-button',

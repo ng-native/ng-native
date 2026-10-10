@@ -162,6 +162,25 @@ describe("a widget layout's template, through ngc", () => {
     );
   });
 
+  it('type-checks a date and a timer, on a ui-text and a ui-progress', () => {
+    assert.equal(
+      check(`<ui-hstack>
+        <ui-text [date]="props().done" dateStyle="relative" />
+        <ui-text [timerInterval]="{ lower: props().done, upper: props().us }" [countsDown]="false" />
+        <ui-progress [timerInterval]="{ lower: props().done, upper: props().done }" countsDown />
+      </ui-hstack>`),
+      '',
+    );
+    assert.match(
+      check('<ui-text [date]="props().done" dateStyle="stopwatch" />'),
+      /'"stopwatch"' is not assignable to type/,
+    );
+    assert.match(
+      check('<ui-progress [timerInterval]="{ lower: props().done }" />'),
+      /Property 'upper' is missing/,
+    );
+  });
+
   it("type-checks a widget's buttons: a target, and the props a press changes", () => {
     assert.equal(
       check(`<ui-hstack>

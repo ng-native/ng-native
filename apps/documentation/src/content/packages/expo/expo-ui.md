@@ -125,6 +125,9 @@ error. `expo-ui-components.ts` has thin typed components for the views an app re
   `<ui-text>Us {{ score() }}</ui-text>`, as `<text>` takes its own; `text` sets it too, and wins.
   A `ui-text` nested inside one is a span with its own modifiers, drawn after the text: put text
   that comes after a span in a `ui-text` of its own.
+  On iOS, a `date` drawn by `dateStyle`, or a `timerInterval`, has it keep time by itself, as
+  `timerInterval` does a `UiProgress`: see
+  [Time between updates](/packages/expo/live-activity#time-between-updates).
 - **`UiDatePicker`** - SwiftUI's `DatePicker` on iOS, Compose's on Android, and a Signal Forms
   field: its `value` model is a `Date` or null, whichever way each platform takes and reports one.
   A pick is when it emits `touch`. SwiftUI's picker always shows a date, today when the field is
