@@ -34,7 +34,10 @@ function scene(css = '') {
     const { props } = all(fabric.committed).find((each) => each.props['testID'] === id)!;
     return [props['numberOfLines'] ?? null, props['ellipsizeMode'] ?? null];
   };
-  return { engine, say, lines };
+  /** The committed view called `id`. */
+  const committed = (id: string): FakeFabricNode =>
+    all(fabric.committed).find((each) => each.props['testID'] === id)!;
+  return { engine, say, lines, committed };
 }
 
 describe('text with nowhere to wrap', () => {
@@ -63,6 +66,33 @@ describe('text with nowhere to wrap', () => {
     s.say('dots', 'Supercalifragilistic', 'dots');
     assert.deepEqual(s.lines('two'), [2, 'tail']);
     assert.deepEqual(s.lines('dots'), [1, 'tail']);
+  });
+
+  it('is so for text written straight into a view, and follows it changing', () => {
+    // The paragraph is one the engine makes for the text, and is no child of the view's.
+    const s = scene();
+    const view = s.engine.createElement('view');
+    s.engine.setProp(view, 'testID', 'box');
+    const words = s.engine.createText('Save');
+    s.engine.appendChild(view, words);
+    s.engine.appendChild(s.engine.root, view);
+    const paragraph = (): unknown[] => {
+      s.engine.commit();
+      const [made] = s.committed('box').children;
+      return [made!.props['numberOfLines'] ?? null, made!.props['ellipsizeMode'] ?? null];
+    };
+    assert.deepEqual(paragraph(), [1, 'clip']);
+    s.engine.setText(words, 'Save all');
+    assert.deepEqual(paragraph(), [null, 'tail']);
+    s.engine.setText(words, 'Saved');
+    assert.deepEqual(paragraph(), [1, 'clip']);
+  });
+
+  it('keeps an ending a style override gives it', () => {
+    const s = scene();
+    const label = s.say('label', 'Supercalifragilistic');
+    s.engine.setProp(label, 'styleOverride', { ellipsizeMode: 'head' });
+    assert.deepEqual(s.lines('label'), [1, 'head']);
   });
 
   it('follows the text changing, and a run coming to be in it', () => {
