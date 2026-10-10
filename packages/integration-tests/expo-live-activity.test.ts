@@ -203,8 +203,9 @@ describe('liveActivity', () => {
 });
 
 /** Stands in for `expo-widgets`' interaction events, which carry every widget's and activity's taps. */
-function fakeTaps() {
+function fakeTaps(held: WidgetTap[] = []) {
   const listeners = new Set<(tap: WidgetTap) => void>();
+  const asked: string[][] = [];
   const none = () => () => {};
   return {
     events: {
@@ -212,12 +213,17 @@ function fakeTaps() {
         listeners.add(listener),
         () => listeners.delete(listener)
       ),
+      takeHeld: (sources: readonly string[]) => {
+        asked.push([...sources]);
+        return held.splice(0).filter((tap) => sources.includes(tap.source));
+      },
       onForeground: none,
       onBackground: none,
     },
-    tap: (source: string, target: string) =>
-      listeners.forEach((listener) => listener({ source, target })),
+    tap: (source: string, target: string, timestamp = 0) =>
+      listeners.forEach((listener) => listener({ source, target, timestamp })),
     listening: () => listeners.size,
+    asked,
   };
 }
 
@@ -225,8 +231,9 @@ describe("liveActivity's buttons", () => {
   function withTaps(
     fake: ReturnType<typeof fakeActivities>,
     onTaps: (taps: readonly string[]) => void,
+    held: WidgetTap[] = [],
   ) {
-    const taps = fakeTaps();
+    const taps = fakeTaps(held);
     const handled: unknown[] = [];
     const injector = createEnvironmentInjector(
       [
@@ -291,6 +298,35 @@ describe("liveActivity's buttons", () => {
     taps.tap('activity-0', 'us');
     assert.match(String(handled[0]), /bad tap/);
     assert.deepEqual(received, ['bad', 'us']);
+  });
+
+  it('hands over the taps made before the app was listening, by the activities they came from', async () => {
+    const received: string[][] = [];
+    const { taps } = withTaps(
+      fakeActivities({ running: 1 }),
+      (targets) => received.push([...targets]),
+      [
+        { source: 'activity-0', target: 'us', timestamp: 1 },
+        { source: 'activity-0', target: 'them', timestamp: 2 },
+      ],
+    );
+    assert.deepEqual(received, [], 'not while the caller is still being built');
+    await settle();
+    assert.deepEqual(taps.asked, [['activity-0']]);
+    assert.deepEqual(received, [['us', 'them']]);
+  });
+
+  it('hands a held tap over once when it arrives as it happens too', async () => {
+    const received: string[][] = [];
+    const { taps } = withTaps(
+      fakeActivities({ running: 1 }),
+      (targets) => received.push([...targets]),
+      [{ source: 'activity-0', target: 'us', timestamp: 1 }],
+    );
+    taps.tap('activity-0', 'us', 1);
+    await settle();
+    taps.tap('activity-0', 'us', 2);
+    assert.deepEqual(received, [['us'], ['us']], 'the held one, then only the later tap');
   });
 
   it('stops listening when destroyed, and never listens with no onTaps', () => {

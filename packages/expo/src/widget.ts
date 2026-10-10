@@ -40,12 +40,19 @@ export interface WidgetTap {
   readonly source: string;
   /** The button's `target`. */
   readonly target: string;
+  /** When it was tapped, in milliseconds since the epoch. */
+  readonly timestamp: number;
 }
 
 /** When to collect taps, and when to ask iOS to redraw the widget. */
 export interface WidgetEvents {
   /** A button of a widget or a Live Activity was tapped while the app was running. */
   onTap(listener: (tap: WidgetTap) => void): () => void;
+  /**
+   * The taps made on Live Activities with these ids before the app was listening, each answered
+   * once. A tap can start the app, and is over before its JavaScript has loaded.
+   */
+  takeHeld?(sources: readonly string[]): readonly WidgetTap[];
   onForeground(listener: () => void): () => void;
   onBackground(listener: () => void): () => void;
 }
@@ -78,6 +85,12 @@ type ExpoWidgets = {
   addUserInteractionListener(listener: (tap: WidgetTap) => void): { remove(): void };
 };
 
+/** This package's own native module, which holds a Live Activity's taps from launch. Absent off iOS. */
+type HeldTaps = { takeTaps?(sources: readonly string[]): readonly WidgetTap[] };
+const heldTaps = () =>
+  (globalThis as { expo?: { modules?: { NgNativeLiveActivityTaps?: HeldTaps } } }).expo?.modules
+    ?.NgNativeLiveActivityTaps;
+
 /** Overridden in a test to tap a widget that is not there. */
 export const WIDGET_EVENTS = new InjectionToken<WidgetEvents>('angular-native.widgetEvents', {
   factory: () => {
@@ -94,6 +107,7 @@ export const WIDGET_EVENTS = new InjectionToken<WidgetEvents>('angular-native.wi
         const subscription = widgets?.addUserInteractionListener(listener);
         return () => subscription?.remove();
       },
+      takeHeld: (sources) => heldTaps()?.takeTaps?.(sources) ?? [],
       onForeground: onState('active'),
       onBackground: onState('background'),
     };

@@ -16,7 +16,7 @@ import {
   type Type,
 } from '@angular/core';
 import { expoModule } from './native.ts';
-import { WIDGET_EVENTS } from './widget.ts';
+import { WIDGET_EVENTS, type WidgetTap } from './widget.ts';
 
 /** A widget layout: an Angular component whose `props` input the layout draws from. */
 export type WidgetLayout<T extends object> = Type<{ readonly props: InputSignal<T> }>;
@@ -116,8 +116,8 @@ export interface LiveActivityOptions {
   /**
    * Called with the target of a `ui-button` tapped on a running activity of this kind, as `widget`
    * hands over a widget's. iOS runs the tap in the app, starting it in the background if it has
-   * to, and the tap is not kept: one that starts the app is over before this is listening. A
-   * handler that throws goes to the `ErrorHandler`.
+   * to; a tap that starts the app is held until this is listening. A handler that throws goes to
+   * the `ErrorHandler`.
    */
   readonly onTaps?: (taps: readonly string[]) => void;
 }
@@ -210,17 +210,34 @@ export function liveActivity<T extends object>(
     if (activity) untracked(() => activity.update(next).catch(report));
   });
 
-  // Every widget's and activity's taps arrive here: an activity's names it by its id.
-  const stopTaps =
-    onTaps &&
-    inject(WIDGET_EVENTS).onTap((tap) => {
-      if (!running().some((activity) => activity.getId() === tap.source)) return;
+  const stopTaps = onTaps && listenForTaps(onTaps);
+
+  /**
+   * Every widget's and activity's taps arrive here: an activity's names it by its id. Those made
+   * before this was listening are taken once it is, so one that also arrives as it happens is
+   * handed over once.
+   */
+  function listenForTaps(hand: (taps: readonly string[]) => void): () => void {
+    const events = inject(WIDGET_EVENTS);
+    const key = (tap: WidgetTap) => `${tap.source} ${tap.target} ${tap.timestamp}`;
+    const taken = new Set<string>();
+    const handOver = (targets: readonly string[]) => {
       try {
-        onTaps([tap.target]);
+        hand(targets);
       } catch (failure) {
         errors.handleError(failure);
       }
+    };
+    const stop = events.onTap((tap) => {
+      if (taken.delete(key(tap))) return;
+      if (running().some((activity) => activity.getId() === tap.source)) handOver([tap.target]);
     });
+    const held = events.takeHeld?.(running().map((activity) => activity.getId())) ?? [];
+    for (const tap of held) taken.add(key(tap));
+    // Not yet: the caller's own fields may not be set while this one is.
+    if (held.length) queueMicrotask(() => handOver(held.map((tap) => tap.target)));
+    return stop;
+  }
 
   inject(DestroyRef).onDestroy(() => {
     stopTaps?.();

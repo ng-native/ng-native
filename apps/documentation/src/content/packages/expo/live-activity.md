@@ -141,10 +141,11 @@ The tap runs in your app, not in the extension: iOS wakes the app in the backgro
 opening it, and the app changes the signal, which updates the activity.
 
 - **Buttons need iOS 17.** Before it the button is drawn, and its tap does not reach `onTaps`.
-- **A tap is not kept.** It reaches `onTaps` while the app is running or suspended. When iOS has
-  to start the app to run the tap, the tap is over before the app is listening, and that one is
-  lost; the next one arrives. For a tap that must not be lost, use a `ui-link`: it opens the app at
-  its `destination`, which a cold start still receives.
+- **A tap that starts the app is held.** When iOS has to start the app to run a tap, the tap is
+  over before the app's JavaScript has loaded. `@ng-native/expo` holds it from launch, on iOS, and
+  hands it to `onTaps` once `liveActivity()` is called for its activity. Its native half does the
+  holding, so that needs an app built since `@ng-native/expo` was installed; an older build drops
+  that one tap, and delivers the next.
 - **A press can run while the phone is locked.** The app is then woken with the phone still
   locked, when a keychain item stored as readable only while unlocked cannot be read. Store what
   `onTaps` needs as readable after the first unlock.
