@@ -2,7 +2,7 @@
   "$schema": "../../node_modules/@angular-devkit/schematics/collection-schema.json",
   "schematics": {
     "sync-app-versions": {
-      "version": "0.9.0",
+      "version": "0.10.0",
       "description": "Move the @ng-native packages each project's own package.json lists to the new version.",
       "factory": "./migrations/run.cjs#sync-app-versions"
     },

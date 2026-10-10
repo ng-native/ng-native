@@ -1,6 +1,6 @@
 {
   "name": "@ng-native/nx",
-  "version": "0.9.0",
+  "version": "0.10.0",
   "description": "Nx generators for Angular Native: nx add, an Expo app project whose targets run it, and native libraries and components.",
   "keywords": [
     "angular",

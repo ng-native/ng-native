@@ -1,3 +1,79 @@
+## 0.10.0 (2026-10-10)
+
+### 🩹 Fixes
+
+- On Android, a screen that is closed keeps its content while it animates away: a `formSheet` dismissed with `NativeNavigation.back()` or the system back button was emptied at once and slid away blank. ([#724](https://github.com/ng-native/ng-native/pull/724), [#720](https://github.com/ng-native/ng-native/issues/720))
+
+  react-native-screens starts a removed screen's transition before its views are unmounted, from a listener its native module installs as it is made, and React Native makes a module only when JavaScript asks for it. Nothing asked, since none of react-native-screens' JavaScript is imported. `provideNativeRouter` now asks for it.
+
+- `ongoingNotification()` from `@ng-native/expo/ongoing-notification` keeps an Android ongoing notification in step with a signal, with a timer Android counts itself, a progress bar and action buttons whose taps reach `onTaps` even when made while the app was not running; it asks Android to show it as a Live Update. It needs the app rebuilt (`npx expo run:android`, or a new EAS build). An Android app built with `@ng-native/expo` now declares the `POST_NOTIFICATIONS` and `POST_PROMOTED_NOTIFICATIONS` permissions, whether or not it shows one. ([#762](https://github.com/ng-native/ng-native/pull/762))
+- Renderer2.removeChild takes a node out of the parent it has, whatever parent it is handed, as Angular's DOM renderer does. ([#723](https://github.com/ng-native/ng-native/pull/723))
+- A library's stylesheet with a rule that does not parse nested inside one that does, such as `@keyframes` in a style rule, keeps the rules nested beside it, where they were dropped with it. ([#756](https://github.com/ng-native/ng-native/pull/756))
+- A box with a `z-index` above 0 is drawn over what follows the views it is in, as in a browser: each plain view it is in is committed at its `z-index`, up to a view with a `z-index` of its own. ([#726](https://github.com/ng-native/ng-native/pull/726))
+- `NativeNavigation.popTo()` pops to an earlier screen whose url is the one already showing, where a stack holds the same url twice: its promise never settled and nothing was popped. ([#732](https://github.com/ng-native/ng-native/pull/732))
+- A video player's `state()` starts with the player's own `muted` and `volume`, and keeps them when its source changes. It read unmuted at full volume until an event said otherwise, and again after every new source. ([#740](https://github.com/ng-native/ng-native/pull/740))
+- `:first-of-type`, `:last-of-type`, `:only-of-type`, `:nth-of-type()` and `:nth-last-of-type()` are matched, counting the siblings with the element's own name, where a rule with one was dropped. ([#751](https://github.com/ng-native/ng-native/pull/751))
+- `::ng-deep` is read where something is written before it: `:host ::ng-deep .inner` and `.panel ::ng-deep .inner` style `.inner` anywhere under that component, in the views of the components it holds as well. With nothing before it the rule is still dropped. ([#754](https://github.com/ng-native/ng-native/pull/754))
+- A tap on a Live Activity's button that starts the app reaches `onTaps`, where it was lost before the app's JavaScript had loaded. `@ng-native/expo` holds it in a native module of its own on iOS, so rebuild the app (`npx expo run:ios`, or a new EAS build) to get it; an app not rebuilt behaves as before. ([#760](https://github.com/ng-native/ng-native/pull/760))
+- A Live Activity layout takes `ui-button`, on iOS 17 and later, and `liveActivity()` hands each tap's `target` to a new `onTaps` option, as `widget()` does. A `(buttonPress)` in a Live Activity is a build error, where the button itself was before. ([#759](https://github.com/ng-native/ng-native/pull/759))
+- Text with a `line-height` is never laid out shorter than one line: in a box too short for it, it is drawn at its full line height and overflows, where its letters were cut off. ([#755](https://github.com/ng-native/ng-native/pull/755))
+- A deep link the app was launched with is followed over the first page to show, or not at all: when that page failed to load, the link was followed after whichever navigation next succeeded, however much later. ([#733](https://github.com/ng-native/ng-native/pull/733))
+- An element after one that changed is matched again on its own, and what is under it is styled again only where a rule reads that far, in a sheet with a sibling combinator. ([#713](https://github.com/ng-native/ng-native/pull/713))
+- A rule can ask :has() of a box the styled node is in, .card:has(.action) .title, where it used to be dropped with a warning. ([#725](https://github.com/ng-native/ng-native/pull/725))
+- An @font-face that names several files is registered from its TrueType or OpenType file, and from the last src it writes, rather than from the first file named. ([#719](https://github.com/ng-native/ng-native/pull/719))
+- `dark:` applies to the view that has the `dark` class as well as to everything inside it, with both Tailwind presets. A root view an app puts `dark` on itself kept its light `dark:bg-zinc-950` and only its children turned dark. The variant is now Tailwind's own class-based form, `&:where(.dark, .dark *)`, at the same specificity as on the web: a `dark:` utility still wins over the plain one it follows, and a rule an app writes after the utilities can now override it, as in a browser. ([#707](https://github.com/ng-native/ng-native/pull/707))
+- On iOS, `Dialogs.choose()` resolves `null` when the choice with `style: 'cancel'` is picked or the sheet is dismissed, as it does on Android. It resolved that choice's index, so a caller checking for `null` took a dismissal for a choice. ([#729](https://github.com/ng-native/ng-native/pull/729))
+- A border with a width and no color is drawn in the element's text color, its own or inherited, where it was black: give it a `border-color` to keep it black. ([#752](https://github.com/ng-native/ng-native/pull/752))
+- Text written straight into a view, rather than in a `<text>`, takes a custom font that finishes loading after the first render. It stayed in the fallback face. ([#735](https://github.com/ng-native/ng-native/pull/735))
+- The `background` shorthand takes gradients, with a position, size, repeat and color beside them, and what it leaves out is back at its initial value: `background: red` now takes away a gradient an earlier rule gave, as in a browser. ([#728](https://github.com/ng-native/ng-native/pull/728))
+- A `[attr.class]` or `[attr.style]` binding that becomes null takes its classes or styles away, and a style attribute set again drops the declarations it no longer has. They stayed applied. ([#734](https://github.com/ng-native/ng-native/pull/734))
+- An app below Metro's config root starts its transform cache afresh when its own `@angular/core`, `react-native-worklets` or `react-native-reanimated` is upgraded, installed or removed. ([#702](https://github.com/ng-native/ng-native/pull/702))
+
+  `withAngularNative(config, { projectRoot })` read those versions for Metro's cache key from the config root, whose walk up never looks in the app's own `node_modules`. The app's copies are the ones its files resolve, so a change to them left every cached transform in place until a `--clear`. The key reads them from the app now, as it already did for `@ng-icons` sets, and keeps the config root's worklets packages beside them, since `babel-preset-expo` looks there first.
+
+- Text that is one word, with no space or hyphen to break at, is one line cut at the edge of its box, where it was wrapped between its letters. Text of several words is as it was. ([#753](https://github.com/ng-native/ng-native/pull/753))
+- A `<scroll-view>` with `pagingEnabled` settles on a whole page in a browser, one page per swipe, as on a device, where it scrolled freely and stopped anywhere before. Each child of the content view is a page, so a carousel of page-sized children pages as it does on a device. ([#704](https://github.com/ng-native/ng-native/pull/704))
+- A `<text>` with `numberOfLines` is cut to that many lines in a browser, ending in an ellipsis as on a device, where it wrapped onto every line before. `ellipsizeMode="clip"` cuts it without the ellipsis, and `head` and `middle` end it at the tail, which is all CSS can say. ([#703](https://github.com/ng-native/ng-native/pull/703))
+- A `<text-input>` in a browser hands `(keyPress)` and `(selectionChange)` React Native's payloads: `{ nativeEvent: { key } }` with `Backspace`, `Enter` or the character typed, and `{ nativeEvent: { selection: { start, end } } }` whenever the caret moves or a range is selected. ([#701](https://github.com/ng-native/ng-native/pull/701))
+
+  `(keyPress)` was bound to the DOM's `keypress` event and handed it raw, so reading `$event.nativeEvent.key` threw on every character and `Backspace` sent nothing at all. `(selectionChange)` never fired.
+
+- `Updates` keeps a downloaded update waiting when a later `check()` fails or finds nothing new: `ready()` stays `true`, `check()` resolves `true` and `apply()` restarts into it, with the failure reported on `error()` only. `error()` is cleared by the next check that succeeds. ([#705](https://github.com/ng-native/ng-native/pull/705))
+- `ui-text` takes `date`, `dateStyle`, `timerInterval` and `countsDown`, and `ui-progress` takes `timerInterval` and `countsDown`, so a Live Activity, a home-screen widget or an iOS screen shows elapsed and remaining time that moves with no update from the app. ([#757](https://github.com/ng-native/ng-native/pull/757))
+- `ui-image` takes `assetName`, an image or a custom symbol in the asset catalog, in an app and in a Live Activity or widget layout. ([#758](https://github.com/ng-native/ng-native/pull/758))
+- A token of two to four lengths may have a `var()` for any of them, `--content-padding: 0 var(--modal-padding) var(--modal-padding)`, and gives `padding`, `margin`, `border-width` and `border-radius` a value a side as one of written lengths does. ([#746](https://github.com/ng-native/ng-native/pull/746))
+- Text is centred in a box taller than its line at a system text size smaller than the default, where it sat at the top of the box. ([#763](https://github.com/ng-native/ng-native/pull/763))
+- A test that imports a DOM component's `'use dom'` file gets a reference to its page, as native code does in a Metro bundle, under `ngNative()` and under `@ng-native/testing/register`. ([#711](https://github.com/ng-native/ng-native/pull/711), [#710](https://github.com/ng-native/ng-native/issues/710))
+
+  The file was evaluated in Node instead, so `mountInWebView` failed as it was imported with "window is not defined", which Vitest reports as an unhandled rejection that fails a run whose tests all pass, and the page's web-only imports were loaded into the test run.
+
+- `userEvent.press`, `longPress`, `type` and `clear`, and `fireEvent.press`, do nothing on a node a finger could not reach, as React Native Testing Library decides it: one that is `pointerEvents` `none` or `box-none` itself, or one under a view that is `none` or `box-only`. `pointer-events: none` in CSS counts too. A test that the button is blocked while an overlay is up passed before, because the press went through. ([#706](https://github.com/ng-native/ng-native/pull/706))
+
+  A query `RegExp` with the `g` or `y` flag finds every match. It tested each node from where its last match ended, so `getAllByText(/item/gi)` over four items found two, and a second `getByText` with the same `RegExp` could miss.
+
+- A `<native-tab>` an `@if` takes away and brings back shows its page again, where it was left, in place of an empty tab. ([#718](https://github.com/ng-native/ng-native/pull/718))
+- A `<native-tab>` added after the tab bar starts, as an `@if` behind a feature flag adds one, can now be opened by a tap or a navigation. ([#717](https://github.com/ng-native/ng-native/pull/717))
+- Dropping a `StatusBar.push()` claim puts back what only that claim had changed: a bar it hid is shown again, and its style and translucency go back to the platform's own. They stayed as the claim left them when no claim underneath named them. ([#727](https://github.com/ng-native/ng-native/pull/727))
+- Styling an element passes over a rule that names an ancestor the element has not got, without walking up the tree to look for it. ([#712](https://github.com/ng-native/ng-native/pull/712))
+- A custom property of two to four lengths gives padding, margin, border-width and border-radius a value for each side or corner, where it used to leave them unset. ([#722](https://github.com/ng-native/ng-native/pull/722))
+- A screen with a scroll-driven animation (`animation-timeline: scroll()`) is released when it is closed: the engine kept its scroll view, and through it the whole screen, for as long as the app ran. ([#730](https://github.com/ng-native/ng-native/pull/730))
+- A deep link that arrives while the app is running is pushed over the screen showing, as the Screens page says, when the app has no `withLinkParent`. A link to a url already further down the stack went back to that screen instead and closed the ones above it; now Back from the link returns to the screen it was opened over. ([#715](https://github.com/ng-native/ng-native/pull/715))
+
+  Two different links that arrive back to back leave only the last one above the screen that was showing, since the second push supersedes the first.
+
+- A default style given to a styled element, and a class a rule asks a box to have or not to have, restyle only what they reach rather than everything under the element. ([#714](https://github.com/ng-native/ng-native/pull/714))
+- A reset or a replace to a page that navigates elsewhere as it is created, a sign-in check in its `ngOnInit`, takes out the screens it supersedes. ([#721](https://github.com/ng-native/ng-native/pull/721))
+
+  The page's own navigation cancelled the reset or the replace before the stack had marked what it supersedes, and the stack waited for that navigation to end, which it never did. Signing out to a page that sent a signed-out user to sign in left every screen of the session under the sign-in page.
+
+- `NativeNavigation.reset()` to a screen still kept further down the stack now leaves that screen alone on the stack. The screens below it are destroyed too, so back has nowhere to go, as the docs say. ([#716](https://github.com/ng-native/ng-native/pull/716))
+
+### ❤️ Thank You
+
+- Ashley Hunter
+- erKam @erkamyaman
+- Gabriel Silva @GabeSilvaDev
+
 ## 0.9.0 (2026-10-09)
 
 ### 🚀 Features

@@ -1,6 +1,6 @@
 {
   "name": "@ng-native/analog",
-  "version": "0.9.0",
+  "version": "0.10.0",
   "description": "Analog's file-based pages and content files for Angular Native: src/app/pages, routed by @analogjs/router on a native stack, and src/content read as @analogjs/content reads it.",
   "keywords": [
     "angular",
