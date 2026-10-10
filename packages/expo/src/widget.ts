@@ -53,6 +53,11 @@ export interface WidgetEvents {
    * once. A tap can start the app, and is over before its JavaScript has loaded.
    */
   takeHeld?(sources: readonly string[]): readonly WidgetTap[];
+  /**
+   * The token a server starts a Live Activity with over APNs: null until iOS issues one. One signal
+   * for the whole app, since `expo-widgets` hands the token it has only to the first to listen.
+   */
+  pushToStartToken?(): Signal<string | null>;
   onForeground(listener: () => void): () => void;
   onBackground(listener: () => void): () => void;
 }
@@ -83,6 +88,9 @@ export interface WidgetRef {
 type ReactNative = typeof import('react-native');
 type ExpoWidgets = {
   addUserInteractionListener(listener: (tap: WidgetTap) => void): { remove(): void };
+  addPushToStartTokenListener?(listener: (event: { activityPushToStartToken: string }) => void): {
+    remove(): void;
+  };
 };
 
 /** This package's own native module, which holds a Live Activity's taps from launch. Absent off iOS. */
@@ -96,6 +104,8 @@ export const WIDGET_EVENTS = new InjectionToken<WidgetEvents>('angular-native.wi
   factory: () => {
     const widgets = optional(() => require('expo-widgets') as ExpoWidgets);
     const native = optional(() => require('react-native') as ReactNative);
+    const destroyRef = inject(DestroyRef);
+    let startToken: Signal<string | null> | undefined;
     const onState = (wanted: string) => (listener: () => void) => {
       const subscription = native?.AppState.addEventListener('change', (state) => {
         if (state === wanted) listener();
@@ -108,6 +118,15 @@ export const WIDGET_EVENTS = new InjectionToken<WidgetEvents>('angular-native.wi
         return () => subscription?.remove();
       },
       takeHeld: (sources) => heldTaps()?.takeTaps?.(sources) ?? [],
+      pushToStartToken: () => {
+        if (startToken) return startToken;
+        const token = signal<string | null>(null);
+        const subscription = widgets?.addPushToStartTokenListener?.((event) =>
+          token.set(event.activityPushToStartToken),
+        );
+        destroyRef.onDestroy(() => subscription?.remove());
+        return (startToken = token.asReadonly());
+      },
       onForeground: onState('active'),
       onBackground: onState('background'),
     };
