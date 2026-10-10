@@ -293,6 +293,16 @@ describe("liveActivity's buttons", () => {
     assert.deepEqual(received, ['bad', 'us']);
   });
 
+  it('hands an asynchronous onTaps that rejects to the ErrorHandler', async () => {
+    const { activity, taps, handled } = withTaps(fakeActivities(), async () => {
+      throw new Error('bad tap, later');
+    });
+    activity.start();
+    taps.tap('activity-0', 'us');
+    await Promise.resolve();
+    assert.match(String(handled[0]), /bad tap, later/);
+  });
+
   it('stops listening when destroyed, and never listens with no onTaps', () => {
     const { taps, destroy } = withTaps(fakeActivities(), () => {});
     assert.equal(taps.listening(), 1);

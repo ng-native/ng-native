@@ -15,7 +15,7 @@ import {
   type Signal,
   type Type,
 } from '@angular/core';
-import { expoModule } from './native.ts';
+import { expoModule, isolated } from './native.ts';
 import { WIDGET_EVENTS } from './widget.ts';
 
 /** A widget layout: an Angular component whose `props` input the layout draws from. */
@@ -117,7 +117,7 @@ export interface LiveActivityOptions {
    * Called with the target of a `ui-button` tapped on a running activity of this kind, as `widget`
    * hands over a widget's. iOS runs the tap in the app, starting it in the background if it has
    * to, and the tap is not kept: one that starts the app is over before this is listening. A
-   * handler that throws goes to the `ErrorHandler`.
+   * handler that throws, or rejects, goes to the `ErrorHandler`.
    */
   readonly onTaps?: (taps: readonly string[]) => void;
 }
@@ -215,11 +215,10 @@ export function liveActivity<T extends object>(
     onTaps &&
     inject(WIDGET_EVENTS).onTap((tap) => {
       if (!running().some((activity) => activity.getId() === tap.source)) return;
-      try {
-        onTaps([tap.target]);
-      } catch (failure) {
-        errors.handleError(failure);
-      }
+      isolated(
+        () => onTaps([tap.target]),
+        (failure) => errors.handleError(failure),
+      );
     });
 
   inject(DestroyRef).onDestroy(() => {

@@ -144,6 +144,34 @@ describe('widget', () => {
     assert.deepEqual(received, [['point-us']], 'a tap is handed over once');
   });
 
+  it('hands an asynchronous tap handler that rejects to the ErrorHandler', async () => {
+    const handled: unknown[] = [];
+    const injector = createEnvironmentInjector(
+      [
+        { provide: WIDGET_EVENTS, useValue: fakeEvents().events },
+        {
+          provide: ErrorHandler,
+          useValue: { handleError: (error: unknown) => handled.push(error) },
+        },
+      ],
+      root,
+    );
+    runInInjectionContext(injector, () =>
+      widget(
+        fakeWidget({ us: '0', them: '0', taps: ['point-us'] }).native,
+        signal<Score>({ us: '0', them: '0' }),
+        {
+          onTaps: async () => {
+            throw new Error('bad tap, later');
+          },
+        },
+      ),
+    );
+    await settle();
+    await settle();
+    assert.match(String(handled[0]), /bad tap, later/);
+  });
+
   it('hands a failing tap handler to the ErrorHandler and still clears the taps', async () => {
     const handled: unknown[] = [];
     const fake = fakeWidget({ us: '0', them: '0', taps: ['point-us'] });

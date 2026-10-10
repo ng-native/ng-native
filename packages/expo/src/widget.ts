@@ -18,7 +18,7 @@ import {
   untracked,
   type Signal,
 } from '@angular/core';
-import { optional } from './native.ts';
+import { isolated, optional } from './native.ts';
 
 /** One entry of a widget's timeline, as `expo-widgets` stores it. */
 export interface WidgetEntry<T extends object> {
@@ -53,7 +53,7 @@ export interface WidgetEvents {
 export interface WidgetOptions {
   /**
    * Called with the targets of the buttons tapped since the last call, oldest first, once the write
-   * that clears them from the widget has worked, so a tap is handed over once. A handler that throws
+   * that clears them from the widget has worked, so a tap is handed over once. A handler that throws, or rejects,
    * goes to the `ErrorHandler`, and its taps are still cleared.
    */
   readonly onTaps?: (taps: readonly string[]) => void;
@@ -130,13 +130,11 @@ export function widget<T extends object>(
     return taps;
   };
 
-  const hand = (taps: readonly string[]) => {
-    try {
-      options.onTaps?.(taps);
-    } catch (failure) {
-      errors.handleError(failure);
-    }
-  };
+  const hand = (taps: readonly string[]) =>
+    isolated(
+      () => options.onTaps?.(taps),
+      (failure) => errors.handleError(failure),
+    );
 
   const run = async () => {
     try {
