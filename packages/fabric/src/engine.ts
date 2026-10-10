@@ -1306,16 +1306,32 @@ function ratioForAutoSize(props: Record<string, unknown>): void {
 
 const OUTLINE_KEYS = ['outlineWidth', 'outlineStyle', 'outlineColor', 'outlineOffset'];
 
-/** Each side a border has: its width, its colour, and the logical colour React Native takes too. */
+/** Whether a side of a border has a width and nothing that gives it a colour. */
+function colourless(
+  props: Record<string, unknown>,
+  side: (typeof BORDER_SIDES)[number],
+  flipped: boolean,
+): boolean {
+  const width = props[side.width] ?? props['borderWidth'];
+  if (typeof width !== 'number' || width <= 0) return false;
+  const given = [side.color, flipped ? side.flipped : side.logical, 'borderColor'];
+  return given.every((key) => props[key] == null);
+}
+
+/**
+ * Each side a border has: its width, its colour, and the logical colour React Native takes for
+ * it too, read left to right and, `flipped`, right to left.
+ */
 const BORDER_SIDES = [
-  ['Top', 'BlockStart'],
-  ['Right', 'End'],
-  ['Bottom', 'BlockEnd'],
-  ['Left', 'Start'],
-].map(([side, logical]) => ({
+  ['Top', 'BlockStart', 'BlockStart'],
+  ['Right', 'End', 'Start'],
+  ['Bottom', 'BlockEnd', 'BlockEnd'],
+  ['Left', 'Start', 'End'],
+].map(([side, logical, flipped]) => ({
   width: `border${side}Width`,
   color: `border${side}Color`,
   logical: `border${logical}Color`,
+  flipped: `border${flipped}Color`,
 }));
 
 /**
@@ -4171,11 +4187,12 @@ export class Engine implements HostEngine {
    */
   private borderInText(node: EngineNode, props: Record<string, unknown>): void {
     let text: unknown;
+    // The side a logical colour is for is the other one where text is read right to left.
+    const flipped =
+      (props['borderStartColor'] != null || props['borderEndColor'] != null) &&
+      this.styles.readsRightToLeft(props);
     for (const side of BORDER_SIDES) {
-      const width = props[side.width] ?? props['borderWidth'];
-      if (typeof width !== 'number' || width <= 0) continue;
-      if (props[side.color] != null || props[side.logical] != null) continue;
-      if (props['borderColor'] != null) continue;
+      if (!colourless(props, side, flipped)) continue;
       text ??= props['color'] ?? this.styles.resolve(node, this.styleEpoch).inherited['color'];
       if (text == null) return;
       props[side.color] = text;

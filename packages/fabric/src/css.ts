@@ -3280,11 +3280,16 @@ export class StyleResolver {
     const written = Object.keys(inline);
     for (const [at, key] of written.entries()) {
       if (!(key in TWIN.ltr)) continue;
-      twin ??= TWIN[(style['direction'] ?? this.conditions.direction) === 'rtl' ? 'rtl' : 'ltr'];
+      twin ??= TWIN[this.readsRightToLeft(style) ? 'rtl' : 'ltr'];
       const other = twin[key]!;
       // Where the inline style sets both, the one it set later stands.
       if (written.indexOf(other) < at) delete style[other];
     }
+  }
+
+  /** Whether a settled style is of an element read right to left: by its own, or the app's. */
+  readsRightToLeft(style: Readonly<Record<string, unknown>>): boolean {
+    return (style['direction'] ?? this.conditions.direction) === 'rtl';
   }
 
   /**
