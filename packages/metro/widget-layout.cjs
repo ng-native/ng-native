@@ -60,6 +60,7 @@ const VIEWS = {
     component: 'Image',
     inputs: {
       systemName: 'string',
+      assetName: 'string',
       uiImage: 'string',
       size: 'number',
       color: 'string',

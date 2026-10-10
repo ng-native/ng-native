@@ -46,6 +46,7 @@ const COMPONENTS = [
   'Gauge',
   'Chart',
   'Button',
+  'Image',
 ];
 const GLOBALS = {
   _jsx: (type: string, props: Record<string, unknown>) => ({ type, props }),
@@ -210,6 +211,24 @@ describe('inputs', () => {
       type: 'Gauge',
       props: { value: 1, currentValueLabel: { type: 'Text', props: { children: 'done' } } },
     });
+  });
+
+  it('names an image by its symbol, by an asset in the extension, or by a file', () => {
+    assert.deepEqual(
+      render(
+        `<ui-hstack>
+          <ui-image systemName="tennisball.fill" />
+          <ui-image assetName="court" [size]="20" />
+          <ui-image [uiImage]="props().crest" />
+        </ui-hstack>`,
+        { crest: 'file:///group/crest.png' },
+      ).props['children'],
+      [
+        { type: 'Image', props: { systemName: 'tennisball.fill' } },
+        { type: 'Image', props: { assetName: 'court', size: 20 } },
+        { type: 'Image', props: { uiImage: 'file:///group/crest.png' } },
+      ],
+    );
   });
 
   it("draws a ui-chart as the extension's Chart, its data and styles as they are bound", () => {
