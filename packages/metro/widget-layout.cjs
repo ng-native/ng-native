@@ -172,9 +172,13 @@ const CONVERTED = {
   range: (value) => `ɵrange(${value})`,
 };
 
-/** The slots a Live Activity's layout fills: the lock screen banner and the Dynamic Island. */
+/**
+ * The slots a Live Activity's layout fills: the lock screen banner, the banner where the activity
+ * is drawn small, and the Dynamic Island.
+ */
 const SLOTS = new Set([
   'banner',
+  'bannerSmall',
   'compactLeading',
   'compactTrailing',
   'minimal',
