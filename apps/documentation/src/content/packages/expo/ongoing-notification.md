@@ -11,7 +11,8 @@ counterpart to a [Live Activity](/packages/expo/live-activity), and it asks Andr
 a Live Update, with a chip in the status bar, where Android has them.
 
 It comes with `@ng-native/expo`, whose native half draws it, so it needs an app built since
-`@ng-native/expo` was installed: `npx expo run:android`, or a new EAS build.
+`@ng-native/expo` was installed: `npx expo run:android`, or a new EAS build. That native half adds
+the `POST_NOTIFICATIONS` and `POST_PROMOTED_NOTIFICATIONS` permissions to the app's manifest.
 
 ```ts
 import { ongoingNotification } from '@ng-native/expo/ongoing-notification';
@@ -66,12 +67,12 @@ Call it in an injection context, such as a field of a component or service.
 - **`title`** and **`text`**.
 - **`timer`** is time Android counts by itself, with no update from the app: up from `since`, or
   down to `until`. Each is a `Date` or milliseconds since the epoch.
-- **`progress`** is a bar filled to `value` of `max`, 100 unless given, or a moving bar with
-  `{ indeterminate: true }`.
+- **`progress`** is a bar filled to `value` of `max`, which is 1 unless given, as a `ui-progress`
+  is filled from 0 to 1, or a moving bar with `{ indeterminate: true }`.
 - **`chip`** is the text of the status bar chip of a Live Update: keep it under seven characters,
   which is what always fits.
-- **`actions`** are up to three buttons. A tap hands its `target` to `onTaps`; an action with a
-  `url` opens the app at that link instead.
+- **`actions`** are up to three buttons, each with a `title`. A tap on one with a `target` hands
+  that to `onTaps`; one with a `url` instead opens the app at that link.
 
 ## The options
 
@@ -80,7 +81,8 @@ Call it in an injection context, such as a field of a component or service.
 - **`id`** tells one notification from another on the same channel. It is the channel's id unless
   given.
 - **`url`** opens the app at that link when the notification itself is tapped. Without one the
-  tap opens the app.
+  tap opens the app. It is an option here, where a Live Activity takes it in `start()`, as every
+  update draws the notification again.
 - **`onTaps`** is called with the targets of the actions tapped since the last call, oldest first.
 
 Its icon is the app's notification icon, the one the `expo-notifications` plugin sets in
@@ -92,7 +94,9 @@ so an app icon that fills its square is drawn as a blank shape.
 - **`start()`** asks for the notification permission where Android 13 and later need it, shows the
   notification with the signal's current value, and answers whether it is showing. One left
   showing from before the app started is picked up without it.
-- **Updates** follow the signal while the notification is showing, and make no sound.
+- **Updates** follow the signal while the notification is showing, and make no sound. With the
+  app in the background React Native runs no timers on Android, so a change made there is shown when the
+  app is next in front, or straight after `onTaps`.
 - **`end()`** removes it.
 - **`active`** is a signal. It turns false when the user swipes the notification away, and a
   change to the signal does not show it again.
@@ -109,8 +113,10 @@ showing.
 
 A tap on an action does not open the app. Android delivers it to `@ng-native/expo`'s native half,
 starting the app's process when there is none, and the tap is stored. `onTaps` receives it at once
-while the app is running, and otherwise when `ongoingNotification()` is next called for that
-notification, so a tap made while the app is not running is handed over when it next runs, once.
+while the app is running, in front or in the background, and what it changes in the signal is
+shown straight after it. Otherwise `onTaps` receives it when `ongoingNotification()` is next
+called for that notification, so a tap made while the app is not running is handed over when it
+next runs, once.
 
 ## Live Updates
 

@@ -77,7 +77,11 @@ class OngoingNotificationModule : Module() {
     }
   }
 
-  /** Runs `show` once notifications are allowed, asking first where Android 13 and later need it. */
+  /**
+   * Runs `show` once notifications are allowed, asking first where Android 13 and later need it.
+   * Only when it is not granted yet: asking goes through the activity, and answers denied when
+   * there is none, as when an action is tapped with the app closed to the background.
+   */
   private fun whenAllowed(promise: Promise, show: () -> Unit) {
     val guarded = {
       try {
@@ -88,7 +92,13 @@ class OngoingNotificationModule : Module() {
       }
     }
     val permissions = appContext.permissions
-    if (Build.VERSION.SDK_INT < 33 || permissions == null) return guarded()
+    if (
+      Build.VERSION.SDK_INT < 33 ||
+      permissions == null ||
+      permissions.hasGrantedPermissions(Manifest.permission.POST_NOTIFICATIONS)
+    ) {
+      return guarded()
+    }
     permissions.askForPermissions(
       { result ->
         if (result[Manifest.permission.POST_NOTIFICATIONS]?.status == PermissionsStatus.GRANTED) guarded()

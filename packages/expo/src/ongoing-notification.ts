@@ -22,14 +22,18 @@ import {
 /** A moment: a `Date`, or milliseconds since the epoch. */
 type Moment = Date | number;
 
-/** A button under the notification. */
-export interface OngoingNotificationAction {
-  /** What a tap hands `onTaps`. */
-  readonly target: string;
-  readonly title: string;
-  /** Opens the app at this link when tapped, instead of handing `target` to `onTaps`. */
-  readonly url?: string;
-}
+/** A button under the notification: one whose tap `onTaps` is handed, or one that opens a link. */
+export type OngoingNotificationAction =
+  | {
+      readonly title: string;
+      /** What a tap hands `onTaps`. */
+      readonly target: string;
+    }
+  | {
+      readonly title: string;
+      /** Opens the app at this link when tapped. */
+      readonly url: string;
+    };
 
 /** What the notification shows. */
 export interface OngoingNotificationContent {
@@ -37,7 +41,7 @@ export interface OngoingNotificationContent {
   readonly text?: string;
   /** Time Android counts by itself: up from `since`, or down to `until`. */
   readonly timer?: { readonly since: Moment } | { readonly until: Moment };
-  /** A bar filled to `value` of `max`, 100 unless given, or a moving one. */
+  /** A bar filled to `value` of `max`, 1 unless given as a `ui-progress` is, or a moving one. */
   readonly progress?:
     { readonly value: number; readonly max?: number } | { readonly indeterminate: true };
   /** A few characters for the status bar chip of a Live Update, where Android shows one. */
@@ -63,9 +67,15 @@ export interface OngoingNotificationOptions {
   readonly onTaps?: (taps: readonly string[]) => void;
 }
 
-/** The content as the native module takes it, with each moment in milliseconds. */
-type NativeContent = Omit<OngoingNotificationContent, 'timer'> & {
+/**
+ * The content as the native module takes it: each moment in milliseconds, the bar in the whole
+ * numbers Android draws, and every action with a target, which is what Android tells it by.
+ */
+type NativeContent = Omit<OngoingNotificationContent, 'timer' | 'progress' | 'actions'> & {
   readonly timer?: { readonly since: number } | { readonly until: number };
+  readonly progress?:
+    { readonly value: number; readonly max: number } | { readonly indeterminate: true };
+  readonly actions?: readonly { title: string; target: string; url?: string }[];
 };
 
 /** This package's native module on Android. A test provides a stand-in. */
@@ -138,14 +148,34 @@ export interface OngoingNotificationRef {
 
 const milliseconds = (moment: Moment) => new Date(moment).getTime();
 
-function forNative({ timer, ...content }: OngoingNotificationContent): NativeContent {
-  if (!timer) return content;
+/** The steps of a bar, which Android takes as whole numbers. */
+const STEPS = 1000;
+
+function forNative({
+  timer,
+  progress,
+  actions,
+  ...content
+}: OngoingNotificationContent): NativeContent {
   return {
     ...content,
-    timer:
-      'since' in timer
-        ? { since: milliseconds(timer.since) }
-        : { until: milliseconds(timer.until) },
+    ...(timer && {
+      timer:
+        'since' in timer
+          ? { since: milliseconds(timer.since) }
+          : { until: milliseconds(timer.until) },
+    }),
+    ...(progress && {
+      progress:
+        'value' in progress
+          ? { value: Math.round((progress.value / (progress.max ?? 1)) * STEPS), max: STEPS }
+          : progress,
+    }),
+    ...(actions && {
+      actions: actions.map((action) =>
+        'url' in action ? { ...action, target: action.url } : action,
+      ),
+    }),
   };
 }
 
@@ -167,25 +197,31 @@ export function ongoingNotification(
   const promoted = signal(false);
   const error = signal<unknown>(null);
 
+  let sent: OngoingNotificationContent | null = null;
+
   const show = async (next: OngoingNotificationContent) => {
+    sent = next;
     const result = await native!.show(id, forNative(next), shown);
     promoted.set(result.promoted);
     error.set(null);
   };
 
   const forget = () => {
+    sent = null;
     active.set(false);
     promoted.set(false);
   };
 
-  effect(() => {
-    const next = content();
-    if (!untracked(active)) return;
+  /** Shows what the signal holds while the notification is showing, unless Android has it. */
+  const follow = (next: OngoingNotificationContent) => {
+    if (!untracked(active) || next === sent) return;
     show(next).catch((failure: unknown) => {
       error.set(failure);
       errors.handleError(failure);
     });
-  });
+  };
+
+  effect(() => follow(content()));
 
   /** The taps Android stored, and whether the user has swiped the notification away. */
   const collect = () => {
@@ -197,6 +233,9 @@ export function ongoingNotification(
     } catch (failure) {
       errors.handleError(failure);
     }
+    // Not left to the effect: React Native runs no timers while the app is in the background, so
+    // the pass that would run it waits until the app is back in front.
+    follow(untracked(content));
   };
 
   if (native) {
@@ -211,7 +250,12 @@ export function ongoingNotification(
     error: error.asReadonly(),
     async start() {
       if (!native) {
-        error.set(new Error('An ongoing notification is only on Android.'));
+        error.set(
+          new Error(
+            'An ongoing notification needs Android, and an app built since @ng-native/expo was ' +
+              'installed ("npx expo run:android", or a new EAS build).',
+          ),
+        );
         return false;
       }
       const first = untracked(content);

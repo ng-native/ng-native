@@ -154,6 +154,30 @@ describe('ongoingNotification', () => {
     assert.deepEqual(counting.calls[0]![2], { title: 'Match', timer: { since: 1000 } });
   });
 
+  it('hands Android a bar as a share of a thousand, of 1 unless a max is given', async () => {
+    const shown = async (progress: OngoingNotificationContent['progress']) => {
+      const fake = fakeNative();
+      await setup(fake, {}, { title: 'Set', progress }).ref.start();
+      return (fake.calls[0]![2] as { progress: unknown }).progress;
+    };
+    assert.deepEqual(await shown({ value: 0.5 }), { value: 500, max: 1000 });
+    assert.deepEqual(await shown({ value: 3, max: 5 }), { value: 600, max: 1000 });
+    assert.deepEqual(await shown({ indeterminate: true }), { indeterminate: true });
+  });
+
+  it('gives an action that opens a link its link as the target Android tells it by', async () => {
+    const fake = fakeNative();
+    const actions = [
+      { title: 'Point us', target: 'us' },
+      { title: 'Open', url: 'padel://match' },
+    ];
+    await setup(fake, {}, { title: 'Match', actions }).ref.start();
+    assert.deepEqual((fake.calls[0]![2] as { actions: unknown }).actions, [
+      { title: 'Point us', target: 'us' },
+      { title: 'Open', url: 'padel://match', target: 'padel://match' },
+    ]);
+  });
+
   it('picks up a notification left showing from before the app started, and updates it', async () => {
     const fake = fakeNative({ showing: ['match'] });
     const { ref, content, flush } = setup(fake);
@@ -200,7 +224,7 @@ describe('ongoingNotification', () => {
   it('does not start off Android, where the module is absent', async () => {
     const { ref } = setup(null);
     assert.equal(await ref.start(), false);
-    assert.match(String(ref.error()), /only on Android/);
+    assert.match(String(ref.error()), /needs Android, and an app built since/);
     ref.end();
     ref.openPromotionSettings();
   });
@@ -225,6 +249,18 @@ describe("ongoingNotification's actions", () => {
     fake.tap('match', 'us');
     fake.tap('match', 'them');
     assert.deepEqual(received, [['us'], ['them']]);
+  });
+
+  it('shows what a tap changed at once, as the app in the background runs no pass to do it', async () => {
+    const fake = fakeNative();
+    const scene = setup(fake, {
+      onTaps: () => scene.content.set({ title: 'Us 15 - 0 Them' }),
+    });
+    await scene.ref.start();
+    fake.tap('match', 'us');
+    assert.deepEqual(fake.calls.at(-1)![2], { title: 'Us 15 - 0 Them' });
+    await scene.flush();
+    assert.equal(fake.calls.length, 2, 'the pass that follows does not show it again');
   });
 
   it('hands over the taps stored while the app was not running, once it is', async () => {
