@@ -158,6 +158,10 @@ describe('the least height of text', () => {
     // And follows a line height bound on the run.
     s.engine.setProp(inner, 'style', { lineHeight: 40 });
     assert.equal(s.least('still'), 80);
+    // Written into the style the run holds, as a binding of one property is.
+    (inner.props['style'] as Record<string, unknown>)['lineHeight'] = 50;
+    s.engine.styleChanged(inner);
+    assert.equal(s.least('still'), 100);
     s.engine.setProp(inner, 'style', null);
     assert.equal(s.least('still'), 64);
   });
