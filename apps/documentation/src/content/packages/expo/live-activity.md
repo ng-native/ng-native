@@ -114,8 +114,9 @@ The extension runs the layout with no Angular and no instance of the class, so:
 
 ### Buttons
 
-A `ui-button` in a slot is a button on the lock screen or in the expanded Dynamic Island. Give it
-a `target`, and `liveActivity()` hands that to `onTaps` when it is tapped:
+A `ui-button` in a slot is a button on the lock screen or in the expanded Dynamic Island. Import
+`UiButton` beside the layout's other views, give the button a `target`, and `liveActivity()` hands
+that to `onTaps` when it is tapped:
 
 ```ts
 template: `
@@ -247,5 +248,5 @@ A layout file imports in a Vitest test as it is: with no `expo-widgets` to hand 
 `liveActivity` a stand-in for the factory instead, an object with `start(props)` and
 `getInstances()`.
 To tap a button, provide `WIDGET_EVENTS` from `@ng-native/expo/widget` with a stand-in whose
-`onTap` keeps the listener, and call it with the activity's id as `source` and the button's
-`target`.
+`onTap` keeps the listener, and call it with the activity's id as `source`, the button's
+`target` and a `timestamp`.
