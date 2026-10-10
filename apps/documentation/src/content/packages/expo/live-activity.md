@@ -114,8 +114,8 @@ The extension runs the layout with no Angular and no instance of the class, so:
   `uiImage`. The extension draws it, not your app, so `assetName` names an asset in the widget
   extension's own asset catalog, which `expo-widgets` does not create: an asset of the app's is
   not found there, and a name that is not found draws nothing. `uiImage` is a `file://` URL the
-  extension reads when it draws, so the file is one the extension can reach, such as one in the app
-  group's shared container.
+  extension reads when it draws, so the file is one the extension can reach: see
+  [An image of your own](#an-image-of-your-own).
 - **A `ui-button`** needs a `target`, which is what its tap hands the app: see [Buttons](#buttons).
   In a home-screen widget it records the target for the app to collect with
   [`widget()`](/packages/expo/widget#the-layout), and its `(buttonPress)` is an object of the props
@@ -123,6 +123,49 @@ The extension runs the layout with no Angular and no instance of the class, so:
   a build error.
 - **Any other event, pipes, references, content projection, and class, style or attribute
   bindings** are build errors, with the line and column in the file.
+
+### Modifiers of their own
+
+Every modifier in `@expo/ui/swift-ui/modifiers` can be a member of a layout's class. Some are only
+for a Live Activity or a widget:
+
+- **`activityBackgroundTint(color)`** colours a Live Activity's banner behind its views.
+- **`containerBackground(style, 'widget')`** is a home-screen widget's background, which iOS 17 and
+  later draw to the widget's edges and remove where widgets are shown without one.
+- **`widgetURL(url)`** is the link the app is opened at when the widget or the activity is tapped,
+  outside a `ui-button` or a `ui-link`. A layout has one.
+- **`contentTransition('numericText')`** animates a number from one update to the next.
+- **`privacySensitive()`** marks a view iOS hides while the phone is locked, for someone who has
+  chosen to hide such content.
+
+### An image of your own
+
+The extension cannot read the app's files, and the app cannot add to the extension's assets. Both
+can read one directory, which `expo-widgets` names `widgetsDirectory`: copy the image there, and
+give its URL to the layout in the props.
+
+```ts
+import { FileSystem } from '@ng-native/expo/file-system';
+import { widgetsDirectory } from 'expo-widgets';
+
+export class Scoreboard {
+  private readonly files = inject(FileSystem);
+
+  /** Copies the crest where the extension can read it, and answers its URL for a `ui-image`. */
+  private async share(downloaded: string): Promise<string> {
+    const shared = this.files.file(widgetsDirectory + 'crest.png');
+    if (!shared.exists) this.files.write(shared, await this.files.file(downloaded).bytes());
+    return shared.uri;
+  }
+}
+```
+
+```html
+<ui-image [uiImage]="props().crest" />
+```
+
+The image is drawn at its own size, so store it at the size it is shown. `widgetsDirectory` is an
+empty string on Android and the web.
 
 ### Time between updates
 

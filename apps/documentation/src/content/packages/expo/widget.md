@@ -94,6 +94,57 @@ export const scoreWidget = createWidget('Score', ScoreWidget);
 The name passed to `createWidget` is the one in `app.json`. A Live Activity's button has no
 `(buttonPress)`: its tap goes [straight to the app](/packages/expo/live-activity#buttons).
 
+### What its user chooses
+
+A widget can have settings its user edits on the home screen, by holding the widget and choosing
+Edit Widget. List them in `app.json`, as the widget's `configuration`:
+
+```json
+{
+  "name": "Score",
+  "displayName": "Score",
+  "description": "The score, with a button for each side.",
+  "ios": {
+    "supportedFamilies": ["systemSmall", "systemMedium"],
+    "configuration": {
+      "title": "Score",
+      "parameters": {
+        "side": {
+          "title": "Side",
+          "type": "enum",
+          "values": [
+            { "name": "Us", "value": "us" },
+            { "name": "Them", "value": "them" }
+          ],
+          "default": "us"
+        },
+        "showGames": { "title": "Show games", "type": "boolean", "default": true }
+      }
+    }
+  }
+}
+```
+
+The layout reads what was chosen from `environment().configuration`, typed by the `environment`
+input:
+
+```ts
+readonly environment = input.required<WidgetEnvironment<{ side: 'us' | 'them'; showGames: boolean }>>();
+```
+
+```html
+@if (environment().configuration.showGames) {
+<ui-text>Games {{ props().games }}</ui-text>
+}
+```
+
+- **A parameter's `type`** is `string`, `number`, `boolean` or `enum`, and each has a `default`.
+- **Each widget on the home screen has its own choices,** so two of one kind can show different
+  things from the same props.
+- **The extension holds the choices, not the app:** the layout reads them, and `widget()` is not
+  told.
+- **A change to the parameters** needs `npx expo prebuild -p ios` and a rebuild.
+
 ## Keep it in step from Angular
 
 ```ts
