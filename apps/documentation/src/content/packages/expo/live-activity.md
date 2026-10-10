@@ -106,6 +106,12 @@ The extension runs the layout with no Angular and no instance of the class, so:
   extension drops a view nested in a text.
 - **A `ui-text` or a `ui-progress` can keep time by itself**: see
   [Time between updates](#time-between-updates).
+- **A `ui-image`** is an SF Symbol by `systemName`, an asset by `assetName`, or a file by
+  `uiImage`. The extension draws it, not your app, so `assetName` names an asset in the widget
+  extension's own asset catalog, which `expo-widgets` does not create: an asset of the app's is
+  not found there, and a name that is not found draws nothing. `uiImage` is a `file://` URL the
+  extension reads when it draws, so the file is one the extension can reach, such as one in the app
+  group's shared container.
 - **A home-screen widget's `ui-button`** records its `target` when tapped, for the app to collect
   with [`widget()`](/packages/expo/widget#the-layout); its `(buttonPress)` is an object of the props
   to change at once. A Live Activity has nowhere to record a tap, so a button there is a build

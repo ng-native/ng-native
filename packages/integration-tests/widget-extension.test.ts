@@ -393,6 +393,27 @@ describe('a layout through the widget extension', () => {
     });
   });
 
+  it('draws an image from a symbol, an asset and a file as its JSX does', () => {
+    same(
+      `<ui-hstack>
+        <ui-image systemName="tennisball.fill" />
+        <ui-image assetName="court" size="20" color="#d7f23c" />
+        <ui-image [uiImage]="props().crest" [modifiers]="[frame({ width: 24, height: 24 })]" />
+      </ui-hstack>`,
+      `(props) => {
+        'widget';
+        return (
+          <HStack>
+            <Image systemName="tennisball.fill" />
+            <Image assetName="court" size={20} color="#d7f23c" />
+            <Image uiImage={props.crest} modifiers={[frame({ width: 24, height: 24 })]} />
+          </HStack>
+        );
+      }`,
+      [{ props: { crest: 'file:///group/crest.png' } }],
+    );
+  });
+
   it('draws a ui-chart as its JSX does, with every style it takes', () => {
     same(
       `<ui-chart

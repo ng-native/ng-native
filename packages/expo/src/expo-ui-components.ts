@@ -356,12 +356,16 @@ export class UiVStack {
   }
 }
 
-/** A SwiftUI `Image`: an SF Symbol by `systemName`, or a picture by `uiImage` URL. */
+/**
+ * A SwiftUI `Image`: an SF Symbol by `systemName`, a symbol or picture in the asset catalog by
+ * `assetName`, or a picture by `uiImage`, the URL of a file on the device.
+ */
 @Component({
   selector: 'ui-image',
   template: '',
   host: {
     '[systemName]': 'systemName()',
+    '[assetName]': 'assetName()',
     '[uiImage]': 'uiImage()',
     '[size]': 'size()',
     '[color]': 'color()',
@@ -371,6 +375,7 @@ export class UiVStack {
 export class UiImage {
   protected readonly nativeView = nativeView();
   readonly systemName = input<string>();
+  readonly assetName = input<string>();
   readonly uiImage = input<string>();
   readonly size = input<number>(undefined, { transform: optionalNumber });
   readonly color = input<string>();

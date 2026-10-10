@@ -120,7 +120,8 @@ error. `expo-ui-components.ts` has thin typed components for the views an app re
   or `rectangle`, and each type takes a style of its own: `lineStyle`, `barStyle`, `pieStyle` and
   so on. `referenceLines` draws lines across it in `ruleStyle`.
 - **`UiForm`**, **`UiSection`** and **`UiLabeledContent`** - settings-style grouped rows.
-- **`UiImage`** - an SF Symbol by `systemName`, or a picture by `uiImage` URL.
+- **`UiImage`** - an SF Symbol by `systemName`, a symbol or picture in the app's asset catalog by
+  `assetName`, or a picture by `uiImage`, the URL of a file on the device.
 - **`UiText`** - a SwiftUI `Text`. Its text is what is written inside it,
   `<ui-text>Us {{ score() }}</ui-text>`, as `<text>` takes its own; `text` sets it too, and wins.
   A `ui-text` nested inside one is a span with its own modifiers, drawn after the text: put text
