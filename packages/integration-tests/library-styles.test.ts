@@ -462,6 +462,41 @@ describe('CSS a library writes that does not parse', () => {
   });
 });
 
+describe('a rule that does not parse, nested in one that does', () => {
+  const { compileCss } = require('@ng-native/metro/css/compile.cjs') as {
+    compileCss(css: string, name: string, options?: object): { rules: { declarations: object }[] };
+  };
+  // An example's own sheet: keyframes written inside a rule, which no rule may hold.
+  const CSS = [
+    '.box {',
+    '  @keyframes fade { 0% { opacity: 0 } 100% { opacity: 1 } }',
+    '  .hidden { display: none }',
+    '  opacity: 0.5;',
+    '}',
+    '.after { opacity: 0.25 }',
+  ].join('\n');
+
+  it('is dropped with a warning, and the rules beside it are kept, as Chrome keeps them', () => {
+    const warnings: string[] = [];
+    const sheet = compileCss(CSS, 'x-ui', {
+      recover: true,
+      onUnsupported: (message: string) => warnings.push(message),
+    });
+    assert.deepEqual(
+      sheet.rules
+        .map((rule) => rule.declarations)
+        .sort((a, b) => JSON.stringify(a).localeCompare(JSON.stringify(b))),
+      [{ display: 'none' }, { opacity: 0.25 }, { opacity: 0.5 }],
+    );
+    assert.equal(warnings.length, 1, warnings.join('\n'));
+    assert.match(warnings[0]!, /^x-ui:2: dropped a rule that does not parse: .*@keyframes/);
+  });
+
+  it('still fails a build that is not told to go on, on the line it is written', () => {
+    assert.throws(() => compileCss(CSS, 'app.css'), /app\.css:2: .*@keyframes/);
+  });
+});
+
 describe('a library declaration this cannot read', () => {
   it('says so, rather than leaving the component unstyled in silence', async () => {
     const file = '/app/node_modules/x-ui/odd.mjs';

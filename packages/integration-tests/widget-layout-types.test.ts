@@ -56,6 +56,7 @@ import {
   UiButton,
   UiChart,
   UiHStack,
+  UiImage,
   UiLink,
   UiProgress,
   UiRoundedRectangle,
@@ -79,6 +80,7 @@ interface Scoreline {
     UiButton,
     UiChart,
     UiHStack,
+    UiImage,
     UiLink,
     UiProgress,
     UiRoundedRectangle,
@@ -159,6 +161,40 @@ describe("a widget layout's template, through ngc", () => {
     assert.match(
       check(`<ui-chart [data]="props().games" [barStyle]="{ cornerRadius: 'big' }" />`),
       /'string' is not assignable to type 'number/,
+    );
+  });
+
+  it('type-checks a date and a timer, on a ui-text and a ui-progress', () => {
+    assert.equal(
+      check(`<ui-hstack>
+        <ui-text [date]="props().done" dateStyle="relative" />
+        <ui-text [timerInterval]="{ lower: props().done, upper: props().us }" [countsDown]="false" />
+        <ui-progress [timerInterval]="{ lower: props().done, upper: props().done }" countsDown />
+      </ui-hstack>`),
+      '',
+    );
+    assert.match(
+      check('<ui-text [date]="props().done" dateStyle="stopwatch" />'),
+      /'"stopwatch"' is not assignable to type/,
+    );
+    assert.match(
+      check('<ui-progress [timerInterval]="{ lower: props().done }" />'),
+      /Property 'upper' is missing/,
+    );
+  });
+
+  it('type-checks an image by symbol, asset and file', () => {
+    assert.equal(
+      check(`<ui-hstack>
+        <ui-image systemName="tennisball.fill" />
+        <ui-image assetName="court" />
+        <ui-image [uiImage]="props().us" />
+      </ui-hstack>`),
+      '',
+    );
+    assert.match(
+      check('<ui-image [assetName]="props().done" />'),
+      /'number' is not assignable to type 'string/,
     );
   });
 

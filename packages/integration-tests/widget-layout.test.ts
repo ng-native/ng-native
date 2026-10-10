@@ -46,6 +46,7 @@ const COMPONENTS = [
   'Gauge',
   'Chart',
   'Button',
+  'Image',
 ];
 const GLOBALS = {
   _jsx: (type: string, props: Record<string, unknown>) => ({ type, props }),
@@ -210,6 +211,74 @@ describe('inputs', () => {
       type: 'Gauge',
       props: { value: 1, currentValueLabel: { type: 'Text', props: { children: 'done' } } },
     });
+  });
+
+  it('hands a date to a ui-text as the Date the extension draws from, whatever the props hold it as', () => {
+    const at = Date.UTC(2026, 9, 10, 12);
+    for (const held of [at, new Date(at).toISOString(), new Date(at)]) {
+      assert.deepEqual(
+        render('<ui-text [date]="props().at" dateStyle="relative" />', { at: held }),
+        {
+          type: 'Text',
+          props: { date: new Date(at), dateStyle: 'relative' },
+        },
+      );
+    }
+  });
+
+  it('hands a timer its two ends as Dates, on a ui-text and on a ui-progress', () => {
+    const props = { from: 1000, to: '1970-01-01T00:01:00.000Z' };
+    const timerInterval = { lower: new Date(1000), upper: new Date(60000) };
+    assert.deepEqual(
+      render(
+        '<ui-text [timerInterval]="{ lower: props().from, upper: props().to }" countsDown="false" />',
+        props,
+      ),
+      { type: 'Text', props: { timerInterval, countsDown: false } },
+    );
+    assert.deepEqual(
+      render(
+        '<ui-progress [timerInterval]="{ lower: props().from, upper: props().to }" countsDown />',
+        props,
+      ),
+      { type: 'ProgressView', props: { timerInterval, countsDown: true } },
+    );
+  });
+
+  it('leaves out a date or a timer the props do not hold yet, so the text is drawn instead', () => {
+    assert.deepEqual(
+      render(
+        '<ui-text [date]="props().at" [timerInterval]="{ lower: props().from, upper: props().to }">Soon</ui-text>',
+        { from: 1000 },
+      ),
+      { type: 'Text', props: { date: undefined, timerInterval: undefined, children: 'Soon' } },
+    );
+    assert.deepEqual(
+      render(
+        '<ui-text [date]="props().at" [timerInterval]="{ lower: props().from, upper: props().to }">Soon</ui-text>',
+        { at: 'soon', from: 1000, to: 'later' },
+      ),
+      { type: 'Text', props: { date: undefined, timerInterval: undefined, children: 'Soon' } },
+      'a string that is no moment',
+    );
+  });
+
+  it('names an image by its symbol, by an asset in the extension, or by a file', () => {
+    assert.deepEqual(
+      render(
+        `<ui-hstack>
+          <ui-image systemName="tennisball.fill" />
+          <ui-image assetName="court" [size]="20" />
+          <ui-image [uiImage]="props().crest" />
+        </ui-hstack>`,
+        { crest: 'file:///group/crest.png' },
+      ).props['children'],
+      [
+        { type: 'Image', props: { systemName: 'tennisball.fill' } },
+        { type: 'Image', props: { assetName: 'court', size: 20 } },
+        { type: 'Image', props: { uiImage: 'file:///group/crest.png' } },
+      ],
+    );
   });
 
   it("draws a ui-chart as the extension's Chart, its data and styles as they are bound", () => {
