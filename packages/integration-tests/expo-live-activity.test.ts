@@ -13,6 +13,7 @@ import {
   createLiveActivity,
   createWidget,
   liveActivity,
+  pushToStartToken,
   type LiveActivityFactory,
   type NativeLiveActivity,
 } from '@ng-native/expo/live-activity';
@@ -72,11 +73,11 @@ function fakeActivities(options: { running?: number; refuse?: boolean } = {}) {
 }
 
 let root: EnvironmentInjector;
+let counter: Type<unknown>;
 before(async () => {
   const mod = await compileFixture('fixtures/counter.ts');
-  root = mount(1, mod['Counter'] as Type<unknown>, createFakeFabric()).componentRef.injector.get(
-    EnvironmentInjector,
-  );
+  counter = mod['Counter'] as Type<unknown>;
+  root = mount(1, counter, createFakeFabric()).componentRef.injector.get(EnvironmentInjector);
 });
 
 function withActivity(
@@ -145,6 +146,39 @@ describe('liveActivity', () => {
     assert.equal(fake.instances.length, 0);
     assert.equal(activity.start(), true);
     assert.equal(activity.id(), 'activity-2');
+  });
+
+  it('does nothing when started while it is live', () => {
+    const fake = fakeActivities();
+    const { activity } = withActivity(fake);
+    activity.start();
+    assert.equal(activity.start(), true);
+    assert.deepEqual(
+      fake.calls.map(([call]) => call),
+      ['start'],
+    );
+    assert.equal(fake.listening(), 1, 'one listener for the push token, not one a start');
+  });
+
+  it('forgets the push token when it ends', async () => {
+    const fake = fakeActivities();
+    const { activity } = withActivity(fake);
+    activity.start();
+    fake.pushToken('abc');
+    assert.equal(activity.pushToken(), 'abc');
+    await activity.end();
+    assert.equal(activity.pushToken(), null);
+  });
+
+  it('forgets why a start was refused once one works', () => {
+    const allowed = { refuse: true };
+    const fake = fakeActivities(allowed);
+    const { activity } = withActivity(fake);
+    assert.equal(activity.start(), false);
+    assert.match(String(activity.error()), /turned off/);
+    allowed.refuse = false;
+    assert.equal(activity.start(), true);
+    assert.equal(activity.error(), null);
   });
 
   it('reports a start the system refuses, and stays not live', () => {
@@ -355,6 +389,109 @@ describe("liveActivity's buttons", () => {
     );
     assert.equal(unused.listening(), 0);
     injector.destroy();
+  });
+});
+
+describe('pushToStartToken', () => {
+  type TokenListener = (event: { activityPushToStartToken: string }) => void;
+
+  /** Stands in for `expo-widgets`, which hands the token it has only to the first to listen. */
+  function fakeExpoWidgets() {
+    const listeners = new Set<TokenListener>();
+    let issued: string | null = null;
+    return {
+      expo: {
+        addUserInteractionListener: () => ({ remove() {} }),
+        addPushToStartTokenListener: (listener: TokenListener) => {
+          if (!listeners.size && issued !== null) listener({ activityPushToStartToken: issued });
+          listeners.add(listener);
+          return { remove: () => listeners.delete(listener) };
+        },
+      },
+      issue: (token: string) => {
+        issued = token;
+        listeners.forEach((listener) => listener({ activityPushToStartToken: token }));
+      },
+      listening: () => listeners.size,
+    };
+  }
+
+  /** A new app, whose events load `expo` as an app on a device loads `expo-widgets`. */
+  function withExpoWidgets(expo: unknown, run: (read: () => string | null) => void) {
+    const scope = globalThis as { require?: unknown };
+    const require = scope.require;
+    scope.require = (name: string) => {
+      if (name === 'expo-widgets') return expo;
+      throw new Error(`${name} is not in Node`);
+    };
+    const app = mount(2, counter, createFakeFabric());
+    try {
+      const injector = app.componentRef.injector.get(EnvironmentInjector);
+      run(() => runInInjectionContext(injector, pushToStartToken)());
+    } finally {
+      app.applicationRef.destroy();
+      scope.require = require;
+    }
+  }
+
+  it('is null until iOS issues a token, and then the latest one', () => {
+    const fake = fakeExpoWidgets();
+    withExpoWidgets(fake.expo, (read) => {
+      assert.equal(read(), null);
+      fake.issue('token-1');
+      assert.equal(read(), 'token-1');
+      fake.issue('token-2');
+      assert.equal(read(), 'token-2');
+    });
+  });
+
+  it('holds a token issued before it was asked for', () => {
+    const fake = fakeExpoWidgets();
+    fake.issue('token-1');
+    withExpoWidgets(fake.expo, (read) => assert.equal(read(), 'token-1'));
+  });
+
+  it('listens once for all who ask, as only the first to listen is handed the token there is', () => {
+    const fake = fakeExpoWidgets();
+    fake.issue('token-1');
+    withExpoWidgets(fake.expo, (read) => {
+      assert.equal(read(), 'token-1');
+      assert.equal(read(), 'token-1');
+      assert.equal(fake.listening(), 1);
+    });
+  });
+
+  it('does not listen until asked, and stops when the app is destroyed', () => {
+    const fake = fakeExpoWidgets();
+    withExpoWidgets(fake.expo, (read) => {
+      assert.equal(fake.listening(), 0);
+      read();
+      assert.equal(fake.listening(), 1);
+    });
+    assert.equal(fake.listening(), 0);
+  });
+
+  it('is null where expo-widgets has no such listener', () => {
+    withExpoWidgets({ addUserInteractionListener: () => ({ remove() {} }) }, (read) =>
+      assert.equal(read(), null),
+    );
+  });
+
+  it('is null in Node, where there is no expo-widgets', () => {
+    assert.equal(runInInjectionContext(root, pushToStartToken)(), null);
+  });
+
+  it('reads the token of the events a test stands in, and is null where they have none', () => {
+    const token = signal<string | null>('token-1');
+    const read = (events: object) => {
+      const injector = createEnvironmentInjector(
+        [{ provide: WIDGET_EVENTS, useValue: events }],
+        root,
+      );
+      return runInInjectionContext(injector, pushToStartToken)();
+    };
+    assert.equal(read({ ...fakeTaps().events, pushToStartToken: () => token }), 'token-1');
+    assert.equal(read(fakeTaps().events), null);
   });
 });
 

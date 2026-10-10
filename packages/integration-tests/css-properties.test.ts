@@ -271,9 +271,7 @@ describe('the per-side border shorthands', () => {
     assert.equal(warnings.length, 1);
     assert.match(warnings[0]!, /dropped part of 'border-inline-start'.*'dotted'.*drawn solid/);
   });
-});
 
-describe('properties React Native supports that we were rejecting', () => {
   it('sets both block sides from a border-block that holds a token, with no style of the whole box', () => {
     assert.deepEqual(declarationsOf('border-block: var(--w) solid red'), {
       borderTopColor: 'rgb(255, 0, 0)',
@@ -287,6 +285,20 @@ describe('properties React Native supports that we were rejecting', () => {
       (rule.deferred as { line: { roles: string[] } }[]).map((entry) => entry.line.roles),
       [['width', 'color']],
     );
+  });
+});
+
+describe('properties React Native supports that we were rejecting', () => {
+  it('reads an angle in turns, radians and gradians as the degrees native takes', () => {
+    assert.deepEqual(declarationsOf('transform: rotate(0.5turn)'), {
+      transform: [{ rotate: '180deg' }],
+    });
+    assert.deepEqual(declarationsOf('transform: rotate(100grad)'), {
+      transform: [{ rotate: '90deg' }],
+    });
+    assert.deepEqual(declarationsOf('transform: rotate(1rad)'), {
+      transform: [{ rotate: '57.296deg' }],
+    });
   });
 
   it('transform, as the array of single-key objects Fabric expects', () => {
