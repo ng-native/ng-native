@@ -4248,7 +4248,12 @@ export class Engine implements HostEngine {
     node.oneWord = props['numberOfLines'] == null ? unbroken(node) : undefined;
     if (!node.oneWord) return;
     props['numberOfLines'] = 1;
-    const ended = [this.styles.resolve(node, this.styleEpoch).style, node.props, inlineOf(node)];
+    const ended = [
+      this.styles.resolve(node, this.styleEpoch).style,
+      node.props,
+      inlineOf(node),
+      flattenStyle(node.props[STYLE_OVERRIDE], {}),
+    ];
     if (ended.every((from) => from['ellipsizeMode'] == null)) props['ellipsizeMode'] = 'clip';
   }
 
@@ -5766,7 +5771,11 @@ export class Engine implements HostEngine {
     }
     box.parent = parent;
     // The text is not under the box in the tree, so a change to it never marked the box.
-    if (!this.isClean(text)) box.subtreeDirty = true;
+    if (!this.isClean(text)) {
+      box.subtreeDirty = true;
+      // Nor had it merged again where the text became one word, or stopped being one.
+      if (box.oneWord !== undefined && unbroken(box) !== box.oneWord) box.propsDirty = true;
+    }
     return box;
   }
 
