@@ -138,7 +138,19 @@ function jsxSource(layout: string): string {
 }
 
 /** The extension's modifier functions a layout's class names, as members of the same name. */
-const MODIFIERS = ['font', 'foregroundStyle', 'padding', 'frame', 'background', 'opacity'];
+const MODIFIERS = [
+  'font',
+  'foregroundStyle',
+  'padding',
+  'frame',
+  'background',
+  'opacity',
+  'widgetURL',
+  'containerBackground',
+  'contentTransition',
+  'activityBackgroundTint',
+  'privacySensitive',
+];
 const MEMBERS = {
   props: 'props',
   environment: 'environment',
@@ -350,6 +362,63 @@ describe('a layout through the widget extension', () => {
         };
       }`,
       [{ props: { us: '30', them: '15' } }],
+    );
+  });
+
+  it('gives a view the modifiers a widget and a Live Activity have of their own, as its JSX does', () => {
+    same(
+      `<ui-vstack [modifiers]="[containerBackground('#0b2a66', 'widget'), widgetURL(props().link)]">
+        <ui-text [modifiers]="[contentTransition('numericText'), privacySensitive()]">{{ props().us }}</ui-text>
+      </ui-vstack>`,
+      `(props) => {
+        'widget';
+        return (
+          <VStack modifiers={[containerBackground('#0b2a66', 'widget'), widgetURL(props.link)]}>
+            <Text modifiers={[contentTransition('numericText'), privacySensitive()]}>{props.us}</Text>
+          </VStack>
+        );
+      }`,
+      [{ props: { us: '15', link: 'padel://match' } }],
+    );
+    same(
+      `<ng-template #banner>
+        <ui-hstack [modifiers]="[activityBackgroundTint('#0b2a66')]"><ui-text>{{ props().us }}</ui-text></ui-hstack>
+      </ng-template>`,
+      `(props) => {
+        'widget';
+        return {
+          banner: (
+            <HStack modifiers={[activityBackgroundTint('#0b2a66')]}><Text>{props.us}</Text></HStack>
+          ),
+        };
+      }`,
+      [{ props: { us: '15' } }],
+    );
+  });
+
+  it('draws a home-screen widget by what its user configured, as its JSX does', () => {
+    same(
+      `@if (environment().configuration.showGames) {
+        <ui-text>{{ environment().configuration.side }} {{ props().games }}</ui-text>
+      } @else {
+        <ui-text>{{ environment().configuration.side }}</ui-text>
+      }`,
+      `(props, environment) => {
+        'widget';
+        return environment.configuration.showGames
+          ? <Text>{\`\${environment.configuration.side} \${props.games}\`}</Text>
+          : <Text>{environment.configuration.side}</Text>;
+      }`,
+      [
+        {
+          props: { games: '3-2' },
+          environment: { configuration: { side: 'us', showGames: true } },
+        },
+        {
+          props: { games: '3-2' },
+          environment: { configuration: { side: 'them', showGames: false } },
+        },
+      ],
     );
   });
 
