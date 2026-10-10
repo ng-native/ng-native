@@ -191,8 +191,9 @@ class ScoreLayout {
 - **`isLuminanceReduced`** is true while an always-on display is dimmed.
 - **`isStale`** is true once the activity is past its [`staleDate`](#what-it-does).
 - **`isActivityFullscreen`** is true where the activity fills the screen, as in StandBy.
-- **`activityFamily`** is `'small'` where the activity is drawn small, and `'medium'` elsewhere.
-  It is set from iOS 18.
+- **`activityFamily`** is `'medium'` on an iPhone or iPad, the Dynamic Island's compact views
+  included, and `'small'` in the Smart Stack of a paired Apple Watch and in CarPlay. It is set
+  from iOS 18.
 
 ### Buttons
 
