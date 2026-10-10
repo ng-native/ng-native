@@ -147,6 +147,15 @@ protected readonly homeScreen = widget(
 );
 ```
 
+The layout draws the entry's props as it draws any others, so it shows `over` for the change to be
+seen:
+
+```html
+@if (props().over) {
+<ui-text>Full time</ui-text>
+}
+```
+
 - **It is asked at every write,** with the signal's props, which are shown until the first entry's
   date. Each write replaces the timeline before it. A signal it reads is not followed, so what it
   needs belongs in the props, as the time the match ends is here.
@@ -165,6 +174,7 @@ Android and the web, `expo-widgets` answers with a stand-in, and `widget()` does
 ## Testing
 
 Pass a stand-in for the widget, an object with `updateSnapshot`, `getTimeline` and `reload`, and
-provide `WIDGET_EVENTS` to tap it. A `timeline` is written to the stand-in's `updateTimeline`; one
-without it is written the signal's props alone. In Node, `createWidget` answers a stand-in that
-draws nothing, so a test can import the layout file as it is.
+provide `WIDGET_EVENTS` to tap it. To check a `timeline`, give the stand-in an `updateTimeline` as
+well, which is called with the entries; one without it is written the signal's props alone. In
+Node, `createWidget` answers a stand-in that draws nothing, so a test can import the layout file as
+it is.
