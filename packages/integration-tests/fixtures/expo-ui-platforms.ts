@@ -91,6 +91,7 @@ export class ExpoUiTextContentFixture {
       <ui-text [date]="started" dateStyle="relative" />
       <ui-text [timerInterval]="{ lower: started, upper: 60000 }" countsDown="false" />
       <ui-progress [timerInterval]="{ lower: started, upper: 60000 }" countsDown="false" />
+      <ui-text date="soon" [timerInterval]="{ lower: started, upper: 'later' }">Soon</ui-text>
     </ui-host>
   `,
 })

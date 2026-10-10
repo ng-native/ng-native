@@ -40,7 +40,7 @@ const ng = require('@angular/compiler');
 const HELPERS =
   'function ɵflat(list){var out=[];(function add(v){if(Array.isArray(v))v.forEach(add);else if(v!==undefined&&v!==null&&v!==false)out.push(v);})(list);return out.length===0?undefined:out.length===1?out[0]:out;}' +
   'function ɵstr(v){return v===undefined||v===null?"":String(v);}' +
-  'function ɵdate(v){return v===undefined||v===null?undefined:new Date(v);}' +
+  'function ɵdate(v){var d=v===undefined||v===null?NaN:new Date(v);return isNaN(d)?undefined:d;}' +
   'function ɵrange(v){var l=v&&ɵdate(v.lower),u=v&&ɵdate(v.upper);return l&&u?{lower:l,upper:u}:undefined;}';
 
 /**

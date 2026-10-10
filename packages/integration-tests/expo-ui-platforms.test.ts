@@ -87,6 +87,14 @@ describe('text and progress that keep time by themselves', () => {
     assert.equal(progress.props['countsDown'], false);
   });
 
+  it('sends no date and no timer for a moment that is not one, so the text is drawn', async () => {
+    const { every } = await boot('ios', Time);
+    const soon = every(/ExpoUI_TextView$/)[2]!;
+    assert.equal(soon.props['date'], undefined);
+    assert.equal(soon.props['timerInterval'], undefined);
+    assert.equal(soon.props['text'], 'Soon');
+  });
+
   it('sends Compose none of it, which has no such text or progress', async () => {
     const { named } = await boot('android', Time);
     const progress = named(/ExpoUI_LinearProgressIndicatorView$/);

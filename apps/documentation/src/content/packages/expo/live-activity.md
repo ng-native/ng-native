@@ -146,7 +146,8 @@ class RestLayout {
 - **A moment** is milliseconds since the epoch, a `Date`, or the string JSON makes of a `Date`,
   which is how one in the props reaches the extension.
 - A `ui-text` with a `date` or a `timerInterval` does not draw its text. One whose props hold
-  neither yet draws its text instead.
+  neither yet, or hold something that is not a moment, draws its text instead, as does one whose
+  `timerInterval` ends before it starts.
 
 The same inputs work in a home-screen widget, and on a `ui-text` or a `ui-progress` in an app on
 iOS. Compose has no such text or bar, so on Android they are not sent.

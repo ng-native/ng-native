@@ -386,13 +386,17 @@ export interface UiTimerInterval {
   readonly upper: UiDate;
 }
 
-/** A moment as SwiftUI takes it, in milliseconds since the epoch. */
-function milliseconds(value: UiDate | undefined): number | undefined {
-  return value === undefined ? undefined : new Date(value).getTime();
+/** A moment as SwiftUI takes it, in milliseconds since the epoch, or none for what is not one. */
+function milliseconds(value: UiDate | null | undefined): number | undefined {
+  const time = value == null ? NaN : new Date(value).getTime();
+  return Number.isNaN(time) ? undefined : time;
 }
 
-function timerMilliseconds(value: UiTimerInterval | undefined) {
-  return value && { lower: milliseconds(value.lower), upper: milliseconds(value.upper) };
+/** No timer unless both ends are moments, as the extension has none. */
+function timerMilliseconds(value: UiTimerInterval | null | undefined) {
+  const lower = milliseconds(value?.lower);
+  const upper = milliseconds(value?.upper);
+  return lower === undefined || upper === undefined ? undefined : { lower, upper };
 }
 
 /**

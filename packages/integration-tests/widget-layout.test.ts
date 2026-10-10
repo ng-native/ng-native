@@ -252,6 +252,14 @@ describe('inputs', () => {
       ),
       { type: 'Text', props: { date: undefined, timerInterval: undefined, children: 'Soon' } },
     );
+    assert.deepEqual(
+      render(
+        '<ui-text [date]="props().at" [timerInterval]="{ lower: props().from, upper: props().to }">Soon</ui-text>',
+        { at: 'soon', from: 1000, to: 'later' },
+      ),
+      { type: 'Text', props: { date: undefined, timerInterval: undefined, children: 'Soon' } },
+      'a string that is no moment',
+    );
   });
 
   it("draws a ui-chart as the extension's Chart, its data and styles as they are bound", () => {
