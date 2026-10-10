@@ -133,6 +133,36 @@ Call it in an injection context, such as a field of a component or service.
   moment after the app changed it. Going to the background asks iOS to redraw it.
 - **`sync()`** collects the taps now, and **`reload()`** asks iOS to redraw the widget.
 
+### Later, with the app closed
+
+A widget runs no code of the app's, so what it shows changes only when the app writes it. To change
+it at a known time with the app closed, give `widget()` a `timeline`: the entries after now, each
+the props to show from its date.
+
+```ts
+protected readonly homeScreen = widget(
+  scoreWidget,
+  computed(() => ({ us: this.match.us(), them: this.match.them(), endsAt: this.match.endsAt() })),
+  { timeline: (now) => [{ date: new Date(now.endsAt), props: { ...now, over: true } }] },
+);
+```
+
+The layout draws the entry's props as it draws any others, so it shows `over` for the change to be
+seen:
+
+```html
+@if (props().over) {
+<ui-text>Full time</ui-text>
+}
+```
+
+- **It is asked at every write,** with the signal's props, which are shown until the first entry's
+  date. Each write replaces the timeline before it. A signal it reads is not followed, so what it
+  needs belongs in the props, as the time the match ends is here.
+- **A tap is recorded in the entry showing when it was made,** and `onTaps` is handed the taps of
+  every entry. A button's `(buttonPress)` changes only that entry, so an entry after it shows what
+  it was written with until the app next writes.
+
 The app stays the one source of truth: a widget's own change to what it shows lasts until the app
 collects the taps and writes its value back.
 
@@ -144,5 +174,7 @@ Android and the web, `expo-widgets` answers with a stand-in, and `widget()` does
 ## Testing
 
 Pass a stand-in for the widget, an object with `updateSnapshot`, `getTimeline` and `reload`, and
-provide `WIDGET_EVENTS` to tap it. In Node, `createWidget` answers a stand-in that draws nothing,
-so a test can import the layout file as it is.
+provide `WIDGET_EVENTS` to tap it. To check a `timeline`, give the stand-in an `updateTimeline` as
+well, which is called with the entries; one without it is written the signal's props alone. In
+Node, `createWidget` answers a stand-in that draws nothing, so a test can import the layout file as
+it is.

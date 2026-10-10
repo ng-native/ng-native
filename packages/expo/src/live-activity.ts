@@ -83,6 +83,7 @@ const STAND_IN = {
 /** A widget in Node: it draws nothing and holds no timeline, and `widget()` keeps it in step. */
 const WIDGET_STAND_IN = {
   updateSnapshot: () => {},
+  updateTimeline: () => {},
   getTimeline: async () => [],
   reload: () => {},
 };
