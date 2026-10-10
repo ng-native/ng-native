@@ -130,4 +130,30 @@ describe('the least height of text', () => {
     assert.equal(s.least('small'), 36);
     assert.equal(s.least('fixed'), 24);
   });
+
+  it('scales each run by its own text size, where a run does not scale or stops at a size', () => {
+    // At a text size of 2: a run that does not scale is its 32 points beside a 24 point line
+    // drawn 48 tall, and one that stops at one and a half times is 48 itself.
+    const s = scene('.line { line-height: 24px } .big { line-height: 32px }', 2);
+    const run = (into: EngineNode, key: string, value: unknown) => {
+      const inner = s.engine.createElement('text');
+      s.engine.setClasses(inner, 'big');
+      s.engine.setProp(inner, key, value);
+      s.engine.appendChild(inner, s.engine.createText('run'));
+      s.engine.appendChild(into, inner);
+      return inner;
+    };
+    run(s.say('fixed', 'line', 'A '), 'allowFontScaling', false);
+    assert.equal(s.least('fixed'), 48);
+    run(s.say('capped', 'line', 'A '), 'maxFontSizeMultiplier', 1.5);
+    assert.equal(s.least('capped'), 48);
+    // And a run in a paragraph that does not scale does not either, with nothing of its own.
+    const still = s.say('still', 'line', 'A ');
+    s.engine.setProp(still, 'allowFontScaling', false);
+    const inner = run(still, 'testID', 'inner');
+    assert.equal(s.least('still'), 32);
+    // Until it says it does.
+    s.engine.setProp(inner, 'allowFontScaling', true);
+    assert.equal(s.least('still'), 64);
+  });
 });
