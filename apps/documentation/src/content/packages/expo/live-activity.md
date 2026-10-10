@@ -104,6 +104,14 @@ The extension runs the layout with no Angular and no instance of the class, so:
 - **A `ui-text`'s text** is what is written inside it, with whitespace collapsed as Angular
   collapses it; `&nbsp;` keeps a wider gap. A `ui-text` inside another is a build error: the
   extension drops a view nested in a text.
+- **A `ui-text` or a `ui-progress` can keep time by itself**: see
+  [Time between updates](#time-between-updates).
+- **A `ui-image`** is an SF Symbol by `systemName`, an asset by `assetName`, or a file by
+  `uiImage`. The extension draws it, not your app, so `assetName` names an asset in the widget
+  extension's own asset catalog, which `expo-widgets` does not create: an asset of the app's is
+  not found there, and a name that is not found draws nothing. `uiImage` is a `file://` URL the
+  extension reads when it draws, so the file is one the extension can reach, such as one in the app
+  group's shared container.
 - **A `ui-button`** needs a `target`, which is what its tap hands the app: see [Buttons](#buttons).
   In a home-screen widget it records the target for the app to collect with
   [`widget()`](/packages/expo/widget#the-layout), and its `(buttonPress)` is an object of the props
@@ -111,6 +119,45 @@ The extension runs the layout with no Angular and no instance of the class, so:
   a build error.
 - **Any other event, pipes, references, content projection, and class, style or attribute
   bindings** are build errors, with the line and column in the file.
+
+### Time between updates
+
+A Live Activity runs no code between one update and the next, so a clock the app counts is still
+until the app next writes. iOS draws time itself instead: give a `ui-text` a `date` or a
+`timerInterval`, or a `ui-progress` a `timerInterval`, and it moves with no update from the app.
+
+```ts
+@Component({
+  selector: 'rest-activity',
+  imports: [UiProgress, UiText, UiVStack],
+  template: `
+    <ng-template #banner>
+      <ui-vstack>
+        <ui-text [timerInterval]="{ lower: props().startedAt, upper: props().endsAt }" />
+        <ui-progress [timerInterval]="{ lower: props().startedAt, upper: props().endsAt }" />
+        <ui-text [date]="props().startedAt" dateStyle="relative" />
+      </ui-vstack>
+    </ng-template>
+  `,
+})
+class RestLayout {
+  readonly props = input.required<{ startedAt: number; endsAt: number }>();
+}
+```
+
+- **`date`** is drawn by **`dateStyle`**: `'timer'` counts up from it, or down to it,
+  `'relative'` and `'offset'` say how long ago or how far ahead it is, and `'date'`, the default,
+  and `'time'` show the moment itself.
+- **`timerInterval`** is a timer from its `lower` to its `upper`, which stops at the end. It counts
+  down, and a `ui-progress` empties, unless **`countsDown`** is false.
+- **A moment** is milliseconds since the epoch, a `Date`, or the string JSON makes of a `Date`,
+  which is how one in the props reaches the extension.
+- A `ui-text` with a `date` or a `timerInterval` does not draw its text. One whose props hold
+  neither yet, or hold something that is not a moment, draws its text instead, as does one whose
+  `timerInterval` ends before it starts.
+
+The same inputs work in a home-screen widget, and on a `ui-text` or a `ui-progress` in an app on
+iOS. Compose has no such text or bar, so on Android they are not sent.
 
 ### Buttons
 
@@ -233,6 +280,11 @@ Call it in an injection context, such as a field of a component or service.
 
 The activity outlives the app: destroying the component stops the updates but leaves it on the lock
 screen until it is ended or the system removes it.
+
+## How long it lasts
+
+An activity runs for up to eight hours. iOS then ends it, and keeps the ended activity on the lock
+screen for up to four hours more before removing it.
 
 ## Only on iOS
 

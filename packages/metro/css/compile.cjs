@@ -2973,7 +2973,7 @@ function compileCss(source, context = 'styles', options = {}) {
     }));
   }
 
-  const flattened = flatten(source, context);
+  const flattened = flatten(source, context, options.recover === true);
   let parsed;
   try {
     parsed = lightning.transform({
@@ -2989,7 +2989,12 @@ function compileCss(source, context = 'styles', options = {}) {
   } catch (error) {
     throw placed(error, where);
   }
-  if (options.recover === true) reportUnparsed(parsed.warnings, where, onUnsupported);
+  if (options.recover === true) {
+    // The rules dropped as the sheet was flattened are on the lines they were written on.
+    const written = (line) => options.locate?.(line) ?? `${context}:${line}`;
+    reportUnparsed(flattened.warnings, written, onUnsupported);
+    reportUnparsed(parsed.warnings, where, onUnsupported);
+  }
 
   /** `@layer`, as a statement that names layers or a block of rules in one. */
   function layerRule(rule) {
@@ -3511,8 +3516,8 @@ function arithmetic(text) {
   return Number.isFinite(result) ? Math.round(result * 1000) / 1000 : null;
 }
 
-function flatten(source, context) {
-  const unchanged = { code: source, lineOf: (line) => line };
+function flatten(source, context, recover) {
+  const unchanged = { code: source, lineOf: (line) => line, warnings: [] };
   if (!source.includes('&') && !NESTED_BLOCK.test(source)) return unchanged;
   try {
     // Nesting is the only feature asked to be lowered. A browser target lowered everything that
@@ -3528,6 +3533,10 @@ function flatten(source, context) {
       filename: `${context}.css`,
       code: Buffer.from(hidden),
       include: lightning.Features.Nesting,
+      // A rule that does not parse inside one that does, `@keyframes` in a style rule: dropped
+      // here where the sheet is one to go on with, or the rules nested beside it stay nested
+      // and are lost with it. Its warning is handed on, as nothing of it is left to warn of.
+      errorRecovery: recover,
       // The lowered text is printed afresh, so its lines are not the sheet's. The map says which
       // line each came from, so an error can still name the line somebody wrote.
       sourceMap: true,
@@ -3535,6 +3544,7 @@ function flatten(source, context) {
     return {
       code: lowered.code.toString().replaceAll(HIDDEN_TRANSFORM, ''),
       lineOf: sourceLines(lowered.map),
+      warnings: lowered.warnings,
     };
   } catch {
     // Left to the real pass, which says where the syntax error is rather than that there is one.
