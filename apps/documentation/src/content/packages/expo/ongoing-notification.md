@@ -95,8 +95,8 @@ so an app icon that fills its square is drawn as a blank shape.
   notification with the signal's current value, and answers whether it is showing. One left
   showing from before the app started is picked up without it.
 - **Updates** follow the signal while the notification is showing, and make no sound. With the
-  app in the background React Native runs no timers on Android, so a change made there is shown when the
-  app is next in front, or straight after `onTaps`.
+  app in the background React Native runs no timers on Android, so a change made there is shown
+  when the app is next in front, or straight after `onTaps`.
 - **`end()`** removes it.
 - **`active`** is a signal. It turns false when the user swipes the notification away, and a
   change to the signal does not show it again.
