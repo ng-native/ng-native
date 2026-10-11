@@ -34,11 +34,12 @@ async function start(routes: string) {
   const host = () =>
     flatten(app.fabric.committed).find((node) => node.viewName === 'RNSTabsHostIOS')!;
   let provenance = 0;
-  const report = async (key: string, actionOrigin: string) => {
+  const report = async (key: string, actionOrigin: string, isRepeated = false) => {
     await fireEvent(host(), 'tabSelected', {
       selectedScreenKey: key,
       provenance: ++provenance,
       actionOrigin,
+      isRepeated,
     });
     await idle();
   };
@@ -46,9 +47,11 @@ async function start(routes: string) {
   const tap = (key: string) => report(key, 'user');
   /** Native reporting a selection the outlet asked for, as it reports every change. */
   const echo = (key: string) => report(key, 'programmatic-js');
+  /** The user tapping the tab already in front, which native reports as repeated. */
+  const retap = (key: string) => report(key, 'user', true);
   const selected = () =>
     (host().props['navStateRequest'] as { selectedScreenKey: string }).selectedScreenKey;
-  return { router, tap, echo, selected };
+  return { router, tap, echo, retap, selected };
 }
 
 it('stays on the tab tapped last when the tap before it is still loading', async () => {
@@ -73,6 +76,21 @@ it('lets a navigation from code finish when native reports the tab in front mean
   await idle();
   assert.ok(gate.open, 'the navigation is still waiting on its guard');
   await echo('home');
+  gate.open?.();
+  await idle();
+
+  assert.equal(await arrived, true);
+  assert.equal(router.url, '/search');
+  assert.equal(selected(), 'search');
+});
+
+it('lets a navigation from code finish when the user taps the tab in front meanwhile', async () => {
+  const gate = mod['gate'] as { open: (() => void) | null };
+  const { router, retap, selected } = await start('gatedRoutes');
+  const arrived = router.navigateByUrl('/search');
+  await idle();
+  assert.ok(gate.open, 'the navigation is still waiting on its guard');
+  await retap('home');
   gate.open?.();
   await idle();
 

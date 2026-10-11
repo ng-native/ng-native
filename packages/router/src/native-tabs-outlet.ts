@@ -113,6 +113,8 @@ interface TabSelection {
   readonly provenance: number;
   /** `'user'` for a tap. Native reports the changes it was asked for too, under other names. */
   readonly actionOrigin?: string;
+  /** Set when the user tapped the tab already in front, which is not a tap back. */
+  readonly isRepeated?: boolean;
 }
 
 @Component({
@@ -611,10 +613,16 @@ export class NativeTabsOutlet implements RouterOutletContract, AfterContentInit 
   /**
    * Whether the user tapped the tab in front while a navigation is running: back from the tab that
    * navigation is still loading, so the tab in front is where it is to end. A selection native
-   * reports because the outlet asked for it is not a tap, and cancels nothing.
+   * reports because the outlet asked for it is not a tap, and cancels nothing. Nor does a tap on
+   * the tab already in front (native reports it as repeated): no other tab was tapped first, so a
+   * navigation running then is one from code, or a push inside the tab, and is left to finish.
    */
   private tappedBack(selection: TabSelection): boolean {
-    return selection.actionOrigin === 'user' && !!this.router?.getCurrentNavigation();
+    return (
+      selection.actionOrigin === 'user' &&
+      !selection.isRepeated &&
+      !!this.router?.getCurrentNavigation()
+    );
   }
 
   /**
