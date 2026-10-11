@@ -1,6 +1,6 @@
 {
   "name": "@ng-native/icons",
-  "version": "0.9.0",
+  "version": "0.10.0",
   "description": "@ng-icons rendered as native react-native-svg shapes in Angular Native.",
   "keywords": [
     "angular",

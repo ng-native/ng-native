@@ -200,6 +200,7 @@ export const PACKAGES: NavSection = {
         { path: 'packages/expo/watch', title: 'Apple Watch' },
         { path: 'packages/expo/live-activity', title: 'Live Activities' },
         { path: 'packages/expo/widget', title: 'Home screen widgets' },
+        { path: 'packages/expo/ongoing-notification', title: 'Ongoing notifications' },
         { path: 'packages/expo/store-review', title: 'Store review' },
         { path: 'packages/expo/storage', title: 'Storage', group: 'Storage and files' },
         { path: 'packages/expo/file-system', title: 'File system' },

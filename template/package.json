@@ -1,6 +1,6 @@
 {
   "name": "@ng-native/template",
-  "version": "0.9.0",
+  "version": "0.10.0",
   "description": "An Angular app rendering real native views. Use with create-expo-app --template.",
   "license": "MIT",
   "main": "src/main.ts",

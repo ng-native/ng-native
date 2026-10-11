@@ -85,11 +85,16 @@ of the wrong type fails `ngc`. The slots are `banner`, for the lock screen, and 
 `compactTrailing`, `minimal`, `expandedLeading`, `expandedTrailing`, `expandedCenter` and
 `expandedBottom`, for the Dynamic Island.
 
+The activity is also drawn small: in the Smart Stack of a paired Apple Watch from iOS 18 with
+watchOS 11, and in CarPlay from iOS 26. A `bannerSmall` slot is what is drawn there; a layout
+without one is drawn there by its `banner`.
+
 ### What a layout can hold
 
 The extension runs the layout with no Angular and no instance of the class, so:
 
-- **The class** holds its `props` input, members set to a modifier from
+- **The class** holds its `props` input, an [`environment` input](#where-it-is-drawn), members set
+  to a modifier from
   `@expo/ui/swift-ui/modifiers`, and members set to a literal: a string, number, boolean, `null`,
   or an array or object of them. A method, another input, or any other value is a build error
   naming the member and its line. The build removes the class, so it is not exported, and nothing
@@ -104,12 +109,179 @@ The extension runs the layout with no Angular and no instance of the class, so:
 - **A `ui-text`'s text** is what is written inside it, with whitespace collapsed as Angular
   collapses it; `&nbsp;` keeps a wider gap. A `ui-text` inside another is a build error: the
   extension drops a view nested in a text.
-- **A home-screen widget's `ui-button`** records its `target` when tapped, for the app to collect
-  with [`widget()`](/packages/expo/widget#the-layout); its `(buttonPress)` is an object of the props
-  to change at once. A Live Activity has nowhere to record a tap, so a button there is a build
-  error.
+- **A `ui-text` or a `ui-progress` can keep time by itself**: see
+  [Time between updates](#time-between-updates).
+- **A `ui-image`** is an SF Symbol by `systemName`, an asset by `assetName`, or a file by
+  `uiImage`. The extension draws it, not your app, so `assetName` names an asset in the widget
+  extension's own asset catalog, which `expo-widgets` does not create: an asset of the app's is
+  not found there, and a name that is not found draws nothing. `uiImage` is a `file://` URL the
+  extension reads when it draws, so the file is one the extension can reach: see
+  [An image of your own](#an-image-of-your-own).
+- **A `ui-button`** needs a `target`, which is what its tap hands the app: see [Buttons](#buttons).
+  In a home-screen widget it records the target for the app to collect with
+  [`widget()`](/packages/expo/widget#the-layout), and its `(buttonPress)` is an object of the props
+  to change at once. A Live Activity's props are the app's to change, so a `(buttonPress)` there is
+  a build error.
 - **Any other event, pipes, references, content projection, and class, style or attribute
   bindings** are build errors, with the line and column in the file.
+
+### Modifiers of their own
+
+Every modifier in `@expo/ui/swift-ui/modifiers` can be a member of a layout's class. Some are only
+for a Live Activity or a widget:
+
+- **`activityBackgroundTint(color)`** colours a Live Activity's banner behind its views.
+- **`containerBackground(style, 'widget')`** is a home-screen widget's background, which iOS 17 and
+  later draw to the widget's edges and remove where widgets are shown without one.
+- **`widgetURL(url)`** is the link the app is opened at when the widget or the activity is tapped,
+  outside a `ui-button` or a `ui-link`. A layout has one.
+- **`contentTransition('numericText')`** animates a number from one update to the next.
+- **`privacySensitive()`** marks a view iOS hides while the phone is locked, for someone who has
+  chosen to hide such content.
+
+### An image of your own
+
+The extension cannot read the app's files, and the app cannot add to the extension's assets. Both
+can read one directory, which `expo-widgets` names `widgetsDirectory`: copy the image there, and
+give its URL to the layout in the props.
+
+```ts
+import { inject } from '@angular/core';
+import { FileSystem } from '@ng-native/expo/file-system';
+import { widgetsDirectory } from 'expo-widgets';
+
+export class Scoreboard {
+  private readonly files = inject(FileSystem);
+
+  /** Copies the crest where the extension can read it, and answers its URL for a `ui-image`. */
+  private async share(downloaded: string): Promise<string> {
+    const shared = this.files.file(widgetsDirectory + 'crest.png');
+    this.files.write(shared, await this.files.file(downloaded).bytes());
+    return shared.uri;
+  }
+}
+```
+
+```html
+<ui-image [uiImage]="props().crest" />
+```
+
+The image is drawn at its own size, so store it at the size it is shown. `widgetsDirectory` is an
+empty string on Android and the web.
+
+### Time between updates
+
+A Live Activity runs no code between one update and the next, so a clock the app counts is still
+until the app next writes. iOS draws time itself instead: give a `ui-text` a `date` or a
+`timerInterval`, or a `ui-progress` a `timerInterval`, and it moves with no update from the app.
+
+```ts
+@Component({
+  selector: 'rest-activity',
+  imports: [UiProgress, UiText, UiVStack],
+  template: `
+    <ng-template #banner>
+      <ui-vstack>
+        <ui-text [timerInterval]="{ lower: props().startedAt, upper: props().endsAt }" />
+        <ui-progress [timerInterval]="{ lower: props().startedAt, upper: props().endsAt }" />
+        <ui-text [date]="props().startedAt" dateStyle="relative" />
+      </ui-vstack>
+    </ng-template>
+  `,
+})
+class RestLayout {
+  readonly props = input.required<{ startedAt: number; endsAt: number }>();
+}
+```
+
+- **`date`** is drawn by **`dateStyle`**: `'timer'` counts up from it, or down to it,
+  `'relative'` and `'offset'` say how long ago or how far ahead it is, and `'date'`, the default,
+  and `'time'` show the moment itself.
+- **`timerInterval`** is a timer from its `lower` to its `upper`, which stops at the end. It counts
+  down, and a `ui-progress` empties, unless **`countsDown`** is false.
+- **A moment** is milliseconds since the epoch, a `Date`, or the string JSON makes of a `Date`,
+  which is how one in the props reaches the extension.
+- A `ui-text` with a `date` or a `timerInterval` does not draw its text. One whose props hold
+  neither yet, or hold something that is not a moment, draws its text instead, as does one whose
+  `timerInterval` ends before it starts.
+
+The same inputs work in a home-screen widget, and on a `ui-text` or a `ui-progress` in an app on
+iOS. Compose has no such text or bar, so on Android they are not sent.
+
+### Where it is drawn
+
+An `environment` input beside `props` holds what the activity is being drawn in, so one layout can
+draw differently there:
+
+```ts
+import type { LiveActivityEnvironment } from 'expo-widgets';
+
+@Component({
+  selector: 'score-activity',
+  imports: [UiText],
+  template: `
+    <ng-template #banner>
+      @if (environment().isStale) {
+        <ui-text>Waiting for the score</ui-text>
+      } @else {
+        <ui-text>Us {{ props().us }} - {{ props().them }} Them</ui-text>
+      }
+    </ng-template>
+  `,
+})
+class ScoreLayout {
+  readonly props = input.required<Scoreline>();
+  readonly environment = input.required<LiveActivityEnvironment>();
+}
+```
+
+- **`colorScheme`** is `'light'` or `'dark'`.
+- **`isLuminanceReduced`** is true while an always-on display is dimmed.
+- **`isStale`** is true once the activity is past its [`staleDate`](#what-it-does).
+- **`isActivityFullscreen`** is true where the activity fills the screen, as in StandBy.
+- **`activityFamily`** is `'medium'` on an iPhone or iPad, the Dynamic Island's compact views
+  included, and `'small'` in the Smart Stack of a paired Apple Watch and in CarPlay. It is set
+  from iOS 18.
+
+### Buttons
+
+A `ui-button` in a slot is a button on the lock screen or in the expanded Dynamic Island. Import
+`UiButton` beside the layout's other views, give the button a `target`, and `liveActivity()` hands
+that to `onTaps` when it is tapped:
+
+```ts
+template: `
+  <ng-template #banner>
+    <ui-hstack>
+      <ui-text>Us {{ props().us }} - {{ props().them }} Them</ui-text>
+      <ui-button target="us" label="Point us" />
+      <ui-button target="them"><ui-text>Point them</ui-text></ui-button>
+    </ui-hstack>
+  </ng-template>
+`,
+```
+
+```ts
+protected readonly lockScreen = liveActivity(
+  scoreActivity,
+  computed(() => ({ us: this.match.us(), them: this.match.them() })),
+  { onTaps: (taps) => taps.forEach((side) => this.match.point(side)) },
+);
+```
+
+The tap runs in your app, not in the extension: iOS wakes the app in the background, without
+opening it, and the app changes the signal, which updates the activity.
+
+- **Buttons need iOS 17.** Before it the button is drawn, and its tap does not reach `onTaps`.
+- **A tap that starts the app is held.** When iOS has to start the app to run a tap, the tap is
+  over before the app's JavaScript has loaded. `@ng-native/expo` holds it from launch, on iOS, and
+  hands it to `onTaps` once `liveActivity()` is called for its activity. Its native half does the
+  holding, so that needs an app built since `@ng-native/expo` was installed; an older build drops
+  that one tap, and delivers the next.
+- **A press can run while the phone is locked.** The app is then woken with the phone still
+  locked, when a keychain item stored as readable only while unlocked cannot be read. Store what
+  `onTaps` needs as readable after the first unlock.
+- **There is no toggle.** The extension draws buttons and links, and no `ui-toggle`.
 
 ### Home-screen widgets
 
@@ -183,7 +355,15 @@ Call it in an injection context, such as a field of a component or service.
   the lock screen, with its final value, for up to four hours, above any started after it; a button
   that ends one and can start the next wants `'immediate'`.
 - **`active`**, **`id`** and **`pushToken`** are signals. The push token is for updating the
-  activity from a server through APNs.
+  activity [from a server](#from-a-server) through APNs.
+- **`staleDate`**, in the options, answers when what the activity shows is out of date unless it
+  is written again first, or null for never. It is asked at the start and at each update, so
+  `() => new Date(Date.now() + 5 * 60_000)` is five minutes after the last write. iOS then draws
+  the layout with [`environment().isStale`](#where-it-is-drawn) true. It marks activities stale on
+  its own schedule, which can be a minute or two after the date.
+- **`onTaps`**, in the options, is called with the `target` of each
+  [button](#buttons) tapped on a running activity of this kind. A handler that throws, or rejects,
+  goes to the `ErrorHandler`.
 - **`error`** holds why the last start or update failed, for example Live Activities turned off in
   Settings. A refused start is only kept there; an update that fails also goes to the
   `ErrorHandler`.
@@ -191,10 +371,81 @@ Call it in an injection context, such as a field of a component or service.
 The activity outlives the app: destroying the component stops the updates but leaves it on the lock
 screen until it is ended or the system removes it.
 
+## How long it lasts
+
+An activity runs for up to eight hours. iOS then ends it, and keeps the ended activity on the lock
+screen for up to four hours more before removing it.
+
+To carry on past that, end the activity and start another: from the app, or
+[from a server](#from-a-server) while the app is closed.
+
+## From a server
+
+A server can update a running activity, and start one while the app is closed, by sending to APNs.
+Both need `enablePushNotifications` in the plugin's config, and a rebuild:
+
+```json
+["expo-widgets", { "enablePushNotifications": true }]
+```
+
+- **`pushToken`**, on what `liveActivity()` answers, is the token of that one activity. A push to
+  it updates or ends the activity.
+- **`pushToStartToken()`** is the token a push starts an activity with. The app has one, for every
+  kind of activity it has. It is a signal: null until iOS issues a token, then the latest, as iOS
+  can issue another at any time. Call it in an injection context, and send each one to your server:
+
+```ts
+import { effect, inject } from '@angular/core';
+import { pushToStartToken } from '@ng-native/expo/live-activity';
+
+export class Scoreboard {
+  private readonly server = inject(Server);
+  private readonly startToken = pushToStartToken();
+
+  constructor() {
+    effect(() => {
+      const token = this.startToken();
+      if (token) this.server.keepStartToken(token);
+    });
+  }
+}
+```
+
+A push that starts an activity names its kind and gives its props in the `content-state`: `name` is
+the name passed to `createLiveActivity`, and `props` is the props as a JSON string. Its
+`attributes-type` is `LiveActivityAttributes`, and `attributes` can hold the `url` a tap opens the
+app at:
+
+```json
+{
+  "aps": {
+    "timestamp": 1760000000,
+    "event": "start",
+    "attributes-type": "LiveActivityAttributes",
+    "attributes": {},
+    "content-state": { "name": "Score", "props": "{\"us\":\"0\",\"them\":\"0\"}" },
+    "alert": { "title": "Match started", "body": "Us 0 - 0 Them" }
+  }
+}
+```
+
+The request to APNs carries the headers `apns-push-type: liveactivity` and
+`apns-topic: <bundle identifier>.push-type.liveactivity`, for a start as for an update.
+
+- **Starting from a server needs iOS 17.2.** Before it, with Live Activities turned off in
+  Settings, and on Android and the web, `pushToStartToken()` stays null.
+- **The extension draws the layout the app last stored**, which it does each time it runs
+  `createLiveActivity`. A push draws that one, so it reaches an app that has run since it was
+  installed, as an app with a token to send has.
+- **`liveActivity()` picks up an activity a push started.** One started while the app was closed is
+  followed from when `liveActivity()` is next called, and one started while the app is running from
+  the next `start()`.
+
 ## Only on iOS
 
 Live Activities need iOS 16.4 or newer, the oldest version `expo-widgets` and Expo build for. On
 Android and the web, `expo-widgets` answers with a stand-in, and `start()` answers false.
+Android's counterpart is an [ongoing notification](/packages/expo/ongoing-notification).
 
 ## Testing
 
@@ -202,3 +453,7 @@ A layout file imports in a Vitest test as it is: with no `expo-widgets` to hand 
 `createLiveActivity` answers an activity that never starts. To check what the app sends, pass
 `liveActivity` a stand-in for the factory instead, an object with `start(props)` and
 `getInstances()`.
+To tap a button, provide `WIDGET_EVENTS` from `@ng-native/expo/widget` with a stand-in whose
+`onTap` keeps the listener, and call it with the activity's id as `source`, the button's
+`target` and a `timestamp`. For a start token, give the stand-in a `pushToStartToken` that answers
+a signal.

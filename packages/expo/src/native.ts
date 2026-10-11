@@ -13,6 +13,19 @@
  * a device that has no such sensor. On a device the throw is a module that is present but not
  * linked, which is the same answer for the same reason.
  */
+/**
+ * Calls a listener the app gave. What it throws, or rejects with when it is asynchronous, goes to
+ * `report`, so one failing listener does not stop what calls it.
+ */
+export function isolated(call: () => unknown, report: (failure: unknown) => void): void {
+  try {
+    const done = call();
+    if (done instanceof Promise) done.catch(report);
+  } catch (failure) {
+    report(failure);
+  }
+}
+
 export function optional<T>(load: () => T): T | null {
   try {
     return load();

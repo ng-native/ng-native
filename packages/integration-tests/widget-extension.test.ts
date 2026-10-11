@@ -138,7 +138,19 @@ function jsxSource(layout: string): string {
 }
 
 /** The extension's modifier functions a layout's class names, as members of the same name. */
-const MODIFIERS = ['font', 'foregroundStyle', 'padding', 'frame', 'background', 'opacity'];
+const MODIFIERS = [
+  'font',
+  'foregroundStyle',
+  'padding',
+  'frame',
+  'background',
+  'opacity',
+  'widgetURL',
+  'containerBackground',
+  'contentTransition',
+  'activityBackgroundTint',
+  'privacySensitive',
+];
 const MEMBERS = {
   props: 'props',
   environment: 'environment',
@@ -293,6 +305,123 @@ describe('a layout through the widget extension', () => {
     assert.deepEqual(extensionPress(angular, { us: 2 }, 'them'), { us: 2, taps: ['them'] });
   });
 
+  it("draws a Live Activity's buttons as their JSX does, each with the target its tap carries", () => {
+    same(
+      `<ng-template #banner>
+        <ui-hstack>
+          <ui-button target="us" label="Us" systemImage="plus" />
+          <ui-button [target]="props().side" role="destructive"><ui-text>Them</ui-text></ui-button>
+        </ui-hstack>
+      </ng-template>
+      <ng-template #expandedBottom><ui-button target="undo" label="Undo" /></ng-template>`,
+      `(props) => {
+        'widget';
+        return {
+          banner: (
+            <HStack>
+              <Button target="us" label="Us" systemImage="plus" />
+              <Button target={props.side} role="destructive"><Text>Them</Text></Button>
+            </HStack>
+          ),
+          expandedBottom: <Button target="undo" label="Undo" />,
+        };
+      }`,
+      [{ props: { side: 'them' } }],
+    );
+  });
+
+  it('draws a Live Activity by its environment, as its JSX does', () => {
+    same(
+      `<ng-template #banner>
+        @if (environment().isStale) { <ui-text>Out of date</ui-text> } @else { <ui-text>{{ props().us }}</ui-text> }
+      </ng-template>
+      <ng-template #minimal><ui-text>{{ environment().colorScheme }}</ui-text></ng-template>`,
+      `(props, environment) => {
+        'widget';
+        return {
+          banner: environment.isStale ? <Text>Out of date</Text> : <Text>{props.us}</Text>,
+          minimal: <Text>{environment.colorScheme}</Text>,
+        };
+      }`,
+      [
+        { props: { us: '15' }, environment: { isStale: true, colorScheme: 'dark' } },
+        { props: { us: '15' }, environment: { isStale: false, colorScheme: 'light' } },
+      ],
+    );
+  });
+
+  it("draws a Live Activity's small banner as its JSX does, beside the banner", () => {
+    same(
+      `<ng-template #banner><ui-text>Us {{ props().us }} - {{ props().them }} Them</ui-text></ng-template>
+      <ng-template #bannerSmall><ui-text>{{ props().us }}-{{ props().them }}</ui-text></ng-template>`,
+      `(score) => {
+        'widget';
+        return {
+          banner: <Text>{\`Us \${score.us} - \${score.them} Them\`}</Text>,
+          bannerSmall: <Text>{\`\${score.us}-\${score.them}\`}</Text>,
+        };
+      }`,
+      [{ props: { us: '30', them: '15' } }],
+    );
+  });
+
+  it('gives a view the modifiers a widget and a Live Activity have of their own, as its JSX does', () => {
+    same(
+      `<ui-vstack [modifiers]="[containerBackground('#0b2a66', 'widget'), widgetURL(props().link)]">
+        <ui-text [modifiers]="[contentTransition('numericText'), privacySensitive()]">{{ props().us }}</ui-text>
+      </ui-vstack>`,
+      `(props) => {
+        'widget';
+        return (
+          <VStack modifiers={[containerBackground('#0b2a66', 'widget'), widgetURL(props.link)]}>
+            <Text modifiers={[contentTransition('numericText'), privacySensitive()]}>{props.us}</Text>
+          </VStack>
+        );
+      }`,
+      [{ props: { us: '15', link: 'padel://match' } }],
+    );
+    same(
+      `<ng-template #banner>
+        <ui-hstack [modifiers]="[activityBackgroundTint('#0b2a66')]"><ui-text>{{ props().us }}</ui-text></ui-hstack>
+      </ng-template>`,
+      `(props) => {
+        'widget';
+        return {
+          banner: (
+            <HStack modifiers={[activityBackgroundTint('#0b2a66')]}><Text>{props.us}</Text></HStack>
+          ),
+        };
+      }`,
+      [{ props: { us: '15' } }],
+    );
+  });
+
+  it('draws a home-screen widget by what its user configured, as its JSX does', () => {
+    same(
+      `@if (environment().configuration.showGames) {
+        <ui-text>{{ environment().configuration.side }} {{ props().games }}</ui-text>
+      } @else {
+        <ui-text>{{ environment().configuration.side }}</ui-text>
+      }`,
+      `(props, environment) => {
+        'widget';
+        return environment.configuration.showGames
+          ? <Text>{\`\${environment.configuration.side} \${props.games}\`}</Text>
+          : <Text>{environment.configuration.side}</Text>;
+      }`,
+      [
+        {
+          props: { games: '3-2' },
+          environment: { configuration: { side: 'us', showGames: true } },
+        },
+        {
+          props: { games: '3-2' },
+          environment: { configuration: { side: 'them', showGames: false } },
+        },
+      ],
+    );
+  });
+
   it('repeats a view by @for as a map does, and draws @empty in its place', () => {
     same(
       `<ui-vstack>
@@ -348,6 +477,69 @@ describe('a layout through the widget extension', () => {
         );
       }`,
       [{ props: { done: 1 } }],
+    );
+  });
+
+  it('draws text and progress that keep time by themselves as their JSX does', () => {
+    same(
+      `<ui-vstack>
+        <ui-text [date]="props().startedAt" dateStyle="timer" />
+        <ui-text [timerInterval]="{ lower: props().startedAt, upper: props().endsAt }" countsDown="false" />
+        <ui-progress [timerInterval]="{ lower: props().startedAt, upper: props().endsAt }" [countsDown]="false" />
+      </ui-vstack>`,
+      `(props) => {
+        'widget';
+        const timerInterval = { lower: new Date(props.startedAt), upper: new Date(props.endsAt) };
+        return (
+          <VStack>
+            <Text date={new Date(props.startedAt)} dateStyle="timer" />
+            <Text timerInterval={timerInterval} countsDown={false} />
+            <ProgressView timerInterval={timerInterval} countsDown={false} />
+          </VStack>
+        );
+      }`,
+      [
+        { props: { startedAt: 1791633600000, endsAt: 1791637200000 } },
+        // As a Date in the app's props reaches the extension: JSON has made a string of it.
+        {
+          props: {
+            startedAt: '2026-10-10T12:00:00.000Z',
+            endsAt: '2026-10-10T13:00:00.000Z',
+          },
+        },
+      ],
+    );
+  });
+
+  it('hands native a date as the milliseconds an app hands it', () => {
+    const angular = compileWidgetLayout('<ui-text [date]="props().at" dateStyle="relative" />', {
+      file: 'layout.ts',
+      members: MEMBERS,
+    });
+    assert.deepEqual(extensionRender(angular, { at: '2026-10-10T12:00:00.000Z' }), {
+      type: 'TextView',
+      props: { date: 1791633600000, dateStyle: 'relative' },
+    });
+  });
+
+  it('draws an image from a symbol, an asset and a file as its JSX does', () => {
+    same(
+      `<ui-hstack>
+        <ui-image systemName="tennisball.fill" />
+        <ui-image assetName="court" size="20" color="#d7f23c" />
+        <ui-image [uiImage]="props().crest" [modifiers]="[frame({ width: 24, height: 24 })]" />
+      </ui-hstack>`,
+      `(props) => {
+        'widget';
+        return (
+          <HStack>
+            <Image systemName="tennisball.fill" />
+            <Image assetName="court" size={20} color="#d7f23c" />
+            <Image uiImage={props.crest} modifiers={[frame({ width: 24, height: 24 })]} />
+          </HStack>
+        );
+      }`,
+      [{ props: { crest: 'file:///group/crest.png' } }],
     );
   });
 

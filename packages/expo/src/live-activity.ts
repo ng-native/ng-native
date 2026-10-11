@@ -15,7 +15,8 @@ import {
   type Signal,
   type Type,
 } from '@angular/core';
-import { expoModule } from './native.ts';
+import { expoModule, isolated } from './native.ts';
+import { WIDGET_EVENTS, type WidgetTap } from './widget.ts';
 
 /** A widget layout: an Angular component whose `props` input the layout draws from. */
 export type WidgetLayout<T extends object> = Type<{ readonly props: InputSignal<T> }>;
@@ -82,6 +83,7 @@ const STAND_IN = {
 /** A widget in Node: it draws nothing and holds no timeline, and `widget()` keeps it in step. */
 const WIDGET_STAND_IN = {
   updateSnapshot: () => {},
+  updateTimeline: () => {},
   getTimeline: async () => [],
   reload: () => {},
 };
@@ -111,6 +113,34 @@ export interface LiveActivityFactory<T extends object> {
   getInstances(): NativeLiveActivity<T>[];
 }
 
+export interface LiveActivityOptions {
+  /**
+   * Called with the target of a `ui-button` tapped on a running activity of this kind, as `widget`
+   * hands over a widget's. iOS runs the tap in the app, starting it in the background if it has
+   * to; a tap that starts the app is held until this is listening. A handler that throws, or
+   * rejects, goes to the `ErrorHandler`.
+   */
+  readonly onTaps?: (taps: readonly string[]) => void;
+  /**
+   * When what the activity shows is out of date, unless it is written again first: asked at the
+   * start and at each update, which replaces the date before it. iOS then draws the activity with
+   * its layout's `environment().isStale` true. Null, or no option, is never.
+   */
+  readonly staleDate?: () => Date | null | undefined;
+}
+
+const NO_TOKEN = signal<string | null>(null).asReadonly();
+
+/**
+ * The token a server starts a Live Activity with over APNs, with the app not running: null until
+ * iOS issues one, then the latest. The app has one, for every kind of activity; the push names the
+ * kind. It needs iOS 17.2, and `enablePushNotifications` in the `expo-widgets` plugin's config. Call
+ * it in an injection context.
+ */
+export function pushToStartToken(): Signal<string | null> {
+  return inject(WIDGET_EVENTS).pushToStartToken?.() ?? NO_TOKEN;
+}
+
 /** A Live Activity kept in step with a signal. */
 export interface LiveActivityRef {
   /** Whether an activity of this kind is running and following the signal. */
@@ -138,13 +168,17 @@ export interface LiveActivityRef {
  * Keeps a Live Activity of the factory's kind in step with `props`: once started, every change to the
  * signal updates it. One left running from before the app started is picked up rather than started
  * again, since iOS caps how many an app runs. Destroying the injector stops the updates and leaves
- * the activity running, as it outlives the app. Call it in an injection context.
+ * the activity running, as it outlives the app. Taps on its buttons go to `onTaps`. Call it in an
+ * injection context.
  */
 export function liveActivity<T extends object>(
   factory: LiveActivityFactory<T>,
   props: Signal<T>,
+  options: LiveActivityOptions = {},
 ): LiveActivityRef {
   const errors = inject(ErrorHandler);
+  const { onTaps } = options;
+  const staleDate = () => options.staleDate?.() ?? undefined;
   const active = signal(false);
   const id = signal<string | null>(null);
   const pushToken = signal<string | null>(null);
@@ -187,16 +221,48 @@ export function liveActivity<T extends object>(
     );
   };
 
+  /** Rejects where the stale date cannot be had, as where the write fails. */
+  const write = async (activity: NativeLiveActivity<T>, value: T) =>
+    activity.update(value, staleDate());
+
   const existing = running()[0];
   if (existing) adopt(existing);
 
   effect(() => {
     const next = props();
     const activity = current;
-    if (activity) untracked(() => activity.update(next).catch(report));
+    if (activity) untracked(() => write(activity, next).catch(report));
   });
 
+  const stopTaps = onTaps && listenForTaps(onTaps);
+
+  /**
+   * Every widget's and activity's taps arrive here: an activity's names it by its id. Those made
+   * before this was listening are taken once it is, so one that also arrives as it happens is
+   * handed over once.
+   */
+  function listenForTaps(hand: (taps: readonly string[]) => void): () => void {
+    const events = inject(WIDGET_EVENTS);
+    const key = (tap: WidgetTap) => `${tap.source} ${tap.target} ${tap.timestamp}`;
+    const taken = new Set<string>();
+    const handOver = (targets: readonly string[]) =>
+      isolated(
+        () => hand(targets),
+        (failure) => errors.handleError(failure),
+      );
+    const stop = events.onTap((tap) => {
+      if (taken.delete(key(tap))) return;
+      if (running().some((activity) => activity.getId() === tap.source)) handOver([tap.target]);
+    });
+    const held = events.takeHeld?.(running().map((activity) => activity.getId())) ?? [];
+    for (const tap of held) taken.add(key(tap));
+    // Not yet: the caller's own fields may not be set while this one is.
+    if (held.length) queueMicrotask(() => handOver(held.map((tap) => tap.target)));
+    return stop;
+  }
+
   inject(DestroyRef).onDestroy(() => {
+    stopTaps?.();
     tokenSubscription?.remove();
     tokenSubscription = null;
   });
@@ -211,13 +277,13 @@ export function liveActivity<T extends object>(
       const value = untracked(props);
       try {
         const already = running()[0];
-        const activity = already ?? factory.start(value, options.url);
+        const activity = already ?? factory.start(value, options.url, staleDate());
         if (!activity.getId()) {
           error.set(new Error('Live Activities are only on iOS.'));
           return false;
         }
         adopt(activity);
-        if (already) already.update(value).catch(report);
+        if (already) write(already, value).catch(report);
         return true;
       } catch (failure) {
         error.set(failure);

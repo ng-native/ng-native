@@ -1,6 +1,6 @@
 import { Component, input } from '@angular/core';
 import { font, foregroundStyle, padding } from '@expo/ui/swift-ui/modifiers';
-import { UiHStack, UiSpacer, UiText, UiVStack } from '@ng-native/expo/expo-ui-components';
+import { UiButton, UiHStack, UiSpacer, UiText, UiVStack } from '@ng-native/expo/expo-ui-components';
 import { createLiveActivity } from '@ng-native/expo/live-activity';
 
 export interface Scoreline {
@@ -14,10 +14,11 @@ export interface Scoreline {
 /**
  * The score on the lock screen and in the Dynamic Island. The widget extension draws it from the
  * source `createLiveActivity` has it compiled to, so it holds only its props, modifiers and literals.
+ * A tap on one of the banner's buttons is a point, which the app scores.
  */
 @Component({
   selector: 'score-activity',
-  imports: [UiHStack, UiSpacer, UiText, UiVStack],
+  imports: [UiButton, UiHStack, UiSpacer, UiText, UiVStack],
   template: `
     @let big = font({ size: 34, weight: 'heavy', design: 'rounded' });
     @let compact = font({ weight: 'bold', design: 'rounded' });
@@ -35,6 +36,10 @@ export interface Scoreline {
           <ui-text [modifiers]="[big]">Us {{ props().us }} - {{ props().them }} Them</ui-text>
         </ui-vstack>
         <ui-spacer />
+        <ui-vstack>
+          <ui-button target="us" label="Us" />
+          <ui-button target="them" label="Them" />
+        </ui-vstack>
       </ui-hstack>
     </ng-template>
     <ng-template #compactLeading>

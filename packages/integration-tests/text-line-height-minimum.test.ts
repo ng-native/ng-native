@@ -14,9 +14,14 @@ import { createFakeFabric, type FakeFabricNode } from '@ng-native/testing';
 const require = createRequire(import.meta.url);
 const { compileCss } = require('@ng-native/metro/css/compile.cjs');
 
-function scene(css: string) {
+const WINDOW = { width: 400, height: 800, colorScheme: 'light' } as const;
+
+function scene(css: string, fontScale?: number) {
   const fabric = createFakeFabric();
-  const engine = new Engine(fabric, 1, { globalStyles: compileCss(css, 'app.css') as never });
+  const engine = new Engine(fabric, 1, {
+    globalStyles: compileCss(css, 'app.css') as never,
+    ...(fontScale === undefined ? {} : { conditions: { ...WINDOW, fontScale } }),
+  });
   const say = (id: string, classes: string, words = 'Item 0'): EngineNode => {
     const text = engine.createElement('text');
     engine.setClasses(text, classes);
@@ -105,5 +110,59 @@ describe('the least height of text', () => {
     assert.equal(s.least('text'), 32);
     s.engine.setClasses(text, '');
     assert.equal(s.least('text'), null);
+  });
+
+  it('is a line as the system text size draws it, which scales the line and not the box', () => {
+    // A line of 24 points is 19.2 tall at a text size of 0.8. Held to 24, it sits at the top
+    // of its box, over what a row centres it beside.
+    const s = scene('.line { line-height: 24px } .pad { padding: 4px 0 }', 0.8);
+    s.say('small', 'line');
+    s.say('padded', 'line pad');
+    const fixed = s.say('fixed', 'line');
+    s.engine.setProp(fixed, 'allowFontScaling', false);
+    assert.equal(s.least('small'), 19.2);
+    // What is around the line is points, whatever the text size.
+    assert.equal(s.least('padded'), 27.2);
+    // Text that does not scale is a line as written.
+    assert.equal(s.least('fixed'), 24);
+    // And follows the text size changing.
+    s.engine.updateConditions({ ...WINDOW, fontScale: 1.5 });
+    assert.equal(s.least('small'), 36);
+    assert.equal(s.least('fixed'), 24);
+  });
+
+  it('scales each run by its own text size, where a run does not scale or stops at a size', () => {
+    // At a text size of 2: a run that does not scale is its 32 points beside a 24 point line
+    // drawn 48 tall, and one that stops at one and a half times is 48 itself.
+    const s = scene('.line { line-height: 24px } .big { line-height: 32px }', 2);
+    const run = (into: EngineNode, key: string, value: unknown) => {
+      const inner = s.engine.createElement('text');
+      s.engine.setClasses(inner, 'big');
+      s.engine.setProp(inner, key, value);
+      s.engine.appendChild(inner, s.engine.createText('run'));
+      s.engine.appendChild(into, inner);
+      return inner;
+    };
+    run(s.say('fixed', 'line', 'A '), 'allowFontScaling', false);
+    assert.equal(s.least('fixed'), 48);
+    run(s.say('capped', 'line', 'A '), 'maxFontSizeMultiplier', 1.5);
+    assert.equal(s.least('capped'), 48);
+    // And a run in a paragraph that does not scale does not either, with nothing of its own.
+    const still = s.say('still', 'line', 'A ');
+    s.engine.setProp(still, 'allowFontScaling', false);
+    const inner = run(still, 'testID', 'inner');
+    assert.equal(s.least('still'), 32);
+    // Until it says it does.
+    s.engine.setProp(inner, 'allowFontScaling', true);
+    assert.equal(s.least('still'), 64);
+    // And follows a line height bound on the run.
+    s.engine.setProp(inner, 'style', { lineHeight: 40 });
+    assert.equal(s.least('still'), 80);
+    // Written into the style the run holds, as a binding of one property is.
+    (inner.props['style'] as Record<string, unknown>)['lineHeight'] = 50;
+    s.engine.styleChanged(inner);
+    assert.equal(s.least('still'), 100);
+    s.engine.setProp(inner, 'style', null);
+    assert.equal(s.least('still'), 64);
   });
 });

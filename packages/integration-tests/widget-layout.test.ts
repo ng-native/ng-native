@@ -46,6 +46,7 @@ const COMPONENTS = [
   'Gauge',
   'Chart',
   'Button',
+  'Image',
 ];
 const GLOBALS = {
   _jsx: (type: string, props: Record<string, unknown>) => ({ type, props }),
@@ -89,6 +90,14 @@ describe('a widget layout', () => {
     assert.deepEqual(render('<ui-spacer />'), { type: 'Spacer', props: {} });
   });
 
+  it('lets a slot draw nothing, where a widget has to draw a view', () => {
+    assert.deepEqual(
+      render('<ng-template #banner>@if (props().on) {<ui-spacer />}</ng-template>', { on: true }),
+      { banner: { type: 'Spacer', props: {} } },
+    );
+    fails('@if (props().on) {<ui-spacer />}', /always draws a view/);
+  });
+
   it('is one view per slot, for a Live Activity', () => {
     assert.deepEqual(
       render(`
@@ -98,6 +107,19 @@ describe('a widget layout', () => {
       {
         banner: { type: 'Spacer', props: {} },
         minimal: { type: 'Divider', props: {} },
+      },
+    );
+  });
+
+  it('takes a bannerSmall slot beside the banner, for where the activity is drawn small', () => {
+    assert.deepEqual(
+      render(`
+        <ng-template #banner><ui-spacer /></ng-template>
+        <ng-template #bannerSmall><ui-divider /></ng-template>
+      `),
+      {
+        banner: { type: 'Spacer', props: {} },
+        bannerSmall: { type: 'Divider', props: {} },
       },
     );
   });
@@ -210,6 +232,74 @@ describe('inputs', () => {
       type: 'Gauge',
       props: { value: 1, currentValueLabel: { type: 'Text', props: { children: 'done' } } },
     });
+  });
+
+  it('hands a date to a ui-text as the Date the extension draws from, whatever the props hold it as', () => {
+    const at = Date.UTC(2026, 9, 10, 12);
+    for (const held of [at, new Date(at).toISOString(), new Date(at)]) {
+      assert.deepEqual(
+        render('<ui-text [date]="props().at" dateStyle="relative" />', { at: held }),
+        {
+          type: 'Text',
+          props: { date: new Date(at), dateStyle: 'relative' },
+        },
+      );
+    }
+  });
+
+  it('hands a timer its two ends as Dates, on a ui-text and on a ui-progress', () => {
+    const props = { from: 1000, to: '1970-01-01T00:01:00.000Z' };
+    const timerInterval = { lower: new Date(1000), upper: new Date(60000) };
+    assert.deepEqual(
+      render(
+        '<ui-text [timerInterval]="{ lower: props().from, upper: props().to }" countsDown="false" />',
+        props,
+      ),
+      { type: 'Text', props: { timerInterval, countsDown: false } },
+    );
+    assert.deepEqual(
+      render(
+        '<ui-progress [timerInterval]="{ lower: props().from, upper: props().to }" countsDown />',
+        props,
+      ),
+      { type: 'ProgressView', props: { timerInterval, countsDown: true } },
+    );
+  });
+
+  it('leaves out a date or a timer the props do not hold yet, so the text is drawn instead', () => {
+    assert.deepEqual(
+      render(
+        '<ui-text [date]="props().at" [timerInterval]="{ lower: props().from, upper: props().to }">Soon</ui-text>',
+        { from: 1000 },
+      ),
+      { type: 'Text', props: { date: undefined, timerInterval: undefined, children: 'Soon' } },
+    );
+    assert.deepEqual(
+      render(
+        '<ui-text [date]="props().at" [timerInterval]="{ lower: props().from, upper: props().to }">Soon</ui-text>',
+        { at: 'soon', from: 1000, to: 'later' },
+      ),
+      { type: 'Text', props: { date: undefined, timerInterval: undefined, children: 'Soon' } },
+      'a string that is no moment',
+    );
+  });
+
+  it('names an image by its symbol, by an asset in the extension, or by a file', () => {
+    assert.deepEqual(
+      render(
+        `<ui-hstack>
+          <ui-image systemName="tennisball.fill" />
+          <ui-image assetName="court" [size]="20" />
+          <ui-image [uiImage]="props().crest" />
+        </ui-hstack>`,
+        { crest: 'file:///group/crest.png' },
+      ).props['children'],
+      [
+        { type: 'Image', props: { systemName: 'tennisball.fill' } },
+        { type: 'Image', props: { assetName: 'court', size: 20 } },
+        { type: 'Image', props: { uiImage: 'file:///group/crest.png' } },
+      ],
+    );
   });
 
   it("draws a ui-chart as the extension's Chart, its data and styles as they are bound", () => {
@@ -370,6 +460,18 @@ describe('control flow', () => {
     assert.deepEqual(render(template, { family: 'systemLarge' }), { type: 'Divider', props: {} });
   });
 
+  it('reads the environment a Live Activity is drawn in, in a slot', () => {
+    const banner = `<ng-template #banner>
+      @if (environment().isStale) { <ui-text>Out of date</ui-text> } @else { <ui-text>{{ props().us }}</ui-text> }
+    </ng-template>`;
+    assert.deepEqual(render(banner, { us: '15' }, { isStale: true }), {
+      banner: { type: 'Text', props: { children: 'Out of date' } },
+    });
+    assert.deepEqual(render(banner, { us: '15' }, { isStale: false }), {
+      banner: { type: 'Text', props: { children: '15' } },
+    });
+  });
+
   it('reads the environment a home-screen widget is drawn in', () => {
     assert.deepEqual(
       render('<ui-text>{{ environment().family }}</ui-text>', {}, { family: 'systemSmall' }),
@@ -455,6 +557,36 @@ describe('buttons', () => {
     assert.deepEqual((view.props['onPress'] as Press)(), { us: '30', them: '0', taps: ['us'] });
   });
 
+  it('send only their target from a Live Activity, where the tap goes to the app', () => {
+    assert.deepEqual(
+      render(
+        `
+        <ng-template #banner>
+          <ui-hstack>
+            <ui-button target="us" label="Us" />
+            <ui-button [target]="props().side"><ui-spacer /></ui-button>
+          </ui-hstack>
+        </ng-template>
+      `,
+        { side: 'them' },
+      ),
+      {
+        banner: {
+          type: 'HStack',
+          props: {
+            children: [
+              { type: 'Button', props: { target: 'us', label: 'Us' } },
+              {
+                type: 'Button',
+                props: { target: 'them', children: { type: 'Spacer', props: {} } },
+              },
+            ],
+          },
+        },
+      },
+    );
+  });
+
   it('keep the taps their (buttonPress) did not mean to replace', () => {
     const view = render('<ui-button target="us" (buttonPress)="{ taps: [] }" />', {
       taps: ['them'],
@@ -471,10 +603,19 @@ describe('a layout the compiler refuses', () => {
     );
   });
 
-  it('refuses a button in a Live Activity, which has nowhere to record its tap', () => {
+  it('refuses a (buttonPress) in a Live Activity, whose props only the app changes', () => {
     fails(
-      '<ng-template #banner><ui-button target="a" label="Point" /></ng-template>',
-      /<ui-button> records its tap.*home-screen widget/,
+      `<ng-template #banner>
+        <ui-button target="a" (buttonPress)="{ us: 1 }" label="Point" />
+      </ng-template>`,
+      /layout\.ts:2:31: \(buttonPress\) changes a home-screen widget's props.*Live Activity/,
+    );
+  });
+
+  it('refuses a Live Activity button with no target, which the app could not tell from the others', () => {
+    fails(
+      '<ng-template #banner><ui-button label="Point" /></ng-template>',
+      /layout\.ts:1:22: <ui-button> needs a target/,
     );
   });
 

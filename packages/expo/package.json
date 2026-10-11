@@ -1,13 +1,16 @@
 {
   "name": "@ng-native/expo",
-  "version": "0.9.0",
+  "version": "0.10.0",
   "description": "Expo modules as Angular services for Angular Native, plus registerExpoView for a module's native view.",
   "keywords": [
     "angular",
     "react-native",
     "angular-native",
     "ios",
-    "android",
+    "android/build.gradle",
+    "android/src",
+    "android/build.gradle",
+    "android/src",
     "fabric",
     "native",
     "expo",
@@ -49,6 +52,7 @@
     "./media-library": "./src/media-library.ts",
     "./network": "./src/network.ts",
     "./notifications": "./src/notifications.ts",
+    "./ongoing-notification": "./src/ongoing-notification.ts",
     "./orientation": "./src/orientation.ts",
     "./player": "./src/player.ts",
     "./screen-capture": "./src/screen-capture.ts",
@@ -200,6 +204,10 @@
       "./notifications": {
         "types": "./dist/notifications.d.ts",
         "default": "./dist/notifications.js"
+      },
+      "./ongoing-notification": {
+        "types": "./dist/ongoing-notification.d.ts",
+        "default": "./dist/ongoing-notification.js"
       },
       "./orientation": {
         "types": "./dist/orientation.d.ts",
@@ -500,6 +508,10 @@
     "directory": "packages/expo"
   },
   "files": [
-    "dist"
+    "dist",
+    "ios",
+    "android/build.gradle",
+    "android/src",
+    "expo-module.config.json"
   ]
 }

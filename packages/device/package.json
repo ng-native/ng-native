@@ -1,6 +1,6 @@
 {
   "name": "@ng-native/device",
-  "version": "0.9.0",
+  "version": "0.10.0",
   "description": "Angular Native device services: keyboard, screen, color scheme, app state, accessibility, hardware back and deep links.",
   "keywords": [
     "angular",

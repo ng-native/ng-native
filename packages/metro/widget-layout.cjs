@@ -16,6 +16,8 @@
  *   read as that component's transform reads it.
  * - A `ui-text`'s content is its text, as in an app: each run of whitespace collapsed to one space,
  *   as Angular collapses it, and the space at the two ends dropped.
+ * - A `ui-text`'s `date`, and a `timerInterval`'s two ends, become the `Date`s the extension's
+ *   components take, so the text or the bar keeps time with no update from the app.
  * - `props()` and `environment()` are the function's parameters, a member standing for a modifier
  *   is the extension's global of that name, and a constant member is inlined.
  * - `@if`, `@for` (with `@empty` and the contextual names), `@switch` and `@let` are expressions.
@@ -24,6 +26,8 @@
  * - A home-screen widget's `ui-button` records its `target` in the props' `taps` when it is
  *   tapped, since the extension runs the tap while the app may be suspended; `@ng-native/expo/widget`
  *   hands the taps to the app. Its `(buttonPress)` is the props to change at once, as an object.
+ *   A Live Activity's `ui-button` only carries its `target`: iOS runs its tap in the app, which
+ *   `liveActivity` hands it to.
  *
  * Anything a layout cannot do is an error naming the file, line and column, rather than a view the
  * extension draws as an error box on the lock screen.
@@ -37,17 +41,30 @@ const ng = require('@angular/compiler');
  */
 const HELPERS =
   'function ɵflat(list){var out=[];(function add(v){if(Array.isArray(v))v.forEach(add);else if(v!==undefined&&v!==null&&v!==false)out.push(v);})(list);return out.length===0?undefined:out.length===1?out[0]:out;}' +
-  'function ɵstr(v){return v===undefined||v===null?"":String(v);}';
+  'function ɵstr(v){return v===undefined||v===null?"":String(v);}' +
+  'function ɵdate(v){var d=v===undefined||v===null?NaN:new Date(v);return isNaN(d)?undefined:d;}' +
+  'function ɵrange(v){var l=v&&ɵdate(v.lower),u=v&&ɵdate(v.upper);return l&&u?{lower:l,upper:u}:undefined;}';
 
 /**
  * The views the widget extension draws (`DynamicView.swift`) that have a typed `ui-*` component, by
  * element: the `@expo/ui` component that draws it, and the inputs of the typed component with how a
  * static attribute is read for each. A view with no typed component is left out, since `ngc`
  * refuses its element in the layout's own template. A `label` input is a string in an app; the extension's component takes a view there, so the string
- * is drawn as a `Text`.
+ * is drawn as a `Text`. A `date` input, and each end of a `range`, is a `Date` there, made from
+ * what the props hold: milliseconds, or the string JSON makes of a `Date`.
  */
 const VIEWS = {
-  text: { component: 'Text', inputs: { text: 'string', modifiers: 'any' } },
+  text: {
+    component: 'Text',
+    inputs: {
+      text: 'string',
+      date: 'date',
+      dateStyle: 'string',
+      timerInterval: 'range',
+      countsDown: 'boolean',
+      modifiers: 'any',
+    },
+  },
   hstack: {
     component: 'HStack',
     inputs: { alignment: 'string', spacing: 'number', modifiers: 'any' },
@@ -60,6 +77,7 @@ const VIEWS = {
     component: 'Image',
     inputs: {
       systemName: 'string',
+      assetName: 'string',
       uiImage: 'string',
       size: 'number',
       color: 'string',
@@ -108,7 +126,10 @@ const VIEWS = {
       modifiers: 'any',
     },
   },
-  progress: { component: 'ProgressView', inputs: { value: 'number', modifiers: 'any' } },
+  progress: {
+    component: 'ProgressView',
+    inputs: { value: 'number', timerInterval: 'range', countsDown: 'boolean', modifiers: 'any' },
+  },
   spacer: { component: 'Spacer', inputs: { modifiers: 'any' } },
   gauge: {
     component: 'Gauge',
@@ -144,9 +165,20 @@ const VIEWS = {
   },
 };
 
-/** The slots a Live Activity's layout fills: the lock screen banner and the Dynamic Island. */
+/** The kinds of input the extension's component takes as something other than the app's value. */
+const CONVERTED = {
+  label: (value) => `_jsx(Text,{children:${value}})`,
+  date: (value) => `ɵdate(${value})`,
+  range: (value) => `ɵrange(${value})`,
+};
+
+/**
+ * The slots a Live Activity's layout fills: the lock screen banner, the banner where the activity
+ * is drawn small, and the Dynamic Island.
+ */
 const SLOTS = new Set([
   'banner',
+  'bannerSmall',
   'compactLeading',
   'compactTrailing',
   'minimal',
@@ -391,11 +423,12 @@ class Compiler {
       props.set(input.name, this.expression(input.value, scope));
     }
     for (const [key, value] of props) {
-      if (view.inputs?.[key] === 'label') props.set(key, `_jsx(Text,{children:${value}})`);
+      const convert = CONVERTED[view.inputs?.[key]];
+      if (convert) props.set(key, convert(value));
     }
     const children = this.content(node, name, props, scope);
     if (children !== null) props.set('children', children);
-    if (name === 'button') props.set('onPress', this.press(node, props, scope));
+    if (name === 'button') this.press(node, props, scope);
     const entries = [...props].map(([key, value]) => `${JSON.stringify(key)}:${value}`);
     return `_jsx(${view.component},{${entries.join(',')}})`;
   }
@@ -413,22 +446,26 @@ class Compiler {
   }
 
   /**
-   * A button's tap, as the function the extension runs: the props it answers replace the widget's,
+   * A button's tap, as the `onPress` the extension runs: the props it answers replace the widget's,
    * with its target added to `taps`. What `(buttonPress)` answers is merged in first, so the widget
-   * can show the tap at once; the taps it holds are kept whatever that answers.
+   * can show the tap at once; the taps it holds are kept whatever that answers. A Live Activity's
+   * button has none, and runs nothing in the extension: its tap reaches the app with its target.
    */
   press(node, props, scope) {
-    if (this.inSlot) {
-      this.fail(
-        node,
-        '<ui-button> records its tap in the props, which only a home-screen widget keeps: a Live Activity cannot.',
-      );
-    }
     const target = props.get('target');
     if (target === undefined) {
       this.fail(node, '<ui-button> needs a target, for the app to tell its taps from the others.');
     }
     const [event] = node.outputs;
+    if (this.inSlot) {
+      if (event) {
+        this.fail(
+          event,
+          "(buttonPress) changes a home-screen widget's props; a Live Activity's button sends its target to the app, which updates the activity.",
+        );
+      }
+      return;
+    }
     let change = '{}';
     if (event) {
       if (event.handler.ast instanceof ng.Chain) {
@@ -440,7 +477,10 @@ class Compiler {
       change = this.expression(event.handler, scope);
     }
     const taps = 'Array.isArray(props.taps)?props.taps:[]';
-    return `function(){return Object.assign({},props,${change},{taps:(${taps}).concat([${target}])});}`;
+    props.set(
+      'onPress',
+      `function(){return Object.assign({},props,${change},{taps:(${taps}).concat([${target}])});}`,
+    );
   }
 
   /** @param {string | null} [event] an output the view does take */
