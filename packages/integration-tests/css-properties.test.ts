@@ -271,6 +271,21 @@ describe('the per-side border shorthands', () => {
     assert.equal(warnings.length, 1);
     assert.match(warnings[0]!, /dropped part of 'border-inline-start'.*'dotted'.*drawn solid/);
   });
+
+  it('sets both block sides from a border-block that holds a token, with no style of the whole box', () => {
+    assert.deepEqual(declarationsOf('border-block: var(--w) solid red'), {
+      borderTopColor: 'rgb(255, 0, 0)',
+      borderBottomColor: 'rgb(255, 0, 0)',
+    });
+  });
+
+  it('leaves a token in a border its width and colour, where the style is written', () => {
+    const [rule] = compileCss('view { border: var(--w) solid }').rules;
+    assert.deepEqual(
+      (rule.deferred as { line: { roles: string[] } }[]).map((entry) => entry.line.roles),
+      [['width', 'color']],
+    );
+  });
 });
 
 describe('properties React Native supports that we were rejecting', () => {
