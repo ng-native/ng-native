@@ -72,6 +72,15 @@ function domComponentReference(filename, { dev }) {
 /**
  * The page's entry: pass on anything thrown before Angular is up - an import that fails, a module
  * that throws as it loads - then load the component. Angular's `ErrorHandler` covers it after that.
+ *
+ * Between the two, a `localStorage` and a `sessionStorage` where the web view has none. Android's
+ * answers `null` for both until DOM storage is turned on, and `@expo/dom-webview` does not turn it
+ * on, so web code that reads one as it starts threw there and ran on iOS. Here rather than in
+ * `mountInWebView`, so a module that reads storage as it loads finds it too.
+ *
+ * ponytail: the stand-in is memory, so it lasts as long as the page, and it has storage's methods
+ * and not its named properties (`localStorage.theme`). Keeping it across launches means carrying
+ * it over the bridge to a store in the app.
  */
 function domComponentEntry(relativeImport) {
   return `(function () {
@@ -83,6 +92,25 @@ function domComponentEntry(relativeImport) {
   }
   window.addEventListener('error', function (event) { report(event.error || event.message); });
   window.addEventListener('unhandledrejection', function (event) { report(event.reason); });
+})();
+(function () {
+  function storage() {
+    var items = Object.create(null);
+    return {
+      get length() { return Object.keys(items).length; },
+      key: function (index) { var name = Object.keys(items)[index]; return name === undefined ? null : name; },
+      getItem: function (name) { return name in items ? items[name] : null; },
+      setItem: function (name, value) { items[name] = String(value); },
+      removeItem: function (name) { delete items[name]; },
+      clear: function () { items = Object.create(null); },
+    };
+  }
+  ['localStorage', 'sessionStorage'].forEach(function (name) {
+    try {
+      if (window[name]) return;
+    } catch (refused) {}
+    Object.defineProperty(window, name, { configurable: true, value: storage() });
+  });
 })();
 require(${JSON.stringify(relativeImport)});
 `;

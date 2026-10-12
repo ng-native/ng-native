@@ -234,4 +234,71 @@ describe("the page's entry", () => {
       ],
     );
   });
+
+  /** Run the entry over `window`, and answer with what the component finds as it loads. */
+  function load<T>(window: object, component: (window: PageWindow) => T): T {
+    const page = Object.assign(window as PageWindow, { addEventListener: () => {} });
+    let found: T | undefined;
+    new Function('window', 'require', domComponentEntry('./note.ts'))(page, () => {
+      found = component(page);
+    });
+    return found as T;
+  }
+
+  it('gives a page whose web view has no storage one to use, before the component loads', () => {
+    // Android's web view answers `null` for both until DOM storage is turned on, which Expo's
+    // never does, so `localStorage.getItem(...)` in a service's constructor threw.
+    const window = load({ localStorage: null, sessionStorage: null }, (window) => {
+      assert.equal(window.localStorage.getItem('theme'), null, 'there as the component loads');
+      return window;
+    });
+    const { localStorage, sessionStorage } = window;
+
+    localStorage.setItem('theme', 'dark');
+    localStorage.setItem('count', 2 as unknown as string);
+    assert.equal(localStorage.getItem('theme'), 'dark');
+    assert.equal(
+      localStorage.getItem('count'),
+      '2',
+      'a value is kept as a string, as storage does',
+    );
+    assert.equal(localStorage.length, 2);
+    assert.equal(localStorage.key(0), 'theme');
+    assert.equal(localStorage.key(2), null);
+    assert.equal(sessionStorage.getItem('theme'), null, 'the two are apart');
+
+    localStorage.removeItem('theme');
+    assert.equal(localStorage.getItem('theme'), null);
+    assert.equal(localStorage.length, 1);
+    localStorage.clear();
+    assert.equal(localStorage.length, 0);
+    assert.equal(localStorage.getItem('toString'), null, 'nothing is there that was not set');
+  });
+
+  it('gives it one where reading storage throws', () => {
+    const window = Object.defineProperty({ sessionStorage: null }, 'localStorage', {
+      configurable: true,
+      get: () => {
+        throw new Error('The operation is insecure.');
+      },
+    });
+    const storage = load(window, (window) => window.localStorage);
+    storage.setItem('a', 'b');
+    assert.equal(storage.getItem('a'), 'b');
+  });
+
+  it("leaves a web view's own storage alone", () => {
+    const own = { getItem: () => 'kept' };
+    const window = { localStorage: own, sessionStorage: own };
+    assert.equal(
+      load(window, (window) => window.localStorage),
+      own,
+    );
+    assert.equal(window.sessionStorage, own);
+  });
 });
+
+interface PageWindow {
+  localStorage: Storage;
+  sessionStorage: Storage;
+}

@@ -220,7 +220,15 @@ file directly instead of mounting a React component, and the file mounts itself.
   Fine for a screen's centerpiece, wrong for a list.
 - **No children.** Native content cannot be projected into a DOM component.
 - **Sized from outside.** The web view does not size itself to its content.
-- **Checked on iOS.** Android uses the same Expo web view and the same pages, but has not been run.
+- **Storage on Android lasts as long as the page.** Expo's Android web view has DOM storage turned
+  off, so `localStorage` and `sessionStorage` are `null` there. The page is given one of each, kept
+  in memory, before any of its code runs: `getItem`, `setItem`, `removeItem`, `clear`, `key` and
+  `length`, and not named properties such as `localStorage.theme`. What a page stores is gone when
+  the page is. On iOS both are the web view's own, and `localStorage` is kept between launches.
+- **Checked on iOS.** Android uses the same Expo web view and the same pages, and has been run in a
+  development build only.
+- **Not in Expo Go on Android.** Expo Go there does not include `@expo/dom-webview`, so a
+  `<dom-component>` needs a development build.
 
 ## Reference
 
