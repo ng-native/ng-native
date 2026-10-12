@@ -116,6 +116,31 @@ const run = (cmd, args, cwd, quiet = true, env = {}) =>
     },
   });
 
+/**
+ * A step that installs only other people's packages, tried again when it fails: `ng new`,
+ * `create-nx-workspace`. Each resolves the newest of everything from npm, and a release that is
+ * part way out fails the install: one package of a set names a version of another that is not on
+ * the registry for another minute (`ETARGET`, for `@typescript-eslint/parser`, the minute it was
+ * published). None of this repo's code has run yet, so a retry hides nothing of ours.
+ *
+ * `leaves` is what a failed try leaves behind, removed so the next starts clean. The wait is past
+ * the two minutes Verdaccio keeps what npm told it about a package.
+ */
+function upstream(leaves, step) {
+  for (let attempt = 1; ; attempt++) {
+    try {
+      return step();
+    } catch (error) {
+      if (attempt === UPSTREAM_TRIES) throw error;
+      console.log(`\nfailed before any of our packages ran; try ${attempt + 1} in 150s`);
+      rmSync(leaves, { recursive: true, force: true });
+      execFileSync('sleep', ['150']);
+    }
+  }
+}
+
+const UPSTREAM_TRIES = 3;
+
 /** `npm install` or `pnpm install`, from the registry, with this run's fresh caches. */
 const install = (pm, cwd) =>
   pm === 'pnpm'
@@ -276,8 +301,10 @@ async function serve(cmd, args, cwd, port) {
 async function angularWorkspace(dir, { latest = false } = {}) {
   console.log('\nng new, then ng add @ng-native/schematics');
   // Not quiet: these installs are minutes, and the log should show them moving.
-  run('npx', ['--yes', '@angular/cli@22', 'new', 'web', '--defaults', '--skip-git'], dir, false);
   const workspace = path.join(dir, 'web');
+  upstream(workspace, () =>
+    run('npx', ['--yes', '@angular/cli@22', 'new', 'web', '--defaults', '--skip-git'], dir, false),
+  );
   writeFileSync(path.join(workspace, '.npmrc'), `registry=${REGISTRY}\n`);
   run('npx', ['ng', 'add', '@ng-native/schematics@local', '--skip-confirmation'], workspace, false);
   if (latest) {
@@ -323,27 +350,29 @@ async function nxWorkspace(
   { preset = 'angular-monorepo', pm = 'npm', latest = false, port = 8092 } = {},
 ) {
   console.log(`\ncreate-nx-workspace --preset=${preset} with ${pm}, then nx add @ng-native/nx`);
-  run(
-    'npx',
-    [
-      '--yes',
-      'create-nx-workspace@latest',
-      'monorepo',
-      ...NX_PRESETS[preset].args,
-      `--packageManager=${pm}`,
-      // No `--ci=skip`: create-nx-workspace 23.2.1 passes it on twice and then fails on
-      // `'skip,skip'`. Without it, a non-interactive run generates no CI workflow anyway.
-      '--nxCloud=skip',
-      '--interactive=false',
-    ],
-    dir,
-    // Not quiet: this and the two below are installs of minutes, and the log should show them.
-    false,
-    // create-nx-workspace 23.2.1 allows only nx's build script in the pnpm-workspace.yaml a preset
-    // writes, and pnpm 11 fails an install over any other: ERR_PNPM_IGNORED_BUILDS, for the
-    // esbuild and lmdb Angular brings. That is Nx's to fix, and it would stop this before
-    // `nx add @ng-native/nx`, which is what is checked here.
-    { pnpm_config_strict_dep_builds: 'false' },
+  upstream(path.join(dir, 'monorepo'), () =>
+    run(
+      'npx',
+      [
+        '--yes',
+        'create-nx-workspace@latest',
+        'monorepo',
+        ...NX_PRESETS[preset].args,
+        `--packageManager=${pm}`,
+        // No `--ci=skip`: create-nx-workspace 23.2.1 passes it on twice and then fails on
+        // `'skip,skip'`. Without it, a non-interactive run generates no CI workflow anyway.
+        '--nxCloud=skip',
+        '--interactive=false',
+      ],
+      dir,
+      // Not quiet: this and the two below are installs of minutes, and the log should show them.
+      false,
+      // create-nx-workspace 23.2.1 allows only nx's build script in the pnpm-workspace.yaml a preset
+      // writes, and pnpm 11 fails an install over any other: ERR_PNPM_IGNORED_BUILDS, for the
+      // esbuild and lmdb Angular brings. That is Nx's to fix, and it would stop this before
+      // `nx add @ng-native/nx`, which is what is checked here.
+      { pnpm_config_strict_dep_builds: 'false' },
+    ),
   );
   const workspace = path.join(dir, 'monorepo');
   // What pnpm tells someone stopped by that to run, and every later install fails without it.
