@@ -3,7 +3,8 @@ import { provideIcons } from '@ng-icons/core';
 import { lucideFlame } from '@ng-icons/lucide';
 import { NgIcon } from '@ng-native/icons';
 import { Notifications, TriggerType } from '@ng-native/expo/notifications';
-import { SafeAreaView, ScrollView, Switch, Text, View } from '@ng-native/components';
+import { Pressable, SafeAreaView, ScrollView, Switch, Text, View } from '@ng-native/components';
+import { DeepLinks } from '@ng-native/device';
 import { Habits } from '../data/habits.ts';
 
 /**
@@ -13,7 +14,7 @@ import { Habits } from '../data/habits.ts';
  */
 @Component({
   selector: 'app-settings',
-  imports: [NgIcon, SafeAreaView, ScrollView, Switch, Text, View],
+  imports: [NgIcon, Pressable, SafeAreaView, ScrollView, Switch, Text, View],
   providers: [provideIcons({ lucideFlame })],
   template: `
     <safe-area-view class="flex-1 bg-zinc-100 dark:bg-black" [edges]="['top']">
@@ -37,6 +38,9 @@ import { Habits } from '../data/habits.ts';
               Notifications are turned off for Habits. Enable them in the system Settings app to get
               reminders.
             </text>
+            <pressable class="px-4 pb-3" accessibilityRole="button" (press)="links.openSettings()">
+              <text class="text-sm font-semibold text-sky-600">Open Settings</text>
+            </pressable>
           }
         </view>
 
@@ -67,6 +71,7 @@ import { Habits } from '../data/habits.ts';
 export class Settings {
   private readonly habitsService = inject(Habits);
   private readonly notifications = inject(Notifications);
+  protected readonly links = inject(DeepLinks);
 
   protected readonly habits = this.habitsService.habits;
   protected readonly permission = this.notifications.permission;

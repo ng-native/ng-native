@@ -9,12 +9,19 @@ export interface DeepLinkSource {
   launchUrl(): Promise<string | null>;
   subscribe(listener: (url: string) => void): () => void;
   open(url: string): void;
+  /** Optional, so a source written before there was one is still a source. */
+  openSettings?(): void;
 }
 
 export function deepLinkSource(): DeepLinkSource {
   const native = reactNative();
   if (!native) {
-    return { launchUrl: () => Promise.resolve(null), subscribe: () => () => {}, open: () => {} };
+    return {
+      launchUrl: () => Promise.resolve(null),
+      subscribe: () => () => {},
+      open: () => {},
+      openSettings: () => {},
+    };
   }
 
   return {
@@ -24,6 +31,7 @@ export function deepLinkSource(): DeepLinkSource {
       return () => subscription.remove();
     },
     open: (url) => void native.Linking.openURL(url).catch(() => {}),
+    openSettings: () => void native.Linking.openSettings().catch(() => {}),
   };
 }
 
@@ -147,5 +155,13 @@ export class DeepLinks {
   /** Hand a url to whatever else on the device handles it: a browser, Maps, another app. */
   open(url: string): void {
     this.source.open(url);
+  }
+
+  /**
+   * Open the app's own page in the system settings, where a person turns on a permission the
+   * platform no longer asks for. Android has no url for that page, so `open()` cannot reach it.
+   */
+  openSettings(): void {
+    this.source.openSettings?.();
   }
 }

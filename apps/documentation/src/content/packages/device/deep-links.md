@@ -45,6 +45,10 @@ that resolves `initialUrl()` races the first navigation and neither order is gua
 
 `open(url)` hands a url to whatever else on the device handles it: a browser, Maps, another app.
 
+`openSettings()` opens the app's own page in the system settings, where a person turns on a
+permission the platform no longer asks for (see [Permissions](/packages/expo/permissions)). Android
+has no url for that page, so `open()` cannot reach it there.
+
 A url that came from a person or a server can name any scheme, another app's included. Check it
 against the schemes you mean to open, usually `https:` and the app's own, before passing it to
 `open()`, to [`Browser`](/packages/expo/browser)'s `open()` or to a `ui-link`'s `destination`.
@@ -57,9 +61,10 @@ most apps never call `DeepLinks` directly.
 
 ## Off a device and on the web
 
-Off a device `initialUrl()` stays `null` and `subscribe()` never fires, because there is no
-`Linking` module underneath it. On the web, urls and paths are already the same idea, so `DeepLinks`
-is a native-only concern - a web build reads the address bar instead.
+Off a device `initialUrl()` stays `null`, `subscribe()` never fires, and `open()` and
+`openSettings()` do nothing, because there is no `Linking` module underneath them. On the web, urls
+and paths are already the same idea, so `DeepLinks` is a native-only concern - a web build reads the
+address bar instead.
 
 ## Reference
 

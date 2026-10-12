@@ -144,6 +144,7 @@ export interface ReactNative {
   Linking: {
     getInitialURL(): Promise<string | null>;
     openURL(url: string): Promise<unknown>;
+    openSettings(): Promise<void>;
     addEventListener(event: 'url', handler: (event: { url: string }) => void): { remove(): void };
   };
 }

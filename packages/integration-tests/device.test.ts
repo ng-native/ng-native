@@ -30,6 +30,7 @@ import * as device from '@ng-native/device';
 import { reactNative } from '../device/src/react-native.ts';
 import { cleanup, injectService } from '@ng-native/testing';
 import { appStateSource } from '../device/src/app-state.ts';
+import { deepLinkSource } from '../device/src/deep-links.ts';
 import { colorSchemeSource } from '../device/src/color-scheme.ts';
 import { directionSource } from '../device/src/direction.ts';
 import { keyboardSource } from '../device/src/keyboard.ts';
@@ -136,6 +137,25 @@ describe('deep links', () => {
       },
     };
   };
+
+  it("opens the app's own page in the system settings", () => {
+    let opened = 0;
+    const platform = { ...source(null).value, openSettings: () => void opened++ };
+    build(DeepLinks, [{ provide: DeepLinks.SOURCE, useValue: platform }]).openSettings();
+    assert.equal(opened, 1);
+  });
+
+  it('does nothing for settings over a source that cannot open them', () => {
+    const links = build(DeepLinks, [{ provide: DeepLinks.SOURCE, useValue: source(null).value }]);
+    assert.doesNotThrow(() => links.openSettings());
+  });
+
+  it('does nothing for settings off a device', () => {
+    const stood = deepLinkSource();
+    assert.equal(typeof stood.openSettings, 'function', 'the stand-in has every method');
+    const links = build(DeepLinks, [{ provide: DeepLinks.SOURCE, useValue: stood }]);
+    assert.doesNotThrow(() => links.openSettings());
+  });
 
   it('reduces a url to the path the router can navigate to', () => {
     assert.equal(pathOf('canary://primitives'), '/primitives');

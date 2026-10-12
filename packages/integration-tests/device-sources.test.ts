@@ -610,6 +610,36 @@ describe('the deep link source', () => {
     assert.doesNotThrow(() => source.open('nope://x'));
     await new Promise((resolve) => setTimeout(resolve, 0));
   });
+
+  it("opens the app's own page in the system settings", () => {
+    let opened = 0;
+    const native = {
+      Linking: {
+        getInitialURL: () => Promise.resolve(null),
+        openURL: () => Promise.resolve(true),
+        openSettings: () => (opened++, Promise.resolve()),
+        addEventListener: () => ({ remove: () => {} }),
+      },
+    };
+    withNative(native, () => deepLinkSource()).openSettings?.();
+    assert.equal(opened, 1);
+  });
+
+  it('swallows settings that would not open, as it does a dead link', async () => {
+    let asked = false;
+    const native = {
+      Linking: {
+        getInitialURL: () => Promise.resolve(null),
+        openURL: () => Promise.resolve(true),
+        openSettings: () => ((asked = true), Promise.reject(new Error('no settings activity'))),
+        addEventListener: () => ({ remove: () => {} }),
+      },
+    };
+    const source = withNative(native, () => deepLinkSource());
+    assert.doesNotThrow(() => source.openSettings?.());
+    assert.equal(asked, true);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  });
 });
 
 describe('an Android permission on the wrong platform', () => {

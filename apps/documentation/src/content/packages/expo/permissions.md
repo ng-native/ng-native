@@ -64,8 +64,9 @@ readonly notifications = Permission.of(getPermissionsAsync, requestPermissionsAs
   asked yet.
 - **`granted`** is a signal: whether the permission is currently granted.
 - **`blocked`** is a signal: true once the platform will no longer show a dialog at all - refused
-  for good. This is the moment to send the person to Settings instead of asking again. It is not
-  final: see [Coming back from Settings](#coming-back-from-settings).
+  for good. This is the moment to send the person to Settings instead of asking again, with
+  [`DeepLinks`](/packages/device/deep-links)' `openSettings()`. It is not final: see
+  [Coming back from Settings](#coming-back-from-settings).
 - **`check()`** asks the platform what it currently thinks, without showing the person anything.
 - **`request()`** shows the dialog and resolves to whether they granted it.
 - **`ensure()`** is the method most call sites want: it has the permission if it can be had, and
