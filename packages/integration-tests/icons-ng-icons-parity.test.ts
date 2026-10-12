@@ -104,6 +104,14 @@ describe('an icon with a mask, a use or a clip path', () => {
     const clipped = named('sierra-leone', 'RNSVGGroup').find((group) => group.props['clipPath']);
     assert.equal(clipped?.props['clipPath'], 'ID_PLACEHOLDER_1');
   });
+
+  it('reads a mask, a clip path and a mask type written in a style attribute', () => {
+    // A `style` is folded into the element's attributes before they become props, so what CSS
+    // lets a stylesheet say there is read the same as the attribute.
+    assert.equal(named('styled', 'RNSVGMask')[0]!.props['maskType'], 1, 'alpha');
+    const [shape] = named('styled', 'RNSVGPath');
+    assert.deepEqual(pick(shape!.props, 'mask', 'clipPath'), { mask: 'm', clipPath: 'c' });
+  });
 });
 
 describe('an icon under provideNgIconsConfig', () => {

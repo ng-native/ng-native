@@ -28,6 +28,12 @@ export const flagSlSquare =
   '<path fill="#0000cd" d="M0 341.7h512V512H0z"></path><path fill="#fff" d="M0 171.4h512v170.3H0z"></path>' +
   '<path fill="#00cd00" d="M0 0h512v171.4H0z"></path></g></svg>';
 
+/** A mask and a clip path named in `style`, and the mask's type there too, as CSS allows. */
+export const styledReferences =
+  '<svg viewBox="0 0 24 24"><defs><mask id="m" style="mask-type:alpha"><rect width="24" height="24"/></mask>' +
+  '<clipPath id="c"><rect width="12" height="24"/></clipPath></defs>' +
+  '<path d="M0 0h24v24H0z" style="clip-path:url(#c);mask:url(#m)"/></svg>';
+
 const square =
   '<svg viewBox="0 0 24 24" style="stroke-width:var(--ng-icon__stroke-width, 2)"><rect width="24" height="24"/></svg>';
 
@@ -39,12 +45,14 @@ const square =
     <ng-icon nativeID="duotone" [svg]="duotone" />
     <ng-icon nativeID="china" [svg]="china" />
     <ng-icon nativeID="sierra-leone" [svg]="sierraLeone" />
+    <ng-icon nativeID="styled" [svg]="styled" />
   `,
 })
 export class IconMasks {
   readonly duotone = letsAddDuotoneLine;
   readonly china = flagCnSquare;
   readonly sierraLeone = flagSlSquare;
+  readonly styled = styledReferences;
 }
 
 /** Icons under `provideNgIconsConfig`, with and without inputs of their own. */
