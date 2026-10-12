@@ -47,6 +47,9 @@ export const SVG_ELEMENTS: Record<string, string> = {
   polyline: 'svg-path',
   polygon: 'svg-path',
   defs: 'svg-defs',
+  mask: 'svg-mask',
+  clipPath: 'svg-clip-path',
+  use: 'svg-use',
   linearGradient: 'svg-linear-gradient',
   radialGradient: 'svg-radial-gradient',
   text: 'svg-text',
@@ -65,9 +68,11 @@ const GEOMETRY: Record<string, readonly string[]> = {
   ellipse: ['cx', 'cy', 'rx', 'ry'],
   rect: ['x', 'y', 'width', 'height', 'rx', 'ry'],
   line: ['x1', 'y1', 'x2', 'y2'],
+  mask: ['x', 'y', 'width', 'height'],
+  use: ['x', 'y', 'width', 'height'],
 };
 
-/** A shape's geometry, as written, and 0 for what react-native-svg defaults and it left out. */
+/** A shape's geometry, as written, and the default for what it left out. */
 function geometry(
   tag: string,
   attrs: Readonly<Record<string, string>>,
@@ -77,6 +82,8 @@ function geometry(
     if (attrs[name] !== undefined) props[name] = attrs[name];
   }
   for (const name of own(ZERO_BY_DEFAULT, tag) ?? []) props[name] ??= 0;
+  if (tag !== 'mask') return;
+  for (const [name, value] of Object.entries(MASK_AREA)) props[name] ??= value;
 }
 
 /**
@@ -89,7 +96,26 @@ const ZERO_BY_DEFAULT: Record<string, readonly string[]> = {
   ellipse: ['cx', 'cy', 'rx', 'ry'],
   rect: ['x', 'y', 'width', 'height'],
   line: ['x1', 'y1', 'x2', 'y2'],
+  use: ['x', 'y', 'width', 'height'],
 };
+
+/** The area a mask covers when the markup does not say, which is SVG's default. */
+const MASK_AREA = { x: '-10%', y: '-10%', width: '120%', height: '120%' };
+
+const MASK_TYPE: Record<string, number> = { luminance: 0, alpha: 1 };
+
+/** A mask's units and type, as the integers react-native-svg's `Mask` sends. */
+function maskProps(attrs: Readonly<Record<string, string>>): Record<string, number> {
+  return {
+    maskUnits: own(GRADIENT_UNITS, attrs['maskUnits'] ?? '') ?? 0,
+    maskContentUnits: own(GRADIENT_UNITS, attrs['maskContentUnits'] ?? '') ?? 1,
+    maskType: own(MASK_TYPE, attrs['mask-type'] ?? '') ?? 0,
+  };
+}
+
+/** The id in `url(#id)` or `#id`, the form a reference to another element is written in. */
+const referenceOf = (value: string | undefined): string | undefined =>
+  value === undefined ? undefined : (URL_REFERENCE.exec(value) ?? /^#(.+)$/.exec(value))?.[1];
 
 /** SVG attribute -> native prop, for the presentation attributes shapes and groups share. */
 const PRESENTATION: Record<string, string> = {
@@ -419,6 +445,7 @@ export function nativeProps(
   if (propList.length > 0) props['propList'] = propList;
 
   geometry(tag, attrs, props);
+  references(tag, attrs, props);
   if (tag === 'polyline' || tag === 'polygon') {
     props['d'] = pointsToPath(attrs['points'] ?? '', tag === 'polygon');
   }
@@ -427,6 +454,24 @@ export function nativeProps(
     if (matrix) props['matrix'] = matrix;
   }
   return props;
+}
+
+/**
+ * How elements point at each other: an element's `id` is the `name` native knows it by, and a
+ * `mask`, a `clip-path` and a `<use>` name the element they use, as react-native-svg sends them.
+ */
+function references(
+  tag: string,
+  attrs: Readonly<Record<string, string>>,
+  props: Record<string, unknown>,
+): void {
+  if (attrs['id']) props['name'] = attrs['id'];
+  const mask = referenceOf(attrs['mask']);
+  if (mask) props['mask'] = mask;
+  const clipPath = referenceOf(attrs['clip-path']);
+  if (clipPath) props['clipPath'] = clipPath;
+  if (tag === 'mask') Object.assign(props, maskProps(attrs));
+  if (tag === 'use') props['href'] = referenceOf(attrs['href'] ?? attrs['xlink:href']);
 }
 
 /**
@@ -454,16 +499,25 @@ function presentationValue(prop: string, value: string, context: SvgContext): un
   if (prop === 'strokeLinecap') return own(LINECAP, value) ?? 0;
   if (prop === 'strokeLinejoin') return own(LINEJOIN, value) ?? 0;
   if (prop === 'fillRule' || prop === 'clipRule') return own(FILL_RULE, value) ?? 1;
-  if (prop === 'strokeDasharray')
-    return value
-      .trim()
-      .split(/[\s,]+/)
-      .filter(Boolean);
+  if (prop === 'strokeDasharray') return dashes(value);
   return prop in NUMERIC ? numberFor(prop, value) : value;
 }
+
+/** A dash pattern as a list of lengths, or null for `none`, which is a solid line. */
+function dashes(value: string): string[] | null {
+  if (value.trim() === 'none') return null;
+  return value
+    .trim()
+    .split(/[\s,]+/)
+    .filter(Boolean);
+}
+
+const OPACITY: ReadonlySet<string> = new Set(['opacity', 'fillOpacity', 'strokeOpacity']);
 
 /** The attribute as the float Android's view manager takes, or the default it applies. */
 function numberFor(prop: string, value: string): number {
   const number = Number.parseFloat(value);
-  return Number.isNaN(number) ? NUMERIC[prop]! : number;
+  if (Number.isNaN(number)) return NUMERIC[prop]!;
+  // `50%` is half, for an opacity, as react-native-svg's `extractOpacity` reads it.
+  return OPACITY.has(prop) && value.trim().endsWith('%') ? number / 100 : number;
 }

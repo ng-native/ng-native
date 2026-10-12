@@ -13,7 +13,7 @@ export const WORDMARK =
 export const TINTED =
   '<svg viewBox="0 0 24 24"><defs><radialGradient id="r">' +
   '<stop offset="0%" stop-color="currentColor" /><stop offset="100%" stop-color="#000000" stop-opacity="0" />' +
-  '</radialGradient></defs><mask id="a" /><mask id="b" /><circle cx="12" cy="12" r="10" fill="url(#r)" /></svg>';
+  '</radialGradient></defs><filter id="a" /><filter id="b" /><circle cx="12" cy="12" r="10" fill="url(#r)" /></svg>';
 
 @Component({
   selector: 'x-wordmark-host',

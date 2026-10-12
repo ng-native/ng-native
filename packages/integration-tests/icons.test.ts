@@ -258,13 +258,13 @@ describe('a wordmark in the tree', () => {
   });
 
   it('warns about an element it does not draw, once, and not about a title or a stop', () => {
-    // Two icons, each with two masks.
+    // Two icons, each with two filters.
     assert.deepEqual(
       warnings.filter((warning) => warning.includes('does not draw')),
       [
-        '[angular-native] <ng-icon> does not draw <mask>, so it is left out of the icon. ' +
-          'It draws svg, g, path, circle, ellipse, rect, line, polyline, polygon, defs, ' +
-          'linearGradient, radialGradient, text, tspan and stop.',
+        '[angular-native] <ng-icon> does not draw <filter>, so it is left out of the icon. ' +
+          'It draws svg, g, path, circle, ellipse, rect, line, polyline, polygon, defs, mask, ' +
+          'clipPath, use, linearGradient, radialGradient, text, tspan and stop.',
       ],
     );
   });
@@ -361,6 +361,65 @@ describe('translating an icon', () => {
     assert.equal(props['opacity'], 1);
     assert.equal(props['strokeDashoffset'], 0);
     assert.equal(props['strokeMiterlimit'], 4);
+  });
+
+  it('reads an opacity written as a percentage as a fraction, as react-native-svg does', () => {
+    const props = nativeProps(
+      'path',
+      { opacity: '50%', 'fill-opacity': '25%', 'stroke-opacity': ' 100% ' },
+      colour,
+    );
+    assert.deepEqual(pick(props, 'opacity', 'fillOpacity', 'strokeOpacity'), {
+      opacity: 0.5,
+      fillOpacity: 0.25,
+      strokeOpacity: 1,
+    });
+  });
+
+  it('reads stroke-dasharray="none" as no dashes, not a dash named none', () => {
+    assert.equal(
+      nativeProps('path', { 'stroke-dasharray': 'none' }, colour)['strokeDasharray'],
+      null,
+    );
+    assert.deepEqual(
+      nativeProps('path', { 'stroke-dasharray': '4 2' }, colour)['strokeDasharray'],
+      ['4', '2'],
+    );
+  });
+
+  it('names a shape by its id, and points it at the mask or clip path it uses', () => {
+    const props = nativeProps(
+      'path',
+      { id: 'star', mask: 'url(#m)', 'clip-path': 'url(#c)', d: 'M0 0' },
+      colour,
+    );
+    assert.deepEqual(pick(props, 'name', 'mask', 'clipPath', 'propList'), {
+      name: 'star',
+      mask: 'm',
+      clipPath: 'c',
+      propList: undefined,
+    });
+  });
+
+  it('reads the units and type of a mask as the integers native takes', () => {
+    const props = nativeProps(
+      'mask',
+      { id: 'm', x: '0', width: '18', maskUnits: 'userSpaceOnUse', 'mask-type': 'alpha' },
+      colour,
+    );
+    assert.deepEqual(
+      pick(props, 'name', 'x', 'y', 'width', 'height', 'maskUnits', 'maskContentUnits', 'maskType'),
+      {
+        name: 'm',
+        x: '0',
+        y: '-10%',
+        width: '18',
+        height: '120%',
+        maskUnits: 1,
+        maskContentUnits: 1,
+        maskType: 1,
+      },
+    );
   });
 
   it('reads an unknown fill rule as nonzero, the SVG default', () => {
