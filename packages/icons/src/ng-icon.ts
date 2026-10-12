@@ -20,21 +20,35 @@
  * The two things ng-icons expresses in CSS become inputs here. `color` is set on the host, which
  * is what native paints a `currentColor` brush from - so a bound colour changes every stroke in
  * the icon without re-parsing it. `strokeWidth` fills in `var(--ng-icon__stroke-width, 1.5)`,
- * which is how the heroicons outline set carries its weight.
+ * which is how the heroicons outline set carries its weight. `provideNgIconsConfig` sets the
+ * defaults of both and of `size`, and `provideNgIconLoader` is asked for a name no `provideIcons`
+ * has, as on the web.
  */
 import {
   Component,
   ElementRef,
+  ErrorHandler,
+  HostAttributeToken,
+  Injector,
   Renderer2,
   computed,
   effect,
   inject,
   input,
   numberAttribute,
+  runInInjectionContext,
+  signal,
+  untracked,
   type Signal,
 } from '@angular/core';
 import { claimHost, type Engine, type EngineNode, HostEngine } from '@ng-native/fabric';
-import { NgIconsToken } from '@ng-icons/core';
+import {
+  NgIconCacheToken,
+  NgIconConfigToken,
+  NgIconLoaderToken,
+  NgIconsToken,
+  type NgIconLoader,
+} from '@ng-icons/core';
 import { parseSvg, type SvgNode } from './parse-svg.ts';
 import { registerSvgComponents } from './svg-elements.ts';
 import {
@@ -79,23 +93,41 @@ function pointsOf(value: number | string | undefined): number | undefined {
   return Number.isNaN(points) ? undefined : points;
 }
 
+/** A loader's answer as a promise: it may be a string, a promise or an observable. */
+function settled(result: unknown): Promise<string | undefined> {
+  if (typeof result === 'string') return Promise.resolve(result);
+  const observable = result as { subscribe?: unknown } | null;
+  if (typeof observable?.subscribe !== 'function')
+    return Promise.resolve(result as Promise<string>);
+  // The last value once it completes, which is what ng-icons' `toPromise()` waits for.
+  return new Promise((resolve, reject) => {
+    let last: string | undefined;
+    (result as { subscribe(observer: object): void }).subscribe({
+      next: (value: string) => (last = value),
+      error: reject,
+      complete: () => resolve(last),
+    });
+  });
+}
+
 @Component({
   selector: 'ng-icon',
   template: '',
   /*
    * With no size it is as big as the text around it, which is what an icon is on the web:
-   * `@ng-icons/core` sizes one `1em`, and a library sizes its icons with a font size. A `size`
-   * is an inline style, which beats this.
+   * `@ng-icons/core` sizes one `1em`, and a library sizes its icons with a font size. An
+   * `<ng-icon-stack size>` sets `--ng-icon__size` for the icons in it. A `size` is an inline
+   * style, which beats both.
    */
   styles: `
     :host {
-      width: 1em;
-      height: 1em;
+      width: var(--ng-icon__size, 1em);
+      height: var(--ng-icon__size, 1em);
     }
   `,
   host: {
     '[style]': 'style()',
-    '[color]': 'color()',
+    '[style.color]': 'color()',
     '[bbWidth]': 'box()',
     '[bbHeight]': 'box()',
     '[minX]': 'viewBox().minX',
@@ -104,9 +136,9 @@ function pointsOf(value: number | string | undefined): number | undefined {
     '[vbHeight]': 'viewBox().vbHeight',
     '[align]': 'viewBox().align',
     '[meetOrSlice]': 'viewBox().meetOrSlice',
-    '[accessible]': 'accessibilityLabel() !== undefined',
-    '[accessibilityRole]': "accessibilityLabel() === undefined ? undefined : 'image'",
-    '[accessibilityLabel]': 'accessibilityLabel()',
+    '[accessible]': 'label() !== undefined',
+    '[accessibilityRole]': "label() === undefined ? undefined : 'image'",
+    '[accessibilityLabel]': 'label()',
   },
 })
 export class NgIcon {
@@ -115,6 +147,16 @@ export class NgIcon {
   private readonly engine = inject(HostEngine);
   /** Every `provideIcons` in scope, innermost last, which is how ng-icons layers them. */
   private readonly icons = inject(NgIconsToken, { optional: true }) ?? [];
+  /** `provideNgIconsConfig`: the size, colour and stroke width an icon has without its own. */
+  private readonly config = inject(NgIconConfigToken, { optional: true }) ?? {};
+  /** `provideNgIconLoader`: where an icon no `provideIcons` has comes from. */
+  private readonly loader = inject(NgIconLoaderToken, { optional: true });
+  /** `withCaching()`: what the loader already answered, so it is asked once per name. */
+  private readonly cache = inject(NgIconCacheToken, { optional: true });
+  private readonly injector = inject(Injector);
+  private readonly errors = inject(ErrorHandler);
+  /** A static `aria-label`, which labels the icon as `accessibilityLabel` does. */
+  private readonly ariaLabel = inject(new HostAttributeToken('aria-label'), { optional: true });
 
   /** The key the icon was provided under: `heroBookOpen`, or `hero-book-open`. */
   readonly name = input<string>();
@@ -125,17 +167,29 @@ export class NgIcon {
    * `size="32"` is read as the number it spells. With none, the icon is `1em`: as big as the
    * text around it, and sized by a `font-size` on it or above it, or by a width and height.
    */
-  readonly size = input(undefined, {
+  readonly size = input(pointsOf(this.config.size), {
     transform: (value: number | string | undefined) => pointsOf(value),
   });
-  /** What a `currentColor` stroke or fill paints as. Native resolves it, so binding is cheap. */
-  readonly color = input<string>();
+  /**
+   * What a `currentColor` stroke or fill paints as. It is the host's `color` style, so a `var()`
+   * resolves against the tokens in scope, and native paints it, so binding is cheap.
+   */
+  readonly color = input<string | undefined>(this.config.color);
   /** Fills in `var(--ng-icon__stroke-width, …)`, which is how an outline set carries its weight. */
-  readonly strokeWidth = input<number | string>();
+  readonly strokeWidth = input<number | string | undefined>(this.config.strokeWidth);
   /** Absent leaves the icon out of the accessibility tree, which is right for a decorative one. */
   readonly accessibilityLabel = input<string>();
 
-  /** The size as an inline style, or nothing for the stylesheet's `1em` to stand. */
+  /** The label a screen reader reads: the input, or a static `aria-label`. */
+  protected readonly label = computed(
+    () => this.accessibilityLabel() ?? this.ariaLabel ?? undefined,
+  );
+  /** The markup the loader answered with, and the name it was asked for. */
+  private readonly loaded = signal<{ name: string; svg: string | undefined } | undefined>(
+    undefined,
+  );
+
+  /** The size as an inline style, or nothing for the stylesheet's size to stand. */
   protected readonly style = computed(() => {
     const size = this.size();
     return size === undefined ? {} : { width: size, height: size };
@@ -149,18 +203,13 @@ export class NgIcon {
     const name = this.name();
     if (name === undefined) return undefined;
 
-    const key = toPropertyName(name);
-    // Reversed, because a nearer `provideIcons` should win over one further up the tree.
-    for (const set of [...this.icons].reverse()) {
-      const markup = own(set, key);
-      if (markup) return markup;
-    }
-    if (typeof ngDevMode !== 'undefined' && ngDevMode) {
-      console.warn(
-        `[angular-native] no icon named ${name}. Pass it to provideIcons() from the set it ` +
-          `belongs to, the same way you would on the web.`,
-      );
-    }
+    const provided = this.provided(name);
+    if (provided) return provided;
+    const loaded = this.loaded();
+    if (loaded?.name === name && loaded.svg) return loaded.svg;
+    // Still loading: the warning waits for the loader's answer.
+    if (this.loader && loaded?.name !== name) return undefined;
+    this.reportMissing(name);
     return undefined;
   });
 
@@ -185,6 +234,60 @@ export class NgIcon {
     // The shapes are created rather than templated: an icon's tree is data, and a template that
     // could express it would be a component per tag with a recursive switch between them.
     effect(() => this.draw());
+    effect(() => this.load());
+  }
+
+  /** The icon `provideIcons` has under this name, the nearest one first. */
+  private provided(name: string): string | undefined {
+    const key = toPropertyName(name);
+    // Reversed, because a nearer `provideIcons` should win over one further up the tree.
+    for (const set of [...this.icons].reverse()) {
+      const markup = own(set, key);
+      if (markup) return markup;
+    }
+    return undefined;
+  }
+
+  /** Asks the loader for an icon no `provideIcons` has, as `@ng-icons/core` does. */
+  private load(): void {
+    const name = this.name();
+    if (!this.loader || this.svg() !== undefined || name === undefined) return;
+    if (this.provided(name)) return;
+    this.request(this.loader, name).then(
+      (svg) => {
+        // The name changed while the loader was answering, so this answer is for another icon.
+        if (this.name() === name) this.loaded.set({ name, svg });
+      },
+      (error: unknown) => this.errors.handleError(error),
+    );
+  }
+
+  /** The loader's answer for a name, through the `withCaching()` cache when there is one. */
+  private async request(loader: NgIconLoader, name: string): Promise<string | undefined> {
+    const cached = this.cache?.get(name);
+    if (cached !== undefined) return cached;
+    // Untracked, so a signal the loader reads does not ask it again when that signal changes.
+    const answer = settled(
+      untracked(() => runInInjectionContext(this.injector, () => loader(name))),
+    );
+    this.cache?.set(name, answer as Promise<string>);
+    try {
+      const svg = await answer;
+      if (svg !== undefined) this.cache?.set(name, svg);
+      return svg;
+    } catch (error) {
+      // Not kept, so the next icon with this name asks again.
+      this.cache?.delete(name);
+      throw error;
+    }
+  }
+
+  private reportMissing(name: string): void {
+    if (typeof ngDevMode === 'undefined' || !ngDevMode) return;
+    console.warn(
+      `[angular-native] no icon named ${name}. Pass it to provideIcons() from the set it ` +
+        `belongs to, the same way you would on the web, or load it with provideNgIconLoader().`,
+    );
   }
 
   private draw(): void {
