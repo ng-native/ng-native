@@ -296,7 +296,9 @@ export class NativeStackOutlet implements RouterOutletContract, OnInit {
     this.fillScreen(screen);
     // Subscribed now, so it is the newest answer and the first asked: a back dismisses the page
     // before it pops anything in the tab under it.
-    const stopBack = back.handle(() => this.dismissPresentedPage());
+    const stopBack = back.handle((from) =>
+      from === 'button' && this.refuseBack(screen) ? true : this.dismissPresentedPage(),
+    );
     this.presentedPage = {
       route,
       ref,
@@ -761,12 +763,16 @@ export class NativeStackOutlet implements RouterOutletContract, OnInit {
    */
   private refusesButton(): boolean {
     if (this.entries.length < 2 || !this.isShowing()) return false;
-    const screen = this.top!.screen as EngineNode;
-    if (screen.props['preventNativeDismiss'] !== true) return false;
+    return this.refuseBack(this.top!.screen);
+  }
+
+  /** Refuses Android's Back for a screen that sets `preventNativeDismiss`, and tells its page. */
+  private refuseBack(screen: unknown): boolean {
+    if (!refuses(screen)) return false;
     // The native engine's own entry point for an event, the one Fabric calls. Not on
     // `HostEngine`, because only a native host has a screen to refuse with.
     const native = this.engine as { dispatchEvent?: NativeDispatch } | null;
-    native?.dispatchEvent?.(screen, 'topNativeDismissCancelled', { dismissCount: 1 });
+    native?.dispatchEvent?.(screen as EngineNode, 'topNativeDismissCancelled', { dismissCount: 1 });
     return true;
   }
 
