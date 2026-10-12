@@ -89,7 +89,9 @@ require(${JSON.stringify(relativeImport)});
 `;
 }
 
-const CSS_URL = /url\(\s*(["']?)([^"')]+)\1\s*\)/g;
+/** A `url()`, quoted either way or bare. A quoted one can have a bracket in it. */
+const CSS_URL = /url\(\s*(?:"([^"]*)"|'([^']*)'|([^"')\s]+))\s*\)/g;
+const urlIn = (double, single, bare) => double ?? single ?? bare;
 /** A url that is not a file beside the sheet: inline data, a fragment, a rooted path, a scheme. */
 const NOT_BESIDE = /^(data:|[#/]|[a-z][a-z0-9+.-]*:)/i;
 
@@ -120,7 +122,8 @@ async function withExportedUrls(result, options) {
   const { exported, left } = await exportedFiles(css.code, options);
   if (!exported.size) return { result, read: [], left };
 
-  css.code = css.code.replace(CSS_URL, (whole, _quote, url) => {
+  css.code = css.code.replace(CSS_URL, (whole, ...quoted) => {
+    const url = urlIn(...quoted);
     const asset = exported.get(fileOf(url));
     const rest = url.slice(url.search(/[?#]|$/));
     return asset ? `url("${TO_BUNDLE_ROOT}${encodeURI(asset.path)}${rest}")` : whole;
@@ -128,7 +131,7 @@ async function withExportedUrls(result, options) {
   const dependencies = [...exported.keys()].map(dependencyOn);
   return {
     result: { ...result, dependencies: [...result.dependencies, ...dependencies] },
-    read: [...exported.values()].map((asset) => asset.target),
+    read: [...exported.values()].flatMap((asset) => asset.files),
     left,
   };
 }
@@ -138,8 +141,8 @@ async function exportedFiles(code, { filename, projectRoot, assetExts, assetData
   const beside = path.dirname(path.resolve(projectRoot, filename));
   const exported = new Map();
   let left = 0;
-  for (const [, , url] of code.matchAll(CSS_URL)) {
-    const file = fileOf(url);
+  for (const [, ...quoted] of code.matchAll(CSS_URL)) {
+    const file = fileOf(urlIn(...quoted));
     if (file === null || exported.has(file)) continue;
     const target = path.resolve(beside, file);
     const data = isAsset(target, assetExts)
@@ -151,7 +154,8 @@ async function exportedFiles(code, { filename, projectRoot, assetExts, assetData
       continue;
     }
     const location = data.httpServerLocation.replace(/\.\.\//g, '_');
-    exported.set(file, { target, path: `${location}/${data.name}.${data.type}` });
+    // Every size of an image is in the hash, so each is a file the sheet was made from.
+    exported.set(file, { files: data.files, path: `${location}/${data.name}.${data.type}` });
   }
   return { exported, left };
 }

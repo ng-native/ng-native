@@ -320,6 +320,37 @@ describe("the files a page's stylesheet names, in a release build", () => {
     }
   });
 
+  it('follows a quoted url() with a bracket in the file name', async () => {
+    const font = Buffer.from('a font');
+    const { run, warnings, cleanup } = project(
+      `@font-face { font-family: F; src: url("./font(v2).woff2"); }`,
+      { 'web/font(v2).woff2': font },
+    );
+    try {
+      const sheet = await run();
+      assert.ok(
+        sheet.css.includes(`url("../../../assets/web/font(v2).${md5(font)}.woff2")`),
+        sheet.css,
+      );
+      assert.deepEqual(sheet.dependencies.slice(-1), ['./font(v2).woff2']);
+      assert.deepEqual(warnings, []);
+    } finally {
+      cleanup();
+    }
+  });
+
+  it('is stale once any size of an image changes, as the name has a hash of them all', async () => {
+    const { run, cleanup } = project(`.a { background: url('./pic.png'); }`, {
+      'web/pic.png': PNG,
+      'web/pic@2x.png': PNG,
+    });
+    try {
+      assert.deepEqual((await run()).resources.sort(), ['web/pic.png', 'web/pic@2x.png']);
+    } finally {
+      cleanup();
+    }
+  });
+
   it('leaves alone what is not a file beside the sheet', async () => {
     const css = `.a { background: url(data:image/png;base64,AAAA), url(https://example.com/a.png), url(/a.png), url(#a); }`;
     const { run, cleanup } = project(css);
