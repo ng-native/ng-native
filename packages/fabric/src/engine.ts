@@ -5857,6 +5857,11 @@ export class Engine implements HostEngine {
   private looseText(parent: EngineNode, text: EngineNode, drawnBy = 'text'): EngineNode | null {
     if (!trimEnds(text.text)) return null;
     let box = text.box;
+    // One made for another element, before the view was registered again, is done with.
+    if (box && box.name !== drawnBy) {
+      if (box.committed) this.forgetCommitted(box);
+      box = undefined;
+    }
     if (!box) {
       box = new RetainedNode('element', drawnBy, this);
       box.anonymous = true;

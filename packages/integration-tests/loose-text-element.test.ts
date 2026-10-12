@@ -73,6 +73,28 @@ describe('a view registered with looseText', () => {
     );
   });
 
+  it('draws text already there by another element once the view names another', () => {
+    registerViewName('x-drawn-twice', 'DrawnTwice', undefined, { looseText: 'x-drawn-span' });
+    const fabric = createFakeFabric();
+    const engine = new Engine(fabric, 1);
+    const view = engine.createElement('x-drawn-twice');
+    engine.appendChild(engine.root, view);
+    const run = engine.createText('One');
+    engine.appendChild(view, run);
+    engine.commit();
+    const kinds = () => fabric.committed[0]!.children.map((child) => child.viewName);
+    assert.deepEqual(kinds(), ['DrawnSpan']);
+    // The element kept for the text is the one named when it was made: not the one to keep.
+    registerViewName('x-drawn-twice', 'DrawnTwice');
+    engine.setText(run, 'Two');
+    engine.commit();
+    assert.deepEqual(kinds(), ['Paragraph']);
+    registerViewName('x-drawn-twice', 'DrawnTwice', undefined, { looseText: 'x-drawn-span' });
+    engine.setText(run, 'Three');
+    engine.commit();
+    assert.deepEqual(drawn(fabric.committed[0]!), [['DrawnSpan', 'Three']]);
+  });
+
   it('leaves a view that names none with a paragraph for its text', () => {
     const fabric = createFakeFabric();
     const engine = new Engine(fabric, 1);
