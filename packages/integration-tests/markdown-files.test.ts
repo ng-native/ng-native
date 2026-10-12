@@ -199,7 +199,7 @@ describe('the Metro transformer', () => {
       serializer: { getPolyfills: () => [] },
     });
     assert.ok(config.resolver.sourceExts.includes('md'));
-    assert.deepEqual(config.resolver.assetExts, ['png']);
+    assert.ok(!config.resolver.assetExts.includes('md'));
   });
 });
 

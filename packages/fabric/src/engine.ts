@@ -1554,6 +1554,8 @@ export function registerViewName(
   for (const name of typeof viewName === 'string' ? [viewName] : [viewName.ios, viewName.android]) {
     if (defaultProps) DEFAULT_PROPS[name] = defaultProps;
     if (options?.textContent) TEXT_CONTENT_PROPS[name] = options.textContent;
+    if (options?.looseText) LOOSE_TEXT[name] = options.looseText;
+    else delete LOOSE_TEXT[name];
   }
 }
 
@@ -1572,7 +1574,16 @@ export interface ViewNameOptions {
    * typed wrapper for it, says so with `keepNativeView`.
    */
   readonly yieldsToComponents?: boolean;
+  /**
+   * The element a run of text written straight into the view is drawn by, where that is not a
+   * paragraph: an SVG text draws its words by a span, which is no child a template wrote. The
+   * element is the engine's own, as the paragraph a view is given for its loose text is.
+   */
+  readonly looseText?: string;
 }
+
+/** The element loose text in a view is drawn by, for the views that say. See `ViewNameOptions`. */
+const LOOSE_TEXT: Record<string, string> = {};
 
 /** The registered names that give way to a component's own host. See `ViewNameOptions`. */
 const YIELDING = new Set<string>();
@@ -5839,15 +5850,20 @@ export class Engine implements HostEngine {
       if (text.box && text.box !== parent) text.box = undefined;
       return this.reconcileUnder(parent, text, context);
     }
-    const box = this.looseText(parent, text);
+    const box = this.looseText(parent, text, LOOSE_TEXT[viewName]);
     return box ? this.reconcileUnder(parent, box, context) : null;
   }
 
-  private looseText(parent: EngineNode, text: EngineNode): EngineNode | null {
+  private looseText(parent: EngineNode, text: EngineNode, drawnBy = 'text'): EngineNode | null {
     if (!trimEnds(text.text)) return null;
     let box = text.box;
+    // One made for another element, before the view was registered again, is done with.
+    if (box && box.name !== drawnBy) {
+      if (box.committed) this.forgetCommitted(box);
+      box = undefined;
+    }
     if (!box) {
-      box = new RetainedNode('element', 'text', this);
+      box = new RetainedNode('element', drawnBy, this);
       box.anonymous = true;
       box.children = [text];
       text.box = box;
@@ -5856,6 +5872,8 @@ export class Engine implements HostEngine {
     // The text is not under the box in the tree, so a change to it never marked the box.
     if (!this.isClean(text)) {
       box.subtreeDirty = true;
+      // An element that says its words as a prop is merged again for them.
+      if (drawnBy !== 'text') box.propsDirty = true;
       // Nor had it merged again where the text became one word, or stopped being one.
       if (box.oneWord !== undefined && unbroken(box) !== box.oneWord) box.propsDirty = true;
     }

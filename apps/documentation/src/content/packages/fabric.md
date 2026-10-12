@@ -37,7 +37,11 @@ an unknown _component_, not an unknown element, which compiles to an empty templ
 A third-party Fabric component - `react-native-screens`, for instance - is added with
 `registerViewName('rns-screen', 'RNSScreen')`, optionally with `defaultProps` for a native view
 whose React wrapper normally supplies a base style in JavaScript (`ScrollView` and `Modal` both need
-this, and it is already applied for you). `registerPlatformComponents(Platform.OS)` swaps in the
+this, and it is already applied for you). A fourth argument says what else the engine needs to
+know about the view: `textContent` names the prop a view reads its text from where it takes no
+children, and `looseText` names the element that draws text written straight into the view where
+that is not a paragraph, as an SVG text draws its words by a span.
+`registerPlatformComponents(Platform.OS)` swaps in the
 handful of Android-specific names (`Switch` to `AndroidSwitch`, `TextInput` to `AndroidTextInput`,
 and so on) and is one of the lines [`mount()`'s own
 example](/packages/platform/bootstrapping) calls before mounting.

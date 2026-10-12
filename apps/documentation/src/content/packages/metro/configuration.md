@@ -24,6 +24,9 @@ module.exports = withAngularNative(getDefaultConfig(__dirname));
   It also takes `html` back out of `config.resolver.assetExts`, where Expo lists it for its DOM
   components: Metro checks assets first, and a template bundled as an asset never reaches the
   transformer.
+- Adds `woff` and `woff2` to `config.resolver.assetExts`, so a web font a
+  [DOM component](/packages/expo/dom-components)'s stylesheet names in a `url()` is exported with
+  its page.
 - Wraps Expo's transform worker (`config.transformerPath`) so that, in dev and on native, a
   stylesheet reaches the transformer above. Expo's worker otherwise turns every native stylesheet
   into an empty module before any transformer sees it, which would leave an edited `styleUrl`

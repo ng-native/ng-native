@@ -207,6 +207,14 @@ the web view.
 - **With `eas update`**, the pages go wherever Expo puts DOM components' pages, and the web view
   looks for them where Expo would. This path has not been tested yet.
 
+A font or an image a page's stylesheet names in a `url()`, relative to the sheet, ships with the
+page: `@font-face { src: url('./files/inter.woff2') }` from a package's stylesheet, or a
+`background: url('./paper.png')` of your own. In a release build each such file is written into the
+page's folder under a name with a hash of its contents, and the `url()` is pointed at it. It has to
+be a kind of file Metro takes as an asset (`config.resolver.assetExts`, to which `withAngularNative`
+adds `woff` and `woff2`); a `url()` to any other file, or to one that is not there, is left as
+written, with Expo's warning that it is not supported.
+
 Two pieces make this work, both in `@ng-native/metro`'s transformer. Imported from native code, a
 `'use dom'` file becomes the reference to its page and carries the same marker Expo's `'use dom'`
 plugin records, which is how the export finds it. Built for the web, the page's entry loads the
