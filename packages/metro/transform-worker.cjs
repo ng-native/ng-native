@@ -11,7 +11,11 @@
  */
 const { readFileSync } = require('node:fs');
 const path = require('node:path');
-const { isAngularDomComponent, domComponentEntry } = require('./dom-component.cjs');
+const {
+  isAngularDomComponent,
+  domComponentEntry,
+  withExportedUrls,
+} = require('./dom-component.cjs');
 const { withResources } = require('./resource-cache.cjs');
 
 const IS_STYLESHEET = /\.(s?css|sass)$/;
@@ -71,6 +75,82 @@ function withLibraryStyles(config, options) {
   };
 }
 
+/** A stylesheet of a DOM component's page in a release build, which Expo writes out as a file. */
+const isPageStylesheet = (filename, options) =>
+  !options.dev &&
+  options.platform === 'web' &&
+  options.type !== 'asset' &&
+  typeof options.customTransformOptions?.dom === 'string' &&
+  IS_STYLESHEET.test(filename);
+
+/**
+ * Expo's stylesheet, with the files its `url()`s name exported: see `withExportedUrls`.
+ *
+ * Expo warns that each such `url()` is not supported. The warnings are held until it is known
+ * whether every one was exported, and said only when one was not.
+ */
+async function pageStylesheet(expo, config, projectRoot, filename, data, options) {
+  const held = holdUnsupported(filename);
+  let result;
+  try {
+    result = await require(expo).transform(config, projectRoot, filename, data, options);
+  } finally {
+    held.stop();
+  }
+  const { getUniversalAssetData } = require(path.join(path.dirname(expo), 'getAssets'));
+  const exported = await withExportedUrls(result, {
+    filename,
+    projectRoot,
+    assetExts: config.angularNativeAssetExts ?? [],
+    // As Expo's asset transformer asks for a DOM component's asset in an export.
+    assetData: (file, local) =>
+      getUniversalAssetData(file, local, config.assetPlugins, 'web', EXPORT_PUBLIC_PATH, true),
+  });
+  if (exported.left) for (const args of held.warnings) console.warn(...args);
+  return exported.read.length
+    ? { ...exported.result, [URL_FILES]: exported.read }
+    : exported.result;
+}
+
+/** The sheets whose warnings are being held, and what `console.warn` was before the first. */
+const holding = new Map();
+let warn;
+
+/**
+ * Hold Expo's "not supported" warnings about `filename` until `stop()`. By the file the warning
+ * names, and with `console.warn` put back only once no sheet is held: Metro transforms several
+ * files at once in one process when it runs without workers.
+ */
+function holdUnsupported(filename) {
+  const warnings = [];
+  if (holding.size === 0) {
+    warn = console.warn;
+    console.warn = (...args) => {
+      const message = String(args[0]);
+      const about = UNSUPPORTED.test(message)
+        ? [...holding].find(([file]) => message.includes(`(${file}:`))
+        : undefined;
+      if (about) about[1].push(args);
+      else warn(...args);
+    };
+  }
+  holding.set(filename, warnings);
+  return {
+    warnings,
+    stop() {
+      holding.delete(filename);
+      if (holding.size === 0) console.warn = warn;
+    },
+  };
+}
+
+const UNSUPPORTED = /^Importing local resources in CSS is not supported yet/;
+
+/** MUST MATCH `@expo/metro-config`'s `asset-transformer`, for a DOM component in an export. */
+const EXPORT_PUBLIC_PATH = '/assets?export_path=assets';
+/** Where a result carries the files its `url()`s named, as far as `transform` below. */
+const URL_FILES = Symbol('urlFiles');
+
 /** The file through Expo's worker, or through the one under it that runs our transformer. */
 function transformFile(config, projectRoot, filename, data, options) {
   const expo = upstreamPath(config, projectRoot);
@@ -84,7 +164,11 @@ function transformFile(config, projectRoot, filename, data, options) {
     options.type !== 'asset' &&
     IS_STYLESHEET.test(filename) &&
     !IS_CSS_MODULE.test(filename);
-  if (!ours) return require(expo).transform(config, projectRoot, filename, data, options);
+  if (!ours) {
+    return isPageStylesheet(filename, options)
+      ? pageStylesheet(expo, config, projectRoot, filename, data, options)
+      : require(expo).transform(config, projectRoot, filename, data, options);
+  }
 
   return innerWorker(expo).transform(config, projectRoot, filename, data, options);
 }
@@ -94,7 +178,7 @@ module.exports = {
   // change: see `resource-cache.cjs`.
   transform(config, projectRoot, filename, data, options) {
     const result = transformFile(config, projectRoot, filename, data, options);
-    const done = (output) => withResources(output, projectRoot, filename);
+    const done = (output) => withResources(output, projectRoot, filename, output?.[URL_FILES]);
     return typeof result?.then === 'function' ? result.then(done) : done(result);
   },
 

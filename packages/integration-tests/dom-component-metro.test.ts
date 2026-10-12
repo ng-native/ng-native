@@ -235,3 +235,165 @@ describe("the page's entry", () => {
     );
   });
 });
+
+describe("the files a page's stylesheet names, in a release build", () => {
+  const PNG = Buffer.from(
+    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==',
+    'base64',
+  );
+  const md5 = (data: Buffer) => createHash('md5').update(data).digest('hex');
+
+  /** Our worker in front of Expo's own, over a project with a stylesheet and files beside it. */
+  function project(css: string, files: Record<string, Buffer> = {}, sheet = 'web/page.css') {
+    const root = mkdtempSync(path.join(tmpdir(), 'ng-native-page-css-'));
+    for (const [name, data] of Object.entries({ [sheet]: Buffer.from(css), ...files })) {
+      mkdirSync(path.dirname(path.join(root, name)), { recursive: true });
+      writeFileSync(path.join(root, name), data);
+    }
+    const expo = createRequire(require.resolve('expo/package.json')).resolve(
+      '@expo/metro-config/build/transform-worker/transform-worker.js',
+    );
+    const ours = require('@ng-native/metro/transform-worker.cjs') as {
+      transform(...args: unknown[]): Promise<Sheet>;
+    };
+    const config = {
+      angularNativeUpstreamTransformer: path.relative(root, expo),
+      angularNativeAssetExts: ['png', 'woff2'],
+      assetPlugins: [],
+      publicPath: '/assets',
+    };
+    const warnings: string[] = [];
+    const transform = (options: object = {}) =>
+      ours.transform(config, root, sheet, Buffer.from(css), {
+        platform: 'web',
+        dev: false,
+        type: 'module',
+        customTransformOptions: { dom: './p.ts' },
+        ...options,
+      });
+    const run = async (options: object = {}) => {
+      const warn = console.warn;
+      console.warn = (message: unknown) => warnings.push(String(message));
+      try {
+        const sheet = await transform(options);
+        return {
+          css: sheet.output[0]!.data.css?.code ?? '',
+          dependencies: sheet.dependencies.map((dependency) => dependency.name),
+          resources: (sheet.angularNativeResources ?? []).map((resource) => resource.file),
+        };
+      } finally {
+        console.warn = warn;
+      }
+    };
+    return {
+      run,
+      transform,
+      warnings,
+      cleanup: () => rmSync(root, { recursive: true, force: true }),
+    };
+  }
+
+  it('are in the bundle, and the url()s point at where the export writes them', async () => {
+    const font = Buffer.from('a font');
+    const { run, warnings, cleanup } = project(
+      `.a { background: url('./pic.png'); }
+       @font-face { font-family: F; src: url("fonts/f.woff2?v=1#x") format('woff2'); }`,
+      { 'web/pic.png': PNG, 'web/fonts/f.woff2': font },
+    );
+    try {
+      const sheet = await run();
+      // From `www.bundle/_expo/static/css`, to the name and the hash Expo's export gives a file.
+      assert.match(
+        sheet.css,
+        new RegExp(`url\\("\\.\\./\\.\\./\\.\\./assets/web/pic\\.${md5(PNG)}\\.png"\\)`),
+      );
+      assert.ok(
+        sheet.css.includes(`url("../../../assets/web/fonts/f.${md5(font)}.woff2?v=1#x")`),
+        sheet.css,
+      );
+      assert.deepEqual(sheet.dependencies.slice(-2), ['./pic.png', './fonts/f.woff2']);
+      assert.deepEqual(warnings, [], "and Expo's warning that they are not supported is not said");
+      // The sheet holds each file's hash, so a cached transform is stale once a file changes.
+      assert.deepEqual(sheet.resources, ['web/pic.png', 'web/fonts/f.woff2']);
+    } finally {
+      cleanup();
+    }
+  });
+
+  it('leaves alone what is not a file beside the sheet', async () => {
+    const css = `.a { background: url(data:image/png;base64,AAAA), url(https://example.com/a.png), url(/a.png), url(#a); }`;
+    const { run, cleanup } = project(css);
+    try {
+      const sheet = await run();
+      for (const url of [
+        'data:image/png;base64,AAAA',
+        'https://example.com/a.png',
+        '/a.png',
+        '#a',
+      ]) {
+        assert.ok(sheet.css.includes(`url("${url}")`), `${url} in ${sheet.css}`);
+      }
+      assert.deepEqual(sheet.resources, []);
+    } finally {
+      cleanup();
+    }
+  });
+
+  it('leaves a file that is missing, or that Metro would not take as an asset, with a warning', async () => {
+    const { run, warnings, cleanup } = project(
+      `.a { background: url('./gone.png'), url('./notes.txt'), url('./pic.png'); }`,
+      { 'web/notes.txt': Buffer.from('notes'), 'web/pic.png': PNG },
+    );
+    try {
+      const sheet = await run();
+      assert.ok(
+        sheet.css.includes('url("./gone.png")') && sheet.css.includes('url("./notes.txt")'),
+      );
+      assert.deepEqual(sheet.dependencies.slice(-1), ['./pic.png'], 'the one that can be is');
+      assert.equal(warnings.length, 3, 'as Expo said it');
+      assert.match(warnings[0]!, /not supported yet/);
+    } finally {
+      cleanup();
+    }
+  });
+
+  it('says the warning of one sheet while another, transformed with it, has none to say', async () => {
+    // Metro without workers transforms files together in one process, and `console.warn` is one.
+    const fine = project(`.a { background: url('./pic.png'); }`, { 'web/pic.png': PNG });
+    const broken = project(`.a { background: url('./gone.png'); }`, {}, 'web/other.css');
+    const said: string[] = [];
+    const warn = console.warn;
+    console.warn = (message: unknown) => said.push(String(message));
+    try {
+      await Promise.all([fine.transform(), broken.transform()]);
+      assert.equal(said.length, 1, said.join('\n'));
+      assert.match(said[0]!, /gone\.png/);
+      const mine = console.warn;
+      assert.equal((console.warn('after'), said.at(-1)), 'after', 'console.warn is put back');
+      assert.equal(console.warn, mine);
+    } finally {
+      console.warn = warn;
+      fine.cleanup();
+      broken.cleanup();
+    }
+  });
+
+  it('are left to Metro in development, and in a page that is not a DOM component', async () => {
+    const { run, cleanup } = project(`.a { background: url('./pic.png'); }`, {
+      'web/pic.png': PNG,
+    });
+    try {
+      assert.deepEqual((await run({ dev: true })).resources, []);
+      const web = await run({ customTransformOptions: {} });
+      assert.ok(web.css.includes('url("./pic.png")'), web.css);
+    } finally {
+      cleanup();
+    }
+  });
+});
+
+interface Sheet {
+  dependencies: { name: string }[];
+  output: { data: { css?: { code: string } } }[];
+  angularNativeResources?: { file: string }[];
+}

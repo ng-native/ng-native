@@ -74,7 +74,20 @@ describe('the Metro preset', () => {
     const config = base();
     config.resolver.assetExts = ['png', 'html'];
     const out = withAngularNative(config) as MetroConfig;
-    assert.deepEqual(out.resolver.assetExts, ['png']);
+    assert.ok(!out.resolver.assetExts!.includes('html'));
+    assert.ok(out.resolver.assetExts!.includes('png'));
+  });
+
+  it('lists web fonts as assets, and tells the worker what an asset is', () => {
+    // A DOM component's stylesheet names a font in a `url()`, and a file is exported with the
+    // page only as a Metro asset. Metro's own list has `ttf` and `otf` and neither of these.
+    const config = base();
+    config.resolver.assetExts = ['png', 'woff2'];
+    const out = withAngularNative(config) as MetroConfig & {
+      transformer: { angularNativeAssetExts?: string[] };
+    };
+    assert.deepEqual(out.resolver.assetExts, ['png', 'woff2', 'woff']);
+    assert.deepEqual(out.transformer.angularNativeAssetExts, ['png', 'woff2', 'woff']);
   });
 
   it('keeps the polyfills React Native ships and adds ours', () => {

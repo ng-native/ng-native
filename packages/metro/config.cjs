@@ -21,6 +21,7 @@ const { iconSetVersions } = require('./inline-icons.cjs');
 const { checkingResources } = require('./resource-cache.cjs');
 
 const SOURCE_EXTS = ['html', 'css', 'scss', 'md'];
+const WEB_FONT_EXTS = ['woff', 'woff2'];
 
 const EXPO_WORKER =
   /@expo[\\/]metro-config[\\/]build[\\/]transform-worker[\\/]transform-worker\.js$/;
@@ -638,6 +639,17 @@ function recordLibraryStyles(config, options) {
     .join('-');
 }
 
+/**
+ * A web font is what a DOM component's stylesheet most often names in a `url()`, and Metro lists
+ * neither kind as an asset. The worker is told the list: see `withExportedUrls`.
+ */
+function listWebFonts(config) {
+  const assets = config.resolver.assetExts;
+  if (!assets) return;
+  config.resolver.assetExts = [...assets, ...WEB_FONT_EXTS.filter((ext) => !assets.includes(ext))];
+  config.transformer.angularNativeAssetExts = config.resolver.assetExts;
+}
+
 function withAngularNative(config, options = {}) {
   const { workspaceRoot, projectRoot = config.projectRoot } = options;
 
@@ -704,6 +716,8 @@ function withAngularNative(config, options = {}) {
       (ext) => !SOURCE_EXTS.includes(ext),
     );
   }
+
+  listWebFonts(config);
 
   config.resolver.resolveRequest = withTypeScriptJsImports(
     config.resolver.resolveRequest,

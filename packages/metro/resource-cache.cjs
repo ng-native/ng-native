@@ -30,8 +30,8 @@ const sha1Of = (file) => createHash('sha1').update(readFileSync(file)).digest('h
  * The result, with the resources the transform of `filename` read written onto it. Named from the
  * project root, as Metro names `filename`, so a cache moved with the project still holds.
  */
-function withResources(result, projectRoot, filename) {
-  const resources = takeResourcesRead(filename).map((absolute) => ({
+function withResources(result, projectRoot, filename, alsoRead = []) {
+  const resources = [...takeResourcesRead(filename), ...alsoRead].map((absolute) => ({
     file: path.relative(projectRoot, absolute),
     sha1: sha1Of(absolute),
   }));

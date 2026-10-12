@@ -16,6 +16,7 @@
  *   itself, after a listener that passes the page's early errors to the app.
  */
 const { createHash } = require('node:crypto');
+const { existsSync } = require('node:fs');
 const path = require('node:path');
 const { pathToFileURL } = require('node:url');
 
@@ -88,4 +89,98 @@ require(${JSON.stringify(relativeImport)});
 `;
 }
 
-module.exports = { isAngularDomComponent, domComponentReference, domComponentEntry };
+const CSS_URL = /url\(\s*(["']?)([^"')]+)\1\s*\)/g;
+/** A url that is not a file beside the sheet: inline data, a fragment, a rooted path, a scheme. */
+const NOT_BESIDE = /^(data:|[#/]|[a-z][a-z0-9+.-]*:)/i;
+
+/** Where a page's stylesheet is from its `www.bundle`: Expo writes it to `_expo/static/css`. */
+const TO_BUNDLE_ROOT = '../../../';
+
+/**
+ * A page's stylesheet in a release build, with the files its `url()`s name exported beside it.
+ *
+ * Expo exports a page's stylesheet as it is written and none of what it refers to, so a font or an
+ * image named by a relative `url()` loaded from Metro in development and was missing from a
+ * release build. Each such file is made a dependency of the sheet's module, which puts it in the
+ * page's bundle as an asset and so in `www.bundle`, and the `url()` is pointed at where Expo
+ * writes it.
+ *
+ * Only a file Metro takes as an asset, by `assetExts`: anything else would be read as source.
+ * A url left alone keeps Expo's warning that it is not supported.
+ *
+ * `assetData` is Expo's own `getUniversalAssetData`, so the name and its hash are the ones the
+ * export uses. The path made from them MUST MATCH `@expo/metro-config`'s `asset-transformer`.
+ *
+ * Answers with the files it read as well: their hashes are in the sheet, so a cached transform of
+ * it is stale once one changes (see `resource-cache.cjs`). And with how many `url()`s it left.
+ */
+async function withExportedUrls(result, options) {
+  const css = result.output?.[0]?.data?.css;
+  if (!css?.code) return { result, read: [], left: 0 };
+  const { exported, left } = await exportedFiles(css.code, options);
+  if (!exported.size) return { result, read: [], left };
+
+  css.code = css.code.replace(CSS_URL, (whole, _quote, url) => {
+    const asset = exported.get(fileOf(url));
+    const rest = url.slice(url.search(/[?#]|$/));
+    return asset ? `url("${TO_BUNDLE_ROOT}${encodeURI(asset.path)}${rest}")` : whole;
+  });
+  const dependencies = [...exported.keys()].map(dependencyOn);
+  return {
+    result: { ...result, dependencies: [...result.dependencies, ...dependencies] },
+    read: [...exported.values()].map((asset) => asset.target),
+    left,
+  };
+}
+
+/** Each file the sheet's `url()`s name that the export writes, by the name the sheet gives it. */
+async function exportedFiles(code, { filename, projectRoot, assetExts, assetData }) {
+  const beside = path.dirname(path.resolve(projectRoot, filename));
+  const exported = new Map();
+  let left = 0;
+  for (const [, , url] of code.matchAll(CSS_URL)) {
+    const file = fileOf(url);
+    if (file === null || exported.has(file)) continue;
+    const target = path.resolve(beside, file);
+    const data = isAsset(target, assetExts)
+      ? await assetData(target, path.relative(projectRoot, target))
+      : null;
+    // Without a 1x file there is no file of this name in the export, only `name@2x`.
+    if (!data?.scales.includes(1)) {
+      left++;
+      continue;
+    }
+    const location = data.httpServerLocation.replace(/\.\.\//g, '_');
+    exported.set(file, { target, path: `${location}/${data.name}.${data.type}` });
+  }
+  return { exported, left };
+}
+
+const isAsset = (file, assetExts) =>
+  assetExts.includes(path.extname(file).slice(1).toLowerCase()) && existsSync(file);
+
+/** A dependency of the sheet's module on a file beside it, as Metro's own transform records one. */
+function dependencyOn(file) {
+  const name = file.startsWith('.') ? file : `./${file}`;
+  return {
+    name,
+    data: { asyncType: null, isESMImport: false, isOptional: false, locs: [], key: name },
+  };
+}
+
+/** The file a `url()` names beside its sheet, without its query or fragment, or null. */
+function fileOf(url) {
+  if (NOT_BESIDE.test(url)) return null;
+  try {
+    return decodeURI(url.split(/[?#]/, 1)[0]);
+  } catch {
+    return null;
+  }
+}
+
+module.exports = {
+  isAngularDomComponent,
+  domComponentReference,
+  domComponentEntry,
+  withExportedUrls,
+};
