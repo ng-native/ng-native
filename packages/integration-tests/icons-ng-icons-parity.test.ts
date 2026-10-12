@@ -5,7 +5,7 @@
  */
 import assert from 'node:assert/strict';
 import { after, before, describe, it } from 'node:test';
-import { ErrorHandler, signal, type Type } from '@angular/core';
+import { ErrorHandler, signal, type Type, type WritableSignal } from '@angular/core';
 import { provideNgIconLoader, withCaching } from '@ng-icons/core';
 import { of } from 'rxjs';
 import { cleanup, render, screen, settle, type FakeFabricNode } from '@ng-native/testing';
@@ -262,5 +262,34 @@ describe('an icon from provideNgIconLoader', () => {
     setting.set(1);
     await answered();
     assert.equal(calls.length, asked);
+  });
+});
+
+describe('an icon whose loader answers out of order', () => {
+  it('draws the newest answer when the name goes back to one it had', async () => {
+    const pending: ((svg: string) => void)[] = [];
+    const loader = () => new Promise<string>((resolve) => pending.push(resolve));
+    const { instance } = await render<{ name: WritableSignal<string> }>(
+      mod['IconSwap'] as Type<{ name: WritableSignal<string> }>,
+      { providers: [provideNgIconLoader(loader)] },
+    );
+    try {
+      await settle();
+      instance.name.set('b-icon');
+      await settle();
+      instance.name.set('a-icon');
+      await settle();
+      assert.equal(pending.length, 3, 'a-icon is asked for twice, with nothing cached');
+
+      pending[2]!('<svg viewBox="0 0 24 24"><circle r="1"/></svg>');
+      await settle();
+      await settle();
+      pending[0]!('<svg viewBox="0 0 24 24"><line x2="1"/></svg>');
+      await settle();
+      await settle();
+      assert.deepEqual(viewNames('swap'), ['RNSVGSvgView', 'RNSVGGroup', 'RNSVGCircle']);
+    } finally {
+      cleanup();
+    }
   });
 });

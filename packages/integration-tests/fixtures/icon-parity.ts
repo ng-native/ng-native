@@ -96,3 +96,13 @@ export class IconSurroundings {
 export class IconLoader {
   readonly swapped = signal('slow-icon');
 }
+
+/** One icon whose name changes, for a loader that answers out of order. */
+@Component({
+  selector: 'x-icon-swap',
+  imports: [NgIcon],
+  template: `<ng-icon nativeID="swap" [name]="name()" />`,
+})
+export class IconSwap {
+  readonly name = signal('a-icon');
+}

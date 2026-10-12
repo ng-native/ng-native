@@ -184,6 +184,8 @@ export class NgIcon {
   protected readonly label = computed(
     () => this.accessibilityLabel() ?? this.ariaLabel ?? undefined,
   );
+  /** How many times the icon has asked the loader, so only the newest answer is drawn. */
+  private asks = 0;
   /** The markup the loader answered with, and the name it was asked for. */
   private readonly loaded = signal<{ name: string; svg: string | undefined } | undefined>(
     undefined,
@@ -251,12 +253,13 @@ export class NgIcon {
   /** Asks the loader for an icon no `provideIcons` has, as `@ng-icons/core` does. */
   private load(): void {
     const name = this.name();
+    const ask = ++this.asks;
     if (!this.loader || this.svg() !== undefined || name === undefined) return;
     if (this.provided(name)) return;
     this.request(this.loader, name).then(
       (svg) => {
-        // The name changed while the loader was answering, so this answer is for another icon.
-        if (this.name() === name) this.loaded.set({ name, svg });
+        // The icon asked again while the loader was answering, so this answer is out of date.
+        if (ask === this.asks) this.loaded.set({ name, svg });
       },
       (error: unknown) => this.errors.handleError(error),
     );
