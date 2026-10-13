@@ -179,6 +179,9 @@ export class NativeNavigation {
    * `gestureEnabled: false` neither can.
    */
   present(commands: NavigationCommands, options: PresentOptions = {}): Promise<boolean> {
+    if (this.firstNavigationRunning()) {
+      return this.firstNavigation().then(() => this.present(commands, options));
+    }
     const { as = 'modal', presentation, ...extras } = options;
     const intent: NativeIntent = {
       stack: 'push',
