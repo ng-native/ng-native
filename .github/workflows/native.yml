@@ -146,8 +146,24 @@ jobs:
           curl -fsSL https://get.maestro.mobile.dev | MAESTRO_VERSION=2.10.0 bash
           echo "$HOME/.maestro/bin" >> "$GITHUB_PATH"
 
+      # EXPERIMENT: the simulators, as a run that booted one left them, by the iOS build they are
+      # for. CoreSimulator reads the set when it starts, so it is restarted to see a restored one.
+      - id: runtime
+        run: |
+          echo "build=$(xcrun simctl list runtimes -j | jq -r '[.runtimes[] | select(.platform == "iOS" and .isAvailable)] | sort_by(.version) | last | .buildversion')" >> "$GITHUB_OUTPUT"
+          du -sh ~/Library/Developer/CoreSimulator/Devices
+      - uses: actions/cache@v6
+        with:
+          path: ~/Library/Developer/CoreSimulator/Devices
+          key: simulators-${{ runner.os }}-${{ steps.runtime.outputs.build }}-v1
+      - run: |
+          du -sh ~/Library/Developer/CoreSimulator/Devices
+          killall -9 com.apple.CoreSimulator.CoreSimulatorService 2>/dev/null || true
+
       # The same flows the Android half walks, on a simulator created for the run.
       - name: Launch it on a simulator
+        env:
+          KEEP_SIMULATOR: '1'
         run: >
           ./examples/canary/scripts/smoke-ios.sh "$RUNNER_TEMP/canary.app" "$RUNNER_TEMP/maestro"
 
