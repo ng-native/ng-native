@@ -6,6 +6,12 @@ inputs:
     description: Passed to setup-node, which writes an .npmrc for it. Only the release sets it.
     required: false
     default: ''
+  nx-cache:
+    description: >-
+      Names the Nx task cache to restore, for a job that runs Nx tasks and saves it from main under
+      the same name. A job that does not set it restores none.
+    required: false
+    default: ''
 
 runs:
   using: composite
@@ -22,14 +28,20 @@ runs:
         node-version: 24
         registry-url: ${{ inputs.registry-url }}
 
-    # Nx's task cache, as main's latest CI run left it (ci.yml saves it). Capped, so it carries
+    # Nx's task cache, as main's latest run of the same job left it (ci.yml saves it). Each job has
+    # a cache of its own name, since each holds only the tasks that job ran. Capped, so it carries
     # what recent commits built rather than growing with every one.
-    - uses: actions/cache/restore@v6
+    - if: inputs.nx-cache != ''
+      uses: actions/cache/restore@v6
       with:
         path: .nx/cache
-        key: nx-${{ runner.os }}-${{ github.sha }}
-        restore-keys: nx-${{ runner.os }}-
-    - run: echo "NX_MAX_CACHE_SIZE=500MB" >> "$GITHUB_ENV"
+        key: nx-${{ inputs.nx-cache }}-${{ runner.os }}-${{ github.sha }}
+        restore-keys: nx-${{ inputs.nx-cache }}-${{ runner.os }}-
+    # Nx keeps its cache under the home directory unless told where: without NX_CACHE_DIRECTORY
+    # there is no `.nx/cache` to restore into or to save.
+    - run: |
+        echo "NX_MAX_CACHE_SIZE=500MB" >> "$GITHUB_ENV"
+        echo "NX_CACHE_DIRECTORY=$GITHUB_WORKSPACE/.nx/cache" >> "$GITHUB_ENV"
       shell: bash
 
     # Frozen: CI fails on a lockfile that does not match the manifests rather than quietly
