@@ -48,6 +48,15 @@ step "creating a $type on $runtime"
 udid=$(xcrun simctl create canary-smoke "$type" "$runtime") || exit 1
 trap 'xcrun simctl shutdown "$udid" 2>/dev/null; xcrun simctl delete "$udid"' EXIT
 
+# PROBE, to be removed before this is ready: what the Mac is busy with through the run.
+(while :; do
+  echo "[$(date +%T)] load $(sysctl -n vm.loadavg) top: $(ps -Ao %cpu,comm -r | sed 1d | head -7 |
+    awk '{ n = split($0, a, "/"); printf "%s=%s ", a[n], $1 }')"
+  sleep 20
+done) &
+sampler=$!
+trap 'kill "$sampler" 2>/dev/null; xcrun simctl shutdown "$udid" 2>/dev/null; xcrun simctl delete "$udid"' EXIT
+
 step "booting it"
 xcrun simctl boot "$udid" && xcrun simctl bootstatus "$udid" -b | boot_phases || exit 1
 # A fresh simulator posts follow-up notifications of its own, "Ready for Apple Intelligence" among
@@ -56,6 +65,7 @@ xcrun simctl boot "$udid" && xcrun simctl bootstatus "$udid" -b | boot_phases ||
 # them, so it is stopped here, and stays disabled when the retry below reboots the simulator.
 xcrun simctl spawn "$udid" launchctl disable system/com.apple.followupd 2>/dev/null
 xcrun simctl spawn "$udid" launchctl bootout system/com.apple.followupd 2>/dev/null
+step "followupd stopped"
 step "installing the app"
 xcrun simctl install "$udid" "$app" || exit 1
 # Maestro drives the simulator through an XCTest runner of its own, which a loaded CI Mac has
