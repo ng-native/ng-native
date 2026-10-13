@@ -5,8 +5,8 @@
  */
 import assert from 'node:assert/strict';
 import { afterEach, before, it } from 'node:test';
-import type { Type } from '@angular/core';
-import { Router, type Routes } from '@angular/router';
+import { Injector, inject, type Type } from '@angular/core';
+import { Router, UrlHandlingStrategy, type Routes, type UrlTree } from '@angular/router';
 import { cleanup, render, settle } from '@ng-native/testing';
 import { NativeNavigation } from '../router/src/native-navigation.ts';
 import { provideNativeRouter } from '../router/src/provide-native-router.ts';
@@ -50,3 +50,30 @@ for (const [when, routes] of [
     assert.equal(router.url, '/home(presented:library/7)', 'over home, with library left alone');
   });
 }
+
+it('does not wait forever when the first navigation is skipped', async () => {
+  let presented: Promise<boolean> | undefined;
+  /** Declines every url, and asks for a page while the first navigation is deciding. */
+  class Declines implements UrlHandlingStrategy {
+    private readonly injector = inject(Injector);
+    shouldProcessUrl(): boolean {
+      presented ??= this.injector.get(NativeNavigation).present('/library/7');
+      return false;
+    }
+    extract(url: UrlTree): UrlTree {
+      return url;
+    }
+    merge(url: UrlTree): UrlTree {
+      return url;
+    }
+  }
+  await render(mod['Shell'] as Type<unknown>, {
+    providers: [
+      provideNativeRouter(mod['routes'] as Routes),
+      { provide: UrlHandlingStrategy, useClass: Declines },
+    ],
+  });
+  assert.ok(presented, 'asked while the first navigation was running');
+  const answer = await Promise.race([presented, wait(200).then(() => 'still waiting')]);
+  assert.notEqual(answer, 'still waiting');
+});
