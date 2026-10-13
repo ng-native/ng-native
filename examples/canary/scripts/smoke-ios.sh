@@ -44,21 +44,9 @@ boot_phases() {
     esac
   done
 }
-# EXPERIMENT: with KEEP_SIMULATOR set, a simulator an earlier run booted (CI restores the device
-# set from its cache) is used again and left in place, so its first boot's setup is not repeated.
-udid=$(xcrun simctl list devices available -j |
-  jq -r '[.devices[][] | select(.name == "canary-smoke")][0].udid // empty')
-if [ -n "${KEEP_SIMULATOR:-}" ] && [ -n "$udid" ]; then
-  step "using the simulator an earlier run booted"
-else
-  step "creating a $type on $runtime"
-  udid=$(xcrun simctl create canary-smoke "$type" "$runtime") || exit 1
-fi
-finish() {
-  xcrun simctl shutdown "$udid" 2>/dev/null
-  if [ -z "${KEEP_SIMULATOR:-}" ]; then xcrun simctl delete "$udid"; fi
-}
-trap finish EXIT
+step "creating a $type on $runtime"
+udid=$(xcrun simctl create canary-smoke "$type" "$runtime") || exit 1
+trap 'xcrun simctl shutdown "$udid" 2>/dev/null; xcrun simctl delete "$udid"' EXIT
 
 # PROBE, to be removed before this is ready: what the Mac is busy with through the run.
 (while :; do
@@ -67,7 +55,7 @@ trap finish EXIT
   sleep 20
 done) &
 sampler=$!
-trap 'kill "$sampler" 2>/dev/null; finish' EXIT
+trap 'kill "$sampler" 2>/dev/null; xcrun simctl shutdown "$udid" 2>/dev/null; xcrun simctl delete "$udid"' EXIT
 
 step "booting it"
 xcrun simctl boot "$udid" && xcrun simctl bootstatus "$udid" -b | boot_phases || exit 1
