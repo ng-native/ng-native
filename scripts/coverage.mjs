@@ -480,9 +480,11 @@ function report(minimum, suites) {
 function main() {
   rmSync(SUMMARY, { force: true });
   const args = process.argv.slice(2);
+  // `--min 95` or `--min=95`: the second read as no floor at all, and anything passed.
+  const joined = args.find((arg) => arg.startsWith('--min='));
   const minimumAt = args.indexOf('--min');
-  const raw = args[minimumAt + 1];
-  const minimum = minimumAt === -1 ? undefined : Number(raw);
+  const raw = joined ? joined.slice('--min='.length) : args[minimumAt + 1];
+  const minimum = !joined && minimumAt === -1 ? undefined : Number(raw);
   if (
     minimum !== undefined &&
     (!raw?.trim() || !Number.isFinite(minimum) || minimum < 0 || minimum > 100)

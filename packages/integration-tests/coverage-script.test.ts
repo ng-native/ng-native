@@ -217,6 +217,14 @@ describe('coverage script integrity', () => {
       assert.equal(summary(root).overall, 0);
     }));
 
+  it('holds a floor written --min=95, as one written --min 95', () =>
+    workspace((root) => {
+      for (const report of reports) writeFileSync(path.join(root, 'coverage', report), lcov(0));
+      const result = cli(root, ['--report', '--min=95']);
+      assert.equal(result.status, 1);
+      assert.match(result.stderr, /under the 95% floor/);
+    }));
+
   it('clears every old report before the first suite and can report a completed new run', () =>
     workspace((root) => {
       assert.equal(cli(root).status, 0);

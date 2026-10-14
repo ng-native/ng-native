@@ -8,6 +8,7 @@
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
 import { describe, it } from 'node:test';
+import vm from 'node:vm';
 import type { Tree } from '@nx/devkit';
 
 const require = createRequire(import.meta.url);
@@ -622,5 +623,69 @@ describe('an app whose files it cannot follow', () => {
       ),
       warnings.join('\n'),
     );
+  });
+});
+
+describe('Tailwind 3, with a library whose preset it has to name', () => {
+  it('writes a config that parses for a library in a directory named for a reserved word', async () => {
+    // `packages/ui/switch`, a switch component's library: the preset is named for the directory.
+    const tree = await integrated();
+    library(tree, 'ui-switch', 'packages/ui/switch');
+    await generate(tree, { tailwindVersion: 3, library: 'ui-switch' });
+    const config = read(tree, 'apps/mobile/tailwind.config.js');
+    assert.doesNotThrow(() => new vm.Script(config), `not JavaScript:\n${config}`);
+    assert.match(config, /const switchPreset = require\('..\/..\/packages\/ui\/switch\//);
+  });
+
+  it('keeps the libraries it has once a formatter has given the config double quotes', async () => {
+    const tree = await integrated();
+    await generate(tree, { tailwindVersion: 3, library: 'ui' });
+    const file = 'apps/mobile/tailwind.config.js';
+    tree.write(file, read(tree, file).replace(/'/g, '"'));
+
+    await generate(tree, { tailwindVersion: 3, library: 'tokens' });
+    const config = read(tree, file);
+    assert.match(config, /packages\/tokens\/tailwind\.preset\.cjs/);
+    assert.match(config, /packages\/ui\/tailwind\.preset\.cjs/, `ui is gone:\n${config}`);
+  });
+});
+
+describe('Tailwind 4, with a library, in a stylesheet a formatter has given double quotes', () => {
+  it("imports a library's theme once", async () => {
+    const tree = await integrated();
+    await generate(tree, { library: 'ui' });
+    const file = 'apps/mobile/src/styles.css';
+    tree.write(file, read(tree, file).replace(/'/g, '"'));
+
+    await generate(tree, { library: 'ui' });
+    assert.equal(read(tree, file).match(/packages\/ui\//g)?.length, 1, read(tree, file));
+  });
+});
+
+describe('an app with a stylesheet of its own already, and no Tailwind in it', () => {
+  // Metro is given this file as Tailwind's input, so with no Tailwind in it the build has no
+  // utilities and every class draws unstyled.
+  const OWN = '.title {\n  font-size: 20px;\n}\n';
+
+  it("puts Tailwind 4's imports ahead of its rules", async () => {
+    const tree = await integrated();
+    tree.write('apps/mobile/src/styles.css', OWN);
+    await generate(tree, {});
+    assert.equal(read(tree, 'apps/mobile/src/styles.css'), `${V4_IMPORTS.join('\n')}\n\n${OWN}`);
+  });
+
+  it("puts Tailwind 3's directives ahead of its rules", async () => {
+    const tree = await integrated();
+    tree.write('apps/mobile/src/styles.css', OWN);
+    await generate(tree, { tailwindVersion: 3 });
+    assert.match(read(tree, 'apps/mobile/src/styles.css'), /^@tailwind base;[\s\S]*\.title \{/);
+  });
+
+  it('leaves one that has Tailwind in it as it is', async () => {
+    const tree = await integrated();
+    await generate(tree, {});
+    const before = read(tree, 'apps/mobile/src/styles.css');
+    await generate(tree, {});
+    assert.equal(read(tree, 'apps/mobile/src/styles.css'), before);
   });
 });

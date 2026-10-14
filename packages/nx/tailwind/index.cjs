@@ -245,9 +245,11 @@ function writeV4Stylesheet(tree, file, base, themes) {
   const lines =
     existing === null ? ["/* The app's Tailwind entry, without preflight. */", ...base] : [];
   const text = existing ?? '';
+  // Compared in one quote: a formatter may have rewritten the file since.
+  const written = text.replace(/"/g, "'");
   const imports = themes
     .map((theme) => `@import '${path.relative(path.dirname(file), theme)}';`)
-    .filter((line) => !text.includes(line));
+    .filter((line) => !written.includes(line));
   if (existing !== null && imports.length === 0) return;
   const last = [...text.matchAll(/^@import .+;$/gm)].at(-1);
   const at = last ? last.index + last[0].length + 1 : text.length;
@@ -325,7 +327,25 @@ function linkStylesheet(tree, root, stylesheet) {
 
 function writeV3Stylesheet(tree, root) {
   const file = joinPathFragments(root, 'src/styles.css');
-  if (!tree.exists(file)) tree.write(file, `${V3_DIRECTIVES.join('\n')}\n`);
+  const existing = tree.read(file, 'utf-8');
+  if (existing === null) tree.write(file, `${V3_DIRECTIVES.join('\n')}\n`);
+  // One the app has already, without Tailwind, gets the directives ahead of its rules.
+  else if (!existing.includes('@tailwind')) {
+    tree.write(file, `${V3_DIRECTIVES.join('\n')}\n\n${existing}`);
+  }
+}
+
+/**
+ * The device build's Tailwind 4 stylesheet. One the app has already, without Tailwind, gets the
+ * native preset's imports ahead of its rules, where CSS requires an `@import`: Metro is given
+ * this file as Tailwind's input, and with no Tailwind in it every class would draw unstyled.
+ */
+function writeDeviceV4Stylesheet(tree, file, themes) {
+  const existing = tree.read(file, 'utf-8');
+  if (existing !== null && !existing.includes('tailwindcss')) {
+    tree.write(file, `${V4_IMPORTS.join('\n')}\n\n${existing}`);
+  }
+  writeV4Stylesheet(tree, file, V4_IMPORTS, themes);
 }
 
 /**
@@ -345,8 +365,9 @@ function writeV3Config(tree, file, presets, options) {
       }
       return;
     }
-    const had = [...existing.matchAll(/require\('([^']+\/tailwind\.preset\.cjs)'\)/g)].map(
-      (match) => match[1],
+    // In either quote: a formatter may have rewritten the file since.
+    const had = [...existing.matchAll(/require\((['"])([^'"]+\/tailwind\.preset\.cjs)\1\)/g)].map(
+      (match) => match[2],
     );
     wanted.unshift(...had.filter((preset) => !wanted.includes(preset)));
   }
@@ -464,10 +485,19 @@ function setUpWeb(tree, root, vite, version, libraries, besideDevice) {
   linkStylesheet(tree, root, file);
 }
 
-/** A JavaScript name for a library's preset: `ui`, `sharedUi`. */
+/**
+ * A JavaScript name for a library's preset: `ui`, `sharedUi`. A directory named for a word the
+ * language keeps, `switch` or `default`, gets `switchPreset`.
+ */
 function identifier(name) {
   const camel = name.replace(/[^a-zA-Z0-9]+(.)/g, (_, next) => next.toUpperCase());
-  return /^[a-zA-Z_$]/.test(camel) ? camel : `_${camel}`;
+  const named = /^[a-zA-Z_$]/.test(camel) ? camel : `_${camel}`;
+  try {
+    new Function(`'use strict'; const ${named} = 0;`);
+    return named;
+  } catch {
+    return `${named}Preset`;
+  }
 }
 
 /** Adds the preset's file name to `@nx/enforce-module-boundaries`' `allow` list, where there is one. */
@@ -550,10 +580,9 @@ async function tailwind(tree, options) {
         libraries.map((library) => libraryPreset(tree, library)),
       );
     } else {
-      writeV4Stylesheet(
+      writeDeviceV4Stylesheet(
         tree,
         joinPathFragments(app.root, 'src/styles.css'),
-        V4_IMPORTS,
         libraries.map((library) => libraryTheme(tree, library)),
       );
     }
