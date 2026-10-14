@@ -42,6 +42,7 @@ import {
   input,
   signal,
   untracked,
+  ViewContainerRef,
   type AfterContentInit,
   type ComponentRef,
   type EnvironmentInjector,
@@ -68,6 +69,7 @@ import { ownHost } from './own-host.ts';
 import { markTabRoute } from './tab-routes.ts';
 import { IN_TAB, type InTab } from './in-tab.ts';
 import { taken, withoutPresented } from './presented-route.ts';
+import { SVG_ICON_HOST } from './svg-icons.ts';
 
 /** A url without its query or fragment. */
 const pathOnly = (url: string): string => url.split(/[?#]/, 1)[0]!;
@@ -120,6 +122,7 @@ interface TabSelection {
 @Component({
   selector: 'native-tabs-outlet',
   template: '<ng-content />',
+  providers: [{ provide: SVG_ICON_HOST, useFactory: () => inject(ViewContainerRef) }],
   host: {
     '[style]': 'fill',
     '[tabBarHidden]': 'barHidden()',

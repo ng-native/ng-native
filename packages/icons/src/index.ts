@@ -7,4 +7,5 @@
  */
 export { NgIcon } from './ng-icon.ts';
 export { type SvgNode } from './parse-svg.ts';
+export { SvgImages, type SvgImagesNative } from './svg-images.ts';
 export { brushOf, nativeProps, viewBoxProps, type Brush, type SvgContext } from './svg-props.ts';

@@ -35,6 +35,7 @@ import {
   type InjectionToken,
   type Provider,
   type Signal,
+  type Type,
 } from '@angular/core';
 import { ColorScheme, DeepLinks, type Scheme } from '@ng-native/device';
 import {
@@ -53,6 +54,7 @@ import {
   intentOf,
 } from './native-navigation.ts';
 import { NativePlatformLocation } from './native-platform-location.ts';
+import { SVG_ICON_RENDERER, type SvgIconRenderer } from './svg-icons.ts';
 import { NativeStackReuseStrategy } from './native-stack-reuse-strategy.ts';
 import { ROUTE_PARKING, type ParkedPage } from './route-parking.ts';
 import { registerScreenComponents } from './screens.ts';
@@ -98,6 +100,18 @@ export function withHeaderDefaults(defaults: SchemeDefaults<HeaderDefaults>): Na
  */
 export function withTabDefaults(defaults: SchemeDefaults<TabDefaults>): NativeRouterFeature {
   return { ɵnativeRouter: { providers: [bySchemeProvider(NATIVE_TAB_DEFAULTS, defaults)] } };
+}
+
+/**
+ * What draws a `<native-tab>` icon written as SVG markup, `[icon]="{ svg }"`, which neither
+ * platform's tab bar can draw itself. `SvgImages` from `@ng-native/icons` is one:
+ *
+ * ```ts
+ * provideNativeRouter(routes, withSvgIcons(SvgImages));
+ * ```
+ */
+export function withSvgIcons(renderer: Type<SvgIconRenderer>): NativeRouterFeature {
+  return { ɵnativeRouter: { providers: [{ provide: SVG_ICON_RENDERER, useClass: renderer }] } };
 }
 
 /** One signal for the whole app, rather than every bar calling the function again. */

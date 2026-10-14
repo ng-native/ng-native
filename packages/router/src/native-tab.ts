@@ -26,10 +26,22 @@
  * each activated route's component on a child view, so destroying a route cannot remove this
  * tab item from the bar.
  */
-import { Component, ElementRef, computed, inject, input, type OnInit } from '@angular/core';
+import {
+  Component,
+  ElementRef,
+  ErrorHandler,
+  computed,
+  effect,
+  inject,
+  input,
+  signal,
+  type OnInit,
+  type Signal,
+} from '@angular/core';
 import { nativePlatform, type EngineNode, HostEngine } from '@ng-native/fabric';
 import { NATIVE_TAB_DEFAULTS } from './native-bar-defaults.ts';
 import { ownHost } from './own-host.ts';
+import { SVG_ICON_HOST, SVG_ICON_RENDERER } from './svg-icons.ts';
 
 /**
  * Where a tab's picture comes from.
@@ -47,7 +59,13 @@ export type TabIcon =
   /** The same, drawn as a mask and tinted. */
   | { readonly template: unknown }
   /** Android: a drawable resource name. */
-  | { readonly drawable: string };
+  | { readonly drawable: string }
+  /**
+   * SVG markup, such as an `@ng-icons` icon, drawn as a mask and tinted like `template`. Native
+   * cannot draw SVG, so it is drawn once by the renderer `withSvgIcons` provides, `size` points
+   * square: 25 on iOS and 24 on Android unless it says. The tab has no icon until it has been.
+   */
+  | { readonly svg: string; readonly size?: number };
 
 /** One of Apple's standard items, which brings its own icon and title. */
 export type TabSystemItem =
@@ -167,6 +185,10 @@ export function tabIconProps(
 
 declare const ngDevMode: unknown;
 
+function isSvg(icon: TabIcon | undefined): icon is Extract<TabIcon, { svg: string }> {
+  return icon !== undefined && 'svg' in icon;
+}
+
 /** The paths already warned about, so a tab bar rebuilt by a navigation says it once. */
 const warnedTabs = new Set<string>();
 
@@ -192,6 +214,25 @@ function warnIfIconOnOnePlatform(tab: NativeTab): void {
     `[angular-native] <native-tab path="${path}"> has no icon on ${platform}: ${platform} reads ` +
       `only ${missing}. Add ${missing}="...", or bind [icon] for a tab meant for one platform.`,
   );
+}
+
+/**
+ * Says, once per path and in development only, that a tab's icon is SVG and the app gave nothing
+ * to draw it, so the tab shows no icon.
+ */
+function warnNoSvgRenderer(path: string): void {
+  if (typeof ngDevMode !== 'undefined' && !ngDevMode) return;
+  if (warnedTabs.has(`svg:${path}`)) return;
+  warnedTabs.add(`svg:${path}`);
+  console.warn(
+    `[angular-native] <native-tab path="${path}"> has an SVG icon and nothing to draw it, so it ` +
+      `shows none. Add withSvgIcons(SvgImages) from @ng-native/icons to provideNativeRouter.`,
+  );
+}
+
+/** A tab bar icon's size in points when an SVG icon gives none, as each platform draws one. */
+function svgIconSize(): number {
+  return nativePlatform() === 'android' ? 24 : 25;
 }
 
 /**
@@ -232,6 +273,9 @@ export class NativeTab implements OnInit {
   private readonly engine = inject(HostEngine);
   /** The app's `withTabDefaults`, for an appearance this tab does not bind itself. */
   private readonly defaults = inject(NATIVE_TAB_DEFAULTS);
+  private readonly svgRenderer = inject(SVG_ICON_RENDERER);
+  private readonly svgHost = inject(SVG_ICON_HOST, { optional: true });
+  private readonly errors = inject(ErrorHandler);
 
   /**
    * The `RNSTabsScreen` this tab is. The outlet creates the activated route's component inside
@@ -292,12 +336,46 @@ export class NativeTab implements OnInit {
     this.processAppearance(this.scrollEdgeAppearance() ?? this.defaults().scrollEdgeAppearance),
   );
 
-  protected readonly icons = computed(() =>
-    tabIconProps(
-      this.iconProps(this.icon() ?? this.shorthand()),
-      this.iconProps(this.selectedIcon()),
-    ),
-  );
+  /** `icon` and `selectedIcon` as drawn, when they are SVG. */
+  private readonly drawnIcon = this.drawn(this.icon);
+  private readonly drawnSelectedIcon = this.drawn(this.selectedIcon);
+
+  protected readonly icons = computed(() => {
+    const icon = this.iconProps(this.icon() ?? this.shorthand(), this.drawnIcon());
+    // A selected icon drawn before the icon it replaces waits for it: native takes no pair of a
+    // selected icon and none.
+    const undrawn = isSvg(this.icon()) && this.drawnIcon() === undefined;
+    const selected = undrawn ? {} : this.iconProps(this.selectedIcon(), this.drawnSelectedIcon());
+    return tabIconProps(icon, selected);
+  });
+
+  /**
+   * An SVG icon as the renderer drew it, undefined until it has. Markup that changes is drawn
+   * again, and a drawing that finishes after newer markup arrived is dropped.
+   */
+  private drawn(icon: Signal<TabIcon | undefined>): Signal<unknown> {
+    const markup = computed(
+      () => {
+        const svg = icon();
+        return isSvg(svg) ? { svg: svg.svg, size: svg.size ?? svgIconSize() } : undefined;
+      },
+      { equal: (a, b) => a?.svg === b?.svg && a?.size === b?.size },
+    );
+    const drawn = signal<unknown>(undefined);
+    effect((onCleanup) => {
+      const wanted = markup();
+      drawn.set(undefined);
+      if (!wanted || !this.svgHost) return;
+      if (!this.svgRenderer) return warnNoSvgRenderer(this.path());
+      let current = true;
+      onCleanup(() => (current = false));
+      this.svgRenderer.render(wanted.svg, wanted.size, this.svgHost).then(
+        (source) => current && drawn.set(source ?? undefined),
+        (error: unknown) => this.errors.handleError(error),
+      );
+    });
+    return drawn;
+  }
 
   /**
    * `sfSymbol` and `drawable` say the same thing as `icon`, in the form most tabs want. A tab
@@ -317,11 +395,17 @@ export class NativeTab implements OnInit {
    * host resolves it, which is the same thing an `<image src>` needs and the engine only does for
    * props it knows by name.
    */
-  private iconProps(icon: TabIcon | undefined): TabIconProps {
+  private iconProps(icon: TabIcon | undefined, drawn: unknown): TabIconProps {
     if (!icon) return {};
     if ('sfSymbol' in icon) return { iconType: 'sfSymbol', iconResourceName: icon.sfSymbol };
     if ('xcasset' in icon) return { iconType: 'xcasset', iconResourceName: icon.xcasset };
     if ('drawable' in icon) return { drawableIconResourceName: icon.drawable };
+    if ('svg' in icon) {
+      if (drawn === undefined) return {};
+      return nativePlatform() === 'android'
+        ? { imageIconResource: drawn }
+        : { iconType: 'template', iconImageSource: drawn };
+    }
 
     const source = this.engine.resolveAsset('image' in icon ? icon.image : icon.template);
     return nativePlatform() === 'android'

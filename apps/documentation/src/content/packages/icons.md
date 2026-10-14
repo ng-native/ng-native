@@ -147,6 +147,15 @@ protected readonly logo =
   '<svg viewBox="0 0 10 10"><path d="M0 0L5 5" stroke="var(--brand)"/></svg>';
 ```
 
+## As an image
+
+A place that takes an image and not a view, such as a tab bar item, takes an icon through
+`SvgImages`. `render(svg, size, at)` draws the markup as an `ng-icon` in the view container `at`,
+asks react-native-svg for it as a PNG, and takes the view away again. It answers with an image
+source, a PNG data URI with the screen's scale, or null when react-native-svg is not in the build
+or does not answer. Android draws nothing off screen, so `at` has to be on screen. The router uses
+it for an SVG tab icon: see [Tabs](/packages/router/tabs).
+
 ## Accessibility
 
 An icon with no `accessibilityLabel` is treated as decorative: it is left out of the accessibility

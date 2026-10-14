@@ -56,9 +56,11 @@ export {
   provideNativeRouter,
   withHeaderDefaults,
   withLinkParent,
+  withSvgIcons,
   withTabDefaults,
   type NativeRouterFeature,
 } from './provide-native-router.ts';
+export { type SvgIconRenderer } from './svg-icons.ts';
 export {
   type GestureResponseDistance,
   type ReplaceAnimation,

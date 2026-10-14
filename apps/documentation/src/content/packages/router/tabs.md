@@ -43,6 +43,22 @@ that platform logs a warning naming the tab's path. The fuller inputs also take 
 image drawn either as-authored or as a tinted template mask; `icon` and `selectedIcon` must be the
 same kind of image, since native carries one icon type for both states.
 
+Neither platform's tab bar draws SVG, so an icon written as SVG markup, such as an `@ng-icons` icon,
+is drawn once into an image by a renderer the app provides. `SvgImages` from `@ng-native/icons` is
+one:
+
+```ts
+provideNativeRouter(routes, withSvgIcons(SvgImages));
+```
+
+```html
+<native-tab path="saved" title="Saved" [icon]="{ svg: lucideHeart }" />
+```
+
+It is tinted like a symbol, 25 points square on iOS and 24 on Android unless the icon gives a
+`size`, and the tab shows no icon until it has been drawn, a frame or two after the bar appears.
+Without a renderer the tab has no icon, and in development it logs a warning naming the tab's path.
+
 Every tab is a route a user reaches in one tap, so a tab whose route is lazy pauses on its first
 visit while its code loads. `withPreloading(PreloadAllModules)` in `provideNativeRouter` loads
 those routes right after start-up; see [the router](/packages/router).
