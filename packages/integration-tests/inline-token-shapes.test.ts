@@ -72,4 +72,9 @@ describe('a custom property set on an element', () => {
 it('is no list of sides for five lengths, which no side shorthand takes', () => {
   const { props } = committed('padding: var(--x)', '1px 2px 3px 4px 5px', 'inline');
   assert.equal(props['paddingLeft'], undefined);
+
+  it('is three zeroes, read as colour channels and as the sides of a padding', () => {
+    same('background-color: rgb(var(--x))', '0 0 0', 'backgroundColor');
+    same('padding: var(--x)', '0 0 0', 'paddingTop');
+  });
 });

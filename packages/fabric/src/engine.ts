@@ -5640,10 +5640,14 @@ export class Engine implements HostEngine {
       return;
     }
     // One with no box, or in a box with none, paints nothing, and an endless one would keep the
-    // frame loop going for good. It starts again when the node is shown, as it is made again.
+    // frame loop going for good. It is cancelled, as a browser cancels it, and starts again when
+    // the node is shown, as it is made again.
     if (this.boxless(node)) {
+      this.cancelPlaying(node);
       this.playing.delete(node);
       node.playing = undefined;
+      // A commit, for its `animationcancel` to be sent after, and to drop its last frame.
+      this.markProps(node, false);
       return;
     }
     // Frames that say nothing paint nothing: a keyframe's one declaration refused at build time

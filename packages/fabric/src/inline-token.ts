@@ -248,7 +248,9 @@ export function tokenFromValue(value: unknown): TokenValue | undefined {
   if (NUMBER.test(text)) return fromNumber(Number(text));
   if (DERIVED.test(text)) return withTokens(text);
   if (COLOR_FUNCTION.test(text)) return { color: text };
+  // `0 0 0` is both, so it is kept as both, as the stylesheet's own token is.
   const lengths = fromLengths(text);
-  if (lengths) return lengths;
-  return fromChannels(text) ?? (WORD.test(text) ? fromWord(text) : fromText(text));
+  const channels = fromChannels(text);
+  if (lengths) return { ...channels, ...lengths };
+  return channels ?? (WORD.test(text) ? fromWord(text) : fromText(text));
 }

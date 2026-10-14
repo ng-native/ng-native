@@ -52,6 +52,20 @@ describe('an endless animation on an element that is not displayed', () => {
     assert.equal(s.frame().commits, 0, 'a commit a frame for a view that is not there');
   });
 
+  it('sends animationcancel once, as a browser does for display: none', () => {
+    const s = scene();
+    const heard: string[] = [];
+    s.engine.setEventListener(s.spinner, 'topAnimationcancel', (event) => {
+      heard.push((event as { animationName: string }).animationName);
+    });
+    s.frame();
+    s.engine.addClass(s.spinner, 'hidden');
+    s.engine.commit();
+    s.frame();
+    s.frame();
+    assert.deepEqual(heard, ['spin']);
+  });
+
   it('stops asking for frames once the element itself is display: none', () => {
     const s = scene();
     s.frame();
