@@ -30,6 +30,17 @@ describe('inlining icons from a set', () => {
     assert.equal(out.split('\n').length, src.split('\n').length, 'line numbers are kept');
   });
 
+  it('leaves an import written inside a template literal, a code sample an app shows', () => {
+    const src =
+      'export const SAMPLE = `\n' +
+      "import { lucideCompass } from '@ng-icons/lucide';\n" +
+      '`;\n' +
+      "import { lucideTarget } from '@ng-icons/lucide';\n";
+    const out = inlineIcons(src, here);
+    assert.match(out, /^import \{ lucideCompass \} from '@ng-icons\/lucide';$/m, 'the sample');
+    assert.match(out, /^const lucideTarget = `<svg/m, 'and the import after it is still inlined');
+  });
+
   it('keeps the lines of an import written over several, as Prettier wraps a long one', () => {
     const src =
       "import {\n  lucideCompass,\n  lucideTarget,\n} from '@ng-icons/lucide';\nexport const a = 1;\n";

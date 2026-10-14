@@ -77,13 +77,15 @@ const resourcesRead = new Map();
 
 /** What the transform of `filename` read, once: a second ask is empty. */
 function takeResourcesRead(filename) {
-  const files = resourcesRead.get(filename) ?? [];
+  const files = [...(resourcesRead.get(filename) ?? [])];
   resourcesRead.delete(filename);
   return files;
 }
 
-function readResources(dependencies, filename) {
-  const directory = path.dirname(filename);
+function readResources(dependencies, filename, root = process.cwd()) {
+  // Metro names a file relative to the project root, which is not where Metro was started when
+  // the project is named on the command line: `expo export apps/mobile`.
+  const directory = path.dirname(path.resolve(root, filename));
   const templates = {};
   const styles = {};
   const read = [];
@@ -755,6 +757,22 @@ function hotUpdate(template, component, filename, options) {
   };
 }
 
+/** Where Metro names files from: the project root it was given, or where it was started. */
+const projectRootOf = (options) => options?.projectRoot ?? process.cwd();
+
+/**
+ * Reads a component's resource by its url from `directory`: `target` is the one being transformed,
+ * whose text is `src`, and every other is read from disk and added to `read`.
+ */
+function readerBeside(directory, target, src, read) {
+  return (url) => {
+    const at = path.resolve(directory, url);
+    if (at === target) return src;
+    read.add(at);
+    return readFileSync(at, 'utf8');
+  };
+}
+
 /**
  * The components that use an external resource, found from the resource's side.
  *
@@ -765,10 +783,10 @@ function hotUpdate(template, component, filename, options) {
  * carried no update, the edit bubbled to each screen's cached module, and the app reloaded with
  * the old styles.
  */
-function ownersOf(resource) {
-  // Metro names files relative to the project root, which is also the worker's directory, so a
-  // relative resource gets its owners named the same way, and everything compares resolved.
-  const target = path.resolve(resource);
+function ownersOf(resource, root = process.cwd()) {
+  // Metro names files relative to the project root, so a relative resource gets its owners named
+  // the same way, and everything compares resolved.
+  const target = path.resolve(root, resource);
   const name = path.basename(resource);
   const owners = [];
 
@@ -776,7 +794,7 @@ function ownersOf(resource) {
     const src = sourceOf(absolute);
     if (!src.includes(name) || !HAS_ANGULAR_DECORATOR.test(src)) continue;
 
-    const file = path.isAbsolute(resource) ? absolute : path.relative(process.cwd(), absolute);
+    const file = path.isAbsolute(resource) ? absolute : path.relative(root, absolute);
     const directory = path.dirname(absolute);
     const components = extractComponentMetadataSync(src, file).filter((component) =>
       [component.templateUrl, ...(component.styleUrls ?? [])].some(
@@ -848,22 +866,27 @@ function resourceBlock(src, resource, options) {
   const applies = [];
   const defs = [];
 
-  for (const owner of ownersOf(resource)) {
-    const read = (url) => {
-      const at = path.resolve(path.dirname(owner.file), url);
-      return at === path.resolve(resource) ? src : readFileSync(at, 'utf8');
-    };
+  // What this module is made from besides its own text: each component that uses it, and that
+  // component's other resources. Metro keys the module on the resource alone, so a dev server
+  // started again on a warm cache after one of the others changed would run this module as it
+  // was, and it puts back the template or the styles it was compiled with.
+  const root = projectRootOf(options);
+  const target = path.resolve(root, resource);
+  const alsoRead = new Set();
+  resourcesRead.set(resource, alsoRead);
+
+  for (const owner of ownersOf(resource, root)) {
+    const directory = path.dirname(path.resolve(root, owner.file));
+    alsoRead.add(path.resolve(root, owner.file));
+    const read = readerBeside(directory, target, src, alsoRead);
 
     for (const component of owner.components) {
       const template = component.template ?? read(component.templateUrl);
       // This module is the only transform an edit to the template reaches, so a malformed template
       // is placed here by Angular's parser as well.
       if (component.template == null) {
-        const at = path.resolve(
-          path.dirname(owner.file),
-          /** @type {string} */ (component.templateUrl),
-        );
-        if (at === path.resolve(resource)) {
+        const at = path.resolve(directory, /** @type {string} */ (component.templateUrl));
+        if (at === target) {
           assertTemplateFileParses(template, resource, component.className);
         }
       }
@@ -1097,7 +1120,7 @@ function compileTwice(src, filename, compilerOptions) {
 
   let resources = null;
   if (dependencies.length) {
-    resources = readResources(dependencies, filename);
+    resources = readResources(dependencies, filename, compilerOptions.projectRoot);
     result = transformAngularFileSync(
       src,
       filename,

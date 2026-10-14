@@ -123,7 +123,8 @@ describe('declaring a face', () => {
   it('tells such a file by its name where the face gives no format', () => {
     const face =
       "@font-face { font-family: Icons; src: url('./icons.woff2'), url('./icons.otf?v=2') }";
-    assert.equal(compileCss(face, 'test').fonts[0].source.asset, './icons.otf?v=2');
+    // Without its query, which names no file: the bundler resolves what it is given.
+    assert.equal(compileCss(face, 'test').fonts[0].source.asset, './icons.otf');
   });
 
   it('keeps the first file of a face that names none a device is known to load', () => {

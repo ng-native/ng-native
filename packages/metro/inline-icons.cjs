@@ -12,6 +12,10 @@
  * import did, wrapped over several or not, so every line after it keeps its number and the source
  * map stays right.
  *
+ * ponytail: an import is found with a regex too, and one after an odd number of backticks is taken
+ * to be text inside a template literal, a code sample an app shows, and left as it is. A backtick
+ * on its own in a comment above an import leaves that import to the bundler, whole set and all.
+ *
  * ponytail: a set is parsed with a regex over its published `fesm2022` file, which is one
  * `const name = \`<svg ...>\`;` per icon; a set published in another shape is left alone.
  */
@@ -63,8 +67,9 @@ function iconsIn(file) {
  */
 function inlineIcons(src, filename) {
   if (!src.includes('@ng-icons/')) return src;
-  return src.replace(IMPORT, (statement, list, specifier) => {
+  return src.replace(IMPORT, (statement, list, specifier, at) => {
     if (/^\s*type\b/.test(list)) return statement;
+    if ((src.slice(0, at).match(/(?<!\\)`/g) ?? []).length % 2) return statement;
     let file;
     try {
       file = require.resolve(specifier, { paths: [path.dirname(filename)] });

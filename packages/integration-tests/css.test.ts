@@ -56,6 +56,17 @@ describe('CSS compilation', () => {
       /not a media feature/,
     );
   });
+
+  it('keeps the queries of a list that can match beside one that never does', () => {
+    // A comma is an or, so `print` adds nothing, and the rest is the query.
+    const sheet = compileCss('@media screen and (min-width: 500px), print { .a { color: red } }');
+    assert.deepEqual(sheet.rules[0].condition, { feature: 'width', op: 'gte', value: 500 });
+    assert.deepEqual(
+      compileCss('@media print, (min-width: 500px), speech { .a { color: red } }').rules[0]
+        .condition,
+      { feature: 'width', op: 'gte', value: 500 },
+    );
+  });
 });
 
 describe('CSS at runtime', () => {
