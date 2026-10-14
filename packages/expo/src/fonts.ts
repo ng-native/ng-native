@@ -79,6 +79,8 @@ export function registrationsFor(faces: readonly FontFace[]): Record<string, unk
 export function expoFonts(): NativeFonts | null {
   const expo = expoModule('expo-font', () => require('expo-font') as typeof import('expo-font'));
   if (!expo) return null;
+  // Missing, the stand-in itself: `available` reads false, and a load says what to install.
+  if (!present(expo)) return expo as unknown as NativeFonts;
   return {
     loadAsync: (map) => expo.loadAsync(map as Parameters<typeof expo.loadAsync>[0]),
     isLoaded: (family) => expo.isLoaded(family),

@@ -18,7 +18,7 @@
  * identifier.
  */
 import { InjectionToken, Service, inject } from '@angular/core';
-import { expoModule } from './native.ts';
+import { expoModule, present } from './native.ts';
 import { Permission, UNAVAILABLE } from './permissions.ts';
 
 type Expo = typeof import('expo-tracking-transparency');
@@ -59,7 +59,7 @@ export class Tracking {
 
   /** Whether the device has the tracking API. Where it does not, the permission answers granted. */
   get available(): boolean {
-    return this.native?.isAvailable() ?? false;
+    return present(this.native)?.isAvailable() ?? false;
   }
 
   /**

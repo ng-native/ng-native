@@ -9,7 +9,7 @@
  * See `Store` in `@ng-native/expo/store` for what the signal does.
  */
 import { InjectionToken } from '@angular/core';
-import { expoModule } from './native.ts';
+import { expoModule, present } from './native.ts';
 import { Store, type NativeStore } from './store.ts';
 
 const secure = (): NativeStore | null => {
@@ -18,6 +18,8 @@ const secure = (): NativeStore | null => {
     () => require('expo-secure-store') as typeof import('expo-secure-store'),
   );
   if (!expo) return null;
+  // Missing from the build: the stand-in, to say so when it is used.
+  if (!present(expo)) return expo as never;
   return {
     get: (key) => expo.getItemAsync(key),
     set: (key, value) => expo.setItemAsync(key, value),

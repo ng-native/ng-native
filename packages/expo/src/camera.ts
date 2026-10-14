@@ -24,7 +24,7 @@
  */
 import { Directive, ElementRef, InjectionToken, inject } from '@angular/core';
 import { Engine, type EngineNode } from '@ng-native/fabric';
-import { expoModule, optional } from './native.ts';
+import { expoModule, optional, present } from './native.ts';
 
 export type PictureOptions = Omit<
   import('expo-camera').CameraPictureOptions,
@@ -52,6 +52,8 @@ export class Camera {
             ViewPrototypes?: Record<string, CameraViewFunctions>;
           }>('ExpoCamera'),
         );
+        // Missing, the stand-in is the functions: taking a picture says what to install.
+        if (module && !present(module)) return module as unknown as CameraViewFunctions;
         // The camera is the module's first view, so its functions are under the module's name.
         return module?.ViewPrototypes?.['ExpoCamera'] ?? null;
       },

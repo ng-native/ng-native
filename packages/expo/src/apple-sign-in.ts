@@ -117,7 +117,7 @@ export class AppleSignIn {
 
   /** Whether Sign in with Apple can be offered: iOS 13 and later, with the module installed. */
   async available(): Promise<boolean> {
-    return (await this.native?.isAvailableAsync()) ?? false;
+    return (await present(this.native)?.isAvailableAsync()) ?? false;
   }
 
   /**

@@ -10,7 +10,7 @@
  * it is asked for; `expo-local-authentication`'s config plugin writes it.
  */
 import { InjectionToken, Service, inject } from '@angular/core';
-import { expoModule } from './native.ts';
+import { expoModule, present } from './native.ts';
 
 export type BiometricKind = 'fingerprint' | 'face' | 'iris';
 
@@ -53,10 +53,11 @@ export class Biometrics {
 
   /** Whether there is a sensor and something enrolled on it: whether asking can succeed. */
   async available(): Promise<boolean> {
-    if (!this.native) return false;
+    const native = present(this.native);
+    if (!native) return false;
     const [hardware, enrolled] = await Promise.all([
-      this.native.hasHardwareAsync(),
-      this.native.isEnrolledAsync(),
+      native.hasHardwareAsync(),
+      native.isEnrolledAsync(),
     ]);
     return hardware && enrolled;
   }

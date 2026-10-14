@@ -23,6 +23,7 @@
  * over one class, for the same reason the sensors are.
  */
 import { computed, signal, type Signal, type WritableSignal } from '@angular/core';
+import { present } from './native.ts';
 
 /** What both `AsyncStorage` and `SecureStore` offer, reduced to the three verbs. */
 export interface NativeStore {
@@ -88,6 +89,8 @@ export class Store {
    * The same key always returns the same signal, so two components binding to it stay in step.
    */
   signal<T>(key: string, initial: T): WritableSignal<T> {
+    // A read is a use: a missing module says what to install on every one, before a key is kept.
+    if (this.native && !present(this.native)) void this.native.get(key);
     const existing = this.bound.get(key);
     if (existing) return existing.value as WritableSignal<T>;
 

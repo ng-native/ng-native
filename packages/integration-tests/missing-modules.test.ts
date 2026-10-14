@@ -239,6 +239,7 @@ describe('a service whose module is missing', () => {
       Biometrics,
       Brightness,
       Browser,
+      Camera.SOURCE,
       Clipboard,
       Crypto,
       DocumentPicker,
@@ -276,9 +277,33 @@ describe('a service whose module is missing', () => {
       }
       assert.equal(app.get(Haptics).available, false, 'and says it is not there');
       assert.equal(app.get(Watch).available, false);
+      assert.equal(app.get(Fonts).available, false);
+      assert.equal(app.get(Tracking).available, false);
       assert.throws(() => app.get(Network).status(), fixes('expo-network', 'ios'));
       assert.throws(() => app.get(AppInfo).version, fixes('expo-application', 'ios'));
     });
+  });
+
+  it('says what is missing on every read of a store, not only the first', () => {
+    on('ios', () => {
+      for (const [service, module] of [
+        [Storage, '@react-native-async-storage/async-storage'],
+        [SecureStorage, 'expo-secure-store'],
+      ] as const) {
+        const store = app.get(service as never) as Storage;
+        for (let time = 0; time < 2; time++) {
+          assert.throws(() => store.signal('theme', 'light'), fixes(module, 'ios'), `time ${time}`);
+        }
+      }
+    });
+  });
+
+  it('answers available() with false rather than rejecting, as the getters read false', async () => {
+    const asked = on('ios', () => [
+      app.get(Biometrics).available(),
+      app.get(AppleSignIn).available(),
+    ]);
+    assert.deepEqual(await Promise.all(asked), [false, false]);
   });
 
   it('is inert in Node, where there is no platform to ask', () => {
