@@ -1,14 +1,6 @@
-import {
-  Component,
-  DestroyRef,
-  effect,
-  inject,
-  input,
-  numberAttribute,
-  signal,
-  untracked,
-} from '@angular/core';
+import { Component, DestroyRef, effect, inject, input, signal, untracked } from '@angular/core';
 import { ControlBase } from './pressable.ts';
+import { numberOr } from './transforms.ts';
 
 /**
  * A pressable that dims while pressed, as RN's `TouchableOpacity` does.
@@ -67,7 +59,7 @@ export class TouchableOpacity extends ControlBase {
   }
 
   /** The opacity while pressed. */
-  readonly activeOpacity = input(0.2, { transform: numberAttribute });
+  readonly activeOpacity = input(0.2, { transform: numberOr(0.2) });
 
   /** Undefined at rest, so the caller's own `[style]` opacity shows through. */
   protected readonly opacity = signal<number | undefined>(undefined);

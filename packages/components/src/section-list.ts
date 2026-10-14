@@ -6,13 +6,12 @@ import {
   contentChild,
   inject,
   input,
-  numberAttribute,
   output,
   viewChild,
 } from '@angular/core';
 import { nativePlatform } from '@ng-native/fabric';
 import { TemplateSlot } from './template-slot.ts';
-import { optionalBoolean } from './transforms.ts';
+import { numberOr, optionalBoolean } from './transforms.ts';
 import { View } from './view.ts';
 import type { KeyboardShouldPersistTaps } from './keyboard-taps.ts';
 import { VirtualList, type VirtualListPadding } from './virtual-list.ts';
@@ -312,8 +311,8 @@ export class SectionList<T, S extends SectionListSection<T> = SectionListSection
   readonly sectionFooterHeight = input<Height<[section: S]>>(0);
   /** Pin the current section's header. Defaults to true on iOS and false on Android, as RN. */
   readonly stickySectionHeadersEnabled = input(undefined, { transform: optionalBoolean });
-  readonly overscan = input(4, { transform: numberAttribute });
-  readonly endReachedThreshold = input(2, { transform: numberAttribute });
+  readonly overscan = input(4, { transform: numberOr(4) });
+  readonly endReachedThreshold = input(2, { transform: numberOr(2) });
   /** Space around the rows, inside the scrolling content. See `<virtual-list>`. */
   readonly contentPadding = input<VirtualListPadding>(0);
   /** What a tap in the list does while a text input has the keyboard up. See `ScrollView`. */

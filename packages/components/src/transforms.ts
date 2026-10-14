@@ -16,3 +16,12 @@ export function optionalBoolean(value: unknown): boolean | undefined {
 export function optionalNumber(value: unknown): number | undefined {
   return value === undefined ? undefined : numberAttribute(value);
 }
+
+/**
+ * The transform for a number input with a default: `[delayLongPress]="undefined"` is the default,
+ * as a prop left out is, where `numberAttribute` alone makes it `NaN`. So is anything else that
+ * is not a number.
+ */
+export function numberOr(fallback: number): (value: unknown) => number {
+  return (value) => numberAttribute(value, fallback);
+}

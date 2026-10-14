@@ -390,7 +390,11 @@ export abstract class ViewBase {
   /** `aria-busy`. */
   readonly ariaBusy = input<boolean>(undefined, { alias: 'aria-busy', transform: optionalBoolean });
   /** `aria-checked`. */
-  readonly ariaChecked = input<boolean | 'mixed'>(undefined, { alias: 'aria-checked' });
+  readonly ariaChecked = input<boolean | 'mixed'>(undefined, {
+    alias: 'aria-checked',
+    // Written as an attribute it is text, and native takes a boolean or `mixed`.
+    transform: (value: unknown) => (value === 'mixed' ? 'mixed' : optionalBoolean(value)),
+  });
   /** `aria-disabled`. */
   readonly ariaDisabled = input<boolean>(undefined, {
     alias: 'aria-disabled',

@@ -126,11 +126,43 @@ function parseStyleAttribute(css: string): Record<string, unknown> {
     const name = declaration.slice(0, at).trim();
     const value = declaration.slice(at + 1).trim();
     // A custom property keeps its name, which is case-sensitive, and its text for the engine.
-    if (name.startsWith('--')) out[name] = value;
-    else if (name) out[styleKey(name)] = declaredValue(styleKey(name), value);
+    // Any other is left as written, for `setStyle` to read as it reads a bound one.
+    if (name) out[name.startsWith('--') ? name : styleKey(name)] = value;
   }
   return out;
 }
+
+const SIDES = ['Top', 'Right', 'Bottom', 'Left'] as const;
+const SHORTHANDS = new Set(['padding', 'margin', 'inset', 'gap']);
+
+/**
+ * A shorthand written with a value for each side, `padding: 4px 8px`, as the longhands native
+ * reads: it takes one number for `padding`, and drops the text. Null for one value, which native
+ * takes as it is, and for a value holding a function, which is not split on its spaces.
+ *
+ * ponytail: `padding`, `margin`, `inset` and `gap`, the ones written this way in a style. A
+ * stylesheet has every shorthand; add one here when a style needs it.
+ */
+function longhands(key: string, value: unknown): [string, string][] | null {
+  if (!SHORTHANDS.has(key) || typeof value !== 'string' || value.includes('(')) return null;
+  const parts = value.trim().split(/\s+/);
+  if (parts.length < 2 || parts.length > 4) return null;
+  const [first, second = first, third = first, fourth = second] = parts as [string, ...string[]];
+  if (key === 'gap')
+    return parts.length === 2
+      ? [
+          ['rowGap', first],
+          ['columnGap', second],
+        ]
+      : null;
+  return [first, second, third, fourth].map((part, side) => [
+    key === 'inset' ? SIDES[side]!.toLowerCase() : `${key}${SIDES[side]!}`,
+    part,
+  ]);
+}
+
+/** The longhands each element's shorthand was last written as, to take out when it changes. */
+const writtenAs = new WeakMap<EngineNode, Map<string, string[]>>();
 
 /** The declarations each element's `style` attribute made, to take out when it changes or goes. */
 const attributeStyles = new WeakMap<EngineNode, readonly string[]>();
@@ -247,6 +279,17 @@ class NativeRenderer implements Renderer2 {
       return;
     }
     const key = styleKey(style);
+    const sides = longhands(key, value);
+    if (SHORTHANDS.has(key)) this.dropLonghands(el, key, sides);
+    if (sides) {
+      this.removeStyle(el, key);
+      (writtenAs.get(el) ?? writtenAs.set(el, new Map()).get(el)!).set(
+        key,
+        sides.map(([side]) => side),
+      );
+      for (const [side, part] of sides) this.setStyle(el, side, part);
+      return;
+    }
     // A `var()` is for the cascade to settle, with the tokens in scope, not a value of the style.
     if (this.engine.setBoundStyle(el, key, value)) return this.dropStyle(el, key);
     const next = declaredValue(key, value);
@@ -268,8 +311,20 @@ class NativeRenderer implements Renderer2 {
       return;
     }
     const key = styleKey(style);
+    if (SHORTHANDS.has(key)) this.dropLonghands(el, key, null);
     this.engine.setBoundStyle(el, key, null);
     this.dropStyle(el, key);
+  }
+
+  /** Takes out the longhands `key` was written as, but for the ones it is about to be again. */
+  private dropLonghands(el: EngineNode, key: string, next: [string, string][] | null): void {
+    const written = writtenAs.get(el);
+    const sides = written?.get(key);
+    if (!sides) return;
+    written!.delete(key);
+    for (const side of sides) {
+      if (!next?.some(([kept]) => kept === side)) this.removeStyle(el, side);
+    }
   }
 
   /** Takes `key` out of an element's inline style, if it is there. */

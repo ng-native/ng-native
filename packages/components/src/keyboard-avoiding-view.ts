@@ -1,12 +1,11 @@
 import {
   Component,
-  booleanAttribute,
   computed,
   effect,
   inject,
   input,
-  numberAttribute,
   signal,
+  booleanAttribute,
 } from '@angular/core';
 import { Keyboard, LayoutAnimation, type LayoutEasing } from '@ng-native/device';
 import type { NativeSyntheticEvent } from '@ng-native/fabric';
@@ -14,6 +13,7 @@ import type { Rect } from './events.ts';
 import { ContentContainer } from './content-container.ts';
 import { View } from './view.ts';
 import { ViewBase } from './view-base.ts';
+import { numberOr } from './transforms.ts';
 
 export type KeyboardAvoidingBehavior = 'padding' | 'height' | 'position';
 
@@ -96,7 +96,7 @@ export class KeyboardAvoidingView extends ViewBase {
    * Extra room to leave above the keyboard, in points. RN's name, and in RN the place to put a
    * header's height; here the view is measured in the window, so a navigation bar needs none.
    */
-  readonly keyboardVerticalOffset = input(0, { transform: numberAttribute });
+  readonly keyboardVerticalOffset = input(0, { transform: numberOr(0) });
 
   private readonly keyboard = inject(Keyboard).metrics;
   private readonly layoutAnimation = inject(LayoutAnimation);

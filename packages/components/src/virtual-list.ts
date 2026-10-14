@@ -12,7 +12,6 @@ import {
   inject,
   input,
   linkedSignal,
-  numberAttribute,
   output,
   signal,
   untracked,
@@ -35,6 +34,7 @@ import { TemplateSlot } from './template-slot.ts';
 import { ZeroSizeWarning, checksZeroSize, written } from './zero-size-warning.ts';
 import { View } from './view.ts';
 import { ScrollViewProps } from './scroll-view-props.ts';
+import { numberOr } from './transforms.ts';
 
 /** One rendered row: the item, its index, and a stable style object for its slot. */
 export interface VirtualRow<T> {
@@ -306,7 +306,7 @@ export class VirtualList<T> extends ScrollViewProps {
    */
   readonly contentPadding = input<VirtualListPadding>(0);
   /** Space between one row and the next, along the axis: not before the first or after the last. */
-  readonly rowGap = input(0, { transform: numberAttribute });
+  readonly rowGap = input(0, { transform: numberOr(0) });
   /**
    * An item's identity, as FlatList's `keyExtractor`: what a measured height, a slot and a held
    * position follow across an insert. Without it an item is its own key, which is enough for items
@@ -323,9 +323,9 @@ export class VirtualList<T> extends ScrollViewProps {
   /** Keep what is on screen still when rows are inserted or removed before it. */
   readonly maintainVisibleContentPosition = input<VirtualListVisiblePosition>();
   /** Rows rendered beyond each edge of the viewport, to cover fling gaps. */
-  readonly overscan = input(4, { transform: numberAttribute });
+  readonly overscan = input(4, { transform: numberOr(4) });
   /** How close to the end, in viewport heights, `(endReached)` fires. RN's default is 2. */
-  readonly endReachedThreshold = input(2, { transform: numberAttribute });
+  readonly endReachedThreshold = input(2, { transform: numberOr(2) });
 
   /** Lay the rows out along x instead of y, and scroll that way. */
   readonly horizontal = input(false, { transform: booleanAttribute });
@@ -341,7 +341,7 @@ export class VirtualList<T> extends ScrollViewProps {
   /** What a tap in the list does while a text input has the keyboard up. See `ScrollView`. */
   readonly keyboardShouldPersistTaps = input<KeyboardShouldPersistTaps>('never');
   /** How much of a row must be on screen to count as viewable. RN's default is 0, meaning any. */
-  readonly itemVisiblePercentThreshold = input(0, { transform: numberAttribute });
+  readonly itemVisiblePercentThreshold = input(0, { transform: numberOr(0) });
 
   /**
    * The scroll position is within `endReachedThreshold` of the end: once per item count, and again

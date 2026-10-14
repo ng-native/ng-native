@@ -20,6 +20,7 @@ import { View } from '../../components/src/view.ts';
     <view testID="object" [style]="{ width: '0.5em', marginTop: '1em' }"></view>
     <view testID="static" style="width: 1.5em; margin-top: 1em"></view>
     <text testID="line" [style.line-height]="'2em'">line</text>
+    <view testID="grow" [style.flex-grow]="'2em'"></view>
     <view class="large">
       <view testID="rem" [style.width]="'2rem'" [style.margin-top.rem]="1.5"></view>
     </view>

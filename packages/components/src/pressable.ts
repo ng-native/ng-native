@@ -7,18 +7,17 @@
  */
 import {
   Directive,
-  booleanAttribute,
   computed,
   forwardRef,
   input,
-  numberAttribute,
   output,
   signal,
   type Signal,
+  booleanAttribute,
 } from '@angular/core';
 import { nativePlatform, type NativeSyntheticEvent } from '@ng-native/fabric';
 import type { Insets, TouchEvent } from './events.ts';
-import { optionalBoolean } from './transforms.ts';
+import { numberOr, optionalBoolean } from './transforms.ts';
 import { ViewBase } from './view-base.ts';
 
 /** What a press handler receives: RN's `{nativeEvent}` shape, passed straight through. */
@@ -107,13 +106,17 @@ export abstract class TouchableBase extends ViewBase {
    */
   readonly pressRetentionOffset = input<Insets | number>();
   /** Milliseconds a touch must be held before `(longPress)` fires. */
-  readonly delayLongPress = input(DEFAULT_LONG_PRESS_DELAY, { transform: numberAttribute });
+  readonly delayLongPress = input(DEFAULT_LONG_PRESS_DELAY, {
+    transform: numberOr(DEFAULT_LONG_PRESS_DELAY),
+  });
   /** Milliseconds between the touch landing and `(pressIn)`, so a scroll can start first. */
-  readonly delayPressIn = input(0, { transform: numberAttribute });
+  readonly delayPressIn = input(0, { transform: numberOr(0) });
   /** Milliseconds between the touch lifting and `(pressOut)`. */
-  readonly delayPressOut = input(0, { transform: numberAttribute });
+  readonly delayPressOut = input(0, { transform: numberOr(0) });
   /** The pressed state lasts at least this long, so a quick tap still shows it. */
-  readonly minPressDuration = input(DEFAULT_MIN_PRESS_DURATION, { transform: numberAttribute });
+  readonly minPressDuration = input(DEFAULT_MIN_PRESS_DURATION, {
+    transform: numberOr(DEFAULT_MIN_PRESS_DURATION),
+  });
   /** Whether a scrolling ancestor may take the gesture away mid-press. */
   readonly cancelable = input(true, { transform: booleanAttribute });
   /** Android: a native ripple on press. */

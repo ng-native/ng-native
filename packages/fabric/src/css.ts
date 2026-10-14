@@ -4426,6 +4426,9 @@ export function boundDeclaration(
 /** A length in `em` or a viewport unit, the whole value: `2em`, `-0.5em`, `50vw`. */
 const RELATIVE_LENGTH = /^\s*(-?\d*\.?\d+)(em|vw|vh|vmin|vmax)\s*$/i;
 
+/** A number with no unit, as a `line-height` is written: a multiple of the font size. */
+const UNITLESS = /^\s*(-?\d*\.?\d+)\s*$/;
+
 type RelativeUnit = NonNullable<DeferredDeclaration['compute']>['unit'];
 
 /**
@@ -4439,13 +4442,16 @@ export function boundRelativeLength(
   text: string,
   on?: string,
 ): DeferredDeclaration | null {
-  const match = RELATIVE_LENGTH.exec(text);
   const kind = boundKind(prop);
-  if (!match || (kind !== 'length' && kind !== 'lineHeight')) return null;
+  if (kind !== 'length' && kind !== 'lineHeight') return null;
+  // A line height with no unit is a multiple of the font size, which is what an `em` is.
+  const match = RELATIVE_LENGTH.exec(text) ?? (kind === 'lineHeight' ? UNITLESS.exec(text) : null);
+  if (!match) return null;
+  const unit = (match[2]?.toLowerCase() ?? 'em') as RelativeUnit;
   return {
     props: [prop],
     ...(on === undefined ? {} : { on }),
-    compute: { unit: match[2]!.toLowerCase() as RelativeUnit, factor: Number(match[1]) },
+    compute: { unit, factor: Number(match[1]) },
   };
 }
 
