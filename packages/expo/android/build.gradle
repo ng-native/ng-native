@@ -17,4 +17,6 @@ android {
 dependencies {
   // The first version with ProgressStyle and promoted ongoing notifications in NotificationCompat.
   implementation 'androidx.core:core:1.17.0'
+  // `<search-field>`'s SearchView. React Native depends on AppCompat already.
+  implementation 'androidx.appcompat:appcompat:1.7.0'
 }

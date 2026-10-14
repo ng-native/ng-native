@@ -227,6 +227,7 @@ export const PACKAGES: NavSection = {
         { path: 'packages/expo/background-task', title: 'Background task' },
         { path: 'packages/expo/native-views', title: 'Native views', group: 'Native views' },
         { path: 'packages/expo/expo-ui', title: 'Expo UI' },
+        { path: 'packages/expo/search-field', title: 'Search field' },
         { path: 'packages/expo/dom-components', title: 'DOM components', group: 'Web interop' },
       ],
     },

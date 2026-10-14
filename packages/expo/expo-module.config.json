@@ -1,10 +1,13 @@
 {
   "platforms": ["apple", "android"],
   "apple": {
-    "modules": ["LiveActivityTapsModule", "ExpoUIModifiersModule"],
+    "modules": ["LiveActivityTapsModule", "ExpoUIModifiersModule", "SearchFieldModule"],
     "appDelegateSubscribers": ["LiveActivityTapsObserver"]
   },
   "android": {
-    "modules": ["dev.ngnative.expo.OngoingNotificationModule"]
+    "modules": [
+      "dev.ngnative.expo.OngoingNotificationModule",
+      "dev.ngnative.expo.SearchFieldModule"
+    ]
   }
 }

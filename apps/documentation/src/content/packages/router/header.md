@@ -69,7 +69,8 @@ one spelling Android's header takes. Press handling is the ordinary responder sy
 `<native-search-bar>` is the navigation bar's own search field: react-native-screens'
 `RNSSearchBar`, the `UISearchController` iOS puts under a large title. Use it for a list that
 filters from the bar, as the notes, wallet and music examples do, rather than a text field at the
-top of the page. It goes in the `searchBar` slot:
+top of the page. It goes in the `searchBar` slot. For a search field where there is no navigation
+bar, such as in a bottom sheet, use [`<search-field>`](/packages/expo/search-field).
 
 <!-- api: NativeSearchBar -->
 

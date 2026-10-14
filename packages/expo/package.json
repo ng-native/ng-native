@@ -56,6 +56,7 @@
     "./orientation": "./src/orientation.ts",
     "./player": "./src/player.ts",
     "./screen-capture": "./src/screen-capture.ts",
+    "./search-field": "./src/search-field.ts",
     "./secure-store": "./src/secure-store.ts",
     "./sensors": "./src/sensors.ts",
     "./splash-screen": "./src/splash-screen.ts",
@@ -220,6 +221,10 @@
       "./screen-capture": {
         "types": "./dist/screen-capture.d.ts",
         "default": "./dist/screen-capture.js"
+      },
+      "./search-field": {
+        "types": "./dist/search-field.d.ts",
+        "default": "./dist/search-field.js"
       },
       "./secure-store": {
         "types": "./dist/secure-store.d.ts",
