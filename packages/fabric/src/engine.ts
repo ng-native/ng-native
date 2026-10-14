@@ -3356,7 +3356,10 @@ export class Engine implements HostEngine {
    * again, with all that is under it.
    */
   private classesAbove = 0;
-  /** The count when each element went out of the tree, for the ones still out. */
+  /**
+   * The count when each element went out of the tree, for the ones still out. `detach` sets it
+   * for a node that only moves too, so `markReturned` runs after it and clears that.
+   */
   private readonly outSince = new WeakMap<EngineNode, number>();
 
   /** Have matched again a node coming back into the tree that missed a class change above it. */
@@ -3443,8 +3446,8 @@ export class Engine implements HostEngine {
 
   appendChild(parent: EngineNode, child: EngineNode): void {
     this.markAdopted(child, parent);
-    this.markReturned(child);
     this.detach(child);
+    this.markReturned(child);
     child.parent = parent;
     parent.children.push(child);
     if (child.dormantHoists) this.wakeHoists(child);
@@ -3454,8 +3457,8 @@ export class Engine implements HostEngine {
 
   insertBefore(parent: EngineNode, child: EngineNode, ref: EngineNode | null): void {
     this.markAdopted(child, parent);
-    this.markReturned(child);
     this.detach(child);
+    this.markReturned(child);
     child.parent = parent;
     const at = ref ? parent.children.indexOf(ref) : -1;
     if (at < 0) parent.children.push(child);

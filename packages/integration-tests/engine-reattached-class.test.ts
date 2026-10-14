@@ -70,4 +70,38 @@ describe('an element put back after a class changed above it', () => {
     s.engine.commit();
     assert.equal(s.titleProps()['opacity'], 0.5);
   });
+
+  it('does not match again a node that only moved, with what is under it', () => {
+    const s = scene(CSS);
+    const other = s.engine.createElement('view');
+    s.engine.appendChild(s.card, other);
+    const deep = s.engine.createElement('view');
+    s.engine.setClasses(deep, 'title');
+    s.engine.appendChild(s.title, deep);
+    s.engine.commit();
+    s.engine.insertBefore(s.card, s.title, null);
+    s.engine.commit();
+    s.engine.addClass(s.app, 'dark');
+    s.engine.commit();
+    s.engine.removeClass(s.app, 'dark');
+    s.engine.commit();
+    s.engine.insertBefore(s.card, s.title, other);
+    assert.equal(deep.ownDirty, false);
+    assert.equal(s.title.ownDirty, false);
+  });
+
+  it('matches again a node that left and came back after the class changed, with its children', () => {
+    const s = scene(CSS);
+    const deep = s.engine.createElement('view');
+    s.engine.setClasses(deep, 'title');
+    s.engine.appendChild(s.title, deep);
+    s.engine.commit();
+    s.engine.removeChild(s.card, s.title);
+    s.engine.commit();
+    s.engine.addClass(s.app, 'dark');
+    s.engine.commit();
+    s.engine.appendChild(s.card, s.title);
+    assert.equal(s.title.ownDirty, true);
+    assert.equal(deep.ownDirty, true);
+  });
 });
