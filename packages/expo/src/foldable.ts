@@ -14,7 +14,7 @@ import {
   signal,
   type Signal,
 } from '@angular/core';
-import { expoModule } from './native.ts';
+import { expoModule, present } from './native.ts';
 
 /** How far the hinge is open. `'unknown'` without a hinge, or while the platform cannot say. */
 export type HingePosture = 'closed' | 'partially-open' | 'fully-open' | 'unknown';
@@ -94,7 +94,7 @@ export class Foldable {
   readonly tabletop: Signal<boolean> = computed(() => this.halfOpen('horizontal'));
 
   constructor() {
-    const native = this.native;
+    const native = present(this.native);
     if (!native) return;
     const stateSubscription = native.addOnStateChangeListener((state) => this.update(state));
     this.update(native.getState());

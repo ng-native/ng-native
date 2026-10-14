@@ -18,7 +18,7 @@
  * stays at zero.
  */
 import { DestroyRef, InjectionToken, Service, inject, signal, type Signal } from '@angular/core';
-import { expoModule } from './native.ts';
+import { expoModule, present } from './native.ts';
 import { Permission, UNAVAILABLE } from './permissions.ts';
 
 type Expo = typeof import('expo-screen-capture');
@@ -63,7 +63,9 @@ export class ScreenCapture {
   readonly screenshots: Signal<number> = this.count.asReadonly();
 
   constructor() {
-    const listener = this.native?.addScreenshotListener(() => this.count.update((n) => n + 1));
+    const listener = present(this.native)?.addScreenshotListener(() =>
+      this.count.update((n) => n + 1),
+    );
     if (listener) inject(DestroyRef).onDestroy(() => listener.remove());
   }
 

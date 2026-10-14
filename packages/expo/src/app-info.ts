@@ -61,15 +61,27 @@ export class AppInfo {
   private readonly native = inject(AppInfo.SOURCE);
 
   /** The version people see: `CFBundleShortVersionString`, or Android's `versionName`. */
-  readonly version = this.native.application?.nativeApplicationVersion ?? null;
+  // Read when asked, so a module missing from the build says so then, not as the service is made.
+  get version(): string | null {
+    return this.native.application?.nativeApplicationVersion ?? null;
+  }
   /** The build number: `CFBundleVersion`, or Android's `versionCode`. */
-  readonly build = this.native.application?.nativeBuildVersion ?? null;
+  get build(): string | null {
+    return this.native.application?.nativeBuildVersion ?? null;
+  }
   /** The bundle identifier on iOS, the package name on Android. */
-  readonly id = this.native.application?.applicationId ?? null;
+  get id(): string | null {
+    return this.native.application?.applicationId ?? null;
+  }
   /** The name under the icon. */
-  readonly name = this.native.application?.applicationName ?? null;
+  get name(): string | null {
+    return this.native.application?.applicationName ?? null;
+  }
 
-  readonly device = deviceOf(this.native.device);
+  get device(): ReturnType<typeof deviceOf> {
+    return (this.deviceInfo ??= deviceOf(this.native.device));
+  }
+  private deviceInfo?: ReturnType<typeof deviceOf>;
 }
 
 /** What a device reads as without `expo-device`: nothing known. */

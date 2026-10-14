@@ -498,7 +498,7 @@ function withDisabled(
     '[title]': 'title()',
     '[selection]': 'resolvedSelection()',
     '[initialDate]': 'initialDate()',
-    '[displayedComponents]': 'displayedComponents()',
+    '[displayedComponents]': 'resolvedComponents()',
     '[range]': 'range()',
     '[accessibilityLabel]': 'accessibilityLabel()',
     '[modifiers]': 'resolvedModifiers()',
@@ -524,6 +524,12 @@ export class UiDatePicker {
   protected readonly resolvedSelection = computed(() =>
     this.android ? undefined : (this.selection() ?? this.value()?.toISOString()),
   );
+  /** SwiftUI takes a list of what to show, and Compose one word for it. */
+  protected readonly resolvedComponents = computed(() => {
+    const shown = this.displayedComponents();
+    if (!this.android || !shown) return shown;
+    return shown.length === 1 ? shown[0] : 'dateAndTime';
+  });
   protected readonly initialDate = computed(() =>
     this.android ? (this.value()?.getTime() ?? null) : undefined,
   );
@@ -556,6 +562,93 @@ export class UiDatePicker {
 /** How long after a date picker appears its first report is taken to be about itself. */
 const APPEARING_MS = 1000;
 
+/** Compose's `SingleChoiceSegmentedButtonRow`, Android only: a row of `ui-segmented-button`s. */
+@Component({
+  selector: 'ui-single-choice-segmented-button-row',
+  template: '<ng-content />',
+  host: { '[modifiers]': 'modifiers()' },
+})
+export class UiSingleChoiceSegmentedButtonRow {
+  protected readonly nativeView = nativeView();
+  readonly modifiers = input<readonly UiModifier[]>();
+}
+
+/** Compose's `SegmentedButton`, Android only, its label in a `<ui-slot name="label">`. */
+@Component({
+  selector: 'ui-segmented-button',
+  template: '<ng-content />',
+  host: {
+    '[selected]': 'selected()',
+    '[enabled]': 'enabled()',
+    '[modifiers]': 'modifiers()',
+    '(buttonPressed)': 'press.emit()',
+  },
+})
+export class UiSegmentedButton {
+  protected readonly nativeView = nativeView();
+  readonly selected = input(false, { transform: booleanAttribute });
+  readonly enabled = input(true, { transform: booleanAttribute });
+  readonly modifiers = input<readonly UiModifier[]>();
+  readonly press = output<void>();
+}
+
+/**
+ * Compose's `ExposedDropdownMenuBox`, Android only: an anchor, a view with the `menuAnchor`
+ * modifier, and the `ui-exposed-dropdown-menu` it opens. A tap on the anchor asks to open or close
+ * it, through `toggled`; `expanded` says which it is.
+ */
+@Component({
+  selector: 'ui-exposed-dropdown-menu-box',
+  template: '<ng-content />',
+  host: {
+    '[expanded]': 'expanded()',
+    '[modifiers]': 'modifiers()',
+    // Not a model: its output would be named for this event, and take it.
+    '(expandedChange)': 'toggled.emit($event.nativeEvent.value)',
+  },
+})
+export class UiExposedDropdownMenuBox {
+  protected readonly nativeView = nativeView();
+  readonly expanded = input(false, { transform: booleanAttribute });
+  readonly toggled = output<boolean>();
+  readonly modifiers = input<readonly UiModifier[]>();
+}
+
+/** Compose's `ExposedDropdownMenu`, Android only: the `ui-dropdown-menu-item`s a box opens. */
+@Component({
+  selector: 'ui-exposed-dropdown-menu',
+  template: '<ng-content />',
+  host: {
+    '[expanded]': 'expanded()',
+    '[modifiers]': 'modifiers()',
+    '(dismissRequest)': 'dismiss.emit()',
+  },
+})
+export class UiExposedDropdownMenu {
+  protected readonly nativeView = nativeView();
+  readonly expanded = input(false, { transform: booleanAttribute });
+  readonly modifiers = input<readonly UiModifier[]>();
+  /** A tap outside the menu, or Back: the box should close it. */
+  readonly dismiss = output<void>();
+}
+
+/** Compose's `DropdownMenuItem`, Android only, its text in a `<ui-slot name="text">`. */
+@Component({
+  selector: 'ui-dropdown-menu-item',
+  template: '<ng-content />',
+  host: {
+    '[enabled]': 'enabled()',
+    '[modifiers]': 'modifiers()',
+    '(itemPressed)': 'press.emit()',
+  },
+})
+export class UiDropdownMenuItem {
+  protected readonly nativeView = nativeView();
+  readonly enabled = input(true, { transform: booleanAttribute });
+  readonly modifiers = input<readonly UiModifier[]>();
+  readonly press = output<void>();
+}
+
 /** One choice in a `ui-picker`: what the field is set to, and what the user reads. */
 export interface UiPickerOption {
   readonly value: string | number;
@@ -563,29 +656,71 @@ export interface UiPickerOption {
 }
 
 /**
- * A SwiftUI `Picker`, iOS only, as a Signal Forms field: `<ui-picker [options]="rooms"
- * [formField]="f.room" />`. `options` draws the choices, each tagged with its value, which is the
- * content slot and `tag` modifiers `@expo/ui` otherwise wants written out by hand; children still
- * work for anything richer. `pickerStyle` is SwiftUI's (`menu`, `segmented`, `wheel`, `inline`).
+ * A SwiftUI `Picker` as a Signal Forms field: `<ui-picker [options]="rooms" [formField]="f.room"
+ * />`. `options` draws the choices, each tagged with its value, which is the content slot and `tag`
+ * modifiers `@expo/ui` otherwise wants written out by hand; children still work for anything
+ * richer on iOS. `pickerStyle` is SwiftUI's (`menu`, `segmented`, `wheel`, `inline`).
+ *
+ * Compose has no `Picker`, so on Android the options are drawn with its own controls: `segmented`
+ * as a row of segmented buttons, and any other style as an exposed dropdown menu under the chosen
+ * option. `label`, `systemImage`, children and `modifiers` are SwiftUI's alone.
  */
 @Component({
   selector: 'ui-picker',
-  imports: [UiSlot, UiText],
+  imports: [
+    UiDropdownMenuItem,
+    UiExposedDropdownMenu,
+    UiExposedDropdownMenuBox,
+    UiSegmentedButton,
+    UiSingleChoiceSegmentedButtonRow,
+    UiSlot,
+    UiText,
+  ],
   template: `
-    @if (options(); as options) {
-      <ui-slot name="content">
-        @for (option of options; track option.value) {
-          <ui-text [text]="option.label" [modifiers]="tags().get(option.value)" />
-        }
-      </ui-slot>
+    @if (android) {
+      @if (pickerStyle() === 'segmented') {
+        <ui-single-choice-segmented-button-row>
+          @for (option of options() ?? []; track option.value) {
+            <ui-segmented-button
+              [selected]="option.value === value()"
+              [enabled]="!disabled()"
+              (press)="choose(option.value)"
+            >
+              <ui-slot name="label"><ui-text [text]="option.label" /></ui-slot>
+            </ui-segmented-button>
+          }
+        </ui-single-choice-segmented-button-row>
+      } @else {
+        <ui-exposed-dropdown-menu-box
+          [expanded]="open()"
+          (toggled)="open.set(!disabled() && $event)"
+        >
+          <ui-text [text]="chosenLabel()" [modifiers]="anchor()" />
+          <ui-exposed-dropdown-menu [expanded]="open()" (dismiss)="open.set(false)">
+            @for (option of options() ?? []; track option.value) {
+              <ui-dropdown-menu-item [enabled]="!disabled()" (press)="choose(option.value)">
+                <ui-slot name="text"><ui-text [text]="option.label" /></ui-slot>
+              </ui-dropdown-menu-item>
+            }
+          </ui-exposed-dropdown-menu>
+        </ui-exposed-dropdown-menu-box>
+      }
+    } @else {
+      @if (options(); as options) {
+        <ui-slot name="content">
+          @for (option of options; track option.value) {
+            <ui-text [text]="option.label" [modifiers]="tags().get(option.value)" />
+          }
+        </ui-slot>
+      }
+      <ng-content />
     }
-    <ng-content />
   `,
   host: {
-    '[label]': 'label()',
-    '[systemImage]': 'systemImage()',
-    '[selection]': 'value()',
-    '[modifiers]': 'resolvedModifiers()',
+    '[label]': 'android ? undefined : label()',
+    '[systemImage]': 'android ? undefined : systemImage()',
+    '[selection]': 'android ? undefined : value()',
+    '[modifiers]': 'android ? undefined : resolvedModifiers()',
   },
 })
 export class UiPicker {
@@ -617,6 +752,22 @@ export class UiPicker {
       ),
   );
 
+  protected readonly android = nativePlatform() === 'android';
+  /** Whether Android's dropdown is open. */
+  protected readonly open = signal(false);
+  /**
+   * What Android's dropdown shows closed: the chosen option, or the label before there is one,
+   * with the arrow that says a tap opens it, which plain text otherwise does not.
+   */
+  protected readonly chosenLabel = computed(() => {
+    const chosen = this.options()?.find((option) => option.value === this.value());
+    return `${chosen?.label ?? this.label() ?? ''} \u25BE`;
+  });
+  /** What anchors Android's dropdown to the option it shows. */
+  protected readonly anchor = computed(() => [
+    { $type: 'menuAnchor', type: 'primaryNotEditable', enabled: !this.disabled() },
+  ]);
+
   protected readonly resolvedModifiers = computed(() => {
     const style = this.pickerStyle();
     const own = style
@@ -628,9 +779,15 @@ export class UiPicker {
   constructor() {
     listen('topSelectionChange', ({ selection }) => {
       if (typeof selection !== 'string' && typeof selection !== 'number') return;
-      this.value.set(selection);
-      this.touch.emit();
+      this.choose(selection);
     });
+  }
+
+  protected choose(selection: string | number): void {
+    this.open.set(false);
+    if (this.disabled()) return;
+    this.value.set(selection);
+    this.touch.emit();
   }
 }
 

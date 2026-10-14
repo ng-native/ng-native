@@ -24,7 +24,7 @@ import {
   signal,
   type Signal,
 } from '@angular/core';
-import { expoModule } from './native.ts';
+import { expoModule, present } from './native.ts';
 
 /**
  * What `expo-local-llm` reports, plus `notInstalled` for an app without the module or a build
@@ -138,6 +138,8 @@ export class LanguageModel {
           },
           ['ios'],
         );
+        // Missing from the build: the stand-in, to say so when it is used.
+        if (llm && !present(llm)) return llm as never;
         const module = llm?.ExpoLocalLlmModule;
         if (!llm || !module) return null;
         return {
@@ -182,7 +184,7 @@ export class LanguageModel {
   readonly downloadProgress: Signal<number | null> = this.progress.asReadonly();
 
   constructor() {
-    const native = this.native;
+    const native = present(this.native);
     if (!native) return;
     const availability = native.onAvailabilityChange((value) => this.state.set(known(value)));
     const progress = native.onDownloadProgress((value) => this.progress.set(value));
@@ -302,7 +304,8 @@ export class LanguageModel {
   }
 
   private read(): LanguageModelAvailability {
-    return this.native ? known(this.native.availability()) : 'notInstalled';
+    const native = present(this.native);
+    return native ? known(native.availability()) : 'notInstalled';
   }
 }
 

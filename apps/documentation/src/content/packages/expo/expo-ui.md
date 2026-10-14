@@ -307,8 +307,9 @@ than a crash.
 
 ## Choices: `UiPicker`
 
-**`UiPicker`** is a SwiftUI `Picker`: one choice out of a short, fixed list, drawn as a menu, a
-segmented control, a wheel or inline rows. It is a Signal Forms field as it stands, through its
+**`UiPicker`** is a SwiftUI `Picker` on iOS: one choice out of a short, fixed list, drawn as a
+menu, a segmented control, a wheel or inline rows. On Android it is drawn with Compose's own
+controls, described below. It is a Signal Forms field as it stands, through its
 `value` model, so `[formField]` binds it like any other control:
 
 ```ts
@@ -358,10 +359,18 @@ alongside or instead of `options`, for anything richer than a label.
 A pick writes the new value into the model, and so into the form, before `touch`; a report
 whose `selection` is neither a string nor a number is ignored.
 
-**The picker is iOS only.** `registerExpoUiViews('android')` registers no `ui-picker`, because
-`@expo/ui` has no Compose picker of that shape, so on Android the element commits as nothing. An
-app that runs on both needs another control for the choice there. Like every `ui-*` view, it
-sits inside a `<ui-host>`.
+**On Android** Compose has no `Picker`, so the same element draws its `options` with Compose's
+own controls, and the field binds the same way:
+
+- `pickerStyle: 'segmented'` is a row of segmented buttons, the chosen one marked.
+- Any other style is an exposed dropdown menu: the chosen option, or `label` before there is one,
+  with an arrow, and a tap opens the options under it.
+
+`systemImage`, `modifiers` and children are SwiftUI's alone, and are not drawn on Android. The
+Compose pieces are components of their own too, for a layout `UiPicker` does not cover:
+`UiSingleChoiceSegmentedButtonRow`, `UiSegmentedButton`, `UiExposedDropdownMenuBox`,
+`UiExposedDropdownMenu` and `UiDropdownMenuItem`, each Android only. Like every `ui-*` view, the
+picker sits inside a `<ui-host>`.
 
 ## A bottom sheet
 

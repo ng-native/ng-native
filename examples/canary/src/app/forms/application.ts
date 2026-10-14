@@ -92,7 +92,8 @@ import { FormRow } from './form-row.ts';
         />
       </x-form-row>
       <x-form-row label="Date of birth" [field]="f.born">
-        <ui-host [matchContents]="true">
+        <!-- Its height only: Compose's picker scrolls sideways, and crashes at a width with no limit. -->
+        <ui-host [matchContents]="{ vertical: true }">
           <ui-date-picker
             title="Born"
             accessibilityLabel="Date of birth"
@@ -244,7 +245,7 @@ import { FormRow } from './form-row.ts';
             />
           </x-form-row>
           <x-form-row label="Their date of birth" [field]="dependant.born">
-            <ui-host [matchContents]="true">
+            <ui-host [matchContents]="{ vertical: true }">
               <ui-date-picker
                 title="Born"
                 [displayedComponents]="dateOnly"

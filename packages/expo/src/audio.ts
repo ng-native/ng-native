@@ -7,7 +7,7 @@
  * // {{ player.state().currentTime }}
  * ```
  */
-import { expoModule, unavailable } from './native.ts';
+import { expoModuleNow, unavailable } from './native.ts';
 import { ownPlayer, watchAudioPlayer, type Player } from './player.ts';
 
 /**
@@ -20,7 +20,7 @@ export function audioPlayer(
   source: import('expo-audio').AudioSource,
   options: { timeUpdate?: number } = {},
 ): Player<import('expo-audio').AudioPlayer> {
-  const expo = expoModule(
+  const expo = expoModuleNow(
     'expo-audio',
     () => require('expo-audio') as typeof import('expo-audio'),
     ['ios', 'android', 'web'],

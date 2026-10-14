@@ -9,7 +9,7 @@
  * See `Store` in `@ng-native/expo/store` for what the signal does.
  */
 import { InjectionToken } from '@angular/core';
-import { expoModule } from './native.ts';
+import { expoModule, present } from './native.ts';
 import { Store, type NativeStore } from './store.ts';
 
 const plain = (): NativeStore | null => {
@@ -20,6 +20,8 @@ const plain = (): NativeStore | null => {
         default: typeof import('@react-native-async-storage/async-storage').default;
       },
   );
+  // Missing from the build: the stand-in, to say so when it is used.
+  if (module && !present(module)) return module as never;
   const store = module?.default;
   if (!store) return null;
   return {

@@ -30,8 +30,8 @@ const flatten = (nodes: readonly FakeFabricNode[]): FakeFabricNode[] =>
 
 interface Form {
   data: {
-    (): { arrival: Date; room: string };
-    set(value: { arrival: Date; room: string }): void;
+    (): { arrival: Date; room: string; board: string };
+    set(value: { arrival: Date; room: string; board: string }): void;
   };
   locked: { set(value: boolean): void };
 }
@@ -116,6 +116,8 @@ describe('a date picker in a form', () => {
     const { instance } = await boot();
     const date = screen.getByTestId('date');
     assert.equal(date.props['initialDate'], Date.parse('2026-10-01T09:00:00.000Z'));
+    // One word for what it shows, where SwiftUI takes a list.
+    assert.equal(date.props['displayedComponents'], 'dateAndTime');
     await fireEvent(date, 'dateSelected', { date: Date.parse('2027-01-02T00:00:00.000Z') });
     assert.equal(instance.data().arrival.toISOString(), '2027-01-02T00:00:00.000Z');
   });
@@ -167,5 +169,101 @@ describe('a SwiftUI host', () => {
     assert.equal(both['matchContentsHorizontal'], true);
     assert.equal(tall['matchContentsVertical'], true);
     assert.equal(tall['matchContentsHorizontal'], undefined);
+  });
+});
+
+/**
+ * SwiftUI's `Picker` has no Compose twin, so on Android a picker is drawn from Compose's own
+ * controls: a segmented one as a row of segmented buttons, any other as an exposed dropdown menu
+ * under the chosen option. The same template, the same field.
+ */
+describe('a picker on Android', () => {
+  const inside = (id: string, view: string) =>
+    flatten([screen.getByTestId(id)]).filter((node) => node.viewName.endsWith(`_${view}`));
+
+  async function bootAndroid() {
+    registerPlatformComponents('android');
+    registerExpoUiViews('android');
+    return boot();
+  }
+
+  it('draws a menu picker as a dropdown under the chosen option, and sets the field', async () => {
+    const { instance } = await bootAndroid();
+    const box = () => inside('room', 'ExposedDropdownMenuBoxView')[0]!;
+    assert.ok(box(), 'an exposed dropdown menu box');
+    const anchor = inside('room', 'TextView').find((node) =>
+      ((node.props['modifiers'] ?? []) as { $type: string }[]).some(
+        (modifier) => modifier.$type === 'menuAnchor',
+      ),
+    );
+    assert.equal(anchor?.props['text'], 'Double \u25BE', 'the chosen option, as its anchor');
+    const items = inside('room', 'DropdownMenuItemView');
+    assert.equal(items.length, 3);
+
+    await fireEvent(box(), 'expandedChange', { value: true });
+    assert.equal(box().props['expanded'], true);
+    await fireEvent(items[2]!, 'itemPressed', {});
+    await settle();
+    assert.equal(instance.data().room, 'suite');
+    assert.equal(box().props['expanded'], false, 'and closes');
+  });
+
+  it('opens and closes the dropdown as the box and the menu ask, starting closed', async () => {
+    await bootAndroid();
+    const box = () => inside('room', 'ExposedDropdownMenuBoxView')[0]!;
+    const menu = () => inside('room', 'ExposedDropdownMenuView')[0]!;
+    assert.equal(box().props['expanded'], false);
+    await fireEvent(box(), 'expandedChange', { value: true });
+    assert.equal(menu().props['expanded'], true);
+    await fireEvent(box(), 'expandedChange', { value: false });
+    assert.equal(box().props['expanded'], false, 'closed from the box');
+    await fireEvent(box(), 'expandedChange', { value: true });
+    await fireEvent(menu(), 'dismissRequest', {});
+    assert.equal(box().props['expanded'], false, 'and dismissed');
+  });
+
+  it('neither opens nor takes a pick while disabled', async () => {
+    registerPlatformComponents('android');
+    registerExpoUiViews('android');
+    await render(mod['UiDisabled'] as Type<unknown>);
+    const box = inside('bare-room', 'ExposedDropdownMenuBoxView')[0]!;
+    const anchor = () => inside('bare-room', 'TextView')[0]!;
+    const before = anchor().props['text'];
+    await fireEvent(box, 'expandedChange', { value: true });
+    assert.equal(box.props['expanded'], false);
+    await fireEvent(inside('bare-room', 'DropdownMenuItemView')[0]!, 'itemPressed', {});
+    await settle();
+    assert.equal(anchor().props['text'], before, 'nothing chosen');
+  });
+
+  it('draws a segmented picker as segmented buttons, and sets the field', async () => {
+    const { instance } = await bootAndroid();
+    assert.equal(inside('board', 'SingleChoiceSegmentedButtonRowView').length, 1);
+    const buttons = () => inside('board', 'SegmentedButtonView');
+    assert.deepEqual(
+      buttons().map((button) => button.props['selected']),
+      [false, true],
+    );
+    await fireEvent(buttons()[0]!, 'buttonPressed', {});
+    await settle();
+    assert.equal(instance.data().board, 'none');
+    assert.deepEqual(
+      buttons().map((button) => button.props['selected']),
+      [true, false],
+    );
+  });
+
+  it("leaves out SwiftUI's own props and views", async () => {
+    await bootAndroid();
+    const room = screen.getByTestId('room');
+    assert.equal(room.props['selection'], undefined);
+    assert.equal(inside('room', 'PickerView').length, 0);
+    assert.equal(
+      flatten([room]).some(
+        (node) => node.viewName === 'SlotView' && node.props['slotName'] === 'content',
+      ),
+      false,
+      "SwiftUI's content slot, which Compose refuses outside a host",
+    );
   });
 });

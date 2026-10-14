@@ -28,7 +28,7 @@ import {
   fontsSettled,
   onFontsRegistered,
 } from '@ng-native/fabric';
-import { expoModule } from './native.ts';
+import { expoModule, present } from './native.ts';
 
 /** A face a stylesheet declared, as the compiler collected it. */
 export interface FontFace {
@@ -107,7 +107,7 @@ export class FontRegistry {
 
   /** Whether `expo-font` is installed at all. Without it a custom face simply never appears. */
   get available(): boolean {
-    return this.native !== null;
+    return present(this.native) !== null;
   }
 
   /** Every family the platform can currently find, custom or bundled. */

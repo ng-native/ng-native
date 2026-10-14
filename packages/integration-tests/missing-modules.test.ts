@@ -72,7 +72,13 @@ type Platform = 'ios' | 'android' | 'web';
 function on<T>(platform: Platform, run: () => T): T {
   const host = globalThis as Record<string, unknown>;
   host['require'] = (id: string) => {
-    if (id === 'react-native') return { Platform: { OS: platform } };
+    // React Native itself is there on a device, whatever is missing: `Locale` listens to it.
+    if (id === 'react-native') {
+      return {
+        Platform: { OS: platform },
+        AppState: { addEventListener: () => ({ remove() {} }) },
+      };
+    }
     throw new Error(`Cannot find module '${id}'`);
   };
   try {
@@ -161,6 +167,27 @@ const SERVICES: readonly [string, () => unknown, string, (readonly Platform[])?]
   ['Watch', factoryOf(Watch.SOURCE), 'react-native-watch-connectivity', ['ios']],
 ];
 
+/**
+ * Reach a service, and use what it answers. A missing module throws when it is used, not when it
+ * is asked for: thrown from a factory, it would leave Angular's token marked as being made, and
+ * every injection after the first would fail with NG0200 instead.
+ */
+const use = (reach: () => unknown) => async (): Promise<unknown> => {
+  const reached = await reach();
+  await touch(reached, 2);
+  return reached;
+};
+
+/** Read what an object holds, and call what it offers, as code using it would. */
+async function touch(value: unknown, depth: number): Promise<void> {
+  if (!value || (typeof value !== 'object' && typeof value !== 'function') || depth < 0) return;
+  for (const key of Object.keys(value)) {
+    const held = (value as Record<string, unknown>)[key];
+    if (typeof held === 'function') await held.call(value);
+    else await touch(held, depth - 1);
+  }
+}
+
 /** What a throw says: the module, and the two commands that fix it. */
 function fixes(module: string, platform: Platform) {
   return (error: unknown) => {
@@ -184,15 +211,75 @@ describe('a service whose module is missing', () => {
     it(`${name}: throws with what to run where ${module} exists, and is inert elsewhere`, async () => {
       for (const platform of ['ios', 'android', 'web'] as const) {
         const attempt = async () => {
-          const reached = on(platform, reach);
-          // A player or a database reaches its module on creation; the rest do so in the factory.
-          if (reached instanceof Promise) await reached;
+          await on(platform, use(reach));
         };
         if (platforms.includes(platform)) await assert.rejects(attempt, fixes(module, platform));
         else await assert.doesNotReject(attempt, `${name} is inert on ${platform}`);
       }
     });
   }
+
+  it('says what to run every time it is used, not only the first', () => {
+    on('ios', () => {
+      for (let time = 0; time < 2; time++) {
+        const source = app.get(MapView.SOURCE) as unknown as Record<string, unknown>;
+        assert.throws(() => source['setCameraPosition'], fixes('expo-maps', 'ios'), `time ${time}`);
+      }
+    });
+  });
+
+  it('is made without its module, so every page that injects it is told what is missing', () => {
+    // Made as the service is, through the app's injector: a service that threw as it was made
+    // would leave Angular's record of it marked as being made, and the next page would get NG0200.
+    const services = [
+      AppInfo,
+      AppleSignIn,
+      BackgroundTask,
+      Battery,
+      Biometrics,
+      Brightness,
+      Browser,
+      Clipboard,
+      Crypto,
+      DocumentPicker,
+      FileSystem,
+      Foldable,
+      Fonts,
+      Haptics,
+      ImageEditor,
+      ImagePicker,
+      KeepAwake,
+      LanguageModel,
+      Locale,
+      Location,
+      MediaLibrary,
+      Network,
+      Notifications,
+      DeviceOrientation,
+      ScreenCapture,
+      Accelerometer,
+      Storage,
+      SecureStorage,
+      StoreReview,
+      Tracking,
+      Updates,
+      Watch,
+    ];
+    on('ios', () => {
+      for (const service of services) {
+        for (let time = 0; time < 2; time++) {
+          assert.doesNotThrow(
+            () => app.get(service as never),
+            `${'name' in service ? service.name : String(service)}, time ${time}`,
+          );
+        }
+      }
+      assert.equal(app.get(Haptics).available, false, 'and says it is not there');
+      assert.equal(app.get(Watch).available, false);
+      assert.throws(() => app.get(Network).status(), fixes('expo-network', 'ios'));
+      assert.throws(() => app.get(AppInfo).version, fixes('expo-application', 'ios'));
+    });
+  });
 
   it('is inert in Node, where there is no platform to ask', () => {
     for (const [name, reach] of SERVICES) {
@@ -314,7 +401,7 @@ describe('a service whose native module is not in the build', () => {
       await own.result.catch(() => {});
       assert.ok(own.evaluated.includes(module), `${module} was not evaluated with its modules`);
       for (const platform of platforms.filter((one) => one !== 'web') as Platform[]) {
-        const { result, evaluated } = attempt(reach, platform, () => false);
+        const { result, evaluated } = attempt(use(reach), platform, () => false);
         await assert.rejects(result, fixes(module, platform));
         assert.ok(!evaluated.includes(module), `${module} was evaluated on ${platform}`);
       }
@@ -427,7 +514,8 @@ describe('the watch, without its TurboModule in the build', () => {
 
   it('never evaluates the package, and says what to run', () => {
     const evaluated = device(false);
-    assert.throws(factoryOf(Watch.SOURCE), fixes('react-native-watch-connectivity', 'ios'));
+    const watch = factoryOf(Watch.SOURCE)() as unknown as Record<string, unknown>;
+    assert.throws(() => watch['watchEvents'], fixes('react-native-watch-connectivity', 'ios'));
     assert.deepEqual(evaluated, []);
   });
 

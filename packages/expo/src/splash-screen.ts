@@ -29,7 +29,7 @@
  * platform rather than injecting it, because the first call happens before there is an injector.
  */
 import { InjectionToken } from '@angular/core';
-import { expoModule } from './native.ts';
+import { expoModuleNow } from './native.ts';
 
 /** The slice of `expo-splash-screen` this needs. */
 export interface NativeSplashScreen {
@@ -38,7 +38,7 @@ export interface NativeSplashScreen {
 }
 
 export function expoSplashScreen(): NativeSplashScreen | null {
-  const expo = expoModule(
+  const expo = expoModuleNow(
     'expo-splash-screen',
     () => require('expo-splash-screen') as typeof import('expo-splash-screen'),
   );

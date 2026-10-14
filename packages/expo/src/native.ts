@@ -144,8 +144,9 @@ function nativeHalfMissing(module: string, platform: ModulePlatform | null): boo
  * The Expo module a service needs.
  *
  * Where the module exists for the platform the app is on, a module that is missing is a mistake
- * the developer can fix, so this throws a `MissingModuleError` that says how - rather than leave a
- * feature that silently does nothing. Anywhere it cannot exist - an iOS-only module on Android, the
+ * the developer can fix, so using what this answers throws a `MissingModuleError` that says how -
+ * rather than leave a feature that silently does nothing. Using it, not asking for it: see
+ * `missing`. Anywhere it cannot exist - an iOS-only module on Android, the
  * web, and Node, where a test runs with no platform at all - this answers null, and the service
  * goes inert, as code shared across platforms needs it to.
  *
@@ -167,5 +168,72 @@ export function expoModule<T>(
     failure = error;
   }
   if (platform === null || !platforms.includes(platform)) return null;
-  throw new MissingModuleError(module, platform, failure);
+  return missing(new MissingModuleError(module, platform, failure));
+}
+
+/**
+ * A module that is not there, which throws `error` when it is used rather than when it is asked
+ * for. Thrown from a token's factory or a service's constructor, the error would be the one the
+ * first injection sees: Angular leaves the token marked as being made, and every injection after
+ * it fails with NG0200, "Circular dependency", which names nothing to install.
+ *
+ * Not thenable, and quiet to a symbol, so awaiting it or logging it does not throw, nor Angular
+ * asking an injected value whether it has an `ngOnDestroy` or is its own not-found marker, by
+ * `name`.
+ */
+/** What Angular asks of any injected value, and `await` of any value: never the module's. */
+const ASKED_OF_ANY = new Set(['then', 'ngOnDestroy', 'name']);
+
+function missing<T>(error: MissingModuleError): T {
+  const fail = (): never => {
+    throw error;
+  };
+  // A function, so calling it, or a member read off it, is a use that says so too.
+  const standIn = new Proxy(function standIn() {}, {
+    get: (_, key) => (typeof key === 'symbol' || ASKED_OF_ANY.has(key) ? undefined : fail()),
+    set: fail,
+    has: fail,
+    apply: fail,
+    construct: fail,
+    ownKeys: fail,
+    deleteProperty: fail,
+    defineProperty: fail,
+    getOwnPropertyDescriptor: fail,
+  });
+  missingErrors.set(standIn, error);
+  return standIn as T;
+}
+
+/** The error each stand-in for a missing module throws when it is used. */
+const missingErrors = new WeakMap<object, MissingModuleError>();
+
+/** Whether `value` is the stand-in for a module missing from the build. */
+const isMissing = (value: unknown): boolean =>
+  typeof value === 'function' && missingErrors.has(value);
+
+/**
+ * The module, or null where it is missing from the build: for what a service does as it is made,
+ * a listener or a first read, which is skipped then rather than thrown, so the service is made and
+ * what the app calls on it is what says the module is missing. See `missing`. A factory that
+ * builds over the module hands the stand-in on where it is missing (`if (!present(expo)) return
+ * expo as never`), for the same reason.
+ */
+export function present<T>(value: T | null | undefined): T | null {
+  return value == null || isMissing(value) ? null : value;
+}
+
+/**
+ * As `expoModule`, throwing at once where the module is missing: for a function an app calls
+ * itself, a player, a database or the splash screen, where no token is left marked and a failure
+ * after the call would be caught and lost.
+ */
+export function expoModuleNow<T>(
+  module: string,
+  load: () => T | null | undefined,
+  platforms?: readonly ModulePlatform[],
+): T | null {
+  const found = expoModule(module, load, platforms);
+  const error = found && missingErrors.get(found as object);
+  if (error) throw error;
+  return found;
 }

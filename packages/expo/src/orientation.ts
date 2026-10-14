@@ -8,7 +8,7 @@
  */
 import { InjectionToken, Service, computed, inject, type Signal } from '@angular/core';
 import { observed, observedFrom, type Observed } from './observed.ts';
-import { expoModule } from './native.ts';
+import { expoModule, present } from './native.ts';
 
 export type Orientation =
   'unknown' | 'portrait' | 'portrait-upside-down' | 'landscape-left' | 'landscape-right';
@@ -40,6 +40,8 @@ export class DeviceOrientation {
           () => require('expo-screen-orientation') as typeof import('expo-screen-orientation'),
         );
         if (!expo) return NOTHING;
+        // Missing from the build: stand-ins, to say so when they are used.
+        if (!present(expo)) return { reported: expo, lock: expo, unlock: expo } as never;
 
         const ORIENTATIONS: Record<number, Orientation> = {
           [expo.Orientation.UNKNOWN]: 'unknown',

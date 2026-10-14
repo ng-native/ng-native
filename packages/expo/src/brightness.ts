@@ -8,7 +8,7 @@
  * Expo's own API rather than to reach through a convenience here.
  */
 import { InjectionToken, Service, inject, signal, type Signal } from '@angular/core';
-import { expoModule } from './native.ts';
+import { expoModule, present } from './native.ts';
 
 export interface NativeBrightness {
   get(): Promise<number>;
@@ -28,6 +28,8 @@ export class Brightness {
           () => require('expo-brightness') as typeof import('expo-brightness'),
         );
         if (!expo) return null;
+        // Missing from the build: the stand-in, to say so when it is used.
+        if (!present(expo)) return expo as never;
         return {
           get: () => expo.getBrightnessAsync(),
           set: (level) => expo.setBrightnessAsync(level),
@@ -44,10 +46,12 @@ export class Brightness {
   readonly level: Signal<number> = this.current.asReadonly();
 
   constructor() {
-    void this.native?.get().then(
-      (level) => this.current.set(level),
-      () => {},
-    );
+    void present(this.native)
+      ?.get()
+      .then(
+        (level) => this.current.set(level),
+        () => {},
+      );
   }
 
   /**

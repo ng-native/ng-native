@@ -15,7 +15,7 @@
  * a moment the user will not lose anything at. Nothing here does it on its own.
  */
 import { InjectionToken, Service, inject, signal, type Signal } from '@angular/core';
-import { expoModule } from './native.ts';
+import { expoModule, present } from './native.ts';
 
 export interface NativeUpdates {
   readonly enabled: boolean;
@@ -38,6 +38,8 @@ export class Updates {
           () => require('expo-updates') as typeof import('expo-updates'),
         );
         if (!expo) return null;
+        // Missing from the build: the stand-in, to say so when it is used.
+        if (!present(expo)) return expo as never;
         return {
           // False in development and in Expo Go, where the bundle comes from Metro. A banner shown
           // there is one that can never resolve.

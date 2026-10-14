@@ -3,7 +3,7 @@
  */
 import { InjectionToken, Service, computed, inject, type Signal } from '@angular/core';
 import { observed, observedFrom, type Observed } from './observed.ts';
-import { expoModule } from './native.ts';
+import { expoModule, present } from './native.ts';
 
 /** What the battery is doing. `unknown` is a real answer on a simulator. */
 export type BatteryState = 'unknown' | 'unplugged' | 'charging' | 'full';
@@ -26,6 +26,8 @@ export class Battery {
         () => require('expo-battery') as typeof import('expo-battery'),
       );
       if (!expo) return NOTHING;
+      // Missing from the build: stand-ins, to say so when they are read.
+      if (!present(expo)) return { level: expo, state: expo, saving: expo } as never;
 
       /**
        * Expo's states are numbers, and one of them is Android-only.

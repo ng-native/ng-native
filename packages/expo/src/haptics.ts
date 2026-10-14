@@ -10,7 +10,7 @@
  * to be installed - that is what links the native side.
  */
 import { InjectionToken, Service, inject } from '@angular/core';
-import { expoModule, optional } from './native.ts';
+import { expoModule, optional, present } from './native.ts';
 
 /** How hard the collision felt. `rigid` and `soft` are iOS 13+. */
 export type ImpactStyle = 'light' | 'medium' | 'heavy' | 'rigid' | 'soft';
@@ -56,7 +56,7 @@ export class Haptics {
 
   /** Whether the native module is installed at all. */
   get available(): boolean {
-    return this.native !== null;
+    return present(this.native) !== null;
   }
 
   /** A collision between interface elements. */

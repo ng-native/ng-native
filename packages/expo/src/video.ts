@@ -8,7 +8,7 @@
  * // {{ player.state().currentTime }}
  * ```
  */
-import { expoModule, unavailable } from './native.ts';
+import { expoModuleNow, unavailable } from './native.ts';
 import { ownPlayer, watchPlayer, type Player } from './player.ts';
 
 /** A video player owned by the current component, released when it is destroyed. */
@@ -16,7 +16,7 @@ export function videoPlayer(
   source: import('expo-video').VideoSource,
   options: { timeUpdate?: number } = {},
 ): Player<import('expo-video').VideoPlayer> {
-  const expo = expoModule(
+  const expo = expoModuleNow(
     'expo-video',
     () => require('expo-video') as typeof import('expo-video'),
     ['ios', 'android', 'web'],

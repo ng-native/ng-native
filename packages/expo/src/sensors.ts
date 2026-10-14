@@ -20,7 +20,7 @@
  * never idles.
  */
 import { InjectionToken, signal, type Signal } from '@angular/core';
-import { expoModule } from './native.ts';
+import { expoModule, present as moduleThere } from './native.ts';
 
 /** What a three-axis sensor reports. Barometer and light report their own shapes. */
 export interface Vector {
@@ -58,7 +58,8 @@ export class Sensor<T> {
     this.native = native;
     this.current = signal(zero);
     this.reading = this.current.asReadonly();
-    void (native?.isAvailableAsync() ?? Promise.resolve(false)).then(
+    // Not there at all is not available; a missing module says so when it is started.
+    void (moduleThere(native)?.isAvailableAsync() ?? Promise.resolve(false)).then(
       (yes) => this.present.set(yes),
       () => this.present.set(false),
     );
@@ -113,7 +114,9 @@ function sensorToken<T>(pick: (expo: Sensors) => unknown, zero: T, name: string)
   return new InjectionToken<Sensor<T>>(`angular-native.${name}`, {
     factory: () => {
       const expo = expoModule('expo-sensors', () => require('expo-sensors') as Sensors);
-      return new Sensor<T>(expo ? (pick(expo) as NativeSensor<T>) : null, zero);
+      // Missing from the build, the stand-in is the sensor, to say so when it is used.
+      const sensor = expo && (moduleThere(expo) ? pick(expo) : expo);
+      return new Sensor<T>(sensor ? (sensor as NativeSensor<T>) : null, zero);
     },
   });
 }

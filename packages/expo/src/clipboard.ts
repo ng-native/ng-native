@@ -6,7 +6,7 @@
  * expects. `expo-haptics`'s JavaScript adds none of that, which is why `./haptics.ts` skips it.
  */
 import { DestroyRef, InjectionToken, Service, inject, signal, type Signal } from '@angular/core';
-import { expoModule } from './native.ts';
+import { expoModule, present } from './native.ts';
 
 /** The slice of `expo-clipboard` this needs. */
 export interface NativeClipboard {
@@ -38,6 +38,8 @@ export class Clipboard {
           () => require('expo-clipboard') as typeof import('expo-clipboard'),
         );
         if (!expo) return null;
+        // Missing from the build: the stand-in, to say so when it is used.
+        if (!present(expo)) return expo as never;
         return {
           getStringAsync: () => expo.getStringAsync(),
           setStringAsync: (text) => expo.setStringAsync(text),
@@ -54,7 +56,9 @@ export class Clipboard {
   readonly changes: Signal<number> = this.count.asReadonly();
 
   constructor() {
-    const listener = this.native?.addClipboardListener(() => this.count.update((n) => n + 1));
+    const listener = present(this.native)?.addClipboardListener(() =>
+      this.count.update((n) => n + 1),
+    );
     if (listener) inject(DestroyRef).onDestroy(() => listener.remove());
   }
 

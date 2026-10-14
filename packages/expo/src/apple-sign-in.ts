@@ -31,7 +31,7 @@ import type {
   AppleAuthenticationCredentialState as ExpoCredentialState,
   AppleAuthenticationScope as ExpoScope,
 } from 'expo-apple-authentication';
-import { expoModule } from './native.ts';
+import { expoModule, present } from './native.ts';
 
 type Expo = typeof import('expo-apple-authentication');
 
@@ -102,10 +102,11 @@ export class AppleSignIn {
   private readonly revocations = signal(0);
 
   constructor() {
-    if (!this.native) return;
+    const native = present(this.native);
+    if (!native) return;
     // The user can revoke the app's access in Settings while it runs; the session it signed in
     // with is then no longer theirs to use.
-    const subscription = this.native.addRevokeListener(() =>
+    const subscription = native.addRevokeListener(() =>
       this.revocations.update((count) => count + 1),
     );
     inject(DestroyRef).onDestroy(() => subscription.remove());

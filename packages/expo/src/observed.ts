@@ -8,7 +8,8 @@
  * So this is that hook, as a signal: a value that starts at a stated default, is fetched once,
  * and follows the listener from then on.
  */
-import { DestroyRef, inject, signal, type Signal } from '@angular/core';
+import { computed, DestroyRef, inject, signal, type Signal } from '@angular/core';
+import { present } from './native.ts';
 
 /** A value the platform knows now and will say more about later. */
 export interface Observed<T> {
@@ -30,6 +31,8 @@ export interface Observed<T> {
 export function observed<T>(source: Observed<T> | null, initial: T): Signal<T> {
   const value = signal(initial);
   if (!source) return value.asReadonly();
+  // A module missing from the build says so when the value is read, not as it is subscribed.
+  if (!present(source)) return computed(() => source.current as never);
 
   // Failures are swallowed rather than surfaced: a device with no battery API is a device where
   // the default is the honest answer, and nothing on screen should break over it. The first

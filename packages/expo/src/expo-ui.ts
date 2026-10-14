@@ -64,6 +64,8 @@ export const EXPO_UI_VIEWS: Readonly<Record<string, readonly [string | null, str
   divider: ['DividerView', 'HorizontalDividerView'],
   'docked-search-bar': [null, 'DockedSearchBarView'],
   ellipse: ['EllipseView', null],
+  'dropdown-menu-item': [null, 'DropdownMenuItemView'],
+  'exposed-dropdown-menu': [null, 'ExposedDropdownMenuView'],
   'exposed-dropdown-menu-box': [null, 'ExposedDropdownMenuBoxView'],
   'filter-chip': [null, 'FilterChipView'],
   'floating-action-button': [null, 'FloatingActionButtonView'],
@@ -95,7 +97,8 @@ export const EXPO_UI_VIEWS: Readonly<Record<string, readonly [string | null, str
   'navigation-stack': ['NavigationStackView', null],
   overlay: ['OverlayView', null],
   pager: [null, 'HorizontalPagerView'],
-  picker: ['PickerView', null],
+  /** On Android, the box `UiPicker` draws Compose's controls in: see there. */
+  picker: ['PickerView', 'BoxView'],
   'plain-tooltip': [null, 'PlainTooltipView'],
   popover: ['PopoverView', null],
   progress: ['ProgressView', 'LinearProgressIndicatorView'],

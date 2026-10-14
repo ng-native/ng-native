@@ -4,7 +4,7 @@
  */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { ORIGIN, Sensor, type Vector } from '@ng-native/expo/sensors';
+import { Accelerometer, ORIGIN, Sensor, type Vector } from '@ng-native/expo/sensors';
 import { Locale } from '@ng-native/expo/locale';
 import { serviceWith } from './injected.ts';
 
@@ -85,6 +85,26 @@ describe('a sensor', () => {
     assert.equal(native.listeners, 1, 'a stop called twice takes nothing more');
     stopBelow();
     assert.equal(native.listeners, 0);
+  });
+
+  it("is the module's own sensor, of all the sensors it has, on a device", () => {
+    const accelerometer = sensor();
+    const gyroscope = sensor();
+    const host = globalThis as Record<string, unknown>;
+    host['require'] = (id: string) => {
+      if (id === 'react-native') return { Platform: { OS: 'ios' } };
+      if (id === 'expo-modules-core') return { requireOptionalNativeModule: () => ({}) };
+      if (id === 'expo-sensors') return { Accelerometer: accelerometer, Gyroscope: gyroscope };
+      throw new Error(`Cannot find module '${id}'`);
+    };
+    try {
+      const provider = (Accelerometer as unknown as { ɵprov: { factory(): Sensor<Vector> } }).ɵprov;
+      provider.factory().start(100);
+    } finally {
+      delete host['require'];
+    }
+    assert.equal(accelerometer.interval, 100);
+    assert.equal(gyroscope.interval, 0, 'and not another');
   });
 
   it('is inert with no sensor at all', async () => {

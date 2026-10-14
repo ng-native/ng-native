@@ -41,7 +41,7 @@ import type {
   NotificationResponse,
   SchedulableTriggerInputTypes,
 } from 'expo-notifications';
-import { currentPlatform, expoModule, optional } from './native.ts';
+import { currentPlatform, expoModule, optional, present } from './native.ts';
 import { Permission, UNAVAILABLE } from './permissions.ts';
 
 type Expo = typeof import('expo-notifications');
@@ -144,23 +144,25 @@ export class Notifications {
       () => native?.getPermissionsAsync?.() ?? Promise.resolve(UNAVAILABLE),
       () => native?.requestPermissionsAsync?.() ?? Promise.resolve(UNAVAILABLE),
     );
-    if (!native) return;
+    // Its listeners only where the module is there; missing, what the app calls says so.
+    const live = present(native);
+    if (!live) return;
     const subscriptions = [
-      native.addNotificationReceivedListener((notification) => this.received.set(notification)),
-      native.addNotificationResponseReceivedListener((response) => this.responded.set(response)),
+      live.addNotificationReceivedListener((notification) => this.received.set(notification)),
+      live.addNotificationResponseReceivedListener((response) => this.responded.set(response)),
       // Android drops notifications when too many arrive at once while the app is not running;
       // this is the only word that any went missing.
-      native.addNotificationsDroppedListener(() => this.drops.update((count) => count + 1)),
+      live.addNotificationsDroppedListener(() => this.drops.update((count) => count + 1)),
       // A device push token can be rolled by the platform while the app is running; the old one
       // then fails silently rather than delivering anything. This is the only way to find out.
-      native.addPushTokenListener((token) => this.rolled.set(token)),
+      live.addPushTokenListener((token) => this.rolled.set(token)),
     ];
     inject(DestroyRef).onDestroy(() => subscriptions.forEach((one) => one.remove()));
     // The response that launched the app happened before anything was listening, so it has to be
     // asked for rather than waited for. Without this a cold start from a notification does
     // nothing, which is the single most common way this is got wrong. A platform that cannot say
     // is the same as a launch without a notification.
-    void native
+    void live
       .getLastNotificationResponseAsync()
       .then((response) => {
         if (response && this.responded() === null) this.responded.set(response);
