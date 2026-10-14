@@ -20,8 +20,13 @@ public final class SearchFieldModule: Module {
         view.mostRecentEventCount = count ?? 0
       }
       Prop("enabled") { (view: SearchFieldView, enabled: Bool?) in
-        view.searchBar.searchTextField.isEnabled = enabled ?? true
-        view.searchBar.alpha = (enabled ?? true) ? 1 : 0.5
+        let enabled = enabled ?? true
+        // The text field and the Cancel button: disabled while it is edited, Cancel would still
+        // empty the field.
+        view.searchBar.isUserInteractionEnabled = enabled
+        view.searchBar.searchTextField.isEnabled = enabled
+        view.searchBar.alpha = enabled ? 1 : 0.5
+        if !enabled { view.searchBar.resignFirstResponder() }
       }
       Prop("placeholder") { (view: SearchFieldView, placeholder: String?) in
         view.searchBar.placeholder = placeholder
