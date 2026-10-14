@@ -508,6 +508,10 @@ export class UiDatePicker {
   protected readonly nativeView = nativeView();
   readonly title = input<string>();
   readonly selection = input<string>();
+  /**
+   * What the picker shows. An empty list shows nothing in SwiftUI; Compose has no such choice,
+   * so on Android it shows the date and the time.
+   */
   readonly displayedComponents = input<readonly ('date' | 'hourAndMinute')[]>();
   readonly range = input<{ readonly start?: string; readonly end?: string }>();
   readonly accessibilityLabel = input<string>();

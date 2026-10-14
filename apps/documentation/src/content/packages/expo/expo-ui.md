@@ -134,9 +134,12 @@ error. `expo-ui-components.ts` has thin typed components for the views an app re
   A pick is when it emits `touch`. SwiftUI's picker always shows a date, today when the field is
   empty, and the report it makes as it appears is not taken as the user's choice, so an optional
   date is best asked for behind a button that shows the picker. Without a form, `selection` still
-  takes ISO text on iOS.
-- **`UiPicker`** - a SwiftUI `Picker`, iOS only, and a Signal Forms field. `options` draws the
-  choices; see [Choices: `UiPicker`](#choices-uipicker) below.
+  takes ISO text on iOS. `displayedComponents` is a list of `'date'` and `'hourAndMinute'`; an
+  empty list shows nothing on iOS, and the date and time on Android, which has no way to show
+  nothing.
+- **`UiPicker`** - a SwiftUI `Picker` on iOS, Compose's segmented buttons or dropdown menu on
+  Android, and a Signal Forms field. `options` draws the choices;
+  see [Choices: `UiPicker`](#choices-uipicker) below.
 - **`UiBottomSheet`** - the system's sheet on both platforms, opened by its `open` model, with the
   app's own components as its content. It needs no `ui-host`; see
   [A bottom sheet](#a-bottom-sheet) below.
@@ -182,9 +185,9 @@ a modifier it does not know, silently, and knows few of SwiftUI's: `frame`, `fon
 only `start`, `top`, `end` and `bottom`. Choose the modifiers by platform, with `nativePlatform()`
 from `@ng-native/fabric`, where a view needs them on both.
 
-`UiDatePicker` and `UiBottomSheet` already take both platforms, as described under each. The rest
-of the typed components are SwiftUI's. On Android a text field, a menu and an image are different
-controls rather than renamed ones, and `UiPicker`, `UiList`, `UiForm`, `UiSection` and the others
+`UiDatePicker`, `UiPicker` and `UiBottomSheet` take both platforms, as described under each. The
+rest of the typed components are SwiftUI's. On Android a text field, a menu and an image are
+different controls rather than renamed ones, and `UiList`, `UiForm`, `UiSection` and the others
 have no Compose view at all; use Compose's own names for those.
 
 Still call `registerExpoUiViews` alongside importing these. The component supplies the types; the

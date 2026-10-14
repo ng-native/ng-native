@@ -171,6 +171,9 @@ export function expoModule<T>(
   return missing(new MissingModuleError(module, platform, failure));
 }
 
+/** What Angular asks of any injected value, and `await` of any value: never the module's. */
+const ASKED_OF_ANY = new Set(['then', 'ngOnDestroy', 'name']);
+
 /**
  * A module that is not there, which throws `error` when it is used rather than when it is asked
  * for. Thrown from a token's factory or a service's constructor, the error would be the one the
@@ -181,9 +184,6 @@ export function expoModule<T>(
  * asking an injected value whether it has an `ngOnDestroy` or is its own not-found marker, by
  * `name`.
  */
-/** What Angular asks of any injected value, and `await` of any value: never the module's. */
-const ASKED_OF_ANY = new Set(['then', 'ngOnDestroy', 'name']);
-
 function missing<T>(error: MissingModuleError): T {
   const fail = (): never => {
     throw error;

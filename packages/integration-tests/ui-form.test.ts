@@ -123,6 +123,25 @@ describe('a date picker in a form', () => {
   });
 });
 
+describe('which parts a date picker shows', () => {
+  const shown = async () => {
+    await render(mod['UiComponents'] as Type<unknown>);
+    return ['only-date', 'only-time', 'both', 'none'].map(
+      (id) => screen.getByTestId(id).props['displayedComponents'],
+    );
+  };
+
+  it('hands SwiftUI the list as it is written, an empty one showing nothing', async () => {
+    assert.deepEqual(await shown(), [['date'], ['hourAndMinute'], ['date', 'hourAndMinute'], []]);
+  });
+
+  it('gives Compose one word, and an empty list the date and time, which it cannot hide', async () => {
+    registerPlatformComponents('android');
+    registerExpoUiViews('android');
+    assert.deepEqual(await shown(), ['date', 'hourAndMinute', 'dateAndTime', 'dateAndTime']);
+  });
+});
+
 describe('a picker in a form', () => {
   it('draws its options and selects the field s value', async () => {
     const { fabric } = await boot();

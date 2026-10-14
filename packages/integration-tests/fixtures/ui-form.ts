@@ -106,3 +106,18 @@ export class UiStatic {}
   `,
 })
 export class UiHosts {}
+
+/** Date pickers showing a date, a time, both, and nothing. */
+@Component({
+  selector: 'x-ui-components',
+  imports: [UiDatePicker, UiHost],
+  template: `
+    <ui-host>
+      <ui-date-picker nativeID="only-date" [displayedComponents]="['date']" />
+      <ui-date-picker nativeID="only-time" [displayedComponents]="['hourAndMinute']" />
+      <ui-date-picker nativeID="both" [displayedComponents]="['date', 'hourAndMinute']" />
+      <ui-date-picker nativeID="none" [displayedComponents]="[]" />
+    </ui-host>
+  `,
+})
+export class UiComponents {}
