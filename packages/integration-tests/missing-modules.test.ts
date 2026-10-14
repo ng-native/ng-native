@@ -278,6 +278,16 @@ describe('a service whose module is missing', () => {
       assert.equal(app.get(Haptics).available, false, 'and says it is not there');
       assert.equal(app.get(Watch).available, false);
       assert.equal(app.get(Fonts).available, false);
+      // A write or a read that needs the module says so, rather than holding it or answering like
+      // a phone without a hinge.
+      const watch = 'react-native-watch-connectivity';
+      assert.throws(() => app.get(Watch).update({ a: 1 }), fixes(watch, 'ios'));
+      assert.throws(() => app.get(Watch).transfer({ a: 1 }), fixes(watch, 'ios'));
+      assert.throws(() => app.get(Watch).transferComplication({ a: 1 }), fixes(watch, 'ios'));
+      assert.equal(app.get(Foldable).available(), false);
+      assert.throws(() => app.get(Foldable).posture(), fixes('expo-foldables', 'ios'));
+      assert.throws(() => app.get(Foldable).fold(), fixes('expo-foldables', 'ios'));
+      assert.throws(() => app.get(Foldable).angle(), fixes('expo-foldables', 'ios'));
       assert.equal(app.get(Tracking).available, false);
       assert.throws(() => app.get(Network).status(), fixes('expo-network', 'ios'));
       assert.throws(() => app.get(AppInfo).version, fixes('expo-application', 'ios'));

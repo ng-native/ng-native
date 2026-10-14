@@ -50,12 +50,13 @@ export class SaveButton {
 - **`select()`** - a selection changed, the lightest of the three.
 - **`available`** - whether the native module is installed at all.
 
-Every method returns nothing and swallows failures. Expo's own equivalents are all promises, and a
-caller who does not await one gets an unhandled rejection on a device with no Taptic Engine, in a
-simulator, or on an Android build with the vibration permission off - none of which is a reason for
-anything to go wrong on screen. Nobody awaits a vibration, so nothing here surfaces one going
-nowhere; if that ever needs debugging, add logging under `__DEV__` rather than making call sites
-handle a rejection.
+Every method returns nothing and swallows the failures of a vibration. Expo's own equivalents are
+all promises, and a caller who does not await one gets an unhandled rejection on a device with no
+Taptic Engine, in a simulator, or on an Android build with the vibration permission off - none of
+which is a reason for anything to go wrong on screen. Nobody awaits a vibration, so nothing here
+surfaces one going nowhere; if that ever needs debugging, add logging under `__DEV__` rather than
+making call sites handle a rejection. A module missing from the build is not one of those: it
+throws, as below.
 
 ## Without the module
 

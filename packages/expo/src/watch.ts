@@ -235,7 +235,8 @@ export class Watch {
 
   update(context: WatchPayload): void {
     if (!this.native) return;
-    if (this.ready) this.native.updateApplicationContext(context);
+    // Missing from the build, the stand-in is called rather than held for later: it says so.
+    if (this.ready || !present(this.native)) this.native.updateApplicationContext(context);
     else this.pendingContext = context;
   }
 
@@ -260,7 +261,7 @@ export class Watch {
   private queue(complication: boolean, userInfo: WatchPayload): void {
     const native = this.native;
     if (!native) return;
-    if (!this.ready) this.pendingTransfers.push([complication, userInfo]);
+    if (!this.ready && present(native)) this.pendingTransfers.push([complication, userInfo]);
     else if (complication) native.transferCurrentComplicationUserInfo(userInfo);
     else native.transferUserInfo(userInfo);
   }

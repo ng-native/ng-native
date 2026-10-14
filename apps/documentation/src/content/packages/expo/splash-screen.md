@@ -46,9 +46,9 @@ face.
 ## `hold()`
 
 Keeps the splash up. Called at module scope, before anything is mounted - the first thing an entry
-file does. Failures are swallowed: the only ones are races with the screen already having gone,
-and an app that cannot hold its splash should still start. Calling it twice is safe; only the
-first call does anything.
+file does. Its failures are swallowed: the only ones are races with the screen already having gone,
+and an app that cannot hold its splash should still start. A module missing from the build is not
+one of those: it throws, as below. Calling it twice is safe; only the first call does anything.
 
 ## `hide()`
 

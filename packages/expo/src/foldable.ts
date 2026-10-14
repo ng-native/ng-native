@@ -77,15 +77,18 @@ export class Foldable {
 
   /** Whether the device reports a hinge. It can turn true shortly after launch. */
   readonly available: Signal<boolean> = computed(() => this.state() !== undefined);
-  readonly posture: Signal<HingePosture> = computed(() => this.state()?.posture ?? 'unknown');
+  readonly posture: Signal<HingePosture> = computed(() => this.known()?.posture ?? 'unknown');
   /**
    * Where the fold crosses the window, in window coordinates: a view that does not start at the
    * window's left edge subtracts its own offset. Null while it crosses no window, as on a closed
    * phone's cover display.
    */
-  readonly fold: Signal<Fold | null> = computed(() => this.state()?.fold ?? null);
+  readonly fold: Signal<Fold | null> = computed(() => this.known()?.fold ?? null);
   /** The hinge angle in degrees, 0 shut and 180 flat. Null without an angle sensor. */
-  readonly angle: Signal<number | null> = this.angleState.asReadonly();
+  readonly angle: Signal<number | null> = computed(() => {
+    this.known();
+    return this.angleState();
+  });
   /** Whether the fold splits the window, so content should stay off it. */
   readonly separating: Signal<boolean> = computed(() => this.fold()?.isSeparating ?? false);
   /** Half open with the fold running down the middle, like a book. */
@@ -102,6 +105,12 @@ export class Foldable {
       stateSubscription.remove();
       this.angleSubscription?.remove();
     });
+  }
+
+  /** The hinge's state, read as a use: a module missing from the build says what to install. */
+  private known(): HingeState | undefined {
+    if (this.native && !present(this.native)) this.native.getState();
+    return this.state();
   }
 
   private update(state: HingeState | undefined): void {
