@@ -25,7 +25,7 @@
  *   node scripts/coverage.mjs --report --shards 4    # report from all four shards' reports
  */
 import { spawnSync } from 'node:child_process';
-import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { availableParallelism } from 'node:os';
 import path from 'node:path';
 import url from 'node:url';
@@ -33,6 +33,8 @@ import url from 'node:url';
 const ROOT = path.resolve(path.dirname(url.fileURLToPath(import.meta.url)), '..');
 const OUT = path.join(ROOT, 'coverage');
 const INCOMPLETE = path.join(OUT, '.incomplete');
+/** A shard run's own mark, so one shard's success cannot clear another run's failure. */
+const incomplete = (shard) => (shard ? `${INCOMPLETE}-${shard}` : INCOMPLETE);
 const SUMMARY = path.join(OUT, 'summary.json');
 
 /**
@@ -272,10 +274,10 @@ function uncoveredRanges(lines) {
   return ranges.map(([from, to]) => (from === to ? `${from}` : `${from}-${to}`));
 }
 
-function run(suites) {
+function run(suites, mark = INCOMPLETE) {
   mkdirSync(OUT, { recursive: true });
   // Kept on failure or interruption, even when a failed producer wrote a complete LCOV file.
-  writeFileSync(INCOMPLETE, 'Coverage run incomplete. Rerun pnpm coverage.\n');
+  writeFileSync(mark, 'Coverage run incomplete. Rerun pnpm coverage.\n');
   for (const suite of suites) rmSync(suite.report(OUT), { force: true });
   for (const suite of suites) {
     const started = Date.now();
@@ -491,12 +493,18 @@ function main() {
   const suites = count ? sharded(count) : SUITES;
   if (index) {
     // One runner's part: its shard, and beside the first shard the suites that are not split.
-    run(suites.filter((suite) => (suite.shard ?? 1) === index));
-    rmSync(INCOMPLETE, { force: true });
+    run(
+      suites.filter((suite) => (suite.shard ?? 1) === index),
+      incomplete(index),
+    );
+    rmSync(incomplete(index), { force: true });
     return;
   }
   if (args.includes('--report')) {
-    if (existsSync(INCOMPLETE)) throw new Error('Coverage run incomplete. Rerun pnpm coverage.');
+    const marks = existsSync(OUT)
+      ? readdirSync(OUT).filter((file) => file.startsWith(path.basename(INCOMPLETE)))
+      : [];
+    if (marks.length) throw new Error('Coverage run incomplete. Rerun pnpm coverage.');
   } else {
     run(suites);
   }

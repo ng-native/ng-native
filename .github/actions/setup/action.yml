@@ -6,12 +6,6 @@ inputs:
     description: Passed to setup-node, which writes an .npmrc for it. Only the release sets it.
     required: false
     default: ''
-  nx-cache:
-    description: >-
-      Names the Nx task cache to restore, for a job that runs Nx tasks and saves it from main under
-      the same name. A job that does not set it restores none.
-    required: false
-    default: ''
 
 runs:
   using: composite
@@ -28,21 +22,8 @@ runs:
         node-version: 24
         registry-url: ${{ inputs.registry-url }}
 
-    # Nx's task cache, as main's latest run of the same job left it (ci.yml saves it). Each job has
-    # a cache of its own name, since each holds only the tasks that job ran. Capped, so it carries
-    # what recent commits built rather than growing with every one.
-    - if: inputs.nx-cache != ''
-      uses: actions/cache/restore@v6
-      with:
-        path: .nx/cache
-        key: nx-${{ inputs.nx-cache }}-${{ runner.os }}-${{ github.sha }}
-        restore-keys: nx-${{ inputs.nx-cache }}-${{ runner.os }}-
-    # Nx keeps its cache under the home directory unless told where: without NX_CACHE_DIRECTORY
-    # there is no `.nx/cache` to restore into or to save.
-    - run: |
-        echo "NX_MAX_CACHE_SIZE=500MB" >> "$GITHUB_ENV"
-        echo "NX_CACHE_DIRECTORY=$GITHUB_WORKSPACE/.nx/cache" >> "$GITHUB_ENV"
-      shell: bash
+    # No Nx task cache from an earlier run: Nx records its entries in a database named for the
+    # machine, so a restored cache directory is never read on a new runner, and every task runs.
 
     # Frozen: CI fails on a lockfile that does not match the manifests rather than quietly
     # resolving something newer, which is how the Reanimated version drifted off Expo's set.

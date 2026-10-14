@@ -292,7 +292,7 @@ describe('coverage script integrity', () => {
     }));
 
   // Stands in for the suites, as `suites` does, and keeps the arguments each was started with.
-  function shardRun(root: string, shard: string) {
+  function shardRun(root: string, shard: string, status = 0) {
     writeFileSync(
       path.join(root, 'suites.mjs'),
       `
@@ -306,7 +306,7 @@ childProcess.spawnSync = (command, args) => {
   const report = named ? named.split('=')[1] : ${JSON.stringify(path.join(root, 'coverage/browser/lcov.info'))};
   mkdirSync(path.dirname(report), { recursive: true });
   writeFileSync(report, ${JSON.stringify(lcov())});
-  return { status: 0 };
+  return { status: ${status} };
 };
 syncBuiltinESMExports();
 `,
@@ -334,6 +334,23 @@ syncBuiltinESMExports();
       assert.equal(first.calls.length, 4);
       assert.ok(first.calls[0]!.includes('--test-shard=1/2'));
       assert.ok(existsSync(path.join(root, 'coverage/native-2.info')), 'the other shard is kept');
+      assert.equal(cli(root, sharded).status, 0);
+    }));
+
+  it('does not clear the mark a failed whole run left when a shard run succeeds', () =>
+    workspace((root) => {
+      suites(root, 'failure');
+      assert.equal(cli(root, [], true).status, 2);
+      assert.equal(shardRun(root, '2/2').result.status, 0);
+      rejects(root, /incomplete|rerun/i);
+    }));
+
+  it('does not merge the shards when one of them failed', () =>
+    workspace((root) => {
+      assert.equal(shardRun(root, '1/2').result.status, 0);
+      assert.equal(shardRun(root, '2/2', 1).result.status, 1);
+      rejects(root, /incomplete|rerun/i, sharded);
+      assert.equal(shardRun(root, '2/2').result.status, 0);
       assert.equal(cli(root, sharded).status, 0);
     }));
 

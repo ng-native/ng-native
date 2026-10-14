@@ -35,8 +35,6 @@ jobs:
           fetch-depth: 0
 
       - uses: ./.github/actions/setup
-        with:
-          nx-cache: verify
 
       # Formatting is checked for the whole tree rather than per project: it is not a task graph
       # and it takes under a second.
@@ -61,14 +59,6 @@ jobs:
       - name: Check the release bundle
         run: npx nx affected -t check-bundle
 
-      # Nx's task cache, which the setup action restores into this job. Saved from main only, so a
-      # pull request cannot put an output into a cache that main later trusts.
-      - if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-        uses: actions/cache/save@v6
-        with:
-          path: .nx/cache
-          key: nx-verify-${{ runner.os }}-${{ github.sha }}
-
   # Cold test runs compile lazy screens, so they have their own time budget beside `verify`.
   tests:
     if: github.event.pull_request.draft != true
@@ -80,8 +70,6 @@ jobs:
           fetch-depth: 0
 
       - uses: ./.github/actions/setup
-        with:
-          nx-cache: tests
 
       - uses: nrwl/nx-set-shas@afb73a62d26e41464e9254689e1fd6122ee683c1 # v5.0.1
 
@@ -89,12 +77,6 @@ jobs:
       # generators, docs, examples, template, and testing's own Vitest runner checks.
       - name: Test the remaining projects that changed
         run: pnpm nx affected -t test --exclude=@ng-native/integration-tests,@ng-native/web --parallel=2
-
-      - if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-        uses: actions/cache/save@v6
-        with:
-          path: .nx/cache
-          key: nx-tests-${{ runner.os }}-${{ github.sha }}
 
   # Every suite, measured: most of CI's time, nearly all of it the native suite, so that suite is
   # split across four runners. `coverage` below merges what they measured and holds the floor.
@@ -134,7 +116,7 @@ jobs:
       # Every suite, always, rather than what changed: the floor is on the merged number, and a
       # change in one package moves the coverage of another.
       - name: Test, measuring coverage
-        run: node scripts/coverage.mjs --shard ${{ matrix.shard }}/4
+        run: node scripts/coverage.mjs --shard ${{ matrix.shard }}/${{ strategy.job-total }}
 
       - uses: actions/upload-artifact@v7
         with:
