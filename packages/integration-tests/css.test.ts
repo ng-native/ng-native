@@ -67,6 +67,19 @@ describe('CSS compilation', () => {
       { feature: 'width', op: 'gte', value: 500 },
     );
   });
+
+  it('treats a qualified type that never matches as dead, as an unqualified one is', () => {
+    const only = compileCss('@media only print, (min-width: 500px) { .a { color: red } }');
+    assert.deepEqual(only.rules[0].condition, { feature: 'width', op: 'gte', value: 500 });
+    const typed = compileCss(
+      '@media only print and (min-width: 1px), (min-width: 500px) { .a { color: red } }',
+    );
+    assert.deepEqual(typed.rules[0].condition, { feature: 'width', op: 'gte', value: 500 });
+    assert.throws(
+      () => compileCss('@media only print { .a { color: red } }'),
+      /media type has no meaning/,
+    );
+  });
 });
 
 describe('CSS at runtime', () => {

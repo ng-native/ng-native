@@ -134,6 +134,31 @@ describe('declaring a face', () => {
     assert.equal(compileCss(face, 'test').fonts[0].source.asset, './icons.woff2');
   });
 
+  it('chooses among the files the bundle can hold, ahead of a remote one listed first', () => {
+    const face = (src: string) => `@font-face { font-family: A; src: ${src} }`;
+    assert.equal(
+      compileCss(face('url(https://x.com/a.ttf), url(./a.ttf)'), 'test').fonts[0].source.asset,
+      './a.ttf',
+    );
+    // The remote file is the format a device prefers, and is still not one it can have.
+    assert.equal(
+      compileCss(
+        face("url(https://x.com/a.ttf) format('truetype'), url(./a.woff2) format('woff2')"),
+        'test',
+      ).fonts[0].source.asset,
+      './a.woff2',
+    );
+    assert.equal(
+      compileCss(face('url(data:font/ttf;base64,AAAA), url(./a.ttf)'), 'test').fonts[0].source
+        .asset,
+      './a.ttf',
+    );
+    assert.throws(
+      () => compileCss(face('url(https://x.com/a.ttf), url(data:font/ttf;base64,AA)'), 'test'),
+      /naming a file in the app/,
+    );
+  });
+
   it('refuses a face with no family or no source, which could only fail at runtime', () => {
     assert.throws(() => compileCss("@font-face { src: url('./x.ttf') }", 'test'), /family/);
     assert.throws(() => compileCss('@font-face { font-family: Inter }', 'test'), /src/);

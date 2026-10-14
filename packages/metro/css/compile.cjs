@@ -886,8 +886,9 @@ const neverOnADevice = (type) => Boolean(type) && type !== 'all' && type !== 'sc
 function mediaQuery(query, context) {
   const queries = query?.mediaQueries ?? [];
   // One that never matches on a device adds nothing to an or, so the rest are the query. Alone,
-  // it is a rule that never applies, and is refused below with its reason.
-  const live = queries.filter((one) => one.qualifier || !neverOnADevice(one.mediaType));
+  // it is a rule that never applies, and is refused below with its reason. `only` changes nothing
+  // about that, and `not print` is the one kind that does match.
+  const live = queries.filter((one) => one.qualifier === 'not' || !neverOnADevice(one.mediaType));
   const parts = (live.length ? live : queries).map((one) => {
     if (one.qualifier === 'not') {
       throw new CssUnsupported(`${context}: 'not' media queries are not supported yet`);
@@ -3179,14 +3180,18 @@ function faceWeight(value) {
 /** The file a face comes from. Anything but a `url()` is a font the bundle would not contain. */
 function fontUrl(sources, family, context) {
   const list = sources ?? [];
-  const files = list.filter((source) => source.type === 'url').map((source) => source.value);
+  const urls = list.filter((source) => source.type === 'url').map((source) => source.value);
+  // A remote or inline file is not one the bundle can hold, so it is not a choice: a face that
+  // lists one first still has the local file after it.
+  const remote = (file) => /^(?:[a-z][a-z\d+.-]*:|\/\/)/i.test(file.url?.url ?? '');
+  const files = urls.filter((file) => !remote(file));
   // A browser takes the first format it knows, and a face lists the newest first. A device
   // loads TrueType and OpenType, so that one is taken where the face has it.
   const url = (files.find(loadsOnADevice) ?? files[0])?.url?.url;
-  if (url && /^(?:[a-z][a-z\d+.-]*:|\/\/)/i.test(url)) {
+  if (!url && urls.length) {
     throw new CssUnsupported(
       `${context}: @font-face '${family}' needs a src: url() naming a file in the app ` +
-        `('${url.slice(0, 40)}' is not one the bundle can hold).`,
+        `('${urls[0].url.url.slice(0, 40)}' is not one the bundle can hold).`,
     );
   }
   // A query or a fragment is a browser's cache key or a font inside a collection, not the file.
