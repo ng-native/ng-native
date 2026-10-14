@@ -431,6 +431,20 @@ describe('translating an icon', () => {
     assert.equal(props['strokeWidth'], '1.5');
   });
 
+  it('lists only the paint native inherits, which Android reads each name of as a field', () => {
+    // react-native-svg on Android looks each name in the list up on the shape by reflection:
+    // one that is no inherited paint, `opacity` or `clipRule`, throws and stops the app.
+    const props = nativeProps(
+      'path',
+      { opacity: '0.5', 'clip-rule': 'evenodd', fill: 'red', 'stroke-width': '2', d: 'M0 0' },
+      colour,
+    );
+    assert.deepEqual(props['propList'], ['fill', 'strokeWidth']);
+    assert.equal(props['opacity'], 0.5);
+    const bare = nativeProps('path', { opacity: '0.5', d: 'M0 0' }, colour);
+    assert.equal(bare['propList'], undefined);
+  });
+
   it('lists what the shape set, which is what native inherits around', () => {
     const props = nativeProps('path', { stroke: 'currentColor', d: 'M0 0' }, colour);
     assert.deepEqual(props['propList'], ['stroke']);

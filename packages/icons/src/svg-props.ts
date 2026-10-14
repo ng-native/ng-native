@@ -422,6 +422,18 @@ function multiply(left: number[], right: number[]): number[] {
 }
 
 /**
+ * The paint a shape inherits from the group around it where it sets none of its own, and so the
+ * only names `propList` may hold: react-native-svg's own list (`extractFill`, `extractStroke`).
+ * Android reads each name in the list off the shape by reflection, and one that is no field of
+ * its paint, `opacity` or `clipRule`, throws and stops the app.
+ */
+const INHERITED: ReadonlySet<string> = new Set([
+  ...['fill', 'fillOpacity', 'fillRule', 'stroke', 'strokeWidth', 'strokeOpacity'],
+  ...['strokeDasharray', 'strokeDashoffset', 'strokeLinecap', 'strokeLinejoin'],
+  'strokeMiterlimit',
+]);
+
+/**
  * One element's native props.
  *
  * `propList` is the load-bearing part: it names the props this element set itself, and native
@@ -440,7 +452,7 @@ export function nativeProps(
     const prop = own(PRESENTATION, name);
     if (!prop) continue;
     props[prop] = presentationValue(prop, value, context);
-    propList.push(prop);
+    if (INHERITED.has(prop)) propList.push(prop);
   }
   if (propList.length > 0) props['propList'] = propList;
 
