@@ -5,22 +5,24 @@
  *
  * ```html
  * <ui-bottom-sheet [(open)]="filtering">
- *   <search-field placeholder="Search colours" [(query)]="query" />
+ *   <search-field placeholder="Search colours" [(value)]="query" />
  *   ...
  * </ui-bottom-sheet>
  * ```
  *
  * It is `@ng-native/expo`'s own native view: UIKit's `UISearchBar` on iOS, with its Cancel button,
  * dictation and clear button, and AndroidX's `SearchView` on Android, which has no Cancel button.
- * The inputs and events are `<native-search-bar>`'s: a two-way `query`, `(search)` for the keyboard's
- * search key with the text, `(cancel)`, `(searchFocus)` and `(searchBlur)`, and `focus()`, `blur()`
- * and `clear()` from code.
+ * The events are `<native-search-bar>`'s: `(search)` for the keyboard's search key with the text,
+ * `(cancel)`, `(searchFocus)` and `(searchBlur)`, and `focus()`, `blur()` and `clear()` from code.
+ * The text is a two-way `value` rather than the bar's `query`, because it is a Signal Forms control
+ * as `<text-input>` is: `[formField]` binds `value`, `disabled`, and `touch` on blur.
  *
  * Expo Go cannot load native code of its own, so there the element draws nothing, and in
  * development it says so once.
  */
 import {
   Component,
+  booleanAttribute,
   DestroyRef,
   ElementRef,
   InjectionToken,
@@ -68,7 +70,8 @@ function warnMissing(): void {
   template: '',
   styles: ':host { height: 56px; }',
   host: {
-    '[text]': 'query()',
+    '[text]': 'value()',
+    '[enabled]': '!disabled()',
     '[mostRecentEventCount]': 'eventCount()',
     '[placeholder]': 'placeholder()',
     '[showsCancelButton]': 'showsCancelButton()',
@@ -97,8 +100,13 @@ export class SearchField {
     },
   );
 
-  /** The text in the field: typing writes it, and a query set from code is put in the field. */
-  readonly query = model('');
+  /**
+   * The text in the field: typing writes it, and text set from code is put in the field. A
+   * `model()`, which is all `FormValueControl<string>` asks, so `[formField]` binds it.
+   */
+  readonly value = model('');
+  /** Refuse input and show the field dimmed. Signal Forms' `disabled()` rule sets it. */
+  readonly disabled = input(false, { transform: booleanAttribute });
   readonly placeholder = input<string>();
   /**
    * iOS: whether the Cancel button shows. Left unset it shows while the field has the keyboard,
@@ -115,6 +123,8 @@ export class SearchField {
   readonly cancel = output<void>();
   readonly searchFocus = output<void>();
   readonly searchBlur = output<void>();
+  /** The field gave up the keyboard: what Signal Forms marks a field touched from. */
+  readonly touch = output<void>();
 
   /**
    * The keystroke the text answers, as React Native's text input counts them: native skips a text
@@ -139,13 +149,16 @@ export class SearchField {
     const stops = [
       listen('topChangeText', ({ text, eventCount }) => {
         if (typeof eventCount === 'number') this.eventCount.set(eventCount);
-        this.query.set(String(text ?? ''));
+        this.value.set(String(text ?? ''));
       }),
       // Named apart from the outputs: a native event of an output's name reaches its listener too.
-      listen('topSubmitSearch', ({ text }) => this.search.emit(String(text ?? this.query()))),
+      listen('topSubmitSearch', ({ text }) => this.search.emit(String(text ?? this.value()))),
       listen('topPressCancel', () => this.cancel.emit()),
       listen('topBeginEditing', () => this.searchFocus.emit()),
-      listen('topEndEditing', () => this.searchBlur.emit()),
+      listen('topEndEditing', () => {
+        this.searchBlur.emit();
+        this.touch.emit();
+      }),
     ];
     inject(DestroyRef).onDestroy(() => stops.forEach((stop) => stop()));
   }
@@ -160,9 +173,9 @@ export class SearchField {
     await this.call('blur');
   }
 
-  /** Empty the field, and the query with it. */
+  /** Empty the field, and the value with it. */
   clear(): void {
-    this.query.set('');
+    this.value.set('');
   }
 
   private async call(name: 'focus' | 'blur'): Promise<void> {

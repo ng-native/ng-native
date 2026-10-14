@@ -25,6 +25,7 @@ class SearchFieldModule : Module() {
       Prop("mostRecentEventCount") { view: SearchFieldView, count: Int? ->
         view.mostRecentEventCount = count ?: 0
       }
+      Prop("enabled") { view: SearchFieldView, enabled: Boolean? -> view.fieldEnabled = enabled ?: true }
       Prop("placeholder") { view: SearchFieldView, placeholder: String? ->
         view.search.queryHint = placeholder
       }
@@ -91,6 +92,16 @@ class SearchFieldView(context: Context, appContext: AppContext) : ExpoView(conte
     search.setQuery(text, false)
     applying = false
   }
+
+  var fieldEnabled = true
+    set(value) {
+      field = value
+      search.isEnabled = value
+      // The text box and its clear button take touches of their own, so each is turned off too.
+      search.findViewById<android.view.View>(androidx.appcompat.R.id.search_src_text)?.isEnabled = value
+      search.findViewById<android.view.View>(androidx.appcompat.R.id.search_close_btn)?.isEnabled = value
+      search.alpha = if (value) 1f else 0.5f
+    }
 
   fun focus() {
     search.requestFocus()

@@ -19,6 +19,10 @@ public final class SearchFieldModule: Module {
       Prop("mostRecentEventCount") { (view: SearchFieldView, count: Int?) in
         view.mostRecentEventCount = count ?? 0
       }
+      Prop("enabled") { (view: SearchFieldView, enabled: Bool?) in
+        view.searchBar.searchTextField.isEnabled = enabled ?? true
+        view.searchBar.alpha = (enabled ?? true) ? 1 : 0.5
+      }
       Prop("placeholder") { (view: SearchFieldView, placeholder: String?) in
         view.searchBar.placeholder = placeholder
       }

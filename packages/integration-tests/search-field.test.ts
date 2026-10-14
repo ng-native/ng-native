@@ -132,3 +132,44 @@ describe('a search field', () => {
     }
   });
 });
+
+describe('a search field in a Signal Forms form', () => {
+  interface FormHost {
+    readonly locked: WritableSignal<boolean>;
+    readonly model: () => { text: string };
+    readonly filter: { text: () => { touched(): boolean } };
+  }
+
+  async function boot() {
+    const app = await render(mod['SearchFieldForm'] as Type<unknown>, {
+      providers: [{ provide: (mod['SearchField'] as { SOURCE: unknown }).SOURCE, useValue: {} }],
+    });
+    await idle();
+    return { host: app.instance as FormHost, field: () => screen.getByTestId('filter') };
+  }
+
+  it('shows the field and writes typing into it', async () => {
+    const { host, field } = await boot();
+    assert.equal(field().props['text'], 'teal');
+    await fireEvent(field(), 'topChangeText', { text: 'coral', eventCount: 1 });
+    assert.equal(host.model().text, 'coral');
+  });
+
+  it('marks the field touched when it gives up the keyboard', async () => {
+    const { host, field } = await boot();
+    assert.equal(host.filter.text().touched(), false);
+    await fireEvent(field(), 'topEndEditing', {});
+    assert.equal(host.filter.text().touched(), true);
+  });
+
+  it('is disabled while the form says so, and enabled again after', async () => {
+    const { host, field } = await boot();
+    assert.equal(field().props['enabled'], true);
+    host.locked.set(true);
+    await idle();
+    assert.equal(field().props['enabled'], false);
+    host.locked.set(false);
+    await idle();
+    assert.equal(field().props['enabled'], true);
+  });
+});

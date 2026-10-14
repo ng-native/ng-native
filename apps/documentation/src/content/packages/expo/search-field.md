@@ -25,7 +25,7 @@ import { SearchField } from '@ng-native/expo/search-field';
   imports: [SearchField, Text, UiBottomSheet],
   template: `
     <ui-bottom-sheet [(open)]="open">
-      <search-field placeholder="Search colours" [(query)]="query" />
+      <search-field placeholder="Search colours" [(value)]="query" />
       @for (colour of matching(); track colour) {
         <text>{{ colour }}</text>
       }
@@ -44,12 +44,13 @@ export class ColourFilter {
 
 ## Inputs and events
 
-They are `<native-search-bar>`'s, so a field can move between a navigation bar and a sheet with
-its bindings:
+The events are `<native-search-bar>`'s. The text is a two-way `value` rather than the bar's
+`query`, because the field is a Signal Forms control, as `<text-input>` is:
 
-- **`query`** - the text in the field, two-way. Typing writes it, and a query set from code is put
-  in the field. A query for a keystroke the user has typed past is skipped, so a fast typist loses
+- **`value`** - the text in the field, two-way. Typing writes it, and text set from code is put in
+  the field. Text for a keystroke the user has typed past is skipped, so a fast typist loses
   nothing, as with a text input.
+- **`disabled`** - refuse input and show the field dimmed.
 - **`placeholder`** - shown while the field is empty.
 - **`showsCancelButton`** - iOS: whether the Cancel button shows. Unset, it shows while the field
   has the keyboard. Android's search field has no Cancel button.
@@ -58,12 +59,35 @@ its bindings:
 - **`search`** - the keyboard's search key, with the text. The field gives up the keyboard.
 - **`cancel`** - iOS: the Cancel button. The field is emptied and gives up the keyboard.
 - **`searchFocus`** and **`searchBlur`** - the field taking the keyboard and giving it up.
+- **`touch`** - the field gave up the keyboard, which is when a form marks it touched.
 
 `focus()` and `blur()` give the field the keyboard and take it away, and `clear()` empties the field
-and the query. Reach them with `viewChild(SearchField)`.
+and the value. Reach them with `viewChild(SearchField)`.
 
 The element is 56 points tall by default, the height of the system's own field. A height in a style
 or a class replaces it.
+
+## In a form
+
+`value` is a `model()`, so `[formField]` binds a search field into a Signal Forms form with no
+adapter, as it binds a `<text-input>`. The form's `disabled()` rule disables it, and leaving the
+field marks it touched:
+
+```ts
+import { Component, signal } from '@angular/core';
+import { FormField, form } from '@angular/forms/signals';
+import { SearchField } from '@ng-native/expo/search-field';
+
+@Component({
+  selector: 'app-saved-filter',
+  imports: [FormField, SearchField],
+  template: `<search-field placeholder="Filter" [formField]="filter.text" />`,
+})
+export class SavedFilter {
+  private readonly model = signal({ text: '' });
+  protected readonly filter = form(this.model);
+}
+```
 
 ## API
 
