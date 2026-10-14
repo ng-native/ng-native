@@ -11,6 +11,7 @@
 import {
   boundDeclaration,
   boundRelativeLength,
+  isNegativeLineHeight,
   faded,
   fills,
   inlineInherited,
@@ -2283,6 +2284,13 @@ function reportHover(host: HostEngine): void {
   );
 }
 
+/** A bound value kept as a declaration the cascade settles: a `var()` or a relative length. */
+function boundFrom(prop: string, text: string, on: string): DeferredDeclaration | null {
+  return /^\s*var\(/i.test(text)
+    ? boundDeclaration(prop, tokenFromValue(text), on)
+    : boundRelativeLength(prop, text, on);
+}
+
 /** Whether a value is one of the engine's own nodes. */
 export function isEngineNode(value: unknown): value is EngineNode {
   return value instanceof RetainedNode;
@@ -3670,23 +3678,27 @@ export class Engine implements HostEngine {
    * A bound declaration, `[style.color]`, whose value may be a `var()`, or a length in `em` or a
    * viewport unit. One that is, is kept as a declaration the cascade settles with the node's
    * tokens, font size and viewport, as a rule's is, and true is answered: the text is no value to
-   * put in the node's style. Any other value forgets what was kept.
+   * put in the node's style. A negative `line-height` is dropped, with a warning, and true is
+   * answered too. Any other value forgets what was kept.
    */
   setBoundStyle(node: EngineNode, prop: string, value: unknown): boolean {
     const text = typeof value === 'string' ? value : undefined;
-    const bound =
-      text === undefined
-        ? null
-        : /^\s*var\(/i.test(text)
-          ? boundDeclaration(prop, tokenFromValue(text), node.name)
-          : boundRelativeLength(prop, text, node.name);
-    if (!bound && !node.boundByProp?.has(prop)) return false;
+    const refused = text !== undefined && this.refusedBound(node, prop, text);
+    const bound = text === undefined || refused ? null : boundFrom(prop, text, node.name);
+    if (!bound && !node.boundByProp?.has(prop)) return refused;
     const byProp = (node.boundByProp ??= new Map());
     if (bound) byProp.set(prop, bound);
     else byProp.delete(prop);
     node.boundStyle = byProp.size ? [...byProp.values()] : null;
     this.markProps(node);
-    return bound !== null;
+    return bound !== null || refused;
+  }
+
+  /** Whether a bound value is one CSS has none of, which is dropped with a warning. */
+  private refusedBound(node: EngineNode, prop: string, text: string): boolean {
+    if (!isNegativeLineHeight(prop, text)) return false;
+    this.reportDroppedDeclaration('line-height', text, node.name, 'it is negative');
+    return true;
   }
 
   /**
@@ -6200,6 +6212,22 @@ export class Engine implements HostEngine {
       `[angular-native] var(${name}) in ${where} names a custom property nothing in` +
         ` scope defines, so the declaration is dropped, as a browser drops it. Define ${name} on` +
         ` :root or an ancestor, or give the var() a fallback.`,
+    );
+  }
+
+  private readonly droppedDeclarations = new Set<string>();
+
+  /**
+   * A declaration in a style, written or bound, that is no value its property takes, so it is
+   * dropped as a browser drops it. Said once per element name and declaration, in development.
+   */
+  reportDroppedDeclaration(prop: string, value: string, on: string, why: string): void {
+    const report = `${on} ${prop}: ${value}`;
+    if (!this.dev || this.droppedDeclarations.has(report)) return;
+    this.droppedDeclarations.add(report);
+    console.warn(
+      `[angular-native] ${prop}: ${value}, in a style on <${on}>, is no value ${prop} takes:` +
+        ` ${why}. The declaration is dropped, as a browser drops it.`,
     );
   }
 

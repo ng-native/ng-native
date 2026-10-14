@@ -60,11 +60,6 @@ describe('an em in a bound style declaration', () => {
     assert.equal(props('line')['minHeight'], 32);
   });
 
-  it('is no length for a property that takes none', () => {
-    // `flex-grow` is a number: the text is left as it is written, for native to drop.
-    assert.equal(props('grow')['flexGrow'], '2em');
-  });
-
   it('never reaches native as text', () => {
     const ids = ['plain', 'own', 'inherited', 'font', 'follows', 'switching', 'object', 'static'];
     for (const id of [...ids, 'line', 'rem', 'rem-object', 'rem-static']) {

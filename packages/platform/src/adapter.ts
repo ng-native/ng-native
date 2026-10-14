@@ -107,6 +107,8 @@ const declaredValue = (key: string, value: unknown): unknown =>
  */
 const customPropertyName = (style: string): string => style.replace(/%NS%/g, '');
 
+const IMPORTANT = /!\s*important\s*$/i;
+
 /**
  * `flex: 1; margin-top: 4px` -> `{ flex: 1, marginTop: 4 }`.
  *
@@ -124,7 +126,12 @@ function parseStyleAttribute(css: string): Record<string, unknown> {
     const at = declaration.indexOf(':');
     if (at === -1) continue;
     const name = declaration.slice(0, at).trim();
-    const value = declaration.slice(at + 1).trim();
+    // `!important` comes off as Angular takes it off a bound value, which `setStyle` reads alike.
+    // ponytail: neither is ranked above a rule's own `!important`, as a browser ranks it.
+    const value = declaration
+      .slice(at + 1)
+      .replace(IMPORTANT, '')
+      .trim();
     // A custom property keeps its name, which is case-sensitive, and its text for the engine.
     // Any other is left as written, for `setStyle` to read as it reads a bound one.
     if (name) out[name.startsWith('--') ? name : styleKey(name)] = value;
@@ -135,26 +142,51 @@ function parseStyleAttribute(css: string): Record<string, unknown> {
 const SIDES = ['Top', 'Right', 'Bottom', 'Left'] as const;
 const SHORTHANDS = new Set(['padding', 'margin', 'inset', 'gap']);
 
+/** CSS whitespace, which a no-break space is not. */
+const CSS_SPACE = /[ \t\n\r\f]/;
+
+/** The values in `text`, split on CSS whitespace outside parentheses: `4px calc(2px + 2px)` is two. */
+function cssValues(text: string): string[] {
+  const parts: string[] = [];
+  let part = '';
+  let depth = 0;
+  for (const char of text) {
+    if (depth === 0 && CSS_SPACE.test(char)) {
+      if (part) parts.push(part);
+      part = '';
+      continue;
+    }
+    if (char === '(') depth++;
+    else if (char === ')') depth = Math.max(0, depth - 1);
+    part += char;
+  }
+  if (part) parts.push(part);
+  return parts;
+}
+
+/** A shorthand with more values than it takes, which a browser drops whole. */
+const REFUSED = 'refused';
+
 /**
  * A shorthand written with a value for each side, `padding: 4px 8px`, as the longhands native
  * reads: it takes one number for `padding`, and drops the text. Null for one value, which native
- * takes as it is, and for a value holding a function, which is not split on its spaces.
+ * takes as it is, and for a value holding a `var()`, whose count is only known once it is settled.
+ * `REFUSED` for more values than the shorthand takes.
  *
  * ponytail: `padding`, `margin`, `inset` and `gap`, the ones written this way in a style. A
  * stylesheet has every shorthand; add one here when a style needs it.
  */
-function longhands(key: string, value: unknown): [string, string][] | null {
-  if (!SHORTHANDS.has(key) || typeof value !== 'string' || value.includes('(')) return null;
-  const parts = value.trim().split(/\s+/);
-  if (parts.length < 2 || parts.length > 4) return null;
+function longhands(key: string, value: unknown): [string, string][] | typeof REFUSED | null {
+  if (!SHORTHANDS.has(key) || typeof value !== 'string' || /var\(/i.test(value)) return null;
+  const parts = cssValues(value);
+  if (parts.length < 2) return null;
+  if (parts.length > (key === 'gap' ? 2 : 4)) return REFUSED;
   const [first, second = first, third = first, fourth = second] = parts as [string, ...string[]];
   if (key === 'gap')
-    return parts.length === 2
-      ? [
-          ['rowGap', first],
-          ['columnGap', second],
-        ]
-      : null;
+    return [
+      ['rowGap', first],
+      ['columnGap', second],
+    ];
   return [first, second, third, fourth].map((part, side) => [
     key === 'inset' ? SIDES[side]!.toLowerCase() : `${key}${SIDES[side]!}`,
     part,
@@ -278,18 +310,11 @@ class NativeRenderer implements Renderer2 {
       this.engine.setCustomProperty(el, customPropertyName(style), value);
       return;
     }
+    // A number bound to the CSS name is a CSS number, a multiple of the font size, as a browser's
+    // `style.setProperty` reads it. A style object's `lineHeight: 24` stays React Native's points.
+    if (style === 'line-height' && typeof value === 'number') value = String(value);
     const key = styleKey(style);
-    const sides = longhands(key, value);
-    if (SHORTHANDS.has(key)) this.dropLonghands(el, key, sides);
-    if (sides) {
-      this.removeStyle(el, key);
-      (writtenAs.get(el) ?? writtenAs.set(el, new Map()).get(el)!).set(
-        key,
-        sides.map(([side]) => side),
-      );
-      for (const [side, part] of sides) this.setStyle(el, side, part);
-      return;
-    }
+    if (this.setShorthand(el, key, value)) return;
     // A `var()` is for the cascade to settle, with the tokens in scope, not a value of the style.
     if (this.engine.setBoundStyle(el, key, value)) return this.dropStyle(el, key);
     const next = declaredValue(key, value);
@@ -303,6 +328,30 @@ class NativeRenderer implements Renderer2 {
     const owned = { ...(current ?? {}), [key]: next };
     el.ownStyle = owned;
     this.engine.setProp(el, 'style', owned);
+  }
+
+  /**
+   * A shorthand with a value for each side, set as its sides, or dropped for more values than it
+   * takes. False for any other declaration, which is set as it is.
+   */
+  private setShorthand(el: EngineNode, key: string, value: unknown): boolean {
+    if (!SHORTHANDS.has(key)) return false;
+    const sides = longhands(key, value);
+    this.dropLonghands(el, key, sides === REFUSED ? null : sides);
+    if (!sides) return false;
+    this.removeStyle(el, key);
+    if (sides === REFUSED) {
+      const most = key === 'gap' ? 'two' : 'four';
+      const why = `${key} takes ${most} values at most`;
+      this.engine.reportDroppedDeclaration(key, String(value), el.name, why);
+      return true;
+    }
+    (writtenAs.get(el) ?? writtenAs.set(el, new Map()).get(el)!).set(
+      key,
+      sides.map(([side]) => side),
+    );
+    for (const [side, part] of sides) this.setStyle(el, side, part);
+    return true;
   }
 
   removeStyle(el: EngineNode, style: string, _flags?: RendererStyleFlags2): void {
