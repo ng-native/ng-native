@@ -889,6 +889,7 @@ function resourceBlock(src, resource, options) {
         // skipping here would be an edit that ships and does nothing.
         throw new Error(`${resource}: ${component.className}'s template did not compile.`);
       }
+      assertLowercaseElements(update.apply, resource);
 
       applies.push(update.apply);
       defs.push(

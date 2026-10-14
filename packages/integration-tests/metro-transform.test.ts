@@ -51,6 +51,27 @@ describe('the transform chain', () => {
     );
   });
 
+  it('fails a capitalized element name in an edited external template, which hot-swaps alone', () => {
+    const { transformAngular } = require('@ng-native/metro/angular-transform.cjs');
+    const dir = mkdtempSync(path.join(tmpdir(), 'capitalized-template-'));
+    try {
+      const html = path.join(dir, 'card.html');
+      writeFileSync(html, '<View></View>\n');
+      writeFileSync(
+        path.join(dir, 'card.ts'),
+        "import { Component } from '@angular/core';\n" +
+          "@Component({ selector: 'x-card', templateUrl: './card.html' })\n" +
+          'export class Card {}\n',
+      );
+      assert.throws(
+        () => transformAngular(readFileSync(html, 'utf8'), html, { dev: true }),
+        (error: Error) => error.message.startsWith(`${html}: element <View> is capitalized`),
+      );
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
   it('compiles a method shorthand inside decorator metadata to a module that loads', async () => {
     // @oxc-angular/vite through 0.0.39 dropped the "function"/"async"/"get" keyword when it
     // re-emitted the shorthand, with no error: the module was not valid JavaScript.
