@@ -16,6 +16,9 @@ Pod::Spec.new do |s|
   s.static_framework = true
 
   s.dependency 'ExpoModulesCore'
+  # `@expo/ui` is an optional peer. Where the app has it, the modifiers it is given are built.
+  has_expo_ui = system('node', '-e', "require.resolve('@expo/ui/package.json', { paths: [process.argv[1]] })", __dir__, out: File::NULL, err: File::NULL)
+  s.dependency 'ExpoUI' if has_expo_ui
 
   s.source_files = '**/*.swift'
   s.pod_target_xcconfig = { 'DEFINES_MODULE' => 'YES' }

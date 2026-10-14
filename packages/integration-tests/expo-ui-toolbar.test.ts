@@ -131,6 +131,14 @@ describe('a toolbar item written in a bottom sheet', () => {
     assert.equal(all([host!]).includes(byId('close')!), false, 'not among the content');
   });
 
+  it('keeps its bar inline, with no room for a large title above the content', async () => {
+    // A navigation stack's root shows a large title by default, and SwiftUI leaves the band for
+    // one between the bar and the content even with no title in it.
+    const { every } = await boot('ios', Sheet);
+    const [toolbar] = every('ToolbarView');
+    assert.deepEqual(toolbar!.props['modifiers'], [{ $type: 'ngNativeInlineNavigationTitle' }]);
+  });
+
   it('rests at half and full height, not at the height of its content, which the bar is not part of', async () => {
     // A navigation stack fills what it is given, so a sheet sized to its content came out taller
     // than the content, with the content in the middle of it.

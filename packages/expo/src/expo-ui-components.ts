@@ -1503,7 +1503,7 @@ function windowWidth(): Signal<number | undefined> {
             <ui-group [modifiers]="presentation()">
               @if (toolbar()) {
                 <ui-navigation-stack>
-                  <ui-toolbar>
+                  <ui-toolbar [modifiers]="inlineTitle">
                     <ui-view-host layoutRoot [matchContents]="fits() || undefined">
                       <ui-bottom-sheet-content [style]="body()" [content]="content" />
                     </ui-view-host>
@@ -1608,6 +1608,15 @@ export class UiBottomSheet {
   protected readonly toolbar = computed(
     () => this.toolbarInBuild && this.toolbarItems().length > 0,
   );
+
+  /**
+   * A sheet's bar never shows a large title, but a navigation stack leaves room for one under its
+   * bar. `@expo/ui` has no modifier for the title's display mode, so `@ng-native/expo` registers
+   * one natively, in a build with `@expo/ui`. One without it, Expo Go's, ignores the modifier.
+   */
+  protected readonly inlineTitle: readonly UiModifier[] = [
+    { $type: 'ngNativeInlineNavigationTitle' },
+  ];
 
   /** SwiftUI's sheet stays in the tree; anywhere else it is there while it shows. */
   protected readonly swiftUI = nativePlatform() === 'ios';
