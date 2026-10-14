@@ -5185,10 +5185,39 @@ export class Engine implements HostEngine {
     for (const key of started) {
       const eased = state.get(key)!;
       if (!LAID_OUT.has(key) || eased.start > now || eased.duration <= 0) continue;
+      if (this.sentOnAgain(node, key, eased, now)) {
+        // Where it ends, at once: see `sentOnAgain`.
+        Object.assign(eased, { current: eased.to, done: true });
+        this.emitTransition(node, 'topTransitionend', key);
+        props[key] = eased.to;
+        continue;
+      }
       eased.laid = true;
       this.laying.push({ node, key, eased });
     }
     for (const [key, eased] of state) if (eased.laid && !eased.done) props[key] = eased.to;
+  }
+
+  /** When each size in transition was last started, and how many starts in a row came soon. */
+  private readonly laidStarts = new WeakMap<
+    EngineNode,
+    Map<string, { at: number; soon: number }>
+  >();
+
+  /**
+   * Whether a transition of a size is one sent on again and again, each before the last had
+   * ended: a progress bar that steps every 50ms and eases each step over 150. Native moves the
+   * view, and lays the screen out, every frame while a layout animation runs, so one started at
+   * every step is one that never stops. The first, and one sent back before it ends, are
+   * played; from the second sent on in a row, each is committed where it ends, and the steps
+   * are the motion. Played again once the size has been left alone for as long as it lasts.
+   */
+  private sentOnAgain(node: EngineNode, key: string, eased: Transition, now: number): boolean {
+    const starts = this.laidStarts.get(node) ?? this.laidStarts.set(node, new Map()).get(node)!;
+    const last = starts.get(key);
+    const soon = last && now - last.at < eased.duration ? last.soon + 1 : 0;
+    starts.set(key, { at: now, soon });
+    return soon >= 2;
   }
 
   /** The animations this commit lays out at their last frame, for native to move the views to. */

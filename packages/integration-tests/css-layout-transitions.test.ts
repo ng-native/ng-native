@@ -138,6 +138,39 @@ describe('a transition of a width', () => {
     assert.equal(s.engine.animating, false);
   });
 
+  it('is committed where it ends, with nothing asked of native, once it is sent on again and again', () => {
+    // A progress bar steps every 50ms and eases each step over 200: native would be moving the
+    // view, and laying the screen out, every frame for as long as the bar moves.
+    const s = scene();
+    const widths: number[] = [];
+    for (const [step, classes] of ['a on', 'a far', 'a on', 'a far', 'a on'].entries()) {
+      if (step) s.later(50);
+      s.engine.setClasses(s.a, classes);
+      s.engine.commit();
+      widths.push(s.width());
+    }
+    assert.deepEqual(widths, [30, 50, 30, 50, 30]);
+    // The first and the one sent back are played by native; the rest are where they end.
+    assert.equal(s.asked.length, 2);
+    assert.equal(s.engine.animating, false);
+    // And each of those says it has ended, as it has.
+    assert.equal(s.events.filter((each) => each === 'end').length, 3);
+  });
+
+  it('is played by native again once it has been left alone for as long as it lasts', () => {
+    const s = scene();
+    for (const [step, classes] of ['a on', 'a far', 'a on'].entries()) {
+      if (step) s.later(50);
+      s.engine.setClasses(s.a, classes);
+      s.engine.commit();
+    }
+    s.later(250);
+    s.engine.setClasses(s.a, 'a far');
+    s.engine.commit();
+    assert.equal(s.asked.length, 3);
+    assert.equal(s.width(), 50);
+  });
+
   it('is eased from JavaScript on a host with no layout animation', () => {
     const fabric = createFakeFabric();
     let now = 0;
