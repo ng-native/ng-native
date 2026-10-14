@@ -111,3 +111,33 @@ describe('a border with a width and no colour', () => {
     assert.deepEqual(s.edges('box'), [null, null, null, 'rgb(255, 0, 0)']);
   });
 });
+
+describe('a border that comes after its colour', () => {
+  it('is sent its colour again with the width or style that makes it, which Android needs', () => {
+    // Android draws a border black when the update that gives it a width or a style does not
+    // give it its colour too, though it was given one before: a box made without a border and
+    // given one as its state changes, a file attachment that is done.
+    const fabric = createFakeFabric();
+    const css = '.box { border-color: #e5e5e5 } .done { border-width: 1px; border-style: solid }';
+    const engine = new Engine(fabric, 1, { globalStyles: compileCss(css, 'app.css') as never });
+    const node = engine.createElement('view');
+    engine.setClasses(node, 'box');
+    engine.appendChild(engine.root, node);
+    engine.commit();
+    const sent: Record<string, unknown>[] = [];
+    const { cloneNodeWithNewProps, cloneNodeWithNewChildrenAndProps } = fabric;
+    const note = (props: object) => sent.push(props as Record<string, unknown>);
+    fabric.cloneNodeWithNewProps = (n, props) => (note(props), cloneNodeWithNewProps(n, props));
+    fabric.cloneNodeWithNewChildrenAndProps = (n, props) => (
+      note(props),
+      cloneNodeWithNewChildrenAndProps(n, props)
+    );
+    engine.setClasses(node, 'box done');
+    engine.commit();
+    const payload = sent.find((props) => props['borderTopWidth'] !== undefined)!;
+    assert.deepEqual(
+      SIDES.map((side) => payload[`border${side}Color`]),
+      SIDES.map(() => 'rgb(229, 229, 229)'),
+    );
+  });
+});

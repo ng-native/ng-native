@@ -1326,6 +1326,20 @@ function colourless(
  * Each side a border has: its width, its colour, and the logical colour React Native takes for
  * it too, read left to right and, `flipped`, right to left.
  */
+const BORDER_DRAWN = /^border\w*(Width|Style)$/;
+const BORDER_COLOUR = /^border\w*Color$/;
+
+/**
+ * Send a border's colours again with an update that gives it a width or a style: Android draws
+ * the border black when that update does not carry its colour, though it was given one before.
+ * A box made without a border and given one later, a file attachment that is done, has one.
+ */
+function borderColoursAgain(payload: Record<string, unknown>, props: Record<string, unknown>) {
+  if (!Object.keys(payload).some((key) => BORDER_DRAWN.test(key))) return;
+  for (const key in props)
+    if (BORDER_COLOUR.test(key) && !(key in payload)) payload[key] = props[key];
+}
+
 const BORDER_SIDES = [
   ['Top', 'BlockStart', 'BlockStart'],
   ['Right', 'End', 'Start'],
@@ -5921,6 +5935,7 @@ export class Engine implements HostEngine {
     props: Record<string, unknown>,
   ): Record<string, unknown> | null {
     const payload = diffProps(previous, props);
+    if (payload) borderColoursAgain(payload, props);
     if (payload && this.fontsRefreshed && this.fontResends.delete(node)) {
       payload['fontFamily'] = props['fontFamily'];
     }
