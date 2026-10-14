@@ -175,6 +175,36 @@ describe('a picker in a form', () => {
   });
 });
 
+describe('a segmented picker given a font', () => {
+  const sent = (id: string) =>
+    (screen.getByTestId(id).props['modifiers'] as { $type: string }[]).filter(
+      (modifier) => modifier.$type === 'ngNativeSegmentedFont',
+    );
+  const font = { family: 'Nunito Sans', size: 14, weight: 'bold' };
+
+  it('sends the font again for its segments, which SwiftUI does not draw in it', async () => {
+    await render(mod['UiPickerFont'] as Type<unknown>);
+    assert.deepEqual(sent('by-input'), [{ $type: 'ngNativeSegmentedFont', ...font }]);
+  });
+
+  it('does so when its style is a modifier too', async () => {
+    await render(mod['UiPickerFont'] as Type<unknown>);
+    assert.deepEqual(sent('by-modifier'), [{ $type: 'ngNativeSegmentedFont', ...font }]);
+  });
+
+  it('leaves a picker of another style to SwiftUI, which draws it in the font', async () => {
+    await render(mod['UiPickerFont'] as Type<unknown>);
+    assert.deepEqual(sent('wheel'), []);
+  });
+
+  it('stops sending it when the font goes', async () => {
+    const { instance } = await render(mod['UiPickerFont'] as Type<unknown>);
+    (instance as { font: { set(value: unknown[]): void } }).font.set([]);
+    await settle();
+    assert.deepEqual(sent('by-input'), []);
+  });
+});
+
 describe('a SwiftUI host', () => {
   // The native host reads one flag per axis; `@expo/ui`'s React wrapper splits `matchContents`
   // into them. Passed through whole, it is a prop native ignores: the host keeps no size, and the

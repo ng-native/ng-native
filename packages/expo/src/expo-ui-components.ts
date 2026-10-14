@@ -653,6 +653,19 @@ export class UiDropdownMenuItem {
   readonly press = output<void>();
 }
 
+/**
+ * A segmented picker's `font` modifiers again, as `@ng-native/expo`'s own modifier: SwiftUI draws
+ * the segments as a `UISegmentedControl`, which `font` does not reach. In a build without that
+ * modifier, Expo Go's, the segments stay in the system font.
+ */
+function segmentFonts(modifiers: readonly UiModifier[]): UiModifier[] {
+  const segmented = modifiers.some((m) => m.$type === 'pickerStyle' && m['style'] === 'segmented');
+  if (!segmented) return [];
+  return modifiers
+    .filter((m) => m.$type === 'font')
+    .map((m) => ({ ...m, $type: 'ngNativeSegmentedFont' }));
+}
+
 /** One choice in a `ui-picker`: what the field is set to, and what the user reads. */
 export interface UiPickerOption {
   readonly value: string | number;
@@ -667,7 +680,8 @@ export interface UiPickerOption {
  *
  * Compose has no `Picker`, so on Android the options are drawn with its own controls: `segmented`
  * as a row of segmented buttons, and any other style as an exposed dropdown menu under the chosen
- * option. `label`, `systemImage`, children and `modifiers` are SwiftUI's alone.
+ * option. `label`, `systemImage`, children and `modifiers` are SwiftUI's alone. A `font` modifier
+ * reaches a segmented picker's segments in a development build, not in Expo Go.
  */
 @Component({
   selector: 'ui-picker',
@@ -777,7 +791,7 @@ export class UiPicker {
     const own = style
       ? [{ $type: 'pickerStyle', style }, ...(this.modifiers() ?? [])]
       : this.modifiers();
-    return withDisabled(own, this.disabled());
+    return withDisabled(own && [...own, ...segmentFonts(own)], this.disabled());
   });
 
   constructor() {

@@ -63,6 +63,29 @@ export class UiForm {
   ];
 }
 
+/** Pickers given an app font: SwiftUI's segmented one does not take it from `font`. */
+@Component({
+  selector: 'x-ui-picker-font',
+  imports: [UiHost, UiPicker],
+  template: `
+    <ui-host>
+      <ui-picker
+        nativeID="by-input"
+        pickerStyle="segmented"
+        [options]="sizes"
+        [modifiers]="font()"
+      />
+      <ui-picker nativeID="by-modifier" [options]="sizes" [modifiers]="[segmented, ...font()]" />
+      <ui-picker nativeID="wheel" pickerStyle="wheel" [options]="sizes" [modifiers]="font()" />
+    </ui-host>
+  `,
+})
+export class UiPickerFont {
+  readonly sizes = [{ value: 's', label: 'Small' }];
+  readonly segmented = { $type: 'pickerStyle', style: 'segmented' };
+  readonly font = signal([{ $type: 'font', family: 'Nunito Sans', size: 14, weight: 'bold' }]);
+}
+
 /** Pickers disabled outside a form, by a bare attribute. */
 @Component({
   selector: 'x-ui-disabled',

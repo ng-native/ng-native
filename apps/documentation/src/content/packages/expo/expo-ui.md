@@ -352,6 +352,10 @@ alongside or instead of `options`, for anything richer than a label.
 - **`label`** and **`systemImage`** - the picker's own title, and an SF Symbol name beside it.
 - **`pickerStyle`** - SwiftUI's picker style: `'automatic'`, `'menu'`, `'segmented'`, `'wheel'`,
   `'inline'` or `'palette'`. It becomes a `pickerStyle` modifier ahead of any in `modifiers`.
+- **`modifiers`** - SwiftUI modifiers on the picker. SwiftUI draws a segmented picker as a
+  `UISegmentedControl`, which a `font` modifier does not reach, so `UiPicker` also sends each
+  `font` of a segmented picker to the control itself, with its `family`, `size` and `weight`. That
+  needs a development build: in Expo Go the segments stay in the system font.
 - **`disabled`** - adds SwiftUI's `disabled` modifier. A form's `disabled()` rule sets it, and so
   does a bare `disabled` attribute outside a form.
 - **`touch`** - the user picked. A picker has no blur, so a pick is when the field counts as
