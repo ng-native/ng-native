@@ -465,6 +465,17 @@ describe('engine-node-tag, through nx migrate, ng update and ng-native-migrate',
       '}',
       '',
     ].join('\n'),
+    'src/app/cast.ts': [
+      "import type { EngineNode } from '@ng-native/fabric';",
+      '',
+      'export function cast(node: EngineNode, user: unknown): unknown[] {',
+      '  const { name } = node as { name?: string };',
+      '  const loose = (node as { name?: string }).name;',
+      '  const forced = (node as unknown as { name: string }).name;',
+      '  return [name, loose, forced, (user as { name?: string }).name];',
+      '}',
+      '',
+    ].join('\n'),
     'src/app/unsure.ts': [
       "import { ElementRef, inject } from '@angular/core';",
       "import type { EngineNode } from '@ng-native/fabric';",
@@ -507,9 +518,13 @@ describe('engine-node-tag, through nx migrate, ng update and ng-native-migrate',
       files['src/app/shadow.ts'].replace('const outer = node.name;', 'const outer = node.tag;'),
       'the inner node, the user, the typed parameter, the class and the files keep name',
     );
+    assert.equal(nx.files['src/app/cast.ts'], files['src/app/cast.ts'], 'a cast hides the type');
     assert.equal(nx.files['src/app/unsure.ts'], files['src/app/unsure.ts']);
     assert.equal(nx.files['src/app/user.ts'], files['src/app/user.ts']);
     assert.deepEqual(nx.notes, [
+      'src/app/cast.ts:4: { name } = node as { name?: string } takes name from an engine node read as another type. Its element tag is now tag: take tag, and say so in the type.',
+      'src/app/cast.ts:5: (node as { name?: string }).name reads name from an engine node read as another type. Its element tag is now tag: read tag, and say so in the type.',
+      'src/app/cast.ts:6: (node as unknown as { name: string }).name reads name from an engine node read as another type. Its element tag is now tag: read tag, and say so in the type.',
       "src/app/unsure.ts:5: lookup()?.name may be an engine node's element tag, which is now tag. If it is, read lookup()?.tag instead.",
       "src/app/unsure.ts:5: inject(ElementRef).nativeElement.name may be an engine node's element tag, which is now tag. If it is, read inject(ElementRef).nativeElement.tag instead.",
     ]);

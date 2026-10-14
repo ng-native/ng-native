@@ -17,7 +17,9 @@
  *
  * Everything else is left as it is. In a file that imports one of the types, a `.name` read from
  * something it cannot tell is noted with its file and line, and so is a `nativeElement.name`
- * anywhere, because an `ElementRef` holds `any` unless it is told otherwise.
+ * anywhere, because an `ElementRef` holds `any` unless it is told otherwise. So is a `name` read
+ * from, or taken out of, a node cast to another type: `(node as { name?: string }).name` still
+ * compiles once the field is gone, and reads `undefined`.
  */
 const { applied, scriptKind, SOURCE, typescript } = require('./move-imports.cjs');
 const { files } = require('./host.cjs');
@@ -286,6 +288,19 @@ class Reader {
     return this.type(type) ?? OTHER;
   }
 
+  /**
+   * Whether `expression` is a node cast to another type, `node as { name?: string }`: the type it
+   * is read as hides the node, and a `name` that type declares still compiles after the rename.
+   */
+  castNode(expression, depth = 0) {
+    const ts = this.ts;
+    const inner = unwrapped(ts, expression);
+    if (depth > 32 || !isAssertion(ts, inner) || this.type(inner.type)) return false;
+    return (
+      this.kind(inner.expression, depth + 1) === NODE || this.castNode(inner.expression, depth + 1)
+    );
+  }
+
   /** Whether `expression` is certainly not a node, so a `name` read from it is no tag. */
   notNode(expression, depth = 0) {
     const ts = this.ts;
@@ -399,6 +414,13 @@ function destructured(ts, pattern, edits) {
   }
 }
 
+/** Whether a destructuring pattern takes `name`. */
+const takesName = (ts, pattern) =>
+  pattern.elements.some((element) => {
+    const key = element.propertyName ?? (element.dotDotDotToken ? null : element.name);
+    return key && ts.isIdentifier(key) && key.text === 'name';
+  });
+
 /** An object literal written as a node with its `name` key as `tag`. */
 function literal(ts, object, edits) {
   for (const property of object.properties) {
@@ -423,6 +445,15 @@ function note(file, source, access) {
   return (
     `${file}:${lineOf(source, access)}: ${read} may be an engine node's element tag, which is ` +
     `now tag. If it is, read ${instead} instead.`
+  );
+}
+
+/** The note for a `name` taken from a node cast to another type, which still compiles. */
+function castNote(file, source, node, verb) {
+  const text = node.getText().replace(/\s+/g, ' ');
+  return (
+    `${file}:${lineOf(source, node)}: ${text} ${verb}s name from an engine node read as another ` +
+    `type. Its element tag is now tag: ${verb} tag, and say so in the type.`
   );
 }
 
@@ -451,6 +482,10 @@ function read(context, node) {
     edits.push(renamed(found.key));
     return;
   }
+  if (reader.castNode(found.receiver)) {
+    notes.push(castNote(file, source, node, 'read'));
+    return;
+  }
   const unsure = fromNativeElement(ts, found.receiver) || typed;
   const said = unsure && !reader.notNode(found.receiver) && note(file, source, node);
   if (said && !notes.includes(said)) {
@@ -460,11 +495,19 @@ function read(context, node) {
 
 /** The destructuring patterns and object literals that name `name` as a key of a node. */
 function keys(context, node) {
-  const { ts, reader, edits } = context;
+  const { ts, reader, edits, notes, file, source } = context;
   const pattern =
     (ts.isVariableDeclaration(node) || ts.isParameter(node)) &&
     ts.isObjectBindingPattern(node.name);
   if (pattern && reader.binding(node, 0) === NODE) destructured(ts, node.name, edits);
+  else if (
+    pattern &&
+    node.initializer &&
+    reader.castNode(node.initializer) &&
+    takesName(ts, node.name)
+  ) {
+    notes.push(castNote(file, source, node, 'take'));
+  }
   if (ts.isObjectLiteralExpression(node) && reader.written(node) === NODE) {
     literal(ts, node, edits);
   }
