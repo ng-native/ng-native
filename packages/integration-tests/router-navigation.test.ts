@@ -57,7 +57,15 @@ describe('asking for a screen', () => {
             serializeUrl: (commands: unknown[]) => commands.join('/'),
           },
         ],
-        [NativeBack, { back: () => ((backs += 1), true), unopenedTabOf: () => null }],
+        [
+          NativeBack,
+          {
+            back: () => ((backs += 1), true),
+            unopenedTabOf: () => null,
+            coveredTabAt: () => null,
+            inTabBehind: () => false,
+          },
+        ],
       ],
       () => new NativeNavigation(),
     );

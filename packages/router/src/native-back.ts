@@ -37,6 +37,12 @@ export interface TabBar {
   unopenedTabOf(url: string): string | null;
   /** Whether `url` is a tab other than the one in front, or a page inside one. */
   behind(url: string): boolean;
+  /**
+   * Where the tab `url` is in was left, when a screen of the stack the bar is on covers the bar:
+   * the url that brings the bar back in front at that tab. Null when the bar is in front, or
+   * `url` is in none of its tabs.
+   */
+  coveredAt(url: string): string | null;
 }
 
 @Service()
@@ -64,6 +70,15 @@ export class NativeBack {
     for (const bar of this.tabBars) {
       const root = bar.unopenedTabOf(url);
       if (root) return root;
+    }
+    return null;
+  }
+
+  /** Where a covered bar's tab holding `url` was left, or null: see `TabBar.coveredAt`. */
+  coveredTabAt(url: string): string | null {
+    for (const bar of this.tabBars) {
+      const at = bar.coveredAt(url);
+      if (at) return at;
     }
     return null;
   }

@@ -212,6 +212,7 @@ export class NativeTabsOutlet implements RouterOutletContract, AfterContentInit 
     const unsubscribeBar = back.addTabBar({
       unopenedTabOf: (url) => this.unopenedTabOf(url),
       behind: (url) => this.behind(url),
+      coveredAt: (url) => this.coveredAt(url),
     });
 
     inject(DestroyRef).onDestroy(() => {
@@ -537,6 +538,13 @@ export class NativeTabsOutlet implements RouterOutletContract, AfterContentInit 
     if (!entry || entry.ref) return null;
     const root = this.pathOf(entry);
     return pathOnly(url) === root ? null : root;
+  }
+
+  /** Where the tab `url` is in was left, while a screen over the bar covers it. */
+  private coveredAt(url: string): string | null {
+    if (this.injector.get(SCREEN_IN_FRONT)()) return null;
+    const entry = this.tabOf(url);
+    return entry ? this.urlOf(entry) : null;
   }
 
   /** Whether `url` is a tab other than the one in front, or a page inside one. */

@@ -382,7 +382,7 @@ describe('a native stack driven by the router', () => {
       });
     });
 
-    it('builds a second bar pushed over the first with tabs of its own', async () => {
+    it('goes back to the bar beneath for a push to one of its tabs, rather than building a second', async () => {
       await router.navigateByUrl('/wrapped-tabs/schedule');
       await idle();
       await tap('speakers');
@@ -390,18 +390,9 @@ describe('a native stack driven by the router', () => {
       await nav.push('/wrapped-tabs/schedule');
       await idle();
       assert.equal(router.url, '/wrapped-tabs/schedule');
-      assert.equal(created['Schedule'], 2, 'a new page, not the one the bar beneath keeps');
-      assert.equal(live['Schedule'], 2);
-
-      nav.back();
-      await idle();
-      nav.back();
-      await idle();
-      assert.equal(router.url, '/wrapped-tabs/speakers');
-      await tap('schedule');
-      assert.equal(router.url, '/wrapped-tabs/schedule');
-      assert.equal(live['Schedule'], 1, "the first bar's own page, still there");
-      assert.equal(created['Schedule'], 2);
+      assert.equal(created['Schedule'], 1, "the bar's own page, not a new one");
+      assert.equal(live['Schedule'], 1);
+      assert.equal(live['User'], 0, 'the page over the bar is gone');
       assert.deepEqual(reported, []);
     });
 
