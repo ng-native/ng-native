@@ -81,11 +81,13 @@ function toPropertyName(name: string): string {
 
 /**
  * A size in points: a number, a number as a string, or one with the unit a web app writes it
- * with, `18px` or `1.5rem`. Anything else is no size, and the icon is as big as the text around it.
+ * with, `18px` or `1.5rem`. One in `em` is kept as written, for the engine to measure against the
+ * font size in scope. Anything else is no size, and the icon is as big as the text around it.
  */
-function pointsOf(value: number | string | undefined): number | undefined {
+function pointsOf(value: number | string | undefined): number | string | undefined {
   if (value === undefined || value === '') return undefined;
   const text = typeof value === 'string' ? value.trim() : '';
+  if (/^\d*\.?\d+em$/i.test(text)) return text;
   const rem = /^([\d.]+)rem$/.exec(text);
   const px = /^([\d.]+)px$/.exec(text);
   // `..rem` fits the pattern and is no number: NaN either way, and so no size.
@@ -164,8 +166,9 @@ export class NgIcon {
   readonly svg = input<string>();
   /**
    * Points, square. Icons are drawn from a `viewBox`, so this is the size on screen. A static
-   * `size="32"` is read as the number it spells. With none, the icon is `1em`: as big as the
-   * text around it, and sized by a `font-size` on it or above it, or by a width and height.
+   * `size="32"` is read as the number it spells, and `size="2em"` against the font size in scope,
+   * as on the web. With none, the icon is `1em`: as big as the text around it, and sized by a
+   * `font-size` on it or above it, or by a width and height.
    */
   readonly size = input(pointsOf(this.config.size), {
     transform: (value: number | string | undefined) => pointsOf(value),
@@ -197,7 +200,10 @@ export class NgIcon {
     return size === undefined ? {} : { width: size, height: size };
   });
   /** What the view scales its drawing to: the size, or the whole of the box it is laid out as. */
-  protected readonly box = computed(() => this.size() ?? '100%');
+  protected readonly box = computed(() => {
+    const size = this.size();
+    return typeof size === 'number' ? size : '100%';
+  });
 
   private readonly markup: Signal<string | undefined> = computed(() => {
     const svg = this.svg();

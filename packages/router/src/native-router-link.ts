@@ -11,6 +11,7 @@
 import { Directive, booleanAttribute, inject, input } from '@angular/core';
 import { ActivatedRoute, Router, type NavigationExtras } from '@angular/router';
 import { NATIVE_INTENT } from './native-navigation.ts';
+import { leavingPresented } from './presented-route.ts';
 
 @Directive({
   selector: '[nativeRouterLink]',
@@ -44,6 +45,10 @@ export class NativeRouterLink {
     const stack = extras.replaceUrl ? 'replace' : 'push';
     extras.state = { ...own?.state, [NATIVE_INTENT]: { stack } };
 
-    void this.router.navigate(Array.isArray(target) ? [...target] : [target], extras);
+    const commands = Array.isArray(target) ? [...target] : [target];
+    const leaving = leavingPresented(this.router, commands, extras);
+    void (leaving
+      ? this.router.navigateByUrl(leaving, extras)
+      : this.router.navigate(commands, extras));
   }
 }

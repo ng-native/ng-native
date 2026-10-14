@@ -357,16 +357,24 @@ export class NativeNavigation {
   private firstNavigation(): Promise<void> {
     return new Promise((resolve) => {
       const events = this.router.events.subscribe((event) => {
-        if (
-          event instanceof NavigationEnd ||
-          event instanceof NavigationCancel ||
-          event instanceof NavigationError ||
-          event instanceof NavigationSkipped
-        ) {
+        if (ended(event) && !carriesOn(event)) {
           events.unsubscribe();
           resolve();
         }
       });
     });
   }
+}
+
+/**
+ * Whether a navigation ended only for another to take its place: a guard's redirect does, and so
+ * does a newer navigation. Waiting for a navigation to end goes on past one of these, or what
+ * starts next supersedes the redirect and opens with nothing beneath it, past the guard.
+ */
+export function carriesOn(event: unknown): boolean {
+  return (
+    event instanceof NavigationCancel &&
+    (event.code === NavigationCancellationCode.Redirect ||
+      event.code === NavigationCancellationCode.SupersededByNewNavigation)
+  );
 }

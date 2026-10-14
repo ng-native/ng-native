@@ -177,9 +177,12 @@ export function leavingPresented(
   const tree = router.createUrlTree([...commands], extras);
   // Commands relative to the page itself, as a link inside it gives them, resolve inside the
   // presented outlet: where they lead is that path in its own place, not beside the page.
-  const beside = extras.relativeTo?.pathFromRoot.some((route) => route.outlet === PRESENTED)
-    ? tree.root.children[PRESENTED]
-    : undefined;
+  const start = commands[0];
+  const absolute = typeof start === 'string' && start.startsWith('/');
+  const beside =
+    !absolute && extras.relativeTo?.pathFromRoot.some((route) => route.outlet === PRESENTED)
+      ? tree.root.children[PRESENTED]
+      : undefined;
   if (beside) {
     const path = beside.segments.map((segment) => segment.path);
     const { queryParams, fragment } = tree;

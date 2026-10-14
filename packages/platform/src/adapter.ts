@@ -73,17 +73,25 @@ function topLevelType(eventName: string): string {
  */
 const PX = /^-?\d*\.?\d+px$/;
 const NUMBER = /^-?\d*\.?\d+$/;
+const REM = /^-?\d*\.?\d+rem$/;
 const styleKey = (name: string): string =>
   name.includes('-') ? name.replace(/-([a-z])/g, (_, c: string) => c.toUpperCase()) : name;
 /**
- * A bare number arrives as a string too, and Yoga wants a number.
+ * A bare number arrives as a string too, and Yoga wants a number. A `rem` is 16 points, as in a
+ * stylesheet, so it needs no font size in scope.
  *
  * Angular parses `[style]="'flex: 1'"` itself and calls `setStyle('flex', '1')`, so the same
  * declaration written as an object gave `1` and written as a string gave `'1'` - the two spellings
  * of one design disagreeing at the only layer that can tell.
  */
 const styleValue = (value: unknown): unknown =>
-  typeof value === 'string' && (PX.test(value) || NUMBER.test(value)) ? parseFloat(value) : value;
+  typeof value !== 'string'
+    ? value
+    : PX.test(value) || NUMBER.test(value)
+      ? parseFloat(value)
+      : REM.test(value)
+        ? parseFloat(value) * 16
+        : value;
 /**
  * A `font-family` is a stack, quoted or not, where native takes one family by name: the first,
  * unquoted, as a stylesheet rule commits it. Left as written, `'Inter-Bold'` names no font.

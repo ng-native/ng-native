@@ -27,12 +27,29 @@ fi
 # Booting and the driver's start are minutes of a run with nothing to print, so each step says
 # when it starts.
 step() { echo "[$(date +%T)] $*"; }
+# What a boot is waiting on, each time that changes. bootstatus repeats itself every second, and a
+# new simulator's first boot is minutes of one-time setup on a CI Mac: this says which part.
+boot_phases() {
+  local line waiting='' reason=''
+  while read -r line; do
+    case $line in
+      Waiting\ on* | Finished)
+        if [ "$line" != "$waiting" ]; then step "boot: $line"; fi
+        waiting=$line
+        ;;
+      Reason:*)
+        if [ "$line" != "$reason" ]; then step "boot: $line"; fi
+        reason=$line
+        ;;
+    esac
+  done
+}
 step "creating a $type on $runtime"
 udid=$(xcrun simctl create canary-smoke "$type" "$runtime") || exit 1
 trap 'xcrun simctl shutdown "$udid" 2>/dev/null; xcrun simctl delete "$udid"' EXIT
 
 step "booting it"
-xcrun simctl boot "$udid" && xcrun simctl bootstatus "$udid" -b >/dev/null || exit 1
+xcrun simctl boot "$udid" && xcrun simctl bootstatus "$udid" -b | boot_phases || exit 1
 # A fresh simulator posts follow-up notifications of its own, "Ready for Apple Intelligence" among
 # them, at any point after it boots. The banner covers the top of the screen, so
 # a tap on a header button lands on the banner and opens Settings over the app. followupd posts
@@ -67,7 +84,7 @@ if [ "$status" -ne 0 ] && grep -qE "$lost" "$out/console.log" "$out/maestro.log"
   if xcrun simctl list devices "$udid" | grep -q '(Booted)'; then
     xcrun simctl shutdown "$udid" || exit 1
   fi
-  xcrun simctl boot "$udid" && xcrun simctl bootstatus "$udid" -b >/dev/null || exit 1
+  xcrun simctl boot "$udid" && xcrun simctl bootstatus "$udid" -b | boot_phases || exit 1
   walk "$out/retry"
   status=$?
 fi

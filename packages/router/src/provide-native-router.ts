@@ -15,7 +15,6 @@
 import { PlatformLocation } from '@angular/common';
 import {
   NavigationCancel,
-  NavigationCancellationCode,
   NavigationEnd,
   NavigationError,
   NavigationSkipped,
@@ -49,6 +48,7 @@ import { followLink, linkAncestry, type LinkParent } from './native-links.ts';
 import {
   NATIVE_INTENT,
   NativeNavigation,
+  carriesOn,
   carryIntentAcrossRedirects,
   intentOf,
 } from './native-navigation.ts';
@@ -204,7 +204,7 @@ function nativeProviders(parentOf: LinkParent | undefined): (Provider | Environm
       const settled = new Promise<void>((resolve) => {
         if (router.navigated) return resolve();
         const first = router.events.subscribe((event) => {
-          if (!isEnd(event)) return;
+          if (!isEnd(event) || carriesOn(event)) return;
           first.unsubscribe();
           resolve();
         });
@@ -274,7 +274,7 @@ function keepHistoryAcrossReloads(): void {
       await new Promise<void>((resolve) => {
         if (router.navigated) return resolve();
         const first = router.events.subscribe((event) => {
-          if (!isEnd(event)) return;
+          if (!isEnd(event) || carriesOn(event)) return;
           first.unsubscribe();
           resolve();
         });
@@ -297,15 +297,6 @@ function keepHistoryAcrossReloads(): void {
 }
 
 /** A navigation's last event, whichever way it went. */
-/** Whether a navigation ended only for another to take its place: a guard's redirect does. */
-function carriesOn(event: unknown): boolean {
-  return (
-    event instanceof NavigationCancel &&
-    (event.code === NavigationCancellationCode.Redirect ||
-      event.code === NavigationCancellationCode.SupersededByNewNavigation)
-  );
-}
-
 function isEnd(event: unknown): boolean {
   return (
     event instanceof NavigationEnd ||

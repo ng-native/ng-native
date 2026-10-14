@@ -59,14 +59,6 @@ jobs:
       - name: Check the release bundle
         run: npx nx affected -t check-bundle
 
-      # Nx's task cache, which the setup action restores in every job. Saved from main only, so a
-      # pull request cannot put an output into a cache that main later trusts.
-      - if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-        uses: actions/cache/save@v6
-        with:
-          path: .nx/cache
-          key: nx-${{ runner.os }}-${{ github.sha }}
-
   # Cold test runs compile lazy screens, so they have their own time budget beside `verify`.
   tests:
     if: github.event.pull_request.draft != true
@@ -86,17 +78,29 @@ jobs:
       - name: Test the remaining projects that changed
         run: pnpm nx affected -t test --exclude=@ng-native/integration-tests,@ng-native/web --parallel=2
 
-      - if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-        uses: actions/cache/save@v6
+      # The `node --test` hook on the oldest Node the packages support, which nothing else here
+      # runs. Node 22 cannot `require` an ES module that imports anything on the thread that runs
+      # `module.register`'s hooks, and the compiler does. `@ng-native/testing/register`, then the
+      # web suite for `@ng-native/testing/loader` registered with options. Under a minute.
+      - uses: actions/setup-node@v7
         with:
-          path: .nx/cache
-          key: nx-${{ runner.os }}-${{ github.sha }}-tests
+          node-version: '22.18'
+      - name: Test the node:test hook on Node 22.18
+        run: |
+          pnpm --filter @ng-native/testing exec node --import ./runner/register.mjs --test "src/**/*.node.test.ts"
+          pnpm --filter @ng-native/web test
 
-  # Every suite with the coverage floor: most of CI's time, so a job of its own beside `verify`.
-  coverage:
+  # Every suite, measured: most of CI's time, nearly all of it the native suite, so that suite is
+  # split across four runners. `coverage` below merges what they measured and holds the floor.
+  coverage-shard:
     if: github.event.pull_request.draft != true
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    strategy:
+      # A failing shard does not stop the others: their failures are worth seeing in the same run.
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
     steps:
       - uses: actions/checkout@v7
 
@@ -106,22 +110,56 @@ jobs:
       # Chromium, and only Chromium is installed. Cached by Playwright's version, which is what
       # decides the browser build it downloads. The system libraries it needs on Linux are apt
       # packages rather than part of the cache, so those are installed either way.
+      # Only beside the first shard, which is where the suites that are not split run.
       - id: playwright
+        if: matrix.shard == 1
         run: echo "version=$(pnpm --filter @ng-native/web exec playwright --version | awk '{print $2}')" >> "$GITHUB_OUTPUT"
       - id: browsers
+        if: matrix.shard == 1
         uses: actions/cache@v6
         with:
           path: ~/.cache/ms-playwright
           key: ${{ runner.os }}-chromium-${{ steps.playwright.outputs.version }}
-      - if: steps.browsers.outputs.cache-hit != 'true'
+      - if: matrix.shard == 1 && steps.browsers.outputs.cache-hit != 'true'
         run: pnpm --filter @ng-native/web exec playwright install --with-deps chromium
-      - if: steps.browsers.outputs.cache-hit == 'true'
+      - if: matrix.shard == 1 && steps.browsers.outputs.cache-hit == 'true'
         run: pnpm --filter @ng-native/web exec playwright install-deps chromium
 
       # Every suite, always, rather than what changed: the floor is on the merged number, and a
       # change in one package moves the coverage of another.
-      - name: Test, with the coverage floor
-        run: pnpm coverage
+      - name: Test, measuring coverage
+        run: node scripts/coverage.mjs --shard ${{ matrix.shard }}/${{ strategy.job-total }}
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: coverage-${{ matrix.shard }}
+          path: coverage/**/*.info
+          if-no-files-found: error
+          retention-days: 1
+
+  # The floor, on what the shards measured together. It runs when a shard failed too, and fails
+  # then on the report that shard never uploaded: skipped, it would read as a check that passed.
+  coverage:
+    needs: coverage-shard
+    if: ${{ !cancelled() && github.event.pull_request.draft != true }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+
+      # No install: the script is Node's standard library alone.
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: coverage-*
+          path: coverage
+          merge-multiple: true
+
+      - name: Hold the coverage floor
+        run: node scripts/coverage.mjs --report --shards 4 --min 95
 
   # Which parts of the tree a pull request touched, for the jobs that only matter to some of it.
   # A push to main runs everything regardless.

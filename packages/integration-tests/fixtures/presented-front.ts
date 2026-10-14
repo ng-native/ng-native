@@ -1,0 +1,81 @@
+import { Component, inject, type Signal } from '@angular/core';
+import type { Routes } from '@angular/router';
+import { SCREEN_IN_FRONT } from '@ng-native/device';
+import { Text } from '../../components/src/text.ts';
+import { NativeStackOutlet } from '../../router/src/native-stack-outlet.ts';
+import { NativeTab } from '../../router/src/native-tab.ts';
+import { NativeTabsOutlet } from '../../router/src/native-tabs-outlet.ts';
+
+/** What the home page was told about being in front, for the test to read. */
+export const home: { inFront?: Signal<boolean> } = {};
+
+@Component({
+  selector: 'x-shell',
+  imports: [NativeStackOutlet],
+  template: `<native-stack-outlet />`,
+})
+export class Shell {}
+
+@Component({
+  selector: 'x-bar',
+  imports: [NativeTab, NativeTabsOutlet],
+  template: `
+    <native-tabs-outlet>
+      <native-tab path="home" title="Home" />
+      <native-tab path="library" title="Library" />
+    </native-tabs-outlet>
+  `,
+})
+export class Bar {}
+
+@Component({
+  selector: 'x-tab-stack',
+  imports: [NativeStackOutlet],
+  template: `<native-stack-outlet />`,
+})
+export class TabStack {}
+
+@Component({ selector: 'x-home', imports: [Text], template: `<text>home</text>` })
+export class Home {
+  constructor() {
+    home.inFront = inject(SCREEN_IN_FRONT);
+  }
+}
+
+@Component({ selector: 'x-library', imports: [Text], template: `<text>library</text>` })
+export class Library {}
+
+@Component({ selector: 'x-album', imports: [Text], template: `<text>album</text>` })
+export class Album {}
+
+/** A page that throws on its first render, which fails the navigation to it. */
+@Component({ selector: 'x-broken', imports: [Text], template: `<text>{{ title() }}</text>` })
+export class Broken {
+  protected title(): string {
+    throw new Error('the page failed to render');
+  }
+}
+
+@Component({ selector: 'x-detail', imports: [Text], template: `<text>detail</text>` })
+export class Detail {}
+
+export const routes: Routes = [
+  {
+    path: '',
+    component: Bar,
+    children: [
+      { path: '', pathMatch: 'full', redirectTo: 'home' },
+      { path: 'home', component: Home },
+      {
+        path: 'library',
+        component: TabStack,
+        children: [
+          { path: '', component: Library },
+          { path: 'broken', component: Broken },
+          { path: ':id', component: Album },
+        ],
+      },
+    ],
+  },
+  { path: 'detail/:id', component: Detail },
+];

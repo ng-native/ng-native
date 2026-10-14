@@ -16,8 +16,9 @@
  *   `@ng-native/*` package and most Angular libraries on npm are full of `ɵɵngDeclare*` calls, which compile eagerly at module evaluation
  *   and throw "needs to be compiled using the JIT compiler" without the linker.
  */
-import { createRequire } from 'node:module';
+import { createRequire, Module } from 'node:module';
 import path from 'node:path';
+import { pathToFileURL } from 'node:url';
 
 const require = createRequire(import.meta.url);
 
@@ -38,6 +39,26 @@ export function needsAngular(source, file) {
   return IS_SOURCE.test(file)
     ? HAS_ANGULAR_DECORATOR.test(source)
     : IS_PARTIAL_COMPILED.test(source);
+}
+
+/**
+ * Imports the ES modules the compiler `require`s, `@oxc-angular/vite`'s API and
+ * `@angular/compiler`, into `require.cache`, where its `require` finds them. For a hook to call
+ * before it is registered: Node 22 and early Node 24 releases cannot `require` an ES module that
+ * imports anything on the thread that runs `module.register`'s hooks, and throw
+ * `ERR_METHOD_NOT_IMPLEMENTED` from `resolveSync` for every file compiled. A test that compiles
+ * anything loads both anyway.
+ */
+export async function importCompilerModules() {
+  const compiler = createRequire(require.resolve('@ng-native/metro/angular-transform.cjs'));
+  for (const specifier of ['@oxc-angular/vite/api', '@angular/compiler']) {
+    const file = compiler.resolve(specifier);
+    const module = new Module(file);
+    module.filename = file;
+    module.exports = await import(pathToFileURL(file).href);
+    module.loaded = true;
+    require.cache[file] = module;
+  }
 }
 
 /**

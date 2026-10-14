@@ -22,9 +22,14 @@ import {
   compileAngular,
   compileMarkdown,
   domComponentReference,
+  importCompilerModules,
   needsAngular,
   stubAssets,
 } from './compile.mjs';
+
+// Before this hook is in place, so loading them cannot come back through it. See
+// `importCompilerModules`.
+await importCompilerModules();
 
 /** @type {string[]} */
 let skip = [];

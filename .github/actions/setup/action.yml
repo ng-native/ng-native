@@ -22,15 +22,8 @@ runs:
         node-version: 24
         registry-url: ${{ inputs.registry-url }}
 
-    # Nx's task cache, as main's latest CI run left it (ci.yml saves it). Capped, so it carries
-    # what recent commits built rather than growing with every one.
-    - uses: actions/cache/restore@v6
-      with:
-        path: .nx/cache
-        key: nx-${{ runner.os }}-${{ github.sha }}
-        restore-keys: nx-${{ runner.os }}-
-    - run: echo "NX_MAX_CACHE_SIZE=500MB" >> "$GITHUB_ENV"
-      shell: bash
+    # No Nx task cache from an earlier run: Nx records its entries in a database named for the
+    # machine, so a restored cache directory is never read on a new runner, and every task runs.
 
     # Frozen: CI fails on a lockfile that does not match the manifests rather than quietly
     # resolving something newer, which is how the Reanimated version drifted off Expo's set.

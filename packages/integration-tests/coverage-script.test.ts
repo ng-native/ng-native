@@ -269,4 +269,107 @@ describe('coverage script integrity', () => {
       );
       rejects(root, /incomplete|rerun/i);
     }));
+
+  // CI runs the native suite as shards on runners of their own, and one more job merges them.
+  const sharded = ['--report', '--shards', '2', '--min', '95'];
+
+  it('counts a line that only one shard of the native suite reached', () =>
+    workspace((root) => {
+      rmSync(path.join(root, 'coverage/native.info'));
+      const other = '../fabric/src/node.ts';
+      writeFileSync(path.join(root, 'coverage/native-1.info'), lcov() + lcov(0, other));
+      writeFileSync(path.join(root, 'coverage/native-2.info'), lcov(1, other));
+      const result = cli(root, sharded);
+      assert.equal(result.status, 0, result.stderr);
+      assert.equal(summary(root).overall, 100);
+    }));
+
+  it('rejects a merge with a shard missing, and one whose shard count is not a number', () =>
+    workspace((root) => {
+      writeFileSync(path.join(root, 'coverage/native-1.info'), lcov());
+      rejects(root, /native-2 coverage.*(missing|read|ENOENT)/i, sharded);
+      rejects(root, /--shards/, ['--report', '--shards', 'two']);
+    }));
+
+  // Stands in for the suites, as `suites` does, and keeps the arguments each was started with.
+  function shardRun(root: string, shard: string, status = 0) {
+    writeFileSync(
+      path.join(root, 'suites.mjs'),
+      `
+import childProcess from 'node:child_process';
+import { syncBuiltinESMExports } from 'node:module';
+import { appendFileSync, mkdirSync, writeFileSync } from 'node:fs';
+import path from 'node:path';
+childProcess.spawnSync = (command, args) => {
+  appendFileSync(${JSON.stringify(path.join(root, 'calls.jsonl'))}, JSON.stringify(args) + '\\n');
+  const named = args.find((arg) => arg.startsWith('--test-reporter-destination=') && arg.endsWith('.info'));
+  const report = named ? named.split('=')[1] : ${JSON.stringify(path.join(root, 'coverage/browser/lcov.info'))};
+  mkdirSync(path.dirname(report), { recursive: true });
+  writeFileSync(report, ${JSON.stringify(lcov())});
+  return { status: ${status} };
+};
+syncBuiltinESMExports();
+`,
+    );
+    const result = cli(root, ['--shard', shard], true);
+    const calls = existsSync(path.join(root, 'calls.jsonl'))
+      ? readFileSync(path.join(root, 'calls.jsonl'), 'utf8').trim().split('\n')
+      : [];
+    return { result, calls: calls.map((line) => JSON.parse(line) as string[]) };
+  }
+
+  it('runs one shard of the native suite, and the other suites beside the first', () =>
+    workspace((root) => {
+      for (const report of reports) rmSync(path.join(root, 'coverage', report));
+      const second = shardRun(root, '2/2');
+      assert.equal(second.result.status, 0, second.result.stderr);
+      assert.equal(second.calls.length, 1);
+      assert.ok(second.calls[0]!.includes('--test-shard=2/2'));
+      assert.ok(existsSync(path.join(root, 'coverage/native-2.info')));
+      assert.equal(existsSync(path.join(root, 'coverage/summary.json')), false, 'no report yet');
+
+      rmSync(path.join(root, 'calls.jsonl'));
+      const first = shardRun(root, '1/2');
+      assert.equal(first.result.status, 0, first.result.stderr);
+      assert.equal(first.calls.length, 4);
+      assert.ok(first.calls[0]!.includes('--test-shard=1/2'));
+      assert.ok(existsSync(path.join(root, 'coverage/native-2.info')), 'the other shard is kept');
+      assert.equal(cli(root, sharded).status, 0);
+    }));
+
+  it('does not clear the mark a failed whole run left when a shard run succeeds', () =>
+    workspace((root) => {
+      suites(root, 'failure');
+      assert.equal(cli(root, [], true).status, 2);
+      assert.equal(shardRun(root, '2/2').result.status, 0);
+      rejects(root, /incomplete|rerun/i);
+    }));
+
+  it('does not merge the shards when one of them failed', () =>
+    workspace((root) => {
+      assert.equal(shardRun(root, '1/2').result.status, 0);
+      assert.equal(shardRun(root, '2/2', 1).result.status, 1);
+      rejects(root, /incomplete|rerun/i, sharded);
+      assert.equal(shardRun(root, '2/2').result.status, 0);
+      assert.equal(cli(root, sharded).status, 0);
+    }));
+
+  for (const other of ['--report', '--min']) {
+    it(`rejects a shard run asked for ${other} too, which it would not do`, () =>
+      workspace((root) => {
+        const result = cli(root, ['--shard', '1/2', other, ...(other === '--min' ? ['95'] : [])]);
+        assert.equal(result.status, 1);
+        assert.match(result.stderr, /--shard/);
+      }));
+  }
+
+  for (const shard of ['3/2', '0/2', '1', 'a/b', '1.5/2']) {
+    it(`rejects the shard ${shard} before running anything`, () =>
+      workspace((root) => {
+        const { result, calls } = shardRun(root, shard);
+        assert.equal(result.status, 1);
+        assert.match(result.stderr, /--shard/);
+        assert.equal(calls.length, 0);
+      }));
+  }
 });

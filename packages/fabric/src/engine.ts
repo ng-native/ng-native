@@ -10,6 +10,7 @@
 
 import {
   boundDeclaration,
+  boundRelativeLength,
   faded,
   fills,
   inlineInherited,
@@ -3666,14 +3667,19 @@ export class Engine implements HostEngine {
   }
 
   /**
-   * A bound declaration, `[style.color]`, whose value may be a `var()`. One that is, is kept as a
-   * declaration the cascade settles with the node's tokens, as a rule's is, and true is answered:
-   * the text is no value to put in the node's style. Any other value forgets what was kept.
+   * A bound declaration, `[style.color]`, whose value may be a `var()`, or a length in `em` or a
+   * viewport unit. One that is, is kept as a declaration the cascade settles with the node's
+   * tokens, font size and viewport, as a rule's is, and true is answered: the text is no value to
+   * put in the node's style. Any other value forgets what was kept.
    */
   setBoundStyle(node: EngineNode, prop: string, value: unknown): boolean {
-    const text = typeof value === 'string' && /^\s*var\(/i.test(value) ? value : undefined;
+    const text = typeof value === 'string' ? value : undefined;
     const bound =
-      text === undefined ? null : boundDeclaration(prop, tokenFromValue(text), node.name);
+      text === undefined
+        ? null
+        : /^\s*var\(/i.test(text)
+          ? boundDeclaration(prop, tokenFromValue(text), node.name)
+          : boundRelativeLength(prop, text, node.name);
     if (!bound && !node.boundByProp?.has(prop)) return false;
     const byProp = (node.boundByProp ??= new Map());
     if (bound) byProp.set(prop, bound);

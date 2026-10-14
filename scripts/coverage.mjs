@@ -18,9 +18,14 @@
  *   node scripts/coverage.mjs            # run every suite, merge, report
  *   node scripts/coverage.mjs --report   # re-report from the last run, without re-running
  *   node scripts/coverage.mjs --min 70   # exit non-zero if total line coverage is under 70%
+ *
+ * CI splits the native suite, which is most of the time, across runners, and merges in one more job:
+ *
+ *   node scripts/coverage.mjs --shard 2/4            # that shard alone, and no report
+ *   node scripts/coverage.mjs --report --shards 4    # report from all four shards' reports
  */
 import { spawnSync } from 'node:child_process';
-import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { availableParallelism } from 'node:os';
 import path from 'node:path';
 import url from 'node:url';
@@ -28,6 +33,8 @@ import url from 'node:url';
 const ROOT = path.resolve(path.dirname(url.fileURLToPath(import.meta.url)), '..');
 const OUT = path.join(ROOT, 'coverage');
 const INCOMPLETE = path.join(OUT, '.incomplete');
+/** A shard run's own mark, so one shard's success cannot clear another run's failure. */
+const incomplete = (shard) => (shard ? `${INCOMPLETE}-${shard}` : INCOMPLETE);
 const SUMMARY = path.join(OUT, 'summary.json');
 
 /**
@@ -121,6 +128,40 @@ const SUITES = [
     report: (out) => path.join(out, 'browser', 'lcov.info'),
   },
 ];
+
+/**
+ * `SUITES` with the native one as `count` shards, each a suite with a report of its own.
+ *
+ * A line any shard reached is covered, as with any two suites. Branches are not added together
+ * either, for the reason `mergeSuites` gives: Node numbers a file's branches by what the run
+ * executed, so two shards number them differently. The branch column therefore reads lower from
+ * shards than from one whole run; the floor is on lines, which read the same.
+ */
+function sharded(count) {
+  const [native, ...rest] = SUITES;
+  const shards = Array.from({ length: count }, (_, at) => ({
+    ...native,
+    name: `native-${at + 1}`,
+    shard: at + 1,
+    args: (destination) => [`--test-shard=${at + 1}/${count}`, ...native.args(destination)],
+    report: (out) => path.join(out, `native-${at + 1}.info`),
+  }));
+  return [...shards, ...rest];
+}
+
+/** `--shard 2/4` as `{ index: 2, count: 4 }`, `--shards 4` as `{ index: 0, count: 4 }`. */
+function shardOf(args) {
+  const value = (flag) => (args.includes(flag) ? (args[args.indexOf(flag) + 1] ?? '') : undefined);
+  const one = value('--shard');
+  const all = value('--shards');
+  if (one === undefined && all === undefined) return { index: 0, count: 0 };
+  const match = one === undefined ? /^()(\d+)$/.exec(all) : /^(\d+)\/(\d+)$/.exec(one);
+  const [index, count] = match ? [Number(match[1]), Number(match[2])] : [];
+  if (!match || count < 1 || index > count || (one !== undefined && index < 1)) {
+    throw new Error('--shard takes <index>/<count> and --shards a count, each a whole number.');
+  }
+  return { index, count };
+}
 
 /** `SF:` records, as `{ [file]: { lines: Map<number, hits>, branches: Map<id, hits> } }`. */
 function parseLcov(text, cwd) {
@@ -233,12 +274,12 @@ function uncoveredRanges(lines) {
   return ranges.map(([from, to]) => (from === to ? `${from}` : `${from}-${to}`));
 }
 
-function run() {
+function run(suites, mark = INCOMPLETE) {
   mkdirSync(OUT, { recursive: true });
   // Kept on failure or interruption, even when a failed producer wrote a complete LCOV file.
-  writeFileSync(INCOMPLETE, 'Coverage run incomplete. Rerun pnpm coverage.\n');
-  for (const suite of SUITES) rmSync(suite.report(OUT), { force: true });
-  for (const suite of SUITES) {
+  writeFileSync(mark, 'Coverage run incomplete. Rerun pnpm coverage.\n');
+  for (const suite of suites) rmSync(suite.report(OUT), { force: true });
+  for (const suite of suites) {
     const started = Date.now();
     const result = spawnSync(suite.command, suite.args(suite.report(OUT)), {
       cwd: path.join(ROOT, suite.cwd),
@@ -284,12 +325,12 @@ const row = (name, data) =>
   `${ratio(data.branchesCovered, data.branches).toFixed(1).padStart(9)}`;
 
 /** Worst package first, so the table reads as a queue of work. */
-function printPackages(shipped) {
+function printPackages(shipped, suites) {
   const groups = new Map();
   for (const entry of shipped) {
     groups.set(entry.package, [...(groups.get(entry.package) ?? []), entry]);
   }
-  console.log(`\nCoverage by package (${SUITES.length} suites merged)\n`);
+  console.log(`\nCoverage by package (${suites.length} suites merged)\n`);
   console.log(
     `${'package'.padEnd(16)} ${'files'.padStart(5)} ${'lines'.padStart(7)} ` +
       `${'line %'.padStart(7)} ${'branch %'.padStart(9)}`,
@@ -340,9 +381,9 @@ function printWorst(shipped) {
  * file keeps the branch set of whichever suite covered the largest share of it, which is a real
  * measurement by one instrumenter rather than an invented union of two.
  */
-function mergeSuites() {
+function mergeSuites(suites) {
   const totals = new Map();
-  for (const suite of SUITES) {
+  for (const suite of suites) {
     for (const [name, data] of readSuite(suite)) {
       const held = totals.get(name) ?? { lines: new Map(), branches: new Map() };
       for (const [number, hits] of data.lines) {
@@ -419,11 +460,11 @@ function fold(measured) {
   return [...bySource.values()];
 }
 
-function report(minimum) {
-  const shipped = fold(filesIn(mergeSuites()));
+function report(minimum, suites) {
+  const shipped = fold(filesIn(mergeSuites(suites)));
   const all = totals(shipped);
   if (all.lines === 0) throw new Error('No shipped source lines were measured.');
-  printPackages(shipped);
+  printPackages(shipped, suites);
   printWorst(shipped);
 
   const overall = ratio(all.covered, all.lines);
@@ -448,12 +489,32 @@ function main() {
   ) {
     throw new Error('--min must be a finite percentage between 0 and 100.');
   }
-  if (args.includes('--report')) {
-    if (existsSync(INCOMPLETE)) throw new Error('Coverage run incomplete. Rerun pnpm coverage.');
-  } else {
-    run();
+  const { index, count } = shardOf(args);
+  const suites = count ? sharded(count) : SUITES;
+  // A shard measures and stops: the report and the floor are the merge's, from every shard.
+  if (index && (args.includes('--report') || minimum !== undefined)) {
+    throw new Error(
+      '--shard runs one shard and reports nothing: --report and --min go with --shards.',
+    );
   }
-  report(minimum);
+  if (index) {
+    // One runner's part: its shard, and beside the first shard the suites that are not split.
+    run(
+      suites.filter((suite) => (suite.shard ?? 1) === index),
+      incomplete(index),
+    );
+    rmSync(incomplete(index), { force: true });
+    return;
+  }
+  if (args.includes('--report')) {
+    const marks = existsSync(OUT)
+      ? readdirSync(OUT).filter((file) => file.startsWith(path.basename(INCOMPLETE)))
+      : [];
+    if (marks.length) throw new Error('Coverage run incomplete. Rerun pnpm coverage.');
+  } else {
+    run(suites);
+  }
+  report(minimum, suites);
   rmSync(INCOMPLETE, { force: true });
 }
 

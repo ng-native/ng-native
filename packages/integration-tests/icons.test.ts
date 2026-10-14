@@ -579,6 +579,11 @@ describe('an icon in the tree', () => {
     assert.equal(byId('in-px').props['width'], 18);
     assert.equal(byId('in-px').props['bbWidth'], 18);
     assert.equal(byId('in-rem').props['width'], 24);
+    // `size="1.5em"` is what `@ng-icons/core` writes in its own examples. Drawn at 1em, it was.
+    assert.equal(byId('in-em').props['width'], 32);
+    assert.equal(byId('in-em').props['height'], 32);
+    assert.equal(byId('in-em').props['bbWidth'], '100%');
+    assert.equal(byId('in-em-font').props['width'], 30);
     // One it cannot read is left the size of the text around it, and never NaN.
     assert.equal(byId('unread').props['width'], 16);
     // Nor one whose number is not a number, which matched as rem and came to NaN.

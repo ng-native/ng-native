@@ -293,6 +293,9 @@ export class NativeStackOutlet implements RouterOutletContract, OnInit {
       inFront,
       PRESENTED,
     );
+    // Once the page is there to cover it: one that throws on its first render never is, and
+    // nothing would put the screen under it back in front.
+    this.top?.inFront.set(false);
     this.fillScreen(screen);
     // Subscribed now, so it is the newest answer and the first asked: a back dismisses the page
     // before it pops anything in the tab under it.
@@ -318,6 +321,7 @@ export class NativeStackOutlet implements RouterOutletContract, OnInit {
     this.presentedPage = null;
     page.stopBack();
     this.drop(page);
+    if (this.top && !this.top.detached) this.top.inFront.set(true);
   }
 
   /**
