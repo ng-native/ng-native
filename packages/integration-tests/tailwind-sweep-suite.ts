@@ -473,12 +473,12 @@ function resolverFor(
   const resolver = new StyleResolver(sheet, { ...viewport, colorScheme: 'light' });
   const states = world.states ? { ...STATE_ATTRIBUTES } : {};
   const target = (
-    name: string,
+    tag: string,
     classes: readonly string[],
     parent: StyleTarget | null,
     props: Record<string, unknown> = {},
   ): StyleTarget => ({
-    name,
+    tag,
     parent,
     classes: new Set(classes),
     props,

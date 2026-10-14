@@ -247,9 +247,9 @@ function declareProps(ctor: unknown, node: HostNode): void {
   const def =
     (ctor as { ɵcmp?: { inputs?: object }; ɵdir?: { inputs?: object } }).ɵcmp ??
     (ctor as { ɵdir?: { inputs?: object } }).ɵdir;
-  const name = (node as { name?: string }).name;
-  if (!name || !def?.inputs) return;
-  declareNativeProps(name, [...Object.keys(def.inputs), ...WRITTEN_PROPS]);
+  const tag = (node as { tag?: string }).tag;
+  if (!tag || !def?.inputs) return;
+  declareNativeProps(tag, [...Object.keys(def.inputs), ...WRITTEN_PROPS]);
 }
 
 function stripConsumedAttributes(ctor: unknown, node: HostNode): void {

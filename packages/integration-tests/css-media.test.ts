@@ -165,7 +165,7 @@ describe('the ways a media query can be written', () => {
     const sheet = compileCss(`.a { color: red } @media ${query} { .a { color: blue } }`, 'media');
     const resolver = new StyleResolver(sheet, { width, height, colorScheme: 'light' });
     const target: StyleTarget = {
-      name: 'view',
+      tag: 'view',
       parent: null,
       classes: new Set(['a']),
       props: {},
@@ -249,7 +249,7 @@ describe('a media query inside another', () => {
     const holdsAt = (width: number) => {
       const resolver = new StyleResolver(sheet, { width, height: 800, colorScheme: 'light' });
       const target: StyleTarget = {
-        name: 'view',
+        tag: 'view',
         parent: null,
         classes: new Set(['a']),
         props: {},

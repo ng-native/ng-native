@@ -16,8 +16,8 @@ import { compileCss } from '@ng-native/testing';
 
 /** What an element wearing `classes` under a root wearing `rootClasses` resolves to. */
 function resolvedStyle(css: string, classes: string[], rootClasses: string[] = []) {
-  const target = (name: string, parent: StyleTarget | null, own: string[]): StyleTarget => ({
-    name,
+  const target = (tag: string, parent: StyleTarget | null, own: string[]): StyleTarget => ({
+    tag,
     parent,
     classes: new Set(own),
     props: {},

@@ -818,7 +818,7 @@ const BY_ELEMENT: Record<string, Record<string, Handler>> = {
  * attribute, a `noop` key is claimed and genuinely does nothing.
  */
 export function applyProp(node: BrowserNode, key: string, value: unknown, clear: boolean): void {
-  const elementHandler = BY_ELEMENT[node.name]?.[key];
+  const elementHandler = BY_ELEMENT[node.tag]?.[key];
   const baseHandler = VIEW_BASE_HANDLERS[key];
   if (elementHandler || baseHandler) {
     elementHandler?.(node, value, clear);

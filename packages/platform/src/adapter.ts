@@ -343,7 +343,7 @@ class NativeRenderer implements Renderer2 {
     if (sides === REFUSED) {
       const most = key === 'gap' ? 'two' : 'four';
       const why = `${key} takes ${most} values at most`;
-      this.engine.reportDroppedDeclaration(key, String(value), el.name, why);
+      this.engine.reportDroppedDeclaration(key, String(value), el.tag, why);
       return true;
     }
     (writtenAs.get(el) ?? writtenAs.set(el, new Map()).get(el)!).set(

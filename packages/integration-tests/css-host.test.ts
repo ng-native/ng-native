@@ -95,7 +95,7 @@ describe(':host', () => {
 
 describe('a host node, straight from the resolver', () => {
   const hostOf = (hostSheet: StyleTarget['hostSheet'], classes: string[]): StyleTarget => ({
-    name: 'view',
+    tag: 'view',
     parent: null,
     classes: new Set(classes),
     props: {},

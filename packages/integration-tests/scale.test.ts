@@ -119,7 +119,7 @@ describe('engine at scale', () => {
     await settle();
 
     const stillCommitted = walk(app.engine.root).filter((node) => node.committed !== null);
-    const names = stillCommitted.map((node) => node.name).sort();
+    const names = stillCommitted.map((node) => node.tag).sort();
     // Only the surviving static subtree, and the root component's host above it, hold a Fabric
     // handle. The engine root is never committed itself: commit() walks its children straight
     // into the root child set.

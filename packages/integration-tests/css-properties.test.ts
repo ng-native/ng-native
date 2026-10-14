@@ -182,7 +182,7 @@ describe('a shorthand beats a longhand from a weaker rule', () => {
   // normalize is `* { border-width: 0 }`, so no bordered element in it had a border.
   const resolved = (css: string, classes: string[]) => {
     const target = (parent: StyleTarget | null, own: string[]): StyleTarget => ({
-      name: 'view',
+      tag: 'view',
       parent,
       classes: new Set(own),
       props: {},
@@ -371,7 +371,7 @@ describe('properties React Native supports that we were rejecting', () => {
     );
     const resolver = new StyleResolver(sheet, { width: 400, height: 800, colorScheme: 'light' });
     const node = {
-      name: 'text',
+      tag: 'text',
       classes: new Set(['a', 'plain']),
       props: {},
       parent: null,
@@ -779,7 +779,7 @@ describe('a colour token made of channel tokens', () => {
   // colour is settled where the token is defined, from the tokens in scope there.
   const resolve = (css: string, parentClasses: string[], classes: string[]) => {
     const target = (parent: StyleTarget | null, own: string[]): StyleTarget => ({
-      name: 'view',
+      tag: 'view',
       parent,
       classes: new Set(own),
       props: {},

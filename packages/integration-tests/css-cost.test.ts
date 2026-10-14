@@ -130,7 +130,7 @@ describe('what CSS costs', () => {
       let node: StyleTarget | null = null;
       for (let i = 0; i < depth; i++) {
         node = {
-          name: 'view',
+          tag: 'view',
           parent: node,
           classes: new Set([`c${i % 30}`]),
           props: {},

@@ -30,7 +30,7 @@ export function isFormsInput(name: string): boolean {
 
 /** An element, as far as this report needs one: enough to name it. */
 export interface NamedHostNode {
-  readonly name: string;
+  readonly tag: string;
 }
 
 /** Elements and inputs already reported, per caller, so a list of fields says it once. */
@@ -49,12 +49,12 @@ export function reportUnboundFormsInput(owner: object, el: NamedHostNode, name: 
   if (!directiveEntry) return;
   const seen = reportedInputs.get(owner) ?? new Set<string>();
   reportedInputs.set(owner, seen);
-  const key = `${el.name} ${name}`;
+  const key = `${el.tag} ${name}`;
   if (seen.has(key)) return;
   seen.add(key);
   const [directive, from] = directiveEntry;
   console.error(
-    `[angular-native] Can't bind to '${name}' on <${el.name}>: no directive in its template ` +
+    `[angular-native] Can't bind to '${name}' on <${el.tag}>: no directive in its template ` +
       `takes it, so it binds nothing. Add ${directive} from '${from}' to the component's ` +
       `\`imports\`.`,
   );

@@ -617,7 +617,7 @@ export function fills(child: StyleTarget): boolean {
 
 /** What the matcher needs of a node. The engine's node satisfies this structurally. */
 export interface StyleTarget {
-  readonly name: string;
+  readonly tag: string;
   readonly parent: StyleTarget | null;
   /**
    * Needed only by the selectors that ask about a node's place among its siblings, which is why
@@ -952,7 +952,7 @@ function matchesCompound(node: StyleTarget, compound: Compound, sheet: StyleShee
       if (state === 'focus' ? !node.focused : !node.active) return false;
     }
   }
-  if (compound.type !== undefined && compound.type !== node.name) return false;
+  if (compound.type !== undefined && compound.type !== node.tag) return false;
   if (compound.own !== undefined && !ownedBy(node, compound, sheet)) return false;
   if (compound.id !== undefined && node.props['nativeID'] !== compound.id) return false;
   for (const className of compound.classes) {
@@ -1189,7 +1189,7 @@ function bitsAbove(node: StyleTarget): Bits {
   };
   for (let up = node.parent; up; up = up.parent) {
     if (up.classes) for (const className of up.classes) add(bitOf('.', className));
-    if (up.name !== undefined) add(bitOf('<', up.name));
+    if (up.tag !== undefined) add(bitOf('<', up.tag));
     const id = up.props?.['nativeID'];
     if (typeof id === 'string') add(bitOf('#', id));
   }
@@ -1680,7 +1680,7 @@ function countPosition(
   let position = 0;
   let seen = 0;
   for (const sibling of siblings) {
-    if (!isElement(sibling) || (ofType && sibling.name !== node.name)) continue;
+    if (!isElement(sibling) || (ofType && sibling.tag !== node.tag)) continue;
     seen++;
     if (sibling === node) position = seen;
   }
@@ -1901,7 +1901,7 @@ function reach(node: StyleTarget, index: RuleIndex, found: IndexedEntry[]): void
     if (bucket) found.push(...bucket);
   };
   if (index.universal.length) found.push(...index.universal);
-  take(`type:${node.name}`);
+  take(`type:${node.tag}`);
   const id = node.props['nativeID'];
   if (typeof id === 'string') take(`id:${id}`);
   if (node.classes) for (const name of node.classes) take(`class:${name}`);
@@ -2322,7 +2322,7 @@ function boxAround(rule: StyleRule): string | undefined {
 
 /** Whether a rule among these could be for a node: never no where one is. */
 function writtenFor(of: Subjects, node: StyleTarget): boolean {
-  if (of.any || of.types.has(node.name)) return true;
+  if (of.any || of.types.has(node.tag)) return true;
   for (const name of node.classes ?? []) if (of.classes.has(name)) return true;
   if (!of.inside.size) return false;
   for (let over = node.parent; over; over = over.parent) {

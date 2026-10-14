@@ -406,6 +406,124 @@ describe('device-react-native-import, through nx migrate, ng update and ng-nativ
   });
 });
 
+describe('engine-node-tag, through nx migrate, ng update and ng-native-migrate', () => {
+  const files = {
+    'src/app/badge.ts': [
+      "import { ElementRef, inject } from '@angular/core';",
+      "import type { EngineNode as Node } from '@ng-native/fabric';",
+      "import * as fabric from '@ng-native/fabric';",
+      '',
+      'interface Card extends Node {',
+      '  readonly extra: number;',
+      '}',
+      '',
+      'export function tags(node: Node | null, card: Card): string[] {',
+      '  const found = [node?.name ?? "", card.name, card.parent?.name ?? ""];',
+      "  for (const child of node!.children) found.push(child.name, child['name']);",
+      '  found.push(...card.children.map(({ name }) => name));',
+      '  const { name, kind } = card;',
+      '  const cast = node as fabric.EngineNode;',
+      "  const target: fabric.StyleTarget = { name: 'view', parent: null };",
+      '  return [...found, name, kind, cast.name, target.name];',
+      '}',
+      '',
+      'export class Badge {',
+      '  private readonly host = inject<ElementRef<Node>>(ElementRef);',
+      '  constructor(private readonly node: Node) {}',
+      '  tag() {',
+      '    return this.host.nativeElement.name + this.node.name;',
+      '  }',
+      '}',
+      '',
+      'export class Target implements fabric.StyleTarget {',
+      "  readonly name = 'view';",
+      '  readonly parent = null;',
+      '  label() {',
+      '    return this.name;',
+      '  }',
+      '}',
+      '',
+    ].join('\n'),
+    'src/app/shadow.ts': [
+      "import type { EngineNode } from '@ng-native/fabric';",
+      '',
+      'export function shadowed(node: EngineNode, user: { name: string }) {',
+      '  const outer = node.name;',
+      '  {',
+      "    const node = { name: 'Ada' };",
+      '    return [outer, node.name, user.name];',
+      '  }',
+      '}',
+      '',
+      'export const greet = (node: { name: string }) => node.name;',
+      '',
+      'export class Named {',
+      "  readonly name = 'card';",
+      '  label(files: readonly { name: string }[]) {',
+      '    return [this.name, ...files.map((file) => file.name)];',
+      '  }',
+      '}',
+      '',
+    ].join('\n'),
+    'src/app/unsure.ts': [
+      "import { ElementRef, inject } from '@angular/core';",
+      "import type { EngineNode } from '@ng-native/fabric';",
+      '',
+      'export function described(lookup: () => EngineNode | undefined): string {',
+      '  return lookup()?.name ?? inject(ElementRef).nativeElement.name;',
+      '}',
+      '',
+    ].join('\n'),
+    'src/app/user.ts': [
+      'export class Profile {',
+      "  readonly user = { name: 'Ada' };",
+      '  label(file: { name: string }) {',
+      '    return `${this.user.name} ${file.name} ${Profile.name}`;',
+      '  }',
+      '}',
+      '',
+    ].join('\n'),
+  };
+
+  it("reads a node's tag as tag where it is a node's, and leaves every other name", async () => {
+    const { nx, angular, cli } = await acrossAdapters(files, 'engine-node-tag', '0.13.0');
+    assert.equal(
+      nx.files['src/app/badge.ts'],
+      files['src/app/badge.ts']
+        .replace('node?.name ??', 'node?.tag ??')
+        .replace('card.name,', 'card.tag,')
+        .replace('card.parent?.name', 'card.parent?.tag')
+        .replace("child.name, child['name']", "child.tag, child['tag']")
+        .replace('map(({ name }) => name)', 'map(({ tag: name }) => name)')
+        .replace('const { name, kind } = card;', 'const { tag: name, kind } = card;')
+        .replace("{ name: 'view', parent: null }", "{ tag: 'view', parent: null }")
+        .replace('cast.name, target.name', 'cast.tag, target.tag')
+        .replace('nativeElement.name + this.node.name', 'nativeElement.tag + this.node.tag')
+        .replace("readonly name = 'view';", "readonly tag = 'view';")
+        .replace('return this.name;', 'return this.tag;'),
+    );
+    assert.equal(
+      nx.files['src/app/shadow.ts'],
+      files['src/app/shadow.ts'].replace('const outer = node.name;', 'const outer = node.tag;'),
+      'the inner node, the user, the typed parameter, the class and the files keep name',
+    );
+    assert.equal(nx.files['src/app/unsure.ts'], files['src/app/unsure.ts']);
+    assert.equal(nx.files['src/app/user.ts'], files['src/app/user.ts']);
+    assert.deepEqual(nx.notes, [
+      "src/app/unsure.ts:5: lookup()?.name may be an engine node's element tag, which is now tag. If it is, read lookup()?.tag instead.",
+      "src/app/unsure.ts:5: inject(ElementRef).nativeElement.name may be an engine node's element tag, which is now tag. If it is, read inject(ElementRef).nativeElement.tag instead.",
+    ]);
+    assert.deepEqual(angular, nx);
+    assert.deepEqual(cli, nx);
+  });
+
+  it('changes nothing the second time', async () => {
+    const first = await viaNx(files, 'engine-node-tag');
+    const again = await viaNx(first.files as Record<string, string>, 'engine-node-tag');
+    assert.deepEqual(again.files, first.files);
+  });
+});
+
 describe('ng-native-migrate', () => {
   const app = {
     'package.json': JSON.stringify({ dependencies: { '@ng-native/components': '^0.1.3' } }),

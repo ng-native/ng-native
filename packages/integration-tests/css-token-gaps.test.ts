@@ -9,7 +9,7 @@ import { compileCss } from '@ng-native/testing';
 
 function resolvedStyle(css: string): Record<string, unknown> {
   const target = (parent: StyleTarget | null, own: string[]): StyleTarget => ({
-    name: 'view',
+    tag: 'view',
     parent,
     classes: new Set(own),
     props: {},
@@ -191,7 +191,7 @@ describe('the direction a flex box lays out in', () => {
   // A row is written, as `flex-row`. See components/layout.md.
   const direction = (css: string, classes = ['a']) => {
     const target = (parent: StyleTarget | null, own: string[]): StyleTarget => ({
-      name: 'view',
+      tag: 'view',
       parent,
       classes: new Set(own),
       props: {},
@@ -223,7 +223,7 @@ describe('a border style that draws no border', () => {
   // width. Compiled to widths of 0, a width from a later rule - `border-hidden border-x` - drew.
   const style = (css: string, classes: string[]) => {
     const target = (parent: StyleTarget | null, own: string[]): StyleTarget => ({
-      name: 'view',
+      tag: 'view',
       parent,
       classes: new Set(own),
       props: {},

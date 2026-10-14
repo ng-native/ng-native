@@ -59,13 +59,13 @@ export const checksZeroSize = (): boolean => typeof ngDevMode !== 'undefined' &&
  * the engine's on a device, and a DOM element on the web host.
  */
 export function written(node: unknown): string {
-  const { name, localName, classes, classList } = node as {
-    name?: string;
+  const { tag, localName, classes, classList } = node as {
+    tag?: string;
     localName?: string;
     classes?: Iterable<string> | null;
     classList?: Iterable<string>;
   };
   // An engine node has a `classList` too, for Angular's renderer, but its classes are `classes`.
   const names = [...((classes === undefined ? classList : classes) ?? [])];
-  return `<${name ?? localName}${names.length ? ` class="${names.join(' ')}"` : ''}>`;
+  return `<${tag ?? localName}${names.length ? ` class="${names.join(' ')}"` : ''}>`;
 }

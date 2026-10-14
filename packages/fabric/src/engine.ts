@@ -450,8 +450,8 @@ interface Committed {
 export interface EngineNode extends HostNode {
   readonly kind: NodeKind;
   /** Lowercase template spelling, e.g. `view`. Never the native view name. */
-  readonly name: string;
-  /** `name` again, for Angular 22.0, which reads it on a component's host element. */
+  readonly tag: string;
+  /** `tag` again, for Angular 22.0, which reads it on a component's host element. */
   readonly tagName: string;
   props: Record<string, unknown>;
   text: string;
@@ -1848,7 +1848,7 @@ function paragraphText(node: EngineNode): string {
 /** The part of a node `viewNameOf` reads: an engine node, or any host's mirror of one. */
 export interface ViewNameNode {
   readonly kind: string;
-  readonly name: string;
+  readonly tag: string;
   readonly parent: ViewNameNode | null;
   /** Whether a component is mounted on it, and whether that component is the native view. */
   readonly componentHost?: boolean;
@@ -1865,10 +1865,10 @@ export interface ViewNameNode {
  */
 function isTextElement(node: ViewNameNode | null): boolean {
   if (node === null || node.kind !== 'element') return false;
-  if (node.name === 'text') return true;
+  if (node.tag === 'text') return true;
   // One lookup settles nearly every other element, which is a view.
-  if (registeredViewName(node.name) !== PARAGRAPH) return false;
-  return !TEXT_ELEMENTS.has(node.name) || holdsOnlyText(node);
+  if (registeredViewName(node.tag) !== PARAGRAPH) return false;
+  return !TEXT_ELEMENTS.has(node.tag) || holdsOnlyText(node);
 }
 
 /** Whether a text element holds text and nothing else. One that holds nothing holds no text. */
@@ -1894,7 +1894,7 @@ const ALIGNS = new Set(['center', 'flex-end', 'space-around', 'space-evenly']);
  * element holding more than the one run is left as it was.
  */
 function aligningText(node: EngineNode): boolean {
-  if (node.kind !== 'element' || node.name === 'text' || !TEXT_ELEMENTS.has(node.name)) {
+  if (node.kind !== 'element' || node.tag === 'text' || !TEXT_ELEMENTS.has(node.tag)) {
     return false;
   }
   if (node.children.length !== 1 || !oneRun(node.children[0]!)) return false;
@@ -1909,7 +1909,7 @@ function aligningText(node: EngineNode): boolean {
 
 /** One run of text to place: text itself, or a text element around some, a label in a span. */
 const oneRun = (child: EngineNode): boolean =>
-  child.kind === 'text' || (child.kind === 'element' && TEXT_ELEMENTS.has(child.name));
+  child.kind === 'text' || (child.kind === 'element' && TEXT_ELEMENTS.has(child.tag));
 
 /** The view a node is committed as: `viewNameOf`, but for a text element that aligns its text. */
 const committedViewName = (node: EngineNode): string =>
@@ -1930,12 +1930,12 @@ export function viewNameOf(node: ViewNameNode): string {
   // Committing a nested `<text>` as another Paragraph gives a paragraph inside a paragraph,
   // which lays out as a separate block instead of flowing inline.
   // A component of the app's own under a name a view set registered: its host is a plain view.
-  if (node.componentHost && !node.nativeView && YIELDING.has(node.name)) return DEFAULT_VIEW;
-  const registered = registeredViewName(node.name);
+  if (node.componentHost && !node.nativeView && YIELDING.has(node.tag)) return DEFAULT_VIEW;
+  const registered = registeredViewName(node.tag);
   // Nearly every element: a view of some kind, by its name alone.
   if (registered !== PARAGRAPH) return registered ?? DEFAULT_VIEW;
   // One of HTML's text elements that holds something other than text: a view.
-  if (node.name !== 'text' && TEXT_ELEMENTS.has(node.name) && !holdsOnlyText(node)) {
+  if (node.tag !== 'text' && TEXT_ELEMENTS.has(node.tag) && !holdsOnlyText(node)) {
     return DEFAULT_VIEW;
   }
   // The paragraph the engine makes for a view's loose text is under a view, whatever the name
@@ -2355,18 +2355,18 @@ class RetainedNode {
   scrolled?: ScrollAnimation;
 
   readonly kind: NodeKind;
-  readonly name: string;
+  readonly tag: string;
   /** See `HostNode.host`. */
   readonly host: HostEngine;
 
-  constructor(kind: NodeKind, name: string, host: HostEngine) {
+  constructor(kind: NodeKind, tag: string, host: HostEngine) {
     this.kind = kind;
-    this.name = name;
+    this.tag = tag;
     this.host = host;
   }
 
   get tagName(): string {
-    return this.name;
+    return this.tag;
   }
 
   /** Angular's dev-mode assertion compares this against `Node.ELEMENT_NODE`. */
@@ -3752,7 +3752,7 @@ export class Engine implements HostEngine {
   setBoundStyle(node: EngineNode, prop: string, value: unknown): boolean {
     const text = typeof value === 'string' ? value : undefined;
     const refused = text !== undefined && this.refusedBound(node, prop, text);
-    const bound = text === undefined || refused ? null : boundFrom(prop, text, node.name);
+    const bound = text === undefined || refused ? null : boundFrom(prop, text, node.tag);
     if (!bound && !node.boundByProp?.has(prop)) return refused;
     const byProp = (node.boundByProp ??= new Map());
     if (bound) byProp.set(prop, bound);
@@ -3765,7 +3765,7 @@ export class Engine implements HostEngine {
   /** Whether a bound value is one CSS has none of, which is dropped with a warning. */
   private refusedBound(node: EngineNode, prop: string, text: string): boolean {
     if (!isNegativeLineHeight(prop, text)) return false;
-    this.reportDroppedDeclaration('line-height', text, node.name, 'it is negative');
+    this.reportDroppedDeclaration('line-height', text, node.tag, 'it is negative');
     return true;
   }
 
@@ -5955,7 +5955,7 @@ export class Engine implements HostEngine {
     style: StyleCache | null,
   ): FabricNode[] {
     const context = style?.context;
-    if (HOIST_TARGETS.has(node.name)) return this.reconcileHoistTarget(node, context);
+    if (HOIST_TARGETS.has(node.tag)) return this.reconcileHoistTarget(node, context);
     const handles: FabricNode[] = [];
     for (const child of node.children) {
       if (child.kind === 'anchor' || this.committedElsewhere(child) || this.withheld(child)) {
@@ -6004,7 +6004,7 @@ export class Engine implements HostEngine {
     if (!trimEnds(text.text)) return null;
     let box = text.box;
     // One made for another element, before the view was registered again, is done with.
-    if (box && box.name !== drawnBy) {
+    if (box && box.tag !== drawnBy) {
       if (box.committed) this.forgetCommitted(box);
       box = undefined;
     }
@@ -6175,8 +6175,8 @@ export class Engine implements HostEngine {
    * keeps for its name when it has one (`HoistOptions.standIn`), and keep the view it commits as.
    */
   private land(target: EngineNode, child: EngineNode, landed: Set<string>): FabricNode {
-    if (!STAND_INS[child.name]) return this.reconcileUnder(target, child);
-    const kept = target.kept?.get(child.name);
+    if (!STAND_INS[child.tag]) return this.reconcileUnder(target, child);
+    const kept = target.kept?.get(child.tag);
     if (kept && kept.node !== child && child.committed === null && !isWithin(kept.node, target)) {
       // A node taken out without being destroyed would otherwise come back holding this tag too.
       if (kept.node) kept.node.committed = null;
@@ -6185,8 +6185,8 @@ export class Engine implements HostEngine {
     }
     const handle = this.reconcile(child);
     child.committedUnder = target;
-    (target.kept ??= new Map()).set(child.name, { node: child, committed: child.committed! });
-    landed.add(child.name);
+    (target.kept ??= new Map()).set(child.tag, { node: child, committed: child.committed! });
+    landed.add(child.tag);
     return handle;
   }
 
@@ -6235,10 +6235,10 @@ export class Engine implements HostEngine {
   private hoistedInto(node: EngineNode): Map<EngineNode, EngineNode[]> | null {
     let found: Map<EngineNode, EngineNode[]> | null = null;
     for (const candidate of this.hoisted) {
-      if (candidate.parent === node || HOISTS[candidate.name] !== node.name) continue;
+      if (candidate.parent === node || HOISTS[candidate.tag] !== node.tag) continue;
       let written: EngineNode = candidate;
       let above = candidate.parent;
-      while (above && above !== node && above.name !== node.name) {
+      while (above && above !== node && above.tag !== node.tag) {
         written = above;
         above = above.parent;
       }
@@ -6253,10 +6253,10 @@ export class Engine implements HostEngine {
 
   /** Whether a hoisted node commits further up than the parent it was written in. */
   private hoistsAbove(node: EngineNode): boolean {
-    const target = HOISTS[node.name];
-    if (node.parent?.name === target) return false;
+    const target = HOISTS[node.tag];
+    if (node.parent?.tag === target) return false;
     for (let above = node.parent?.parent; above; above = above.parent) {
-      if (above.name === target) return true;
+      if (above.tag === target) return true;
     }
     return false;
   }
@@ -6290,12 +6290,12 @@ export class Engine implements HostEngine {
   private checkClaimed(node: EngineNode): void {
     // The paragraph the engine wraps loose text in is its own: no template wrote it.
     if (node.kind !== 'element' || node.claimed || node.anonymous) return;
-    if (!PRIMITIVE_NAMES.has(node.name)) return;
-    if (this.reported.has(node.name)) return;
-    this.reported.add(node.name);
+    if (!PRIMITIVE_NAMES.has(node.tag)) return;
+    if (this.reported.has(node.tag)) return;
+    this.reported.add(node.tag);
     console.error(
-      `[angular-native] <${node.name}> is used in a template that does not import ` +
-        `${className(node.name)}. Add it to the component's \`imports\` from ` +
+      `[angular-native] <${node.tag}> is used in a template that does not import ` +
+        `${className(node.tag)}. Add it to the component's \`imports\` from ` +
         `'@ng-native/components'; without it the element has none of the component's inputs ` +
         `or behavior, so a prop written on it stays the text it was written as.`,
     );
@@ -6357,20 +6357,20 @@ export class Engine implements HostEngine {
   }
 
   private checkProps(node: EngineNode): void {
-    if (!node.claimed || !PRIMITIVE_NAMES.has(node.name)) return;
-    const declared = DECLARED_PROPS.get(node.name);
+    if (!node.claimed || !PRIMITIVE_NAMES.has(node.tag)) return;
+    const declared = DECLARED_PROPS.get(node.tag);
     if (!declared) return;
     for (const key of Object.keys(node.props)) {
       if (this.isDeclared(declared, key, node.props[key])) continue;
-      const report = `${node.name} ${key}`;
+      const report = `${node.tag} ${key}`;
       if (this.reported.has(report)) continue;
       this.reported.add(report);
       const meant = [...declared].find((name) => name.toLowerCase() === key.toLowerCase());
       console.warn(
-        `[angular-native] <${node.name}> has no prop '${key}', so native ignores it.` +
+        `[angular-native] <${node.tag}> has no prop '${key}', so native ignores it.` +
           (meant ? ` Did you mean '${meant}'?` : '') +
-          ` Check the spelling against the ${className(node.name)} page, or declare it with` +
-          ` declareNativeProps('${node.name}', ['${key}']) if the native view does read it.`,
+          ` Check the spelling against the ${className(node.tag)} page, or declare it with` +
+          ` declareNativeProps('${node.tag}', ['${key}']) if the native view does read it.`,
       );
     }
   }
@@ -6419,11 +6419,11 @@ export class Engine implements HostEngine {
    * the trade for not holding a registry per component, and the typo is the case that matters.
    */
   private checkKnown(node: EngineNode): void {
-    if (node.kind !== 'element' || node.componentHost || node.name in VIEW_NAMES) return;
-    if (this.declaredElements.has(node.name) || this.reported.has(node.name)) return;
-    this.reported.add(node.name);
+    if (node.kind !== 'element' || node.componentHost || node.tag in VIEW_NAMES) return;
+    if (this.declaredElements.has(node.tag) || this.reported.has(node.tag)) return;
+    this.reported.add(node.tag);
     console.error(
-      `[angular-native] <${node.name}> is not a known element: no component, directive or ` +
+      `[angular-native] <${node.tag}> is not a known element: no component, directive or ` +
         `registered native view claims it, so it renders as an empty view. Check the spelling, ` +
         `or import the component that owns it.`,
     );
@@ -6931,7 +6931,7 @@ export class Engine implements HostEngine {
     for (let n = target; n; n = DIRECT_EVENTS.has(topLevelType) ? null : n.parent) {
       matched += n.listeners?.get(topLevelType)?.size ?? 0;
     }
-    console.log('[event]', topLevelType, target?.name ?? '(no handle)', matched);
+    console.log('[event]', topLevelType, target?.tag ?? '(no handle)', matched);
   }
 
   /**

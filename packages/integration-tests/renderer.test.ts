@@ -20,7 +20,7 @@ interface Features {
 }
 
 function findEngineNode(node: EngineNode, name: string): EngineNode | undefined {
-  if (node.name === name) return node;
+  if (node.tag === name) return node;
   for (const child of node.children) {
     const hit = findEngineNode(child, name);
     if (hit) return hit;

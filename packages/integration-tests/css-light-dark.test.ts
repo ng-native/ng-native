@@ -19,7 +19,7 @@ function resolvedStyle(
   width = 400,
 ): Record<string, unknown> {
   const target = (parent: StyleTarget | null, own: string[]): StyleTarget => ({
-    name: 'view',
+    tag: 'view',
     parent,
     classes: new Set(own),
     props: {},

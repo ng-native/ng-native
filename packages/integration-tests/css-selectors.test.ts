@@ -12,13 +12,13 @@ import { compileCss } from '@ng-native/testing';
 
 /** A standalone node, with no parent, carrying the given props and classes. */
 function node(
-  name: string,
+  tag: string,
   props: Record<string, unknown> = {},
   classes: string[] = [],
   parent: StyleTarget | null = null,
 ): StyleTarget {
   return {
-    name,
+    tag,
     parent,
     classes: new Set(classes),
     props,

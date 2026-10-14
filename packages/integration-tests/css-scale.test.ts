@@ -46,7 +46,7 @@ function screen(sheet: StyleSheet, nodes: number, classes: number, rules: number
   let parent: StyleTarget | null = null;
   for (let i = 0; i < nodes; i++) {
     const node: StyleTarget = {
-      name: i % 4 === 0 ? 'text' : 'view',
+      tag: i % 4 === 0 ? 'text' : 'view',
       parent: i % 6 === 0 ? null : parent,
       classes: new Set(
         Array.from({ length: classes }, (_, k) => `u${(i * classes + k * 7) % rules}`),
@@ -230,7 +230,7 @@ describe("a real Tailwind sheet, the size an app's would be", () => {
     let parent: StyleTarget | null = null;
     for (let i = 0; i < nodes; i++) {
       const node = {
-        name: i % 4 === 0 ? 'text' : 'view',
+        tag: i % 4 === 0 ? 'text' : 'view',
         parent: i % 6 === 0 ? null : parent,
         classes: new Set(
           Array.from({ length: worn }, (_, k) => classes[(i * worn + k * 7) % classes.length]!),

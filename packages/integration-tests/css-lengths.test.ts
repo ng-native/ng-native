@@ -60,7 +60,7 @@ describe('calc', () => {
       { width: 500, height: 900, colorScheme: 'light' },
     );
     const node = (classes: string[]): StyleTarget => ({
-      name: 'view',
+      tag: 'view',
       parent: null,
       classes: new Set(classes),
       props: {},
@@ -82,7 +82,7 @@ describe('calc', () => {
     });
     const style = resolver.resolve(
       {
-        name: 'view',
+        tag: 'view',
         parent: null,
         classes: new Set(['a']),
         props: {},
@@ -196,7 +196,7 @@ describe('viewport and font-relative lengths', () => {
       colorScheme: 'light',
     });
     const target: StyleTarget = {
-      name: 'text',
+      tag: 'text',
       parent: null,
       classes: new Set(['a']),
       props: {},
@@ -222,7 +222,7 @@ describe('viewport and font-relative lengths', () => {
       { width: 400, height: 800, colorScheme: 'light' },
     );
     const target: StyleTarget = {
-      name: 'view',
+      tag: 'view',
       parent: null,
       classes: new Set(['a']),
       props: {},
@@ -248,7 +248,7 @@ describe('viewport and font-relative lengths', () => {
         colorScheme: 'light',
       });
       const target: StyleTarget = {
-        name: 'view',
+        tag: 'view',
         parent: null,
         classes: new Set(['x', 'y']),
         props: {},
@@ -351,7 +351,7 @@ describe('a length written with no unit', () => {
     const { refused, rules } = refusals('.a { --x: 3; translate: var(--x) 0 }');
     assert.deepEqual(refused, []);
     const target = {
-      name: 'view',
+      tag: 'view',
       parent: null,
       classes: new Set(['a']),
       props: {},

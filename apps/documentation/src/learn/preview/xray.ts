@@ -72,7 +72,7 @@ export class Xray {
       box.className = 'xray-box';
       box.style.cssText = `left:${rect.left}px;top:${rect.top}px;width:${rect.width}px;height:${rect.height}px`;
       const label = document.createElement('span');
-      label.textContent = `${node.name} ${viewNameOf(node)}`;
+      label.textContent = `${node.tag} ${viewNameOf(node)}`;
       const corner = `${Math.round(rect.left)},${Math.round(rect.top)}`;
       const stacked = corners.get(corner) ?? 0;
       corners.set(corner, stacked + 1);

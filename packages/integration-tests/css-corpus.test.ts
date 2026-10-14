@@ -217,7 +217,7 @@ const oracle = require('./fixtures/css-corpus-oracle.json') as Recorded[];
 /** Build the tree the browser was given, as nodes the resolver understands. */
 function build(spec: CaseNode, parent: StyleTarget | null): StyleTarget[] {
   const node: StyleTarget = {
-    name: spec.name,
+    tag: spec.name,
     parent,
     classes: new Set(spec.classes ?? []),
     props: { ...(spec.id ? { nativeID: spec.id } : {}), ...(spec.attrs ?? {}) },

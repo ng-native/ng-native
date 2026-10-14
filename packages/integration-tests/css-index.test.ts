@@ -118,9 +118,9 @@ describe('the candidates a node is offered', () => {
     const sheet = sheetOf(css);
     return sheet.rules.map((rule, order) => ({ rule, sheet, weight: order }));
   };
-  const target = (name: string, classes: string[], props: Record<string, unknown> = {}) =>
+  const target = (tag: string, classes: string[], props: Record<string, unknown> = {}) =>
     ({
-      name,
+      tag,
       parent: null,
       classes: new Set(classes),
       props,
@@ -245,7 +245,7 @@ describe('a rule that translated to nothing', () => {
 describe('a sheet added after others are filed', () => {
   const node = (_resolver: StyleResolver, classes: string[]): StyleTarget =>
     ({
-      name: 'view',
+      tag: 'view',
       kind: 'element',
       parent: null,
       children: [],

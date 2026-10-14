@@ -25,9 +25,9 @@ export interface BrowserNode extends HostNode {
   readonly kind: BrowserNodeKind;
   /** The real DOM node this wraps. An `Element` for `element`, a `Text` for `text`. */
   readonly el: Element | Text | Comment;
-  /** Lowercase template spelling, e.g. `view`. Mirrors `EngineNode.name`; never the DOM tag. */
-  readonly name: string;
-  /** `name` again on an element, for Angular 22.0, which reads it on a component's host element. */
+  /** Lowercase template spelling, e.g. `view`. Mirrors `EngineNode.tag`; never the DOM tag. */
+  readonly tag: string;
+  /** `tag` again on an element, for Angular 22.0, which reads it on a component's host element. */
   readonly tagName?: string;
   /**
    * The wrapped element's attributes, on an element, for Angular's hydration. Once an app on the
@@ -128,7 +128,7 @@ export function makeElementNode(name: string, el: Element): BrowserNode {
   const node: BrowserNode = {
     kind: 'element',
     el,
-    name,
+    tag: name,
     tagName: name,
     hasAttribute,
     getAttribute,
@@ -149,7 +149,7 @@ export function makeTextNode(text: Text): BrowserNode {
   const node: BrowserNode = {
     kind: 'text',
     el: text,
-    name: '#text',
+    tag: '#text',
     props: {},
     text: text.data,
     children: [],
@@ -167,7 +167,7 @@ export function makeAnchorNode(comment: Comment): BrowserNode {
   const node: BrowserNode = {
     kind: 'anchor',
     el: comment,
-    name: '#anchor',
+    tag: '#anchor',
     props: {},
     text: '',
     children: [],

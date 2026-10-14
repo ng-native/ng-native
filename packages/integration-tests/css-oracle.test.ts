@@ -48,7 +48,7 @@ function build(
   bound: OracleCase['bound'] = {},
 ): StyleTarget[] {
   const node: StyleTarget = {
-    name: spec.name,
+    tag: spec.name,
     parent,
     classes: new Set(spec.classes ?? []),
     // An id is `nativeID` here, which is the prop React Native gives a view for the purpose.

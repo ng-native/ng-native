@@ -25,8 +25,8 @@ after(cleanup);
  * resolver: the shortest path from a stylesheet to the value native would be sent.
  */
 function resolvedStyle(css: string, classes: string[]): Record<string, unknown> {
-  const target = (name: string, parent: StyleTarget | null, own: string[]): StyleTarget => ({
-    name,
+  const target = (tag: string, parent: StyleTarget | null, own: string[]): StyleTarget => ({
+    tag,
     parent,
     classes: new Set(own),
     props: {},

@@ -18,6 +18,7 @@
  *   what is left for the developer to do, one line each.
  */
 const { deviceReactNativeImport } = require('./device-react-native-import.cjs');
+const { engineNodeTag } = require('./engine-node-tag.cjs');
 const { splitStoreAndPlayer } = require('./split-store-and-player.cjs');
 const { syncAppVersions } = require('./sync-app-versions.cjs');
 const { trackingAvailableGetter } = require('./tracking-available-getter.cjs');
@@ -51,6 +52,12 @@ const migrations = [
     description:
       'Note each import of reactNative or ReactNative from @ng-native/device, which no longer exports them.',
     run: deviceReactNativeImport,
+  },
+  {
+    name: 'engine-node-tag',
+    version: '0.14.0',
+    description: "Read an engine node's element tag as tag rather than name.",
+    run: engineNodeTag,
   },
 ];
 

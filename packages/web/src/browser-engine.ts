@@ -230,7 +230,7 @@ export class BrowserEngine extends HostEngine {
       if (node.props[key] === value) return;
       node.props[key] = value;
     }
-    if (key === 'multiline' && node.name === 'text-input') this.fieldFor(node, value === true);
+    if (key === 'multiline' && node.tag === 'text-input') this.fieldFor(node, value === true);
     applyProp(node, key, value, clear);
   }
 
@@ -398,9 +398,9 @@ export class BrowserEngine extends HostEngine {
   // --- always-on listeners, installed once per element at creation ---------------------------
 
   private wireAlwaysOnListeners(node: BrowserNode): void {
-    if (node.name === 'scroll-view' || node.name === 'virtual-list') this.wireScroll(node);
-    if (node.name === 'text-input') this.wireTextInput(node);
-    if (node.name === 'switch') this.wireSwitch(node);
+    if (node.tag === 'scroll-view' || node.tag === 'virtual-list') this.wireScroll(node);
+    if (node.tag === 'text-input') this.wireTextInput(node);
+    if (node.tag === 'switch') this.wireSwitch(node);
   }
 
   /**
@@ -656,7 +656,7 @@ export class BrowserEngine extends HostEngine {
   private keyTarget(event: KeyboardEvent): BrowserNode | null {
     if (event.defaultPrevented || event.altKey || event.ctrlKey || event.metaKey) return null;
     const node = nodeOf(event.target as Element | null);
-    if (!node || node.name === 'text-input' || node.name === 'switch') return null;
+    if (!node || node.tag === 'text-input' || node.tag === 'switch') return null;
     return this.responders.responds(node) ? node : null;
   }
 

@@ -11,7 +11,7 @@ import { compileCss } from '@ng-native/testing';
 
 function resolvedStyle(css: string, classes: string[]): Record<string, unknown> {
   const node: StyleTarget = {
-    name: 'view',
+    tag: 'view',
     parent: null,
     classes: new Set(classes),
     props: {},

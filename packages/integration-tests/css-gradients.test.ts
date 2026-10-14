@@ -363,7 +363,7 @@ describe('a gradient stop token that is set but of the wrong kind', () => {
     const sheet = compileCss(`:root { ${tokens} } .g { background-image: ${image} }`, 'g');
     const resolver = new StyleResolver(sheet, { width: 400, height: 800, colorScheme: 'light' });
     const node: StyleTarget = {
-      name: 'view',
+      tag: 'view',
       parent: null,
       classes: new Set(['g']),
       props: {},

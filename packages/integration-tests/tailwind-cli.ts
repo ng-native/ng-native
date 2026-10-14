@@ -106,7 +106,7 @@ export function committedProps(fabric: FakeFabric, node: unknown): Record<string
  */
 export function resolvedClasses(sheet: StyleSheet, classes: string): Record<string, unknown> {
   const target = (parent: StyleTarget | null, own: string): StyleTarget => ({
-    name: 'view',
+    tag: 'view',
     parent,
     classes: new Set(own.split(/\s+/).filter(Boolean)),
     props: {},

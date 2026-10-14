@@ -126,7 +126,7 @@ export class SwipeRefreshLayout {
    */
   private findScroll(): EngineNode | null {
     for (let node = this.layout.parent; node; node = node.parent) {
-      if (SCROLL_HOSTS.has(node.name)) return node;
+      if (SCROLL_HOSTS.has(node.tag)) return node;
     }
     return null;
   }
