@@ -60,8 +60,9 @@ From `expo-device`, on `device`:
 ## Without the module
 
 On iOS and Android, a missing `expo-application` and `expo-device` - never installed, or installed
-without the app being rebuilt since - throws a `MissingModuleError` when the service first reaches
-for it. Its message names the module and the commands that fix it; see
+without the app being rebuilt since - leaves the service made, so injecting it does not throw. A
+call, or a read of a value only the module knows, throws a `MissingModuleError`. Its message names
+the module and the commands that fix it; see
 [Using a module](/packages/expo/using-a-module#what-happens-without-the-module-installed).
 
 On the web, and in a test that provides no fake, `version`, `build`, `id` and `name` are all null

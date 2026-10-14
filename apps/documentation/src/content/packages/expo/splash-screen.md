@@ -72,8 +72,8 @@ and wants the same instance; both resolve to the one `Splash` the module created
 ## Without the module
 
 On iOS and Android, a missing `expo-splash-screen` - never installed, or installed without the app
-being rebuilt since - throws a `MissingModuleError` when `hold()` first reaches for it. Its
-message names the module and the commands that fix it; see
+being rebuilt since - throws a `MissingModuleError` when `hold()` is called. Its message names the
+module and the commands that fix it; see
 [Using a module](/packages/expo/using-a-module#what-happens-without-the-module-installed).
 
 On the web, and in a test that provides no fake, `available` is `false`. `hold()`, `hide()` and

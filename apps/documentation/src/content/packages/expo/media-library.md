@@ -103,8 +103,9 @@ The text in iOS's permission dialogs comes from the module's config plugin optio
 ## Without the module
 
 On iOS and Android, a missing `expo-media-library` - never installed, or installed without the app
-being rebuilt since - throws a `MissingModuleError` when the service first reaches for it. Its
-message names the module and the commands that fix it; see
+being rebuilt since - leaves the service made, so injecting it does not throw. A call, or a read of
+a value only the module knows, throws a `MissingModuleError`. Its message names the module and the
+commands that fix it; see
 [Using a module](/packages/expo/using-a-module#what-happens-without-the-module-installed).
 
 On the web, and in a test that provides no fake, both permissions are refused, `save()`, `album()`

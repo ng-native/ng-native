@@ -69,9 +69,9 @@ An app that wants assets warmed before there is an injector at all - during boot
 
 ## Without the module
 
-On iOS and Android, a missing `expo-asset` - never installed, or installed without the app
-being rebuilt since - throws a `MissingModuleError` when `assets()` first reaches for it. Its
-message names the module and the commands that fix it; see
+On iOS and Android, a missing `expo-asset` - never installed, or installed without the app being
+rebuilt since - throws a `MissingModuleError` when `assets()` is called. Its message names the
+module and the commands that fix it; see
 [Using a module](/packages/expo/using-a-module#what-happens-without-the-module-installed).
 
 On the web, and in a test that provides no fake, the resource resolves to an empty list rather than

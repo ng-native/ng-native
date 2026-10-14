@@ -113,9 +113,10 @@ It needs a width and a height to show. Its color and corners come from `buttonSt
 
 ## Without the module
 
-On iOS, a missing `expo-apple-authentication` - never installed, or installed without the app
-being rebuilt since - throws a `MissingModuleError` when `AppleSignIn` first reaches for it. Its
-message names the module and the commands that fix it; see
+On iOS, a missing `expo-apple-authentication` - never installed, or installed without the app being
+rebuilt since - leaves the service made, so injecting it does not throw. A call, or a read of a
+value only the module knows, throws a `MissingModuleError`. Its message names the module and the
+commands that fix it; see
 [Using a module](/packages/expo/using-a-module#what-happens-without-the-module-installed).
 
 On Android and the web, and in a test that provides no fake, `available()` resolves to false,

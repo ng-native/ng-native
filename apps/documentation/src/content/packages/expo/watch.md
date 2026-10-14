@@ -13,9 +13,9 @@ React Native does not run on watchOS, so the phone side is Angular and the watch
 Only apps that install `react-native-watch-connectivity` get its native code. On Android and the
 web, `Watch` is inert: `available` is false, the signals stay at their defaults and sending
 rejects. With no paired watch it is available, and stays unpaired and unreachable. On iOS, a build
-without the native module, such as Expo Go or one made before the package was installed, throws a
-`MissingModuleError` when `Watch` is injected, saying what to install and that the app needs
-rebuilding.
+without the native module, such as Expo Go or one made before the package was installed, still
+makes `Watch` and reads `available` as false. A call, or a read of a value only the module knows,
+throws a `MissingModuleError` saying what to install and that the app needs rebuilding.
 
 ## Install
 

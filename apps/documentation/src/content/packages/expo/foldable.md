@@ -85,7 +85,8 @@ Everything is a signal, so a template or a `computed()` follows the device as it
 
 On a phone that does not fold, on the web and in a test, `Foldable` answers like a phone: not
 available, `'unknown'`, no fold and no angle. On iOS and Android without `expo-foldables`
-installed, injecting it throws an error that says what to install.
+installed, injecting it does not throw; a call, or a read of a value only the module knows,
+throws an error that says what to install.
 
 ## Testing
 
