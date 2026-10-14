@@ -354,6 +354,15 @@ syncBuiltinESMExports();
       assert.equal(cli(root, sharded).status, 0);
     }));
 
+  for (const other of ['--report', '--min']) {
+    it(`rejects a shard run asked for ${other} too, which it would not do`, () =>
+      workspace((root) => {
+        const result = cli(root, ['--shard', '1/2', other, ...(other === '--min' ? ['95'] : [])]);
+        assert.equal(result.status, 1);
+        assert.match(result.stderr, /--shard/);
+      }));
+  }
+
   for (const shard of ['3/2', '0/2', '1', 'a/b', '1.5/2']) {
     it(`rejects the shard ${shard} before running anything`, () =>
       workspace((root) => {

@@ -491,6 +491,12 @@ function main() {
   }
   const { index, count } = shardOf(args);
   const suites = count ? sharded(count) : SUITES;
+  // A shard measures and stops: the report and the floor are the merge's, from every shard.
+  if (index && (args.includes('--report') || minimum !== undefined)) {
+    throw new Error(
+      '--shard runs one shard and reports nothing: --report and --min go with --shards.',
+    );
+  }
   if (index) {
     // One runner's part: its shard, and beside the first shard the suites that are not split.
     run(
