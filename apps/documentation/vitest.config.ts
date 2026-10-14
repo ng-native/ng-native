@@ -15,8 +15,8 @@ export default defineConfig({
   // `markdown()` because the lesson tests load each lesson as the site does, `lesson.md` and all.
   plugins: [markdown(), ngNative({ inline: ['sucrase'] })],
   // `css: true` so that a stylesheet imported with `?raw` is its text, not an empty string.
-  // `build/**` alongside `src/**` so a Vite plugin under `build/` (`angular-guards.ts`'s own test,
-  // for one) is covered by the same `vitest run` the rest of the site's unit tests are.
+  // `build/**` alongside `src/**` so a Vite plugin under `build/` (`markdown.ts`'s own test, for
+  // one) is covered by the same `vitest run` the rest of the site's unit tests are.
   test: {
     maxWorkers: 1,
     testTimeout: 30_000,

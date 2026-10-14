@@ -14,8 +14,6 @@ const path = require('node:path');
 const { compileError } = require('./compile-error.cjs');
 const { assertTemplateFileParses, assertTemplatesParse } = require('./template-syntax.cjs');
 const { compileCss } = require('./css/compile.cjs');
-const { assertStylesRead } = require('./styles-expression.cjs');
-const { assertHostRead } = require('./host-expression.cjs');
 const { componentDeclarations } = require('./component-declarations.cjs');
 const { hotShape } = require('./hot-shape.cjs');
 const {
@@ -46,63 +44,19 @@ function isResource(filename) {
 }
 
 /**
- * A leading-capital element name compiles to an empty template with zero errors and a
- * valid-looking ɵcmp: a blank screen on a green build. Turn it into a build failure.
- *
- * Checked per component, not per file. A file can hold several components, and one of them
- * legitimately having an empty template (a leaf primitive with no children) must not condemn
- * its neighbours - which it did, until it bit.
+ * A leading-capital element name is kept as written, so `<View>` matches no component's `view`
+ * selector and renders as an unregistered element: an empty box on a green build. Angular reads
+ * it the same way. Turn it into a build failure, naming the element.
  */
-function assertTemplatesCompiled(code, src, filename, components) {
-  const decls = [...code.matchAll(/decls:\s*(\d+)/g)].map((match) => match[1]);
-  if (!decls.length || !decls.includes('0')) return;
+const CAPITALIZED = /ɵɵelement(?:Start)?\(\d+,\s*"([A-Z][\w-]*)"/;
 
-  // Emitted definitions follow source order, so the two lists line up.
-  const paired = components && components.length === decls.length;
-  for (let i = 0; i < decls.length; i++) {
-    if (decls[i] !== '0') continue;
-
-    const template = paired ? (components[i].template ?? '') : src;
-    if (!template.includes('<')) continue; // genuinely has nothing to render
-
-    const name = paired ? components[i].className : filename;
-    const capitalized = /<([A-Z][A-Za-z0-9]*)[\s/>]/.exec(template);
-    throw new Error(
-      `${filename}: ${name}'s template compiled to nothing (decls: 0).` +
-        (capitalized
-          ? ` Element <${capitalized[1]}> is capitalized; element names must be lowercase.`
-          : ' Check for a leading-capital element name.'),
-    );
-  }
-}
-
-/**
- * `@oxc-angular/vite` (through 0.0.40) resolves a template arrow function's own parameter against
- * the component: `(o) => !o` compiles to `(o) => !ctx.o`, which reads `undefined` at runtime with
- * no error from the compiler. Angular itself scopes the parameter correctly.
- *
- * `ctx.` is how compiled template code reaches the component, so `(x) => ... ctx.x` in the output
- * is this bug and nothing else: an arrow the author wrote in TypeScript never says `ctx`.
- *
- * ponytail: the body scan stops at the first `;` or line break, which covers what a template
- * expression compiles to; a multi-line arrow body would slip past.
- */
-const ARROW = /\(([\w$\s,]*)\)\s*=>([^;\n]*)/g;
-
-function assertNoShadowedArrowParameters(code, filename) {
-  for (const [, list, body] of code.matchAll(ARROW)) {
-    const parameter = list
-      .split(',')
-      .map((name) => name.trim())
-      .find((name) => name && new RegExp(`\\bctx\\.${name.replace(/\$/g, '\\$')}\\b`).test(body));
-    if (!parameter) continue;
-    throw new Error(
-      `${filename}: an arrow function in this component's template reads its own parameter ` +
-        `"${parameter}", and it compiled as the component's "${parameter}" instead. This is a known ` +
-        '@oxc-angular/vite bug (confirmed through 0.0.40). Move the logic into a component ' +
-        'method and call that from the template.',
-    );
-  }
+function assertLowercaseElements(code, filename) {
+  const capitalized = CAPITALIZED.exec(code);
+  if (!capitalized) return;
+  throw new Error(
+    `${filename}: element <${capitalized[1]}> is capitalized; element names in a template are ` +
+      `lowercase, such as <${capitalized[1].toLowerCase()}>.`,
+  );
 }
 
 /**
@@ -783,23 +737,7 @@ function collisionQuiet(filename, components) {
   );
 }
 
-/**
- * The update-metadata function for one component's template, named for it.
- *
- * The compiler's update function spreads the live definition and replaces the template, but
- * leaves `decls`, `vars` and `ngContentSelectors` as they were (`@oxc-angular/vite` 0.0.40). Those
- * size the view the swap rebuilds, so a template that gained an element or a binding ran off the
- * end of a view laid out for the one before it: an assertion halfway through the swap, and a
- * half-built view left in the tree. So they are read off a full compile of the same template and
- * written in after the spread. Anything that cannot be read that way is no swap at all, which the
- * caller turns into a reload.
- *
- * The spread also hands `ɵɵdefineComponent` the live definition's `outputs`, which it has already
- * turned round to read by public name, and turns round again: `checkedChange` became a property
- * and `checked` its event. So they are written back the way a definition is given them. A
- * component swapped before it first rendered, as on a cold start after a stylesheet edit, was no
- * longer a form control (NG01914).
- */
+/** The update-metadata function for one component's template, named for it. */
 function hotUpdate(template, component, filename, options) {
   const result = compileForHmrSync(
     template,
@@ -809,47 +747,12 @@ function hotUpdate(template, component, filename, options) {
     options,
   );
   if (result.errors.length) return null;
-  const layout = templateLayout(template, component.className, filename, options);
-  const spread = `...${component.className}.ɵcmp,`;
-  if (!layout || !result.hmrModule.includes(spread)) return null;
   const name = `${component.className}_ApplyMetadata`;
   return {
     id: result.componentId,
     name,
-    apply: result.hmrModule
-      .replace(/export\s+default\s+function\s+\w+/, `function ${name}`)
-      .replace(
-        spread,
-        `${spread} ${layout} outputs: Object.fromEntries(Object.entries(` +
-          `${component.className}.ɵcmp.outputs).map(function (o) { return [o[1], o[0]]; })),`,
-      ),
+    apply: result.hmrModule.replace(/export\s+default\s+function\s+\w+/, `function ${name}`),
   };
-}
-
-/**
- * The definition fields a template decides and the update function leaves out, as source: its
- * slot and binding counts and its projection selectors, from compiling it as a component alone.
- */
-function templateLayout(template, className, filename, options) {
-  const { platform, ...rest } = options ?? {};
-  const probe = transformAngularFileSync(
-    `import { Component } from '@angular/core';\n` +
-      `@Component({ selector: 'hmr-layout', template: ${JSON.stringify(template)} })\n` +
-      `export class ${className} {}\n`,
-    filename,
-    { ...rest, emitClassMetadata: false, sourcemap: false },
-  );
-  if (probe.errors?.length) return null;
-  const counts = /\bdecls:(\d+),\s*vars:(\d+)/.exec(probe.code);
-  if (!counts) return null;
-  let selectors = 'undefined';
-  const projected = /\bngContentSelectors:(_c\d+)/.exec(probe.code);
-  if (projected) {
-    const constant = new RegExp(`\\bconst ${projected[1]} = (\\[[^;]*\\]);`).exec(probe.code);
-    if (!constant) return null;
-    selectors = constant[1];
-  }
-  return `decls: ${counts[1]}, vars: ${counts[2]}, ngContentSelectors: ${selectors},`;
 }
 
 /**
@@ -953,8 +856,8 @@ function resourceBlock(src, resource, options) {
 
     for (const component of owner.components) {
       const template = component.template ?? read(component.templateUrl);
-      // This module is the only transform an edit to the template reaches, so a template the
-      // compiler would cut short without a word has to be caught here as well.
+      // This module is the only transform an edit to the template reaches, so a malformed template
+      // is placed here by Angular's parser as well.
       if (component.template == null) {
         const at = path.resolve(
           path.dirname(owner.file),
@@ -1202,6 +1105,10 @@ function compileTwice(src, filename, compilerOptions) {
     );
   }
 
+  // Angular's own parser places a malformed template more exactly than the compiler does.
+  if (result.errors?.length) {
+    assertTemplatesParse(src, filename, extractComponentMetadataSync(src, filename), resources);
+  }
   fail(result, src, filename, resources);
   return { result, dependencies, resources };
 }
@@ -1439,15 +1346,11 @@ function transformAngular(src, filename, options = {}) {
     };
 
     const { result, dependencies, resources } = compileTwice(src, filename, compilerOptions);
-    assertNoShadowedArrowParameters(result.code, filename);
+    assertLowercaseElements(result.code, filename);
     // Not guarded: a failure here used to fall back to "no components", which compiled the file
     // with no stylesheet and no HMR block and said nothing. A dropped sheet is the one failure
     // this pipeline exists to make loud.
     const components = extractComponentMetadataSync(src, filename);
-    assertTemplatesParse(src, filename, components, resources);
-    assertTemplatesCompiled(result.code, src, filename, components);
-    assertStylesRead(src, filename, components);
-    assertHostRead(src, filename, components);
 
     // An external template is not an import, so without an edge Metro would never watch it. The
     // edge does not re-transform this file when the template changes - Metro caches a transform
@@ -1525,10 +1428,4 @@ module.exports = {
   transformAngular,
   takeResourcesRead,
   isResource,
-  // Exported for `apps/documentation/vite.config.ts`'s own small Vite plugin, which runs the same
-  // check against `@oxc-angular/vite`'s Vite output - the docs site compiles its own Angular
-  // straight out of `@ng-native/components`' source rather than through this Metro pipeline, and
-  // is exposed to the same compiler bug. Shared rather than copied, so another confirmed bug in
-  // the compiler is one fix rather than two.
-  assertNoShadowedArrowParameters,
 };

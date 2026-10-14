@@ -59,3 +59,14 @@ packageExtensions:
     peerDependenciesMeta:
       '@analogjs/content':
         optional: true
+
+minimumReleaseAgeExclude:
+  - '@oxc-angular/binding-darwin-arm64@0.0.41'
+  - '@oxc-angular/binding-darwin-x64@0.0.41'
+  - '@oxc-angular/binding-linux-arm64-gnu@0.0.41'
+  - '@oxc-angular/binding-linux-arm64-musl@0.0.41'
+  - '@oxc-angular/binding-linux-x64-gnu@0.0.41'
+  - '@oxc-angular/binding-linux-x64-musl@0.0.41'
+  - '@oxc-angular/binding-win32-arm64-msvc@0.0.41'
+  - '@oxc-angular/binding-win32-x64-msvc@0.0.41'
+  - '@oxc-angular/vite@0.0.41'

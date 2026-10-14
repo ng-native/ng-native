@@ -52,9 +52,10 @@ const TITLE = '.title { font-weight: 600; }';
 export class Card {}
 ```
 
-An imported constant, a concatenation with `+`, a spread, a constant that holds an array, or a
-function call cannot be read at build time, and the build fails naming the component and the entry.
-CSS shared between components belongs in a `.css` file, listed in `styleUrl` or `styleUrls` by every
+The build evaluates `styles` as Angular's compiler does, so a concatenation, a spread, a constant
+that holds an array or a `function` declaration in the same file all work. A value imported from
+another file cannot be read at build time, and the build fails naming the file and the import. CSS
+shared between components belongs in a `.css` file, listed in `styleUrl` or `styleUrls` by every
 component that uses it; a component's own `styles` apply alongside it, after the shared sheets, as
 Angular orders them, so an inline rule wins over a shared one of the same specificity. A
 concatenation of same-file constants is written as a template literal with one substitution per

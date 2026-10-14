@@ -66,11 +66,9 @@ on their own clock: a JavaScript-driven `Animated` frame and a CSS transition or
 outside change detection, because waiting for the next pass would drop the frame.
 
 **Element names in templates are lowercase.** `<view>`, `<scroll-view>`, `<text-input>`. This is
-not style: `@oxc-angular/vite` silently emits an empty template (`decls: 0`, no errors, no
-warnings) for any component whose template contains an element name with a leading capital, so
-`<View>` compiles to a blank screen on a green build. The Metro transform fails the build on it,
-checking every `decls:` in a file, since one file can hold several components and only one of them
-may be broken.
+not style: a component's selector is lowercase, and Angular matches element names case-sensitively,
+so `<View>` matches no component and renders as an empty box with no compiler error. The Metro
+transform fails the build on any element in the compiled output whose name starts with a capital.
 
 **`@angular/core` resolves to exactly one copy.** Injection context is module-level state, so two
 copies fail at runtime with `NG0203` at `createComponent`, which looks nothing like a duplication

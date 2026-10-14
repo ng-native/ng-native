@@ -30,8 +30,8 @@ host element always exists in the tree - Angular creates one for `<x-card>` whet
 import anything - so an unmapped name cannot fail the way a missing DOM element would. The cost is
 that a typo'd element name, or a Fabric primitive used without importing its component from
 `@ng-native/components`, renders as an empty box instead of an error; in a dev build it logs a
-console warning naming it. Element names must also be lowercase - Angular reads a capitalized tag as
-an unknown _component_, not an unknown element, which compiles to an empty template with no error.
+console warning naming it. Element names must also be lowercase - a capitalized tag such as `<View>`
+matches no component's selector, so it would be an unmapped name too.
 [Metro](/packages/metro/configuration) catches that at build time and fails loudly instead.
 
 A third-party Fabric component - `react-native-screens`, for instance - is added with

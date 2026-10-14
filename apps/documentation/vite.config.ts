@@ -12,10 +12,7 @@
  * source text to the page that shows it running, and `api()` reads every component, directive and
  * service in the workspace out of its own source so the reference pages cannot drift from the code
  * they describe. `exampleSources()` does the same for the example apps' code browser, reading each
- * app's files out of `examples/`. `angularGuards()`, placed after `angular()`, fails the build on
- * the same confirmed `@oxc-angular/vite` bug `packages/metro/angular-transform.cjs` guards
- * against - see that file for why an unrelated build otherwise picks up a mis-compiled component
- * with no error.
+ * app's files out of `examples/`.
  */
 import { angular } from '@oxc-angular/vite';
 import tailwindcss from '@tailwindcss/vite';
@@ -24,7 +21,6 @@ import fs from 'node:fs';
 import type { ServerResponse } from 'node:http';
 import path from 'node:path';
 import url from 'node:url';
-import { angularGuards } from './build/angular-guards.ts';
 import { api } from './build/api.ts';
 import { exampleSources } from './build/example-sources.ts';
 import { markdown } from './build/markdown.ts';
@@ -132,7 +128,6 @@ export default defineConfig({
       // first hit it was removed, but it costs nothing to keep off in production code either way.
       emitClassMetadata: false,
     }),
-    angularGuards(),
     tailwindcss(),
   ],
   optimizeDeps: {

@@ -156,33 +156,13 @@ External templates and stylesheets hot-swap in every component using them within
 project, including `../` paths. Cross-package monorepo edits appear only after the component's own
 file changes.
 
-## No spread or constant as a component's `host`
+## No imported value in a component's `host` or `styles`
 
-A component's `host` is read at build time as an object literal written out in the decorator: each
-entry a key with a string, or with a constant from the same file. `@oxc-angular/vite` reads nothing
-from a spread (`host: { ...SHARED, '(press)': 'go()' }`) or from a `host` that is itself a constant
-or a call, and reports no error, while Angular's own compiler, and so `ngc`, accepts the file.
-Angular Native fails the build on one, naming the component and the entry, since otherwise the
-listeners never fire and the attributes never appear.
+A component's `host` and `styles` are evaluated at build time from the file they are in: a spread, a
+constant or a `function` declaration in the same file works. `@oxc-angular/vite` compiles one file
+at a time, so unlike Angular's own compiler it cannot follow a value imported from another file, and
+the build fails naming the file and the import.
 
-**Workaround:** write the bindings out in the literal. Share the behavior with a directive in
-`hostDirectives` rather than an object of bindings.
-
-## No template arrow function that reads its own parameter
-
-A template arrow that reads its parameter, such as `(press)="open.update((was) => !was)"`, compiles
-as though the parameter were a component property and reads `undefined`. The compiler reports no
-error. This `@oxc-angular/vite` bug is confirmed through 0.0.40; Angular Native catches it at build
-time and names the file and parameter. Parameterless arrows such as `() => !open()` work.
-
-**Workaround:** move the logic into a component method, such as `toggle()`, and call that from the
-template.
-
-## A malformed control-flow block is caught by a second parse
-
-`@oxc-angular/vite` (0.0.40) silently drops the rest of a template after an unclosed control-flow
-parameter list such as `@if (on() {`. Angular Native
-parses every template again with Angular's parser and fails with its message, line and column.
-Errors point to the component file for inline templates or the template file for `templateUrl`.
-The check runs in tests, production builds and hot reload, which preserves the previous template
-on the device.
+**Workaround:** for `host`, write the bindings in the same file, or share the behavior with a
+directive in `hostDirectives`. For `styles`, put CSS shared between files in a `.css` file and list
+it in `styleUrl` or `styleUrls`.

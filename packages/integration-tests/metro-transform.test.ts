@@ -43,12 +43,11 @@ function transformBroken(name: string, src: string): unknown {
 }
 
 describe('the transform chain', () => {
-  it('fails the build on a template that compiled to nothing', async () => {
-    // The trap this exists for: a capitalized element name yields decls:0 with zero errors
-    // and a valid-looking ɵcmp, i.e. a blank screen on a green build.
+  it('fails the build on a capitalized element name', async () => {
+    // `<View>` matches no component's `view` selector: an empty box on a green build.
     await assert.rejects(
       () => compileFixture(fixture('capitalized.ts')),
-      /compiled to nothing.*<View> is capitalized/s,
+      /element <View> is capitalized.*<view>/s,
     );
   });
 
@@ -57,25 +56,6 @@ describe('the transform chain', () => {
     // re-emitted the shorthand, with no error: the module was not valid JavaScript.
     const module = await compileFixture(fixture('method-shorthand-in-metadata.ts'));
     assert.equal(typeof module['MethodShorthandInMetadata'], 'function');
-  });
-
-  it('fails the build on a template arrow function that reads its own parameter, which oxc-angular mis-compiles', () => {
-    // @oxc-angular/vite (through 0.0.40) resolves an arrow's parameter against the component:
-    // "(o) => !o" in a template compiles to "(o) => !ctx.o", which reads undefined at runtime.
-    const { transformAngular } = require('@ng-native/metro/angular-transform.cjs');
-    const component = (handler: string) =>
-      `import { Component, signal } from '@angular/core';
-       @Component({ selector: 'x-toggle', template: '<pressable (press)="${handler}"></pressable>' })
-       export class Toggle { open = signal(false); }`;
-
-    assert.throws(
-      () => transformAngular(component('open.update((o) => !o)'), '/x/toggle.ts'),
-      /toggle\.ts: .*arrow function.*"o".*method/s,
-    );
-    // An arrow that reads only the component is compiled correctly, so it is left alone.
-    assert.doesNotThrow(() =>
-      transformAngular(component('open.update(() => !open())'), '/x/toggle.ts'),
-    );
   });
 
   it('compiles a component sheet for the platform Metro is bundling', () => {
@@ -557,7 +537,7 @@ describe('a template error, which the compiler reports with no position', () => 
 
     assert.deepEqual(error.loc, { line: 9, column: 4 });
     const message = stripVTControlCharacters(error.message);
-    assert.ok(message.includes('Unclosed block "@if" (9:4)'), message);
+    assert.ok(message.includes('Unclosed block "if" (9:4)'), message);
     assert.match(message, />\s*9 \|\s+@if \(ready\) \{/);
   });
 
@@ -566,12 +546,9 @@ describe('a template error, which the compiler reports with no position', () => 
       "import { Component } from '@angular/core';",
       '@Component({',
       "  selector: 'x-broken',",
-      "  template: '@if (a) { <text>a</text> } @if (b) { <text>b</text>',",
+      "  template: '<text>{{ label( }}</text><text>{{ label( }}</text>',",
       '})',
-      'export class Broken {',
-      '  a = true;',
-      '  b = true;',
-      '}',
+      'export class Broken {}',
       '',
     ].join('\n');
 
@@ -580,8 +557,7 @@ describe('a template error, which the compiler reports with no position', () => 
     assert.equal(error.loc, undefined, 'no position is claimed');
     assert.ok(
       error.message.endsWith(
-        'broken-twice.ts: Unclosed block "@if"\n' +
-          'This is in Broken\'s template, where "@if" appears 2 times, so the line cannot be told.',
+        'This is in Broken\'s template, where "label(" appears 2 times, so the line cannot be told.',
       ),
       error.message,
     );
@@ -621,11 +597,10 @@ describe('a template error, which the compiler reports with no position', () => 
   });
 });
 
-describe('a template the compiler cuts short without an error', () => {
-  // `@oxc-angular/vite` (0.0.40) reports no error for a block whose parameters never close: it
-  // compiles everything before it and drops the rest. The screen showed only what came before the
-  // block, in hot reload, under Vitest and in a production export. It reports a @let with no
-  // semicolon itself.
+describe('a malformed control-flow block', () => {
+  // `@oxc-angular/vite` through 0.0.40 compiled a block whose parameters never close without an
+  // error, dropping the rest of the template. It reports one now, but with no position in an
+  // external template, so Angular's own parser places it.
   type Located = Error & { loc?: { line: number; column: number } };
   const failure = (run: () => unknown): Located => {
     try {
@@ -737,9 +712,9 @@ describe('source positions, with an external template or stylesheet', () => {
   });
 });
 
-describe('a styles expression the build cannot read', () => {
-  // The compiler reads a literal, a template literal and a same-file constant, and drops any other
-  // expression with no error: the component rendered unstyled and its sheet was never checked.
+describe('a styles expression', () => {
+  // The compiler evaluates styles as Angular's does. Through 0.0.40 it dropped anything but a
+  // literal or a same-file constant with no error, and the component rendered unstyled.
   const { transformAngular } = require('@ng-native/metro/angular-transform.cjs') as {
     transformAngular: (src: string, filename: string, options?: object) => { code: string };
   };
@@ -751,62 +726,21 @@ describe('a styles expression the build cannot read', () => {
       'export class Styled {}',
     ].join('\n');
   const sheet = (code: string) => code.slice(code.indexOf('ɵnativeStyles'));
-  const imported = "import { SHARED } from './shared';";
 
-  it('fails the build on an imported constant, naming the component and the expression', () => {
-    assert.throws(
-      () => transformAngular(component(imported, 'SHARED'), '/tmp/a.ts'),
-      (error: Error) => {
-        assert.match(error.message, /\/tmp\/a\.ts: Styled's styles/);
-        assert.match(error.message, /"SHARED"/);
-        assert.match(error.message, /styleUrl/);
-        return true;
-      },
-    );
+  it('fails the build on an imported constant, naming the file and the import', () => {
+    const imported = "import { SHARED } from './shared';";
+    for (const styles of ['SHARED', "[SHARED, '.box { width: 50px; }']"]) {
+      assert.throws(
+        () => transformAngular(component(imported, styles), '/tmp/a.ts'),
+        /\/tmp\/a\.ts: .*styles depends on 'SHARED', which is imported/s,
+      );
+    }
   });
 
-  it('fails the build on a concatenation', () => {
-    const preamble = "const CSS = '.box { width: 50px; }';";
-    assert.throws(
-      () => transformAngular(component(preamble, "CSS + ' .x {}'"), '/tmp/b.ts'),
-      /Styled's styles.*"CSS \+ ' \.x \{\}'"/s,
-    );
-  });
-
-  it('fails the build on one unreadable entry in an otherwise literal array', () => {
-    assert.throws(
-      () => transformAngular(component(imported, "[SHARED, '.box { width: 50px; }']"), '/tmp/c.ts'),
-      (error: Error) => {
-        assert.match(error.message, /"SHARED"/);
-        assert.doesNotMatch(error.message, /width: 50px/, 'only the entry that was dropped');
-        return true;
-      },
-    );
-  });
-
-  it('fails the build on a spread and on a constant that holds an array', () => {
-    const preamble = "const SHEETS = ['.box { width: 50px; }'];";
-    assert.throws(
-      () => transformAngular(component(preamble, '[...SHEETS]'), '/tmp/d.ts'),
-      /"\.\.\.SHEETS"/,
-    );
-    assert.throws(() => transformAngular(component(preamble, 'SHEETS'), '/tmp/e.ts'), /"SHEETS"/);
-  });
-
-  it('fails the build on a shorthand styles property naming an imported constant', () => {
-    const src = [
-      "import { Component } from '@angular/core';",
-      "import { styles } from './shared';",
-      "@Component({ selector: 'x-s', template: '<view></view>', styles })",
-      'export class Styled {}',
-    ].join('\n');
-    assert.throws(() => transformAngular(src, '/tmp/g.ts'), /Styled's styles.*"styles"/s);
-  });
-
-  it('compiles every form it can read', () => {
-    const preamble = "const CSS = '.box { width: 50px; }';";
+  it('compiles every form the same file can evaluate', () => {
+    const preamble = "const CSS = '.box { width: 50px; }'; const SHEETS = [CSS];";
     const forms = ["'.box { width: 50px; }'", 'CSS', '[CSS]', "[CSS, '.x { height: 1px; }']"];
-    for (const styles of [...forms, '`${CSS}`']) {
+    for (const styles of [...forms, '`${CSS}`', "CSS + ' .x {}'", '[...SHEETS]', 'SHEETS']) {
       const { code } = transformAngular(component(preamble, styles), '/tmp/f.ts');
       assert.match(sheet(code), /"width":50/, styles);
     }
@@ -824,18 +758,6 @@ describe('a styles expression the build cannot read', () => {
       'export class Styled {}',
     ].join('\n');
     assert.match(sheet(transformAngular(src, '/tmp/g.ts').code), /"width":50/);
-  });
-
-  it('checks each component in a file on its own', () => {
-    const src = [
-      "import { Component } from '@angular/core';",
-      imported,
-      "@Component({ selector: 'x-a', template: '<view></view>', styles: '.a { width: 1px; }' })",
-      'export class Fine {}',
-      "@Component({ selector: 'x-b', template: '<view></view>', styles: SHARED })",
-      'export class Dropped {}',
-    ].join('\n');
-    assert.throws(() => transformAngular(src, '/tmp/h.ts'), /Dropped's styles/);
   });
 });
 

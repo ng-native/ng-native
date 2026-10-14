@@ -206,8 +206,8 @@ export class App {
 Import each element's component, for example `imports: [View, Text]`. Missing imports render
 plain views and trigger development warnings.
 
-Use lowercase element names. Angular silently compiles uppercase names as unknown components with
-empty templates; the Metro transform catches this as a build failure.
+Use lowercase element names. An uppercase name such as `<View>` matches no component's selector;
+the Metro transform fails the build on it.
 
 Run `npx expo start`, then scan the QR code with Expo Go or press `i` or `a` for a simulator.
 Check that each press increments the counter.

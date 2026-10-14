@@ -73,8 +73,7 @@ and dev-server watching so an edit to the compiler itself is never served stale,
 hot-reload path that can patch a live component's template without a full bundle reload.
 
 A capitalized element name - `<Card>` instead of `<card>` - is a hard build failure here rather
-than a blank screen, because Angular itself would otherwise compile it to an empty template with no
-error at all.
+than an empty box, because it matches no component's selector and the compiler reports no error.
 
 A `.md` file is a module too: `import post from './post.md'` is `{ attributes, content, tokens }`,
 its front matter parsed and its Markdown lexed by `marked` as the app is bundled, for

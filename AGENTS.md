@@ -42,8 +42,8 @@ pnpm export                       # release bundles of every example, after CSS 
 - **Change the CSS engine test-first.** It drops what it cannot express with a warning, or with
   none at all after a regression, so a test pinning the expected behavior comes before the change
   in `packages/fabric` or `packages/metro`.
-- **Element names in templates are lowercase.** `<View>` compiles to an empty template on a green
-  build.
+- **Element names in templates are lowercase.** `<View>` matches no component and renders as an
+  empty box; the Metro transform fails the build on it.
 - **One copy of `@angular/core` and of each native module.** A second copy fails at runtime far
   from the cause. `pnpm-workspace.yaml` pins the native modules with `overrides` to the Expo SDK's
   versions.

@@ -104,9 +104,9 @@ export class App {
 Edit the `title` text and save to see it update on the device. Press the button to increment
 `count`: its label reads "Tapped 1 times", "Tapped 2 times", and so on.
 
-Use lowercase names such as `<view>` and `<text>`. Angular treats uppercase names as unknown
-components and silently emits an empty template; the Metro transform catches this as a build
-failure. An element used without its import renders a plain view and logs a development warning.
+Use lowercase names such as `<view>` and `<text>`. An uppercase name such as `<View>` matches no
+component's selector, and the Metro transform fails the build on it. An element used without its
+import renders a plain view and logs a development warning.
 
 ## Run `app.test.ts`
 

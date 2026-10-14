@@ -29,7 +29,7 @@ change; both are fast.
 - **Element names are lowercase:** `<view>`, `<text>`, `<pressable>`, `<scroll-view>`,
   `<text-input>`, `<image>`, `<switch>`, `<safe-area-view>`, `<virtual-list>`, `<modal>`. Each is
   imported from `@ng-native/components` into the component's `imports`, like any Angular
-  component: `imports: [View, Text]`. `<View>` compiles to an empty template, and an element used
+  component: `imports: [View, Text]`. `<View>` matches no component and fails the build, and an element used
   without its import renders as a plain view.
 - **There is no DOM.** No `document`, no `window`, no `<button>`, `<a>`, `<input>` or `<img>`, no
   `@angular/platform-browser`, and no `@angular/animations`. Use the native elements above. HTML's

@@ -1,14 +1,13 @@
 /**
- * A template read by Angular's own parser, for the errors `@oxc-angular/vite` does not report.
+ * A template read by Angular's own parser, to place a malformed template more exactly than
+ * `@oxc-angular/vite` does.
  *
- * Through 0.0.40 it compiles a block whose parameters never close (`@if (on() {`) without an
- * error: everything before the block compiles and the rest of the template is dropped, so a
- * screen shows only what came before it, in a hot reload, under a test and in a production export
- * alike. Angular reports it, with a position, from the lexer and tree builder alone, so that is
- * all this runs: no expression parsing and no code generation.
+ * The compiler reports a block whose parameters never close (`@if (on() {`), but an external
+ * template's error carries no file of its own and a quoted line can appear more than once. Angular
+ * reports it, with a position, from the lexer and tree builder alone, so that is all this runs: no
+ * expression parsing and no code generation.
  *
- * Only asked once the compiler has reported nothing, so an error it does report is still the one
- * a reader sees, and this is one parse of a template per compile.
+ * Only asked once the compiler has reported an error, so a template that compiles costs nothing.
  */
 const path = require('node:path');
 const { HtmlParser } = require('@angular/compiler');
