@@ -55,6 +55,7 @@ const POSTCSS_CONFIGS = [
   ...['', '.json', '.yaml', '.yml', '.js', '.cjs', '.mjs'].map((ext) => `.postcssrc${ext}`),
 ];
 const V3_DIRECTIVES = ['@tailwind base;', '@tailwind components;', '@tailwind utilities;'];
+const COMMONJS_NAMES = ['require', 'module', 'exports', '__dirname', '__filename'];
 const PRESET_ALLOWED = String.raw`'^.*/tailwind\\.preset\\.cjs$'`;
 
 /**
@@ -264,13 +265,13 @@ function writeV4Stylesheet(tree, file, base, themes) {
 function writeWebV4Stylesheet(tree, file, themes) {
   const existing = tree.read(file, 'utf-8');
   if (existing !== null && !existing.includes('@ng-native/tailwind/web.css')) {
-    if (existing.includes('tailwindcss')) {
+    if (importsTailwind(existing)) {
       return byHand(
         file,
         `import '@ng-native/tailwind/web.css' after Tailwind's theme and utilities.`,
       );
     }
-    tree.write(file, `${V4_WEB_IMPORTS.join('\n')}\n\n${existing}`);
+    tree.write(file, prependedTo(existing, V4_WEB_IMPORTS));
   }
   writeV4Stylesheet(tree, file, V4_WEB_IMPORTS, themes);
 }
@@ -325,13 +326,29 @@ function linkStylesheet(tree, root, stylesheet) {
   tree.write(file, `${html.slice(0, head.index)}${indent}${link}\n${html.slice(head.index)}`);
 }
 
+function withoutComments(css) {
+  return css.replace(/\/\*[\s\S]*?\*\//g, '');
+}
+
+/** Whether `css` imports Tailwind 4, in a quote or `url()`; a comment that names it does not. */
+function importsTailwind(css) {
+  return /@import\s+(?:url\(\s*)?["']tailwindcss(?:\/[^"']*)?["']/.test(withoutComments(css));
+}
+
+/** `css` with `lines` ahead of its rules, after a leading `@charset`, which must stay first. */
+function prependedTo(css, lines) {
+  const charset = /^@charset\s+(["'])[^"'\n]*\1\s*;[ \t]*\r?\n?/.exec(css)?.[0] ?? '';
+  const head = charset && !charset.endsWith('\n') ? `${charset}\n` : charset;
+  return `${head}${lines.join('\n')}\n\n${css.slice(charset.length)}`;
+}
+
 function writeV3Stylesheet(tree, root) {
   const file = joinPathFragments(root, 'src/styles.css');
   const existing = tree.read(file, 'utf-8');
   if (existing === null) tree.write(file, `${V3_DIRECTIVES.join('\n')}\n`);
   // One the app has already, without Tailwind, gets the directives ahead of its rules.
-  else if (!existing.includes('@tailwind')) {
-    tree.write(file, `${V3_DIRECTIVES.join('\n')}\n\n${existing}`);
+  else if (!/@tailwind\s/.test(withoutComments(existing))) {
+    tree.write(file, prependedTo(existing, V3_DIRECTIVES));
   }
 }
 
@@ -342,8 +359,8 @@ function writeV3Stylesheet(tree, root) {
  */
 function writeDeviceV4Stylesheet(tree, file, themes) {
   const existing = tree.read(file, 'utf-8');
-  if (existing !== null && !existing.includes('tailwindcss')) {
-    tree.write(file, `${V4_IMPORTS.join('\n')}\n\n${existing}`);
+  if (existing !== null && !importsTailwind(existing)) {
+    tree.write(file, prependedTo(existing, V4_IMPORTS));
   }
   writeV4Stylesheet(tree, file, V4_IMPORTS, themes);
 }
@@ -492,6 +509,8 @@ function setUpWeb(tree, root, vite, version, libraries, besideDevice) {
 function identifier(name) {
   const camel = name.replace(/[^a-zA-Z0-9]+(.)/g, (_, next) => next.toUpperCase());
   const named = /^[a-zA-Z_$]/.test(camel) ? camel : `_${camel}`;
+  // The config runs in CommonJS's wrapper, which binds these names as parameters.
+  if (COMMONJS_NAMES.includes(named)) return `${named}Preset`;
   try {
     new Function(`'use strict'; const ${named} = 0;`);
     return named;
