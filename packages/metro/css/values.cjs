@@ -246,7 +246,12 @@ function resolveNamed(value) {
  * light and dark and the accessibility settings, which is what the keyword asks a browser for.
  */
 const PAGE = ['systemBackground', '?android:attr/colorBackground'];
-const TEXT = ['label', '?android:attr/textColorPrimary'];
+// Android's text colours by state, `textColorPrimary` and `textColorSecondary`, are read by
+// React Native as no colour: it takes a theme attribute's `TypedValue.data`, which for a list of
+// colours by state is not one. `colorForeground` is one colour, and follows light and dark.
+// ponytail: grey text is the text colour on Android, where no theme attribute is a grey that
+// follows light and dark. A fixed grey is unreadable in the other.
+const TEXT = ['label', '?android:attr/colorForeground'];
 const LINK = ['link', '?android:attr/textColorLink'];
 const SYSTEM_COLOURS = {
   canvas: PAGE,
@@ -254,7 +259,7 @@ const SYSTEM_COLOURS = {
   canvastext: TEXT,
   fieldtext: TEXT,
   buttontext: TEXT,
-  graytext: ['secondaryLabel', '?android:attr/textColorSecondary'],
+  graytext: ['secondaryLabel', TEXT[1]],
   linktext: LINK,
   visitedtext: LINK,
   activetext: LINK,

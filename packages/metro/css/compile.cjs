@@ -3247,7 +3247,7 @@ function asksAboutPosition(compound) {
 }
 
 /**
- * `platform-color(label, ?attr/textColorPrimary)`: a colour the *system* defines.
+ * `platform-color(label, ?attr/colorForeground)`: a colour the *system* defines.
  *
  * Held as the list of names rather than resolved, because which one is right is a runtime
  * question - the same declaration is `{semantic: [...]}` on iOS and `{resource_paths: [...]}` on
@@ -3290,11 +3290,11 @@ function platformColor(part, context) {
 function nameOf(term, context) {
   const token = term?.type === 'token' ? term.value : null;
   if (token?.type === 'ident' || token?.type === 'string') return token.value;
-  // `?attr/textColorPrimary` is not one token, so it arrives as several; a quoted string is the
+  // `?attr/colorForeground` is not one token, so it arrives as several; a quoted string is the
   // spelling that survives, and saying so beats silently taking the first word.
   throw new CssUnsupported(
     `${context}: '${JSON.stringify(term).slice(0, 40)}' is not a platform colour name. ` +
-      `Quote it if it is not a plain word: platform-color("?attr/textColorPrimary").`,
+      `Quote it if it is not a plain word: platform-color("?attr/colorForeground").`,
   );
 }
 

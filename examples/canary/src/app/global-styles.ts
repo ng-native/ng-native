@@ -137,7 +137,7 @@ import { Component } from '@angular/core';
 
       /* A colour the system defines, which already tracks dark mode and contrast settings. */
       .verify-platform-color {
-        color: platform-color(label);
+        color: platform-color(label, '?attr/colorForeground');
         font-size: 16px;
       }
 

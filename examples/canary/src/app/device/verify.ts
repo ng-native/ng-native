@@ -94,8 +94,8 @@ import { page } from '../screen-styles.ts';
       <text class="heading">platform-color()</text>
       <text class="verify-platform-color">The system's own label colour</text>
       <text class="hint">
-        iOS 'label', Android '?attr/textColorPrimary'. It should invert with the system theme
-        without a dark-mode rule of its own.
+        iOS 'label', Android '?attr/colorForeground'. It should invert with the system theme without
+        a dark-mode rule of its own.
       </text>
 
       <text class="heading">Gradient</text>

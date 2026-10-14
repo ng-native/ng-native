@@ -1,7 +1,7 @@
 /**
  * The platform's own semantic colours, from a stylesheet.
  *
- * `PlatformColor('label')` is iOS's label colour and Android's `?attr/textColorPrimary`: a colour
+ * `PlatformColor('label')` is iOS's label colour and Android's `?attr/colorForeground`: a colour
  * the *system* defines, which already tracks dark mode, increased contrast, and the accessibility
  * settings that change all of them at once. Writing `#000` with a `dark:` override approximates
  * one of those and silently ignores the rest.
@@ -23,7 +23,9 @@ const declarationsOf = (css: string): Record<string, unknown> =>
 
 describe('compiling a CSS system colour', () => {
   const canvas = { platformColor: ['systemBackground', '?android:attr/colorBackground'] };
-  const text = { platformColor: ['label', '?android:attr/textColorPrimary'] };
+  // On Android `colorForeground`: `textColorPrimary` is a list of colours by state, which React
+  // Native reads as no colour (`TypedValue.data` of a theme attribute), and draws nothing.
+  const text = { platformColor: ['label', '?android:attr/colorForeground'] };
 
   it("is the platform's colour for the same thing, which follows light and dark", () => {
     // `Canvas` and `CanvasText` are a browser's page and its text. Left as the keyword, no view
@@ -33,7 +35,7 @@ describe('compiling a CSS system colour', () => {
       color: text,
     });
     assert.deepEqual(declarationsOf('color: GrayText'), {
-      color: { platformColor: ['secondaryLabel', '?android:attr/textColorSecondary'] },
+      color: { platformColor: ['secondaryLabel', '?android:attr/colorForeground'] },
     });
     assert.deepEqual(declarationsOf('color: LinkText'), {
       color: { platformColor: ['link', '?android:attr/textColorLink'] },
@@ -77,7 +79,7 @@ describe('compiling a CSS system colour', () => {
       },
     });
     assert.deepEqual(declarationsOf('color: InactiveCaptionText'), {
-      color: { platformColor: ['secondaryLabel', '?android:attr/textColorSecondary'] },
+      color: { platformColor: ['secondaryLabel', '?android:attr/colorForeground'] },
     });
     // `ActiveBorder` is `ButtonBorder`, which has no colour of the platform.
     assert.throws(() => declarationsOf('border-top-color: ActiveBorder'), /system colour/);
@@ -106,20 +108,17 @@ describe('compiling a platform colour', () => {
   });
 
   it('keeps a fallback list, which is how one name covers both platforms', () => {
-    // iOS calls it `label`; Android calls it `?attr/textColorPrimary`. Native takes the first that
+    // iOS calls it `label`; Android calls it `?attr/colorForeground`. Native takes the first that
     // resolves, so one declaration can name both.
-    assert.deepEqual(declarationsOf('color: platform-color(label, "?attr/textColorPrimary")'), {
-      color: { platformColor: ['label', '?attr/textColorPrimary'] },
+    assert.deepEqual(declarationsOf('color: platform-color(label, "?attr/colorForeground")'), {
+      color: { platformColor: ['label', '?attr/colorForeground'] },
     });
   });
 
   it('says to quote a name that is not a plain word, rather than taking half of it', () => {
-    // `?attr/textColorPrimary` is several tokens, so an unquoted one would silently become
+    // `?attr/colorForeground` is several tokens, so an unquoted one would silently become
     // `?` or `attr` - a colour that never resolves and never says why.
-    assert.throws(
-      () => declarationsOf('color: platform-color(?attr/textColorPrimary)'),
-      /Quote it/,
-    );
+    assert.throws(() => declarationsOf('color: platform-color(?attr/colorForeground)'), /Quote it/);
   });
 
   it('works anywhere a colour does', () => {
