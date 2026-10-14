@@ -4,19 +4,21 @@
  *
  * A stylesheet's custom properties are converted when the app is built, where there is a CSS
  * parser (`@ng-native/metro/css/values.cjs`). A bound one only exists here, where there is not,
- * so this takes the shapes a binding actually holds and nothing more: a length in `px` or `%`, a
- * number, a colour as React Native writes one, a colour's three channels, a word, another token,
- * `var(--brand)`, and one made of others, `calc(var(--gap) * 2)` or a `color-mix()` (see
+ * so this takes the shapes a binding actually holds and nothing more: a length in `px`, `%`,
+ * `rem`, `em` or a viewport unit, two to four lengths in `px`, a number, a colour as React Native
+ * writes one, a colour's three channels, a word, another token, `var(--brand)`, and one made of
+ * others, `calc(var(--gap) * 2)`, `calc(10px * 2)` or a `color-mix()` (see
  * inline-derived-token.ts).
  * Anything else is kept as a word, which leaves a use site that wants a length or a colour unset,
  * as a token of the wrong kind does.
  */
-import { CSS_SPACE, type TokenValue } from './css.ts';
+import { CSS_SPACE, type DeferredDeclaration, type TokenValue } from './css.ts';
 import { derivedToken } from './inline-derived-token.ts';
 import { HUE_DEGREES, isNamedColor } from './transition.ts';
 
 const PX = /^(-?\d*\.?\d+)px$/;
 const PERCENT = /^-?\d*\.?\d+%$/;
+const RELATIVE = /^(-?\d*\.?\d+)(rem|em|vw|vh|vmin|vmax)$/i;
 const NUMBER = /^-?\d*\.?\d+$/;
 const ANGLE = /^(-?\d*\.?\d+)(deg|grad|rad|turn)$/i;
 /** `#fff`, `rgb()`, `rgba()`, `hsl()`, `hsla()` and `hwb()`: what React Native's `processColor` reads. */
@@ -27,10 +29,10 @@ const CHANNEL = /^(-?(?:\d+\.?\d*|\.\d+))(%|deg|grad|rad|turn)?$/;
 /** `var(--name)` or `var(--name, <fallback>)`, the whole value. */
 const VAR = /^var\([ \t\n\r\f]*(--[\w-]+)[ \t\n\r\f]*(?:,([\s\S]*))?\)$/i;
 /**
- * A value worked out where it is set: one with a `var()` in it, a `color-mix()`, or a relative
- * colour, of tokens or of colours written out.
+ * A value worked out where it is set: one with a `var()` in it, a `calc()`, `min()` or `max()`,
+ * a `color-mix()`, or a relative colour, of tokens or of values written out.
  */
-const DERIVED = /var\(|^color-mix\(|^[a-z]+\([ \t\n\r\f]*from[ \t\n\r\f]/i;
+const DERIVED = /var\(|^(?:calc|min|max|color-mix)\(|^[a-z]+\([ \t\n\r\f]*from[ \t\n\r\f]/i;
 const WEIGHTS: Record<string, string> = { normal: '400', bold: '700' };
 /**
  * CSS whitespace at either end: a space, a tab, a newline, a carriage return or a form feed. A
@@ -96,7 +98,13 @@ function fromNumber(value: number): TokenValue | undefined {
     value >= 1 && value <= 1000
       ? { weight: String(Math.min(900, Math.max(100, Math.round(value / 100) * 100))) }
       : {};
-  return value === 0 ? { number: 0, length: 0 } : { number: value, ...weight };
+  // And a line height, as a multiple of the font size, as the stylesheet's own reads it.
+  const lineHeight = {
+    lineHeight: { __defer: { unit: 'em' as const, factor: value, multiple: true as const } },
+  };
+  return value === 0
+    ? { number: 0, length: 0, ...lineHeight }
+    : { number: value, ...weight, ...lineHeight };
 }
 
 /**
@@ -181,6 +189,14 @@ function balanced(text: string): boolean {
   return depth === 0;
 }
 
+/** Two to four lengths in `px`, a padding or a margin's sides, as the stylesheet's own reads them. */
+function fromLengths(text: string): TokenValue | undefined {
+  const parts = text.split(/[ \t\n\r\f]+/);
+  if (parts.length < 2 || parts.length > 4) return undefined;
+  const lengths = parts.map((part) => (part === '0' ? 0 : Number(PX.exec(part)?.[1] ?? NaN)));
+  return lengths.every(Number.isFinite) ? { lengths } : undefined;
+}
+
 /** A time as CSS writes one: a number of seconds or milliseconds. */
 const TIME = /^([+-]?(?:\d+\.?\d*|\.\d+))(ms|s)$/i;
 
@@ -188,6 +204,17 @@ const TIME = /^([+-]?(?:\d+\.?\d*|\.\d+))(ms|s)$/i;
 function withUnit(text: string): TokenValue | undefined {
   const px = PX.exec(text);
   if (px) return { length: Number(px[1]) };
+  // A `rem` is 16 points, and the others are measured where they are used, as in a stylesheet.
+  const relative = RELATIVE.exec(text);
+  if (relative) {
+    const [, factor, unit] = relative;
+    const lower = unit!.toLowerCase();
+    if (lower === 'rem') return { length: Number(factor) * 16 };
+    const measured = lower as NonNullable<DeferredDeclaration['compute']>['unit'];
+    // The shape the stylesheet compiles one to, which `TokenValue` does not spell out.
+    const deferred = { __defer: { unit: measured, factor: Number(factor) } };
+    return { length: deferred } as unknown as TokenValue;
+  }
   // A percentage is a fraction as well, and an angle its degrees, as the build-time conversion
   // reads them: an hsl() of tokens takes its saturation and its hue so.
   if (PERCENT.test(text)) return { length: text, number: Number(text.slice(0, -1)) / 100 };
@@ -221,5 +248,7 @@ export function tokenFromValue(value: unknown): TokenValue | undefined {
   if (NUMBER.test(text)) return fromNumber(Number(text));
   if (DERIVED.test(text)) return withTokens(text);
   if (COLOR_FUNCTION.test(text)) return { color: text };
+  const lengths = fromLengths(text);
+  if (lengths) return lengths;
   return fromChannels(text) ?? (WORD.test(text) ? fromWord(text) : fromText(text));
 }

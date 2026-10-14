@@ -2950,14 +2950,27 @@ export class Engine implements HostEngine {
    */
   private setActiveChain(from: EngineNode | null, active: boolean): boolean {
     let changed = false;
-    for (let node = from; node; node = node.parent) {
-      if (node.active === active) continue;
+    const set = (node: EngineNode) => {
+      if (node.active === active) return;
       node.active = active;
       this.markActive(node);
       changed = true;
+    };
+    for (let node = from; node; node = node.parent) {
+      set(node);
+      if (active) this.activeNodes.add(node);
+    }
+    if (!active) {
+      // Every node the press set, too: one the pressed node was moved or removed from mid-press
+      // is no longer above it.
+      for (const node of this.activeNodes) set(node);
+      this.activeNodes.clear();
     }
     return changed;
   }
+
+  /** The nodes a press has set `:active` on, to clear whatever happens to the tree meanwhile. */
+  private readonly activeNodes = new Set<EngineNode>();
 
   /** Whether any sheet styles a pressed element, and each compound that asks about one from another. */
   private activeUse: { own: boolean; elsewhere: readonly Compound[] } = {
@@ -3331,7 +3344,34 @@ export class Engine implements HostEngine {
     this.markProps(node, false);
     if (!reach) return;
     if (reach.own) node.ownDirty = true;
-    if (this.styles.reachesUnder(reach)) this.markUnder(node, reach);
+    if (this.styles.reachesUnder(reach)) {
+      this.classesAbove += 1;
+      this.markUnder(node, reach);
+    }
+  }
+
+  /**
+   * How many class changes have restyled what is under an element. `markUnder` walks the tree as
+   * it is, so an element out of it then is not reached: one that comes back after any is matched
+   * again, with all that is under it.
+   */
+  private classesAbove = 0;
+  /** The count when each element went out of the tree, for the ones still out. */
+  private readonly outSince = new WeakMap<EngineNode, number>();
+
+  /** Have matched again a node coming back into the tree that missed a class change above it. */
+  private markReturned(child: EngineNode): void {
+    const since = this.outSince.get(child);
+    if (since === undefined) return;
+    this.outSince.delete(child);
+    if (since !== this.classesAbove) this.markAllUnder(child);
+  }
+
+  private markAllUnder(node: EngineNode): void {
+    if (node.kind !== 'element') return;
+    node.ownDirty = true;
+    this.markPath(node);
+    for (const child of node.children) this.markAllUnder(child);
   }
 
   /**
@@ -3403,6 +3443,7 @@ export class Engine implements HostEngine {
 
   appendChild(parent: EngineNode, child: EngineNode): void {
     this.markAdopted(child, parent);
+    this.markReturned(child);
     this.detach(child);
     child.parent = parent;
     parent.children.push(child);
@@ -3413,6 +3454,7 @@ export class Engine implements HostEngine {
 
   insertBefore(parent: EngineNode, child: EngineNode, ref: EngineNode | null): void {
     this.markAdopted(child, parent);
+    this.markReturned(child);
     this.detach(child);
     child.parent = parent;
     const at = ref ? parent.children.indexOf(ref) : -1;
@@ -3440,6 +3482,7 @@ export class Engine implements HostEngine {
     if (at < 0) return;
     target.children.splice(at, 1);
     child.parent = null;
+    this.outSince.set(child, this.classesAbove);
     this.removedSinceCommit.add(child);
     this.markStructure(target, child, at);
     this.markTextContent(target, child);
@@ -3521,7 +3564,27 @@ export class Engine implements HostEngine {
         this.markProps(node, false);
       }
     }
-    if (this.focusedNode && this.topOf(this.focusedNode) !== this.root) this.focusedNode = null;
+    if (this.focusedNode && this.topOf(this.focusedNode) !== this.root) this.dropFocus();
+    this.dropDetachedPress();
+  }
+
+  /** A pressed node out of the tree gets no release: native has no view to end the touch on. */
+  private dropDetachedPress(): void {
+    const pressed = this.currentResponder;
+    if (!pressed || this.topOf(pressed) === this.root) return;
+    this.setActiveChain(pressed, false);
+    this.currentResponder = null;
+  }
+
+  /**
+   * Forget the focused node, which has left the tree without a blur: off the node as well as the
+   * engine, or a `:focus` rule styles it again when it is put back.
+   */
+  private dropFocus(): void {
+    const node = this.focusedNode!;
+    node.focused = false;
+    this.markProps(node);
+    this.focusedNode = null;
   }
 
   /** Forget the committed views of each node removed since the last commit that is still out. */
@@ -3566,7 +3629,7 @@ export class Engine implements HostEngine {
     this.hoisted.delete(node);
     node.kept = undefined;
     // A field popped with the keyboard up never sends its blur.
-    if (this.focusedNode === node) this.focusedNode = null;
+    if (this.focusedNode === node) this.dropFocus();
   }
 
   parentNode(node: EngineNode): EngineNode | null {
@@ -3670,7 +3733,9 @@ export class Engine implements HostEngine {
    * has changed for the props diff to notice.
    */
   styleChanged(node: EngineNode): void {
-    this.markProps(node, this.inlineReachesStyle(node));
+    // As `setProp` restyles for a new style object: a child that takes one of its values, an
+    // `inherit`, follows the one changed in place too.
+    this.markProps(node, this.inlineReachesStyle(node) || node.styleCache?.heirs === true);
     this.markParagraph(node);
   }
 
@@ -4012,7 +4077,17 @@ export class Engine implements HostEngine {
     const facesAdded = this.facesAdded;
     if (this.awaitingKeyframes.size) this.settleKeyframes();
     if (facesAdded) this.rematchFonts();
+    this.blurHidden();
     return true;
+  }
+
+  /** A field went out of view focused, in the commit running: see `undisplayed`. */
+  private blurAfterCommit = false;
+
+  private blurHidden(): void {
+    if (!this.blurAfterCommit) return;
+    this.blurAfterCommit = false;
+    this.setFocused(null);
   }
 
   private beforeCommit: (() => void) | null = null;
@@ -5539,6 +5614,16 @@ export class Engine implements HostEngine {
     return true;
   }
 
+  /** Whether a node, or an element it is in, is `display: none`. */
+  private boxless(node: EngineNode): boolean {
+    for (let at: EngineNode | null = node; at; at = at.parent) {
+      if (at.kind !== 'element') continue;
+      this.styles.resolve(at, this.styleEpoch);
+      if (ownLayout(at, 'display') === 'none') return true;
+    }
+    return false;
+  }
+
   /** One `@keyframes` player, one frame on. */
   private advancePlayer(node: EngineNode, now: number): void {
     const running = node.playing;
@@ -5549,6 +5634,13 @@ export class Engine implements HostEngine {
 
     if (running.pausedAt !== undefined) {
       this.playing.delete(node);
+      return;
+    }
+    // One with no box, or in a box with none, paints nothing, and an endless one would keep the
+    // frame loop going for good. It starts again when the node is shown, as it is made again.
+    if (this.boxless(node)) {
+      this.playing.delete(node);
+      node.playing = undefined;
       return;
     }
     // Frames that say nothing paint nothing: a keyframe's one declaration refused at build time
@@ -5969,9 +6061,11 @@ export class Engine implements HostEngine {
     if (ownLayout(child, 'display') !== 'none') return false;
     if (child.committed) {
       this.forgetCommitted(child);
-      // A field in it has no view to send its blur from.
-      if (isWithin(this.focusedNode, child)) this.setFocused(null);
+      // A field in it has no view to send its blur from. Blurred once this commit is done: a
+      // `:focus` rule that hid it then no longer holds, and the commit that follows shows it.
+      if (isWithin(this.focusedNode, child)) this.blurAfterCommit = true;
     }
+    settlePaths(child);
     return true;
   }
 
@@ -6051,6 +6145,13 @@ export class Engine implements HostEngine {
     node.committedUnder = null;
     node.styleCommitted = null;
     node.kept = undefined;
+    // A scroll-driven animation is bound to native views by their tags: its own, and its scroll
+    // view's. Made again, each has another, so what drives it starts again with the new ones.
+    if (node.scrolled?.drive) this.stopScrolled(node);
+    for (const follower of this.scrollTimelines.get(node) ?? []) {
+      this.stopScrolled(follower);
+      this.markProps(follower, false);
+    }
     if (node.box?.committed) this.forgetCommitted(node.box);
     for (const child of node.children) {
       if (child.committed || child.box?.committed) this.forgetCommitted(child);
@@ -6457,7 +6558,7 @@ export class Engine implements HostEngine {
    * costs the depth of one node, on a touch, and only while something is focused.
    */
   get focused(): EngineNode | null {
-    if (this.focusedNode && !this.isAttached(this.focusedNode)) this.focusedNode = null;
+    if (this.focusedNode && !this.isAttached(this.focusedNode)) this.dropFocus();
     return this.focusedNode;
   }
 
@@ -6884,4 +6985,16 @@ export class Engine implements HostEngine {
   private detach(child: EngineNode): void {
     if (child.parent) this.removeChild(child.parent, child);
   }
+}
+
+/**
+ * Clear the marks that lead a commit down to a change, under a node no commit goes into: one with
+ * no box. Left set, a later change under it stops climbing at them, as it stops at any mark already
+ * there, and never reaches the root: nothing is committed, and an ancestor's `:has()` reading into
+ * it is not asked again. What is under it has no views, so it is reconciled whole when it is shown.
+ */
+function settlePaths(node: EngineNode): void {
+  if (!node.subtreeDirty) return;
+  node.subtreeDirty = false;
+  for (const child of node.children) settlePaths(child);
 }
