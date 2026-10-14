@@ -125,6 +125,28 @@ describe('a push to a page of the tab bar from a screen over it', () => {
     assert.deepEqual(app.front(), ['detail/1']);
   });
 
+  for (const [how, push] of [
+    ['written into the url', (nav: NativeNavigation) => nav.push('/library/2?filter=new')],
+    [
+      'given as extras',
+      (nav: NativeNavigation) => nav.push('/library/2', { queryParams: { filter: 'new' } }),
+    ],
+  ] as const) {
+    it(`keeps the query of a push to the page the tab was left on, ${how}`, async () => {
+      const app = await boot();
+      await app.nav.push('/library/2');
+      await turns();
+      await app.router.navigateByUrl('/home');
+      await turns();
+      await app.nav.push('/detail/1');
+      await turns();
+
+      await push(app.nav);
+      await turns();
+      assert.equal(app.router.url, '/library/2?filter=new');
+    });
+  }
+
   it('control: a push from the bar itself is unchanged', async () => {
     const app = await boot();
     await app.nav.push('/library/3');

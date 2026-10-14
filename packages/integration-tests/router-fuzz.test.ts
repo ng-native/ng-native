@@ -23,9 +23,19 @@ before(async () => {
 });
 
 // A few seconds by default; `ROUTER_FUZZ_SEEDS=600 ROUTER_FUZZ_STEPS=30` searches harder.
-const SEEDS = Number(process.env['ROUTER_FUZZ_SEEDS'] ?? 40);
-const FIRST = Number(process.env['ROUTER_FUZZ_FIRST'] ?? 1);
-const STEPS = Number(process.env['ROUTER_FUZZ_STEPS'] ?? 20);
+const SEEDS = setting('ROUTER_FUZZ_SEEDS', 40);
+const FIRST = setting('ROUTER_FUZZ_FIRST', 1);
+const STEPS = setting('ROUTER_FUZZ_STEPS', 20);
+
+/** A whole number from the environment, or `fallback`: anything else would run no seeds, and pass. */
+function setting(name: string, fallback: number): number {
+  const text = process.env[name];
+  if (text === undefined) return fallback;
+  const value = Number(text);
+  if (!Number.isInteger(value) || value < 1)
+    throw new Error(`${name} must be a whole number above 0`);
+  return value;
+}
 
 /** mulberry32: small, seeded, and the same on every run. */
 function random(seed: number): () => number {

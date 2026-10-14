@@ -55,6 +55,12 @@ export interface PresentOptions extends NativeNavigationOptions {
   as?: StackPresentation;
 }
 
+/** Whether commands ask for a query or a fragment, written into a url string or as extras. */
+const asksMore = (commands: NavigationCommands, extras: NavigationExtras): boolean =>
+  (typeof commands === 'string' && /[?#]/.test(commands)) ||
+  extras.queryParams != null ||
+  extras.fragment != null;
+
 /** A url string up to its query or fragment. */
 const pathOf = (url: string): string => url.split(/[?#]/, 1)[0]!;
 
@@ -308,10 +314,12 @@ export class NativeNavigation {
     const path = this.pathFor(commands, extras);
     const left = this.outlets.coveredTabAt(path);
     if (left) {
-      // The tab is open once the bar is back, so the page goes straight onto it.
+      // The tab is open once the bar is back, so the page goes straight onto it, unless it is the
+      // page the tab was left on and nothing more, a query or a fragment, is asked of it.
+      const asked = pathOf(left) !== path || asksMore(commands, extras);
       return this.router
         .navigateByUrl(left)
-        .then((arrived) => (arrived && pathOf(left) !== path ? navigate() : arrived));
+        .then((arrived) => (arrived && asked ? navigate() : arrived));
     }
     const tab = this.outlets.unopenedTabOf(path);
     if (!tab) return navigate();
