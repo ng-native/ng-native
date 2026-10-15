@@ -483,9 +483,12 @@ as a title with `placement="principal"`. `placement` takes SwiftUI's `ToolbarIte
 and an item with none is placed by SwiftUI. The button does not close the sheet by itself: its
 `(buttonPress)` sets `open`.
 
-With an item in it, the sheet's content is in a `ui-toolbar` inside a `ui-navigation-stack`, under
-the group that carries the presentation modifiers. A sheet with no item has neither. Adding the
-first item to a sheet that is open, or removing the last, makes its content again.
+In a build with SwiftUI's toolbar, a sheet that is not sized to its content has its content in a
+`ui-navigation-stack`, under the group that carries the presentation modifiers, over a `ui-toolbar`
+that holds the items. It has them with no item too, when the stack draws no bar, so items can come
+and go while the sheet is open and its content stays as it is. A sheet sized to its content with
+no item has neither: adding the first item to one that is open, or removing the last, makes its
+content again.
 
 A sheet with a toolbar is not sized to its content on iOS, whatever `fitToContents` says: the bar
 is no part of the content. It rests at half and full height, or at its `detents`, so give it a

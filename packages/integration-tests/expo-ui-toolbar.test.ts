@@ -113,14 +113,27 @@ describe('a SwiftUI toolbar written out', () => {
 });
 
 describe('a toolbar item written in a bottom sheet', () => {
-  it('is lifted into a toolbar around the content, inside a navigation stack', async () => {
+  it('is lifted into a toolbar beside the content, inside a navigation stack', async () => {
     const { every, byId } = await boot('ios', Sheet);
     const [group] = every('GroupView');
     const [stack] = childrenNamed(group!, 'NavigationStackView');
     assert.ok(stack, 'under the group that carries how the sheet is presented');
-    const [toolbar] = childrenNamed(stack, 'ToolbarView');
-    const [host] = childrenNamed(toolbar!, 'RNHostView');
-    assert.ok(all([host!]).includes(byId('body')!), 'the content is the view the toolbar is on');
+    const [layers] = childrenNamed(stack, 'ZStackView');
+    const [toolbar] = childrenNamed(layers!, 'ToolbarView');
+    const [host] = childrenNamed(layers!, 'RNHostView');
+    assert.ok(
+      all([host!]).includes(byId('body')!),
+      'the content is in the stack, over the toolbar',
+    );
+    assert.deepEqual(
+      toolbar!.children.map((child) => child.viewName.replace(/.*ExpoUI_/, '')),
+      ['SpacerView', 'SlotView'],
+      'the toolbar is on a view of its own, without which SwiftUI shows no item',
+    );
+    assert.ok(
+      layers!.children.indexOf(toolbar!) < layers!.children.indexOf(host!),
+      'and under the content, which takes the presses',
+    );
 
     const [content] = childrenNamed(toolbar!, 'SlotView');
     assert.equal(content!.props['name'], 'content');
@@ -194,22 +207,48 @@ describe('a toolbar item written in a bottom sheet', () => {
     assert.equal(every('BottomSheetView')[0]!.props['isPresented'], false);
   });
 
-  it('leaves a sheet with no item as it was, with no navigation stack', async () => {
+  it('keeps the content where it is while an item comes and goes, with the toolbar beside it', async () => {
+    // `@expo/ui`'s view host takes the content's touches as it appears and gives them up as it
+    // disappears. One made again around the same content, by the sheet or by SwiftUI as the
+    // toolbar's items change, appears before the old one has gone, so the content takes none.
     const { every, byId, instance, pass } = await boot('ios', Sheet);
+    const host = every('RNHostView')[0]!;
+    const body = byId('body')!;
+    const toolbar = every('ToolbarView')[0]!;
+    assert.equal(all([toolbar]).includes(body), false, 'the toolbar is not around the content');
+
     instance.closable.set(false);
     await pass();
-    assert.deepEqual(every('NavigationStackView'), [], 'the item went, and the bar with it');
+    assert.equal(byId('close'), undefined, 'the item went');
+    assert.equal(every('RNHostView')[0]!.reactTag, host.reactTag, 'and the view host stayed');
+    assert.equal(byId('body')!.reactTag, body.reactTag, 'with the same content in it');
+    const content = every('SlotView').find((slot) => slot.props['name'] === 'content')!;
+    assert.deepEqual(content.children, [], 'the bar has no item, and SwiftUI draws none');
+
+    instance.closable.set(true);
+    await pass();
+    assert.ok(byId('close'), 'the item came back');
+    assert.equal(every('RNHostView')[0]!.reactTag, host.reactTag);
+    assert.equal(byId('body')!.reactTag, body.reactTag);
+  });
+
+  it('leaves a sheet sized to its content with no item without a navigation stack', async () => {
+    // A navigation stack fills what it is given, so it cannot be there around content the sheet is
+    // sized to. Such a sheet is made again as its first item arrives, and as its last goes.
+    const { fabric, every, byId, instance, pass } = await boot('ios', Sheet);
+    instance.open.set(false);
+    await pass();
+    fabric.emit(every('BottomSheetView')[0]!, 'topDismiss', {});
+    await pass();
+    instance.closable.set(false);
+    instance.fit.set(true);
+    instance.open.set(true);
+    await pass();
+    assert.deepEqual(every('NavigationStackView'), []);
     assert.deepEqual(every('ToolbarView'), []);
     const [group] = every('GroupView');
     const [host] = childrenNamed(group!, 'RNHostView');
     assert.ok(all([host!]).includes(byId('body')!), 'the content is straight under the group');
-    assert.equal(byId('close'), undefined);
-
-    instance.closable.set(true);
-    await pass();
-    assert.equal(every('NavigationStackView').length, 1, 'and comes back with the item');
-    assert.ok(byId('close'));
-    assert.ok(byId('body'));
   });
 
   it('leaves the toolbar out of a build with none, where a SwiftUI view under it would crash', async () => {

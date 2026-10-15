@@ -1487,8 +1487,9 @@ function windowWidth(): Signal<number | undefined> {
  * Unlike the other components here, the element this is mounted on is a plain view, which takes
  * no room and needs no `ui-host` around it. The sheet is inside it, wrapped as `@expo/ui`'s own
  * React component wraps one: a `ui-host`, the sheet, on iOS a `ui-group` that carries the
- * presentation modifiers, and a `ui-view-host` holding the one view the content goes in. With
- * toolbar items, the view host is in a `ui-toolbar` in a `ui-navigation-stack`, under the group.
+ * presentation modifiers, and a `ui-view-host` holding the one view the content goes in. Where the
+ * build has SwiftUI's toolbar and the sheet is not sized to its content, the view host is in a
+ * `ui-navigation-stack` under the group, over a `ui-toolbar` that holds the items.
  */
 @Component({
   selector: 'ui-bottom-sheet',
@@ -1499,8 +1500,10 @@ function windowWidth(): Signal<number | undefined> {
     UiHost,
     UiNavigationStack,
     UiSlot,
+    UiSpacer,
     UiToolbar,
     UiViewHost,
+    UiZStack,
   ],
   template: `
     <ng-template #content><ng-content /></ng-template>
@@ -1515,14 +1518,17 @@ function windowWidth(): Signal<number | undefined> {
         >
           @if (mounted()) {
             <ui-group [modifiers]="presentation()">
-              @if (toolbar()) {
+              @if (stacked()) {
                 <ui-navigation-stack>
-                  <ui-toolbar [modifiers]="inlineTitle">
+                  <ui-zstack>
+                    <ui-toolbar [modifiers]="inlineTitle">
+                      <ui-spacer />
+                      <ui-slot name="content"><ng-content select="ui-toolbar-item" /></ui-slot>
+                    </ui-toolbar>
                     <ui-view-host layoutRoot [matchContents]="fits() || undefined">
                       <ui-bottom-sheet-content [style]="body()" [content]="content" />
                     </ui-view-host>
-                    <ui-slot name="content"><ng-content select="ui-toolbar-item" /></ui-slot>
-                  </ui-toolbar>
+                  </ui-zstack>
                 </ui-navigation-stack>
               } @else {
                 <ui-view-host layoutRoot [matchContents]="fits() || undefined">
@@ -1649,8 +1655,8 @@ export class UiBottomSheet {
    * Whether the sheet is sized to its content, as it opened: a view host takes its sizing once,
    * as it mounts. SwiftUI's sheet is not where it has detents to rest at, nor where it has a
    * toolbar: a navigation stack fills what it is given, and the bar is no part of the content.
-   * A toolbar that comes or goes while the sheet is open is followed, since the view host is made
-   * again around it.
+   * A toolbar that comes or goes while such a sheet is open is followed, since the view host is
+   * made again around it.
    */
   protected readonly fits = computed(() => {
     this.mounted();
@@ -1659,6 +1665,17 @@ export class UiBottomSheet {
       () => this.fitToContents() && !(this.swiftUI && (this.detents()?.length || toolbar)),
     );
   });
+
+  /**
+   * Whether the content is in a navigation stack, beside a toolbar: wherever the build has one and
+   * the sheet is not sized to its content, items or none, so that an item coming or going never
+   * makes the view host again. `@expo/ui`'s view host takes its content's touches as it appears and
+   * gives them up as it disappears, and one made again around the same content appears before the
+   * old one has gone, leaving the content none. A stack with no item draws no bar. The toolbar is
+   * beside the view host rather than around it, since SwiftUI makes the view a toolbar is on again
+   * as its items change.
+   */
+  protected readonly stacked = computed(() => this.toolbarInBuild && !this.fits());
 
   /**
    * SwiftUI reads how a sheet is presented from modifiers on its content, not from props. The
