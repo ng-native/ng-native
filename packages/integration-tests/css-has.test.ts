@@ -349,23 +349,19 @@ describe(':has() on a box the styled node is in', () => {
   });
 });
 
-describe(':has() the engine does not take', () => {
-  it('refuses what it cannot match and what a browser drops, each by name', () => {
-    for (const [css, why] of [
-      ['.card:has(.action) + .title { opacity: 0.5 }', /the node the rule styles/],
-      ['.card:has(.action) ~ .panel .title { opacity: 0.5 }', /the node the rule styles/],
-      ['.card:has(.a .b) { opacity: 0.5 }', /one compound/],
-      ['.card:has(+ .next) { opacity: 0.5 }', /one compound/],
-      ['.card:has(~ .later) { opacity: 0.5 }', /one compound/],
-      // Chrome drops each of these as invalid: no ':has()' inside another.
-      ['.card:has(.a:has(.b)) { opacity: 0.5 }', /inside another/],
-      ['.card:has(.a:not(:has(.b))) { opacity: 0.5 }', /inside another/],
-      ['.card:has(:is(.a:has(.b))) { opacity: 0.5 }', /inside another/],
-      ['.card .title:has(> .a:has(.b)) { opacity: 0.5 }', /inside another/],
-    ] as const) {
+describe(':has() and the sheet it is in', () => {
+  it('takes one beside the styled node, a combinator inside, and a sibling', () => {
+    // What each matches is in css-nested-selector.
+    for (const css of [
+      '.card:has(.action) + .title { opacity: 0.5 }',
+      '.card:has(.action) ~ .panel .title { opacity: 0.5 }',
+      '.card:has(.a .b) { opacity: 0.5 }',
+      '.card:has(+ .next) { opacity: 0.5 }',
+      '.card:has(~ .later) { opacity: 0.5 }',
+    ]) {
       const s = scene(css);
-      assert.equal(s.reports.length, 1, css);
-      assert.match(s.reports[0]!, why, css);
+      assert.deepEqual(s.reports, [], css);
+      assert.equal((s.sheet as { rules: unknown[] }).rules.length, 1, css);
     }
   });
 

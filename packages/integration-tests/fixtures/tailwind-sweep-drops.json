@@ -10865,12 +10865,6 @@
     "invalid:opacity-50",
     "invalid:p-4"
   ],
-  "dropped a rule: ':is()' cannot contain a combinator, only a compound selector, '…', which is an ancestor test, '…', a parent test, or '…', a sibling test.": [
-    "peer-midnight:bg-[rgb(1,2,3)]",
-    "peer-midnight:bg-red-500",
-    "peer-midnight:opacity-50",
-    "peer-midnight:p-4"
-  ],
   "dropped a rule: ':optional' is not supported. Nothing on native answers it; bind a class or an attribute from the state it stands for, and select on that.": [
     "optional:bg-[rgb(1,2,3)]",
     "optional:bg-red-500",

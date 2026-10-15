@@ -1053,8 +1053,14 @@ function compound(parts, context) {
         }
         if (nested.ancestors?.length) (out.ancestors ??= []).push(...nested.ancestors);
         if (nested.parents?.length) (out.parents ??= []).push(...nested.parents);
-        if (part.kind === 'not') (out.not ??= []).push(...nested.compounds);
-        else if (nested.compounds.length) (out.is ??= []).push(nested.compounds);
+        if (part.kind === 'not') {
+          if (nested.compounds.length) (out.not ??= []).push(...nested.compounds);
+          if (nested.complex.length) (out.notComplex ??= []).push(...nested.complex);
+        } else if (nested.complex.length) {
+          // One list: the compounds alongside are selectors of one compound each.
+          const alone = nested.compounds.map((one) => ({ compounds: [one], combinators: [] }));
+          (out.isComplex ??= []).push([...alone, ...nested.complex]);
+        } else if (nested.compounds.length) (out.is ??= []).push(nested.compounds);
         break;
       }
       case 'pseudo-element':
@@ -1239,12 +1245,11 @@ function tokensToCompoundParts(tokens, context) {
 }
 
 /**
- * `:is(<compound> *)`: an ancestor test, which is the one combinator worth having in here.
+ * `:is(<compound> *)`: an ancestor test, read as a test of one compound rather than a selector.
  *
  * Tailwind's whole `group-*` family compiles to this shape - `group-data-[size=sm]:w-6` becomes
- * `:is(:where(.group)[data-size="sm"] *)` - and it says nothing a second matching pass is needed
- * for. "Some ancestor matches this compound" is what `:host-context()` already means, and the
- * matcher already walks the tree to answer it.
+ * `:is(:where(.group)[data-size="sm"] *)`. "Some ancestor matches this compound" is what
+ * `:host-context()` already means, and the matcher already walks the tree to answer it.
  *
  * @returns the ancestor compound, or null if this is not that shape.
  */
@@ -1335,7 +1340,7 @@ const SIBLING = new Set(['next-sibling', 'later-sibling']);
  * Moving the sibling out in front keeps the rest of the selector true: a sibling has the same
  * parent and ancestors as the element, so whatever came before the element comes before it.
  * Only one argument is read this way, which is the only form Tailwind writes; a list of them is
- * left to be refused with the other combinators.
+ * a selector the engine matches from the element, as any other argument with a combinator is.
  *
  * @returns the compound's own parts, and the sibling test if there was one.
  */
@@ -1365,32 +1370,95 @@ function siblingArgument(argument) {
 }
 
 /**
- * The arguments of `:is()`, `:where()` or `:not()`, each of which must be a single compound.
- *
- * Any other combinator inside would need a second, independent matching pass rooted at this node,
- * which the matcher has no shape for; it is refused rather than half-implemented.
+ * The arguments of `:is()`, `:where()` or `:not()`: compounds, the ancestor, parent and scoped
+ * forms each read as a test of one compound, and any other selector as the engine's own, which
+ * it matches from the node leftwards as it does a rule: `complex`.
  */
 function functionalPseudo(part, context) {
   if (part.kind !== 'is' && part.kind !== 'where' && part.kind !== 'not') return null;
 
-  const found = { compounds: [], ancestors: [], parents: [] };
+  const found = {
+    compounds: [],
+    ancestors: [],
+    parents: [],
+    complex: /** @type {object[]} */ ([]),
+  };
   let top = { ids: 0, classes: 0, types: 0 };
 
   // `:not()` of a list matches none of it, so an argument that is a list with an ancestor test in
   // it is each of its alternatives, as it is at the top of a selector: see `alternatives`.
   const args = part.kind === 'not' ? part.selectors.flatMap(alternatives) : part.selectors;
   for (const argument of args) {
-    const { list, parts } = functionalArgument(part, argument, context);
-    const built = compound(parts, context);
-    const scope = parts.under && compound(parts.under, context);
-    found[list].push(under(built.compound, scope?.compound));
-    const whole = scope ? sum(built, scope) : built;
+    const { list, parts } = functionalArgument(part, argument);
+    let whole;
+    if (list === 'complex') {
+      whole = complexArgument(parts, context);
+      found.complex.push(whole.selector);
+    } else {
+      const built = compound(parts, context);
+      const scope = parts.under && compound(parts.under, context);
+      found[list].push(under(built.compound, scope?.compound));
+      whole = scope ? sum(built, scope) : built;
+    }
     // The single most specific argument wins, taken whole. Not the maximum of each component
     // independently: `:is(.a, #b)` is as specific as `#b`, not as `#b.a`.
     if (weight(whole) > weight(top)) top = whole;
   }
+  if (found.complex.length) aboveAsComplex(found);
 
   return { ...found, ids: top.ids, classes: top.classes, types: top.types };
+}
+
+/**
+ * An ancestor or parent test beside a selector in one list, as the selector it is, `.p *` or
+ * `.p > *`: either may match, where a test kept apart would be one the node must pass as well.
+ */
+function aboveAsComplex(found) {
+  for (const [list, combinator] of [
+    ['ancestors', 'descendant'],
+    ['parents', 'child'],
+  ]) {
+    for (const above of found[list]) {
+      found.complex.push({ compounds: [above, { classes: [] }], combinators: [combinator] });
+    }
+    found[list] = [];
+  }
+}
+
+/**
+ * A selector of compounds and combinators inside a pseudo-class, as the engine has one, and what
+ * its compounds weigh together.
+ */
+function complexArgument(argument, context) {
+  const compounds = [];
+  const combinators = [];
+  let total = { ids: 0, classes: 0, types: 0 };
+  let current = [];
+  const flush = () => {
+    const built = compound(current, context);
+    compounds.push(built.compound);
+    total = sum(total, built);
+    current = [];
+  };
+  for (const piece of argument) {
+    if (piece.type !== 'combinator') {
+      current.push(piece);
+      continue;
+    }
+    flush();
+    combinators.push(combinatorOf(piece, context));
+  }
+  flush();
+  return { selector: { compounds, combinators }, ...total };
+}
+
+/** A combinator the engine matches, or a refusal of one it has no meaning for. */
+function combinatorOf(piece, context) {
+  if (COMBINATORS.has(piece.value)) return piece.value;
+  throw new CssUnsupported(
+    `${context}: the '${piece.value}' combinator has no meaning here. Descendant, child and ` +
+      `the two sibling combinators are the ones a node's position can answer.`,
+  );
 }
 
 const weight = (built) => pack(built.ids, built.classes, built.types);
@@ -1410,9 +1478,9 @@ function under(tested, scope) {
 
 /**
  * One argument of `:is()`, `:where()` or `:not()`: the compound it tests, and which of the node,
- * its parent or an ancestor it tests it against.
+ * its parent or an ancestor it tests it against, or `complex` for any other selector.
  */
-function functionalArgument(part, argument, context) {
+function functionalArgument(part, argument) {
   const above = part.kind !== 'not';
   const ancestor = above && ancestorArgument(argument);
   if (ancestor) return { list: 'ancestors', parts: ancestor };
@@ -1421,11 +1489,7 @@ function functionalArgument(part, argument, context) {
   const scoped = above && underArgument(argument);
   if (scoped) return { list: 'compounds', parts: scoped };
   if (argument.some((piece) => piece.type === 'combinator')) {
-    throw new CssUnsupported(
-      `${context}: ':${part.kind}()' cannot contain a combinator, only a compound selector, ` +
-        `'<compound> *', which is an ancestor test, '<compound> > *', a parent test, or ` +
-        `'<compound> ~ *', a sibling test.`,
-    );
+    return { list: 'complex', parts: argument };
   }
   return { list: 'compounds', parts: argument };
 }
@@ -1434,99 +1498,81 @@ function functionalArgument(part, argument, context) {
 const RELATION = { null: false, descendant: false, child: true };
 
 /**
- * The arguments of `:has()`: each one compound, a descendant of the node or, after `>`, a child.
- *
- * A longer selector inside would be a second matching pass from every descendant, and a sibling
- * one (`:has(+ x)`, `:has(~ x)`) asks about what comes after the node, which nothing marks it for.
+ * The arguments of `:has()`: compounds all for a descendant, or all for a child after `>`, as a
+ * list of compounds, and otherwise each a selector from the node, `:has(+ .a)` or `:has(.a > .b)`,
+ * as `relative`: its first combinator joins the node to its first compound.
  */
 function hasTest(part, context) {
   const parsed = part.selectors.map((argument) => hasArgument(argument, context));
-  if (new Set(parsed.map((one) => one.child)).size > 1) {
-    throw new CssUnsupported(
-      `${context}: ':has()' takes descendants or children, not a list that mixes the two.`,
-    );
-  }
   // As specific as its most specific argument, taken whole, as `:is()` is.
   const top = parsed.reduce((a, b) => (weigh(b) > weigh(a) ? b : a));
-  const any = parsed.flatMap((one) => one.any);
-  const has = parsed[0].child ? { child: true, any } : { any };
+  const single = parsed.every((one) => one.selector.compounds.length === 1);
+  const leading = new Set(parsed.map((one) => one.leading));
+  let has;
+  if (single && leading.size === 1 && RELATION[parsed[0].leading] !== undefined) {
+    // Each argument's compound, or the compounds an `:is()` in it is split into: see `hasArgument`.
+    const any = parsed.flatMap((one) => one.any ?? [one.selector.compounds[0]]);
+    has = RELATION[parsed[0].leading] ? { child: true, any } : { any };
+  } else {
+    const relative = parsed.map(({ leading, selector }) => ({
+      compounds: selector.compounds,
+      combinators: [leading ?? 'descendant', ...selector.combinators],
+    }));
+    has = { any: [], relative };
+  }
   return { has, ids: top.ids, classes: top.classes, types: top.types };
 }
 
 const weigh = (built) => pack(built.ids, built.classes, built.types);
 
 /**
- * One argument of `:has()`: its compound, as the compounds it is the union of, and whether it is
- * looked for among children only.
+ * One argument of `:has()`: the combinator it starts with, if any, and the selector after it.
  *
- * An ancestor test among the alternatives of an `:is()` in it is split out as it is at the top
- * of a selector (see `alternatives`), each alternative an argument of its own:
- * `:has(.x:is(.p *, .y))` is `:has(.x:is(.p *), .x.y)`. Kept in one compound it asked for both.
- * The argument stays as specific as written, which is what `:is()` makes each alternative.
+ * An ancestor test among the alternatives of an `:is()` in an argument of one compound is split
+ * out as it is at the top of a selector (see `alternatives`), each alternative a compound of its
+ * own in `any`: `:has(.x:is(.p *, .y))` is `:has(.x:is(.p *), .x.y)`. Kept in one compound it
+ * asked for both. The argument stays as specific as written, which is what `:is()` makes each
+ * alternative.
  */
 function hasArgument(argument, context) {
   // `:has(> x)` is parsed as `:scope > x`, the node itself standing at the front.
   const scoped = argument[0]?.type === 'pseudo-class' && argument[0].kind === 'scope';
-  const leading = scoped && argument[1]?.type === 'combinator' ? argument[1].value : null;
-  const rest = leading ? argument.slice(2) : argument;
-  const child = RELATION[leading];
-  if (child === undefined || rest.some((piece) => piece.type === 'combinator')) {
-    throw new CssUnsupported(
-      `${context}: ':has()' takes one compound selector, for a descendant, or one after '>', ` +
-        `for a child. A longer selector or a sibling one inside it is not supported.`,
-    );
-  }
-  const built = compound(rest, context);
-  if (asksBeneath(built.compound)) {
+  const joined = scoped && argument[1]?.type === 'combinator' ? argument[1] : null;
+  const leading = joined ? combinatorOf(joined, context) : null;
+  const rest = joined ? argument.slice(2) : argument;
+  const built = complexArgument(rest, context);
+  if (built.selector.compounds.some(asksBeneath)) {
     throw new CssUnsupported(
       `${context}: ':has()' inside another ':has()' is not a valid selector, and a browser ` +
         `drops the rule.`,
     );
   }
-  const split = alternatives(rest);
-  const any =
-    split.length > 1 ? split.map((one) => compound(one, context).compound) : [built.compound];
-  return { ...built, any, child };
+  const split = built.selector.compounds.length === 1 ? alternatives(rest) : [rest];
+  const any = split.length > 1 ? split.map((one) => compound(one, context).compound) : undefined;
+  return { ...built, leading, any };
 }
 
 /** Whether a compound, or any compound nested in it, uses `:has()`. */
 function asksBeneath(compound) {
   if (compound.has !== undefined) return true;
-  const nested = [
-    ...(compound.not ?? []),
-    ...(compound.is ?? []).flat(),
-    ...(compound.ancestors ?? []),
-    ...(compound.parents ?? []),
-    ...(compound.hostContext ?? []),
-  ];
-  return nested.some(asksBeneath);
+  return nestedCompounds(compound).some(asksBeneath);
 }
 
-/**
- * `:has()` is read on the node a rule styles, and on a box that node is in: `.card:has(.x)
- * .title`, where the engine has the titles under a card matched again as what is in the card
- * changes. Not on a node beside the one styled, `.card:has(.x) + .title`, or beside a box it is
- * in: nothing under the card is the title then, and nothing restyles it.
- */
-function refuseHasAbove(compounds, combinators, context) {
-  const subject = compounds.at(-1);
-  // From the last sibling combinator back, a compound is beside the node or a box it is in.
-  const beside = combinators.findLastIndex(
-    (joined) => joined === 'next-sibling' || joined === 'later-sibling',
-  );
-  const above = compounds.slice(0, beside + 1).some(asksBeneath);
-  const within = [
-    ...(subject?.ancestors ?? []),
-    ...(subject?.parents ?? []),
-    ...(subject?.hostContext ?? []),
-  ].some(asksBeneath);
-  if (above || within) {
-    throw new CssUnsupported(
-      `${context}: ':has()' is supported on the node the rule styles and on a box it is in, ` +
-        `not on a sibling of either. Put a class on that node from the state it depends on.`,
-    );
-  }
-}
+/** The selectors of more than a compound in a compound's `:is()` and `:not()`. */
+const nestedSelectors = (compound) => [
+  ...(compound.isComplex ?? []).flat(),
+  ...(compound.notComplex ?? []),
+];
+
+/** The compounds nested in one, a `:has()`'s apart. */
+const nestedCompounds = (compound) => [
+  ...(compound.not ?? []),
+  ...(compound.is ?? []).flat(),
+  ...(compound.ancestors ?? []),
+  ...(compound.parents ?? []),
+  ...(compound.hostContext ?? []),
+  ...nestedSelectors(compound).flatMap((selector) => selector.compounds),
+];
 
 const isPlaceholder = (part) => part?.type === 'pseudo-element' && part.kind === 'placeholder';
 
@@ -1621,14 +1667,12 @@ function selector(written, context) {
   };
 
   const flush = () => {
-    const { own, sibling } = siblingTest(current);
+    // After a sibling combinator the two siblings could be in either order, which one selector
+    // cannot say: the test stays in the compound, for the engine to match from the node.
+    const { own, sibling } = SIBLING.has(combinators.at(-1))
+      ? { own: current, sibling: null }
+      : siblingTest(current);
     if (sibling) {
-      if (SIBLING.has(combinators.at(-1))) {
-        throw new CssUnsupported(
-          `${context}: a sibling test inside ':${sibling.kind}()' cannot follow a sibling ` +
-            `combinator: the two siblings could be in either order, which one selector cannot say.`,
-        );
-      }
       // `:is()` counts its argument, which is the sibling's compound; `:where()` counts nothing.
       add(compound(sibling.parts, context), sibling.kind === 'is');
       combinators.push(sibling.combinator);
@@ -1639,20 +1683,14 @@ function selector(written, context) {
 
   for (const part of parts) {
     if (part.type === 'combinator') {
-      if (!COMBINATORS.has(part.value)) {
-        throw new CssUnsupported(
-          `${context}: the '${part.value}' combinator has no meaning here. Descendant, child and ` +
-            `the two sibling combinators are the ones a node's position can answer.`,
-        );
-      }
+      const combinator = combinatorOf(part, context);
       flush();
-      combinators.push(part.value);
+      combinators.push(combinator);
     } else {
       current.push(part);
     }
   }
   flush();
-  refuseHasAbove(compounds, combinators, context);
 
   return {
     compounds,
@@ -3250,18 +3288,14 @@ function asksAboutSiblings(rule) {
 
 /**
  * Whether a compound, or any compound nested in it, asks about a child list: its place in its
- * parent's, or whether its own is empty. `:not(:last-child)` asks as much as `:last-child` does.
+ * parent's, or whether its own is empty, or an element before it, `:is(.a + .b)`.
+ * `:not(:last-child)` asks as much as `:last-child` does.
  */
 function asksAboutPosition(compound) {
   if (compound.nth !== undefined || compound.empty !== undefined) return true;
-  const nested = [
-    ...(compound.not ?? []),
-    ...(compound.is ?? []).flat(),
-    ...(compound.ancestors ?? []),
-    ...(compound.parents ?? []),
-    ...(compound.hostContext ?? []),
-  ];
-  return nested.some(asksAboutPosition);
+  const beside = (selector) => selector.combinators.some((one) => SIBLING.has(one));
+  if (nestedSelectors(compound).some(beside)) return true;
+  return nestedCompounds(compound).some(asksAboutPosition);
 }
 
 /**

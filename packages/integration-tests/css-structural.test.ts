@@ -119,8 +119,13 @@ describe('a sibling test inside :is(), the shape Tailwind writes peer-* as', () 
     assert.equal(compileCss('.x:is(.peer ~ *) { color: red }', 'test').structural, true);
   });
 
-  it('still refuses a sibling test after a sibling combinator, which would reorder the two', () => {
-    assert.throws(() => compileCss('.a ~ .x:is(.peer ~ *) { color: red }', 'test'), /combinator/);
+  it('keeps a sibling test after a sibling combinator in the compound, the two in either order', () => {
+    // Taken out, `.a ~ .peer ~ .x` would have the peer after `.a`: see css-nested-selector.
+    const rule = compileCss('.a ~ .x:is(.peer ~ *) { color: red }', 'test').rules[0];
+    assert.deepEqual(rule.combinators, ['later-sibling']);
+    assert.deepEqual(rule.compounds[1].isComplex, [
+      [{ compounds: [{ classes: ['peer'] }, { classes: [] }], combinators: ['later-sibling'] }],
+    ]);
   });
 });
 
@@ -437,16 +442,20 @@ describe('what a child list changing has styled again', () => {
     assert.equal(s.parent.styleDirty, true, 'and its first has come');
   });
 
-  it('has no rule to follow for a :has() on a box beside the one styled, which is refused', () => {
-    // `.box:has(> .active) + .spacer` would hang what follows a box on what the box holds. The
-    // compiler takes `:has()` on the element a rule styles and nowhere else, and says so, so a
-    // child list changing has nothing beside its parent to style again.
-    const refused: string[] = [];
-    const sheet = compileCss('.box:has(> .active) + .spacer { opacity: 0.5 }', 'app.css', {
-      onUnsupported: (message: string) => refused.push(message),
-    }) as { rules: unknown[] };
-    assert.deepEqual(sheet.rules, []);
-    assert.equal(refused.length, 1);
+  it('styles again what follows a box whose :has() a child list changing answers', () => {
+    // `.row:has(> .active) + .row` hangs what follows a row on what the row holds.
+    const s = list('.row:has(> .active) + .row { opacity: 0.5 }', 2);
+    const opacity = () => {
+      s.engine.commit();
+      return s.parent.childList.map((row) => row.styleCache?.style['opacity'] ?? null);
+    };
+    assert.deepEqual(opacity(), [null, null]);
+    const active = s.engine.createElement('view');
+    s.engine.setClasses(active, 'active');
+    s.engine.appendChild(s.rows[0]!, active);
+    assert.deepEqual(opacity(), [null, 0.5]);
+    s.engine.removeChild(s.rows[0]!, active);
+    assert.deepEqual(opacity(), [null, null]);
   });
 
   it('is every row for a host whose own sheet counts, given while it was out of the tree', () => {

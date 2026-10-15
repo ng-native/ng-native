@@ -15,11 +15,12 @@ parse fails the build.
 
 Type, class and id selectors. Attribute selectors: `[name]`, `[name="value"]`, `[name^="value"]`,
 `[name$="value"]`, `[name*="value"]`, `[name~="value"]` and `[name|="value"]`. `:is()`, `:where()`
-and `:not()` (each compound argument only - a combinator inside one of these is dropped). `:is()`
-and `:where()`, and not `:not()`, also take three forms Tailwind writes: `<compound> *`, the
-ancestor test its `group-*` variants compile to, `<compound> > *`, the parent test its `*:` variant
-compiles to, and `<compound> ~ *` or `<compound> + *`, the sibling test its `peer-*` variants
-compile to, which is read as the sibling combinator it means. `:host`
+and `:not()`, of compounds or of any selector, `:is(.a + .b)` and `:not(.list > *)` among them,
+each as specific as in a browser. `:is()` and `:where()` read three forms Tailwind writes as a test
+of one compound: `<compound> *`, the ancestor test its `group-*` variants compile to,
+`<compound> > *`, the parent test its `*:` variant compiles to, and `<compound> ~ *` or
+`<compound> + *`, the sibling test its `peer-*` variants compile to, which is read as the sibling
+combinator it means. `:host`
 and `:host(<compound>)`. `:host-context(<compound>)`. `:first-child`, `:last-child`, `:only-child`,
 `:nth-child()` and `:nth-last-child()` (the `of <selector>` form is not supported).
 `:first-of-type`, `:last-of-type`, `:only-of-type`, `:nth-of-type()` and `:nth-last-of-type()`,
@@ -69,21 +70,21 @@ pseudo-classes are unsupported too: a native control keeps that state in its com
 where no selector can see it. Bind an attribute from the same signal (`[attr.data-checked]`) and
 select on that.
 
-`:has()` styles a node by what is beneath it. Its argument is one compound selector, for a
-descendant (`.card:has(.action)`), or one after `>`, for a child (`.card:has(> img)`), and a list of
-either. It is read on the node the rule styles and on a box that node is in:
-`.card:has(.action) .title` styles the titles in a card that has an action, and
-`.field:has(.input:focus) > .label` a field's own label. On a node beside the one styled, or beside
-a box it is in, it is dropped with a warning (`.card:has(.action) + .title`), and so is a longer
-selector or a sibling one inside it (`:has(.a .b)`, `:has(+ .next)`), and a `:has()` inside
-another (`:has(.a:has(.b))`), which a browser drops as invalid. Tailwind's `has-[...]` and
-`has-data-[...]` variants are supported. `group-has-*` and `peer-has-*` are dropped with a warning:
-they ask it inside `:is()`, and of a sibling.
+`:has()` styles a node by what is beneath it, or after it. Its argument is any relative
+selector: a descendant (`.card:has(.action)`), a child (`.card:has(> img)`), a longer selector
+(`.card:has(.row > .badge)`), or what follows the node (`.label:has(+ .input)`,
+`.item:has(~ .panel .mark)`), and a list of any of these. It is read on the node the rule styles,
+on a box that node is in, and on one before either: `.card:has(.action) .title` styles the titles
+in a card that has an action, `.field:has(.input:focus) > .label` a field's own label, and
+`.card:has(.action) + .title` the title after such a card. A `:has()` inside another
+(`:has(.a:has(.b))`) is dropped with a warning, as a browser drops it as invalid. Tailwind's
+`has-[...]`, `has-data-[...]`, `group-has-*` and `peer-has-*` variants are supported.
 
 A sheet that uses `:has()` has the engine match a changed node's ancestors again on each change,
 and restyle one only where the rules it matches came out different. Where a rule asks it of a box
 the styled node is in, the nodes under that box that such a rule is for are matched again too,
-once for a commit. A sheet that does not use it costs nothing.
+once for a commit, and where it asks what follows a node, the elements before a change are
+matched again too. A sheet that does not use it costs nothing.
 
 ## Everything else CSS can paint
 

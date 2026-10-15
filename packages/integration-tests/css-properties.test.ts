@@ -694,7 +694,7 @@ describe('what it refuses, and how it says so', () => {
     // `group-hover:` beside `data-[state=on]:` of the same colour arrives as one rule, and
     // refusing the whole list silently took the variant that was fine with it.
     const dropped: string[] = [];
-    const sheet = compileCss('.a:hover, .b, .c:has(+ .d) { color: red }', 'list.css', {
+    const sheet = compileCss('.a:hover, .b, .c:checked { color: red }', 'list.css', {
       onUnsupported: (message: string) => dropped.push(message),
     });
     assert.deepEqual(
@@ -706,17 +706,17 @@ describe('what it refuses, and how it says so', () => {
     assert.equal((sheet.rules[0] as { order: number }).order, 1, 'ordered as it was in the list');
     assert.equal(dropped.length, 2);
     assert.match(dropped[0]!, /^list\.css:1: dropped a selector: ':hover'/);
-    assert.match(dropped[1]!, /^list\.css:1: dropped a selector: ':has\(\)'/);
+    assert.match(dropped[1]!, /^list\.css:1: dropped a selector: ':checked'/);
   });
 
   it('names the line of a dropped rule before saying it was dropped', () => {
     // `app.tailwind.css: dropped a rule: app.tailwind.css:430: ...`, the line in the middle.
     const dropped: string[] = [];
-    compileCss('.a { color: red }\n.b:has(+ .c) { color: blue }', 'app.tailwind.css', {
+    compileCss('.a { color: red }\n.b:checked { color: blue }', 'app.tailwind.css', {
       onUnsupported: (message: string) => dropped.push(message),
     });
     assert.equal(dropped.length, 1);
-    assert.match(dropped[0]!, /^app\.tailwind\.css:2: dropped a rule: ':has\(\)'/);
+    assert.match(dropped[0]!, /^app\.tailwind\.css:2: dropped a rule: ':checked'/);
     assert.equal(dropped[0]!.split('app.tailwind.css').length, 2, 'named once');
   });
 
@@ -899,16 +899,13 @@ describe('unsupported CSS, through the build', () => {
   it('drops a rule it cannot select with a warning, and keeps the others', () => {
     const { transformAngular } = require('@ng-native/metro/angular-transform.cjs');
     const { result, warnings } = warned(() =>
-      transformAngular(
-        component('  .a:has(+ .b) { color: blue }\n  .c { color: red }'),
-        '/tmp/r.ts',
-      ),
+      transformAngular(component('  .a:checked { color: blue }\n  .c { color: red }'), '/tmp/r.ts'),
     );
     const sheet = result.code.slice(result.code.indexOf('ɵnativeStyles'));
     assert.match(sheet, /rgb\(255, 0, 0\)/);
     assert.doesNotMatch(sheet, /rgb\(0, 0, 255\)/);
     assert.equal(warnings.length, 1);
-    assert.match(warnings[0]!, /\/tmp\/r\.ts:3 \(E\): dropped a rule: .*:has/);
+    assert.match(warnings[0]!, /\/tmp\/r\.ts:3 \(E\): dropped a rule: .*:checked/);
   });
 
   it('accepts a native-ignore-unsupported comment and warns the same way', () => {
