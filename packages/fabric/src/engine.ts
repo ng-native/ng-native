@@ -2531,9 +2531,16 @@ function reportHover(host: HostEngine): void {
   );
 }
 
-/** A bound value kept as a declaration the cascade settles: a `var()` or a relative length. */
+/** A bound value the cascade works out from tokens: a `var()`, a `color-mix()`, a relative colour. */
+const BOUND_TOKEN =
+  /^[ \t\n\r\f]*(?:var|color-mix)\(|^[ \t\n\r\f]*[a-z]+\([ \t\n\r\f]*from[ \t\n\r\f]/i;
+
+/**
+ * A bound value kept as a declaration the cascade settles: a `var()`, a colour made of tokens, or
+ * a relative length.
+ */
 function boundFrom(prop: string, text: string, on: string): DeferredDeclaration | null {
-  return /^\s*var\(/i.test(text)
+  return BOUND_TOKEN.test(text)
     ? boundDeclaration(prop, tokenFromValue(text), on)
     : boundRelativeLength(prop, text, on);
 }

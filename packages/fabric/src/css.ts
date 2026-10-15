@@ -4397,17 +4397,20 @@ function boundKind(prop: string): TokenKind {
  * the compiler writes for the same value in a rule. `token` is the value as a token, which is an
  * alias when it is a `var()`; null for any other.
  *
- * ponytail: the whole value has to be the `var()`. One inside a longer value, `calc()` included,
- * is what the compiler parses at build time and nothing here does; write the sum in a custom
- * property, `[style.--gap]`, and read that in the stylesheet.
+ * A colour made of tokens, `color-mix(in srgb, var(--brand), white 20%)`, is worked out from the
+ * tokens where it is used, as a fallback of the same shape is.
+ *
+ * ponytail: any other value has to be the whole `var()`. One inside a longer value, `calc()`
+ * included, is what the compiler parses at build time and nothing here does; write the sum in a
+ * custom property, `[style.--gap]`, and read that in the stylesheet.
  */
 export function boundDeclaration(
   prop: string,
   token: TokenValue | undefined,
   on?: string,
 ): DeferredDeclaration | null {
-  if (!token?.alias) return null;
   const kind = boundKind(prop);
+  if (!token?.alias) return derivedColour(prop, token, kind, on);
   const [reference, ...alternatives] = aliasesOf(token);
   for (; token?.alias; token = token.fallback);
   // `tokenForm`, so a fallback of `currentColor` is the colour of the element, as in a rule.
@@ -4473,6 +4476,17 @@ export function boundRelativeLength(
     ...(on === undefined ? {} : { on }),
     compute: { unit: 'em', factor: Number(unitless[1]), multiple: true },
   };
+}
+
+/** A bound colour made of tokens, worked out where it is used; null for any other value. */
+function derivedColour(
+  prop: string,
+  token: TokenValue | undefined,
+  kind: TokenKind,
+  on: string | undefined,
+): DeferredDeclaration | null {
+  if (!token || kind !== 'color' || !isDerived(token)) return null;
+  return { props: [prop], ...(on === undefined ? {} : { on }), kind, fallbackToken: token };
 }
 
 /** The names a `var()` tries in turn: its own, then each `var()` nested as its fallback. */
