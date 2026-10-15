@@ -29,7 +29,9 @@ export class Composer {
 the keyboard away, as tapping outside a field would: the `text-input` that has the focus is sent
 `blur`, which on iOS resigns it as first responder and on Android clears its focus and hides the
 keyboard. A view or a pressable that has the focus, from a hardware keyboard or a D-pad, holds no
-keyboard and is left as it is. Call it while that field is still on screen. Once its view has been removed there is nothing left
+keyboard and is left as it is. A `search-field` or an `@expo/ui` text field does not tell the
+engine it has the focus, so `dismiss()` does not put its keyboard away. Call it while that field is
+still on screen. Once its view has been removed there is nothing left
 to send `blur` to, and Android, unlike iOS, does not take the keyboard down with the field.
 
 ## When it changes
