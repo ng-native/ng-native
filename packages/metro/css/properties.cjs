@@ -673,6 +673,7 @@ function line(value, prefix, out, context, { style: withStyle = true } = {}) {
   const style = value.style === undefined ? undefined : keyword(value.style, context);
   const set = (part, to) => {
     for (const side of lineSides(prefix)) out[`${side}${part}`] = to;
+    if (prefix === 'border') out[`border${part}`] = to;
   };
   if (NO_LINE.has(style)) {
     set('Width', 0);
@@ -727,9 +728,25 @@ const drawnColor = (colour, width) =>
  * unsided `borderWidth` loses to a `borderTopWidth` from any weaker rule, because native reads the
  * per-side prop first whatever order the two arrived in, so `* { border-width: 0 }` beat every
  * `.card { border: 1px solid }` after it. The style stays one prop, since native has only one.
+ *
+ * The unsided width and colour are written as well, by the same rule (see `unsided`): Android
+ * strokes a rounded border, dashed or dotted, from those alone.
  */
 function lineSides(prefix) {
   return prefix === 'border' ? Object.values(SIDES).map((side) => `border${side}`) : [prefix];
+}
+
+/**
+ * A border's unsided width or colour, written beside the four sides when they agree. Android
+ * strokes a rounded border, the only way it draws one dashed or dotted, from `borderWidth` and
+ * `borderColor`, and only when every side equals them; given the sides alone it fills each in
+ * solid. It cannot lose to a weaker rule's side (see `lineSides`): the rule that writes it writes
+ * every side as well. Sides that differ draw as four pieces anyway, so nothing is written for them.
+ */
+function unsided(value, out, part) {
+  if (Object.keys(SIDES).some((side) => value[side] === undefined)) return;
+  const [first, ...rest] = Object.values(SIDES).map((side) => out[`border${side}${part}`]);
+  if (rest.every((one) => one === first)) out[`border${part}`] = first;
 }
 
 /**
@@ -1531,6 +1548,7 @@ const TRANSLATORS = new Map([
       for (const [side, suffix] of Object.entries(SIDES)) {
         if (value[side] !== undefined) out[`border${suffix}Width`] = length(value[side], property);
       }
+      unsided(value, out, 'Width');
     },
   ],
   [
@@ -1541,6 +1559,7 @@ const TRANSLATORS = new Map([
           out[`border${suffix}Color`] = paintColour(value[side], property);
         }
       }
+      unsided(value, out, 'Color');
     },
   ],
   [

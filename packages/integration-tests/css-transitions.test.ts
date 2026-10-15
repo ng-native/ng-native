@@ -272,6 +272,7 @@ describe('compiling a transition', () => {
     ]);
     assert.deepEqual(keys('transition: border-color 1s;'), [
       'borderBottomColor',
+      'borderColor',
       'borderLeftColor',
       'borderRightColor',
       'borderTopColor',
