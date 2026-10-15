@@ -1384,9 +1384,12 @@ function stretchesAcross(props: Record<string, unknown>, row: boolean): boolean 
   if (!STRETCHES.has(props['alignSelf'] as string)) return false;
   const size = row ? 'height' : 'width';
   if (isSet(props[size]) && props[size] !== 'auto') return false;
-  return (row ? MARGINS_ACROSS_ROW : MARGINS_ACROSS_COLUMN).every(
-    (keys) => keys.map((key) => props[key]).find(isSet) !== 'auto',
-  );
+  const sides = row
+    ? MARGINS_ACROSS_ROW
+    : props['direction'] === 'rtl'
+      ? MARGINS_ACROSS_COLUMN_RTL
+      : MARGINS_ACROSS_COLUMN;
+  return sides.every((keys) => keys.map((key) => props[key]).find(isSet) !== 'auto');
 }
 
 /** The margins across a line, a side each, as Yoga reads them: the first set wins. */
@@ -1397,6 +1400,11 @@ const MARGINS_ACROSS_ROW = [
 const MARGINS_ACROSS_COLUMN = [
   ['marginStart', 'marginLeft', 'marginHorizontal', 'margin'],
   ['marginEnd', 'marginRight', 'marginHorizontal', 'margin'],
+];
+/** Right to left, where the start is the right side. */
+const MARGINS_ACROSS_COLUMN_RTL = [
+  ['marginEnd', 'marginLeft', 'marginHorizontal', 'margin'],
+  ['marginStart', 'marginRight', 'marginHorizontal', 'margin'],
 ];
 
 /** In a row, the height a ratio gives a width in points, as the item's least height. */

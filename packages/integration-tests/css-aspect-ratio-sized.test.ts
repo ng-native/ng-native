@@ -124,6 +124,13 @@ describe('aspect-ratio on a flex item that stretches across its line', () => {
     const s = laidOut(RATIO, ['p', ['r h']]);
     s.engine.setProp(s.nodes.get('r h')!, 'style', { marginHorizontal: 'auto' });
     assert.deepEqual(s.size('r h'), [200, 100]);
+    // Right to left, the start side is the right: a start margin leaves the left one auto.
+    s.engine.setProp(s.nodes.get('r h')!, 'style', {
+      direction: 'rtl',
+      marginStart: 5,
+      marginLeft: 'auto',
+    });
+    assert.deepEqual(s.size('r h'), [200, 100]);
   });
 
   it('follows the box it is in turning from a column to a row', () => {
