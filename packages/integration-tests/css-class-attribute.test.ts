@@ -102,3 +102,30 @@ describe('a selector reading the class attribute', () => {
     assert.equal(s.opacity('node'), 0.5);
   });
 });
+
+describe('the spaces between classes', () => {
+  it('are the spaces HTML names, so a no-break space or a vertical tab is part of a class', () => {
+    const s = scene('.a { opacity: 0.5 } .b { opacity: 0.25 }');
+    s.add('a b', 'no-break');
+    s.add('a\u000bb', 'vertical-tab');
+    assert.equal(s.opacity('no-break') ?? 1, 1);
+    assert.equal(s.opacity('vertical-tab') ?? 1, 1);
+  });
+
+  it('split at a tab, a line feed, a form feed and a carriage return', () => {
+    const s = scene('.b { opacity: 0.5 }');
+    for (const space of ['\t', '\n', '\f', '\r'])
+      s.add(`a${space}b`, `split-${space.charCodeAt(0)}`);
+    for (const space of ['\t', '\n', '\f', '\r']) {
+      assert.equal(s.opacity(`split-${space.charCodeAt(0)}`), 0.5);
+    }
+  });
+
+  it('are the same spaces for one whole word with ~=', () => {
+    const s = scene('[class~="a"] { opacity: 0.5 }');
+    s.add('a b', 'no-break');
+    s.add('a\tb', 'tab');
+    assert.equal(s.opacity('no-break') ?? 1, 1);
+    assert.equal(s.opacity('tab'), 0.5);
+  });
+});

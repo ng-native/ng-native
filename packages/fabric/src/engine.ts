@@ -3464,7 +3464,8 @@ export class Engine implements HostEngine {
    * another order are a change too, to a selector that reads the class attribute, `[class^="a"]`.
    */
   setClasses(node: EngineNode, value: string): void {
-    const names = value.split(/\s+/).filter(Boolean);
+    // By HTML's spaces: a vertical tab or a no-break space is part of a class's name.
+    const names = value.split(/[\t\n\f\r ]+/).filter(Boolean);
     const before = node.classes;
     node.classes = names.length ? new Set(names) : null;
     // Each class that came or went: one in both changes nothing.
