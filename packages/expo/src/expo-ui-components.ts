@@ -1709,12 +1709,16 @@ export class UiBottomSheet {
   /** The sheet's colour: the input's, or else the element's from CSS. */
   protected readonly color = computed(() => this.backgroundColor() || this.painted() || undefined);
 
-  /** The sheet's own background, a colour converted as any colour is, where one is given. */
+  /**
+   * The sheet's own background, a colour converted as any colour is, where one is given. As a
+   * shape style for `@expo/ui` 57.0.17 and later, and as the plain colour the versions before it
+   * read, Expo Go's among them. Each ignores the other's field.
+   */
   private readonly background = computed<readonly UiModifier[]>(() => {
-    const color = this.color();
-    if (color === undefined) return [];
-    const style = { type: 'color', color: this.engine?.color(color) ?? color };
-    return [{ $type: 'presentationBackground', style }];
+    const given = this.color();
+    if (given === undefined) return [];
+    const color = this.engine?.color(given) ?? given;
+    return [{ $type: 'presentationBackground', style: { type: 'color', color }, color }];
   });
 
   /**

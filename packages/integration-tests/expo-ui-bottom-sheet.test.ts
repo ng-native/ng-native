@@ -477,6 +477,8 @@ describe('a bottom sheet on iOS, which SwiftUI presents by a prop', () => {
     assert.deepEqual(modifiersOf(group!)['presentationBackground'], {
       $type: 'presentationBackground',
       style: { type: 'color', color: 'processed #1c1c1e' },
+      // The shape `@expo/ui` before 57.0.17 reads, Expo Go's among them.
+      color: 'processed #1c1c1e',
     });
     assert.equal(
       'containerColor' in named(/ExpoUI_BottomSheetView$/)!.props,
@@ -839,6 +841,7 @@ describe('a bottom sheet coloured by CSS, a background-color on the element', ()
     assert.deepEqual(background(), {
       $type: 'presentationBackground',
       style: { type: 'color', color: 'processed rgb(255, 255, 255)' },
+      color: 'processed rgb(255, 255, 255)',
     });
 
     scheme(app)('dark');
