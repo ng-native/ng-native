@@ -6001,6 +6001,11 @@ export class Engine implements HostEngine {
     if (HOIST_TARGETS.has(node.tag)) return this.reconcileHoistTarget(node, context);
     const handles: FabricNode[] = [];
     for (const child of node.children) {
+      const clean = this.cleanUnder(node, child, context);
+      if (clean) {
+        handles.push(clean);
+        continue;
+      }
       if (child.kind === 'anchor' || this.committedElsewhere(child) || this.withheld(child)) {
         continue;
       }
@@ -6146,11 +6151,10 @@ export class Engine implements HostEngine {
     // which RNS keeps clear by never letting the header config be the first.
     const direct: EngineNode[] = [];
     for (const child of node.children) {
-      if (child.kind === 'anchor' || this.committedElsewhere(child) || this.withheld(child)) {
-        continue;
-      }
-      if (this.hoisted.has(child)) direct.push(child);
-      else handles.push(this.reconcileUnder(node, child, context));
+      const taken = this.takenByTarget(node, child, context);
+      if (taken === null) continue;
+      if (taken === 'direct') direct.push(child);
+      else handles.push(taken);
       const moved = hoisted?.get(child);
       for (const written of moved ?? []) {
         if (!this.undisplayedUnder(node, written)) handles.push(this.land(node, written, landed));
@@ -6278,6 +6282,39 @@ export class Engine implements HostEngine {
       }
       handles.push(kept.committed.handle);
     }
+  }
+
+  /**
+   * What a hoist target takes of a child written in it: the child's handle, `direct` for one
+   * hoisted into it, which goes after its siblings, or null for none.
+   */
+  private takenByTarget(
+    node: EngineNode,
+    child: EngineNode,
+    context: object | undefined,
+  ): FabricNode | 'direct' | null {
+    if (this.hoisted.has(child)) {
+      if (this.committedElsewhere(child) || this.withheld(child)) return null;
+      return 'direct';
+    }
+    const clean = this.cleanUnder(node, child, context);
+    if (clean) return clean;
+    if (child.kind === 'anchor' || this.withheld(child)) return null;
+    return this.reconcileUnder(node, child, context);
+  }
+
+  /**
+   * A clean element's handle under `parent`, before anything else is asked of it: one committed
+   * there and unchanged since was displayed and in its place, and is still. The siblings of what
+   * changed are most of what a commit steps over: a list one row of which ticks.
+   */
+  private cleanUnder(
+    parent: EngineNode,
+    child: EngineNode,
+    context: object | undefined,
+  ): FabricNode | null {
+    if (child.kind !== 'element' || child.committedUnder !== parent) return null;
+    return this.stillCommitted(child, context);
   }
 
   /** A clean child's committed handle, when its style still holds under its parent's. */

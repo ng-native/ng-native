@@ -6,6 +6,7 @@
 import assert from 'node:assert/strict';
 import { before, beforeEach, describe, it } from 'node:test';
 import type { Type } from '@angular/core';
+import { Engine } from '@ng-native/fabric';
 import { mount, type MountResult } from '@ng-native/platform';
 import { createFakeFabric, type FakeFabric, type FakeFabricNode } from '@ng-native/testing';
 import { compileFixture } from './compile.ts';
@@ -140,5 +141,37 @@ describe('incremental commit', () => {
 
     assert.equal(fabric.calls.completeRoot, 0, 'a clean tick does not commit');
     assert.equal(fabric.calls.createNode, 0);
+  });
+});
+
+describe('incremental commit, of one child among many', () => {
+  it('asks nothing of the siblings that did not change, past that they did not', () => {
+    const fabric = createFakeFabric();
+    const engine = new Engine(fabric, 1);
+    const box = engine.createElement('view');
+    engine.appendChild(engine.root, box);
+    const children = Array.from({ length: 50 }, () => {
+      const child = engine.createElement('view');
+      engine.appendChild(box, child);
+      return child;
+    });
+    engine.commit();
+    // Each one resolved is one whose style was asked for again: the one that changed, and those
+    // it is in.
+    const styles = (engine as unknown as { styles: { resolve: (...all: unknown[]) => unknown } })
+      .styles;
+    const { resolve } = styles;
+    let asked = 0;
+    styles.resolve = (...all) => (asked++, resolve.apply(styles, all));
+    try {
+      engine.setProp(children[20]!, 'nativeID', 'changed');
+      engine.commit();
+    } finally {
+      styles.resolve = resolve;
+    }
+    assert.ok(asked < 10, `${asked} resolved`);
+    const [committedBox] = fabric.committed;
+    assert.equal(committedBox!.children.length, 50);
+    assert.equal(committedBox!.children[20]!.props['nativeID'], 'changed');
   });
 });
