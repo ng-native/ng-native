@@ -1,7 +1,7 @@
 {
   "bootstrap": {
-    "rules": 2531,
-    "dropped": 677,
+    "rules": 2529,
+    "dropped": 679,
     "emitted": [
       "$animation",
       "$animationDelay",
@@ -107,30 +107,26 @@
       "zIndex"
     ],
     "drops": {
-      "(alternative)": {
-        "':is()' cannot contain a combinator, only a compound selector, '<compound> *', which is an ancestor test, '<compound> > *', a parent test, or '<compound> ~ *', a sibling test.": 2
-      },
       "(rule)": {
         "':-moz-focusring' is not supported. Nothing on native answers it; bind a class or an attribute from the state it stands for, and select on that.": 1,
         "':autofill' is not supported. Nothing on native answers it; bind a class or an attribute from the state it stands for, and select on that.": 1,
-        "':checked' has no state on native to read: whether a control is checked is an input of its component, not a prop a selector can see. Bind an attribute from the same signal, such as [attr.data-checked], and select on that.": 5,
+        "':checked' has no state on native to read: whether a control is checked is an input of its component, not a prop a selector can see. Bind an attribute from the same signal, such as [attr.data-checked], and select on that.": 6,
         "':focus-visible' is not supported. Native has no hover or focus cascade: use ':active' or ':focus', which the engine tracks, or a bound attribute such as [attr.data-hover].": 5,
-        "':hover' is not supported. Native has no hover or focus cascade: use ':active' or ':focus', which the engine tracks, or a bound attribute such as [attr.data-hover].": 11,
+        "':hover' is not supported. Native has no hover or focus cascade: use ':active' or ':focus', which the engine tracks, or a bound attribute such as [attr.data-hover].": 25,
         "':indeterminate' has no state on native to read: whether a control is checked is an input of its component, not a prop a selector can see. Bind an attribute from the same signal, such as [attr.data-checked], and select on that.": 1,
-        "pseudo-elements like ::before are never supported. They would mean synthesising nodes no template declares, which puts the style engine in the business of creating view hierarchy.": 63,
+        "pseudo-elements like ::before are never supported. They would mean synthesising nodes no template declares, which puts the style engine in the business of creating view hierarchy.": 60,
         "the 'print' media type has no meaning on a device": 1
       },
       "(selector)": {
-        "':any' is not supported. Nothing on native answers it; bind a class or an attribute from the state it stands for, and select on that.": 1,
-        "':checked' has no state on native to read: whether a control is checked is an input of its component, not a prop a selector can see. Bind an attribute from the same signal, such as [attr.data-checked], and select on that.": 7,
+        "':autofill' is not supported. Nothing on native answers it; bind a class or an attribute from the state it stands for, and select on that.": 2,
+        "':checked' has no state on native to read: whether a control is checked is an input of its component, not a prop a selector can see. Bind an attribute from the same signal, such as [attr.data-checked], and select on that.": 6,
         "':focus-visible' is not supported. Native has no hover or focus cascade: use ':active' or ':focus', which the engine tracks, or a bound attribute such as [attr.data-hover].": 5,
         "':focus-within' is not supported. Native has no hover or focus cascade: use ':active' or ':focus', which the engine tracks, or a bound attribute such as [attr.data-hover].": 8,
-        "':hover' is not supported. Native has no hover or focus cascade: use ':active' or ':focus', which the engine tracks, or a bound attribute such as [attr.data-hover].": 36,
+        "':hover' is not supported. Native has no hover or focus cascade: use ':active' or ':focus', which the engine tracks, or a bound attribute such as [attr.data-hover].": 22,
         "':invalid' is not supported. Nothing on native answers it; bind a class or an attribute from the state it stands for, and select on that.": 16,
-        "':is()' cannot contain a combinator, only a compound selector, '<compound> *', which is an ancestor test, '<compound> > *', a parent test, or '<compound> ~ *', a sibling test.": 1,
-        "':placeholder-shown' is not supported. Nothing on native answers it; bind a class or an attribute from the state it stands for, and select on that.": 6,
+        "':placeholder-shown' is not supported. Nothing on native answers it; bind a class or an attribute from the state it stands for, and select on that.": 4,
         "':valid' is not supported. Nothing on native answers it; bind a class or an attribute from the state it stands for, and select on that.": 16,
-        "pseudo-elements like ::before are never supported. They would mean synthesising nodes no template declares, which puts the style engine in the business of creating view hierarchy.": 50
+        "pseudo-elements like ::before are never supported. They would mean synthesising nodes no template declares, which puts the style engine in the business of creating view hierarchy.": 57
       },
       "--*": {
         "'--*' has a value native cannot express in any form": 15,
@@ -240,7 +236,7 @@
         "'line-break' has no React Native equivalent: no style prop of a native view does what it does.": 2
       },
       "list-style": {
-        "'list-style' has no React Native equivalent: no style prop of a native view does what it does.": 6
+        "'list-style' has no React Native equivalent: no style prop of a native view does what it does.": 7
       },
       "list-style-type": {
         "'list-style-type' has no React Native equivalent: no style prop of a native view does what it does.": 1
@@ -261,17 +257,14 @@
       "order": {
         "'order' has no React Native equivalent: no style prop of a native view does what it does. Yoga lays children out in the order they are written: change the order in the template.": 48
       },
-      "overflow": {
-        "overflow: native has one overflow for both axes, so 'hidden auto' cannot be applied": 1
-      },
       "overflow-anchor": {
         "'overflow-anchor' is not mapped yet. React Native may well support it; nothing here translates it. Check RN's style types, then add it to css/properties.cjs.": 1
       },
       "overflow-x": {
-        "'overflow-x': native has one overflow for both axes. Write 'overflow'.": 10
+        "'overflow-x': native has one overflow for both axes. Write 'overflow'.": 11
       },
       "overflow-y": {
-        "'overflow-y': native has one overflow for both axes. Write 'overflow'.": 24
+        "'overflow-y': native has one overflow for both axes. Write 'overflow'.": 25
       },
       "position": {
         "position: fixed is not supported. Yoga has no viewport to fix to and no scroll container to stick within. Use `position: absolute` inside the element you meant to pin to; for a header that should stay put, put it outside the scroll view rather than inside it.": 12,
@@ -329,7 +322,7 @@
     }
   },
   "bulma": {
-    "rules": 3280,
+    "rules": 3297,
     "dropped": 1819,
     "emitted": [
       "$animation",
@@ -437,23 +430,18 @@
       "zIndex"
     ],
     "drops": {
-      "(alternative)": {
-        "':placeholder-shown' is not supported. Nothing on native answers it; bind a class or an attribute from the state it stands for, and select on that.": 4
-      },
       "(rule)": {
-        "':-moz-placeholder-shown' is not supported. Nothing on native answers it; bind a class or an attribute from the state it stands for, and select on that.": 10,
-        "':-ms-placeholder-shown' is not supported. Nothing on native answers it; bind a class or an attribute from the state it stands for, and select on that.": 10,
         "':has()' takes one compound selector, for a descendant, or one after '>', for a child. A longer selector or a sibling one inside it is not supported.": 2,
-        "':hover' is not supported. Native has no hover or focus cascade: use ':active' or ':focus', which the engine tracks, or a bound attribute such as [attr.data-hover].": 9,
+        "':hover' is not supported. Native has no hover or focus cascade: use ':active' or ':focus', which the engine tracks, or a bound attribute such as [attr.data-hover].": 11,
         "':indeterminate' has no state on native to read: whether a control is checked is an input of its component, not a prop a selector can see. Bind an attribute from the same signal, such as [attr.data-checked], and select on that.": 4,
-        "':placeholder-shown' is not supported. Nothing on native answers it; bind a class or an attribute from the state it stands for, and select on that.": 2,
         "'@container' is not supported. Media queries, keyframes, font faces and cascade layers are the only at-rules with a runtime meaning here.": 10,
         "pseudo-elements like ::before are never supported. They would mean synthesising nodes no template declares, which puts the style engine in the business of creating view hierarchy.": 32
       },
       "(selector)": {
         "':focus-visible' is not supported. Native has no hover or focus cascade: use ':active' or ':focus', which the engine tracks, or a bound attribute such as [attr.data-hover].": 92,
         "':focus-within' is not supported. Native has no hover or focus cascade: use ':active' or ':focus', which the engine tracks, or a bound attribute such as [attr.data-hover].": 18,
-        "':hover' is not supported. Native has no hover or focus cascade: use ':active' or ':focus', which the engine tracks, or a bound attribute such as [attr.data-hover].": 124,
+        "':hover' is not supported. Native has no hover or focus cascade: use ':active' or ':focus', which the engine tracks, or a bound attribute such as [attr.data-hover].": 122,
+        "':placeholder-shown' is not supported. Nothing on native answers it; bind a class or an attribute from the state it stands for, and select on that.": 24,
         "pseudo-elements like ::before are never supported. They would mean synthesising nodes no template declares, which puts the style engine in the business of creating view hierarchy.": 16
       },
       "--*": {
@@ -540,8 +528,11 @@
       "color": {
         "'color' mixes var() with other values, which needs a parser on device. calc() of tokens, numbers and points, max(var(--x), <length>), colours and transforms are understood; anything else has to be worked out at build time.": 637
       },
-      "container": {
-        "'container' is not mapped yet. React Native may well support it; nothing here translates it. Check RN's style types, then add it to css/properties.cjs.": 1
+      "container-name": {
+        "'container-name' is not mapped yet. React Native may well support it; nothing here translates it. Check RN's style types, then add it to css/properties.cjs.": 1
+      },
+      "container-type": {
+        "'container-type' is not mapped yet. React Native may well support it; nothing here translates it. Check RN's style types, then add it to css/properties.cjs.": 1
       },
       "content": {
         "'content' has no React Native equivalent: no style prop of a native view does what it does.": 1
@@ -601,16 +592,12 @@
       "order": {
         "'order' has no React Native equivalent: no style prop of a native view does what it does. Yoga lays children out in the order they are written: change the order in the template.": 10
       },
-      "overflow": {
-        "overflow: native has one overflow for both axes, so 'auto hidden' cannot be applied": 3,
-        "overflow: native has one overflow for both axes, so 'hidden visible' cannot be applied": 1
-      },
       "overflow-x": {
-        "'overflow-x': native has one overflow for both axes. Write 'overflow'.": 8,
+        "'overflow-x': native has one overflow for both axes. Write 'overflow'.": 10,
         "var() cannot be used in the 'overflow-x' shorthand, because which native property the value lands in depends on the value, and there is no CSS parser on device. Use the longhand.": 1
       },
       "overflow-y": {
-        "'overflow-y': native has one overflow for both axes. Write 'overflow'.": 5,
+        "'overflow-y': native has one overflow for both axes. Write 'overflow'.": 8,
         "var() cannot be used in the 'overflow-y' shorthand, because which native property the value lands in depends on the value, and there is no CSS parser on device. Use the longhand.": 1
       },
       "padding-left": {

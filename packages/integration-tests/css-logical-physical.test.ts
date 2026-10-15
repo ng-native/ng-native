@@ -213,3 +213,90 @@ describe('a logical edge and a physical one', () => {
     assert.equal(props['marginRight'], 10);
   });
 });
+
+/**
+ * A sheet with nesting in it is printed again by lightningcss before it is compiled, to lower the
+ * nesting, and its printer folds an equal start and end into the shorthand: `padding-inline: 4px`,
+ * which is left and right. A sheet whose only blocks inside blocks are `@media` rules has no
+ * nesting to lower, and compiles as it would without them.
+ */
+describe('a sheet with an @media rule in it', () => {
+  const rules = (css: string) => compileCss(css, 'app.css').rules;
+  const ruleOf = (css: string, name = 'a') =>
+    rules(css).find((rule) => rule.compounds.at(-1)?.classes?.includes(name));
+  const MEDIA = '@media (width > 1px) { .b { opacity: 1 } }';
+
+  const pairs: [string, string[]][] = [
+    ['padding-inline-start: 4px; padding-inline-end: 4px', ['paddingStart', 'paddingEnd']],
+    ['margin-inline-start: 4px; margin-inline-end: 4px', ['marginStart', 'marginEnd']],
+    ['inset-inline-start: 4px; inset-inline-end: 4px', ['start', 'end']],
+    [
+      'border-inline-start-width: 2px; border-inline-end-width: 2px',
+      ['borderStartWidth', 'borderEndWidth'],
+    ],
+    [
+      'border-inline-start-color: red; border-inline-end-color: red',
+      ['borderStartColor', 'borderEndColor'],
+    ],
+  ];
+  for (const [pair, logical] of pairs) {
+    it(`keeps an equal ${logical.join(' and ')} logical`, () => {
+      const rule = ruleOf(`.a { ${pair} } ${MEDIA}`)!;
+      assert.deepEqual(rule, ruleOf(`.a { ${pair} }`));
+      for (const key of logical) assert.equal(has(rule.declarations, key), true, key);
+      for (const key of Object.keys(rule.declarations)) {
+        assert.doesNotMatch(key, /Left|Right|^left$|^right$/);
+      }
+    });
+  }
+
+  // The order a logical and a physical side were written in is kept, as the later one wins.
+  const mixed = [
+    'padding: 2px; padding-inline-start: 6px',
+    'padding-inline: 2px; padding-inline-end: 6px',
+    'margin-right: 2px; margin-inline-start: 6px',
+    'inset-inline-start: 6px; left: 2px',
+    'border-width: 2px; border-inline-start-width: 6px',
+  ];
+  for (const css of mixed) {
+    it(`compiles ${css} as it would without it`, () => {
+      assert.deepEqual(ruleOf(`.a { ${css} } ${MEDIA}`), ruleOf(`.a { ${css} }`));
+    });
+  }
+
+  it('is still left and right for the shorthand', () => {
+    const rule = ruleOf(`.a { padding-inline: 4px } ${MEDIA}`)!;
+    assert.equal(rule.declarations['paddingLeft'], 4);
+    assert.equal(rule.declarations['paddingRight'], 4);
+  });
+
+  it('still lowers a rule nested in a rule, inside or outside an @media rule', () => {
+    const lowered = [
+      '@media (width > 1px) { .a { .b { opacity: 0.5 } } }',
+      '.a { .b { opacity: 0.5 } }',
+      '.a { /* } */ .b { opacity: 0.5 } }',
+      '.a[title="}"] { .b { opacity: 0.5 } }',
+      '.a\\} { .b { opacity: 0.5 } }',
+      '.a[title="\\"}"] { .b { opacity: 0.5 } }',
+      '.a { .b { opacity: 0.5 }',
+    ];
+    for (const css of lowered) {
+      const rule = ruleOf(css, 'b');
+      assert.equal(rule?.compounds.length, 2, css);
+      assert.equal(rule?.declarations['opacity'], 0.5, css);
+    }
+    const media = rules('.a { @media (width > 1px) { opacity: 0.5 } }');
+    assert.equal(media.length, 1);
+    assert.equal(media[0]!.declarations['opacity'], 0.5);
+  });
+
+  it('reads a stray brace, or a comment or string left open, as before', () => {
+    assert.equal(ruleOf('.a { opacity: 1 } /* x')?.declarations['opacity'], 1);
+    assert.equal(
+      ruleOf("@media (width > 1px) { .a[title='{'] { opacity: 0.5 } }")?.compounds.length,
+      1,
+    );
+    assert.throws(() => rules('.c { opacity: 1 } } .a { .b { opacity: 0.5 } }'), /empty selector/);
+    assert.throws(() => rules('.a[title="x] { .b { opacity: 0.5 } }'), /end of input/);
+  });
+});
