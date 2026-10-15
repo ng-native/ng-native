@@ -919,7 +919,7 @@ function matchesValue(
       return value.includes(expected);
     case 'includes':
       // `~=` matches one whole word of a list split at CSS's spaces, which a no-break space is not.
-      return value.split(/[\t\n\f\r ]+/).includes(expected);
+      return value.split(CSS_SPACE).includes(expected);
     case 'dash-match':
       // `|=` matches the value itself or the value followed by a hyphen, as `lang` uses.
       return value === expected || value.startsWith(`${expected}-`);
