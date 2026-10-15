@@ -505,6 +505,42 @@ describe('streaming', () => {
     assert.equal(textOf(named('ScrollView')[0]!), 'code\n~~~');
   });
 
+  it('draws a fence line too short to close the fence once a space follows it', async () => {
+    const { named } = await stream('\u0060\u0060\u0060\ncode\n\u0060\u0060 ');
+    assert.match(textOf(named('ScrollView')[0]!), /^code\n\u0060\u0060/);
+  });
+
+  it('converts only the last block again, however many blocks are kept before it', async () => {
+    const reads = new Map<string, number>();
+    const lex = Lexer.prototype.lex;
+    Lexer.prototype.lex = function (this: Lexer, source: string) {
+      const tokens = lex.call(this, source);
+      for (const token of tokens) {
+        if (token.type !== 'paragraph') continue;
+        const inline = token.tokens;
+        Object.defineProperty(token, 'tokens', {
+          get: () => {
+            reads.set(token.raw, (reads.get(token.raw) ?? 0) + 1);
+            return inline;
+          },
+        });
+      }
+      return tokens;
+    };
+    try {
+      const kept = Array.from({ length: 50 }, (_, i) => 'Kept ' + i + '\n\n').join('');
+      const { blocks, feed } = await stream(kept, 'Tail');
+      reads.clear();
+      await feed(' more');
+      assert.equal(blocks().length, 51);
+      assert.equal(textOf(blocks()[50]!), 'Tail more');
+      const settled = [...reads].filter(([raw]) => raw.startsWith('Kept'));
+      assert.deepEqual(settled, [], 'no kept paragraph is converted again');
+    } finally {
+      Lexer.prototype.lex = lex;
+    }
+  });
+
   it('holds back a closing fence half written inside a quote', async () => {
     const { named, feed } = await stream('> \u0060\u0060\u0060\n> code\n> \u0060\u0060');
     assert.equal(textOf(named('ScrollView')[0]!), 'code');

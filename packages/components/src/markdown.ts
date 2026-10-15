@@ -96,7 +96,8 @@ function imageSources(blocks: readonly MarkdownBlock[], into = new Set<string>()
  *
  * For a source that grows as it streams in, an answer arriving a few words at a time, set
  * `streaming` until it is complete. The blocks before the last one are then kept as they are and
- * only the last is lexed again. Syntax still open at its end, a code span, an emphasis, a link,
+ * only the last is lexed and converted again, unless a chunk defines or changes a link reference,
+ * which can change a block already kept, and the whole source is lexed again. Syntax still open at its end, a code span, an emphasis, a link,
  * an image or a table row, is held back until it closes. Of a code fence only an unfinished
  * opening line is held back, and its code then streams as it arrives. Clearing `streaming` draws
  * the whole source as written, and `tokens` are always drawn as given. A block that did not
@@ -245,7 +246,8 @@ export class Markdown {
   readonly tokens = input<readonly Token[]>();
   /**
    * Whether `source` is still arriving, a chunk at a time. While it is, only its last block is
-   * lexed again, and syntax still open at its end is held back. See the class note.
+   * lexed again, unless a link reference changes, and syntax still open at its end is held back.
+   * See the class note.
    */
   readonly streaming = input(false, { transform: booleanAttribute });
   /** A class for an element, in place of its default. See the class note. */
@@ -256,10 +258,25 @@ export class Markdown {
   private readonly stream = new MarkdownStream();
   protected readonly blockKey = blockKey;
 
+  /**
+   * The blocks each token the stream kept was drawn as. A kept token is the same object from one
+   * chunk to the next, so its blocks are not converted or compared again; a source lexed whole
+   * makes new tokens, and so new blocks.
+   */
+  private readonly streamed = new WeakMap<Token, readonly MarkdownBlock[]>();
+
   /** The document's blocks, with each one that did not change kept, so it is not drawn again. */
-  protected readonly blocks = linkedSignal<readonly Token[], readonly MarkdownBlock[]>({
-    source: () => this.tokens() ?? this.lex(this.source() ?? ''),
-    computation: (tokens, previous) => shareBlocks(previous?.value, markdownBlocks(tokens)),
+  protected readonly blocks = linkedSignal({
+    source: () => {
+      const tokens = this.tokens();
+      if (tokens) return { tokens, streamed: false };
+      const streamed = this.streaming();
+      return { tokens: this.lex(this.source() ?? '', streamed), streamed };
+    },
+    computation: ({ tokens, streamed }, previous?: { value: readonly MarkdownBlock[] }) =>
+      streamed
+        ? this.streamedBlocks(tokens, previous?.value)
+        : shareBlocks(previous?.value, markdownBlocks(tokens)),
   });
 
   private readonly classOf = computed(() => ({ ...DEFAULT_CLASSES, ...this.classes() }));
@@ -279,8 +296,34 @@ export class Markdown {
     },
   });
 
-  private lex(source: string): readonly Token[] {
-    return this.streaming() ? this.stream.lex(source) : lexer(source);
+  private lex(source: string, streaming: boolean): readonly Token[] {
+    return streaming ? this.stream.lex(source) : lexer(source);
+  }
+
+  /** `tokens`' blocks, converting and sharing only those of tokens the stream had not kept. */
+  private streamedBlocks(
+    tokens: readonly Token[],
+    previous: readonly MarkdownBlock[] | undefined,
+  ): readonly MarkdownBlock[] {
+    const kept: MarkdownBlock[] = [];
+    let at = 0;
+    for (; at < tokens.length; at++) {
+      const blocks = this.streamed.get(tokens[at]!);
+      if (!blocks) break;
+      kept.push(...blocks);
+    }
+    const rest = tokens.slice(at);
+    const converted = rest.map((token) => markdownBlocks([token]));
+    // The blocks drawn after the kept ones, when those are still the ones drawn first.
+    const drawn = !kept.length || previous?.[kept.length - 1] === kept.at(-1);
+    const was = drawn ? previous?.slice(kept.length) : undefined;
+    const shared = shareBlocks(was, converted.flat());
+    let from = 0;
+    rest.forEach((token, i) => {
+      const count = converted[i]!.length;
+      this.streamed.set(token, shared.slice(from, (from += count)));
+    });
+    return [...kept, ...shared];
   }
 
   protected classFor(element: MarkdownElement): string {

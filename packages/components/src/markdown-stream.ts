@@ -93,12 +93,13 @@ function heldFence(block: Token, tail: string): number | null {
   const lineStart = tail.lastIndexOf('\n') + 1;
   // An opening fence whose info string is still arriving.
   if (!block.raw.includes('\n')) return lineStart;
-  // A closing fence, or a line of the fence's own marker that may yet grow into one. The block's
-  // own last line, since in a quote or a list item the source line starts with their markers.
-  const closing = fence[1]![0] === '`' ? /^ {0,3}`+\s*$/ : /^ {0,3}~+\s*$/;
-  const last = block.raw.slice(block.raw.lastIndexOf('\n') + 1);
-  const open = !tail.endsWith('\n') && closing.test(last);
-  return open ? lineStart : null;
+  // A closing fence, or a line of the fence's own marker that may yet grow into one: a run too
+  // short to close it can grow only while nothing follows it. The block's own last line, since in
+  // a quote or a list item the source line starts with their markers.
+  const closing = fence[1]![0] === '`' ? /^ {0,3}(`+)(\s*)$/ : /^ {0,3}(~+)(\s*)$/;
+  const last = closing.exec(block.raw.slice(block.raw.lastIndexOf('\n') + 1));
+  const grows = last && (!last[2] || last[1]!.length >= fence[1]!.length);
+  return grows && !tail.endsWith('\n') ? lineStart : null;
 }
 
 /**
