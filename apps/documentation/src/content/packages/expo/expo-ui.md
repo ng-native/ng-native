@@ -446,6 +446,12 @@ whichever view it is inside.
   sheet opens as `fitToContents` alone says. None, or an empty list, is the sheet without them.
 - **`showDragIndicator`** - whether the grabber shows at the top of the sheet. It does unless this
   is false.
+- **`backgroundColor`** - the colour of the sheet behind its content: SwiftUI's
+  `presentationBackground` on iOS, where a sheet below its full height is otherwise drawn as glass,
+  and the container colour of Compose's sheet on Android. A `background-color` on the element from
+  CSS colours the sheet the same way, from a class, a stylesheet, a Tailwind utility or `[style]`,
+  and follows a token or a theme change. The input wins over CSS. With neither, the system draws
+  the sheet as it does by default.
 - **`dismissed`** - the sheet has finished closing, whether the user dismissed it or `open` was set
   false. It is emitted after the sheet has slid away, which is when another sheet or a dialog can
   be presented.

@@ -1544,6 +1544,7 @@ function windowWidth(): Signal<number | undefined> {
         <ui-bottom-sheet-view
           #sheet
           [showDragHandle]="showDragIndicator()"
+          [containerColor]="color()"
           [skipPartiallyExpanded]="fits()"
           (dismissRequest)="dismissRequested($event)"
         >
@@ -1616,6 +1617,13 @@ export class UiBottomSheet {
   readonly detents = input<readonly UiPresentationDetent[]>();
   /** Whether the grabber shows at the top of the sheet. */
   readonly showDragIndicator = input(true, { transform: booleanAttribute });
+  /**
+   * The colour of the sheet behind its content: SwiftUI's `presentationBackground` on iOS, where
+   * a sheet below its full height is otherwise drawn as glass, and Compose's `containerColor` on
+   * Android. Over a `background-color` the element has from CSS, which colours the sheet the same
+   * way. Neither is the sheet as the system draws it.
+   */
+  readonly backgroundColor = input<string>();
   /**
    * The sheet has finished closing, whether the user dismissed it or `open` was set false: the
    * moment another sheet or a dialog can be presented.
@@ -1692,7 +1700,22 @@ export class UiBottomSheet {
       $type: 'presentationDragIndicator',
       visibility: this.showDragIndicator() ? 'visible' : 'hidden',
     },
+    ...this.background(),
   ]);
+
+  /** The `background-color` the element has from CSS, which the sheet draws rather than it. */
+  private readonly painted = signal<unknown>(undefined);
+
+  /** The sheet's colour: the input's, or else the element's from CSS. */
+  protected readonly color = computed(() => this.backgroundColor() || this.painted() || undefined);
+
+  /** The sheet's own background, a colour converted as any colour is, where one is given. */
+  private readonly background = computed<readonly UiModifier[]>(() => {
+    const color = this.color();
+    if (color === undefined) return [];
+    const style = { type: 'color', color: this.engine?.color(color) ?? color };
+    return [{ $type: 'presentationBackground', style }];
+  });
 
   /**
    * The one view a view host holds. Sized to its content it needs a width of its own, the
@@ -1711,6 +1734,9 @@ export class UiBottomSheet {
     effect(() => {
       if (!this.open()) untracked(() => this.close());
     });
+    const host = inject<ElementRef<EngineNode>>(ElementRef).nativeElement;
+    const stop = this.engine?.takePaint?.(host, (color) => this.painted.set(color));
+    if (stop) inject(DestroyRef).onDestroy(stop);
     if (this.swiftUI && !this.toolbarInBuild) {
       const warned = effect(() => {
         if (!this.toolbarItems().length) return;

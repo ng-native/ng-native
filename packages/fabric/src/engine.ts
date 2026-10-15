@@ -568,6 +568,10 @@ export interface EngineNode extends HostNode {
   attributeOnly?: Set<string>;
   /** The child this node's background is painted on instead of itself. See `paintOn`. */
   paintsOn?: EngineNode;
+  /** What this node's background colour is handed to instead of painted. See `takePaint`. */
+  paintTaker?: (color: unknown) => void;
+  /** The background colour `paintTaker` was last handed, or is about to be. */
+  paintTaken?: unknown;
   /**
    * Style weaker than every sheet, where no rule and no inline style says otherwise. What lets the
    * root component's host fill the surface by default and still give way to its own `:host`. See
@@ -2370,6 +2374,9 @@ const EASED_COLOURS = new Set([
 ]);
 const NATIVELY_EASED = new Set(['opacity', 'transform', ...EASED_COLOURS]);
 
+/** What a node that hands its background colour over has handed so far: nothing. */
+const UNREPORTED = Symbol('unreported');
+
 /** The style keys that are a view's background. */
 const PAINT_KEYS = [
   'backgroundColor',
@@ -4008,6 +4015,33 @@ export class Engine implements HostEngine {
   }
 
   /**
+   * Hand a node's background colour to `listener` instead of painting it: what its stylesheets,
+   * tokens and inline style resolve `background-color` to, or undefined for none. Called after
+   * each commit that changes it, the first one included. What a component needs whose colour is
+   * drawn by a native view the node is not, from a prop of that view's, as a bottom sheet's is.
+   * The function returned stops it, and the node paints its own background again.
+   */
+  takePaint(node: EngineNode, listener: (color: unknown) => void): () => void {
+    node.paintTaker = listener;
+    node.paintTaken = UNREPORTED;
+    this.markProps(node, false);
+    return () => {
+      if (node.paintTaker !== listener) return;
+      node.paintTaker = undefined;
+      this.paintReports.delete(node);
+      this.markProps(node, false);
+    };
+  }
+
+  /** Nodes whose background colour is to be handed over once the commit running ends. */
+  private readonly paintReports = new Set<EngineNode>();
+
+  private reportPaint(): void {
+    for (const node of this.paintReports) node.paintTaker?.(node.paintTaken);
+    this.paintReports.clear();
+  }
+
+  /**
    * Keep a prop the node already has as an attribute: on the node for a selector such as
    * `:host([variant='primary'])` to match, and left out of what is committed to the native view.
    * It is committed again once the prop is next written. What the platform adapter does with a
@@ -4389,6 +4423,7 @@ export class Engine implements HostEngine {
     }
 
     this.flushTransitionEvents();
+    this.reportPaint();
     this.playSized();
     this.scrollDriver?.afterCommit();
     // Read first: the commit that settles keyframes starts by clearing it.
@@ -4774,11 +4809,19 @@ export class Engine implements HostEngine {
    * its parent's: the cascade's, and over it the parent's inline style.
    */
   private movePaint(node: EngineNode, merged: Record<string, unknown>): void {
-    if (node.paintsOn) for (const key of PAINT_KEYS) delete merged[key];
+    if (node.paintTaker) this.takenPaint(node, merged['backgroundColor']);
+    if (node.paintsOn || node.paintTaker) for (const key of PAINT_KEYS) delete merged[key];
     const from = node.parent?.paintsOn === node ? node.parent : null;
     if (!from) return;
     const paint = { ...this.styles.resolve(from, this.styleEpoch).style, ...inlineOf(from) };
     for (const key of PAINT_KEYS) if (paint[key] !== undefined) merged[key] = paint[key];
+  }
+
+  /** Note the background colour a node that hands it over resolves to, where it changed. */
+  private takenPaint(node: EngineNode, color: unknown): void {
+    if (color === node.paintTaken) return;
+    node.paintTaken = color;
+    this.paintReports.add(node);
   }
 
   /**
