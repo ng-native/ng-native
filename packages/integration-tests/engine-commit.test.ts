@@ -352,6 +352,26 @@ describe('what a commit sends', () => {
     assert.equal(fabric.committed[0]!.props['fill'] ?? null, null);
   });
 
+  it('sends no paint for none, on a shape created with it and on one changed to it', () => {
+    const fabric = createFakeFabric();
+    const engine = new Engine(fabric, 1, {
+      processColor: (value) => (value === 'red' ? 0xffff0000 : null),
+    });
+    const created = engine.createElement('path');
+    engine.setProp(created, 'style', { fill: 'none', stroke: 'none' });
+    engine.appendChild(engine.root, created);
+    const changed = engine.createElement('path');
+    engine.setProp(changed, 'style', { fill: 'red' });
+    engine.appendChild(engine.root, changed);
+    engine.commit();
+    engine.setProp(changed, 'style', { fill: 'none' });
+    engine.commit();
+    const [first, second] = fabric.committed;
+    assert.equal(first!.props['fill'], null);
+    assert.equal(first!.props['stroke'], null);
+    assert.equal(second!.props['fill'], null);
+  });
+
   it('sends no brush an icon made of a colour native reads nothing in', () => {
     // @ng-native/icons builds its solid brush before the engine sees it, with whatever
     // processColor answered: null for a colour it cannot read.

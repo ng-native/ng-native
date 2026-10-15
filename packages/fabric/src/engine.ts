@@ -7055,7 +7055,8 @@ export class Engine implements HostEngine {
 
   /** A colour prop as `processed` sends it: one dropped as unreadable is null on an update. */
   private colourProp(key: string, value: unknown, update: boolean): unknown {
-    return this.painted(key, value) ?? (update ? null : undefined);
+    const painted = this.painted(key, value);
+    return painted === undefined && update ? null : painted;
   }
 
   /**

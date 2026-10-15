@@ -194,7 +194,7 @@ export function createFakeFabric(): FakeFabric {
     instanceHandle: unknown,
   ): FakeFabricNode =>
     withHandle(
-      { handle: ++handle, reactTag, viewName, props: { ...props }, children: [] },
+      { handle: ++handle, reactTag, viewName, props: defined(props), children: [] },
       instanceHandle,
     );
 
