@@ -22,6 +22,7 @@ const CSS = `
   .turned { transform: rotate(90deg) }
   .across { transform: translateX(-50%) }
   .leaves { animation: out 200ms linear }
+  .shown { opacity: 1 }
 `;
 
 function scene(classes: string) {
@@ -72,6 +73,13 @@ describe('a view a native animation has let go', () => {
   it('has the style a keyframes animation rests at set on native when it ends', () => {
     // It fades out and does not fill: the view is drawn as it rests, not at its last frame.
     const s = scene('leaves');
+    s.finish(s.started()[0]!);
+    assert.deepEqual(s.set(), { opacity: 1 });
+  });
+
+  it('has the style it rests at set on native, where that is the frame it started at', () => {
+    // The resting opacity is the first frame, which the view was committed with as it played.
+    const s = scene('shown leaves');
     s.finish(s.started()[0]!);
     assert.deepEqual(s.set(), { opacity: 1 });
   });

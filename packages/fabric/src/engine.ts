@@ -1304,6 +1304,9 @@ function stillTouched(props: Record<string, unknown>): Record<string, unknown> {
   return props;
 }
 
+/** Every prop `setOwned` can set, as a payload that changes them all. */
+const RESET_OWNED: Readonly<Record<string, unknown>> = { opacity: undefined, transform: undefined };
+
 /** As Animated does: a view native sets values on is kept, or there is no view to set them on. */
 function keptForNative(node: EngineNode, props: Record<string, unknown>): void {
   if (node.owned && props['collapsable'] === undefined) props['collapsable'] = false;
@@ -5006,6 +5009,10 @@ export class Engine implements HostEngine {
     native.stop();
     this.advancePlayer(node, Math.max(this.now(), end));
     this.commit();
+    // The commit sets only what it changed, and the style the view rests at can be the frame it
+    // was committed with as it played: native has drawn it elsewhere since.
+    const committed = node.committed;
+    if (node.owned && committed) this.setOwned(node, RESET_OWNED, committed.props);
   }
 
   /** A graph of native's was connected to a view: see `Touched`. */
@@ -5024,7 +5031,7 @@ export class Engine implements HostEngine {
    */
   private setOwned(
     node: EngineNode,
-    payload: Record<string, unknown>,
+    payload: Readonly<Record<string, unknown>>,
     props: Record<string, unknown>,
   ): void {
     const owned = node.owned!;
