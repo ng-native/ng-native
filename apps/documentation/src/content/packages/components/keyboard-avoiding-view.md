@@ -86,7 +86,11 @@ transcript reversed: `computed(() => this.messages().toReversed())`.
 
 The lifted view sits inside one that clips, so what rises past its top is hidden rather than
 drawn over the screen above it. Without the library, and on Android, the dock sits in flow,
-padded by as much of the keyboard as covers it, which it learns as the keyboard starts to move.
+padded by as much of the keyboard as covers it. It learns that as the keyboard starts to move on
+iOS, and once the keyboard has arrived on Android, so there the bar jumps into place after the
+keyboard rather than moving with it. Android does not use the library even when it is installed:
+its view takes over the window's insets listener from react-native-screens, and a form sheet would
+stop rising with the keyboard.
 
 `covered()` is how much of the bottom of the screen the keyboard covers beyond the dock's own
 place, for content that keeps clear of it with padding or an inset rather than moving with it. It

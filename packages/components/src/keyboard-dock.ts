@@ -103,9 +103,12 @@ export class KeyboardGestureArea {
  * the keyboard, as Messages does, and a short one springs it back up. `keyboardLift` moves
  * content above with it.
  *
- * Without it, and on Android, the bar is padded by as much of the keyboard as covers it, which it
- * learns as the keyboard starts to move; a window the system resized for the keyboard already
- * puts it clear, and then it is not padded at all.
+ * Without it, and on Android, the bar is padded by as much of the keyboard as covers it: on iOS
+ * as the keyboard starts to move, and on Android once it has arrived, because Android reports
+ * nothing sooner. A window the system resized for the keyboard already puts it clear, and then it
+ * is not padded at all. Android does not use the controller: its view replaces the window's insets
+ * listener, which is react-native-screens' own, and a form sheet would stop rising with the
+ * keyboard.
  *
  * `covered()` is how much of the bottom of the screen the keyboard covers beyond the dock's own
  * place, for content above that keeps clear of it with padding or an inset rather than moving.

@@ -61,3 +61,7 @@ status bar's height and the bottom inset is the navigation bar's. The
 Android sends no `keyboardWill*` events, so [`Keyboard`](/packages/device/keyboard) listens to
 `keyboardDidShow` and `keyboardDidHide` there. `<keyboard-avoiding-view>` and the other views that
 follow the keyboard move once it has settled, not alongside it as they do on iOS.
+
+That includes `<keyboard-dock>`, with or without react-native-keyboard-controller: only on iOS,
+with that library, does the bar move with the keyboard frame by frame. See [A bar that rides the
+keyboard](/packages/components/keyboard-avoiding-view#a-bar-that-rides-the-keyboard).

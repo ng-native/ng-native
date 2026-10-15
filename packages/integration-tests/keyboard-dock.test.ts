@@ -213,4 +213,27 @@ describe('keyboard dock on Android', () => {
     });
     assert.equal(screen.getByTestId('dock').props['paddingBottom'], 0);
   });
+
+  it('stays in flow with react-native-keyboard-controller, which would take the window insets from a form sheet', async () => {
+    registerPlatformComponents('android');
+    const { fabric, keyboard, bottom, named } = await boot('DockedComposer', true);
+    await bottom(24);
+    assert.equal(
+      flatten(fabric.committed).some((node) => node.viewName === 'KeyboardControllerView'),
+      false,
+    );
+    assert.deepEqual(named('event'), []);
+    fabric.frames.set('dock', { x: 0, y: 820, width: 402, height: 54 });
+    await fireEvent(screen.getByTestId('dock'), 'layout', {
+      layout: { x: 0, y: 820, width: 402, height: 54 },
+    });
+    await keyboard({ height: 300, screenY: 574 });
+    assert.equal(screen.getByTestId('dock').props['paddingBottom'], 300);
+    await keyboard({ height: 0 });
+    assert.equal(
+      screen.getByTestId('dock').props['paddingBottom'],
+      24,
+      'and back once it has gone',
+    );
+  });
 });
