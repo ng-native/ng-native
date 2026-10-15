@@ -3357,9 +3357,9 @@ export class StyleResolver {
   }
 
   /**
-   * Set by the engine once a sheet uses `:has()`, styles a pressed element or asks about a place
-   * in a child list. Until then no cache keeps the rules it matched, so an app that never asks
-   * pays nothing for it.
+   * Set by the engine while a sheet in play uses `:has()` or styles a pressed element, and once
+   * one asks about a place in a child list. Otherwise no cache keeps the rules it matched, so an
+   * app that never asks pays nothing for it.
    */
   tracksHas = false;
 

@@ -3410,7 +3410,9 @@ export class Engine implements HostEngine {
 
   /** A sheet has left play, by a hot swap or by being removed: what it asked goes with it. */
   private unwatchActive(sheet: StyleSheet): void {
-    if (this.activeBySheet.delete(sheet)) this.countActive();
+    if (!this.activeBySheet.delete(sheet)) return;
+    this.countActive();
+    this.trackMatched();
   }
 
   private countActive(): void {
@@ -4386,6 +4388,16 @@ export class Engine implements HostEngine {
     if (!this.hasWatched.delete(sheet)) return;
     this.hasSheets = this.hasWatched.size > 0;
     this.hasBesideSheets = [...this.hasWatched.values()].some(Boolean);
+    this.trackMatched();
+  }
+
+  /**
+   * Have caches keep the rules each node matched while a sheet in play compares with them, and
+   * stop once none does. A sheet that asks about a place in a child list is never unset.
+   */
+  private trackMatched(): void {
+    const { own, elsewhere } = this.activeUse;
+    this.styles.tracksHas = this.hasSheets || this.structuralSheets || own || elsewhere.length > 0;
   }
 
   /**

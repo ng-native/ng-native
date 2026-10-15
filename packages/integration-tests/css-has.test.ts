@@ -338,6 +338,29 @@ describe(':has() on a box the styled node is in', () => {
     assert.equal(s.title.styleCache, before, 'nothing under the box was matched again');
   });
 
+  it('keeps no record of the rules a node matched once the last sheet that asked is gone', () => {
+    // The record is what a node matched again is compared with, which nothing needs after.
+    const s = titled('.unused { opacity: 1 }');
+    const restyled = () => {
+      s.engine.setClasses(s.title, s.title.classes!.has('x') ? 'title' : 'title x');
+      s.engine.commit();
+      return s.title.styleCache!.matched;
+    };
+    const first = compileCss(ABOVE, 'first.css', { onUnsupported: () => {} });
+    const second = compileCss(ABOVE, 'second.css', { onUnsupported: () => {} });
+    s.engine.addGlobalSheet(first);
+    s.engine.addGlobalSheet(second);
+    assert.ok(restyled(), 'kept while a sheet asks');
+    s.engine.removeGlobalSheet(first);
+    assert.ok(restyled(), 'kept while another still asks');
+    s.engine.removeGlobalSheet(second);
+    assert.equal(restyled(), undefined, 'not kept once none asks');
+    s.engine.addGlobalSheet(first);
+    assert.ok(restyled(), 'kept again for a sheet that asks again');
+    s.el('action', s.card);
+    assert.equal(s.opacity('title'), 0.5);
+  });
+
   it('styles again only what such a rule is for, of all that is in the box', () => {
     const s = titled();
     const other = s.el('other', s.body);
