@@ -57,12 +57,8 @@ function scene(
     const configs = new Map<unknown, Config>(
       rec.named('create').map(([, tag, config]) => [tag, config as Config]),
     );
-    const live = new Map<unknown, unknown>();
-    for (const [name, props, viewTag] of rec.calls) {
-      if (name === 'toView') live.set(viewTag, props);
-      if (name === 'fromView' && live.get(viewTag) === props) live.delete(viewTag);
-    }
-    const propsTag = live.get(engine.tagOf(view));
+    // The graph of an animation, and not one setting the view's values once it has ended.
+    const propsTag = rec.connected().get(engine.tagOf(view))?.find(rec.animates);
     if (propsTag === undefined) return null;
     const evaluate = (tag: unknown): number => {
       const config = configs.get(tag)!;
@@ -247,12 +243,15 @@ describe('a @keyframes animation of opacity and transforms', () => {
     const s = scene('.a { animation: fade 120ms linear }');
     const [animation] = s.started();
     assert.deepEqual(s.rec.named('set'), []);
+    const value = s.rec.named('start')[0]![2];
     s.finish(animation!.id);
     const names = s.rec.calls.map(([name]) => name);
-    const set = s.rec.named('set');
+    // Of the value the animation ran, and not what sets the style it rests at after.
+    const set = s.rec.named('set').filter(([, node]) => node === value);
     assert.equal(set.length, 1);
     assert.equal(set[0]![2], animation!.toValue, 'the end of what it was played to');
-    assert.ok(names.lastIndexOf('set') < names.indexOf('fromView'), 'while the view is its own');
+    const written = s.rec.calls.findIndex(([name, node]) => name === 'set' && node === value);
+    assert.ok(written < names.indexOf('fromView'), 'while the view is its own');
     assert.equal(s.at(0.5), null, 'and then let go');
   });
 

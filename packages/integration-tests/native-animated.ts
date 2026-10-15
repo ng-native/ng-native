@@ -65,11 +65,69 @@ export function recorder() {
       ]),
     );
   };
+  /** The props nodes connected to each view, by view tag, in the order they were connected. */
+  const connected = () => {
+    const live = new Map<unknown, unknown[]>();
+    for (const [name, props, view] of calls) {
+      if (name === 'toView') live.set(view, [...(live.get(view) ?? []), props]);
+      if (name === 'fromView') {
+        live.set(
+          view,
+          (live.get(view) ?? []).filter((each) => each !== props),
+        );
+      }
+    }
+    return live;
+  };
+  /** Whether a node has an interpolation up its graph: whether an animation drives it. */
+  const animates = (node: unknown): boolean => {
+    const configs = new Map(named('create').map(([, tag, config]) => [tag, config]));
+    const seen = new Set<unknown>();
+    const up = (at: unknown): boolean => {
+      if (seen.has(at)) return false;
+      seen.add(at);
+      if ((configs.get(at) as { type?: string } | undefined)?.type === 'interpolation') return true;
+      return named('connect').some(([, parent, child]) => child === at && up(parent));
+    };
+    return up(node);
+  };
+  /**
+   * What a graph that plays no animation sets on a view, each value node at the value it was
+   * last set to: a transform is its entries.
+   */
+  const painted = (viewTag: unknown): Record<string, unknown> => {
+    type Config = Record<string, unknown> & { type: string };
+    const configs = new Map<unknown, Config>(
+      named('create').map(([, tag, config]) => [tag, config as Config]),
+    );
+    const values = new Map<unknown, number>();
+    for (const [name, tag, value] of calls) {
+      if (name === 'create' && (value as Config).type === 'value') {
+        values.set(tag, (value as { value: number }).value);
+      }
+      if (name === 'set') values.set(tag, value as number);
+    }
+    const out: Record<string, unknown> = {};
+    for (const propsTag of connected().get(viewTag) ?? []) {
+      if (animates(propsTag)) continue;
+      const style = configs.get((configs.get(propsTag)!['props'] as { style: unknown }).style)!;
+      for (const [key, tag] of Object.entries(style['style'] as Record<string, unknown>)) {
+        const config = configs.get(tag)!;
+        if (config.type === 'value') {
+          out[key] = values.get(tag);
+          continue;
+        }
+        const entries = config['transforms'] as { property: string; nodeTag?: unknown }[];
+        out[key] = entries.map((entry) => ({ [entry.property]: values.get(entry.nodeTag) }));
+      }
+    }
+    return out;
+  };
   /** Native reaching the end of an animation it was started on, as it tells JavaScript. */
   const finish = (id: number) => {
     const end = ends.get(id);
     ends.delete(id);
     end?.({ finished: true });
   };
-  return { native, calls, named, drives, finish };
+  return { native, calls, named, drives, connected, animates, painted, finish };
 }

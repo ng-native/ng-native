@@ -213,6 +213,20 @@ function heldGroup(resting: unknown): TransformChannel[] | null {
   return channels;
 }
 
+/**
+ * A transform as native's transform node holds it, entry by entry, each move by a share as the
+ * points it is of the box `sizeOf` answers. Null for one native cannot take that way: a matrix,
+ * or a share of a box with no size yet.
+ */
+export function heldTransform(
+  value: unknown,
+  sizeOf: () => { width: number; height: number } | undefined,
+): { property: string; value: number }[] | null {
+  const size = sharesIn(value) ? sizeOf() : undefined;
+  const channels = heldGroup(size ? inPoints(value, size) : value);
+  return channels as { property: string; value: number }[] | null;
+}
+
 function restingAmount(resting: unknown, index: number, key: string, identity: number): number {
   const entry = Array.isArray(resting) ? (resting[index] as Record<string, unknown>) : undefined;
   return (entry && key in entry ? amount(key, entry[key]) : null) ?? identity;

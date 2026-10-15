@@ -64,6 +64,7 @@ import {
   type ScrollAxis,
   type ScrollDrive,
   type ScrollRange,
+  type SetValues,
   type StaticTransform,
 } from './native-drive.ts';
 import type { DrivenChannels } from './scroll-animation.ts';
@@ -76,6 +77,7 @@ import {
   clockChannels,
   colourChannels,
   firstFrame,
+  heldTransform,
   movesByShare,
   rangeOf,
   scrollChannels,
@@ -534,6 +536,11 @@ export interface EngineNode extends HostNode {
   playing?: RunningAnimation;
   /** An animation played by a scroll view's offset rather than the clock. See `scrollAnimated`. */
   scrolled?: ScrollAnimation;
+  /**
+   * The props a native animated graph has set on the view with this tag, which no commit
+   * changes again: see `Touched`. A view made again has another tag, and starts with none.
+   */
+  owned?: { readonly tag: number; readonly keys: Set<string> };
   /**
    * The last `transform` built from the individual transform properties, and what it was built
    * from. Reused while the parts are the same objects, so an unrelated change does not re-send it.
@@ -1295,6 +1302,11 @@ function stillTouched(props: Record<string, unknown>): Record<string, unknown> {
   const opacity = props['opacity'];
   if (typeof opacity === 'number' && opacity < TOUCHED_ALPHA) props['opacity'] = TOUCHED_ALPHA;
   return props;
+}
+
+/** As Animated does: a view native sets values on is kept, or there is no view to set them on. */
+function keptForNative(node: EngineNode, props: Record<string, unknown>): void {
+  if (node.owned && props['collapsable'] === undefined) props['collapsable'] = false;
 }
 
 /**
@@ -2426,6 +2438,7 @@ class RetainedNode {
   transitions?: Map<string, Transition>;
   playing?: RunningAnimation;
   scrolled?: ScrollAnimation;
+  owned?: { readonly tag: number; readonly keys: Set<string> };
 
   readonly kind: NodeKind;
   readonly tag: string;
@@ -2974,7 +2987,9 @@ export class Engine implements HostEngine {
     this.processColor = options.processColor ?? ((value) => value);
     this.resolveAssetSource = options.resolveAssetSource ?? ((value) => value);
     this.scrollDriver = options.nativeAnimated
-      ? new NativeScrollDriver(options.nativeAnimated)
+      ? new NativeScrollDriver(options.nativeAnimated, (view, tag, keys) =>
+          this.touchedNatively(view as EngineNode, tag, keys),
+        )
       : null;
     // Eagerly, not on the first listener. Fabric holds exactly one event handler and
     // `ReactFabric` installs React's at module scope, so until we claim it every native event
@@ -4466,6 +4481,7 @@ export class Engine implements HostEngine {
     this.heldFor(node, merged);
     this.movePaint(node, merged);
     if (node.raised !== undefined) merged['zIndex'] ??= node.raised;
+    keptForNative(node, merged);
     return merged;
   }
 
@@ -4977,8 +4993,9 @@ export class Engine implements HostEngine {
 
   /**
    * Native reached the end of an animation it was playing. The frame it ends at, or the resting
-   * style where it does not fill, is committed before the view is let go, so nothing shows of
-   * the frame it started at, which is what the view had been committed with.
+   * style where it does not fill, is committed, and set on native where the animation set the
+   * prop (see `setOwned`). The view is let go first, which puts nothing back on Fabric: it is
+   * drawn where the animation left it until then.
    */
   private endedNatively(node: EngineNode, running: RunningAnimation): void {
     if (node.playing !== running || !running.native) return;
@@ -4986,9 +5003,60 @@ export class Engine implements HostEngine {
     running.native = undefined;
     this.playedNatively.delete(node);
     const end = running.start + spec.duration * (spec.iterations ?? 1);
+    native.stop();
     this.advancePlayer(node, Math.max(this.now(), end));
     this.commit();
-    native.stop();
+  }
+
+  /** A graph of native's was connected to a view: see `Touched`. */
+  private touchedNatively(node: EngineNode, tag: number, keys: readonly string[]): void {
+    const taken = keys.filter((key) => key === 'opacity' || key === 'transform');
+    if (!taken.length) return;
+    if (node.owned?.tag !== tag) node.owned = { tag, keys: new Set() };
+    for (const key of taken) node.owned.keys.add(key);
+  }
+
+  /**
+   * Set on native a change of a prop a graph of native's has set on the view before, while no
+   * graph of its holds it: the commit cannot change it (see `Touched`). The payload is committed
+   * as well, so the shadow node is as the view is drawn. A transform native cannot take as
+   * numbers, a matrix, is left committed alone.
+   */
+  private setOwned(
+    node: EngineNode,
+    payload: Record<string, unknown>,
+    props: Record<string, unknown>,
+  ): void {
+    const owned = node.owned!;
+    const tag = node.committed?.tag;
+    if (tag === undefined || owned.tag !== tag || !this.scrollDriver) return;
+    const held = this.scrollDriver.held(node);
+    const free = (key: string) => key in payload && owned.keys.has(key) && !held.has(key);
+    const values: SetValues = {};
+    if (free('opacity')) {
+      const opacity = props['opacity'];
+      values.opacity = typeof opacity === 'number' ? opacity : 1;
+    }
+    if (free('transform')) {
+      const transform = heldTransform(props['transform'], () => this.boxSize(node));
+      if (transform) values.transform = transform;
+    }
+    if (values.opacity !== undefined || values.transform) {
+      this.scrollDriver.set(node, tag, values);
+    }
+  }
+
+  /** The size a view is laid out at, where it has been. */
+  private boxSize(node: EngineNode): { width: number; height: number } | undefined {
+    let size: { width: number; height: number } | undefined;
+    this.measure(node, (frame) => (size = frame));
+    return size;
+  }
+
+  /** Forget the props native set on a node's view, which is gone or made again. */
+  private disown(node: EngineNode): void {
+    node.owned = undefined;
+    this.scrollDriver?.forget(node);
   }
 
   /** Take an animation back from native, which stops it there. The caller plays it on, or not. */
@@ -6059,6 +6127,7 @@ export class Engine implements HostEngine {
   ): Record<string, unknown> | null {
     const payload = diffProps(previous, props);
     if (payload) borderColoursAgain(payload, props);
+    if (payload && node.owned) this.setOwned(node, payload, props);
     if (payload && this.fontsRefreshed && this.fontResends.delete(node)) {
       payload['fontFamily'] = props['fontFamily'];
     }
@@ -6321,6 +6390,8 @@ export class Engine implements HostEngine {
   private forgetCommitted(node: EngineNode): void {
     node.committed = null;
     node.committedUnder = null;
+    // Another view, with another tag, which no graph has set anything on.
+    if (node.owned) this.disown(node);
     node.styleCommitted = null;
     node.kept = undefined;
     // A scroll-driven animation is bound to native views by their tags: its own, and its scroll

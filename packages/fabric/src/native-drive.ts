@@ -102,14 +102,163 @@ interface Drive {
   stopped: boolean;
 }
 
+/**
+ * Told of each view a graph is connected to, with the props it sets there. Once a graph has set
+ * a view's `transform` or `opacity`, React Native lets no commit change it again: iOS skips both
+ * for good (`propKeysManagedByAnimated`), and Android puts the last value set back over each
+ * commit's (`overrideBySynchronousMountPropsAtMountingAndroid`), until the view is made again.
+ */
+export type Touched = (view: object, viewTag: number, keys: readonly string[]) => void;
+
+/**
+ * What a view is set to on native with no animation, where a graph has set it before: see
+ * `NativeScrollDriver.set`. A transform is each entry's amount: points, a factor, or an angle in
+ * radians.
+ */
+export interface SetValues {
+  opacity?: number;
+  transform?: readonly { readonly property: string; readonly value: number }[];
+}
+
+/** The graph that sets a view's values: a value node for each number, by its path. */
+interface Setter {
+  readonly tag: number;
+  readonly shape: string;
+  readonly props: number;
+  /** Every node made, the props node first, for dropping them. */
+  readonly nodes: readonly number[];
+  readonly leaves: ReadonlyMap<string, number>;
+}
+
+/** The style keys a graph's channels set. */
+function channelKeys(channels: DrivenChannels): string[] {
+  const keys = Object.keys(channels.colors ?? {});
+  if (channels.opacity) keys.push('opacity');
+  if (channels.transform.length) keys.push('transform');
+  return keys;
+}
+
+/** Every number a set of values holds, by its path in the graph. */
+function leavesOf(values: SetValues): Map<string, number> {
+  const leaves = new Map<string, number>();
+  if (values.opacity !== undefined) leaves.set('opacity', values.opacity);
+  values.transform?.forEach((entry, at) => leaves.set(`transform.${at}`, entry.value));
+  return leaves;
+}
+
+/** What makes two sets of values the same graph: which keys, and the transform's properties. */
+function shapeOf(values: SetValues): string {
+  const transform = values.transform?.map((entry) => entry.property).join(',');
+  return `${values.opacity === undefined ? '' : 'o'}|${transform ?? '-'}`;
+}
+
+const NONE_HELD: ReadonlySet<string> = new Set();
+
 export class NativeScrollDriver {
   private readonly native: NativeAnimated;
+  private readonly touched: Touched | undefined;
   /** One value per source view and feed, by the feed's key. */
   private readonly offsets = new Map<object, Map<string, Offset>>();
   private readonly pending = new Set<() => boolean>();
+  /** The keys each graph connected to a view sets, by its props node, while it is connected. */
+  private readonly live = new WeakMap<object, Map<number, readonly string[]>>();
+  /** The graph setting each view's values, where one does: see `set`. */
+  private readonly setters = new WeakMap<object, Setter>();
 
-  constructor(native: NativeAnimated) {
+  constructor(native: NativeAnimated, touched?: Touched) {
     this.native = native;
+    this.touched = touched;
+  }
+
+  /** The style keys a graph of this driver's playing or driving a view sets on it now. */
+  held(view: object): ReadonlySet<string> {
+    const graphs = this.live.get(view);
+    return graphs ? new Set([...graphs.values()].flat()) : NONE_HELD;
+  }
+
+  /**
+   * Set a view's values on native, where a graph that has let it go set them before and no commit
+   * can now (see `Touched`). One graph per view, connected until the view is let go or a graph
+   * that plays it is connected: a value node for each number, set where it changed.
+   */
+  set(view: object, viewTag: number, values: SetValues): void {
+    const { API } = this.native;
+    const shape = shapeOf(values);
+    let setter = this.setters.get(view);
+    const fresh = setter?.tag !== viewTag || setter.shape !== shape;
+    if (fresh) {
+      this.forget(view);
+      setter = this.buildSetter(viewTag, shape, values);
+      this.setters.set(view, setter);
+      this.touched?.(view, viewTag, Object.keys(values));
+    }
+    for (const [path, value] of leavesOf(values)) {
+      API.setAnimatedNodeValue(setter!.leaves.get(path)!, value);
+    }
+    this.flush();
+  }
+
+  /** Let go of a view `set` set values on: it is made again, or gone. */
+  forget(view: object): void {
+    const setter = this.setters.get(view);
+    if (!setter) return;
+    this.setters.delete(view);
+    const { API } = this.native;
+    API.disconnectAnimatedNodeFromView(setter.props, setter.tag);
+    for (const node of setter.nodes) API.dropAnimatedNode(node);
+    this.flush();
+  }
+
+  private buildSetter(viewTag: number, shape: string, values: SetValues): Setter {
+    const { API } = this.native;
+    const nodes: number[] = [];
+    const leaves = new Map<string, number>();
+    const made = (config: object): number => {
+      const node = this.native.generateNewNodeTag();
+      API.createAnimatedNode(node, config);
+      nodes.push(node);
+      return node;
+    };
+    const leaf = (path: string, value: number): number => {
+      const node = made({ type: 'value', value, offset: 0 });
+      leaves.set(path, node);
+      return node;
+    };
+    const style: Record<string, number> = {};
+    if (values.opacity !== undefined) style['opacity'] = leaf('opacity', values.opacity);
+    if (values.transform) {
+      const transforms = values.transform.map((entry, at) => ({
+        type: 'animated',
+        property: entry.property,
+        nodeTag: leaf(`transform.${at}`, entry.value),
+      }));
+      const transform = made({ type: 'transform', transforms });
+      for (const entry of transforms) API.connectAnimatedNodes(entry.nodeTag, transform);
+      style['transform'] = transform;
+    }
+    // A style node between, as `Animated` builds it: see `build`.
+    const styleNode = made({ type: 'style', style });
+    for (const node of Object.values(style)) API.connectAnimatedNodes(node, styleNode);
+    const props = made({ type: 'props', props: { style: styleNode } });
+    API.connectAnimatedNodes(styleNode, props);
+    API.connectAnimatedNodeToView(props, viewTag);
+    return { tag: viewTag, shape, props, nodes: nodes.reverse(), leaves };
+  }
+
+  /**
+   * Note a graph connected to a view, for `held`, and tell whoever asked of it. The graph that
+   * set the view's values lets go: the one that plays it sets them from here.
+   */
+  private hold(view: object, viewTag: number, props: number, keys: readonly string[]): void {
+    this.forget(view);
+    const graphs = this.live.get(view) ?? new Map<number, readonly string[]>();
+    this.live.set(view, graphs.set(props, keys));
+    this.touched?.(view, viewTag, keys);
+  }
+
+  private letGo(view: object, props: number): void {
+    const graphs = this.live.get(view);
+    if (graphs?.delete(props) && !graphs.size) this.live.delete(view);
   }
 
   /**
@@ -137,6 +286,7 @@ export class NativeScrollDriver {
       drive.viewTag = viewTag;
       const offset = this.offset(source, sourceTag, feed, key);
       drive.nodes = this.build(offset.value, viewTag, property, drive, statics);
+      this.hold(view, viewTag, drive.nodes.props, ['transform']);
       this.flush();
       return true;
     };
@@ -147,8 +297,10 @@ export class NativeScrollDriver {
         drive.range = next;
         if (!drive.nodes || drive.viewTag === null) return;
         this.tearDown(drive.nodes, drive.viewTag);
+        this.letGo(view, drive.nodes.props);
         const offset = this.offsets.get(source)!.get(key)!;
         drive.nodes = this.build(offset.value, drive.viewTag, property, drive, statics);
+        this.hold(view, drive.viewTag, drive.nodes.props, ['transform']);
         this.flush();
       },
       shift: (amount) => {
@@ -164,6 +316,7 @@ export class NativeScrollDriver {
         this.pending.delete(connect);
         if (!drive.nodes || drive.viewTag === null) return;
         this.tearDown(drive.nodes, drive.viewTag);
+        this.letGo(view, drive.nodes.props);
         this.release(source, key);
         this.flush();
       },
@@ -196,7 +349,7 @@ export class NativeScrollDriver {
       if (viewTag === null || sourceTag === null) return false;
       state.viewTag = viewTag;
       const offset = this.offset(source, sourceTag, feed, key);
-      state.nodes = this.buildChannels(offset.value, viewTag, state.channels);
+      state.nodes = this.buildChannels(view, offset.value, viewTag, state.channels);
       this.flush();
       return true;
     };
@@ -206,9 +359,9 @@ export class NativeScrollDriver {
         if (state.stopped) return;
         state.channels = next;
         if (!state.nodes || state.viewTag === null) return;
-        this.dropChannels(state.nodes, state.viewTag);
+        this.dropChannels(view, state.nodes, state.viewTag);
         const offset = this.offsets.get(source)!.get(key)!;
-        state.nodes = this.buildChannels(offset.value, state.viewTag, next);
+        state.nodes = this.buildChannels(view, offset.value, state.viewTag, next);
         this.flush();
       },
       stop: () => {
@@ -216,7 +369,7 @@ export class NativeScrollDriver {
         state.stopped = true;
         this.pending.delete(connect);
         if (!state.nodes || state.viewTag === null) return;
-        this.dropChannels(state.nodes, state.viewTag);
+        this.dropChannels(view, state.nodes, state.viewTag);
         this.release(source, key);
         this.flush();
       },
@@ -255,7 +408,7 @@ export class NativeScrollDriver {
       state.viewTag = viewTag;
       state.value = this.native.generateNewNodeTag();
       API.createAnimatedNode(state.value, { type: 'value', value: 0, offset: 0 });
-      state.nodes = this.buildChannels(state.value, viewTag, channels);
+      state.nodes = this.buildChannels(view, state.value, viewTag, channels);
       state.id = this.native.generateNewAnimationId!();
       const config = { type: 'frames', frames: [...timing.frames], toValue: timing.toValue };
       start(state.id, state.value, { ...config, iterations: timing.iterations }, (result) => {
@@ -280,7 +433,7 @@ export class NativeScrollDriver {
         this.pending.delete(connect);
         if (!state.nodes || state.viewTag === null) return;
         if (state.id) API.stopAnimation!(state.id);
-        this.dropChannels(state.nodes, state.viewTag);
+        this.dropChannels(view, state.nodes, state.viewTag);
         API.dropAnimatedNode(state.value);
         this.flush();
       },
@@ -288,7 +441,12 @@ export class NativeScrollDriver {
   }
 
   /** The nodes for a set of channels, connected to the view; the props node first. */
-  private buildChannels(value: number, viewTag: number, channels: DrivenChannels): number[] {
+  private buildChannels(
+    view: object,
+    value: number,
+    viewTag: number,
+    channels: DrivenChannels,
+  ): number[] {
     const { API } = this.native;
     const made: number[] = [];
     const interpolation = (range: ScrollRange): number => {
@@ -335,11 +493,13 @@ export class NativeScrollDriver {
     API.createAnimatedNode(props, { type: 'props', props: { style: styleTag } });
     API.connectAnimatedNodes(styleTag, props);
     API.connectAnimatedNodeToView(props, viewTag);
+    this.hold(view, viewTag, props, channelKeys(channels));
     return [props, styleTag, ...made.reverse()];
   }
 
-  private dropChannels(nodes: readonly number[], viewTag: number): void {
+  private dropChannels(view: object, nodes: readonly number[], viewTag: number): void {
     const { API } = this.native;
+    this.letGo(view, nodes[0]!);
     API.disconnectAnimatedNodeFromView(nodes[0]!, viewTag);
     for (const tag of nodes) API.dropAnimatedNode(tag);
   }
