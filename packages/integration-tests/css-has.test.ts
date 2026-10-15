@@ -133,6 +133,19 @@ describe(':has()', () => {
     assert.equal(parent.opacity('card') ?? null, null);
   });
 
+  it('matches any alternative of :where() with an ancestor test in it, as of :is()', () => {
+    const s = scene('.card:has(.x:where(.p *, .y)) { opacity: 0.5 }');
+    const x = s.el('x', s.card);
+    assert.equal(s.opacity('card'), undefined);
+    s.engine.addClass(x, 'y');
+    assert.equal(s.opacity('card'), 0.5);
+    s.engine.removeClass(x, 'y');
+    assert.equal(s.opacity('card') ?? null, null);
+    s.engine.addClass(s.card, 'p');
+    assert.equal(s.opacity('card'), 0.5);
+    assert.deepEqual(s.reports, []);
+  });
+
   it('is as specific as its argument', () => {
     // Two classes beat the one that comes later in the sheet.
     const s = scene('.card:has(.action) { opacity: 0.5 } .card { opacity: 1 }');
