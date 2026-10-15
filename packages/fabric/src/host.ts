@@ -99,6 +99,14 @@ export abstract class HostEngine {
   abstract commit(): boolean;
   /** The node holding focus, or null. Verified to still be attached before it is handed back. */
   abstract get focused(): HostNode | null;
+  /**
+   * The focused node when it is a text field, which is what holds a keyboard; otherwise null. A
+   * view or a pressable takes focus from a hardware keyboard or a D-pad, and has no keyboard to
+   * put away.
+   */
+  abstract get focusedField(): HostNode | null;
+  /** Put the keyboard away: `focusedField`, if there is one, is sent `blur`. */
+  abstract blurFocused(): void;
   /** Turn whatever an app passed as an image source into what the host wants. */
   abstract resolveAsset(value: unknown): unknown;
   /** Turn a colour the app wrote into whatever the host draws with. */
