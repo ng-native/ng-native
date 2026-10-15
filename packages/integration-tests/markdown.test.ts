@@ -463,6 +463,50 @@ describe('streaming', () => {
     assert.equal(blocks()[1]!.props['accessibilityRole'], 'header');
   });
 
+  it('keeps the native views of the blocks before a block that arrives', async () => {
+    const { blocks, feed } = await stream('First\n\nSecond');
+    const [first, second] = blocks();
+    await feed('\n\nThird');
+    assert.deepEqual(texts(blocks()), ['First', 'Second', 'Third']);
+    assert.equal(blocks()[0]!.reactTag, first!.reactTag, 'First is the same view');
+    assert.equal(blocks()[1]!.reactTag, second!.reactTag, 'Second is the same view');
+  });
+
+  it('draws a delimiter that cannot open emphasis, before punctuation inside a word', async () => {
+    const { blocks } = await stream('Use foo*.bar or foo_.bar now');
+    assert.deepEqual(texts(blocks()), ['Use foo*.bar or foo_.bar now']);
+  });
+
+  it('holds back a tilde before punctuation that starts a word, which can open', async () => {
+    const { blocks } = await stream('See ~/.config');
+    assert.deepEqual(texts(blocks()), ['See']);
+  });
+
+  it('draws a line after a header row that cannot be a delimiter row', async () => {
+    const { blocks, feed } = await stream('| a | b |\n|-');
+    assert.equal(blocks().length, 0, 'the start of a delimiter row');
+    await feed('x');
+    assert.equal(blocks().length, 1);
+    assert.match(textOf(blocks()[0]!), /\|-x$/);
+    const other = await stream('| a | b |\n|---|\n');
+    assert.equal(other.blocks().length, 1, 'a whole second line that did not make a table');
+  });
+
+  it('draws a fence line that cannot close the fence it is in', async () => {
+    const { named, feed } = await stream('\u0060\u0060\u0060\u0060\ncode\n~~~');
+    assert.equal(textOf(named('ScrollView')[0]!), 'code\n~~~', 'a tilde line in a backtick fence');
+    await feed('\n\u0060\u0060\u0060');
+    assert.equal(textOf(named('ScrollView')[0]!), 'code\n~~~', 'three backticks may yet be four');
+    await feed('\u0060\n\nAfter');
+    assert.equal(textOf(named('ScrollView')[0]!), 'code\n~~~');
+  });
+
+  it('draws indented code that starts like a fence', async () => {
+    const { blocks, named } = await stream('Text\n\n    \u0060\u0060\u0060');
+    assert.equal(blocks().length, 2);
+    assert.equal(textOf(named('ScrollView')[0]!), '\u0060\u0060\u0060');
+  });
+
   it('draws everything held back once streaming ends', async () => {
     const { blocks, app, screen } = await stream('Run `cx5');
     assert.deepEqual(texts(blocks()), ['Run']);

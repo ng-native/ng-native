@@ -30,6 +30,7 @@ function lastBlock(tokens: readonly Token[]): Token | undefined {
 
 const WHITESPACE = /\s/;
 const WORD = /[\p{L}\p{N}]/u;
+const PUNCTUATION = /[\p{P}\p{S}]/u;
 const DELIMITERS = /`+|\*+|_+|~+/g;
 
 interface Opener {
@@ -41,7 +42,8 @@ interface Opener {
 /**
  * The last delimiter in `tokens` that marked left as text and that could still open a code span
  * or an emphasis. A backtick left as text always could. An asterisk, underscore or tilde could
- * when what follows is not a space, or has not arrived yet; an underscore inside a word cannot.
+ * when what follows is not a space, or has not arrived yet, and is not punctuation straight after
+ * a letter or digit; an underscore inside a word cannot.
  */
 function lastOpener(tokens: readonly Token[], atEnd: boolean): Opener | null {
   for (let i = tokens.length - 1; i >= 0; i--) {
@@ -64,37 +66,49 @@ function openerIn(raw: string, atEnd: boolean): Opener | null {
   for (const match of raw.matchAll(DELIMITERS)) {
     const run = match[0];
     const at = match.index;
-    const next = raw[at + run.length];
-    const before = raw[at - 1];
-    const opens =
-      run[0] === '`' ||
-      ((next === undefined ? atEnd : !WHITESPACE.test(next)) &&
-        !(run[0] === '_' && before !== undefined && WORD.test(before)) &&
-        !(run[0] === '~' && run.length > 2));
-    if (opens) found = { at, raw };
+    if (canOpen(run, raw[at - 1], raw[at + run.length], atEnd)) found = { at, raw };
   }
   return found;
 }
 
+/** Whether a delimiter run, between `before` and `next`, could open a code span or an emphasis. */
+function canOpen(
+  run: string,
+  before: string | undefined,
+  next: string | undefined,
+  atEnd: boolean,
+) {
+  if (run[0] === '`') return true;
+  if (next === undefined ? !atEnd : WHITESPACE.test(next)) return false;
+  const afterWord = before !== undefined && WORD.test(before);
+  if (afterWord && next !== undefined && PUNCTUATION.test(next)) return false;
+  if (run[0] === '_' && afterWord) return false;
+  return !(run[0] === '~' && run.length > 2);
+}
+
 /** Where a fenced code block's half-written fence line starts, or null when it has none. */
 function heldFence(block: Token, tail: string): number | null {
-  if (!/^ *(`{3,}|~{3,})/.test(block.raw)) return null;
+  const fence = /^ {0,3}(`{3,}|~{3,})/.exec(block.raw);
+  if (!fence) return null;
   const lineStart = tail.lastIndexOf('\n') + 1;
   // An opening fence whose info string is still arriving.
   if (!block.raw.includes('\n')) return lineStart;
-  // A closing fence, or a line that may yet be one.
-  const open = !tail.endsWith('\n') && /^ {0,3}[`~]+\s*$/.test(tail.slice(lineStart));
+  // A closing fence, or a line of the fence's own marker that may yet grow into one.
+  const closing = fence[1]![0] === '`' ? /^ {0,3}`+\s*$/ : /^ {0,3}~+\s*$/;
+  const open = !tail.endsWith('\n') && closing.test(tail.slice(lineStart));
   return open ? lineStart : null;
 }
 
 /**
- * Where a paragraph that starts like a table row starts, while it is short enough to be a header
- * row whose delimiter row has not arrived, and so a table once it does.
+ * Where a paragraph that starts like a table row starts, while it is a header row whose delimiter
+ * row has not arrived, or is arriving, and so a table once it does.
  */
 function heldHeaderRow(block: Token, tail: string): number | null {
   if (!/^ {0,3}\|/.test(block.raw)) return null;
   const lines = block.raw.trimEnd().split('\n');
   if (lines.length > 2) return null;
+  // A second line that has ended, or that can no longer be a delimiter row, made no table.
+  if (lines.length === 2 && (tail.endsWith('\n') || !/^[\s|:-]*$/.test(lines[1]!))) return null;
   const first = tail.lastIndexOf(lines[0]!.trim());
   return first < 0 ? null : tail.lastIndexOf('\n', first - 1) + 1;
 }
