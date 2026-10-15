@@ -331,6 +331,34 @@ describe('running a transition', () => {
     view.faded { opacity: 0; background-color: rgb(100, 200, 40); width: 50px; }
   `;
 
+  it('runs one in a sheet added after the view was committed, where nothing had one', () => {
+    const s = scene('view { opacity: 1 } view.faded { opacity: 0 }');
+    s.engine.addGlobalSheet(sheet(css));
+    s.engine.commit();
+    s.classes('faded');
+    assert.equal(s.engine.animating, true);
+    s.tick(50);
+    assert.equal(s.painted('opacity'), 0.5);
+  });
+
+  it('runs one an inline style asks for, where no sheet has one', () => {
+    const s = scene('view { opacity: 1 }');
+    s.engine.setProp(
+      s.view,
+      'style',
+      sheet('v { transition: opacity 100ms linear }').rules[0]!.declarations,
+    );
+    s.engine.commit();
+    s.engine.setProp(s.view, 'style', {
+      ...sheet('v { transition: opacity 100ms linear }').rules[0]!.declarations,
+      opacity: 0,
+    });
+    s.engine.commit();
+    assert.equal(s.engine.animating, true);
+    s.tick(50);
+    assert.equal(s.painted('opacity'), 0.5);
+  });
+
   it('does not animate what is there on the first commit', () => {
     const s = scene(css);
     assert.equal(s.painted('opacity'), 1, 'the starting value, not a transition from nothing');

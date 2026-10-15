@@ -3426,6 +3426,7 @@ export class Engine implements HostEngine {
    * the web's mount point has, unless the app's `:host` sizes it otherwise.
    */
   setDefaultStyle(node: EngineNode, style: Readonly<Record<string, unknown>> | undefined): void {
+    this.noteEasing(style);
     node.defaultStyle = style;
     // Under what the cascade comes to, and read by no selector: nothing is matched again.
     this.markProps(node, false);
@@ -3659,7 +3660,33 @@ export class Engine implements HostEngine {
     return siblings[siblings.indexOf(node) + 1] ?? null;
   }
 
+  /**
+   * Whether any declaration the engine was given transitions or animates: until one does, a
+   * node's style is committed as it is, with nothing asked of what eases it. See `eased`.
+   */
+  private eases = false;
+
+  private noteEasing(declarations: Readonly<Record<string, unknown>> | null | undefined): void {
+    if (this.eases || !declarations) return;
+    for (const key in declarations) {
+      if (key.startsWith('$transition') || key.startsWith('$animation')) this.eases = true;
+    }
+  }
+
+  /** A node's style as its transitions and animation have it: a declaration asks for one. */
+  private eased(node: EngineNode, style: Record<string, unknown>): Record<string, unknown> {
+    if (!this.eases) return style;
+    return this.animated(node, this.transitioned(node, style));
+  }
+
+  /** Note a prop, or a style set as one, that transitions or animates: see `eases`. */
+  private noteEasingProp(key: string, value: unknown): void {
+    this.noteEasing({ [key]: value });
+    if (key === 'style' || key === STYLE_OVERRIDE) this.noteEasing(flattenStyle(value, {}));
+  }
+
   setProp(node: EngineNode, key: string, value: unknown): void {
+    if (!this.eases) this.noteEasingProp(key, value);
     // A prop written again is a binding's, and is committed as any other is.
     if (node.attributeOnly?.delete(key)) this.markProps(node, false);
     if (value === undefined || value === null) {
@@ -4347,7 +4374,7 @@ export class Engine implements HostEngine {
     if (this.fontsRefreshed) this.capForFonts(node, style);
     alignMultiline(viewName, style);
     rowsTall(style, this.fontScale);
-    const merged = composeTransform(node, this.animated(node, this.transitioned(node, style)));
+    const merged = composeTransform(node, this.eased(node, style));
     // On iOS: Android's field says the baseline of the line it is sized and centred by.
     // Still under the row that marked it: a row taken away is not committed again to unmark it.
     const row = node.onBaseline;
@@ -4552,6 +4579,13 @@ export class Engine implements HostEngine {
   private registerSheet(sheet: StyleSheet | null | undefined): void {
     if (!sheet || this.knownSheets.has(sheet)) return;
     this.knownSheets.add(sheet);
+    for (const rule of this.eases ? [] : sheet.rules) {
+      this.noteEasing(rule.declarations);
+      this.noteEasing(rule.important);
+      // One a token holds: `animation: var(--motion)`.
+      for (const deferred of rule.deferred ?? [])
+        this.noteEasing(Object.fromEntries(deferred.props.map((key) => [key, true])));
+    }
     this.styles.noteSheet(sheet);
     this.sheetOrder.push(sheet);
     for (const name of Object.keys(sheet.keyframes ?? {})) {
