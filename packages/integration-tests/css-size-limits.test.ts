@@ -56,6 +56,9 @@ const CSS =
   ' .inset { max-width: 10px; padding-left: 30px; height: 5px } .low { min-height: 20px }' +
   ' .logical { max-width: 10px; padding-inline-start: 30px; border-inline-end: 4px solid; height: 5px }' +
   ' .edged { max-height: 10px; border-top: 15px solid; border-bottom: 15px solid }' +
+  ' .over { max-width: 10px; padding-left: 20px; padding-inline-start: 30px; height: 5px }' +
+  ' .rtl { direction: rtl; max-width: 10px; padding-left: 20px; padding-inline-start: 30px;' +
+  ' border-left: 3px solid; border-inline-end: 5px solid; height: 5px }' +
   ' .content { box-sizing: content-box; max-height: 10px; padding-top: 50px }';
 
 describe('a least size over a most', () => {
@@ -78,6 +81,39 @@ describe('a least size over a most', () => {
     const s = scene(CSS, ['row', ['logical']]);
     assert.deepEqual(s.size('logical'), [34, 5]);
     assert.equal(s.committed('logical', 'maxWidth'), 34);
+  });
+
+  it('reads a logical side over the physical one it is on, left to right and right to left', () => {
+    // Left to right, the start is the left: 30. Right to left, it is the right, so the left's
+    // 20 counts as well, and the end's border is on the left, over the left's.
+    const s = scene(CSS, ['row', ['over'], ['rtl']]);
+    assert.equal(s.committed('over', 'maxWidth'), 30);
+    assert.equal(s.committed('rtl', 'maxWidth'), 55);
+  });
+
+  it("holds a box at React Native's block and inline padding, written as a style", () => {
+    const s = scene(CSS, ['a', ['b']]);
+    const style = (value: Record<string, unknown>) =>
+      s.engine.setProp(s.nodes.get('b')!, 'style', value);
+    style({ maxHeight: 0, paddingBlockStart: 40, paddingBlockEnd: 2 });
+    assert.equal(s.committed('b', 'maxHeight'), 42);
+    // A top given is over the block's start, and the block over the vertical.
+    style({
+      maxHeight: 0,
+      paddingTop: 5,
+      paddingBlockStart: 40,
+      paddingVertical: 1,
+      paddingBlock: 6,
+    });
+    assert.equal(s.committed('b', 'maxHeight'), 11);
+    style({
+      maxWidth: 0,
+      paddingHorizontal: 1,
+      paddingInline: 7,
+      paddingStart: 2,
+      paddingInlineStart: 9,
+    });
+    assert.equal(s.committed('b', 'maxWidth'), 16);
   });
 
   it('holds a box at its border, where the border alone is over the most', () => {

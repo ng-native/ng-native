@@ -1496,30 +1496,38 @@ function aroundALine(props: Record<string, unknown>): number {
 }
 
 /**
- * The sides a box's padding and border are on, across a height and across a width, each as Yoga
- * reads it: a logical side over the physical one, the start on the left unless the box is
- * right to left.
+ * The props each side's padding and border are read from, across a height and across a width,
+ * the first set winning, as React Native and then Yoga read them: an alias of React Native's over
+ * Yoga's own, a logical side over the physical one, and the start on the left unless the box is
+ * right to left. A block's start and end are under the top and bottom.
  */
-function sides(props: Record<string, unknown>, size: 'Height' | 'Width') {
-  if (size === 'Height') return { axis: 'Vertical', ends: [['Top'], ['Bottom']] } as const;
-  const ends = [
-    ['Start', 'Left'],
-    ['End', 'Right'],
-  ] as const;
-  return { axis: 'Horizontal', ends: props['direction'] === 'rtl' ? [ends[1], ends[0]] : ends };
+function sides(props: Record<string, unknown>, size: 'Height' | 'Width'): string[][] {
+  if (size === 'Height') {
+    const block = ['paddingBlock', 'paddingVertical', 'padding'];
+    return [
+      ['paddingTop', 'paddingBlockStart', ...block],
+      ['borderTopWidth', 'borderWidth'],
+      ['paddingBottom', 'paddingBlockEnd', ...block],
+      ['borderBottomWidth', 'borderWidth'],
+    ];
+  }
+  const rtl = props['direction'] === 'rtl';
+  const inline = ['paddingInline', 'paddingHorizontal', 'padding'];
+  return (['Left', 'Right'] as const).flatMap((physical, at) => {
+    const logical = (at === 0) !== rtl ? 'Start' : 'End';
+    return [
+      [`paddingInline${logical}`, `padding${logical}`, `padding${physical}`, ...inline],
+      [`border${logical}Width`, `border${physical}Width`, 'borderWidth'],
+    ];
+  });
 }
 
 /** The points of padding and border across a view's height or width, where each is a length. */
 function around(props: Record<string, unknown>, size: 'Height' | 'Width'): number {
-  const edge = (...keys: string[]): number => {
-    const found = keys.map((key) => props[key]).find((value) => value != null);
-    return typeof found === 'number' ? found : 0;
-  };
-  const { axis, ends } = sides(props, size);
   let total = 0;
-  for (const side of ends) {
-    total += edge(...side.map((name) => `padding${name}`), `padding${axis}`, 'padding');
-    total += edge(...side.map((name) => `border${name}Width`), 'borderWidth');
+  for (const keys of sides(props, size)) {
+    const found = keys.map((key) => props[key]).find((value) => value != null);
+    if (typeof found === 'number') total += found;
   }
   return total;
 }
