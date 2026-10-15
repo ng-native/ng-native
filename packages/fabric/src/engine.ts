@@ -3679,6 +3679,18 @@ export class Engine implements HostEngine {
     return this.animated(node, this.transitioned(node, style));
   }
 
+  /** Note a sheet any of whose rules transitions or animates: see `eases`. */
+  private noteSheetEasing(sheet: StyleSheet): void {
+    for (const rule of this.eases ? [] : sheet.rules) {
+      this.noteEasing(rule.declarations);
+      this.noteEasing(rule.important);
+      // One a token holds: `animation: var(--motion)`.
+      for (const deferred of rule.deferred ?? []) {
+        this.noteEasing(Object.fromEntries(deferred.props.map((key) => [key, true])));
+      }
+    }
+  }
+
   /** Note a prop, or a style set as one, that transitions or animates: see `eases`. */
   private noteEasingProp(key: string, value: unknown): void {
     this.noteEasing({ [key]: value });
@@ -3777,6 +3789,7 @@ export class Engine implements HostEngine {
    * has changed for the props diff to notice.
    */
   styleChanged(node: EngineNode): void {
+    if (!this.eases) this.noteEasingProp('style', node.props['style']);
     // As `setProp` restyles for a new style object: a child that takes one of its values, an
     // `inherit`, follows the one changed in place too.
     this.markProps(node, this.inlineReachesStyle(node) || node.styleCache?.heirs === true);
@@ -4579,13 +4592,7 @@ export class Engine implements HostEngine {
   private registerSheet(sheet: StyleSheet | null | undefined): void {
     if (!sheet || this.knownSheets.has(sheet)) return;
     this.knownSheets.add(sheet);
-    for (const rule of this.eases ? [] : sheet.rules) {
-      this.noteEasing(rule.declarations);
-      this.noteEasing(rule.important);
-      // One a token holds: `animation: var(--motion)`.
-      for (const deferred of rule.deferred ?? [])
-        this.noteEasing(Object.fromEntries(deferred.props.map((key) => [key, true])));
-    }
+    this.noteSheetEasing(sheet);
     this.styles.noteSheet(sheet);
     this.sheetOrder.push(sheet);
     for (const name of Object.keys(sheet.keyframes ?? {})) {
@@ -4615,6 +4622,7 @@ export class Engine implements HostEngine {
     this.knownSheets.delete(sheet);
     if (next && !this.knownSheets.has(next)) {
       this.knownSheets.add(next);
+      this.noteSheetEasing(next);
       this.styles.noteSheet(next);
       this.sheetOrder[at] = next;
     } else {

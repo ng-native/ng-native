@@ -359,6 +359,31 @@ describe('running a transition', () => {
     assert.equal(s.painted('opacity'), 0.5);
   });
 
+  it('runs one an inline style changed in place asks for, where nothing else had one', () => {
+    const s = scene('view { opacity: 1 }');
+    const style: Record<string, unknown> = {};
+    s.engine.setProp(s.view, 'style', style);
+    s.engine.commit();
+    Object.assign(style, sheet('v { transition: opacity 100ms linear }').rules[0]!.declarations);
+    s.engine.styleChanged(s.view);
+    s.engine.commit();
+    style['opacity'] = 0;
+    s.engine.styleChanged(s.view);
+    s.engine.commit();
+    assert.equal(s.engine.animating, true);
+  });
+
+  it('runs one a hot swap brings in, where the sheet it replaces had none', () => {
+    const plain = sheet('view { opacity: 1 } view.faded { opacity: 0 }');
+    const s = scene('view { width: 10px }');
+    s.engine.addGlobalSheet(plain);
+    s.engine.commit();
+    s.engine.addGlobalSheet(sheet(css), plain);
+    s.engine.commit();
+    s.classes('faded');
+    assert.equal(s.engine.animating, true);
+  });
+
   it('does not animate what is there on the first commit', () => {
     const s = scene(css);
     assert.equal(s.painted('opacity'), 1, 'the starting value, not a transition from nothing');
