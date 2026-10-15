@@ -9,7 +9,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { createRequire } from 'node:module';
-import { Engine, type EngineNode } from '@ng-native/fabric';
+import { Engine, type EngineNode, type StyleSheet } from '@ng-native/fabric';
 import { resetStyleStats, styleStats } from '../fabric/src/css.ts';
 import { createFakeFabric, type FakeFabricNode } from '@ng-native/testing';
 import { build } from './tailwind-cli.ts';
@@ -20,9 +20,13 @@ const { flattenTailwind } = require('@ng-native/tailwind') as {
   flattenTailwind(css: string): string;
 };
 
-function scene(css: string) {
+/** A scene styled by `css`, or by a sheet built by hand for what the build refuses. */
+function scene(css: string | StyleSheet) {
   const reports: string[] = [];
-  const sheet = compileCss(css, 'app.css', { onUnsupported: (m: string) => reports.push(m) });
+  const sheet =
+    typeof css === 'string'
+      ? compileCss(css, 'app.css', { onUnsupported: (m: string) => reports.push(m) })
+      : css;
   const fabric = createFakeFabric();
   const engine = new Engine(fabric, 1, { globalStyles: sheet as never });
   /** An element with `classes`, under `parent` or the root. */
@@ -263,6 +267,170 @@ describe(':has() and the cost of asking it', () => {
       styleStats.compoundTests < rows * 20,
       `${styleStats.compoundTests} compound tests for ${rows} rows`,
     );
+  });
+});
+
+describe(':has() of what comes after a node, on a long list', () => {
+  // `.item:has(~ .later)` and `.item:has(+ .next)`, as a stylesheet read while the app runs has
+  // them: the build refuses both.
+  const after = (combinator: 'later-sibling' | 'next-sibling', name: string): StyleSheet => ({
+    rules: [
+      {
+        compounds: [
+          {
+            classes: ['item'],
+            has: [
+              {
+                any: [],
+                relative: [{ compounds: [{ classes: [name] }], combinators: [combinator] }],
+              },
+            ],
+          },
+        ],
+        combinators: [],
+        specificity: 2000,
+        order: 0,
+        declarations: { opacity: 0.5 },
+      },
+    ],
+    has: true,
+  });
+  const ITEMS = 2000;
+  const list = (sheet: StyleSheet) => {
+    const s = scene(sheet);
+    const items = Array.from({ length: ITEMS }, () => s.el('item', s.card));
+    s.engine.setProp(items[0]!, 'testID', 'first');
+    s.engine.setProp(items.at(-2)!, 'testID', 'second last');
+    s.engine.setProp(items.at(-1)!, 'testID', 'last');
+    /** Work a commit did, in compound tests and children indexed for their place. */
+    const work = (): number => {
+      resetStyleStats();
+      s.engine.commit();
+      return styleStats.compoundTests + styleStats.placesIndexed;
+    };
+    return { ...s, items, work };
+  };
+
+  it('asks each item what comes after it in work that grows with the list, not its square', () => {
+    const s = list(after('later-sibling', 'later'));
+    const cost = s.work();
+    assert.ok(cost < ITEMS * 20, `${cost} for ${ITEMS} items`);
+    assert.equal(s.opacity('first') ?? null, null);
+
+    s.engine.addClass(s.items.at(-1)!, 'later');
+    const marked = s.work();
+    assert.ok(marked < ITEMS * 20, `${marked} for ${ITEMS} items, one later`);
+    assert.equal(s.opacity('first'), 0.5);
+    assert.equal(s.opacity('second last'), 0.5);
+    assert.equal(s.opacity('last') ?? null, null);
+  });
+
+  it('follows an item coming in at the end, going, and restyled, across the whole list', () => {
+    const s = list(after('later-sibling', 'later'));
+    s.work();
+    const extra = s.el('later', s.card);
+    assert.equal(s.opacity('first'), 0.5);
+    assert.equal(s.opacity('last'), 0.5);
+    s.engine.removeChild(s.card, extra);
+    assert.equal(s.opacity('first') ?? null, null);
+    s.engine.addClass(s.items[1]!, 'later');
+    assert.equal(s.opacity('first'), 0.5);
+    assert.equal(s.opacity('second last') ?? null, null);
+    s.engine.removeClass(s.items[1]!, 'later');
+    assert.equal(s.opacity('first') ?? null, null);
+  });
+
+  it('asks each item what comes next in work that grows with the list, not its square', () => {
+    const s = list(after('next-sibling', 'next'));
+    const cost = s.work();
+    assert.ok(cost < ITEMS * 20, `${cost} for ${ITEMS} items`);
+    s.engine.addClass(s.items.at(-1)!, 'next');
+    s.engine.addClass(s.items[1]!, 'next');
+    const marked = s.work();
+    assert.ok(marked < ITEMS * 20, `${marked} for ${ITEMS} items, two next`);
+    assert.equal(s.opacity('first'), 0.5);
+    assert.equal(s.opacity('second last'), 0.5);
+    assert.equal(s.opacity('last') ?? null, null);
+    s.engine.removeChild(s.card, s.items[1]!);
+    assert.equal(s.opacity('first') ?? null, null);
+  });
+
+  it('marks each item before a change once, however many come in after it before a commit', () => {
+    const s = scene(after('later-sibling', 'later'));
+    s.engine.commit();
+    let marks = 0;
+    const items = Array.from({ length: ITEMS }, () => {
+      const item = s.engine.createElement('view');
+      s.engine.setClasses(item, 'item');
+      let dirty = false;
+      Object.defineProperty(item, 'hasDirty', {
+        get: () => dirty,
+        set: (value: boolean) => {
+          if (value) marks++;
+          dirty = value;
+        },
+      });
+      return item;
+    });
+    for (const item of items) s.engine.appendChild(s.card, item);
+    assert.ok(marks < ITEMS * 5, `${marks} marks for ${ITEMS} items`);
+    s.engine.setProp(items[0]!, 'testID', 'first');
+    s.engine.addClass(items.at(-1)!, 'later');
+    assert.equal(s.opacity('first'), 0.5);
+  });
+
+  it('matches again what comes after many boxes asked :has() in one pass of the list', () => {
+    // `.item:has(.mark) ~ .item`, the other way round: each item before a change is asked again,
+    // and what comes after each one with it.
+    const sheet = after('later-sibling', 'later');
+    const s = list({
+      ...sheet,
+      rules: [
+        ...sheet.rules,
+        {
+          compounds: [
+            { classes: ['item'], has: [{ any: [{ classes: ['mark'] }] }] },
+            { classes: ['item'] },
+          ],
+          combinators: ['later-sibling'],
+          specificity: 3000,
+          order: 1,
+          declarations: { opacity: 0.25 },
+        },
+      ],
+    });
+    s.work();
+    let marks = 0;
+    for (const item of s.items) {
+      let dirty = item.ownDirty;
+      Object.defineProperty(item, 'ownDirty', {
+        get: () => dirty,
+        set: (value: boolean) => {
+          if (value) marks++;
+          dirty = value;
+        },
+      });
+    }
+    s.engine.addClass(s.items.at(-1)!, 'later');
+    s.work();
+    assert.ok(marks < ITEMS * 5, `${marks} marks for ${ITEMS} items`);
+    assert.equal(s.opacity('second last'), 0.5);
+    s.el('mark', s.items[0]!);
+    assert.equal(s.opacity('second last'), 0.25);
+    assert.equal(s.opacity('first'), 0.5);
+  });
+
+  it('marks again what moved into the place of items taken out before a commit', () => {
+    const s = list(after('later-sibling', 'later'));
+    s.engine.setProp(s.items[8]!, 'testID', 'moved');
+    s.work();
+    // A change to the eighth has the seven before it matched again. Two go from the front, and
+    // the ninth, which nothing marked, is where the seventh was. What comes after it changes.
+    s.engine.addClass(s.items[7]!, 'later');
+    s.engine.removeChild(s.card, s.items[0]!);
+    s.engine.removeChild(s.card, s.items[1]!);
+    s.engine.addClass(s.items.at(-1)!, 'later');
+    assert.equal(s.opacity('moved'), 0.5);
   });
 });
 
