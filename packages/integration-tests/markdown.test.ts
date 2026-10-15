@@ -499,15 +499,55 @@ describe('tables', () => {
     });
     await app.detectChanges();
     const columns = screen.columns();
-    const started = performance.now();
-    for (let row = 0; row <= ROWS; row++) {
-      for (let column = 0; column < 3; column++) {
-        columns.measure(row, column, { nativeEvent: { layout: { width: (row * 7) % 200 } } });
-        columns.width(column);
+    const visited = countVisits();
+    try {
+      for (let row = 0; row <= ROWS; row++) {
+        for (let column = 0; column < 3; column++) {
+          columns.measure(row, column, { nativeEvent: { layout: { width: (row * 7) % 200 } } });
+          columns.width(column);
+        }
       }
+    } finally {
+      visited.restore();
     }
-    const elapsed = performance.now() - started;
     assert.equal(columns.width(0), 199);
-    assert.ok(elapsed < 250, `9000 measurements took ${elapsed.toFixed(0)}ms`);
+    const measurements = (ROWS + 1) * 3;
+    assert.ok(
+      visited.count < measurements * 10,
+      `${measurements} measurements went over ${visited.count} elements`,
+    );
   });
 });
+
+/**
+ * Counts the elements the array and map methods a measurement could go over the table with visit,
+ * so the cost of a measurement is checked by the work it does rather than by the clock.
+ */
+function countVisits(): { readonly count: number; restore(): void } {
+  const state = { count: 0 };
+  const patched: [object, PropertyKey, unknown][] = [];
+  const patch = (target: object, key: PropertyKey, size: (self: never) => number): void => {
+    const original = Reflect.get(target, key) as (...args: unknown[]) => unknown;
+    patched.push([target, key, original]);
+    Reflect.set(target, key, function (this: never, ...args: unknown[]) {
+      state.count += size(this);
+      return original.apply(this, args);
+    });
+  };
+  const length = (self: { length: number }): number => self.length;
+  const size = (self: { size: number }): number => self.size;
+  for (const key of ['reduce', 'map', 'slice', 'forEach', 'filter', Symbol.iterator] as const) {
+    patch(Array.prototype, key, length);
+  }
+  for (const key of ['forEach', 'entries', 'values', 'keys', Symbol.iterator] as const) {
+    patch(Map.prototype, key, size);
+  }
+  return {
+    get count() {
+      return state.count;
+    },
+    restore() {
+      for (const [target, key, original] of patched.reverse()) Reflect.set(target, key, original);
+    },
+  };
+}
