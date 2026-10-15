@@ -37,8 +37,15 @@ export interface Compound {
   readonly attributes?: readonly AttributeTest[];
   /** `:is()` / `:where()` arguments: the compound matches if any of these do. */
   readonly is?: readonly (readonly Compound[])[];
+  /**
+   * `:is()` / `:where()` with an argument of more than a compound, `:is(.a + .b)`, once for each
+   * written: the node is the last element of one of these.
+   */
+  readonly isComplex?: readonly (readonly ComplexSelector[])[];
   /** `:not()` arguments: the compound matches only if none of these do. */
   readonly not?: readonly Compound[];
+  /** `:not()` with an argument of more than a compound: the node is the last of none of these. */
+  readonly notComplex?: readonly ComplexSelector[];
   /** `:host`: the node must be the host of the component whose sheet is being evaluated. */
   readonly host?: true;
   /** `:host-context()`, once for each written: the host, or one of its ancestors, must match it. */
@@ -76,6 +83,27 @@ export interface HasTest {
   /** `:has(> x)`: a child, not any descendant. */
   readonly child?: true;
   readonly any: readonly Compound[];
+  /**
+   * Arguments that are more than one compound for a descendant or a child, `:has(+ .a)` or
+   * `:has(.a > .b)`: some element related to the node by one of these is its last.
+   */
+  readonly relative?: readonly RelativeSelector[];
+}
+
+/** Compounds joined by combinators, matched leftwards from the last as a rule's are. */
+export interface ComplexSelector {
+  readonly compounds: readonly Compound[];
+  /** Between compounds; length is `compounds.length - 1`. */
+  readonly combinators: readonly Combinator[];
+}
+
+/**
+ * A `:has()` argument, which starts at the node it is asked of: `combinators[0]` joins that node
+ * to `compounds[0]`, and each one after joins the compound before it to the next.
+ */
+export interface RelativeSelector {
+  readonly compounds: readonly Compound[];
+  readonly combinators: readonly Combinator[];
 }
 
 /** `an + b`, counted from the start unless `fromEnd`. */
@@ -987,6 +1015,16 @@ function matchesCompound(node: StyleTarget, compound: Compound, sheet: StyleShee
       if (!alternatives.some((option) => matchesCompound(node, option, sheet))) return false;
     }
   }
+  if (compound.notComplex) {
+    for (const excluded of compound.notComplex) {
+      if (matchesComplex(node, excluded, sheet)) return false;
+    }
+  }
+  if (compound.isComplex) {
+    for (const alternatives of compound.isComplex) {
+      if (!alternatives.some((option) => matchesComplex(node, option, sheet))) return false;
+    }
+  }
   if (compound.has) {
     for (const test of compound.has) {
       if (!hasBeneath(node, test, sheet)) return false;
@@ -1022,14 +1060,170 @@ function matchesCompound(node: StyleTarget, compound: Compound, sheet: StyleShee
   return true;
 }
 
+/**
+ * `:has()` answers, by the node asked and the test, while the engine commits: a rule like
+ * `main:has(.missing) span` asks the same of `main` for each span in it, and each answer is a
+ * walk of everything in `main`. Nothing an answer hangs on changes in a commit, and a change
+ * between two drops them all: see `forgetHasAnswers`.
+ */
+let hasAnswers: Map<StyleTarget, Map<HasTest, boolean>> | null = null;
+
+/** Keep `:has()` answers from here, or stop keeping them. */
+export function keepHasAnswers(keep: boolean): void {
+  hasAnswers = keep ? new Map() : null;
+}
+
+/** Drop the `:has()` answers kept, for something beneath a node changed. */
+export function forgetHasAnswers(): void {
+  hasAnswers?.clear();
+}
+
 /** Whether some element beneath `node`, or some child of it for `:has(> x)`, matches the test. */
 function hasBeneath(node: StyleTarget, test: HasTest, sheet: StyleSheet | null): boolean {
+  const known = hasAnswers?.get(node)?.get(test);
+  if (known !== undefined) return known;
+  const found =
+    test.relative?.some((relative) => hasRelative(node, relative, sheet)) === true ||
+    hasCompound(node, test, sheet);
+  if (hasAnswers) {
+    let answers = hasAnswers.get(node);
+    if (!answers) hasAnswers.set(node, (answers = new Map()));
+    answers.set(test, found);
+  }
+  return found;
+}
+
+function hasCompound(node: StyleTarget, test: HasTest, sheet: StyleSheet | null): boolean {
+  if (!test.any.length) return false;
   for (const child of node.childList ?? []) {
     if (child.nodeKind !== undefined && child.nodeKind !== 'element') continue;
     if (test.any.some((option) => matchesCompound(child, option, sheet))) return true;
-    if (!test.child && hasBeneath(child, test, sheet)) return true;
+    if (!test.child && hasCompound(child, test, sheet)) return true;
   }
   return false;
+}
+
+/** Whether a node is the last element of a selector: matched leftwards, as a rule is. */
+function matchesComplex(node: StyleTarget, selector: ComplexSelector, sheet: StyleSheet | null) {
+  const last = selector.compounds.length - 1;
+  return (
+    matchesCompound(node, selector.compounds[last]!, sheet) &&
+    matchPrefix(node, selector, last - 1, sheet)
+  );
+}
+
+const SIBLING_COMBINATORS: ReadonlySet<Combinator> = new Set(['next-sibling', 'later-sibling']);
+
+/**
+ * Each element's place in its parent's list, found once for a `:has()` as it is asked: a list
+ * of thousands asked `:has(.a + .b)` is not searched again for each element in it to find the
+ * one before. Nothing changes while a selector is matched, so nothing is out of date.
+ */
+class Places {
+  private readonly lists = new Map<StyleTarget, Map<StyleTarget, number>>();
+
+  /** The element `step` places along from `node`: before it for -1, after it for 1. */
+  element(node: StyleTarget, step: -1 | 1): StyleTarget | null {
+    const siblings = node.parent?.childList;
+    if (!siblings) return null;
+    let places = this.lists.get(node.parent!);
+    if (!places) {
+      places = new Map(siblings.map((child, at) => [child, at]));
+      this.lists.set(node.parent!, places);
+    }
+    for (let at = places.get(node)! + step; at >= 0 && at < siblings.length; at += step) {
+      if (isElement(siblings[at]!)) return siblings[at]!;
+    }
+    return null;
+  }
+}
+
+/**
+ * Whether some element is the last of a `:has()` argument asked of `anchor`: one beneath it, or
+ * after it where the argument starts with `+` or `~`, and beneath one of those where it goes on
+ * to a child or a descendant.
+ */
+function hasRelative(
+  anchor: StyleTarget,
+  relative: RelativeSelector,
+  sheet: StyleSheet | null,
+): boolean {
+  const places = new Places();
+  const deep = relative.combinators.some((one) => !SIBLING_COMBINATORS.has(one));
+  const test = (node: StyleTarget): boolean => relativeFits(node, relative, anchor, sheet, places);
+  if (!SIBLING_COMBINATORS.has(relative.combinators[0]!)) return someBeneath(anchor, test);
+  // After `+` alone, the next element is the only one that can be the last.
+  const one = relative.combinators.length === 1 && relative.combinators[0] === 'next-sibling';
+  for (let next = places.element(anchor, 1); next; next = one ? null : places.element(next, 1)) {
+    if (test(next) || (deep && someBeneath(next, test))) return true;
+  }
+  return false;
+}
+
+/** Whether some element beneath `node` passes `test`. */
+function someBeneath(node: StyleTarget, test: (node: StyleTarget) => boolean): boolean {
+  for (const child of node.childList ?? []) {
+    if (!isElement(child)) continue;
+    if (test(child) || someBeneath(child, test)) return true;
+  }
+  return false;
+}
+
+/** Whether `node` is the last element of a `:has()` argument asked of `anchor`. */
+function relativeFits(
+  node: StyleTarget,
+  relative: RelativeSelector,
+  anchor: StyleTarget,
+  sheet: StyleSheet | null,
+  places: Places,
+): boolean {
+  const last = relative.compounds.length - 1;
+  return (
+    matchesCompound(node, relative.compounds[last]!, sheet) &&
+    relativeLeft(node, last, { relative, anchor, sheet, places })
+  );
+}
+
+/** What a `:has()` argument is matched with: see `relativeLeft`. */
+interface Relating {
+  readonly relative: RelativeSelector;
+  readonly anchor: StyleTarget;
+  readonly sheet: StyleSheet | null;
+  readonly places: Places;
+}
+
+/**
+ * Match what is left of `relative.compounds[at]`, which `matched` is: the compound before it,
+ * or the anchor where it is the first, by the combinator between. A descendant or a later
+ * sibling tries each candidate, as `matchAny` does.
+ */
+function relativeLeft(matched: StyleTarget, at: number, relating: Relating): boolean {
+  const { relative, anchor, sheet, places } = relating;
+  const compound = at > 0 ? relative.compounds[at - 1]! : null;
+  const fits = (node: StyleTarget): boolean =>
+    compound === null
+      ? node === anchor
+      : matchesCompound(node, compound, sheet) && relativeLeft(node, at - 1, relating);
+  switch (relative.combinators[at]) {
+    case 'child':
+      return matched.parent !== null && fits(matched.parent);
+    case 'next-sibling': {
+      const before = places.element(matched, -1);
+      return before !== null && fits(before);
+    }
+    case 'later-sibling':
+      for (let before = places.element(matched, -1); before; before = places.element(before, -1)) {
+        if (fits(before)) return true;
+      }
+      return false;
+    default:
+      for (let up = matched.parent; up; up = up.parent) {
+        if (fits(up)) return true;
+        // Nothing above the anchor is beneath it.
+        if (up === anchor) return false;
+      }
+      return false;
+  }
 }
 
 /**
@@ -1071,7 +1265,7 @@ export function matches(
  */
 function matchPrefix(
   matched: StyleTarget,
-  rule: StyleRule,
+  rule: ComplexSelector,
   index: number,
   sheet: StyleSheet | null,
 ): boolean {
@@ -1094,7 +1288,7 @@ function matchPrefix(
 /** A combinator with exactly one candidate: the parent, or the sibling immediately before. */
 function matchStep(
   candidate: StyleTarget | null,
-  rule: StyleRule,
+  rule: ComplexSelector,
   index: number,
   compound: Compound,
   sheet: StyleSheet | null,
@@ -1114,7 +1308,7 @@ function matchStep(
 function matchAny(
   first: StyleTarget | null,
   next: (node: StyleTarget) => StyleTarget | null,
-  rule: StyleRule,
+  rule: ComplexSelector,
   index: number,
   compound: Compound,
   sheet: StyleSheet | null,
@@ -1306,10 +1500,12 @@ function countSiblings(
   const counts = (compound.nth ?? []).filter((test) => test.a !== 0 || test.b !== 1 || test.ofType);
   if (counts.some((test) => withinHas || !test.fromEnd)) reach.after = Infinity;
   if (counts.some((test) => withinHas || test.fromEnd)) reach.before = true;
-  for (const inner of nestedCompounds(compound)) countSiblings(inner, reach, withinHas);
-  for (const test of compound.has ?? []) {
-    for (const inner of test.any) countSiblings(inner, reach, true);
+  // `:is(.a + .b)`: what the node matches hangs on the element before it, as a rule's does.
+  for (const selector of nestedSelectors(compound)) {
+    if (!withinHas) reach.after = Math.max(reach.after, stepsAlong(selector.combinators));
   }
+  for (const inner of nestedCompounds(compound)) countSiblings(inner, reach, withinHas);
+  for (const inner of hasCompounds(compound)) countSiblings(inner, reach, true);
 }
 
 /**
@@ -1374,32 +1570,49 @@ const NAMED_BESIDE = new WeakMap<StyleSheet, ReadonlySet<string>>();
 export function namedBeside(sheet: StyleSheet): ReadonlySet<string> {
   let named = NAMED_BESIDE.get(sheet);
   if (named === undefined) {
-    named = new Set();
-    for (const rule of sheet.rules) {
-      rule.combinators.forEach((joined, at) => {
-        if (joined === 'next-sibling' || joined === 'later-sibling') {
-          propsNamed(rule.compounds[at]!, named as Set<string>);
-        }
-      });
-    }
-    NAMED_BESIDE.set(sheet, named);
+    const found = new Set<string>();
+    for (const rule of sheet.rules) besideIn(rule, rule, found);
+    NAMED_BESIDE.set(sheet, (named = found));
   }
   return named;
 }
 
-/** Add each prop a compound, or one nested in it at any depth, asks about: an attribute or an id. */
-function propsNamed(compound: Compound, into: Set<string>): void {
-  if (compound.id !== undefined) into.add('nativeID');
-  for (const test of compound.attributes ?? []) into.add(test.name);
-  const within = (compound.has ?? []).flatMap((test) => test.any);
-  for (const inner of [...nestedCompounds(compound), ...within]) propsNamed(inner, into);
+/**
+ * Add to `into` what each compound joined to a later one by `+` or `~` asks, in a selector and
+ * in each one nested in it. A `:has()` argument starts at the element it is asked of, so one
+ * with a sibling in it has every prop the rule names added.
+ */
+function besideIn(selector: unknown, rule: StyleRule, into: Set<string>): void {
+  if (selector === null || typeof selector !== 'object') return;
+  if (Array.isArray(selector)) return selector.forEach((inner) => besideIn(inner, rule, into));
+  const { compounds, combinators } = selector as Partial<ComplexSelector>;
+  if (Array.isArray(compounds) && Array.isArray(combinators)) {
+    const relative = combinators.length === compounds.length;
+    combinators.forEach((joined, at) => {
+      if (joined !== 'next-sibling' && joined !== 'later-sibling') return;
+      if (relative) propsNamed(rule, into);
+      else propsNamed(compounds[at], into);
+    });
+  }
+  for (const [key, inner] of Object.entries(selector)) {
+    if (!DECLARED.has(key)) besideIn(inner, rule, into);
+  }
+}
+
+/** Add every prop a part of a selector asks about to `into`: each attribute, and an id. */
+function propsNamed(part: unknown, into: Set<string>): void {
+  if (part === null || typeof part !== 'object') return;
+  if (Array.isArray(part)) return part.forEach((inner) => propsNamed(inner, into));
+  const { attributes, id } = part as Partial<Compound>;
+  if (id !== undefined) into.add('nativeID');
+  for (const test of attributes ?? []) into.add(test.name);
+  for (const [key, inner] of Object.entries(part)) if (!DECLARED.has(key)) propsNamed(inner, into);
 }
 
 /** Whether a compound, or one nested in it at any depth, asks about a place in a child list. */
 function readsPlace(compound: Compound): boolean {
   if (compound.nth?.length) return true;
-  const within = (compound.has ?? []).flatMap((test) => test.any);
-  return [...nestedCompounds(compound), ...within].some(readsPlace);
+  return [...nestedCompounds(compound), ...hasCompounds(compound)].some(readsPlace);
 }
 
 /**
@@ -1413,8 +1626,20 @@ function placeReadAbove(compound: Compound, elsewhere: PlaceReader[]): void {
     ...(compound.hostContext ?? []),
   ];
   for (const inner of above) if (readsPlace(inner)) elsewhere.push({ compound: inner });
+  // `:is(.a + .b)` or `:not(:first-child .b)`: an element whose place changed can change what
+  // one beside it or under it matches, which is told from no class here. Only such sheets pay.
+  const beside = (one: ComplexSelector): boolean =>
+    one.combinators.some((each) => SIBLING_COMBINATORS.has(each)) ||
+    (one.compounds.length > 1 && one.compounds.some(readsPlace));
+  if (nestedSelectors(compound).some(beside)) elsewhere.push({ compound: { classes: [] } });
   for (const inner of nestedCompounds(compound)) placeReadAbove(inner, elsewhere);
 }
+
+/** The selectors of more than a compound nested in one, in its `:is()` and its `:not()`. */
+const nestedSelectors = (compound: Compound): ComplexSelector[] => [
+  ...(compound.notComplex ?? []),
+  ...(compound.isComplex ?? []).flat(),
+];
 
 /** The compounds nested in one, a `:has()`'s apart. */
 const nestedCompounds = (compound: Compound): Compound[] => [
@@ -1423,7 +1648,15 @@ const nestedCompounds = (compound: Compound): Compound[] => [
   ...(compound.ancestors ?? []),
   ...(compound.parents ?? []),
   ...(compound.hostContext ?? []),
+  ...nestedSelectors(compound).flatMap((selector) => selector.compounds),
 ];
+
+/** The compounds of a compound's `:has()` arguments. */
+const hasCompounds = (compound: Compound): Compound[] =>
+  (compound.has ?? []).flatMap((test) => [
+    ...test.any,
+    ...(test.relative ?? []).flatMap((relative) => relative.compounds),
+  ]);
 
 /** The element before this one, skipping everything that is not one. */
 function previousElement(node: StyleTarget): StyleTarget | null {
@@ -2108,6 +2341,11 @@ function subjectsOf(sheet: StyleSheet): Subjects {
 export interface HasAbove {
   readonly classes: readonly string[];
   readonly subjects: Subjects;
+  /**
+   * The box is before the node, or before a box the node is in: `.card:has(.x) ~ .title`. What
+   * comes after it is matched again as well as what is under it.
+   */
+  readonly beside?: true;
 }
 
 const HAS_ABOVE = new WeakMap<StyleSheet, readonly HasAbove[]>();
@@ -2115,21 +2353,37 @@ const HAS_ABOVE = new WeakMap<StyleSheet, readonly HasAbove[]>();
 /** Whether a compound, or one it asks of the same node, uses `:has()`. */
 const asksBeneath = (compound: Compound): boolean =>
   compound.has !== undefined ||
-  [...(compound.not ?? []), ...(compound.is ?? []).flat()].some(asksBeneath);
+  [
+    ...(compound.not ?? []),
+    ...(compound.is ?? []).flat(),
+    ...nestedSelectors(compound).map((selector) => selector.compounds.at(-1)!),
+  ].some(asksBeneath);
 
 /**
- * The boxes above the styled node that a compound asks `:has()` of: the compound's own node,
- * where that is not the styled one, and each box it is asked to be inside,
- * `.body:is(.card:has(.x) *) .title`.
+ * The boxes other than the styled node that a compound asks `:has()` of: the compound's own
+ * node, where that is not the styled one, each box it is asked to be inside,
+ * `.body:is(.card:has(.x) *) .title`, and each element an `:is()` or `:not()` of more than a
+ * compound asks about, which can be before it as well as above it.
  */
-function* boxesAsked(compound: Compound, styled: boolean): Generator<Compound> {
-  if (!styled && asksBeneath(compound)) yield compound;
+function* boxesAsked(
+  compound: Compound,
+  styled: boolean,
+  beside: boolean,
+): Generator<{ box: Compound; beside: boolean }> {
+  if (!styled && asksBeneath(compound)) yield { box: compound, beside };
   for (const key of ['ancestors', 'parents', 'hostContext'] as const) {
-    for (const outer of compound[key] ?? []) yield* boxesAsked(outer, false);
+    for (const outer of compound[key] ?? []) yield* boxesAsked(outer, false, beside);
+  }
+  for (const selector of nestedSelectors(compound)) {
+    const last = selector.compounds.length - 1;
+    // The last is the compound's own node, which `asksBeneath` has asked of already.
+    for (const [at, inner] of selector.compounds.entries()) {
+      yield* boxesAsked(inner, at === last, at === last ? beside : true);
+    }
   }
 }
 
-/** Each box a sheet's rules ask `:has()` of above the node they style. */
+/** Each box a sheet's rules ask `:has()` of other than the node they style. */
 export function hasAbove(sheet: StyleSheet): readonly HasAbove[] {
   let known = HAS_ABOVE.get(sheet);
   if (known === undefined) {
@@ -2137,14 +2391,45 @@ export function hasAbove(sheet: StyleSheet): readonly HasAbove[] {
     for (const rule of sheet.rules) {
       const last = rule.compounds.length - 1;
       for (const [at, compound] of rule.compounds.entries()) {
-        for (const box of boxesAsked(compound, at === last)) {
+        const before = rule.combinators.slice(at).some((one) => SIBLING_COMBINATORS.has(one));
+        for (const { box, beside } of boxesAsked(compound, at === last, before)) {
           const subjects = noSubjects();
           noteSubject(subjects, rule);
-          found.push({ classes: box.classes, subjects });
+          found.push({ classes: box.classes, subjects, ...(beside ? { beside: true } : {}) });
         }
       }
     }
     HAS_ABOVE.set(sheet, (known = found));
+  }
+  return known;
+}
+
+/** Each compound in one, and each nested in it at any depth, `:has()` arguments among them. */
+function* everyCompound(compound: Compound): Generator<Compound> {
+  yield compound;
+  for (const inner of [...nestedCompounds(compound), ...hasCompounds(compound)]) {
+    yield* everyCompound(inner);
+  }
+}
+
+const HAS_BESIDE = new WeakMap<StyleSheet, boolean>();
+
+/**
+ * Whether a sheet asks `:has()` about what comes after a node, `:has(+ .x)` or `:has(~ .x .y)`:
+ * then a change can change what the elements before it match, and those before what it is in.
+ */
+export function hasBeside(sheet: StyleSheet): boolean {
+  let known = HAS_BESIDE.get(sheet);
+  if (known === undefined) {
+    const after = (test: HasTest) =>
+      test.relative?.some((one) => SIBLING_COMBINATORS.has(one.combinators[0]!)) === true;
+    known = sheet.rules.some((rule) =>
+      rule.compounds.some((outer) => {
+        for (const compound of everyCompound(outer)) if (compound.has?.some(after)) return true;
+        return false;
+      }),
+    );
+    HAS_BESIDE.set(sheet, known);
   }
   return known;
 }

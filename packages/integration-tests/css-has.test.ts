@@ -240,6 +240,32 @@ describe(':has() as what is beneath a node changes', () => {
   });
 });
 
+describe(':has() and the cost of asking it', () => {
+  it('follows a change under a box that is not drawn', () => {
+    const s = scene(`${RULE} .none { display: none }`);
+    const hidden = s.el('none', s.card);
+    const inner = s.el('', hidden);
+    assert.equal(s.opacity('card'), undefined);
+    s.engine.addClass(inner, 'action');
+    assert.equal(s.opacity('card'), 0.5);
+    s.engine.removeClass(inner, 'action');
+    assert.equal(s.opacity('card') ?? null, null);
+  });
+
+  it('asks a box once a commit, however many of what it holds ask it', () => {
+    // Each row asks whether the card has an action, which is a walk of every row in the card.
+    const s = scene('.card:has(.action) .row { opacity: 0.5 }');
+    const rows = 2000;
+    for (let i = 0; i < rows; i++) s.el('row', s.card);
+    resetStyleStats();
+    s.engine.commit();
+    assert.ok(
+      styleStats.compoundTests < rows * 20,
+      `${styleStats.compoundTests} compound tests for ${rows} rows`,
+    );
+  });
+});
+
 describe(':has() on a box the styled node is in', () => {
   // A component library's own: `.field:has(.input:focus) .label`, a label moved by what is in
   // the field beside it, and `.group:has(.button) .input`, a field squared off for its button.

@@ -21,6 +21,9 @@ import {
   usesActive,
   elementsAtEnd,
   hasAbove,
+  hasBeside,
+  forgetHasAnswers,
+  keepHasAnswers,
   joinSubjects,
   placeReadElsewhere,
   siblingReach,
@@ -3223,8 +3226,15 @@ export class Engine implements HostEngine {
   private readonly placeElsewhere = new Set<PlaceReader>();
   /** The sheets `watchStructure` has read, which it is asked about once an element. */
   private readonly watchedStructure = new WeakSet<StyleSheet>();
-  /** Whether any sheet uses `:has()`. See `markBeneath`. */
+  /**
+   * The sheets in play that use `:has()`, each with whether it asks about what comes after a
+   * node, `:has(+ .x)`: see `hasBeside`. A sheet taken away asks no more.
+   */
+  private readonly hasWatched = new Map<StyleSheet, boolean>();
+  /** Whether any sheet in play uses `:has()`. See `markBeneath`. */
   private hasSheets = false;
+  /** Whether any asks about what comes after a node. See `markBefore`. */
+  private hasBesideSheets = false;
   private readonly resolveAssetSource: (value: unknown) => unknown;
 
   constructor(fabric: FabricUIManager, rootTag: number, options: EngineOptions = {}) {
@@ -3698,7 +3708,7 @@ export class Engine implements HostEngine {
     this.markProps(node, false);
     if (!reach) return;
     if (reach.own) node.ownDirty = true;
-    if (this.hasSheets && reach.beneath) this.markBeneath(node.parent);
+    if (this.hasSheets && reach.beneath) this.markBeneath(node.parent, null, node);
     // `:has(> .on)`: only the box right above the node can answer it.
     else if (this.hasSheets && reach.parentHas) this.markBeneath(node.parent, node.parent?.parent);
     if (this.styles.reachesUnder(reach)) {
@@ -4280,7 +4290,7 @@ export class Engine implements HostEngine {
       // state, though nothing about the sibling moved. Only sheets that ask about siblings pay.
       // Not for a change `beside` says no rule asks of an element before another.
       if (this.structuralSheets && beside) this.markLaterSiblings(node);
-      if (this.hasSheets) this.markBeneath(node.parent);
+      if (this.hasSheets) this.markBeneath(node.parent, null, node);
     }
     // The root has no parent to carry the mark, so it carries its own: `.dark` on the root alone
     // restyles everything beneath it.
@@ -4291,6 +4301,9 @@ export class Engine implements HostEngine {
   private watchHas(sheet: StyleSheet | null | undefined): void {
     if (!sheet?.has) return;
     if (!this.hasReaders.has(sheet)) this.hasReaders.set(sheet, hasAbove(sheet));
+    if (this.hasWatched.has(sheet)) return;
+    this.hasWatched.set(sheet, hasBeside(sheet));
+    if (this.hasWatched.get(sheet)) this.hasBesideSheets = true;
     if (this.hasSheets) return;
     this.hasSheets = true;
     this.styles.tracksHas = true;
@@ -4301,16 +4314,62 @@ export class Engine implements HostEngine {
     this.markPath(this.root);
   }
 
+  /** A sheet has left play: what it asked of `:has()` goes with it. */
+  private unwatchHas(sheet: StyleSheet): void {
+    this.hasReaders.delete(sheet);
+    if (!this.hasWatched.delete(sheet)) return;
+    this.hasSheets = this.hasWatched.size > 0;
+    this.hasBesideSheets = [...this.hasWatched.values()].some(Boolean);
+  }
+
   /**
    * Something at or beneath `from` changed: every node from there up may match a `:has()` rule
    * it did not, or stop matching one, up to `upTo` and not it. They are matched again rather than
    * marked for restyling, which would restyle everything under them. Only sheets that use
    * `:has()` pay.
    */
-  private markBeneath(from: EngineNode | null, upTo: EngineNode | null = null): void {
+  private markBeneath(
+    from: EngineNode | null,
+    upTo: EngineNode | null = null,
+    changed?: EngineNode,
+    at?: number,
+  ): void {
+    forgetHasAnswers();
+    const wasClean = !this.root.structureDirty && !this.root.subtreeDirty;
+    this.markAsking(from, upTo);
+    if (wasClean && this.root.subtreeDirty) this.onDirty?.();
+    if (!this.hasBesideSheets || !from) return;
+    this.markBefore(from, at ?? (changed ? from.childList.indexOf(changed) : 0));
+  }
+
+  /** Each box from `from` up to `upTo`, and not it, to be matched again for `:has()`. */
+  private markAsking(from: EngineNode | null, upTo: EngineNode | null): void {
     for (let node = from; node && node !== upTo; node = node.parent) {
       node.hasDirty = true;
+      // Each is reached by the commit, though a box on the way was marked and not committed
+      // since: one with `display: none` keeps its mark, and `markPath` stops at a marked box.
+      node.subtreeDirty = true;
       if (this.hasReaders.size) this.changedBeneath.add(node);
+    }
+  }
+
+  /**
+   * `:has(+ .x)` and `:has(~ .x .y)`: a change in `parent`'s list at `at` can change what the
+   * elements before it match, and so can one beneath a box for the elements before that box.
+   * Each is matched again, as an ancestor is. Only sheets that ask about what comes after pay.
+   */
+  private markBefore(parent: EngineNode, at: number): void {
+    let end = at;
+    for (let list: EngineNode | null = parent; list;) {
+      for (let i = 0; i < end; i++) {
+        const before = list.childList[i]!;
+        if (before.nodeKind !== 'element') continue;
+        before.hasDirty = true;
+        if (this.hasReaders.size) this.changedBeneath.add(before);
+      }
+      const up: EngineNode | null = list.parent;
+      if (up) end = up.childList.indexOf(list);
+      list = up;
     }
   }
 
@@ -4366,7 +4425,25 @@ export class Engine implements HostEngine {
     if (!asked.length) return above;
     const subjects = asked.map((reader) => reader.subjects);
     this.markUnder(node, subjects.length === 1 ? subjects[0]! : joinSubjects(subjects));
+    for (const reader of asked) if (reader.beside) this.markAfter(node, reader.subjects);
     return new Set([...(above ?? []), ...asked]);
+  }
+
+  /**
+   * Have matched again each element after `node` that one of `subjects`' rules could be for, and
+   * each under one of those: what `.card:has(.x) ~ .title` is for, where the card is `node`.
+   */
+  private markAfter(node: EngineNode, subjects: Subjects): void {
+    const siblings = node.parent?.childList ?? [];
+    for (let i = siblings.indexOf(node) + 1; i < siblings.length; i++) {
+      const sibling = siblings[i]!;
+      if (sibling.nodeKind !== 'element') continue;
+      if (this.styles.isFor(subjects, sibling)) {
+        sibling.ownDirty = true;
+        this.markPath(sibling);
+      }
+      this.markUnder(sibling, subjects);
+    }
   }
 
   /**
@@ -4403,7 +4480,7 @@ export class Engine implements HostEngine {
         this.markLaterSiblings(node);
       }
     }
-    if (this.hasSheets) this.markBeneath(node);
+    if (this.hasSheets) this.markBeneath(node, null, undefined, at);
     this.markPath(node.parent);
   }
 
@@ -4506,6 +4583,16 @@ export class Engine implements HostEngine {
    * optimisation.
    */
   commit(): boolean {
+    // What `:has()` answers is kept for the commit, where a sheet asks it: see `keepHasAnswers`.
+    keepHasAnswers(this.hasSheets);
+    try {
+      return this.commitWhole();
+    } finally {
+      keepHasAnswers(false);
+    }
+  }
+
+  private commitWhole(): boolean {
     if (this.removedSinceCommit.size) this.releaseDetached();
     // The root is never reconciled itself, so it has no `committed` record and `isClean` would
     // always say dirty. Ask the flags directly, or every change-detection pass ends in a
@@ -5048,7 +5135,7 @@ export class Engine implements HostEngine {
    */
   sheetReplaced(sheet: StyleSheet, next: StyleSheet | null): void {
     if (sheet === next && this.knownSheets.has(sheet)) return;
-    this.hasReaders.delete(sheet);
+    this.unwatchHas(sheet);
     this.watchHas(next);
     this.unwatchActive(sheet);
     this.watchActive(next);
