@@ -127,9 +127,9 @@ naming that face needs the PostScript name itself.
 A family and a weight are not matched to a face here, as they are for a `<text>`: name the face,
 `Nunito Sans-700`, rather than `Nunito Sans` with a `weight`.
 
-A font registered by hand with `Fonts.load(map)` has no stylesheet the build can read a file from,
-so a `font` modifier has to name it by its PostScript name. In development, a modifier naming such a
-font by the name it was loaded under logs a warning.
+A font registered by hand with `inject(Fonts).load(map)` has no stylesheet the build can read a
+file from, so a `font` modifier has to name it by its PostScript name. In development, a modifier
+naming such a font by the name it was loaded under logs a warning.
 
 ## Reading what loaded: `Fonts`
 

@@ -79,9 +79,9 @@ function resolved(modifier: UiModifier, postScriptName: PostScriptNames): unknow
 
 /**
  * In development, a family registered by name that no face read at build time has a PostScript
- * name for: a font loaded by hand with `Fonts.load`, or a face whose file could not be read. A
- * name nothing registered is left unsaid, since a font built into the system is found by a name
- * no app registers.
+ * name for: a font loaded by hand with `FontRegistry.load`, or a face whose file could not be
+ * read. A name nothing registered is left unsaid, since a font built into the system is found by a
+ * name no app registers.
  */
 function warnUnfound(family: string): void {
   if (typeof ngDevMode !== 'undefined' && !ngDevMode) return;
