@@ -75,6 +75,10 @@ function withHandle(node: Omit<FakeFabricNode, 'instanceHandle'>, instanceHandle
   return node as FakeFabricNode;
 }
 
+/** The props JSI hands native: a key whose value is undefined is not there at all. */
+const defined = (props: object): Record<string, unknown> =>
+  Object.fromEntries(Object.entries(props).filter(([, value]) => value !== undefined));
+
 export function createFakeFabric(): FakeFabric {
   let handle = 0;
   let committed: FakeFabricNode[] = [];
@@ -174,8 +178,9 @@ export function createFakeFabric(): FakeFabric {
       {
         ...source,
         handle: ++handle,
-        // Fabric merges raw props onto the source props rather than replacing them.
-        props: props ? { ...source.props, ...props } : source.props,
+        // Fabric merges raw props onto the source props rather than replacing them, and JSI
+        // drops a key whose value is undefined on the way (JSIDynamic.cpp), so it changes nothing.
+        props: props ? { ...source.props, ...defined(props) } : source.props,
         children: keepChildren ? source.children : [],
       },
       source.instanceHandle,

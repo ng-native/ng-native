@@ -6117,13 +6117,17 @@ export class Engine implements HostEngine {
     return this.animating;
   }
 
-  /** The host's conversions, applied to a copy. A removed prop travels as null and stays null. */
-  private processed(props: Record<string, unknown>): Record<string, unknown> {
+  /**
+   * The host's conversions, applied to a copy. A removed prop travels as null and stays null. On
+   * an update a colour dropped as unreadable is null too: JSI leaves out an undefined key, and
+   * Fabric keeps what a clone leaves out.
+   */
+  private processed(props: Record<string, unknown>, update: boolean): Record<string, unknown> {
     const out: Record<string, unknown> = {};
     for (const key of Object.keys(props)) {
       const value = props[key];
       if (value === null || value === undefined) out[key] = value;
-      else if (isColorProp(key)) out[key] = this.painted(key, value);
+      else if (isColorProp(key)) out[key] = this.colourProp(key, value, update);
       // A list of sources has already been resolved by whoever built it, as RN's resolver
       // also assumes: it passes any object through and only turns a number into one.
       else if (ASSET_PROPS.has(key) && !Array.isArray(value))
@@ -6286,7 +6290,7 @@ export class Engine implements HostEngine {
     if (childrenChanged || propsPayload) {
       handle = this.clone(
         previous.handle,
-        propsPayload && this.processed(propsPayload),
+        propsPayload && this.processed(propsPayload, true),
         childrenChanged ? childHandles : null,
       );
       // A clone is the same view, so it keeps the tag it was created with, not the newest tag
@@ -6623,7 +6627,11 @@ export class Engine implements HostEngine {
           ...STAND_INS[name],
         };
         const payload = diffProps(kept.committed.props, props);
-        const handle = this.clone(kept.committed.handle, payload && this.processed(payload), []);
+        const handle = this.clone(
+          kept.committed.handle,
+          payload && this.processed(payload, true),
+          [],
+        );
         kept.committed = { ...kept.committed, handle, props, childHandles: [] };
         kept.node = null;
       }
@@ -6729,7 +6737,13 @@ export class Engine implements HostEngine {
     const tag = nextTag();
     this.stats.createdNodes++;
     // instanceHandle is the retained node itself: it is what Fabric hands back on events.
-    const handle = this.fabric.createNode(tag, viewName, this.rootTag, this.processed(props), node);
+    const handle = this.fabric.createNode(
+      tag,
+      viewName,
+      this.rootTag,
+      this.processed(props, false),
+      node,
+    );
     for (const child of childHandles) this.fabric.appendChild(handle, child);
     node.committed = { handle, tag, props, childHandles, viewName };
     node.bornIn = this.stats.commits;
@@ -7037,6 +7051,11 @@ export class Engine implements HostEngine {
   /** The host's `resolveAssetSource`, for a component that needs an asset's size up front. */
   resolveAsset(value: unknown): unknown {
     return this.resolveAssetSource(value);
+  }
+
+  /** A colour prop as `processed` sends it: one dropped as unreadable is null on an update. */
+  private colourProp(key: string, value: unknown, update: boolean): unknown {
+    return this.painted(key, value) ?? (update ? null : undefined);
   }
 
   /**

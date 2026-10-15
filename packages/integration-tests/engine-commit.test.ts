@@ -336,6 +336,22 @@ describe('what a commit sends', () => {
     );
   });
 
+  it('takes the paint off a shape whose fill turns into a colour native cannot read', () => {
+    // Fabric keeps a prop a clone leaves out, and JSI leaves out one that is undefined: the old
+    // paint goes only when null is sent for it.
+    const fabric = createFakeFabric();
+    const engine = new Engine(fabric, 1, {
+      processColor: (value) => (value === 'red' ? 0xffff0000 : null),
+    });
+    const path = engine.createElement('path');
+    engine.setProp(path, 'style', { fill: 'red' });
+    engine.appendChild(engine.root, path);
+    engine.commit();
+    engine.setProp(path, 'style', { fill: 'not-a-colour' });
+    engine.commit();
+    assert.equal(fabric.committed[0]!.props['fill'] ?? null, null);
+  });
+
   it('sends no brush an icon made of a colour native reads nothing in', () => {
     // @ng-native/icons builds its solid brush before the engine sees it, with whatever
     // processColor answered: null for a colour it cannot read.
