@@ -169,8 +169,11 @@ export class NativeNavigation {
   /**
    * Swap the current screen for another. The history entry is replaced too, so a back from the
    * new screen goes where a back from the old one would have.
+   *
+   * A `stackAnimation` in `presentation` is the one the new screen arrives with. Without one, the
+   * swap animates as the screen leaving was opened.
    */
-  replace(commands: NavigationCommands, options: NavigationExtras = {}): Promise<boolean> {
+  replace(commands: NavigationCommands, options: NativeNavigationOptions = {}): Promise<boolean> {
     return this.go(commands, { ...options, replaceUrl: true }, { stack: 'replace' });
   }
 
@@ -205,8 +208,12 @@ export class NativeNavigation {
   /**
    * Replace the whole stack with one screen, the way signing out or finishing onboarding does.
    * Every screen below is destroyed, so there is nothing to go back to.
+   *
+   * A `stackAnimation` in `presentation` is the one the screen arrives with:
+   * `reset('/', { presentation: { stackAnimation: 'none' } })` lands with no animation. Without
+   * one, the reset animates as the screen leaving was opened.
    */
-  reset(commands: NavigationCommands, options: NavigationExtras = {}): Promise<boolean> {
+  reset(commands: NavigationCommands, options: NativeNavigationOptions = {}): Promise<boolean> {
     return this.go(commands, { ...options, replaceUrl: true }, { stack: 'reset' });
   }
 

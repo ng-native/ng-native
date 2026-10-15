@@ -51,6 +51,11 @@ export interface ScreenPresentation {
   readonly stackAnimation?: StackAnimation;
   /** Milliseconds. Only read when `stackAnimation` is not `default`. */
   readonly transitionDuration?: number;
+  /**
+   * How a replace or a reset brings this screen in. `pop`, the platform's default, animates as a
+   * back from the screen leaving; `push` runs this screen's `stackAnimation`. A replace or a reset
+   * that names a `stackAnimation` and no `replaceAnimation` is given `push`.
+   */
   readonly replaceAnimation?: ReplaceAnimation;
 
   // --- the dismiss gesture -------------------------------------------------------------
