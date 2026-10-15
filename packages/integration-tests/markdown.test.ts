@@ -9,7 +9,7 @@ import { after, before, describe, it } from 'node:test';
 import type { Type } from '@angular/core';
 import { DeepLinks, type DeepLinkSource } from '@ng-native/device';
 import { cleanup, fireEvent, render, type FakeFabricNode } from '@ng-native/testing';
-import { lexer, type Token } from 'marked';
+import { Lexer, lexer, type Token } from 'marked';
 import { compileFixture } from './compile.ts';
 
 interface Screen {
@@ -499,6 +499,31 @@ describe('streaming', () => {
     assert.equal(textOf(named('ScrollView')[0]!), 'code\n~~~', 'three backticks may yet be four');
     await feed('\u0060\n\nAfter');
     assert.equal(textOf(named('ScrollView')[0]!), 'code\n~~~');
+  });
+
+  it('holds back a closing fence half written inside a quote', async () => {
+    const { named, feed } = await stream('> \u0060\u0060\u0060\n> code\n> \u0060\u0060');
+    assert.equal(textOf(named('ScrollView')[0]!), 'code');
+    await feed('\u0060\n\nAfter');
+    assert.equal(textOf(named('ScrollView')[0]!), 'code');
+  });
+
+  it('lexes only the last block again after a quote that defines a link reference', async () => {
+    const lexed: string[] = [];
+    const lex = Lexer.prototype.lex;
+    Lexer.prototype.lex = function (this: Lexer, source: string) {
+      lexed.push(source);
+      return lex.call(this, source);
+    };
+    try {
+      const { blocks, feed } = await stream('> [d]: https://example.com\n\nSee [d].\n\n', 'One');
+      lexed.length = 0;
+      await feed('\n\nTwo');
+      assert.deepEqual(texts(blocks()), ['', 'See d.', 'One', 'Two']);
+      assert.deepEqual(lexed, ['One\n\nTwo']);
+    } finally {
+      Lexer.prototype.lex = lex;
+    }
   });
 
   it('draws indented code that starts like a fence', async () => {

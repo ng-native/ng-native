@@ -93,9 +93,11 @@ function heldFence(block: Token, tail: string): number | null {
   const lineStart = tail.lastIndexOf('\n') + 1;
   // An opening fence whose info string is still arriving.
   if (!block.raw.includes('\n')) return lineStart;
-  // A closing fence, or a line of the fence's own marker that may yet grow into one.
+  // A closing fence, or a line of the fence's own marker that may yet grow into one. The block's
+  // own last line, since in a quote or a list item the source line starts with their markers.
   const closing = fence[1]![0] === '`' ? /^ {0,3}`+\s*$/ : /^ {0,3}~+\s*$/;
-  const open = !tail.endsWith('\n') && closing.test(tail.slice(lineStart));
+  const last = block.raw.slice(block.raw.lastIndexOf('\n') + 1);
+  const open = !tail.endsWith('\n') && closing.test(last);
   return open ? lineStart : null;
 }
 
@@ -138,6 +140,21 @@ function lexHeldBack(tail: string, links: Links): { tokens: Token[]; links: Link
     if (cut === null || cut >= tail.length) return { tokens, links: tokens.links };
     tail = tail.slice(0, cut);
   }
+}
+
+/** Adds the link references `token` defines, in a quote or a list item too, as marked does. */
+function addDefinitions(token: Token, links: Links) {
+  if (token.type === 'def') {
+    const def = token as Tokens.Def;
+    links[def.tag] ??= { href: def.href, title: def.title };
+  }
+  const inner =
+    token.type === 'list'
+      ? (token as Tokens.List).items
+      : token.type === 'blockquote' || token.type === 'list_item'
+        ? (token as Tokens.Generic).tokens
+        : undefined;
+  for (const child of inner ?? []) addDefinitions(child, links);
 }
 
 function sameLinks(next: Links, previous: Links): boolean {
@@ -197,10 +214,7 @@ export class MarkdownStream {
       if (!source.startsWith(token.raw, offset)) break;
       kept.push(token);
       offset += token.raw.length;
-      if (token.type === 'def') {
-        const def = token as Tokens.Def;
-        keptLinks[def.tag] ??= { href: def.href, title: def.title };
-      }
+      addDefinitions(token, keptLinks);
     }
     this.settled = kept;
     this.settledLength = offset;
