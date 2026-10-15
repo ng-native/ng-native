@@ -183,6 +183,8 @@ describe('host primitives', () => {
     assert.equal(fading().props['opacity'], 1);
     assert.equal(dimmed().props['opacity'], 0.8, "the caller's own opacity is untouched");
 
+    // Pressed once the screen has been drawn: a view no frame has shown yet starts nothing.
+    await new Promise((resolve) => setTimeout(resolve, 20));
     await fireEvent(fading(), 'touchStart');
     // Halfway through the 150ms fade in. A value at either end here would mean the transition
     // never ran and the component had simply set the target, which is what it used to do.

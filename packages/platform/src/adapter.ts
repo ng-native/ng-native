@@ -606,11 +606,13 @@ export class NativeRendererFactory implements RendererFactory2 {
    */
   private readonly pump = (): void => {
     this.frame = 0;
+    // A frame has been drawn since, so every view committed before it has been seen.
+    this.unseenSince = null;
     this.engine.advanceAnimations();
     // Also the commit for anything changed outside change detection. Angular's `animate.enter`
     // and `animate.leave` add their classes from an animation queue that runs after the render
     // pass, so without a frame behind it the class would sit on the node and never reach native.
-    this.engine.commit();
+    this.commit();
     // `pending` as well as `transitioning`: a transition's end listener runs after the commit
     // that finished it, and removing a leaving element is exactly what it tends to do.
     if (this.engine.animating || this.engine.pending) this.schedule();
@@ -636,8 +638,28 @@ export class NativeRendererFactory implements RendererFactory2 {
   };
 
   private rendering = false;
-  /** How many commits there had been before the first one of this turn, while one is unsettled. */
+  /** How many commits there had been before the first that created a view no frame has drawn. */
   private unseenSince: number | null = null;
+  private settling = false;
+
+  /**
+   * Commit, with the views created since the last frame was drawn taken as unseen: what this gives
+   * them is where they start, and no transition runs toward it. A browser computes no style for an
+   * element before the frame after it was inserted, so a class added before then, in the same
+   * task or in another, starts nothing either. A view this commit creates is unseen until the next
+   * frame, which is asked for here.
+   */
+  private commit(): boolean {
+    const before = this.engine.stats.commits;
+    const created = this.engine.stats.createdNodes;
+    const since = this.unseenSince;
+    const committed = since === null ? this.engine.commit() : this.engine.commitUnseen(since);
+    if (since === null && this.engine.stats.createdNodes !== created) {
+      this.unseenSince = before;
+      this.schedule();
+    }
+    return committed;
+  }
 
   /**
    * Commit what the rest of this turn changes before a frame is drawn, rather than a frame later.
@@ -646,14 +668,13 @@ export class NativeRendererFactory implements RendererFactory2 {
    * element has been committed once without it. Committed again in the same turn, the class is on
    * the view's first frame, and the engine starts the view there instead of easing to it.
    */
-  private settleUnseen(before: number): void {
-    if (this.unseenSince !== null) return;
-    this.unseenSince = before;
+  private settleTurn(): void {
+    if (this.settling) return;
+    this.settling = true;
     queueMicrotask(() => {
-      const since = this.unseenSince!;
-      this.unseenSince = null;
+      this.settling = false;
       if (!this.engine.pending) return;
-      this.engine.commitUnseen(since);
+      this.commit();
       if (this.engine.animating) this.schedule();
     });
   }
@@ -676,8 +697,7 @@ export class NativeRendererFactory implements RendererFactory2 {
   end(): void {
     if (this.passes > 0 && --this.passes > 0) return;
     this.rendering = false;
-    const before = this.engine.stats.commits;
-    if (this.engine.commit()) this.settleUnseen(before);
+    if (this.commit()) this.settleTurn();
 
     // A commit is what starts a transition, because it is where the cascade is recomputed.
     if (this.engine.animating) this.schedule();

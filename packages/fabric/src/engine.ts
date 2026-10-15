@@ -4433,14 +4433,14 @@ export class Engine implements HostEngine {
   private unseen = Infinity;
 
   /**
-   * A commit for what changed in the same turn as earlier commits, before a frame was drawn.
-   * `since` is how many commits there had been before the first of them (`stats.commits`).
+   * A commit for what changed after earlier commits, before a frame has drawn them. `since` is
+   * how many commits there had been before the first of them (`stats.commits`).
    *
    * A view those commits created has not been seen in the style they gave it, so what this one
-   * gives it is where it starts, and no transition runs toward it. That is what a browser
-   * does with a class added to an element in the turn that inserted it, and what `animate.enter`
-   * is built on: Angular adds the enter class after the render pass that created the element, and
-   * takes it off a frame later, which is the one change the transition is for.
+   * gives it is where it starts, and no transition runs toward it. That is what a browser does
+   * with a class added to an element before the frame after it was inserted, and what
+   * `animate.enter` is built on: Angular adds the enter class after the render pass that created
+   * the element, and takes it off a frame later, which is the one change the transition is for.
    */
   commitUnseen(since: number): boolean {
     this.unseen = since;

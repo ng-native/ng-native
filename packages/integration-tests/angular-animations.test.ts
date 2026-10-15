@@ -219,6 +219,8 @@ describe('a bound transform under a transition', () => {
     const x = (id: string) =>
       (app.getByTestId(id).props['transform'] as [{ translateX: number }])[0].translateX;
     try {
+      // Changed once the screen has been drawn: a view no frame has shown yet starts nothing.
+      await new Promise((resolve) => setTimeout(resolve, 20));
       app.instance.on.set(true);
       await settle();
       await time.tick(150);
