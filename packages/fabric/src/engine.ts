@@ -1900,9 +1900,12 @@ function paragraphText(node: EngineNode): string {
   let root = node.parent;
   // Text written straight into a view is a paragraph of its own, and all of it.
   if (root === null || !isTextElement(root)) return node.box ? trimEnds(node.text) : node.text;
+  // A text element a view stands in for, which places what it holds: no paragraph runs past it.
+  const inParagraph = (above: EngineNode | null) =>
+    isTextElement(above) && !aligningText(above as EngineNode);
   // The commonest paragraph by far: one run and nothing else, so it is both the first and last.
-  if (root.children.length === 1 && !isTextElement(root.parent)) return trimEnds(node.text);
-  while (isTextElement(root.parent)) root = root.parent!;
+  if (root.children.length === 1 && !inParagraph(root.parent)) return trimEnds(node.text);
+  while (inParagraph(root.parent)) root = root.parent!;
   const runs: EngineNode[] = [];
   const collect = (from: EngineNode) => {
     for (const child of from.children) {
@@ -1982,7 +1985,7 @@ function aligningText(node: EngineNode): boolean {
 function placesByFlex(node: EngineNode, stacked: boolean): boolean {
   if (ownLayout(node, 'display') !== 'flex') return false;
   // A column of them: each a line of its own, where one paragraph would run them on.
-  if (stacked) return String(ownLayout(node, 'flexDirection')).startsWith('column');
+  if (stacked) return String(ownLayout(node, 'flexDirection') ?? 'column').startsWith('column');
   return (
     ALIGNS.has(ownLayout(node, 'alignItems') as string) ||
     ALIGNS.has(ownLayout(node, 'justifyContent') as string)

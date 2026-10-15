@@ -288,10 +288,13 @@ describe('HTML elements in a template', () => {
     it('stacks the text elements a flex column of them holds, as a browser does', () => {
       // A field's label: a name over a hint, `<label class="flex flex-col">`.
       const COLUMN =
-        '.c { display: flex; flex-direction: column } .r { display: flex; flex-direction: row }';
+        '.c { display: flex; flex-direction: column } .r { display: flex; flex-direction: row }' +
+        ' .f { display: flex }';
       const label = engine.createElement('label', compileCss(COLUMN, 'flex'));
       engine.setClasses(label, 'c');
-      for (const words of ['Name', 'As on your passport']) {
+      // Each written across lines, which Angular leaves a space either side of: each is a
+      // paragraph of its own, which starts and ends without it.
+      for (const words of [' Name ', ' As on your passport ']) {
         const span = engine.createElement('span');
         engine.appendChild(span, engine.createText(words));
         engine.appendChild(label, span);
@@ -308,6 +311,9 @@ describe('HTML elements in a template', () => {
         engine.commit();
         return fabric.committed[0]!.viewName;
       };
+      // A flex container is a column where it says nothing of its direction.
+      engine.setClasses(label, 'f');
+      assert.equal(viewName(), 'View');
       // A row of them runs on as one paragraph, and so does a column with no flex.
       engine.setClasses(label, 'r');
       assert.equal(viewName(), 'Paragraph');
