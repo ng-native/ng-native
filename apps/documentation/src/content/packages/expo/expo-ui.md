@@ -185,6 +185,12 @@ a modifier it does not know, silently, and knows few of SwiftUI's: `frame`, `fon
 only `start`, `top`, `end` and `bottom`. Choose the modifiers by platform, with `nativePlatform()`
 from `@ng-native/fabric`, where a view needs them on both.
 
+A `font` modifier's `family` names one of the app's own faces as a `<text>` would, by the name it is
+registered under: `{ $type: 'font', family: 'Nunito Sans-700', size: 17 }`. SwiftUI finds a face
+only by the PostScript name inside its file, so on iOS that family is committed as the PostScript
+name the build read from the face's file. See
+[Fonts](/packages/expo/fonts#in-a-swiftui-font-modifier).
+
 `UiDatePicker`, `UiPicker` and `UiBottomSheet` take both platforms, as described under each. The
 rest of the typed components are SwiftUI's. On Android a text field, a menu and an image are
 different controls rather than renamed ones, and `UiList`, `UiForm`, `UiSection` and the others

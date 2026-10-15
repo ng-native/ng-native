@@ -16,6 +16,7 @@ import { createRequire } from 'node:module';
 import { mkdirSync, mkdtempSync, realpathSync, rmSync, unlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
+import { named, sfnt } from './font-files.ts';
 
 const require = createRequire(import.meta.url);
 const expo = path.dirname(require.resolve('expo/package.json'));
@@ -160,6 +161,22 @@ describe('a release build from a warm Metro cache', () => {
     const back = await releaseBuild(root, cache);
     assert.ok(shipped(back, 'THIRD_TEMPLATE'), 'the edit is in the bundle');
     assert.ok(!shipped(back, 'FIRST_TEMPLATE'), 'what the edit replaced is not');
+  });
+
+  it('ships the PostScript name of a font file replaced since the last build', async () => {
+    const { root, cache } = project({
+      'index.ts': INDEX,
+      'card.ts': card(
+        `template: '<view></view>', styles: \`@font-face { font-family: Brand; src: url('./brand.ttf') }\``,
+      ),
+    });
+    writeFileSync(path.join(root, 'brand.ttf'), sfnt(named('Brand-First')));
+    assert.ok(shipped(await releaseBuild(root, cache), 'Brand-First'));
+
+    writeFileSync(path.join(root, 'brand.ttf'), sfnt(named('Brand-Second')));
+    const code = await releaseBuild(root, cache);
+    assert.ok(shipped(code, 'Brand-Second'), 'the new name is in the bundle');
+    assert.ok(!shipped(code, 'Brand-First'), 'the name it replaced is not');
   });
 
   it('builds a module importing a stylesheet a resolver replaces with another file', async () => {

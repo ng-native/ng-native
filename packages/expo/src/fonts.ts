@@ -22,13 +22,14 @@
  */
 import { InjectionToken, computed, signal, type Signal } from '@angular/core';
 import {
-  faceName,
   fontsLoading,
   fontsRegistered,
   fontsSettled,
   onFontsRegistered,
+  registeredFaces,
 } from '@ng-native/fabric';
 import { expoModule, present } from './native.ts';
+import { noteRegisteredNames } from './ui-font-names.ts';
 
 /** A face a stylesheet declared, as the compiler collected it. */
 export interface FontFace {
@@ -37,6 +38,8 @@ export interface FontFace {
   readonly source: unknown;
   readonly weight?: number;
   readonly style?: string;
+  /** The name inside the face's file, which SwiftUI finds it by. Read by the build. */
+  readonly postScriptName?: string;
 }
 
 /** Just enough of a compiled stylesheet to find the faces in it. */
@@ -64,15 +67,7 @@ export interface NativeFonts {
  */
 export function registrationsFor(faces: readonly FontFace[]): Record<string, unknown> {
   const map: Record<string, unknown> = {};
-  for (const face of faces) {
-    map[face.family] ??= face.source;
-    map[faceName(face)] = face.source;
-  }
-  for (const face of faces) {
-    if (face.weight === undefined || !face.style) continue;
-    map[`${face.family}-${face.weight}`] ??= face.source;
-    map[`${face.family}-${face.style}`] ??= face.source;
-  }
+  for (const [name, face] of registeredFaces(faces)) map[name] = face.source;
   return map;
 }
 
@@ -143,6 +138,7 @@ export class FontRegistry {
     if (!native) return;
     // Before the first await, so text the app lays out meanwhile waits for the face by name.
     const families = Object.keys(map);
+    noteRegisteredNames(families);
     fontsLoading(families);
     try {
       await native.loadAsync(map);

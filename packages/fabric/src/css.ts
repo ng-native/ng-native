@@ -541,6 +541,11 @@ export interface StyleSheet {
     /** The weights a variable font covers, `font-weight: 100 900`, in place of one `weight`. */
     readonly weightRange?: readonly [number, number];
     readonly style?: string;
+    /**
+     * The name inside the face's file, which the build reads where it can. SwiftUI finds a face by
+     * this name only, and not by the name it is registered under.
+     */
+    readonly postScriptName?: string;
   }[];
 }
 

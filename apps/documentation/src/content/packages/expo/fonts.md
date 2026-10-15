@@ -104,6 +104,33 @@ A weight inside the range is covered by that face, and the text keeps its `font-
 weight is what native picks the instance by. The face is registered as `Inter-100to900`. Two files
 that split a family, `100 400` and `500 900`, are picked between by the range each covers.
 
+## In a SwiftUI `font` modifier
+
+A `font` modifier on an `@expo/ui` view takes a face by the name it is registered under, as
+`font-family` does: the family, or `<family>-<weight>` and the other names above.
+
+```ts
+const title: UiModifier[] = [{ $type: 'font', family: 'Nunito Sans-700', size: 17 }];
+```
+
+SwiftUI finds a custom face only by the PostScript name inside its file (`NunitoSans-Bold`), and
+draws the system font for any other name. So the build reads that name from each face's file, and on
+iOS a `font` modifier whose `family` is a name a face is registered under is committed with the
+face's PostScript name. A PostScript name, or the name of a font built into the system, is
+committed as it is written. Compose finds a face by the name it is registered under, so Android
+takes the family as written.
+
+The name is read from a `.ttf`, `.otf`, `.ttc` (its first font) or `.woff` file. A face whose file
+it cannot be read from, such as a `.woff2`, is reported in the build, and a modifier naming that
+face needs the PostScript name itself.
+
+A family and a weight are not matched to a face here, as they are for a `<text>`: name the face,
+`Nunito Sans-700`, rather than `Nunito Sans` with a `weight`.
+
+A font registered by hand with `Fonts.load(map)` has no stylesheet the build can read a file from,
+so a `font` modifier has to name it by its PostScript name. In development, a modifier naming such a
+font by the name it was loaded under logs a warning.
+
 ## Reading what loaded: `Fonts`
 
 `loadFonts()` runs before there is an injector to inject from, which is why it is a function
@@ -131,7 +158,8 @@ export class FamilyPicker {
 - **`available`** - whether `expo-font` is installed at all. Without it a custom face simply never
   appears.
 - **`load(map)`** - register faces by name directly, for a font that did not come from a
-  stylesheet. `loadSheet(...sheets)` is what `loadFonts()` calls underneath.
+  stylesheet. A SwiftUI `font` modifier names such a face by its PostScript name, not by the name
+  in `map`. `loadSheet(...sheets)` is what `loadFonts()` calls underneath.
 
 ## Without the module
 
