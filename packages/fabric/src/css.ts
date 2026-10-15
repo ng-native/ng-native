@@ -870,6 +870,8 @@ export const styleStats = {
   nodesResolved: 0,
   /** Rules filed by key selector: each sheet's once, however many sheets come after it. */
   rulesFiled: 0,
+  /** Nodes asked whether a rule `:has()` was asked for could be for them: see `isFor`. */
+  subjectTests: 0,
 };
 
 export function resetStyleStats(): void {
@@ -877,6 +879,7 @@ export function resetStyleStats(): void {
   styleStats.ruleTests = 0;
   styleStats.nodesResolved = 0;
   styleStats.rulesFiled = 0;
+  styleStats.subjectTests = 0;
 }
 
 /** A prop's value as an attribute test compares it: in lower case, under the i flag. */
@@ -2198,6 +2201,13 @@ function addSubjects(into: Subjects, from: Subjects): void {
   if (from.own) into.own = true;
 }
 
+/** What all of `each` are for, as one. */
+export function joinSubjects(each: readonly Subjects[]): Subjects {
+  const all = noSubjects();
+  for (const one of each) addSubjects(all, one);
+  return all;
+}
+
 /**
  * Where a rule names each class it names, for the classes it names in no other place than these:
  *
@@ -2710,6 +2720,7 @@ export class StyleResolver {
 
   /** Whether one of the rules `subjects` stands for could be for a node. */
   isFor(subjects: Subjects, node: StyleTarget): boolean {
+    styleStats.subjectTests++;
     return writtenFor(subjects, node);
   }
 

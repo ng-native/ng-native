@@ -10,6 +10,7 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { createRequire } from 'node:module';
 import { Engine, type EngineNode } from '@ng-native/fabric';
+import { resetStyleStats, styleStats } from '../fabric/src/css.ts';
 import { createFakeFabric, type FakeFabricNode } from '@ng-native/testing';
 import { build } from './tailwind-cli.ts';
 
@@ -196,6 +197,46 @@ describe(':has() as what is beneath a node changes', () => {
     s.engine.addClass(action, 'other');
     s.engine.commit();
     assert.equal(title.styleCache, before, 'the title was not resolved again');
+  });
+
+  it('walks what is under a changed box once, however many rules ask :has() of any box', () => {
+    // A library's `:has(.x) .y`, and Tailwind's, ask it of every box: each one a change is
+    // beneath, from the change up to the root.
+    const READERS = 40;
+    const css = Array.from(
+      { length: READERS },
+      (_, i) => `:has(.on${i}) .title${i} { opacity: 0.5 }`,
+    ).join(' ');
+    const s = scene(css);
+    let box = s.card;
+    const DEPTH = 30;
+    for (let i = 0; i < DEPTH; i++) {
+      box = s.el('', box);
+      s.el('', box);
+    }
+    const title = s.el('title7', box);
+    s.engine.setProp(title, 'testID', 'title');
+    assert.equal(s.opacity('title'), undefined);
+    const nodes = DEPTH * 2 + 2;
+
+    resetStyleStats();
+    s.el('on7', box);
+    assert.equal(s.opacity('title'), 0.5);
+    assert.ok(
+      styleStats.subjectTests < nodes * 3,
+      `${styleStats.subjectTests} nodes asked for ${nodes} nodes and ${READERS} rules`,
+    );
+  });
+
+  it('walks a rule a box asks under it, where a box above asks only others', () => {
+    const s = scene(':has(.on) .other { opacity: 1 } .card:has(.action) .title { opacity: 0.5 }');
+    const title = s.el('title', s.el('body', s.card));
+    s.engine.setProp(title, 'testID', 'title');
+    assert.equal(s.opacity('title'), undefined);
+    const action = s.el('action', s.card);
+    assert.equal(s.opacity('title'), 0.5);
+    s.engine.removeChild(s.card, action);
+    assert.equal(s.opacity('title') ?? null, null);
   });
 });
 

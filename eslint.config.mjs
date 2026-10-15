@@ -156,6 +156,7 @@ export default tseslint.config(
       'packages/integration-tests/css-attribute-reach.test.ts',
       'packages/integration-tests/css-cost.test.ts',
       'packages/integration-tests/css-global-sheet-added.test.ts',
+      'packages/integration-tests/css-has.test.ts',
       'packages/integration-tests/css-oracle.test.ts',
       'packages/integration-tests/css-restyle-keeps-matches.test.ts',
       'packages/integration-tests/dev-loading-view.test.ts',

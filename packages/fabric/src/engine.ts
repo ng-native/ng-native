@@ -21,6 +21,7 @@ import {
   usesActive,
   elementsAtEnd,
   hasAbove,
+  joinSubjects,
   placeReadElsewhere,
   siblingReach,
   type Compound,
@@ -3046,6 +3047,13 @@ function applyIntrinsicSize(props: Record<string, unknown>, size: IntrinsicSize)
 
 const now = (): number => globalThis.performance?.now?.() ?? Date.now();
 
+/** How many boxes `node` is under. */
+function depthOf(node: EngineNode): number {
+  let depth = 0;
+  for (let up = node.parent; up; up = up.parent) depth++;
+  return depth;
+}
+
 function sameHandles(a: readonly FabricNode[], b: readonly FabricNode[]): boolean {
   return a.length === b.length && a.every((handle, i) => handle === b[i]);
 }
@@ -4249,17 +4257,47 @@ export class Engine implements HostEngine {
    * Have matched again what is under each box that changed beneath and that such a rule could
    * be asking: the nodes the rule is for, and no other. Once for a commit, however many changes
    * there were beneath the box: a table gains its rows one at a time.
+   *
+   * A rule asked of a box above is walked under the highest box that asks it, which reaches what
+   * is under the boxes beneath that one as well: a rule `:has()` asks of any box is asked by every
+   * box from the change up to the root, and walked once, from the root. The rules a box asks are
+   * walked together, the tree beneath it once.
    */
   private markUnderHas(): void {
     if (!this.changedBeneath.size) return;
-    for (const node of this.changedBeneath) {
-      for (const readers of this.hasReaders.values()) {
-        for (const { classes, subjects } of readers) {
-          if (classes.every((name) => node.classes?.has(name))) this.markUnder(node, subjects);
-        }
-      }
+    const readers = [...this.hasReaders.values()].flat();
+    const depths = new Map<EngineNode, number>();
+    for (const node of this.changedBeneath) depths.set(node, depthOf(node));
+    const boxes = [...this.changedBeneath].sort((a, b) => depths.get(a)! - depths.get(b)!);
+    // By box walked, the rules walked under it and under every box above it.
+    const walked = new Map<EngineNode, ReadonlySet<HasAbove>>();
+    for (const node of boxes) {
+      let above: ReadonlySet<HasAbove> | undefined;
+      for (let up = node.parent; up && !above; up = up.parent) above = walked.get(up);
+      const all = this.markUnderBox(node, readers, above);
+      if (all) walked.set(node, all);
     }
     this.changedBeneath.clear();
+  }
+
+  /**
+   * `markUnderHas` for one box: the rules it asks that no box above it was walked for, walked
+   * together. What was walked under it and above it, which is `above` where it asks no more.
+   */
+  private markUnderBox(
+    node: EngineNode,
+    readers: readonly HasAbove[],
+    above: ReadonlySet<HasAbove> | undefined,
+  ): ReadonlySet<HasAbove> | undefined {
+    const asked: HasAbove[] = [];
+    for (const reader of readers) {
+      if (above?.has(reader) || !reader.classes.every((name) => node.classes?.has(name))) continue;
+      asked.push(reader);
+    }
+    if (!asked.length) return above;
+    const subjects = asked.map((reader) => reader.subjects);
+    this.markUnder(node, subjects.length === 1 ? subjects[0]! : joinSubjects(subjects));
+    return new Set([...(above ?? []), ...asked]);
   }
 
   /**
