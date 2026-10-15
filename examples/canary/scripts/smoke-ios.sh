@@ -70,14 +70,15 @@ export MAESTRO_DRIVER_STARTUP_TIMEOUT=${MAESTRO_DRIVER_STARTUP_TIMEOUT:-180000}
 # finished, where given a file it prints each command as it runs. A failing flow stops the walk,
 # so the logs left in the output dir are its own.
 walk() {
-  local flow
+  local flow code
   mkdir -p "$1"
   : > "$1/console.log"
   for flow in "$flows"/*.yaml; do
     step "walking $(basename "$flow"); Maestro's driver takes a minute or two to start"
     maestro --device "$udid" test --no-ansi "$flow" --test-output-dir "$1" --debug-output "$1" \
       --flatten-debug-output 2>&1 | tee -a "$1/console.log"
-    [ "${PIPESTATUS[0]}" -eq 0 ] || return 1
+    code=${PIPESTATUS[0]}
+    [ "$code" -eq 0 ] || return "$code"
   done
 }
 walk "$out"
