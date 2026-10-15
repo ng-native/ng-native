@@ -7034,13 +7034,18 @@ export class Engine implements HostEngine {
 
   /**
    * A colour prop as native takes it. A shape's `fill` or `stroke` the cascade settled from a
-   * token is the solid brush react-native-svg takes, and `none` no paint at all.
+   * token is the solid brush react-native-svg takes, `none` no paint at all, and one the host
+   * reads no colour in no paint of the shape's own.
    */
   private painted(key: string, value: unknown): unknown {
     if (!BRUSH_PROPS.has(key)) return this.color(value);
     // Already a brush, as the icon wrote it: only one the cascade settled is still text.
     if (typeof value !== 'string') return value;
-    return value === 'none' ? null : { type: 0, payload: this.color(value) };
+    if (value === 'none') return null;
+    // A colour the host cannot read is dropped, as a browser drops it: a solid brush with no
+    // colour in it stops the app.
+    const payload = this.color(value);
+    return payload == null ? undefined : { type: 0, payload };
   }
 
   /**

@@ -311,6 +311,31 @@ describe('what a commit sends', () => {
     ]);
   });
 
+  it('sends no brush for a fill or stroke that is no colour native reads', () => {
+    // react-native-svg stops the app on a solid brush with no colour in it, as processColor
+    // answers for a value it cannot read.
+    const fabric = createFakeFabric();
+    const engine = new Engine(fabric, 1, {
+      processColor: (value) => (value === 'red' ? 0xffff0000 : null),
+    });
+    for (const paint of ['red', 'not-a-colour']) {
+      const path = engine.createElement('path');
+      engine.setProp(path, 'style', { fill: paint, stroke: paint });
+      engine.appendChild(engine.root, path);
+    }
+    engine.commit();
+    assert.deepEqual(
+      fabric.committed.map((each) => [each.props['fill'], each.props['stroke']]),
+      [
+        [
+          { type: 0, payload: 0xffff0000 },
+          { type: 0, payload: 0xffff0000 },
+        ],
+        [undefined, undefined],
+      ],
+    );
+  });
+
   it('keeps hyphenated attributes to the engine, since no native prop is spelt that way', () => {
     const props = committed({ 'data-row': '3', testID: 'row' });
     assert.equal(props['data-row'], undefined);
