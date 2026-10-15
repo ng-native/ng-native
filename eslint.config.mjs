@@ -164,6 +164,7 @@ export default tseslint.config(
       'packages/integration-tests/engine-commit.test.ts',
       'packages/integration-tests/expo.test.ts',
       'packages/integration-tests/markdown-files.test.ts',
+      'packages/integration-tests/markdown.test.ts',
       'packages/integration-tests/fabric-facade.test.ts',
       'packages/integration-tests/host-primitives.test.ts',
       'packages/integration-tests/layout-animation.test.ts',

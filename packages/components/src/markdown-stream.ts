@@ -1,8 +1,8 @@
 /**
  * A Markdown source that grows as it streams in, lexed a chunk at a time: the blocks before the
  * last one are kept, only the last is lexed again, and syntax still open at its end is held back
- * until it closes, so a half-written code span, emphasis, table row or code fence never shows as
- * the characters it is written with.
+ * until it closes, so a half-written code span, emphasis, link, image, table row or code fence
+ * line never shows as the characters it is written with.
  *
  * Plain functions and a class with no Angular in them, beside `markdown-blocks.ts`.
  */
@@ -106,13 +106,57 @@ function heldFence(block: Token, tail: string): number | null {
  * row has not arrived, or is arriving, and so a table once it does.
  */
 function heldHeaderRow(block: Token, tail: string): number | null {
-  if (!/^ {0,3}\|/.test(block.raw)) return null;
   const lines = block.raw.trimEnd().split('\n');
+  // A header row has a pipe, leading or not, as in marked's table syntax.
+  if (!lines[0]!.includes('|')) return null;
   if (lines.length > 2) return null;
   // A second line that has ended, or that can no longer be a delimiter row, made no table.
   if (lines.length === 2 && (tail.endsWith('\n') || !/^[\s|:-]*$/.test(lines[1]!))) return null;
   const first = tail.lastIndexOf(lines[0]!.trim());
   return first < 0 ? null : tail.lastIndexOf('\n', first - 1) + 1;
+}
+
+/** A label still open, a label that a target may yet follow, or a target still open. */
+const UNFINISHED_LINK = /^\[[^\]]*(?:\](?:\([^)]*|\[[^\]]*)?)?$/;
+
+/** Where the first bracket in a text token's `raw` that starts an unfinished link is in `tail`. */
+function linkIn(raw: string, tail: string): number | null {
+  const start = tail.lastIndexOf(raw);
+  if (start < 0) return null;
+  for (let at = raw.indexOf('['); at >= 0; at = raw.indexOf('[', at + 1)) {
+    const from = start + at;
+    if (UNFINISHED_LINK.test(tail.slice(from))) return tail[from - 1] === '!' ? from - 1 : from;
+  }
+  return null;
+}
+
+/**
+ * Where an unfinished link or image in `tokens` starts in `tail`: a bracket marked left as text
+ * whose label, or the target after it, has not closed yet.
+ */
+function heldLink(tokens: readonly Token[], tail: string): number | null {
+  for (let i = tokens.length - 1; i >= 0; i--) {
+    const token = tokens[i]!;
+    const children = (token as Tokens.Generic).tokens;
+    const found =
+      token.type === 'text' && !children?.length
+        ? linkIn(token.raw, tail)
+        : children && token.type !== 'link' && token.type !== 'image'
+          ? heldLink(children, tail)
+          : null;
+    if (found !== null) return found;
+  }
+  return null;
+}
+
+/** Where the first unfinished link, code span or emphasis in `inline` starts in `tail`. */
+function heldInline(inline: readonly Token[], tail: string): number | null {
+  const link = heldLink(inline, tail);
+  const opener = lastOpener(inline, true);
+  const at = opener ? tail.lastIndexOf(opener.raw) : -1;
+  const delimiter = opener && at >= 0 ? at + opener.at : null;
+  if (link === null || delimiter === null) return link ?? delimiter;
+  return Math.min(link, delimiter);
 }
 
 /** Where `tail` is cut so its last block shows nothing half written, or null to show all of it. */
@@ -124,21 +168,34 @@ function holdBackAt(tail: string, tokens: readonly Token[]): number | null {
   const header = block.type === 'paragraph' ? heldHeaderRow(block, tail) : null;
   if (header !== null) return header;
   const inline = (block as Tokens.Generic).tokens;
-  const opener = inline ? lastOpener(inline, true) : null;
-  if (!opener) return null;
-  const at = tail.lastIndexOf(opener.raw);
-  return at >= 0 ? at + opener.at : null;
+  return inline ? heldInline(inline, tail) : null;
 }
 
-/** `tail` lexed, cut back until nothing at its end is half written. */
+/**
+ * Where the last block starts in `tail`, inside a quote or a list item too, found by its first
+ * line since there each source line starts with their markers.
+ */
+function floorOf(tail: string, tokens: readonly Token[]): number {
+  const block = lastBlock(tokens);
+  if (!block) return tail.length;
+  return Math.max(0, tail.lastIndexOf(block.raw.split('\n')[0]!));
+}
+
+/**
+ * `tail` lexed, cut back until nothing at its end is half written. Only its last block is cut:
+ * once a cut reaches where that block starts, the blocks before it, in its quote or list item
+ * too, are drawn as they are.
+ */
 function lexHeldBack(tail: string, links: Links): { tokens: Token[]; links: Links } {
+  let floor: number | undefined;
   for (;;) {
     const lexer = new Lexer();
     Object.assign(lexer.tokens.links, links);
     const tokens = lexer.lex(tail);
-    const cut = holdBackAt(tail, tokens);
+    floor ??= floorOf(tail, tokens);
+    const cut = floor < tail.length ? holdBackAt(tail, tokens) : null;
     if (cut === null || cut >= tail.length) return { tokens, links: tokens.links };
-    tail = tail.slice(0, cut);
+    tail = tail.slice(0, Math.max(cut, floor));
   }
 }
 

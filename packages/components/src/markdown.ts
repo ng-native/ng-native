@@ -96,8 +96,9 @@ function imageSources(blocks: readonly MarkdownBlock[], into = new Set<string>()
  *
  * For a source that grows as it streams in, an answer arriving a few words at a time, set
  * `streaming` until it is complete. The blocks before the last one are then kept as they are and
- * only the last is lexed again, and syntax still open at its end, a code span, an emphasis, a
- * table row or a code fence's first line, is held back until it closes. Clearing `streaming` draws
+ * only the last is lexed again. Syntax still open at its end, a code span, an emphasis, a link,
+ * an image or a table row, is held back until it closes. Of a code fence only an unfinished
+ * opening line is held back, and its code then streams as it arrives. Clearing `streaming` draws
  * the whole source as written, and `tokens` are always drawn as given. A block that did not
  * change keeps its views, streaming or not.
  *

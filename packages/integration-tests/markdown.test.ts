@@ -10,6 +10,7 @@ import type { Type } from '@angular/core';
 import { DeepLinks, type DeepLinkSource } from '@ng-native/device';
 import { cleanup, fireEvent, render, type FakeFabricNode } from '@ng-native/testing';
 import { Lexer, lexer, type Token } from 'marked';
+import { MarkdownStream } from '../components/src/markdown-stream.ts';
 import { compileFixture } from './compile.ts';
 
 interface Screen {
@@ -533,6 +534,66 @@ describe('streaming', () => {
     const { blocks, named } = await stream('Text\n\n    \u0060\u0060\u0060');
     assert.equal(blocks().length, 2);
     assert.equal(textOf(named('ScrollView')[0]!), '\u0060\u0060\u0060');
+  });
+
+  it('draws a finished paragraph when the one after it is held back whole', async () => {
+    const { blocks } = await stream('*one\n\n*two');
+    assert.deepEqual(texts(blocks()), ['*one']);
+    const quoted = await stream('> *one\n>\n> *two');
+    assert.deepEqual(texts(quoted.blocks()), ['*one'], 'in a quote');
+    const listed = await stream('- a\n\n  *one\n\n  *two');
+    assert.deepEqual(texts(listed.blocks()), ['\u2022a*one'], 'in a list item');
+  });
+
+  it('holds back an unfinished link or image until it closes', async () => {
+    const { blocks, named, feed } = await stream('See [the **docs**](http');
+    assert.deepEqual(texts(blocks()), ['See']);
+    await feed('s://example.com)');
+    assert.deepEqual(texts(blocks()), ['See the docs']);
+    assert.deepEqual(texts(named('VirtualText')).slice(0, 1), ['the docs'], 'drawn as a link');
+    await feed(' and ![a logo](https://exa');
+    assert.deepEqual(texts(blocks()), ['See the docs and']);
+    const brackets = await stream('Keep [this] note and [x');
+    assert.deepEqual(texts(brackets.blocks()), ['Keep [this] note and']);
+  });
+
+  it('holds back a header row with no leading pipe until its delimiter row ends', async () => {
+    const { blocks, feed } = await stream('a | b\n--- | -');
+    assert.equal(blocks().length, 0, 'a header row and the start of a delimiter row');
+    await feed('--\n1 | 2\n');
+    assert.equal(textOf(blocks()[0]!), 'ab12');
+  });
+
+  it('hides nothing but the end of the last block, streamed a character at a time', () => {
+    const documents = [
+      '*one\n\n*two\n\n**three**\n',
+      'See [the **docs**](https://example.com "Docs") and ![a logo](https://example.com/a.png).\n\n[x] note, `[y` and [z][d].\n\n[d]: https://example.com\n',
+      'a | b\n--- | ---\n1 | *2*\n\nAfter `code` and _em_.\n',
+      '| a | b |\n|:-|-:|\n| `1` | [2](https://example.com) |\n\nDone ~~gone~~.\n',
+      '# Title\n\n- *one*\n- two `x`\n  - nested **b**\n\n> quote *em*\n> more\n\n1. a\n2. [b](c)\n',
+      'Text\n\n```ts\nconst a = `b`;\n```\n\n~~~\ncode\n~~~\n\nSetext\n---\n',
+    ];
+    const json = (tokens: readonly Token[]) => JSON.parse(JSON.stringify(tokens)) as unknown;
+    const blocksOf = (tokens: readonly Token[]) => tokens.filter((one) => one.type !== 'space');
+    for (const document of documents) {
+      const markdown = new MarkdownStream();
+      for (let end = 1; end <= document.length; end++) {
+        const prefix = document.slice(0, end);
+        const whole = blocksOf(lexer(prefix)).map((one) => one.raw);
+        const before = whole.slice(0, -1);
+        // A character at a time, and the whole prefix in one chunk.
+        for (const lexed of [markdown.lex(prefix), new MarkdownStream().lex(prefix)]) {
+          const shown = blocksOf(lexed).map((one) => one.raw);
+          assert.deepEqual(shown.slice(0, before.length), before, JSON.stringify(prefix));
+          assert.ok(shown.length <= whole.length, JSON.stringify(prefix));
+          const last = shown[before.length];
+          if (last !== undefined) {
+            assert.ok(whole.at(-1)!.startsWith(last.trimEnd()), JSON.stringify(prefix));
+          }
+        }
+      }
+      assert.deepEqual(json(markdown.lex(document)), json(lexer(document)), document);
+    }
   });
 
   it('draws everything held back once streaming ends', async () => {
