@@ -152,11 +152,12 @@
 
 .md-th,
 .md-td {
-  flex: 1;
+  align-self: flex-start;
+  max-width: 280px;
   padding: 6px 8px;
 }
 
-.md-td {
+.md-cell-body {
   border-top-width: 1px;
   border-top-color: #d1d1d6;
 }
@@ -189,7 +190,7 @@
 
   .md-blockquote,
   .md-table,
-  .md-td {
+  .md-cell-body {
     border-color: #38383a;
   }
 

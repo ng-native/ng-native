@@ -360,3 +360,93 @@ describe('inputs', () => {
     assert.equal(blocks()[0]!.props['fontSize'], null, 'md-h1 no longer applies');
   });
 });
+
+describe('tables', () => {
+  const TABLE = [
+    '| Rank | Pattern | Example context |',
+    '| --- | --- | --- |',
+    '| 1 | `request completed` | PUT /api/search returned 201 |',
+    '| 22 | miss | GET /a |',
+  ].join('\n');
+
+  /** The table's cells, row by row, each the text a cell is drawn in. */
+  const cellsOf = (table: FakeFabricNode): FakeFabricNode[][] => {
+    const isRow = (node: FakeFabricNode) => node.props['flexDirection'] === 'row';
+    return flatten([table])
+      .filter((node) => isRow(node) && !flatten(node.children).some(isRow))
+      .map((row) => flatten(row.children).filter((node) => node.viewName === 'Paragraph'));
+  };
+  /** The node that holds `node`, found by walking down from `root`. */
+  const parentOf = (root: FakeFabricNode, node: FakeFabricNode): FakeFabricNode =>
+    flatten([root]).find((one) => one.children.includes(node))!;
+  const measure = async (cells: FakeFabricNode[][], widths: number[][]) => {
+    for (const [r, row] of cells.entries()) {
+      for (const [c, cell] of row.entries()) {
+        await fireEvent(cell, 'layout', { layout: { width: widths[r]![c]! } });
+      }
+    }
+  };
+  /** Each cell's least width, which lines its column up. */
+  const columnWidths = (table: FakeFabricNode) =>
+    cellsOf(table).map((row) => row.map((cell) => parentOf(table, cell).props['minWidth']));
+
+  it('scrolls sideways, rather than squeezing its columns into the width of the page', async () => {
+    const { blocks } = await show(TABLE);
+    const scroll = blocks()[0]!;
+    assert.equal(scroll.viewName, 'ScrollView');
+    assert.equal(scroll.props['horizontal'], true);
+    const cells = cellsOf(scroll);
+    assert.deepEqual(
+      cells.map((row) => row.map(textOf)),
+      [
+        ['Rank', 'Pattern', 'Example context'],
+        ['1', 'request completed', 'PUT /api/search returned 201'],
+        ['22', 'miss', 'GET /a'],
+      ],
+    );
+    for (const node of flatten(scroll.children)) {
+      assert.notEqual(node.props['flexGrow'], 1, 'no cell is stretched to share out the page');
+      assert.notEqual(node.props['flex'], 1, 'no cell is stretched to share out the page');
+    }
+    assert.equal(cells[0]![0]!.props['fontWeight'], '600', 'a header cell is bold');
+  });
+
+  it('lines each column up at the width of its widest cell', async () => {
+    const { blocks } = await show(TABLE);
+    await measure(cellsOf(blocks()[0]!), [
+      [40, 60, 120],
+      [10, 150, 230],
+      [20, 30, 50],
+    ]);
+    assert.deepEqual(columnWidths(blocks()[0]!), [
+      [40, 150, 230],
+      [40, 150, 230],
+      [40, 150, 230],
+    ]);
+  });
+
+  it('narrows a column again when its widest cell shrinks, or its row goes', async () => {
+    const { blocks, app, screen } = await show(TABLE);
+    await measure(cellsOf(blocks()[0]!), [
+      [40, 60, 120],
+      [10, 150, 230],
+      [20, 30, 300],
+    ]);
+    await fireEvent(cellsOf(blocks()[0]!)[1]![1]!, 'layout', { layout: { width: 50 } });
+    assert.deepEqual(columnWidths(blocks()[0]!)[0], [40, 60, 300]);
+
+    screen.source.set(TABLE.split('\n').slice(0, 3).join('\n'));
+    await app.detectChanges();
+    assert.deepEqual(
+      columnWidths(blocks()[0]!),
+      [
+        [40, 60, 230],
+        [40, 60, 230],
+      ],
+      'the row that went no longer counts',
+    );
+    screen.source.set(['| Rank | Pattern |', '| --- | --- |', '| 1 | a |'].join('\n'));
+    await app.detectChanges();
+    assert.deepEqual(columnWidths(blocks()[0]!)[0], [40, 60], 'nor does the column that went');
+  });
+});
