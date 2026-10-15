@@ -1330,6 +1330,17 @@ function truncatedAs(box: EngineNode, props: Record<string, unknown>): void {
 }
 
 /**
+ * Stretch the lines of a wrapping flex container that says nothing of `align-content`, as CSS
+ * starts them (`normal`, which is `stretch` in a flex container). Yoga starts them at
+ * `flex-start`, as tall as what is in them, where an item that stretches across its line has
+ * no size. A container that does not wrap has one line, which Yoga stretches already.
+ */
+function wrappedLinesStretch(props: Record<string, unknown>): void {
+  const wraps = props['flexWrap'] === 'wrap' || props['flexWrap'] === 'wrap-reverse';
+  if (wraps && props['alignContent'] === undefined) props['alignContent'] = 'stretch';
+}
+
+/**
  * Leave `aspect-ratio` out for a box with both a width and a height. CSS takes the ratio only
  * for a size that is `auto`; Yoga takes it over one of two that are given, the height in a
  * column and the width in a row.
@@ -4457,6 +4468,7 @@ export class Engine implements HostEngine {
     basisAsSize(node, merged);
     // After the basis, which is a size given where it is committed as one.
     ratioForAutoSize(merged);
+    wrappedLinesStretch(merged);
     noOutline(merged);
     this.borderInText(node, merged);
     // Last, on what is committed: an override or an animation can hide a box, or place it.
