@@ -1495,11 +1495,19 @@ function aroundALine(props: Record<string, unknown>): number {
   return around(props, 'Height');
 }
 
-/** The sides a box's padding and border are on, across a height and across a width. */
-const ENDS = {
-  Height: ['Top', 'Bottom', 'Vertical'],
-  Width: ['Left', 'Right', 'Horizontal'],
-} as const;
+/**
+ * The sides a box's padding and border are on, across a height and across a width, each as Yoga
+ * reads it: a logical side over the physical one, the start on the left unless the box is
+ * right to left.
+ */
+function sides(props: Record<string, unknown>, size: 'Height' | 'Width') {
+  if (size === 'Height') return { axis: 'Vertical', ends: [['Top'], ['Bottom']] } as const;
+  const ends = [
+    ['Start', 'Left'],
+    ['End', 'Right'],
+  ] as const;
+  return { axis: 'Horizontal', ends: props['direction'] === 'rtl' ? [ends[1], ends[0]] : ends };
+}
 
 /** The points of padding and border across a view's height or width, where each is a length. */
 function around(props: Record<string, unknown>, size: 'Height' | 'Width'): number {
@@ -1507,13 +1515,13 @@ function around(props: Record<string, unknown>, size: 'Height' | 'Width'): numbe
     const found = keys.map((key) => props[key]).find((value) => value != null);
     return typeof found === 'number' ? found : 0;
   };
-  const [start, end, axis] = ENDS[size];
-  return (
-    edge(`padding${start}`, `padding${axis}`, 'padding') +
-    edge(`padding${end}`, `padding${axis}`, 'padding') +
-    edge(`border${start}Width`, 'borderWidth') +
-    edge(`border${end}Width`, 'borderWidth')
-  );
+  const { axis, ends } = sides(props, size);
+  let total = 0;
+  for (const side of ends) {
+    total += edge(...side.map((name) => `padding${name}`), `padding${axis}`, 'padding');
+    total += edge(...side.map((name) => `border${name}Width`), 'borderWidth');
+  }
+  return total;
 }
 
 /** The most and the least of each size, by name: asked of every node merged. */

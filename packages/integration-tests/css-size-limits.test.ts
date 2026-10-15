@@ -54,6 +54,8 @@ const CSS =
   '.both { min-height: 100px; max-height: 80px } .padded { max-height: 10px; padding-top: 50px }' +
   ' .row { flex-direction: row } .wide { min-width: 100px; max-width: 80px; height: 5px }' +
   ' .inset { max-width: 10px; padding-left: 30px; height: 5px } .low { min-height: 20px }' +
+  ' .logical { max-width: 10px; padding-inline-start: 30px; border-inline-end: 4px solid; height: 5px }' +
+  ' .edged { max-height: 10px; border-top: 15px solid; border-bottom: 15px solid }' +
   ' .content { box-sizing: content-box; max-height: 10px; padding-top: 50px }';
 
 describe('a least size over a most', () => {
@@ -70,6 +72,18 @@ describe('a least size over a most', () => {
     assert.deepEqual(s.size('inset'), [30, 5]);
     assert.equal(s.committed('wide', 'maxWidth'), 100);
     assert.equal(s.committed('inset', 'maxWidth'), 30);
+  });
+
+  it('holds a box at its padding and border on its logical sides', () => {
+    const s = scene(CSS, ['row', ['logical']]);
+    assert.deepEqual(s.size('logical'), [34, 5]);
+    assert.equal(s.committed('logical', 'maxWidth'), 34);
+  });
+
+  it('holds a box at its border, where the border alone is over the most', () => {
+    const s = scene(CSS, ['a', ['edged']]);
+    assert.deepEqual(s.size('edged'), [400, 30]);
+    assert.equal(s.committed('edged', 'maxHeight'), 30);
   });
 
   it('holds a box at its padding, and the box around it with it', () => {
