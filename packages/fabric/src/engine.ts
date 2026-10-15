@@ -5232,9 +5232,10 @@ export class Engine implements HostEngine {
     this.takeBackEased(node, state, props, spec, now);
     this.takeBackLaid(state, props, spec, now);
     const started: string[] = [];
+    const before = spec && this.paintedBefore(node);
 
     for (const key of steppedKeys(props, spec, state)) {
-      if (step(state, key, props, spec?.[key] ?? spec?.['all'], now)) {
+      if (step(state, key, props, spec?.[key] ?? spec?.['all'], now, before)) {
         this.running.add(node);
         started.push(key);
         this.emitTransition(node, 'topTransitionstart', key);
@@ -5244,6 +5245,26 @@ export class Engine implements HostEngine {
 
     if (state.size === 0) node.transitions = undefined;
     return props;
+  }
+
+  /**
+   * What a view was last painted with, by property, for a transition that arrives with the change
+   * it eases: CSS takes the transition from the style after the change and eases from the value
+   * before it. Nothing for a view nobody has seen yet, which starts where it is. The individual
+   * transforms are read back from the parts the painted transform was put together from.
+   */
+  private paintedBefore(node: EngineNode): ((key: string) => unknown) | undefined {
+    const painted = node.committed?.props;
+    // A view that paints its background on a child does not commit it as its own.
+    if (!painted || node.paintsOn) return undefined;
+    if (node.bornIn !== undefined && node.bornIn >= this.unseen) return undefined;
+    const composed = node.composedTransform;
+    if (!composed || painted['transform'] !== composed.value) return (key) => painted[key];
+    return (key) => {
+      if (key === 'transform') return composed.parts[3];
+      const part = (INDIVIDUAL_TRANSFORMS as readonly string[]).indexOf(key);
+      return part === -1 ? painted[key] : composed.parts[part];
+    };
   }
 
   /** Nobody saw what the last commit gave a view it created, so this is where the view starts. */

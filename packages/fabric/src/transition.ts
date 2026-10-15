@@ -574,7 +574,8 @@ function percentageOf(value: unknown): number | null {
  * Bring one property up to date, and say whether that started a transition.
  *
  * Mutates `props[key]` to what should be painted now, which for a transition in flight is the
- * value it has reached rather than the one it is heading for.
+ * value it has reached rather than the one it is heading for. `before` is what the element was
+ * painted with before this change, where it was painted at all.
  */
 export function step(
   state: Map<string, Transition>,
@@ -582,6 +583,7 @@ export function step(
   props: Record<string, unknown>,
   rule: TransitionSpec | undefined,
   now: number,
+  before?: (key: string) => unknown,
 ): boolean {
   if (!rule) {
     // No longer transitioning: forget it, so re-adding the rule later starts fresh.
@@ -598,13 +600,8 @@ export function step(
     return false;
   }
 
-  const seen = state.get(key);
-  if (seen === undefined) {
-    // First sight of the property. CSS does not animate one of these either; without the rule
-    // every element would animate in from whatever the previous value happened to be.
-    state.set(key, settled(target, rule));
-    return false;
-  }
+  const seen = state.get(key) ?? firstSight(state, key, target, rule, before);
+  if (seen === undefined) return false;
 
   // Nothing to interpolate when one end is missing: `null` here is `auto`, or a property the
   // element no longer sets at all and that has no initial value worth easing to, and there is no
@@ -626,6 +623,25 @@ export function step(
   if (started) redirect(seen, target, rule, now);
   if (!seen.done) props[key] = seen.current;
   return started;
+}
+
+/**
+ * A property seen under a rule for the first time. CSS takes the rule from the style after the
+ * change, so a change that brings in the rule with a new value eases from the value painted before
+ * it, which `before` gives, and the entry is returned for `step` to ease. A view nobody has seen
+ * has no such value, and starts where it is, with nothing returned.
+ */
+function firstSight(
+  state: Map<string, Transition>,
+  key: string,
+  target: unknown,
+  rule: TransitionSpec,
+  before: ((key: string) => unknown) | undefined,
+): Transition | undefined {
+  const from = before && (before(key) ?? INITIAL[key]);
+  const seen = settled(from ?? target, rule);
+  state.set(key, seen);
+  return from === undefined ? undefined : seen;
 }
 
 /**

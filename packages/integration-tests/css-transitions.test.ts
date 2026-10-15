@@ -1406,6 +1406,102 @@ describe('a transition shorthand whose time is a token', () => {
   });
 });
 
+describe('a transition that arrives with the change it eases', () => {
+  // CSS takes the transition from the style after the change, so one class change that brings
+  // in both a new value and the rule that eases it animates, in Chrome, from the value the
+  // element had. One that brings in `transition: none` with the value changes it at once.
+  function scene(css: string, initial: string) {
+    let now = 1000;
+    const fabric = createFakeFabric();
+    const engine = new Engine(fabric, 1, {
+      globalStyles: compileCss(css) as StyleSheet,
+      now: () => now,
+    });
+    const view = engine.createElement('view');
+    engine.setClasses(view, initial);
+    engine.appendChild(engine.root, view);
+    engine.commit();
+    return {
+      engine,
+      painted: (prop: string) => flatten(fabric.committed)[0]?.props[prop],
+      classes(value: string) {
+        engine.setClasses(view, value);
+        engine.commit();
+      },
+      tick(ms: number) {
+        now += ms;
+        engine.advanceAnimations();
+        engine.commit();
+      },
+    };
+  }
+
+  const FADE =
+    '.fade { transition: opacity 200ms linear } .still { transition: none; opacity: 1 }' +
+    ' .gone { opacity: 0 } .off { transition: none }';
+
+  it('animates where the change takes away the transition: none that held it', () => {
+    const s = scene(FADE, 'fade still');
+    s.classes('fade gone');
+    assert.equal(s.painted('opacity'), 1, 'where it was, on the commit that changed it');
+    s.tick(100);
+    assert.equal(s.painted('opacity'), 0.5, 'half way');
+    s.tick(100);
+    assert.equal(s.painted('opacity'), 0);
+    assert.equal(s.engine.animating, false);
+  });
+
+  it('animates where the element had no transition at all before the change', () => {
+    const s = scene(FADE, '');
+    s.classes('fade gone');
+    s.tick(100);
+    assert.equal(s.painted('opacity'), 0.5);
+  });
+
+  it('changes at once where the change brings in transition: none', () => {
+    const s = scene(FADE, 'fade');
+    s.classes('fade gone off');
+    assert.equal(s.painted('opacity'), 0);
+    assert.equal(s.engine.animating, false);
+  });
+
+  it('eases a transform from the one it had', () => {
+    const s = scene(
+      '.at { transform: translateX(10px) }' +
+        ' .at.far { transform: translateX(20px); transition: transform 200ms linear }',
+      'at',
+    );
+    s.classes('at far');
+    s.tick(100);
+    assert.deepEqual(s.painted('transform'), [{ translateX: 15 }]);
+  });
+
+  it('eases a scale from the one it had, where it was folded into the transform', () => {
+    const s = scene(
+      '.small { scale: 0.5 } .small.big { scale: 1; transition: scale 200ms linear }',
+      'small',
+    );
+    s.classes('small big');
+    s.tick(100);
+    assert.deepEqual(s.painted('transform'), [{ scaleX: 0.75 }, { scaleY: 0.75 }]);
+  });
+
+  it('eases a transform from the one it had beside a scale', () => {
+    const s = scene(
+      '.at { scale: 0.5; transform: translateX(10px) }' +
+        ' .at.far { transform: translateX(20px); transition: transform 200ms linear }',
+      'at',
+    );
+    s.classes('at far');
+    s.tick(100);
+    assert.deepEqual(s.painted('transform'), [
+      { scaleX: 0.5 },
+      { scaleY: 0.5 },
+      { translateX: 15 },
+    ]);
+  });
+});
+
 describe('a view with a transition', () => {
   // React Native gives a view a native view of its own for an opacity under 1 and for little
   // else, and takes it away when the reason goes: `ViewShadowNode.cpp`. A wrapper that fades in
@@ -1443,6 +1539,7 @@ describe('a view with a transition', () => {
   it('stays a native view before, through and after the transition', () => {
     const s = scene(FADE);
     s.classes('fade hidden');
+    s.tick(200);
     assert.equal(s.props()['collapsable'], false, 'at rest');
     s.classes('fade');
     s.tick(100);
