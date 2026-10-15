@@ -1362,8 +1362,8 @@ function wrappedLinesStretch(props: Record<string, unknown>): void {
  * column, a height given leaves the ratio nothing to work out. In a row, the line is as tall as
  * the ratio makes the item from its width, at least, which is then the item's least height.
  *
- * ponytail: a width in points that does not grow, in a row. One that grows or is a share keeps
- * the ratio, as Yoga has it. A plain view only: an image keeps its picture's proportions.
+ * ponytail: a width in points that does not grow, in a row, with any least or most height in
+ * points. One that grows, or is a share, keeps the ratio, as Yoga has it. A plain view only: an image keeps its picture's proportions.
  */
 function stretchedOverRatio(node: EngineNode, props: Record<string, unknown>): void {
   if (!isSet(props['aspectRatio']) || props['position'] === 'absolute') return;
@@ -1382,22 +1382,45 @@ function stretchedOverRatio(node: EngineNode, props: Record<string, unknown>): v
 /** Whether an item stretches across its line: its own size and margins across it are `auto`. */
 function stretchesAcross(props: Record<string, unknown>, row: boolean): boolean {
   if (!STRETCHES.has(props['alignSelf'] as string)) return false;
-  const [size, start, end] = row
-    ? ['height', 'marginTop', 'marginBottom']
-    : ['width', 'marginLeft', 'marginRight'];
+  const size = row ? 'height' : 'width';
   if (isSet(props[size]) && props[size] !== 'auto') return false;
-  return [start, end, 'margin'].every((key) => props[key] !== 'auto');
+  return (row ? MARGINS_ACROSS_ROW : MARGINS_ACROSS_COLUMN).every(
+    (keys) => keys.map((key) => props[key]).find(isSet) !== 'auto',
+  );
 }
+
+/** The margins across a line, a side each, as Yoga reads them: the first set wins. */
+const MARGINS_ACROSS_ROW = [
+  ['marginTop', 'marginVertical', 'margin'],
+  ['marginBottom', 'marginVertical', 'margin'],
+];
+const MARGINS_ACROSS_COLUMN = [
+  ['marginStart', 'marginLeft', 'marginHorizontal', 'margin'],
+  ['marginEnd', 'marginRight', 'marginHorizontal', 'margin'],
+];
 
 /** In a row, the height a ratio gives a width in points, as the item's least height. */
 function ratioAsLeast(props: Record<string, unknown>): void {
   const [width, ratio] = [props['width'], props['aspectRatio']];
   if (typeof width !== 'number' || typeof ratio !== 'number' || ratio <= 0) return;
-  const limited = isSet(props['minHeight']) || isSet(props['maxHeight']);
-  if (props['boxSizing'] === 'content-box' || limited) return;
-  if (isSet(props['flexBasis']) || Number(props['flexGrow'] ?? props['flex'] ?? 0) > 0) return;
-  props['minHeight'] = width / ratio;
+  const [least, most] = [props['minHeight'], props['maxHeight']];
+  const inPoints = (bound: unknown) => !isSet(bound) || typeof bound === 'number';
+  if (props['boxSizing'] === 'content-box' || !inPoints(least) || !inPoints(most)) return;
+  if (sizedAlong(props)) return;
+  props['minHeight'] = heldTo(width / ratio, least, most);
   delete props['aspectRatio'];
+}
+
+/** Whether an item's width is not what it is along its line: it has a basis, or it grows. */
+function sizedAlong(props: Record<string, unknown>): boolean {
+  const basis = props['flexBasis'];
+  return (isSet(basis) && basis !== 'auto') || Number(props['flexGrow'] ?? props['flex'] ?? 0) > 0;
+}
+
+/** A height held to the least and most given, which CSS keeps: the least wins over the most. */
+function heldTo(height: number, least: unknown, most: unknown): number {
+  const under = typeof most === 'number' ? Math.min(height, most) : height;
+  return typeof least === 'number' ? Math.max(under, least) : under;
 }
 
 /**
