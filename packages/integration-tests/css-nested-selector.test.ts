@@ -275,6 +275,18 @@ describe(':has() of a relative selector', () => {
     assert.deepEqual(listed.reports, []);
   });
 
+  it('is asked of a box before the styled element named by no class, the root among them', () => {
+    const s = scene(':has(.mark) ~ .title { opacity: 0.5 }');
+    const box = s.el('box');
+    s.el('title', 'title');
+    assert.equal(s.opacity('title'), null);
+    const mark = s.el('mark', 'mark', box);
+    assert.equal(s.opacity('title'), 0.5);
+    s.engine.removeChild(box, mark);
+    assert.equal(s.opacity('title'), null);
+    assert.deepEqual(s.reports, []);
+  });
+
   it('finds what is under a later sibling', () => {
     const s = scene('.x:has(~ .panel .mark) { opacity: 0.5 }');
     s.el('x', 'x');

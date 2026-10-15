@@ -4558,7 +4558,9 @@ export class Engine implements HostEngine {
    * One already reached for `subjects` in this pass had all after it reached with it.
    */
   private markAfter(node: EngineNode, subjects: Subjects, after: MarkedAfter): void {
-    const siblings = node.parent?.childList ?? [];
+    // The root, or a box taken out since, has nothing after it.
+    if (!node.parent) return;
+    const siblings = node.parent.childList;
     const reached = after.reached(subjects);
     for (let i = after.place(node) + 1; i < siblings.length; i++) {
       const sibling = siblings[i]!;
