@@ -1303,19 +1303,30 @@ function stillTouched(props: Record<string, unknown>): Record<string, unknown> {
  */
 const TRUNCATION = ['numberOfLines', 'ellipsizeMode'] as const;
 
+/**
+ * The truncation each paragraph made around a view's words was merged with, as the view said it.
+ * Not what it was committed with, which has the paragraph's own defaults in it.
+ */
+const truncatedBy = new WeakMap<EngineNode, readonly unknown[]>();
+
+/** What a view says of how its own words are truncated. */
+const truncationOf = (parent: EngineNode): unknown[] =>
+  TRUNCATION.map((key) => ownLayout(parent, key) ?? null);
+
 /** Whether a paragraph made around a view's words is truncated other than the view now says. */
 function truncationMoved(box: EngineNode, parent: EngineNode): boolean {
-  const committed = box.committed?.props;
-  if (!committed) return false;
-  return TRUNCATION.some((key) => (committed[key] ?? null) !== (ownLayout(parent, key) ?? null));
+  const merged = truncatedBy.get(box);
+  if (!merged) return false;
+  return truncationOf(parent).some((said, at) => said !== merged[at]);
 }
 
 function truncatedAs(box: EngineNode, props: Record<string, unknown>): void {
   if (!box.anonymous || !box.parent) return;
-  for (const key of TRUNCATION) {
-    const said = ownLayout(box.parent, key);
-    if (said != null) props[key] = said;
-  }
+  const said = truncationOf(box.parent);
+  truncatedBy.set(box, said);
+  TRUNCATION.forEach((key, at) => {
+    if (said[at] !== null) props[key] = said[at];
+  });
 }
 
 /**

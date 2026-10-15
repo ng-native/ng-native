@@ -12,7 +12,7 @@ import assert from 'node:assert/strict';
 import { before, describe, it } from 'node:test';
 import { createRequire } from 'node:module';
 import type { Type } from '@angular/core';
-import { Engine, type StyleSheet } from '@ng-native/fabric';
+import { Engine, type EngineNode, type StyleSheet } from '@ng-native/fabric';
 import { createFakeFabric, render, screen, type FakeFabricNode } from '@ng-native/testing';
 import { compileFixture } from './compile.ts';
 
@@ -243,5 +243,26 @@ describe('truncation of the words written straight into a view', () => {
     assert.equal(s.paragraph()['numberOfLines'], 3);
     s.engine.setProp(s.view, 'numberOfLines', null);
     assert.equal(s.paragraph()['numberOfLines'] ?? undefined, undefined);
+  });
+
+  it('merges the paragraph again only where the truncation the view says moved', () => {
+    for (const classes of ['', 'truncate']) {
+      const s = scene(classes);
+      s.paragraph();
+      const engine = s.engine as unknown as Record<string, (node: EngineNode) => unknown>;
+      const merge = engine['mergeProps']!;
+      let merged = 0;
+      engine['mergeProps'] = function (this: unknown, node: EngineNode, ...rest: unknown[]) {
+        if (node.anonymous) merged++;
+        return (merge as (...args: unknown[]) => unknown).call(this, node, ...rest);
+      };
+      try {
+        s.engine.setProp(s.view, 'testID', 'moved');
+        s.paragraph();
+        assert.equal(merged, 0, classes || 'no truncation');
+      } finally {
+        engine['mergeProps'] = merge;
+      }
+    }
   });
 });
