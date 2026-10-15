@@ -12,7 +12,8 @@ import assert from 'node:assert/strict';
 import { before, describe, it } from 'node:test';
 import { createRequire } from 'node:module';
 import type { Type } from '@angular/core';
-import { render, screen } from '@ng-native/testing';
+import { Engine, type StyleSheet } from '@ng-native/fabric';
+import { createFakeFabric, render, screen, type FakeFabricNode } from '@ng-native/testing';
 import { compileFixture } from './compile.ts';
 
 const require = createRequire(import.meta.url);
@@ -192,5 +193,55 @@ describe('truncation written in CSS', () => {
       numberOfLines: null,
     });
     assert.deepEqual(of('tabular-nums'), { fontVariant: ['tabular-nums'] });
+  });
+});
+
+describe('truncation of the words written straight into a view', () => {
+  /** A view with `classes` holding its own words, and the paragraph the engine draws them in. */
+  function scene(classes: string) {
+    const css =
+      '.truncate { overflow: hidden; text-overflow: ellipsis; white-space: nowrap }' +
+      ' .clamp { overflow: hidden; -webkit-line-clamp: 2 }';
+    const fabric = createFakeFabric();
+    const engine = new Engine(fabric, 1, {
+      globalStyles: compileCss(css, 'app.css') as StyleSheet,
+    });
+    const view = engine.createElement('view');
+    engine.setClasses(view, classes);
+    engine.appendChild(view, engine.createText('A long address that goes on and on'));
+    engine.appendChild(engine.root, view);
+    const paragraph = (): Record<string, unknown> => {
+      engine.commit();
+      const [box] = fabric.committed as FakeFabricNode[];
+      return box!.children[0]!.props;
+    };
+    return { engine, view, paragraph };
+  }
+
+  it('truncates them as the view says, as a browser does a block of its own words', () => {
+    const one = scene('truncate').paragraph();
+    assert.equal(one['numberOfLines'], 1);
+    assert.equal(one['ellipsizeMode'], 'tail');
+    assert.equal(scene('clamp').paragraph()['numberOfLines'], 2);
+  });
+
+  it('follows the view coming to truncate them, and stopping', () => {
+    const s = scene('');
+    assert.equal(s.paragraph()['numberOfLines'] ?? undefined, undefined);
+    s.engine.setClasses(s.view, 'clamp');
+    assert.equal(s.paragraph()['numberOfLines'], 2);
+    s.engine.setClasses(s.view, 'truncate');
+    assert.equal(s.paragraph()['numberOfLines'], 1);
+    s.engine.setClasses(s.view, '');
+    assert.equal(s.paragraph()['numberOfLines'] ?? undefined, undefined);
+  });
+
+  it('follows a number of lines bound on the view', () => {
+    const s = scene('');
+    s.paragraph();
+    s.engine.setProp(s.view, 'numberOfLines', 3);
+    assert.equal(s.paragraph()['numberOfLines'], 3);
+    s.engine.setProp(s.view, 'numberOfLines', null);
+    assert.equal(s.paragraph()['numberOfLines'] ?? undefined, undefined);
   });
 });
