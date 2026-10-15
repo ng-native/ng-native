@@ -50,6 +50,13 @@ describe('the lines of a wrapping flex container', () => {
     assert.deepEqual(size(), [300, 0]);
   });
 
+  it('stretch where a bound style sets align-content to null, which says nothing of it', () => {
+    const { engine, box, size } = scene('.box { width: 300px; height: 100px; flex-wrap: wrap }');
+    engine.setProp(box, 'style', { alignContent: null });
+    assert.deepEqual(size(), [300, 0]);
+    assert.equal(box.committed?.props['alignContent'], 'stretch');
+  });
+
   it('start where the container says they start', () => {
     const { size } = scene(
       '.box { width: 300px; height: 100px; flex-wrap: wrap; align-content: flex-start }',

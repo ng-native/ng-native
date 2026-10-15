@@ -1337,7 +1337,7 @@ function truncatedAs(box: EngineNode, props: Record<string, unknown>): void {
  */
 function wrappedLinesStretch(props: Record<string, unknown>): void {
   const wraps = props['flexWrap'] === 'wrap' || props['flexWrap'] === 'wrap-reverse';
-  if (wraps && props['alignContent'] === undefined) props['alignContent'] = 'stretch';
+  if (wraps && props['alignContent'] == null) props['alignContent'] = 'stretch';
 }
 
 /**
