@@ -1492,16 +1492,47 @@ function lineTall(
 
 /** The points of padding and border above and below a view's content, where each is a length. */
 function aroundALine(props: Record<string, unknown>): number {
+  return around(props, 'Height');
+}
+
+/** The sides a box's padding and border are on, across a height and across a width. */
+const ENDS = {
+  Height: ['Top', 'Bottom', 'Vertical'],
+  Width: ['Left', 'Right', 'Horizontal'],
+} as const;
+
+/** The points of padding and border across a view's height or width, where each is a length. */
+function around(props: Record<string, unknown>, size: 'Height' | 'Width'): number {
   const edge = (...keys: string[]): number => {
     const found = keys.map((key) => props[key]).find((value) => value != null);
     return typeof found === 'number' ? found : 0;
   };
+  const [start, end, axis] = ENDS[size];
   return (
-    edge('paddingTop', 'paddingVertical', 'padding') +
-    edge('paddingBottom', 'paddingVertical', 'padding') +
-    edge('borderTopWidth', 'borderWidth') +
-    edge('borderBottomWidth', 'borderWidth')
+    edge(`padding${start}`, `padding${axis}`, 'padding') +
+    edge(`padding${end}`, `padding${axis}`, 'padding') +
+    edge(`border${start}Width`, 'borderWidth') +
+    edge(`border${end}Width`, 'borderWidth')
   );
+}
+
+/** The most and the least of each size, by name: asked of every node merged. */
+const MOST = { Height: 'maxHeight', Width: 'maxWidth' } as const;
+const LEAST = { Height: 'minHeight', Width: 'minWidth' } as const;
+
+/**
+ * A most size under the least: under a `min-height`, or a border box's padding and border, which
+ * CSS lets win (CSS 2.2, 10.7). React Native's Yoga holds the box to its most, and the box around
+ * it to that, so the most is raised to the least. A most and a least in points: a share on either
+ * side is left to Yoga.
+ */
+function leastWins(props: Record<string, unknown>, size: 'Height' | 'Width'): void {
+  const most = props[MOST[size]];
+  if (typeof most !== 'number') return;
+  const written = props[LEAST[size]];
+  let least = typeof written === 'number' ? written : 0;
+  if (props['boxSizing'] !== 'content-box') least = Math.max(least, around(props, size));
+  if (most < least) props[MOST[size]] = least;
 }
 
 /**
@@ -4514,6 +4545,8 @@ export class Engine implements HostEngine {
     // After the basis, which is a size given where it is committed as one.
     ratioForAutoSize(merged);
     wrappedLinesStretch(merged);
+    leastWins(merged, 'Height');
+    leastWins(merged, 'Width');
     noOutline(merged);
     this.borderInText(node, merged);
     // Last, on what is committed: an override or an animation can hide a box, or place it.
