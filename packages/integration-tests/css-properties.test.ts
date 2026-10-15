@@ -33,11 +33,20 @@ after(cleanup);
 const flatten = (n: FakeFabricNode[]): FakeFabricNode[] =>
   n.flatMap((x) => [x, ...flatten(x.children)]);
 
-/** Every side of a border, spelled out: what the `border` shorthand compiles to. */
+/** Every side of a border, spelled out. */
 const everySide = (part: 'Width' | 'Color', value: unknown) =>
   Object.fromEntries(
     ['Top', 'Right', 'Bottom', 'Left'].map((side) => [`border${side}${part}`, value]),
   );
+
+/**
+ * What the `border` shorthand compiles to: every side, and the unsided prop beside them, which
+ * Android strokes a rounded border from. See 'a border the same on every side'.
+ */
+const wholeBorder = (part: 'Width' | 'Color', value: unknown) => ({
+  ...everySide(part, value),
+  [`border${part}`]: value,
+});
 
 /** The declarations a single-rule stylesheet produces. */
 /**
@@ -60,20 +69,20 @@ describe('shorthands that every stylesheet uses', () => {
   });
 
   it('border, which sets width, style and colour on every side at once', () => {
-    // Every side spelled out rather than native's unsided props, which lose to a per-side prop
+    // Every side spelled out, not native's unsided props alone, which lose to a per-side prop
     // from any weaker rule. See 'a shorthand beats a longhand from a weaker rule'.
     assert.deepEqual(declarationsOf('border: 2px solid red'), {
-      ...everySide('Width', 2),
+      ...wholeBorder('Width', 2),
       borderStyle: 'solid',
-      ...everySide('Color', 'rgb(255, 0, 0)'),
+      ...wholeBorder('Color', 'rgb(255, 0, 0)'),
     });
   });
 
   it('a per-side border longhand still overrides the shorthand', () => {
     assert.deepEqual(declarationsOf('border: 1px solid red; border-left-width: 4px'), {
-      ...everySide('Width', 1),
+      ...wholeBorder('Width', 1),
       borderStyle: 'solid',
-      ...everySide('Color', 'rgb(255, 0, 0)'),
+      ...wholeBorder('Color', 'rgb(255, 0, 0)'),
       borderLeftWidth: 4,
     });
   });
@@ -117,6 +126,33 @@ describe('shorthands that every stylesheet uses', () => {
   });
 });
 
+describe('a border the same on every side', () => {
+  // Android strokes a rounded border, the only way it draws one dashed or dotted, from the
+  // unsided `borderWidth` and `borderColor` alone, and only when every side equals them. Given
+  // the sides only, it fills each side in as a solid quadrilateral: a dashed card with rounded
+  // corners was drawn solid there, and dashed on iOS.
+  it('is written unsided as well, beside each side', () => {
+    const style = declarationsOf('border: 1px dashed #8a7a66; border-radius: 12px');
+    assert.equal(style['borderWidth'], 1);
+    assert.equal(style['borderColor'], 'rgb(138, 122, 102)');
+    assert.equal(style['borderStyle'], 'dashed');
+    assert.deepEqual(
+      ['Top', 'Right', 'Bottom', 'Left'].map((side) => style[`border${side}Width`]),
+      [1, 1, 1, 1],
+    );
+  });
+
+  it('is written unsided by border-width and border-color too', () => {
+    assert.equal(declarationsOf('border-width: 2px')['borderWidth'], 2);
+    assert.equal(declarationsOf('border-color: red')['borderColor'], 'rgb(255, 0, 0)');
+  });
+
+  it('is not, where the sides differ', () => {
+    assert.equal('borderWidth' in declarationsOf('border-width: 1px 2px'), false);
+    assert.equal('borderColor' in declarationsOf('border-color: red blue'), false);
+  });
+});
+
 describe('the parts of a shorthand the author left out', () => {
   // lightningcss fills every omitted part in with its initial value: `border: none` arrives as a
   // `medium` width, a `none` style and a `currentColor` colour. Each of those used to be refused,
@@ -127,7 +163,7 @@ describe('the parts of a shorthand the author left out', () => {
     // CSS computes the width of a border whose style is `none` as 0, which is also how native is
     // told there is no border.
     // The none style is kept for the engine, which settles it into widths and sends none of it.
-    const none = { ...everySide('Width', 0), borderStyle: 'none' };
+    const none = { ...wholeBorder('Width', 0), borderStyle: 'none' };
     assert.deepEqual(declarationsOf('border: none'), none);
     assert.deepEqual(declarationsOf('border: 0'), none);
     assert.deepEqual(declarationsOf('border: 2px none red'), none);
@@ -135,9 +171,9 @@ describe('the parts of a shorthand the author left out', () => {
 
   it('reads the width keywords as the lengths CSS defines them as', () => {
     assert.deepEqual(declarationsOf('border: thin solid red'), {
-      ...everySide('Width', 1),
+      ...wholeBorder('Width', 1),
       borderStyle: 'solid',
-      ...everySide('Color', 'rgb(255, 0, 0)'),
+      ...wholeBorder('Color', 'rgb(255, 0, 0)'),
     });
     assert.deepEqual(declarationsOf('border-width: medium thick'), {
       borderTopWidth: 3,
@@ -1160,7 +1196,7 @@ describe('values the build settles on its own', () => {
 
   it('takes a zero-width currentColor border as no border, with no colour to resolve', () => {
     const declarations = declarationsOf('border: 0 solid currentColor');
-    assert.deepEqual(declarations, { ...everySide('Width', 0), borderStyle: 'solid' });
+    assert.deepEqual(declarations, { ...wholeBorder('Width', 0), borderStyle: 'solid' });
   });
 
   it('lays -webkit-box out as a row, its default orientation', () => {

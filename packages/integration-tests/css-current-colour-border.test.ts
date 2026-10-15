@@ -41,6 +41,9 @@ describe('a border with no colour', () => {
     assert.deepEqual(colours(props()), [RED, RED, RED, RED]);
     assert.equal(props()['borderTopWidth'], 2);
     assert.equal(props()['borderStyle'], 'solid');
+    // The unsided colour too, which Android strokes a rounded border in.
+    assert.equal(props()['borderColor'], RED);
+    assert.equal(props()['borderWidth'], 2);
   });
 
   it('is drawn in the colour the element inherits', () => {

@@ -368,6 +368,19 @@ const CSS_OF: Record<string, string | readonly string[]> = {
   borderStartColor: 'border-left-color',
   borderEndColor: 'border-right-color',
   borderStyle: 'border-top-style',
+  // Written beside the four sides when they agree, which Chrome has compared already.
+  borderWidth: [
+    'border-top-width',
+    'border-right-width',
+    'border-bottom-width',
+    'border-left-width',
+  ],
+  borderColor: [
+    'border-top-color',
+    'border-right-color',
+    'border-bottom-color',
+    'border-left-color',
+  ],
   experimental_backgroundImage: 'background-image',
   experimental_backgroundSize: 'background-size',
   experimental_backgroundRepeat: 'background-repeat',
