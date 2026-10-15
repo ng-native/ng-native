@@ -4037,8 +4037,16 @@ export class Engine implements HostEngine {
   private readonly paintReports = new Set<EngineNode>();
 
   private reportPaint(): void {
-    for (const node of this.paintReports) node.paintTaker?.(node.paintTaken);
+    const nodes = [...this.paintReports];
     this.paintReports.clear();
+    // One listener that throws stops neither the rest nor what the commit does after them.
+    for (const node of nodes) {
+      try {
+        node.paintTaker?.(node.paintTaken);
+      } catch (error) {
+        this.reportEventError(error, 'paint');
+      }
+    }
   }
 
   /**
@@ -4809,8 +4817,12 @@ export class Engine implements HostEngine {
    * its parent's: the cascade's, and over it the parent's inline style.
    */
   private movePaint(node: EngineNode, merged: Record<string, unknown>): void {
-    if (node.paintTaker) this.takenPaint(node, merged['backgroundColor']);
-    if (node.paintsOn || node.paintTaker) for (const key of PAINT_KEYS) delete merged[key];
+    if (node.paintTaker) {
+      // Only the colour is handed over: a background image stays painted on the node.
+      this.takenPaint(node, merged['backgroundColor']);
+      delete merged['backgroundColor'];
+    }
+    if (node.paintsOn) for (const key of PAINT_KEYS) delete merged[key];
     const from = node.parent?.paintsOn === node ? node.parent : null;
     if (!from) return;
     const paint = { ...this.styles.resolve(from, this.styleEpoch).style, ...inlineOf(from) };
