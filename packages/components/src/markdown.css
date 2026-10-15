@@ -150,9 +150,13 @@
   flex-direction: row;
 }
 
+/* The text hugs its content inside the column's least width, so it can report a narrower one. */
+.md-cell {
+  align-items: flex-start;
+}
+
 .md-th,
 .md-td {
-  align-self: flex-start;
   max-width: 280px;
   padding: 6px 8px;
 }

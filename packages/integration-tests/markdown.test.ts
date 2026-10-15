@@ -449,4 +449,65 @@ describe('tables', () => {
     await app.detectChanges();
     assert.deepEqual(columnWidths(blocks()[0]!)[0], [40, 60], 'nor does the column that went');
   });
+
+  it('forgets a width when its row or column goes, so one that comes back starts unmeasured', async () => {
+    const { blocks, app, screen } = await show(TABLE);
+    await measure(cellsOf(blocks()[0]!), [
+      [40, 60, 120],
+      [10, 150, 230],
+      [20, 30, 300],
+    ]);
+    screen.source.set(['| Rank | Pattern |', '| --- | --- |', '| 1 | a |'].join('\n'));
+    await app.detectChanges();
+    screen.source.set(TABLE);
+    await app.detectChanges();
+    assert.deepEqual(
+      columnWidths(blocks()[0]!)[0]!.map((width) => width ?? null),
+      [40, 150, null],
+      'neither the last row nor the last column kept its width while they were gone',
+    );
+  });
+
+  it('keeps the text in a cell its own width when the app replaces the th and td classes', async () => {
+    const { blocks, app, screen } = await show(TABLE);
+    screen.classes.set({ th: 'x-th', td: 'x-td' });
+    await app.detectChanges();
+    const table = blocks()[0]!;
+    for (const cell of cellsOf(table).flat()) {
+      const wrapper = parentOf(table, cell);
+      const hugs =
+        cell.props['alignSelf'] === 'flex-start' ||
+        (cell.props['alignSelf'] == null && wrapper.props['alignItems'] === 'flex-start');
+      assert.ok(hugs, 'the text is not stretched to its column, so it can report a narrower width');
+    }
+  });
+
+  it('takes each measurement without going over the rest of the table again', async () => {
+    const app = await render(mod['MarkdownColumnsScreen'] as Type<unknown>);
+    const screen = app.instance as {
+      table: { set(value: unknown): void };
+      columns: () => {
+        measure(row: number, column: number, event: unknown): void;
+        width(column: number): number | null;
+      };
+    };
+    const ROWS = 3000;
+    screen.table.set({
+      kind: 'table',
+      header: [[], [], []],
+      rows: Array.from({ length: ROWS }, () => [[], [], []]),
+    });
+    await app.detectChanges();
+    const columns = screen.columns();
+    const started = performance.now();
+    for (let row = 0; row <= ROWS; row++) {
+      for (let column = 0; column < 3; column++) {
+        columns.measure(row, column, { nativeEvent: { layout: { width: (row * 7) % 200 } } });
+        columns.width(column);
+      }
+    }
+    const elapsed = performance.now() - started;
+    assert.equal(columns.width(0), 199);
+    assert.ok(elapsed < 250, `9000 measurements took ${elapsed.toFixed(0)}ms`);
+  });
 });

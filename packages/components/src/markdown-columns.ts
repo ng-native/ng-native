@@ -7,44 +7,63 @@
  * width rather than at it, so a cell that narrows, or a row or column that goes, narrows its
  * column again.
  */
-import { Directive, computed, input, signal } from '@angular/core';
+import { Directive, input, linkedSignal } from '@angular/core';
 import type { LayoutEvent } from './events.ts';
 import type { MarkdownBlock } from './markdown-blocks.ts';
 
 type MarkdownTable = Extract<MarkdownBlock, { kind: 'table' }>;
+
+interface Columns {
+  /** Each cell's text width, by column and then row, with the header as row 0. */
+  readonly cells: number[][];
+  /** Each column's widest cell. */
+  readonly widths: readonly number[];
+}
+
+const widest = (column: readonly number[]): number =>
+  column.reduce((most, width) => Math.max(most, width), 0);
 
 @Directive({ selector: '[markdownColumns]', exportAs: 'markdownColumns' })
 export class MarkdownColumns {
   /** The table whose columns are lined up. */
   readonly table = input.required<MarkdownTable>({ alias: 'markdownColumns' });
 
-  /** Each cell's text width, by `row:column`, with the header as row 0. */
-  private readonly measured = signal<ReadonlyMap<string, number>>(new Map());
-
-  /** Each column's widest cell, counting only the rows and columns the table still has. */
-  private readonly widths = computed(() => {
-    const { header, rows } = this.table();
-    const widths = header.map(() => 0);
-    for (const [key, width] of this.measured()) {
-      const [row, column] = key.split(':').map(Number) as [number, number];
-      if (row <= rows.length && column < widths.length) {
-        widths[column] = Math.max(widths[column]!, width);
-      }
-    }
-    return widths;
+  /**
+   * The measured cells and each column's widest. A new table keeps only the cells of the rows
+   * and columns it still has, so one that goes and comes back starts unmeasured.
+   */
+  private readonly columns = linkedSignal<MarkdownTable, Columns>({
+    source: this.table,
+    computation: ({ header, rows }, previous) => {
+      const cells = header.map((_, column) =>
+        (previous?.value.cells[column] ?? []).slice(0, rows.length + 1),
+      );
+      return { cells, widths: cells.map(widest) };
+    },
   });
 
   /** The least width of a cell in `column`, or null until one of its cells is measured. */
   width(column: number): number | null {
-    return this.widths()[column] || null;
+    return this.columns().widths[column] || null;
   }
 
-  /** Records the width the text of the cell at `row` (0 for the header) and `column` was laid out at. */
+  /**
+   * Records the width the text of the cell at `row` (0 for the header) and `column` was laid out
+   * at. Only a column whose widest cell narrows is gone over again.
+   */
   measure(row: number, column: number, event: Partial<LayoutEvent>): void {
     const width = event.nativeEvent?.layout.width;
-    if (width === undefined) return;
-    const key = `${row}:${column}`;
-    if (this.measured().get(key) === width) return;
-    this.measured.update((measured) => new Map(measured).set(key, width));
+    if (width === undefined || row > this.table().rows.length) return;
+    const { cells, widths } = this.columns();
+    const measured = cells[column];
+    if (!measured || measured[row] === width) return;
+    const was = measured[row];
+    measured[row] = width;
+    const most = widths[column]!;
+    const next = width >= most ? width : was === most ? widest(measured) : most;
+    if (next === most) return;
+    const changed = [...widths];
+    changed[column] = next;
+    this.columns.set({ cells, widths: changed });
   }
 }
