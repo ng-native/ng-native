@@ -30,11 +30,20 @@ const registeredNames = new Set<string>();
 /** Families already warned about, once each. */
 const warned = new Set<string>();
 
+/**
+ * Families a modifier named that had no PostScript name, in development: a font still loading
+ * when the view was committed is warned about once it registers, since nothing commits it again.
+ */
+const unfound = new Set<string>();
+
 declare const ngDevMode: unknown;
 
 /** Note the names `Fonts` registered faces under. See `fontModifierNames`. */
 export function noteRegisteredNames(names: Iterable<string>): void {
-  for (const name of names) registeredNames.add(name);
+  for (const name of names) {
+    registeredNames.add(name);
+    if (unfound.has(name)) warnUnfound(name);
+  }
 }
 
 /** Rewrites the families of `props.modifiers` that name a face, as `ViewNameOptions.fontNames`. */
@@ -76,6 +85,7 @@ function resolved(modifier: UiModifier, postScriptName: PostScriptNames): unknow
  */
 function warnUnfound(family: string): void {
   if (typeof ngDevMode !== 'undefined' && !ngDevMode) return;
+  unfound.add(family);
   if (!registeredNames.has(family) || warned.has(family)) return;
   warned.add(family);
   console.warn(

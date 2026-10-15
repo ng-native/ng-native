@@ -73,6 +73,19 @@ function warnings<T>(run: () => T): { result: T; warned: string[] } {
   }
 }
 
+/** Runs `run` with `console.warn` recorded, and restores it once it settles. */
+async function warningsAsync(run: () => Promise<void>): Promise<string[]> {
+  const warned: string[] = [];
+  const original = console.warn;
+  console.warn = (...args: unknown[]) => warned.push(args.join(' '));
+  try {
+    await run();
+    return warned;
+  } finally {
+    console.warn = original;
+  }
+}
+
 describe('reading a face file at build time', () => {
   it('gives a face the PostScript name its TrueType file says', () => {
     const code = scratch({ 'Brand-Bold.ttf': sfnt(named('Brand-Bold')) }, (dir) =>
@@ -453,6 +466,30 @@ describe('a font modifier naming a face SwiftUI cannot find', () => {
     assert.equal(warned.length, 1, warned.join('\n'));
     assert.match(warned[0]!, /'Hand Lettered'/);
     assert.match(warned[0]!, /PostScript name/);
+  });
+
+  it('warns of a view committed while the font was still loading, once it registers', async () => {
+    let finish!: () => void;
+    const slow = {
+      ...native,
+      loadAsync(map: Record<string, unknown>) {
+        return new Promise<void>((resolve) => {
+          finish = () => {
+            for (const name of Object.keys(map)) native.loaded.add(name);
+            resolve();
+          };
+        });
+      },
+    };
+    const loading = new FontRegistry(slow).load({ 'Still Loading': 1 });
+    const { warned } = warnings(() => scene([font('Still Loading')]));
+    assert.deepEqual(warned, [], 'nothing is registered yet');
+    const after = await warningsAsync(async () => {
+      finish();
+      await loading;
+    });
+    assert.equal(after.length, 1, after.join('\n'));
+    assert.match(after[0]!, /'Still Loading'/);
   });
 
   it('says nothing of a name whose load failed, which expo-font never registered', async () => {
