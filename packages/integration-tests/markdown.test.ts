@@ -9,7 +9,15 @@ import { after, before, describe, it } from 'node:test';
 import type { Type } from '@angular/core';
 import { DeepLinks, type DeepLinkSource } from '@ng-native/device';
 import { cleanup, fireEvent, render, type FakeFabricNode } from '@ng-native/testing';
-import { Lexer, lexer, type Token } from 'marked';
+import {
+  getDefaults,
+  Lexer,
+  lexer,
+  setOptions,
+  use,
+  type Token,
+  type TokenizerAndRendererExtension,
+} from 'marked';
 import { MarkdownStream } from '../components/src/markdown-stream.ts';
 import { compileFixture } from './compile.ts';
 
@@ -397,6 +405,8 @@ describe('streaming', () => {
     return { ...shown, feed };
   }
   const texts = (nodes: FakeFabricNode[]) => nodes.map((node) => textOf(node));
+  const json = (tokens: readonly Token[]) => JSON.parse(JSON.stringify(tokens)) as unknown;
+  const blocksOf = (tokens: readonly Token[]) => tokens.filter((one) => one.type !== 'space');
 
   it('holds back an unclosed code span until it closes', async () => {
     const { blocks, feed } = await stream('Run ', '`cx5');
@@ -608,9 +618,9 @@ describe('streaming', () => {
       '| a | b |\n|:-|-:|\n| `1` | [2](https://example.com) |\n\nDone ~~gone~~.\n',
       '# Title\n\n- *one*\n- two `x`\n  - nested **b**\n\n> quote *em*\n> more\n\n1. a\n2. [b](c)\n',
       'Text\n\n```ts\nconst a = `b`;\n```\n\n~~~\ncode\n~~~\n\nSetext\n---\n',
+      '*x\n*x y\n\nEnd *a *b _c [d] [e](f) `g *h* and **i\n\n> *q\n> *q _r\n',
+      'Intro\n- `cx` and *em*\n- [l](u)\n\nNext\n> - *a*\n',
     ];
-    const json = (tokens: readonly Token[]) => JSON.parse(JSON.stringify(tokens)) as unknown;
-    const blocksOf = (tokens: readonly Token[]) => tokens.filter((one) => one.type !== 'space');
     for (const document of documents) {
       const markdown = new MarkdownStream();
       for (let end = 1; end <= document.length; end++) {
@@ -630,6 +640,62 @@ describe('streaming', () => {
       }
       assert.deepEqual(json(markdown.lex(document)), json(lexer(document)), document);
     }
+  });
+
+  it('applies a marked extension while streaming, one registered after the stream began too', async () => {
+    const shout: TokenizerAndRendererExtension = {
+      name: 'shout',
+      level: 'inline',
+      start: (source) => source.indexOf('!!'),
+      tokenizer(source) {
+        const match = /^!!(\w+)!!/.exec(source);
+        return match ? { type: 'shout', raw: match[0], text: match[1]! } : undefined;
+      },
+    };
+    const markdown = new MarkdownStream();
+    markdown.lex('Say');
+    try {
+      use({ extensions: [shout] });
+      assert.deepEqual(
+        json(markdown.lex('Say !!hi!! now')),
+        json(lexer('Say !!hi!! now')),
+        'lexed as marked.lexer does',
+      );
+      assert.ok(JSON.stringify(markdown.lex('Say !!hi!! now')).includes('"type":"shout"'));
+    } finally {
+      setOptions(getDefaults());
+    }
+  });
+
+  it('lexes a paragraph a bounded number of times, however many delimiters never close', () => {
+    let lexes = 0;
+    const lex = Lexer.prototype.lex;
+    Lexer.prototype.lex = function (this: Lexer, source: string) {
+      lexes++;
+      return lex.call(this, source);
+    };
+    try {
+      const runs = Array.from({ length: 200 }, (_, i) => (i % 2 ? '*a' : '_a') + i).join(' ');
+      for (const source of ['Text ' + runs, '> Text ' + runs, '- Text ' + runs]) {
+        lexes = 0;
+        assert.deepEqual(blocksOf(new MarkdownStream().lex(source)).length, 1, source.slice(0, 9));
+        assert.ok(lexes <= 3, lexes + ' lexes for ' + JSON.stringify(source.slice(0, 9)));
+      }
+    } finally {
+      Lexer.prototype.lex = lex;
+    }
+  });
+
+  it('holds back from an opener in the first line of a paragraph whose later line repeats it', async () => {
+    const { blocks } = await stream('Intro\n\n*x\n*x');
+    assert.deepEqual(texts(blocks()), ['Intro']);
+  });
+
+  it('holds back the marker of a list item it holds back whole, which would join the paragraph before', async () => {
+    const { blocks } = await stream('Intro\n- \u0060cx');
+    assert.deepEqual(texts(blocks()), ['Intro']);
+    const quoted = await stream('Intro\n> - *a');
+    assert.deepEqual(texts(quoted.blocks()), ['Intro']);
   });
 
   it('draws everything held back once streaming ends', async () => {

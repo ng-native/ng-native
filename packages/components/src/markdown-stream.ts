@@ -33,53 +33,50 @@ const WORD = /[\p{L}\p{N}]/u;
 const PUNCTUATION = /[\p{P}\p{S}]/u;
 const DELIMITERS = /`+|\*+|_+|~+/g;
 
-interface Opener {
-  /** Where the delimiter is in the text token's raw source. */
-  readonly at: number;
+/** A text token marked left as text, and where it is in the tail, or -1 when it was not found. */
+interface Leaf {
   readonly raw: string;
+  readonly at: number;
 }
 
 /**
- * The last delimiter in `tokens` that marked left as text and that could still open a code span
+ * The text tokens in `inline`, in order, each found in `tail` after the one before it, starting
+ * from `from`. A link or an image is passed over whole, as it closed.
+ */
+function leavesOf(inline: readonly Token[], tail: string, from: number, leaves: Leaf[] = []) {
+  let cursor = from;
+  for (const token of inline) {
+    const at = tail.indexOf(token.raw, cursor);
+    const children = (token as Tokens.Generic).tokens;
+    if (token.type === 'text' && !children?.length) leaves.push({ raw: token.raw, at });
+    else if (children && token.type !== 'link' && token.type !== 'image') {
+      leavesOf(children, tail, at < 0 ? cursor : at, leaves);
+    }
+    if (at >= 0) cursor = at + token.raw.length;
+  }
+  return leaves;
+}
+
+/**
+ * Where the first delimiter in a text token at `at` in `tail` is that could still open a code span
  * or an emphasis. A backtick left as text always could. An asterisk, underscore or tilde could
  * when what follows is not a space, or has not arrived yet, and is not punctuation straight after
- * a letter or digit; an underscore inside a word cannot.
+ * a letter or digit; an underscore inside a word cannot. What is before and after the delimiter
+ * is read from `tail`, since a text token can end where another token starts.
  */
-function lastOpener(tokens: readonly Token[], atEnd: boolean): Opener | null {
-  for (let i = tokens.length - 1; i >= 0; i--) {
-    const token = tokens[i]!;
-    const last = atEnd && i === tokens.length - 1;
-    const children = (token as Tokens.Generic).tokens;
-    if (token.type === 'text' && !children?.length) {
-      const opener = openerIn(token.raw, last);
-      if (opener) return opener;
-    } else if (children && token.type !== 'link' && token.type !== 'image') {
-      const opener = lastOpener(children, last);
-      if (opener) return opener;
-    }
+function openerIn(raw: string, at: number, tail: string): number | null {
+  for (const match of raw.matchAll(DELIMITERS)) {
+    const from = at + match.index;
+    const next = tail[from + match[0].length];
+    if (canOpen(match[0], tail[from - 1], next)) return from;
   }
   return null;
 }
 
-function openerIn(raw: string, atEnd: boolean): Opener | null {
-  let found: Opener | null = null;
-  for (const match of raw.matchAll(DELIMITERS)) {
-    const run = match[0];
-    const at = match.index;
-    if (canOpen(run, raw[at - 1], raw[at + run.length], atEnd)) found = { at, raw };
-  }
-  return found;
-}
-
 /** Whether a delimiter run, between `before` and `next`, could open a code span or an emphasis. */
-function canOpen(
-  run: string,
-  before: string | undefined,
-  next: string | undefined,
-  atEnd: boolean,
-) {
+function canOpen(run: string, before: string | undefined, next: string | undefined) {
   if (run[0] === '`') return true;
-  if (next === undefined ? !atEnd : WHITESPACE.test(next)) return false;
+  if (next !== undefined && WHITESPACE.test(next)) return false;
   const afterWord = before !== undefined && WORD.test(before);
   if (afterWord && next !== undefined && PUNCTUATION.test(next)) return false;
   if (run[0] === '_' && afterWord) return false;
@@ -117,47 +114,39 @@ function heldHeaderRow(block: Token, tail: string): number | null {
   return first < 0 ? null : tail.lastIndexOf('\n', first - 1) + 1;
 }
 
-/** A label still open, a label that a target may yet follow, or a target still open. */
-const UNFINISHED_LINK = /^\[[^\]]*(?:\](?:\([^)]*|\[[^\]]*)?)?$/;
-
-/** Where the first bracket in a text token's `raw` that starts an unfinished link is in `tail`. */
-function linkIn(raw: string, tail: string): number | null {
-  const start = tail.lastIndexOf(raw);
-  if (start < 0) return null;
-  for (let at = raw.indexOf('['); at >= 0; at = raw.indexOf('[', at + 1)) {
-    const from = start + at;
-    if (UNFINISHED_LINK.test(tail.slice(from))) return tail[from - 1] === '!' ? from - 1 : from;
-  }
-  return null;
+/**
+ * From where in `tail` a bracket starts an unfinished link: a label still open, a label that a
+ * target may yet follow, or a target still open. Each has at most one closing bracket after its
+ * opening one, so the two last closing brackets in `tail` bound where it can start.
+ */
+function unfinishedLinksFrom(tail: string): number {
+  const close = tail.lastIndexOf(']');
+  if (close < 0) return 0;
+  const after = tail.slice(close + 1);
+  const open = after === '' || after[0] === '[' || (after[0] === '(' && !after.includes(')'));
+  return open ? tail.lastIndexOf(']', close - 1) + 1 : close + 1;
 }
 
 /**
- * Where an unfinished link or image in `tokens` starts in `tail`: a bracket marked left as text
- * whose label, or the target after it, has not closed yet.
+ * Where the first unfinished link, code span or emphasis in `inline` starts in `tail`, found in
+ * one pass over its text tokens. Cutting at the first, rather than the last, means the source is
+ * lexed again only when the cut opens a span that closed after it, not once for each delimiter
+ * that never closes.
  */
-function heldLink(tokens: readonly Token[], tail: string): number | null {
-  for (let i = tokens.length - 1; i >= 0; i--) {
-    const token = tokens[i]!;
-    const children = (token as Tokens.Generic).tokens;
-    const found =
-      token.type === 'text' && !children?.length
-        ? linkIn(token.raw, tail)
-        : children && token.type !== 'link' && token.type !== 'image'
-          ? heldLink(children, tail)
-          : null;
-    if (found !== null) return found;
+function heldInline(inline: readonly Token[], tail: string, start: number): number | null {
+  const leaves = leavesOf(inline, tail, start);
+  const links = unfinishedLinksFrom(tail);
+  for (const { raw, at } of leaves) {
+    if (at < 0) continue;
+    const opener = openerIn(raw, at, tail);
+    for (let bracket = raw.indexOf('['); bracket >= 0; bracket = raw.indexOf('[', bracket + 1)) {
+      const from = at + bracket;
+      if (opener !== null && from > opener) break;
+      if (from >= links) return tail[from - 1] === '!' ? from - 1 : from;
+    }
+    if (opener !== null) return opener;
   }
   return null;
-}
-
-/** Where the first unfinished link, code span or emphasis in `inline` starts in `tail`. */
-function heldInline(inline: readonly Token[], tail: string): number | null {
-  const link = heldLink(inline, tail);
-  const opener = lastOpener(inline, true);
-  const at = opener ? tail.lastIndexOf(opener.raw) : -1;
-  const delimiter = opener && at >= 0 ? at + opener.at : null;
-  if (link === null || delimiter === null) return link ?? delimiter;
-  return Math.min(link, delimiter);
 }
 
 /** Where `tail` is cut so its last block shows nothing half written, or null to show all of it. */
@@ -169,7 +158,7 @@ function holdBackAt(tail: string, tokens: readonly Token[]): number | null {
   const header = block.type === 'paragraph' ? heldHeaderRow(block, tail) : null;
   if (header !== null) return header;
   const inline = (block as Tokens.Generic).tokens;
-  return inline ? heldInline(inline, tail) : null;
+  return inline ? heldInline(inline, tail, floorOf(tail, tokens)) : null;
 }
 
 /**
@@ -179,7 +168,22 @@ function holdBackAt(tail: string, tokens: readonly Token[]): number | null {
 function floorOf(tail: string, tokens: readonly Token[]): number {
   const block = lastBlock(tokens);
   if (!block) return tail.length;
-  return Math.max(0, tail.lastIndexOf(block.raw.split('\n')[0]!));
+  // Its whole source when that is in the tail as it is, since its first line can come again.
+  const whole = tail.lastIndexOf(block.raw.trimEnd());
+  return Math.max(0, whole >= 0 ? whole : tail.lastIndexOf(block.raw.split('\n')[0]!));
+}
+
+/** A line's quote and list item markers, up to where the block they hold starts. */
+const MARKERS = /^(?:[ \t]*(?:>|[-+*](?=[ \t])|\d{1,9}[.)](?=[ \t])))*[ \t]*$/;
+
+/**
+ * Where the markers before `at` on its line start, when only markers are before it, or `at`. A
+ * block held back whole takes its markers with it, or a list item marker left behind would join
+ * the paragraph before it.
+ */
+function markersStart(tail: string, at: number): number {
+  const line = tail.lastIndexOf('\n', at - 1) + 1;
+  return MARKERS.test(tail.slice(line, at)) ? line : at;
 }
 
 /**
@@ -196,7 +200,7 @@ function lexHeldBack(tail: string, links: Links): { tokens: Token[]; links: Link
     floor ??= floorOf(tail, tokens);
     const cut = floor < tail.length ? holdBackAt(tail, tokens) : null;
     if (cut === null || cut >= tail.length) return { tokens, links: tokens.links };
-    tail = tail.slice(0, Math.max(cut, floor));
+    tail = tail.slice(0, cut > floor ? cut : markersStart(tail, floor));
   }
 }
 

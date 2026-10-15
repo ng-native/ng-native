@@ -1,5 +1,5 @@
 ---
-'__default__': minor
+'__default__': patch
 ---
 
 `<markdown>` takes a `streaming` input for a source that arrives a chunk at a time, keeping the blocks before the last one and holding back what has not closed yet: a code span, emphasis, a link, an image, a table row or a code fence's opening line. A fenced block's code streams in once its opening line ends.
