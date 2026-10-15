@@ -285,6 +285,28 @@ describe('HTML elements in a template', () => {
       assert.equal(committed.children[0]!.props['alignItems'], 'center');
     });
 
+    it('stacks the text elements a flex column of them holds, as a browser does', () => {
+      // A field's label: a name over a hint, `<label class="flex flex-col">`.
+      const COLUMN = '.c { display: flex; flex-direction: column }';
+      const label = engine.createElement('label', compileCss(COLUMN, 'flex'));
+      engine.setClasses(label, 'c');
+      for (const words of ['Name', 'As on your passport']) {
+        const span = engine.createElement('span');
+        engine.appendChild(span, engine.createText(words));
+        engine.appendChild(label, span);
+        // The whitespace a template leaves between them is no run of its own.
+        engine.appendChild(label, engine.createText(' '));
+      }
+      const committed = commit(label);
+      assert.deepEqual(shape(committed), {
+        View: [{ Paragraph: ['"Name"'] }, { Paragraph: ['"As on your passport"'] }],
+      });
+      // A row of them, or a column of a run and a text element, runs on as one paragraph.
+      engine.setClasses(label, '');
+      engine.commit();
+      assert.equal(fabric.committed[0]!.viewName, 'Paragraph');
+    });
+
     it('is one paragraph again once it stops centring, and a view once it centres again', () => {
       const outer = engine.createElement('span', compileCss(CENTRED, 'flex'));
       engine.setClasses(outer, 'c');

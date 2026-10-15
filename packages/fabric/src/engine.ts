@@ -1963,21 +1963,43 @@ const ALIGNS = new Set(['center', 'flex-end', 'space-around', 'space-evenly']);
  * alignment moves, so such an element commits as a view, and its text as the paragraph any view's
  * loose text is. Read from the node's own style on each reconcile, which a change to it brings
  * about, so nothing is kept to go stale. The run can be a text element of its own, a label in a
- * span, which is then the item placed. A `<text>` is a paragraph whatever its style, and an
- * element holding more than the one run is left as it was.
+ * span, which is then the item placed. So is a column of text elements, each an item under the
+ * last. A `<text>` is a paragraph whatever its style, and any other element holding more than
+ * the one run is left as it was.
  */
 function aligningText(node: EngineNode): boolean {
   if (node.kind !== 'element' || node.tag === 'text' || !TEXT_ELEMENTS.has(node.tag)) {
     return false;
   }
-  if (node.children.length !== 1 || !oneRun(node.children[0]!)) return false;
+  const stacked = stacksRuns(node);
+  if (!stacked && (node.children.length !== 1 || !oneRun(node.children[0]!))) return false;
   // Under a text element it is a span of that paragraph, unless that one is a view placing it.
   if (isTextElement(node.parent) && !aligningText(node.parent as EngineNode)) return false;
+  return placesByFlex(node, stacked);
+}
+
+/** Whether a flex container's own style places the run it holds, or stacks the runs it holds. */
+function placesByFlex(node: EngineNode, stacked: boolean): boolean {
   if (ownLayout(node, 'display') !== 'flex') return false;
+  // A column of them: each a line of its own, where one paragraph would run them on.
+  if (stacked) return String(ownLayout(node, 'flexDirection')).startsWith('column');
   return (
     ALIGNS.has(ownLayout(node, 'alignItems') as string) ||
     ALIGNS.has(ownLayout(node, 'justifyContent') as string)
   );
+}
+
+/**
+ * Whether a text element holds two or more text elements and nothing else but whitespace: a
+ * label around a name and a hint, which a flex column has one under the other.
+ */
+function stacksRuns(node: EngineNode): boolean {
+  let runs = 0;
+  for (const child of node.children) {
+    if (child.kind === 'element' && TEXT_ELEMENTS.has(child.tag)) runs++;
+    else if (child.kind !== 'text' || trimEnds(child.text)) return false;
+  }
+  return runs > 1;
 }
 
 /** One run of text to place: text itself, or a text element around some, a label in a span. */
