@@ -92,6 +92,38 @@ describe(':has()', () => {
     assert.equal(s.opacity('card') ?? null, null);
   });
 
+  it('matches any alternative of a list with an ancestor test in it, as Chrome does', () => {
+    // Chrome: a descendant of the card that is .x and either under .p or .y itself.
+    const rule = '.card:has(.x:is(.p *, .y)) { opacity: 0.5 }';
+    const own = scene(rule);
+    const x = own.el('x', own.card);
+    assert.equal(own.opacity('card'), undefined);
+    own.engine.addClass(x, 'y');
+    assert.equal(own.opacity('card'), 0.5);
+    assert.deepEqual(own.reports, []);
+    own.engine.removeClass(x, 'y');
+    assert.equal(own.opacity('card') ?? null, null);
+
+    // The ancestor may be anywhere above the descendant, the card's own ancestors included.
+    const above = scene(rule);
+    const outer = above.el('');
+    const card = above.el('card', outer);
+    above.engine.setProp(card, 'testID', 'outer card');
+    above.el('x', card);
+    assert.equal(above.opacity('outer card'), undefined);
+    above.engine.addClass(outer, 'p');
+    assert.equal(above.opacity('outer card'), 0.5);
+    above.engine.removeClass(outer, 'p');
+    assert.equal(above.opacity('outer card') ?? null, null);
+
+    const child = scene('.card:has(> .x:is(.p > *, .y)) { opacity: 0.5 }');
+    const p = child.el('p', child.card);
+    child.el('x', p);
+    assert.equal(child.opacity('card'), undefined, 'the .x under .p is no child of the card');
+    child.el('x y', child.card);
+    assert.equal(child.opacity('card'), 0.5);
+  });
+
   it('is as specific as its argument', () => {
     // Two classes beat the one that comes later in the sheet.
     const s = scene('.card:has(.action) { opacity: 0.5 } .card { opacity: 1 }');
@@ -229,13 +261,18 @@ describe(':has() on a box the styled node is in', () => {
 });
 
 describe(':has() the engine does not take', () => {
-  it('refuses one beside the styled node, a combinator inside, and a sibling, each by name', () => {
+  it('refuses what it cannot match and what a browser drops, each by name', () => {
     for (const [css, why] of [
       ['.card:has(.action) + .title { opacity: 0.5 }', /the node the rule styles/],
       ['.card:has(.action) ~ .panel .title { opacity: 0.5 }', /the node the rule styles/],
       ['.card:has(.a .b) { opacity: 0.5 }', /one compound/],
       ['.card:has(+ .next) { opacity: 0.5 }', /one compound/],
       ['.card:has(~ .later) { opacity: 0.5 }', /one compound/],
+      // Chrome drops each of these as invalid: no ':has()' inside another.
+      ['.card:has(.a:has(.b)) { opacity: 0.5 }', /inside another/],
+      ['.card:has(.a:not(:has(.b))) { opacity: 0.5 }', /inside another/],
+      ['.card:has(:is(.a:has(.b))) { opacity: 0.5 }', /inside another/],
+      ['.card .title:has(> .a:has(.b)) { opacity: 0.5 }', /inside another/],
     ] as const) {
       const s = scene(css);
       assert.equal(s.reports.length, 1, css);

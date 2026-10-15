@@ -1448,14 +1448,22 @@ function hasTest(part, context) {
   }
   // As specific as its most specific argument, taken whole, as `:is()` is.
   const top = parsed.reduce((a, b) => (weigh(b) > weigh(a) ? b : a));
-  const any = parsed.map((one) => one.compound);
+  const any = parsed.flatMap((one) => one.any);
   const has = parsed[0].child ? { child: true, any } : { any };
   return { has, ids: top.ids, classes: top.classes, types: top.types };
 }
 
 const weigh = (built) => pack(built.ids, built.classes, built.types);
 
-/** One argument of `:has()`: its compound, and whether it is looked for among children only. */
+/**
+ * One argument of `:has()`: its compound, as the compounds it is the union of, and whether it is
+ * looked for among children only.
+ *
+ * An ancestor test among the alternatives of an `:is()` in it is split out as it is at the top
+ * of a selector (see `alternatives`), each alternative an argument of its own:
+ * `:has(.x:is(.p *, .y))` is `:has(.x:is(.p *), .x.y)`. Kept in one compound it asked for both.
+ * The argument stays as specific as written, which is what `:is()` makes each alternative.
+ */
 function hasArgument(argument, context) {
   // `:has(> x)` is parsed as `:scope > x`, the node itself standing at the front.
   const scoped = argument[0]?.type === 'pseudo-class' && argument[0].kind === 'scope';
@@ -1468,7 +1476,17 @@ function hasArgument(argument, context) {
         `for a child. A longer selector or a sibling one inside it is not supported.`,
     );
   }
-  return { ...compound(rest, context), child };
+  const built = compound(rest, context);
+  if (asksBeneath(built.compound)) {
+    throw new CssUnsupported(
+      `${context}: ':has()' inside another ':has()' is not a valid selector, and a browser ` +
+        `drops the rule.`,
+    );
+  }
+  const split = alternatives(rest);
+  const any =
+    split.length > 1 ? split.map((one) => compound(one, context).compound) : [built.compound];
+  return { ...built, any, child };
 }
 
 /** Whether a compound, or any compound nested in it, uses `:has()`. */

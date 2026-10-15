@@ -75,7 +75,8 @@ either. It is read on the node the rule styles and on a box that node is in:
 `.card:has(.action) .title` styles the titles in a card that has an action, and
 `.field:has(.input:focus) > .label` a field's own label. On a node beside the one styled, or beside
 a box it is in, it is dropped with a warning (`.card:has(.action) + .title`), and so is a longer
-selector or a sibling one inside it (`:has(.a .b)`, `:has(+ .next)`). Tailwind's `has-[...]` and
+selector or a sibling one inside it (`:has(.a .b)`, `:has(+ .next)`), and a `:has()` inside
+another (`:has(.a:has(.b))`), which a browser drops as invalid. Tailwind's `has-[...]` and
 `has-data-[...]` variants are supported. `group-has-*` and `peer-has-*` are dropped with a warning:
 they ask it inside `:is()`, and of a sibling.
 
