@@ -1990,14 +1990,14 @@ function placesByFlex(node: EngineNode, stacked: boolean): boolean {
 }
 
 /**
- * Whether a text element holds two or more text elements and nothing else but whitespace: a
- * label around a name and a hint, which a flex column has one under the other.
+ * Whether a text element holds two or more text elements and nothing else but whitespace and
+ * the anchors control flow leaves: a label around a name and a hint, which a flex column has one under the other.
  */
 function stacksRuns(node: EngineNode): boolean {
   let runs = 0;
   for (const child of node.children) {
     if (child.kind === 'element' && TEXT_ELEMENTS.has(child.tag)) runs++;
-    else if (child.kind !== 'text' || trimEnds(child.text)) return false;
+    else if (child.kind === 'text' ? trimEnds(child.text) : child.kind !== 'anchor') return false;
   }
   return runs > 1;
 }
