@@ -14,6 +14,9 @@ const { inflateSync } = require('node:zlib');
 /** The PostScript name's id in a font's `name` table. */
 const POSTSCRIPT_NAME = 6;
 
+/** The platforms a name is read for: Unicode, Mac and Windows. ISO's and custom ones are passed over. */
+const READ = new Set([0, 1, 3]);
+
 /**
  * The PostScript name in a TrueType, OpenType or WOFF file, or in the first font of a collection,
  * which is the one a device loads. Null for a file this cannot read, such as a WOFF2, whose tables
@@ -85,7 +88,7 @@ function nameIn(table) {
   for (let i = 0; i < count; i++) {
     const record = 6 + 12 * i;
     const platform = table.readUInt16BE(record);
-    if (table.readUInt16BE(record + 6) !== POSTSCRIPT_NAME) continue;
+    if (table.readUInt16BE(record + 6) !== POSTSCRIPT_NAME || !READ.has(platform)) continue;
     const start = strings + table.readUInt16BE(record + 10);
     const bytes = table.subarray(start, start + table.readUInt16BE(record + 8));
     byPlatform.set(platform, platform === 1 ? bytes.toString('latin1') : utf16(bytes));

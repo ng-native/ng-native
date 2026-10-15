@@ -138,7 +138,6 @@ export class FontRegistry {
     if (!native) return;
     // Before the first await, so text the app lays out meanwhile waits for the face by name.
     const families = Object.keys(map);
-    noteRegisteredNames(families);
     fontsLoading(families);
     try {
       await native.loadAsync(map);
@@ -146,7 +145,9 @@ export class FontRegistry {
       fontsSettled(families);
       // Text already laid out in the fallback face keeps it until it is laid out again. Only the
       // faces that registered: one failing fails the whole load, not the others in it.
-      fontsRegistered(Object.keys(map).filter((family) => native.isLoaded(family)));
+      const registered = families.filter((family) => native.isLoaded(family));
+      noteRegisteredNames(registered);
+      fontsRegistered(registered);
     }
   }
 }

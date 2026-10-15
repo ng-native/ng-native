@@ -8,12 +8,16 @@ export interface NameRecord {
   readonly platform: number;
   readonly id: number;
   readonly value: string;
+  /** The record's bytes as stored, in place of `value` encoded for its platform. */
+  readonly bytes?: Buffer;
 }
 
 /** A `name` table holding the records given, Unicode and Windows ones in UTF-16, Mac ones in one byte. */
 export function nameTable(records: readonly NameRecord[]): Buffer {
-  const strings = records.map(({ platform, value }) =>
-    platform === 1 ? Buffer.from(value, 'latin1') : Buffer.from(value, 'utf16le').swap16(),
+  const strings = records.map(
+    ({ platform, value, bytes }) =>
+      bytes ??
+      (platform === 1 ? Buffer.from(value, 'latin1') : Buffer.from(value, 'utf16le').swap16()),
   );
   const head = Buffer.alloc(6 + 12 * records.length);
   head.writeUInt16BE(0, 0);

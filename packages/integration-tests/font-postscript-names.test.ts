@@ -115,6 +115,16 @@ describe('reading a face file at build time', () => {
     assert.deepEqual(postScriptNames(code), ['Brand-Windows']);
   });
 
+  it('passes over a record of a platform it does not read, even one it could not decode', () => {
+    // ISO's platform, long deprecated: an odd length is no UTF-16, and is not this reader's to decode.
+    const iso = nameTable([
+      { platform: 2, id: 6, value: '', bytes: Buffer.from('Odd', 'latin1') },
+      { platform: 3, id: 6, value: 'Brand-Windows' },
+    ]);
+    const code = scratch({ 'a.ttf': sfnt(iso) }, (dir) => compiledFrom(dir, face('./a.ttf')));
+    assert.deepEqual(postScriptNames(code), ['Brand-Windows']);
+  });
+
   it('reads the file from the project root, which Metro names a file from', () => {
     const code = scratch({ 'src/fonts/a.ttf': sfnt(named('Brand-Rooted')) }, (dir) => {
       const source = `
@@ -201,6 +211,24 @@ describe('reading a face file at build time', () => {
     );
     assert.deepEqual(postScriptNames(code), ['Brand-Tailwind']);
   });
+
+  it('warns about an unreadable face in the Tailwind entry once, however often it is rebuilt', () => {
+    const { warned } = scratch({ 'fonts/Brand.woff2': Buffer.from('wOF2') }, (dir) =>
+      warnings(() => {
+        for (let i = 0; i < 2; i++) {
+          compileSheetModule(face('./fonts/Brand.woff2'), 'styles.css', {
+            input: path.join(dir, 'styles.css'),
+            output: path.join(dir, '.angular-native', 'app.tailwind.js'),
+          });
+        }
+      }),
+    );
+    assert.equal(
+      warned.filter((line) => line.includes('Brand.woff2')).length,
+      1,
+      warned.join('\n'),
+    );
+  });
 });
 
 const flatten = (nodes: FakeFabricNode[]): FakeFabricNode[] =>
@@ -240,6 +268,25 @@ describe('a font modifier on a SwiftUI view', () => {
       { $type: 'padding', all: 4 },
       { $type: 'font', family: 'Brand-Bold', size: 17 },
     ]);
+  });
+
+  it('takes the last of two faces declared under one name, as expo-font registers it', () => {
+    const fabric = createFakeFabric();
+    const engine = new Engine(fabric, 1);
+    engine.addGlobalSheet({
+      rules: [],
+      fonts: [
+        { family: 'Twice', source: 1, weight: 700, postScriptName: 'Twice-First' },
+        { family: 'Twice', source: 2, weight: 700, postScriptName: 'Twice-Second' },
+      ],
+    });
+    registerExpoUiViews('ios');
+    const text = engine.createElement('ui-text');
+    engine.setProp(text, 'modifiers', [font('Twice-700')]);
+    engine.appendChild(engine.root, text);
+    engine.commit();
+    const modifiers = flatten(fabric.committed)[0]!.props['modifiers'] as Record<string, unknown>[];
+    assert.equal(modifiers[0]!['family'], 'Twice-Second');
   });
 
   it('takes the bare family as the face registered under it, as expo-font does', () => {
@@ -406,6 +453,18 @@ describe('a font modifier naming a face SwiftUI cannot find', () => {
     assert.equal(warned.length, 1, warned.join('\n'));
     assert.match(warned[0]!, /'Hand Lettered'/);
     assert.match(warned[0]!, /PostScript name/);
+  });
+
+  it('says nothing of a name whose load failed, which expo-font never registered', async () => {
+    const failing = {
+      ...native,
+      async loadAsync() {
+        throw new Error('no such file');
+      },
+    };
+    await assert.rejects(new FontRegistry(failing).load({ 'Never Loaded': 1 }));
+    const { warned } = warnings(() => scene([font('Never Loaded')]));
+    assert.deepEqual(warned, []);
   });
 
   it('says nothing of a system font, or of a face it could rewrite', () => {

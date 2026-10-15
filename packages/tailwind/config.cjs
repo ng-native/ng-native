@@ -197,10 +197,21 @@ function compileSheetModule(css, context = 'tailwind', paths) {
   return `// Generated from ${path.basename(context)}. Edit the Tailwind entry, not this.\n${imports.join('')}export default ${literal};\n`;
 }
 
+/** Faces already reported unreadable, once a process: the sheet is rebuilt on every class written. */
+const warnedFaces = new Set();
+
 /** Gives each face the entry declares the PostScript name its file says: see `font-names.cjs`. */
 function nameEntryFaces(sheet, input) {
-  const warn = (message) => console.warn(`[angular-native] ${message}`);
-  nameFaces(sheet, path.dirname(input), () => {}, warn);
+  nameFaces(
+    sheet,
+    path.dirname(input),
+    () => {},
+    (message) => {
+      if (warnedFaces.has(message)) return;
+      warnedFaces.add(message);
+      console.warn(`[angular-native] ${message}`);
+    },
+  );
 }
 
 /**

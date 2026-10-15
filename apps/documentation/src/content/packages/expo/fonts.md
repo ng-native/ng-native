@@ -120,9 +120,9 @@ face's PostScript name. A PostScript name, or the name of a font built into the 
 committed as it is written. Compose finds a face by the name it is registered under, so Android
 takes the family as written.
 
-The name is read from a `.ttf`, `.otf`, `.ttc` (its first font) or `.woff` file. A face whose file
-it cannot be read from, such as a `.woff2`, is reported in the build, and a modifier naming that
-face needs the PostScript name itself.
+The name is read from a `.ttf`, `.otf`, `.ttc` (its first font) or `.woff` file. A face file in a
+format the name cannot be read from, such as `.woff2`, is reported in the build, and a modifier
+naming that face needs the PostScript name itself.
 
 A family and a weight are not matched to a face here, as they are for a `<text>`: name the face,
 `Nunito Sans-700`, rather than `Nunito Sans` with a `weight`.

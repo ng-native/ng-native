@@ -111,7 +111,10 @@ const familyKey = (family: string) => family.toLowerCase();
 /** Every face the engine has seen a sheet declare, by family. */
 export class FontFaces {
   private readonly byFamily = new Map<string, FontFace[]>();
-  /** Every face, in the order taken in. */
+  /**
+   * Every face, in the order taken in, one declared twice under a name too: the name index takes
+   * the last of them, as expo-font registers it, where matching keeps the first.
+   */
   private readonly faces: FontFace[] = [];
   /** What `postScriptName` reads, made again on the first read after the faces change. */
   private names: Map<string, FontFace> | null = null;
@@ -135,15 +138,15 @@ export class FontFaces {
   /** Take faces in; whether any was new, which changes what text already matched may match. */
   add(faces: readonly FontFace[]): boolean {
     let added = false;
+    this.faces.push(...faces);
+    this.names = null;
     for (const face of faces) {
       const known = this.byFamily.get(familyKey(face.family));
       if (known?.some((one) => faceName(one) === faceName(face))) continue;
       if (known) known.push(face);
       else this.byFamily.set(familyKey(face.family), [face]);
-      this.faces.push(face);
       added = true;
     }
-    if (added) this.names = null;
     return added;
   }
 
