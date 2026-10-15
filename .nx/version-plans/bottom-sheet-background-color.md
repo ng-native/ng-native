@@ -1,5 +1,5 @@
 ---
-__default__: minor
+__default__: patch
 ---
 
 `ui-bottom-sheet` takes a `backgroundColor` input, and a `background-color` on the element from CSS, as the colour of the sheet: SwiftUI's `presentationBackground` on iOS and the container colour of Compose's sheet on Android.
