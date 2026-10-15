@@ -66,12 +66,19 @@ xcrun simctl install "$udid" "$app" || exit 1
 # later, and Maestro fails a flow on it outright, past any `retry` or `optional`. Its console is kept, since the
 # startup failure is reported there and not in maestro.log.
 export MAESTRO_DRIVER_STARTUP_TIMEOUT=${MAESTRO_DRIVER_STARTUP_TIMEOUT:-180000}
+# One flow at a time, without ANSI: given a directory, Maestro prints nothing until every flow has
+# finished, where given a file it prints each command as it runs. A failing flow stops the walk,
+# so the logs left in the output dir are its own.
 walk() {
-  step "walking the flow; Maestro's driver takes a minute or two to start"
+  local flow
   mkdir -p "$1"
-  maestro --device "$udid" test "$flows" --test-output-dir "$1" --debug-output "$1" \
-    --flatten-debug-output 2>&1 | tee "$1/console.log"
-  return "${PIPESTATUS[0]}"
+  : > "$1/console.log"
+  for flow in "$flows"/*.yaml; do
+    step "walking $(basename "$flow"); Maestro's driver takes a minute or two to start"
+    maestro --device "$udid" test --no-ansi "$flow" --test-output-dir "$1" --debug-output "$1" \
+      --flatten-debug-output 2>&1 | tee -a "$1/console.log"
+    [ "${PIPESTATUS[0]}" -eq 0 ] || return 1
+  done
 }
 walk "$out"
 status=$?

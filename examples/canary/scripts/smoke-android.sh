@@ -18,7 +18,14 @@ mkdir -p "$out"
 # the app instead. A canary that hangs or crashes still fails the flow, by what it no longer shows.
 adb shell settings put global hide_error_dialogs 1
 adb install -r "$apk" || exit 1
-maestro test "$flows" --test-output-dir "$out" --debug-output "$out" --flatten-debug-output
-status=$?
+# One flow at a time, without ANSI: given a directory, Maestro prints nothing until every flow has
+# finished, where given a file it prints each command as it runs. A failing flow stops the walk,
+# so the logs left in the output dir are its own.
+status=0
+for flow in "$flows"/*.yaml; do
+  echo "[$(date +%T)] walking $(basename "$flow")"
+  maestro test --no-ansi "$flow" --test-output-dir "$out" --debug-output "$out" \
+    --flatten-debug-output || { status=$?; break; }
+done
 adb logcat -d > "$out/logcat.txt"
 exit "$status"
