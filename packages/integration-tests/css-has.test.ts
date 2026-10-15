@@ -280,6 +280,21 @@ describe(':has() the engine does not take', () => {
     }
   });
 
+  it('applies nothing for a :has() inside another, whatever the box holds', () => {
+    for (const css of [
+      '.card:has(.a:has(.b)) { opacity: 0.5 }',
+      '.card:has(.a:not(:has(.b))) { opacity: 0.5 }',
+      '.card:has(:is(.a:has(.b))) { opacity: 0.5 }',
+      '.card:has(> .a:has(.b)) { opacity: 0.5 }',
+    ]) {
+      const s = scene(css);
+      s.el('b', s.el('a', s.card));
+      s.el('a', s.card);
+      assert.equal(s.sheet.rules.length, 0, css);
+      assert.equal(s.opacity('card'), undefined, css);
+    }
+  });
+
   it('marks a sheet that asks, and no other', () => {
     assert.equal((scene(RULE).sheet as { has?: true }).has, true);
     assert.equal((scene('.card { opacity: 1 }').sheet as { has?: true }).has, undefined);
