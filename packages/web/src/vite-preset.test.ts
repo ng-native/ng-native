@@ -214,6 +214,18 @@ describe('ngNativeWeb() registered twice', () => {
     assert.equal(code.match(/ɵɵdefineComponent\(/g)?.length, 1);
   });
 
+  it('compiles a component once when the same result is listed twice', async () => {
+    const preset = ngNativeWeb();
+    const code = await built([preset, preset], 'same');
+    assert.equal(code.match(/ɵɵdefineComponent\(/g)?.length, 1);
+  });
+
+  it('applies again in a config resolved again', async () => {
+    const preset = ngNativeWeb();
+    assert.equal((await built([preset], 'again-1')).match(/ɵɵdefineComponent\(/g)?.length, 1);
+    assert.equal((await built([preset], 'again-2')).match(/ɵɵdefineComponent\(/g)?.length, 1);
+  });
+
   it("keeps a plugin's own apply: the optimizer only builds", async () => {
     const names = async (command: 'serve' | 'build') =>
       (
