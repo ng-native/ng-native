@@ -56,6 +56,12 @@ against the schemes you mean to open, usually `https:` and the app's own, before
 Opening goes the other way too: any app or web page can open any of your routes by deep link, so a
 route that acts as it arrives needs a guard (see [Router](/packages/router)).
 
+`DeepLinks` gives a path, so the scheme, the host and the query of a link are gone by the time you
+see it. An app that needs the whole address reads the platform's source itself: `deepLinkSource()`
+returns the `DeepLinkSource` that `DeepLinks` is built on, with `launchUrl()`, `subscribe()`,
+`open()` and, where the platform has one, `openSettings()`, all in terms of the url as it arrived.
+Off a device it is a source that never delivers a link.
+
 `@ng-native/router`'s `provideNativeRouter(routes)` wires this into `PlatformLocation` for you, so
 most apps never call `DeepLinks` directly.
 
