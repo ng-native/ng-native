@@ -3053,6 +3053,13 @@ export interface EngineStats {
 
 const FRAME_BUDGET_MS = 8;
 
+/** A solid brush with no colour in it, which stops react-native-svg. */
+const emptyBrush = (value: unknown): boolean =>
+  typeof value === 'object' &&
+  value !== null &&
+  (value as { type?: unknown }).type === 0 &&
+  (value as { payload?: unknown }).payload == null;
+
 export class Engine implements HostEngine {
   /** Scopes the CSS resolver's memo. Bumped once per commit. */
   private styleEpoch = 0;
@@ -7039,8 +7046,9 @@ export class Engine implements HostEngine {
    */
   private painted(key: string, value: unknown): unknown {
     if (!BRUSH_PROPS.has(key)) return this.color(value);
-    // Already a brush, as the icon wrote it: only one the cascade settled is still text.
-    if (typeof value !== 'string') return value;
+    // Already a brush, as the icon wrote it: only one the cascade settled is still text. An
+    // icon's solid brush holds whatever the host read, which is nothing for an unreadable colour.
+    if (typeof value !== 'string') return emptyBrush(value) ? undefined : value;
     if (value === 'none') return null;
     // A colour the host cannot read is dropped, as a browser drops it: a solid brush with no
     // colour in it stops the app.

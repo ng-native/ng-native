@@ -336,6 +336,21 @@ describe('what a commit sends', () => {
     );
   });
 
+  it('sends no brush an icon made of a colour native reads nothing in', () => {
+    // @ng-native/icons builds its solid brush before the engine sees it, with whatever
+    // processColor answered: null for a colour it cannot read.
+    const fabric = createFakeFabric();
+    const engine = new Engine(fabric, 1);
+    const path = engine.createElement('path');
+    engine.setProp(path, 'fill', { type: 0, payload: null });
+    engine.setProp(path, 'stroke', { type: 0, payload: 0xffff0000 });
+    engine.appendChild(engine.root, path);
+    engine.commit();
+    const [committed] = fabric.committed;
+    assert.equal(committed!.props['fill'], undefined);
+    assert.deepEqual(committed!.props['stroke'], { type: 0, payload: 0xffff0000 });
+  });
+
   it('keeps hyphenated attributes to the engine, since no native prop is spelt that way', () => {
     const props = committed({ 'data-row': '3', testID: 'row' });
     assert.equal(props['data-row'], undefined);
