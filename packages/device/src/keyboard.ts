@@ -128,16 +128,15 @@ export class Keyboard {
   }
 
   /**
-   * Put the keyboard away, as tapping outside a field would: the focused field is sent `blur`, as
-   * a scroll view does at such a tap.
+   * Put the keyboard away, as tapping outside a field would: the focused text field is sent
+   * `blur`, as a scroll view does at such a tap. A focused view or button is left as it is.
    *
    * React Native's own `Keyboard.dismiss()`, which the source calls too, blurs only a field its
    * `TextInput` component recorded in `TextInputState`. A `text-input` here is the native component
    * with no `TextInput.js` around it, so nothing is recorded and that call alone blurs nothing.
    */
   dismiss(): void {
-    const field = this.engine?.focused;
-    if (field) this.engine?.dispatchCommand(field, 'blur');
+    this.engine?.blurFocused();
     this.source.dismiss();
   }
 }

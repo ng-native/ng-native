@@ -348,6 +348,17 @@ export class BrowserEngine extends HostEngine {
     return this.focusedNode;
   }
 
+  /** A `text-input`, the `<input>` or `<textarea>` it commits as; a focused button is not one. */
+  get focusedField(): BrowserNode | null {
+    const node = this.focused;
+    return node?.tag === 'text-input' ? node : null;
+  }
+
+  blurFocused(): void {
+    const field = this.focusedField;
+    if (field) this.dispatchCommand(field, 'blur');
+  }
+
   private isAttached(node: BrowserNode): boolean {
     return (node.el as Element).isConnected;
   }

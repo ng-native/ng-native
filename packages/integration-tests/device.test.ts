@@ -94,7 +94,10 @@ describe('the keyboard', () => {
       const fabric = createFakeFabric();
       const engine = new Engine(fabric, 1);
       const field = engine.createElement('text-input');
+      const box = engine.createElement('view');
+      engine.setProp(box, 'focusable', true);
       engine.appendChild(engine.root, field);
+      engine.appendChild(engine.root, box);
       engine.commit();
       let dismissed = 0;
       const keyboard = build(Keyboard, [
@@ -104,8 +107,19 @@ describe('the keyboard', () => {
           useValue: { subscribe: () => () => {}, dismiss: () => dismissed++ },
         },
       ]);
-      const focus = () => fabric.emit(fabric.committed[0]!, 'topFocus', {});
-      return { fabric, keyboard, focus, dismissed: () => dismissed };
+      const focus = (on = fabric.committed[0]!) => fabric.emit(on, 'topFocus', {});
+      const remove = () => {
+        engine.removeChild(engine.root, field);
+        engine.commit();
+      };
+      return {
+        fabric,
+        keyboard,
+        focus,
+        remove,
+        box: () => fabric.committed[1]!,
+        dismissed: () => dismissed,
+      };
     }
 
     it('blurs the field that has the keyboard', () => {
@@ -118,6 +132,26 @@ describe('the keyboard', () => {
 
     it('sends nothing when no field has the keyboard', () => {
       const s = scene();
+      s.keyboard.dismiss();
+      assert.deepEqual(s.fabric.commands, []);
+      assert.equal(s.dismissed(), 1);
+    });
+
+    // A view takes focus from a hardware keyboard or a D-pad, and has no `blur` command to take.
+    it('sends nothing when what has the focus is not a text input', () => {
+      const s = scene();
+      s.focus(s.box());
+      s.keyboard.dismiss();
+      assert.deepEqual(s.fabric.commands, []);
+      assert.equal(s.dismissed(), 1);
+    });
+
+    // The field is out of the tree before its view is gone, so there is nothing left to blur.
+    // That is why the docs say to call it while the field is still on screen.
+    it('sends nothing once the focused field has left the tree', () => {
+      const s = scene();
+      s.focus();
+      s.remove();
       s.keyboard.dismiss();
       assert.deepEqual(s.fabric.commands, []);
       assert.equal(s.dismissed(), 1);
