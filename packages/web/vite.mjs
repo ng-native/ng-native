@@ -96,7 +96,34 @@ function config() {
  * @returns {import('vite').Plugin[]}
  */
 export function ngNativeWeb(options = {}) {
-  return [config(), ...angular({ zoneless: true, emitClassMetadata: false, ...options })];
+  return [config(), ...angular({ zoneless: true, emitClassMetadata: false, ...options })].map(once);
+}
+
+/** Marks a plugin `ngNativeWeb()` made. See `once`. */
+const MADE = Symbol('ngNativeWeb');
+
+/**
+ * Has a plugin apply only where it is the first of its name that `ngNativeWeb()` made in the app's
+ * config. Storybook's recipe registers the preset twice, in the app's `vite.config.ts` and in
+ * `viteFinal`, and a second compiler compiles each component again, finding `input()` in a class
+ * the first one took the decorator off. By name rather than by call, so `ngNativeWebLink()` beside
+ * `ngNativeWeb()` still has the compiler. A plugin's own `apply` still decides after this.
+ *
+ * @param {import('vite').Plugin} plugin
+ * @returns {import('vite').Plugin}
+ */
+function once(plugin) {
+  const own = plugin.apply;
+  plugin[MADE] = true;
+  plugin.apply = (config, env) => {
+    const first = [config.plugins]
+      .flat(Infinity)
+      .find((other) => other?.[MADE] && other.name === plugin.name);
+    if (first && first !== plugin) return false;
+    if (typeof own === 'function') return own(config, env);
+    return own === undefined || own === env.command;
+  };
+  return plugin;
 }
 
 /** The plugins of `ngNativeWeb()` that `ngNativeWebLink()` keeps. */

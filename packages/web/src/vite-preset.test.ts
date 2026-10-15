@@ -174,3 +174,62 @@ describe('ngNativeWebLink()', () => {
     assert.match(built, /ɵɵdefineInjectable/);
   });
 });
+
+/**
+ * `ngNativeWeb()` twice, as Storybook's recipe gets it: the app's `vite.config.ts` has it, and
+ * `viteFinal` adds it again. A second compiler would compile its component a second time, and
+ * finds `input()` in a class whose decorator the first one already took off.
+ */
+describe('ngNativeWeb() registered twice', () => {
+  const root = realpathSync(mkdtempSync(path.join(tmpdir(), 'ng-native-web-twice-')));
+  writeFileSync(
+    path.join(root, 'main.ts'),
+    [
+      "import { Component, input } from '@angular/core';",
+      "@Component({ selector: 'app-label', template: '{{ label() }}' })",
+      "export class Label { readonly label = input('Label'); }",
+    ].join('\n'),
+  );
+
+  after(() => rmSync(root, { recursive: true, force: true }));
+
+  const built = async (plugins: UserConfig['plugins'], outDir: string) => {
+    await build({
+      root,
+      configFile: false,
+      logLevel: 'silent',
+      plugins,
+      build: {
+        outDir,
+        minify: false,
+        lib: { entry: 'main.ts', formats: ['es'], fileName: 'main' },
+        rolldownOptions: { external: [/^@angular\//] },
+      },
+    });
+    return readFileSync(path.join(root, outDir, 'main.mjs'), 'utf8');
+  };
+
+  it('compiles a component once', async () => {
+    const code = await built([ngNativeWeb(), ngNativeWeb()], 'twice');
+    assert.equal(code.match(/ɵɵdefineComponent\(/g)?.length, 1);
+  });
+
+  it("keeps a plugin's own apply: the optimizer only builds", async () => {
+    const names = async (command: 'serve' | 'build') =>
+      (
+        await resolveConfig(
+          { root, configFile: false, logLevel: 'silent', plugins: [ngNativeWeb(), ngNativeWeb()] },
+          command,
+        )
+      ).plugins
+        .map((plugin) => plugin.name)
+        .filter((name) => name === '@oxc-angular/vite-optimizer');
+    assert.deepEqual(await names('serve'), []);
+    assert.deepEqual(await names('build'), ['@oxc-angular/vite-optimizer']);
+  });
+
+  it("keeps the compiler beside ngNativeWebLink()'s plugins", async () => {
+    const code = await built([ngNativeWebLink(), ngNativeWeb()], 'linked');
+    assert.equal(code.match(/ɵɵdefineComponent\(/g)?.length, 1);
+  });
+});
