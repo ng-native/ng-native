@@ -14,7 +14,7 @@
  * No decorators and no Angular here on purpose: this is a registration, and the components it
  * registers are ordinary elements in a template.
  */
-import { registerViewName } from '@ng-native/fabric';
+import { registerViewName, type ViewNameOptions } from '@ng-native/fabric';
 import { optional } from './native.ts';
 
 /**
@@ -60,6 +60,8 @@ export interface ExpoViewOptions {
    * reads `text`. The text written inside the element becomes that prop. See `ViewNameOptions`.
    */
   readonly textContent?: string;
+  /** Rewrites the fonts the view's own props name. See `ViewNameOptions`. */
+  readonly fontNames?: ViewNameOptions['fontNames'];
 }
 
 /**
@@ -81,6 +83,7 @@ export function registerExpoView(
     {
       textContent: options?.textContent,
       yieldsToComponents: options?.yieldsToComponents,
+      fontNames: options?.fontNames,
     },
   );
   optional(() =>

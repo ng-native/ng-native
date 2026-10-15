@@ -13,6 +13,10 @@ export interface DeepLinkSource {
   openSettings?(): void;
 }
 
+/**
+ * React Native's `Linking`, with each url whole: the scheme, host, query and fragment that
+ * `DeepLinks` strips to a path. Off a device, a source that never delivers a link.
+ */
 export function deepLinkSource(): DeepLinkSource {
   const native = reactNative();
   if (!native) {

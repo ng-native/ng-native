@@ -138,6 +138,15 @@ describe('deep links', () => {
     };
   };
 
+  it('exports the platform source from the package entry, for a url that is not stripped to a path', async () => {
+    // DeepLinks.subscribe hands over paths. An app that needs the whole address, scheme and query
+    // included, reads the source itself, so the source has to be reachable from '@ng-native/device'.
+    assert.equal(typeof device.deepLinkSource, 'function');
+    const links = device.deepLinkSource();
+    assert.equal(await links.launchUrl(), null);
+    assert.doesNotThrow(() => links.subscribe(() => {})());
+  });
+
   it("opens the app's own page in the system settings", () => {
     let opened = 0;
     const platform = { ...source(null).value, openSettings: () => void opened++ };

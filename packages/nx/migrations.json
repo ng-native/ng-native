@@ -1,7 +1,7 @@
 {
   "generators": {
     "sync-app-versions": {
-      "version": "0.13.0",
+      "version": "0.14.0",
       "description": "Move the @ng-native packages each project's own package.json lists to the new version.",
       "implementation": "./migrations/run.cjs#sync-app-versions"
     },

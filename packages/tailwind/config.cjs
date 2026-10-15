@@ -29,6 +29,7 @@ const {
 } = require('node:fs');
 const path = require('node:path');
 const { compileCss } = require('@ng-native/metro/css/compile.cjs');
+const { nameFaces } = require('@ng-native/metro/css/font-names.cjs');
 const { flattenTailwind } = require('./flatten.cjs');
 
 /** Where the generated module goes if the app does not say. */
@@ -176,6 +177,8 @@ function compileSheetModule(css, context = 'tailwind', paths) {
     // and native cannot express, which is worth saying while it is still being written.
     if (!message.includes("dropped '--")) console.warn(`[angular-native] ${message}`);
   }
+  // Before the sources are re-pointed at the module: a face's file is named from the entry.
+  if (paths) nameEntryFaces(sheet, paths.input);
   for (const face of sheet.fonts ?? []) {
     if (paths && /^\.\.?\//.test(face.source.asset)) {
       const file = path.resolve(path.dirname(paths.input), face.source.asset);
@@ -192,6 +195,23 @@ function compileSheetModule(css, context = 'tailwind', paths) {
     return `font${imports.length - 1}`;
   });
   return `// Generated from ${path.basename(context)}. Edit the Tailwind entry, not this.\n${imports.join('')}export default ${literal};\n`;
+}
+
+/** Faces already reported unreadable, once a process: the sheet is rebuilt on every class written. */
+const warnedFaces = new Set();
+
+/** Gives each face the entry declares the PostScript name its file says: see `font-names.cjs`. */
+function nameEntryFaces(sheet, input) {
+  nameFaces(
+    sheet,
+    path.dirname(input),
+    () => {},
+    (message) => {
+      if (warnedFaces.has(message)) return;
+      warnedFaces.add(message);
+      console.warn(`[angular-native] ${message}`);
+    },
+  );
 }
 
 /**

@@ -31,6 +31,7 @@
  */
 import type { PlatformOSType } from 'react-native';
 import { registerExpoView } from './register-expo-view.ts';
+import { fontModifierNames } from './ui-font-names.ts';
 
 /** Element name -> the `ExpoUI` view on iOS and on Android. Null where the platform has no such. */
 export const EXPO_UI_VIEWS: Readonly<Record<string, readonly [string | null, string | null]>> = {
@@ -179,6 +180,8 @@ export function registerExpoUiViews(platform: PlatformOSType): void {
       viewName,
       textContent,
       yieldsToComponents: true,
+      // SwiftUI finds a face by its PostScript name alone; Compose by the name it registered as.
+      fontNames: platform === 'ios' ? fontModifierNames : undefined,
     });
   }
 }

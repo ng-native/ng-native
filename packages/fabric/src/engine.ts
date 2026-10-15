@@ -1753,6 +1753,8 @@ export function registerViewName(
     if (options?.textContent) TEXT_CONTENT_PROPS[name] = options.textContent;
     if (options?.looseText) LOOSE_TEXT[name] = options.looseText;
     else delete LOOSE_TEXT[name];
+    if (options?.fontNames) FONT_NAMES[name] = options.fontNames;
+    else delete FONT_NAMES[name];
   }
 }
 
@@ -1777,6 +1779,28 @@ export interface ViewNameOptions {
    * element is the engine's own, as the paragraph a view is given for its loose text is.
    */
   readonly looseText?: string;
+  /**
+   * Where a view's own props name a font that must reach native by another name, as SwiftUI's
+   * `font` modifier must name a face by its file's PostScript name: rewrites `props` in place,
+   * given that name for each name the app's `@font-face` faces are registered under. Called on
+   * every commit of the view, and again for each view when the faces change.
+   */
+  readonly fontNames?: (props: Record<string, unknown>, postScriptName: PostScriptNames) => void;
+}
+
+/** The PostScript name of the face a name is registered under, where the build read it. */
+export type PostScriptNames = (name: string) => string | undefined;
+
+/** How each view that names fonts in its own props rewrites them. See `ViewNameOptions`. */
+const FONT_NAMES: Record<string, NonNullable<ViewNameOptions['fontNames']>> = {};
+
+/** Rewrites the fonts a view's own props name, for a view that says how. See `ViewNameOptions`. */
+function renameFonts(
+  viewName: string,
+  props: Record<string, unknown>,
+  postScriptName: PostScriptNames,
+): void {
+  FONT_NAMES[viewName]?.(props, postScriptName);
 }
 
 /** The element loose text in a view is drawn by, for the views that say. See `ViewNameOptions`. */
@@ -4602,6 +4626,7 @@ export class Engine implements HostEngine {
     const resolved = props['pointerEvents'];
     writeOwnProps(node.props, props, node.attributeOnly);
     withTextContent(node, viewName, props);
+    renameFonts(viewName, props, this.postScriptName);
     truncatedAs(node, props);
     const cascaded = props['transform'];
     const inline = inlineOf(node);
@@ -4906,6 +4931,7 @@ export class Engine implements HostEngine {
 
   /** Every `@font-face` seen, global as on the web: a face declared in one sheet serves all. */
   private readonly fontFaces = new FontFaces();
+  private readonly postScriptName: PostScriptNames = (name) => this.fontFaces.postScriptName(name);
   /** Whether a sheet first used in this commit declared a face. See `rematchFonts`. */
   private facesAdded = false;
 
@@ -4928,7 +4954,8 @@ export class Engine implements HostEngine {
       // The paragraph of a run of text written straight into a view is kept on the text.
       if (child.kind === 'text') named(child.box);
       if (child.kind !== 'element') continue;
-      named(child);
+      if (child.committed && FONT_NAMES[child.committed.viewName]) this.markProps(child, false);
+      else named(child);
       this.markFontText(child);
     }
   }

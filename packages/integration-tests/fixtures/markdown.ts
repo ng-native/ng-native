@@ -1,10 +1,12 @@
-import { Component, signal } from '@angular/core';
+import { Component, signal, viewChild } from '@angular/core';
 import type { Token } from 'marked';
 import {
   Markdown,
   type MarkdownClasses,
   type MarkdownLinkPress,
 } from '../../components/src/markdown.ts';
+import { MarkdownColumns } from '../../components/src/markdown-columns.ts';
+import type { MarkdownBlock } from '../../components/src/markdown-blocks.ts';
 
 /** A plain app's screen with a document on it: no router, no Analog, just the component. */
 @Component({
@@ -32,4 +34,19 @@ export class MarkdownScreen {
     this.presses.push({ href: event.href, title: event.title });
     if (this.prevent) event.preventDefault();
   }
+}
+
+/** A table's columns on their own, measured directly rather than through a layout pass. */
+@Component({
+  selector: 'x-markdown-columns-screen',
+  imports: [MarkdownColumns],
+  template: `<view [markdownColumns]="table()"></view>`,
+})
+export class MarkdownColumnsScreen {
+  readonly table = signal<Extract<MarkdownBlock, { kind: 'table' }>>({
+    kind: 'table',
+    header: [],
+    rows: [],
+  });
+  readonly columns = viewChild.required(MarkdownColumns);
 }

@@ -33,6 +33,7 @@ import {
   type MarkdownElement,
   type MarkdownInline,
 } from './markdown-blocks.ts';
+import { MarkdownColumns } from './markdown-columns.ts';
 import { MarkdownStream } from './markdown-stream.ts';
 import { ScrollView } from './scroll-view.ts';
 import { TemplateSlot } from './template-slot.ts';
@@ -105,7 +106,7 @@ function imageSources(blocks: readonly MarkdownBlock[], into = new Set<string>()
  */
 @Component({
   selector: 'markdown',
-  imports: [Image, ScrollView, TemplateSlot, Text, View],
+  imports: [Image, MarkdownColumns, ScrollView, TemplateSlot, Text, View],
   template: `
     <ng-template #blockTemplate let-list>
       @for (block of list; track blockKey(block)) {
@@ -159,24 +160,39 @@ function imageSources(blocks: readonly MarkdownBlock[], into = new Set<string>()
             <view [class]="classFor('hr')"></view>
           }
           @case ('table') {
-            <view [class]="classFor('table')">
-              <view [class]="classFor('tr')">
-                @for (cell of block.header; track $index) {
-                  <text [class]="classFor('th')"
-                    ><ng-container *templateSlot="inlineTemplate; context: { $implicit: cell }"
-                  /></text>
-                }
-              </view>
-              @for (row of block.rows; track $index) {
+            <scroll-view horizontal>
+              <view
+                [class]="classFor('table')"
+                [markdownColumns]="block"
+                #columns="markdownColumns"
+              >
                 <view [class]="classFor('tr')">
-                  @for (cell of row; track $index) {
-                    <text [class]="classFor('td')"
-                      ><ng-container *templateSlot="inlineTemplate; context: { $implicit: cell }"
-                    /></text>
+                  @for (cell of block.header; track $index; let column = $index) {
+                    <view class="md-cell" [style.minWidth]="columns.width(column)">
+                      <text
+                        [class]="classFor('th')"
+                        (layout)="columns.measure(0, column, $any($event))"
+                        ><ng-container *templateSlot="inlineTemplate; context: { $implicit: cell }"
+                      /></text>
+                    </view>
                   }
                 </view>
-              }
-            </view>
+                @for (row of block.rows; track $index; let r = $index) {
+                  <view [class]="classFor('tr')">
+                    @for (cell of row; track $index; let column = $index) {
+                      <view class="md-cell md-cell-body" [style.minWidth]="columns.width(column)">
+                        <text
+                          [class]="classFor('td')"
+                          (layout)="columns.measure(r + 1, column, $any($event))"
+                          ><ng-container
+                            *templateSlot="inlineTemplate; context: { $implicit: cell }"
+                        /></text>
+                      </view>
+                    }
+                  </view>
+                }
+              </view>
+            </scroll-view>
           }
         }
       }

@@ -1,6 +1,6 @@
 {
   "name": "@ng-native/expo",
-  "version": "0.13.0",
+  "version": "0.14.0",
   "description": "Expo modules as Angular services for Angular Native, plus registerExpoView for a module's native view.",
   "keywords": [
     "angular",

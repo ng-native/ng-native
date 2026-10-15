@@ -18,7 +18,7 @@ export {
   watchConditions,
   type WatchOptions,
 } from './conditions.ts';
-export { DeepLinks, pathOf, type DeepLinkSource } from './deep-links.ts';
+export { DeepLinks, deepLinkSource, pathOf, type DeepLinkSource } from './deep-links.ts';
 export {
   Direction,
   type DirectionContext,

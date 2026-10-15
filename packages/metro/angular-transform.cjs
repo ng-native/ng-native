@@ -14,6 +14,7 @@ const path = require('node:path');
 const { compileError } = require('./compile-error.cjs');
 const { assertTemplateFileParses, assertTemplatesParse } = require('./template-syntax.cjs');
 const { compileCss } = require('./css/compile.cjs');
+const { nameFaces } = require('./css/font-names.cjs');
 const { componentDeclarations } = require('./component-declarations.cjs');
 const { hotShape } = require('./hot-shape.cjs');
 const {
@@ -74,6 +75,20 @@ function relativeSpecifier(url) {
  * always a file at that name, so the cache is told what was read rather than what was imported.
  */
 const resourcesRead = new Map();
+
+/** Adds `file` to what the transform of `filename` read. */
+function noteRead(filename, file) {
+  const read = resourcesRead.get(filename);
+  if (read instanceof Set) read.add(file);
+  else if (read) read.push(file);
+  else resourcesRead.set(filename, [file]);
+}
+
+/**
+ * The project root of the transform running now, which Metro names a file from. Set as one starts,
+ * and read while it runs, which is all at once: the font files a sheet names are read from it.
+ */
+let transformRoot = process.cwd();
 
 /** What the transform of `filename` read, once: a second ask is empty. */
 function takeResourcesRead(filename) {
@@ -1092,6 +1107,10 @@ function componentSheet(
   };
 
   const sheet = compileCss(css, context, options);
+  if (sheet.fonts) {
+    const from = path.dirname(path.resolve(transformRoot, module));
+    nameFaces(sheet, from, (file) => noteRead(module, file), warn);
+  }
   return sheet.rules.length || sheet.fonts ? sheet : null;
 }
 
@@ -1346,6 +1365,7 @@ function reasonOf(message) {
  */
 function transformAngular(src, filename, options = {}) {
   resourcesRead.delete(filename);
+  transformRoot = projectRootOf(options);
   // A template or stylesheet is only in the graph to carry its component's edits: empty in a
   // release build, and the hot update for its owners in a native dev build. A web build - a DOM
   // component's page - has no native hot update to carry, and its stylesheets are a browser's.

@@ -429,10 +429,13 @@ describe('streaming', () => {
     assert.equal(blocks().length, 0, 'a header row with no delimiter row yet');
     await feed('|---|---|\n| 1 | 2');
     const table = () => blocks()[0]!;
-    assert.equal(table().children.length, 1, 'the header row alone');
+    const isRow = (node: FakeFabricNode) => node.props['flexDirection'] === 'row';
+    const rows = () =>
+      flatten([table()]).filter((node) => isRow(node) && !flatten(node.children).some(isRow));
+    assert.equal(rows().length, 1, 'the header row alone');
     assert.equal(textOf(table()), 'ab');
     await feed(' |\n');
-    assert.equal(table().children.length, 2);
+    assert.equal(rows().length, 2);
     assert.equal(textOf(table()), 'ab12');
   });
 
@@ -540,3 +543,194 @@ describe('streaming', () => {
     assert.deepEqual(texts(blocks()), ['Run `cx5']);
   });
 });
+
+describe('tables', () => {
+  const TABLE = [
+    '| Rank | Pattern | Example context |',
+    '| --- | --- | --- |',
+    '| 1 | `request completed` | PUT /api/search returned 201 |',
+    '| 22 | miss | GET /a |',
+  ].join('\n');
+
+  /** The table's cells, row by row, each the text a cell is drawn in. */
+  const cellsOf = (table: FakeFabricNode): FakeFabricNode[][] => {
+    const isRow = (node: FakeFabricNode) => node.props['flexDirection'] === 'row';
+    return flatten([table])
+      .filter((node) => isRow(node) && !flatten(node.children).some(isRow))
+      .map((row) => flatten(row.children).filter((node) => node.viewName === 'Paragraph'));
+  };
+  /** The node that holds `node`, found by walking down from `root`. */
+  const parentOf = (root: FakeFabricNode, node: FakeFabricNode): FakeFabricNode =>
+    flatten([root]).find((one) => one.children.includes(node))!;
+  const measure = async (cells: FakeFabricNode[][], widths: number[][]) => {
+    for (const [r, row] of cells.entries()) {
+      for (const [c, cell] of row.entries()) {
+        await fireEvent(cell, 'layout', { layout: { width: widths[r]![c]! } });
+      }
+    }
+  };
+  /** Each cell's least width, which lines its column up. */
+  const columnWidths = (table: FakeFabricNode) =>
+    cellsOf(table).map((row) => row.map((cell) => parentOf(table, cell).props['minWidth']));
+
+  it('scrolls sideways, rather than squeezing its columns into the width of the page', async () => {
+    const { blocks } = await show(TABLE);
+    const scroll = blocks()[0]!;
+    assert.equal(scroll.viewName, 'ScrollView');
+    assert.equal(scroll.props['horizontal'], true);
+    const cells = cellsOf(scroll);
+    assert.deepEqual(
+      cells.map((row) => row.map(textOf)),
+      [
+        ['Rank', 'Pattern', 'Example context'],
+        ['1', 'request completed', 'PUT /api/search returned 201'],
+        ['22', 'miss', 'GET /a'],
+      ],
+    );
+    for (const node of flatten(scroll.children)) {
+      assert.notEqual(node.props['flexGrow'], 1, 'no cell is stretched to share out the page');
+      assert.notEqual(node.props['flex'], 1, 'no cell is stretched to share out the page');
+    }
+    assert.equal(cells[0]![0]!.props['fontWeight'], '600', 'a header cell is bold');
+  });
+
+  it('lines each column up at the width of its widest cell', async () => {
+    const { blocks } = await show(TABLE);
+    await measure(cellsOf(blocks()[0]!), [
+      [40, 60, 120],
+      [10, 150, 230],
+      [20, 30, 50],
+    ]);
+    assert.deepEqual(columnWidths(blocks()[0]!), [
+      [40, 150, 230],
+      [40, 150, 230],
+      [40, 150, 230],
+    ]);
+  });
+
+  it('narrows a column again when its widest cell shrinks, or its row goes', async () => {
+    const { blocks, app, screen } = await show(TABLE);
+    await measure(cellsOf(blocks()[0]!), [
+      [40, 60, 120],
+      [10, 150, 230],
+      [20, 30, 300],
+    ]);
+    await fireEvent(cellsOf(blocks()[0]!)[1]![1]!, 'layout', { layout: { width: 50 } });
+    assert.deepEqual(columnWidths(blocks()[0]!)[0], [40, 60, 300]);
+
+    screen.source.set(TABLE.split('\n').slice(0, 3).join('\n'));
+    await app.detectChanges();
+    assert.deepEqual(
+      columnWidths(blocks()[0]!),
+      [
+        [40, 60, 230],
+        [40, 60, 230],
+      ],
+      'the row that went no longer counts',
+    );
+    screen.source.set(['| Rank | Pattern |', '| --- | --- |', '| 1 | a |'].join('\n'));
+    await app.detectChanges();
+    assert.deepEqual(columnWidths(blocks()[0]!)[0], [40, 60], 'nor does the column that went');
+  });
+
+  it('forgets a width when its row or column goes, so one that comes back starts unmeasured', async () => {
+    const { blocks, app, screen } = await show(TABLE);
+    await measure(cellsOf(blocks()[0]!), [
+      [40, 60, 120],
+      [10, 150, 230],
+      [20, 30, 300],
+    ]);
+    screen.source.set(['| Rank | Pattern |', '| --- | --- |', '| 1 | a |'].join('\n'));
+    await app.detectChanges();
+    screen.source.set(TABLE);
+    await app.detectChanges();
+    assert.deepEqual(
+      columnWidths(blocks()[0]!)[0]!.map((width) => width ?? null),
+      [40, 150, null],
+      'neither the last row nor the last column kept its width while they were gone',
+    );
+  });
+
+  it('keeps the text in a cell its own width when the app replaces the th and td classes', async () => {
+    const { blocks, app, screen } = await show(TABLE);
+    screen.classes.set({ th: 'x-th', td: 'x-td' });
+    await app.detectChanges();
+    const table = blocks()[0]!;
+    for (const cell of cellsOf(table).flat()) {
+      const wrapper = parentOf(table, cell);
+      const hugs =
+        cell.props['alignSelf'] === 'flex-start' ||
+        (cell.props['alignSelf'] == null && wrapper.props['alignItems'] === 'flex-start');
+      assert.ok(hugs, 'the text is not stretched to its column, so it can report a narrower width');
+    }
+  });
+
+  it('takes each measurement without going over the rest of the table again', async () => {
+    const app = await render(mod['MarkdownColumnsScreen'] as Type<unknown>);
+    const screen = app.instance as {
+      table: { set(value: unknown): void };
+      columns: () => {
+        measure(row: number, column: number, event: unknown): void;
+        width(column: number): number | null;
+      };
+    };
+    const ROWS = 3000;
+    screen.table.set({
+      kind: 'table',
+      header: [[], [], []],
+      rows: Array.from({ length: ROWS }, () => [[], [], []]),
+    });
+    await app.detectChanges();
+    const columns = screen.columns();
+    const visited = countVisits();
+    try {
+      for (let row = 0; row <= ROWS; row++) {
+        for (let column = 0; column < 3; column++) {
+          columns.measure(row, column, { nativeEvent: { layout: { width: (row * 7) % 200 } } });
+          columns.width(column);
+        }
+      }
+    } finally {
+      visited.restore();
+    }
+    assert.equal(columns.width(0), 199);
+    const measurements = (ROWS + 1) * 3;
+    assert.ok(
+      visited.count < measurements * 10,
+      `${measurements} measurements went over ${visited.count} elements`,
+    );
+  });
+});
+
+/**
+ * Counts the elements the array and map methods a measurement could go over the table with visit,
+ * so the cost of a measurement is checked by the work it does rather than by the clock.
+ */
+function countVisits(): { readonly count: number; restore(): void } {
+  const state = { count: 0 };
+  const patched: [object, PropertyKey, unknown][] = [];
+  const patch = (target: object, key: PropertyKey, size: (self: never) => number): void => {
+    const original = Reflect.get(target, key) as (...args: unknown[]) => unknown;
+    patched.push([target, key, original]);
+    Reflect.set(target, key, function (this: never, ...args: unknown[]) {
+      state.count += size(this);
+      return original.apply(this, args);
+    });
+  };
+  const length = (self: { length: number }): number => self.length;
+  const size = (self: { size: number }): number => self.size;
+  for (const key of ['reduce', 'map', 'slice', 'forEach', 'filter', Symbol.iterator] as const) {
+    patch(Array.prototype, key, length);
+  }
+  for (const key of ['forEach', 'entries', 'values', 'keys', Symbol.iterator] as const) {
+    patch(Map.prototype, key, size);
+  }
+  return {
+    get count() {
+      return state.count;
+    },
+    restore() {
+      for (const [target, key, original] of patched.reverse()) Reflect.set(target, key, original);
+    },
+  };
+}

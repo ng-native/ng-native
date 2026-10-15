@@ -32,6 +32,27 @@ export function faceName(
   return name;
 }
 
+/**
+ * Every name the faces are registered under, and the face each names, in the order they are
+ * registered. A face is registered under `faceName`, the last face of that name winning, and the
+ * first face of a family under the family as well. A face with both a weight and a style also
+ * answers to each alone, where no face declared exactly that.
+ */
+export function registeredFaces<Face extends FontFace>(faces: readonly Face[]): Map<string, Face> {
+  const names = new Map<string, Face>();
+  for (const face of faces) {
+    if (!names.has(face.family)) names.set(face.family, face);
+    names.set(faceName(face), face);
+  }
+  for (const face of faces) {
+    if (face.weight === undefined || !face.style) continue;
+    for (const name of [`${face.family}-${face.weight}`, `${face.family}-${face.style}`]) {
+      if (!names.has(name)) names.set(name, face);
+    }
+  }
+  return names;
+}
+
 /** CSS's fallback order for a style: the closest slant first, upright last. */
 const STYLE_ORDER: Readonly<Record<string, readonly string[]>> = {
   italic: ['italic', 'oblique', 'normal'],
@@ -90,15 +111,35 @@ const familyKey = (family: string) => family.toLowerCase();
 /** Every face the engine has seen a sheet declare, by family. */
 export class FontFaces {
   private readonly byFamily = new Map<string, FontFace[]>();
+  /**
+   * Every face, in the order taken in, one declared twice under a name too: the name index takes
+   * the last of them, as expo-font registers it, where matching keeps the first.
+   */
+  private readonly faces: FontFace[] = [];
+  /** What `postScriptName` reads, made again on the first read after the faces change. */
+  private names: Map<string, FontFace> | null = null;
 
   /** Forget every face, before they are taken in again from the sheets still registered. */
   clear(): void {
     this.byFamily.clear();
+    this.faces.length = 0;
+    this.names = null;
+  }
+
+  /**
+   * The PostScript name of the face a name is registered under, as `registeredFaces` names them,
+   * where the build could read it from the face's file.
+   */
+  postScriptName(name: string): string | undefined {
+    this.names ??= registeredFaces(this.faces);
+    return this.names.get(name)?.postScriptName;
   }
 
   /** Take faces in; whether any was new, which changes what text already matched may match. */
   add(faces: readonly FontFace[]): boolean {
     let added = false;
+    this.faces.push(...faces);
+    this.names = null;
     for (const face of faces) {
       const known = this.byFamily.get(familyKey(face.family));
       if (known?.some((one) => faceName(one) === faceName(face))) continue;
