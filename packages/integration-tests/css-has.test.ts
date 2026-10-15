@@ -122,6 +122,15 @@ describe(':has()', () => {
     assert.equal(child.opacity('card'), undefined, 'the .x under .p is no child of the card');
     child.el('x y', child.card);
     assert.equal(child.opacity('card'), 0.5);
+
+    // The other alternative: a direct .x child of a card that is itself .p.
+    const parent = scene('.card:has(> .x:is(.p > *, .y)) { opacity: 0.5 }');
+    parent.el('x', parent.card);
+    assert.equal(parent.opacity('card'), undefined);
+    parent.engine.addClass(parent.card, 'p');
+    assert.equal(parent.opacity('card'), 0.5);
+    parent.engine.removeClass(parent.card, 'p');
+    assert.equal(parent.opacity('card') ?? null, null);
   });
 
   it('is as specific as its argument', () => {
