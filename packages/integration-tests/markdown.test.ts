@@ -16,6 +16,7 @@ interface Screen {
   source: { set(value: string | undefined): void };
   tokens: { set(value: readonly Token[] | undefined): void };
   classes: { set(value: Record<string, string>): void };
+  streaming: { set(value: boolean): void };
   presses: { href: string; title: string | null }[];
   prevent: boolean;
 }
@@ -358,5 +359,115 @@ describe('inputs', () => {
     screen.classes.set({ h1: 'custom' });
     await app.detectChanges();
     assert.equal(blocks()[0]!.props['fontSize'], null, 'md-h1 no longer applies');
+  });
+});
+
+describe('a block that did not change', () => {
+  it('keeps its native view when a block is added before it', async () => {
+    const { blocks, app, screen } = await show('First\n\nSecond');
+    const [first, second] = blocks();
+    screen.source.set('# Added\n\nFirst\n\nSecond');
+    await app.detectChanges();
+    assert.deepEqual(
+      blocks().map((node) => textOf(node)),
+      ['Added', 'First', 'Second'],
+    );
+    assert.equal(blocks()[1]!.reactTag, first!.reactTag, 'First is the same view, moved');
+    assert.equal(blocks()[2]!.reactTag, second!.reactTag, 'Second is the same view, moved');
+  });
+});
+
+describe('streaming', () => {
+  /** A document on screen with streaming set, fed its chunks one at a time. */
+  async function stream(...chunks: string[]) {
+    const shown = await show('');
+    shown.screen.streaming.set(true);
+    let source = '';
+    for (const chunk of chunks) {
+      source += chunk;
+      shown.screen.source.set(source);
+      await shown.app.detectChanges();
+    }
+    const feed = async (chunk: string) => {
+      source += chunk;
+      shown.screen.source.set(source);
+      await shown.app.detectChanges();
+    };
+    return { ...shown, feed };
+  }
+  const texts = (nodes: FakeFabricNode[]) => nodes.map((node) => textOf(node));
+
+  it('holds back an unclosed code span until it closes', async () => {
+    const { blocks, feed } = await stream('Run ', '`cx5');
+    assert.deepEqual(texts(blocks()), ['Run']);
+    await feed('81` now');
+    const paragraph = blocks()[0]!;
+    assert.equal(textOf(paragraph), 'Run cx581 now');
+    assert.equal(paragraph.children[1]!.props['fontFamily'], 'Menlo');
+  });
+
+  it('holds back unclosed emphasis, and draws the text before it again once it closes', async () => {
+    const { blocks, feed } = await stream('Done.\n\nThis is **very imp');
+    assert.deepEqual(texts(blocks()), ['Done.', 'This is']);
+    await feed('ortant** to');
+    const paragraph = blocks()[1]!;
+    assert.equal(textOf(paragraph), 'This is very important to');
+    assert.equal(paragraph.children[1]!.props['fontWeight'], '700');
+    await feed(' _kn');
+    assert.equal(textOf(blocks()[1]!), 'This is very important to');
+    await feed('ow_');
+    assert.equal(blocks()[1]!.children.at(-1)!.props['fontStyle'], 'italic');
+  });
+
+  it('leaves a lone asterisk, an underscore inside a word and a list bullet alone', async () => {
+    const { blocks } = await stream('* one\n* 2 * 3 is snake_case');
+    assert.deepEqual(texts(blocks()), ['\u2022one\u20222 * 3 is snake_case']);
+  });
+
+  it('holds back a table row until its line ends', async () => {
+    const { blocks, feed } = await stream('| a | b |\n');
+    assert.equal(blocks().length, 0, 'a header row with no delimiter row yet');
+    await feed('|---|---|\n| 1 | 2');
+    const table = () => blocks()[0]!;
+    assert.equal(table().children.length, 1, 'the header row alone');
+    assert.equal(textOf(table()), 'ab');
+    await feed(' |\n');
+    assert.equal(table().children.length, 2);
+    assert.equal(textOf(table()), 'ab12');
+  });
+
+  it('holds back a code fence until its opening line ends, then streams the code', async () => {
+    const { blocks, named, feed } = await stream('Code:\n\n', '\u0060\u0060\u0060t');
+    assert.deepEqual(texts(blocks()), ['Code:']);
+    await feed('s\nconst a = 1;\n\u0060\u0060');
+    assert.equal(named('ScrollView').length, 1);
+    assert.equal(textOf(named('ScrollView')[0]!), 'const a = 1;');
+    await feed('\u0060\n\nAfter');
+    assert.deepEqual(texts(blocks()), ['Code:', 'const a = 1;', 'After']);
+  });
+
+  it('redraws an earlier block a later chunk changes', async () => {
+    const { blocks, named, feed } = await stream('See [the docs][d].\n\nMore.\n\n');
+    assert.deepEqual(texts(blocks()), ['See [the docs][d].', 'More.']);
+    assert.equal(named('VirtualText').length, 0);
+    await feed('[d]: https://example.com\n');
+    assert.deepEqual(texts(blocks()), ['See the docs.', 'More.']);
+    assert.deepEqual(texts(named('VirtualText')), ['the docs'], 'drawn as a link');
+  });
+
+  it('turns the last paragraph into a heading when its underline arrives', async () => {
+    const { blocks, feed } = await stream('Intro\n\nTitle\n');
+    assert.equal(blocks()[1]!.props['accessibilityRole'], undefined);
+    await feed('===');
+    assert.deepEqual(texts(blocks()), ['Intro', 'Title']);
+    assert.equal(blocks()[1]!.props['accessibilityRole'], 'header');
+  });
+
+  it('draws everything held back once streaming ends', async () => {
+    const { blocks, app, screen } = await stream('Run `cx5');
+    assert.deepEqual(texts(blocks()), ['Run']);
+    screen.streaming.set(false);
+    await app.detectChanges();
+    assert.deepEqual(texts(blocks()), ['Run `cx5']);
   });
 });

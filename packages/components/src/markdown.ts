@@ -9,19 +9,31 @@
  * import { Markdown } from '@ng-native/components/markdown';
  * ```
  */
-import { Component, Injector, computed, inject, input, linkedSignal, output } from '@angular/core';
+import {
+  Component,
+  Injector,
+  booleanAttribute,
+  computed,
+  inject,
+  input,
+  linkedSignal,
+  output,
+} from '@angular/core';
 import { DeepLinks } from '@ng-native/device';
 import { nativePlatform } from '@ng-native/fabric';
 import { lexer, type Token } from 'marked';
 import type { ImageLoadEvent } from './events.ts';
 import { Image } from './image.ts';
 import {
+  blockKey,
   markdownBlocks,
   opensOnPress,
+  shareBlocks,
   type MarkdownBlock,
   type MarkdownElement,
   type MarkdownInline,
 } from './markdown-blocks.ts';
+import { MarkdownStream } from './markdown-stream.ts';
 import { ScrollView } from './scroll-view.ts';
 import { TemplateSlot } from './template-slot.ts';
 import { Text } from './text.ts';
@@ -81,6 +93,13 @@ function imageSources(blocks: readonly MarkdownBlock[], into = new Set<string>()
  * dark. `classes` replaces one by its element's name, so a global stylesheet or Tailwind styles it
  * instead: `{ h1: 'text-3xl font-bold' }`. Put the default back beside your own to keep both.
  *
+ * For a source that grows as it streams in, an answer arriving a few words at a time, set
+ * `streaming` until it is complete. The blocks before the last one are then kept as they are and
+ * only the last is lexed again, and syntax still open at its end, a code span, an emphasis, a
+ * table row or a code fence's first line, is held back until it closes. Clearing `streaming` draws
+ * the whole source as written, and `tokens` are always drawn as given. A block that did not
+ * change keeps its views, streaming or not.
+ *
  * A pressed link is `(linkPress)`. An absolute target is then opened with `DeepLinks.open` unless
  * a handler calls `preventDefault()`; a relative one is only reported, for the app to route.
  */
@@ -89,7 +108,7 @@ function imageSources(blocks: readonly MarkdownBlock[], into = new Set<string>()
   imports: [Image, ScrollView, TemplateSlot, Text, View],
   template: `
     <ng-template #blockTemplate let-list>
-      @for (block of list; track $index) {
+      @for (block of list; track blockKey(block)) {
         @switch (block.kind) {
           @case ('heading') {
             <text [class]="classFor(block.element)" accessibilityRole="header"
@@ -207,14 +226,24 @@ export class Markdown {
   readonly source = input<string>();
   /** Tokens `marked.lexer` made already, drawn in place of `source`. */
   readonly tokens = input<readonly Token[]>();
+  /**
+   * Whether `source` is still arriving, a chunk at a time. While it is, only its last block is
+   * lexed again, and syntax still open at its end is held back. See the class note.
+   */
+  readonly streaming = input(false, { transform: booleanAttribute });
   /** A class for an element, in place of its default. See the class note. */
   readonly classes = input<MarkdownClasses>({});
   /** A link was pressed. See the class note. */
   readonly linkPress = output<MarkdownLinkPress>();
 
-  protected readonly blocks = computed(() =>
-    markdownBlocks(this.tokens() ?? lexer(this.source() ?? '')),
-  );
+  private readonly stream = new MarkdownStream();
+  protected readonly blockKey = blockKey;
+
+  /** The document's blocks, with each one that did not change kept, so it is not drawn again. */
+  protected readonly blocks = linkedSignal<readonly Token[], readonly MarkdownBlock[]>({
+    source: () => this.tokens() ?? this.lex(this.source() ?? ''),
+    computation: (tokens, previous) => shareBlocks(previous?.value, markdownBlocks(tokens)),
+  });
 
   private readonly classOf = computed(() => ({ ...DEFAULT_CLASSES, ...this.classes() }));
 
@@ -232,6 +261,10 @@ export class Markdown {
       return kept;
     },
   });
+
+  private lex(source: string): readonly Token[] {
+    return this.streaming() ? this.stream.lex(source) : lexer(source);
+  }
 
   protected classFor(element: MarkdownElement): string {
     return this.classOf()[element];
