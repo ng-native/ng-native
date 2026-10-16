@@ -4,9 +4,10 @@
  * `null` that clears a prop as a string and stops the app (#884).
  */
 import assert from 'node:assert/strict';
-import { before, it } from 'node:test';
+import { afterEach, before, it } from 'node:test';
 import type { Type, WritableSignal } from '@angular/core';
 import {
+  cleanup,
   fireEvent,
   render,
   settle,
@@ -38,6 +39,8 @@ function sentToIcons(fabric: FakeFabric): unknown[] {
   fabric.cloneNodeWithNewChildrenAndProps = (node, props) => record(withBoth(node, props), props);
   return sent;
 }
+
+afterEach(cleanup);
 
 let mod: Record<string, unknown>;
 before(async () => {
