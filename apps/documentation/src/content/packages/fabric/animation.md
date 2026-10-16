@@ -52,7 +52,8 @@ layout animation. Android is one unless the app turns layout animations on: Reac
 them off there, and Expo Go cannot turn them on (see
 [layout animations on Android](/packages/device/layout-animation#on-android)). Native takes one
 length of time for a commit: of several that start together and take different times, the longest
-is the one it plays, and the others are eased from JavaScript. `transitionend` is sent when the transition's time is up.
+is the one it plays, and the others are eased from JavaScript. `transitionend` is sent when the
+transition's time is up. One eased from JavaScript stalls while JavaScript is busy.
 
 A plain view with a transition is a native view for as long as it has one, as an `Animated.View`
 is in React Native. Left to itself React Native makes a native view of one only while its opacity
