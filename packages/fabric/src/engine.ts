@@ -410,6 +410,13 @@ const VIEW_EVENT_OPT_IN_PROPS: Record<string, Record<string, string>> = {
     topError: 'shouldNotifyLoadEvents',
     topProgress: 'shouldNotifyLoadEvents',
   },
+  // `ReactTextInputManager` watches each of these only behind a prop of the handler's name,
+  // which `TextInput.js` sets by passing the handler through. iOS's field sends them unasked.
+  AndroidTextInput: {
+    topContentSizeChange: 'onContentSizeChange',
+    topScroll: 'onScroll',
+    topKeyPress: 'onKeyPress',
+  },
 };
 
 /**
