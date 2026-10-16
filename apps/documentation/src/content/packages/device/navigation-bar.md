@@ -47,6 +47,27 @@ npx expo install expo-navigation-bar
 Nothing in `@ng-native/device` imports the package: `NavigationBar` reaches its native module by
 name. In a build without it, every claim is kept in `state` and changes nothing on screen.
 
+## Buttons and contrast
+
+`style` colours the buttons of three-button navigation, on Android 8 and later; on Android 7 it
+changes nothing. Expo documents it as having no effect with gesture navigation, which has a handle
+in place of buttons.
+
+By default Android also keeps the buttons readable with a translucent band behind them, in the
+colour that suits the style: light behind dark buttons and dark behind light ones. So light buttons
+on a light screen sit on a grey band rather than straight on the screen. On Android 9 and earlier,
+`expo-navigation-bar` paints that band as the bar's colour itself. A development build that wants
+the buttons drawn straight over its own content turns the band off with the plugin's
+`enforceContrast` option in `app.json`, then rebuilds; Expo Go keeps it on:
+
+```json
+{
+  "expo": {
+    "plugins": [["expo-navigation-bar", { "enforceContrast": false }]]
+  }
+}
+```
+
 ## Following the color scheme
 
 `'auto'` is dark buttons while [`ColorScheme`](/packages/device/color-scheme) reports light, and
@@ -73,7 +94,17 @@ with its own, from its presentation or its page's host bindings, has it each tim
 front, and the claim is back when a screen without one is.
 
 ```ts
-inject(NativeNavigation).push('/video', { presentation: { navigationBarHidden: true } });
+import { Component, inject } from '@angular/core';
+import { NativeNavigation } from '@ng-native/router';
+
+@Component({ selector: 'app-library', template: `<view />` })
+export class Library {
+  private readonly navigation = inject(NativeNavigation);
+
+  protected openVideo(): void {
+    this.navigation.push('/video', { presentation: { navigationBarHidden: true } });
+  }
+}
 ```
 
 ## On iOS, the web and Node
