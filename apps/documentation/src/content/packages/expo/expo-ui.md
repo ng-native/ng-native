@@ -194,8 +194,9 @@ write the new value back from `(isOnChange)`. A stack without an `alignment` is 
 Without a `spacing`, SwiftUI puts its own default spacing between a stack's children and Compose
 puts none, so give a stack a `spacing` where the gap matters.
 
-`modifiers` go to both platforms as they are written, and the two read different ones. Compose skips
-a modifier it does not know, silently, and knows few of SwiftUI's: `frame`, `font` and
+`modifiers` go to both platforms as they are written, but for a `ui-view-host`'s, which go to
+Android only, and the two read different ones. Compose skips a modifier it does not know, silently,
+and knows few of SwiftUI's: `frame`, `font` and
 `foregroundStyle` do nothing on Android. Even a name both know can read different fields: SwiftUI's
 `padding` takes `leading`, `trailing`, `horizontal`, `vertical` and `all`, while Compose's reads
 only `start`, `top`, `end` and `bottom`. Choose the modifiers by platform, with `nativePlatform()`
