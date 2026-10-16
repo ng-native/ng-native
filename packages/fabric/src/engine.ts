@@ -3616,8 +3616,10 @@ export class Engine implements HostEngine {
    * element matched again, and one named as what a rule's element is inside, `.animating .close`
    * or `.close:is(.animating *)`, the elements under the node that such rules are for. What is
    * under any of those is styled again from the rules it matched, for what it inherits: a `dark`
-   * class on the root finds no rule again for an element no `dark` rule is for. Any other class
-   * has the node and everything under it matched again, as any other change to it does.
+   * class on the root finds no rule again for an element no `dark` rule is for. One named in
+   * `:has()`, or answering a test of the class attribute there, has the boxes above the node
+   * asked again. Any other class has the node and everything under it matched again, as any
+   * other change to it does.
    *
    * A sheet that names a class later restyles what it is for as it arrives, and a node not yet
    * committed is styled when it is, with the class as it is then.
@@ -3632,6 +3634,7 @@ export class Engine implements HostEngine {
     this.markProps(node, false);
     if (!reach) return;
     if (reach.own) node.ownDirty = true;
+    if (reach.beneath && this.hasSheets) this.markBeneath(node.parent);
     if (this.styles.reachesUnder(reach)) {
       this.classesAbove += 1;
       this.markUnder(node, reach);

@@ -396,7 +396,9 @@ describe('what a child list changing has styled again', () => {
     engine.commit();
     /** Which of the rows there now are marked to be styled again, before the commit that does it. */
     const marked = () =>
-      parent.children.map((child) => (child.styleDirty || child.stateDirty ? 'x' : '.')).join('');
+      parent.children
+        .map((child) => (child.styleDirty || child.ownDirty || child.stateDirty ? 'x' : '.'))
+        .join('');
     const widths = () => {
       engine.commit();
       return fabric.committed[0]!.children.map((view) => view.props['borderTopWidth'] ?? 0);

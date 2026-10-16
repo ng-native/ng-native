@@ -154,6 +154,7 @@ export default tseslint.config(
       // Tests of internals the package entry points do not export, which have no other way in.
       'packages/integration-tests/css-ancestor-filter.test.ts',
       'packages/integration-tests/css-attribute-reach.test.ts',
+      'packages/integration-tests/css-class-restyle.test.ts',
       'packages/integration-tests/css-cost.test.ts',
       'packages/integration-tests/css-global-sheet-added.test.ts',
       'packages/integration-tests/css-oracle.test.ts',

@@ -1988,6 +1988,14 @@ interface CascadeResult {
 /** What `em` falls back to when nothing in scope has set a font size. The web's default. */
 const DEFAULT_FONT_SIZE = 16;
 
+/**
+ * The rules a node matched, to style it from again: for a change above it, and not for one of
+ * its own or beneath it, which can change what it matches.
+ */
+function rulesKept(cached: StyleCache, node: StyleTarget): readonly StyleRule[] | undefined {
+  return node.ownDirty || node.hasDirty ? undefined : cached.rules;
+}
+
 /** Shared empty result. Never handed out anywhere that mutates it. */
 const EMPTY: Record<string, unknown> = {};
 
@@ -2027,6 +2035,11 @@ export interface Subjects {
    * matched again itself. Unset where the rules are only for elements under it.
    */
   own?: boolean;
+  /**
+   * In what a class reaches: a rule names it in `:has()`, `.field:has(.on)`, which the boxes
+   * above the element that has it are then asked again.
+   */
+  beneath?: boolean;
 }
 
 interface Addition {
@@ -2147,11 +2160,12 @@ function classReach(sheet: StyleSheet): SheetReach {
   for (const rule of sheet.rules) {
     const every = new Set<string>();
     collectClasses(rule, every, reads, named);
-    const { own, inside } = classPlaces(rule);
+    const { own, inside, beneath } = classPlaces(rule);
     for (const name of every) {
-      if (!own.has(name) && !inside.has(name)) classes.set(name, true);
+      if (!own.has(name) && !inside.has(name) && !beneath.has(name)) classes.set(name, true);
       if (own.has(name)) noteOwn(classes, name);
       if (inside.has(name)) noteInside(classes, name, rule);
+      if (beneath.has(name)) noteBeneath(classes, name);
     }
   }
   reaches.set(sheet, (found = { classes, reads, named }));
@@ -2164,6 +2178,14 @@ function noteOwn(found: ClassReach, name: string): void {
   if (subjects === true) return;
   if (subjects) subjects.own = true;
   else found.set(name, { ...noSubjects(), own: true });
+}
+
+/** Note a rule as one that names a class in `:has()`. */
+function noteBeneath(found: ClassReach, name: string): void {
+  const subjects = found.get(name);
+  if (subjects === true) return;
+  if (subjects) subjects.beneath = true;
+  else found.set(name, { ...noSubjects(), beneath: true });
 }
 
 /** Note a rule as one that names a class as what its element is inside. */
@@ -2186,9 +2208,6 @@ const noSubjects = (): Subjects => ({
   any: false,
 });
 
-/** The reach of classes that rules are for the element of, and for nothing under it. */
-const OWN_ALONE: Subjects = { ...noSubjects(), own: true };
-
 /** Add to `into` what `from` is for. */
 function addSubjects(into: Subjects, from: Subjects): void {
   for (const name of from.classes) into.classes.add(name);
@@ -2196,6 +2215,7 @@ function addSubjects(into: Subjects, from: Subjects): void {
   for (const name of from.inside) into.inside.add(name);
   into.any ||= from.any;
   if (from.own) into.own = true;
+  if (from.beneath) into.beneath = true;
 }
 
 /**
@@ -2205,21 +2225,29 @@ function addSubjects(into: Subjects, from: Subjects): void {
  *   it, which are asked of that element;
  * - `inside`, as what that element is inside: the classes of a compound before the last, with
  *   nothing but `>` and a space between there and the element, and those of what `:is(.box *)`
- *   and `:is(.box > *)` put over it.
+ *   and `:is(.box > *)` put over it;
+ * - `beneath`, inside `:has()`, wherever in the rule that is: what it asks of is under the box
+ *   that answers it.
  *
- * A class named anywhere else in the rule is in neither, whatever else names it: beside the
- * element, inside `:has()` or `:host-context()`, or in `:not()` of a box the element is in.
+ * A class named anywhere else in the rule is in none, whatever else names it: beside the element,
+ * inside `:host-context()`, or in `:not()` of a box the element is in. A test of the class
+ * attribute is placed as a class is, by `classTestKey`.
  */
-function classPlaces(rule: StyleRule): { own: ReadonlySet<string>; inside: ReadonlySet<string> } {
+function classPlaces(rule: StyleRule): {
+  own: ReadonlySet<string>;
+  inside: ReadonlySet<string>;
+  beneath: ReadonlySet<string>;
+} {
   const own = new Set<string>();
   const inside = new Set<string>();
+  const beneath = new Set<string>();
   const elsewhere = new Set<string>();
   const last = rule.compounds.length - 1;
   let under = true;
   for (let index = last; index >= 0; index--) {
     const compound = rule.compounds[index]!;
     if (index === last) {
-      placeClasses(compound, own, inside, elsewhere);
+      placeClasses(compound, own, inside, elsewhere, beneath);
       continue;
     }
     const joined = rule.combinators[index];
@@ -2227,13 +2255,14 @@ function classPlaces(rule: StyleRule): { own: ReadonlySet<string>; inside: Reado
     // A box the element is under, by its classes and by those it is asked to have or not to,
     // `.box:not(.busy) .row`: each is asked of that box, as its own are.
     const over = under ? inside : elsewhere;
-    placeClasses(compound, over, over, elsewhere);
+    placeClasses(compound, over, over, elsewhere, beneath);
   }
   for (const name of elsewhere) {
     own.delete(name);
     inside.delete(name);
+    beneath.delete(name);
   }
-  return { own, inside };
+  return { own, inside, beneath };
 }
 
 /**
@@ -2246,6 +2275,7 @@ function placeClasses(
   at: Set<string>,
   inside: Set<string>,
   elsewhere: Set<string>,
+  beneath: Set<string>,
 ): void {
   const {
     classes,
@@ -2253,24 +2283,81 @@ function placeClasses(
     not,
     ancestors,
     parents,
+    attributes,
+    has,
     type: _t,
     id: _i,
     root: _r,
     pseudo: _p,
     ...rest
   } = compound;
-  for (const name of classes) at.add(name);
+  for (const name of namesOf(classes, attributes)) at.add(name);
   for (const alternatives of is ?? []) {
-    for (const option of alternatives) placeClasses(option, at, inside, elsewhere);
+    for (const option of alternatives) placeClasses(option, at, inside, elsewhere, beneath);
   }
-  for (const excluded of not ?? []) placeClasses(excluded, at, inside, elsewhere);
+  for (const excluded of not ?? []) placeClasses(excluded, at, inside, elsewhere, beneath);
   // What is over the element is over it whichever of these said so, and what is over that is too.
   for (const above of [...(ancestors ?? []), ...(parents ?? [])]) {
-    placeClasses(above, inside, inside, elsewhere);
+    placeClasses(above, inside, inside, elsewhere, beneath);
   }
-  // `attributes` among them: a test of the `class` attribute is answered through `classTests`.
+  placeHas(has, beneath, elsewhere);
   collectClasses(rest, elsewhere, []);
 }
+
+/**
+ * The classes `:has()` asks of what is under the box that answers it, into
+ * `beneath`, wherever in the rule it is written. One it can ask of what is above the box goes
+ * `elsewhere`: `:is()` in `:has()` is not relative, so the `.night` of `:has(:is(.night .cell))`
+ * can be any element over the cell.
+ */
+function placeHas(
+  tests: readonly HasTest[] | undefined,
+  beneath: Set<string>,
+  elsewhere: Set<string>,
+): void {
+  for (const test of tests ?? []) {
+    for (const compound of test.any) placeBeneath(compound, beneath, elsewhere);
+  }
+}
+
+/** `placeHas` for one compound of a `:has()` argument. */
+function placeBeneath(compound: Compound, beneath: Set<string>, elsewhere: Set<string>): void {
+  const {
+    classes,
+    attributes,
+    is,
+    not,
+    has,
+    type: _t,
+    id: _i,
+    root: _r,
+    pseudo: _p,
+    ...rest
+  } = compound;
+  for (const name of namesOf(classes, attributes)) beneath.add(name);
+  for (const alternatives of is ?? []) {
+    for (const option of alternatives) placeBeneath(option, beneath, elsewhere);
+  }
+  for (const excluded of not ?? []) placeBeneath(excluded, beneath, elsewhere);
+  placeHas(has, beneath, elsewhere);
+  collectClasses(rest, elsewhere, []);
+}
+
+/** A compound's classes, and its tests of the class attribute, which are asked as its classes are. */
+function namesOf(
+  classes: readonly string[],
+  attributes: readonly AttributeTest[] | undefined,
+): readonly string[] {
+  const tests = attributes?.filter((test) => test.name === 'class');
+  return tests?.length ? [...classes, ...tests.map(classTestKey)] : classes;
+}
+
+/**
+ * A test of the class attribute, `[class^="p-"]`, by a name no class can have: it has a reach
+ * as a class does, for what any class it answers can restyle.
+ */
+const classTestKey = (test: AttributeTest): string =>
+  `\0${test.operator ?? ''}${test.insensitive ? 'i' : ''}\0${test.value ?? ''}`;
 
 /** What a rule declares, which names no element. */
 const DECLARED = new Set(['declarations', 'important', 'tokens']);
@@ -2294,7 +2381,9 @@ function collectClasses(
   if (Array.isArray(part.attributes)) {
     for (const test of part.attributes as AttributeTest[]) {
       named?.add(test.name);
-      if (test.name === 'class') reads.push(test);
+      if (test.name !== 'class') continue;
+      reads.push(test);
+      into.add(classTestKey(test));
     }
   }
   for (const [key, inner] of Object.entries(value)) {
@@ -2637,7 +2726,7 @@ export class StyleResolver {
   /** How far each class named by the sheets met so far reaches: see `classReach`. */
   private readonly reach: ClassReach = new Map();
   /** The tests of the `class` attribute itself in those sheets, which any class may answer. */
-  private readonly classTests: AttributeTest[] = [];
+  private readonly classTests = new Map<string, AttributeTest>();
   private readonly noted = new WeakSet<StyleSheet>();
   /**
    * The sheets with a rule written with `::ng-deep`, which is for what is under the component
@@ -2653,7 +2742,7 @@ export class StyleResolver {
     if (sheet.rules.some((rule) => rule.deep)) this.deepSheets.add(sheet);
     const { classes, reads, named } = classReach(sheet);
     for (const [name, how] of classes) this.noteReach(name, how);
-    this.classTests.push(...reads);
+    for (const test of reads) this.classTests.set(classTestKey(test), test);
     for (const name of named) this.named.add(name);
   }
 
@@ -2692,20 +2781,23 @@ export class StyleResolver {
    * of them and nothing is styled again.
    */
   reachOf(classes: Iterable<string>): true | Subjects | null {
-    let under: Subjects | null = null;
-    let own = false;
+    let found: Subjects | null = null;
     for (const name of classes) {
-      const how = this.reach.get(name);
-      if (how === true || this.classTests.some((test) => answers(test, name))) return true;
-      if (!how) continue;
-      own ||= how.own === true;
-      // Made only for a class that reaches under: most are a rule's own, and this is asked for
-      // every element as it is given its classes.
-      if (this.reachesUnder(how)) addSubjects((under ??= noSubjects()), how);
+      for (const how of this.reachesOf(name)) {
+        if (how === true) return true;
+        addSubjects((found ??= noSubjects()), how);
+      }
     }
-    if (!under) return own ? OWN_ALONE : null;
-    if (own) under.own = true;
-    return under;
+    return found;
+  }
+
+  /** How far a class reaches by its name, and by each test of the class attribute it answers. */
+  private *reachesOf(name: string): Generator<true | Subjects> {
+    const how = this.reach.get(name);
+    if (how) yield how;
+    for (const [key, test] of this.classTests) {
+      if (answers(test, name)) yield this.reach.get(key) ?? true;
+    }
   }
 
   /** Whether one of the rules `subjects` stands for could be for a node. */
@@ -2809,8 +2901,7 @@ export class StyleResolver {
 
     styleStats.nodesResolved++;
 
-    // Its own rules are found again for a change of its own, and not for one above it.
-    const rules = stands && !node.ownDirty ? cached!.rules : undefined;
+    const rules = stands ? rulesKept(cached!, node) : undefined;
     const matched = found ?? rules ?? this.matchedBy(node);
     const parentTokens = parent ? parent.tokens : this.tokensOnRoot;
     this.heir(node, parent, matched);
