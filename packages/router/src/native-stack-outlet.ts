@@ -240,7 +240,11 @@ export class NativeStackOutlet implements RouterOutletContract, OnInit {
         entry.ref.destroy();
       }
       this.entries.length = 0;
-      this.parentContexts.onChildOutletDestroyed(this.name);
+      // Only while it is this outlet's: a page kept by the reuse strategy takes its outlets'
+      // registrations with it, and gets them back as it is attached, before what was over it goes.
+      if (this.parentContexts.getContext(this.name)?.outlet === this) {
+        this.parentContexts.onChildOutletDestroyed(this.name);
+      }
     });
   }
 
@@ -288,7 +292,9 @@ export class NativeStackOutlet implements RouterOutletContract, OnInit {
     return () => {
       back.presents = false;
       this.dropPresentedPage();
-      this.parentContexts.onChildOutletDestroyed(PRESENTED);
+      if (this.parentContexts.getContext(PRESENTED)?.outlet === outlet) {
+        this.parentContexts.onChildOutletDestroyed(PRESENTED);
+      }
     };
   }
 

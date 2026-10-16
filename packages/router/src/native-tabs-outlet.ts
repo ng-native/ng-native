@@ -227,7 +227,10 @@ export class NativeTabsOutlet implements RouterOutletContract, AfterContentInit 
         entry.ref?.destroy();
       }
       this.entries.length = 0;
-      this.parentContexts.onChildOutletDestroyed(this.name);
+      // Only while it is this outlet's, as for a stack: see `NativeStackOutlet`.
+      if (this.parentContexts.getContext(this.name)?.outlet === this) {
+        this.parentContexts.onChildOutletDestroyed(this.name);
+      }
     });
   }
 
