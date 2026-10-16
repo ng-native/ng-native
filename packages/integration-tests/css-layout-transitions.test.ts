@@ -209,7 +209,7 @@ describe('a transition of a width on a host with no layout animation', () => {
     }
     // The first two are eased from where the bar is drawn; the rest are where they end.
     assert.equal(widths[0], 10);
-    assert.notEqual(widths[1], 50);
+    assert.ok(widths[1]! > 10 && widths[1]! < 30, `eased from where it is drawn: ${widths[1]}`);
     assert.deepEqual(widths.slice(2), [30, 50, 30]);
     assert.equal(s.engine.animating, false);
     assert.equal(s.events.filter((each) => each === 'end').length, 3);

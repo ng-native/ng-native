@@ -57,7 +57,8 @@ transition's time is up. One eased from JavaScript stalls while JavaScript is bu
 
 A transition of a size or a place that is started again before it ends, twice in a row, such as
 a progress bar that steps every 50ms and eases each step over 150ms, is committed where it ends
-from that third start on, with `transitionend` sent at once, by native or from JavaScript alike.
+from that third start on, with `transitionend` sent at once, whether the host plays layout
+animations or the engine eases from JavaScript.
 CSS would ease every step, but easing one that is always restarted keeps a commit, or a layout
 animation, running on every frame for as long as the bar moves, so the steps are the motion. The
 next start after the size has been left alone for as long as the transition lasts is eased again.
