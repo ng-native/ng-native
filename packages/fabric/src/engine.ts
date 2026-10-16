@@ -3618,7 +3618,7 @@ export class Engine implements HostEngine {
    * under any of those is styled again from the rules it matched, for what it inherits: a `dark`
    * class on the root finds no rule again for an element no `dark` rule is for. One named in
    * `:has()`, or answering a test of the class attribute there, has the boxes above the node
-   * asked again. Any other class has the node and everything under it matched again, as any
+   * asked again, and one named only in `:has(> )` the box right above it. Any other class has the node and everything under it matched again, as any
    * other change to it does.
    *
    * A sheet that names a class later restyles what it is for as it arrives, and a node not yet
@@ -3634,7 +3634,9 @@ export class Engine implements HostEngine {
     this.markProps(node, false);
     if (!reach) return;
     if (reach.own) node.ownDirty = true;
-    if (reach.beneath && this.hasSheets) this.markBeneath(node.parent);
+    if (this.hasSheets && reach.beneath) this.markBeneath(node.parent);
+    // `:has(> .on)`: only the box right above the node can answer it.
+    else if (this.hasSheets && reach.parentHas) this.markBeneath(node.parent, node.parent?.parent);
     if (this.styles.reachesUnder(reach)) {
       this.classesAbove += 1;
       this.markUnder(node, reach);
@@ -3693,6 +3695,7 @@ export class Engine implements HostEngine {
     node.hostSheet = sheet;
     this.styles.noteSheet(sheet);
     this.watchStructure(sheet);
+    this.watchHas(sheet);
     this.watchActive(sheet);
     this.markProps(node);
   }
@@ -4230,11 +4233,12 @@ export class Engine implements HostEngine {
 
   /**
    * Something at or beneath `from` changed: every node from there up may match a `:has()` rule
-   * it did not, or stop matching one. They are matched again rather than marked for restyling,
-   * which would restyle everything under them. Only sheets that use `:has()` pay.
+   * it did not, or stop matching one, up to `upTo` and not it. They are matched again rather than
+   * marked for restyling, which would restyle everything under them. Only sheets that use
+   * `:has()` pay.
    */
-  private markBeneath(from: EngineNode | null): void {
-    for (let node = from; node; node = node.parent) {
+  private markBeneath(from: EngineNode | null, upTo: EngineNode | null = null): void {
+    for (let node = from; node && node !== upTo; node = node.parent) {
       node.hasDirty = true;
       if (this.hasReaders.size) this.changedBeneath.add(node);
     }

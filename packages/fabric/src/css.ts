@@ -2040,6 +2040,11 @@ export interface Subjects {
    * above the element that has it are then asked again.
    */
   beneath?: boolean;
+  /**
+   * In what a class reaches: a rule names it in `:has(> )` alone, `.field:has(> .on)`, which only
+   * the box right above the element that has it is then asked again.
+   */
+  parentHas?: boolean;
 }
 
 interface Addition {
@@ -2160,12 +2165,14 @@ function classReach(sheet: StyleSheet): SheetReach {
   for (const rule of sheet.rules) {
     const every = new Set<string>();
     collectClasses(rule, every, reads, named);
-    const { own, inside, beneath } = classPlaces(rule);
+    const { own, inside, beneath, parentHas } = classPlaces(rule);
     for (const name of every) {
-      if (!own.has(name) && !inside.has(name) && !beneath.has(name)) classes.set(name, true);
+      const placed = own.has(name) || inside.has(name) || beneath.has(name) || parentHas.has(name);
+      if (!placed) classes.set(name, true);
       if (own.has(name)) noteOwn(classes, name);
       if (inside.has(name)) noteInside(classes, name, rule);
-      if (beneath.has(name)) noteBeneath(classes, name);
+      if (beneath.has(name)) noteBeneath(classes, name, 'beneath');
+      if (parentHas.has(name)) noteBeneath(classes, name, 'parentHas');
     }
   }
   reaches.set(sheet, (found = { classes, reads, named }));
@@ -2180,12 +2187,12 @@ function noteOwn(found: ClassReach, name: string): void {
   else found.set(name, { ...noSubjects(), own: true });
 }
 
-/** Note a rule as one that names a class in `:has()`. */
-function noteBeneath(found: ClassReach, name: string): void {
+/** Note a rule as one that names a class in `:has()`, or in `:has(> )` alone. */
+function noteBeneath(found: ClassReach, name: string, how: 'beneath' | 'parentHas'): void {
   const subjects = found.get(name);
   if (subjects === true) return;
-  if (subjects) subjects.beneath = true;
-  else found.set(name, { ...noSubjects(), beneath: true });
+  if (subjects) subjects[how] = true;
+  else found.set(name, { ...noSubjects(), [how]: true });
 }
 
 /** Note a rule as one that names a class as what its element is inside. */
@@ -2216,6 +2223,7 @@ function addSubjects(into: Subjects, from: Subjects): void {
   into.any ||= from.any;
   if (from.own) into.own = true;
   if (from.beneath) into.beneath = true;
+  if (from.parentHas) into.parentHas = true;
 }
 
 /**
@@ -2227,7 +2235,9 @@ function addSubjects(into: Subjects, from: Subjects): void {
  *   nothing but `>` and a space between there and the element, and those of what `:is(.box *)`
  *   and `:is(.box > *)` put over it;
  * - `beneath`, inside `:has()`, wherever in the rule that is: what it asks of is under the box
- *   that answers it.
+ *   that answers it;
+ * - `parentHas`, of what `:has(> )` asks of the box's children themselves, and nowhere else in
+ *   `:has()`: the element is right under that box.
  *
  * A class named anywhere else in the rule is in none, whatever else names it: beside the element,
  * inside `:host-context()`, or in `:not()` of a box the element is in. A test of the class
@@ -2237,17 +2247,20 @@ function classPlaces(rule: StyleRule): {
   own: ReadonlySet<string>;
   inside: ReadonlySet<string>;
   beneath: ReadonlySet<string>;
+  parentHas: ReadonlySet<string>;
 } {
   const own = new Set<string>();
   const inside = new Set<string>();
   const beneath = new Set<string>();
+  const parentHas = new Set<string>();
   const elsewhere = new Set<string>();
+  const below = { beneath, parentHas, elsewhere };
   const last = rule.compounds.length - 1;
   let under = true;
   for (let index = last; index >= 0; index--) {
     const compound = rule.compounds[index]!;
     if (index === last) {
-      placeClasses(compound, own, inside, elsewhere, beneath);
+      placeClasses(compound, own, inside, below);
       continue;
     }
     const joined = rule.combinators[index];
@@ -2255,14 +2268,15 @@ function classPlaces(rule: StyleRule): {
     // A box the element is under, by its classes and by those it is asked to have or not to,
     // `.box:not(.busy) .row`: each is asked of that box, as its own are.
     const over = under ? inside : elsewhere;
-    placeClasses(compound, over, over, elsewhere, beneath);
+    placeClasses(compound, over, over, below);
   }
   for (const name of elsewhere) {
     own.delete(name);
     inside.delete(name);
     beneath.delete(name);
+    parentHas.delete(name);
   }
-  return { own, inside, beneath };
+  return { own, inside, beneath, parentHas };
 }
 
 /**
@@ -2274,8 +2288,7 @@ function placeClasses(
   compound: Compound,
   at: Set<string>,
   inside: Set<string>,
-  elsewhere: Set<string>,
-  beneath: Set<string>,
+  below: Below,
 ): void {
   const {
     classes,
@@ -2293,35 +2306,39 @@ function placeClasses(
   } = compound;
   for (const name of namesOf(classes, attributes)) at.add(name);
   for (const alternatives of is ?? []) {
-    for (const option of alternatives) placeClasses(option, at, inside, elsewhere, beneath);
+    for (const option of alternatives) placeClasses(option, at, inside, below);
   }
-  for (const excluded of not ?? []) placeClasses(excluded, at, inside, elsewhere, beneath);
+  for (const excluded of not ?? []) placeClasses(excluded, at, inside, below);
   // What is over the element is over it whichever of these said so, and what is over that is too.
   for (const above of [...(ancestors ?? []), ...(parents ?? [])]) {
-    placeClasses(above, inside, inside, elsewhere, beneath);
+    placeClasses(above, inside, inside, below);
   }
-  placeHas(has, beneath, elsewhere);
-  collectClasses(rest, elsewhere, []);
+  placeHas(has, below);
+  collectClasses(rest, below.elsewhere, []);
+}
+
+/** Where `classPlaces` puts what `:has()` asks, and what it can place nowhere. */
+interface Below {
+  readonly beneath: Set<string>;
+  readonly parentHas: Set<string>;
+  readonly elsewhere: Set<string>;
 }
 
 /**
- * The classes `:has()` asks of what is under the box that answers it, into
- * `beneath`, wherever in the rule it is written. One it can ask of what is above the box goes
- * `elsewhere`: `:is()` in `:has()` is not relative, so the `.night` of `:has(:is(.night .cell))`
- * can be any element over the cell.
+ * The classes `:has()` asks of what is under the box that answers it, into `beneath`, wherever
+ * in the rule it is written, or into `parentHas` for what `:has(> )` asks of the box's children.
+ * One it can ask of what is above the box goes `elsewhere`: `:is()` in `:has()` is not relative,
+ * so the `.night` of `:has(:is(.night .cell))` can be any element over the cell.
  */
-function placeHas(
-  tests: readonly HasTest[] | undefined,
-  beneath: Set<string>,
-  elsewhere: Set<string>,
-): void {
+function placeHas(tests: readonly HasTest[] | undefined, below: Below): void {
   for (const test of tests ?? []) {
-    for (const compound of test.any) placeBeneath(compound, beneath, elsewhere);
+    const into = test.child ? below.parentHas : below.beneath;
+    for (const compound of test.any) placeBeneath(compound, into, below);
   }
 }
 
-/** `placeHas` for one compound of a `:has()` argument. */
-function placeBeneath(compound: Compound, beneath: Set<string>, elsewhere: Set<string>): void {
+/** `placeHas` for one compound of a `:has()` argument, whose own classes go `into`. */
+function placeBeneath(compound: Compound, into: Set<string>, below: Below): void {
   const {
     classes,
     attributes,
@@ -2334,13 +2351,13 @@ function placeBeneath(compound: Compound, beneath: Set<string>, elsewhere: Set<s
     pseudo: _p,
     ...rest
   } = compound;
-  for (const name of namesOf(classes, attributes)) beneath.add(name);
+  for (const name of namesOf(classes, attributes)) into.add(name);
   for (const alternatives of is ?? []) {
-    for (const option of alternatives) placeBeneath(option, beneath, elsewhere);
+    for (const option of alternatives) placeBeneath(option, into, below);
   }
-  for (const excluded of not ?? []) placeBeneath(excluded, beneath, elsewhere);
-  placeHas(has, beneath, elsewhere);
-  collectClasses(rest, elsewhere, []);
+  for (const excluded of not ?? []) placeBeneath(excluded, into, below);
+  placeHas(has, below);
+  collectClasses(rest, below.elsewhere, []);
 }
 
 /** A compound's classes, and its tests of the class attribute, which are asked as its classes are. */

@@ -176,6 +176,49 @@ describe('a class named only in :has()', () => {
     assert.equal(s.props('panel')['opacity'], 1);
   });
 
+  it('matches a component host again for a class its own :has() names, coming and going', () => {
+    // The only :has() is in the host's sheet, which the engine meets through setHostSheet.
+    const s = scene(CSS);
+    s.engine.setHostSheet(s.panel, sheet(':host:has(.flag) { opacity: 0.2 }'));
+    s.engine.commit();
+    const cell = s.panel.children[3]!.children[2]!;
+    s.engine.addClass(cell, 'flag');
+    s.engine.commit();
+    assert.equal(s.props('panel')['opacity'], 0.2);
+    s.engine.removeClass(cell, 'flag');
+    s.engine.commit();
+    assert.equal(s.props('panel')['opacity'], 1);
+  });
+
+  it('asks only the box right above the element again for a class :has(> ) names', () => {
+    const s = scene(`${CSS} .row:has(> .flag) { opacity: 0.2 }`);
+    const row = s.panel.children[3]!;
+    s.engine.setProp(row, 'nativeID', 'picked');
+    s.engine.commit();
+    s.engine.addClass(row.children[2]!, 'flag');
+    // The row, and not the panel or the root, which cannot have the cell as a child.
+    assert.deepEqual(
+      [row, s.panel, s.engine.root].map((node) => node.hasDirty),
+      [true, false, false],
+    );
+    s.engine.commit();
+    assert.equal(s.props('picked')['opacity'], 0.2);
+    s.engine.removeClass(row.children[2]!, 'flag');
+    s.engine.commit();
+    assert.equal(s.props('picked')['opacity'], null);
+  });
+
+  it('asks every box above again where another rule names the class in :has() too', () => {
+    const s = scene(`${CSS} .row:has(> .flag) { color: red } .panel:has(.flag) { opacity: 0.2 }`);
+    const cell = s.panel.children[3]!.children[2]!;
+    s.engine.addClass(cell, 'flag');
+    s.engine.commit();
+    assert.equal(s.props('panel')['opacity'], 0.2);
+    s.engine.removeClass(cell, 'flag');
+    s.engine.commit();
+    assert.equal(s.props('panel')['opacity'], 1);
+  });
+
   it('matches the box again for a class an :is() in :has() asks of what is above it', () => {
     // `:is()` in `:has()` is not relative: its `.night` can be any element over the cell.
     const s = scene(`${CSS} .panel:has(:is(.night .cell)) { opacity: 0.2 }`);
