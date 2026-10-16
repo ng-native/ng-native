@@ -131,6 +131,16 @@ const SYSTEM_BAR_PROPS = {
 /** The system bar claims a screen carries, keyed as `SYSTEM_BAR_PROPS` names them. */
 type SystemBarClaim = { readonly [key in keyof typeof SYSTEM_BAR_PROPS]?: string | boolean };
 
+/**
+ * Whether a screen has its own value for a system bar prop, which the app's claim leaves alone.
+ * `navigationBarHidden` goes by who wrote it, so a page binding the same value the screen carries
+ * still keeps it. The status bar props go by value: one that is not what was carried.
+ */
+function ownValue(node: Partial<EngineNode>, prop: string, before: Record<string, unknown>) {
+  if (prop === 'navigationBarHidden') return node.writes?.has(prop) === true;
+  return node.props?.[prop] !== undefined && node.props[prop] !== before[prop];
+}
+
 /** The native engine's `dispatchEvent`, as Fabric calls it. */
 type NativeDispatch = (node: unknown, topLevelType: string, nativeEvent: unknown) => void;
 
@@ -227,8 +237,8 @@ export class NativeStackOutlet implements RouterOutletContract, OnInit {
     });
 
     const carryAll = (claim: SystemBarClaim) => {
-      for (const entry of this.entries) this.carryStatusBar(entry.screen, claim);
-      if (this.presentedPage) this.carryStatusBar(this.presentedPage.screen, claim);
+      for (const entry of this.entries) this.carrySystemBars(entry.screen, claim);
+      if (this.presentedPage) this.carrySystemBars(this.presentedPage.screen, claim);
     };
     effect(() => {
       const claim = this.systemBars();
@@ -331,7 +341,7 @@ export class NativeStackOutlet implements RouterOutletContract, OnInit {
       inFront,
       PRESENTED,
     );
-    this.carryStatusBar(screen, untracked(this.systemBars));
+    this.carrySystemBars(screen, untracked(this.systemBars));
     // Once the page is there to cover it: one that throws on its first render never is, and
     // nothing would put the screen under it back in front.
     this.top?.inFront.set(false);
@@ -446,7 +456,7 @@ export class NativeStackOutlet implements RouterOutletContract, OnInit {
     const screen = this.createScreen(presentation);
     const inFront = signal(true);
     const { ref, unbind } = this.createPage(component, route, environmentInjector, screen, inFront);
-    this.carryStatusBar(screen, untracked(this.systemBars));
+    this.carrySystemBars(screen, untracked(this.systemBars));
     // The page's own host style, including any `position` or inset it declared, has now landed
     // on the screen: put the stack's fill back over it. Per-key, through `setStyle`, so whatever
     // else the page's style set - a background colour, say - still merges and stays.
@@ -748,6 +758,9 @@ export class NativeStackOutlet implements RouterOutletContract, OnInit {
     dismissed = (count: number) => this.onNativeDismiss(count),
   ): unknown {
     const screen = ownHost(this.renderer.createElement('screen'));
+    // From before the presentation is set, so a value it or the page's host bindings write counts
+    // as the screen's own, even one equal to a carried value. See `carrySystemBars`.
+    (screen as Partial<EngineNode>).writes = new Set();
     this.fillScreen(screen);
     // Set once and never lowered: see the note at the top of this file.
     this.renderer.setProperty(screen, 'activityState', ActivityState.Active);
@@ -779,23 +792,26 @@ export class NativeStackOutlet implements RouterOutletContract, OnInit {
   }
 
   /**
-   * Puts the app's status bar claim on a screen that has no style or visibility of its own, from
-   * its presentation or its page's host bindings. On Android, react-native-screens sets the bar
-   * from the screen in front each time one appears, and falls back to light text and shown for a
-   * screen without these props, which would undo the claim on every push and pop.
+   * Puts the app's status bar and navigation bar claims on a screen that has no value of its own
+   * for them, from its presentation or its page's host bindings. On Android, react-native-screens
+   * sets both bars from the screen in front each time one appears, and falls back to light text
+   * and shown for a screen without these props, which would undo the claim on every push and pop.
    *
    * First called once the page has rendered, so a prop its host bindings set is already there and
    * counts as the screen's own, even one equal to the claim.
    */
-  private carryStatusBar(screen: unknown, claim: SystemBarClaim): void {
-    const props = (screen as Partial<EngineNode>).props ?? {};
+  private carrySystemBars(screen: unknown, claim: SystemBarClaim): void {
+    const node = screen as Partial<EngineNode>;
+    const props = node.props ?? {};
     const before = this.carried.get(screen as object) ?? {};
     const now: Record<string, unknown> = {};
     for (const [key, prop] of Object.entries(SYSTEM_BAR_PROPS)) {
-      if (props[prop] !== undefined && props[prop] !== before[prop]) continue;
+      if (ownValue(node, prop, before)) continue;
       const value = claim[key as keyof typeof claim];
       now[prop] = value;
       if (props[prop] !== value) this.renderer.setProperty(screen, prop, value);
+      // A value carried here is no binding's.
+      node.writes?.delete(prop);
     }
     this.carried.set(screen as object, now);
   }

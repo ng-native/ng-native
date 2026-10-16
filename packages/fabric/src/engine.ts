@@ -567,6 +567,12 @@ export interface EngineNode extends HostNode {
   nativeView?: true;
   /** Props kept for selectors to match and left out of what is committed. See `keepAsAttribute`. */
   attributeOnly?: Set<string>;
+  /**
+   * Set by whoever needs to know which props have been written: each `setProp` with a value adds
+   * its key, even one equal to the value already there, and one with `undefined` or `null` takes
+   * it out. The native stack outlet tells a page's own binding from a value it carried this way.
+   */
+  writes?: Set<string>;
   /** The child this node's background is painted on instead of itself. See `paintOn`. */
   paintsOn?: EngineNode;
   /** What this node's background colour is handed to instead of painted. See `takePaint`. */
@@ -2401,6 +2407,13 @@ const PAINT_KEYS = [
   'experimental_backgroundRepeat',
 ];
 
+/** Note a prop written on a node that keeps `writes`: see there. */
+function noteWrite(node: EngineNode, key: string, value: unknown): void {
+  if (!node.writes) return;
+  if (value === undefined || value === null) node.writes.delete(key);
+  else node.writes.add(key);
+}
+
 /**
  * A node's own props onto what it commits with. No native prop has a hyphen: `data-*` and `aria-*`
  * attributes stay on the node for selectors to match, and an `aria-*` one is mapped to the prop
@@ -4022,6 +4035,7 @@ export class Engine implements HostEngine {
 
   setProp(node: EngineNode, key: string, value: unknown): void {
     if (!this.eases) this.noteEasingProp(key, value);
+    noteWrite(node, key, value);
     // A prop written again is a binding's, and is committed as any other is.
     if (node.attributeOnly?.delete(key)) this.markProps(node, false);
     if (value === undefined || value === null) {

@@ -6,7 +6,7 @@
  */
 import assert from 'node:assert/strict';
 import { afterEach, before, describe, it } from 'node:test';
-import type { Type } from '@angular/core';
+import type { Type, WritableSignal } from '@angular/core';
 import { Router, type Routes } from '@angular/router';
 import { NavigationBar, type NavigationBarSource } from '@ng-native/device';
 import { cleanup, render, settle, type FakeFabricNode } from '@ng-native/testing';
@@ -78,6 +78,29 @@ describe("the app's navigation bar claim on each screen", () => {
     await nav.push('/list');
     await idle();
     assert.deepEqual(hidden(), [true, true], 'a screen with none of its own carries the claim');
+  });
+
+  it("keeps a page's own value that it binds while it matches the claim", async () => {
+    const own = mod['ownNavigationBarHidden'] as WritableSignal<boolean | undefined>;
+    own.set(undefined);
+    const { hidden, bar, nav } = await boot(true);
+    bar.set({ hidden: true });
+    await nav.push('/own-navigation-bar');
+    await idle();
+    assert.deepEqual(hidden(), [true, true], 'the page has none of its own yet');
+
+    own.set(true);
+    await idle();
+    bar.set({});
+    await idle();
+    assert.deepEqual(hidden(), [undefined, true], 'the claim goes, the page keeps its own');
+
+    own.set(undefined);
+    await idle();
+    bar.set({ hidden: true });
+    await idle();
+    assert.deepEqual(hidden(), [true, true], 'a page that lets go carries the claim again');
+    own.set(undefined);
   });
 
   it('puts nothing on a screen where screens leave the bar alone', async () => {
