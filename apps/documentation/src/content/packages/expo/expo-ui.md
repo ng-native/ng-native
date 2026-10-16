@@ -160,9 +160,15 @@ error. `expo-ui-components.ts` has thin typed components for the views an app re
   57.0.20 or later in the native build. See
   [The system's close button](#the-systems-close-button) for one in a sheet.
 
-Each input goes straight through to the node as a prop, `modifiers` included -
+Most inputs go straight through to the node as a prop of the same name, `modifiers` included -
 `UiModifier` is one SwiftUI modifier, shaped exactly as `@expo/ui`'s own modifier functions build
-them (`{ $type: 'frame', ... }`). Events are declared as outputs purely for their type: `$event` in
+them (`{ $type: 'frame', ... }`). A few become what the native view reads instead, as `@expo/ui`'s
+own components send them. On iOS, a `ui-image`'s `size` and `color` are `font` and
+`foregroundStyle` modifiers, a `ui-gauge`'s `type` is a `gaugeStyle` modifier and its labels are
+slots, a `ui-label`'s `color` colours its icon, and `accessibilityLabel` on a `ui-menu` or
+`ui-date-picker` is an `accessibilityLabel` modifier; each modifier made this way comes after the
+app's own. A `ui-view-host` takes `modifiers` on Android only, since SwiftUI's view host reads
+none. Events are declared as outputs purely for their type: `$event` in
 a template binding is typed as the native payload, but the output itself is never emitted. Angular
 binds a template's `(dateChange)` to the element's own native event directly, so that is the only
 place it arrives - a programmatic subscription to the output from code never receives anything.
