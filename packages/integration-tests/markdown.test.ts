@@ -292,12 +292,27 @@ describe('images', () => {
     assert.equal(blocks()[0]!.props['height'], 200, 'the ratio went with the image');
   });
 
-  it('loads only http and https, and draws anything else as its alt text', async () => {
+  it('loads http and https, and draws a file or a relative path as its alt text', async () => {
+    const { blocks, named } = await show('![local](file:///x.png) ![rel](cat.png)');
+    assert.equal(named('Image').length, 0);
+    assert.equal(textOf(blocks()[0]!), 'local rel');
+  });
+
+  it('loads a raster picture written into the document as a data url', async () => {
+    const png = 'data:image/png;base64,iVBORw0KGgo=';
+    const { named } = await show(`![pasted](${png})`);
+    assert.deepEqual(
+      named('Image').map((image) => image.props['source']),
+      [[{ uri: png, scale: 1 }]],
+    );
+  });
+
+  it('draws any other data url as its alt text', async () => {
     const { blocks, named } = await show(
-      '![local](file:///x.png) ![inline](data:image/png;base64,AAAA) ![rel](cat.png)',
+      '![vector](data:image/svg+xml;base64,PHN2Zz4=) ![page](data:text/html;base64,PGI+) ![plain](data:image/png,raw)',
     );
     assert.equal(named('Image').length, 0);
-    assert.equal(textOf(blocks()[0]!), 'local inline rel');
+    assert.equal(textOf(blocks()[0]!), 'vector page plain');
   });
 
   it('reads an image scheme after the leading Unicode whitespace a trim strips', async () => {
