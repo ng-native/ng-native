@@ -39,8 +39,10 @@ const FORMS = {
 
 /**
  * Divergences already there, as `<element> <prop> <platform>` or `<element> view <platform>`, each
- * to be fixed, stopped or explained in #924. A new one fails; so does one of these that native
- * declares, in the version this workspace installs, so the list can't go stale.
+ * to be fixed, stopped or explained in #924. A new one fails. One of these that native declares
+ * comes back as `stale`: `expo-ui-native-props.test.ts` fails on it for the version this workspace
+ * installs, so the list can't go stale, and a run here only notes it, since an entry can be known
+ * for a newer `@expo/ui` than the one it reads.
  */
 const KNOWN = new Set([
   'accessory-widget-background view ios',

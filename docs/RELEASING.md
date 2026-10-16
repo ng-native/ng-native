@@ -112,7 +112,7 @@ typecheck the page's code on every pull request. `docs-samples.test.ts` fails wh
 This repository pins its dependencies, and a user's new workspace installs the newest versions our
 ranges allow, so the two drift apart between releases: Angular 22.2 crashed every new app on Hermes
 while the tests here still ran 22.1.5. `.github/workflows/latest.yml` runs every Monday, and by hand
-from the Actions tab, to catch that within a week. Each job runs one scenario of
+from the Actions tab, to catch that within a week. Each workspace job runs one scenario of
 `node scripts/verify-publish.mjs --scenario=<name>`: the template with npm and with pnpm, `ng new`
 with `ng add`, Nx's `angular-monorepo` preset with npm and with pnpm, and its TypeScript preset
 with npm. Each Nx one also generates a library the app renders and tests, and every scenario runs
