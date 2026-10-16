@@ -48,6 +48,24 @@ export class Own {
   protected readonly style = ownStyle;
 }
 
+/** What the `x-own-status-bar` page binds as its own `statusBarStyle`, set from the test. */
+export const ownStatusBarStyle = signal<string | undefined>(undefined);
+
+/** What the `x-own-status-bar` page binds as its own `statusBarHidden`, set from the test. */
+export const ownStatusBarHidden = signal<boolean | undefined>(undefined);
+
+/** A page whose own status bar style and visibility can come and go. */
+@Component({
+  selector: 'x-own-status-bar',
+  imports: [Text],
+  host: { '[statusBarStyle]': 'style()', '[statusBarHidden]': 'hidden()' },
+  template: `<text>own status bar</text>`,
+})
+export class OwnStatusBar {
+  protected readonly style = ownStatusBarStyle;
+  protected readonly hidden = ownStatusBarHidden;
+}
+
 /** What the `x-own-navigation-bar` page binds as its own `navigationBarHidden`, set from the test. */
 export const ownNavigationBarHidden = signal<boolean | undefined>(undefined);
 
@@ -69,5 +87,6 @@ export const routes: Routes = [
   { path: 'video', component: Video },
   { path: 'reader', component: Reader },
   { path: 'own', component: Own },
+  { path: 'own-status-bar', component: OwnStatusBar },
   { path: 'own-navigation-bar', component: OwnNavigationBar },
 ];

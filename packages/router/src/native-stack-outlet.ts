@@ -131,16 +131,6 @@ const SYSTEM_BAR_PROPS = {
 /** The system bar claims a screen carries, keyed as `SYSTEM_BAR_PROPS` names them. */
 type SystemBarClaim = { readonly [key in keyof typeof SYSTEM_BAR_PROPS]?: string | boolean };
 
-/**
- * Whether a screen has its own value for a system bar prop, which the app's claim leaves alone.
- * `navigationBarHidden` goes by who wrote it, so a page binding the same value the screen carries
- * still keeps it. The status bar props go by value: one that is not what was carried.
- */
-function ownValue(node: Partial<EngineNode>, prop: string, before: Record<string, unknown>) {
-  if (prop === 'navigationBarHidden') return node.writes?.has(prop) === true;
-  return node.props?.[prop] !== undefined && node.props[prop] !== before[prop];
-}
-
 /** The native engine's `dispatchEvent`, as Fabric calls it. */
 type NativeDispatch = (node: unknown, topLevelType: string, nativeEvent: unknown) => void;
 
@@ -187,8 +177,6 @@ export class NativeStackOutlet implements RouterOutletContract, OnInit {
     ...this.statusBar.forScreens(),
     navigationBarHidden: this.navigationBar.forScreens().hidden,
   }));
-  /** The system bar props each screen carries for the app's claim, not set by the screen itself. */
-  private readonly carried = new WeakMap<object, Record<string, unknown>>();
 
   private readonly entries: StackEntry[] = [];
   /**
@@ -797,23 +785,20 @@ export class NativeStackOutlet implements RouterOutletContract, OnInit {
    * sets both bars from the screen in front each time one appears, and falls back to light text
    * and shown for a screen without these props, which would undo the claim on every push and pop.
    *
-   * First called once the page has rendered, so a prop its host bindings set is already there and
-   * counts as the screen's own, even one equal to the claim.
+   * A prop is the screen's own when its presentation or a host binding wrote it, as the screen's
+   * `writes` records, so one equal to the claim stays when the claim changes or drops. First called
+   * once the page has rendered, so its host bindings have written already.
    */
   private carrySystemBars(screen: unknown, claim: SystemBarClaim): void {
     const node = screen as Partial<EngineNode>;
     const props = node.props ?? {};
-    const before = this.carried.get(screen as object) ?? {};
-    const now: Record<string, unknown> = {};
     for (const [key, prop] of Object.entries(SYSTEM_BAR_PROPS)) {
-      if (ownValue(node, prop, before)) continue;
+      if (node.writes?.has(prop)) continue;
       const value = claim[key as keyof typeof claim];
-      now[prop] = value;
       if (props[prop] !== value) this.renderer.setProperty(screen, prop, value);
       // A value carried here is no binding's.
       node.writes?.delete(prop);
     }
-    this.carried.set(screen as object, now);
   }
 
   /**
