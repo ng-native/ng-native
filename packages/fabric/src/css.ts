@@ -2416,6 +2416,8 @@ function subjectsOf(sheet: StyleSheet): Subjects {
  */
 export interface HasAbove {
   readonly classes: readonly string[];
+  /** The element the box is, where the rule names one. */
+  readonly type?: string;
   readonly subjects: Subjects;
   /**
    * The box is before the node, or before a box the node is in: `.card:has(.x) ~ .title`. What
@@ -2471,13 +2473,42 @@ export function hasAbove(sheet: StyleSheet): readonly HasAbove[] {
         for (const { box, beside } of boxesAsked(compound, at === last, before)) {
           const subjects = noSubjects();
           noteSubject(subjects, rule);
-          found.push({ classes: box.classes, subjects, ...(beside ? { beside: true } : {}) });
+          found.push({
+            classes: classesOf(box),
+            ...(box.type !== undefined ? { type: box.type } : {}),
+            subjects,
+            ...(beside ? { beside: true } : {}),
+          });
         }
       }
     }
     HAS_ABOVE.set(sheet, (known = found));
   }
   return known;
+}
+
+/** Whether `node` can be the box a `:has()` rule asks: it has the classes and is the element. */
+export function couldAsk(reader: HasAbove, node: StyleTarget): boolean {
+  if (reader.type !== undefined && reader.type !== typeOf(node)) return false;
+  return reader.classes.every((name) => node.classes?.has(name));
+}
+
+/**
+ * The classes a node needs to match a compound: its own, and those every argument of one of its
+ * `:is()` or `:where()` lists names, `:where(.group)` as Tailwind's `group-has-*` writes it.
+ */
+function classesOf(compound: Compound): readonly string[] {
+  if (!compound.is && !compound.isComplex) return compound.classes;
+  const all = new Set(compound.classes);
+  const lists = [
+    ...(compound.is ?? []),
+    ...(compound.isComplex ?? []).map((list) => list.map((selector) => selector.compounds.at(-1)!)),
+  ];
+  for (const list of lists) {
+    const [first, ...rest] = list.map(classesOf);
+    for (const name of first ?? []) if (rest.every((other) => other.includes(name))) all.add(name);
+  }
+  return [...all];
 }
 
 /** Each compound in one, and each nested in it at any depth, `:has()` arguments among them. */

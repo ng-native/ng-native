@@ -242,6 +242,60 @@ describe(':has() as what is beneath a node changes', () => {
     s.engine.removeChild(s.card, action);
     assert.equal(s.opacity('title') ?? null, null);
   });
+
+  it('asks a rule only of a box with the class its :is() or :where() names', () => {
+    // Tailwind's `group-has-*` compiles to `:is(:where(.group):has(.on) *)`: a box with no
+    // `.group` cannot be the one it asks, so a change under one is no reason to match again.
+    const s = scene(':where(.group):has(.on) .title { opacity: 0.5 }');
+    const TITLES = 40;
+    for (let i = 0; i < TITLES; i++) s.el('title', s.el('row', s.card));
+    const group = s.el('group', s.card);
+    const title = s.el('title', group);
+    s.engine.setProp(title, 'testID', 'title');
+    assert.equal(s.opacity('title'), undefined);
+
+    resetStyleStats();
+    s.el('', s.el('row', s.card));
+    s.engine.commit();
+    assert.ok(styleStats.nodesResolved < 5, `${styleStats.nodesResolved} nodes styled again`);
+
+    const on = s.el('on', group);
+    assert.equal(s.opacity('title'), 0.5);
+    s.engine.removeChild(group, on);
+    assert.equal(s.opacity('title') ?? null, null);
+  });
+
+  it('asks a rule only of a box of the element it names', () => {
+    // A table's `tr:has(+ .selected) > td`: a box that is no `tr` cannot be the one it asks.
+    const s = scene('section:has(.on) .title { opacity: 0.5 }');
+    const TITLES = 40;
+    for (let i = 0; i < TITLES; i++) s.el('title', s.el('row', s.card));
+    const section = s.el('', s.card, 'section');
+    const title = s.el('title', section);
+    s.engine.setProp(title, 'testID', 'title');
+    assert.equal(s.opacity('title'), undefined);
+
+    resetStyleStats();
+    s.el('', s.el('row', s.card));
+    s.engine.commit();
+    assert.ok(styleStats.nodesResolved < 5, `${styleStats.nodesResolved} nodes styled again`);
+
+    const on = s.el('on', section);
+    assert.equal(s.opacity('title'), 0.5);
+    s.engine.removeChild(section, on);
+    assert.equal(s.opacity('title') ?? null, null);
+  });
+
+  it('asks a rule of a box with any of the classes an :is() list names', () => {
+    const s = scene(':is(.group, .panel):has(.on) .title { opacity: 0.5 }');
+    const panel = s.el('panel', s.card);
+    const title = s.el('title', panel);
+    s.engine.setProp(title, 'testID', 'title');
+    const on = s.el('on', panel);
+    assert.equal(s.opacity('title'), 0.5);
+    s.engine.removeChild(panel, on);
+    assert.equal(s.opacity('title') ?? null, null);
+  });
 });
 
 describe(':has() and the cost of asking it', () => {

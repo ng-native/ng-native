@@ -21,6 +21,7 @@ import {
   usesActive,
   elementsAtEnd,
   hasAbove,
+  couldAsk,
   hasBeside,
   forgetHasAnswers,
   keepHasAnswers,
@@ -4542,7 +4543,7 @@ export class Engine implements HostEngine {
   ): ReadonlySet<HasAbove> | undefined {
     const asked: HasAbove[] = [];
     for (const reader of readers) {
-      if (above?.has(reader) || !reader.classes.every((name) => node.classes?.has(name))) continue;
+      if (above?.has(reader) || !couldAsk(reader, node)) continue;
       asked.push(reader);
     }
     if (!asked.length) return above;
