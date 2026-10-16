@@ -387,7 +387,8 @@ export class UiImage {
   readonly uiImage = input<string>();
   /**
    * A symbol's size in points, as a `font` modifier of that size, which does not scale with
-   * Dynamic Type. A `font` modifier in `modifiers` wins over it.
+   * Dynamic Type. A `font` modifier in `modifiers` wins over it. Without either, the symbol is
+   * SwiftUI's default size, where `@expo/ui`'s own `Image` and a widget layout draw it at 24.
    */
   readonly size = input<number>(undefined, { transform: optionalNumber });
   /** A symbol's colour, as a `foregroundStyle` modifier. */
