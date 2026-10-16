@@ -8,7 +8,6 @@ description: Take one GitHub issue from report to merged-ready PR - verify the r
 One issue, end to end. Read [AGENTS.md](../../../AGENTS.md), [ARCHITECTURE.md](../../../docs/ARCHITECTURE.md),
 [CONTEXT.md](../../../docs/CONTEXT.md), [CONTRIBUTING.md](../../../CONTRIBUTING.md) and
 [.claude/rules/angular.md](../../rules/angular.md) first.
-A fresh worktree has no `node_modules`, so run `pnpm install` before anything else.
 
 Keep a running record as you go: each claim and its evidence, the repro commands, the test's failures, the
 mutation results and the device artifacts. The PR body in step 11 is built from it.
@@ -21,7 +20,8 @@ or a recent closed one for the same issue goes back to whoever owns the batch be
 
 Then branch from the latest main: `git switch -c fix/<slug> origin/main`. A PR that needs another merged
 first is stacked: it branches from that PR's branch (`origin/<that branch>`) instead, so it carries those
-commits.
+commits. A fresh worktree has no `node_modules`, so run `pnpm install` once
+you are on the branch.
 
 ## 1. Verify the report
 
