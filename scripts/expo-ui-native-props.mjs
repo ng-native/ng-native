@@ -239,13 +239,18 @@ function declaredViews(expoUi) {
  * `EXPO_UI_VIEWS` names that `@expo/ui` does not have, as sentences, leaving out `KNOWN` ones; and
  * the `KNOWN` ones this `@expo/ui` does declare, as `stale`.
  */
-export async function divergences(expoUi) {
+export async function divergences(
+  expoUi,
+  source = readFileSync(path.join(expoPackage, 'src/expo-ui-components.ts'), 'utf8'),
+) {
   const { EXPO_UI_VIEWS } = await import(path.join(expoPackage, 'src/expo-ui.ts'));
-  const components = componentProps(
-    readFileSync(path.join(expoPackage, 'src/expo-ui-components.ts'), 'utf8'),
-  );
+  const components = componentProps(source);
   const declared = declaredViews(expoUi);
   if (components.size < 10) throw new Error(`Found ${components.size} typed ui-* components.`);
+  const bound = [...components.values()].reduce((count, props) => count + props.size, 0);
+  if (bound < 50) {
+    throw new Error(`Found ${bound} host bindings: did the components change how they write them?`);
+  }
   const found = [];
   const seen = new Set();
   const report = (key, sentence) => {

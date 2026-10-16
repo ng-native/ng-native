@@ -13,7 +13,7 @@ import { describe, it } from 'node:test';
 const require = createRequire(import.meta.url);
 const script = new URL('../../scripts/expo-ui-native-props.mjs', import.meta.url);
 const { divergences } = (await import(script.href)) as {
-  divergences(expoUi: string): Promise<{ found: string[]; stale: string[] }>;
+  divergences(expoUi: string, source?: string): Promise<{ found: string[]; stale: string[] }>;
 };
 const installed = path.dirname(
   createRequire(require.resolve('@ng-native/expo/package.json')).resolve('@expo/ui/package.json'),
@@ -67,6 +67,13 @@ describe('the props typed ui-* components send', () => {
     assert.deepEqual(found, [
       "<ui-slider> sends 'value' on ios, which SliderView does not declare.",
     ]);
+  });
+
+  it('fails, rather than passing, when it reads no host bindings', async () => {
+    const source = readFileSync(require.resolve('@ng-native/expo/expo-ui-components'), 'utf8');
+    // The same components, with each binding written in double quotes the pattern does not read.
+    const unread = source.replace(/'\[(\w+)\]': '([^']*)'/g, '"[$1]": "$2"');
+    await assert.rejects(divergences(installed, unread), /Found 0 host bindings/);
   });
 
   it('fails, rather than passing, when it finds no native views', async () => {
