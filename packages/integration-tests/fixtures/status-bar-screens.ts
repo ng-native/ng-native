@@ -49,10 +49,10 @@ export class Own {
 }
 
 /** What the `x-own-status-bar` page binds as its own `statusBarStyle`, set from the test. */
-export const ownStatusBarStyle = signal<string | undefined>(undefined);
+export const ownStatusBarStyle = signal<string | null | undefined>(undefined);
 
 /** What the `x-own-status-bar` page binds as its own `statusBarHidden`, set from the test. */
-export const ownStatusBarHidden = signal<boolean | undefined>(undefined);
+export const ownStatusBarHidden = signal<boolean | null | undefined>(undefined);
 
 /** A page whose own status bar style and visibility can come and go. */
 @Component({

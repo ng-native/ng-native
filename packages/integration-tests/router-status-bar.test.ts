@@ -199,11 +199,11 @@ describe("the app's status bar claim on each screen", () => {
     });
 
     describe("a page's own values that it binds while they match the claim", () => {
-      let style: WritableSignal<string | undefined>;
-      let hidden: WritableSignal<boolean | undefined>;
+      let style: WritableSignal<string | null | undefined>;
+      let hidden: WritableSignal<boolean | null | undefined>;
       beforeEach(async () => {
-        style = mod['ownStatusBarStyle'] as WritableSignal<string | undefined>;
-        hidden = mod['ownStatusBarHidden'] as WritableSignal<boolean | undefined>;
+        style = mod['ownStatusBarStyle'] as WritableSignal<string | null | undefined>;
+        hidden = mod['ownStatusBarHidden'] as WritableSignal<boolean | null | undefined>;
         bar.set({ style: 'light', hidden: true });
         await nav.push('/own-status-bar');
         await idle();
@@ -249,6 +249,18 @@ describe("the app's status bar claim on each screen", () => {
           { style: 'dark', hidden: false },
           'a page that lets go carries the claim',
         );
+      });
+
+      it('give way to the claim once the page binds null', async () => {
+        bar.set({ style: 'dark', hidden: false });
+        await idle();
+        style.set(null);
+        hidden.set(null);
+        await idle();
+        assert.deepEqual(screens(), [
+          { style: 'dark', hidden: false },
+          { style: 'dark', hidden: false },
+        ]);
       });
     });
   });
