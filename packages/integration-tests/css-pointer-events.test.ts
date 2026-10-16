@@ -78,8 +78,9 @@ describe('pointer-events: none', () => {
     assert.deepEqual(committed(), { layer: 'box-none', panel: 'auto', plain: 'none' });
     engine.removeClass(layer, 'off');
     engine.commit();
-    // A prop that went is committed as null, which resets it on the native side.
-    assert.deepEqual(committed(), { layer: null, panel: 'auto', plain: null });
+    // A pointerEvents that went is committed as auto, what no value means: react-native-svg's
+    // Android root reads a null as a string and stops the app (#884).
+    assert.deepEqual(committed(), { layer: 'auto', panel: 'auto', plain: 'auto' });
   });
 
   it('means the same set inline, as a style attribute or a style binding sets it', () => {

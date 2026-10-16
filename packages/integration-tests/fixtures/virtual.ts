@@ -1,7 +1,8 @@
-import { Component, signal, viewChild } from '@angular/core';
+import { Component, Directive, input, signal, viewChild } from '@angular/core';
 import { Text } from '../../components/src/text.ts';
 import { View } from '../../components/src/view.ts';
 import { VirtualList, VirtualListRow } from '../../components/src/virtual-list.ts';
+import { NgIcon } from '../../icons/src/ng-icon.ts';
 
 @Component({
   selector: 'x-virtual',
@@ -182,4 +183,38 @@ export class VirtualFeed {
   ended = 0;
   viewable: string[] = [];
   readonly label = (row: { item: string }) => row.item;
+}
+
+/** Rows with an icon in each, as an app's catalog has: a parked row's icon is reused (#884). */
+@Component({
+  selector: 'x-virtual-icons',
+  imports: [VirtualList, NgIcon, View],
+  template: `
+    <virtual-list #list [items]="rows" [itemHeight]="40" [overscan]="2" [style]="fill">
+      @for (row of list.window(); track row.slot) {
+        <view [style]="row.style"><ng-icon [svg]="icon" color="white" /></view>
+      }
+    </virtual-list>
+  `,
+})
+export class VirtualIcons {
+  rows = Array.from({ length: 200 }, (_, i) => ({ id: i }));
+  fill = { flex: 1 };
+  icon = '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/></svg>';
+}
+
+/** An icon whose `pointerEvents` a binding sets, and then clears with null. */
+@Directive({ selector: '[touches]', host: { '[pointerEvents]': 'touches()' } })
+export class Touches {
+  readonly touches = input<string | null>(null);
+}
+
+@Component({
+  selector: 'x-bound-touch-icon',
+  imports: [NgIcon, Touches],
+  template: `<ng-icon [touches]="touches()" [svg]="icon" />`,
+})
+export class BoundTouchIcon {
+  touches = signal<string | null>('none');
+  icon = '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/></svg>';
 }

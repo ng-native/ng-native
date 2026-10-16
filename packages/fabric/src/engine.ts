@@ -1293,6 +1293,13 @@ function placeholderFaded(props: Record<string, unknown>): void {
   else if (opacity <= 0) props['placeholderTextColor'] = 'rgba(0, 0, 0, 0)';
 }
 
+/**
+ * What a removed prop travels as: null, which native resets the prop on, except `pointerEvents`,
+ * which react-native-svg's Android root reads as a string and stops the app on a null. `auto` is
+ * what no value means.
+ */
+const cleared = (key: string): unknown => (key === 'pointerEvents' ? 'auto' : null);
+
 /** The least alpha iOS sends a touch to a view at: under a hundredth it is passed over. */
 const TOUCHED_ALPHA = 0.011;
 
@@ -6265,15 +6272,16 @@ export class Engine implements HostEngine {
   }
 
   /**
-   * The host's conversions, applied to a copy. A removed prop travels as null and stays null. On
-   * an update a colour dropped as unreadable is null too: JSI leaves out an undefined key, and
-   * Fabric keeps what a clone leaves out.
+   * The host's conversions, applied to a copy. A removed prop travels as `cleared` says, null for
+   * nearly every one. On an update a colour dropped as unreadable is null too: JSI leaves out an
+   * undefined key, and Fabric keeps what a clone leaves out.
    */
   private processed(props: Record<string, unknown>, update: boolean): Record<string, unknown> {
     const out: Record<string, unknown> = {};
     for (const key of Object.keys(props)) {
       const value = props[key];
-      if (value === null || value === undefined) out[key] = value;
+      if (value === null) out[key] = cleared(key);
+      else if (value === undefined) out[key] = value;
       else if (isColorProp(key)) out[key] = this.colourProp(key, value, update);
       // A list of sources has already been resolved by whoever built it, as RN's resolver
       // also assumes: it passes any object through and only turns a number into one.
