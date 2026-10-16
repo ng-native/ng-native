@@ -117,6 +117,10 @@ from the Actions tab, to catch that within a week. Each job runs one scenario of
 with `ng add`, Nx's `angular-monorepo` preset with npm and with pnpm, and its TypeScript preset
 with npm. Each Nx one also generates a library the app renders and tests, and every scenario runs
 its install a second time and bundles for iOS and Android. The job summary lists the Angular, Expo,
-React Native, Nx, Vitest and TypeScript each scenario resolved. A scheduled failure opens an issue
+React Native, Nx, Vitest and TypeScript each scenario resolved. One more job,
+`expo-ui-native-props`, runs `node scripts/expo-ui-native-props.mjs --latest`: it checks each prop a
+typed `ui-*` component sends against the native views of the newest `@expo/ui` that
+`@ng-native/expo`'s peer range allows, since a native view ignores a prop it doesn't declare and a
+rename there fails nothing else. A scheduled failure opens an issue
 titled `Latest versions: <scenario> fails`, or comments on the one already open; close it once
 the fix is in.
