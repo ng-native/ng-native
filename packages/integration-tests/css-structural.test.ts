@@ -731,6 +731,21 @@ describe('what a child list changing has styled again', () => {
     assert.equal(s.fabric.committed[0]!.children[1]!.props['borderBottomWidth'] ?? null, null);
   });
 
+  it('is none of the rows after a style bound to a token, and nothing for one bound again', () => {
+    // A chart writes `fill="var(--ink)"` on each of its points again as a finger moves: no rule
+    // asks about a bound style, and one written as it was changes nothing.
+    const s = list('.row ~ .row { border-top-width: 3px } .row { --ink: 4px }', 6);
+    const row = s.parent.childList[1]!;
+    s.engine.setBoundStyle(row, 'borderBottomWidth', 'var(--ink)');
+    assert.equal(s.marked(), '.x....', 'the row it is bound on');
+    s.engine.commit();
+    s.engine.setBoundStyle(row, 'borderBottomWidth', 'var(--ink)');
+    assert.equal(s.marked(), '......', 'bound as it was');
+    s.engine.setBoundStyle(row, 'borderBottomWidth', null);
+    assert.equal(s.marked(), '.x....', 'and as it goes');
+    assert.deepEqual(s.widths(), [0, 3, 3, 3, 3, 3]);
+  });
+
   it('is the rows after the change where a sheet asks about any row before', () => {
     const css = '.row ~ .row { border-top-width: 3px }';
     const s = list(css, 8);

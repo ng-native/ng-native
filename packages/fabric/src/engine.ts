@@ -2659,6 +2659,13 @@ const BOUND_TOKEN =
  * A bound value kept as a declaration the cascade settles: a `var()`, a colour made of tokens, or
  * a relative length.
  */
+/** The text each bound declaration was read from, to know one bound again as it was. */
+const BOUND_TEXT = new WeakMap<DeferredDeclaration, string>();
+
+/** Bound again as it is: a chart writes each of its points' paints again as a finger moves. */
+const boundAsIs = (had: DeferredDeclaration | undefined, text: string | undefined): boolean =>
+  had !== undefined && text !== undefined && BOUND_TEXT.get(had) === text;
+
 function boundFrom(prop: string, text: string, on: string): DeferredDeclaration | null {
   return BOUND_TOKEN.test(text)
     ? boundDeclaration(prop, tokenFromValue(text), on)
@@ -4319,9 +4326,12 @@ export class Engine implements HostEngine {
    */
   setBoundStyle(node: EngineNode, prop: string, value: unknown): boolean {
     const text = typeof value === 'string' ? value : undefined;
+    const had = node.boundByProp?.get(prop);
+    if (boundAsIs(had, text)) return true;
     const refused = text !== undefined && this.refusedBound(node, prop, text);
     const bound = text === undefined || refused ? null : boundFrom(prop, text, node.tag);
-    if (!bound && !node.boundByProp?.has(prop)) return refused;
+    if (bound) BOUND_TEXT.set(bound, text!);
+    if (!bound && !had) return refused;
     const byProp = (node.boundByProp ??= new Map());
     if (bound) byProp.set(prop, bound);
     else byProp.delete(prop);
