@@ -244,4 +244,20 @@ describe("a search field's type", () => {
   it('leaves a family no @font-face declares as written, for the system to find', async () => {
     assert.equal((await inBrand('ios'))('system')['fontFamily'], 'Georgia');
   });
+
+  it('keeps a weight and a style no face was matched for, for the system font to draw', async () => {
+    for (const platform of ['ios', 'android'] as const) {
+      const props = (await inBrand(platform))('bold-italic');
+      assert.equal(props['fontWeight'], 'bold', platform);
+      assert.equal(props['fontStyle'], 'italic', platform);
+      cleanup();
+    }
+  });
+
+  it('keeps them beside a family no @font-face declares', async () => {
+    const props = (await inBrand('ios'))('system-bold');
+    assert.equal(props['fontFamily'], 'Georgia');
+    assert.equal(props['fontWeight'], 700);
+    assert.equal(props['fontStyle'], 'italic');
+  });
 });

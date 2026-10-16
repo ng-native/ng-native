@@ -1,15 +1,15 @@
 package dev.ngnative.expo
 
 import android.content.Context
-import android.graphics.Typeface
 import android.util.TypedValue
 import android.view.inputmethod.InputMethodManager
 import android.widget.TextView
 import androidx.appcompat.widget.SearchView
-import com.facebook.react.common.assets.ReactFontManager
+import com.facebook.react.views.text.ReactTypefaceUtils
 import expo.modules.kotlin.AppContext
 import expo.modules.kotlin.modules.Module
 import expo.modules.kotlin.modules.ModuleDefinition
+import expo.modules.kotlin.types.Either
 import expo.modules.kotlin.viewevent.EventDispatcher
 import expo.modules.kotlin.views.ExpoView
 
@@ -37,6 +37,15 @@ class SearchFieldModule : Module() {
       // registers it under.
       Prop("fontFamily") { view: SearchFieldView, family: String? -> view.fontFamily = family }
       Prop("fontSize") { view: SearchFieldView, size: Double? -> view.fontSize = size?.toFloat() }
+      // A weight and a slant no matched face already draws: a number, or `normal` and `bold`.
+      Prop("fontWeight") { view: SearchFieldView, weight: Either<Double, String>? ->
+        view.fontWeight = when {
+          weight == null -> null
+          weight.`is`(Double::class) -> weight.get(Double::class).toInt().toString()
+          else -> weight.get(String::class)
+        }
+      }
+      Prop("fontStyle") { view: SearchFieldView, style: String? -> view.fontStyle = style }
 
       AsyncFunction("focus") { view: SearchFieldView -> view.focus() }.runOnQueue(expo.modules.kotlin.functions.Queues.MAIN)
       AsyncFunction("blur") { view: SearchFieldView -> view.search.clearFocus() }.runOnQueue(expo.modules.kotlin.functions.Queues.MAIN)
@@ -108,13 +117,30 @@ class SearchFieldView(context: Context, appContext: AppContext) : ExpoView(conte
       field = value
       applyFont()
     }
+  var fontWeight: String? = null
+    set(value) {
+      field = value
+      applyFont()
+    }
+  var fontStyle: String? = null
+    set(value) {
+      field = value
+      applyFont()
+    }
 
-  /** The CSS's face, found as a text's is, at its size in sp, so it scales with the font size setting. */
+  /**
+   * The CSS's face, weight and slant, found as a text's is, at its size in sp, so it scales with the
+   * font size setting.
+   */
   private fun applyFont() {
     val input = input ?: return
-    val family = fontFamily
-    input.typeface = if (family == null) systemTypeface
-      else ReactFontManager.getInstance().getTypeface(family, Typeface.NORMAL, context.assets)
+    input.typeface = ReactTypefaceUtils.applyStyles(
+      systemTypeface,
+      ReactTypefaceUtils.parseFontStyle(fontStyle),
+      ReactTypefaceUtils.parseFontWeight(fontWeight),
+      fontFamily,
+      context.assets,
+    )
     val size = fontSize
     if (size != null) input.setTextSize(TypedValue.COMPLEX_UNIT_SP, size)
     else if (systemTextSize != null) input.setTextSize(TypedValue.COMPLEX_UNIT_PX, systemTextSize)

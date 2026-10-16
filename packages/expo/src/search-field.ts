@@ -16,7 +16,8 @@
  * `(cancel)`, `(searchFocus)` and `(searchBlur)`, and `focus()`, `blur()` and `clear()` from code.
  * The text is a two-way `value` rather than the bar's `query`, because it is a Signal Forms control
  * as `<text-input>` is: `[formField]` binds `value`, `disabled`, and `touch` on blur.
- * Its type is the `font-family` and `font-size` its CSS resolves to, as a `<text>`'s is.
+ * Its type is the `font-family`, `font-size`, `font-weight` and `font-style` its CSS resolves to,
+ * as a `<text>`'s is.
  *
  * Expo Go cannot load native code of its own, so there the element draws nothing, and in
  * development it says so once.

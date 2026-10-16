@@ -67,10 +67,22 @@ and the value. Reach them with `viewChild(SearchField)`.
 The element is 56 points tall by default, the height of the system's own field. A height in a style
 or a class replaces it.
 
-The field's text and placeholder take the `font-family` and `font-size` its CSS resolves to, from a
-class on the field, its own style, or what it inherits, as a `<text>` beside it does. A face the
-app's `@font-face` declares is matched by `font-weight` and `font-style`. The size scales with the
-system text size setting. With neither set, the field keeps the system font at its own size.
+The field's text and placeholder take the `font-family`, `font-size`, `font-weight` and `font-style`
+its CSS resolves to, from a class on the field, its own style, or what it inherits, as a `<text>`
+beside it does. A face the app's `@font-face` declares is matched by weight and style; the system
+font, or a family no `@font-face` declares, is drawn at that weight and slant. The size scales with
+the system text size setting. With none of them set, the field keeps the system font at its own
+size.
+
+On iOS, the system's field grows with the system font: in it, a size above about 21px needs more
+than the 56-point default height. A face the app declares keeps the field at its usual height.
+
+```css
+.search {
+  font-size: 24px;
+  height: 96px;
+}
+```
 
 ## In a form
 

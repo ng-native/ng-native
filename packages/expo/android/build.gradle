@@ -19,6 +19,6 @@ dependencies {
   implementation 'androidx.core:core:1.17.0'
   // `<search-field>`'s SearchView. React Native depends on AppCompat already.
   implementation 'androidx.appcompat:appcompat:1.7.0'
-  // ReactFontManager, which finds a face expo-font registered for `<search-field>`.
+  // ReactTypefaceUtils, which finds a face expo-font registered for `<search-field>` as a text's.
   implementation 'com.facebook.react:react-android'
 }

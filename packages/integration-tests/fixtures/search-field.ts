@@ -51,9 +51,13 @@ export class SearchFieldForm {
     <view class="page"><search-field nativeID="field" /></view>
     <search-field nativeID="inline" [style]="inline" />
     <search-field nativeID="system" [style]="system" />
+    <search-field nativeID="bold-italic" [style]="boldItalic" />
+    <search-field nativeID="system-bold" [style]="systemBold" />
   `,
 })
 export class SearchFieldInBrand {
   readonly inline = { fontFamily: 'Brand', fontWeight: '700' };
   readonly system = { fontFamily: 'Georgia' };
+  readonly boldItalic = { fontWeight: 'bold', fontStyle: 'italic' };
+  readonly systemBold = { fontFamily: 'Georgia', fontWeight: '700', fontStyle: 'italic' };
 }
