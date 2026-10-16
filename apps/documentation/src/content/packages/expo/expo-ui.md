@@ -107,14 +107,19 @@ error. `expo-ui-components.ts` has thin typed components for the views an app re
 - **`UiRectangle`**, **`UiRoundedRectangle`**, **`UiUnevenRoundedRectangle`**, **`UiCapsule`**,
   **`UiCircle`** and **`UiEllipse`** - SwiftUI's shapes, iOS only, coloured with the
   `foregroundStyle` modifier. **`UiAccessoryWidgetBackground`** is the system's backdrop for a lock
-  screen widget.
-- **`UiLabel`** - a `title` beside an SF Symbol, iOS only. **`UiLink`** opens its `destination`
+  screen widget, for a [widget layout](/packages/expo/live-activity): from `@expo/ui` 57.0.22 it
+  has no view in the app, and `expo-widgets` 57.0.23 or later draws it in the widget.
+- **`UiLabel`** - a `title` beside an SF Symbol, iOS only. `color` colours the symbol alone, and the
+  `foregroundStyle` modifier the title too. **`UiLink`** opens its `destination`
   URL when tapped, showing its `label` or the views written inside it, iOS only.
 - **`UiSlider`**, **`UiStepper`** and **`UiToggle`** - with `valueChanged`, `valueChange` and
   `isOnChange` for what the user did.
 - **`UiTextField`** - its `text` is a `nativeState('')`, which the field writes to on the UI
   thread; `textChange` reports each change.
-- **`UiColorPicker`**, **`UiGauge`** and **`UiProgress`**.
+- **`UiColorPicker`**, **`UiGauge`** and **`UiProgress`**. A gauge's `type` is its `gaugeStyle`:
+  `circular`, `circularCapacity`, `linear`, `linearCapacity` or `automatic`. Its
+  `currentValueLabel`, `minimumValueLabel` and `maximumValueLabel` are drawn as text where SwiftUI
+  puts each.
 - **`UiChart`** - a Swift Charts chart of `data`, iOS only, each point an `x` label or number
   against a `y`, with an optional `color`. `type` is `line`, `point`, `bar`, `area`, `pie` (iOS 17)
   or `rectangle`, and each type takes a style of its own: `lineStyle`, `barStyle`, `pieStyle` and
@@ -124,7 +129,9 @@ error. `expo-ui-components.ts` has thin typed components for the views an app re
   the note under its rows. When both a `title` and a header slot are set, `@expo/ui`'s `SectionView`
   draws the `title` and drops the slot; an empty `title=""` counts as unset.
 - **`UiImage`** - an SF Symbol by `systemName`, a symbol or picture in the app's asset catalog by
-  `assetName`, or a picture by `uiImage`, the URL of a file on the device.
+  `assetName`, or a picture by `uiImage`, the URL of a file on the device. A symbol's `size` is a
+  `font` modifier of that many points, which a `font` modifier of your own wins over, and its
+  `color` a `foregroundStyle` modifier.
 - **`UiText`** - a SwiftUI `Text`. Its text is what is written inside it,
   `<ui-text>Us {{ score() }}</ui-text>`, as `<text>` takes its own; `text` sets it too, and wins.
   A `ui-text` nested inside one is a span with its own modifiers, drawn after the text: put text

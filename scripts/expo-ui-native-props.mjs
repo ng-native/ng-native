@@ -39,44 +39,29 @@ const FORMS = {
 
 /**
  * Divergences already there, as `<element> <prop> <platform>` or `<element> view <platform>`, each
- * to be fixed, stopped or explained in #924. A new one fails. One of these that native declares
+ * with the reason it stays, or to be fixed or stopped in #924. A new one fails. One of these that native declares
  * comes back as `stale`: `expo-ui-native-props.test.ts` fails on it for the version this workspace
  * installs, so the list can't go stale, and a run here only notes it, since an entry can be known
  * for a newer `@expo/ui` than the one it reads.
  */
 const KNOWN = new Set([
+  // A widget layout's view. @expo/ui 57.0.22 moved it out of the app, where it had no effect, and
+  // expo-widgets 57.0.23 draws it in the widget extension, which a layout's build compiles it for.
   'accessory-widget-background view ios',
   'button label android',
   'button role android',
   'button systemImage android',
-  'button target android',
-  'button target ios',
   'date-picker accessibilityLabel android',
-  'date-picker accessibilityLabel ios',
-  'date-picker initialDate ios',
   'date-picker range android',
-  'date-picker selection android',
   'date-picker title android',
-  'gauge currentValueLabel ios',
-  'gauge maximumValueLabel ios',
-  'gauge minimumValueLabel ios',
-  'gauge type ios',
   'host ignoreSafeArea android',
   'image assetName android',
-  'image color android',
-  'image color ios',
-  'image size android',
-  'image size ios',
   'image systemName android',
   'image uiImage android',
-  'label color ios',
-  'menu accessibilityLabel android',
-  'menu accessibilityLabel ios',
   'menu label android',
   'menu systemImage android',
   'slot extraProps android',
   'toggle label android',
-  'view-host modifiers ios',
 ]);
 
 /** Every file under `directory` whose name ends with `extension`. */
