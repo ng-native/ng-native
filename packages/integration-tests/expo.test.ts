@@ -9,7 +9,7 @@
  */
 import assert from 'node:assert/strict';
 import { afterEach, before, beforeEach, describe, it } from 'node:test';
-import { ErrorHandler, InjectionToken, type Type } from '@angular/core';
+import { ErrorHandler, InjectionToken, type Type, type WritableSignal } from '@angular/core';
 import { Engine, registerPlatformComponents } from '@ng-native/fabric';
 import { mount } from '@ng-native/platform';
 import { compileFixture } from './compile.ts';
@@ -725,6 +725,44 @@ describe('the typed SwiftUI list', () => {
     fabric.emit(slider, 'topValueChanged', { value: 0.75 });
     app.applicationRef.tick();
     assert.equal((app.componentRef.instance as { level(): number }).level(), 0.75);
+  });
+});
+
+describe('a SwiftUI section', () => {
+  const all = (n: readonly FakeFabricNode[]): FakeFabricNode[] =>
+    n.flatMap((x) => [x, ...all(x.children)]);
+  /** The section's own slots, by name, and the texts each draws. */
+  const slots = (fabric: FakeFabric) => {
+    const section = all(fabric.committed).find((n) => /ExpoUI_SectionView$/.test(n.viewName))!;
+    return section.children.map((slot) => [
+      slot.props['name'],
+      all(slot.children)
+        .filter((n) => /ExpoUI_TextView$/.test(n.viewName))
+        .map((n) => n.props['text']),
+    ]);
+  };
+
+  it('takes a header and a footer slot as its own, not as rows of its content', async () => {
+    const mod = await compileFixture('fixtures/expo-ui.ts');
+    registerExpoUiViews('ios');
+    const fabric = createFakeFabric();
+    const app = mount(1, mod['ExpoUiSectionSlotsFixture'] as Type<unknown>, fabric);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    // `SectionView` reads each by name among its children, as `@expo/ui`'s `Section` puts them.
+    assert.deepEqual(slots(fabric), [
+      ['header', ['Notifications']],
+      ['content', ['On']],
+      ['footer', ['Turn them on in Settings.']],
+    ]);
+
+    (app.componentRef.instance as { footer: WritableSignal<boolean> }).footer.set(false);
+    app.applicationRef.tick();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    assert.deepEqual(slots(fabric), [
+      ['header', ['Notifications']],
+      ['content', ['On']],
+    ]);
   });
 });
 

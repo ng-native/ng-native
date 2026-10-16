@@ -1320,11 +1320,18 @@ export class UiForm {
   readonly modifiers = input<readonly UiModifier[]>();
 }
 
-/** A SwiftUI `Section` of a form or a list, under `title`. */
+/**
+ * A SwiftUI `Section` of a form or a list, under `title`, iOS only. A `<ui-slot name="header">`
+ * is its header in place of a `title`, which SwiftUI draws instead when both are set, and a
+ * `<ui-slot name="footer">` is the note under its rows. The slot's `name` is written as it is,
+ * not bound, as that is what picks it out of the rows.
+ */
 @Component({
   selector: 'ui-section',
   imports: [UiSlot],
-  template: '<ui-slot name="content"><ng-content /></ui-slot>',
+  template: `<ng-content select="ui-slot[name=header]" />
+    <ui-slot name="content"><ng-content /></ui-slot>
+    <ng-content select="ui-slot[name=footer]" />`,
   host: { '[title]': 'title()', '[modifiers]': 'modifiers()' },
 })
 export class UiSection {
