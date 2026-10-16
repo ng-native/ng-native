@@ -40,10 +40,10 @@ The complete working project shown above is available at
 
 `@nativescript/react-native` links a native JSI runtime and generates platform metadata during the
 native build, so it requires a development build (`npx expo run:ios` or `npx expo run:android`)
-rather than Expo Go.
+rather than Expo Go. This guide is written against `@nativescript/react-native` 9.1.0.
 
 ```sh
-npm install @nativescript/react-native react-native-worklets
+npm install @nativescript/react-native@^9.1.0 react-native-worklets
 ```
 
 Add `@nativescript/react-native` beside `@ng-native/metro` in `app.json`:
@@ -213,13 +213,6 @@ attaches `libnativescript_rn.so` to React Native's `jsi::Runtime *`, exposing `g
 `globalThis.java`, `globalThis.androidx` and the app's own Java/Kotlin packages synchronously in
 TypeScript.
 
-> **Temporarily make `globalThis.expo` writable during `install('')`.** Expo defines
-> `globalThis.expo` with `{ writable: false, configurable: true }`. When NativeScript Android's
-> `MetadataNode::CreateTopLevelNamespaces` iterates top-level classpath packages (`android`, `com`,
-> `expo`, `java`, `org`), setting `globalThis.expo` throws if it is read-only and aborts before
-> `java` and `org` are registered. Make `globalThis.expo` writable before `install('')` and restore
-> its descriptor right after.
-
 ```ts
 declare const require: ((id: string) => unknown) | undefined;
 
@@ -227,26 +220,21 @@ export function ensureAndroidNativeScriptInstalled(): boolean {
   const g = globalThis as Record<string, any>;
   if (g.android && g.java) return true;
 
-  const desc = Object.getOwnPropertyDescriptor(g, 'expo');
-  if (desc && !desc.writable && desc.configurable) {
-    Object.defineProperty(g, 'expo', { ...desc, writable: true });
-  }
-
-  try {
-    const rn = typeof require === 'function' ? (require('react-native') as any) : null;
-    const api =
-      g.__turboModuleProxy?.('NativeScriptNativeApi') ??
-      rn?.TurboModuleRegistry?.get?.('NativeScriptNativeApi');
-    if (!api?.isInstalled?.()) {
-      api?.install?.('');
-    }
-  } finally {
-    if (desc) Object.defineProperty(g, 'expo', desc);
+  const rn = typeof require === 'function' ? (require('react-native') as any) : null;
+  const api =
+    g.__turboModuleProxy?.('NativeScriptNativeApi') ??
+    rn?.TurboModuleRegistry?.get?.('NativeScriptNativeApi');
+  if (!api?.isInstalled?.()) {
+    api?.install?.('');
   }
 
   return Boolean(g.android && g.java);
 }
 ```
+
+A top-level package whose name is already taken by a read-only global is exposed with a `$`
+prefix instead, as a package named after a JavaScript keyword is. Expo owns `globalThis.expo`, so
+the `expo.*` Java packages are at `globalThis.$expo` and Expo's own object is left untouched.
 
 Once installed, instantiate Android SDK classes directly and attach a `BitmapDrawable` or
 `View.OnTouchListener` to the Fabric view matching your `nativeID`:
