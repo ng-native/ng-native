@@ -62,9 +62,9 @@ pnpm export                       # release bundles of every example, after CSS 
   on an element, a first load and a hot reload. List the ways in before writing the fix.
 - **`null` removes a committed prop; `undefined` does not.** JSI drops `undefined` keys, so the old
   native value stays. And `??` treats an intentional `null` (a paint of `none`) as missing.
-- **Logical sides follow the direction.** `Start` and `End`, and the inline and block sides, map to
-  left or right by the box's direction, and Yoga reads aliases such as `marginHorizontal` too. Test
-  right to left, and a physical and a logical side set together.
+- **Inline logical sides follow the direction.** `Start` and `End` map to left or right by the box's
+  direction, while block sides stay top and bottom, and Yoga reads aliases such as `marginHorizontal`
+  too. Test right to left, and a physical and a logical side set together.
 - **A version plan is `patch` unless the change breaks something.** Under `0.x`, `minor` is the
   breaking bump. Its sentences are checked against the code like docs: no "every" the code does not
   cover, and a platform or OS qualifier wherever the behaviour has one.

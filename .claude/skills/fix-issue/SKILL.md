@@ -1,6 +1,6 @@
 ---
 name: fix-issue
-description: Take one GitHub issue from report to merged-ready PR - verify the report without trusting it, reproduce it in a test and on a simulator or emulator, write a failing test, make the minimal fix, prove the test bites by reverting and mutating the fix, run the checks, verify the fix on the device, review the diff adversarially, and open the PR. Also covers answering review comments and CI failures on that PR. Use when asked to fix, work on, or pick up an issue, or to address review comments or a failing check on an issue's PR.
+description: Take one GitHub issue from report to merged-ready PR - verify the report without trusting it, reproduce it in a test and, when it shows on a device, on a simulator or emulator, write a failing test, make the minimal fix, prove the test bites by reverting and mutating the fix, run the checks, verify the fix on that device, review the diff adversarially, and open the PR. Also covers answering review comments and CI failures on that PR. Use when asked to fix, work on, or pick up an issue, or to address review comments or a failing check on an issue's PR.
 ---
 
 # Fix an issue
@@ -149,7 +149,7 @@ with a test. Anything outside the issue goes in the PR as a follow-up rather tha
 
 ## 8. Verify on the device
 
-Tests prove the code, not the app. For a bug that shows on a device, run step 2's commands again on the same
+Tests prove the code, not the app. For a bug step 2 reproduced on a device, run step 2's commands again on the same
 device(s), with the fix and the review's changes in place, and capture the same artifact. It is fixed when the
 artifact shows the report's expected behaviour, not merely something different.
 
@@ -177,8 +177,8 @@ out a platform or OS qualifier.
 
 Shut down and delete the devices you created, stop your Metro, release the build lock if you hold it, delete
 scratch workspaces, remove a repro page that is not staying, and delete the `examples/*/ios` and `android`
-folders a native build generated (lint and typecheck scan them). `git status` and `git diff origin/main`
-show only the fix, its tests and the version plan.
+folders a native build generated (lint and typecheck scan them). `git status` and `git diff <base>` (`origin/main`, or the
+branch a stacked PR depends on) show only the fix, its tests and the version plan.
 
 ## 11. Open the PR
 

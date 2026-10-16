@@ -58,8 +58,8 @@ intuition. Check:
 - shorthands: a duplicate part invalidates the declaration, an omitted part resets to its initial
   value, a later longhand still wins, and `!important` beats a normal declaration;
 - out-of-range values clamped the way CSS clamps them;
-- logical sides (`Start`/`End`, inline and block) resolved by the box's direction, with a right-to-left
-  case and a physical and logical side set together, and aliases Yoga reads (`marginHorizontal`,
+- inline logical sides (`Start`/`End`, `inline-start`/`inline-end`) resolved by the box's direction,
+  while block sides stay top and bottom, with a right-to-left case and a physical and logical side set together, and aliases Yoga reads (`marginHorizontal`,
   `paddingStart`) counted as Yoga counts them;
 - every alternative of a selector the change supports (`:is()` and `:where()`, each branch of a list,
   `>` as well as a descendant combinator);
@@ -79,8 +79,9 @@ Then list every way into the state the change touches, and check the change on e
 handles one path and misses its sibling is the most common finding after stale state: host sheets
 not watched where global and component sheets were, a guard on clone but not on create, a sheet
 replaced but not rescanned, an assertion run on the build but not on a hot reload, the first of two
-duplicate font faces kept where Expo registers the last. A map keyed by something that comes and goes
-(rows, cells, names) needs eviction, or it grows for the life of the app.
+duplicate font faces kept where Expo registers the last. A long-lived map keyed by something that comes and
+goes (rows, cells, names) needs eviction, or it grows for the life of the app; one discarded with its owner
+does not.
 
 **Native modules and devices (`packages/expo`, `packages/device`).**
 

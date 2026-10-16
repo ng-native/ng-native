@@ -111,7 +111,7 @@ When a group's PRs have merged:
 
 - Remove its agent worktrees. Check each is clean first; its work is on main.
 - Delete any temporary branches you made.
-- Stop the watchdog and the merge queue, and remove the build lock if one is left.
+- Stop the watchdog and the merge queue, and remove the build lock if one is left and no native build is running (`pgrep -fl 'xcodebuild|gradle'` prints nothing); another session may hold it.
 - Leave other threads' worktrees alone.
 
 Report what merged and which issues it closed, what is still open, and the follow-ups found.

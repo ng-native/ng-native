@@ -31,7 +31,7 @@ pids() {
 
 pids | xargs -r kill -CONT 2>/dev/null
 while true; do
-  comp=$(vm_stat | awk '/occupied by compressor/ {gsub("\\.","",$5); printf "%.2f", $5*16384/1073741824}')
+  comp=$(vm_stat | awk '/page size of/ {page=$(NF-1)} /occupied by compressor/ {gsub("\\.","",$5); printf "%.2f", $5*page/1073741824}')
   swap=$(sysctl -n vm.swapusage | awk '{gsub("M","",$6); print int($6)}')
   load=$(sysctl -n vm.loadavg | awk '{print $3}')
   swaphist+=($swap); (( ${#swaphist} > 4 )) && shift swaphist   # 4 samples of 15s: one minute

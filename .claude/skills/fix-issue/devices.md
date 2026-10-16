@@ -12,7 +12,7 @@ Other sessions use simulators, emulators and Metro too, so memory runs out befor
   minute. Free percentage is the wrong signal.
 
   ```sh
-  vm_stat | awk '/occupied by compressor/ {printf "%.1f GB compressed\n", $5*16384/2^30}'
+  vm_stat | awk '/page size of/ {page=$(NF-1)} /occupied by compressor/ {printf "%.1f GB compressed\n", $5*page/2^30}'
   sysctl -n vm.swapusage
   ```
 
