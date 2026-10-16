@@ -8,11 +8,7 @@ import 'expo';
 import { AppRegistry, Image, Platform, processColor } from 'react-native';
 import { mount } from '@ng-native/platform';
 import { currentConditions, deviceTokens, watchConditions } from '@ng-native/device';
-import {
-  getFabricUIManager,
-  registerPlatformComponents,
-  styleSheetOf,
-} from '@ng-native/fabric';
+import { getFabricUIManager, registerPlatformComponents, styleSheetOf } from '@ng-native/fabric';
 import { registerExpoUiViews, registerExpoView, registerExpoViews } from '@ng-native/expo';
 import { registerExpoMap } from '@ng-native/expo/map-view';
 import { App } from './app/app.ts';
