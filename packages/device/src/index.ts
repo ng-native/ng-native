@@ -53,5 +53,12 @@ export {
   type StatusBarState,
   type StatusBarStyle,
 } from './status-bar.ts';
+export {
+  NavigationBar,
+  navigationBarSource,
+  type NavigationBarSource,
+  type NavigationBarState,
+  type NavigationBarStyle,
+} from './navigation-bar.ts';
 export { SCREEN_IN_FRONT } from './screen-in-front.ts';
 export { OS_VERSION } from './os-version.ts';

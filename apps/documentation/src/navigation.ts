@@ -167,6 +167,7 @@ export const PACKAGES: NavSection = {
         { path: 'packages/device/accessibility', title: 'Accessibility' },
         { path: 'packages/device/direction', title: 'Direction' },
         { path: 'packages/device/status-bar', title: 'Status bar', group: 'System' },
+        { path: 'packages/device/navigation-bar', title: 'Navigation bar' },
         { path: 'packages/device/keyboard', title: 'Keyboard' },
         { path: 'packages/device/hardware-back', title: 'Hardware back' },
         { path: 'packages/device/app-state', title: 'App state' },
