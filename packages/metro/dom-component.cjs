@@ -188,6 +188,43 @@ async function exportedFiles(code, { filename, projectRoot, assetExts, assetData
   return { exported, left };
 }
 
+/**
+ * A page's stylesheet in development, with each file its `url()`s name pointed at Metro.
+ *
+ * The page is served from `/_expo/@dom/`, so a url left relative is asked for there, where nothing
+ * answers it. Metro serves an asset at `/assets`, a file outside the project too, so a font from a
+ * package in a pnpm store at the workspace root loads as well. The sheet is rewritten before Expo
+ * transforms it, since in development Expo puts the sheet into the module's code as a string.
+ *
+ * Only a file Metro takes as an asset, by `assetExts`, as for a release build. A url left alone
+ * keeps Expo's warning that it is not supported.
+ *
+ * Answers with the files it pointed at as well: a cached transform of the sheet is stale once one
+ * of them goes (see `resource-cache.cjs`).
+ */
+function withServedUrls(css, { filename, projectRoot, assetExts }) {
+  const beside = path.dirname(path.resolve(projectRoot, filename));
+  const read = new Set();
+  const code = css.replace(CSS_URL, (whole, ...quoted) => {
+    const url = urlIn(...quoted);
+    const file = fileOf(url);
+    const target = file === null ? null : path.resolve(beside, file);
+    if (target === null || !isAsset(target, assetExts)) return whole;
+    read.add(target);
+    const rest = url.slice(url.search(/[?#]|$/));
+    // The url's own query after Metro's, which names the file in its own query.
+    return `url("${servedAt(path.relative(projectRoot, target))}${rest.replace(/^\?/, '&')}")`;
+  });
+  return { code, read: [...read] };
+}
+
+/**
+ * Where Metro's dev server serves `file`, named from the project. A path in `unstable_path` can
+ * leave the project, as one after `/assets/` cannot. MUST MATCH `metro`'s `Server`, which reads it.
+ */
+const servedAt = (file) =>
+  `/assets?unstable_path=${encodeURIComponent(file.split(path.sep).join('/'))}`;
+
 const isAsset = (file, assetExts) =>
   assetExts.includes(path.extname(file).slice(1).toLowerCase()) && existsSync(file);
 
@@ -215,4 +252,5 @@ module.exports = {
   domComponentReference,
   domComponentEntry,
   withExportedUrls,
+  withServedUrls,
 };
