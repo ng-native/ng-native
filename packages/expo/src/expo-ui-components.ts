@@ -143,7 +143,10 @@ export class UiMenu {
   selector: 'ui-view-host',
   template: '<ng-content />',
   host: {
+    // `@expo/ui` to 57.0.22 reads `matchContents`, and from 57.0.23 one prop for each axis.
     '[matchContents]': 'matchContents()',
+    '[matchContentsHorizontal]': 'matchContents()',
+    '[matchContentsVertical]': 'matchContents()',
     '[expoInternalSizeFromChildren]': 'matchContents()',
     '[layoutRoot]': 'layoutRoot()',
     '[modifiers]': 'modifiers()',

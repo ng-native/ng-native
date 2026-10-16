@@ -291,6 +291,8 @@ describe('a bottom sheet on iOS, which SwiftUI presents by a prop', () => {
     });
     const filling = named(/ExpoUI_RNHostView$/)!;
     assert.ok(!filling.props['matchContents'], 'it fills the height SwiftUI gives it');
+    assert.ok(!filling.props['matchContentsHorizontal']);
+    assert.ok(!filling.props['matchContentsVertical']);
     assert.ok(!filling.props['expoInternalSizeFromChildren']);
     assert.equal(filling.children[0]!.props['flexGrow'], 1);
     assert.equal(filling.children[0]!.props['height'], 0);
@@ -316,6 +318,8 @@ describe('a bottom sheet on iOS, which SwiftUI presents by a prop', () => {
     assert.equal(modifiers['presentationSizing']?.['sizing'], 'fitted', 'for an iPad');
     const fitted = named(/ExpoUI_RNHostView$/)!;
     assert.equal(fitted.props['matchContents'], true);
+    assert.equal(fitted.props['matchContentsHorizontal'], true);
+    assert.equal(fitted.props['matchContentsVertical'], true);
     assert.equal(fitted.props['expoInternalSizeFromChildren'], true);
     assert.equal(fitted.children[0]!.props['width'], 390, 'as wide as the window');
     assert.ok(!fitted.children[0]!.props['flexGrow']);
