@@ -109,6 +109,20 @@ shrinks with its text. A field held at a fixed height on iOS reports nothing whi
 inside it, so a field that should grow with its text there leaves its height unset rather than
 setting it from this event.
 
+To follow the field's own height as it grows, leave the height unset, cap it with `max-height`, and
+read `(layout)`. It fires on both platforms whenever the field resizes, including when it reaches
+the cap. `(contentSizeChange)` is the size of the text, which leaves out the padding and goes on
+past the cap on Android.
+
+```html
+<text-input
+  multiline
+  style="max-height: 160px"
+  [(value)]="draft"
+  (layout)="fieldHeight.set($event.nativeEvent.layout.height)"
+/>
+```
+
 <!-- api: TextInput -->
 
 ## Line height
