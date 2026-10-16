@@ -55,6 +55,13 @@ length of time for a commit: of several that start together and take different t
 is the one it plays, and the others are eased from JavaScript. `transitionend` is sent when the
 transition's time is up. One eased from JavaScript stalls while JavaScript is busy.
 
+A transition of a size or a place that is started again before it ends, twice in a row, such as
+a progress bar that steps every 50ms and eases each step over 150ms, is committed where it ends
+from that third start on, with `transitionend` sent at once, by native or from JavaScript alike.
+CSS would ease every step, but easing one that is always restarted keeps a commit, or a layout
+animation, running on every frame for as long as the bar moves, so the steps are the motion. The
+next start after the size has been left alone for as long as the transition lasts is eased again.
+
 A plain view with a transition is a native view for as long as it has one, as an `Animated.View`
 is in React Native. Left to itself React Native makes a native view of one only while its opacity
 is under 1, or it has a transform or a background, and moves what is inside it to the view above

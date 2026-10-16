@@ -5810,7 +5810,8 @@ export class Engine implements HostEngine {
   /**
    * Commit where it ends each transition of a size or a place that just started, for native to
    * move the view there: a layout animation, which the commit asks for once it is known that
-   * nothing else in it moves. One still on its way is committed where it ends too.
+   * nothing else in it moves. One still on its way is committed where it ends too. On a host
+   * with no layout animation they are eased from JavaScript, but for one sent on again and again.
    *
    * A width eased from JavaScript is a commit a frame, and a commit lays the whole screen out.
    */
@@ -5821,7 +5822,7 @@ export class Engine implements HostEngine {
     props: Record<string, unknown>,
     now: number,
   ): void {
-    if (!this.fabric.configureNextLayoutAnimation) return;
+    const native = this.fabric.configureNextLayoutAnimation !== undefined;
     for (const key of started) {
       const eased = state.get(key)!;
       if (!LAID_OUT.has(key) || eased.start > now || eased.duration <= 0) continue;
@@ -5832,6 +5833,7 @@ export class Engine implements HostEngine {
         props[key] = eased.to;
         continue;
       }
+      if (!native) continue;
       eased.laid = true;
       this.laying.push({ node, key, eased });
     }
@@ -5847,10 +5849,11 @@ export class Engine implements HostEngine {
   /**
    * Whether a transition of a size is one sent on again and again, each before the last had
    * ended: a progress bar that steps every 50ms and eases each step over 150. Native moves the
-   * view, and lays the screen out, every frame while a layout animation runs, so one started at
-   * every step is one that never stops. The first, and one sent back before it ends, are
-   * played; from the second sent on in a row, each is committed where it ends, and the steps
-   * are the motion. Played again once the size has been left alone for as long as it lasts.
+   * view, and lays the screen out, every frame while a layout animation runs, and JavaScript
+   * commits every frame while it eases one, so one started at every step is one that never
+   * stops. The first, and one sent back before it ends, are played; from the second sent on in
+   * a row, each is committed where it ends, and the steps are the motion. Played again once the
+   * size has been left alone for as long as it lasts.
    */
   private sentOnAgain(node: EngineNode, key: string, eased: Transition, now: number): boolean {
     const starts = this.laidStarts.get(node) ?? this.laidStarts.set(node, new Map()).get(node)!;

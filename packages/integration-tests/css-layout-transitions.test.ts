@@ -29,12 +29,14 @@ const CSS = `
   .b.red { background-color: red }
 `;
 
-function scene() {
+function scene({ native = true } = {}) {
   const fabric = createFakeFabric();
   const asked: { duration: number; update: { type: string } }[] = [];
-  Object.assign(fabric, {
-    configureNextLayoutAnimation: (config: (typeof asked)[number]) => void asked.push(config),
-  });
+  if (native) {
+    Object.assign(fabric, {
+      configureNextLayoutAnimation: (config: (typeof asked)[number]) => void asked.push(config),
+    });
+  }
   let now = 0;
   const engine = new Engine(fabric, 1, {
     globalStyles: compileCss(CSS) as StyleSheet,
@@ -176,26 +178,56 @@ describe('a transition of a width', () => {
     assert.equal(s.asked.length, 3);
     assert.equal(s.width(), 50);
   });
+});
 
-  it('is eased from JavaScript on a host with no layout animation', () => {
-    const fabric = createFakeFabric();
-    let now = 0;
-    const engine = new Engine(fabric, 1, {
-      globalStyles: compileCss(CSS) as StyleSheet,
-      now: () => now,
-    });
-    const view = engine.createElement('view');
-    engine.setClasses(view, 'a straight');
-    engine.appendChild(engine.root, view);
-    engine.commit();
-    engine.advanceAnimations();
-    engine.setClasses(view, 'a straight on');
-    engine.commit();
-    assert.equal(engine.animating, true);
-    now += 100;
-    engine.advanceAnimations();
-    engine.commit();
-    assert.equal(fabric.committed[0]!.props['width'], 20);
+describe('a transition of a width on a host with no layout animation', () => {
+  // Android unless the app turns layout animations on: JavaScript eases it, a commit a frame.
+  it('is eased from JavaScript, a commit a frame, when it starts on its own', () => {
+    const s = scene({ native: false });
+    s.engine.setClasses(s.a, 'a straight on');
+    s.engine.commit();
+    assert.equal(s.width(), 10);
+    assert.equal(s.engine.animating, true);
+    s.later(100);
+    assert.equal(s.width(), 20);
+    s.later(100);
+    assert.equal(s.width(), 30);
+    assert.equal(s.engine.animating, false);
+    assert.deepEqual(s.events, ['start', 'end']);
+  });
+
+  it('is committed where it ends once it is sent on again and again, as native has it', () => {
+    // A progress bar that steps every 50ms and eases each step over 200 would keep JavaScript
+    // committing every frame for as long as the bar moves.
+    const s = scene({ native: false });
+    const widths: number[] = [];
+    for (const [step, classes] of ['a on', 'a far', 'a on', 'a far', 'a on'].entries()) {
+      if (step) s.later(50);
+      s.engine.setClasses(s.a, classes);
+      s.engine.commit();
+      widths.push(s.width());
+    }
+    // The first two are eased from where the bar is drawn; the rest are where they end.
+    assert.equal(widths[0], 10);
+    assert.notEqual(widths[1], 50);
+    assert.deepEqual(widths.slice(2), [30, 50, 30]);
+    assert.equal(s.engine.animating, false);
+    assert.equal(s.events.filter((each) => each === 'end').length, 3);
+  });
+
+  it('is eased from JavaScript again once it has been left alone for as long as it lasts', () => {
+    const s = scene({ native: false });
+    for (const [step, classes] of ['a on', 'a far', 'a on'].entries()) {
+      if (step) s.later(50);
+      s.engine.setClasses(s.a, classes);
+      s.engine.commit();
+    }
+    s.later(250);
+    s.engine.setClasses(s.a, 'a straight far');
+    s.engine.commit();
+    assert.equal(s.engine.animating, true);
+    s.later(100);
+    assert.equal(s.width(), 40);
   });
 });
 
