@@ -3,7 +3,7 @@
  * fresh host function. Read each method exactly once into a plain object (this is what
  * RN's own `FabricUIManager.js` does with its CACHED_PROPERTIES list).
  */
-import type { FabricUIManager } from './engine.ts';
+import { nativePlatform, type FabricUIManager } from './engine.ts';
 
 /**
  * Every method of `FabricUIManager`, and nothing else.
@@ -64,5 +64,29 @@ export function getFabricUIManager(): FabricUIManager {
     const value = raw[name];
     if (typeof value === 'function') facade[name] = value.bind(raw);
   }
+  // Asked for, a layout animation that is off moves nothing, and the views jump to where it ends.
+  if (!layoutAnimationsOn()) delete facade['configureNextLayoutAnimation'];
   return facade as unknown as FabricUIManager;
+}
+
+/**
+ * Whether native plays a layout animation on this platform. React Native turns them off on
+ * Android unless the app turns them on, and `configureNextLayoutAnimation` is there to call either
+ * way. Read from React Native's feature flags module through the two globals its own
+ * `TurboModuleRegistry` reads, so nothing of React Native is imported. Taken as on where there is
+ * no flag to read.
+ */
+function layoutAnimationsOn(): boolean {
+  const host = globalThis as {
+    __turboModuleProxy?: (name: string) => unknown;
+    nativeModuleProxy?: Record<string, unknown>;
+  };
+  const name = 'NativeReactNativeFeatureFlagsCxx';
+  const flags = (host.__turboModuleProxy?.(name) ?? host.nativeModuleProxy?.[name]) as
+    Record<string, (() => boolean) | undefined> | null | undefined;
+  const flag =
+    nativePlatform() === 'android'
+      ? 'enableLayoutAnimationsOnAndroid'
+      : 'enableLayoutAnimationsOnIOS';
+  return flags?.[flag]?.() !== false;
 }

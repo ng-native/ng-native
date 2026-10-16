@@ -48,9 +48,11 @@ commit changes, so it is used where the only boxes that commit resizes or moves 
 transition; where another box is resized in the same commit, text comes to another length, or an
 element is added or removed, the transition is eased from JavaScript, a commit on every frame, by
 its own curve. So is one with a `transition-delay`, and every such transition on a host with no
-layout animation. Native takes one length of time for a commit: of several that start together
-and take different times, the longest is the one it plays, and the others are eased from
-JavaScript. `transitionend` is sent when the transition's time is up.
+layout animation. Android is one unless the app turns layout animations on: React Native ships
+them off there, and Expo Go cannot turn them on (see
+[layout animations on Android](/packages/device/layout-animation#on-android)). Native takes one
+length of time for a commit: of several that start together and take different times, the longest
+is the one it plays, and the others are eased from JavaScript. `transitionend` is sent when the transition's time is up.
 
 A plain view with a transition is a native view for as long as it has one, as an `Animated.View`
 is in React Native. Left to itself React Native makes a native view of one only while its opacity

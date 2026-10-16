@@ -10,7 +10,13 @@
  */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { Engine, type EngineNode, type StyleSheet } from '@ng-native/fabric';
+import {
+  Engine,
+  getFabricUIManager,
+  registerPlatformComponents,
+  type EngineNode,
+  type StyleSheet,
+} from '@ng-native/fabric';
 import { compileCss, createFakeFabric } from '@ng-native/testing';
 
 const CSS = `
@@ -190,6 +196,108 @@ describe('a transition of a width', () => {
     engine.advanceAnimations();
     engine.commit();
     assert.equal(fabric.committed[0]!.props['width'], 20);
+  });
+});
+
+describe('a transition of a width on a device whose layout animations are off', () => {
+  // React Native turns Fabric's layout animations off on Android unless the app turns them on
+  // (`enableLayoutAnimationsOnAndroid`). There, `configureNextLayoutAnimation` is still there to
+  // call and does nothing, so a size committed where it ends would be drawn there at once.
+  type Flags = Record<string, () => boolean>;
+
+  function onDevice(platform: string, flags: Flags | null, through: 'bridgeless' | 'bridge') {
+    const fabric = createFakeFabric();
+    const asked: unknown[] = [];
+    Object.assign(fabric, {
+      configureNextLayoutAnimation: (config: unknown) => asked.push(config),
+    });
+    const host = globalThis as Record<string, unknown>;
+    host['nativeFabricUIManager'] = fabric;
+    if (through === 'bridgeless') {
+      host['nativeModuleProxy'] = flags ? { NativeReactNativeFeatureFlagsCxx: flags } : {};
+    } else {
+      host['__turboModuleProxy'] = (name: string) =>
+        name === 'NativeReactNativeFeatureFlagsCxx' ? flags : null;
+    }
+    registerPlatformComponents(platform);
+    let now = 0;
+    const engine = new Engine(getFabricUIManager(), 1, {
+      globalStyles: compileCss(CSS) as StyleSheet,
+      now: () => now,
+    });
+    const view = engine.createElement('view');
+    engine.setClasses(view, 'a straight');
+    engine.appendChild(engine.root, view);
+    engine.commit();
+    engine.advanceAnimations();
+    engine.setClasses(view, 'a straight on');
+    engine.commit();
+    now += 100;
+    engine.advanceAnimations();
+    engine.commit();
+    return { asked, width: fabric.committed[0]!.props['width'] };
+  }
+
+  function restore(): void {
+    const host = globalThis as Record<string, unknown>;
+    for (const name of ['nativeFabricUIManager', 'nativeModuleProxy', '__turboModuleProxy']) {
+      delete host[name];
+    }
+    registerPlatformComponents('ios');
+  }
+
+  const off = (name: string): Flags => ({ [name]: () => false });
+
+  for (const through of ['bridgeless', 'bridge'] as const) {
+    it(`is eased from JavaScript on Android (${through})`, () => {
+      try {
+        const s = onDevice('android', off('enableLayoutAnimationsOnAndroid'), through);
+        assert.deepEqual(s.asked, []);
+        assert.equal(s.width, 20, 'half way, where a commit at its end would be 30');
+      } finally {
+        restore();
+      }
+    });
+  }
+
+  it('is eased from JavaScript on iOS where they are turned off there', () => {
+    try {
+      const s = onDevice('ios', off('enableLayoutAnimationsOnIOS'), 'bridgeless');
+      assert.deepEqual(s.asked, []);
+      assert.equal(s.width, 20);
+    } finally {
+      restore();
+    }
+  });
+
+  it('is laid out by native where the platform it runs on has them on', () => {
+    // The flag of the other platform is not this one's.
+    try {
+      const s = onDevice('ios', off('enableLayoutAnimationsOnAndroid'), 'bridgeless');
+      assert.equal(s.asked.length, 1);
+      assert.equal(s.width, 30);
+    } finally {
+      restore();
+    }
+  });
+
+  it('is laid out by native where the app turned them on for Android', () => {
+    try {
+      const s = onDevice('android', { enableLayoutAnimationsOnAndroid: () => true }, 'bridgeless');
+      assert.equal(s.asked.length, 1);
+      assert.equal(s.width, 30);
+    } finally {
+      restore();
+    }
+  });
+
+  it('is laid out by native where there is no flag to read', () => {
+    try {
+      const s = onDevice('android', null, 'bridgeless');
+      assert.equal(s.asked.length, 1);
+    } finally {
+      restore();
+    }
   });
 });
 
