@@ -173,14 +173,15 @@ export function createFakeFabric(): FakeFabric {
 
   const clone = (n: FabricNode, props?: object, keepChildren = false): FabricNode => {
     const source = n as unknown as FakeFabricNode;
-    noteModal(source, props as Record<string, unknown> | undefined);
+    const given = props ? defined(props) : undefined;
+    noteModal(source, given);
     return withHandle(
       {
         ...source,
         handle: ++handle,
         // Fabric merges raw props onto the source props rather than replacing them, and JSI
         // drops a key whose value is undefined on the way (JSIDynamic.cpp), so it changes nothing.
-        props: props ? { ...source.props, ...defined(props) } : source.props,
+        props: given ? { ...source.props, ...given } : source.props,
         children: keepChildren ? source.children : [],
       },
       source.instanceHandle,
