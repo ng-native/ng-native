@@ -3768,9 +3768,10 @@ export class Engine implements HostEngine {
    * or `.close:is(.animating *)`, the elements under the node that such rules are for. What is
    * under any of those is styled again from the rules it matched, for what it inherits: a `dark`
    * class on the root finds no rule again for an element no `dark` rule is for. One named in
-   * `:has()`, or answering a test of the class attribute there, has the boxes above the node
-   * asked again, and one named only in `:has(> )` the box right above it. Any other class has the node and everything under it matched again, as any
-   * other change to it does.
+   * `:has()`, or answering a test of the class attribute there, has the boxes above the node and
+   * those before it asked again, and one named only in `:has(> )` the box right above it. Any
+   * other class has the node and everything under it matched again, as any other change to it
+   * does.
    *
    * A sheet that names a class later restyles what it is for as it arrives, and a node not yet
    * committed is styled when it is, with the class as it is then.
@@ -3785,13 +3786,18 @@ export class Engine implements HostEngine {
     this.markProps(node, false);
     if (!reach) return;
     if (reach.own) node.ownDirty = true;
-    if (this.hasSheets && reach.beneath) this.markBeneath(node.parent, null, node);
-    // `:has(> .on)`: only the box right above the node can answer it.
-    else if (this.hasSheets && reach.parentHas) this.markBeneath(node.parent, node.parent?.parent);
+    if (this.hasSheets) this.markHasAsking(node, reach);
     if (this.styles.reachesUnder(reach)) {
       this.classesAbove += 1;
       this.markUnder(node, reach);
     }
+  }
+
+  /** Mark the boxes whose `:has()` can ask of a node whose classes changed, by `reach`. */
+  private markHasAsking(node: EngineNode, reach: Subjects): void {
+    if (reach.beneath) this.markBeneath(node.parent, node);
+    // `:has(> .on)`: only the box right above the node can answer it.
+    else if (reach.parentHas) this.markAsked(node.parent, node.parent?.parent);
   }
 
   /**
@@ -4385,7 +4391,7 @@ export class Engine implements HostEngine {
       // state, though nothing about the sibling moved. Only sheets that ask about siblings pay.
       // Not for a change `beside` says no rule asks of an element before another.
       if (this.structuralSheets && beside) this.markLaterSiblings(node);
-      if (this.hasSheets) this.markBeneath(node.parent, null, node);
+      if (this.hasSheets) this.markBeneath(node.parent, node);
     }
     // The root has no parent to carry the mark, so it carries its own: `.dark` on the root alone
     // restyles everything beneath it.
@@ -4429,21 +4435,27 @@ export class Engine implements HostEngine {
 
   /**
    * Something at or beneath `from` changed: every node from there up may match a `:has()` rule
-   * it did not, or stop matching one, up to `upTo` and not it. They are matched again rather than
-   * marked for restyling, which would restyle everything under them. Only sheets that use
-   * `:has()` pay.
+   * it did not, or stop matching one. They are matched again rather than marked for restyling,
+   * which would restyle everything under them. Only sheets that use `:has()` pay. `changed` is
+   * the child of `from` that changed, or `at` where in its list one came or went.
    */
-  private markBeneath(
-    from: EngineNode | null,
-    upTo: EngineNode | null = null,
-    changed?: EngineNode,
-    at?: number,
-  ): void {
+  private markBeneath(from: EngineNode | null, changed?: EngineNode, at?: number): void {
+    this.markAsked(from);
+    if (this.hasBesideSheets && from) this.markBeside(from, changed, at);
+  }
+
+  /** The boxes from `from` up, to `upTo` and not it, to ask `:has()` again: see `markBeneath`. */
+  private markAsked(from: EngineNode | null, upTo: EngineNode | null = null): void {
     forgetHasAnswers();
     const wasClean = !this.root.structureDirty && !this.root.subtreeDirty;
-    this.markAsking(from, upTo);
+    for (let node = from; node && node !== upTo; node = node.parent) {
+      node.hasDirty = true;
+      // Each is reached by the commit, though a box on the way was marked and not committed
+      // since: one with `display: none` keeps its mark, and `markPath` stops at a marked box.
+      node.subtreeDirty = true;
+      if (this.hasReaders.size) this.changedBeneath.add(node);
+    }
     if (wasClean && this.root.subtreeDirty) this.onDirty?.();
-    if (this.hasBesideSheets && from) this.markBeside(from, changed, at);
   }
 
   /** `markBefore` for a change to `changed` in `parent`'s list, or one coming or going at `at`. */
@@ -4461,17 +4473,6 @@ export class Engine implements HostEngine {
    * through once for each. A child coming or going before that many brings it down to where.
    */
   private readonly markedBefore = new Map<EngineNode, number>();
-
-  /** Each box from `from` up to `upTo`, and not it, to be matched again for `:has()`. */
-  private markAsking(from: EngineNode | null, upTo: EngineNode | null): void {
-    for (let node = from; node && node !== upTo; node = node.parent) {
-      node.hasDirty = true;
-      // Each is reached by the commit, though a box on the way was marked and not committed
-      // since: one with `display: none` keeps its mark, and `markPath` stops at a marked box.
-      node.subtreeDirty = true;
-      if (this.hasReaders.size) this.changedBeneath.add(node);
-    }
-  }
 
   /**
    * `:has(+ .x)` and `:has(~ .x .y)`: a change in `parent`'s list at `at` can change what the
@@ -4610,7 +4611,7 @@ export class Engine implements HostEngine {
         this.markLaterSiblings(node);
       }
     }
-    if (this.hasSheets) this.markBeneath(node, null, undefined, at);
+    if (this.hasSheets) this.markBeneath(node, undefined, at);
     this.markPath(node.parent);
   }
 

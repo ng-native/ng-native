@@ -2489,7 +2489,7 @@ export function hasAbove(sheet: StyleSheet): readonly HasAbove[] {
 
 /** Whether `node` can be the box a `:has()` rule asks: it has the classes and is the element. */
 export function couldAsk(reader: HasAbove, node: StyleTarget): boolean {
-  if (reader.type !== undefined && reader.type !== typeOf(node)) return false;
+  if (reader.type !== undefined && reader.type !== node.tag) return false;
   return reader.classes.every((name) => node.classes?.has(name));
 }
 
@@ -2667,7 +2667,7 @@ export function joinSubjects(each: readonly Subjects[]): Subjects {
  *   nothing but `>` and a space between there and the element, and those of what `:is(.box *)`
  *   and `:is(.box > *)` put over it;
  * - `beneath`, inside `:has()`, wherever in the rule that is: what it asks of is under the box
- *   that answers it;
+ *   that answers it, or after it;
  * - `parentHas`, of what `:has(> )` asks of the box's children themselves, and nowhere else in
  *   `:has()`: the element is right under that box.
  *
@@ -2757,15 +2757,19 @@ interface Below {
 }
 
 /**
- * The classes `:has()` asks of what is under the box that answers it, into `beneath`, wherever
- * in the rule it is written, or into `parentHas` for what `:has(> )` asks of the box's children.
- * One it can ask of what is above the box goes `elsewhere`: `:is()` in `:has()` is not relative,
- * so the `.night` of `:has(:is(.night .cell))` can be any element over the cell.
+ * The classes `:has()` asks of what is under the box that answers it or after it, into
+ * `beneath`, wherever in the rule it is written, or into `parentHas` for what `:has(> )` asks of
+ * the box's children. One it can ask of what is above the box goes `elsewhere`: `:is()` in
+ * `:has()` is not relative, so the `.night` of `:has(:is(.night .cell))` can be any element over
+ * the cell.
  */
 function placeHas(tests: readonly HasTest[] | undefined, below: Below): void {
   for (const test of tests ?? []) {
     const into = test.child ? below.parentHas : below.beneath;
     for (const compound of test.any) placeBeneath(compound, into, below);
+    for (const one of test.relative ?? []) {
+      for (const compound of one.compounds) placeBeneath(compound, below.beneath, below);
+    }
   }
 }
 
