@@ -117,9 +117,17 @@ require(${JSON.stringify(relativeImport)});
 `;
 }
 
-/** A `url()`, quoted either way or bare. A quoted one can have a bracket in it. */
-const CSS_URL = /url\(\s*(?:"([^"]*)"|'([^']*)'|([^"')\s]+))\s*\)/g;
-const urlIn = (double, single, bare) => double ?? single ?? bare;
+/**
+ * A `url()`, quoted either way or bare, in any case, as CSS reads a function's name. A quoted one
+ * can have a bracket in it.
+ *
+ * A comment or a string is matched first and kept whole, so a `url()` in its text, as in
+ * `content: "url('./a.png')"`, is not taken for one: rewritten, its quotes would end the string.
+ */
+const CSS_URL =
+  /(\/\*[\s\S]*?\*\/|"(?:[^"\\\n]|\\[\s\S])*"|'(?:[^'\\\n]|\\[\s\S])*')|url\(\s*(?:"([^"]*)"|'([^']*)'|([^"')\s]+))\s*\)/gi;
+/** The url a match names, or null for a comment or a string. */
+const urlIn = (kept, double, single, bare) => (kept ? null : (double ?? single ?? bare));
 /** A url that is not a file beside the sheet: inline data, a fragment, a rooted path, a scheme. */
 const NOT_BESIDE = /^(data:|[#/]|[a-z][a-z0-9+.-]*:)/i;
 
@@ -153,8 +161,9 @@ async function withExportedUrls(result, options) {
   css.code = css.code.replace(CSS_URL, (whole, ...quoted) => {
     const url = urlIn(...quoted);
     const asset = exported.get(fileOf(url));
+    if (!asset) return whole;
     const rest = url.slice(url.search(/[?#]|$/));
-    return asset ? `url("${TO_BUNDLE_ROOT}${encodeURI(asset.path)}${rest}")` : whole;
+    return `url("${TO_BUNDLE_ROOT}${encodeURI(asset.path)}${rest}")`;
   });
   const dependencies = [...exported.keys()].map(dependencyOn);
   return {
@@ -239,7 +248,7 @@ function dependencyOn(file) {
 
 /** The file a `url()` names beside its sheet, without its query or fragment, or null. */
 function fileOf(url) {
-  if (NOT_BESIDE.test(url)) return null;
+  if (url === null || NOT_BESIDE.test(url)) return null;
   try {
     return decodeURI(url.split(/[?#]/, 1)[0]);
   } catch {

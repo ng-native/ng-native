@@ -509,6 +509,20 @@ describe("the files a page's stylesheet names", () => {
     }
   });
 
+  it('leaves the text of a string alone, which only looks like a url()', async () => {
+    const { run, cleanup } = project(
+      `.a::after { content: "url('./pic.png')"; } .b { background: url('./pic.png'); }`,
+      { 'web/pic.png': PNG },
+    );
+    try {
+      const sheet = await run();
+      assert.ok(sheet.css.includes(`content: "url('./pic.png')"`), sheet.css);
+      assert.ok(sheet.css.includes(`url("../../../assets/web/pic.${md5(PNG)}.png")`), sheet.css);
+    } finally {
+      cleanup();
+    }
+  });
+
   it('are left alone in a page that is not a DOM component', async () => {
     const { run, cleanup } = project(`.a { background: url('./pic.png'); }`, {
       'web/pic.png': PNG,
@@ -585,6 +599,40 @@ describe("the files a page's stylesheet names", () => {
         assert.ok(sheet.injected.includes(`url("${served('web/pic.png')}")`), sheet.injected);
         assert.deepEqual(sheet.resources, ['web/pic.png']);
         assert.equal(warnings.length, 2, 'as Expo said it, for the two beside the sheet');
+      } finally {
+        cleanup();
+      }
+    });
+
+    it('take a url() in capitals, as CSS does', async () => {
+      const { run, cleanup } = project(`.a { background: URL('./pic.png'); }`, {
+        'web/pic.png': PNG,
+      });
+      try {
+        const sheet = await run({ dev: true });
+        assert.ok(sheet.injected.includes(`url("${served('web/pic.png')}")`), sheet.injected);
+      } finally {
+        cleanup();
+      }
+    });
+
+    it('leave the text of a string or a comment alone, which only looks like a url()', async () => {
+      const { run, cleanup } = project(
+        `/* url('./pic.png') */
+         /* it's a comment */ .c0 { background: url('./pic.png'); }
+         .a::after { content: "url('./pic.png')"; }
+         .b::after { content: 'url("./pic.png")'; }
+         .c { background: url('./pic.png'); }`,
+        { 'web/pic.png': PNG },
+      );
+      try {
+        const sheet = await run({ dev: true });
+        // The rule after the strings is still read, so they still end where they did.
+        assert.ok(sheet.injected.includes(`url("${served('web/pic.png')}")`), sheet.injected);
+        // An apostrophe in a comment starts no string, which would hide the url() after it.
+        assert.ok(!sheet.injected.includes(`url("./pic.png")`), sheet.injected);
+        assert.ok(sheet.injected.includes(`content: "url('./pic.png')"`), sheet.injected);
+        assert.ok(sheet.injected.includes(`content: "url(\\"./pic.png\\")"`), sheet.injected);
       } finally {
         cleanup();
       }
