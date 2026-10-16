@@ -1071,6 +1071,28 @@ describe('what a row whose place changed keeps', () => {
     assert.deepEqual(s.labels(), [1, 0.5, 1, 1, 1, 0.5, 1, 1, 0.5, 1, 1]);
   });
 
+  it('leaves what is under each row as it was where a sibling test nested in a rule is the row its own', () => {
+    // `.on ~ .row:is(.on ~ *)` asks what is before the row of the row alone: a box whose place
+    // changed changes nothing under it. A chart's group of thousands of points is such a box,
+    // moved as a label beside it comes and goes. (The `:is()` alone is compiled into the rule.)
+    const s = list('.on ~ .row:is(.on ~ *) { border-top-width: 3px }');
+    assert.deepEqual(s.widths(), [0, 3, 3, 3, 3, 3, 3, 3, 3, 3]);
+    s.engine.insertBefore(s.parent, s.row(), s.rows[0]!);
+    assert.equal(s.marks(), 'xmmmmmmmmmm', 'the row that came is styled, the rest matched');
+    // The row that came and its label: every other row matches as it did.
+    assert.equal(s.styled(), 2);
+    assert.deepEqual(s.widths(), [0, 0, 3, 3, 3, 3, 3, 3, 3, 3, 3]);
+  });
+
+  it('styles a row again with all under it where a nested sibling test is of a box above', () => {
+    // `:is(.on ~ .row) .label`: whether a row has an `.on` before it is read by its label.
+    const s = list(':is(.on ~ .row) .label { opacity: 0.5 }');
+    assert.deepEqual(s.labels(), [1, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5]);
+    s.engine.removeChild(s.parent, s.rows[0]!);
+    s.engine.commit();
+    assert.deepEqual(s.labels(), [1, 1, 1, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5]);
+  });
+
   it('asks it only of the rows a rule could mean, by their classes', () => {
     const s = list(
       '.on:nth-child(3) .label { opacity: 0.5 } .row ~ .row { border-top-width: 3px }',

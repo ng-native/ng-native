@@ -1618,7 +1618,7 @@ export function placeReadElsewhere(sheet: StyleSheet): readonly PlaceReader[] {
       // above the element styled, and its last compound is the element the rest hangs under.
       let start = 0;
       rule.compounds.forEach((compound, at) => {
-        placeReadAbove(compound, elsewhere);
+        placeReadAbove(compound, elsewhere, at < rule.compounds.length - 1);
         const joined = rule.combinators[at];
         if (joined === 'next-sibling' || joined === 'later-sibling') return;
         const run = rule.compounds.slice(start, at + 1);
@@ -1693,22 +1693,58 @@ function readsPlace(compound: Compound): boolean {
 
 /**
  * Collect the compounds nested in one that are matched against an element above the one it is
- * matched against, and ask about that element's place: `:is(.group:first-child *)`.
+ * matched against, and ask about that element's place: `:is(.group:first-child *)`. `above`
+ * says the compound is itself matched against an element above the one styled.
  */
-function placeReadAbove(compound: Compound, elsewhere: PlaceReader[]): void {
-  const above = [
+function placeReadAbove(compound: Compound, elsewhere: PlaceReader[], above: boolean): void {
+  const over = [
     ...(compound.ancestors ?? []),
     ...(compound.parents ?? []),
     ...(compound.hostContext ?? []),
   ];
-  for (const inner of above) if (readsPlace(inner)) elsewhere.push({ compound: inner });
-  // `:is(.a + .b)` or `:not(:first-child .b)`: an element whose place changed can change what
-  // one beside it or under it matches, which is told from no class here. Only such sheets pay.
-  const beside = (one: ComplexSelector): boolean =>
-    one.combinators.some((each) => SIBLING_COMBINATORS.has(each)) ||
-    (one.compounds.length > 1 && one.compounds.some(readsPlace));
-  if (nestedSelectors(compound).some(beside)) elsewhere.push({ compound: { classes: [] } });
-  for (const inner of nestedCompounds(compound)) placeReadAbove(inner, elsewhere);
+  for (const inner of over) if (readsPlace(inner)) elsewhere.push({ compound: inner });
+  // `:is(.a + .b) .c` or `:not(:first-child .b)`: an element whose place changed can change what
+  // one under it matches, which is told from no class here. Only such sheets pay. Of the element
+  // styled, `.b:is(.a ~ *)` reads what is before the element alone, as a rule's own `~` does.
+  const reads = above ? beside : readFromUnder;
+  if (nestedSelectors(compound).some(reads)) elsewhere.push({ compound: { classes: [] } });
+  for (const inner of over) placeReadAbove(inner, elsewhere, true);
+  placeReadNested(compound, elsewhere, above);
+}
+
+/**
+ * `placeReadAbove` of the compounds nested in one: those of its `:is()` and `:not()` are matched
+ * against the element it is, and those of a longer selector in one before its last against others.
+ */
+function placeReadNested(compound: Compound, elsewhere: PlaceReader[], above: boolean): void {
+  for (const inner of [...(compound.not ?? []), ...(compound.is ?? []).flat()]) {
+    placeReadAbove(inner, elsewhere, above);
+  }
+  for (const selector of nestedSelectors(compound)) {
+    const last = selector.compounds.length - 1;
+    selector.compounds.forEach((inner, at) => placeReadAbove(inner, elsewhere, above || at < last));
+  }
+}
+
+/** Whether what a selector matches hangs on where an element is among those beside it. */
+const beside = (one: ComplexSelector): boolean =>
+  one.combinators.some((each) => SIBLING_COMBINATORS.has(each)) ||
+  (one.compounds.length > 1 && one.compounds.some(readsPlace));
+
+/**
+ * Whether a selector reads the place of an element above the one it ends at: a run of compounds
+ * joined by `+` and `~` before a descendant or child combinator, `.a + .b .c`, or a compound
+ * there that asks its place, `:first-child > .c`.
+ */
+function readFromUnder(one: ComplexSelector): boolean {
+  let start = 0;
+  for (let at = 0; at < one.combinators.length; at++) {
+    if (SIBLING_COMBINATORS.has(one.combinators[at]!)) continue;
+    const run = one.compounds.slice(start, at + 1);
+    if (run.length > 1 || run.some(readsPlace)) return true;
+    start = at + 1;
+  }
+  return false;
 }
 
 /** The selectors of more than a compound nested in one, in its `:is()` and its `:not()`. */

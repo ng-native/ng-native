@@ -2666,6 +2666,13 @@ const BOUND_TEXT = new WeakMap<DeferredDeclaration, string>();
 const boundAsIs = (had: DeferredDeclaration | undefined, text: string | undefined): boolean =>
   had !== undefined && text !== undefined && BOUND_TEXT.get(had) === text;
 
+/** `boundFrom`, remembering the text it was read from: see `boundAsIs`. */
+function boundRead(prop: string, text: string, on: string): DeferredDeclaration | null {
+  const bound = boundFrom(prop, text, on);
+  if (bound) BOUND_TEXT.set(bound, text);
+  return bound;
+}
+
 function boundFrom(prop: string, text: string, on: string): DeferredDeclaration | null {
   return BOUND_TOKEN.test(text)
     ? boundDeclaration(prop, tokenFromValue(text), on)
@@ -4329,9 +4336,13 @@ export class Engine implements HostEngine {
     const had = node.boundByProp?.get(prop);
     if (boundAsIs(had, text)) return true;
     const refused = text !== undefined && this.refusedBound(node, prop, text);
-    const bound = text === undefined || refused ? null : boundFrom(prop, text, node.tag);
-    if (bound) BOUND_TEXT.set(bound, text!);
-    if (!bound && !had) return refused;
+    const bound = text === undefined || refused ? null : boundRead(prop, text, node.tag);
+    if (bound || had) this.keepBound(node, prop, bound);
+    return bound !== null || refused;
+  }
+
+  /** Keep a bound declaration for the cascade to settle, or forget the one kept, with `null`. */
+  private keepBound(node: EngineNode, prop: string, bound: DeferredDeclaration | null): void {
     const byProp = (node.boundByProp ??= new Map());
     if (bound) byProp.set(prop, bound);
     else byProp.delete(prop);
@@ -4339,7 +4350,6 @@ export class Engine implements HostEngine {
     // Settled by the cascade as the node is styled, and asked about by no selector: nothing after
     // the node matches otherwise for it.
     this.markProps(node, true, false);
-    return bound !== null || refused;
   }
 
   /** Whether a bound value is one CSS has none of, which is dropped with a warning. */
