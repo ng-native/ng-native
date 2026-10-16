@@ -148,6 +148,9 @@ function libraryStylesOf(params) {
 
 let warnedWorker = false;
 
+/** A file Babel can parse: JavaScript or TypeScript. */
+const SCRIPT = /\.[cm]?[jt]sx?$/;
+
 /**
  * The Angular stage, or the file's own syntax error when that is why it failed.
  *
@@ -155,7 +158,8 @@ let warnedWorker = false;
  * "Unexpected token" with no line, no column and no code frame. Babel reports the same mistake
  * with all three, so when the Angular stage fails, the file is handed to Babel as written: if it
  * cannot parse either, its error is the one to show. If it can, the fault is in a template or a
- * stylesheet, and the Angular error stands.
+ * stylesheet, and the Angular error stands. A stylesheet or a template file is not JavaScript, so
+ * Babel always fails on it with a place, and only the Angular error says what is wrong.
  */
 function angularOrSyntaxError(params) {
   try {
@@ -167,6 +171,7 @@ function angularOrSyntaxError(params) {
       projectRoot: params.options?.projectRoot,
     });
   } catch (error) {
+    if (!SCRIPT.test(params.filename)) throw error;
     try {
       upstream.transform(params);
     } catch (syntaxError) {

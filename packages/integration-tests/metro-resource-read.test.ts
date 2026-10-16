@@ -47,6 +47,7 @@ function project(files: Record<string, string>): { root: string; cache: string }
 
 function write(root: string, files: Record<string, string>): void {
   for (const [name, content] of Object.entries(files)) {
+    mkdirSync(path.dirname(path.join(root, name)), { recursive: true });
     writeFileSync(path.join(root, name), content);
   }
 }
@@ -224,5 +225,55 @@ export class Which { a = signal(1); }
       () => transformAngular('.shared { opacity: 0.5 }', sheet, { dev: true, projectRoot: root }),
       /shared\.css: Which's template did not compile/,
     );
+  });
+
+  // The transformer retries a file that failed through Babel, for a syntax error with a place. A
+  // stylesheet or a template file is not JavaScript, so Babel's error there would hide the
+  // component's, and a dev server may report the resource's failure before the component's own.
+  const reportsTheComponent = (root: string, file: string, src: string) =>
+    assert.throws(
+      () =>
+        (
+          require('@ng-native/metro/transformer.cjs') as { transform(params: object): unknown }
+        ).transform({
+          src,
+          filename: path.join(root, file),
+          options: { dev: true, platform: 'ios', projectRoot: root },
+        }),
+      (error: Error) => {
+        assert.match(error.message, /Which's template did not compile/);
+        assert.doesNotMatch(error.message, /Unexpected token/);
+        return true;
+      },
+    );
+
+  it("reports the component's error, not a syntax error in the stylesheet, from the transformer", () => {
+    const { root } = project(files('@switch (a()) { <text>no case</text> }'));
+    reportsTheComponent(root, 'shared.css', '.shared { opacity: 0.5 }');
+  });
+
+  it("reports the component's error, not a syntax error in its template file", () => {
+    const template = '@switch (a()) { <text>no case</text> }';
+    const { root } = project({
+      'index.ts': `import { Which } from './which';\nexport default [Which];\n`,
+      'which.ts': `import { Component, signal } from '@angular/core';
+@Component({ selector: 'which', templateUrl: './which.html' })
+export class Which { a = signal(1); }
+`,
+      'which.html': template,
+    });
+    reportsTheComponent(root, 'which.html', template);
+  });
+
+  it("reports the component's error for a stylesheet in a folder named like a script", () => {
+    const { root } = project({
+      'index.ts': `import { Which } from './which';\nexport default [Which];\n`,
+      'which.ts': `import { Component, signal } from '@angular/core';
+@Component({ selector: 'which', styleUrl: './chart.js/shared.css', template: '@switch (a()) { <text>no case</text> }' })
+export class Which { a = signal(1); }
+`,
+      'chart.js/shared.css': '.shared { opacity: 0.5 }',
+    });
+    reportsTheComponent(root, 'chart.js/shared.css', '.shared { opacity: 0.5 }');
   });
 });
