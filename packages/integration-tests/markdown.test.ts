@@ -8,7 +8,7 @@ import assert from 'node:assert/strict';
 import { after, before, describe, it } from 'node:test';
 import type { Type } from '@angular/core';
 import { DeepLinks, type DeepLinkSource } from '@ng-native/device';
-import { cleanup, fireEvent, render, type FakeFabricNode } from '@ng-native/testing';
+import { cleanup, compileCss, fireEvent, render, type FakeFabricNode } from '@ng-native/testing';
 import {
   getDefaults,
   Lexer,
@@ -44,7 +44,10 @@ before(async () => {
 });
 after(cleanup);
 
-async function show(source: string) {
+async function show(
+  source: string,
+  options: { globalStyles?: ReturnType<typeof compileCss> } = {},
+) {
   const opened: string[] = [];
   const links: DeepLinkSource = {
     launchUrl: () => Promise.resolve(null),
@@ -53,6 +56,7 @@ async function show(source: string) {
   };
   const app = await render(mod['MarkdownScreen'] as Type<unknown>, {
     providers: [{ provide: DeepLinks.SOURCE, useValue: links }],
+    ...options,
   });
   const screen = app.instance as Screen;
   screen.source.set(source);
@@ -290,6 +294,54 @@ describe('images', () => {
     screen.source.set('![wide](https://example.com/w.png)');
     await app.detectChanges();
     assert.equal(blocks()[0]!.props['height'], 200, 'the ratio went with the image');
+  });
+
+  it('draws an image at its own size once it loads, no wider than the document', async () => {
+    const { blocks } = await show('![icon](https://example.com/icon-64.png)');
+    assert.equal(blocks()[0]!.props['width'], '100%', 'the document width until it loads');
+    await fireEvent(blocks()[0]!, 'load', {
+      source: { uri: 'https://example.com/icon-64.png', width: 64, height: 64 },
+    });
+    const image = blocks()[0]!;
+    assert.equal(image.props['width'], 64, 'its own width, as a browser draws it');
+    assert.equal(image.props['maxWidth'], '100%', 'shrunk to the document when wider');
+    assert.equal(image.props['aspectRatio'], 1);
+    assert.equal(image.props['height'], 'auto');
+  });
+
+  it('keeps the shape of an image narrowed to the document, from the width it is laid out at', async () => {
+    // Yoga takes the height from the width before max-width narrows it, where CSS takes it after.
+    const { blocks } = await show('![wide](https://example.com/wide.png)');
+    await fireEvent(blocks()[0]!, 'load', {
+      source: { uri: 'https://example.com/wide.png', width: 1000, height: 250 },
+    });
+    assert.equal(blocks()[0]!.props['height'], 'auto');
+    await fireEvent(blocks()[0]!, 'layout', { layout: { x: 0, y: 0, width: 362, height: 250 } });
+    assert.equal(blocks()[0]!.props['height'], 90.5, 'its width over its ratio');
+    await fireEvent(blocks()[0]!, 'layout', { layout: { x: 0, y: 0, width: 1000, height: 90.5 } });
+    assert.equal(blocks()[0]!.props['height'], 'auto', 'its own size again once it fits');
+  });
+
+  it('leaves an image laid out at its own width to its ratio', async () => {
+    const { blocks } = await show('![icon](https://example.com/icon-64.png)');
+    await fireEvent(blocks()[0]!, 'load', {
+      source: { uri: 'https://example.com/icon-64.png', width: 64, height: 64 },
+    });
+    await fireEvent(blocks()[0]!, 'layout', { layout: { x: 0, y: 0, width: 64, height: 64 } });
+    assert.equal(blocks()[0]!.props['height'], 'auto');
+  });
+
+  it("leaves the width to the app's own class for an image, once it loads too", async () => {
+    const globalStyles = compileCss('.x-img { width: 50%; height: 120px }', 'global');
+    const { blocks, screen, app } = await show('![icon](https://example.com/icon-64.png)', {
+      globalStyles,
+    });
+    screen.classes.set({ img: 'x-img' });
+    await app.detectChanges();
+    await fireEvent(blocks()[0]!, 'load', {
+      source: { uri: 'https://example.com/icon-64.png', width: 64, height: 64 },
+    });
+    assert.equal(blocks()[0]!.props['width'], '50%');
   });
 
   it('draws a file or a relative path as its alt text', async () => {

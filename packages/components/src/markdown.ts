@@ -22,7 +22,7 @@ import {
 import { DeepLinks } from '@ng-native/device';
 import { nativePlatform } from '@ng-native/fabric';
 import { lexer, type Token } from 'marked';
-import type { ImageLoadEvent } from './events.ts';
+import type { ImageLoadEvent, LayoutEvent } from './events.ts';
 import { Image } from './image.ts';
 import {
   blockKey,
@@ -65,13 +65,24 @@ const DEFAULT_CLASSES = Object.fromEntries(
 
 type MarkdownLink = Extract<MarkdownInline, { kind: 'link' }>;
 
-/** Every image address in `blocks`, however deep in quotes and lists. */
-function imageSources(blocks: readonly MarkdownBlock[], into = new Set<string>()): Set<string> {
+/** A loaded image's own width in points, and its width over its height. */
+interface ImageSize {
+  readonly width: number;
+  readonly ratio: number;
+}
+
+type ImageBlock = Extract<MarkdownBlock, { kind: 'image' }>;
+
+/** Every image in `blocks`, however deep in quotes and lists. */
+function imageBlocks(
+  blocks: readonly MarkdownBlock[],
+  into = new Set<ImageBlock>(),
+): Set<ImageBlock> {
   for (const block of blocks) {
-    if (block.kind === 'image') into.add(block.src);
-    else if (block.kind === 'blockquote') imageSources(block.children, into);
+    if (block.kind === 'image') into.add(block);
+    else if (block.kind === 'blockquote') imageBlocks(block.children, into);
     else if (block.kind === 'list') {
-      for (const item of block.items) imageSources(item.children, into);
+      for (const item of block.items) imageBlocks(item.children, into);
     }
   }
   return into;
@@ -129,9 +140,11 @@ function imageSources(blocks: readonly MarkdownBlock[], into = new Set<string>()
               [alt]="block.alt || undefined"
               resizeMode="contain"
               [class]="classFor('img')"
-              [style.aspectRatio]="ratios().get(block.src) ?? null"
-              [style.height]="ratios().has(block.src) ? 'auto' : null"
+              [style.--md-img-width]="imageWidth(block.src)"
+              [style.aspectRatio]="sizes().get(block.src)?.ratio ?? null"
+              [style.height]="imageHeight(block)"
               (load)="sizeImage(block.src, $any($event))"
+              (layout)="layOutImage(block, $any($event))"
             />
           }
           @case ('blockquote') {
@@ -282,16 +295,40 @@ export class Markdown {
   private readonly classOf = computed(() => ({ ...DEFAULT_CLASSES, ...this.classes() }));
 
   /**
-   * Each image's width over its height, once it has loaded, so it is drawn at the page's width and
-   * its own shape. An image the document no longer has is forgotten when the document changes.
+   * Each image's own width and its width over its height, once it has loaded, so it is drawn at its
+   * own size and shape, as a browser draws it, and no wider than the document. The width reaches
+   * the image as `--md-img-width`, which `.md-img` reads, so a class of the app's own still sets
+   * the width. An image the document no longer has is forgotten when the document changes.
    */
-  protected readonly ratios = linkedSignal<readonly MarkdownBlock[], ReadonlyMap<string, number>>({
+  protected readonly sizes = linkedSignal<readonly MarkdownBlock[], ReadonlyMap<string, ImageSize>>(
+    {
+      source: this.blocks,
+      computation: (blocks, previous) => {
+        const kept = new Map<string, ImageSize>();
+        if (!previous) return kept;
+        const present = new Set([...imageBlocks(blocks)].map((block) => block.src));
+        for (const [src, size] of previous.value) if (present.has(src)) kept.set(src, size);
+        return kept;
+      },
+    },
+  );
+
+  /**
+   * The width each image is laid out at where that is less than its own, narrowed by
+   * `max-width`. Yoga takes an image's height from its width before `max-width` narrows it, where
+   * CSS takes it after, so a narrowed image is given the height its ratio makes of the width it
+   * has. An image no longer in the document is forgotten when the document changes.
+   */
+  protected readonly narrowed = linkedSignal<
+    readonly MarkdownBlock[],
+    ReadonlyMap<ImageBlock, number>
+  >({
     source: this.blocks,
     computation: (blocks, previous) => {
-      const kept = new Map<string, number>();
+      const kept = new Map<ImageBlock, number>();
       if (!previous) return kept;
-      const present = imageSources(blocks);
-      for (const [src, ratio] of previous.value) if (present.has(src)) kept.set(src, ratio);
+      const present = imageBlocks(blocks);
+      for (const [block, width] of previous.value) if (present.has(block)) kept.set(block, width);
       return kept;
     },
   });
@@ -330,12 +367,41 @@ export class Markdown {
     return this.classOf()[element];
   }
 
+  protected imageWidth(src: string): string | null {
+    const size = this.sizes().get(src);
+    return size ? `${size.width}px` : null;
+  }
+
+  /** The class's height until the image loads, then its ratio's, or a narrowed image's own. */
+  protected imageHeight(block: ImageBlock): number | 'auto' | null {
+    const size = this.sizes().get(block.src);
+    if (!size) return null;
+    const width = this.narrowed().get(block);
+    return width === undefined ? 'auto' : width / size.ratio;
+  }
+
+  protected layOutImage(block: ImageBlock, event: Partial<LayoutEvent>): void {
+    const width = event.nativeEvent?.layout?.width;
+    const size = this.sizes().get(block.src);
+    if (width === undefined || !size) return;
+    const narrowed = width < size.width ? width : undefined;
+    if (this.narrowed().get(block) === narrowed) return;
+    this.narrowed.update((all) => {
+      const next = new Map(all);
+      if (narrowed === undefined) next.delete(block);
+      else next.set(block, narrowed);
+      return next;
+    });
+  }
+
   protected sizeImage(src: string, event: Partial<ImageLoadEvent>): void {
     const source = event.nativeEvent?.source;
     if (!source) return;
     const { width, height } = source;
     if (!(width > 0 && height > 0)) return;
-    this.ratios.update((ratios) => new Map(ratios).set(src, width / height));
+    // A url's or a data url's scale is 1, so the load event's pixels are the points a browser's
+    // CSS pixels are.
+    this.sizes.update((sizes) => new Map(sizes).set(src, { width, ratio: width / height }));
   }
 
   protected followLink(link: MarkdownLink): void {
