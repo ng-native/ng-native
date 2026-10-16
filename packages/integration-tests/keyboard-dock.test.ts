@@ -214,7 +214,7 @@ describe('keyboard dock on Android', () => {
     assert.equal(screen.getByTestId('dock').props['paddingBottom'], 0);
   });
 
-  it('stays in flow with react-native-keyboard-controller, which would take the window insets from a form sheet', async () => {
+  it('stays in flow with react-native-keyboard-controller, which would lift a dock in a form sheet twice', async () => {
     registerPlatformComponents('android');
     const { fabric, keyboard, bottom, named } = await boot('DockedComposer', true);
     await bottom(24);
