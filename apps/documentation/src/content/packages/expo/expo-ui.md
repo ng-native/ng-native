@@ -121,7 +121,8 @@ error. `expo-ui-components.ts` has thin typed components for the views an app re
   so on. `referenceLines` draws lines across it in `ruleStyle`.
 - **`UiForm`**, **`UiSection`** and **`UiLabeledContent`** - settings-style grouped rows. A
   section's header is its `title` or a `<ui-slot name="header">`, and a `<ui-slot name="footer">` is
-  the note under its rows. When both a `title` and a header slot are set, SwiftUI draws the `title`.
+  the note under its rows. When both a `title` and a header slot are set, `@expo/ui`'s `SectionView`
+  draws the `title` and drops the slot; an empty `title=""` counts as unset.
 - **`UiImage`** - an SF Symbol by `systemName`, a symbol or picture in the app's asset catalog by
   `assetName`, or a picture by `uiImage`, the URL of a file on the device.
 - **`UiText`** - a SwiftUI `Text`. Its text is what is written inside it,

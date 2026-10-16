@@ -1322,8 +1322,9 @@ export class UiForm {
 
 /**
  * A SwiftUI `Section` of a form or a list, under `title`, iOS only. A `<ui-slot name="header">`
- * is its header in place of a `title`, which SwiftUI draws instead when both are set, and a
- * `<ui-slot name="footer">` is the note under its rows. The slot's `name` is written as it is,
+ * is its header in place of a `title`, and a `<ui-slot name="footer">` is the note under its rows.
+ * When both a non-empty `title` and a header slot are set, `@expo/ui`'s `SectionView` draws the
+ * `title` and drops the slot; an empty `title` counts as unset. The slot's `name` is written as it is,
  * not bound, as that is what picks it out of the rows.
  */
 @Component({
