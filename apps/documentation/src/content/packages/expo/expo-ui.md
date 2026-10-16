@@ -146,9 +146,9 @@ error. `expo-ui-components.ts` has thin typed components for the views an app re
   date is best asked for behind a button that shows the picker. Without a form, `selection` still
   takes ISO text on iOS. `displayedComponents` is a list of `'date'` and `'hourAndMinute'`; an
   empty list shows nothing on iOS, and the date and time on Android, which has no way to show
-  nothing. `range`, a `start` and an `end` as ISO text, limits the dates that can be picked on
-  both. `accessibilityLabel` is what VoiceOver reads for it, and TalkBack with `@expo/ui` 57.0.21
-  or later. `title` is iOS only.
+  nothing. `range`, an optional `start` and an optional `end` as ISO text, limits the dates that
+  can be picked on both: from `start` on, up to `end`, or between the two. `accessibilityLabel` is
+  what VoiceOver reads for it, and TalkBack with `@expo/ui` 57.0.21 or later. `title` is iOS only.
 - **`UiPicker`** - a SwiftUI `Picker` on iOS, Compose's segmented buttons or dropdown menu on
   Android, and a Signal Forms field. `options` draws the choices;
   see [Choices: `UiPicker`](#choices-uipicker) below.

@@ -54,6 +54,12 @@ import {
       />
       <ui-date-picker />
       <ui-menu label="More" accessibilityLabel="More actions"><ui-button label="Copy" /></ui-menu>
+      <ui-menu
+        label="Share"
+        accessibilityLabel="Share it"
+        [modifiers]="[{ $type: 'opacity', value: 0.5 }]"
+        ><ui-button label="Send"
+      /></ui-menu>
       <ui-button label="Undo" target="undo" systemImage="arrow.uturn.backward" role="destructive" />
       <ui-toggle label="Wi-Fi" />
       <ui-slot name="actions" [extraProps]="{ edge: 'trailing' }"><ui-text text="slot" /></ui-slot>

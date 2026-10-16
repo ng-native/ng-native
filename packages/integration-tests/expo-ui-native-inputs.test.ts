@@ -216,6 +216,15 @@ describe('SwiftUI props on Android, where Compose draws it another way or not at
     );
   });
 
+  it("still sends Compose's image and menu the app's own modifiers, and none of SwiftUI's", async () => {
+    const find = await boot('android');
+    const opacity = [{ $type: 'opacity', value: 0.5 }];
+    // An image with a colour and a modifier of the app's own: no foregroundStyle is made for it.
+    assert.deepEqual(find(/ExpoUI_ImageView$/)[2]!.props['modifiers'], opacity);
+    // A menu with an accessibility label and a modifier: no accessibilityLabel modifier.
+    assert.deepEqual(find(/ExpoUI_DropdownMenuView$/)[1]!.props['modifiers'], opacity);
+  });
+
   it("sends Compose's button, switch, host and slot none of SwiftUI's own props", async () => {
     const find = await boot('android');
     const undo = find(/ExpoUI_Button$/).at(-1)!;
