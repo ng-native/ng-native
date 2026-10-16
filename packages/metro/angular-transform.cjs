@@ -754,7 +754,12 @@ function collisionQuiet(filename, components) {
   );
 }
 
-/** The update-metadata function for one component's template, named for it. */
+/**
+ * The update-metadata function for one component's template, named for it.
+ *
+ * `errors` holds warnings too, and an aliased `@if` or a `@switch` gets one beside an update that
+ * is complete, so only an error means the template did not compile.
+ */
 function hotUpdate(template, component, filename, options) {
   const result = compileForHmrSync(
     template,
@@ -763,7 +768,7 @@ function hotUpdate(template, component, filename, options) {
     component.styles ?? null,
     options,
   );
-  if (result.errors.length) return null;
+  if (result.errors.some((error) => error.severity === 'Error')) return null;
   const name = `${component.className}_ApplyMetadata`;
   return {
     id: result.componentId,

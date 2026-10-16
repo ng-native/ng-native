@@ -183,3 +183,46 @@ describe('the resource cache', () => {
     assert.ok(code.includes('FIRST_TEMPLATE'));
   });
 });
+
+describe('a stylesheet shared by components', () => {
+  // `compileForHmrSync` reports a warning about an aliased `@if` and a `@switch` beside an update
+  // that is complete. The stylesheet's module took it for a template that did not compile, threw,
+  // and the dev bundle failed with a syntax error on the stylesheet.
+  const files = (switched: string) => ({
+    'index.ts': `import { When } from './when';\nimport { Which } from './which';\nexport default [When, Which];\n`,
+    'when.ts': `import { Component, signal } from '@angular/core';
+@Component({ selector: 'when', styleUrl: './shared.css', template: '@if (a(); as x) { <text>{{ x }}</text> }' })
+export class When { a = signal(1); }
+`,
+    'which.ts': `import { Component, signal } from '@angular/core';
+@Component({ selector: 'which', styleUrl: './shared.css', template: '${switched}' })
+export class Which { a = signal(1); }
+`,
+    'shared.css': '.shared { opacity: 0.5 }',
+  });
+
+  it('builds a dev bundle with an aliased @if and a @switch in its components', async () => {
+    const { root, cache } = project(
+      files('@switch (a()) { @case (1) { <text>one</text> } @default { <text>more</text> } }'),
+    );
+    await inDirectory(root, async () => {
+      const written = await devTransforms(root, cache);
+      const sheet = written.filter(
+        (value) => value.includes('When_ApplyMetadata') && value.includes('Which_ApplyMetadata'),
+      );
+      assert.equal(sheet.length, 1, "the stylesheet's module carries the update for both");
+    });
+  });
+
+  it('still fails on a template that does not compile, naming the component', () => {
+    const { root } = project(files('@switch (a()) { <text>no case</text> }'));
+    const { transformAngular } = require('@ng-native/metro/angular-transform.cjs') as {
+      transformAngular(src: string, file: string, options: object): { code: string };
+    };
+    const sheet = path.join(root, 'shared.css');
+    assert.throws(
+      () => transformAngular('.shared { opacity: 0.5 }', sheet, { dev: true, projectRoot: root }),
+      /shared\.css: Which's template did not compile/,
+    );
+  });
+});
