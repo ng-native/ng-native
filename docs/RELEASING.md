@@ -22,7 +22,7 @@ one interactively, or write it by hand:
 
 ```md
 ---
-__default__: minor
+__default__: patch
 ---
 
 A virtual list recycles its rows when a template tracks them by slot.
