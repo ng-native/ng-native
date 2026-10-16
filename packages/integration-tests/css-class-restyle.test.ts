@@ -160,6 +160,26 @@ describe('a class named only in :has()', () => {
     assert.ok(styleStats.ruleTests < 20, `${styleStats.ruleTests} rules tried`);
   });
 
+  it('matches what is above it again as a list starts and stops both starting and ending as asked', () => {
+    const s = scene(`${CSS} .panel:has([class^="p-"][class$="-fluid"]) { opacity: 0.4 }`);
+    const cell = s.engine.root.children[0]!.children[3]!.children[2]!;
+    const opacity = () => s.props('panel')['opacity'] ?? 1;
+    s.engine.setClasses(cell, 'p-input-fluid');
+    s.engine.commit();
+    assert.equal(opacity(), 0.4);
+    // Still starts with p-, no longer ends with -fluid.
+    s.engine.addClass(cell, 'later');
+    s.engine.commit();
+    assert.equal(opacity(), 1);
+    s.engine.removeClass(cell, 'later');
+    s.engine.commit();
+    assert.equal(opacity(), 0.4);
+    // Ends with -fluid, no longer starts with p-.
+    s.engine.setClasses(cell, 'wide-fluid');
+    s.engine.commit();
+    assert.equal(opacity(), 1);
+  });
+
   it('matches what is above it again, coming and going', () => {
     const s = scene(HAS);
     const rows = s.engine.root.children[0]!.children;
