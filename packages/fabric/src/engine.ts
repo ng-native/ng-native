@@ -897,10 +897,17 @@ const blockEdge = (
 /**
  * A multiline field's `rows` as its height, where it was given none: that many lines of its
  * line height at the system text size, inside its padding and border, as a browser sizes a `<textarea>`. A native field
- * is as tall as its text, which is one line before anything is typed.
+ * is as tall as its text, which is one line before anything is typed. Taken off the props once
+ * read: neither platform's native field has a prop of that name.
  */
-function rowsTall(props: Record<string, unknown>, fontScale: number | undefined): void {
+function rowsTall(
+  viewName: string,
+  props: Record<string, unknown>,
+  fontScale: number | undefined,
+): void {
+  if (!TEXT_INPUTS.has(viewName)) return;
   const rows = Number(props['rows']);
+  delete props['rows'];
   const line = props['lineHeight'];
   if (props['multiline'] !== true || !(rows > 0) || typeof line !== 'number') return;
   if (isSet(props['height']) && props['height'] !== 'auto') return;
@@ -4776,7 +4783,7 @@ export class Engine implements HostEngine {
     }
     if (this.fontsRefreshed) this.capForFonts(node, style);
     alignMultiline(viewName, style);
-    rowsTall(style, this.fontScale);
+    rowsTall(viewName, style, this.fontScale);
     const merged = composeTransform(node, this.eased(node, style));
     // On iOS: Android's field says the baseline of the line it is sized and centred by.
     // Still under the row that marked it: a row taken away is not committed again to unmark it.
