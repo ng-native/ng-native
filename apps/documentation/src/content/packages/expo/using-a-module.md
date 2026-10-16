@@ -157,4 +157,6 @@ itself rather than behind an entry point: [`Permission`](/packages/expo/permissi
 ## Where everything else lives
 
 Every module has its own page, grouped by what it is for, from the [overview](/packages/expo).
-For a capability no package covers, [write a native module](/guide/native-modules) of your own.
+For a capability no package covers, [create an Expo module](/guide/native-modules) in Swift and
+Kotlin or [use NativeScript](/guide/native-modules/nativescript) to call platform APIs directly from
+TypeScript.

@@ -294,12 +294,19 @@ export class App {
    * reads as belonging to the section rather than to a page in it.
    */
   protected pages(item: NavItem): NavItem[] {
+    if (item.children?.some((child) => child.path === item.path)) {
+      return [...item.children];
+    }
     return [{ path: item.path, title: 'Overview' }, ...(item.children ?? [])];
   }
 
   protected isOpen(item: NavItem): boolean {
     const current = this.url().split('?')[0] ?? '';
-    return current === `/${item.path}` || current.startsWith(`/${item.path}/`);
+    return (
+      current === `/${item.path}` ||
+      current.startsWith(`/${item.path}/`) ||
+      (item.children?.some((child) => current === `/${child.path}`) ?? false)
+    );
   }
   protected readonly menuOpen = signal(false);
 

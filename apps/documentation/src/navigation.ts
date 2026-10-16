@@ -51,7 +51,10 @@ export const STANDALONE_PAGES: readonly NavItem[] = [{ path: 'sponsor', title: '
 
 /** Every page in a section, parents and children alike, in reading order. */
 export function flattenItems(items: readonly NavItem[]): NavItem[] {
-  return items.flatMap((item) => [item, ...flattenItems(item.children ?? [])]);
+  return items.flatMap((item) => {
+    const children = flattenItems(item.children ?? []);
+    return children.some((child) => child.path === item.path) ? children : [item, ...children];
+  });
 }
 
 /**
@@ -76,7 +79,14 @@ export const GUIDE: NavSection = {
     { path: 'guide/theming', title: 'Theming and Tailwind' },
     { path: 'guide/forms', title: 'Build a form' },
     { path: 'guide/offline', title: 'Working offline' },
-    { path: 'guide/native-modules', title: 'Write a native module' },
+    {
+      path: 'guide/native-modules',
+      title: 'Write native code',
+      children: [
+        { path: 'guide/native-modules', title: 'Create Expo Module' },
+        { path: 'guide/native-modules/nativescript', title: 'Use NativeScript' },
+      ],
+    },
     {
       path: 'guide/localization',
       title: 'Localization',
@@ -338,13 +348,6 @@ export interface Breadcrumb {
 export function breadcrumbsFor(path: string): Breadcrumb[] {
   for (const section of SECTIONS) {
     for (const item of section.items) {
-      if (item.path === path) {
-        return [
-          { title: 'Home', path: '/' },
-          { title: section.title },
-          { title: item.title, path: `/${item.path}` },
-        ];
-      }
       for (const child of item.children ?? []) {
         if (child.path === path) {
           return [
@@ -354,6 +357,13 @@ export function breadcrumbsFor(path: string): Breadcrumb[] {
             { title: child.title, path: `/${child.path}` },
           ];
         }
+      }
+      if (item.path === path) {
+        return [
+          { title: 'Home', path: '/' },
+          { title: section.title },
+          { title: item.title, path: `/${item.path}` },
+        ];
       }
     }
   }
