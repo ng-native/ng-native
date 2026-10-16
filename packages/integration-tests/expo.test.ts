@@ -605,7 +605,7 @@ describe('the typed SwiftUI and segmented-control components', () => {
     await settle();
   });
 
-  it('passes each input to the native view as the prop of the same name', () => {
+  it('passes each input to the native view as the prop it reads, a modifier or a slot', () => {
     assert.equal(named(/HostView/).props['ignoreSafeArea'], 'container');
     // Except `matchContents`, which native reads as a flag per axis; see `UiHost`.
     assert.equal(named(/HostView/).props['matchContentsVertical'], true);
@@ -782,7 +782,7 @@ describe('the typed SwiftUI controls and expo-image', () => {
   const all = (n: readonly FakeFabricNode[]): FakeFabricNode[] =>
     n.flatMap((x) => [x, ...all(x.children)]);
 
-  it('passes each input through as the prop of the same name, and events to the outputs', async () => {
+  it('passes each input through as the prop, modifier or slot native reads, and events to the outputs', async () => {
     const mod = await compileFixture('fixtures/expo-ui.ts');
     registerExpoUiViews('ios');
     registerExpoViews('expo-image');
