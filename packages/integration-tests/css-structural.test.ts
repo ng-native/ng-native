@@ -606,8 +606,27 @@ describe('what a child list changing has styled again', () => {
     assert.deepEqual(s.widths(), [0, 3, 3, 3, 3, 3]);
   });
 
+  it('is the rows after a prop changes while a component holds a sheet that was global too', () => {
+    const s = list('', 0);
+    const lead = compileCss('[data-lead] ~ .row { border-top-width: 5px }', 'lead.css') as never;
+    const rows = Array.from({ length: 4 }, () => {
+      const node = s.engine.createElement('view', lead);
+      s.engine.setClasses(node, 'row');
+      s.engine.appendChild(s.parent, node);
+      return node;
+    });
+    s.engine.commit();
+    assert.ok(s.engine.addGlobalSheet(lead));
+    s.engine.commit();
+    // Before the commit after it, which would find the component's sheet again.
+    assert.ok(s.engine.removeGlobalSheet(lead));
+    s.engine.setProp(rows[0]!, 'data-lead', 'yes');
+    assert.equal(s.marked(), 'xxxx', 'the component still asks it of a row before another');
+    assert.deepEqual(s.widths(), [0, 5, 5, 5]);
+  });
+
   it('is none of the rows after a style bound to a token', () => {
-    // A chart binds `fill="var(--ink)"` on each of its points: no rule asks about a bound style.
+    // A chart binds `borderBottomWidth: var(--ink)` on each of its points: no rule asks about a bound style.
     const s = list('.row ~ .row { border-top-width: 3px } .row { --ink: 4px }', 6);
     const row = s.parent.children[1]!;
     s.engine.setBoundStyle(row, 'borderBottomWidth', 'var(--ink)');

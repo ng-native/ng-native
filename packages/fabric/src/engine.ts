@@ -3570,7 +3570,7 @@ export class Engine implements HostEngine {
     const sheet = like ? like.sheet : this.ownSheets.get(node);
     if (sheet === undefined || node.sheet === sheet) return;
     node.sheet = sheet;
-    this.styles.noteSheet(sheet);
+    this.styles.noteSheet(sheet, true);
     this.watchStructure(sheet);
     this.watchHas(sheet);
     this.watchActive(sheet);
@@ -3613,7 +3613,7 @@ export class Engine implements HostEngine {
   createElement(name: string, sheet: StyleSheet | null = null): EngineNode {
     const node = new RetainedNode('element', name, this);
     node.sheet = sheet;
-    this.styles.noteSheet(sheet);
+    this.styles.noteSheet(sheet, true);
     const html = HTML_ELEMENTS.get(name);
     if (html !== undefined) {
       if (html.role) node.props['accessibilityRole'] = html.role;
@@ -3721,7 +3721,7 @@ export class Engine implements HostEngine {
   setHostSheet(node: EngineNode, sheet: StyleSheet | null): void {
     if (node.hostSheet === sheet) return;
     node.hostSheet = sheet;
-    this.styles.noteSheet(sheet);
+    this.styles.noteSheet(sheet, true);
     this.watchStructure(sheet);
     this.watchHas(sheet);
     this.watchActive(sheet);

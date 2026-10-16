@@ -2796,9 +2796,13 @@ export class StyleResolver {
   private readonly deepSheets = new Set<StyleSheet>();
   private readonly deepIndexes = new WeakMap<StyleSheet, RuleIndex>();
 
-  /** Read the classes a sheet names, once, as soon as any node is given it. */
-  noteSheet(sheet: StyleSheet | null | undefined): void {
+  /**
+   * Read the classes a sheet names, once, as soon as any node is given it. One `scoped` to a
+   * component or a host asks of its elements for good, global or not.
+   */
+  noteSheet(sheet: StyleSheet | null | undefined, scoped = false): void {
     if (!sheet) return;
+    if (scoped) this.scoped.add(sheet);
     this.noteBeside(sheet);
     if (this.noted.has(sheet)) return;
     this.noted.add(sheet);
@@ -2826,6 +2830,8 @@ export class StyleResolver {
    */
   private readonly besideNamed = new Map<string, number>();
   private readonly besideNoted = new WeakSet<StyleSheet>();
+  /** The sheets a component or a host was given: see `noteSheet`. */
+  private readonly scoped = new WeakSet<StyleSheet>();
 
   private noteBeside(sheet: StyleSheet): void {
     if (this.besideNoted.has(sheet)) return;
@@ -2836,7 +2842,7 @@ export class StyleResolver {
   }
 
   private forgetBeside(sheet: StyleSheet): void {
-    if (!this.besideNoted.delete(sheet)) return;
+    if (this.scoped.has(sheet) || !this.besideNoted.delete(sheet)) return;
     for (const name of namedBeside(sheet)) {
       const left = this.besideNamed.get(name)! - 1;
       if (left) this.besideNamed.set(name, left);
