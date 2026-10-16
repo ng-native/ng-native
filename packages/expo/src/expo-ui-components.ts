@@ -88,12 +88,13 @@ function nativeView(): true {
   host: {
     '[matchContentsVertical]': 'matchVertical()',
     '[matchContentsHorizontal]': 'matchHorizontal()',
-    '[ignoreSafeArea]': 'ignoreSafeArea()',
+    '[ignoreSafeArea]': 'android ? undefined : ignoreSafeArea()',
     '[useViewportSizeMeasurement]': 'useViewportSizeMeasurement()',
   },
 })
 export class UiHost {
   protected readonly nativeView = nativeView();
+  protected readonly android = nativePlatform() === 'android';
   readonly matchContents = input<
     boolean | { readonly vertical?: boolean; readonly horizontal?: boolean }
   >();
@@ -105,6 +106,7 @@ export class UiHost {
     const match = this.matchContents();
     return typeof match === 'object' ? match.horizontal : match;
   });
+  /** The safe area SwiftUI's host ignores, iOS only: Compose's host has no such prop. */
   readonly ignoreSafeArea = input<'all' | 'keyboard' | 'container'>();
   readonly useViewportSizeMeasurement = input<boolean>(undefined, { transform: optionalBoolean });
 }
@@ -114,13 +116,14 @@ export class UiHost {
   selector: 'ui-menu',
   template: '<ng-content />',
   host: {
-    '[label]': 'label()',
-    '[systemImage]': 'systemImage()',
-    '[modifiers]': 'resolvedModifiers()',
+    '[label]': 'android ? undefined : label()',
+    '[systemImage]': 'android ? undefined : systemImage()',
+    '[modifiers]': 'android ? modifiers() : resolvedModifiers()',
   },
 })
 export class UiMenu {
   protected readonly nativeView = nativeView();
+  protected readonly android = nativePlatform() === 'android';
   readonly label = input<string>();
   /** An SF Symbol name. */
   readonly systemImage = input<string>();
@@ -203,9 +206,9 @@ export class UiContextMenu {
     <ng-content />`,
   host: {
     '(buttonPressed)': 'android && buttonPress.emit($event)',
-    '[label]': 'label()',
-    '[systemImage]': 'systemImage()',
-    '[role]': 'role()',
+    '[label]': 'android ? undefined : label()',
+    '[systemImage]': 'android ? undefined : systemImage()',
+    '[role]': 'android ? undefined : role()',
     '[modifiers]': 'modifiers()',
   },
 })
@@ -248,13 +251,14 @@ export class UiDivider {
   host: {
     '[name]': 'android ? undefined : name()',
     '[slotName]': 'android ? name() : undefined',
-    '[extraProps]': 'extraProps()',
+    '[extraProps]': 'android ? undefined : extraProps()',
   },
 })
 export class UiSlot {
   protected readonly nativeView = nativeView();
   protected readonly android = nativePlatform() === 'android';
   readonly name = input.required<string>();
+  /** What the slot tells its SwiftUI parent about itself, iOS only. */
   readonly extraProps = input<Readonly<Record<string, unknown>>>();
 }
 
@@ -374,14 +378,16 @@ export class UiVStack {
   selector: 'ui-image',
   template: '',
   host: {
-    '[systemName]': 'systemName()',
-    '[assetName]': 'assetName()',
-    '[uiImage]': 'uiImage()',
-    '[modifiers]': 'resolvedModifiers()',
+    '[systemName]': 'android ? undefined : systemName()',
+    '[assetName]': 'android ? undefined : assetName()',
+    '[uiImage]': 'android ? undefined : uiImage()',
+    '[modifiers]': 'android ? modifiers() : resolvedModifiers()',
   },
 })
 export class UiImage {
   protected readonly nativeView = nativeView();
+  /** Compose's image is another control, which takes a `source`: none of these are its. */
+  protected readonly android = nativePlatform() === 'android';
   readonly systemName = input<string>();
   readonly assetName = input<string>();
   readonly uiImage = input<string>();
@@ -522,6 +528,11 @@ function spokenLabel(label: string | undefined): UiModifier | undefined {
   return label === undefined ? undefined : { $type: 'accessibilityLabel', label };
 }
 
+/** Compose's `semantics` modifier with a `contentDescription`, what TalkBack reads for the view. */
+function contentDescription(label: string | undefined): UiModifier | undefined {
+  return label === undefined ? undefined : { $type: 'semantics', contentDescription: label };
+}
+
 /** The caller's modifiers, with SwiftUI's `disabled` added while the field is. */
 function withDisabled(
   modifiers: readonly UiModifier[] | undefined,
@@ -548,12 +559,12 @@ function withDisabled(
   selector: 'ui-date-picker',
   template: '',
   host: {
-    '[title]': 'title()',
+    '[title]': 'android ? undefined : title()',
     '[selection]': 'android ? undefined : resolvedSelection()',
     '[initialDate]': 'android ? initialDate() : undefined',
     '[displayedComponents]': 'resolvedComponents()',
-    '[range]': 'range()',
-    '[accessibilityLabel]': 'android ? accessibilityLabel() : undefined',
+    '[range]': 'android ? undefined : range()',
+    '[selectableDates]': 'android ? selectableDates() : undefined',
     '[modifiers]': 'resolvedModifiers()',
   },
 })
@@ -588,10 +599,20 @@ export class UiDatePicker {
     return shown.length === 1 ? shown[0] : 'dateAndTime';
   });
   protected readonly initialDate = computed(() => this.value()?.getTime() ?? null);
-  /** SwiftUI's picker reads `disabled` and `accessibilityLabel` as modifiers. */
+  /** Compose takes `range` as `selectableDates`, each end in milliseconds. */
+  protected readonly selectableDates = computed(() => {
+    const range = this.range();
+    return (
+      range && { start: milliseconds(range.start) ?? null, end: milliseconds(range.end) ?? null }
+    );
+  });
+  /**
+   * SwiftUI's picker reads `disabled` and `accessibilityLabel` as modifiers, and Compose's reads
+   * `accessibilityLabel` as the `semantics` modifier's `contentDescription`.
+   */
   protected readonly resolvedModifiers = computed(() =>
     this.android
-      ? this.modifiers()
+      ? withModifiers(this.modifiers(), contentDescription(this.accessibilityLabel()))
       : withModifiers(
           withDisabled(this.modifiers(), this.disabled()),
           spokenLabel(this.accessibilityLabel()),
@@ -879,7 +900,7 @@ export type UiToggleChangeEvent = NativeSyntheticEvent<{ readonly isOn: boolean 
   host: {
     '[isOn]': 'android ? undefined : isOn()',
     '[value]': 'android ? (isOn() ?? switchedOn()) : undefined',
-    '[label]': 'label()',
+    '[label]': 'android ? undefined : label()',
     '[modifiers]': 'modifiers()',
     '(checkedChange)': 'android && checked($event)',
   },

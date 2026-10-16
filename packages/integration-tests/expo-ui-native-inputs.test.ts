@@ -198,3 +198,66 @@ describe('an input that changes, and goes away', () => {
     assert.deepEqual(slots(one(/ExpoUI_LabelView$/)), {});
   });
 });
+
+describe('SwiftUI props on Android, where Compose draws it another way or not at all', () => {
+  /** Those of `names` the node is sent. */
+  const sent = (props: Readonly<Record<string, unknown>>, ...names: string[]) =>
+    names.filter((name) => name in props);
+
+  it("sends Compose's image and menu none of SwiftUI's props or modifiers", async () => {
+    const find = await boot('android');
+    const [image] = find(/ExpoUI_ImageView$/);
+    assert.deepEqual(sent(image!.props, 'systemName', 'assetName', 'uiImage', 'size', 'color'), []);
+    assert.equal('modifiers' in image!.props, false, 'no font or foregroundStyle');
+    const [menu] = find(/ExpoUI_DropdownMenuView$/);
+    assert.deepEqual(
+      sent(menu!.props, 'label', 'systemImage', 'accessibilityLabel', 'modifiers'),
+      [],
+    );
+  });
+
+  it("sends Compose's button, switch, host and slot none of SwiftUI's own props", async () => {
+    const find = await boot('android');
+    const undo = find(/ExpoUI_Button$/).at(-1)!;
+    assert.deepEqual(sent(undo.props, 'label', 'systemImage', 'role'), []);
+    assert.ok(
+      undo.children.some((n) => /ExpoUI_TextView$/.test(n.viewName) && n.props['text'] === 'Undo'),
+      'the label is still drawn, as a text inside the button',
+    );
+    assert.deepEqual(sent(find(/ExpoUI_SwitchView$/)[0]!.props, 'label'), []);
+    assert.deepEqual(sent(find(/ExpoUI_HostView$/)[0]!.props, 'ignoreSafeArea'), []);
+    const slot = find(/ExpoUI_SlotView$/).find((n) => n.props['slotName'] === 'actions')!;
+    assert.deepEqual(sent(slot.props, 'extraProps'), []);
+  });
+
+  it('still sends SwiftUI each of them on iOS', async () => {
+    const find = await boot('ios');
+    const undo = find(/ExpoUI_Button$/).at(-1)!;
+    assert.equal(undo.props['label'], 'Undo');
+    assert.equal(undo.props['systemImage'], 'arrow.uturn.backward');
+    assert.equal(undo.props['role'], 'destructive');
+    assert.equal(find(/ExpoUI_ToggleView$/)[0]!.props['label'], 'Wi-Fi');
+    assert.equal(find(/ExpoUI_HostView$/)[0]!.props['ignoreSafeArea'], 'all');
+    const slot = find(/ExpoUI_SlotView$/).find((n) => n.props['name'] === 'actions')!;
+    assert.deepEqual(slot.props['extraProps'], { edge: 'trailing' });
+    const [picker] = find(/ExpoUI_DatePickerView$/);
+    assert.equal(picker!.props['title'], 'When');
+    assert.deepEqual(picker!.props['range'], {
+      start: '2026-01-01T00:00:00.000Z',
+      end: '2026-12-31T00:00:00.000Z',
+    });
+  });
+
+  it("gives Compose's date picker its range as selectableDates and its label to TalkBack", async () => {
+    const [picker, plain] = (await boot('android'))(/ExpoUI_DateTimePickerView$/);
+    assert.deepEqual(picker!.props['selectableDates'], {
+      start: Date.UTC(2026, 0, 1),
+      end: Date.UTC(2026, 11, 31),
+    });
+    assert.deepEqual(picker!.props['modifiers'], [
+      { $type: 'semantics', contentDescription: 'Arrival' },
+    ]);
+    assert.deepEqual(sent(picker!.props, 'title', 'range', 'accessibilityLabel'), []);
+    assert.deepEqual(sent(plain!.props, 'selectableDates', 'modifiers'), []);
+  });
+});
