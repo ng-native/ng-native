@@ -180,6 +180,19 @@ describe('a class named only in :has()', () => {
     assert.equal(opacity(), 1);
   });
 
+  it('matches nothing under a box again for a change beneath it', () => {
+    // The root of a screen whose overlay opens: a class of its own, and a change beneath it.
+    const s = scene(HAS);
+    const cell = s.engine.root.children[0]!.children[3]!.children[2]!;
+    resetStyleStats();
+    s.engine.addClass(cell, 'flag');
+    s.engine.addClass(s.panel, 'on');
+    s.engine.commit();
+    assert.equal(s.props('panel')['opacity'], 0.2);
+    // The cell, and the panel and what is above it, where matching all 121 again tries hundreds.
+    assert.ok(styleStats.ruleTests < 30, `${styleStats.ruleTests} rules tried`);
+  });
+
   it('matches what is above it again, coming and going', () => {
     const s = scene(HAS);
     const rows = s.engine.root.children[0]!.children;

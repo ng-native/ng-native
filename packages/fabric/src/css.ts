@@ -2949,12 +2949,14 @@ export class StyleResolver {
    * change it was marked on the element, its parent's `scope` is the one it was styled under,
    * and no sheet that could match it has come since. It is being styled again all the same, for
    * a change of its own that alters nothing under it, or for what it inherits.
+   *
+   * A change beneath it is not one: what it answers `:has()` is asked again, and the elements a
+   * rule asking that of it is for are marked on their own (`markUnderHas`), not all under it.
    */
   private matchesStand(cached: StyleCache | null, node: StyleTarget, parentScope: object): boolean {
     return (
       cached !== null &&
       !node.styleDirty &&
-      !node.hasDirty &&
       !node.stateDirty &&
       cached.scope !== SHARED_SCOPE &&
       parentScope !== SHARED_SCOPE &&
