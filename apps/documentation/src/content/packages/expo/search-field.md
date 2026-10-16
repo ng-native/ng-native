@@ -69,13 +69,14 @@ or a class replaces it.
 
 The field's text and placeholder take the `font-family`, `font-size`, `font-weight` and `font-style`
 its CSS resolves to, from a class on the field, its own style, or what it inherits, as a `<text>`
-beside it does. A face the app's `@font-face` declares is matched by weight and style; the system
-font, or a family no `@font-face` declares, is drawn at that weight and slant. The size scales with
+beside it does. A face the app's `@font-face` declares, once [`loadFonts()`](/packages/expo/fonts)
+has registered it, is matched by weight and style. The system font, or a family no `@font-face`
+declares, is drawn at that weight, and slanted for `italic`, as a `<text>` is. The size scales with
 the system text size setting. With none of them set, the field keeps the system font at its own
 size.
 
-On iOS, the system's field grows with the system font: in it, a size above about 21px needs more
-than the 56-point default height. A face the app declares keeps the field at its usual height.
+On iOS, the system's field grows with the size of its font: in the system font, a size above about
+21px needs more than the 56-point default height. A height in a style or a class gives it room.
 
 ```css
 .search {
