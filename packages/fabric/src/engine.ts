@@ -3048,9 +3048,22 @@ function applyIntrinsicSize(props: Record<string, unknown>, size: IntrinsicSize)
 const now = (): number => globalThis.performance?.now?.() ?? Date.now();
 
 /** How many boxes `node` is under. */
-function depthOf(node: EngineNode): number {
-  let depth = 0;
-  for (let up = node.parent; up; up = up.parent) depth++;
+/**
+ * How deep a node is, with the depth of every box on its way up kept in `known`: the boxes that
+ * changed beneath are a node and its ancestors, so each is counted once, not once a box.
+ */
+function depthOf(node: EngineNode, known: Map<EngineNode, number>): number {
+  const path: EngineNode[] = [];
+  let depth = -1;
+  for (let up: EngineNode | null = node; up; up = up.parent) {
+    const found = known.get(up);
+    if (found !== undefined) {
+      depth = found;
+      break;
+    }
+    path.push(up);
+  }
+  for (let i = path.length - 1; i >= 0; i--) known.set(path[i]!, ++depth);
   return depth;
 }
 
@@ -4267,7 +4280,7 @@ export class Engine implements HostEngine {
     if (!this.changedBeneath.size) return;
     const readers = [...this.hasReaders.values()].flat();
     const depths = new Map<EngineNode, number>();
-    for (const node of this.changedBeneath) depths.set(node, depthOf(node));
+    for (const node of this.changedBeneath) depthOf(node, depths);
     const boxes = [...this.changedBeneath].sort((a, b) => depths.get(a)! - depths.get(b)!);
     // By box walked, the rules walked under it and under every box above it.
     const walked = new Map<EngineNode, ReadonlySet<HasAbove>>();
