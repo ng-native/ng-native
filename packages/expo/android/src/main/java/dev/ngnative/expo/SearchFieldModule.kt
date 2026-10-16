@@ -1,8 +1,12 @@
 package dev.ngnative.expo
 
 import android.content.Context
+import android.graphics.Typeface
+import android.util.TypedValue
 import android.view.inputmethod.InputMethodManager
+import android.widget.TextView
 import androidx.appcompat.widget.SearchView
+import com.facebook.react.common.assets.ReactFontManager
 import expo.modules.kotlin.AppContext
 import expo.modules.kotlin.modules.Module
 import expo.modules.kotlin.modules.ModuleDefinition
@@ -29,6 +33,10 @@ class SearchFieldModule : Module() {
       Prop("placeholder") { view: SearchFieldView, placeholder: String? ->
         view.search.queryHint = placeholder
       }
+      // The face and size the field's CSS resolves to, as a text's: the face by the name expo-font
+      // registers it under.
+      Prop("fontFamily") { view: SearchFieldView, family: String? -> view.fontFamily = family }
+      Prop("fontSize") { view: SearchFieldView, size: Double? -> view.fontSize = size?.toFloat() }
 
       AsyncFunction("focus") { view: SearchFieldView -> view.focus() }.runOnQueue(expo.modules.kotlin.functions.Queues.MAIN)
       AsyncFunction("blur") { view: SearchFieldView -> view.search.clearFocus() }.runOnQueue(expo.modules.kotlin.functions.Queues.MAIN)
@@ -83,6 +91,33 @@ class SearchFieldView(context: Context, appContext: AppContext) : ExpoView(conte
 
   init {
     addView(search, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT))
+  }
+
+  /** The text box, and the face and size it starts with, put back when the CSS names none. */
+  private val input = search.findViewById<TextView>(androidx.appcompat.R.id.search_src_text)
+  private val systemTypeface = input?.typeface
+  private val systemTextSize = input?.textSize
+
+  var fontFamily: String? = null
+    set(value) {
+      field = value
+      applyFont()
+    }
+  var fontSize: Float? = null
+    set(value) {
+      field = value
+      applyFont()
+    }
+
+  /** The CSS's face, found as a text's is, at its size in sp, so it scales with the font size setting. */
+  private fun applyFont() {
+    val input = input ?: return
+    val family = fontFamily
+    input.typeface = if (family == null) systemTypeface
+      else ReactFontManager.getInstance().getTypeface(family, Typeface.NORMAL, context.assets)
+    val size = fontSize
+    if (size != null) input.setTextSize(TypedValue.COMPLEX_UNIT_SP, size)
+    else if (systemTextSize != null) input.setTextSize(TypedValue.COMPLEX_UNIT_PX, systemTextSize)
   }
 
   /** Puts JavaScript's text in the field, unless it answers a keystroke older than the last one. */

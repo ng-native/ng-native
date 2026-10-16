@@ -41,3 +41,19 @@ export class SearchFieldForm {
     disabled(path.text, () => this.locked());
   });
 }
+
+/** A search field on a page whose type is the app's own face. */
+@Component({
+  selector: 'x-search-field-in-brand',
+  imports: [SearchField],
+  styles: '.page { font-family: Brand; font-weight: 700; font-size: 20px; }',
+  template: `
+    <view class="page"><search-field nativeID="field" /></view>
+    <search-field nativeID="inline" [style]="inline" />
+    <search-field nativeID="system" [style]="system" />
+  `,
+})
+export class SearchFieldInBrand {
+  readonly inline = { fontFamily: 'Brand', fontWeight: '700' };
+  readonly system = { fontFamily: 'Georgia' };
+}

@@ -4,8 +4,19 @@
  */
 import assert from 'node:assert/strict';
 import { afterEach, before, describe, it } from 'node:test';
-import type { Type, WritableSignal } from '@angular/core';
-import { registerPlatformComponents } from '@ng-native/fabric';
+import {
+  inject,
+  provideEnvironmentInitializer,
+  type Type,
+  type WritableSignal,
+} from '@angular/core';
+import {
+  Engine,
+  fontsLoading,
+  fontsSettled,
+  registerPlatformComponents,
+  type StyleSheet,
+} from '@ng-native/fabric';
 import { cleanup, fireEvent, render, screen, settle } from '@ng-native/testing';
 import { compileFixture } from './compile.ts';
 
@@ -171,5 +182,66 @@ describe('a search field in a Signal Forms form', () => {
     host.locked.set(false);
     await idle();
     assert.equal(field().props['enabled'], true);
+  });
+});
+
+/** The faces a stylesheet declared for Brand, each with the PostScript name its file says. */
+const BRAND: StyleSheet = {
+  rules: [],
+  fonts: [
+    { family: 'Brand', source: 1, postScriptName: 'Brand-Regular' },
+    { family: 'Brand', source: 2, weight: 700, postScriptName: 'Brand-Bold' },
+  ],
+};
+
+describe("a search field's type", () => {
+  /** The field on a page set in Brand, beside the app's sheet that declares its faces. */
+  async function inBrand(platform: 'ios' | 'android') {
+    registerPlatformComponents(platform);
+    const Field = mod['SearchField'] as { SOURCE: unknown };
+    await render(mod['SearchFieldInBrand'] as Type<unknown>, {
+      providers: [
+        { provide: Field.SOURCE, useValue: {} },
+        provideEnvironmentInitializer(() => inject(Engine).addGlobalSheet(BRAND)),
+      ],
+    });
+    await idle();
+    return (id = 'field') => screen.getByTestId(id).props;
+  }
+
+  it("is the page's face on iOS, by the PostScript name UIKit finds it by", async () => {
+    const props = await inBrand('ios');
+    assert.equal(props()['fontFamily'], 'Brand-Bold');
+    assert.equal(props()['fontSize'], 20);
+  });
+
+  it("is the page's face on Android, by the name expo-font registers it under", async () => {
+    const props = await inBrand('android');
+    assert.equal(props()['fontFamily'], 'Brand-700');
+    assert.equal(props()['fontSize'], 20);
+  });
+
+  it('is a face set on the field itself, by the same name', async () => {
+    assert.equal((await inBrand('ios'))('inline')['fontFamily'], 'Brand-Bold');
+  });
+
+  it('is held back while its face loads, and named once it has', async () => {
+    // The family a load asks for is the face matched, and native finds no face before it registers.
+    fontsLoading(['Brand-700']);
+    let settled = false;
+    try {
+      const props = await inBrand('ios');
+      assert.equal(props()['fontFamily'], undefined, 'the system font while loading');
+      fontsSettled(['Brand-700']);
+      settled = true;
+      await idle();
+      assert.equal(props()['fontFamily'], 'Brand-Bold');
+    } finally {
+      if (!settled) fontsSettled(['Brand-700']);
+    }
+  });
+
+  it('leaves a family no @font-face declares as written, for the system to find', async () => {
+    assert.equal((await inBrand('ios'))('system')['fontFamily'], 'Georgia');
   });
 });

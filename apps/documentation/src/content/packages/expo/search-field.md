@@ -67,6 +67,11 @@ and the value. Reach them with `viewChild(SearchField)`.
 The element is 56 points tall by default, the height of the system's own field. A height in a style
 or a class replaces it.
 
+The field's text and placeholder take the `font-family` and `font-size` its CSS resolves to, from a
+class on the field, its own style, or what it inherits, as a `<text>` beside it does. A face the
+app's `@font-face` declares is matched by `font-weight` and `font-style`. The size scales with the
+system text size setting. With neither set, the field keeps the system font at its own size.
+
 ## In a form
 
 `value` is a `model()`, so `[formField]` binds a search field into a Signal Forms form with no

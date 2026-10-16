@@ -45,6 +45,13 @@ public final class SearchFieldModule: Module {
       Prop("tintColor") { (view: SearchFieldView, color: UIColor?) in
         view.searchBar.tintColor = color
       }
+      // The face and size the field's CSS resolves to, as a text's: the face by its PostScript name.
+      Prop("fontFamily") { (view: SearchFieldView, family: String?) in
+        view.fontFamily = family
+      }
+      Prop("fontSize") { (view: SearchFieldView, size: Double?) in
+        view.fontSize = size.map { CGFloat($0) }
+      }
 
       AsyncFunction("focus") { (view: SearchFieldView) in
         view.searchBar.becomeFirstResponder()
@@ -72,6 +79,14 @@ final class SearchFieldView: ExpoView, UISearchBarDelegate {
   var text = "" {
     didSet { applyText() }
   }
+  /// The field's own font, put back when the CSS names none.
+  private lazy var systemFont = searchBar.searchTextField.font ?? .preferredFont(forTextStyle: .body)
+  var fontFamily: String? {
+    didSet { applyFont() }
+  }
+  var fontSize: CGFloat? {
+    didSet { applyFont() }
+  }
   /// Nil shows the Cancel button while the field has the keyboard.
   var showsCancelButton: Bool? {
     didSet { searchBar.setShowsCancelButton(showsCancelButton ?? searchBar.isFirstResponder, animated: false) }
@@ -87,6 +102,29 @@ final class SearchFieldView: ExpoView, UISearchBarDelegate {
   override func layoutSubviews() {
     super.layoutSubviews()
     searchBar.frame = bounds
+  }
+
+  /// The CSS's face at its size, scaled with the text size setting as a text's is, or the field's
+  /// own font when the CSS names neither. A name no face is registered under is looked up as a
+  /// family; one the system does not have either keeps the field's own face.
+  private func applyFont() {
+    let field = searchBar.searchTextField
+    guard fontFamily != nil || fontSize != nil else {
+      field.adjustsFontForContentSizeCategory = false
+      field.font = systemFont
+      return
+    }
+    let size = fontSize ?? systemFont.pointSize
+    var font = systemFont.withSize(size)
+    if let family = fontFamily {
+      if let named = UIFont(name: family, size: size) {
+        font = named
+      } else if !UIFont.fontNames(forFamilyName: family).isEmpty {
+        font = UIFont(descriptor: UIFontDescriptor(fontAttributes: [.family: family]), size: size)
+      }
+    }
+    field.font = UIFontMetrics.default.scaledFont(for: font)
+    field.adjustsFontForContentSizeCategory = true
   }
 
   /// Puts JavaScript's text in the field, unless it answers a keystroke older than the last one.

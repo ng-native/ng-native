@@ -16,6 +16,7 @@
  * `(cancel)`, `(searchFocus)` and `(searchBlur)`, and `focus()`, `blur()` and `clear()` from code.
  * The text is a two-way `value` rather than the bar's `query`, because it is a Signal Forms control
  * as `<text-input>` is: `[formField]` binds `value`, `disabled`, and `touch` on blur.
+ * Its type is the `font-family` and `font-size` its CSS resolves to, as a `<text>`'s is.
  *
  * Expo Go cannot load native code of its own, so there the element draws nothing, and in
  * development it says so once.
@@ -37,6 +38,8 @@ import {
   type EngineNode,
   HostEngine,
   type NativeSyntheticEvent,
+  nativePlatform,
+  type PostScriptNames,
   registerViewName,
 } from '@ng-native/fabric';
 import { optional } from './native.ts';
@@ -63,6 +66,15 @@ function warnMissing(): void {
     '[angular-native] <search-field> is native code of @ng-native/expo, which this build does not ' +
       'have, so it draws nothing. Expo Go cannot load it: run a development build.',
   );
+}
+
+/**
+ * The field's face by the PostScript name UIKit finds it by: expo-font registers it under the name
+ * the app gives it, which `UIFont(name:)` does not know. Android's font manager finds that name.
+ */
+function fieldFontName(props: Record<string, unknown>, postScriptName: PostScriptNames): void {
+  const family = props['fontFamily'];
+  if (typeof family === 'string') props['fontFamily'] = postScriptName(family) ?? family;
 }
 
 @Component({
@@ -138,7 +150,9 @@ export class SearchField {
   private readonly engine = inject(Engine, { optional: true });
 
   constructor() {
-    registerViewName('search-field', expoViewName(MODULE));
+    registerViewName('search-field', expoViewName(MODULE), undefined, {
+      fontNames: nativePlatform() === 'ios' ? fieldFontName : undefined,
+    });
     if (this.missing) warnMissing();
     const host =
       (this.node as { host?: Pick<Engine, 'setEventListener'> }).host ?? inject(HostEngine);
