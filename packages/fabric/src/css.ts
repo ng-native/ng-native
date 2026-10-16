@@ -1365,6 +1365,36 @@ export function placeReadElsewhere(sheet: StyleSheet): readonly PlaceReader[] {
   return known;
 }
 
+const NAMED_BESIDE = new WeakMap<StyleSheet, ReadonlySet<string>>();
+
+/**
+ * The props a sheet's rules ask of an element before another in a child list, `[data-on] ~ .x`:
+ * those whose change can restyle the elements after it. An id is asked as `nativeID`.
+ */
+export function namedBeside(sheet: StyleSheet): ReadonlySet<string> {
+  let named = NAMED_BESIDE.get(sheet);
+  if (named === undefined) {
+    named = new Set();
+    for (const rule of sheet.rules) {
+      rule.combinators.forEach((joined, at) => {
+        if (joined === 'next-sibling' || joined === 'later-sibling') {
+          propsNamed(rule.compounds[at]!, named as Set<string>);
+        }
+      });
+    }
+    NAMED_BESIDE.set(sheet, named);
+  }
+  return named;
+}
+
+/** Add each prop a compound, or one nested in it at any depth, asks about: an attribute or an id. */
+function propsNamed(compound: Compound, into: Set<string>): void {
+  if (compound.id !== undefined) into.add('nativeID');
+  for (const test of compound.attributes ?? []) into.add(test.name);
+  const within = (compound.has ?? []).flatMap((test) => test.any);
+  for (const inner of [...nestedCompounds(compound), ...within]) propsNamed(inner, into);
+}
+
 /** Whether a compound, or one nested in it at any depth, asks about a place in a child list. */
 function readsPlace(compound: Compound): boolean {
   if (compound.nth?.length) return true;
@@ -2726,7 +2756,11 @@ export class StyleResolver {
     if (sheet === this.globalSheet || this.addedSheets.includes(sheet)) return false;
     const at = replacing ? this.addedSheets.indexOf(replacing) : -1;
     if (at === -1) this.addedSheets.push(sheet);
-    else this.addedSheets[at] = sheet;
+    else {
+      this.addedSheets[at] = sheet;
+      this.forgetBeside(replacing!);
+    }
+    this.noteBeside(sheet);
     // One added at the end is filed after what is there. One in another's place files them all again.
     if (at !== -1) this.filed = null;
     const before = this.generation;
@@ -2764,7 +2798,9 @@ export class StyleResolver {
 
   /** Read the classes a sheet names, once, as soon as any node is given it. */
   noteSheet(sheet: StyleSheet | null | undefined): void {
-    if (!sheet || this.noted.has(sheet)) return;
+    if (!sheet) return;
+    this.noteBeside(sheet);
+    if (this.noted.has(sheet)) return;
     this.noted.add(sheet);
     if (sheet.rules.some((rule) => rule.deep)) this.deepSheets.add(sheet);
     const { classes, reads, named } = classReach(sheet);
@@ -2782,6 +2818,35 @@ export class StyleResolver {
    */
   reads(prop: string): boolean {
     return this.named.has(prop);
+  }
+
+  /**
+   * By prop, how many sheets in play ask it of an element before another: see `namedBeside`. A
+   * global sheet taken away, or replaced, asks no more.
+   */
+  private readonly besideNamed = new Map<string, number>();
+  private readonly besideNoted = new WeakSet<StyleSheet>();
+
+  private noteBeside(sheet: StyleSheet): void {
+    if (this.besideNoted.has(sheet)) return;
+    this.besideNoted.add(sheet);
+    for (const name of namedBeside(sheet)) {
+      this.besideNamed.set(name, (this.besideNamed.get(name) ?? 0) + 1);
+    }
+  }
+
+  private forgetBeside(sheet: StyleSheet): void {
+    if (!this.besideNoted.delete(sheet)) return;
+    for (const name of namedBeside(sheet)) {
+      const left = this.besideNamed.get(name)! - 1;
+      if (left) this.besideNamed.set(name, left);
+      else this.besideNamed.delete(name);
+    }
+  }
+
+  /** Whether a prop changing can change what the elements after its element match. */
+  readsBeside(prop: string): boolean {
+    return this.besideNamed.has(prop);
   }
 
   private noteReach(name: string, how: true | Subjects): void {
@@ -2857,6 +2922,7 @@ export class StyleResolver {
     const at = this.addedSheets.indexOf(sheet);
     if (at === -1) return false;
     this.addedSheets.splice(at, 1);
+    this.forgetBeside(sheet);
     this.filed = null;
     this.additions.length = 0;
     this.generation = ++generations;

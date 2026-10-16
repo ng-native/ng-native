@@ -403,7 +403,7 @@ describe('what a child list changing has styled again', () => {
       engine.commit();
       return fabric.committed[0]!.children.map((view) => view.props['borderTopWidth'] ?? 0);
     };
-    return { engine, parent, rows, row, marked, widths };
+    return { engine, fabric, parent, rows, row, marked, widths };
   }
 
   const ENDS =
@@ -539,6 +539,85 @@ describe('what a child list changing has styled again', () => {
       assert.equal(s.marked(), 'xxxxxxxxx', `${css}: one at the end moves them all`);
       assert.deepEqual(s.widths(), [3, 0, 3, 0, 3, 0, 3, 0, 3]);
     }
+  });
+
+  it('is none of the rows after a prop changes that no rule asks of a row before another', () => {
+    // A chart sets a prop on one of its thousands of points as a finger moves: what comes after
+    // the point hangs on it only where a rule asks about it from before them.
+    const css =
+      '.row ~ .row { border-top-width: 3px } [data-lead] ~ .row { border-top-width: 5px } ' +
+      '.row[data-own] { opacity: 0.5 } #lead + .row { border-top-width: 7px }';
+    const s = list(css, 6);
+    const row = s.parent.children[1]!;
+    s.engine.setProp(row, 'data-own', 'yes');
+    assert.equal(s.marked(), '.x....', 'a prop only the row itself is styled by');
+    assert.deepEqual(s.widths(), [0, 3, 3, 3, 3, 3]);
+    s.engine.setProp(row, 'data-lead', 'yes');
+    assert.equal(s.marked(), '.xxxxx', 'one a rule asks of a row before others');
+    assert.deepEqual(s.widths(), [0, 3, 5, 5, 5, 5]);
+    s.engine.setProp(row, 'data-lead', null);
+    assert.equal(s.marked(), '.xxxxx', 'and as it goes');
+    assert.deepEqual(s.widths(), [0, 3, 3, 3, 3, 3]);
+    s.engine.setProp(row, 'nativeID', 'lead');
+    assert.equal(s.marked(), '.xxxxx', 'an id a rule asks of a row before another');
+    assert.deepEqual(s.widths(), [0, 3, 7, 3, 3, 3]);
+  });
+
+  it('is the rows after a prop changes once a sheet asking it of a row before comes, and none once it goes', () => {
+    const s = list('.row ~ .row { border-top-width: 3px } .row[data-lead] { opacity: 0.5 }', 6);
+    const row = s.parent.children[1]!;
+    s.engine.setProp(row, 'data-lead', 'yes');
+    assert.equal(s.marked(), '.x....', 'no sheet asks it of a row before another yet');
+    assert.deepEqual(s.widths(), [0, 3, 3, 3, 3, 3]);
+    const lead = compileCss('[data-lead] ~ .row { border-top-width: 5px }', 'lead.css') as never;
+    assert.ok(s.engine.addGlobalSheet(lead));
+    assert.deepEqual(s.widths(), [0, 3, 5, 5, 5, 5]);
+    s.engine.setProp(row, 'data-lead', null);
+    assert.equal(s.marked(), '.xxxxx', 'a sheet that came asks it');
+    assert.deepEqual(s.widths(), [0, 3, 3, 3, 3, 3]);
+    s.engine.setProp(row, 'data-lead', 'yes');
+    assert.deepEqual(s.widths(), [0, 3, 5, 5, 5, 5]);
+    // One sheet put in another's place, as a hot swap does: the one it replaced asks no more.
+    const edited = compileCss('[data-lead] + .row { border-top-width: 6px }', 'lead.css') as never;
+    assert.ok(s.engine.addGlobalSheet(edited, lead));
+    assert.deepEqual(s.widths(), [0, 3, 6, 3, 3, 3]);
+    s.engine.setProp(row, 'data-lead', null);
+    assert.equal(s.marked(), '.xxxxx', 'the edited sheet asks it of a row before another');
+    assert.deepEqual(s.widths(), [0, 3, 3, 3, 3, 3]);
+    s.engine.setProp(row, 'data-lead', 'yes');
+    assert.deepEqual(s.widths(), [0, 3, 6, 3, 3, 3]);
+    assert.ok(s.engine.removeGlobalSheet(edited));
+    assert.deepEqual(s.widths(), [0, 3, 3, 3, 3, 3]);
+    s.engine.setProp(row, 'data-lead', null);
+    assert.equal(s.marked(), '.x....', 'the sheet that asked it is gone');
+    assert.deepEqual(s.widths(), [0, 3, 3, 3, 3, 3]);
+    // And comes back.
+    assert.ok(s.engine.addGlobalSheet(lead));
+    assert.deepEqual(s.widths(), [0, 3, 3, 3, 3, 3]);
+    s.engine.setProp(row, 'data-lead', 'yes');
+    assert.equal(s.marked(), '.xxxxx', 'the sheet that asks it came back');
+    assert.deepEqual(s.widths(), [0, 3, 5, 5, 5, 5]);
+    // Two sheets ask it: one going leaves the other asking.
+    assert.ok(s.engine.addGlobalSheet(edited));
+    assert.ok(s.engine.removeGlobalSheet(lead));
+    assert.deepEqual(s.widths(), [0, 3, 6, 3, 3, 3]);
+    s.engine.setProp(row, 'data-lead', null);
+    assert.equal(s.marked(), '.xxxxx', 'the sheet left asks it');
+    assert.deepEqual(s.widths(), [0, 3, 3, 3, 3, 3]);
+  });
+
+  it('is none of the rows after a style bound to a token', () => {
+    // A chart binds `fill="var(--ink)"` on each of its points: no rule asks about a bound style.
+    const s = list('.row ~ .row { border-top-width: 3px } .row { --ink: 4px }', 6);
+    const row = s.parent.children[1]!;
+    s.engine.setBoundStyle(row, 'borderBottomWidth', 'var(--ink)');
+    assert.equal(s.marked(), '.x....', 'the row it is bound on');
+    s.engine.commit();
+    assert.equal(s.fabric.committed[0]!.children[1]!.props['borderBottomWidth'], 4);
+    s.engine.setBoundStyle(row, 'borderBottomWidth', null);
+    assert.equal(s.marked(), '.x....', 'and as it goes');
+    assert.deepEqual(s.widths(), [0, 3, 3, 3, 3, 3]);
+    assert.equal(s.fabric.committed[0]!.children[1]!.props['borderBottomWidth'] ?? null, null);
   });
 
   it('is the rows after the change where a sheet asks about any row before', () => {
