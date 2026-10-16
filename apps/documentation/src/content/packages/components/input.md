@@ -102,8 +102,9 @@ device and in a browser alike. iOS reports no `Enter` from a single-line field, 
 `$event.nativeEvent.selection`, a `{ start, end }` that changes as the caret moves or a range is
 selected.
 
-`(contentSizeChange)` carries `$event.nativeEvent.contentSize`, the `{ width, height }` of the text.
-Android reports it as the text changes. iOS reports it when the field itself changes size, as React
+`(contentSizeChange)` fires for a multiline field only, as React Native's does, and carries
+`$event.nativeEvent.contentSize`, the `{ width, height }` of the text. Android reports it as the
+text changes. iOS reports it when the field itself changes size, as React
 Native's field does there: on the first layout, and as a field with no height of its own grows or
 shrinks with its text. A field held at a fixed height on iOS reports nothing while its text scrolls
 inside it, so a field that should grow with its text there leaves its height unset rather than
