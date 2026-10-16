@@ -3564,7 +3564,7 @@ function arithmetic(text) {
 
 function flatten(source, context, recover) {
   const unchanged = { code: source, lineOf: (line) => line, warnings: [] };
-  if (!source.includes('&') && !NESTED_BLOCK.test(source)) return unchanged;
+  if (!nests(source)) return unchanged;
   try {
     // Nesting is the only feature asked to be lowered. A browser target lowered everything that
     // browser lacked as well: the media range syntax became 'not' queries, which are refused, and
@@ -3646,12 +3646,48 @@ function vlq(segment) {
 }
 
 /**
- * A block opening inside a block: the implicit nesting that needs no `&`.
+ * Whether a sheet nests a rule in a rule, which `flatten` lowers: an `&`, a block opening inside
+ * a style rule's block, or any block inside one inside an at-rule's. A style rule inside a
+ * top-level at-rule, `@media (width > 1px) { .a { ... } }` or a `@keyframes` step, is not nesting.
  *
- * Deliberately loose. A false positive costs one extra parse of a sheet that did not need it; a
- * false negative is a rule that silently never matches.
+ * A sheet sent to `flatten` that did not need it is not only parsed once more: lightningcss's
+ * printer folds an equal `padding-inline-start` and `padding-inline-end` into `padding-inline`,
+ * which is left and right, so a pair written logical came out physical for the sheet having a
+ * `@media` rule in it. A nested sheet kept from it is a rule that silently never matches, so this
+ * still errs towards yes: a comment, a string and an escaped character are stepped over, a `}`
+ * with nothing open is yes, and a block left open is yes.
  */
-const NESTED_BLOCK = /\{[^{}]*\{/;
+function nests(source) {
+  if (source.includes('&')) return true;
+  // For each open block, whether it is an at-rule's.
+  const open = [];
+  let prelude = 0;
+  for (let i = 0; i < source.length; i = skipOver(source, i) + 1) {
+    const character = source[i];
+    if (character === ';' || character === '}') prelude = i + 1;
+    if (character === '}' && open.pop() === undefined) return true;
+    if (character !== '{') continue;
+    const atRule = source.slice(prelude, i).trimStart().startsWith('@');
+    if (open.length > 0 && (open.length > 1 || !open[0] || atRule)) return true;
+    open.push(atRule);
+    prelude = i + 1;
+  }
+  return open.length > 0;
+}
+
+/** The last index of the comment, string or escaped character that starts at `i`, or `i`. */
+function skipOver(source, i) {
+  const character = source[i];
+  if (character === '\\') return i + 1;
+  if (character === '/' && source[i + 1] === '*') {
+    const end = source.indexOf('*/', i + 2);
+    return end === -1 ? source.length : end + 1;
+  }
+  if (character !== '"' && character !== "'") return i;
+  let at = i + 1;
+  while (at < source.length && source[at] !== character) at += source[at] === '\\' ? 2 : 1;
+  return at;
+}
 
 /** A `translate`, `rotate` or `scale` declaration's name, and what comes before and after it. */
 const INDIVIDUAL_TRANSFORM = /([{;\s])(translate|rotate|scale)(\s*:)/g;

@@ -107,10 +107,10 @@ describe('the individual transform properties', () => {
 
   it('survives a sheet with nesting in it, which is printed again before compiling', () => {
     // lightningcss's printer folds these into `transform`, and drops them when `transform` comes
-    // second in the block. A `@media` anywhere in the sheet is enough to send it through there.
+    // second in the block. A rule nested anywhere in the sheet is enough to send it through there.
     const s = scene(`
       view { rotate: 45deg; transform: translateY(8px) }
-      @media (width > 1px) { view.wide { scale: 2 } }
+      view { .wide { scale: 2 } }
     `);
     assert.deepEqual(s.transform(), [...TURN, { translateY: 8 }]);
   });
