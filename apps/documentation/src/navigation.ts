@@ -353,7 +353,7 @@ export function breadcrumbsFor(path: string): Breadcrumb[] {
           return [
             { title: 'Home', path: '/' },
             { title: section.title },
-            { title: item.title, path: `/${item.path}` },
+            { title: item.title, ...(item.path === child.path ? {} : { path: `/${item.path}` }) },
             { title: child.title, path: `/${child.path}` },
           ];
         }

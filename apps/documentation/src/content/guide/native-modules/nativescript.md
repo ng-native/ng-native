@@ -158,9 +158,9 @@ synchronously on `dispatch_get_main_queue()`.
 
 > **Keep worklets on an object constant.** `@ng-native/metro` wraps top-level function declarations
 > in `.ts` files with an HMR proxy (`cell.stays`), which hides the `__workletHash` property attached
-> by `react-native-worklets/plugin`. Exporting worklets as methods on an object (`export const
-SceneWorklets = { ... }`) preserves `__workletHash` untouched while keeping full TypeScript type
-> checking.
+> by `react-native-worklets/plugin`. Exporting worklets as methods on an object
+> (`export const SceneWorklets = { ... }`) preserves `__workletHash` untouched while keeping full
+> TypeScript type checking.
 
 Create `src/nativescript/scene-worklets.ts`:
 
@@ -196,8 +196,9 @@ export const SceneWorklets = {
     node.runAction(SCNAction.repeatActionForever(SCNAction.rotateByXDuration(0.8, 1.2, 0.4, 2.4)));
     scene.rootNode.addChildNode(node);
 
-    // Register the UIView* with Fabric and return its pointer handle ('0x...')
-    return { scnViewHandle: g.__ns_registerNativeView(scnView) };
+    // Retain the view on globalThis so ARC/GC keeps it alive, and return its pointer ('0x...')
+    g.__ngNativeSceneState = { scnView, scene, torus, material, node };
+    return { scnViewHandle: g.interop?.handleof?.(scnView)?.toHexString?.() ?? '' };
   },
 };
 ```
@@ -207,9 +208,10 @@ Objective-C `@selector` target-actions on controls such as `UISegmentedControl`.
 
 ## Call Android APIs via JSI/JNI
 
-On Android, calling `NativeScriptNativeApi.install('')` attaches `libnativescript_rn.so` to React
-Native's `jsi::Runtime *`, exposing `globalThis.android`, `globalThis.java`, `globalThis.androidx`
-and the app's own Java/Kotlin packages synchronously in TypeScript.
+On Android, calling `NativeScriptNativeApi.install('')` on the `NativeScriptNativeApi` TurboModule
+attaches `libnativescript_rn.so` to React Native's `jsi::Runtime *`, exposing `globalThis.android`,
+`globalThis.java`, `globalThis.androidx` and the app's own Java/Kotlin packages synchronously in
+TypeScript.
 
 > **Temporarily make `globalThis.expo` writable during `install('')`.** Expo defines
 > `globalThis.expo` with `{ writable: false, configurable: true }`. When NativeScript Android's
@@ -235,7 +237,9 @@ export function ensureAndroidNativeScriptInstalled(): boolean {
     const api =
       g.__turboModuleProxy?.('NativeScriptNativeApi') ??
       rn?.TurboModuleRegistry?.get?.('NativeScriptNativeApi');
-    api?.install?.('');
+    if (!api?.isInstalled?.()) {
+      api?.install?.('');
+    }
   } finally {
     if (desc) Object.defineProperty(g, 'expo', desc);
   }
@@ -252,16 +256,20 @@ const g = globalThis as Record<string, any>;
 const { Bitmap, Canvas, Paint } = g.android.graphics;
 const { BitmapDrawable } = g.android.graphics.drawable;
 
-const bitmap = Bitmap.createBitmap(680, 480, Bitmap.Config.ARGB_8888);
-const canvas = new Canvas(bitmap);
-const paint = new Paint(Paint.ANTI_ALIAS_FLAG);
+// Obtain the active Android Activity (e.g. via MainActivity or ActivityThread)
+const activity = g.org?.nativescript?.ngnativewithns?.MainActivity?.getCurrentInstance?.();
+if (activity) {
+  const bitmap = Bitmap.createBitmap(680, 480, Bitmap.Config.ARGB_8888);
+  const canvas = new Canvas(bitmap);
+  const paint = new Paint(Paint.ANTI_ALIAS_FLAG);
 
-// Look up the mounted ReactViewGroup by its nativeID ("scn-viewport")
-const view = g.com.facebook.react.uimanager.util.ReactFindViewUtil.findView(
-  activity.getWindow().getDecorView(),
-  'scn-viewport',
-);
-view?.setBackground(new BitmapDrawable(activity.getResources(), bitmap));
+  // Look up the mounted ReactViewGroup by its nativeID ("scn-viewport")
+  const view = g.com.facebook.react.uimanager.util.ReactFindViewUtil.findView(
+    activity.getWindow().getDecorView(),
+    'scn-viewport',
+  );
+  view?.setBackground(new BitmapDrawable(activity.getResources(), bitmap));
+}
 ```
 
 ## Wrap it in an Angular service
