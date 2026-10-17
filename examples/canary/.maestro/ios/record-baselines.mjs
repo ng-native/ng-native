@@ -3,10 +3,11 @@
 // original so its subflows resolve the same, with every `assertScreenshot` turned into a
 // `takeScreenshot` of the baseline it names. The copies are removed afterwards.
 //
-// The committed baselines are of an iPhone 17 Pro on iOS 27.0 at the default text size. Record
-// them again on the same: another runtime draws its system font and its bars differently, and a
-// fifth of each screenshot differs for that alone. To compare a change with main, record both
-// builds in one sitting with `compare-builds.mjs`, which needs no committed baseline at all.
+// The committed baselines are recorded on CI's simulator, the newest iPhone and iOS on its Mac, by
+// `/update-screenshots` on a pull request (see update-screenshots.yml). Record them locally on the
+// same: another runtime draws its system font and its bars differently, and a fifth of each
+// screenshot differs for that alone. To compare a change with main, record both builds in one
+// sitting with `compare-builds.mjs`, which needs no committed baseline at all.
 import { execFileSync } from 'node:child_process';
 import { mkdirSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { basename, dirname, join } from 'node:path';

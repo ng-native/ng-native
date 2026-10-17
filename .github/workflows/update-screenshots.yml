@@ -1,0 +1,114 @@
+name: Update screenshots
+
+# A maintainer comments `/update-screenshots` on a pull request whose screens changed as intended,
+# and this records the committed baselines of `examples/canary/.maestro/ios` from the pull
+# request's build and commits them to its branch.
+#
+# The baselines are what `pnpm e2e:ios` compares with; CI's comparison records main afresh and
+# needs none. A branch of this repository only: Actions cannot push to a fork's, so for one a
+# maintainer records them locally (`pnpm e2e:ios:record`).
+#
+# A push with Actions' own token starts no workflow, so this dispatches CI and Native builds for the
+# new commit itself. And it carries the `Screens` status of the commit before over to the new one:
+# a commit of baselines alone compares nothing new, and must not pass a difference nobody accepted.
+on:
+  issue_comment:
+    types: [created]
+
+permissions: {}
+
+jobs:
+  update:
+    if: >-
+      github.event.issue.pull_request &&
+      startsWith(github.event.comment.body, '/update-screenshots') &&
+      contains(fromJSON('["OWNER", "MEMBER", "COLLABORATOR"]'), github.event.comment.author_association)
+    runs-on: macos-latest
+    timeout-minutes: 30
+    permissions:
+      actions: write
+      contents: write
+      pull-requests: write
+      statuses: write
+    concurrency:
+      group: update-screenshots-${{ github.event.issue.number }}
+      cancel-in-progress: false
+    env:
+      GH_TOKEN: ${{ github.token }}
+      NUMBER: ${{ github.event.issue.number }}
+    steps:
+      - name: Find the pull request's branch
+        id: pr
+        run: |
+          set -euo pipefail
+          gh api "repos/$GITHUB_REPOSITORY/pulls/$NUMBER" > "$RUNNER_TEMP/pr.json"
+          repo=$(jq -r '.head.repo.full_name' "$RUNNER_TEMP/pr.json")
+          if [ "$repo" != "$GITHUB_REPOSITORY" ]; then
+            gh api "repos/$GITHUB_REPOSITORY/issues/$NUMBER/comments" -f body="The screenshots of a pull request from a fork are recorded locally: Actions cannot push to its branch. Run \`pnpm e2e:ios:record\` in \`examples/canary\` against a release build, as CONTRIBUTING.md says." > /dev/null
+            exit 1
+          fi
+          echo "branch=$(jq -r '.head.ref' "$RUNNER_TEMP/pr.json")" >> "$GITHUB_OUTPUT"
+          echo "head=$(jq -r '.head.sha' "$RUNNER_TEMP/pr.json")" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ steps.pr.outputs.branch }}
+      - uses: ./.github/actions/setup
+
+      # The app Native builds left for this commit's native half: only the bundle is built here.
+      - id: fingerprint
+        working-directory: examples/canary
+        run: echo "hash=$(node scripts/ios-app.mjs fingerprint)" >> "$GITHUB_OUTPUT"
+      - id: cached
+        uses: actions/cache/restore@v6
+        with:
+          path: ${{ runner.temp }}/app-cache
+          key: canary-app-${{ runner.os }}-${{ steps.fingerprint.outputs.hash }}
+      - name: Say there is no app to record from yet
+        if: steps.cached.outputs.cache-hit != 'true'
+        run: |
+          gh api "repos/$GITHUB_REPOSITORY/issues/$NUMBER/comments" -f body="No iOS build of this pull request's native half is cached yet. Wait for Native builds to finish, then comment \`/update-screenshots\` again." > /dev/null
+          exit 1
+      - working-directory: examples/canary
+        run: node scripts/ios-app.mjs rebundle "$RUNNER_TEMP/app-cache/canary.app" "$RUNNER_TEMP/canary.app"
+
+      - uses: actions/setup-java@v6
+        with:
+          distribution: zulu
+          java-version: 17
+      - name: Install Maestro
+        run: |
+          curl -fsSL https://get.maestro.mobile.dev | MAESTRO_VERSION=2.10.0 bash
+          echo "$HOME/.maestro/bin" >> "$GITHUB_PATH"
+
+      - name: Record the baselines
+        run: ./examples/canary/scripts/record-ios.sh "$RUNNER_TEMP/canary.app"
+
+      - name: Commit them, and run the checks for the commit
+        env:
+          BRANCH: ${{ steps.pr.outputs.branch }}
+          BEFORE: ${{ steps.pr.outputs.head }}
+        run: |
+          set -euo pipefail
+          baselines=examples/canary/.maestro/ios/baselines
+          git add "$baselines"
+          if git diff --cached --quiet; then
+            gh api "repos/$GITHUB_REPOSITORY/issues/$NUMBER/comments" -f body="The screenshot baselines already match this pull request's build: nothing to commit." > /dev/null
+            exit 0
+          fi
+          git -c user.name=github-actions -c user.email=github-actions@github.com \
+            commit --quiet -m "Record the screenshot baselines from this pull request's build"
+          git push --quiet origin "HEAD:$BRANCH"
+          after=$(git rev-parse HEAD)
+          # The Screens status of the commit before, as it was: see the top of this file.
+          screens=$(gh api "repos/$GITHUB_REPOSITORY/commits/$BEFORE/status" \
+            --jq '.statuses[] | select(.context == "Screens") | [.state, .description, .target_url] | @tsv' | head -1)
+          if [ -n "$screens" ]; then
+            IFS=$'\t' read -r state description link <<< "$screens"
+            gh api "repos/$GITHUB_REPOSITORY/statuses/$after" -f context=Screens -f state="$state" \
+              -f description="$description" -f target_url="$link" > /dev/null
+          fi
+          gh workflow run ci.yml --ref "$BRANCH"
+          gh workflow run native.yml --ref "$BRANCH"
+          count=$(git show --stat --format= HEAD -- "$baselines" | tail -1)
+          gh api "repos/$GITHUB_REPOSITORY/issues/$NUMBER/comments" -f body="Recorded the screenshot baselines from this pull request's build in $after: $count." > /dev/null
