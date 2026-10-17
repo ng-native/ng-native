@@ -76,6 +76,29 @@ describe('the nativescript generator', () => {
     );
   });
 
+  it('leaves a providers list outside mount alone', async () => {
+    const tree = await app();
+    const main = tree.read('apps/mobile/src/main.ts', 'utf-8')!;
+    tree.write('apps/mobile/src/main.ts', `const config = { providers: [] };\n${main}`);
+    await run(tree);
+    const updated = tree.read('apps/mobile/src/main.ts', 'utf-8')!;
+    assert.match(updated, /^const config = \{ providers: \[\] \};$/m);
+    assert.match(updated, /mount\([^\n]*\{\n\s*providers: \[provideNativeScript\(\)\],/);
+  });
+
+  it('imports provideNativeScript only once', async () => {
+    const tree = await app();
+    const main = tree.read('apps/mobile/src/main.ts', 'utf-8')!;
+    tree.write(
+      'apps/mobile/src/main.ts',
+      `import { provideNativeScript } from '@ng-native/nativescript';\n${main}`,
+    );
+    await run(tree);
+    const updated = tree.read('apps/mobile/src/main.ts', 'utf-8')!;
+    assert.equal(updated.match(/import \{ provideNativeScript \}/g)!.length, 1);
+    assert.match(updated, /providers: \[provideNativeScript\(\)\]/);
+  });
+
   it('changes nothing run again', async () => {
     const tree = await app();
     await run(tree);

@@ -42,7 +42,8 @@ With `provideNativeScript()` among the providers `mount` is given.
 ## What's in the package
 
 - `provideNativeScript()`: installs the runtime, at bootstrap or as a route is entered.
-- `NativeScript`: `call()` on the JavaScript thread, and `runOnUI()` on the UI thread.
+- `NativeScript`: `call()` on the JavaScript thread, and `runOnUI()` on the main thread on iOS
+  (on the JavaScript thread on Android, which has no worklet runtime yet).
 - `<ns-view>` and `nsView()`: a UIView built in a worklet, sized by the template. iOS only.
 
 The documentation is at

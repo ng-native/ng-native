@@ -44,27 +44,46 @@ function addPlugin(tree, root) {
   tree.write(file, `${JSON.stringify(config, null, 2)}\n`);
 }
 
+/** Where the `mount(...)` call's parentheses close, counting brackets; -1 if they never do. */
+function callEnd(source, open) {
+  let depth = 0;
+  for (let at = open; at < source.length; at++) {
+    if ('([{'.includes(source[at])) depth++;
+    else if (')]}'.includes(source[at]) && --depth === 0) return at;
+  }
+  return -1;
+}
+
+const IMPORTED =
+  /\bimport\s*\{[^}]*\bprovideNativeScript\b[^}]*\}\s*from\s*['"]@ng-native\/nativescript['"]/;
+
 function addProvider(tree, root) {
   const file = joinPathFragments(root, 'src/main.ts');
   const main = tree.read(file, 'utf-8');
   if (main === null) return byHand(file, 'it does not exist.');
   if (main.includes(PROVIDER)) return;
   const imports = [...main.matchAll(/^import .+;$/gm)];
-  const listed = /(\bproviders:\s*\[)/.exec(main);
   const options = /(\bmount\([^\n]*\{\n)([ \t]*)/.exec(main);
-  if (!imports.length || (!listed && !options)) {
+  const open = options ? options.index + options[0].indexOf('(') : -1;
+  const end = options ? callEnd(main, open) : -1;
+  if (!imports.length || end < 0) {
     return byHand(
       file,
       `import { provideNativeScript } from '@ng-native/nativescript' and add ${PROVIDER} to the ` +
         'providers mount is given.',
     );
   }
-  const updated = listed
-    ? main.replace(listed[0], `${listed[1]}${PROVIDER}, `)
-    : main.replace(
-        options[0],
-        `${options[1]}${options[2]}providers: [${PROVIDER}],\n${options[2]}`,
+  // Only a providers list inside the call: one elsewhere in the file is not the app's.
+  const call = main.slice(open, end);
+  const listed = /(\bproviders:\s*\[)/.exec(call);
+  const edited = listed
+    ? call.replace(listed[0], `${listed[1]}${PROVIDER}, `)
+    : call.replace(
+        options[0].slice(options[0].indexOf('(')),
+        (found) => `${found}${options[2]}providers: [${PROVIDER}],\n${options[2]}`,
       );
+  const updated = main.slice(0, open) + edited + main.slice(end);
+  if (IMPORTED.test(updated)) return tree.write(file, updated);
   const last = imports.at(-1);
   const at = updated.indexOf(last[0]) + last[0].length;
   const imported = "\nimport { provideNativeScript } from '@ng-native/nativescript';";

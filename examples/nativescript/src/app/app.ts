@@ -172,29 +172,32 @@ export class App {
 
   /** Asks with UIKit's own alert, on the main thread, and shows which button was tapped. */
   protected async confirm(): Promise<void> {
-    const choice = await new Promise<string>((answer) =>
-      this.native.runOnUI(
-        (title: string, reply: (choice: string) => void) => {
-          'worklet';
-          const alert = UIAlertController.alertControllerWithTitleMessagePreferredStyle(
-            title,
-            'Presented by a worklet on the main thread.',
-            UIAlertControllerStyle.Alert,
-          );
-          for (const choice of ['Not now', 'Sounds good']) {
-            alert.addAction(
-              UIAlertAction.actionWithTitleStyleHandler(choice, UIAlertActionStyle.Default, () =>
-                scheduleOnRN(reply, choice),
-              ),
+    if (!this.ios) return;
+    const choice = await new Promise<string>((answer, fail) =>
+      this.native
+        .runOnUI(
+          (title: string, reply: (choice: string) => void) => {
+            'worklet';
+            const alert = UIAlertController.alertControllerWithTitleMessagePreferredStyle(
+              title,
+              'Presented by a worklet on the main thread.',
+              UIAlertControllerStyle.Alert,
             );
-          }
-          let top = UIApplication.sharedApplication.keyWindow!.rootViewController!;
-          while (top.presentedViewController) top = top.presentedViewController;
-          top.presentViewControllerAnimatedCompletion(alert, true, () => {});
-        },
-        'Try NativeScript?',
-        answer,
-      ),
+            for (const choice of ['Not now', 'Sounds good']) {
+              alert.addAction(
+                UIAlertAction.actionWithTitleStyleHandler(choice, UIAlertActionStyle.Default, () =>
+                  scheduleOnRN(reply, choice),
+                ),
+              );
+            }
+            let top = UIApplication.sharedApplication.keyWindow!.rootViewController!;
+            while (top.presentedViewController) top = top.presentedViewController;
+            top.presentViewControllerAnimatedCompletion(alert, true, () => {});
+          },
+          'Try NativeScript?',
+          answer,
+        )
+        .catch(fail),
     );
     this.answer.set(`You chose "${choice}".`);
   }

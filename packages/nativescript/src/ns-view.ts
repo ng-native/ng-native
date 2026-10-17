@@ -95,7 +95,7 @@ export class NsView<P = unknown> {
   /** What to build. A different spec builds a new view in place of the old one. */
   readonly view = input.required<NsViewSpec<P, any>>();
   /** Passed to `create`, then to `update` each time it changes. Copied to the UI runtime. */
-  readonly props = input<P>();
+  readonly props = input.required<P>();
 
   protected readonly handle = signal<string | undefined>(undefined);
 
@@ -106,7 +106,7 @@ export class NsView<P = unknown> {
 
     effect(() => {
       const spec = this.view();
-      const props = this.props() as P;
+      const props = this.props();
       if (this.native.platform !== 'ios') return;
       if (spec !== built) {
         built = spec;

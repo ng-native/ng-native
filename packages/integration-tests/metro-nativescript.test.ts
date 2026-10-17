@@ -58,12 +58,12 @@ describe('NativeScript in the Babel config', () => {
     assert.doesNotMatch(code, /UILabel\s*[,}=:]/, 'UILabel is not captured into the closure');
   });
 
-  it("warns once about an app's own config without strictGlobal", () => {
-    const root = project('own-config');
-    writeFileSync(path.join(root, 'babel.config.js'), 'module.exports = {};\n');
-    const warnings: string[] = [];
+  /** What transforming twice in `root` warns, the app's own config being `name` holding `config`. */
+  const warnings = (root: string, name: string, config: string) => {
+    writeFileSync(path.join(root, name), config);
+    const warned: string[] = [];
     const original = console.warn;
-    console.warn = (message: string) => void warnings.push(String(message));
+    console.warn = (message: string) => void warned.push(String(message));
     try {
       for (let i = 0; i < 2; i++) {
         try {
@@ -75,7 +75,26 @@ describe('NativeScript in the Babel config', () => {
     } finally {
       console.warn = original;
     }
-    assert.equal(warnings.length, 1);
-    assert.match(warnings[0]!, /strictGlobal/);
+    return warned;
+  };
+
+  it("warns once about an app's own config without strictGlobal", () => {
+    const warned = warnings(project('own-config'), 'babel.config.js', 'module.exports = {};\n');
+    assert.equal(warned.length, 1);
+    assert.match(warned[0]!, /babel\.config\.js.*strictGlobal/);
+  });
+
+  it('knows each config file Expo loads, babel.config.json among them', () => {
+    const warned = warnings(project('json-config'), 'babel.config.json', '{}\n');
+    assert.equal(warned.length, 1);
+    assert.match(warned[0]!, /babel\.config\.json/);
+  });
+
+  it('warns about strictGlobal set to false, and not about it set to true', () => {
+    const off =
+      "module.exports = { plugins: [['react-native-worklets/plugin', { strictGlobal: false }]] };\n";
+    assert.equal(warnings(project('strict-off'), 'babel.config.js', off).length, 1);
+    const on = off.replace('false', 'true');
+    assert.equal(warnings(project('strict-on'), 'babel.config.js', on).length, 0);
   });
 });

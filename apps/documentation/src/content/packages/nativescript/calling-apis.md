@@ -86,7 +86,9 @@ A worklet cannot wait for the user, but it can call back when they answer. `sche
 import { scheduleOnRN } from 'react-native-worklets';
 
 protected async remove(): Promise<void> {
-  const choice = await new Promise<string>((answer) =>
+  // UIKit's alert, so iOS only; in Node there is no worklet to reply.
+  if (this.native.platform !== 'ios') return;
+  const choice = await new Promise<string>((answer, fail) =>
     this.native.runOnUI(
       (title: string, reply: (choice: string) => void) => {
         'worklet';
@@ -108,10 +110,14 @@ protected async remove(): Promise<void> {
       },
       'Delete this note?',
       answer,
-    ),
+    ).catch(fail),
   );
 }
 ```
+
+The promise waits for `reply`, so it is settled the other ways too: `fail` rejects it when
+`runOnUI()` does, and the method returns before waiting where there is no iOS runtime to run the
+worklet.
 
 A plain confirmation is [`Dialogs`](/packages/device/dialogs) already, on both platforms, with no
 worklet. This is the shape for what nothing wraps: a delegate, a completion handler, a picker.

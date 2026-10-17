@@ -19,7 +19,12 @@ const { markdownModule, markdownVersions } = require('./markdown-module.cjs');
  * `expo` itself can reach it.
  */
 function expoTransformer() {
-  const id = '@expo/metro-config/build/babel-transformer';
+  return expoMetroConfig('babel-transformer');
+}
+
+/** A module of `@expo/metro-config`'s build, found as `expoTransformer` describes. */
+function expoMetroConfig(name) {
+  const id = `@expo/metro-config/build/${name}`;
   try {
     return require(id);
   } catch (error) {
@@ -171,9 +176,11 @@ function nativeScriptBabel(params) {
   if (!projectRoot || params.options.extendsBabelConfigPath) return params;
   if (!(projectRoot in NATIVESCRIPT)) {
     NATIVESCRIPT[projectRoot] = installed('@nativescript/react-native', projectRoot);
+    // The file Expo would load, by Expo's own list, so none of the app's is passed over.
     const own =
-      NATIVESCRIPT[projectRoot] && BABEL_CONFIGS.find((name) => exists(projectRoot, name));
-    if (own && !readFileSync(path.join(projectRoot, own), 'utf8').includes('strictGlobal')) {
+      NATIVESCRIPT[projectRoot] &&
+      expoMetroConfig('loadBabelConfig').resolveBabelrcName(projectRoot);
+    if (own && !STRICT_GLOBAL.test(readFileSync(path.join(projectRoot, own), 'utf8'))) {
       console.warn(
         `[angular-native] ${own} is used as it is. NativeScript's classes need the worklets ` +
           "plugin's strictGlobal: add ['react-native-worklets/plugin', { strictGlobal: true }] " +
@@ -189,22 +196,8 @@ function nativeScriptBabel(params) {
 
 /** Per project root, whether to use `nativescript-babel.cjs`. */
 const NATIVESCRIPT = /** @type {Record<string, boolean>} */ ({});
-const BABEL_CONFIGS = [
-  'babel.config.js',
-  'babel.config.cjs',
-  'babel.config.mjs',
-  '.babelrc',
-  '.babelrc.js',
-];
-
-function exists(root, name) {
-  try {
-    readFileSync(path.join(root, name));
-    return true;
-  } catch {
-    return false;
-  }
-}
+/** The option set to true, not only named: `strictGlobal: false` still needs the warning. */
+const STRICT_GLOBAL = /["']?strictGlobal["']?\s*:\s*true\b/;
 
 function installed(name, root) {
   try {
