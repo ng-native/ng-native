@@ -227,8 +227,8 @@ function hmrBlock(src, filename, components, resources, options, warn) {
 if (typeof ngDevMode === "undefined" || ngDevMode) {
 ${applies.join('\n')}
 (function () {
-  var registry = (globalThis.__angularNativeHmr ||= new Map());
-  var pending = (globalThis.__angularNativeHmrPending ||= new Map());
+  var registry = (globalThis.__angularNativeHmr ||= new globalThis.Map());
+  var pending = (globalThis.__angularNativeHmrPending ||= new globalThis.Map());
   var file = ${JSON.stringify(filename)};
   var shape = ${JSON.stringify(hash(shapeSource))};
   var source = ${JSON.stringify(hash(src))};
@@ -248,13 +248,13 @@ ${SWAP}${PATCH}
     var entry = {
       shape: shape,
       source: source,
-      types: new Map(defs.map(function (d) { return [d.id, d.type]; })),
-      templates: new Map(defs.map(function (d) { return [d.id, d.template]; })),
-      styles: new Map(defs.map(function (d) { return [d.id, d.styles]; })),
-      metas: new Map(defs.map(function (d) { return [d.id, d.meta]; })),
-      bodies: new Map(defs.map(function (d) { return [d.id, d.body]; })),
-      hooks: new Map(defs.map(function (d) { return [d.id, hooks(d.type)]; })),
-      members: new Map(),
+      types: new globalThis.Map(defs.map(function (d) { return [d.id, d.type]; })),
+      templates: new globalThis.Map(defs.map(function (d) { return [d.id, d.template]; })),
+      styles: new globalThis.Map(defs.map(function (d) { return [d.id, d.styles]; })),
+      metas: new globalThis.Map(defs.map(function (d) { return [d.id, d.meta]; })),
+      bodies: new globalThis.Map(defs.map(function (d) { return [d.id, d.body]; })),
+      hooks: new globalThis.Map(defs.map(function (d) { return [d.id, hooks(d.type)]; })),
+      members: new globalThis.Map(),
       init: init,
       // The exports every module that imported this file holds, which stay the file's exports.
       exports: null,
@@ -494,8 +494,8 @@ const SWAP = `
 const DUPLICATE_WITHIN = 2000;
 
 const PATCH = `
-  var lives = (globalThis.__angularNativeHmrLive ||= new WeakMap());
-  var makers = (globalThis.__angularNativeHmrMakers ||= new WeakMap());
+  var lives = (globalThis.__angularNativeHmrLive ||= new globalThis.WeakMap());
+  var makers = (globalThis.__angularNativeHmrMakers ||= new globalThis.WeakMap());
   // Whether this run is the last one over again. Metro sends an edit once for each bundle the
   // file is in, the app's and every lazy route's that has loaded, so a file two routes share runs
   // twice for one save, the second time with the source it has just applied. A dependency's edit
@@ -526,9 +526,9 @@ const PATCH = `
   // the one its importers read.
   function kept(exports) {
     var own = {};
-    Object.getOwnPropertyNames(exports).forEach(function (key) {
-      Object.defineProperty(own, key, {
-        enumerable: Object.getOwnPropertyDescriptor(exports, key).enumerable,
+    globalThis.Object.getOwnPropertyNames(exports).forEach(function (key) {
+      globalThis.Object.defineProperty(own, key, {
+        enumerable: globalThis.Object.getOwnPropertyDescriptor(exports, key).enumerable,
         configurable: true,
         get: function () { return exports[key]; },
       });
@@ -547,12 +547,12 @@ const PATCH = `
       cell.stays ||= function () {
         read();
         return new.target
-          ? Reflect.construct(cell.latest, arguments, new.target)
+          ? globalThis.Reflect.construct(cell.latest, arguments, new.target)
           : cell.latest.apply(this, arguments);
       };
       if (fn.write) fn.write(cell.stays);
       if (entry.exports) fn.exported.forEach(function (name) {
-        Object.defineProperty(entry.exports, name, {
+        globalThis.Object.defineProperty(entry.exports, name, {
           enumerable: true, configurable: true, writable: true, value: cell.stays,
         });
       });
@@ -579,37 +579,37 @@ const PATCH = `
   // Give a live prototype the members of the class the file defines now: its own, the first time.
   // A library's class is not watched and takes them as they are, by the thousand calls a frame.
   function members(entry, id, from, to) {
-    var cells = entry.members.get(id) || entry.members.set(id, new Map()).get(id);
-    Reflect.ownKeys(to).forEach(function (key) {
-      if (key === "constructor" || Object.prototype.hasOwnProperty.call(from, key)) return;
+    var cells = entry.members.get(id) || entry.members.set(id, new globalThis.Map()).get(id);
+    globalThis.Reflect.ownKeys(to).forEach(function (key) {
+      if (key === "constructor" || globalThis.Object.prototype.hasOwnProperty.call(from, key)) return;
       delete to[key];
       cells.delete(key);
     });
-    Reflect.ownKeys(from).forEach(function (key) {
+    globalThis.Reflect.ownKeys(from).forEach(function (key) {
       if (key === "constructor") return;
-      var now = Object.getOwnPropertyDescriptor(from, key);
+      var now = globalThis.Object.getOwnPropertyDescriptor(from, key);
       var kind = now.get || now.set ? "accessor" : typeof now.value === "function" ? "method" : "value";
       var cell = cells.get(key);
       if (cell && cell.kind === kind) return void (cell.latest = now);
       cells.delete(key);
-      if (kind === "value" || !watched) return void Object.defineProperty(to, key, now);
+      if (kind === "value" || !watched) return void globalThis.Object.defineProperty(to, key, now);
       cell = { kind: kind, latest: now };
       cells.set(key, cell);
-      Object.defineProperty(to, key, staying(cell, kind, now.enumerable));
+      globalThis.Object.defineProperty(to, key, staying(cell, kind, now.enumerable));
     });
   }
   // Statics are only ever added to: Angular keeps its own on the live class, and the id a class
   // is injected by is one of them. Its definitions stay the ones other modules read.
   function statics(from, to) {
     var kept = ["prototype", "length", "name", "ɵcmp", "ɵdir", "ɵprov", "ɵfac", "__NG_ELEMENT_ID__"];
-    Reflect.ownKeys(from).forEach(function (key) {
-      if (kept.indexOf(key) < 0) Object.defineProperty(to, key, Object.getOwnPropertyDescriptor(from, key));
+    globalThis.Reflect.ownKeys(from).forEach(function (key) {
+      if (kept.indexOf(key) < 0) globalThis.Object.defineProperty(to, key, globalThis.Object.getOwnPropertyDescriptor(from, key));
     });
   }
   // The lifecycle hooks a class has. Angular notes which ones when it first renders a view the
   // class is in, so one added or taken away later would never be called, or go on being.
   function hooks(type) {
-    return Reflect.ownKeys(type.prototype).filter(function (key) {
+    return globalThis.Reflect.ownKeys(type.prototype).filter(function (key) {
       return typeof key === "string" && /^ng[A-Z]/.test(key);
     }).sort().join();
   }
@@ -629,7 +629,7 @@ const PATCH = `
     var was = live["ɵcmp"] || live["ɵdir"];
     // What a template using the class read when it first rendered, and will not read again. A
     // directive's decorator is all of that: its host bindings are made once, with its host.
-    var shape = function (d) { return JSON.stringify([d.selectors, d.inputs, d.outputs]); };
+    var shape = function (d) { return globalThis.JSON.stringify([d.selectors, d.inputs, d.outputs]); };
     if (now && (!was || shape(now) !== shape(was))) return false;
     if (hooks(def.type) !== entry.hooks.get(def.id)) return false;
     // Nor a component with an outlet in it, which rendering again would make again.
@@ -650,7 +650,7 @@ const PATCH = `
       if (make) makers.set(live, function (asked) {
         // A subclass asking for its parent's factory is made as itself.
         if (asked && asked !== live) return make(asked);
-        return Object.setPrototypeOf(make(), live.prototype);
+        return globalThis.Object.setPrototypeOf(make(), live.prototype);
       });
       if (cmp && rendersAgain(entry, def)) i0.ɵɵreplaceMetadata(live, function () {
         var uses = cmp.directiveDefs;
