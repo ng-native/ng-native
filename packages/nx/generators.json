@@ -35,6 +35,11 @@
       "factory": "./component/index.cjs#component",
       "schema": "./component/schema.json",
       "description": "A component for an Angular Native app or library, with native elements and a test that runs in Node."
+    },
+    "nativescript": {
+      "factory": "./nativescript/index.cjs#nativescript",
+      "schema": "./nativescript/schema.json",
+      "description": "Sets up @ng-native/nativescript in an Angular Native app: the packages, the config plugin, the iOS types and provideNativeScript()."
     }
   }
 }

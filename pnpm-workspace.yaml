@@ -70,3 +70,4 @@ minimumReleaseAgeExclude:
   - '@oxc-angular/binding-win32-arm64-msvc@0.0.41'
   - '@oxc-angular/binding-win32-x64-msvc@0.0.41'
   - '@oxc-angular/vite@0.0.41'
+  - '@nativescript/react-native@9.1.0'

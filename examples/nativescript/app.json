@@ -1,0 +1,16 @@
+{
+  "expo": {
+    "name": "NativeScript",
+    "slug": "nativescript-example",
+    "scheme": "nativescript-example",
+    "newArchEnabled": true,
+    "userInterfaceStyle": "automatic",
+    "ios": {
+      "bundleIdentifier": "dev.angularnative.nativescript"
+    },
+    "android": {
+      "package": "dev.angularnative.nativescript"
+    },
+    "plugins": ["@ng-native/metro", "@ng-native/nativescript"]
+  }
+}

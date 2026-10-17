@@ -1,0 +1,5 @@
+.angular-native/
+
+# Written by NativeScript's config plugin and its Android build
+nativescript.react-native.json
+types/

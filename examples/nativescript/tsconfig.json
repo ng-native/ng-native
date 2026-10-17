@@ -1,0 +1,10 @@
+{
+  "compilerOptions": {
+    "module": "preserve",
+    "moduleResolution": "bundler",
+    "types": ["node"]
+  },
+  "extends": "../../tsconfig.base.json",
+  "include": ["."],
+  "exclude": ["**/*.generated.ts", ".expo", "dist", "ios", "android"]
+}

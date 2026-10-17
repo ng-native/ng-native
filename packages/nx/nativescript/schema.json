@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/schema",
+  "$id": "NgNativeNxNativeScript",
+  "title": "NativeScript in an Angular Native app",
+  "description": "Sets up @ng-native/nativescript in an Angular Native app: the packages, the config plugin, the iOS types and provideNativeScript().",
+  "type": "object",
+  "properties": {
+    "project": {
+      "type": "string",
+      "description": "The Angular Native app.",
+      "$default": { "$source": "argv", "index": 0 },
+      "x-prompt": "Which app should NativeScript be set up in?",
+      "x-dropdown": "projects"
+    },
+    "skipInstall": {
+      "type": "boolean",
+      "description": "Write the files without installing.",
+      "default": false
+    },
+    "skipFormat": {
+      "type": "boolean",
+      "description": "Leave the generated files unformatted.",
+      "default": false,
+      "x-priority": "internal"
+    }
+  },
+  "required": ["project"]
+}
