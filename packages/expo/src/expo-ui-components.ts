@@ -813,7 +813,7 @@ export interface UiPickerOption {
     }
   `,
   host: {
-    '[label]': 'android ? undefined : label()',
+    '[label]': 'android ? undefined : shownLabel()',
     '[systemImage]': 'android ? undefined : systemImage()',
     '[selection]': 'android ? undefined : value()',
     '[modifiers]': 'android ? undefined : resolvedModifiers()',
@@ -849,6 +849,8 @@ export class UiPicker {
   );
 
   protected readonly android = nativePlatform() === 'android';
+  /** SwiftUI's picker view draws nothing without a label, and a segmented one never shows it. */
+  protected readonly shownLabel = computed(() => this.label() ?? '');
   /** Whether Android's dropdown is open. */
   protected readonly open = signal(false);
   /**
