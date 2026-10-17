@@ -9,18 +9,28 @@ appId: dev.angularnative.canary
 - assertScreenshot:
     path: ../baselines/visual-primitives.png
     thresholdPercentage: 99.9
-# Three screens further down, one scroll at a time, so a long page is compared past its first view.
-- scroll
+# Three screens further down, so a long page is compared past its first view. A slow drag, not a
+# flick: a flick's momentum stops somewhere else each run, and the screenshot never matches.
+- swipe:
+    start: 50%, 80%
+    end: 50%, 30%
+    duration: 3000
 - waitForAnimationToEnd
 - assertScreenshot:
     path: ../baselines/visual-primitives-2.png
     thresholdPercentage: 99.9
-- scroll
+- swipe:
+    start: 50%, 80%
+    end: 50%, 30%
+    duration: 3000
 - waitForAnimationToEnd
 - assertScreenshot:
     path: ../baselines/visual-primitives-3.png
     thresholdPercentage: 99.9
-- scroll
+- swipe:
+    start: 50%, 80%
+    end: 50%, 30%
+    duration: 3000
 - waitForAnimationToEnd
 - assertScreenshot:
     path: ../baselines/visual-primitives-4.png

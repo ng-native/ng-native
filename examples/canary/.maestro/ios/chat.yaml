@@ -15,7 +15,8 @@ appId: dev.angularnative.canary
 - swipe:
     start: 50%, 30%
     end: 50%, 45%
-    duration: 600
+    duration: 3000
+- waitForAnimationToEnd
 - assertScreenshot:
     path: baselines/chat-after-send.png
     thresholdPercentage: 99.9

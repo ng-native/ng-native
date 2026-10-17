@@ -13,18 +13,28 @@ appId: dev.angularnative.canary
 - assertScreenshot:
     path: ../baselines/visual-tailwind.png
     thresholdPercentage: 99.99
-# Three screens further down, one scroll at a time, so a long page is compared past its first view.
-- scroll
+# Three screens further down, so a long page is compared past its first view. A slow drag, not a
+# flick: a flick's momentum stops somewhere else each run, and the screenshot never matches.
+- swipe:
+    start: 50%, 80%
+    end: 50%, 30%
+    duration: 3000
 - waitForAnimationToEnd
 - assertScreenshot:
     path: ../baselines/visual-tailwind-2.png
     thresholdPercentage: 99.99
-- scroll
+- swipe:
+    start: 50%, 80%
+    end: 50%, 30%
+    duration: 3000
 - waitForAnimationToEnd
 - assertScreenshot:
     path: ../baselines/visual-tailwind-3.png
     thresholdPercentage: 99.99
-- scroll
+- swipe:
+    start: 50%, 80%
+    end: 50%, 30%
+    duration: 3000
 - waitForAnimationToEnd
 - assertScreenshot:
     path: ../baselines/visual-tailwind-4.png
