@@ -66,7 +66,14 @@ const ui = {
     'worklet';
     const g = globalThis as Record<string, any>;
     const views: Map<string, unknown> = (g[VIEWS] ??= new Map());
-    const view = create(props);
+    // The view this element showed goes first, so a create that fails leaves it empty.
+    views.delete(id);
+    const view = create(props) as { isKindOfClass?(of: unknown): boolean } | null;
+    if (typeof view?.isKindOfClass !== 'function' || !view.isKindOfClass(g['UIView'])) {
+      throw new Error(
+        `[angular-native] An nsView's create returned ${String(view)}, where it returns a UIView.`,
+      );
+    }
     views.set(id, view);
     return g['interop'].handleof(view).toHexString();
   },
@@ -97,7 +104,8 @@ export class NsView<P = unknown> {
   /** Passed to `create`, then to `update` each time it changes. Copied to the UI runtime. */
   readonly props = input.required<P>();
 
-  protected readonly handle = signal<string | undefined>(undefined);
+  /** The view's pointer; `null` once it is gone, since a prop set to `undefined` is not removed. */
+  protected readonly handle = signal<string | null | undefined>(undefined);
 
   constructor() {
     const id = `ns-view-${nextId++}`;
@@ -110,9 +118,13 @@ export class NsView<P = unknown> {
       if (this.native.platform !== 'ios') return;
       if (spec !== built) {
         built = spec;
-        this.native
-          .runOnUI(ui.mount, id, spec.create as (props: unknown) => unknown, props)
-          .then((handle) => built === spec && this.handle.set(handle), report);
+        this.native.runOnUI(ui.mount, id, spec.create as (props: unknown) => unknown, props).then(
+          (handle) => built === spec && this.handle.set(handle),
+          (error: unknown) => {
+            if (built === spec) this.handle.set(null);
+            report(error);
+          },
+        );
       } else if (spec.update) {
         this.native
           .runOnUI(ui.update, id, spec.update as (view: unknown, props: unknown) => void, props)

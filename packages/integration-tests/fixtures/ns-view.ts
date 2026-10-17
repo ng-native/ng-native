@@ -1,15 +1,21 @@
 import { Component, inject, signal } from '@angular/core';
 import { NativeScript, NsView, nsView } from '@ng-native/nativescript';
 
-export const label = nsView<{ title: string }, { id: string; text: string }>({
-  create: (props) => ({ id: 'label', text: props.title }),
+export const label = nsView<
+  { title: string },
+  { id: string; text: string; isKindOfClass(): boolean }
+>({
+  create: (props) => ({ id: 'label', text: props.title, isKindOfClass: () => true }),
   update: (view, props) => {
     view.text = props.title;
   },
 });
 
-export const badge = nsView<{ title: string }, { id: string; text: string }>({
-  create: (props) => ({ id: 'badge', text: props.title }),
+export const badge = nsView<
+  { title: string },
+  { id: string; text: string; isKindOfClass(): boolean }
+>({
+  create: (props) => ({ id: 'badge', text: props.title, isKindOfClass: () => true }),
 });
 
 @Component({

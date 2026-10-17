@@ -96,7 +96,9 @@ const field = nsView<{ placeholder: string }, UITextField>({
 `heldDelegate` is a name of the app's own; any name the class does not use works. Neither it nor
 `NSObject.extend` is in the generated iOS types, hence the two casts.
 
-What `create` throws is reported to Angular's `ErrorHandler`, and the element stays empty.
+`create` returns a UIView. What it throws is reported to Angular's `ErrorHandler`, and so is a
+value that is not a UIView, `null` included; either way the element is left empty, and a view it
+showed before a new `[view]` is let go.
 
 Each view is a separate `create` on the main thread: a hundred `<ns-view>` elements build theirs in
 about a tenth of a second on the iOS simulator.
@@ -109,6 +111,24 @@ element a size, or a size from its container, as `class="h-12"` does above.
 
 A view with a fixed size of its own, such as a `UISwitch`, stays that size, at the top left of the
 element.
+
+## Hiding one
+
+Hide an `<ns-view>` with `@if`, or `opacity: 0`, and not with `display: none`. A `display: none`
+element has no native view, its own or one inside an element with `display: none`, and when it is
+shown again NativeScript's host does not take the UIView back: the element stays empty. `@if`
+builds a new view when the element comes back.
+
+## Touches
+
+The UIView takes the touches that land on it, as a view inside any UIKit app does. A drag that
+starts on a view with gestures of its own, a map or a SceneKit view with `allowsCameraControl`,
+pans that view rather than scrolling a `<scroll-view>` it is in.
+
+## Children
+
+`<ns-view>` shows its UIView and nothing else: elements written inside it are not rendered. Put
+them beside it, or over it with `position: absolute`.
 
 ## On Android
 

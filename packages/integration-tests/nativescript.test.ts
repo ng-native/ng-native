@@ -153,7 +153,7 @@ describe('NativeScript', () => {
     assert.equal(view().viewName, 'NativeScriptUIView');
     assert.equal(view().props['nativeViewHandle'], '0xlabel');
     const views = g['__ngNsViews'] as Views;
-    assert.deepEqual([...views.values()].at(-1), { id: 'label', text: 'Hello' });
+    assert.equal([...views.values()].at(-1)!.text, 'Hello');
 
     fixture.title.set('Bye');
     await settle();
@@ -173,6 +173,20 @@ describe('NativeScript', () => {
     app.applicationRef.destroy();
     await new Promise((resolve) => setTimeout(resolve));
     assert.equal(views.size, before - 1);
+  });
+
+  it('reports a create that returns no view, and holds nothing for it', async () => {
+    const errors: unknown[] = [];
+    const runtime = fake('ios').runtime;
+    const { fixture, view, settle } = render(runtime, errors);
+    await settle();
+    const views = g['__ngNsViews'] as Map<string, unknown>;
+    const before = views.size;
+    fixture.spec.set({ create: () => 42 });
+    await settle();
+    assert.match(String(errors.at(-1)), /create returned 42, where it returns a UIView/);
+    assert.equal(views.size, before - 1, 'the old view is let go');
+    assert.equal(view().props['nativeViewHandle'], null, 'and the element is empty');
   });
 
   it('commits as a plain view on Android and builds nothing', async () => {
