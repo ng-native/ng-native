@@ -279,6 +279,21 @@ own.) Running it again changes nothing, and running it with another library adds
 it cannot follow, such as a Metro config whose export spans several lines, is left as it is, with a
 warning saying what to add by hand.
 
+## NativeScript
+
+```sh
+nx g @ng-native/nx:nativescript mobile
+```
+
+This sets up [NativeScript](/packages/nativescript) in an app: it adds `@ng-native/nativescript`,
+`@nativescript/react-native` and `react-native-worklets` where the app's dependencies go and
+`@nativescript/types-android` beside them as a dev dependency, adds `@ng-native/nativescript` to the
+config plugins in `app.json`, writes `src/nativescript.d.ts` referencing the iOS and Android SDKs'
+types, and adds `provideNativeScript()` to the providers `mount` is given in `src/main.ts`, joining
+any it passes already. Running it again changes nothing. A `src/main.ts` it cannot follow is left
+as it is, with a warning saying what to add by hand. The app needs rebuilding afterwards, as for
+any native module.
+
 ## Options
 
 `nx g @ng-native/nx:app <directory>` takes `--name` (the directory's last segment by default),

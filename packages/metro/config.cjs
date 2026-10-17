@@ -122,7 +122,12 @@ function angularVersion(projectRoot) {
  * and the app failed at start with `Cannot read property 'code' of undefined` until the cache was
  * cleared by hand. In the key, installing, removing or upgrading one starts the cache afresh.
  */
-const BABEL_PLUGIN_PACKAGES = ['react-native-worklets', 'react-native-reanimated'];
+const BABEL_PLUGIN_PACKAGES = [
+  'react-native-worklets',
+  'react-native-reanimated',
+  // Its being installed switches the Babel config: see `nativescript-babel.cjs`.
+  '@nativescript/react-native',
+];
 
 function babelPluginVersions(...roots) {
   const from = [...new Set(roots.map((root) => path.resolve(root ?? process.cwd())))];

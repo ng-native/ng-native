@@ -161,6 +161,60 @@ const SCRIPT = /\.[cm]?[jt]sx?$/;
  * stylesheet, and the Angular error stands. A stylesheet or a template file is not JavaScript, so
  * Babel always fails on it with a place, and only the Angular error says what is wrong.
  */
+/**
+ * The params with `nativescript-babel.cjs` as the Babel config, for an app that has
+ * `@nativescript/react-native` installed and no Babel config of its own. One that has its own is
+ * told once what to add to it, because the error it would get otherwise names a native class.
+ */
+function nativeScriptBabel(params) {
+  const projectRoot = params.options?.projectRoot;
+  if (!projectRoot || params.options.extendsBabelConfigPath) return params;
+  if (!(projectRoot in NATIVESCRIPT)) {
+    NATIVESCRIPT[projectRoot] = installed('@nativescript/react-native', projectRoot);
+    const own =
+      NATIVESCRIPT[projectRoot] && BABEL_CONFIGS.find((name) => exists(projectRoot, name));
+    if (own && !readFileSync(path.join(projectRoot, own), 'utf8').includes('strictGlobal')) {
+      console.warn(
+        `[angular-native] ${own} is used as it is. NativeScript's classes need the worklets ` +
+          "plugin's strictGlobal: add ['react-native-worklets/plugin', { strictGlobal: true }] " +
+          "to its plugins and { worklets: false } to babel-preset-expo's options, or delete it.",
+      );
+    }
+    if (own) NATIVESCRIPT[projectRoot] = false;
+  }
+  if (!NATIVESCRIPT[projectRoot]) return params;
+  const extendsBabelConfigPath = path.join(__dirname, 'nativescript-babel.cjs');
+  return { ...params, options: { ...params.options, extendsBabelConfigPath } };
+}
+
+/** Per project root, whether to use `nativescript-babel.cjs`. */
+const NATIVESCRIPT = /** @type {Record<string, boolean>} */ ({});
+const BABEL_CONFIGS = [
+  'babel.config.js',
+  'babel.config.cjs',
+  'babel.config.mjs',
+  '.babelrc',
+  '.babelrc.js',
+];
+
+function exists(root, name) {
+  try {
+    readFileSync(path.join(root, name));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function installed(name, root) {
+  try {
+    require.resolve(`${name}/package.json`, { paths: [root] });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 function angularOrSyntaxError(params) {
   try {
     return transformAngular(params.src, params.filename, {
@@ -187,6 +241,7 @@ module.exports = {
     return `${upstream.getCacheKey?.(...args) ?? ''}${ownVersion}`;
   },
   transform(params) {
+    params = nativeScriptBabel(params);
     // A `.md` file is data: see `markdown-module.cjs`.
     if (params.filename.endsWith('.md')) {
       return upstream.transform({ ...params, src: markdownModule(params.src, params.filename) });

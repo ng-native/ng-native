@@ -112,23 +112,24 @@ Analog's file-based routing (`analog`).
 
 ## Packages
 
-| Package                 | What it provides                                                                   |
-| ----------------------- | ---------------------------------------------------------------------------------- |
-| `@ng-native/platform`   | `mount()`, the Angular renderer, and `HttpClient` for React Native.                |
-| `@ng-native/components` | The elements: views, text, images, lists, inputs, pressables, gestures, animation. |
-| `@ng-native/router`     | Native stack and tab navigation over `@angular/router`.                            |
-| `@ng-native/device`     | Keyboard, screen, color scheme, app state, accessibility, deep links and more.     |
-| `@ng-native/expo`       | Expo's modules as Angular services and directives.                                 |
-| `@ng-native/icons`      | `<ng-icon>` with the `@ng-icons` sets, drawn as native SVG.                        |
-| `@ng-native/analog`     | Analog's file-based pages, routed on a native stack.                               |
-| `@ng-native/metro`      | The Metro preset: the Angular compiler, the CSS compiler and hot reload.           |
-| `@ng-native/tailwind`   | The Tailwind preset and its platform variants.                                     |
-| `@ng-native/testing`    | Testing Library for Angular Native, running in Node.                               |
-| `@ng-native/web`        | A DOM renderer for the same components, with a Vite preset.                        |
-| `@ng-native/schematics` | `ng add` and `ng generate` for Angular CLI workspaces.                             |
-| `@ng-native/nx`         | `nx add` and an app generator for Nx workspaces.                                   |
-| `@ng-native/migrate`    | The migrations that update an app to a new release.                                |
-| `@ng-native/fabric`     | The framework-agnostic retained tree and commit engine the renderer is built on.   |
+| Package                   | What it provides                                                                   |
+| ------------------------- | ---------------------------------------------------------------------------------- |
+| `@ng-native/platform`     | `mount()`, the Angular renderer, and `HttpClient` for React Native.                |
+| `@ng-native/components`   | The elements: views, text, images, lists, inputs, pressables, gestures, animation. |
+| `@ng-native/router`       | Native stack and tab navigation over `@angular/router`.                            |
+| `@ng-native/device`       | Keyboard, screen, color scheme, app state, accessibility, deep links and more.     |
+| `@ng-native/expo`         | Expo's modules as Angular services and directives.                                 |
+| `@ng-native/icons`        | `<ng-icon>` with the `@ng-icons` sets, drawn as native SVG.                        |
+| `@ng-native/analog`       | Analog's file-based pages, routed on a native stack.                               |
+| `@ng-native/metro`        | The Metro preset: the Angular compiler, the CSS compiler and hot reload.           |
+| `@ng-native/tailwind`     | The Tailwind preset and its platform variants.                                     |
+| `@ng-native/nativescript` | Every iOS and Android API from TypeScript, and UIKit views, through NativeScript.  |
+| `@ng-native/testing`      | Testing Library for Angular Native, running in Node.                               |
+| `@ng-native/web`          | A DOM renderer for the same components, with a Vite preset.                        |
+| `@ng-native/schematics`   | `ng add` and `ng generate` for Angular CLI workspaces.                             |
+| `@ng-native/nx`           | `nx add` and an app generator for Nx workspaces.                                   |
+| `@ng-native/migrate`      | The migrations that update an app to a new release.                                |
+| `@ng-native/fabric`       | The framework-agnostic retained tree and commit engine the renderer is built on.   |
 
 ## Requirements
 

@@ -52,6 +52,7 @@
     "@ng-native/icons": "workspace:*",
     "@ng-native/metro": "workspace:*",
     "@ng-native/migrate": "workspace:*",
+    "@ng-native/nativescript": "workspace:*",
     "@ng-native/nx": "workspace:*",
     "@ng-native/platform": "workspace:*",
     "@ng-native/router": "workspace:*",

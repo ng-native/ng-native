@@ -73,6 +73,7 @@ const PUBLISHED = [
   'packages/icons',
   'packages/metro',
   'packages/migrate',
+  'packages/nativescript',
   'packages/nx',
   'packages/platform',
   'packages/router',

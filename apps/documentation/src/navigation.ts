@@ -261,6 +261,15 @@ export const PACKAGES: NavSection = {
       ],
     },
     {
+      path: 'packages/nativescript',
+      title: 'NativeScript',
+      summary: 'Every iOS and Android API from TypeScript, through NativeScript',
+      children: [
+        { path: 'packages/nativescript/calling-apis', title: 'Calling native APIs' },
+        { path: 'packages/nativescript/views', title: 'Native views' },
+      ],
+    },
+    {
       path: 'packages/tailwind',
       title: 'Tailwind',
       summary: 'The presets, and the variants a touch device needs',

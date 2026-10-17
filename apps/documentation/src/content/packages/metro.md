@@ -80,6 +80,10 @@ its front matter parsed and its Markdown lexed by `marked` as the app is bundled
 [`<markdown [tokens]>`](/packages/components/markdown#importing-md-files). `marked` is an optional
 peer, needed only when the app has a `.md` file.
 
+An app with `@nativescript/react-native` installed and no Babel config of its own gets one with the
+worklets plugin's `strictGlobal` set, which a worklet naming a native class needs; see
+[NativeScript](/packages/nativescript#the-babel-config).
+
 In a monorepo where the framework packages live outside your app's own `node_modules`, pass
 `{ workspaceRoot }` to `withAngularNative` - it adds the workspace root to `watchFolders` and both
 `node_modules` directories to `resolver.nodeModulesPaths`, which is what lets Metro see a workspace

@@ -33,6 +33,7 @@
       "@ng-native/icons",
       "@ng-native/metro",
       "@ng-native/migrate",
+      "@ng-native/nativescript",
       "@ng-native/nx",
       "@ng-native/platform",
       "@ng-native/router",
