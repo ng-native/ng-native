@@ -5,8 +5,7 @@
 #
 #     source "$(dirname "$0")/ios-simulator.sh" <name>
 #
-# With `UDID` set, that simulator is used as it is, booted already by whoever made it. With
-# `KEEP_SIMULATOR` set, the one made is left booted when the script exits. Run on its
+# With `UDID` set, that simulator is used as it is, booted already by whoever made it. Run on its
 # own with `--which`, it prints the runtime and the device type it would make one of, which is part
 # of what a screenshot recorded on it is cached by.
 
@@ -48,8 +47,7 @@ if [ -n "${UDID:-}" ]; then
 fi
 step "creating a $type on $runtime"
 udid=$(xcrun simctl create "$1" "$type" "$runtime") || exit 1
-# Kept where `KEEP_SIMULATOR` is set: CI boots one while the app builds, for the steps after.
-[ -n "${KEEP_SIMULATOR:-}" ] || trap 'xcrun simctl shutdown "$udid" 2>/dev/null; xcrun simctl delete "$udid"' EXIT
+trap 'xcrun simctl shutdown "$udid" 2>/dev/null; xcrun simctl delete "$udid"' EXIT
 
 step "booting it"
 xcrun simctl boot "$udid" && xcrun simctl bootstatus "$udid" -b | boot_phases || exit 1

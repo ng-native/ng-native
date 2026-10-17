@@ -91,12 +91,6 @@ jobs:
           curl -fsSL https://get.maestro.mobile.dev | MAESTRO_VERSION=2.10.0 bash
           echo "$HOME/.maestro/bin" >> "$GITHUB_PATH"
 
-      # Minutes on CI's Mac with nothing to do with the app: a simulator's first boot, and Maestro's
-      # driver installed on it and started. Begun now, in the background, so they pass while the app
-      # builds; the tests wait for it.
-      - name: Boot a simulator while the app builds
-        run: (./examples/canary/scripts/ios-warm.sh "$RUNNER_TEMP/udid" > "$RUNNER_TEMP/warm.log" 2>&1 &)
-
       # The app's native half is most of the job's time; its JavaScript is a minute. So the app is
       # cached by Expo's fingerprint of everything native, and a run whose fingerprint has been
       # built before puts today's bundle into that app rather than building it again. See
@@ -266,11 +260,6 @@ jobs:
           elif [ "$PUSH" = true ]; then
             export RECORD_INTO=$RUNNER_TEMP/main-screens
           fi
-          # The simulator booting since the build began, and Maestro's driver on it.
-          for _ in $(seq 360); do [ -f "$RUNNER_TEMP/udid.done" ] && break; sleep 5; done
-          cat "$RUNNER_TEMP/warm.log"
-          UDID=$(cat "$RUNNER_TEMP/udid") || exit 1
-          export UDID
           ./examples/canary/scripts/ios-tests.sh "$RUNNER_TEMP/canary.app" "$RUNNER_TEMP/out"
 
       - if: env.PUSH == 'true' && success()

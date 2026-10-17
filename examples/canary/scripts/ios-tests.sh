@@ -25,7 +25,9 @@ compare="$here/../.maestro/ios/compare-builds.mjs"
 mkdir -p "$out/screens"
 
 source "$here/ios-simulator.sh" canary-ci
-export MAESTRO_DRIVER_STARTUP_TIMEOUT=${MAESTRO_DRIVER_STARTUP_TIMEOUT:-180000}
+# The driver's first start on a fresh CI simulator has taken past three minutes, and a start that
+# times out costs a reboot and the whole walk again: given six, it finishes the first time.
+export MAESTRO_DRIVER_STARTUP_TIMEOUT=${MAESTRO_DRIVER_STARTUP_TIMEOUT:-360000}
 
 UDID=$udid "$here/smoke-ios.sh" "$app" "$out/maestro"
 smoke=$?
