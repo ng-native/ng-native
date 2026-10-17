@@ -154,6 +154,10 @@ function record(device, app, flows, into) {
  */
 function assert(device, app, flows, from, out) {
   return keepingBaselines(() => {
+    // A difference an earlier run left, a local `pnpm e2e:ios` that failed, is none of this one's.
+    for (const name of readdirSync(baselines)) {
+      if (name.endsWith('_diff.png')) rmSync(join(baselines, name));
+    }
     for (const shot of flows.flatMap(shotsOf)) {
       if (!existsSync(join(from, shot))) throw new Error(`no screenshot ${shot} to compare with`);
       cpSync(join(from, shot), join(baselines, shot));
