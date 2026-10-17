@@ -21,8 +21,10 @@ export default tseslint.config(
     ignores: [
       '**/node_modules/**',
       '**/*.generated.ts',
-      // Scratch apps the tailwind tests make and delete while lint may be walking the same folder.
+      // Scratch apps and modules the tailwind and library-styles tests make and delete while lint
+      // may be walking the same folder.
       '**/.tailwind-*',
+      '**/.library-styles-*',
       '**/dist/**',
       '.claude/**',
       'examples/*/.expo/**',
