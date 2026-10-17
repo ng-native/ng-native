@@ -59,3 +59,9 @@ xcrun simctl boot "$udid" && xcrun simctl bootstatus "$udid" -b | boot_phases ||
 # them, so it is stopped here, and stays disabled when the retry below reboots the simulator.
 xcrun simctl spawn "$udid" launchctl disable system/com.apple.followupd 2>/dev/null
 xcrun simctl spawn "$udid" launchctl bootout system/com.apple.followupd 2>/dev/null
+# The keyboard's suggestions are of whatever was typed on the simulator before, so a screenshot with
+# the keyboard up differs between runs by them: predictions, and the corrections that come with
+# them, are turned off.
+for key in KeyboardPrediction KeyboardShowPredictionBar KeyboardAutocorrection KeyboardCheckSpelling; do
+  xcrun simctl spawn "$udid" defaults write com.apple.Preferences "$key" -bool NO
+done

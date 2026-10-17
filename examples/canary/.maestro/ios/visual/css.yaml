@@ -11,28 +11,19 @@ appId: dev.angularnative.canary
 - assertScreenshot:
     path: ../baselines/visual-css.png
     thresholdPercentage: 99.9
-# Three screens further down, so a long page is compared past its first view. A slow drag, not a
-# flick: a flick's momentum stops somewhere else each run, and the screenshot never matches.
-- swipe:
-    start: 50%, 80%
-    end: 50%, 30%
-    duration: 3000
+# Further down, by its link: `scroll` puts the page at that many points exactly (ScreenScroll),
+# where a swipe lands a few points apart from one run to the next.
+- openLink: 'canary://css?scroll=700'
 - waitForAnimationToEnd
 - assertScreenshot:
     path: ../baselines/visual-css-2.png
     thresholdPercentage: 99.9
-- swipe:
-    start: 50%, 80%
-    end: 50%, 30%
-    duration: 3000
+- openLink: 'canary://css?scroll=1400'
 - waitForAnimationToEnd
 - assertScreenshot:
     path: ../baselines/visual-css-3.png
     thresholdPercentage: 99.9
-- swipe:
-    start: 50%, 80%
-    end: 50%, 30%
-    duration: 3000
+- openLink: 'canary://css?scroll=2100'
 - waitForAnimationToEnd
 - assertScreenshot:
     path: ../baselines/visual-css-4.png

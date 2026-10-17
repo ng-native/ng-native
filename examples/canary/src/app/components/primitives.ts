@@ -1,4 +1,4 @@
-import { Component, inject, signal } from '@angular/core';
+import { Component, booleanAttribute, inject, input, signal } from '@angular/core';
 import {
   ActivityIndicator,
   Image,
@@ -13,10 +13,12 @@ import {
 import { NativeHeader } from '@ng-native/router';
 import { Palette } from '../palette.ts';
 import { page } from '../screen-styles.ts';
+import { ScreenScroll } from '../screen-scroll.ts';
 
 @Component({
   selector: 'x-primitives',
   imports: [
+    ScreenScroll,
     NativeHeader,
     ScrollView,
     Switch,
@@ -47,7 +49,7 @@ import { page } from '../screen-styles.ts';
         <text class="body"
           >switch: <text class="strong">{{ on() }}</text></text
         >
-        <activity-indicator [animating]="true" color="#3b6ef5" />
+        <activity-indicator [animating]="!still()" [hidesWhenStopped]="false" color="#3b6ef5" />
       </view>
 
       <text-input
@@ -84,6 +86,11 @@ import { page } from '../screen-styles.ts';
   `,
 })
 export class Primitives {
+  /**
+   * `?still=1` in the link: the spinner stopped, as the screenshot flows open it. A spinner that
+   * never stops keeps XCTest waiting for the app to go idle around every swipe, seconds each.
+   */
+  readonly still = input(false, { transform: booleanAttribute });
   protected readonly palette = inject(Palette);
   protected readonly page = page;
   protected readonly on = signal(true);

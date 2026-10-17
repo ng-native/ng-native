@@ -7,6 +7,7 @@ import { NgIcon } from '@ng-native/icons';
 import { Pressable, ScrollView, Text, View } from '@ng-native/components';
 import { NativeHeader } from '@ng-native/router';
 import { page } from '../screen-styles.ts';
+import { ScreenScroll } from '../screen-scroll.ts';
 
 /**
  * ng-icons, rendered as native shapes.
@@ -18,7 +19,7 @@ import { page } from '../screen-styles.ts';
  */
 @Component({
   selector: 'x-icons',
-  imports: [NgIcon, NativeHeader, Pressable, ScrollView, Text, View],
+  imports: [ScreenScroll, NgIcon, NativeHeader, Pressable, ScrollView, Text, View],
   providers: [
     provideIcons({
       heroAcademicCap,

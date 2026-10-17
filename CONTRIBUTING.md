@@ -191,7 +191,9 @@ job compares what each screen sends native. Its `ios` job walks the release smok
 same simulator, compares the iOS screenshots of the screens whose native output changed with main's:
 every screen's, where the app's native half changed. Main's screenshots are recorded by each push to
 main and cached; where they are not cached yet, the job records main's build first. A flow says
-which screens it opens in a `# routes:` line, and one that names none is always compared.
+which screens it opens in a `# routes:` line, and one that names none is always compared. A flow
+opens its screen by link, and reaches further down a page with `?scroll=<points>` in the link,
+which lands on the same point every run where a swipe does not.
 `screens-comment.yml` keeps one comment on the pull request up to date with both, showing each
 screenshot that differs beside main's. It starts a comment only when something differs. A
 comparison that could not be made fails its job, and a pull request that Native builds does not run
