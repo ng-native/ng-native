@@ -142,7 +142,7 @@ jobs:
 
           # One comment, ours: found by its mark, and only one this workflow wrote.
           comment=$(gh api --paginate "repos/$GITHUB_REPOSITORY/issues/$number/comments" \
-            --jq '.[] | select(.user.login == "github-actions[bot]" and (.body | startswith("<!-- screens-report -->"))) | .id' | head -1)
+            --jq '.[] | select(.user.login == "github-actions[bot]" and (.body | startswith("<!-- screens-report -->"))) | .id' | sed -n 1p)
           old=$RUNNER_TEMP/old.md
           body=$RUNNER_TEMP/body.md
           : > "$old"

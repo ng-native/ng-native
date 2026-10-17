@@ -47,6 +47,15 @@ jobs:
             gh api "repos/$GITHUB_REPOSITORY/issues/$NUMBER/comments" -f body="The screenshots of a pull request from a fork are recorded locally: Actions cannot push to its branch. Run \`pnpm e2e:ios:record\` in \`examples/canary\` against a release build, as CONTRIBUTING.md says." > /dev/null
             exit 1
           fi
+          # The screens compared already, and the Screens status final: it is carried over to the commit
+          # of baselines, which compares nothing, so one still pending would stay pending for good.
+          head=$(jq -r '.head.sha' "$RUNNER_TEMP/pr.json")
+          state=$(gh api "repos/$GITHUB_REPOSITORY/commits/$head/status" \
+            --jq '[.statuses[] | select(.context == "Screens") | .state] | first // "none"')
+          if [ "$state" != success ] && [ "$state" != failure ]; then
+            gh api "repos/$GITHUB_REPOSITORY/issues/$NUMBER/comments" -f body="The screens of this pull request are still being compared. Comment \`/update-screenshots\` again once the Screens check has finished." > /dev/null
+            exit 1
+          fi
           echo "branch=$(jq -r '.head.ref' "$RUNNER_TEMP/pr.json")" >> "$GITHUB_OUTPUT"
           echo "head=$(jq -r '.head.sha' "$RUNNER_TEMP/pr.json")" >> "$GITHUB_OUTPUT"
 
