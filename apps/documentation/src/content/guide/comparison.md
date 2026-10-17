@@ -30,8 +30,11 @@ to add zone.js; see [Bootstrapping](/packages/platform/bootstrapping).
 NativeScript generates synchronous JavaScript bindings for 100% of platform APIs at compile time,
 including marshalling of all data types ([NativeScript iOS Marshalling
 docs](https://docs.nativescript.org/guide/ios-marshalling)). It calls Objective-C and Java APIs
-directly, without React Native or per-API wrappers. Angular Native instead reuses the RN/Expo module
-ecosystem. An arbitrary native SDK still needs a facade, as each `@ng-native/expo` module does.
+directly, without React Native or per-API wrappers. Angular Native reuses the RN/Expo module
+ecosystem, and reaches an SDK no module wraps through
+[`@ng-native/nativescript`](/packages/nativescript), which embeds that same runtime: every iOS and
+Android API is callable from TypeScript, and a UIView built in TypeScript can be placed in a
+template. On Android it reaches every API but a view's, which still needs a module.
 
 `@nativescript/angular` is actively maintained: the [NativeScript/angular
 monorepo](https://github.com/NativeScript/angular) tracks current Angular releases, including
@@ -93,8 +96,8 @@ also cover CSS behavior beyond unit tests; see the canary's verify screen and
 - Choose Angular Native for an existing Angular app or a team wanting Angular templates, signals
   and DI with native views and Expo modules.
 - Choose React Native for a team invested in React, where Fabric's ecosystem is largest.
-- Choose NativeScript for direct access to an unwrapped native SDK, when that matters more than
-  React Native plugin reuse.
+- Choose NativeScript for an app built entirely on direct native SDK access, Android views
+  included, when that matters more than React Native plugin reuse.
 - Choose Ionic for a web app that needs installation, or a web team avoiding native build tooling.
 - Choose Flutter when pixel-identical rendering matters more than native controls, or a new team
   has no investment in web, Angular or React ecosystems.
