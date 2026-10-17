@@ -45,11 +45,12 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
-  ios:
+  # The app, once, for the jobs that test it beside each other: `ios`, which launches it, and
+  # `ios-visual`, which compares its screenshots with main's.
+  ios-build:
     if: github.event.pull_request.draft != true
     runs-on: macos-latest
-    # The build, cold, is most of it; with a cached app, the bundle, simulator and flow are a few
-    # minutes.
+    # The build, cold, is most of it; with a cached app, only today's bundle is.
     timeout-minutes: 40
     env:
       # Read by the generated Podfile: pods are built through ccache, so a run recompiles only the
@@ -61,8 +62,13 @@ jobs:
       # compile goes to a default directory that nothing saves, and each run starts from nothing.
       CCACHE_DIR: ${{ github.workspace }}/.ccache
       CCACHE_MAXSIZE: 2G
+    # It runs the pull request's code: no token kept in the checkout, and nothing it may write.
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
       - uses: ./.github/actions/setup
 
       # The app's native half is most of the job's time; its JavaScript is a minute. So the app is
@@ -136,6 +142,36 @@ jobs:
           path: ${{ runner.temp }}/app-cache
           key: canary-app-${{ runner.os }}-${{ steps.fingerprint.outputs.hash }}
 
+      # For the jobs after this one, and for update-screenshots.yml, which records the baselines
+      # from it: a cache a pull request's run saves is its own, out of that workflow's reach. A
+      # tarball, which keeps the executables executable, as an artifact does not.
+      - name: Keep the app for the jobs that test it
+        run: tar -czf "$RUNNER_TEMP/canary-app.tgz" -C "$RUNNER_TEMP" canary.app
+      - uses: actions/upload-artifact@v7
+        with:
+          name: canary-ios-app
+          path: ${{ runner.temp }}/canary-app.tgz
+          retention-days: 7
+
+  # The release build launched on a simulator and walked through the release flows.
+  ios:
+    needs: ios-build
+    runs-on: macos-latest
+    timeout-minutes: 25
+    # It runs the pull request's code: no token kept in the checkout, and nothing it may write.
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - uses: actions/download-artifact@v8
+        with:
+          name: canary-ios-app
+          path: ${{ runner.temp }}
+      - run: tar -xzf "$RUNNER_TEMP/canary-app.tgz" -C "$RUNNER_TEMP"
+
       - uses: actions/setup-java@v6
         with:
           distribution: zulu
@@ -158,6 +194,132 @@ jobs:
           name: maestro-ios
           path: ${{ runner.temp }}/maestro
           if-no-files-found: ignore
+
+  # What the change does to the canary's screenshots: the base's bundle and the pull request's, each
+  # in an app of its native half, on one simulator in one sitting, so a difference is the change
+  # and not a runtime or a baseline recorded long ago. screens-comment.yml shows what differs on the
+  # pull request. After `ios-build`, whose app it compares, and beside `ios`. In two halves of the
+  # flows, each on a runner of its own: one walk of every flow on each side is most of an hour on
+  # CI's Mac, and half is under half an hour.
+  ios-visual:
+    needs: ios-build
+    if: github.event_name == 'pull_request' && github.event.pull_request.draft != true
+    runs-on: macos-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2]
+    # Setting up, then two walks of half the flows, each about eight minutes.
+    timeout-minutes: 40
+    # It runs the pull request's code: no token kept in the checkout, and nothing it may write.
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: ./.github/actions/setup
+
+      # Main as the pull request was merged with for this run, whose app main's own run cached: the
+      # checkout is that merge, and its first parent is main. The event's base.sha can be older.
+      - name: Check out and install main
+        run: |
+          git worktree add --detach "$RUNNER_TEMP/base" "$(git rev-parse HEAD^1)"
+          pnpm --dir "$RUNNER_TEMP/base" install --frozen-lockfile --prefer-offline
+
+      # The native fingerprint of each side: the base's in its own checkout, the change's in this
+      # one, the merge ios-build built.
+      - id: fingerprint
+        run: |
+          echo "base=$(cd "$RUNNER_TEMP/base/examples/canary" && node scripts/ios-app.mjs fingerprint)" >> "$GITHUB_OUTPUT"
+          echo "change=$(cd examples/canary && node scripts/ios-app.mjs fingerprint)" >> "$GITHUB_OUTPUT"
+
+      # The change's app, as ios-build made it.
+      - uses: actions/download-artifact@v8
+        with:
+          name: canary-ios-app
+          path: ${{ runner.temp }}
+      - run: tar -xzf "$RUNNER_TEMP/canary-app.tgz" -C "$RUNNER_TEMP" && mv "$RUNNER_TEMP/canary.app" "$RUNNER_TEMP/change.app"
+
+      # The base's app is its own bundle in an app of its native half. Where the change leaves that
+      # half as it was, which most do, the change's app is that app: no cache is needed, and a pull
+      # request onto another pull request's branch, which no run of main has cached, compares too.
+      # Where the change touches it, the base's own app, cached by a run of main.
+      - id: base-app
+        if: steps.fingerprint.outputs.base != steps.fingerprint.outputs.change
+        uses: actions/cache/restore@v6
+        with:
+          path: ${{ runner.temp }}/app-cache
+          key: canary-app-${{ runner.os }}-${{ steps.fingerprint.outputs.base }}
+      - id: shell
+        env:
+          BASE: ${{ steps.fingerprint.outputs.base }}
+          CHANGE: ${{ steps.fingerprint.outputs.change }}
+          CACHED: ${{ steps.base-app.outputs.cache-hit }}
+        run: |
+          if [ "$BASE" = "$CHANGE" ]; then
+            echo "app=$RUNNER_TEMP/change.app" >> "$GITHUB_OUTPUT"
+          elif [ "$CACHED" = true ]; then
+            echo "app=$RUNNER_TEMP/app-cache/canary.app" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Put the base's bundle into its app
+        if: steps.shell.outputs.app != ''
+        env:
+          SHELL_APP: ${{ steps.shell.outputs.app }}
+        run: |
+          cd "$RUNNER_TEMP/base/examples/canary"
+          node scripts/ios-app.mjs rebundle "$SHELL_APP" "$RUNNER_TEMP/base.app"
+
+      - uses: actions/setup-java@v6
+        if: steps.shell.outputs.app != ''
+        with:
+          distribution: zulu
+          java-version: 17
+
+      - name: Install Maestro
+        if: steps.shell.outputs.app != ''
+        run: |
+          curl -fsSL https://get.maestro.mobile.dev | MAESTRO_VERSION=2.10.0 bash
+          echo "$HOME/.maestro/bin" >> "$GITHUB_PATH"
+
+      - name: Compare the screenshots
+        if: steps.shell.outputs.app != ''
+        run: >
+          ./examples/canary/scripts/visual-ios.sh
+          "$RUNNER_TEMP/base.app" "$RUNNER_TEMP/change.app" "$RUNNER_TEMP/screens"
+          "${{ matrix.shard }}/2"
+
+      # A change to the native half whose base no run of main has cached has nothing to compare
+      # with: the comment says so, and Screens holds until it is compared or accepted.
+      - name: Say the base's app is not cached
+        if: steps.shell.outputs.app == ''
+        run: |
+          mkdir -p "$RUNNER_TEMP/screens"
+          echo '{"shard":"${{ matrix.shard }}/2","skipped":"the change touches the native half, and no app of the base'"'"'s is cached"}' > "$RUNNER_TEMP/screens/report.json"
+
+      # A job stopped before any of the above wrote a report compared nothing, and says so: the
+      # comment then does not take its silence for no difference.
+      - name: Mark a comparison that did not finish
+        if: always()
+        run: |
+          mkdir -p "$RUNNER_TEMP/screens"
+          [ -f "$RUNNER_TEMP/screens/report.json" ] || echo '{"shard":"${{ matrix.shard }}/2","flows":0,"compared":false,"differ":[]}' > "$RUNNER_TEMP/screens/report.json"
+
+      - name: Say which pull request it is for
+        if: always()
+        run: |
+          mkdir -p "$RUNNER_TEMP/screens"
+          printf '{"number":%s,"head":"%s"}\n' "${{ github.event.pull_request.number }}" \
+            "${{ github.event.pull_request.head.sha }}" > "$RUNNER_TEMP/screens/pr.json"
+
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: screens-ios-${{ matrix.shard }}
+          path: ${{ runner.temp }}/screens
+          retention-days: 7
 
   android:
     if: github.event.pull_request.draft != true

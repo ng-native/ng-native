@@ -171,4 +171,51 @@ See [RELEASING.md](./docs/RELEASING.md) for how an actual release goes out.
   explaining why (see `git log --oneline -20` for the style); there is no conventional-commits
   prefix convention (`feat:`, `fix:`, and so on) in use.
 
+### Checking a change against main
+
+`node scripts/pr-gate.mjs` runs what a pull request is checked for against `origin/main`, and prints
+a report for its description:
+
+- formatting, then lint, typecheck and tests of every project the change can reach;
+- the existing tests the change edits or deletes, which the description explains;
+- a version plan, where a package's code changed;
+- what every canary screen sends native, on main and on the change, and each view and prop that
+  differs (`scripts/native-output.mjs`);
+- `pnpm bench`, `bench:tailwind` and `bench:screens` in `packages/integration-tests`, run in turn
+  on each side. A measure fails where it is more than 3% slower and every round of the change was
+  slower than every round of main; one past 3% whose rounds overlap is marked, to be run again with
+  more rounds.
+
+On a pull request, CI does both and comments with what it found. CI's `native-output` job compares
+what each screen sends native when a package or the canary changed. Native builds' `ios-visual` job
+compares the iOS screenshots of main's bundle and the pull request's, each in its own cached app, on
+one simulator. `screens-comment.yml` keeps one comment on the pull request up to date with both,
+showing each screenshot that differs beside main's. It starts a comment only when something
+differs. A comparison that could not be made fails its job.
+
+A difference fails the `Screens` status until a maintainer accepts it: add the `screens-approved`
+label when the change is meant to look different. A new push takes the label off, so what it
+changes is looked at again.
+
+The screenshots committed in `examples/canary/.maestro/ios/baselines`, which `pnpm e2e:ios`
+compares with, are recorded on CI's simulator. A maintainer comments `/update-screenshots` on a
+pull request whose screens changed as intended, and CI records them from its build and commits them
+to the branch. A pull request from a fork has them recorded locally, with `pnpm e2e:ios:record`, as
+Actions cannot push to a fork's branch.
+
+`--base <ref>`, `--rounds <n>`, `--limit <percent>` and `--out <file>` change what it compares with
+and how, and `--skip-bench` leaves the benchmarks out. It exits 1 where a check failed.
+
+What the native output cannot show is how native draws it. For a change that draws, compare two
+iOS release builds of the canary on one simulator:
+
+```sh
+cd examples/canary
+pnpm e2e:ios:compare --base main.app --change pr.app --device <udid> --out visual-diff
+```
+
+It records every screenshot the flows assert from the first build, asserts them on the second, and
+puts the committed baselines back. Each screenshot that differs goes in `visual-diff` with the
+difference marked.
+
 For maintainers cutting a release, see [RELEASING.md](./docs/RELEASING.md).

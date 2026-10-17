@@ -2,9 +2,15 @@
 // look right on the simulator. Runs a copy of each flow that asserts a screenshot, beside the
 // original so its subflows resolve the same, with every `assertScreenshot` turned into a
 // `takeScreenshot` of the baseline it names. The copies are removed afterwards.
+//
+// The committed baselines are recorded on CI's simulator, the newest iPhone and iOS on its Mac, by
+// `/update-screenshots` on a pull request (see update-screenshots.yml). Record them locally on the
+// same: another runtime draws its system font and its bars differently, and a fifth of each
+// screenshot differs for that alone. To compare a change with main, record both builds in one
+// sitting with `compare-builds.mjs`, which needs no committed baseline at all.
 import { execFileSync } from 'node:child_process';
 import { mkdirSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync } from 'node:fs';
-import { basename, dirname, join } from 'node:path';
+import { basename, dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -16,12 +22,15 @@ const output = join(here, '.recording');
 rmSync(output, { recursive: true, force: true });
 const copies = [];
 const expected = new Set();
+// Only the flows named, where any are: `compare-builds.mjs` records a shard of them.
+const only = process.argv.slice(2).map((file) => resolve(file));
 for (const dir of [here, join(here, 'visual')]) {
   for (const name of readdirSync(dir).filter((file) => file.endsWith('.yaml'))) {
+    if (only.length && !only.includes(join(dir, name))) continue;
     const flow = readFileSync(join(dir, name), 'utf8');
     if (!flow.includes('assertScreenshot')) continue;
     const taken = flow.replace(
-      /- assertScreenshot:\n\s+path: (\S+)\.png\n(\s+thresholdPercentage: \d+\n)?/g,
+      /- assertScreenshot:\n\s+path: (\S+)\.png\n(\s+thresholdPercentage: [\d.]+\n)?/g,
       (_, path) => {
         expected.add(`${basename(path)}.png`);
         return `- takeScreenshot: ${basename(path)}\n`;
@@ -34,7 +43,9 @@ for (const dir of [here, join(here, 'visual')]) {
 }
 
 try {
-  execFileSync('maestro', ['test', '--test-output-dir', output, ...copies], {
+  // On the simulator `MAESTRO_DEVICE` names, where one is: see `compare-builds.mjs`.
+  const device = process.env.MAESTRO_DEVICE ? ['--device', process.env.MAESTRO_DEVICE] : [];
+  execFileSync('maestro', [...device, 'test', '--test-output-dir', output, ...copies], {
     stdio: 'inherit',
     env: { ...process.env, JAVA_HOME: process.env.JAVA_HOME ?? '/opt/homebrew/opt/openjdk@21' },
   });

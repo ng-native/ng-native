@@ -1,0 +1,209 @@
+name: Screens comment
+
+# What a pull request does to the canary's screens, in one comment and one commit status.
+#
+# The comment has a section from each workflow that compares the screens: what each screen sends
+# native, from CI's `native-output` job, and the iOS screenshots that differ, from Native builds'
+# `ios-visual` job. Each section records the commit it is for, and is kept up to date as the pull
+# request moves on.
+#
+# The screenshots are shown from a public Cloudflare R2 bucket, one folder a run, so they never land
+# in this repository: the `R2_ACCESS_KEY_ID` and `R2_SECRET_ACCESS_KEY` secrets write to it, and
+# the `R2_ACCOUNT_ID`, `R2_BUCKET` and `R2_PUBLIC_URL` variables say where it is. The bucket's own
+# lifecycle rule deletes them after 30 days. Without the secrets the comment still says which
+# screenshots differ, and links the run, whose artifact has them.
+#
+# The `Screens` status fails while a section for the pull request's head shows a difference, until
+# a maintainer accepts it with the `screens-approved` label. A new push takes the label off, so
+# what it changes is looked at again. The status is what has been compared so far: CI's and Native
+# builds' own checks are what make a merge wait for both comparisons.
+#
+# On `workflow_run` and `pull_request_target`, so it runs from the default branch with a token that
+# can comment, also for a pull request from a fork, whose own run has none. It never checks out or
+# runs the pull request's code: it reads what that run uploaded, which the fork controls, and
+# `scripts/screens-comment.mjs` checks all of it before any reaches the comment.
+on:
+  workflow_run:
+    workflows: [CI, Native builds]
+    types: [completed]
+  pull_request_target:
+    types: [labeled, unlabeled, synchronize]
+
+permissions: {}
+
+jobs:
+  screens:
+    if: >-
+      (github.event_name == 'workflow_run' && github.event.workflow_run.event == 'pull_request') ||
+      (github.event_name == 'pull_request_target' && github.event.action == 'synchronize') ||
+      (github.event_name == 'pull_request_target' && github.event.label.name == 'screens-approved')
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      actions: read
+      contents: read
+      pull-requests: write
+      statuses: write
+    # The two workflows finish close together and edit the same comment: one at a time, by branch.
+    concurrency:
+      group: screens-comment-${{ github.event.workflow_run.head_repository.full_name || github.event.pull_request.head.repo.full_name }}-${{ github.event.workflow_run.head_branch || github.event.pull_request.head.ref }}
+      cancel-in-progress: false
+    env:
+      GH_TOKEN: ${{ github.token }}
+      RUN: ${{ github.event.workflow_run.id }}
+      EVENT: ${{ github.event_name }}
+      ACTION: ${{ github.event.action }}
+      NUMBER: ${{ github.event.pull_request.number }}
+      HEAD: ${{ github.event.workflow_run.head_sha || github.event.pull_request.head.sha }}
+      AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+      AWS_DEFAULT_REGION: auto
+      R2_ACCOUNT_ID: ${{ vars.R2_ACCOUNT_ID }}
+      R2_BUCKET: ${{ vars.R2_BUCKET }}
+      R2_PUBLIC_URL: ${{ vars.R2_PUBLIC_URL }}
+    steps:
+      # The default branch's scripts, never the pull request's.
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          persist-credentials: false
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+
+      # Any may be missing: a job that did not run uploads nothing. Any other failure to download
+      # is a failure, not "nothing to say".
+      - name: Download what the run uploaded
+        if: github.event_name == 'workflow_run'
+        run: |
+          for name in screens-pr screens-native-output screens-ios-1 screens-ios-2; do
+            if ! output=$(gh run download "$RUN" -R "$GITHUB_REPOSITORY" -n "$name" -D "$RUNNER_TEMP/in/$name" 2>&1); then
+              grep -qiE 'no (valid )?artifacts? (found|matches)' <<< "$output" || { echo "$output"; exit 1; }
+            fi
+          done
+          # The screenshot comparison's two halves, as one: each half's images checked, and a half
+          # that uploaded nothing is a comparison that did not finish.
+          shards=()
+          for half in 1 2; do [ -d "$RUNNER_TEMP/in/screens-ios-$half" ] && shards+=("$RUNNER_TEMP/in/screens-ios-$half"); done
+          if [ ${#shards[@]} -gt 0 ]; then
+            mkdir -p "$RUNNER_TEMP/in/screens-ios"
+            cp "${shards[0]}/pr.json" "$RUNNER_TEMP/in/screens-ios/pr.json"
+            # A missing half is an empty upload, which the merge reads as not compared.
+            if [ ${#shards[@]} = 1 ]; then
+              mkdir -p "$RUNNER_TEMP/in/missing-half" && shards+=("$RUNNER_TEMP/in/missing-half")
+            fi
+            node scripts/screens-comment.mjs merge-reports "$RUNNER_TEMP/in/screens-ios" "${shards[@]}"
+          fi
+
+      - name: Comment, and set the Screens status
+        run: |
+          set -euo pipefail
+          in=$RUNNER_TEMP/in
+          status() {
+            gh api "repos/$GITHUB_REPOSITORY/statuses/$HEAD" -f context=Screens -f state="$1" \
+              -f description="$2" -f target_url="$3" > /dev/null
+          }
+          pr_url="https://github.com/$GITHUB_REPOSITORY/pull/"
+
+          # Which pull request: the event's own, or the one the run says it built, checked.
+          number=$NUMBER
+          if [ "$EVENT" = workflow_run ]; then
+            pr=$(find "$in" -name pr.json -print -quit 2> /dev/null || true)
+            [ -n "$pr" ] || { echo "The run uploaded nothing to say which pull request."; exit 0; }
+            number=$(jq -r '.number' "$pr")
+            [[ "$number" =~ ^[0-9]+$ ]] || { echo "not a pull request number: $number"; exit 1; }
+            [ "$(jq -r '.head' "$pr")" = "$HEAD" ] || { echo "the upload is not for $HEAD"; exit 1; }
+          fi
+          if [ "$(gh api "repos/$GITHUB_REPOSITORY/pulls/$number" --jq .head.sha)" != "$HEAD" ]; then
+            echo "#$number has moved on since $HEAD: its newer run says."; exit 0
+          fi
+
+          # A new push: what it changes is looked at again, so an acceptance does not carry over.
+          if [ "$EVENT" = pull_request_target ] && [ "$ACTION" = synchronize ]; then
+            gh api -X DELETE "repos/$GITHUB_REPOSITORY/issues/$number/labels/screens-approved" \
+              > /dev/null 2>&1 || true
+            status pending "Waiting for the screens to be compared" "$pr_url$number"
+            exit 0
+          fi
+
+          # The run's section, where it compared anything.
+          section=$RUNNER_TEMP/section.md
+          key=
+          if [ -f "$in/screens-native-output/native-output.json" ]; then
+            key=native-output
+            node scripts/screens-comment.mjs native "$in/screens-native-output/native-output.json" > "$section"
+          # A native comparison the run was to make and did not finish: a section of its own, which
+          # the status fails on until a run of this commit compares it, whichever workflow comes next.
+          elif [ "$(jq -r '.native // false' "$in/screens-pr/pr.json" 2> /dev/null)" = true ]; then
+            key=native-output
+            node scripts/screens-comment.mjs native-missing \
+              "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$RUN" > "$section"
+          # An upload with no report is a comparison stopped before it wrote one.
+          elif [ -f "$in/screens-ios/pr.json" ] && [ ! -f "$in/screens-ios/report.json" ]; then
+            key=screenshots
+            node -e 'import("./scripts/screens-comment.mjs").then((m) => console.log(m.screenshotSection({ compared: false }, "")))' > "$section"
+          elif [ -f "$in/screens-ios/report.json" ]; then
+            key=screenshots
+            dir=$in/screens-ios
+            folder="$GITHUB_REPOSITORY/pr-$number/$RUN"
+            if [ -n "$AWS_ACCESS_KEY_ID" ] && [ -n "$R2_ACCOUNT_ID" ] && [ -n "$R2_BUCKET" ] && [ -n "$R2_PUBLIC_URL" ]; then
+              node scripts/screens-comment.mjs screenshots "$dir" "${R2_PUBLIC_URL%/}/$folder" > "$section"
+              # The images, checked by the line above, in the bucket the comment shows them from.
+              if compgen -G "$dir/*.png" > /dev/null; then
+                aws s3 cp "$dir" "s3://$R2_BUCKET/$folder/" --recursive --only-show-errors \
+                  --exclude '*' --include '*.png' \
+                  --endpoint-url "https://$R2_ACCOUNT_ID.r2.cloudflarestorage.com"
+              fi
+            else
+              # No store to show them from: say which differ, and where the images are.
+              node scripts/screens-comment.mjs screenshots "$dir" "" > "$section"
+              printf '\nImages: the \x60screens-ios\x60 artifact of [the run](%s).\n' \
+                "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$RUN" >> "$section"
+            fi
+          fi
+
+          # One comment, ours: found by its mark, and only one this workflow wrote.
+          comment=$(gh api --paginate "repos/$GITHUB_REPOSITORY/issues/$number/comments" \
+            --jq '.[] | select(.user.login == "github-actions[bot]" and (.body | startswith("<!-- screens-report -->"))) | .id' | sed -n 1p)
+          old=$RUNNER_TEMP/old.md
+          body=$RUNNER_TEMP/body.md
+          : > "$old"
+          [ -z "$comment" ] || gh api "repos/$GITHUB_REPOSITORY/issues/comments/$comment" --jq .body > "$old"
+          if [ -n "$key" ]; then
+            node scripts/screens-comment.mjs merge "$old" "$key" "$section" "$HEAD" > "$body"
+            if [ -n "$comment" ]; then
+              gh api -X PATCH "repos/$GITHUB_REPOSITORY/issues/comments/$comment" -F "body=@$body" > /dev/null
+              cp "$body" "$old"
+            # Nothing differs and no comment yet: none is started to say so.
+            elif node scripts/screens-comment.mjs worth "$section"; then
+              comment=$(gh api "repos/$GITHUB_REPOSITORY/issues/$number/comments" -F "body=@$body" --jq .id)
+              cp "$body" "$old"
+            fi
+          fi
+
+          # The status, from the comment's sections for this commit and the label.
+          link=$pr_url$number
+          [ -z "$comment" ] || link="$link#issuecomment-$comment"
+          # A comparison for this commit that did not finish is no comparison that found nothing.
+          approved=false
+          if gh api "repos/$GITHUB_REPOSITORY/issues/$number/labels" --jq '.[].name' | grep -qx screens-approved; then
+            approved=true
+          fi
+          # One a maintainer accepts as it is, a change to the native half whose base is not cached
+          # among them, passes with the label, and says so.
+          if node scripts/screens-comment.mjs incomplete "$old" "$HEAD"; then
+            if [ "$approved" = true ]; then
+              status success "Accepted, though a comparison of the screens did not finish" "$link"
+            else
+              status failure "A comparison of the screens did not finish: see the comment" "$link"
+            fi
+          elif node scripts/screens-comment.mjs differs "$old" "$HEAD"; then
+            if [ "$approved" = true ]; then
+              status success "The screens differ, and that is accepted" "$link"
+            else
+              status failure "The screens differ: accept with the screens-approved label" "$link"
+            fi
+          else
+            status success "No screen differs from main" "$link"
+          fi

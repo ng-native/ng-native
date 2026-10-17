@@ -1,0 +1,137 @@
+name: Update screenshots
+
+# A maintainer comments `/update-screenshots` on a pull request whose screens changed as intended,
+# and this records the committed baselines of `examples/canary/.maestro/ios` from the app Native
+# builds tested the pull request's head with, and commits them to its branch.
+#
+# The baselines are what `pnpm e2e:ios` compares with; CI's comparison records main afresh and
+# needs none. A branch of this repository only: Actions cannot push to a fork's, so for one a
+# maintainer records them locally (`pnpm e2e:ios:record`).
+#
+# A push with Actions' own token starts no workflow, so this dispatches CI and Native builds for the
+# new commit itself. And it carries the `Screens` status, and the comment's sections, of the commit
+# before over to the new one: a commit of baselines alone compares nothing new, and must not pass a
+# difference nobody accepted, which the `screens-approved` label still accepts.
+on:
+  issue_comment:
+    types: [created]
+
+permissions: {}
+
+jobs:
+  update:
+    if: >-
+      github.event.issue.pull_request &&
+      startsWith(github.event.comment.body, '/update-screenshots') &&
+      contains(fromJSON('["OWNER", "MEMBER", "COLLABORATOR"]'), github.event.comment.author_association)
+    runs-on: macos-latest
+    timeout-minutes: 30
+    permissions:
+      actions: write
+      contents: write
+      pull-requests: write
+      statuses: write
+    concurrency:
+      group: update-screenshots-${{ github.event.issue.number }}
+      cancel-in-progress: false
+    env:
+      GH_TOKEN: ${{ github.token }}
+      NUMBER: ${{ github.event.issue.number }}
+    steps:
+      - name: Find the pull request's branch
+        id: pr
+        run: |
+          set -euo pipefail
+          gh api "repos/$GITHUB_REPOSITORY/pulls/$NUMBER" > "$RUNNER_TEMP/pr.json"
+          repo=$(jq -r '.head.repo.full_name' "$RUNNER_TEMP/pr.json")
+          if [ "$repo" != "$GITHUB_REPOSITORY" ]; then
+            gh api "repos/$GITHUB_REPOSITORY/issues/$NUMBER/comments" -f body="The screenshots of a pull request from a fork are recorded locally: Actions cannot push to its branch. Run \`pnpm e2e:ios:record\` in \`examples/canary\` against a release build, as CONTRIBUTING.md says." > /dev/null
+            exit 1
+          fi
+          # The screens compared already, and the Screens status final: it is carried over to the commit
+          # of baselines, which compares nothing, so one still pending would stay pending for good.
+          head=$(jq -r '.head.sha' "$RUNNER_TEMP/pr.json")
+          state=$(gh api "repos/$GITHUB_REPOSITORY/commits/$head/status" \
+            --jq '[.statuses[] | select(.context == "Screens") | .state] | first // "none"')
+          if [ "$state" != success ] && [ "$state" != failure ]; then
+            gh api "repos/$GITHUB_REPOSITORY/issues/$NUMBER/comments" -f body="The screens of this pull request are still being compared. Comment \`/update-screenshots\` again once the Screens check has finished." > /dev/null
+            exit 1
+          fi
+          echo "branch=$(jq -r '.head.ref' "$RUNNER_TEMP/pr.json")" >> "$GITHUB_OUTPUT"
+          echo "head=$(jq -r '.head.sha' "$RUNNER_TEMP/pr.json")" >> "$GITHUB_OUTPUT"
+
+      # The commit checked above, not the branch's tip, which may have moved on since.
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ steps.pr.outputs.head }}
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+
+      # The app Native builds tested this commit with: the pull request's own cache is out of this
+      # workflow's reach, as it runs for the default branch.
+      - name: Download the pull request's app
+        env:
+          HEAD: ${{ steps.pr.outputs.head }}
+        run: |
+          set -euo pipefail
+          run=$(gh run list -R "$GITHUB_REPOSITORY" --workflow native.yml --commit "$HEAD" \
+            --event pull_request --status success --limit 1 --json databaseId --jq '.[0].databaseId // empty')
+          if [ -z "$run" ]; then
+            gh api "repos/$GITHUB_REPOSITORY/issues/$NUMBER/comments" -f body="Native builds has not finished for $HEAD yet. Comment \`/update-screenshots\` again once it has." > /dev/null
+            exit 1
+          fi
+          gh run download "$run" -R "$GITHUB_REPOSITORY" -n canary-ios-app -D "$RUNNER_TEMP/app"
+          tar -xzf "$RUNNER_TEMP/app/canary-app.tgz" -C "$RUNNER_TEMP"
+
+      - uses: actions/setup-java@v6
+        with:
+          distribution: zulu
+          java-version: 17
+      - name: Install Maestro
+        run: |
+          curl -fsSL https://get.maestro.mobile.dev | MAESTRO_VERSION=2.10.0 bash
+          echo "$HOME/.maestro/bin" >> "$GITHUB_PATH"
+
+      - name: Record the baselines
+        run: ./examples/canary/scripts/record-ios.sh "$RUNNER_TEMP/canary.app"
+
+      - name: Commit them, and run the checks for the commit
+        env:
+          BRANCH: ${{ steps.pr.outputs.branch }}
+          BEFORE: ${{ steps.pr.outputs.head }}
+        run: |
+          set -euo pipefail
+          baselines=examples/canary/.maestro/ios/baselines
+          git add "$baselines"
+          if git diff --cached --quiet; then
+            gh api "repos/$GITHUB_REPOSITORY/issues/$NUMBER/comments" -f body="The screenshot baselines already match this pull request's build: nothing to commit." > /dev/null
+            exit 0
+          fi
+          git -c user.name=github-actions -c user.email=github-actions@github.com \
+            commit --quiet -m "Record the screenshot baselines from this pull request's build"
+          # Not forced: a branch that moved since the commit checked out rejects it.
+          git push --quiet origin "HEAD:refs/heads/$BRANCH"
+          after=$(git rev-parse HEAD)
+          # The Screens status of the commit before, as it was: see the top of this file.
+          screens=$(gh api "repos/$GITHUB_REPOSITORY/commits/$BEFORE/status" \
+            --jq '.statuses[] | select(.context == "Screens") | [.state, .description, .target_url] | @tsv' | head -1)
+          if [ -n "$screens" ]; then
+            IFS=$'\t' read -r state description link <<< "$screens"
+            gh api "repos/$GITHUB_REPOSITORY/statuses/$after" -f context=Screens -f state="$state" \
+              -f description="$description" -f target_url="$link" > /dev/null
+          fi
+          # The comment's sections were written for the commit before, and hold for this one, which
+          # changes only the baselines no comparison reads: they are said to be for it, so the label
+          # and the next run judge it by them.
+          comment=$(gh api --paginate "repos/$GITHUB_REPOSITORY/issues/$NUMBER/comments" \
+            --jq '.[] | select(.user.login == "github-actions[bot]" and (.body | startswith("<!-- screens-report -->"))) | .id' | sed -n 1p)
+          if [ -n "$comment" ]; then
+            gh api "repos/$GITHUB_REPOSITORY/issues/comments/$comment" --jq .body \
+              | sed "s/:start $BEFORE -->/:start $after -->/" > "$RUNNER_TEMP/body.md"
+            gh api -X PATCH "repos/$GITHUB_REPOSITORY/issues/comments/$comment" -F "body=@$RUNNER_TEMP/body.md" > /dev/null
+          fi
+          gh workflow run ci.yml --ref "$BRANCH"
+          gh workflow run native.yml --ref "$BRANCH"
+          count=$(git show --stat --format= HEAD -- "$baselines" | tail -1)
+          gh api "repos/$GITHUB_REPOSITORY/issues/$NUMBER/comments" -f body="Recorded the screenshot baselines from this pull request's build in $after: $count." > /dev/null
