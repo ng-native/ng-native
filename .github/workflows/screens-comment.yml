@@ -120,6 +120,12 @@ jobs:
           if [ -f "$in/screens-native-output/native-output.json" ]; then
             key=native-output
             node scripts/screens-comment.mjs native "$in/screens-native-output/native-output.json" > "$section"
+          # A native comparison the run was to make and did not finish: a section of its own, which
+          # the status fails on until a run of this commit compares it, whichever workflow comes next.
+          elif [ "$(jq -r '.native // false' "$in/screens-pr/pr.json" 2> /dev/null)" = true ]; then
+            key=native-output
+            node scripts/screens-comment.mjs native-missing \
+              "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$RUN" > "$section"
           elif [ -f "$in/screens-ios/report.json" ]; then
             key=screenshots
             dir=$in/screens-ios
@@ -162,11 +168,9 @@ jobs:
           # The status, from the comment's sections for this commit and the label.
           link=$pr_url$number
           [ -z "$comment" ] || link="$link#issuecomment-$comment"
-          # A comparison the run was to make and did not finish is no comparison that found nothing.
-          if [ "$EVENT" = workflow_run ] && [ "$(jq -r '.native // false' "$in/screens-pr/pr.json" 2> /dev/null)" = true ] \
-            && [ ! -f "$in/screens-native-output/native-output.json" ]; then
-            status failure "The native output was not compared: see the run" \
-              "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$RUN"
+          # A comparison for this commit that did not finish is no comparison that found nothing.
+          if node scripts/screens-comment.mjs incomplete "$old" "$HEAD"; then
+            status failure "A comparison of the screens did not finish: see the comment" "$link"
           elif node scripts/screens-comment.mjs differs "$old" "$HEAD"; then
             if gh api "repos/$GITHUB_REPOSITORY/issues/$number/labels" --jq '.[].name' | grep -qx screens-approved; then
               status success "The screens differ, and that is accepted" "$link"

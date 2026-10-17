@@ -62,8 +62,13 @@ jobs:
       # compile goes to a default directory that nothing saves, and each run starts from nothing.
       CCACHE_DIR: ${{ github.workspace }}/.ccache
       CCACHE_MAXSIZE: 2G
+    # It runs the pull request's code: no token kept in the checkout, and nothing it may write.
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
       - uses: ./.github/actions/setup
 
       # The app's native half is most of the job's time; its JavaScript is a minute. So the app is
@@ -153,8 +158,13 @@ jobs:
     needs: ios-build
     runs-on: macos-latest
     timeout-minutes: 25
+    # It runs the pull request's code: no token kept in the checkout, and nothing it may write.
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
 
       - uses: actions/download-artifact@v8
         with:
@@ -195,15 +205,21 @@ jobs:
     runs-on: macos-latest
     # Two bundles and two walks of the screenshot flows, each about eight minutes.
     timeout-minutes: 45
+    # It runs the pull request's code: no token kept in the checkout, and nothing it may write.
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
+          persist-credentials: false
       - uses: ./.github/actions/setup
 
+      # Main as the pull request was merged with for this run, whose app main's own run cached: the
+      # checkout is that merge, and its first parent is main. The event's base.sha can be older.
       - name: Check out and install main
         run: |
-          git worktree add --detach "$RUNNER_TEMP/base" "${{ github.event.pull_request.base.sha }}"
+          git worktree add --detach "$RUNNER_TEMP/base" "$(git rev-parse HEAD^1)"
           pnpm --dir "$RUNNER_TEMP/base" install --frozen-lockfile --prefer-offline
 
       - id: fingerprint

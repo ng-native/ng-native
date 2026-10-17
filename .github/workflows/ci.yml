@@ -234,10 +234,11 @@ jobs:
 
       - uses: ./.github/actions/setup
 
-      # The base the pull request goes into, as a checkout of its own beside this one.
+      # Main as the pull request was merged with for this run: the checkout is that merge, and its
+      # first parent is main. The event's base.sha can be older, the commit the branch started from.
       - name: Check out and install the base
         run: |
-          git worktree add --detach "$RUNNER_TEMP/base" "${{ github.event.pull_request.base.sha }}"
+          git worktree add --detach "$RUNNER_TEMP/base" "$(git rev-parse HEAD^1)"
           pnpm --dir "$RUNNER_TEMP/base" install --frozen-lockfile --prefer-offline
 
       - name: Write what each screen sends native, on each side

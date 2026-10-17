@@ -8,8 +8,18 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { describe, it } from 'node:test';
 // A script of the repository's, not a package: loaded by its path, which no import can name.
-const { MARK, clean, differs, images, merge, nativeSection, screenshotSection, worth } =
-  await import(new URL('../../scripts/screens-comment.mjs', import.meta.url).href);
+const {
+  MARK,
+  clean,
+  differs,
+  images,
+  incomplete,
+  merge,
+  nativeMissing,
+  nativeSection,
+  screenshotSection,
+  worth,
+} = await import(new URL('../../scripts/screens-comment.mjs', import.meta.url).href);
 
 const PNG = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 0]);
 
@@ -165,5 +175,34 @@ describe('screens-comment', () => {
     assert.equal(worth('### Native output: 0 of 92 screens changed\n'), false);
     assert.equal(worth('### iOS screenshots: none of 12 flows differ\n'), false);
     assert.equal(worth("### iOS screenshots\n\nNot compared: main's app is not cached"), false);
+  });
+
+  it('keeps a comparison that did not finish failing, whichever run reads the comment next', () => {
+    const run = 'https://github.com/o/r/actions/runs/1';
+    // CI's native comparison did not finish; Native builds then finds no screenshot differing.
+    const missing = merge('', 'native-output', nativeMissing(run), 'abc1234');
+    const later = merge(
+      missing,
+      'screenshots',
+      '### iOS screenshots: none of 12 flows differ',
+      'abc1234',
+    );
+    assert.equal(incomplete(later, 'abc1234'), true);
+    assert.equal(differs(later, 'abc1234'), true, 'nor read as nothing differing');
+    // A run of the same commit that compares it puts the native output right.
+    const done = merge(
+      later,
+      'native-output',
+      '### Native output: 0 of 92 screens changed',
+      'abc1234',
+    );
+    assert.equal(incomplete(done, 'abc1234'), false);
+    assert.equal(differs(done, 'abc1234'), false);
+    // A screenshot comparison a flow stopped is the same, and starts a comment to say so.
+    const stopped = screenshotSection({ flows: 12, compared: false, differ: [] }, '');
+    assert.equal(worth(stopped), true);
+    assert.equal(incomplete(merge('', 'screenshots', stopped, 'abc1234'), 'abc1234'), true);
+    // Nor can an upload write the mark: what a run uploads is cleaned of the angle brackets it needs.
+    assert.doesNotMatch(String(clean('<!-- incomplete -->')), /<!--/);
   });
 });

@@ -14,6 +14,10 @@
  *       shown from <url>/<file>
  *   node scripts/screens-comment.mjs merge <comment> <key> <section> <head>
  *       the comment's body with the section for <key> at commit <head> put in, or added
+ *   node scripts/screens-comment.mjs native-missing <run url>
+ *       the native output's section for a comparison that was to be made and did not finish
+ *   node scripts/screens-comment.mjs incomplete <comment> <head>
+ *       exits 0 where a comparison for <head> did not finish, which the `Screens` status fails on
  *   node scripts/screens-comment.mjs differs <comment> <head>
  *       exits 0 where the comment shows a difference at <head>, which the `Screens` status fails on
  *   node scripts/screens-comment.mjs worth <section>...
@@ -26,6 +30,17 @@ import { report } from './native-output.mjs';
 
 /** The comment's own mark, which is how it is found again. */
 export const MARK = '<!-- screens-report -->';
+
+/**
+ * A section's mark for a comparison that was to be made and did not finish: the `Screens` status
+ * fails on it, whichever workflow's run reads the comment next. Written by this script alone,
+ * after what a run uploaded is cleaned, so no upload can write it or take it away.
+ */
+export const INCOMPLETE = '<!-- incomplete -->';
+
+/** The native output's section for a comparison that did not finish. */
+export const nativeMissing = (run) =>
+  `### Native output: not compared\n\nThe comparison did not finish: see [the run](${run}).\n${INCOMPLETE}`;
 
 /** The most screens and screenshots listed, and the largest image put in a comment. */
 const MOST_SCREENS = 50;
@@ -81,7 +96,7 @@ export function screenshotSection(manifest, base) {
   const { flows, compared, differ, skipped } = clean(manifest) ?? {};
   if (typeof skipped === 'string') return `### iOS screenshots\n\nNot compared: ${skipped}`;
   if (compared !== true) {
-    return '### iOS screenshots\n\nNot compared: a flow failed before its screenshots, see the run.';
+    return `### iOS screenshots\n\nNot compared: a flow failed before its screenshots, see the run.\n${INCOMPLETE}`;
   }
   const shots = (Array.isArray(differ) ? differ : []).filter(
     (one) => IMAGE_NAME.test(one?.base ?? '') && IMAGE_NAME.test(one?.diff ?? ''),
@@ -172,6 +187,7 @@ function sectionsFor(body, head) {
  * nothing changed, or that nothing could be compared, updates one already there and starts none.
  */
 export const worth = (section) =>
+  section.includes(INCOMPLETE) ||
   /^### (Native output: [1-9]\d* of \d+ screens changed|iOS screenshots: \d+ differ)/m.test(
     section,
   );
@@ -181,6 +197,10 @@ export const worth = (section) =>
  * accepted. Only the sections for that commit count: one from an earlier push says nothing of it.
  */
 export const differs = (body, head) => Object.values(sectionsFor(body, head)).some(worth);
+
+/** Whether a comparison for `head` did not finish, which fails the `Screens` status as a difference does. */
+export const incomplete = (body, head) =>
+  Object.values(sectionsFor(body, head)).some((section) => section.includes(INCOMPLETE));
 
 function main([command, ...args]) {
   if (command === 'native')
@@ -195,6 +215,11 @@ function main([command, ...args]) {
     return console.log(
       merge(readFileSync(comment, 'utf8'), key, readFileSync(section, 'utf8'), head),
     );
+  }
+  if (command === 'native-missing') return console.log(nativeMissing(args[0]));
+  if (command === 'incomplete') {
+    process.exitCode = incomplete(readFileSync(args[0], 'utf8'), args[1]) ? 0 : 1;
+    return;
   }
   if (command === 'differs') {
     process.exitCode = differs(readFileSync(args[0], 'utf8'), args[1]) ? 0 : 1;
