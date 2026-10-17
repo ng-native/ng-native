@@ -94,7 +94,8 @@ export function nativeSection(json) {
  */
 export function screenshotSection(manifest, base) {
   const { flows, compared, differ, skipped } = clean(manifest) ?? {};
-  if (typeof skipped === 'string') return `### iOS screenshots\n\nNot compared: ${skipped}`;
+  if (typeof skipped === 'string')
+    return `### iOS screenshots\n\nNot compared: ${skipped}.\n${INCOMPLETE}`;
   if (compared !== true) {
     return `### iOS screenshots\n\nNot compared: a flow failed before its screenshots, see the run.\n${INCOMPLETE}`;
   }

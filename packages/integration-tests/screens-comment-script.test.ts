@@ -202,6 +202,10 @@ describe('screens-comment', () => {
     const stopped = screenshotSection({ flows: 12, compared: false, differ: [] }, '');
     assert.equal(worth(stopped), true);
     assert.equal(incomplete(merge('', 'screenshots', stopped, 'abc1234'), 'abc1234'), true);
+    // And one with no app of the base's to compare with: nothing was compared, which is no pass.
+    const skipped = screenshotSection({ skipped: 'no app of the base is cached' }, '');
+    assert.match(skipped, /Not compared: no app of the base is cached\./);
+    assert.equal(incomplete(merge('', 'screenshots', skipped, 'abc1234'), 'abc1234'), true);
     // Nor can an upload write the mark: what a run uploads is cleaned of the angle brackets it needs.
     assert.doesNotMatch(String(clean('<!-- incomplete -->')), /<!--/);
   });

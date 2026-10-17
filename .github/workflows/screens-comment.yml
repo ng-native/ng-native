@@ -126,6 +126,10 @@ jobs:
             key=native-output
             node scripts/screens-comment.mjs native-missing \
               "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$RUN" > "$section"
+          # An upload with no report is a comparison stopped before it wrote one.
+          elif [ -f "$in/screens-ios/pr.json" ] && [ ! -f "$in/screens-ios/report.json" ]; then
+            key=screenshots
+            node -e 'import("./scripts/screens-comment.mjs").then((m) => console.log(m.screenshotSection({ compared: false }, "")))' > "$section"
           elif [ -f "$in/screens-ios/report.json" ]; then
             key=screenshots
             dir=$in/screens-ios
@@ -169,10 +173,20 @@ jobs:
           link=$pr_url$number
           [ -z "$comment" ] || link="$link#issuecomment-$comment"
           # A comparison for this commit that did not finish is no comparison that found nothing.
+          approved=false
+          if gh api "repos/$GITHUB_REPOSITORY/issues/$number/labels" --jq '.[].name' | grep -qx screens-approved; then
+            approved=true
+          fi
+          # One a maintainer accepts as it is, a change to the native half whose base is not cached
+          # among them, passes with the label, and says so.
           if node scripts/screens-comment.mjs incomplete "$old" "$HEAD"; then
-            status failure "A comparison of the screens did not finish: see the comment" "$link"
+            if [ "$approved" = true ]; then
+              status success "Accepted, though a comparison of the screens did not finish" "$link"
+            else
+              status failure "A comparison of the screens did not finish: see the comment" "$link"
+            fi
           elif node scripts/screens-comment.mjs differs "$old" "$HEAD"; then
-            if gh api "repos/$GITHUB_REPOSITORY/issues/$number/labels" --jq '.[].name' | grep -qx screens-approved; then
+            if [ "$approved" = true ]; then
               status success "The screens differ, and that is accepted" "$link"
             else
               status failure "The screens differ: accept with the screens-approved label" "$link"
