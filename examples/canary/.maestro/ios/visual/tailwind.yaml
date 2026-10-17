@@ -13,3 +13,19 @@ appId: dev.angularnative.canary
 - assertScreenshot:
     path: ../baselines/visual-tailwind.png
     thresholdPercentage: 99.99
+# Three screens further down, one scroll at a time, so a long page is compared past its first view.
+- scroll
+- waitForAnimationToEnd
+- assertScreenshot:
+    path: ../baselines/visual-tailwind-2.png
+    thresholdPercentage: 99.99
+- scroll
+- waitForAnimationToEnd
+- assertScreenshot:
+    path: ../baselines/visual-tailwind-3.png
+    thresholdPercentage: 99.99
+- scroll
+- waitForAnimationToEnd
+- assertScreenshot:
+    path: ../baselines/visual-tailwind-4.png
+    thresholdPercentage: 99.99

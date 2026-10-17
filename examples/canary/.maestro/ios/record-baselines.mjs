@@ -21,7 +21,7 @@ for (const dir of [here, join(here, 'visual')]) {
     const flow = readFileSync(join(dir, name), 'utf8');
     if (!flow.includes('assertScreenshot')) continue;
     const taken = flow.replace(
-      /- assertScreenshot:\n\s+path: (\S+)\.png\n(\s+thresholdPercentage: \d+\n)?/g,
+      /- assertScreenshot:\n\s+path: (\S+)\.png\n(\s+thresholdPercentage: [\d.]+\n)?/g,
       (_, path) => {
         expected.add(`${basename(path)}.png`);
         return `- takeScreenshot: ${basename(path)}\n`;
@@ -34,7 +34,9 @@ for (const dir of [here, join(here, 'visual')]) {
 }
 
 try {
-  execFileSync('maestro', ['test', '--test-output-dir', output, ...copies], {
+  // On the simulator `MAESTRO_DEVICE` names, where one is: see `compare-builds.mjs`.
+  const device = process.env.MAESTRO_DEVICE ? ['--device', process.env.MAESTRO_DEVICE] : [];
+  execFileSync('maestro', [...device, 'test', '--test-output-dir', output, ...copies], {
     stdio: 'inherit',
     env: { ...process.env, JAVA_HOME: process.env.JAVA_HOME ?? '/opt/homebrew/opt/openjdk@21' },
   });

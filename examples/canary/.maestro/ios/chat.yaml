@@ -18,5 +18,5 @@ appId: dev.angularnative.canary
     duration: 600
 - assertScreenshot:
     path: baselines/chat-after-send.png
-    thresholdPercentage: 97
+    thresholdPercentage: 99.9
 - runFlow: ../subflows/no-error-screen.yaml

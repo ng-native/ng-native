@@ -8,4 +8,20 @@ appId: dev.angularnative.canary
 - waitForAnimationToEnd
 - assertScreenshot:
     path: ../baselines/visual-text.png
-    thresholdPercentage: 97
+    thresholdPercentage: 99.9
+# Three screens further down, one scroll at a time, so a long page is compared past its first view.
+- scroll
+- waitForAnimationToEnd
+- assertScreenshot:
+    path: ../baselines/visual-text-2.png
+    thresholdPercentage: 99.9
+- scroll
+- waitForAnimationToEnd
+- assertScreenshot:
+    path: ../baselines/visual-text-3.png
+    thresholdPercentage: 99.9
+- scroll
+- waitForAnimationToEnd
+- assertScreenshot:
+    path: ../baselines/visual-text-4.png
+    thresholdPercentage: 99.9

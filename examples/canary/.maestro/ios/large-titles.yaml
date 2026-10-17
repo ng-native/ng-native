@@ -9,7 +9,7 @@ appId: dev.angularnative.canary
     timeout: 30000
 - assertScreenshot:
     path: baselines/home-large-title.png
-    thresholdPercentage: 97
+    thresholdPercentage: 99.9
 - swipe:
     start: 50%, 70%
     end: 50%, 40%
@@ -17,7 +17,7 @@ appId: dev.angularnative.canary
 - waitForAnimationToEnd
 - assertScreenshot:
     path: baselines/home-collapsed-title.png
-    thresholdPercentage: 97
+    thresholdPercentage: 99.9
 - runFlow:
     file: subflows/open.yaml
     env:
@@ -29,4 +29,4 @@ appId: dev.angularnative.canary
 - waitForAnimationToEnd
 - assertScreenshot:
     path: baselines/search-collapsed-title.png
-    thresholdPercentage: 97
+    thresholdPercentage: 99.9

@@ -16,4 +16,4 @@ appId: dev.angularnative.canary
 # The sheet is modal to accessibility, so the toast above it is checked by how it looks.
 - assertScreenshot:
     path: baselines/overlays-sheet-toast.png
-    thresholdPercentage: 97
+    thresholdPercentage: 99.9
