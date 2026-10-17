@@ -1,18 +1,17 @@
-# Opens one canary screen from a freshly launched release build by its deep link, `canary://${PATH}`,
-# rather than finding its row on the home screen: no scroll down a long list first. `SHOWS` is what
-# the screen shows once it is there; iOS's "Open in canary?" is answered where it is asked.
+# Opens one canary screen by its deep link, `canary://${PATH}`, launching the release build onto
+# it: no home screen to wait for, and no scroll down its long list. `SHOWS` is what the screen
+# shows once it is there. Links are allowed already, by allow-links.yaml, which runs first.
 appId: dev.angularnative.canary
 ---
-- launchApp:
-    stopApp: true
-- extendedWaitUntil:
-    visible: 'Angular Native'
-    timeout: 30000
-- runFlow:
-    file: ../../subflows/follow-link.yaml
-    env:
-      LINK: 'canary://${PATH}'
-      SHOWS: '${SHOWS}'
+- stopApp
+# A starved CI simulator has dropped a link: the screen never came. Opened once more then.
+- retry:
+    maxRetries: 1
+    commands:
+      - openLink: 'canary://${PATH}'
+      - extendedWaitUntil:
+          visible: '${SHOWS}'
+          timeout: 45000
 # Until the home screen has gone: its rows name the screens too, so what the screen shows can be
 # visible before the screen is.
 - extendedWaitUntil:

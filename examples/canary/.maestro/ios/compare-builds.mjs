@@ -172,7 +172,9 @@ function assert(device, app, flows, from, out) {
     });
     let run;
     try {
-      run = spawnSync('maestro', ['--device', device, 'test', ...copies], {
+      // Links allowed first, which the flows that open a screen by its link expect.
+      const allow = join(here, 'allow-links.yaml');
+      run = spawnSync('maestro', ['--device', device, 'test', allow, ...copies], {
         stdio: 'inherit',
         env: { ...process.env, ...java },
       });

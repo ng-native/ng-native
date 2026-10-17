@@ -45,7 +45,9 @@ for (const dir of [here, join(here, 'visual')]) {
 try {
   // On the simulator `MAESTRO_DEVICE` names, where one is: see `compare-builds.mjs`.
   const device = process.env.MAESTRO_DEVICE ? ['--device', process.env.MAESTRO_DEVICE] : [];
-  execFileSync('maestro', [...device, 'test', '--test-output-dir', output, ...copies], {
+  // Links allowed first, which the flows that open a screen by its link expect.
+  const allow = join(here, 'allow-links.yaml');
+  execFileSync('maestro', [...device, 'test', '--test-output-dir', output, allow, ...copies], {
     stdio: 'inherit',
     env: { ...process.env, JAVA_HOME: process.env.JAVA_HOME ?? '/opt/homebrew/opt/openjdk@21' },
   });
