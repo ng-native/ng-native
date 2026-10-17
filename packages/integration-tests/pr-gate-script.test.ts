@@ -3,6 +3,9 @@
  * pull request is slower, has changed existing tests, or owes a version plan.
  */
 import assert from 'node:assert/strict';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
 import { describe, it } from 'node:test';
 // A script of the repository's, not a package: loaded by its path, which no import can name.
 const { compareBenches, editedTests, medians, needsPlan } = await import(
@@ -54,6 +57,7 @@ describe('pr-gate', () => {
     const [retheme] = compareBenches(rounds, 3);
     assert.ok(retheme.change > 3);
     assert.equal(retheme.slower, false);
+    assert.equal(retheme.noisy, true, 'and is marked, to be run again');
   });
 
   it('reports a measure one side printed and the other did not, and fails neither', () => {
@@ -88,5 +92,25 @@ describe('pr-gate', () => {
     );
     assert.equal(needsPlan('M\tpackages/integration-tests/css.test.ts'), false);
     assert.equal(needsPlan('A\tscripts/pr-gate.mjs\nM\texamples/canary/src/app/app.ts'), false);
+  });
+
+  it("finds the canary's flows that assert a screenshot, past those that assert none", async () => {
+    const { screenshotFlows } = await import(
+      new URL('../../examples/canary/.maestro/ios/compare-builds.mjs', import.meta.url).href
+    );
+    const root = mkdtempSync(path.join(tmpdir(), 'flows-'));
+    try {
+      mkdirSync(path.join(root, 'visual'));
+      writeFileSync(path.join(root, 'plain.yaml'), '- tapOn: Done\n');
+      writeFileSync(path.join(root, 'shot.yaml'), '- assertScreenshot:\n    path: a.png\n');
+      writeFileSync(path.join(root, 'shot.recording.yaml'), '- takeScreenshot: a\n');
+      writeFileSync(path.join(root, 'visual/page.yaml'), '- assertScreenshot:\n    path: b.png\n');
+      assert.deepEqual(
+        screenshotFlows(root).map((file: string) => path.relative(root, file)),
+        ['shot.yaml', path.join('visual', 'page.yaml')],
+      );
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
   });
 });

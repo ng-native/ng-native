@@ -182,7 +182,9 @@ a report for its description:
 - what every canary screen sends native, on main and on the change, and each view and prop that
   differs (`scripts/native-output.mjs`);
 - `pnpm bench`, `bench:tailwind` and `bench:screens` in `packages/integration-tests`, run in turn
-  on each side. A measure more than 3% slower fails.
+  on each side. A measure fails where it is more than 3% slower and every round of the change was
+  slower than every round of main; one past 3% whose rounds overlap is marked, to be run again with
+  more rounds.
 
 `--base <ref>`, `--rounds <n>`, `--limit <percent>` and `--out <file>` change what it compares with
 and how, and `--skip-bench` leaves the benchmarks out. It exits 1 where a check failed.

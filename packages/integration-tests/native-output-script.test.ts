@@ -104,6 +104,23 @@ describe('native-output diff', () => {
     });
   });
 
+  it('exits 2, not 1, where it cannot compare', () => {
+    const missing = path.join(tmpdir(), 'native-output-missing');
+    screens({ 'a.json': screen({}) }, {}, (a) => {
+      const run = spawnSync(process.execPath, [script.pathname, 'diff', a, missing], {
+        encoding: 'utf8',
+      });
+      assert.equal(run.status, 2);
+    });
+    screens({ 'a.json': screen({}) }, { 'a.json': '{not a screen' as never }, (a, b) => {
+      writeFileSync(path.join(b, 'a.json'), '{not a screen');
+      const run = spawnSync(process.execPath, [script.pathname, 'diff', a, b], {
+        encoding: 'utf8',
+      });
+      assert.equal(run.status, 2);
+    });
+  });
+
   it('counts a screen that throws on one side only as a change, and the same throw as none', () => {
     const threw = (message: string) => ({ url: '/a', tailwind: true, threw: message });
     screens({ 'a.json': screen({}) }, { 'a.json': threw('boom') }, (a, b) => {

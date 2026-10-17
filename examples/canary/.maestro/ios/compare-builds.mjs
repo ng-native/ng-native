@@ -7,10 +7,18 @@
 // The committed baselines are put back afterwards, whatever happened. Each screenshot that differs
 // is copied into `--out` with the difference Maestro drew, for the pull request to show.
 import { execFileSync, spawnSync } from 'node:child_process';
-import { cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync } from 'node:fs';
+import {
+  cpSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  readdirSync,
+  rmSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const baselines = join(here, 'baselines');
@@ -38,12 +46,12 @@ function options(argv) {
 }
 
 /** The flows that assert a screenshot: every one the comparison has something to compare in. */
-function screenshotFlows() {
-  return [here, join(here, 'visual')].flatMap((dir) =>
+export function screenshotFlows(root = here) {
+  return [root, join(root, 'visual')].flatMap((dir) =>
     readdirSync(dir)
       .filter((name) => name.endsWith('.yaml') && !name.endsWith('.recording.yaml'))
       .map((name) => join(dir, name))
-      .filter((file) => execFileSync('grep', ['-l', 'assertScreenshot', file]).length),
+      .filter((file) => readFileSync(file, 'utf8').includes('assertScreenshot')),
   );
 }
 
@@ -110,9 +118,11 @@ function main() {
   }
 }
 
-try {
-  main();
-} catch (error) {
-  console.error(`compare-builds: ${error.message}`);
-  process.exitCode = 1;
+if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) {
+  try {
+    main();
+  } catch (error) {
+    console.error(`compare-builds: ${error.message}`);
+    process.exitCode = 1;
+  }
 }

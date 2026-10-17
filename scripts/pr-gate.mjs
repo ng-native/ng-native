@@ -113,7 +113,15 @@ export function compareBenches(rounds, limit) {
     const after = middle(head);
     const change = before === 0 ? 0 : ((after - before) / before) * 100;
     const apart = Math.min(...head) > Math.max(...base);
-    return { name, before, after, change, slower: change > limit && apart };
+    // Past the limit with the rounds overlapping: not failed, and not to be read past either.
+    return {
+      name,
+      before,
+      after,
+      change,
+      slower: change > limit && apart,
+      noisy: change > limit && !apart,
+    };
   });
 }
 
@@ -165,6 +173,12 @@ function main() {
     if (!ok) failed = true;
   };
 
+  // A remote branch is fetched first, so the base is what it is now and not when it was last fetched.
+  const remote = /^([^/]+)\/(.+)$/.exec(opts.base);
+  if (remote && run('git', ['remote', 'get-url', remote[1]]).ok) {
+    const fetched = run('git', ['fetch', remote[1], remote[2]]);
+    if (!fetched.ok) throw new Error(`could not fetch ${opts.base}:\n${tail(fetched.output)}`);
+  }
   const fork = run('git', ['merge-base', opts.base, 'HEAD']);
   if (!fork.ok) throw new Error(`no merge base with ${opts.base}:\n${tail(fork.output)}`);
   const mergeBase = fork.output.trim();
@@ -176,7 +190,9 @@ function main() {
     '',
   );
 
-  const changes = run('git', ['diff', '--name-status', `${mergeBase}...HEAD`]).output;
+  const diffed = run('git', ['diff', '--name-status', `${mergeBase}...HEAD`]);
+  if (!diffed.ok) throw new Error(`could not list the change's files:\n${tail(diffed.output)}`);
+  const changes = diffed.output;
 
   // 1. Formatting, then everything the change can reach.
   lines.push('### Checks', '');
@@ -244,8 +260,10 @@ function main() {
         path.join(out, 'base'),
         path.join(out, 'head'),
       ]);
-      // A change of what screens send native is not a failure: it is what review reads.
-      lines.push(diff.output.trim());
+      // A change of what screens send native is not a failure, it is what review reads; a diff
+      // that could not compare is.
+      if (diff.status === 0 || diff.status === 1) lines.push(diff.output.trim());
+      else check('native output compared', false, tail(diff.output));
     }
     rmSync(out, { recursive: true, force: true });
 
@@ -284,7 +302,7 @@ function main() {
           continue;
         }
         const sign = one.change > 0 ? '+' : '';
-        const mark = one.slower ? ' ❌' : '';
+        const mark = one.slower ? ' ❌' : one.noisy ? ' ⚠️ rounds overlap, run more' : '';
         lines.push(
           `| ${one.name} | ${one.before.toFixed(2)}ms | ${one.after.toFixed(2)}ms | ${sign}${one.change.toFixed(1)}%${mark} |`,
         );

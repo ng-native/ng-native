@@ -15,10 +15,18 @@
  *   node scripts/native-output.mjs diff <before> <after> --json
  *
  * `write` builds the canary's Tailwind sheet first, as `node metro.config.js` does, and then runs
- * `examples/canary/src/native-output.test.ts`. `diff` exits 1 where anything changed.
+ * `examples/canary/src/native-output.test.ts`. `diff` exits 1 where anything changed, and 2 where it
+ * could not compare: a missing directory or a file that is not a screen.
  */
 import { spawnSync } from 'node:child_process';
-import { copyFileSync, existsSync, readFileSync, readdirSync, rmSync } from 'node:fs';
+import {
+  copyFileSync,
+  existsSync,
+  readFileSync,
+  readdirSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
 import path from 'node:path';
 import url from 'node:url';
 
@@ -159,7 +167,8 @@ function write(dir, checkout = ROOT) {
   const out = path.resolve(dir);
   const canary = path.join(checkout, 'examples/canary');
   const harness = path.join(checkout, HARNESS);
-  const borrowed = checkout !== ROOT && !existsSync(harness);
+  // The other checkout's own harness, where it has one, is put back after.
+  const own = checkout !== ROOT && existsSync(harness) ? readFileSync(harness) : undefined;
   if (checkout !== ROOT) copyFileSync(path.join(ROOT, HARNESS), harness);
   rmSync(out, { recursive: true, force: true });
   const run = (command, args, env = {}) => {
@@ -175,9 +184,10 @@ function write(dir, checkout = ROOT) {
     run(process.execPath, ['metro.config.js']);
     run('pnpm', ['exec', 'vitest', 'run', 'src/native-output.test.ts'], { NATIVE_OUTPUT: out });
   } finally {
-    if (borrowed) rmSync(harness, { force: true });
+    if (own) writeFileSync(harness, own);
+    else if (checkout !== ROOT) rmSync(harness, { force: true });
   }
-  // A screen that threw writes nothing: fewer files than routes is a failed run, not a smaller app.
+  // Each screen catches what it throws and writes it, so a run that wrote nothing failed.
   if (!existsSync(out) || !readdirSync(out).length) throw new Error(`no screens written to ${out}`);
 }
 
@@ -199,4 +209,12 @@ function main(argv) {
   process.exitCode = 2;
 }
 
-if (import.meta.url === url.pathToFileURL(process.argv[1] ?? '').href) main(process.argv.slice(2));
+if (import.meta.url === url.pathToFileURL(process.argv[1] ?? '').href) {
+  try {
+    main(process.argv.slice(2));
+  } catch (error) {
+    // Not 1, which is a change: a gate reading this tells one that could not compare from one that did.
+    console.error(`native-output: ${error.message}`);
+    process.exitCode = 2;
+  }
+}
