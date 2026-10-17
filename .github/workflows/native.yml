@@ -224,6 +224,9 @@ jobs:
       - id: base-fingerprint
         if: steps.base.outputs.needed
         run: |
+          # The change's own app went into app-cache above, and is in canary.app now: main's is
+          # restored there next, and the two would mix.
+          rm -rf "$RUNNER_TEMP/app-cache"
           git worktree add --detach "$RUNNER_TEMP/base" "$(git rev-parse HEAD^1)"
           pnpm --dir "$RUNNER_TEMP/base" install --frozen-lockfile --prefer-offline
           echo "base=$(cd "$RUNNER_TEMP/base/examples/canary" && node scripts/ios-app.mjs fingerprint)" >> "$GITHUB_OUTPUT"
