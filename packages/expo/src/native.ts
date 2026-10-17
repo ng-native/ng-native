@@ -97,6 +97,7 @@ const NATIVE_MODULES: Readonly<Record<string, string>> = {
   'expo-background-task': 'ExpoBackgroundTask',
   'expo-battery': 'ExpoBattery',
   'expo-brightness': 'ExpoBrightness',
+  'expo-calendar': 'CalendarNext',
   'expo-clipboard': 'ExpoClipboard',
   'expo-crypto': 'ExpoCrypto',
   'expo-device': 'ExpoDevice',

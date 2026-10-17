@@ -34,6 +34,7 @@ import { Battery } from '@ng-native/expo/battery';
 import { Biometrics } from '@ng-native/expo/biometrics';
 import { Brightness } from '@ng-native/expo/brightness';
 import { Browser } from '@ng-native/expo/browser';
+import { Calendar } from '@ng-native/expo/calendar';
 import { Camera } from '@ng-native/expo/camera';
 import { Clipboard } from '@ng-native/expo/clipboard';
 import { Crypto } from '@ng-native/expo/crypto';
@@ -132,6 +133,7 @@ const SERVICES: readonly [string, () => unknown, string, (readonly Platform[])?]
   ['FileSystem', factoryOf(FileSystem.SOURCE), 'expo-file-system'],
   ['Foldable', factoryOf(Foldable.SOURCE), 'expo-foldables'],
   ['Fonts', factoryOf(Fonts), 'expo-font'],
+  ['Calendar', factoryOf(Calendar.SOURCE), 'expo-calendar'],
   ['Haptics', factoryOf(Haptics.SOURCE), 'expo-haptics'],
   ['ImageEditor', factoryOf(ImageEditor.SOURCE), 'expo-image-manipulator'],
   ['ImagePicker', factoryOf(ImagePicker.SOURCE), 'expo-image-picker'],

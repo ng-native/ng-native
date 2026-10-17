@@ -71,6 +71,8 @@ is organized into one entry point per module.
 - [Clipboard](/packages/expo/clipboard) - write to the pasteboard, and count when it changes.
 - [Notifications](/packages/expo/notifications) - local and push notifications, with arrivals and
   taps as signals.
+- [Calendar](/packages/expo/calendar) - the calendars on the device, and the events and reminders
+  in them.
 - [Store review](/packages/expo/store-review) - the platform's own "rate this app" prompt.
 
 ### Storage and files

@@ -101,7 +101,8 @@ from their own files - `@ng-native/components/gestures`,
 `@ng-native/components/animations`, `@ng-native/components/reanimated` - covered
 on the gestures and animation pages. `@ng-native/components/markdown` has an entry point of its own
 too, so that only an app that renders Markdown needs `marked`; see the
-[markdown](/packages/components/markdown) page.
+[markdown](/packages/components/markdown) page. So does `@ng-native/components/calendar`, the month
+and day views on the [calendar](/packages/components/calendar) page.
 
 The smallest thing that works:
 
@@ -202,8 +203,9 @@ view](/packages/components/scroll-view) page covers `<scroll-view>` and pull-to-
 [lists](/packages/components/lists) page covers `<virtual-list>` and `<section-list>`. The
 [keyboard-avoiding view](/packages/components/keyboard-avoiding-view) page covers moving content
 clear of the on-screen keyboard. The [image](/packages/components/image) page covers `<image>` and
-`<image-background>`, and the [markdown](/packages/components/markdown) page covers drawing a
-Markdown document; the [activity indicator](/packages/components/activity-indicator) and
+`<image-background>`, the [markdown](/packages/components/markdown) page covers drawing a
+Markdown document, and the [calendar](/packages/components/calendar) page covers a month grid and a
+day's timeline; the [activity indicator](/packages/components/activity-indicator) and
 [switch](/packages/components/switch) pages cover those elements on their own; the
 [modal](/packages/components/modal) page covers presenting content over everything else. The
 [animation](/packages/components/animation) page covers plain CSS transitions, `AnimatedStyle` and

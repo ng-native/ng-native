@@ -30,6 +30,7 @@
     "./biometrics": "./src/biometrics.ts",
     "./brightness": "./src/brightness.ts",
     "./browser": "./src/browser.ts",
+    "./calendar": "./src/calendar.ts",
     "./camera": "./src/camera.ts",
     "./clipboard": "./src/clipboard.ts",
     "./crypto": "./src/crypto.ts",
@@ -117,6 +118,10 @@
       "./browser": {
         "types": "./dist/browser.d.ts",
         "default": "./dist/browser.js"
+      },
+      "./calendar": {
+        "types": "./dist/calendar.d.ts",
+        "default": "./dist/calendar.js"
       },
       "./camera": {
         "types": "./dist/camera.d.ts",
@@ -299,6 +304,7 @@
     "expo-background-task": "^57.0.0",
     "expo-battery": "^57.0.0",
     "expo-brightness": "^57.0.0",
+    "expo-calendar": "^57.0.0",
     "expo-camera": "^57.0.0",
     "expo-clipboard": "^57.0.0",
     "expo-crypto": "^57.0.0",
@@ -348,6 +354,7 @@
     "expo-background-task": "^57.0.21",
     "expo-battery": "^57.0.3",
     "expo-brightness": "^57.0.2",
+    "expo-calendar": "^57.0.5",
     "expo-camera": "^57.0.6",
     "expo-crypto": "^57.0.3",
     "expo-device": "^57.0.2",
@@ -405,6 +412,9 @@
       "optional": true
     },
     "expo-brightness": {
+      "optional": true
+    },
+    "expo-calendar": {
       "optional": true
     },
     "expo-camera": {

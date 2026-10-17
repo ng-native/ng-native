@@ -25,6 +25,7 @@ import { LanguageModel } from '@ng-native/expo/language-model';
 import { Network } from '@ng-native/expo/network';
 import { AppleSignIn } from '@ng-native/expo/apple-sign-in';
 import { Notifications } from '@ng-native/expo/notifications';
+import { Calendar } from '@ng-native/expo/calendar';
 import { MediaLibrary } from '@ng-native/expo/media-library';
 import { ImageEditor } from '@ng-native/expo/image-editor';
 import { ScreenCapture } from '@ng-native/expo/screen-capture';
@@ -542,6 +543,23 @@ describe('the image editor source', () => {
   it('is inert with no expo-image-manipulator installed', () => {
     assert.equal(
       withModules({}, () => defaultSource(ImageEditor.SOURCE)),
+      null,
+    );
+  });
+});
+
+describe('the calendar source', () => {
+  it('is expo-calendar itself, whose functions and classes the service calls by their own names', () => {
+    const expoCalendar = { getCalendars: async () => [] };
+    assert.equal(
+      withModules({ 'expo-calendar': expoCalendar }, () => defaultSource(Calendar.SOURCE)),
+      expoCalendar,
+    );
+  });
+
+  it('is inert with no expo-calendar installed', () => {
+    assert.equal(
+      withModules({}, () => defaultSource(Calendar.SOURCE)),
       null,
     );
   });

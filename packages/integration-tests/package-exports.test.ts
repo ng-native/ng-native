@@ -102,6 +102,7 @@ describe('the entry points Metro has to resolve', () => {
       'background-task',
       'battery',
       'brightness',
+      'calendar',
       'clipboard',
       'crypto',
       'database',
@@ -150,6 +151,19 @@ describe('the entry points Metro has to resolve', () => {
     }
     const barrel = readFileSync(path.join(root, 'packages/components/src/index.ts'), 'utf8');
     assert.doesNotMatch(barrel, /markdown|'marked'/, 'the barrel never reaches marked');
+  });
+
+  it('reaches the calendar views from their own entry, the same file on every platform', () => {
+    for (const platform of ['ios', 'android', 'web']) {
+      assert.equal(
+        path.relative(
+          root,
+          resolve(context(from), '@ng-native/components/calendar', platform).filePath,
+        ),
+        'packages/components/src/calendar.ts',
+        platform,
+      );
+    }
   });
 
   it('gives a browser build its own entry where a device needs a native library', () => {

@@ -1,0 +1,210 @@
+/*
+ * What `<calendar-month>` and `<calendar-day>` look like with nothing of the app's, in light and in
+ * dark. An entry's block, rail and text all derive from its one colour, `--cal-tone`. Set
+ * `--cal-accent`, `--cal-ink`, `--cal-soft` and `--cal-today` on the element to restyle them.
+ */
+
+:host {
+  --cal-accent: #4f46e5;
+  --cal-ink: light-dark(#1c1c1e, #f2f2f7);
+  --cal-soft: light-dark(#6c6c70, #98989f);
+  --cal-line: light-dark(rgba(60, 60, 67, 0.12), rgba(235, 235, 245, 0.12));
+  --cal-today: var(--cal-accent);
+  --cal-now: #ff3b30;
+}
+
+/* The month. */
+
+.cal-month-head {
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 4px 8px;
+}
+
+.cal-month-name {
+  color: var(--cal-ink);
+  font-size: 17px;
+  font-weight: 700;
+}
+
+.cal-step {
+  width: 36px;
+  height: 36px;
+  border-radius: 18px;
+  align-items: center;
+  justify-content: center;
+}
+
+.cal-step:active {
+  background-color: oklch(from var(--cal-accent) l c h / 0.14);
+}
+
+.cal-step-glyph {
+  color: var(--cal-accent);
+  font-size: 24px;
+  font-weight: 600;
+  margin-top: -3px;
+}
+
+.cal-weekdays,
+.cal-week {
+  flex-direction: row;
+}
+
+.cal-weekday {
+  width: calc(100% / 7);
+  text-align: center;
+  color: var(--cal-soft);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.cal-day {
+  width: calc(100% / 7);
+  align-items: center;
+  padding: 3px 0;
+}
+
+.cal-day-disc {
+  width: 36px;
+  height: 36px;
+  border-radius: 18px;
+  align-items: center;
+  justify-content: center;
+}
+
+.cal-day-number {
+  color: var(--cal-ink);
+  font-size: 16px;
+  font-variant-numeric: tabular-nums;
+}
+
+.cal-outside {
+  opacity: 0.35;
+}
+
+.cal-today .cal-day-number {
+  color: var(--cal-today);
+  font-weight: 700;
+}
+
+.cal-selected .cal-day-disc {
+  background-color: var(--cal-accent);
+}
+
+.cal-selected .cal-day-number {
+  color: white;
+  font-weight: 700;
+}
+
+.cal-dots {
+  flex-direction: row;
+  gap: 3px;
+  height: 5px;
+  margin-top: 2px;
+}
+
+.cal-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 3px;
+  background-color: var(--cal-tone);
+}
+
+/* The day. */
+
+.cal-all-day {
+  flex-direction: row;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin: 0 0 8px 56px;
+}
+
+.cal-chip {
+  padding: 3px 8px;
+  border-radius: 6px;
+  background-color: light-dark(
+    oklch(from var(--cal-tone) 0.93 calc(c * 0.3) h),
+    oklch(from var(--cal-tone) 0.32 calc(c * 0.5) h)
+  );
+}
+
+.cal-chip-title,
+.cal-entry-title {
+  color: light-dark(
+    oklch(from var(--cal-tone) 0.35 c h),
+    oklch(from var(--cal-tone) 0.9 calc(c * 0.5) h)
+  );
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.cal-timeline {
+  margin: 8px 0 8px 56px;
+}
+
+.cal-hour {
+  position: absolute;
+  left: -56px;
+  right: 0;
+  margin-top: -8px;
+  flex-direction: row;
+  align-items: center;
+  gap: 6px;
+}
+
+.cal-hour-label {
+  width: 46px;
+  text-align: right;
+  color: var(--cal-soft);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.cal-hour-line {
+  flex: 1;
+  height: 1px;
+  background-color: var(--cal-line);
+}
+
+.cal-entry {
+  position: absolute;
+  padding: 2px 6px;
+  overflow: hidden;
+  border-radius: 6px;
+  border-left-width: 3px;
+  border-color: var(--cal-tone);
+  background-color: light-dark(
+    oklch(from var(--cal-tone) 0.94 calc(c * 0.25) h),
+    oklch(from var(--cal-tone) 0.3 calc(c * 0.5) h)
+  );
+}
+
+.cal-entry-time {
+  color: light-dark(
+    oklch(from var(--cal-tone) 0.5 calc(c * 0.7) h),
+    oklch(from var(--cal-tone) 0.78 calc(c * 0.4) h)
+  );
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.cal-now {
+  position: absolute;
+  left: -4px;
+  right: 0;
+  height: 2px;
+  margin-top: -1px;
+  background-color: var(--cal-now);
+}
+
+.cal-now-dot {
+  position: absolute;
+  left: -4px;
+  top: -4px;
+  width: 10px;
+  height: 10px;
+  border-radius: 5px;
+  background-color: var(--cal-now);
+}
