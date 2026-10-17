@@ -186,9 +186,22 @@ a report for its description:
   slower than every round of main; one past 3% whose rounds overlap is marked, to be run again with
   more rounds.
 
-CI's `native-output` job compares the screens the same way on every pull request that touches a
-package or the canary, and writes the differences in its summary. A changed screen does not fail
-it; a comparison that could not be made does.
+On a pull request, CI does both and comments with what it found. CI's `native-output` job compares
+what each screen sends native when a package or the canary changed. Native builds' `ios-visual` job
+compares the iOS screenshots of main's bundle and the pull request's, each in its own cached app, on
+one simulator. `screens-comment.yml` keeps one comment on the pull request up to date with both,
+showing each screenshot that differs beside main's. It starts a comment only when something
+differs. A comparison that could not be made fails its job.
+
+A difference fails the `Screens` status until a maintainer accepts it: add the `screens-approved`
+label when the change is meant to look different. A new push takes the label off, so what it
+changes is looked at again.
+
+The screenshots committed in `examples/canary/.maestro/ios/baselines`, which `pnpm e2e:ios`
+compares with, are recorded on CI's simulator. A maintainer comments `/update-screenshots` on a
+pull request whose screens changed as intended, and CI records them from its build and commits them
+to the branch. A pull request from a fork has them recorded locally, with `pnpm e2e:ios:record`, as
+Actions cannot push to a fork's branch.
 
 `--base <ref>`, `--rounds <n>`, `--limit <percent>` and `--out <file>` change what it compares with
 and how, and `--skip-bench` leaves the benchmarks out. It exits 1 where a check failed.

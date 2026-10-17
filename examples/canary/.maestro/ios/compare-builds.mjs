@@ -15,6 +15,7 @@ import {
   readFileSync,
   readdirSync,
   rmSync,
+  writeFileSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
@@ -99,11 +100,19 @@ function main() {
     rmSync(opts.out, { recursive: true, force: true });
     mkdirSync(opts.out, { recursive: true });
     const differ = readdirSync(baselines).filter((name) => name.endsWith('_diff.png'));
-    for (const name of differ) {
+    const shots = differ.map((name) => {
       const shot = name.replace(/_diff\.png$/, '.png');
       cpSync(join(baselines, name), join(opts.out, name));
       cpSync(join(baselines, shot), join(opts.out, `base-${shot}`));
-    }
+      return { shot, base: `base-${shot}`, diff: name };
+    });
+    // What CI's comment is written from. A flow that failed with no screenshot differing failed
+    // for another reason, a tap or a crash, and compared nothing.
+    const compared = run.status === 0 || shots.length > 0;
+    writeFileSync(
+      join(opts.out, 'report.json'),
+      `${JSON.stringify({ flows: flows.length, compared, differ: shots }, null, 2)}\n`,
+    );
     console.log(
       differ.length
         ? `\n${differ.length} screenshots differ from the base build: see ${opts.out}`
@@ -123,6 +132,17 @@ if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) {
     main();
   } catch (error) {
     console.error(`compare-builds: ${error.message}`);
+    // Written where it could be: what reads the report says nothing was compared, rather than
+    // finding no report at all.
+    const argv = process.argv.slice(2);
+    const at = argv.indexOf('--out');
+    if (at !== -1 && argv[at + 1]) {
+      mkdirSync(resolve(argv[at + 1]), { recursive: true });
+      writeFileSync(
+        join(resolve(argv[at + 1]), 'report.json'),
+        `${JSON.stringify({ flows: 0, compared: false, differ: [] }, null, 2)}\n`,
+      );
+    }
     process.exitCode = 1;
   }
 }

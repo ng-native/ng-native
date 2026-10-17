@@ -159,6 +159,95 @@ jobs:
           path: ${{ runner.temp }}/maestro
           if-no-files-found: ignore
 
+  # What the change does to the canary's screenshots: main's bundle and the pull request's, each in
+  # its own cached app, on one simulator in one sitting, so a difference is the change and not a
+  # runtime or a baseline recorded long ago. screens-comment.yml shows what differs on the pull
+  # request. After `ios`, which leaves the change's app in the cache; beside everything else.
+  ios-visual:
+    needs: ios
+    if: github.event_name == 'pull_request' && github.event.pull_request.draft != true
+    runs-on: macos-latest
+    # Two bundles and two walks of the screenshot flows, each about eight minutes.
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: ./.github/actions/setup
+
+      - name: Check out and install main
+        run: |
+          git worktree add --detach "$RUNNER_TEMP/base" "${{ github.event.pull_request.base.sha }}"
+          pnpm --dir "$RUNNER_TEMP/base" install --frozen-lockfile --prefer-offline
+
+      - id: fingerprint
+        run: |
+          echo "change=$(cd examples/canary && node scripts/ios-app.mjs fingerprint)" >> "$GITHUB_OUTPUT"
+          echo "base=$(cd "$RUNNER_TEMP/base/examples/canary" && node scripts/ios-app.mjs fingerprint)" >> "$GITHUB_OUTPUT"
+
+      # A cache entry is restored only to the path it was saved from, so main's app is restored
+      # there first and moved aside, then the change's.
+      - id: base-app
+        uses: actions/cache/restore@v6
+        with:
+          path: ${{ runner.temp }}/app-cache
+          key: canary-app-${{ runner.os }}-${{ steps.fingerprint.outputs.base }}
+      - if: steps.base-app.outputs.cache-hit == 'true'
+        run: mv "$RUNNER_TEMP/app-cache" "$RUNNER_TEMP/base-app-cache"
+
+      - id: change-app
+        uses: actions/cache/restore@v6
+        with:
+          path: ${{ runner.temp }}/app-cache
+          key: canary-app-${{ runner.os }}-${{ steps.fingerprint.outputs.change }}
+          fail-on-cache-miss: true
+
+      - name: Put each side's bundle into its app
+        if: steps.base-app.outputs.cache-hit == 'true'
+        run: |
+          (cd "$RUNNER_TEMP/base/examples/canary" && node scripts/ios-app.mjs rebundle "$RUNNER_TEMP/base-app-cache/canary.app" "$RUNNER_TEMP/base.app")
+          (cd examples/canary && node scripts/ios-app.mjs rebundle "$RUNNER_TEMP/app-cache/canary.app" "$RUNNER_TEMP/change.app")
+
+      - uses: actions/setup-java@v6
+        if: steps.base-app.outputs.cache-hit == 'true'
+        with:
+          distribution: zulu
+          java-version: 17
+
+      - name: Install Maestro
+        if: steps.base-app.outputs.cache-hit == 'true'
+        run: |
+          curl -fsSL https://get.maestro.mobile.dev | MAESTRO_VERSION=2.10.0 bash
+          echo "$HOME/.maestro/bin" >> "$GITHUB_PATH"
+
+      - name: Compare the screenshots
+        if: steps.base-app.outputs.cache-hit == 'true'
+        run: >
+          ./examples/canary/scripts/visual-ios.sh
+          "$RUNNER_TEMP/base.app" "$RUNNER_TEMP/change.app" "$RUNNER_TEMP/screens"
+
+      # Main's app is built when main is pushed. Until then there is nothing to compare with, and
+      # the comment says so rather than nothing.
+      - name: Say main's app is not cached
+        if: steps.base-app.outputs.cache-hit != 'true'
+        run: |
+          mkdir -p "$RUNNER_TEMP/screens"
+          echo '{"skipped":"main has no cached app for its native fingerprint yet"}' > "$RUNNER_TEMP/screens/report.json"
+
+      - name: Say which pull request it is for
+        if: always()
+        run: |
+          mkdir -p "$RUNNER_TEMP/screens"
+          printf '{"number":%s,"head":"%s"}\n' "${{ github.event.pull_request.number }}" \
+            "${{ github.event.pull_request.head.sha }}" > "$RUNNER_TEMP/screens/pr.json"
+
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: screens-ios
+          path: ${{ runner.temp }}/screens
+          retention-days: 7
+
   android:
     if: github.event.pull_request.draft != true
     runs-on: ubuntu-latest

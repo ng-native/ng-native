@@ -101,6 +101,13 @@ describe('native-output diff', () => {
       });
       assert.equal(run.status, 0);
       assert.match(run.stdout, /0 of 1 screens changed/);
+      const json = spawnSync(process.execPath, [script.pathname, 'diff', a, b, '--json'], {
+        encoding: 'utf8',
+      });
+      assert.deepEqual(JSON.parse(json.stdout), {
+        results: [{ url: '/a', notes: [], changes: [] }],
+        skipped: {},
+      });
     });
   });
 

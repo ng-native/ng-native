@@ -197,6 +197,19 @@ jobs:
               - 'scripts/native-output.mjs'
               - 'pnpm-lock.yaml'
 
+      # Which pull request and commit this run is for, on every pull request: screens-comment.yml
+      # sets the `Screens` status from it, a run that compared no screens included.
+      - name: Say which pull request it is for
+        run: |
+          mkdir -p "$RUNNER_TEMP/pr"
+          printf '{"number":%s,"head":"%s"}\n' "${{ github.event.pull_request.number }}" \
+            "${{ github.event.pull_request.head.sha }}" > "$RUNNER_TEMP/pr/pr.json"
+      - uses: actions/upload-artifact@v7
+        with:
+          name: screens-pr
+          path: ${{ runner.temp }}/pr
+          retention-days: 7
+
   # What each canary screen sends native, on the base and on the pull request, and each view and
   # prop that differs, in the job's summary for review. A changed screen is often the point of the
   # change, so it does not fail the run; a comparison that could not be made does. Beside the other
@@ -234,6 +247,20 @@ jobs:
           cat "$RUNNER_TEMP/native-output.md" >> "$GITHUB_STEP_SUMMARY"
           cat "$RUNNER_TEMP/native-output.md"
           [ "$code" -le 1 ]
+          mkdir -p "$RUNNER_TEMP/comment"
+          node scripts/native-output.mjs diff "$RUNNER_TEMP/screens/base" "$RUNNER_TEMP/screens/change" \
+            --json > "$RUNNER_TEMP/comment/native-output.json" || [ $? -le 1 ]
+          # Which pull request and commit it is for, which screens-comment.yml checks before using.
+          printf '{"number":%s,"head":"%s"}\n' "${{ github.event.pull_request.number }}" \
+            "${{ github.event.pull_request.head.sha }}" > "$RUNNER_TEMP/comment/pr.json"
+
+      # For screens-comment.yml, which comments with it: a pull request's own run cannot, as one from
+      # a fork has no token that writes.
+      - uses: actions/upload-artifact@v7
+        with:
+          name: screens-native-output
+          path: ${{ runner.temp }}/comment
+          retention-days: 7
 
   # What nothing else checks: that the packages publish, find each other by version through a
   # registry, that `create-expo-app --template` gives an app that typechecks and bundles, and that a
