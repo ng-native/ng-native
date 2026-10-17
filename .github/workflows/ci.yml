@@ -172,7 +172,6 @@ jobs:
       pull-requests: read
     outputs:
       published: ${{ steps.filter.outputs.published }}
-      screens: ${{ steps.filter.outputs.screens }}
     steps:
       - uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4.0.3
         id: filter
@@ -189,86 +188,45 @@ jobs:
               - 'pnpm-lock.yaml'
               - 'pnpm-workspace.yaml'
               - 'tsconfig*.json'
-            screens:
-              - 'packages/**'
-              - '!packages/integration-tests/**'
-              - '!packages/**/*.md'
-              - 'examples/canary/**'
-              - 'scripts/native-output.mjs'
-              - 'pnpm-lock.yaml'
 
-      # Which pull request and commit this run is for, on every pull request: screens-comment.yml
-      # sets the `Screens` status from it, a run that compared no screens included.
+      # Whether Native builds runs, which compares the screens: a file outside its paths-ignore.
+      # Kept the same as that list in native.yml.
+      - uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4.0.3
+        id: native
+        with:
+          predicate-quantifier: every
+          filters: |
+            native:
+              - '**'
+              - '!**/*.md'
+              - '!apps/documentation/**'
+              - '!packages/integration-tests/**'
+              - '!packages/migrate/**'
+              - '!packages/nx/**'
+              - '!packages/schematics/**'
+              - '!template/**'
+              - '!scripts/**'
+              - '!**/*.test.ts'
+              - '!.github/workflows/ci.yml'
+              - '!.github/workflows/docs.yml'
+              - '!.github/workflows/latest.yml'
+              - '!.github/workflows/release.yml'
+              - '!.github/workflows/triage.yml'
+              - '!.nx/version-plans/**'
+
+      # Which pull request and commit this run is for, on every pull request, and whether Native
+      # builds compares its screens: screens-comment.yml passes `Screens` for one where nothing can
+      # change a screen, which no run of Native builds would.
       - name: Say which pull request it is for
         run: |
           mkdir -p "$RUNNER_TEMP/pr"
-          # And whether the native output is compared, so a comparison that did not finish is not
-          # taken for one that found nothing.
           printf '{"number":%s,"head":"%s","native":%s}\n' "${{ github.event.pull_request.number }}" \
-            "${{ github.event.pull_request.head.sha }}" "${{ steps.filter.outputs.screens == 'true' }}" \
+            "${{ github.event.pull_request.head.sha }}" "${{ steps.native.outputs.native == 'true' }}" \
             > "$RUNNER_TEMP/pr/pr.json"
       - uses: actions/upload-artifact@v7
         with:
           name: screens-pr
           path: ${{ runner.temp }}/pr
-          retention-days: 7
-
-  # What each canary screen sends native, on the base and on the pull request, and each view and
-  # prop that differs, in the job's summary for review. A changed screen is often the point of the
-  # change, so it does not fail the run; a comparison that could not be made does. Beside the other
-  # jobs rather than in one: a checkout and install of the base, and a few seconds of each side.
-  native-output:
-    needs: changes
-    if: needs.changes.outputs.screens == 'true'
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    # It runs the pull request's install and scripts: no token kept in the checkout, and nothing
-    # it may write.
-    permissions:
-      contents: read
-    steps:
-      - uses: actions/checkout@v7
-        with:
-          fetch-depth: 0
-          persist-credentials: false
-
-      - uses: ./.github/actions/setup
-
-      # Main as the pull request was merged with for this run: the checkout is that merge, and its
-      # first parent is main. The event's base.sha can be older, the commit the branch started from.
-      - name: Check out and install the base
-        run: |
-          git worktree add --detach "$RUNNER_TEMP/base" "$(git rev-parse HEAD^1)"
-          pnpm --dir "$RUNNER_TEMP/base" install --frozen-lockfile --prefer-offline
-
-      - name: Write what each screen sends native, on each side
-        run: |
-          node scripts/native-output.mjs write "$RUNNER_TEMP/screens/base" --checkout "$RUNNER_TEMP/base"
-          node scripts/native-output.mjs write "$RUNNER_TEMP/screens/change"
-
-      # 0 is no change and 1 a change, both for review; 2, or anything else, is a comparison that
-      # could not be made.
-      - name: Compare them
-        run: |
-          code=0
-          node scripts/native-output.mjs diff "$RUNNER_TEMP/screens/base" "$RUNNER_TEMP/screens/change" \
-            > "$RUNNER_TEMP/native-output.md" || code=$?
-          cat "$RUNNER_TEMP/native-output.md" >> "$GITHUB_STEP_SUMMARY"
-          cat "$RUNNER_TEMP/native-output.md"
-          [ "$code" -le 1 ]
-          mkdir -p "$RUNNER_TEMP/comment"
-          node scripts/native-output.mjs diff "$RUNNER_TEMP/screens/base" "$RUNNER_TEMP/screens/change" \
-            --json > "$RUNNER_TEMP/comment/native-output.json" || [ $? -le 1 ]
-          # Which pull request and commit it is for, which screens-comment.yml checks before using.
-          printf '{"number":%s,"head":"%s"}\n' "${{ github.event.pull_request.number }}" \
-            "${{ github.event.pull_request.head.sha }}" > "$RUNNER_TEMP/comment/pr.json"
-
-      # For screens-comment.yml, which comments with it: a pull request's own run cannot, as one from
-      # a fork has no token that writes.
-      - uses: actions/upload-artifact@v7
-        with:
-          name: screens-native-output
-          path: ${{ runner.temp }}/comment
           retention-days: 7
 
   # What nothing else checks: that the packages publish, find each other by version through a

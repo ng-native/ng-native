@@ -1,10 +1,12 @@
 # Text nesting, as it draws: a screenshot compared with the one taken when it was last right.
+# routes: /text
 appId: dev.angularnative.canary
 ---
 - runFlow:
-    file: ../subflows/open.yaml
+    file: ../subflows/open-screen.yaml
     env:
-      SCREEN: 'Text nesting'
+      PATH: 'text'
+      SHOWS: 'Text nesting'
 - waitForAnimationToEnd
 - assertScreenshot:
     path: ../baselines/visual-text.png

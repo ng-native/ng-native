@@ -1,10 +1,12 @@
 # Primitives, as it draws: a screenshot compared with the one taken when it was last right.
+# routes: /primitives
 appId: dev.angularnative.canary
 ---
 - runFlow:
-    file: ../subflows/open.yaml
+    file: ../subflows/open-screen.yaml
     env:
-      SCREEN: 'Primitives'
+      PATH: 'primitives'
+      SHOWS: 'Primitives'
 - waitForAnimationToEnd
 - assertScreenshot:
     path: ../baselines/visual-primitives.png

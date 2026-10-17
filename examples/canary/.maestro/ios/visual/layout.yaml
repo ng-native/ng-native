@@ -1,10 +1,12 @@
 # Layout, as it draws: a screenshot compared with the one taken when it was last right.
+# routes: /layout
 appId: dev.angularnative.canary
 ---
 - runFlow:
-    file: ../subflows/open.yaml
+    file: ../subflows/open-screen.yaml
     env:
-      SCREEN: 'Layout'
+      PATH: 'layout'
+      SHOWS: 'Layout'
 - waitForAnimationToEnd
 - assertScreenshot:
     path: ../baselines/visual-layout.png

@@ -186,12 +186,16 @@ a report for its description:
   slower than every round of main; one past 3% whose rounds overlap is marked, to be run again with
   more rounds.
 
-On a pull request, CI does both and comments with what it found. CI's `native-output` job compares
-what each screen sends native when a package or the canary changed. Native builds' `ios-visual` job
-compares the iOS screenshots of main's bundle and the pull request's, each in its own cached app, on
-one simulator. `screens-comment.yml` keeps one comment on the pull request up to date with both,
-showing each screenshot that differs beside main's. It starts a comment only when something
-differs. A comparison that could not be made fails its job.
+On a pull request, Native builds does both and comments with what it found. Its `native-output`
+job compares what each screen sends native. Its `ios` job walks the release smoke flow, then, on the
+same simulator, compares the iOS screenshots of the screens whose native output changed with main's:
+every screen's, where the app's native half changed. Main's screenshots are recorded by each push to
+main and cached; where they are not cached yet, the job records main's build first. A flow says
+which screens it opens in a `# routes:` line, and one that names none is always compared.
+`screens-comment.yml` keeps one comment on the pull request up to date with both, showing each
+screenshot that differs beside main's. It starts a comment only when something differs. A
+comparison that could not be made fails its job, and a pull request that Native builds does not run
+for cannot change a screen.
 
 A difference fails the `Screens` status until a maintainer accepts it: add the `screens-approved`
 label when the change is meant to look different. A new push takes the label off, so what it
@@ -215,7 +219,7 @@ pnpm e2e:ios:compare --base main.app --change pr.app --device <udid> --out visua
 ```
 
 It records every screenshot the flows assert from the first build, asserts them on the second, and
-puts the committed baselines back. Each screenshot that differs goes in `visual-diff` with the
+puts the committed baselines back. `--flows visual/css.yaml,chat.yaml` compares only those flows. Each screenshot that differs goes in `visual-diff` with the
 difference marked.
 
 For maintainers cutting a release, see [RELEASING.md](./docs/RELEASING.md).

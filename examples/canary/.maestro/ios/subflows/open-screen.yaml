@@ -1,0 +1,22 @@
+# Opens one canary screen from a freshly launched release build by its deep link, `canary://${PATH}`,
+# rather than finding its row on the home screen: no scroll down a long list first. `SHOWS` is what
+# the screen shows once it is there; iOS's "Open in canary?" is answered where it is asked.
+appId: dev.angularnative.canary
+---
+- launchApp:
+    stopApp: true
+- extendedWaitUntil:
+    visible: 'Angular Native'
+    timeout: 30000
+- runFlow:
+    file: ../../subflows/follow-link.yaml
+    env:
+      LINK: 'canary://${PATH}'
+      SHOWS: '${SHOWS}'
+# Until the home screen has gone: its rows name the screens too, so what the screen shows can be
+# visible before the screen is.
+- extendedWaitUntil:
+    notVisible: 'Real native views.*'
+    timeout: 15000
+- waitForAnimationToEnd
+- runFlow: ../../subflows/no-error-screen.yaml

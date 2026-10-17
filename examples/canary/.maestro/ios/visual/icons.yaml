@@ -1,10 +1,12 @@
 # Icons, as it draws: a screenshot compared with the one taken when it was last right.
+# routes: /icons
 appId: dev.angularnative.canary
 ---
 - runFlow:
-    file: ../subflows/open.yaml
+    file: ../subflows/open-screen.yaml
     env:
-      SCREEN: 'Icons'
+      PATH: 'icons'
+      SHOWS: 'Icons'
 - waitForAnimationToEnd
 - assertScreenshot:
     path: ../baselines/visual-icons.png

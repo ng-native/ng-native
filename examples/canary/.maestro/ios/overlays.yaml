@@ -1,10 +1,12 @@
 # Overlays: a toast above the screen, a loading cover that clears, and a toast above a sheet.
+# routes: /overlays
 appId: dev.angularnative.canary
 ---
 - runFlow:
-    file: subflows/open.yaml
+    file: subflows/open-screen.yaml
     env:
-      SCREEN: Overlays
+      PATH: 'overlays'
+      SHOWS: 'Show a toast'
 - tapOn: 'Show a toast'
 - assertVisible: 'Shown above the screen'
 - tapOn: 'Load for a moment'

@@ -22,7 +22,7 @@ const output = join(here, '.recording');
 rmSync(output, { recursive: true, force: true });
 const copies = [];
 const expected = new Set();
-// Only the flows named, where any are: `compare-builds.mjs` records a shard of them.
+// Only the flows named, where any are: `compare-builds.mjs` records only the flows it compares.
 const only = process.argv.slice(2).map((file) => resolve(file));
 for (const dir of [here, join(here, 'visual')]) {
   for (const name of readdirSync(dir).filter((file) => file.endsWith('.yaml'))) {

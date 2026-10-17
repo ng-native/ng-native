@@ -14,7 +14,7 @@
     "test": "vitest run",
     "e2e:ios": "xcrun simctl status_bar booted override --time 9:41 --batteryState charged --batteryLevel 100 --wifiBars 3 && JAVA_HOME=${JAVA_HOME:-/opt/homebrew/opt/openjdk@21} maestro test .maestro/ios",
     "e2e:ios:record": "xcrun simctl status_bar booted override --time 9:41 --batteryState charged --batteryLevel 100 --wifiBars 3 && node .maestro/ios/record-baselines.mjs",
-    "e2e:ios:compare": "node .maestro/ios/compare-builds.mjs"
+    "e2e:ios:compare": "node .maestro/ios/compare-builds.mjs compare"
   },
   "dependencies": {
     "@angular/common": "22.2.0",

@@ -45,8 +45,7 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
-  # The app, once, for the jobs that test it beside each other: `ios`, which launches it, and
-  # `ios-visual`, which compares its screenshots with main's.
+  # The app, for `ios`, which tests it, and update-screenshots.yml, which records from it.
   ios-build:
     if: github.event.pull_request.draft != true
     runs-on: macos-latest
@@ -153,17 +152,117 @@ jobs:
           path: ${{ runner.temp }}/canary-app.tgz
           retention-days: 7
 
-  # The release build launched on a simulator and walked through the release flows.
-  ios:
-    needs: ios-build
-    runs-on: macos-latest
-    timeout-minutes: 25
-    # It runs the pull request's code: no token kept in the checkout, and nothing it may write.
+  # What each canary screen sends native, on the base and on the pull request, and each view and
+  # prop that differs, for the comment screens-comment.yml writes. A changed screen is often the
+  # point of the change, so it does not fail the run; a comparison that could not be made does.
+  # Linux, beside ios-build: it also says which screenshot flows `ios` compares, those of the
+  # screens that changed, or every flow where the native half did.
+  native-output:
+    if: github.event_name == 'pull_request' && github.event.pull_request.draft != true
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    # It runs the pull request's install and scripts: no token kept in the checkout, and nothing
+    # it may write.
     permissions:
       contents: read
+    outputs:
+      flows: ${{ steps.flows.outputs.flows }}
     steps:
       - uses: actions/checkout@v7
         with:
+          fetch-depth: 2
+          persist-credentials: false
+
+      - uses: ./.github/actions/setup
+
+      # Main as the pull request was merged with for this run: the checkout is that merge, and its
+      # first parent is main. The event's base.sha can be older, the commit the branch started from.
+      - name: Check out and install the base
+        run: |
+          git worktree add --detach "$RUNNER_TEMP/base" "$(git rev-parse HEAD^1)"
+          pnpm --dir "$RUNNER_TEMP/base" install --frozen-lockfile --prefer-offline
+
+      - name: Write what each screen sends native, on each side
+        run: |
+          node scripts/native-output.mjs write "$RUNNER_TEMP/screens/base" --checkout "$RUNNER_TEMP/base"
+          node scripts/native-output.mjs write "$RUNNER_TEMP/screens/change"
+
+      # 0 is no change and 1 a change, both for review; 2, or anything else, is a comparison that
+      # could not be made.
+      - name: Compare them
+        run: |
+          mkdir -p "$RUNNER_TEMP/comment"
+          code=0
+          node scripts/native-output.mjs diff "$RUNNER_TEMP/screens/base" "$RUNNER_TEMP/screens/change" \
+            > "$RUNNER_TEMP/native-output.md" || code=$?
+          cat "$RUNNER_TEMP/native-output.md" >> "$GITHUB_STEP_SUMMARY"
+          cat "$RUNNER_TEMP/native-output.md"
+          [ "$code" -le 1 ]
+          node scripts/native-output.mjs diff "$RUNNER_TEMP/screens/base" "$RUNNER_TEMP/screens/change" \
+            --json > "$RUNNER_TEMP/comment/native-output.json" || [ $? -le 1 ]
+
+      # A screen's screenshots can change only where what it sends native did, or where the app's
+      # native half did, which can change any screen. Each side's fingerprint on this one runner,
+      # so they compare, whatever the Mac's would be.
+      - id: flows
+        run: |
+          base=$(cd "$RUNNER_TEMP/base/examples/canary" && node scripts/ios-app.mjs fingerprint)
+          change=$(cd examples/canary && node scripts/ios-app.mjs fingerprint)
+          compare=examples/canary/.maestro/ios/compare-builds.mjs
+          if [ "$base" != "$change" ]; then
+            flows=$(node "$compare" flows | paste -sd, -)
+          else
+            routes=$(jq -r '[.results[] | select(.missing or (.changes | length > 0) or ((.notes // []) | length > 0)) | .url] | join(",")' \
+              "$RUNNER_TEMP/comment/native-output.json")
+            flows=
+            [ -z "$routes" ] || flows=$(node "$compare" flows --routes "$routes" | paste -sd, -)
+          fi
+          echo "flows=$flows" >> "$GITHUB_OUTPUT"
+          echo "Screenshot flows to compare: ${flows:-none}"
+
+      # Which pull request and commit it is for, which screens-comment.yml checks before using.
+      # Always: a comparison that did not finish says so in the comment.
+      - name: Say which pull request it is for
+        if: always()
+        run: |
+          mkdir -p "$RUNNER_TEMP/comment"
+          printf '{"number":%s,"head":"%s"}\n' "${{ github.event.pull_request.number }}" \
+            "${{ github.event.pull_request.head.sha }}" > "$RUNNER_TEMP/comment/pr.json"
+
+      # For screens-comment.yml, which comments with it: a pull request's own run cannot, as one from
+      # a fork has no token that writes.
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: screens-native-output
+          path: ${{ runner.temp }}/comment
+          retention-days: 7
+
+  # The release build launched on a simulator and walked through the release flows, then its
+  # screenshots, on the same simulator, so its boot and Maestro's driver start are paid once. On a
+  # push to main, every flow's screenshots are recorded and cached by main's commit and the
+  # simulator. On a pull request, the flows native-output names are compared with those of the main
+  # it was merged with, so a difference is the change and not a runtime or a baseline recorded long
+  # ago; screens-comment.yml shows what differs. Where main's are not cached, main's own build is
+  # recorded first, in the same sitting. See examples/canary/scripts/ios-tests.sh.
+  ios:
+    needs: [ios-build, native-output]
+    # After native-output whatever it did: one that failed compares every flow.
+    if: always() && needs.ios-build.result == 'success'
+    runs-on: macos-latest
+    # Setting up, the smoke flow, and the flows compared; every flow, recorded on main or with a
+    # changed native half, is most of it.
+    timeout-minutes: 45
+    # It runs the pull request's code: no token kept in the checkout, and nothing it may write.
+    permissions:
+      contents: read
+    env:
+      PR: ${{ github.event_name == 'pull_request' }}
+      PUSH: ${{ github.event_name == 'push' }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 2
           persist-credentials: false
 
       - uses: actions/download-artifact@v8
@@ -172,6 +271,65 @@ jobs:
           path: ${{ runner.temp }}
       - run: tar -xzf "$RUNNER_TEMP/canary-app.tgz" -C "$RUNNER_TEMP"
 
+      # Main's screenshots are of a simulator and a commit: on a pull request, of the main it was
+      # merged with, the merge's first parent.
+      - id: screens
+        env:
+          NATIVE: ${{ needs.native-output.result }}
+          FLOWS: ${{ needs.native-output.outputs.flows }}
+        run: |
+          main=$GITHUB_SHA
+          [ "$PR" = false ] || main=$(git rev-parse HEAD^1)
+          simulator=$(./examples/canary/scripts/ios-simulator.sh --which | tr ' ' '-')
+          echo "key=canary-screens-$simulator-$main" >> "$GITHUB_OUTPUT"
+          [ "$NATIVE" = success ] \
+            || FLOWS=$(node examples/canary/.maestro/ios/compare-builds.mjs flows | paste -sd, -)
+          echo "flows=$FLOWS" >> "$GITHUB_OUTPUT"
+
+      - id: cached
+        if: env.PR == 'true' && steps.screens.outputs.flows != ''
+        uses: actions/cache/restore@v6
+        with:
+          path: ${{ runner.temp }}/main-screens
+          key: ${{ steps.screens.outputs.key }}
+
+      # Main's screenshots not cached, its run not finished or gone: main's own build, recorded
+      # in this sitting. Its bundle in an app of its native half: the change's app where the change
+      # leaves that half as it was, or the app main's run cached.
+      - id: base
+        if: env.PR == 'true' && steps.screens.outputs.flows != '' && steps.cached.outputs.cache-hit != 'true'
+        run: echo "needed=true" >> "$GITHUB_OUTPUT"
+      - if: steps.base.outputs.needed
+        uses: ./.github/actions/setup
+      - id: fingerprint
+        if: steps.base.outputs.needed
+        run: |
+          git worktree add --detach "$RUNNER_TEMP/base" "$(git rev-parse HEAD^1)"
+          pnpm --dir "$RUNNER_TEMP/base" install --frozen-lockfile --prefer-offline
+          echo "base=$(cd "$RUNNER_TEMP/base/examples/canary" && node scripts/ios-app.mjs fingerprint)" >> "$GITHUB_OUTPUT"
+          echo "change=$(cd examples/canary && node scripts/ios-app.mjs fingerprint)" >> "$GITHUB_OUTPUT"
+      - id: base-app
+        if: steps.base.outputs.needed && steps.fingerprint.outputs.base != steps.fingerprint.outputs.change
+        uses: actions/cache/restore@v6
+        with:
+          path: ${{ runner.temp }}/app-cache
+          key: canary-app-${{ runner.os }}-${{ steps.fingerprint.outputs.base }}
+      - name: Put main's bundle into its app
+        if: steps.base.outputs.needed
+        env:
+          SAME: ${{ steps.fingerprint.outputs.base == steps.fingerprint.outputs.change }}
+          CACHED: ${{ steps.base-app.outputs.cache-hit }}
+        run: |
+          shell=
+          if [ "$SAME" = true ]; then shell=$RUNNER_TEMP/canary.app
+          elif [ "$CACHED" = true ]; then shell=$RUNNER_TEMP/app-cache/canary.app
+          fi
+          # None: the change touches the native half, and no app of main's is cached. ios-tests.sh
+          # says so in the report.
+          [ -n "$shell" ] || exit 0
+          cd "$RUNNER_TEMP/base/examples/canary"
+          node scripts/ios-app.mjs rebundle "$shell" "$RUNNER_TEMP/base.app"
+
       - uses: actions/setup-java@v6
         with:
           distribution: zulu
@@ -182,144 +340,48 @@ jobs:
           curl -fsSL https://get.maestro.mobile.dev | MAESTRO_VERSION=2.10.0 bash
           echo "$HOME/.maestro/bin" >> "$GITHUB_PATH"
 
-      # The same flows the Android half walks, on a simulator created for the run.
-      - name: Launch it on a simulator
-        run: >
-          ./examples/canary/scripts/smoke-ios.sh "$RUNNER_TEMP/canary.app" "$RUNNER_TEMP/maestro"
+      - name: Launch it on a simulator, and compare its screenshots
+        env:
+          FLOWS: ${{ steps.screens.outputs.flows }}
+        run: |
+          # Called by the release workflow or by hand: the smoke flow alone.
+          if [ "$PR" = true ]; then
+            export FLOWS BASE_SHOTS=$RUNNER_TEMP/main-screens BASE_APP=$RUNNER_TEMP/base.app
+          elif [ "$PUSH" = true ]; then
+            export RECORD_INTO=$RUNNER_TEMP/main-screens
+          fi
+          ./examples/canary/scripts/ios-tests.sh "$RUNNER_TEMP/canary.app" "$RUNNER_TEMP/out"
+
+      - if: env.PUSH == 'true' && success()
+        uses: actions/cache/save@v6
+        with:
+          path: ${{ runner.temp }}/main-screens
+          key: ${{ steps.screens.outputs.key }}
+
+      - name: Say which pull request it is for
+        if: always() && env.PR == 'true'
+        run: |
+          mkdir -p "$RUNNER_TEMP/out/screens"
+          # A job stopped before ios-tests.sh wrote a report compared nothing, and says so: the
+          # comment then does not take its silence for no difference.
+          [ -f "$RUNNER_TEMP/out/screens/report.json" ] \
+            || echo '{"flows":0,"compared":false,"differ":[]}' > "$RUNNER_TEMP/out/screens/report.json"
+          printf '{"number":%s,"head":"%s"}\n' "${{ github.event.pull_request.number }}" \
+            "${{ github.event.pull_request.head.sha }}" > "$RUNNER_TEMP/out/screens/pr.json"
+      - uses: actions/upload-artifact@v7
+        if: always() && env.PR == 'true'
+        with:
+          name: screens-ios
+          path: ${{ runner.temp }}/out/screens
+          retention-days: 7
 
       - name: Upload what Maestro saw
         if: failure()
         uses: actions/upload-artifact@v7
         with:
           name: maestro-ios
-          path: ${{ runner.temp }}/maestro
+          path: ${{ runner.temp }}/out/maestro
           if-no-files-found: ignore
-
-  # What the change does to the canary's screenshots: the base's bundle and the pull request's, each
-  # in an app of its native half, on one simulator in one sitting, so a difference is the change
-  # and not a runtime or a baseline recorded long ago. screens-comment.yml shows what differs on the
-  # pull request. After `ios-build`, whose app it compares, and beside `ios`. In two halves of the
-  # flows, each on a runner of its own: one walk of every flow on each side is most of an hour on
-  # CI's Mac, and half is under half an hour.
-  ios-visual:
-    needs: ios-build
-    if: github.event_name == 'pull_request' && github.event.pull_request.draft != true
-    runs-on: macos-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        shard: [1, 2]
-    # Setting up, then two walks of half the flows, each about eight minutes.
-    timeout-minutes: 40
-    # It runs the pull request's code: no token kept in the checkout, and nothing it may write.
-    permissions:
-      contents: read
-    steps:
-      - uses: actions/checkout@v7
-        with:
-          fetch-depth: 0
-          persist-credentials: false
-      - uses: ./.github/actions/setup
-
-      # Main as the pull request was merged with for this run, whose app main's own run cached: the
-      # checkout is that merge, and its first parent is main. The event's base.sha can be older.
-      - name: Check out and install main
-        run: |
-          git worktree add --detach "$RUNNER_TEMP/base" "$(git rev-parse HEAD^1)"
-          pnpm --dir "$RUNNER_TEMP/base" install --frozen-lockfile --prefer-offline
-
-      # The native fingerprint of each side: the base's in its own checkout, the change's in this
-      # one, the merge ios-build built.
-      - id: fingerprint
-        run: |
-          echo "base=$(cd "$RUNNER_TEMP/base/examples/canary" && node scripts/ios-app.mjs fingerprint)" >> "$GITHUB_OUTPUT"
-          echo "change=$(cd examples/canary && node scripts/ios-app.mjs fingerprint)" >> "$GITHUB_OUTPUT"
-
-      # The change's app, as ios-build made it.
-      - uses: actions/download-artifact@v8
-        with:
-          name: canary-ios-app
-          path: ${{ runner.temp }}
-      - run: tar -xzf "$RUNNER_TEMP/canary-app.tgz" -C "$RUNNER_TEMP" && mv "$RUNNER_TEMP/canary.app" "$RUNNER_TEMP/change.app"
-
-      # The base's app is its own bundle in an app of its native half. Where the change leaves that
-      # half as it was, which most do, the change's app is that app: no cache is needed, and a pull
-      # request onto another pull request's branch, which no run of main has cached, compares too.
-      # Where the change touches it, the base's own app, cached by a run of main.
-      - id: base-app
-        if: steps.fingerprint.outputs.base != steps.fingerprint.outputs.change
-        uses: actions/cache/restore@v6
-        with:
-          path: ${{ runner.temp }}/app-cache
-          key: canary-app-${{ runner.os }}-${{ steps.fingerprint.outputs.base }}
-      - id: shell
-        env:
-          BASE: ${{ steps.fingerprint.outputs.base }}
-          CHANGE: ${{ steps.fingerprint.outputs.change }}
-          CACHED: ${{ steps.base-app.outputs.cache-hit }}
-        run: |
-          if [ "$BASE" = "$CHANGE" ]; then
-            echo "app=$RUNNER_TEMP/change.app" >> "$GITHUB_OUTPUT"
-          elif [ "$CACHED" = true ]; then
-            echo "app=$RUNNER_TEMP/app-cache/canary.app" >> "$GITHUB_OUTPUT"
-          fi
-
-      - name: Put the base's bundle into its app
-        if: steps.shell.outputs.app != ''
-        env:
-          SHELL_APP: ${{ steps.shell.outputs.app }}
-        run: |
-          cd "$RUNNER_TEMP/base/examples/canary"
-          node scripts/ios-app.mjs rebundle "$SHELL_APP" "$RUNNER_TEMP/base.app"
-
-      - uses: actions/setup-java@v6
-        if: steps.shell.outputs.app != ''
-        with:
-          distribution: zulu
-          java-version: 17
-
-      - name: Install Maestro
-        if: steps.shell.outputs.app != ''
-        run: |
-          curl -fsSL https://get.maestro.mobile.dev | MAESTRO_VERSION=2.10.0 bash
-          echo "$HOME/.maestro/bin" >> "$GITHUB_PATH"
-
-      - name: Compare the screenshots
-        if: steps.shell.outputs.app != ''
-        run: >
-          ./examples/canary/scripts/visual-ios.sh
-          "$RUNNER_TEMP/base.app" "$RUNNER_TEMP/change.app" "$RUNNER_TEMP/screens"
-          "${{ matrix.shard }}/2"
-
-      # A change to the native half whose base no run of main has cached has nothing to compare
-      # with: the comment says so, and Screens holds until it is compared or accepted.
-      - name: Say the base's app is not cached
-        if: steps.shell.outputs.app == ''
-        run: |
-          mkdir -p "$RUNNER_TEMP/screens"
-          echo '{"shard":"${{ matrix.shard }}/2","skipped":"the change touches the native half, and no app of the base'"'"'s is cached"}' > "$RUNNER_TEMP/screens/report.json"
-
-      # A job stopped before any of the above wrote a report compared nothing, and says so: the
-      # comment then does not take its silence for no difference.
-      - name: Mark a comparison that did not finish
-        if: always()
-        run: |
-          mkdir -p "$RUNNER_TEMP/screens"
-          [ -f "$RUNNER_TEMP/screens/report.json" ] || echo '{"shard":"${{ matrix.shard }}/2","flows":0,"compared":false,"differ":[]}' > "$RUNNER_TEMP/screens/report.json"
-
-      - name: Say which pull request it is for
-        if: always()
-        run: |
-          mkdir -p "$RUNNER_TEMP/screens"
-          printf '{"number":%s,"head":"%s"}\n' "${{ github.event.pull_request.number }}" \
-            "${{ github.event.pull_request.head.sha }}" > "$RUNNER_TEMP/screens/pr.json"
-
-      - uses: actions/upload-artifact@v7
-        if: always()
-        with:
-          name: screens-ios-${{ matrix.shard }}
-          path: ${{ runner.temp }}/screens
-          retention-days: 7
 
   android:
     if: github.event.pull_request.draft != true

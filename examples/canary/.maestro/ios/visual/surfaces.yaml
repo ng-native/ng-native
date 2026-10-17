@@ -1,10 +1,12 @@
 # Surfaces, as it draws: a screenshot compared with the one taken when it was last right.
+# routes: /surfaces
 appId: dev.angularnative.canary
 ---
 - runFlow:
-    file: ../subflows/open.yaml
+    file: ../subflows/open-screen.yaml
     env:
-      SCREEN: 'Surfaces'
+      PATH: 'surfaces'
+      SHOWS: 'Surfaces'
 - waitForAnimationToEnd
 - assertScreenshot:
     path: ../baselines/visual-surfaces.png

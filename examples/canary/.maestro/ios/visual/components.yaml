@@ -1,10 +1,12 @@
 # Components, as it draws: a screenshot compared with the one taken when it was last right.
+# routes: /components
 appId: dev.angularnative.canary
 ---
 - runFlow:
-    file: ../subflows/open.yaml
+    file: ../subflows/open-screen.yaml
     env:
-      SCREEN: 'Components'
+      PATH: 'components'
+      SHOWS: 'Components'
 - waitForAnimationToEnd
 - assertScreenshot:
     path: ../baselines/visual-components.png
