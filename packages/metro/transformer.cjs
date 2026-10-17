@@ -194,7 +194,11 @@ function nativeScriptBabel(params) {
   return { ...params, options: { ...params.options, extendsBabelConfigPath } };
 }
 
-/** Per project root, whether to use `nativescript-babel.cjs`. */
+/**
+ * Per project root, whether to use `nativescript-babel.cjs`, decided once per worker. Expo's own
+ * `loadBabelConfig` keeps the first config it finds for the life of the worker too, so adding,
+ * removing or editing a Babel config needs Metro restarted either way, which starts this afresh.
+ */
 const NATIVESCRIPT = /** @type {Record<string, boolean>} */ ({});
 /** The option set to true, not only named: `strictGlobal: false` still needs the warning. */
 const STRICT_GLOBAL = /["']?strictGlobal["']?\s*:\s*true\b/;
