@@ -26,6 +26,7 @@ import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'no
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import url from 'node:url';
+import { changed } from './native-output.mjs';
 
 const ROOT = path.resolve(path.dirname(url.fileURLToPath(import.meta.url)), '..');
 
@@ -149,10 +150,7 @@ export function needsPlan(nameStatus) {
 }
 
 /** The screens whose native output changed, from `native-output.mjs diff --json`. */
-export const changedRoutes = ({ results }) =>
-  results
-    .filter((one) => one.missing || one.changes.length || one.notes?.length)
-    .map((one) => one.url);
+export const changedRoutes = ({ results }) => results.filter(changed).map((one) => one.url);
 
 /**
  * The screenshots of the flows that open `routes`, base against change: each side's bundle put into
@@ -162,8 +160,16 @@ export const changedRoutes = ({ results }) =>
  */
 function screenshots(app, baseDir, routes, lines, check) {
   const canary = (dir) => path.join(dir, 'examples/canary');
+  // Fail closed: a fingerprint or a flow list that could not be had is not an answer.
+  const output = (result, what) => {
+    if (!result.ok) throw new Error(`could not ${what}:\n${tail(result.output)}`);
+    return result.output.trim();
+  };
   const fingerprint = (dir) =>
-    run(process.execPath, ['scripts/ios-app.mjs', 'fingerprint'], canary(dir)).output.trim();
+    output(
+      run(process.execPath, ['scripts/ios-app.mjs', 'fingerprint'], canary(dir)),
+      'take the native fingerprint',
+    );
   if (fingerprint(baseDir) !== fingerprint(ROOT)) {
     lines.push(
       'Not compared: the change touches the native half, which one app cannot be on both sides of. Compare two builds with `pnpm e2e:ios:compare`.',
@@ -172,7 +178,10 @@ function screenshots(app, baseDir, routes, lines, check) {
   }
   const compare = path.join(canary(ROOT), '.maestro/ios/compare-builds.mjs');
   const flows = routes.length
-    ? run(process.execPath, [compare, 'flows', '--routes', routes.join(',')]).output.trim()
+    ? output(
+        run(process.execPath, [compare, 'flows', '--routes', routes.join(',')]),
+        'list the flows',
+      )
     : '';
   if (!flows) {
     lines.push("None compared: no screen's native output changed.");

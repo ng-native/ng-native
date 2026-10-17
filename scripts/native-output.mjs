@@ -12,7 +12,7 @@
  *   node scripts/native-output.mjs write <dir>           # write this checkout's screens to <dir>
  *   node scripts/native-output.mjs write <dir> --checkout <path>  # another checkout's, this one's way
  *   node scripts/native-output.mjs diff <before> <after>  # what changed, as Markdown
- *   node scripts/native-output.mjs diff <before> <after> --json  # { results, skipped }, for CI
+ *   node scripts/native-output.mjs diff <before> <after> --json  # { results, skipped }, for pr-gate.mjs
  *
  * `write` builds the canary's Tailwind sheet first, as `node metro.config.js` does, and then runs
  * `examples/canary/src/native-output.test.ts`. `diff` exits 1 where anything changed, and 2 where it
@@ -122,10 +122,13 @@ export function skipped(dir) {
 }
 
 /** The comparison as Markdown, for a pull request's description. */
+/** Whether a screen's native output changed: it differs, gained a note, or is on one side only. */
+export const changed = (one) => Boolean(one.missing || one.changes.length || one.notes?.length);
+
 export function report(results, left = {}) {
-  const changed = results.filter((one) => one.missing || one.changes.length || one.notes?.length);
-  const lines = [`### Native output: ${changed.length} of ${results.length} screens changed`, ''];
-  for (const one of changed) {
+  const different = results.filter(changed);
+  const lines = [`### Native output: ${different.length} of ${results.length} screens changed`, ''];
+  for (const one of different) {
     if (one.missing) {
       lines.push(`- \`${one.url}\`: written only ${one.missing === 'after' ? 'before' : 'after'}`);
       continue;
@@ -200,11 +203,11 @@ function main(argv) {
   if (command === 'diff' && rest[0] && rest[1]) {
     const results = compare(rest[0], rest[1]);
     const left = { ...skipped(rest[0]), ...skipped(rest[1]) };
-    // The JSON is what CI's comment is written from: the results, and the screens left out.
+    // The JSON is what pr-gate.mjs reads: the results, and the screens left out.
     const json = JSON.stringify({ results, skipped: left }, null, 2);
     console.log(rest.includes('--json') ? json : report(results, left));
-    const changed = results.some((one) => one.missing || one.changes.length || one.notes?.length);
-    process.exitCode = changed ? 1 : 0;
+    const any = results.some(changed);
+    process.exitCode = any ? 1 : 0;
     return;
   }
   console.error('Usage: native-output.mjs write <dir> | diff <before> <after> [--json]');

@@ -150,7 +150,7 @@ function record(device, app, flows, into) {
 
 /**
  * Each screenshot the flows assert, on a build, against those in `from`: every one compared, the
- * ones after a difference included, and report.json in `out`, which CI's comment is written from.
+ * ones after a difference included, and report.json in `out`, which pr-gate.mjs reads.
  */
 function assert(device, app, flows, from, out) {
   return keepingBaselines(() => {

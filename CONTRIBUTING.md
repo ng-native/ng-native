@@ -205,6 +205,10 @@ It records every screenshot the flows assert from the first build, asserts them 
 puts the committed baselines back. `--flows visual/css.yaml,chat.yaml` compares only those flows.
 Each screenshot that differs goes in `visual-diff` with the difference marked.
 
+The baselines committed in `examples/canary/.maestro/ios/baselines`, which `pnpm e2e:ios` compares
+with, are recorded with `examples/canary/scripts/record-ios.sh <canary.app>`, on a simulator made
+for it with the status bar held still and the keyboard's predictions off.
+
 A flow says which screens it opens in a `# routes:` line, which is how the gate picks the flows for
 the screens that changed; one that names none is always compared. A flow opens its screen by link,
 and reaches further down a page with `?scroll=<points>` in the link, which lands on the same point
