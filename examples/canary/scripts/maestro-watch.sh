@@ -26,10 +26,15 @@ stop() {
   kill -KILL -- "-$pid" 2>/dev/null
   wait "$pid" 2>/dev/null
 }
+# Its group takes it out of reach of a signal sent to this one, as a cancelled CI job sends: so
+# that signal ends it here.
+trap 'stop; exit 143' TERM INT HUP
 
 started=$SECONDS
 while kill -0 "$pid" 2>/dev/null; do
-  if tail -c "+$from" "$log" | grep -q 'Exception in thread "main"'; then
+  # Not through a pipe: with pipefail, grep stopping at the line leaves tail failing on the rest of
+  # a long log, which would read as no match.
+  if grep -q 'Exception in thread "main"' < <(tail -c "+$from" "$log"); then
     echo "[$(date +%T)] Maestro threw on its main thread and kept running: ending it" >&2
     stop
     exit 70
