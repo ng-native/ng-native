@@ -94,6 +94,18 @@ describe('pr-gate', () => {
     assert.equal(needsPlan('A\tscripts/pr-gate.mjs\nM\texamples/canary/src/app/app.ts'), false);
   });
 
+  it('shares the flows between shards, each once, every nth from the ith', async () => {
+    const { inShard } = await import(
+      new URL('../../examples/canary/.maestro/ios/compare-builds.mjs', import.meta.url).href
+    );
+    const flows = ['a', 'b', 'c', 'd', 'e'];
+    assert.deepEqual(inShard(flows, '1/2'), ['a', 'c', 'e']);
+    assert.deepEqual(inShard(flows, '2/2'), ['b', 'd']);
+    assert.deepEqual(inShard(flows, '1/1'), flows);
+    for (const bad of ['0/2', '3/2', 'x', '1/0'])
+      assert.throws(() => inShard(flows, bad), /not a shard/);
+  });
+
   it('makes each screenshot of a flow optional for the comparison, and nothing else', async () => {
     const { comparing } = await import(
       new URL('../../examples/canary/.maestro/ios/compare-builds.mjs', import.meta.url).href

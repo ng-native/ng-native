@@ -10,7 +10,7 @@
 // sitting with `compare-builds.mjs`, which needs no committed baseline at all.
 import { execFileSync } from 'node:child_process';
 import { mkdirSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync } from 'node:fs';
-import { basename, dirname, join } from 'node:path';
+import { basename, dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -22,8 +22,11 @@ const output = join(here, '.recording');
 rmSync(output, { recursive: true, force: true });
 const copies = [];
 const expected = new Set();
+// Only the flows named, where any are: `compare-builds.mjs` records a shard of them.
+const only = process.argv.slice(2).map((file) => resolve(file));
 for (const dir of [here, join(here, 'visual')]) {
   for (const name of readdirSync(dir).filter((file) => file.endsWith('.yaml'))) {
+    if (only.length && !only.includes(join(dir, name))) continue;
     const flow = readFileSync(join(dir, name), 'utf8');
     if (!flow.includes('assertScreenshot')) continue;
     const taken = flow.replace(

@@ -77,11 +77,24 @@ jobs:
       - name: Download what the run uploaded
         if: github.event_name == 'workflow_run'
         run: |
-          for name in screens-pr screens-native-output screens-ios; do
+          for name in screens-pr screens-native-output screens-ios-1 screens-ios-2; do
             if ! output=$(gh run download "$RUN" -R "$GITHUB_REPOSITORY" -n "$name" -D "$RUNNER_TEMP/in/$name" 2>&1); then
               grep -qiE 'no (valid )?artifacts? (found|matches)' <<< "$output" || { echo "$output"; exit 1; }
             fi
           done
+          # The screenshot comparison's two halves, as one: each half's images checked, and a half
+          # that uploaded nothing is a comparison that did not finish.
+          shards=()
+          for half in 1 2; do [ -d "$RUNNER_TEMP/in/screens-ios-$half" ] && shards+=("$RUNNER_TEMP/in/screens-ios-$half"); done
+          if [ ${#shards[@]} -gt 0 ]; then
+            mkdir -p "$RUNNER_TEMP/in/screens-ios"
+            cp "${shards[0]}/pr.json" "$RUNNER_TEMP/in/screens-ios/pr.json"
+            # A missing half is an empty upload, which the merge reads as not compared.
+            if [ ${#shards[@]} = 1 ]; then
+              mkdir -p "$RUNNER_TEMP/in/missing-half" && shards+=("$RUNNER_TEMP/in/missing-half")
+            fi
+            node scripts/screens-comment.mjs merge-reports "$RUNNER_TEMP/in/screens-ios" "${shards[@]}"
+          fi
 
       - name: Comment, and set the Screens status
         run: |

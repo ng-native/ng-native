@@ -35,7 +35,7 @@ function options(argv) {
   const device = value('--device');
   if (!base || !change || !device) {
     throw new Error(
-      'Usage: compare-builds.mjs --base <app> --change <app> --device <udid> [--out dir]',
+      'Usage: compare-builds.mjs --base <app> --change <app> --device <udid> [--out dir] [--shard i/n]',
     );
   }
   return {
@@ -43,7 +43,20 @@ function options(argv) {
     change: resolve(change),
     device,
     out: resolve(value('--out') ?? 'visual-diff'),
+    shard: value('--shard') ?? '1/1',
   };
+}
+
+/**
+ * The flows of one shard of `shard`, `i/n`: every nth from the ith, so each shard has some of the
+ * long pages and the short. A run of each shard beside the others compares them all.
+ */
+export function inShard(flows, shard) {
+  const [, at, of] = /^(\d+)\/(\d+)$/.exec(shard) ?? [];
+  const index = Number(at);
+  const count = Number(of);
+  if (!(count >= 1 && index >= 1 && index <= count)) throw new Error(`not a shard: ${shard}`);
+  return flows.filter((_, place) => place % count === index - 1);
 }
 
 /** A flow with each screenshot it asserts made optional: one that differs is noted, not fatal. */
@@ -94,13 +107,13 @@ function main() {
   const kept = mkdtempSync(join(tmpdir(), 'canary-baselines-'));
   cpSync(baselines, kept, { recursive: true });
   try {
+    const flows = inShard(screenshotFlows(), opts.shard);
     install(opts.device, opts.base);
-    execFileSync(process.execPath, [join(here, 'record-baselines.mjs')], {
+    execFileSync(process.execPath, [join(here, 'record-baselines.mjs'), ...flows], {
       stdio: 'inherit',
       env: { ...process.env, ...java, MAESTRO_DEVICE: opts.device },
     });
     install(opts.device, opts.change);
-    const flows = screenshotFlows();
     // Each screenshot compared, the ones after a difference included: a copy of each flow, beside
     // it so its subflows resolve the same, where a screenshot that differs does not stop the flow.
     const copies = flows.map((flow) => {
@@ -131,7 +144,7 @@ function main() {
     const compared = run.status === 0;
     writeFileSync(
       join(opts.out, 'report.json'),
-      `${JSON.stringify({ flows: flows.length, compared, differ: shots }, null, 2)}\n`,
+      `${JSON.stringify({ shard: opts.shard, flows: flows.length, compared, differ: shots }, null, 2)}\n`,
     );
     console.log(
       differ.length
@@ -160,7 +173,7 @@ if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) {
       mkdirSync(resolve(argv[at + 1]), { recursive: true });
       writeFileSync(
         join(resolve(argv[at + 1]), 'report.json'),
-        `${JSON.stringify({ flows: 0, compared: false, differ: [] }, null, 2)}\n`,
+        `${JSON.stringify({ shard: argv[argv.indexOf('--shard') + 1] ?? '1/1', flows: 0, compared: false, differ: [] }, null, 2)}\n`,
       );
     }
     process.exitCode = 1;

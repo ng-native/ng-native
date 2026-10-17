@@ -15,6 +15,7 @@ const {
   images,
   incomplete,
   merge,
+  mergeReports,
   nativeMissing,
   nativeSection,
   screenshotSection,
@@ -208,5 +209,23 @@ describe('screens-comment', () => {
     assert.equal(incomplete(merge('', 'screenshots', skipped, 'abc1234'), 'abc1234'), true);
     // Nor can an upload write the mark: what a run uploads is cleaned of the angle brackets it needs.
     assert.doesNotMatch(String(clean('<!-- incomplete -->')), /<!--/);
+  });
+
+  it("puts the screenshot comparison's halves together, compared only where both were", () => {
+    const shot = { shot: 'a.png', base: 'base-a.png', diff: 'a_diff.png' };
+    const one = { shard: '1/2', flows: 6, compared: true, differ: [shot] };
+    const two = { shard: '2/2', flows: 6, compared: true, differ: [] };
+    assert.deepEqual(mergeReports([one, two]), { flows: 12, compared: true, differ: [shot] });
+    assert.equal(mergeReports([one]).compared, false, 'a half missing');
+    assert.equal(mergeReports([one, { compared: false }]).compared, false, 'a half with no report');
+    assert.equal(
+      mergeReports([one, { ...two, compared: false }]).compared,
+      false,
+      'a half stopped',
+    );
+    assert.equal(mergeReports([one, { ...one }]).compared, false, 'the same half twice');
+    assert.deepEqual(mergeReports([one, { shard: '2/2', skipped: 'no app' }]), {
+      skipped: 'no app',
+    });
   });
 });

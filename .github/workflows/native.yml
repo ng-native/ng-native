@@ -198,13 +198,19 @@ jobs:
   # What the change does to the canary's screenshots: the base's bundle and the pull request's, each
   # in an app of its native half, on one simulator in one sitting, so a difference is the change
   # and not a runtime or a baseline recorded long ago. screens-comment.yml shows what differs on the
-  # pull request. After `ios-build`, whose app it compares, and beside `ios`.
+  # pull request. After `ios-build`, whose app it compares, and beside `ios`. In two halves of the
+  # flows, each on a runner of its own: one walk of every flow on each side is most of an hour on
+  # CI's Mac, and half is under half an hour.
   ios-visual:
     needs: ios-build
     if: github.event_name == 'pull_request' && github.event.pull_request.draft != true
     runs-on: macos-latest
-    # Two bundles and two walks of the screenshot flows, each about eight minutes.
-    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2]
+    # Setting up, then two walks of half the flows, each about eight minutes.
+    timeout-minutes: 40
     # It runs the pull request's code: no token kept in the checkout, and nothing it may write.
     permissions:
       contents: read
@@ -283,6 +289,7 @@ jobs:
         run: >
           ./examples/canary/scripts/visual-ios.sh
           "$RUNNER_TEMP/base.app" "$RUNNER_TEMP/change.app" "$RUNNER_TEMP/screens"
+          "${{ matrix.shard }}/2"
 
       # A change to the native half whose base no run of main has cached has nothing to compare
       # with: the comment says so, and Screens holds until it is compared or accepted.
@@ -290,7 +297,7 @@ jobs:
         if: steps.shell.outputs.app == ''
         run: |
           mkdir -p "$RUNNER_TEMP/screens"
-          echo '{"skipped":"the change touches the native half, and no app of the base'"'"'s is cached"}' > "$RUNNER_TEMP/screens/report.json"
+          echo '{"shard":"${{ matrix.shard }}/2","skipped":"the change touches the native half, and no app of the base'"'"'s is cached"}' > "$RUNNER_TEMP/screens/report.json"
 
       # A job stopped before any of the above wrote a report compared nothing, and says so: the
       # comment then does not take its silence for no difference.
@@ -298,7 +305,7 @@ jobs:
         if: always()
         run: |
           mkdir -p "$RUNNER_TEMP/screens"
-          [ -f "$RUNNER_TEMP/screens/report.json" ] || echo '{"flows":0,"compared":false,"differ":[]}' > "$RUNNER_TEMP/screens/report.json"
+          [ -f "$RUNNER_TEMP/screens/report.json" ] || echo '{"shard":"${{ matrix.shard }}/2","flows":0,"compared":false,"differ":[]}' > "$RUNNER_TEMP/screens/report.json"
 
       - name: Say which pull request it is for
         if: always()
@@ -310,7 +317,7 @@ jobs:
       - uses: actions/upload-artifact@v7
         if: always()
         with:
-          name: screens-ios
+          name: screens-ios-${{ matrix.shard }}
           path: ${{ runner.temp }}/screens
           retention-days: 7
 

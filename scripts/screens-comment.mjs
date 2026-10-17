@@ -14,6 +14,8 @@
  *       shown from <url>/<file>
  *   node scripts/screens-comment.mjs merge <comment> <key> <section> <head>
  *       the comment's body with the section for <key> at commit <head> put in, or added
+ *   node scripts/screens-comment.mjs merge-reports <out> <dir>...
+ *       the screenshot comparison's shards, each a directory a job uploaded, as one in <out>
  *   node scripts/screens-comment.mjs native-missing <run url>
  *       the native output's section for a comparison that was to be made and did not finish
  *   node scripts/screens-comment.mjs incomplete <comment> <head>
@@ -23,7 +25,14 @@
  *   node scripts/screens-comment.mjs worth <section>...
  *       exits 0 where any section has something to show, so a comment is worth starting
  */
-import { readFileSync, readdirSync, statSync } from 'node:fs';
+import {
+  copyFileSync,
+  existsSync,
+  readFileSync,
+  readdirSync,
+  statSync,
+  writeFileSync,
+} from 'node:fs';
 import path from 'node:path';
 import url from 'node:url';
 import { report } from './native-output.mjs';
@@ -129,6 +138,25 @@ export function screenshotSection(manifest, base) {
 }
 
 /**
+ * The reports of the shards of one screenshot comparison, as one: every shard's screenshots that
+ * differ, and compared only where every shard was. A shard with no report, or one that was not
+ * compared, leaves the whole not compared; one that had nothing to compare with says so for all.
+ */
+export function mergeReports(reports) {
+  const all = reports.map((report) => clean(report) ?? {});
+  const skipped = all.find((report) => typeof report.skipped === 'string');
+  if (skipped) return { skipped: skipped.skipped };
+  const count = Number(/^\d+\/(\d+)$/.exec(all[0]?.shard ?? '')?.[1] ?? all.length);
+  const shards = new Set(all.map((report) => report.shard));
+  const every = all.length === count && shards.size === count;
+  return {
+    flows: all.reduce((sum, report) => sum + (Number(report.flows) || 0), 0),
+    compared: every && all.every((report) => report.compared === true),
+    differ: all.flatMap((report) => (Array.isArray(report.differ) ? report.differ : [])),
+  };
+}
+
+/**
  * The images in a directory that may be put in the comment: each a PNG of a plain name, of a size
  * a comment can show. Throws on any other file, so a run cannot slip one in beside them.
  */
@@ -218,6 +246,23 @@ function main([command, ...args]) {
     );
   }
   if (command === 'native-missing') return console.log(nativeMissing(args[0]));
+  if (command === 'merge-reports') {
+    // The shards' uploads into one: each one's images checked, and copied in, with one report.
+    const [out, ...dirs] = args;
+    const reports = [];
+    for (const dir of dirs) {
+      for (const file of images(dir)) copyFileSync(path.join(dir, file), path.join(out, file));
+      const report = path.join(dir, 'report.json');
+      reports.push(
+        existsSync(report) ? JSON.parse(readFileSync(report, 'utf8')) : { compared: false },
+      );
+    }
+    writeFileSync(
+      path.join(out, 'report.json'),
+      `${JSON.stringify(mergeReports(reports), null, 2)}\n`,
+    );
+    return;
+  }
   if (command === 'incomplete') {
     process.exitCode = incomplete(readFileSync(args[0], 'utf8'), args[1]) ? 0 : 1;
     return;

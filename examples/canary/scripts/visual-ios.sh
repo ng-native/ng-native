@@ -3,7 +3,7 @@
 # simulator of its own: what every flow that asserts one shows on the first build is recorded, and
 # then asserted on the second. See .maestro/ios/compare-builds.mjs.
 #
-#     examples/canary/scripts/visual-ios.sh <base.app> <change.app> <output dir>
+#     examples/canary/scripts/visual-ios.sh <base.app> <change.app> <output dir> [shard i/n]
 #
 # The output dir gets each screenshot that differs, main's beside the change's with the difference
 # marked, and report.json, which screens-comment.yml writes the pull request comment from. It exits
@@ -18,6 +18,7 @@ set -uo pipefail
 base=$1
 change=$2
 out=$3
+shard=${4:-1/1}
 here="$(dirname "$0")"
 mkdir -p "$out"
 
@@ -29,7 +30,7 @@ log=$(mktemp)
 compare() {
   step "recording main's screenshots, then asserting them on the change"
   node "$here/../.maestro/ios/compare-builds.mjs" \
-    --base "$base" --change "$change" --device "$udid" --out "$out" 2>&1 | tee "$log"
+    --base "$base" --change "$change" --device "$udid" --out "$out" --shard "$shard" 2>&1 | tee "$log"
 }
 compare
 lost='DeviceUnreachableException|IOSDriverTimeoutException|failed, code: 500, body: \)'
