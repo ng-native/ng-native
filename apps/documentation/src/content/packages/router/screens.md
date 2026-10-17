@@ -258,6 +258,12 @@ screen was opened with - travels as router navigation state, which Angular's own
 carries: going back to a screen restores the presentation it was originally given, with no extra
 bookkeeping on your part.
 
+`replace()` and `reset()` take a presentation too. A `stackAnimation` named there is the one the
+new screen arrives with, so `reset('/', { presentation: { stackAnimation: 'none' } })` lands with
+no animation: the screen is given `replaceAnimation: 'push'` unless the navigation names a
+`replaceAnimation` of its own. With no `stackAnimation`, a replace or a reset animates as a back
+from the screen it takes away, as `react-native-screens` does.
+
 ## A sideways drag on iOS 26
 
 On iOS 26 the swipe back starts anywhere on a pushed screen, not only at its edge. It takes the
