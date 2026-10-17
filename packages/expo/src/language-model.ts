@@ -192,7 +192,8 @@ export class LanguageModel {
   /**
    * Ask the platform again. iOS announces a change when the app comes back to the front, which
    * covers Apple Intelligence being switched on in Settings; it does not announce the model
-   * finishing its preparation while the app is open.
+   * finishing its preparation while the app is open. Android answers with the module's last
+   * reading, `unknown` until its first check after launch, and announces the fresh one later.
    */
   refresh(): LanguageModelAvailability {
     this.state.set(this.read());

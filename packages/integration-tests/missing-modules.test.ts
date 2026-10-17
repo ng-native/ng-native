@@ -25,6 +25,7 @@ import {
 import { mount } from '@ng-native/platform';
 import { cleanup, createFakeFabric, injectService } from '@ng-native/testing';
 import { compileFixture } from './compile.ts';
+import { serviceWith } from './injected.ts';
 import { MissingModuleError } from '@ng-native/expo';
 import { AppInfo } from '@ng-native/expo/app-info';
 import { AppleSignIn } from '@ng-native/expo/apple-sign-in';
@@ -46,7 +47,7 @@ import { Haptics } from '@ng-native/expo/haptics';
 import { ImageEditor } from '@ng-native/expo/image-editor';
 import { ImagePicker } from '@ng-native/expo/image-picker';
 import { KeepAwake } from '@ng-native/expo/keep-awake';
-import { LanguageModel } from '@ng-native/expo/language-model';
+import { LanguageModel, LanguageModelUnavailableError } from '@ng-native/expo/language-model';
 import { Locale } from '@ng-native/expo/locale';
 import { Location } from '@ng-native/expo/location';
 import { MapView } from '@ng-native/expo/map-view';
@@ -314,6 +315,16 @@ describe('a service whose module is missing', () => {
       app.get(AppleSignIn).available(),
     ]);
     assert.deepEqual(await Promise.all(asked), [false, false]);
+  });
+
+  it('LanguageModel left out of the Android build: notInstalled, a refusal, and a throwing download', async () => {
+    const model = on('android', () =>
+      serviceWith(LanguageModel.SOURCE, factoryOf(LanguageModel.SOURCE)(), () => new LanguageModel()),
+    );
+    assert.equal(model.availability(), 'notInstalled');
+    await assert.rejects(model.generate('hello'), LanguageModelUnavailableError);
+    // download() uses the module rather than reading the availability, so it says what is missing.
+    await assert.rejects(model.download(), fixes('expo-local-llm', 'android'));
   });
 
   it('is inert in Node, where there is no platform to ask', () => {

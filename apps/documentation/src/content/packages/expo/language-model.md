@@ -64,8 +64,10 @@ Nano hardware yet.
 
 An app that does not want to raise it can leave the module out of Android's native build instead,
 with `"autolinking": { "android": { "exclude": ["expo-local-llm"] } }` under `expo` in its
-`package.json`. `LanguageModel` then reports `notInstalled` on Android and works as before on iOS,
-so the same code runs on both.
+`package.json`. `LanguageModel` then reports `notInstalled` on Android and refuses `generate()`,
+`generateObject()` and `stream()` there with that reason, so the same code runs on both as long as
+it checks `available()` first. `download()` is the exception: it throws a `MissingModuleError` on an
+Android build without the module, so call it only when the availability is `downloadRequired`.
 
 ## Streaming an answer into a template
 
@@ -188,8 +190,13 @@ preparation while the app is open, so `refresh()` asks again and returns the ans
 re-reads it before starting, so the signal being stale never sends a prompt to a model that is not
 there.
 
-On Android the first reading can be `unknown` while the module asks ML Kit whether Gemini Nano is
-there; the signal moves when the module announces the answer.
+Android answers differently. ML Kit only answers asynchronously, so `refresh()`, and the read before
+each call, return the last answer the module has, and start a fresh check whose result arrives
+later through the `availability` signal. Until the first check comes back after the app starts,
+that answer is `unknown`, and a call made then is refused with `unknown` even on a device that has
+Gemini Nano. A `refresh()` after a change likewise returns the previous answer. Wait for
+`available()` to turn true rather than calling straight away, and follow the signal rather than
+what `refresh()` returns.
 
 A call made while the model is unavailable is refused before it reaches the model, with a
 `LanguageModelUnavailableError` whose `reason` is one of the values above. `generate()` and
