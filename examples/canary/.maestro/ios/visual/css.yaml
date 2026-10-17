@@ -1,11 +1,30 @@
 # CSS, as it draws: a screenshot compared with the one taken when it was last right.
+# routes: /css
 appId: dev.angularnative.canary
 ---
 - runFlow:
-    file: ../subflows/open.yaml
+    file: ../subflows/open-screen.yaml
     env:
-      SCREEN: 'CSS'
+      PATH: 'css'
+      SHOWS: 'CSS'
 - waitForAnimationToEnd
 - assertScreenshot:
     path: ../baselines/visual-css.png
-    thresholdPercentage: 97
+    thresholdPercentage: 99.9
+# Further down, by its link: `scroll` puts the page at that many points exactly (ScreenScroll),
+# where a swipe lands a few points apart from one run to the next.
+- openLink: 'canary://css?scroll=700'
+- waitForAnimationToEnd
+- assertScreenshot:
+    path: ../baselines/visual-css-2.png
+    thresholdPercentage: 99.9
+- openLink: 'canary://css?scroll=1400'
+- waitForAnimationToEnd
+- assertScreenshot:
+    path: ../baselines/visual-css-3.png
+    thresholdPercentage: 99.9
+- openLink: 'canary://css?scroll=2100'
+- waitForAnimationToEnd
+- assertScreenshot:
+    path: ../baselines/visual-css-4.png
+    thresholdPercentage: 99.9

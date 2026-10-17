@@ -1,11 +1,30 @@
 # Primitives, as it draws: a screenshot compared with the one taken when it was last right.
+# routes: /primitives
 appId: dev.angularnative.canary
 ---
 - runFlow:
-    file: ../subflows/open.yaml
+    file: ../subflows/open-screen.yaml
     env:
-      SCREEN: 'Primitives'
+      PATH: 'primitives?still=1'
+      SHOWS: 'Primitives'
 - waitForAnimationToEnd
 - assertScreenshot:
     path: ../baselines/visual-primitives.png
-    thresholdPercentage: 97
+    thresholdPercentage: 99.9
+# Further down, by its link: `scroll` puts the page at that many points exactly (ScreenScroll),
+# where a swipe lands a few points apart from one run to the next.
+- openLink: 'canary://primitives?still=1&scroll=700'
+- waitForAnimationToEnd
+- assertScreenshot:
+    path: ../baselines/visual-primitives-2.png
+    thresholdPercentage: 99.9
+- openLink: 'canary://primitives?still=1&scroll=1400'
+- waitForAnimationToEnd
+- assertScreenshot:
+    path: ../baselines/visual-primitives-3.png
+    thresholdPercentage: 99.9
+- openLink: 'canary://primitives?still=1&scroll=2100'
+- waitForAnimationToEnd
+- assertScreenshot:
+    path: ../baselines/visual-primitives-4.png
+    thresholdPercentage: 99.9

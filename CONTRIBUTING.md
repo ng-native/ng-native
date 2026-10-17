@@ -171,4 +171,43 @@ See [RELEASING.md](./docs/RELEASING.md) for how an actual release goes out.
   explaining why (see `git log --oneline -20` for the style); there is no conventional-commits
   prefix convention (`feat:`, `fix:`, and so on) in use.
 
+### Checking a change against main
+
+`node scripts/pr-gate.mjs` runs what a pull request is checked for against `origin/main`, and prints
+a report for its description:
+
+- formatting, then lint, typecheck and tests of every project the change can reach;
+- the existing tests the change edits or deletes, which the description explains;
+- a version plan, where a package's code changed;
+- what every canary screen sends native, on main and on the change, and each view and prop that
+  differs (`scripts/native-output.mjs`);
+- `pnpm bench`, `bench:tailwind` and `bench:screens` in `packages/integration-tests`, run in turn
+  on each side. A measure fails where it is more than 3% slower and every round of the change was
+  slower than every round of main; one past 3% whose rounds overlap is marked, to be run again with
+  more rounds;
+- with `--app <canary.app>`, a simulator release build of the canary, the iOS screenshots of the
+  screens whose native output changed: each side's bundle put into a copy of that app, and the
+  flows that open those screens compared on a simulator made for the run. A difference is listed
+  for review, with the images, and does not fail the gate.
+
+`--base <ref>`, `--rounds <n>`, `--limit <percent>` and `--out <file>` change what it compares with
+and how, and `--skip-bench` leaves the benchmarks out. It exits 1 where a check failed.
+
+For a change to the native half, which one app cannot be on both sides of, compare two iOS release
+builds of the canary on one simulator:
+
+```sh
+cd examples/canary
+pnpm e2e:ios:compare --base main.app --change pr.app --device <udid> --out visual-diff
+```
+
+It records every screenshot the flows assert from the first build, asserts them on the second, and
+puts the committed baselines back. `--flows visual/css.yaml,chat.yaml` compares only those flows.
+Each screenshot that differs goes in `visual-diff` with the difference marked.
+
+A flow says which screens it opens in a `# routes:` line, which is how the gate picks the flows for
+the screens that changed; one that names none is always compared. A flow opens its screen by link,
+and reaches further down a page with `?scroll=<points>` in the link, which lands on the same point
+every run where a swipe does not.
+
 For maintainers cutting a release, see [RELEASING.md](./docs/RELEASING.md).

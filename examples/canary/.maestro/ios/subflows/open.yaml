@@ -22,4 +22,9 @@ appId: dev.angularnative.canary
 - tapOn:
     text: '${SCREEN}(, .*)?'
     retryTapIfNoChange: true
+# Until the home screen has gone: a screenshot taken straight after the tap can be of home still.
+- extendedWaitUntil:
+    notVisible: 'Real native views.*'
+    timeout: 15000
+- waitForAnimationToEnd
 - runFlow: ../../subflows/no-error-screen.yaml

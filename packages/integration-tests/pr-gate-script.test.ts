@@ -1,0 +1,189 @@
+/**
+ * `scripts/pr-gate.mjs`: what it reads of the benchmarks and of `git diff`, and how it decides a
+ * pull request is slower, has changed existing tests, or owes a version plan.
+ */
+import assert from 'node:assert/strict';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
+import { describe, it } from 'node:test';
+// A script of the repository's, not a package: loaded by its path, which no import can name.
+const { changedRoutes, compareBenches, editedTests, medians, needsPlan } = await import(
+  new URL('../../scripts/pr-gate.mjs', import.meta.url).href
+);
+
+describe('pr-gate', () => {
+  it('reads the medians each benchmark prints, by name', () => {
+    const output = [
+      'create     median   12.34ms  min   11.00ms  {"nodes":10}',
+      'feed, frame    median    1.50ms  (200 runs)',
+      '               p95       2.00ms per frame',
+      'common    first commit     3.1ms   dark restyle     4.2ms   token retheme     5.3ms   (60 rows, 20 runs)',
+    ].join('\n');
+    assert.deepEqual(medians(output), {
+      create: 12.34,
+      'feed, frame': 1.5,
+      'common first commit': 3.1,
+      'common dark restyle': 4.2,
+      'common token retheme': 5.3,
+    });
+  });
+
+  it('takes the median of the rounds on each side, and fails one slower than the limit', () => {
+    const rounds = [
+      { base: { create: 10, update: 5 }, head: { create: 10.2, update: 6 } },
+      { base: { create: 11, update: 5 }, head: { create: 10.1, update: 5.9 } },
+      { base: { create: 10.5, update: 5.2 }, head: { create: 10.4, update: 6.1 } },
+    ];
+    const [create, update] = compareBenches(rounds, 3);
+    assert.equal(create.before, 10.5);
+    assert.equal(create.after, 10.2);
+    assert.equal(create.slower, false, 'faster is never a failure');
+    assert.equal(update.before, 5);
+    assert.equal(update.after, 6);
+    assert.equal(Math.round(update.change), 20);
+    assert.equal(update.slower, true);
+    // Within the limit passes.
+    assert.equal(compareBenches([{ base: { a: 100 }, head: { a: 102.9 } }], 3)[0].slower, false);
+  });
+
+  it('takes rounds that overlap for the machine, however far apart the medians are', () => {
+    // A busy machine: the change's median is 6% over, but one of its rounds beat one of the base's.
+    const rounds = [
+      { base: { retheme: 19 }, head: { retheme: 20.3 } },
+      { base: { retheme: 19.1 }, head: { retheme: 18.9 } },
+      { base: { retheme: 21 }, head: { retheme: 20.4 } },
+    ];
+    const [retheme] = compareBenches(rounds, 3);
+    assert.ok(retheme.change > 3);
+    assert.equal(retheme.slower, false);
+    assert.equal(retheme.noisy, true, 'and is marked, to be run again');
+  });
+
+  it('reports a measure one side printed and the other did not, and fails neither', () => {
+    const compared = compareBenches([{ base: { gone: 1 }, head: { added: 2 } }], 3);
+    assert.deepEqual(compared, [
+      { name: 'added', missing: 'base' },
+      { name: 'gone', missing: 'change' },
+    ]);
+  });
+
+  it('lists the tests that were there before and changed, were renamed or went', () => {
+    const changes = [
+      'M\tpackages/a/src/thing.ts',
+      'M\tpackages/a/src/thing.test.ts',
+      'A\tpackages/a/src/new.test.ts',
+      'D\tpackages/b/old.test.ts',
+      'R100\tpackages/c/was.test.ts\tpackages/c/now.test.ts',
+    ].join('\n');
+    assert.deepEqual(editedTests(changes), [
+      { status: 'M', file: 'packages/a/src/thing.test.ts', renamed: undefined },
+      { status: 'D', file: 'packages/b/old.test.ts', renamed: undefined },
+      { status: 'R', file: 'packages/c/was.test.ts', renamed: 'packages/c/now.test.ts' },
+    ]);
+  });
+
+  it('asks for a version plan where a package changed, and for none for tests or scripts', () => {
+    assert.equal(needsPlan('M\tpackages/fabric/src/engine.ts'), true);
+    assert.equal(needsPlan('M\tpackages/metro/css/compile.cjs'), true);
+    assert.equal(
+      needsPlan('M\tpackages/fabric/src/engine.ts\nA\t.nx/version-plans/fix-thing.md'),
+      false,
+    );
+    assert.equal(needsPlan('M\tpackages/integration-tests/css.test.ts'), false);
+    assert.equal(needsPlan('A\tscripts/pr-gate.mjs\nM\texamples/canary/src/app/app.ts'), false);
+  });
+
+  it('takes the screens whose native output changed, gained a note or went', () => {
+    assert.deepEqual(
+      changedRoutes({
+        results: [
+          { url: '/same', changes: [], notes: [] },
+          { url: '/props', changes: [{ kind: 'props' }], notes: [] },
+          { url: '/noted', changes: [], notes: ['threw'] },
+          { url: '/gone', missing: 'head', changes: [] },
+        ],
+      }),
+      ['/props', '/noted', '/gone'],
+    );
+  });
+
+  it('compares the flows of the screens that changed, and those that name no screen', async () => {
+    const { flowsFor, routesOf } = await import(
+      new URL('../../examples/canary/.maestro/ios/compare-builds.mjs', import.meta.url).href
+    );
+    assert.deepEqual(routesOf('# routes: / /search-demo\n- launchApp\n'), ['/', '/search-demo']);
+    assert.deepEqual(routesOf('- launchApp\n'), []);
+    const root = mkdtempSync(path.join(tmpdir(), 'flows-'));
+    try {
+      const flow = (name: string, text: string) => {
+        writeFileSync(path.join(root, name), text);
+        return path.join(root, name);
+      };
+      const css = flow('css.yaml', '# routes: /css\n');
+      const titles = flow('titles.yaml', '# routes: / /search-demo\n');
+      const unnamed = flow('unnamed.yaml', '- launchApp\n');
+      const all = [css, titles, unnamed];
+      assert.deepEqual(flowsFor(all, ['/search-demo']), [titles, unnamed]);
+      assert.deepEqual(flowsFor(all, ['/css', '/layout']), [css, unnamed]);
+      assert.deepEqual(flowsFor(all, ['/layout']), [unnamed]);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it('makes each screenshot of a flow optional for the comparison, and nothing else', async () => {
+    const { comparing } = await import(
+      new URL('../../examples/canary/.maestro/ios/compare-builds.mjs', import.meta.url).href
+    );
+    const flow = [
+      '- tapOn: Done',
+      '- assertScreenshot:',
+      '    path: ../baselines/a.png',
+      '    thresholdPercentage: 99.9',
+      '- assertScreenshot:',
+      '    path: ../baselines/b.png',
+      '- assertVisible: Done',
+      '',
+    ].join('\n');
+    assert.equal(
+      comparing(flow),
+      [
+        '- tapOn: Done',
+        '- assertScreenshot:',
+        '    path: ../baselines/a.png',
+        '    thresholdPercentage: 99.9',
+        '    optional: true',
+        '- assertScreenshot:',
+        '    path: ../baselines/b.png',
+        '    optional: true',
+        '- assertVisible: Done',
+        '',
+      ].join('\n'),
+    );
+  });
+
+  it("finds the canary's flows that assert a screenshot, past those that assert none", async () => {
+    const { screenshotFlows } = await import(
+      new URL('../../examples/canary/.maestro/ios/compare-builds.mjs', import.meta.url).href
+    );
+    const root = mkdtempSync(path.join(tmpdir(), 'flows-'));
+    try {
+      mkdirSync(path.join(root, 'visual'));
+      writeFileSync(path.join(root, 'plain.yaml'), '- tapOn: Done\n');
+      writeFileSync(path.join(root, 'shot.yaml'), '- assertScreenshot:\n    path: a.png\n');
+      writeFileSync(path.join(root, 'shot.recording.yaml'), '- takeScreenshot: a\n');
+      writeFileSync(
+        path.join(root, 'shot.comparing.yaml'),
+        '- assertScreenshot:\n    path: a.png\n',
+      );
+      writeFileSync(path.join(root, 'visual/page.yaml'), '- assertScreenshot:\n    path: b.png\n');
+      assert.deepEqual(
+        screenshotFlows(root).map((file: string) => path.relative(root, file)),
+        ['shot.yaml', path.join('visual', 'page.yaml')],
+      );
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+});

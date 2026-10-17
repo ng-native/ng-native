@@ -1,4 +1,4 @@
-import { Component, signal } from '@angular/core';
+import { Component, booleanAttribute, input, signal } from '@angular/core';
 import {
   ActivityIndicator,
   Image,
@@ -12,6 +12,7 @@ import {
 } from '@ng-native/components';
 import { NativeHeader } from '@ng-native/router';
 import { page } from '../screen-styles.ts';
+import { ScreenScroll } from '../screen-scroll.ts';
 
 /**
  * The component pages' claims, each with its result on screen, so a Maestro flow can check them
@@ -21,6 +22,7 @@ import { page } from '../screen-styles.ts';
 @Component({
   selector: 'x-components',
   imports: [
+    ScreenScroll,
     NativeHeader,
     ScrollView,
     Pressable,
@@ -112,7 +114,12 @@ import { page } from '../screen-styles.ts';
           (error)="errored.set(errored() + 1)"
         />
         <image [source]="badImage" [style]="thumb" (error)="errored.set(errored() + 1)" />
-        <activity-indicator [size]="50" color="#3b6ef5" />
+        <activity-indicator
+          [size]="50"
+          color="#3b6ef5"
+          [animating]="!still()"
+          [hidesWhenStopped]="false"
+        />
       </view>
       <text class="body">image load [{{ loaded() }}] errors {{ errored() }}</text>
     </scroll-view>
@@ -135,6 +142,11 @@ import { page } from '../screen-styles.ts';
   `,
 })
 export class ComponentsPage {
+  /**
+   * `?still=1` in the link: the spinner stopped, as the screenshot flows open it. A spinner that
+   * never stops keeps XCTest waiting for the app to go idle around every swipe, seconds each.
+   */
+  readonly still = input(false, { transform: booleanAttribute });
   protected readonly page = page;
   protected readonly outer = signal(0);
   protected readonly inner = signal(0);

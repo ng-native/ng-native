@@ -3,13 +3,32 @@
 # Stricter than the other screens: nothing here moves, so a run matches its baseline pixel for pixel,
 # and what it guards is small. A ring in the wrong colour is 0.09% of the screen and a lost text
 # shadow 0.03%, both of which a 97% threshold lets through.
+# routes: /tailwind
 appId: dev.angularnative.canary
 ---
 - runFlow:
-    file: ../subflows/open.yaml
+    file: ../subflows/open-screen.yaml
     env:
-      SCREEN: 'Tailwind'
+      PATH: 'tailwind'
+      SHOWS: 'Tailwind'
 - waitForAnimationToEnd
 - assertScreenshot:
     path: ../baselines/visual-tailwind.png
+    thresholdPercentage: 99.99
+# Further down, by its link: `scroll` puts the page at that many points exactly (ScreenScroll),
+# where a swipe lands a few points apart from one run to the next.
+- openLink: 'canary://tailwind?scroll=700'
+- waitForAnimationToEnd
+- assertScreenshot:
+    path: ../baselines/visual-tailwind-2.png
+    thresholdPercentage: 99.99
+- openLink: 'canary://tailwind?scroll=1400'
+- waitForAnimationToEnd
+- assertScreenshot:
+    path: ../baselines/visual-tailwind-3.png
+    thresholdPercentage: 99.99
+- openLink: 'canary://tailwind?scroll=2100'
+- waitForAnimationToEnd
+- assertScreenshot:
+    path: ../baselines/visual-tailwind-4.png
     thresholdPercentage: 99.99

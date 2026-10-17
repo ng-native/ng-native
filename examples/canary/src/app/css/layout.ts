@@ -3,6 +3,7 @@ import { ScrollView, Text, View } from '@ng-native/components';
 import { NativeHeader } from '@ng-native/router';
 import { Example, Section } from '../example.ts';
 import { page } from '../screen-styles.ts';
+import { ScreenScroll } from '../screen-scroll.ts';
 
 /** A swatch, so every example below is about the layout rather than about the boxes in it. */
 const box = (color: string, extra: object = {}) => ({
@@ -23,7 +24,7 @@ const box = (color: string, extra: object = {}) => ({
  */
 @Component({
   selector: 'x-layout',
-  imports: [Example, NativeHeader, ScrollView, Section, Text, View],
+  imports: [ScreenScroll, Example, NativeHeader, ScrollView, Section, Text, View],
   template: `
     <native-header title="Layout" />
     <scroll-view class="screen" [contentContainerStyle]="page.content">

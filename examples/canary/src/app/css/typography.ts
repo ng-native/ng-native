@@ -3,6 +3,7 @@ import { ScrollView, Text, View } from '@ng-native/components';
 import { NativeHeader } from '@ng-native/router';
 import { Example, Section } from '../example.ts';
 import { page } from '../screen-styles.ts';
+import { ScreenScroll } from '../screen-scroll.ts';
 
 const SAMPLE =
   'The quick brown fox jumps over the lazy dog, and then keeps going for long enough to wrap.';
@@ -16,7 +17,7 @@ const SAMPLE =
  */
 @Component({
   selector: 'x-typography',
-  imports: [Example, NativeHeader, ScrollView, Section, Text, View],
+  imports: [ScreenScroll, Example, NativeHeader, ScrollView, Section, Text, View],
   template: `
     <native-header title="Typography" />
     <scroll-view class="screen" [contentContainerStyle]="page.content">

@@ -1,11 +1,30 @@
 # Typography, as it draws: a screenshot compared with the one taken when it was last right.
+# routes: /typography
 appId: dev.angularnative.canary
 ---
 - runFlow:
-    file: ../subflows/open.yaml
+    file: ../subflows/open-screen.yaml
     env:
-      SCREEN: 'Typography'
+      PATH: 'typography'
+      SHOWS: 'Typography'
 - waitForAnimationToEnd
 - assertScreenshot:
     path: ../baselines/visual-typography.png
-    thresholdPercentage: 97
+    thresholdPercentage: 99.9
+# Further down, by its link: `scroll` puts the page at that many points exactly (ScreenScroll),
+# where a swipe lands a few points apart from one run to the next.
+- openLink: 'canary://typography?scroll=700'
+- waitForAnimationToEnd
+- assertScreenshot:
+    path: ../baselines/visual-typography-2.png
+    thresholdPercentage: 99.9
+- openLink: 'canary://typography?scroll=1400'
+- waitForAnimationToEnd
+- assertScreenshot:
+    path: ../baselines/visual-typography-3.png
+    thresholdPercentage: 99.9
+- openLink: 'canary://typography?scroll=2100'
+- waitForAnimationToEnd
+- assertScreenshot:
+    path: ../baselines/visual-typography-4.png
+    thresholdPercentage: 99.9

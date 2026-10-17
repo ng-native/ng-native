@@ -1,11 +1,30 @@
 # Surfaces, as it draws: a screenshot compared with the one taken when it was last right.
+# routes: /surfaces
 appId: dev.angularnative.canary
 ---
 - runFlow:
-    file: ../subflows/open.yaml
+    file: ../subflows/open-screen.yaml
     env:
-      SCREEN: 'Surfaces'
+      PATH: 'surfaces'
+      SHOWS: 'Surfaces'
 - waitForAnimationToEnd
 - assertScreenshot:
     path: ../baselines/visual-surfaces.png
-    thresholdPercentage: 97
+    thresholdPercentage: 99.9
+# Further down, by its link: `scroll` puts the page at that many points exactly (ScreenScroll),
+# where a swipe lands a few points apart from one run to the next.
+- openLink: 'canary://surfaces?scroll=700'
+- waitForAnimationToEnd
+- assertScreenshot:
+    path: ../baselines/visual-surfaces-2.png
+    thresholdPercentage: 99.9
+- openLink: 'canary://surfaces?scroll=1400'
+- waitForAnimationToEnd
+- assertScreenshot:
+    path: ../baselines/visual-surfaces-3.png
+    thresholdPercentage: 99.9
+- openLink: 'canary://surfaces?scroll=2100'
+- waitForAnimationToEnd
+- assertScreenshot:
+    path: ../baselines/visual-surfaces-4.png
+    thresholdPercentage: 99.9

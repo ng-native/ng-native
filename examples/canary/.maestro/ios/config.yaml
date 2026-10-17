@@ -3,3 +3,8 @@ flows:
   - '*'
   - 'smoke/*'
   - 'visual/*'
+# Links allowed first: the flows that open a screen by its link expect it.
+executionOrder:
+  continueOnFailure: true
+  flowsOrder:
+    - allow-links
