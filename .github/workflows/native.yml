@@ -45,11 +45,12 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
-  ios:
+  # The app, once, for the jobs that test it beside each other: `ios`, which launches it, and
+  # `ios-visual`, which compares its screenshots with main's.
+  ios-build:
     if: github.event.pull_request.draft != true
     runs-on: macos-latest
-    # The build, cold, is most of it; with a cached app, the bundle, simulator and flow are a few
-    # minutes.
+    # The build, cold, is most of it; with a cached app, only today's bundle is.
     timeout-minutes: 40
     env:
       # Read by the generated Podfile: pods are built through ccache, so a run recompiles only the
@@ -136,6 +137,31 @@ jobs:
           path: ${{ runner.temp }}/app-cache
           key: canary-app-${{ runner.os }}-${{ steps.fingerprint.outputs.hash }}
 
+      # For the jobs after this one, and for update-screenshots.yml, which records the baselines
+      # from it: a cache a pull request's run saves is its own, out of that workflow's reach. A
+      # tarball, which keeps the executables executable, as an artifact does not.
+      - name: Keep the app for the jobs that test it
+        run: tar -czf "$RUNNER_TEMP/canary-app.tgz" -C "$RUNNER_TEMP" canary.app
+      - uses: actions/upload-artifact@v7
+        with:
+          name: canary-ios-app
+          path: ${{ runner.temp }}/canary-app.tgz
+          retention-days: 7
+
+  # The release build launched on a simulator and walked through the release flows.
+  ios:
+    needs: ios-build
+    runs-on: macos-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/download-artifact@v8
+        with:
+          name: canary-ios-app
+          path: ${{ runner.temp }}
+      - run: tar -xzf "$RUNNER_TEMP/canary-app.tgz" -C "$RUNNER_TEMP"
+
       - uses: actions/setup-java@v6
         with:
           distribution: zulu
@@ -145,19 +171,6 @@ jobs:
         run: |
           curl -fsSL https://get.maestro.mobile.dev | MAESTRO_VERSION=2.10.0 bash
           echo "$HOME/.maestro/bin" >> "$GITHUB_PATH"
-
-      # The app this pull request was tested with, for update-screenshots.yml, which records the
-      # baselines from it: a cache a pull request's run saves is its own, out of that workflow's
-      # reach. A tarball, which keeps the executables executable, as an artifact does not.
-      - name: Keep the app for /update-screenshots
-        if: github.event_name == 'pull_request'
-        run: tar -czf "$RUNNER_TEMP/canary-app.tgz" -C "$RUNNER_TEMP" canary.app
-      - if: github.event_name == 'pull_request'
-        uses: actions/upload-artifact@v7
-        with:
-          name: canary-ios-app
-          path: ${{ runner.temp }}/canary-app.tgz
-          retention-days: 7
 
       # The same flows the Android half walks, on a simulator created for the run.
       - name: Launch it on a simulator
@@ -175,9 +188,9 @@ jobs:
   # What the change does to the canary's screenshots: main's bundle and the pull request's, each in
   # its own cached app, on one simulator in one sitting, so a difference is the change and not a
   # runtime or a baseline recorded long ago. screens-comment.yml shows what differs on the pull
-  # request. After `ios`, which leaves the change's app in the cache; beside everything else.
+  # request. After `ios-build`, whose app it compares, and beside `ios`.
   ios-visual:
-    needs: ios
+    needs: ios-build
     if: github.event_name == 'pull_request' && github.event.pull_request.draft != true
     runs-on: macos-latest
     # Two bundles and two walks of the screenshot flows, each about eight minutes.
@@ -195,31 +208,27 @@ jobs:
 
       - id: fingerprint
         run: |
-          echo "change=$(cd examples/canary && node scripts/ios-app.mjs fingerprint)" >> "$GITHUB_OUTPUT"
           echo "base=$(cd "$RUNNER_TEMP/base/examples/canary" && node scripts/ios-app.mjs fingerprint)" >> "$GITHUB_OUTPUT"
 
-      # A cache entry is restored only to the path it was saved from, so main's app is restored
-      # there first and moved aside, then the change's.
+      # Main's app, by main's native fingerprint.
       - id: base-app
         uses: actions/cache/restore@v6
         with:
           path: ${{ runner.temp }}/app-cache
           key: canary-app-${{ runner.os }}-${{ steps.fingerprint.outputs.base }}
-      - if: steps.base-app.outputs.cache-hit == 'true'
-        run: mv "$RUNNER_TEMP/app-cache" "$RUNNER_TEMP/base-app-cache"
 
-      - id: change-app
-        uses: actions/cache/restore@v6
+      # The change's app, as ios-build made it.
+      - uses: actions/download-artifact@v8
         with:
-          path: ${{ runner.temp }}/app-cache
-          key: canary-app-${{ runner.os }}-${{ steps.fingerprint.outputs.change }}
-          fail-on-cache-miss: true
+          name: canary-ios-app
+          path: ${{ runner.temp }}
+      - run: tar -xzf "$RUNNER_TEMP/canary-app.tgz" -C "$RUNNER_TEMP" && mv "$RUNNER_TEMP/canary.app" "$RUNNER_TEMP/change.app"
 
-      - name: Put each side's bundle into its app
+      - name: Put main's bundle into its app
         if: steps.base-app.outputs.cache-hit == 'true'
         run: |
-          (cd "$RUNNER_TEMP/base/examples/canary" && node scripts/ios-app.mjs rebundle "$RUNNER_TEMP/base-app-cache/canary.app" "$RUNNER_TEMP/base.app")
-          (cd examples/canary && node scripts/ios-app.mjs rebundle "$RUNNER_TEMP/app-cache/canary.app" "$RUNNER_TEMP/change.app")
+          cd "$RUNNER_TEMP/base/examples/canary"
+          node scripts/ios-app.mjs rebundle "$RUNNER_TEMP/app-cache/canary.app" "$RUNNER_TEMP/base.app"
 
       - uses: actions/setup-java@v6
         if: steps.base-app.outputs.cache-hit == 'true'
