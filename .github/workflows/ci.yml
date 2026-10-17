@@ -172,6 +172,7 @@ jobs:
       pull-requests: read
     outputs:
       published: ${{ steps.filter.outputs.published }}
+      screens: ${{ steps.filter.outputs.screens }}
     steps:
       - uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4.0.3
         id: filter
@@ -188,6 +189,51 @@ jobs:
               - 'pnpm-lock.yaml'
               - 'pnpm-workspace.yaml'
               - 'tsconfig*.json'
+            screens:
+              - 'packages/**'
+              - '!packages/integration-tests/**'
+              - '!packages/**/*.md'
+              - 'examples/canary/**'
+              - 'scripts/native-output.mjs'
+              - 'pnpm-lock.yaml'
+
+  # What each canary screen sends native, on the base and on the pull request, and each view and
+  # prop that differs, in the job's summary for review. A changed screen is often the point of the
+  # change, so it does not fail the run; a comparison that could not be made does. Beside the other
+  # jobs rather than in one: a checkout and install of the base, and a few seconds of each side.
+  native-output:
+    needs: changes
+    if: needs.changes.outputs.screens == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - uses: ./.github/actions/setup
+
+      # The base the pull request goes into, as a checkout of its own beside this one.
+      - name: Check out and install the base
+        run: |
+          git worktree add --detach "$RUNNER_TEMP/base" "${{ github.event.pull_request.base.sha }}"
+          pnpm --dir "$RUNNER_TEMP/base" install --frozen-lockfile --prefer-offline
+
+      - name: Write what each screen sends native, on each side
+        run: |
+          node scripts/native-output.mjs write "$RUNNER_TEMP/screens/base" --checkout "$RUNNER_TEMP/base"
+          node scripts/native-output.mjs write "$RUNNER_TEMP/screens/change"
+
+      # 0 is no change and 1 a change, both for review; 2, or anything else, is a comparison that
+      # could not be made.
+      - name: Compare them
+        run: |
+          code=0
+          node scripts/native-output.mjs diff "$RUNNER_TEMP/screens/base" "$RUNNER_TEMP/screens/change" \
+            > "$RUNNER_TEMP/native-output.md" || code=$?
+          cat "$RUNNER_TEMP/native-output.md" >> "$GITHUB_STEP_SUMMARY"
+          cat "$RUNNER_TEMP/native-output.md"
+          [ "$code" -le 1 ]
 
   # What nothing else checks: that the packages publish, find each other by version through a
   # registry, that `create-expo-app --template` gives an app that typechecks and bundles, and that a

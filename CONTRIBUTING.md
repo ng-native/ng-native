@@ -186,6 +186,10 @@ a report for its description:
   slower than every round of main; one past 3% whose rounds overlap is marked, to be run again with
   more rounds.
 
+CI's `native-output` job compares the screens the same way on every pull request that touches a
+package or the canary, and writes the differences in its summary. A changed screen does not fail
+it; a comparison that could not be made does.
+
 `--base <ref>`, `--rounds <n>`, `--limit <percent>` and `--out <file>` change what it compares with
 and how, and `--skip-bench` leaves the benchmarks out. It exits 1 where a check failed.
 
