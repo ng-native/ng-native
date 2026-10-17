@@ -146,6 +146,19 @@ jobs:
           curl -fsSL https://get.maestro.mobile.dev | MAESTRO_VERSION=2.10.0 bash
           echo "$HOME/.maestro/bin" >> "$GITHUB_PATH"
 
+      # The app this pull request was tested with, for update-screenshots.yml, which records the
+      # baselines from it: a cache a pull request's run saves is its own, out of that workflow's
+      # reach. A tarball, which keeps the executables executable, as an artifact does not.
+      - name: Keep the app for /update-screenshots
+        if: github.event_name == 'pull_request'
+        run: tar -czf "$RUNNER_TEMP/canary-app.tgz" -C "$RUNNER_TEMP" canary.app
+      - if: github.event_name == 'pull_request'
+        uses: actions/upload-artifact@v7
+        with:
+          name: canary-ios-app
+          path: ${{ runner.temp }}/canary-app.tgz
+          retention-days: 7
+
       # The same flows the Android half walks, on a simulator created for the run.
       - name: Launch it on a simulator
         run: >

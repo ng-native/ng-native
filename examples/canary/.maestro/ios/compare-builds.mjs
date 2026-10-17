@@ -46,11 +46,19 @@ function options(argv) {
   };
 }
 
+/** A flow with each screenshot it asserts made optional: one that differs is noted, not fatal. */
+export function comparing(flow) {
+  return flow.replace(
+    /(- assertScreenshot:\n(\s+)path: \S+\n(?:\s+thresholdPercentage: [\d.]+\n)?)/g,
+    (assertion, _whole, indent) => `${assertion}${indent}optional: true\n`,
+  );
+}
+
 /** The flows that assert a screenshot: every one the comparison has something to compare in. */
 export function screenshotFlows(root = here) {
   return [root, join(root, 'visual')].flatMap((dir) =>
     readdirSync(dir)
-      .filter((name) => name.endsWith('.yaml') && !name.endsWith('.recording.yaml'))
+      .filter((name) => name.endsWith('.yaml') && !/\.(recording|comparing)\.yaml$/.test(name))
       .map((name) => join(dir, name))
       .filter((file) => readFileSync(file, 'utf8').includes('assertScreenshot')),
   );
@@ -93,10 +101,22 @@ function main() {
     });
     install(opts.device, opts.change);
     const flows = screenshotFlows();
-    const run = spawnSync('maestro', ['--device', opts.device, 'test', ...flows], {
-      stdio: 'inherit',
-      env: { ...process.env, ...java },
+    // Each screenshot compared, the ones after a difference included: a copy of each flow, beside
+    // it so its subflows resolve the same, where a screenshot that differs does not stop the flow.
+    const copies = flows.map((flow) => {
+      const copy = flow.replace(/\.yaml$/, '.comparing.yaml');
+      writeFileSync(copy, comparing(readFileSync(flow, 'utf8')));
+      return copy;
     });
+    let run;
+    try {
+      run = spawnSync('maestro', ['--device', opts.device, 'test', ...copies], {
+        stdio: 'inherit',
+        env: { ...process.env, ...java },
+      });
+    } finally {
+      for (const copy of copies) rmSync(copy, { force: true });
+    }
     rmSync(opts.out, { recursive: true, force: true });
     mkdirSync(opts.out, { recursive: true });
     const differ = readdirSync(baselines).filter((name) => name.endsWith('_diff.png'));
@@ -106,9 +126,9 @@ function main() {
       cpSync(join(baselines, shot), join(opts.out, `base-${shot}`));
       return { shot, base: `base-${shot}`, diff: name };
     });
-    // What CI's comment is written from. A flow that failed with no screenshot differing failed
-    // for another reason, a tap or a crash, and compared nothing.
-    const compared = run.status === 0 || shots.length > 0;
+    // What CI's comment is written from. A screenshot that differs fails no flow, so one that failed
+    // did for another reason, a tap or a crash, and what it had left to compare was not compared.
+    const compared = run.status === 0;
     writeFileSync(
       join(opts.out, 'report.json'),
       `${JSON.stringify({ flows: flows.length, compared, differ: shots }, null, 2)}\n`,

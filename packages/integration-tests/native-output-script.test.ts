@@ -7,13 +7,15 @@ import { spawnSync } from 'node:child_process';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { describe, it } from 'node:test';
 // A script of the repository's, not a package: loaded by its path, which no import can name.
 const { compare, differences, report } = await import(
   new URL('../../scripts/native-output.mjs', import.meta.url).href
 );
 
-const script = new URL('../../scripts/native-output.mjs', import.meta.url);
+// A path, not `URL.pathname`, which escapes a space or a character outside ASCII.
+const script = fileURLToPath(new URL('../../scripts/native-output.mjs', import.meta.url));
 
 const view = (name: string, props: Record<string, unknown> = {}, children: unknown[] = []) => ({
   view: name,
@@ -88,7 +90,7 @@ describe('native-output diff', () => {
 
   it('exits 1 and lists the screens that changed, and 0 where none did', () => {
     screens({ 'a.json': screen({ height: 96 }) }, { 'a.json': screen({ height: 97 }) }, (a, b) => {
-      const run = spawnSync(process.execPath, [script.pathname, 'diff', a, b], {
+      const run = spawnSync(process.execPath, [script, 'diff', a, b], {
         encoding: 'utf8',
       });
       assert.equal(run.status, 1);
@@ -96,12 +98,12 @@ describe('native-output diff', () => {
       assert.match(run.stdout, /`height` 96 → 97/);
     });
     screens({ 'a.json': screen({ height: 96 }) }, { 'a.json': screen({ height: 96 }) }, (a, b) => {
-      const run = spawnSync(process.execPath, [script.pathname, 'diff', a, b], {
+      const run = spawnSync(process.execPath, [script, 'diff', a, b], {
         encoding: 'utf8',
       });
       assert.equal(run.status, 0);
       assert.match(run.stdout, /0 of 1 screens changed/);
-      const json = spawnSync(process.execPath, [script.pathname, 'diff', a, b, '--json'], {
+      const json = spawnSync(process.execPath, [script, 'diff', a, b, '--json'], {
         encoding: 'utf8',
       });
       assert.deepEqual(JSON.parse(json.stdout), {
@@ -114,14 +116,14 @@ describe('native-output diff', () => {
   it('exits 2, not 1, where it cannot compare', () => {
     const missing = path.join(tmpdir(), 'native-output-missing');
     screens({ 'a.json': screen({}) }, {}, (a) => {
-      const run = spawnSync(process.execPath, [script.pathname, 'diff', a, missing], {
+      const run = spawnSync(process.execPath, [script, 'diff', a, missing], {
         encoding: 'utf8',
       });
       assert.equal(run.status, 2);
     });
     screens({ 'a.json': screen({}) }, { 'a.json': '{not a screen' as never }, (a, b) => {
       writeFileSync(path.join(b, 'a.json'), '{not a screen');
-      const run = spawnSync(process.execPath, [script.pathname, 'diff', a, b], {
+      const run = spawnSync(process.execPath, [script, 'diff', a, b], {
         encoding: 'utf8',
       });
       assert.equal(run.status, 2);

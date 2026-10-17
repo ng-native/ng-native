@@ -202,8 +202,11 @@ jobs:
       - name: Say which pull request it is for
         run: |
           mkdir -p "$RUNNER_TEMP/pr"
-          printf '{"number":%s,"head":"%s"}\n' "${{ github.event.pull_request.number }}" \
-            "${{ github.event.pull_request.head.sha }}" > "$RUNNER_TEMP/pr/pr.json"
+          # And whether the native output is compared, so a comparison that did not finish is not
+          # taken for one that found nothing.
+          printf '{"number":%s,"head":"%s","native":%s}\n' "${{ github.event.pull_request.number }}" \
+            "${{ github.event.pull_request.head.sha }}" "${{ steps.filter.outputs.screens == 'true' }}" \
+            > "$RUNNER_TEMP/pr/pr.json"
       - uses: actions/upload-artifact@v7
         with:
           name: screens-pr
@@ -219,10 +222,15 @@ jobs:
     if: needs.changes.outputs.screens == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    # It runs the pull request's install and scripts: no token kept in the checkout, and nothing
+    # it may write.
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
+          persist-credentials: false
 
       - uses: ./.github/actions/setup
 

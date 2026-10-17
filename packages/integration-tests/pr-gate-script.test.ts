@@ -94,6 +94,37 @@ describe('pr-gate', () => {
     assert.equal(needsPlan('A\tscripts/pr-gate.mjs\nM\texamples/canary/src/app/app.ts'), false);
   });
 
+  it('makes each screenshot of a flow optional for the comparison, and nothing else', async () => {
+    const { comparing } = await import(
+      new URL('../../examples/canary/.maestro/ios/compare-builds.mjs', import.meta.url).href
+    );
+    const flow = [
+      '- tapOn: Done',
+      '- assertScreenshot:',
+      '    path: ../baselines/a.png',
+      '    thresholdPercentage: 99.9',
+      '- assertScreenshot:',
+      '    path: ../baselines/b.png',
+      '- assertVisible: Done',
+      '',
+    ].join('\n');
+    assert.equal(
+      comparing(flow),
+      [
+        '- tapOn: Done',
+        '- assertScreenshot:',
+        '    path: ../baselines/a.png',
+        '    thresholdPercentage: 99.9',
+        '    optional: true',
+        '- assertScreenshot:',
+        '    path: ../baselines/b.png',
+        '    optional: true',
+        '- assertVisible: Done',
+        '',
+      ].join('\n'),
+    );
+  });
+
   it("finds the canary's flows that assert a screenshot, past those that assert none", async () => {
     const { screenshotFlows } = await import(
       new URL('../../examples/canary/.maestro/ios/compare-builds.mjs', import.meta.url).href
@@ -104,6 +135,10 @@ describe('pr-gate', () => {
       writeFileSync(path.join(root, 'plain.yaml'), '- tapOn: Done\n');
       writeFileSync(path.join(root, 'shot.yaml'), '- assertScreenshot:\n    path: a.png\n');
       writeFileSync(path.join(root, 'shot.recording.yaml'), '- takeScreenshot: a\n');
+      writeFileSync(
+        path.join(root, 'shot.comparing.yaml'),
+        '- assertScreenshot:\n    path: a.png\n',
+      );
       writeFileSync(path.join(root, 'visual/page.yaml'), '- assertScreenshot:\n    path: b.png\n');
       assert.deepEqual(
         screenshotFlows(root).map((file: string) => path.relative(root, file)),

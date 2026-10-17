@@ -1,16 +1,17 @@
 name: Update screenshots
 
 # A maintainer comments `/update-screenshots` on a pull request whose screens changed as intended,
-# and this records the committed baselines of `examples/canary/.maestro/ios` from the pull
-# request's build and commits them to its branch.
+# and this records the committed baselines of `examples/canary/.maestro/ios` from the app Native
+# builds tested the pull request's head with, and commits them to its branch.
 #
 # The baselines are what `pnpm e2e:ios` compares with; CI's comparison records main afresh and
 # needs none. A branch of this repository only: Actions cannot push to a fork's, so for one a
 # maintainer records them locally (`pnpm e2e:ios:record`).
 #
 # A push with Actions' own token starts no workflow, so this dispatches CI and Native builds for the
-# new commit itself. And it carries the `Screens` status of the commit before over to the new one:
-# a commit of baselines alone compares nothing new, and must not pass a difference nobody accepted.
+# new commit itself. And it carries the `Screens` status, and the comment's sections, of the commit
+# before over to the new one: a commit of baselines alone compares nothing new, and must not pass a
+# difference nobody accepted, which the `screens-approved` label still accepts.
 on:
   issue_comment:
     types: [created]
@@ -59,27 +60,29 @@ jobs:
           echo "branch=$(jq -r '.head.ref' "$RUNNER_TEMP/pr.json")" >> "$GITHUB_OUTPUT"
           echo "head=$(jq -r '.head.sha' "$RUNNER_TEMP/pr.json")" >> "$GITHUB_OUTPUT"
 
+      # The commit checked above, not the branch's tip, which may have moved on since.
       - uses: actions/checkout@v7
         with:
-          ref: ${{ steps.pr.outputs.branch }}
-      - uses: ./.github/actions/setup
-
-      # The app Native builds left for this commit's native half: only the bundle is built here.
-      - id: fingerprint
-        working-directory: examples/canary
-        run: echo "hash=$(node scripts/ios-app.mjs fingerprint)" >> "$GITHUB_OUTPUT"
-      - id: cached
-        uses: actions/cache/restore@v6
+          ref: ${{ steps.pr.outputs.head }}
+      - uses: actions/setup-node@v7
         with:
-          path: ${{ runner.temp }}/app-cache
-          key: canary-app-${{ runner.os }}-${{ steps.fingerprint.outputs.hash }}
-      - name: Say there is no app to record from yet
-        if: steps.cached.outputs.cache-hit != 'true'
+          node-version: 24
+
+      # The app Native builds tested this commit with: the pull request's own cache is out of this
+      # workflow's reach, as it runs for the default branch.
+      - name: Download the pull request's app
+        env:
+          HEAD: ${{ steps.pr.outputs.head }}
         run: |
-          gh api "repos/$GITHUB_REPOSITORY/issues/$NUMBER/comments" -f body="No iOS build of this pull request's native half is cached yet. Wait for Native builds to finish, then comment \`/update-screenshots\` again." > /dev/null
-          exit 1
-      - working-directory: examples/canary
-        run: node scripts/ios-app.mjs rebundle "$RUNNER_TEMP/app-cache/canary.app" "$RUNNER_TEMP/canary.app"
+          set -euo pipefail
+          run=$(gh run list -R "$GITHUB_REPOSITORY" --workflow native.yml --commit "$HEAD" \
+            --event pull_request --status success --limit 1 --json databaseId --jq '.[0].databaseId // empty')
+          if [ -z "$run" ]; then
+            gh api "repos/$GITHUB_REPOSITORY/issues/$NUMBER/comments" -f body="Native builds has not finished for $HEAD yet. Comment \`/update-screenshots\` again once it has." > /dev/null
+            exit 1
+          fi
+          gh run download "$run" -R "$GITHUB_REPOSITORY" -n canary-ios-app -D "$RUNNER_TEMP/app"
+          tar -xzf "$RUNNER_TEMP/app/canary-app.tgz" -C "$RUNNER_TEMP"
 
       - uses: actions/setup-java@v6
         with:
@@ -107,7 +110,8 @@ jobs:
           fi
           git -c user.name=github-actions -c user.email=github-actions@github.com \
             commit --quiet -m "Record the screenshot baselines from this pull request's build"
-          git push --quiet origin "HEAD:$BRANCH"
+          # Not forced: a branch that moved since the commit checked out rejects it.
+          git push --quiet origin "HEAD:refs/heads/$BRANCH"
           after=$(git rev-parse HEAD)
           # The Screens status of the commit before, as it was: see the top of this file.
           screens=$(gh api "repos/$GITHUB_REPOSITORY/commits/$BEFORE/status" \
@@ -116,6 +120,16 @@ jobs:
             IFS=$'\t' read -r state description link <<< "$screens"
             gh api "repos/$GITHUB_REPOSITORY/statuses/$after" -f context=Screens -f state="$state" \
               -f description="$description" -f target_url="$link" > /dev/null
+          fi
+          # The comment's sections were written for the commit before, and hold for this one, which
+          # changes only the baselines no comparison reads: they are said to be for it, so the label
+          # and the next run judge it by them.
+          comment=$(gh api --paginate "repos/$GITHUB_REPOSITORY/issues/$NUMBER/comments" \
+            --jq '.[] | select(.user.login == "github-actions[bot]" and (.body | startswith("<!-- screens-report -->"))) | .id' | sed -n 1p)
+          if [ -n "$comment" ]; then
+            gh api "repos/$GITHUB_REPOSITORY/issues/comments/$comment" --jq .body \
+              | sed "s/:start $BEFORE -->/:start $after -->/" > "$RUNNER_TEMP/body.md"
+            gh api -X PATCH "repos/$GITHUB_REPOSITORY/issues/comments/$comment" -F "body=@$RUNNER_TEMP/body.md" > /dev/null
           fi
           gh workflow run ci.yml --ref "$BRANCH"
           gh workflow run native.yml --ref "$BRANCH"

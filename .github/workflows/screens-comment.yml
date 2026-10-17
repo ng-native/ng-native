@@ -162,7 +162,12 @@ jobs:
           # The status, from the comment's sections for this commit and the label.
           link=$pr_url$number
           [ -z "$comment" ] || link="$link#issuecomment-$comment"
-          if node scripts/screens-comment.mjs differs "$old" "$HEAD"; then
+          # A comparison the run was to make and did not finish is no comparison that found nothing.
+          if [ "$EVENT" = workflow_run ] && [ "$(jq -r '.native // false' "$in/screens-pr/pr.json" 2> /dev/null)" = true ] \
+            && [ ! -f "$in/screens-native-output/native-output.json" ]; then
+            status failure "The native output was not compared: see the run" \
+              "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$RUN"
+          elif node scripts/screens-comment.mjs differs "$old" "$HEAD"; then
             if gh api "repos/$GITHUB_REPOSITORY/issues/$number/labels" --jq '.[].name' | grep -qx screens-approved; then
               status success "The screens differ, and that is accepted" "$link"
             else
