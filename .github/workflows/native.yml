@@ -251,7 +251,10 @@ jobs:
           # says so in the report.
           [ -n "$shell" ] || exit 0
           cd "$RUNNER_TEMP/base/examples/canary"
-          node scripts/ios-app.mjs rebundle "$shell" "$RUNNER_TEMP/base.app"
+          # A temp dir of its own: Metro's and Expo's caches are kept in it, and the change's bundle,
+          # made above in this job from the other checkout, left there sends main's DOM components
+          # to the change's files.
+          TMPDIR=$(mktemp -d) node scripts/ios-app.mjs rebundle "$shell" "$RUNNER_TEMP/base.app"
 
       - name: Launch it on a simulator, and compare its screenshots
         env:
