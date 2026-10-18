@@ -1924,7 +1924,18 @@ const COVERS: ReadonlyMap<string, readonly string[]> = new Map([
   ['borderColor', [...across('border'), ...down('border'), 'borderBlock'].map((s) => `${s}Color`)],
   ['borderBlockColor', down('border').map((side) => `${side}Color`)],
   ['borderRadius', CORNERS],
+  ['flex', ['flexGrow', 'flexShrink', 'flexBasis']],
 ]);
+
+/**
+ * The longhands Yoga reads `flex` as when none is set (`Node::resolveFlexGrow`,
+ * `resolveFlexShrink`, `processFlexBasis`), so an inline `flex` means the same over a class's.
+ * Null for a value that is no number, which covers nothing.
+ */
+function flexParts(n: unknown): Record<string, unknown> | null {
+  if (typeof n !== 'number') return null;
+  return { flexGrow: n > 0 ? n : 0, flexShrink: n < 0 ? -n : 0, flexBasis: n > 0 ? 0 : 'auto' };
+}
 
 /**
  * Whether a value is several CSS values, `4px 8px` or `4px / 8px`, split on whitespace outside
@@ -1941,6 +1952,15 @@ function severalValues(value: unknown): boolean {
 }
 
 /**
+ * What a shorthand's value gives each side it covers: undefined for the value itself, the parts
+ * of a `flex`, or null for nothing, as for several values.
+ */
+function partsOf(shorthand: string, value: unknown): Record<string, unknown> | null | undefined {
+  if (severalValues(value)) return null;
+  return shorthand === 'flex' && value != null ? flexParts(value) : undefined;
+}
+
+/**
  * Gives each prop in `style` that a shorthand the element sets itself covers the shorthand's
  * value: one in its inline style, `inline`, or bound from a token, `bound`. The value rather than
  * nothing, so a transition of the side eases to it, as in a browser. Not a prop the element sets
@@ -1953,13 +1973,16 @@ export function underOwnShorthands(
   bound: ReadonlyMap<string, unknown> | undefined,
   important: ReadonlySet<string> | undefined,
 ): void {
+  const own = (key: string) => key in inline || bound?.has(key) || important?.has(key);
   const cover = (shorthand: string) => {
     const value = style[shorthand];
-    if (severalValues(value)) return;
+    const parts = partsOf(shorthand, value);
+    if (parts === null) return;
     for (const key of COVERS.get(shorthand) ?? []) {
-      if (!(key in style) || key in inline || bound?.has(key) || important?.has(key)) continue;
-      if (value == null) delete style[key];
-      else style[key] = value;
+      if (!(key in style) || own(key)) continue;
+      const next = parts ? parts[key] : value;
+      if (next == null) delete style[key];
+      else style[key] = next;
     }
   };
   const set: string[] = [];

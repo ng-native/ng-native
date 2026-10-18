@@ -147,6 +147,29 @@ describe('an inline shorthand over a longhand from a stylesheet', () => {
     assert.equal(s.props()['paddingLeft'], 10, 'and a bound one is ranked the same');
   });
 
+  it('gives a longhand under an inline flex the part Yoga reads from flex alone', () => {
+    // Yoga reads `flexGrow`, `flexShrink` and `flexBasis` over `flex`, so a class's `grow-0` would
+    // keep an inline `flex: 1` from growing. Each takes what `flex` means without it.
+    const s = scene('.a { flex-grow: 0; flex-shrink: 2; flex-basis: auto }', 'a');
+    const read = () => {
+      const props = s.props();
+      return [props['flexGrow'], props['flexShrink'], props['flexBasis']];
+    };
+    assert.deepEqual(read(), [0, 2, 'auto'], 'control');
+    s.style({ flex: 1 });
+    assert.deepEqual(read(), [1, 0, 0]);
+    s.style({ flex: -1 });
+    assert.deepEqual(read(), [0, 1, 'auto']);
+    s.style({ flex: 0 });
+    assert.deepEqual(read(), [0, 0, 'auto']);
+    s.style({ flex: 'auto' });
+    assert.deepEqual(read(), [0, 2, 'auto'], 'and covers nothing with a flex that is no number');
+    s.style({ flex: 1, flexShrink: 3 });
+    assert.deepEqual(read(), [1, 3, 0], 'and leaves one the element sets itself');
+    s.style(null);
+    assert.deepEqual(read(), [0, 2, 'auto'], 'and gives each back when it goes');
+  });
+
   it('leaves the longhand under an inline shorthand that is null, which sets nothing', () => {
     const s = scene('.a { padding-top: 4px }', 'a');
     s.style({ padding: null });
