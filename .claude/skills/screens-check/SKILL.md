@@ -10,7 +10,8 @@ looks like: each of those screens, main beside the change, on one simulator in o
 difference is the change and not a runtime or a day.
 
 Run everything from the repository root. Keep the simulator and the base worktree for the whole
-run, and remove both at the end, whatever happened.
+run, and remove both at the end (step 6) whatever happened: a step that fails part way still ends
+with step 6, which removes whichever of them was made.
 
 ## 1. Which screens
 
@@ -24,10 +25,11 @@ pnpm --dir "$out/base" install --frozen-lockfile --prefer-offline
 node scripts/native-output.mjs write "$out/native/base" --checkout "$out/base"
 node scripts/native-output.mjs write "$out/native/change"
 node scripts/native-output.mjs diff "$out/native/base" "$out/native/change" --json > "$out/diff.json"
-jq -r '.results[] | select(.missing or (.changes | length > 0) or ((.notes // []) | length > 0)) | .url' "$out/diff.json"
+ROUTES=$(jq -r '.results[] | select(.missing or (.changes | length > 0) or ((.notes // []) | length > 0)) | .url' "$out/diff.json" | tr '\n' ' ')
+echo "$ROUTES"
 ```
 
-No route listed: nothing to compare, say so and stop. The screens `diff.json` lists under
+`ROUTES` empty: nothing to compare, say so, clean up (step 6) and stop. The screens `diff.json` lists under
 `skipped` (they throw or never yield in Node) are not covered by the native output: add any the
 change could affect by hand.
 
@@ -42,7 +44,8 @@ both sides when they share a native half:
 ```
 
 Different fingerprints: the change touches the native half, and each side needs a build of its own
-(`pnpm release:ios` in each checkout, one native build at a time). Same: take any Release simulator
+(`pnpm release:ios` in each checkout, one native build at a time), copied to `$out/base.app` and
+`$out/change.app`, where step 4 installs them from. Same: take any Release simulator
 build of the canary with that fingerprint (`examples/canary/ios/build/Build/Products/Release-iphonesimulator/canary.app`
 after a release build) and put each side's bundle into a copy of it. Each side bundles with a temp
 dir of its own: Metro's and Expo's caches live there, and one side's cache sends the other's DOM
@@ -157,9 +160,11 @@ of the screen named, not the home screen, a dialog or a red error screen.
 ## 6. Clean up
 
 ```sh
-xcrun simctl shutdown "$udid"; xcrun simctl delete "$udid"
-git worktree remove --force "$out/base"
-rm -rf "$out"
+if [ -n "${udid:-}" ]; then xcrun simctl shutdown "$udid" 2> /dev/null; xcrun simctl delete "$udid"; fi
+if [ -n "${out:-}" ]; then
+  git worktree remove --force "$out/base" 2> /dev/null
+  rm -rf "$out"
+fi
 ```
 
 Report each screen as same or differs, with what differs, and the screens not compared and why

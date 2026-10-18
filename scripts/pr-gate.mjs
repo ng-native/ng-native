@@ -269,10 +269,12 @@ function main() {
 
     // 5. The benchmarks, a side at a time, round after round.
     lines.push('', '### Benchmarks', '');
+    const rounds = [];
     if (!opts.bench) lines.push('Not run (`--skip-bench`).');
     else {
-      const rounds = [];
-      for (let round = 0; round < opts.rounds; round++) {
+      // A benchmark that fails is a failed check, and the rest of the report still goes out.
+      let broke = null;
+      benches: for (let round = 0; round < opts.rounds; round++) {
         const sides = { base: {}, head: {} };
         for (const [side, dir] of [
           ['base', base.dir],
@@ -280,13 +282,18 @@ function main() {
         ]) {
           for (const bench of BENCHES) {
             const result = run('pnpm', [bench], path.join(dir, 'packages/integration-tests'));
-            if (!result.ok)
-              throw new Error(`${bench} failed on the ${side}:\n${tail(result.output)}`);
+            if (!result.ok) {
+              broke = { name: `\`${bench}\` on the ${side}`, output: result.output };
+              break benches;
+            }
             Object.assign(sides[side], medians(result.output));
           }
         }
         rounds.push(sides);
       }
+      if (broke) check(`${broke.name} ran`, false, `\n\n\`\`\`\n${tail(broke.output)}\n\`\`\``);
+    }
+    if (opts.bench && rounds.length === opts.rounds) {
       const compared = compareBenches(rounds, opts.limit);
       lines.push(
         `Medians of ${opts.rounds} rounds, run in turn; slower by more than ${opts.limit}% fails.`,
