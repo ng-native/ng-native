@@ -94,6 +94,87 @@ describe('a view a native animation has let go', () => {
     assert.deepEqual(s.set(), { transform: [{ translateX: -100 }] });
   });
 
+  it('has a later flat matrix set on native as numbers: a move, a turn, a skew and a scale', () => {
+    // Set whole, a matrix is a list in a list, which native's transform node cannot take: the
+    // view would stay where the transition left it.
+    const s = scene('slide');
+    s.classesTo('slide moved');
+    s.finish(s.started()[0]!);
+    s.engine.setProp(s.view, 'style', { transform: 'matrix(1, 0, 0, 1, 150, 0)' });
+    s.classesTo('');
+    assert.deepEqual(s.set(), {
+      transform: [
+        { translateX: 150 },
+        { translateY: 0 },
+        { rotate: 0 },
+        { skewX: 0 },
+        { scaleX: 1 },
+        { scaleY: 1 },
+      ],
+    });
+    // And numbers again after it.
+    s.engine.setProp(s.view, 'style', { transform: 'translateX(60px)' });
+    s.engine.commit();
+    assert.deepEqual(s.set(), { transform: [{ translateX: 60 }] });
+  });
+
+  it('has a flat matrix bound part way through a transition native plays set on native', () => {
+    const s = scene('slide');
+    s.classesTo('slide moved');
+    s.later(100);
+    s.engine.setProp(s.view, 'style', { transform: 'matrix(1, 0, 0, 1, 150, 0)' });
+    s.classesTo('');
+    for (let frame = 0; frame < 4; frame++) s.later(50);
+    assert.deepEqual((s.set()['transform'] as Record<string, number>[])[0], { translateX: 150 });
+  });
+
+  it('turns, skews, scales and flips the view as the matrix does', () => {
+    for (const [a, b, c, d, e, f] of [
+      [0.5, 0.866, -1.2, 0.9, 10, 20],
+      [-1, 0, 0, 1, 0, 0],
+      [0, 2, -3, 0, 4, 5],
+    ] as const) {
+      const s = scene('slide');
+      s.classesTo('slide moved');
+      s.finish(s.started()[0]!);
+      s.engine.setProp(s.view, 'style', {
+        transform: 'matrix(' + [a, b, c, d, e, f].join(', ') + ')',
+      });
+      s.classesTo('');
+      const entries = s.set()['transform'] as Record<string, number>[];
+      const part = (key: string) => entries.find((entry) => key in entry)![key]!;
+      const [turn, skew] = [part('rotate'), Math.tan(part('skewX'))];
+      const [sx, sy] = [part('scaleX'), part('scaleY')];
+      // rotate(turn) skewX(skew) scale(sx, sy), as CSS composes them.
+      const drawn = [
+        Math.cos(turn) * sx,
+        Math.sin(turn) * sx,
+        (Math.cos(turn) * skew - Math.sin(turn)) * sy,
+        (Math.sin(turn) * skew + Math.cos(turn)) * sy,
+        part('translateX'),
+        part('translateY'),
+      ];
+      drawn.forEach((value, index) =>
+        assert.ok(Math.abs(value - [a, b, c, d, e, f][index]!) < 1e-9),
+      );
+    }
+  });
+
+  it('leaves a matrix in depth committed alone, as native cannot be set to it', () => {
+    const s = scene('slide');
+    s.classesTo('slide moved');
+    s.finish(s.started()[0]!);
+    const sets = s.rec.named('set').length;
+    s.engine.setProp(s.view, 'style', {
+      transform: 'matrix3d(1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, -0.002, 150, 0, 0, 1)',
+    });
+    s.classesTo('');
+    assert.equal(s.rec.named('set').length, sets);
+    assert.deepEqual(s.props()['transform'], [
+      { matrix: [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, -0.002, 150, 0, 0, 1] },
+    ]);
+  });
+
   it('sets nothing while an animation of the prop plays, and lets go when one starts', () => {
     const s = scene('fade');
     s.classesTo('fade gone');

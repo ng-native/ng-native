@@ -12319,7 +12319,7 @@ export class Engine implements HostEngine {
    * Set on native a change of a prop a graph of native's has set on the view before, while no
    * graph of its holds it: the commit cannot change it (see `Touched`). The payload is committed
    * as well, so the shadow node is as the view is drawn. A transform native cannot take as
-   * numbers, a matrix, is left committed alone.
+   * numbers, a matrix in depth, is left committed alone.
    */
   private setOwned(
     node: EngineNode,
