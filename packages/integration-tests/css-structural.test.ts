@@ -550,6 +550,89 @@ describe('what a child list changing has styled again', () => {
     }
   });
 
+  it('looks at each row before the end once a commit, as a list counted from the end grows', () => {
+    // A chart appends its thousands of points to a group one at a time: each would otherwise
+    // look again at every one before it, which were all marked already.
+    const s = list('.row:nth-last-child(odd) { border-top-width: 3px }', 0);
+    const rows = Array.from({ length: 60 }, s.row);
+    let marks = 0;
+    for (const row of rows) {
+      for (const flag of ['styleDirty', 'stateDirty'] as const) {
+        let value = row[flag];
+        Object.defineProperty(row, flag, {
+          configurable: true,
+          get: () => value,
+          set: (to: boolean) => {
+            if (to) marks++;
+            value = to;
+          },
+        });
+      }
+    }
+    for (const row of rows) s.engine.appendChild(s.parent, row);
+    assert.ok(marks < rows.length * 6, `${marks} marks for ${rows.length} rows`);
+    assert.deepEqual(
+      s.widths(),
+      rows.map((_, at) => (at % 2 ? 3 : 0)),
+    );
+    s.engine.removeChild(s.parent, s.parent.childList[10]!);
+    s.engine.appendChild(s.parent, s.row());
+    assert.equal(s.marked(), 'x'.repeat(60), 'a row leaving the middle, then one at the end');
+    assert.deepEqual(
+      s.widths(),
+      rows.map((_, at) => (at % 2 ? 3 : 0)),
+    );
+  });
+
+  it('looks at each row after a change once a commit, as rows leave and come at the start', () => {
+    // A chart taken down removes its thousands of points first to last: each would otherwise
+    // look again at every one after it, which were all marked already.
+    const s = list('.row ~ .row { border-top-width: 3px }', 60);
+    let marks = 0;
+    for (const row of s.rows) {
+      for (const flag of ['styleDirty', 'stateDirty'] as const) {
+        let value = row[flag];
+        Object.defineProperty(row, flag, {
+          configurable: true,
+          get: () => value,
+          set: (to: boolean) => {
+            if (to) marks++;
+            value = to;
+          },
+        });
+      }
+    }
+    for (const row of s.rows.slice(0, 30)) s.engine.removeChild(s.parent, row);
+    for (let i = 0; i < 30; i++) s.engine.insertBefore(s.parent, s.row(), s.parent.childList[0]!);
+    assert.ok(marks < s.rows.length * 6, `${marks} marks for ${s.rows.length} rows`);
+    assert.deepEqual(
+      s.widths(),
+      s.rows.map((_, at) => (at ? 3 : 0)),
+    );
+    s.engine.removeChild(s.parent, s.parent.childList[0]!);
+    s.engine.insertBefore(s.parent, s.row(), s.parent.childList[20]!);
+    s.engine.removeChild(s.parent, s.parent.childList[10]!);
+    assert.equal(s.marked(), 'x'.repeat(59), 'all after the first change');
+    assert.deepEqual(
+      s.widths(),
+      s.rows.slice(1).map((_, at) => (at ? 3 : 0)),
+    );
+  });
+
+  it('matches a row whose place changed alone, where the rules reading a place from under one are for another element', () => {
+    // `text:nth-child(odd) .label` reads the place of a text from what is under it: a view's
+    // place changing changes nothing under the view.
+    const s = list(
+      'text:nth-child(odd) .label { opacity: 0.5 } .row:last-child { border-top-width: 9px }',
+      4,
+    );
+    const old = s.parent.childList.at(-1)!;
+    s.engine.appendChild(s.parent, s.row());
+    assert.equal(s.marked(), 'xx.xx');
+    assert.deepEqual([old.styleDirty, old.stateDirty], [false, true]);
+    assert.deepEqual(s.widths(), [0, 0, 0, 0, 9]);
+  });
+
   it('is none of the rows after a prop changes that no rule asks of a row before another', () => {
     // A chart sets a prop on one of its thousands of points as a finger moves: what comes after
     // the point hangs on it only where a rule asks about it from before them.

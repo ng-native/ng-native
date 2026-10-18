@@ -3750,13 +3750,24 @@ export class Engine implements HostEngine {
   }
 
   addClass(node: EngineNode, name: string): void {
+    const was = this.classAttribute(node);
     (node.classes ??= new Set()).add(name);
-    this.markClasses(node, [name]);
+    this.markClasses(node, [name], was);
   }
 
   removeClass(node: EngineNode, name: string): void {
+    const was = this.classAttribute(node);
     node.classes?.delete(name);
-    this.markClasses(node, [name]);
+    this.markClasses(node, [name], was);
+  }
+
+  /**
+   * A node's classes as its `class` attribute is written, where a sheet reads the attribute as a
+   * whole: see `ClassChange`. Null where none does, and nothing is written.
+   */
+  private classAttribute(node: EngineNode): string | undefined | null {
+    if (!this.styles.testsClassAttribute) return null;
+    return node.classes?.size ? [...node.classes].join(' ') : undefined;
   }
 
   /**
@@ -3776,12 +3787,20 @@ export class Engine implements HostEngine {
    * A sheet that names a class later restyles what it is for as it arrives, and a node not yet
    * committed is styled when it is, with the class as it is then.
    */
-  private markClasses(node: EngineNode, changed: Iterable<string>): void {
+  private markClasses(
+    node: EngineNode,
+    changed: Iterable<string>,
+    was: string | undefined | null,
+  ): void {
     // An element still being built, in no tree and never styled: nothing is styled by it yet,
     // and it is styled when it is committed, with the classes it has then. Every element of a
     // screen is given its classes this way, so what they reach is not asked for each.
     if (node.parent === null && node.styleCache === null) return this.markProps(node, false);
-    const reach = this.styles.reachOf(changed);
+    const now = was === null ? null : this.classAttribute(node);
+    const reach = this.styles.reachOf(
+      changed,
+      now === null ? undefined : { was: was as string | undefined, now },
+    );
     if (reach === true) return this.markProps(node);
     this.markProps(node, false);
     if (!reach) return;
@@ -3877,13 +3896,14 @@ export class Engine implements HostEngine {
     // By HTML's spaces, which are CSS's: a vertical tab or a no-break space is part of a name.
     const names = value.split(CSS_SPACE).filter(Boolean);
     const before = node.classes;
+    const was = this.classAttribute(node);
     node.classes = names.length ? new Set(names) : null;
     // Each class that came or went: one in both changes nothing.
     const changed = [...names.filter((name) => !before?.has(name))];
     for (const name of before ?? []) if (!node.classes?.has(name)) changed.push(name);
     const reordered =
       !changed.length && !!before && !!node.classes && !inOrder(before, node.classes);
-    this.markClasses(node, reordered ? node.classes! : changed);
+    this.markClasses(node, reordered ? node.classes! : changed, was);
   }
 
   /** Angular's `@if`/`@for`/`ViewContainerRef` markers. Ordered, never committed. */
@@ -4475,6 +4495,15 @@ export class Engine implements HostEngine {
   private readonly markedBefore = new Map<EngineNode, number>();
 
   /**
+   * By child list, how many of its first children `markRepositioned` has marked for their place
+   * from the end since the last commit: a list that gains its items one at a time at its end is
+   * not looked through once for each.
+   */
+  private readonly placesMarked = new Map<EngineNode, number>();
+  /** By child list, the first of the children `markAllAfter` has marked with all after it. */
+  private readonly placesMarkedAfter = new Map<EngineNode, number>();
+
+  /**
    * `:has(+ .x)` and `:has(~ .x .y)`: a change in `parent`'s list at `at` can change what the
    * elements before it match, and so can one beneath a box for the elements before that box.
    * Each is matched again, as an ancestor is. Only sheets that ask about what comes after pay.
@@ -4601,7 +4630,7 @@ export class Engine implements HostEngine {
     // the old last row is no longer the last. Only sheets that ask about position pay for this.
     if (this.structuralSheets) {
       moved.styleDirty = true;
-      this.markRepositioned(node.childList, at, moved);
+      this.markRepositioned(node, at, moved);
       // What the node itself matches hangs on its child list only through `:empty`, which only
       // its first child arriving or its last one leaving changes: and then what a later sibling
       // matches can too, `.box:empty + .spacer`. Styled again for any other change, everything
@@ -4628,12 +4657,20 @@ export class Engine implements HostEngine {
    * mark: that many after the change, and that many after the two at the start, either of which
    * may have stopped or started being first. Nothing comes after the two at the end.
    */
-  private markRepositioned(children: readonly EngineNode[], at: number, moved: EngineNode): void {
+  private markRepositioned(list: EngineNode, at: number, moved: EngineNode): void {
+    const children = list.childList;
     const steps = this.structuralAfter;
     const pastFirst = steps === Infinity ? 0 : steps;
     for (const child of elementsAtEnd(children, 2 + pastFirst, false)) this.markPlace(child);
     for (const child of elementsAtEnd(children, 2, true)) this.markPlace(child);
-    if (this.structuralBefore) for (let i = 0; i < at; i++) this.markPlace(children[i]!);
+    if (this.structuralBefore) {
+      // Those before `at` are where they were: the ones of them marked already stay marked.
+      for (let i = Math.min(this.placesMarked.get(list) ?? 0, at); i < at; i++) {
+        this.markPlace(children[i]!);
+      }
+      this.placesMarked.set(list, at);
+    }
+    if (steps === Infinity) return this.markAllAfter(list, at, moved);
     // The elements after the change, not counting the one that came, which is marked already.
     let left = steps;
     for (let i = at; i < children.length && left > 0; i++) {
@@ -4641,6 +4678,23 @@ export class Engine implements HostEngine {
       this.markPlace(child);
       if (child.nodeKind === 'element' && child !== moved) left--;
     }
+  }
+
+  /**
+   * Mark every element after a change at `at`, where a sheet asks about any element before
+   * (`~`). Those after the last change marked so since the commit are marked still, wherever they
+   * moved to: a list losing its rows first to last is not looked through once for each.
+   */
+  private markAllAfter(list: EngineNode, at: number, moved: EngineNode): void {
+    const children = list.childList;
+    const from = this.placesMarkedAfter.get(list);
+    const inserted = children[at] === moved;
+    // The change is among the marked ones, which a row coming or going leaves marked.
+    if (from !== undefined && (at > from || (at === from && !inserted))) return;
+    // Those from `from` moved one along, on for a row put in and back for one taken out.
+    const end = from === undefined ? children.length : inserted ? from + 1 : from - 1;
+    for (let i = at; i < end; i++) this.markPlace(children[i]!);
+    this.placesMarkedAfter.set(list, at);
   }
 
   /**
@@ -4657,11 +4711,13 @@ export class Engine implements HostEngine {
   }
 
   /**
-   * Whether a rule could read this element's place from another element. By its classes alone,
-   * which every such compound it could be asks for: a compound with none could be any element.
+   * Whether a rule could read this element's place from another element. By its classes and its
+   * element name, which every such compound it could be asks for: one with neither could be any.
    */
   private placeReadFromUnder(node: EngineNode): boolean {
     for (const { compound, above, child } of this.placeElsewhere) {
+      // By its element name as well, `text:nth-child(odd) .label`, where the compound has one.
+      if (compound.type !== undefined && compound.type !== node.tag) continue;
       if (!hasClasses(node, compound.classes)) continue;
       // And by what the rule has it in, which a compound with no class is told from.
       if (!above?.length) return true;
@@ -4721,6 +4777,8 @@ export class Engine implements HostEngine {
     } finally {
       keepHasAnswers(false);
       this.markedBefore.clear();
+      this.placesMarked.clear();
+      this.placesMarkedAfter.clear();
     }
   }
 
@@ -4732,8 +4790,10 @@ export class Engine implements HostEngine {
     // frame, since any listener firing marks the view for refresh.
     this.settleCreated();
     this.markUnderHas();
-    // The marks are taken up by the commit from here: see `markedBefore`.
+    // The marks are taken up by the commit from here: see `markedBefore` and `placesMarked`.
     this.markedBefore.clear();
+    this.placesMarked.clear();
+    this.placesMarkedAfter.clear();
     if (!this.root.structureDirty && !this.root.subtreeDirty) return false;
 
     const started = now();

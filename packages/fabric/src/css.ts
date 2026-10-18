@@ -2849,12 +2849,32 @@ function collectClasses(
  * One class of the list where the test is for a whole class or for part of one; any class
  * where it is for how the list starts or ends, or for a part with a space in it.
  */
-function answers(test: AttributeTest, name: string): boolean {
+function answers(test: AttributeTest, name: string, attribute?: ClassChange): boolean {
   const value = test.value ?? '';
   const folded = test.insensitive ? name.toLowerCase() : name;
   if (test.operator === 'includes') return folded === value;
   if (test.operator === 'substring' && !/\s/.test(value)) return folded.includes(value);
+  // `[class^="icon-"]` reads the attribute as a whole: told it, before and after, a change that
+  // leaves its answer as it was answers nothing new.
+  if (attribute) return classHolds(test, attribute.was) !== classHolds(test, attribute.now);
   return true;
+}
+
+/**
+ * A node's `class` attribute, as `[class^="icon-"]` reads it, before a change to its classes and
+ * after: undefined where it has none.
+ */
+export interface ClassChange {
+  readonly was: string | undefined;
+  readonly now: string | undefined;
+}
+
+/** Whether a test of the `class` attribute holds for it written as `value`. */
+function classHolds(test: AttributeTest, value: string | undefined): boolean {
+  if (value === undefined) return false;
+  if (test.operator === undefined) return true;
+  if (test.value === '' && !EMPTY_MATCHES.has(test.operator)) return false;
+  return matchesValue(attributeText(value, test), test.operator, test.value!);
 }
 
 /**
@@ -3274,10 +3294,10 @@ export class StyleResolver {
    * elements under it to match again, by what rules are for; or null, where no rule names any
    * of them and nothing is styled again.
    */
-  reachOf(classes: Iterable<string>): true | Subjects | null {
+  reachOf(classes: Iterable<string>, attribute?: ClassChange): true | Subjects | null {
     let found: Subjects | null = null;
     for (const name of classes) {
-      for (const how of this.reachesOf(name)) {
+      for (const how of this.reachesOf(name, attribute)) {
         if (how === true) return true;
         addSubjects((found ??= noSubjects()), how);
       }
@@ -3286,12 +3306,17 @@ export class StyleResolver {
   }
 
   /** How far a class reaches by its name, and by each test of the class attribute it answers. */
-  private *reachesOf(name: string): Generator<true | Subjects> {
+  private *reachesOf(name: string, attribute?: ClassChange): Generator<true | Subjects> {
     const how = this.reach.get(name);
     if (how) yield how;
     for (const [key, test] of this.classTests) {
-      if (answers(test, name)) yield this.reach.get(key) ?? true;
+      if (answers(test, name, attribute)) yield this.reach.get(key) ?? true;
     }
+  }
+
+  /** Whether a sheet tests the `class` attribute as a whole: see `ClassChange`. */
+  get testsClassAttribute(): boolean {
+    return this.classTests.size > 0;
   }
 
   /** Whether one of the rules `subjects` stands for could be for a node. */
