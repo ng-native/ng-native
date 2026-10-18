@@ -75,6 +75,15 @@ describe('margin: auto on an absolute box', () => {
     assert.deepEqual(scene(css, ['p', ['a']]).box('a'), [130, 0, 40, 20]);
   });
 
+  it('takes a percentage margin down it of the width of its container, beside an auto one', () => {
+    // Chrome, in a container 300 wide and 200 tall: 10% is 30, of the width.
+    const box =
+      'position: absolute; left: 0; width: 40px; height: 40px; margin-top: auto; margin-bottom: 10%;';
+    const css = `.w { width: 300px; height: 200px } .a { ${box} top: 0; bottom: 0 } .b { ${box} bottom: 10px }`;
+    assert.deepEqual(scene(css, ['w', ['a']]).box('a'), [0, 130, 40, 40]);
+    assert.deepEqual(scene(css, ['w', ['b']]).box('b'), [0, 120, 40, 40]);
+  });
+
   it('follows its container changing size', () => {
     const s = scene(`${FRAME} .a { ${BOX} inset: 0; margin: auto }`, ['p', ['a']]);
     assert.deepEqual(s.box('a'), [80, 40, 40, 20]);

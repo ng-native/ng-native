@@ -1790,22 +1790,25 @@ function autoMargins(
   axis: (typeof ABSOLUTE_AXES)[number],
   room: number,
   size: number,
+  width: number,
 ): Record<string, number | null> | null {
   const margin = (side: string) =>
     firstOf(style, [`margin${side}`, `margin${axis.across}`, 'margin']);
+  // A share of a margin is of the width on either axis (CSS 2.2, 8.3), an inset's of the room.
+  const points = (value: unknown) => resolveLength(value, width) ?? 0;
   const [before, after] = [margin(axis.start), margin(axis.end)];
   if (before !== 'auto' && after !== 'auto') return null;
   const start = resolveLength(style[axis.start.toLowerCase()], room);
   const end = resolveLength(style[axis.end.toLowerCase()], room);
   const between = start !== undefined && end !== undefined;
-  const fixed = (resolveLength(before, room) ?? 0) + (resolveLength(after, room) ?? 0);
+  const fixed = points(before) + points(after);
   const free = between ? room - start - end - size - fixed : 0;
   // Two auto margins centre the box, unless it overflows: then the start edge holds.
   const lead = before !== 'auto' ? fixed : after === 'auto' ? Math.max(free / 2, 0) : free;
   return {
     [`margin${axis.start}`]: lead,
     // A length written on the other side stays: with one inset, at the end, it still places it.
-    [`margin${axis.end}`]: after === 'auto' ? 0 : (resolveLength(after, room) ?? 0),
+    [`margin${axis.end}`]: after === 'auto' ? 0 : points(after),
     // The start inset and the margin place it now, and both insets would stretch it.
     ...(between ? { [axis.end.toLowerCase()]: null } : null),
   };
@@ -8851,7 +8854,8 @@ export class Engine implements HostEngine {
     // fixed box is not: those are worked out against its page above.
     Object.assign(resolved, shareOfBlock(withOwnSizes(node, style), against, by === against));
     for (const axis of ABSOLUTE_AXES) {
-      Object.assign(resolved, autoMargins(style, axis, against[axis.size], box[axis.size]));
+      const [room, size, width] = [against[axis.size]!, box[axis.size]!, against[2]!];
+      Object.assign(resolved, autoMargins(style, axis, room, size, width));
     }
     const top = this.flowPlace(node, style, by[1]);
     if (top !== undefined) resolved['top'] = top;
