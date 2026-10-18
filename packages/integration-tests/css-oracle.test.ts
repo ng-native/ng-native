@@ -98,6 +98,16 @@ const NATIVE_DISPLAY: ReadonlySet<string> = new Set([
   'flow-root',
 ]);
 
+/** The displays the cascade keeps as the browser computes them. */
+const KEPT_DISPLAY: ReadonlySet<string> = new Set([
+  'none',
+  'contents',
+  'block',
+  'inline-block',
+  'flow-root',
+  'inline-flex',
+]);
+
 /** What native draws for a property nothing set, where it is not nothing. */
 const NATIVE_INITIAL: Partial<Record<ExtraProperty, unknown>> = {
   'border-top-width': 0,
@@ -151,15 +161,16 @@ function readFrom(property: ExtraProperty, style: Record<string, unknown>): stri
 /** One of a case's extra properties against what the browser computed for it. */
 function assertExtra(property: ExtraProperty, style: Record<string, unknown>, browser: string) {
   if (property === 'display') {
-    // Native has flex, none and contents, and every view is flex when display is unset. What a
-    // browser lays out as a block, inline or flow-root box is a flex column here. Any other
-    // display, a grid or a table, is none native has, so it is left unset.
+    // Every view is flex when display is unset. A block container is kept as the browser has
+    // it, for the engine to lay out, and so are none and contents and a flex box that sits in a
+    // line; an inline box is a flex box.
+    // Any other display, a grid or a table, is none native has, so it is left unset.
     if (!NATIVE_DISPLAY.has(browser)) {
       assert.equal(style['display'], undefined, `${property}: ${browser}`);
       return;
     }
-    const native = ['none', 'contents'].includes(browser) ? browser : 'flex';
-    assert.equal(style['display'] ?? 'flex', native, property);
+    const kept = KEPT_DISPLAY.has(browser) ? browser : 'flex';
+    assert.equal(style['display'] ?? 'flex', kept, property);
     return;
   }
   // One family by name here, and the whole stack, quoted where it needs to be, in the browser.

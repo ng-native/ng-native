@@ -26,6 +26,7 @@ const {
   PER_TURN,
   round,
   withRefusals,
+  mixedToken,
 } = require('./values.cjs');
 const {
   translate,
@@ -1792,7 +1793,8 @@ function derivedToken(parts, context) {
 
 /** A `--x` definition's value, in every form it can be read as. */
 function customToken(name, parts, context) {
-  const value = derivedToken(parts, context) ?? tokenValue(parts, `${context} (${name})`);
+  const value =
+    mixedToken(parts) ?? derivedToken(parts, context) ?? tokenValue(parts, `${context} (${name})`);
   // Tailwind's own slots never hold an animation, and `--tw-inset-shadow: inset 200ms` parses as
   // one named inset: kept, a shadow that is not one would go unreported.
   if (value?.animation && name.startsWith('--tw-')) delete value.animation;
@@ -3548,6 +3550,7 @@ const takesUnits = (name) =>
 
 /** Lengths `kindOf` does not name, whose values are one or more lengths. */
 const UNIT_SHORTHANDS = new Set([
+  'vertical-align',
   'translate',
   'gap',
   'inset',

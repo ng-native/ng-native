@@ -366,9 +366,8 @@ function agrees(property: CorpusProperty, browser: string, value: unknown): bool
  * that has gone away, so this list cannot rot.
  */
 const FLEX_ONLY =
-  'Yoga lays out flex boxes and nothing else. Every native view is a flex item, which a browser ' +
-  'lays out as a block, so inline-block and inline-flex are read as flex, and grid is refused ' +
-  "(ADR 0001). The box keeps native's flex.";
+  'Yoga lays out flex boxes, and the engine block containers and lines of boxes on them. A grid ' +
+  "is refused (ADR 0001), and the box keeps native's flex.";
 const BODY_LINE_HEIGHT =
   'Inherited from `body`, which native has no element for, and as a ratio: CSS inherits ' +
   "`line-height: 1.5` as a multiple of each descendant's own font size, native's lineHeight is " +
@@ -386,7 +385,6 @@ const TWO_VARS =
   '`calc(var(--a) - var(--b))`: arithmetic between two tokens needs evaluating on device.';
 
 const DELIBERATE: Record<string, Partial<Record<CorpusProperty, string>>> = {
-  'bootstrap .btn.btn-primary': { display: FLEX_ONLY },
   'bootstrap .alert.alert-success': {
     'border-top-color': SHORTHAND_TOKEN,
     'border-left-color': SHORTHAND_TOKEN,
@@ -402,10 +400,9 @@ const DELIBERATE: Record<string, Partial<Record<CorpusProperty, string>>> = {
     'padding-right': TWO_VARS,
     'padding-bottom': TWO_VARS,
     'padding-left': TWO_VARS,
-    display: FLEX_ONLY,
   },
   'bulma .is-size-3': { 'line-height': BODY_LINE_HEIGHT },
-  'bulma .tag': { 'background-color': HSL_TOKENS, display: FLEX_ONLY },
+  'bulma .tag': { 'background-color': HSL_TOKENS },
   'pico .grid': { display: FLEX_ONLY },
 };
 

@@ -357,6 +357,7 @@ const CSS_OF: Record<string, string | readonly string[]> = {
   touchAction: 'touch-action',
   ellipsizeMode: 'text-overflow',
   textAlignVertical: 'vertical-align',
+  baselineShift: 'vertical-align',
   start: 'left',
   end: 'right',
   marginStart: 'margin-left',

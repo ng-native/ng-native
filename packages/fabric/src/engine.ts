@@ -90,6 +90,14 @@ import {
   scrollChannels,
   sharesAsPoints,
 } from './scroll-animation.ts';
+import {
+  isBlockContainer,
+  placeInFlow,
+  planFlow,
+  type FlowKey,
+  type FlowPlan,
+  type FlowTree,
+} from './flow.ts';
 import { FontFaces } from './font-faces.ts';
 import { premultipliedStops } from './premultiplied-stops.ts';
 
@@ -236,6 +244,16 @@ export interface FabricUIManager {
     node: FabricNode,
     onSuccess: (x: number, y: number, width: number, height: number) => void,
   ): void;
+  /**
+   * A node's box as the last commit laid it out: x, y, width, height. Fabric lays a commit out
+   * before `completeRoot` returns, so this answers for a commit made a line earlier, and what
+   * was read can be committed again before anything is drawn. That is how a box fitted to its
+   * content is laid out. Optional because a test's fabric has no layout to read.
+   */
+  getBoundingClientRect?(
+    node: FabricNode,
+    includeTransform: boolean,
+  ): readonly [number, number, number, number] | undefined;
 }
 
 /**
@@ -510,6 +528,11 @@ export interface EngineNode extends HostNode {
    * template and in no node's `childList`: it holds the text, and commits where the text would.
    */
   box?: EngineNode;
+  /**
+   * The paragraphs of a run of text beside a box in a line, one a word: see `wordBoxes`. In no
+   * node's `childList` either, and kept on the text as its one paragraph is.
+   */
+  words?: EngineNode[];
   /** A node the engine made, which no rule matches: it only inherits. */
   anonymous?: true;
   /** See `StyleTarget.styled`. */
@@ -536,11 +559,78 @@ export interface EngineNode extends HostNode {
    */
   fitContainer?: string;
   /**
+   * Whether a browser lays this element out inline, with no display of its own: `always`, as a
+   * span is, which is what the box that holds it reads; or `unless-block`, as a custom element
+   * is, which the engine lays out as an inline-block or as a block by what it holds. Set with
+   * `setInline`. Unset on every other node.
+   */
+  inlineLevel?: 'always' | 'unless-block';
+  scrollView?: true;
+  /** Set while `settleLine` has given an always-inline element a line for the boxes it holds. */
+  lined?: true;
+  /** Set while an always-inline element is a flex box or a grid by its own style. */
+  boxed?: true;
+  /**
+   * How this node lays its children out as a block container, and which of them are in its flow:
+   * made on each reconcile from its children's styles, so a child added, removed or restyled is
+   * followed. Unset on every node that is not a block container. See `flow.ts`.
+   */
+  flow?: Flow;
+  /**
+   * Set once a child of this node has had an `order`: its children are then committed in that
+   * order, which Yoga has no property for. Left set, since sorting children with none is nothing.
+   */
+  ordered?: boolean;
+  /**
+   * A box in a line of a block, which is as wide as its content: the width that came to, read
+   * back with the percentages inside it set aside, and whether it has to be read again. See
+   * `settleFits`.
+   */
+  fit?: { dirty: boolean; width?: number; room?: number; grown?: EngineNode[] };
+  /**
+   * The least width a box is held to because a fitted box in it overflows its room: a browser's
+   * flex item is no narrower than its content, which Yoga's is. See `growAround`.
+   */
+  fitMin?: number;
+  /** Set on a box inside one being fitted, while its percentage width and zero basis are off. */
+  fitOff?: boolean;
+  /**
+   * The declarations of this node that are a percentage with a length added, `calc(100% - 2rem)`,
+   * what each came to against the box the percentage is of, and that box's size then. See
+   * `settleMixed`. Set on `mixedOff` while that box is measured with them set aside.
+   */
+  mixed?: MixedState;
+  mixedOff?: boolean;
+  /** The line box this node is the first box of, as it was last committed. See `inLines`. */
+  line?: LineBox;
+  /**
+   * Set on an item in a row whose automatic minimum width is read from what it holds: whether
+   * text in it has somewhere to wrap. Anything changing under it has it asked again.
+   */
+  autoMin?: boolean;
+  /**
+   * The narrowest an item that takes a share of its row goes, read from a commit of it at its
+   * content's width with its words a line each, or nothing until it is read: see
+   * `settleMinimums`. Set while `shareMin` says the item's minimum is to be measured.
+   */
+  shareMin?: { width?: number; share?: number };
+  /** Set while that commit is made: the item is as wide as its content, with no share. */
+  shareOff?: boolean;
+  /** Whether this node's children were last laid out along a row. See `autoMinimum`. */
+  row?: boolean;
+  /** The block container whose flow this node was last in. Its `flow` says whether it still is. */
+  flowIn?: EngineNode;
+  /**
    * Whether this node had a height a percentage could be taken of, when a box beneath it with a
    * percentage height last asked, as `definiteHeight` says it. Compared on each reconcile so its
    * children are worked out again when it changes. Unset on every other node.
    */
   heightBasis?: boolean;
+  /**
+   * The height a box as tall as its content is committed at, so that a percentage height in it
+   * is of that height, and the width it had then. See `settleHeld`.
+   */
+  heldAt?: { height: number; width: number; inner: number };
   /**
    * Per-property transition state, for every property this node has ever seen a `transition` for.
    * A finished entry stays, because its target is what the next change is measured against.
@@ -606,7 +696,7 @@ export interface EngineNode extends HostNode {
 
   committed: Committed | null;
   /** The node this one was committed as a child of, which native holds it to for its life. */
-  committedUnder: EngineNode | null;
+  committedUnder: EngineNode | LineBox | null;
   /** The hoisted views this node keeps committed for, by element name. See `HoistOptions`. */
   kept?: Map<string, KeptHoist>;
   /** On a text field, the row aligned by baseline that takes a baseline from it: `lineBaseline`. */
@@ -839,6 +929,10 @@ const DEFAULT_VIEW = 'View';
 /** A top-level text, the one view that aligns its lines. A nested text is a `VirtualText`. */
 const PARAGRAPH = 'Paragraph';
 
+/** Whether text written into a view of this name is drawn in a paragraph the engine makes. */
+const holdsParagraphs = (viewName: string): boolean =>
+  viewName !== PARAGRAPH && viewName !== VIRTUAL_TEXT && TEXT_CONTENT_PROPS[viewName] === undefined;
+
 /**
  * The box Yoga takes a view's baseline from where the view has none of its own: its first child
  * that is laid out in its flow. Words written straight into the view are the paragraph the
@@ -869,13 +963,22 @@ function firstInFlow(node: EngineNode): EngineNode | undefined {
   for (const child of node.childList ?? []) {
     // Not the paragraph itself, which holds the words it was made around.
     if (child.nodeKind === 'text' && child.box) return child.box === node ? undefined : child.box;
-    if (child.nodeKind !== 'element' || ownLayout(child, 'display') === 'none') continue;
-    if (ownLayout(child, 'position') !== 'absolute') return child;
+    if (child.nodeKind !== 'element' || readStyle(child, 'display') === 'none') continue;
+    if (!OUT_OF_FLOW.has(readStyle(child, 'position') as string)) return child;
   }
   return undefined;
 }
 
 const isNode = (node: EngineNode | undefined): node is EngineNode => node !== undefined;
+
+/**
+ * Whether a text field is one a row aligned by baseline takes its baseline from, and is still
+ * under that row: a row taken away is not committed again to unmark it.
+ */
+function isOnBaseline(node: EngineNode, viewName: string): boolean {
+  const row = node.onBaseline;
+  return viewName === 'TextInput' && row !== undefined && isWithin(node, row);
+}
 
 /** Whether a row lays a child out among its others, and so can take its baseline from it. */
 const inFlow = (child: EngineNode): boolean =>
@@ -947,11 +1050,74 @@ function rowsTall(
   props['height'] = edges.reduce<number>((sum, part) => sum + (part as number), lines);
 }
 
+/** A field's padding and border on its left or right edge, as they are written. */
+const inlineEdge = (
+  props: Record<string, unknown>,
+  side: 'Left' | 'Right',
+  logical: 'Start' | 'End',
+): unknown[] => [
+  props[`padding${side}`] ??
+    props[`padding${logical}`] ??
+    props[`paddingInline${logical}`] ??
+    props['paddingInline'] ??
+    props['paddingHorizontal'] ??
+    props['padding'] ??
+    0,
+  props[`border${side}Width`] ?? props[`border${logical}Width`] ?? props['borderWidth'] ?? 0,
+];
+
+/** The size a browser draws a field's text at where no stylesheet gives it one. */
+const FIELD_FONT_SIZE = 13.3333;
+/**
+ * How wide a browser counts a character of a field as, against the font's size: what Chrome
+ * makes of `size="20"`, 175 points of a 16 point font and 146 of a browser's own.
+ */
+const CHARACTER = 0.546;
+/** And a column of a text area, which is counted wider: 183 points for twenty at 16. */
+const COLUMN = 0.572;
+
+/**
+ * A field's `size` as its width, where it was given none: that many characters of its font,
+ * inside its padding and border, as a browser sizes an `<input>`. A native field has no width
+ * of its own.
+ */
+function columnsWide(props: Record<string, unknown>, size: unknown): void {
+  const columns = Number(size);
+  if (!(columns > 0) || (isSet(props['width']) && props['width'] !== 'auto')) return;
+  const font = typeof props['fontSize'] === 'number' ? props['fontSize'] : FIELD_FONT_SIZE;
+  // A content box's width is its characters alone: Yoga adds the padding and border itself.
+  const edges =
+    props['boxSizing'] === 'content-box'
+      ? []
+      : [...inlineEdge(props, 'Left', 'Start'), ...inlineEdge(props, 'Right', 'End')];
+  if (!edges.every((part) => typeof part === 'number')) return;
+  const characters = columns * (props['multiline'] === true ? COLUMN : CHARACTER) * font;
+  props['width'] = edges.reduce<number>((sum, part) => sum + (part as number), characters);
+}
+
+/**
+ * A text field's `size` as its width, and off what is sent: it is the field's own, and no prop
+ * of the native one. Another view's `size` is that view's, and is left.
+ */
+function sizedField(viewName: string, props: Record<string, unknown>): void {
+  if (!TEXT_INPUTS.has(viewName)) return;
+  columnsWide(props, props[FIELD_SIZE]);
+  delete props[FIELD_SIZE];
+}
+
+/** What a text field alone is styled with, asked of none of the views that are not one. */
+function fieldStyled(
+  viewName: string,
+  props: Record<string, unknown>,
+  fontScale: number | undefined,
+): void {
+  alignMultiline(viewName, props);
+  rowsTall(viewName, props, fontScale);
+  sizedField(viewName, props);
+}
+
 /** A field's own minimum height: none where it says `auto`, which a web element starts with. */
 const ownMinimum = (minHeight: unknown): unknown => (minHeight === 'auto' ? 0 : (minHeight ?? 0));
-
-/** How tall the system's font is, as a share of its size: its rise over the baseline and fall under. */
-const FONT_LINE = 0.95 + 0.24;
 
 /**
  * How tall a field is by its line: the line, padding and border of a border-box field, Yoga's
@@ -996,8 +1162,8 @@ function heightBaseline(
  * top padding, so without this it is the font's own, and the row lifts the paragraphs beside the
  * field to it: a form field's prefix and suffix sit higher than what is typed. Answers the half.
  *
- * ponytail: the font is taken to be as tall as the system's, `FONT_LINE` of its size. Read from
- * the font if a field in another face is seen a point off its prefix.
+ * ponytail: the font is taken to be as tall as the system's, `FONT_ASCENT` and `FONT_DESCENT` of
+ * its size. Read from the font if a field in another face is seen a point off its prefix.
  */
 function lineBaseline(
   props: Record<string, unknown>,
@@ -1007,7 +1173,8 @@ function lineBaseline(
 ): number {
   const size = props['fontSize'];
   if (typeof size !== 'number') return 0;
-  const half = Math.max(0, (line - size * textScale(props, fontScale) * FONT_LINE) / 2);
+  const font = size * textScale(props, fontScale) * (FONT_ASCENT + FONT_DESCENT);
+  const half = Math.max(0, (line - font) / 2);
   props['paddingTop'] = top! + half;
   props['paddingBottom'] = bottom! + half;
   return half;
@@ -1230,6 +1397,9 @@ function capAtContent(props: Record<string, unknown>, size: string, cap: string)
 }
 
 const isPercent = (value: unknown): boolean => typeof value === 'string' && value.endsWith('%');
+/** A percentage, or a `calc()` of one and a length: a share of the box it is of either way. */
+const isShareOrSum = (value: unknown): boolean =>
+  isPercent(value) || mixedParts(value) !== undefined;
 
 /** Whether a `flex-basis` is a length or a percentage of something: not zero, and not `auto`. */
 const isSizedBasis = (basis: unknown): boolean =>
@@ -1286,7 +1456,40 @@ function hasDefiniteHeight(node: EngineNode): boolean {
   if (!parent) return true;
   const height = ownLayout(node, 'height');
   if (isPercent(height)) return definiteHeight(parent);
-  return sizesItself(node, height) || heightFromLayout(node, parent);
+  return sizesItself(node, height) || node.heldAt !== undefined || heightFromLayout(node, parent);
+}
+
+/**
+ * Whether a box with no height of its own has one once flex layout has sized it (CSS Flexbox
+ * 9.8): an item of a column whose height is definite, or one a row with a definite height
+ * stretches. A box in a block's flow or a grid, or out of the flow, has none.
+ */
+function sizedByFlex(node: EngineNode): boolean {
+  if (node.nodeKind !== 'element' || viewNameOf(node) !== 'View') return false;
+  const position = ownLayout(node, 'position');
+  if (position === 'absolute' || position === 'fixed') return false;
+  const parent = layoutParent(node);
+  if (!parent || parent.flow !== undefined) return false;
+  const [direction, align] = containerOf(parent).split(' ');
+  const self = ownLayout(node, 'alignSelf') as string | undefined;
+  if (direction === 'row' && !(STRETCHES.has(self) && align === 'stretch')) return false;
+  return definiteHeight(parent) || sizedByFlex(parent);
+}
+
+/**
+ * Whether a box holds one in the flow whose height is a percentage of it: a height, a least
+ * height, or a basis down a column.
+ */
+function holdsShares(node: EngineNode): boolean {
+  const column = !isRow(node);
+  return node.childList.some(
+    (child) =>
+      child.nodeKind === 'element' &&
+      ownLayout(child, 'position') !== 'absolute' &&
+      (isShareOrSum(ownLayout(child, 'height')) ||
+        isShareOrSum(ownLayout(child, 'minHeight')) ||
+        (column && isShareOrSum(ownLayout(child, 'flexBasis')))),
+  );
 }
 
 const NO_HEIGHT = new Set([undefined, null, 'auto', 'fit-content']);
@@ -1312,24 +1515,11 @@ function heightFromLayout(node: EngineNode, parent: EngineNode): boolean {
   return grows && definiteHeight(parent);
 }
 
-/**
- * A placeholder's opacity, which native has none for, as its colour faded by that share: none of
- * it at 0, which is how a stylesheet hides a placeholder under a label, and all of it at 1.
- *
- * ponytail: with no colour of its own the placeholder is native's default, and a platform colour
- * is native's to resolve: neither is known here, so each is hidden at 0 and left as it is above
- * that. Name the platform's default, or read the colour back, if one is faded part of the way.
- */
-function placeholderFaded(props: Record<string, unknown>): void {
-  const opacity = props['placeholderOpacity'];
-  if (opacity === undefined) return;
-  delete props['placeholderOpacity'];
-  if (typeof opacity !== 'number' || opacity >= 1) return;
-  const colour = props['placeholderTextColor'];
-  if (typeof colour === 'string')
-    props['placeholderTextColor'] = faded(colour, Math.max(opacity, 0));
-  else if (opacity <= 0) props['placeholderTextColor'] = 'rgba(0, 0, 0, 0)';
-}
+const NO_INSETS = { Top: 0, Right: 0, Bottom: 0, Left: 0 };
+const MARGIN_KEYS = [
+  ...['margin', 'marginHorizontal', 'marginVertical'],
+  ...['marginLeft', 'marginRight', 'marginTop', 'marginBottom'],
+];
 
 /**
  * What a removed prop travels as: null, which native resets the prop on, except `pointerEvents`,
@@ -1338,61 +1528,11 @@ function placeholderFaded(props: Record<string, unknown>): void {
  */
 const cleared = (key: string): unknown => (key === 'pointerEvents' ? 'auto' : null);
 
-/** The least alpha iOS sends a touch to a view at: under a hundredth it is passed over. */
-const TOUCHED_ALPHA = 0.011;
-
-/**
- * A view that takes a touch and has no opacity, committed with the least there is to be sent
- * one. A browser sends a press to an element at `opacity: 0`, which is how a see-through
- * backdrop hears a press outside a menu; iOS passes over a view it would not draw. A hundredth
- * of what the view draws is not seen.
- */
-function stillTouched(props: Record<string, unknown>): Record<string, unknown> {
-  // One told to take no touch is not to be sent one, seen or not.
-  if (props['pointerEvents'] === 'none') return props;
-  const opacity = props['opacity'];
-  if (typeof opacity === 'number' && opacity < TOUCHED_ALPHA) props['opacity'] = TOUCHED_ALPHA;
-  return props;
-}
-
-/** Every prop `setOwned` can set, as a payload that changes them all. */
-const RESET_OWNED: Readonly<Record<string, unknown>> = { opacity: undefined, transform: undefined };
-
-/** As Animated does: a view native sets values on is kept, or there is no view to set them on. */
-function keptForNative(node: EngineNode, props: Record<string, unknown>): void {
-  if (node.owned && props['collapsable'] === undefined) props['collapsable'] = false;
-}
-
-/**
- * How a paragraph is truncated, which native does by its props: one the engine made around a
- * view's own words is truncated as the view says, as a browser truncates a block's own text.
- */
-const TRUNCATION = ['numberOfLines', 'ellipsizeMode'] as const;
-
-/**
- * The truncation each paragraph made around a view's words was merged with, as the view said it.
- * Not what it was committed with, which has the paragraph's own defaults in it.
- */
-const truncatedBy = new WeakMap<EngineNode, readonly unknown[]>();
-
-/** What a view says of how its own words are truncated. */
-const truncationOf = (parent: EngineNode): unknown[] =>
-  TRUNCATION.map((key) => ownLayout(parent, key) ?? null);
-
-/** Whether a paragraph made around a view's words is truncated other than the view now says. */
-function truncationMoved(box: EngineNode, parent: EngineNode): boolean {
-  const merged = truncatedBy.get(box);
-  if (!merged) return false;
-  return truncationOf(parent).some((said, at) => said !== merged[at]);
-}
-
-function truncatedAs(box: EngineNode, props: Record<string, unknown>): void {
-  if (!box.anonymous || !box.parent) return;
-  const said = truncationOf(box.parent);
-  truncatedBy.set(box, said);
-  TRUNCATION.forEach((key, at) => {
-    if (said[at] !== null) props[key] = said[at];
-  });
+/** A length of a box, or a percentage of `whole`, or nothing where it is `auto` or unset. */
+function resolveLength(value: unknown, whole: number): number | undefined {
+  if (typeof value === 'number') return value;
+  if (typeof value !== 'string' || !value.endsWith('%')) return undefined;
+  return (Number.parseFloat(value) / 100) * whole;
 }
 
 /**
@@ -1416,10 +1556,10 @@ function wrappedLinesStretch(props: Record<string, unknown>): void {
  * points. One that grows, or is a share, keeps the ratio, as Yoga has it. A plain view only: an image keeps its picture's proportions.
  */
 function stretchedOverRatio(node: EngineNode, props: Record<string, unknown>): void {
-  if (!isSet(props['aspectRatio']) || props['position'] === 'absolute') return;
+  if (!isSet(props['aspectRatio']) || OUT_OF_FLOW.has(props['position'] as string)) return;
   if (viewNameOf(node) !== DEFAULT_VIEW) return;
   const parent = layoutParent(node);
-  if (!parent) return;
+  if (!parent || parent.flow !== undefined) return;
   const container = containerOf(parent);
   // Remembered on the container, so the item is merged again when its direction changes.
   parent.fitContainer = container;
@@ -1549,6 +1689,1311 @@ function noOutline(props: Record<string, unknown>): void {
   for (const key of OUTLINE_KEYS) delete props[key];
 }
 
+const sameBase = (
+  a: readonly [number, number | undefined],
+  b: readonly [number, number | undefined] | undefined,
+): boolean => a[0] === b?.[0] && a[1] === b?.[1];
+
+/** The props an animation can move without moving any box: what a frame of it only paints. */
+const PAINT_ONLY_KEYS = new Set([
+  ...['transform', 'opacity', 'color', 'backgroundColor', 'tintColor', 'filter', 'boxShadow'],
+  ...['borderColor', 'borderTopColor', 'borderRightColor', 'borderBottomColor', 'borderLeftColor'],
+  ...['shadowColor', 'shadowOpacity', 'shadowRadius', 'shadowOffset', 'outlineColor'],
+  ...['textDecorationColor', 'textShadowColor'],
+]);
+/**
+ * Whether the props a node is cloned with change nothing about where any box is: none, or only
+ * how it is painted and what a screen reader is told of it.
+ */
+function paintsOnly(payload: Record<string, unknown> | null): boolean {
+  for (const key in payload) {
+    if (!PAINT_ONLY_KEYS.has(key) && !key.startsWith('accessib') && !key.startsWith('aria-')) {
+      return false;
+    }
+  }
+  return true;
+}
+
+/**
+ * Whether a box is laid out at a size of its own whatever it holds: out of the flow, with a
+ * width and a height in points. See `Engine.heldIn`.
+ */
+function holdsItsContent(node: EngineNode): boolean {
+  const props = node.committed?.props;
+  return (
+    props?.['position'] === 'absolute' &&
+    typeof props['width'] === 'number' &&
+    typeof props['height'] === 'number'
+  );
+}
+
+/** Every run of text under a node. */
+function textsUnder(node: EngineNode): EngineNode[] {
+  return node.childList.flatMap((child) =>
+    child.nodeKind === 'text' ? [child] : textsUnder(child),
+  );
+}
+
+/**
+ * Whether a box out of the flow is as wide as what it holds: it has no width, and no inset on
+ * each side to be stretched between. A browser shrinks it to fit, a panel in the body among
+ * them, where Yoga takes a percentage inside it as one of the room.
+ *
+ * ponytail: the room it is fitted within is the box it is placed in, and not that less its
+ * inset. Take the inset off if a panel placed far across the screen is ever too wide.
+ */
+function shrunkOutOfFlow(node: EngineNode): boolean {
+  if (!OUT_OF_FLOW.has(readStyle(node, 'position') as string)) return false;
+  if (readStyle(node, 'width') != null) return false;
+  const set = (...keys: string[]) => keys.some((key) => readStyle(node, key) != null);
+  return !(set('left', 'start') && set('right', 'end'));
+}
+
+/** Whether a column makes an item as wide as itself: by the item's own alignment, or its own. */
+function stretched(node: EngineNode, column: EngineNode): boolean {
+  const own = readStyle(node, 'alignSelf');
+  const align = own == null || own === 'auto' ? readStyle(column, 'alignItems') : own;
+  return align == null || align === 'stretch' || align === 'normal';
+}
+
+/** Whether a row's item is given its width by the row: it grows into it, or has a basis. */
+function sharesRow(node: EngineNode): boolean {
+  const [grow, flex, basis] = ['flexGrow', 'flex', 'flexBasis'].map((key) => readStyle(node, key));
+  if ((typeof grow === 'number' && grow > 0) || typeof flex === 'number') return true;
+  return basis != null && basis !== 'auto';
+}
+
+/**
+ * Whether a box in the flow is as wide as a share of the box it is in: a percentage. One out of
+ * the flow is a share of a box it has no part in the width of, a focus ring over a chip.
+ */
+function sharesWidth(node: EngineNode): boolean {
+  if (!isShare(readStyle(node, 'width')) && !isShare(readStyle(node, 'minWidth'))) return false;
+  return !OUT_OF_FLOW.has(readStyle(node, 'position') as string);
+}
+
+/** A percentage: of the box a node is in, for a width or the least it may be. */
+const isShare = (value: unknown): boolean => typeof value === 'string' && value.endsWith('%');
+
+/** A move of the engine's written before a box's own transform. */
+function moveBeforeOwn(props: Record<string, unknown>, move: Record<string, number>): void {
+  const own = props['transform'];
+  props['transform'] = Array.isArray(own) ? [move, ...own] : [move];
+}
+
+/**
+ * Take off what is read here and is no style of a native view: `order`, by the container in
+ * `inOrder`, and `justify-self`, by the block a box is in.
+ */
+function notNative(props: Record<string, unknown>): void {
+  if (props['order'] !== undefined) delete props['order'];
+  if (props['justifySelf'] !== undefined) delete props['justifySelf'];
+}
+
+/**
+ * What the engine lays out in Yoga's place, written on a node's props last of all: a box sized
+ * from what was read back, and a relative box in a line moved by its offset.
+ */
+function engineLayout(node: EngineNode, props: Record<string, unknown>, asked: number): void {
+  // Nothing of it is on a node until something asks, and an app of plain flex never does.
+  if (asked !== 0) askedLayout(node, props, asked);
+  // Asked of every node merged, so asked here first: nearly none has a most size.
+  if (props['maxHeight'] !== undefined) leastWins(props, 'Height');
+  if (props['maxWidth'] !== undefined) leastWins(props, 'Width');
+  if (asked & CSS_LAYOUT) notNative(props);
+  if (props['position'] !== undefined) positioned(node, props);
+}
+
+/** The part of `engineLayout` that a layout something asked for sets a node up for. */
+function askedLayout(node: EngineNode, props: Record<string, unknown>, asked: number): void {
+  const css = (asked & CSS_LAYOUT) !== 0;
+  if (asked & MIXED_SIZES) {
+    mixedLayout(node, props);
+    // A basis a sum came to is a size too, as one written is: see `basisAsSize`.
+    basisAsSize(node, props);
+  }
+  // Before the minimum: a cell with its share of a row set aside is sized by its content, and
+  // does not shrink under it while the box it is in is measured.
+  if (node.fitOff) setAsideToFit(node, props);
+  if (css) {
+    autoMinimum(node, props);
+    shareMinimum(node, props);
+  }
+  if (node.fit !== undefined || node.fitMin !== undefined) fitted(node, props);
+  heldHeight(node, props);
+}
+
+/**
+ * A box as tall as its content, at what that came to: see `Engine.settleHeld`. That is read as
+ * the box's border box, and a height of `content-box` is without its padding and border.
+ */
+function heldHeight(node: EngineNode, props: Record<string, unknown>): void {
+  if (node.heldAt === undefined || !NO_HEIGHT.has(props['height'] as string)) return;
+  const edge = props['boxSizing'] === 'content-box' ? insets(props) : NO_INSETS;
+  props['height'] = Math.max(node.heldAt.height - edge.Top - edge.Bottom, 0);
+}
+
+/** A box with its share of a row set aside, while the box it is in is measured. */
+function setAsideToFit(node: EngineNode, props: Record<string, unknown>): void {
+  contentSized(props);
+  pictureWide(node, props);
+  // A field with its share set aside is as wide as its own size makes it, as its content.
+  columnsWide(props, node.props[FIELD_SIZE]);
+}
+
+/** A box fitted to its content: the width that came to, and the least it may be. */
+function fitted(node: EngineNode, props: Record<string, unknown>): void {
+  if (node.fit?.width !== undefined) props['width'] = node.fit.width;
+  if (node.fitMin === undefined) return;
+  const own = typeof props['minWidth'] === 'number' ? props['minWidth'] : 0;
+  props['minWidth'] = Math.max(own, node.fitMin);
+}
+
+/** What a box's `position` needs of the engine, where Yoga does not do what CSS means by it. */
+function positioned(node: EngineNode, props: Record<string, unknown>): void {
+  if (props['position'] === 'relative' && inWrappingRow(node)) offsetAcrossLines(props);
+}
+
+const OUT_OF_FLOW = new Set(['absolute', 'fixed']);
+const INLINE_DISPLAYS = new Set(['inline-block', 'inline-flex', 'inline-grid']);
+
+/** Whether a node is an element said to be always inline that is text in a browser: a span. */
+const inlineText = (node: EngineNode): boolean =>
+  node.inlineLevel === 'always' && TEXT_ELEMENTS.has(node.tag);
+
+/** Whether a box sits in a line: by its display, or with none, as text or an inline element. */
+function sitsInLine(node: EngineNode, display: unknown): boolean {
+  if (INLINE_DISPLAYS.has(display as string)) return true;
+  return display == null && (node.inlineLevel === 'always' || isTextElement(node));
+}
+
+/** Whether a box is an item of a row that wraps: lines the engine lays out, or a row written so. */
+function inWrappingRow(node: EngineNode): boolean {
+  const flow = flowOver(node);
+  if (flow?.plan.kind === 'lines' || flow?.lined.has(node)) return true;
+  const parent = node.parent;
+  if (!parent || readStyle(parent, 'flexWrap') !== 'wrap') return false;
+  return String(readStyle(parent, 'flexDirection')).startsWith('row');
+}
+
+/**
+ * A relative offset across the lines of a row that wraps, as a move of the box: Yoga places
+ * each line's items again once the lines are sized, and leaves the offset out when it does. A
+ * relative offset moves a box from where it was laid out and moves nothing else, which a
+ * translate before its own transform does as well.
+ *
+ * ponytail: a length. A percentage is of the box it is in, which is not known here, and is left
+ * to Yoga; read it back as the mixed sums are if a stylesheet offsets a line item by a share.
+ */
+function offsetAcrossLines(props: Record<string, unknown>): void {
+  const [top, bottom] = [props['top'], props['bottom']];
+  const by = typeof top === 'number' ? top : typeof bottom === 'number' ? -bottom : undefined;
+  if (by === undefined) return;
+  delete props['top'];
+  delete props['bottom'];
+  moveBeforeOwn(props, { translateY: by });
+}
+
+interface MixedState {
+  /** Each declaration as its two parts: a percentage, and points added to it. */
+  parts: Record<string, { percent: number; points: number }>;
+  /** What each came to, or nothing before the box it is of has been read. */
+  values?: Record<string, number>;
+  /** The size of that box when they were worked out: a change in it works them out again. */
+  base?: readonly [number, number | undefined];
+  dirty: boolean;
+}
+
+/**
+ * The props a percentage of the containing block's width is added to a length for, and those
+ * where it is of its height. A margin and a padding are of the width on every side.
+ */
+const MIXED_OF_HEIGHT = new Set(['height', 'minHeight', 'maxHeight', 'top', 'bottom']);
+const MIXED_KEYS = new Set([
+  ...['width', 'minWidth', 'maxWidth', 'height', 'minHeight', 'maxHeight'],
+  ...['top', 'right', 'bottom', 'left', 'start', 'end'],
+  ...['margin', 'marginHorizontal', 'marginVertical', 'marginStart', 'marginEnd'],
+  ...['marginTop', 'marginRight', 'marginBottom', 'marginLeft'],
+  ...['padding', 'paddingHorizontal', 'paddingVertical', 'paddingStart', 'paddingEnd'],
+  ...['paddingTop', 'paddingRight', 'paddingBottom', 'paddingLeft'],
+  // What an item of a row or a column starts from: a share of whichever it is in.
+  'flexBasis',
+]);
+const MIXED = /^calc\(\s*(-?[\d.]+)(%|px)\s*([+-])\s*(-?[\d.]+)(%|px)\s*\)$/;
+
+/** `calc(100% - 32px)` or `calc(32px + 50%)` as a percentage and the points added to it. */
+function mixedParts(value: unknown): { percent: number; points: number } | undefined {
+  if (typeof value !== 'string' || !value.startsWith('calc(')) return undefined;
+  const match = MIXED.exec(value);
+  if (!match || match[2] === match[5]) return undefined;
+  const second = Number(match[4]) * (match[3] === '-' ? -1 : 1);
+  const [percent, points] =
+    match[2] === '%' ? [Number(match[1]), second] : [second, Number(match[1])];
+  return { percent, points };
+}
+
+/**
+ * A percentage with a length added, which Yoga has no value for: committed as what it came to
+ * against the box the percentage is of, and set aside until that box has been read, and while
+ * it is measured. See `settleMixed`.
+ */
+function mixedLayout(node: EngineNode, props: Record<string, unknown>): void {
+  const parts = takeMixed(node, props);
+  if (!parts) node.mixed = undefined;
+  else if (!node.mixed || !sameParts(node.mixed.parts, parts)) node.mixed = { parts, dirty: true };
+}
+
+/** Each such declaration of a node, written on its props as what it came to or taken off them. */
+function takeMixed(
+  node: EngineNode,
+  props: Record<string, unknown>,
+): MixedState['parts'] | undefined {
+  let parts: MixedState['parts'] | undefined;
+  // Set aside too while a box it is in is fitted to its content: see `settleFits`.
+  const values = node.mixedOff || node.fitOff ? undefined : node.mixed?.values;
+  // Asked of every node: its own props are fewer than the ones this could be written on.
+  for (const key in props) {
+    const value = props[key];
+    // Told from the rest here, and not by a call for each: nearly none is a sum.
+    if (typeof value !== 'string' || !value.startsWith('calc(')) continue;
+    const read = mixedParts(value);
+    if (!read) continue;
+    // A token can carry the sum to a property with no box for its percentage: not committed.
+    if (MIXED_KEYS.has(key)) (parts ??= {})[key] = read;
+    writeMixed(props, key, ofNoHeight(node, props, key) ? withNoHeight(key, read) : values?.[key]);
+  }
+  return takeMixedTranslate(props, values, parts);
+}
+
+/** A sum as what it came to, or taken off the props until it is known. */
+function writeMixed(props: Record<string, unknown>, key: string, to: number | undefined): void {
+  if (to === undefined) delete props[key];
+  else props[key] = to;
+}
+
+/**
+ * Whether a sum is a share of a height the box it is in does not have: one as tall as its
+ * content, which a column has not sized yet (see `Engine.settleHeld`). CSS takes its height
+ * as `auto` then, and a basis down a column as its content.
+ */
+function ofNoHeight(node: EngineNode, props: Record<string, unknown>, key: string): boolean {
+  const tall = key === 'height' || key === 'minHeight' || key === 'maxHeight';
+  if (!tall && key !== 'flexBasis') return false;
+  if (props['position'] === 'absolute' || props['position'] === 'fixed') return false;
+  const parent = layoutParent(node);
+  if (!parent || (key === 'flexBasis' && isRow(parent))) return false;
+  return !definiteHeight(parent);
+}
+
+/** What a sum of a share of no height comes to: a least height is its length alone, as Chrome has it. */
+const withNoHeight = (key: string, { points }: { points: number }): number | undefined =>
+  key === 'minHeight' && points > 0 ? points : undefined;
+
+/**
+ * The same for a translate, whose percentage is of the element's own box. Until that has been
+ * read the percentage alone is committed, which native takes, and is all but the length out.
+ */
+function takeMixedTranslate(
+  props: Record<string, unknown>,
+  values: Record<string, number> | undefined,
+  parts: MixedState['parts'] | undefined,
+): MixedState['parts'] | undefined {
+  const transform = props['transform'];
+  if (!Array.isArray(transform)) return parts;
+  let found = parts;
+  let changed = false;
+  const resolved = (transform as Record<string, unknown>[]).map((entry) => {
+    const [key, value] = Object.entries(entry)[0] ?? [];
+    const read = key === 'translateX' || key === 'translateY' ? mixedParts(value) : undefined;
+    if (!key || !read) return entry;
+    (found ??= {})[key] = read;
+    changed = true;
+    return { [key]: values?.[key] ?? `${read.percent}%` };
+  });
+  if (changed) props['transform'] = resolved;
+  return found;
+}
+
+function sameParts(a: MixedState['parts'], b: MixedState['parts']): boolean {
+  const keys = Object.keys(a);
+  return (
+    keys.length === Object.keys(b).length &&
+    keys.every((key) => a[key]!.percent === b[key]?.percent && a[key]!.points === b[key]?.points)
+  );
+}
+
+/** What each declaration comes to against a box of this width and height. */
+function mixedValues(
+  parts: MixedState['parts'],
+  [width, height]: readonly [number, number | undefined],
+  own: readonly number[] | undefined,
+  inColumn = false,
+): Record<string, number> {
+  const values: Record<string, number> = {};
+  for (const [key, { percent, points }] of Object.entries(parts)) {
+    // A translate is by a share of the element's own box.
+    const self = key === 'translateX' ? own?.[2] : key === 'translateY' ? own?.[3] : null;
+    // And a basis by a share of the box it is in, the way that box lays it out.
+    const tall = key === 'flexBasis' ? inColumn : MIXED_OF_HEIGHT.has(key);
+    const whole = self !== null ? self : tall ? height : width;
+    // A percentage of a height nothing gave is of nothing: the declaration stays set aside.
+    if (whole === undefined) continue;
+    const value = (percent / 100) * whole + points;
+    // Only an inset, a margin and a translate go below nothing.
+    values[key] = /^(margin|top|right|bottom|left|start|end|translate)/.test(key)
+      ? value
+      : Math.max(value, 0);
+  }
+  return values;
+}
+
+/** The sizes CSS has keywords for, which a box is fitted to by the engine: `fit-content`. */
+const SIZE_KEYS = new Set([
+  ...['width', 'height', 'minWidth', 'minHeight', 'maxWidth', 'maxHeight', 'flexBasis'],
+]);
+/** What only the engine reads, whatever it is set to: no native view lays out by any of them. */
+const LAID_OUT_HERE = new Set(['order', 'justifySelf']);
+const POSITIONS_HERE = new Set(['static']);
+
+/** What a declaration can ask of the engine that an app of plain flex does not: see `asks`. */
+const CSS_LAYOUT = 1;
+const MIXED_SIZES = 2;
+const SHARED_WIDTHS = 4;
+const TRANSITIONS = 8;
+const SHARED_HEIGHTS = 16;
+/** What the engine lays out in Yoga's place, of those. */
+const LAYOUTS = CSS_LAYOUT | MIXED_SIZES | SHARED_WIDTHS | SHARED_HEIGHTS;
+const EVERYTHING = LAYOUTS | TRANSITIONS;
+/** What a value that may be a share or a sum, known only once a token is, asks for. */
+const SHARES = MIXED_SIZES | SHARED_WIDTHS | SHARED_HEIGHTS;
+
+/**
+ * What a declaration asks for that the engine works out in Yoga's place, each a bit:
+ *
+ * - a layout CSS has and Yoga has not: a block or a grid, a box in a line, a position that is
+ *   not a native view's, a size that is a keyword, an automatic minimum;
+ * - a percentage with a length added, `calc(100% - 32px)`, which Yoga has no value for;
+ * - a width that is a share of its box, which is fitted where that box is as wide as its
+ *   content;
+ * - a height that is a share of its box, which is held at its content's height where it is as
+ *   tall as its content;
+ * - a transition or an animation, which native lays out where nothing else in its commit
+ *   moves, so the boxes a commit moves are noted.
+ *
+ * See `Engine.asked`: a node is asked nothing of what no declaration in the app has asked for.
+ */
+function asks(key: string, value: unknown): number {
+  // A transition or an animation, as each of their declarations is kept: `$transition`.
+  if (key.startsWith('$')) return TRANSITIONS;
+  if (typeof value === 'string') return asksByText(key, value);
+  if (LAID_OUT_HERE.has(key)) return CSS_LAYOUT;
+  // A move by a share with a length added is inside a transform's own list of values, and
+  // nothing else's: see `takeMixedTranslate`.
+  if (key !== 'transform' || value === null || typeof value !== 'object') return 0;
+  return JSON.stringify(value).includes('calc(') ? MIXED_SIZES : 0;
+}
+
+function asksByText(key: string, value: string): number {
+  if (key === 'display') return value !== 'flex' && value !== 'none' ? CSS_LAYOUT : 0;
+  if (key === 'position') return POSITIONS_HERE.has(value) ? CSS_LAYOUT : 0;
+  if (LAID_OUT_HERE.has(key)) return CSS_LAYOUT;
+  // A sum with a share of a height in it is held as a share of one is.
+  if (value.startsWith('calc(')) return MIXED_SIZES | (value.includes('%') ? heightShare(key) : 0);
+  return SIZE_KEYS.has(key) ? asksBySize(key, value) : 0;
+}
+
+/** What a share of its box asks for, by the size it is. */
+const SHARES_OF: Record<string, number> = {
+  width: SHARED_WIDTHS,
+  minWidth: SHARED_WIDTHS,
+  height: SHARED_HEIGHTS,
+  minHeight: SHARED_HEIGHTS,
+  flexBasis: SHARED_HEIGHTS,
+};
+
+const heightShare = (key: string): number =>
+  SHARES_OF[key] === SHARED_HEIGHTS ? SHARED_HEIGHTS : 0;
+
+/** What a size asks for: a share of its box, an automatic minimum, or a keyword of CSS's. */
+function asksBySize(key: string, value: string): number {
+  const least = key === 'minWidth' || key === 'minHeight';
+  if (value.endsWith('%')) return SHARES_OF[key] ?? 0;
+  if (value === 'auto') return least ? CSS_LAYOUT : 0;
+  return value.includes('content') ? CSS_LAYOUT : 0;
+}
+
+/**
+ * Whether a box out of the flow asks for one by what it is merged as: a margin that is `auto`,
+ * which Yoga does not centre such a box by. Read off the node, as no one declaration says it.
+ */
+function asksOfPlaced(props: Record<string, unknown>): boolean {
+  return props['position'] === 'absolute' && MARGIN_KEYS.some((key) => props[key] === 'auto');
+}
+
+/** What a node's own style would have the engine plan, of a layout of CSS's. */
+function unaskedPlan(node: EngineNode): string[] {
+  const missed: string[] = [];
+  const [display, position] = [readStyle(node, 'display'), readStyle(node, 'position')];
+  if (isBlockContainer(display)) missed.push(`display ${String(display)}`);
+  if (position === 'static') missed.push(`position ${position}`);
+  if (readStyle(node, 'order') != null) missed.push('order');
+  return missed;
+}
+
+/**
+ * How a test run has every engine take what is asked of it, to prove that asking changes
+ * nothing but the work done: `all` asks for everything from the start, as every app was laid
+ * out before anything was left unasked, and `check` throws where a node would be laid out by
+ * something nothing asked for.
+ */
+const askMode = (): 'all' | 'check' | undefined =>
+  (globalThis as { ɵngNativeLayoutAsks?: 'all' | 'check' }).ɵngNativeLayoutAsks;
+
+/** What the declarations of a style ask for, together. */
+function styleAsks(style: unknown): number {
+  if (style === null || typeof style !== 'object') return 0;
+  let asked = 0;
+  if (Array.isArray(style)) {
+    for (const each of style) asked |= styleAsks(each);
+    return asked;
+  }
+  for (const key in style) asked |= asks(key, (style as Record<string, unknown>)[key]);
+  return asked;
+}
+
+/**
+ * What a declaration asks for whose value is not known until a token is. A layout of CSS's
+ * where the property could be given one, whatever the token turns out to hold. A share or a
+ * sum only where it is written into the declaration itself, `calc(100% - var(--gap))`: one
+ * that is the token's value and nothing more is asked for by the token, in `tokenAsks`.
+ */
+function lateAsks(late: DeferredDeclaration): number {
+  let asked = 0;
+  for (const prop of late.props) {
+    if (prop === 'display' || prop === 'position' || LAID_OUT_HERE.has(prop)) asked |= CSS_LAYOUT;
+    if (prop.startsWith('$')) asked |= TRANSITIONS;
+  }
+  const text = JSON.stringify(late);
+  if (text.includes('"percent"') || text.includes('%') || text.includes('calc(')) {
+    asked |= SHARES;
+  }
+  return asked;
+}
+
+/** What a token asks for, by the value it holds: a share, a sum, or a keyword of a size. */
+function tokenAsks(token: TokenValue): number {
+  let asked = 0;
+  if (typeof token.length === 'string') asked |= SHARES;
+  const several = token.lengths ?? token.deferredLengths;
+  if (several?.some((each) => typeof each !== 'number')) asked |= SHARES;
+  const keyword = token.keyword;
+  if (keyword !== undefined && (keyword === 'auto' || keyword.includes('content'))) {
+    asked |= CSS_LAYOUT;
+  }
+  if (token.transform && JSON.stringify(token.transform).includes('calc(')) asked |= MIXED_SIZES;
+  return asked;
+}
+
+function tokensAsk(tokens: Readonly<Record<string, TokenValue>> | undefined): number {
+  let asked = 0;
+  for (const name in tokens) asked |= tokenAsks(tokens[name]!);
+  return asked;
+}
+
+/** What the rules of a sheet ask for, together: stopped once it is everything. */
+function sheetAsks(sheet: StyleSheet): number {
+  let asked = 0;
+  for (const rule of sheet.rules) {
+    asked |= styleAsks(rule.declarations) | styleAsks(rule.important);
+    for (const late of rule.deferred ?? []) asked |= lateAsks(late);
+    asked |= tokensAsk(rule.tokens);
+    if (asked === EVERYTHING) return asked;
+  }
+  // A frame of an animation is a style too, for as long as it plays.
+  for (const frames of Object.values(sheet.keyframes ?? {})) {
+    for (const frame of frames) asked |= styleAsks(frame.declarations);
+  }
+  return asked;
+}
+
+/** The displays whose box lays out what it holds itself, as items. */
+const LAYS_OUT_ITSELF = new Set(['flex', 'inline-flex', 'grid', 'inline-grid']);
+
+/** Whether a node lays its children out along a row: a flex row, or a block's lines. */
+function isRow(node: EngineNode): boolean {
+  if (node.flow) return node.flow.plan.kind === 'lines';
+  const direction = readStyle(node, 'flexDirection');
+  return direction === 'row' || direction === 'row-reverse';
+}
+
+/**
+ * Whether what a node holds has somewhere to wrap, which is what lets its content get narrower:
+ * between two words of its text, or between two boxes of a line.
+ */
+const wraps = (node: EngineNode): boolean =>
+  breaksBetweenBoxes(node) ||
+  node.childList.some((child) =>
+    child.nodeKind === 'text'
+      ? /\S\s+\S/.test(child.nodeText)
+      : child.nodeKind === 'element' && wraps(child),
+  );
+
+/** Whether a block holds a line of more than one box: all it holds, or a run among its blocks. */
+function breaksBetweenBoxes(node: EngineNode): boolean {
+  const flow = node.flow;
+  if (!flow) return false;
+  if (flow.plan.kind === 'lines') return flow.members.size > 1;
+  for (const line of flow.plan.lines.values()) if (line.boxes.length > 1) return true;
+  return false;
+}
+
+const isAuto = (value: unknown): boolean => value == null || value === 'auto';
+
+/**
+ * `min-width: auto` and `min-height: auto`, which a browser gives every flex item: one that
+ * shrinks stops at its content. Yoga's minimum is nothing, so the item is kept from shrinking
+ * where its content cannot get smaller: down a column, and along a row when no text in it has
+ * anywhere to wrap. Not for an item that clips, whose minimum is nothing in a browser too.
+ *
+ * ponytail: an item holding text that wraps still shrinks under its longest word, and one with
+ * a size or a basis of its own under its content. Both need the content measured: commit the
+ * item's text a word to a line, as a grid's min-content is read, if either turns up.
+ */
+function autoMinimum(node: EngineNode, props: Record<string, unknown>): void {
+  node.autoMin = undefined;
+  const parent = node.parent;
+  if (!parent || !staysInFlow(props)) return;
+  const row = isRow(parent);
+  if (props[row ? 'minWidth' : 'minHeight'] !== 'auto') return;
+  if (!isAuto(props[row ? 'width' : 'height']) || !sizedByContent(props)) return;
+  if (row) {
+    node.autoMin = true;
+    if (wraps(node)) return;
+  }
+  props['flexShrink'] = 0;
+}
+
+/**
+ * The other half of `min-width: auto`: an item of a row with a share or a basis of its own,
+ * `flex: 1`, which a browser stops at the narrowest its content goes. That has to be measured,
+ * so the item is noted for `settleMinimums`, committed once as its content makes it, and given
+ * the width that came to as its minimum from then on. Answers whether it is such an item.
+ */
+function shareMinimum(node: EngineNode, props: Record<string, unknown>): boolean {
+  if (!sharesFromContent(node, props)) {
+    node.shareMin = undefined;
+    return false;
+  }
+  node.shareMin ??= {};
+  if (node.shareOff) {
+    contentSized(props);
+    delete props['flexBasis'];
+    props['flexShrink'] = 0;
+  } else if (node.shareMin.width !== undefined) {
+    props['minWidth'] = node.shareMin.width;
+    sharedOut(props, node.shareMin.share);
+  }
+  return true;
+}
+
+/** Whether an item's minimum is its content's and it takes a share of a row: see `shareMinimum`. */
+function sharesFromContent(node: EngineNode, props: Record<string, unknown>): boolean {
+  const parent = node.parent;
+  if (!parent || !staysInFlow(props) || !isRow(parent)) return false;
+  if (props['minWidth'] !== 'auto' || !isAuto(props['width']) || sizedByContent(props))
+    return false;
+  return props['aspectRatio'] == null && (props['overflow'] ?? 'visible') === 'visible';
+}
+
+/**
+ * Give an item the share of its line that `lineShares` worked out, as a width: Yoga hands out
+ * what is left of a line after each item's minimum, where a browser hands out the whole line
+ * and then holds an item to its minimum, so the two disagree wherever an item has one.
+ */
+function sharedOut(props: Record<string, unknown>, share: number | undefined): void {
+  if (share === undefined) return;
+  props['width'] = share;
+  props['flexGrow'] = 0;
+  delete props['flex'];
+  delete props['flexBasis'];
+}
+
+/** What a row's item brings to its line: how it grows, and the least it can be. */
+interface Sharer {
+  readonly grow: number;
+  readonly least: number;
+  /** Its margins along the row, which are room no item is given. */
+  readonly around: number;
+}
+
+/**
+ * The widths of a row's items, each growing from nothing into a line of `room`, as CSS lays a
+ * line out: the items a line holds are those whose least widths fit it, the line's room is
+ * shared by how each grows, and an item that comes out under its least is held at it while the
+ * rest share what is left.
+ */
+function lineShares(items: readonly Sharer[], room: number, gap: number, wraps: boolean): number[] {
+  const widths: number[] = [];
+  let line: Sharer[] = [];
+  let taken = 0;
+  const close = () => {
+    widths.push(...sharedLine(line, room - gap * (line.length - 1)));
+    line = [];
+    taken = 0;
+  };
+  for (const item of items) {
+    const needs = item.least + item.around;
+    if (wraps && line.length && taken + gap + needs > room + 0.01) close();
+    taken += (line.length ? gap : 0) + needs;
+    line.push(item);
+  }
+  if (line.length) close();
+  return widths;
+}
+
+function sharedLine(line: readonly Sharer[], room: number): number[] {
+  const held = new Set<Sharer>();
+  for (;;) {
+    const free = line.filter((item) => !held.has(item));
+    const left =
+      room - line.reduce((sum, item) => sum + item.around + (held.has(item) ? item.least : 0), 0);
+    const growth = free.reduce((sum, item) => sum + item.grow, 0);
+    // Nothing left to grow: each is the least it can be.
+    if (!growth) return line.map((item) => item.least);
+    const under = free.filter((item) => (left * item.grow) / growth < item.least);
+    if (!under.length) {
+      return line.map((item) =>
+        held.has(item) ? item.least : Math.max((left * item.grow) / growth, 0),
+      );
+    }
+    for (const item of under) held.add(item);
+  }
+}
+
+/** A node's margins along a row, in points: what a line has less of for it. */
+function marginsAlong(node: EngineNode): number {
+  const margin = (side: string) => {
+    const value =
+      readStyle(node, side) ?? readStyle(node, 'marginHorizontal') ?? readStyle(node, 'margin');
+    return typeof value === 'number' ? value : 0;
+  };
+  return margin('marginLeft') + margin('marginRight');
+}
+
+const sameShare = (a: number | undefined, b: number | undefined): boolean =>
+  a === b || (a !== undefined && b !== undefined && Math.abs(a - b) < 0.01);
+
+const staysInFlow = (props: Record<string, unknown>): boolean =>
+  props['position'] !== 'absolute' && props['position'] !== 'fixed';
+
+/** No basis, share or proportion of its own, and nothing clipped: its content is its size. */
+const sizedByContent = (props: Record<string, unknown>): boolean =>
+  props['flex'] == null &&
+  isAuto(props['flexBasis']) &&
+  props['aspectRatio'] == null &&
+  (props['overflow'] ?? 'visible') === 'visible';
+
+/**
+ * A box as its content makes it, while the box it is in is measured: a percentage width is of a
+ * width not known yet, and a basis of nothing is what a share of that width starts from, so
+ * neither says anything about how wide the content is. Nor does a share of the room left over,
+ * which React Native's Yoga hands out of all the room a row could have.
+ */
+function contentSized(props: Record<string, unknown>): void {
+  if (typeof props['width'] === 'string') delete props['width'];
+  // The least it may be, as a share, is of a width not known yet either.
+  if (isShare(props['minWidth'])) delete props['minWidth'];
+  delete props['flex'];
+  delete props['flexGrow'];
+  if (isNoBasis(props['flexBasis'])) delete props['flexBasis'];
+}
+
+const isNoBasis = (value: unknown): boolean => value === 0 || value === '0%';
+
+/** A picture with its share set aside is as wide as it is itself, as its content. */
+function pictureWide(node: EngineNode, props: Record<string, unknown>): void {
+  const own = node.props[INTRINSIC_SIZE] as IntrinsicSize | undefined;
+  if (own && !isSet(props['width'])) props['width'] = own.width;
+}
+
+/** The first of these a style sets: a side, then the shorthands React Native reads it from. */
+function firstOf(style: Record<string, unknown>, keys: readonly string[]): unknown {
+  for (const key of keys) if (style[key] != null) return style[key];
+  return undefined;
+}
+
+const SIDES = ['Top', 'Right', 'Bottom', 'Left'] as const;
+const AXIS = { Top: 'Vertical', Bottom: 'Vertical', Left: 'Horizontal', Right: 'Horizontal' };
+
+/**
+ * What the edges of a box take from its inside, on each side: its padding and its border, or
+ * its padding alone. A padding written as a percentage is of `whole`, the width of the box it
+ * is in, and nothing where that is not given.
+ */
+function insets(
+  style: Record<string, unknown>,
+  whole = 0,
+  border = true,
+): Record<(typeof SIDES)[number], number> {
+  const points = (value: unknown) =>
+    typeof value === 'number' ? value : (resolveLength(value, whole) ?? 0);
+  const side = (name: (typeof SIDES)[number]) =>
+    points(firstOf(style, [`padding${name}`, `padding${AXIS[name]}`, 'padding'])) +
+    (border ? points(firstOf(style, [`border${name}Width`, 'borderWidth'])) : 0);
+  return { Top: side('Top'), Right: side('Right'), Bottom: side('Bottom'), Left: side('Left') };
+}
+
+/** A block container's plan, and the children it covers. */
+interface Flow {
+  readonly plan: FlowPlan<EngineNode>;
+  readonly members: ReadonlySet<EngineNode>;
+  /** The boxes in a line box among blocks, each named by the first box of its line. */
+  readonly lined: ReadonlyMap<EngineNode, EngineNode>;
+  /**
+   * The room its lines need under the baseline, as `hang` works it out: of a block of lines, and
+   * of each line among blocks by its first box.
+   */
+  under?: number;
+  unders?: ReadonlyMap<EngineNode, number>;
+  /** How far each box on a line sits over the bottom of it, as a margin: see `onBaseline`. */
+  lifts?: ReadonlyMap<EngineNode, number>;
+  /** How far each box of a known height is moved down its line, as a margin: see `liftLines`. */
+  rises?: ReadonlyMap<EngineNode, number>;
+  /** Whether a box of each line reaches as high as its strut, which then holds it no taller. */
+  risen?: boolean;
+}
+
+/**
+ * A line box as it was last committed, kept on the first box of its run. It is what its boxes
+ * are committed under: a box whose line box is another view is made again, since native never
+ * moves a view to another parent. No view yet, before the first commit of it.
+ */
+interface LineBox {
+  handle: FabricNode | null;
+  top: number;
+  /** Where its boxes sit along it, by the `text-align` its container has: see `alongLine`. */
+  along?: string;
+  /** How tall its strut holds it, and the room in that under the baseline: see `lineStrut`. */
+  strut?: LineStrut;
+  handles: readonly FabricNode[];
+  in: EngineNode;
+}
+
+/**
+ * A line box: the view a run of inline-level boxes among blocks is committed in, which no node
+ * of the app stands for. A row that wraps, with its boxes on the bottom of each line as empty
+ * boxes sit on a baseline. It is static and takes no touch, so what is placed or pressed inside
+ * it is placed against and reaches the same boxes as if it were not there.
+ */
+/** A line box's strut, as the props of the row it is: see `lineStrut`. */
+interface LineStrut {
+  minHeight: number;
+  alignContent: string;
+}
+
+/**
+ * The strut of a line among blocks, as `strutLine` has it for a block of lines: at least the
+ * line's height, the room over the baseline and the room `under` it, which its boxes keep as
+ * margins (see `hang`), on the bottom of the row the line is.
+ */
+function lineStrut(
+  inherited: Record<string, unknown>,
+  container: EngineNode,
+  first: EngineNode,
+  fontScale: number | undefined,
+): LineStrut {
+  if (risenLine(container, first)) return RISEN;
+  const under = underLine(container, first);
+  const above = strutOf(inherited).above * textScale(inherited, fontScale);
+  return { minHeight: Math.round((above + under) * 1000) / 1000, alignContent: 'flex-end' };
+}
+
+/** Whether two plans of a block hang their lines the same: see `Engine.liftLines`. */
+const sameHang = (a: Flow | undefined, b: Flow | undefined): boolean =>
+  (a?.under ?? 0) === (b?.under ?? 0) &&
+  sameLifts(a?.lifts, b?.lifts) &&
+  sameLifts(a?.rises, b?.rises);
+
+function sameLifts(
+  a: ReadonlyMap<EngineNode, number> = NO_LIFTS,
+  b: ReadonlyMap<EngineNode, number> = NO_LIFTS,
+): boolean {
+  if (a.size !== b.size) return false;
+  for (const [box, lift] of a) if (b.get(box) !== lift) return false;
+  return true;
+}
+const NO_LIFTS: ReadonlyMap<EngineNode, number> = new Map();
+
+/**
+ * The height of an empty box, where it is known before layout: in points, or a share of `whole`,
+ * with its padding and border where those are outside it or are all it has.
+ */
+function knownHeight(
+  style: Record<string, unknown>,
+  whole: number | undefined,
+): number | undefined {
+  const edges = ['padding', 'paddingVertical', 'paddingTop', 'paddingBottom', 'borderWidth'];
+  if (edges.some((key) => style[key] != null && typeof style[key] !== 'number')) return undefined;
+  if (style['aspectRatio'] != null || style['minHeight'] != null || style['maxHeight'] != null)
+    return undefined;
+  const edge = insets(style);
+  const frame = edge.Top + edge.Bottom;
+  const height = style['height'];
+  if (height == null || height === 'auto') return frame;
+  const own =
+    typeof height === 'number'
+      ? height
+      : isPercent(height) && whole !== undefined
+        ? (Number.parseFloat(height as string) / 100) * whole
+        : undefined;
+  if (own === undefined) return undefined;
+  return style['boxSizing'] === 'content-box' ? own + frame : Math.max(own, frame);
+}
+
+/** A line among blocks that a box on it holds as tall as its strut: see `Engine.riseLines`. */
+const risenLine = (container: EngineNode, first: EngineNode): boolean =>
+  container.flow?.plan.lines.get(first)?.boxes.some((box) => container.flow?.rises?.has(box)) ===
+  true;
+const RISEN: LineStrut = { minHeight: 0, alignContent: 'flex-start' };
+
+/** The room under the baseline of a line among blocks, by its first box. */
+const underLine = (container: EngineNode, first: EngineNode): number =>
+  container.flow?.unders?.get(first) ?? 0;
+
+const sameStrut = (a: LineStrut | undefined, b: LineStrut): boolean =>
+  a?.minHeight === b.minHeight && a.alignContent === b.alignContent;
+
+const LINE_BOX = {
+  flexDirection: 'row',
+  flexWrap: 'wrap',
+  alignItems: 'flex-end',
+  alignContent: 'flex-start',
+  position: 'static',
+  pointerEvents: 'box-none',
+};
+
+/** What a flex container says about its children, which a block container does not. */
+const FLEX_CONTAINER_KEYS = [
+  'flexDirection',
+  'flexWrap',
+  'justifyContent',
+  'alignItems',
+  'alignContent',
+  'gap',
+  'rowGap',
+  'columnGap',
+];
+/** What a flex item says about itself, which a box in a block container's flow does not. */
+const FLEX_ITEM_KEYS = ['flex', 'flexGrow', 'flexShrink', 'flexBasis'];
+
+/** The shorthands React Native reads a side from when the side itself is not set. */
+const FLOW_SOURCES: Readonly<Record<FlowKey, readonly string[]>> = {
+  display: ['display'],
+  position: ['position'],
+  marginTop: ['marginTop', 'marginVertical', 'margin'],
+  marginBottom: ['marginBottom', 'marginVertical', 'margin'],
+  paddingTop: ['paddingTop', 'paddingVertical', 'padding'],
+  paddingBottom: ['paddingBottom', 'paddingVertical', 'padding'],
+  borderTopWidth: ['borderTopWidth', 'borderWidth'],
+  borderBottomWidth: ['borderBottomWidth', 'borderWidth'],
+  height: ['height'],
+  minHeight: ['minHeight'],
+  overflow: ['overflow'],
+  aspectRatio: ['aspectRatio'],
+};
+const FLOW_PROPS = [...new Set(Object.values(FLOW_SOURCES).flat())];
+
+/**
+ * A block container and the boxes in its flow, as the flex column and items Yoga lays out.
+ *
+ * The container is committed as `flex`, without the flex properties a block has no use for, or
+ * as a wrapping row where it holds lines of inline-blocks. A box in its flow loses the flex item
+ * properties, and takes the margins the container's plan collapsed for it. See `flow.ts`.
+ */
+function flowLayout(
+  node: EngineNode,
+  props: Record<string, unknown>,
+  fontScale: number | undefined,
+): void {
+  // Where it sits, in a line or as a block, is the plan's to say: what it holds is a flex box.
+  if (props['display'] === 'inline-flex') props['display'] = 'flex';
+  if (isBlockContainer(props['display'])) blockContainer(node, props, fontScale);
+  const flow = flowOver(node);
+  if (!flow) return;
+  for (const key of FLEX_ITEM_KEYS) delete props[key];
+  // A box in lines is in a line, whatever it is: an inline-block's `auto` margins are none.
+  if (flow.plan.kind !== 'block') return placeInFlow(props, true, false);
+  // A block fills the width, and a box in a line among blocks is as wide as its content, as an
+  // item of the row its line box is. So is a block that is `fit-content`, which `fitContent` has
+  // kept from stretching.
+  if (!fitsWidth(node)) delete props['alignSelf'];
+  // And its `auto` margins are of a browser's block, not of a flex item.
+  placeInFlow(props, flow.plan.inline.has(node), fitsWidth(node));
+  const margins = flow.plan.margins?.get(node);
+  if (!margins) return;
+  props['marginTop'] = margins.top;
+  props['marginBottom'] = margins.bottom;
+}
+
+/** Where in its line a `vertical-align` sits a box, as the row the line is places an item. */
+const LINE_ALIGNED: Readonly<Record<string, string>> = {
+  center: 'center',
+  top: 'flex-start',
+  bottom: 'flex-end',
+};
+
+/**
+ * `vertical-align: middle`, `top` or `bottom` on a box in a line: an arrow after a label's
+ * words, which on the bottom of the line hangs under them. Text takes the keyword itself.
+ *
+ * ponytail: the middle of the line's height, where CSS means half an x-height over the
+ * baseline. The two are a point or so apart in a line of one size of text.
+ */
+function alignedInLine(node: EngineNode, props: Record<string, unknown>): void {
+  const where = LINE_ALIGNED[props['textAlignVertical'] as string];
+  if (where === undefined || isTextElement(node)) return;
+  const flow = flowOver(node);
+  if (flow?.plan.kind === 'lines' || flow?.lined.has(node)) props['alignSelf'] = where;
+}
+
+/**
+ * A block of a set height that clips, as the column Yoga does not squeeze the children of: it
+ * measures a column's child to fit the column's height, so the words in a panel closed to no
+ * height are none tall, where a block's content is as tall as it is and is clipped. A column
+ * that scrolls is measured as CSS has it, and a view told it scrolls clips as one told it hides.
+ *
+ * ponytail: a clipped block only. One that shows its overflow squeezes its words still, and has
+ * no overflow to tell Yoga of that would not clip them.
+ */
+function unsqueezed(props: Record<string, unknown>): void {
+  if (props['overflow'] === 'hidden' && typeof props['height'] === 'number') {
+    props['overflow'] = 'scroll';
+  }
+}
+
+/**
+ * Where `align-content` puts what a block holds along its height: a browser's button has its
+ * label in the middle by it. It is the main axis of the column a block is, and of its lines
+ * the cross axis of the rows they are, which is `align-content` there too.
+ */
+const ALONG_A_BLOCK: Readonly<Record<string, string>> = {
+  center: 'center',
+  end: 'flex-end',
+  'flex-end': 'flex-end',
+};
+
+/** Where a `text-align` sets the boxes of a line, past its start. */
+const ALONG_A_LINE: Readonly<Record<string, string>> = {
+  center: 'center',
+  end: 'flex-end',
+  right: 'flex-end',
+};
+
+function blockContainer(
+  node: EngineNode,
+  props: Record<string, unknown>,
+  fontScale: number | undefined,
+): void {
+  props['display'] = 'flex';
+  const along = ALONG_A_BLOCK[props['alignContent'] as string];
+  for (const key of FLEX_CONTAINER_KEYS) delete props[key];
+  if (node.flow?.plan.kind !== 'lines') {
+    if (along) props['justifyContent'] = along;
+    return unsqueezed(props);
+  }
+  props['flexDirection'] = 'row';
+  props['flexWrap'] = 'wrap';
+  // An empty box sits on the line's baseline, which is its bottom edge.
+  //
+  // ponytail: and so does one with text, by its bottom edge where a browser has its text's
+  // baseline. Yoga's own baseline alignment sizes a box in the line differently (a share of a
+  // width inside one came to nothing), so it is not used; align by baseline if a line of text
+  // beside boxes is ever seen a few points out.
+  props['alignItems'] = 'flex-end';
+  props['alignContent'] = along ?? 'flex-start';
+  if (strutted(node, props)) strutLine(node, props, textScale(props, fontScale));
+}
+
+/**
+ * A line of boxes as tall as its strut makes it: the room over the baseline and under it, the
+ * one a line box is at least whatever is on it. The boxes sit on the bottom of the row, each
+ * over it by the margin `hang` gives it, so the room under the baseline is inside the row's
+ * content box, and the line's height is a `minHeight` of the row. Scaled as native scales a
+ * line of text, by the system text size: see `lineTall`.
+ */
+function strutLine(node: EngineNode, props: Record<string, unknown>, scale: number): void {
+  // Its boxes reach as high as the strut: see `Engine.riseLines`.
+  if (node.flow?.risen) return;
+  const strut = strutOf(props);
+  const line = strut.above * scale + (node.flow?.under ?? strut.below * scale);
+  const held = atLeastALine(props, line);
+  // The line is the room its height leaves, so it is on the bottom of it, as a browser has the
+  // baseline the room over it down. Not where the box is taller for another reason, as a row
+  // stretches it, which a browser has the line at the top of.
+  if (held && props['alignContent'] === 'flex-start' && contentTall(node, props)) {
+    props['alignContent'] = 'flex-end';
+  }
+}
+
+/**
+ * Whether a box is as tall as what it holds, and no taller: in a column, of blocks or a flex
+ * one, that does not grow it. A row stretches what is in it to its own height, and a grid to
+ * its area's.
+ *
+ * ponytail: a row or a grid that does not stretch is counted as one that does, which leaves
+ * its line at the top of the box where a browser has it a few points down.
+ */
+function contentTall(node: EngineNode, props: Record<string, unknown>): boolean {
+  if (flowOver(node)) return true;
+  if (!node.parent) return true;
+  if (String(readStyle(node.parent, 'display')).includes('grid')) return false;
+  const direction = readStyle(node.parent, 'flexDirection');
+  if (direction === 'row' || direction === 'row-reverse') return false;
+  const grow = props['flexGrow'] ?? props['flex'];
+  return !(typeof grow === 'number' && grow > 0);
+}
+
+/**
+ * Keep a row of boxes at least a line tall, with its padding and border, under the `max-height`
+ * written and over the `min-height`, which wins over it as in CSS. Whether the line is what
+ * holds it that tall, and not the `min-height`.
+ *
+ * ponytail: a `min-height` that is not a length is left as written, with no line under it.
+ */
+function atLeastALine(props: Record<string, unknown>, line: number): boolean {
+  const min = props['minHeight'];
+  if (min != null && min !== 'auto' && typeof min !== 'number') return false;
+  const around = props['boxSizing'] === 'content-box' ? 0 : aroundALine(props);
+  const max = props['maxHeight'];
+  const capped = typeof max === 'number' ? Math.min(line + around, max) : line + around;
+  const written = typeof min === 'number' ? min : 0;
+  // To a thousandth of a point, as `lineTall` has it.
+  props['minHeight'] = Math.round(Math.max(capped, written) * 1000) / 1000;
+  return capped >= written;
+}
+
+/** How far under its line's baseline a style sets a box: a `vertical-align` of a length below none. */
+const hungBy = (style: Readonly<Record<string, unknown>>): number => {
+  const shift = style['baselineShift'];
+  return typeof shift === 'number' && shift < 0 ? -shift : 0;
+};
+
+/**
+ * A box on a line, over the bottom of the line by what `hang` worked out: the room under the
+ * baseline, less what the box has under its own baseline, and less how far a `vertical-align`
+ * length hangs it under the line's.
+ *
+ * ponytail: one room for a block of lines, the deepest of any of them. A line that wraps gives
+ * every line the room of the deepest box: lay each line out by its own boxes if a stylesheet
+ * hangs a box in a paragraph.
+ */
+function onBaseline(node: EngineNode, props: Record<string, unknown>): void {
+  const flow = node.parent?.flow;
+  const lift = flow?.lifts?.get(node) ?? 0;
+  delete props['baselineShift'];
+  riseOnLine(props, flow?.rises?.get(node) ?? 0);
+  if (lift <= 0) return;
+  const written = firstOf(props, ['marginBottom', 'marginVertical', 'margin']);
+  // A share of the width has no sum with the room in Yoga: it is kept, and the room is not.
+  if (typeof written === 'string' && written !== 'auto') return;
+  props['marginBottom'] = (typeof written === 'number' ? written : 0) + lift;
+}
+
+/**
+ * Whether a box on a line has its baseline at the bottom edge of its margin for clipping what it
+ * holds: an inline-block does (CSS 2.2, 10.8.1). A flex or grid box keeps the baseline of what
+ * it holds, and an element inline in a browser, a span, is no inline-block there whatever the
+ * engine lays it out as: neither clips its baseline away.
+ */
+function clipsToEdge(
+  box: EngineNode,
+  style: Record<string, unknown>,
+  rule: Readonly<Record<string, unknown>>,
+): boolean {
+  if (style['overflow'] !== 'hidden' && style['overflow'] !== 'scroll') return false;
+  // Written so by a stylesheet or a binding: the engine's own default for an element inline in
+  // a browser is no inline-block there.
+  const own = style['display'] !== box.defaultStyle?.['display'] ? style['display'] : undefined;
+  return (rule['display'] ?? own) === 'inline-block';
+}
+
+/** The boxes on a line that lay out as flex or grid, and have a baseline with nothing in them. */
+const FLEX_ON_A_LINE = new Set(['inline-flex', 'inline-grid']);
+
+/** A box's bottom margin in points, or none. */
+const marginUnder = (style: Record<string, unknown>): number => {
+  const margin = firstOf(style, ['marginBottom', 'marginVertical', 'margin']);
+  return typeof margin === 'number' ? margin : 0;
+};
+
+/** A box of a known height moved down its line to reach as high as the strut: see `riseLines`. */
+function riseOnLine(props: Record<string, unknown>, rise: number): void {
+  if (rise <= 0) return;
+  const top = firstOf(props, ['marginTop', 'marginVertical', 'margin']);
+  props['marginTop'] = (typeof top === 'number' ? top : 0) + rise;
+}
+
+/** How far a Latin font rises over its baseline and falls under it, as a share of its size. */
+const FONT_ASCENT = 0.95;
+const FONT_DESCENT = 0.24;
+/** The font size a view has where nothing gave it one, as React Native's text has. */
+const DEFAULT_FONT_SIZE = 14;
+
+/**
+ * The room a line has over and under its baseline with no text on it to make it: a browser lays
+ * a line out around a strut of the container's font, so a line of boxes that sit on the baseline
+ * is the font's ascent over it and its descent under it, each with half of what its line height
+ * adds. Together they are the line height, where that is a length.
+ *
+ * ponytail: the shares are those of the system fonts and of most Latin ones, not read from the
+ * font, and the strut is around the one line, not each of several a row wraps into. Measured
+ * from the font if a line of boxes is ever a point off in one that matters.
+ */
+function strutOf(props: Record<string, unknown>): { above: number; below: number } {
+  const size = typeof props['fontSize'] === 'number' ? props['fontSize'] : DEFAULT_FONT_SIZE;
+  const line = linePoints(props['lineHeight'], size);
+  const leading = typeof line === 'number' ? line - (FONT_ASCENT + FONT_DESCENT) * size : 0;
+  return {
+    above: Math.max(leading / 2 + FONT_ASCENT * size, 0),
+    below: Math.max(leading / 2 + FONT_DESCENT * size, 0),
+  };
+}
+
+/**
+ * A line height in points: a length, or a number under one times the font size, as an inherited
+ * map hands a unitless one down (`{ multiple }`). Nothing for `normal`.
+ *
+ * ponytail: a number of one or more is read as `normal`. Material's table under Tailwind's
+ * `line-height: 1.5` matched Chrome so and was ten boxes out read as points, which says a
+ * line height Material writes in its own tokens is not reaching those boxes. Read every
+ * number as points once that is found.
+ */
+function linePoints(line: unknown, size: number): number | undefined {
+  if (typeof line === 'number') return line;
+  const multiple = (line as { multiple?: unknown } | null)?.multiple;
+  return typeof multiple === 'number' && multiple < 1 ? multiple * size : undefined;
+}
+
+const paddingUnder = (props: Record<string, unknown>): number => {
+  const written = firstOf(props, ['paddingBottom', 'paddingVertical', 'padding']);
+  return typeof written === 'number' ? written : 0;
+};
+
+/**
+ * Whether a line's strut makes its box taller: where nothing else says how tall the box is, and
+ * nothing on the line has text, whose own line is the same room.
+ */
+function strutted(node: EngineNode, props: Record<string, unknown>): boolean {
+  const tall = props['height'] != null && props['height'] !== 'auto';
+  // Between two insets an out-of-flow box is as tall as they leave it.
+  const held =
+    OUT_OF_FLOW.has(props['position'] as string) && isSet(props['top']) && isSet(props['bottom']);
+  return !tall && !held && !holdsText(node);
+}
+
+/** Whether there is text anywhere in what a node holds, typed into a field or written. */
+function holdsText(node: EngineNode): boolean {
+  return node.childList.some((child) => {
+    if (child.nodeKind === 'text') return child.nodeText.trim() !== '';
+    return MEASURED_VIEWS.has(viewNameOf(child)) || holdsText(child);
+  });
+}
+
+/**
+ * The plan a node is laid out by: the one of the block container it was last in the flow of,
+ * where it is still there. A container taken out of the tree is never planned again, so a node
+ * moved out of one still names it, and is asked where it is now.
+ */
+function flowOver(node: EngineNode): Flow | undefined {
+  const container = node.flowIn;
+  if (!container?.flow?.members.has(node)) return undefined;
+  let parent = node.parent;
+  // No box of its own: its children are laid out in the node above it.
+  while (parent && parent !== container && readStyle(parent, 'display') === 'contents') {
+    parent = parent.parent;
+  }
+  return parent === container ? container.flow : undefined;
+}
+
+/** One key of a `[style]` value, an object or a list of them, without copying it. */
+function styleKey(value: unknown, key: string): unknown {
+  if (!value || typeof value !== 'object') return undefined;
+  if (!Array.isArray(value)) return (value as Record<string, unknown>)[key];
+  for (let i = value.length - 1; i >= 0; i--) {
+    const found = styleKey(value[i], key);
+    if (found !== undefined) return found;
+  }
+  return undefined;
+}
+
+/** What a node's own style says for `key`, as `ownLayout` answers it, without an allocation. */
+function readStyle(node: EngineNode, key: string): unknown {
+  const props = node.props;
+  // Asked of most nodes more than once a commit, and most have neither of the first two.
+  const over = props[STYLE_OVERRIDE];
+  const inline = props['style'];
+  return (
+    (over === undefined ? undefined : styleKey(over, key)) ??
+    (inline === undefined ? undefined : styleKey(inline, key)) ??
+    props[key] ??
+    node.styleCache?.style[key] ??
+    node.defaultStyle?.[key]
+  );
+}
+
+/** Whether a plan lays `child` out the same way in both: in the flow, with the same margins. */
+function sameFlow(child: EngineNode, before: Flow, after: Flow): boolean {
+  if (!before.members.has(child) || !after.members.has(child)) return false;
+  if (before.lined.has(child) !== after.lined.has(child)) return false;
+  const a = before.plan.margins?.get(child);
+  const b = after.plan.margins?.get(child);
+  return a?.top === b?.top && a?.bottom === b?.bottom;
+}
+
+/** Have merged again each child a container's new plan no longer covers. */
+function leaveFlow(container: EngineNode, before: Flow | undefined, after: Flow | undefined): void {
+  for (const child of before?.members ?? []) {
+    if (after?.members.has(child)) continue;
+    child.propsDirty = true;
+    if (child.flowIn === container) child.flowIn = undefined;
+  }
+}
+
+/** Have merged again each child a container's new plan covers differently, or for the first time. */
+function joinFlow(container: EngineNode, before: Flow | undefined, after: Flow | undefined): void {
+  if (!after) return;
+  for (const child of after.members) {
+    if (before && sameFlow(child, before, after)) continue;
+    child.propsDirty = true;
+    child.flowIn = container;
+  }
+}
+
+/** The least alpha iOS sends a touch to a view at: under a hundredth it is passed over. */
+const TOUCHED_ALPHA = 0.011;
+
+/**
+ * A view that takes a touch and has no opacity, committed with the least there is to be sent
+ * one. A browser sends a press to an element at `opacity: 0`, which is how a see-through
+ * backdrop hears a press outside a menu; iOS passes over a view it would not draw. A hundredth
+ * of what the view draws is not seen.
+ */
+function stillTouched(props: Record<string, unknown>): Record<string, unknown> {
+  // One told to take no touch is not to be sent one, seen or not.
+  if (props['pointerEvents'] === 'none') return props;
+  const opacity = props['opacity'];
+  if (typeof opacity === 'number' && opacity < TOUCHED_ALPHA) props['opacity'] = TOUCHED_ALPHA;
+  return props;
+}
+
+/** Every prop `setOwned` can set, as a payload that changes them all. */
+const RESET_OWNED: Readonly<Record<string, unknown>> = { opacity: undefined, transform: undefined };
+
+/** As Animated does: a view native sets values on is kept, or there is no view to set them on. */
+function keptForNative(node: EngineNode, props: Record<string, unknown>): void {
+  if (node.owned && props['collapsable'] === undefined) props['collapsable'] = false;
+}
+
 /**
  * A box with `display: none`, out of the flow as well. It takes no room either way, but Yoga
  * reads an item's baseline from its first child that is in the flow, and a hidden one has no
@@ -1560,16 +3005,127 @@ function hiddenOutOfFlow(props: Record<string, unknown>): void {
 }
 
 /**
+ * A placeholder's opacity, which native has none for, as its colour faded by that share: none of
+ * it at 0, which is how a stylesheet hides a placeholder under a label, and all of it at 1.
+ *
+ * ponytail: with no colour of its own the placeholder is native's default, and a platform colour
+ * is native's to resolve: neither is known here, so each is hidden at 0 and left as it is above
+ * that. Name the platform's default, or read the colour back, if one is faded part of the way.
+ */
+function placeholderFaded(props: Record<string, unknown>): void {
+  const opacity = props['placeholderOpacity'];
+  if (opacity === undefined) return;
+  delete props['placeholderOpacity'];
+  if (typeof opacity !== 'number' || opacity >= 1) return;
+  const colour = props['placeholderTextColor'];
+  if (typeof colour === 'string')
+    props['placeholderTextColor'] = faded(colour, Math.max(opacity, 0));
+  else if (opacity <= 0) props['placeholderTextColor'] = 'rgba(0, 0, 0, 0)';
+}
+
+/**
  * `height: 50%` under a parent with no height to take it of, which CSS reads as `auto`. Yoga
  * takes it of the space on offer, the screen's or everything a scroll view holds, so no height
- * is sent.
+ * is sent. A `min-height: 50%` there is none either, where Yoga takes it of the screen too.
  */
 function percentHeight(node: EngineNode, props: Record<string, unknown>): void {
-  if (!isPercent(props['height'])) return;
+  const height = isPercent(props['height']);
+  const least = isPercent(props['minHeight']);
+  if (!height && !least) return;
   // Out of the flow, it is of the box that holds it, which is laid out first and has a height.
   if (props['position'] === 'absolute') return;
   const parent = layoutParent(node);
-  if (parent && !definiteHeight(parent)) delete props['height'];
+  if (!parent) return;
+  if (least && parent.heldAt) heldLeast(props, parent.heldAt.inner);
+  // On a line among blocks, the line box Yoga takes it of is not the block it is a share of.
+  if (height && onLineAmongBlocks(node)) return linedShare(parent, props);
+  if (definiteHeight(parent)) return;
+  if (height) delete props['height'];
+  if (least) delete props['minHeight'];
+}
+
+const onLineAmongBlocks = (node: EngineNode): boolean => flowOver(node)?.lined.has(node) === true;
+
+/**
+ * A gap down a flex container that is a share of its height, as CSS has it: none where the
+ * container has no height to share, as tall as its content, where Yoga takes it of the room on
+ * offer. A grid works out its own gaps, and a block has none.
+ */
+function percentGap(node: EngineNode, props: Record<string, unknown>): void {
+  if (!isPercent(props['rowGap']) || node.flow !== undefined) return;
+  if (!definiteHeight(node)) props['rowGap'] = 0;
+}
+
+/**
+ * A share of the height of a block, on a line among its blocks, as what it comes to: of the
+ * block's content box, where the block is held at its content's height or has a height in
+ * points of its own, and no height where it has none to share. See `Engine.settleHeld`.
+ */
+function linedShare(parent: EngineNode, props: Record<string, unknown>): void {
+  const whole = blockContentHeight(parent);
+  if (whole === undefined) delete props['height'];
+  else props['height'] = (Number.parseFloat(props['height'] as string) / 100) * whole;
+}
+
+/** The height of a block's content box, where it is known before its layout: see `linedShare`. */
+function blockContentHeight(node: EngineNode): number | undefined {
+  if (node.heldAt) return node.heldAt.inner;
+  const height = ownLayout(node, 'height');
+  if (typeof height !== 'number') return undefined;
+  if (readStyle(node, 'boxSizing') === 'content-box') return height;
+  const edge = insets(node.committed?.props ?? {});
+  return Math.max(height - edge.Top - edge.Bottom, 0);
+}
+
+/**
+ * A least height that is a share of a box held at its content's height, as what it comes to:
+ * Yoga takes one down a column as a share of the box above that one. See `Engine.settleHeld`.
+ *
+ * ponytail: under a held box. One under a box with a height of its own is left to Yoga, which
+ * has the same error there; commit it so too if a stylesheet is seen to need it.
+ */
+function heldLeast(props: Record<string, unknown>, inner: number): void {
+  props['minHeight'] = (Number.parseFloat(props['minHeight'] as string) / 100) * inner;
+}
+
+const INLINE_ROWS = new Set(['inline-flex', 'inline-block', 'inline-grid']);
+
+/**
+ * `flex-basis: 50%` in a box that is as wide as its content, or in a column as tall as its
+ * content, which CSS reads as the item's own content: there is no size yet to take a share of. Yoga takes it of nothing, so the item is
+ * as narrow as it can be made, and a chip's words wrap. No basis is sent.
+ *
+ * ponytail: a box in a line with no width of its own, or a row that is `fit-content` or capped
+ * at its content. One sized by its content some other way, a grid track say, is left to Yoga;
+ * name it here if one comes up.
+ */
+function percentBasis(node: EngineNode, props: Record<string, unknown>): void {
+  if (!isPercent(props['flexBasis'])) return;
+  const parent = layoutParent(node);
+  if (!parent) return;
+  // Down a column as tall as what it holds, the share is of a height that is the content's own,
+  // for a box with CSS's automatic minimum: an HTML element. A native view has none, and a
+  // scroll view that shares a column with no height is no taller than nothing, as it was.
+  if (!isRow(parent)) {
+    if (props['minHeight'] === 'auto' && !definiteHeight(parent)) delete props['flexBasis'];
+    return;
+  }
+  if (fitsWidth(parent)) delete props['flexBasis'];
+  else if (INLINE_ROWS.has(readStyle(parent, 'display') as string)) {
+    const width = readStyle(parent, 'width');
+    if (width == null || width === 'auto') delete props['flexBasis'];
+  }
+}
+
+/**
+ * Whether a box is written to be as wide as its content: `width: fit-content`, or a cap at its
+ * content on a width that would otherwise fill what holds it (`capAtContent`).
+ */
+function fitsWidth(node: EngineNode): boolean {
+  const width = readStyle(node, 'width');
+  if (width === 'fit-content') return true;
+  if (readStyle(node, 'maxWidth') !== 'max-content') return false;
+  return width == null || width === 'auto' || isPercent(width);
 }
 
 /**
@@ -1884,6 +3440,71 @@ const trimStart = (text: string): string => text.replace(/^[ \t\n\r\f]+/, '');
 const trimEnd = (text: string): string => text.replace(/[ \t\n\r\f]+$/, '');
 const trimEnds = (text: string): string => trimEnd(trimStart(text));
 
+const NO_BREAK_SPACE = '\u00a0';
+
+/**
+ * A run of text as the words of a line, each with the space after it: a no-break space, which a
+ * paragraph draws at its end where it drops any other. The run's own first and last space are
+ * kept where something on the line is before or after it.
+ *
+ * ponytail: the space is part of the word, so a word that ends its line is a space wider than a
+ * browser has it, and wraps that much sooner.
+ */
+function wordsOf(run: string, leads: boolean, trails: boolean): string[] {
+  const words = run.split(/[ \t\n\r\f]+/).filter((word) => word !== '');
+  if (!words.length) return words;
+  const last = words.length - 1;
+  const spaced = words.map((word, at) => (at < last ? word + NO_BREAK_SPACE : word));
+  if (leads && trimStart(run) !== run) spaced[0] = NO_BREAK_SPACE + spaced[0];
+  if (trails && trimEnd(run) !== run) spaced[last] += NO_BREAK_SPACE;
+  return spaced;
+}
+
+/**
+ * How a paragraph is truncated, which native does by its props: one the engine made around a
+ * view's own words is truncated as the view says, as a browser truncates a block's own text.
+ */
+const TRUNCATION = ['numberOfLines', 'ellipsizeMode'] as const;
+
+/**
+ * The truncation each paragraph made around a view's words was merged with, as the view said it.
+ * Not what it was committed with, which has the paragraph's own defaults in it.
+ */
+const truncatedBy = new WeakMap<EngineNode, readonly unknown[]>();
+
+/** What a view says of how its own words are truncated. */
+const truncationOf = (parent: EngineNode): unknown[] =>
+  TRUNCATION.map((key) => ownLayout(parent, key) ?? null);
+
+/** Whether a paragraph made around a view's words is truncated other than the view now says. */
+function truncationMoved(box: EngineNode, parent: EngineNode): boolean {
+  const merged = truncatedBy.get(box);
+  if (!merged) return false;
+  return truncationOf(parent).some((said, at) => said !== merged[at]);
+}
+
+function truncatedAs(box: EngineNode, props: Record<string, unknown>): void {
+  if (!box.anonymous || !box.parent) return;
+  const said = truncationOf(box.parent);
+  truncatedBy.set(box, said);
+  TRUNCATION.forEach((key, at) => {
+    if (said[at] !== null) props[key] = said[at];
+  });
+}
+
+/**
+ * Whether the words in a box are each placed on its line: a line of words and boxes, where a box
+ * is an element. Beside only the boxes a rule generates, a library's struts, the words are the
+ * one paragraph: nothing is placed after them, and a paragraph is one view for all of them.
+ */
+const wordedLine = (node: EngineNode): boolean =>
+  node.flow?.plan.kind === 'lines' && node.childList.some((child) => child.nodeKind === 'element');
+
+/** The paragraphs the engine made for a run of text written straight into a view. */
+const paragraphsOf = (text: EngineNode): readonly EngineNode[] =>
+  text.box ? [text.box] : (text.words ?? NO_WORDS);
+const NO_WORDS: readonly EngineNode[] = [];
+
 /**
  * The text written inside a view that takes it as a prop: every run joined, with the whitespace at
  * the two ends dropped as a paragraph drops it, and kept inside. A nested view is drawn after the
@@ -2165,6 +3786,8 @@ export interface ViewNameNode {
   readonly childList?: readonly ViewNameNode[];
   /** Set on the paragraph the engine makes for a run of text written straight into a view. */
   readonly anonymous?: boolean;
+  /** Set on a text element that lays out what it holds itself: see `Engine.settleBoxed`. */
+  readonly boxed?: boolean;
   /** Its props, of which `horizontal` decides which scroll view a scroll view is on Android. */
   readonly props?: Readonly<Record<string, unknown>>;
 }
@@ -2177,7 +3800,7 @@ function isTextElement(node: ViewNameNode | null): boolean {
   if (node === null || node.nodeKind !== 'element') return false;
   if (node.tag === 'text') return true;
   // One lookup settles nearly every other element, which is a view.
-  if (registeredViewName(node.tag) !== PARAGRAPH) return false;
+  if (registeredViewName(node.tag) !== PARAGRAPH || node.boxed) return false;
   return !TEXT_ELEMENTS.has(node.tag) || holdsOnlyText(node);
 }
 
@@ -2217,7 +3840,8 @@ function aligningText(node: EngineNode): boolean {
 
 /** Whether a flex container's own style places the run it holds, or stacks the runs it holds. */
 function placesByFlex(node: EngineNode, stacked: boolean): boolean {
-  if (ownLayout(node, 'display') !== 'flex') return false;
+  const display = ownLayout(node, 'display');
+  if (display !== 'flex' && display !== 'inline-flex') return false;
   // A column of them: each a line of its own, where one paragraph would run them on.
   if (stacked) return String(ownLayout(node, 'flexDirection') ?? 'column').startsWith('column');
   return (
@@ -2283,9 +3907,11 @@ export function viewNameOf(node: ViewNameNode): string {
   // Nearly every element: a view of some kind, by its name alone.
   if (registered !== PARAGRAPH) return namedView(node, registered);
   // One of HTML's text elements that holds something other than text: a view.
+  // Or one that lays out what it holds itself: see `Engine.settleBoxed`.
   if (node.tag !== 'text' && TEXT_ELEMENTS.has(node.tag) && !holdsOnlyText(node)) {
     return DEFAULT_VIEW;
   }
+  if (node.boxed) return DEFAULT_VIEW;
   // The paragraph the engine makes for a view's loose text is under a view, whatever the name
   // of the element that view is.
   return nestedText(node) ? VIRTUAL_TEXT : PARAGRAPH;
@@ -2490,7 +4116,7 @@ function writeOwnProps(
   for (const key of Object.keys(own)) {
     if (attributeOnly?.has(key)) continue;
     if (key.includes('-')) aria ||= key.startsWith('aria-');
-    else if (key !== 'style' && key !== INTRINSIC_SIZE && key !== STYLE_OVERRIDE) {
+    else if (!ENGINES_OWN.has(key)) {
       props[key] = committedProp(key, own[key]);
     }
   }
@@ -2727,7 +4353,7 @@ class RetainedNode {
   claimed: true | undefined = undefined;
   dormantHoists: EngineNode[] | null = null;
   committed: Committed | null = null;
-  committedUnder: EngineNode | null = null;
+  committedUnder: EngineNode | LineBox | null = null;
   kept: Map<string, KeptHoist> | undefined = undefined;
   remeasure: true | undefined = undefined;
   oneWord: boolean | undefined = undefined;
@@ -2737,8 +4363,11 @@ class RetainedNode {
   subtreeDirty = false;
   touchWithin: boolean | undefined = undefined;
   box: EngineNode | undefined = undefined;
+  words: EngineNode[] | undefined = undefined;
   anonymous: true | undefined = undefined;
   styled: true | undefined = undefined;
+  bornIn: number | undefined = undefined;
+  truncates: true | undefined = undefined;
   transitions?: Map<string, Transition>;
   playing?: RunningAnimation;
   scrolled?: ScrollAnimation;
@@ -2900,6 +4529,14 @@ export interface EngineOptions {
    * which nothing knows until a view has been laid out - come through `updateTokens` instead.
    */
   tokens?: Readonly<Record<string, TokenValue>>;
+  /**
+   * `strict` lays the app out without Yoga's legacy errata, as a browser would: a percentage
+   * inset or size of an out-of-flow box is of its container's padding box, and one with no inset
+   * starts inside the padding. `compatibility` keeps the errata and is the default, as it is in
+   * React Native, whose `experimental_LayoutConformance` takes the same two modes. Strict commits
+   * the app inside that view, which has no box of its own.
+   */
+  layoutConformance?: 'strict' | 'compatibility';
   /**
    * Report host primitives used without their component (see `claimHost`). Defaults to RN's
    * `__DEV__`, so a release build never looks.
@@ -3108,6 +4745,13 @@ function diffProps(
 const INTRINSIC_SIZE = 'intrinsicSize';
 
 /**
+ * The prop a text field's width in characters is in, where it has no width of its own: HTML's
+ * `size`. Read here for the width it comes to, see `columnsWide`, and not sent to a native
+ * field, which has no such prop.
+ */
+const FIELD_SIZE = 'size';
+
+/**
  * The prop a component puts the style it must have the last word on in, over the caller's.
  *
  * The other end of the scale from `intrinsicSize`. Angular merges a component's host style
@@ -3118,6 +4762,9 @@ const INTRINSIC_SIZE = 'intrinsicSize';
  * at a time, so every other property the caller wrote still applies. It never reaches native.
  */
 const STYLE_OVERRIDE = 'styleOverride';
+
+/** The props that are the engine's to read, and no prop of any native view. */
+const ENGINES_OWN: ReadonlySet<string> = new Set(['style', INTRINSIC_SIZE, STYLE_OVERRIDE]);
 
 interface IntrinsicSize {
   readonly width: number;
@@ -3149,26 +4796,6 @@ function applyIntrinsicSize(props: Record<string, unknown>, size: IntrinsicSize)
 }
 
 const now = (): number => globalThis.performance?.now?.() ?? Date.now();
-
-/** How many boxes `node` is under. */
-/**
- * How deep a node is, with the depth of every box on its way up kept in `known`: the boxes that
- * changed beneath are a node and its ancestors, so each is counted once, not once a box.
- */
-function depthOf(node: EngineNode, known: Map<EngineNode, number>): number {
-  const path: EngineNode[] = [];
-  let depth = -1;
-  for (let up: EngineNode | null = node; up; up = up.parent) {
-    const found = known.get(up);
-    if (found !== undefined) {
-      depth = found;
-      break;
-    }
-    path.push(up);
-  }
-  for (let i = path.length - 1; i >= 0; i--) known.set(path[i]!, ++depth);
-  return depth;
-}
 
 function sameHandles(a: readonly FabricNode[], b: readonly FabricNode[]): boolean {
   return a.length === b.length && a.every((handle, i) => handle === b[i]);
@@ -3215,13 +4842,6 @@ export interface EngineStats {
 
 const FRAME_BUDGET_MS = 8;
 
-/** A solid brush with no colour in it, which stops react-native-svg. */
-const emptyBrush = (value: unknown): boolean =>
-  typeof value === 'object' &&
-  value !== null &&
-  (value as { type?: unknown }).type === 0 &&
-  (value as { payload?: unknown }).payload == null;
-
 /**
  * What one pass of `markUnderHas` has reached after the boxes it asked: each box's place in its
  * list, found once a list, and the elements reached for each rule's subjects. A list of a
@@ -3248,6 +4868,33 @@ class MarkedAfter {
   }
 }
 
+/** How many boxes `node` is under. */
+/**
+ * How deep a node is, with the depth of every box on its way up kept in `known`: the boxes that
+ * changed beneath are a node and its ancestors, so each is counted once, not once a box.
+ */
+function depthOf(node: EngineNode, known: Map<EngineNode, number>): number {
+  const path: EngineNode[] = [];
+  let depth = -1;
+  for (let up: EngineNode | null = node; up; up = up.parent) {
+    const found = known.get(up);
+    if (found !== undefined) {
+      depth = found;
+      break;
+    }
+    path.push(up);
+  }
+  for (let i = path.length - 1; i >= 0; i--) known.set(path[i]!, ++depth);
+  return depth;
+}
+
+/** A solid brush with no colour in it, which stops react-native-svg. */
+const emptyBrush = (value: unknown): boolean =>
+  typeof value === 'object' &&
+  value !== null &&
+  (value as { type?: unknown }).type === 0 &&
+  (value as { payload?: unknown }).payload == null;
+
 export class Engine implements HostEngine {
   /** Scopes the CSS resolver's memo. Bumped once per commit. */
   private styleEpoch = 0;
@@ -3272,6 +4919,8 @@ export class Engine implements HostEngine {
 
   private readonly fabric: FabricUIManager;
   private readonly rootTag: number;
+  /** Whether the app is laid out without Yoga's errata. See `EngineOptions`. */
+  private readonly strict: boolean;
   private readonly styles: StyleResolver;
   /** Whether to run the development checks, which a release build skips. */
   readonly dev: boolean;
@@ -3335,10 +4984,13 @@ export class Engine implements HostEngine {
     this.viewportSize = { width: conditions.width, height: conditions.height };
     this.fontScale = conditions.fontScale;
     if (options.tokens) this.styles.setRootTokens(options.tokens);
+    this.want(tokensAsk(options.tokens));
     this.watchStructure(options.globalStyles);
+    this.watchLayout(options.globalStyles);
     this.watchHas(options.globalStyles);
     this.watchActive(options.globalStyles);
     this.dev = options.dev ?? (globalThis as { __DEV__?: boolean }).__DEV__ === true;
+    this.strict = options.layoutConformance === 'strict';
     if (this.dev) {
       this.styles.onUndefinedToken = (name, props, on) =>
         this.reportUndefinedToken(name, props, on);
@@ -3500,6 +5152,7 @@ export class Engine implements HostEngine {
     if (replacing) this.sheetReplaced(replacing, sheet);
     else this.registerSheet(sheet);
     this.watchStructure(sheet);
+    this.watchLayout(sheet);
     this.watchHas(sheet);
     this.watchActive(sheet);
     this.markPath(this.root);
@@ -3533,6 +5186,7 @@ export class Engine implements HostEngine {
 
   updateTokens(next: Readonly<Record<string, TokenValue>>): void {
     this.styles.setRootTokens({ ...this.styles.rootTokens, ...next });
+    this.want(tokensAsk(next));
     this.root.subtreeDirty = true;
     this.commit();
   }
@@ -3555,7 +5209,9 @@ export class Engine implements HostEngine {
     const visit = (node: EngineNode): void => {
       for (const child of node.childList) {
         // The paragraph of a run of text written straight into a view is kept on the text.
-        if (child.nodeKind === 'text' && child.box?.committed) again(child.box);
+        if (child.nodeKind === 'text') {
+          for (const box of paragraphsOf(child)) if (box.committed) again(box);
+        }
         if (child.nodeKind !== 'element') continue;
         if (child.committed && MEASURED_VIEWS.has(committedViewName(child))) again(child);
         visit(child);
@@ -3710,6 +5366,7 @@ export class Engine implements HostEngine {
     node.templateSheet = sheet;
     this.styles.noteSheet(sheet, true);
     this.watchStructure(sheet);
+    this.watchLayout(sheet);
     this.watchHas(sheet);
     this.watchActive(sheet);
     this.markProps(node);
@@ -3740,6 +5397,8 @@ export class Engine implements HostEngine {
     this.fontScale = next.fontScale;
     this.styles.setConditions(next);
     this.root.subtreeDirty = true;
+    // The window's size is the room everything is in: see `heldIn`.
+    this.changesHeld = false;
     // Committed here rather than left to the next change-detection pass, because there may not
     // be one: no view is dirty, so a tick does no work and never reaches the renderer at all.
     this.commit();
@@ -3758,6 +5417,7 @@ export class Engine implements HostEngine {
       node.styled = html.styled;
     }
     this.watchStructure(sheet);
+    this.watchLayout(sheet);
     this.watchHas(sheet);
     this.watchActive(sheet);
     if (HOISTS[name]) this.hoisted.add(node);
@@ -3887,6 +5547,7 @@ export class Engine implements HostEngine {
     this.styles.noteSheet(sheet, true);
     this.watchStructure(sheet);
     this.watchHas(sheet);
+    this.watchLayout(sheet);
     this.watchActive(sheet);
     this.markProps(node);
   }
@@ -3899,8 +5560,32 @@ export class Engine implements HostEngine {
   setDefaultStyle(node: EngineNode, style: Readonly<Record<string, unknown>> | undefined): void {
     this.noteEasing(style);
     node.defaultStyle = style;
+    if (this.asked !== EVERYTHING) this.want(this.defaultAsks(node, style));
     // Under what the cascade comes to, and read by no selector: nothing is matched again.
     this.markProps(node, false);
+  }
+
+  /**
+   * What a default style asks for. The root component's host is given the surface's height as a
+   * percentage of it, and the surface's height is native's, which nothing is held at: an app of
+   * plain flex that `mount` gives that height is asked nothing for it. See `noteShare`.
+   */
+  private defaultAsks(node: EngineNode, style: unknown): number {
+    const asked = styleAsks(style);
+    return node.parent === this.root ? asked & ~SHARED_HEIGHTS : asked;
+  }
+
+  /**
+   * Say that a browser lays an element out inline, for a package that gives elements a
+   * browser's defaults. `unless-block` is an element with no display of its own, a custom
+   * element: its default display is the engine's from here, an inline-block while it holds only
+   * text and inline-level boxes and a block once it holds one, which cannot sit in a line.
+   */
+  setInline(node: EngineNode, how: 'always' | 'unless-block' | undefined): void {
+    node.inlineLevel = how;
+    this.inlines ||= how !== undefined;
+    this.want(CSS_LAYOUT);
+    this.markProps(node);
   }
 
   /**
@@ -4188,6 +5873,11 @@ export class Engine implements HostEngine {
     if (key === 'style' || key === STYLE_OVERRIDE) this.noteEasing(flattenStyle(value, {}));
   }
 
+  /**
+   * Exempt from the complexity limit deliberately, as `mergeProps` is: run for every prop Angular
+   * writes, where a call more for what a value asks of the engine measured slower in `pnpm bench`.
+   */
+  // eslint-disable-next-line complexity
   setProp(node: EngineNode, key: string, value: unknown): void {
     if (!this.eases) this.noteEasingProp(key, value);
     noteWrite(node, key, value);
@@ -4203,6 +5893,9 @@ export class Engine implements HostEngine {
     } else {
       if (node.props[key] === value) return;
       node.props[key] = value;
+      // A number asks for nothing but by a key the engine alone reads: see `asks`.
+      const asks = typeof value !== 'number' || LAID_OUT_HERE.has(key);
+      if (asks && this.asked !== EVERYTHING) this.askedBy(key, value);
     }
     // Inline style is applied after the cascade and inherited by nothing, so it cannot change
     // what any node matches or inherits. Every other prop can: `[disabled]` is a selector. An
@@ -4309,6 +6002,18 @@ export class Engine implements HostEngine {
     return true;
   }
 
+  /** Note what a prop just set asks for: a style, or one declaration of one. */
+  private askedBy(key: string, value: unknown): void {
+    const bits =
+      key === 'style' || key === STYLE_OVERRIDE
+        ? styleAsks(value)
+        : value === undefined
+          ? 0
+          : asks(key, value);
+    // Nearly always nothing new: what most props and declarations ask for is nothing.
+    if (bits & ~this.asked) this.want(bits);
+  }
+
   /**
    * The style object a node already holds has been changed in place.
    *
@@ -4317,8 +6022,14 @@ export class Engine implements HostEngine {
    * there and may write into it; this is how it says so, since nothing about the object's identity
    * has changed for the props diff to notice.
    */
-  styleChanged(node: EngineNode): void {
+  styleChanged(node: EngineNode, key?: string): void {
     if (!this.eases) this.noteEasingProp('style', node.props['style']);
+    if (this.asked !== EVERYTHING) {
+      const style = node.props['style'] as Record<string, unknown> | undefined;
+      const value = key === undefined ? style : style?.[key];
+      // A number asks for nothing but by a key the engine alone reads: see `asks`.
+      if (typeof value !== 'number' || LAID_OUT_HERE.has(key!)) this.askedBy(key ?? 'style', value);
+    }
     // As `setProp` restyles for a new style object: a child that takes one of its values, an
     // `inherit`, follows the one changed in place too.
     this.markProps(node, this.inlineReachesStyle(node) || node.styleCache?.heirs === true);
@@ -4344,6 +6055,8 @@ export class Engine implements HostEngine {
 
   /** Keep a bound declaration for the cascade to settle, or forget the one kept, with `null`. */
   private keepBound(node: EngineNode, prop: string, bound: DeferredDeclaration | null): void {
+    // A value not known until its token is: taken as asking, where the property could.
+    if (bound) this.want(lateAsks(bound));
     const byProp = (node.boundByProp ??= new Map());
     if (bound) byProp.set(prop, bound);
     else byProp.delete(prop);
@@ -4376,6 +6089,7 @@ export class Engine implements HostEngine {
       node.customProperties = Object.keys(rest).length ? rest : null;
     } else {
       node.customProperties = { ...current, [name]: token };
+      if (this.asked !== EVERYTHING) this.want(tokenAsks(token));
     }
     // In scope for the node's own rules and for what is under it, and read by no selector: the
     // node is styled again, and those under it from the rules they matched.
@@ -4647,6 +6361,12 @@ export class Engine implements HostEngine {
   /** `node`'s child list changed: `moved` came into it at `at`, or went out of it from there. */
   private markStructure(node: EngineNode, moved: EngineNode, at: number): void {
     node.structureDirty = true;
+    // An item whose least width is measured holds something else now: see `settleMinimums`.
+    if (this.minimums.size) {
+      for (let up: EngineNode | null = node; up; up = up.parent) {
+        if (up.shareMin) up.shareMin.width = undefined;
+      }
+    }
     // A child list that moved changes what its members match, though nothing about them did:
     // the old last row is no longer the last. Only sheets that ask about position pay for this.
     if (this.structuralSheets) {
@@ -4791,20 +6511,11 @@ export class Engine implements HostEngine {
    * optimisation.
    */
   commit(): boolean {
-    // What `:has()` answers is kept for the commit, where a sheet asks it: see `keepHasAnswers`.
-    keepHasAnswers(this.hasSheets);
-    try {
-      return this.commitWhole();
-    } finally {
-      keepHasAnswers(false);
-      this.markedBefore.clear();
-      this.placesMarked.clear();
-      this.placesMarkedAfter.clear();
+    if (this.removedSinceCommit.size) {
+      // A box that went can have made room for any other: see `heldIn`.
+      this.changesHeld = false;
+      this.releaseDetached();
     }
-  }
-
-  private commitWhole(): boolean {
-    if (this.removedSinceCommit.size) this.releaseDetached();
     // The root is never reconciled itself, so it has no `committed` record and `isClean` would
     // always say dirty. Ask the flags directly, or every change-detection pass ends in a
     // completeRoot that changes nothing: during a fling that is one wasted native commit per
@@ -4818,33 +6529,20 @@ export class Engine implements HostEngine {
     if (!this.root.structureDirty && !this.root.subtreeDirty) return false;
 
     const started = now();
-    // One epoch per commit. Node props do not change while a commit runs, so every node can be
-    // resolved once and shared with each of its descendants for the length of this walk.
-    this.styleEpoch++;
     // Faces registered before the walk, the global sheet's among them, reach every node in it.
     this.facesAdded = false;
-    const set = this.fabric.createChildSet(this.rootTag);
-    let handles = this.rootHandles();
-    // Again, where transitions it laid out where they end are to be eased from JavaScript.
-    if (this.layOut()) {
-      handles = this.rootHandles();
-      // What that found resized is the transitions themselves, at the frame they are eased to.
-      this.movesOthers = false;
-    }
-    for (const handle of handles) this.fabric.appendChildToSet(set, handle);
-    this.clearFlags(this.root);
-    this.announceCommit();
-    this.fabric.completeRoot(this.rootTag, set);
+    this.movedBoxes.clear();
+    this.grownBoxes.clear();
+    this.changed.clear();
+    this.quietly.clear();
+    this.loudly.clear();
+    this.holders = undefined;
+    this.commitAsAsked();
+    // Each a layout of the engine's, which an app of plain flex has asked for none of.
+    if (this.asked & LAYOUTS) this.settleLayout();
+    this.changesHeld = true;
 
-    const elapsed = now() - started;
-    this.stats.commits++;
-    this.stats.lastCommitMs = elapsed;
-    if (this.stats.commits === 1) {
-      this.stats.firstCommitMs = elapsed;
-    } else {
-      if (elapsed > this.stats.worstCommitMs) this.stats.worstCommitMs = elapsed;
-      if (elapsed > FRAME_BUDGET_MS) this.stats.slowCommits++;
-    }
+    this.countCommit(now() - started);
 
     this.flushTransitionEvents();
     this.reportPaint();
@@ -4856,6 +6554,18 @@ export class Engine implements HostEngine {
     if (facesAdded) this.rematchFonts();
     this.blurHidden();
     return true;
+  }
+
+  /** Count a commit that reached native, and how long it took, in `stats`. */
+  private countCommit(elapsed: number): void {
+    this.stats.commits++;
+    this.stats.lastCommitMs = elapsed;
+    if (this.stats.commits === 1) {
+      this.stats.firstCommitMs = elapsed;
+    } else {
+      if (elapsed > this.stats.worstCommitMs) this.stats.worstCommitMs = elapsed;
+      if (elapsed > FRAME_BUDGET_MS) this.stats.slowCommits++;
+    }
   }
 
   /** A field went out of view focused, in the commit running: see `undisplayed`. */
@@ -5049,6 +6759,1131 @@ export class Engine implements HostEngine {
     this.markProps(node, false);
   }
 
+  /** Everything the engine lays out in Yoga's place, from the commit just made. */
+  private settleLayout(): void {
+    this.settleMinimums();
+    this.settleFits();
+    this.settleHeld();
+    // A sum can move what is in a held box: it again, and the sums of it after.
+    if (this.settleMixed()) {
+      this.settleHeld();
+      this.settleMixed();
+    }
+  }
+
+  /** Note a node that is settled after layout: by a sum of a share and a length, or its least. */
+  private noteSettled(node: EngineNode, props: Record<string, unknown>): void {
+    if (node.mixed) this.mixeds.add(node);
+    if (node.shareMin) this.minimums.add(node);
+    // While an item is read at its narrowest: a box in it that is no wider than what it is in,
+    // `max-width: 100%`, gets as narrow as that, and holds the item to nothing. A picture.
+    const shrinks = typeof props['maxWidth'] === 'string' && props['maxWidth'].endsWith('%');
+    if (shrinks && this.narrowed && this.inWords(node)) props['width'] = 0;
+  }
+
+  /** The items whose minimum width is measured: see `shareMinimum`. */
+  private readonly minimums = new Set<EngineNode>();
+  /** Those whose text is committed a word to a line, while how narrow they go is read. */
+  private narrowed: ReadonlySet<EngineNode> | null = null;
+
+  private inWords(node: EngineNode): boolean {
+    if (!this.narrowed) return false;
+    for (let up = node.parent; up; up = up.parent) if (this.narrowed.has(up)) return true;
+    return false;
+  }
+
+  /**
+   * Read how narrow each item that takes a share of its row goes, where that is not known or
+   * something in the item changed: all of them committed as wide as their content with their
+   * words a line each, read, and committed again with that as their minimum. Two commits for
+   * all of them together, and none where nothing in any of them moved.
+   */
+  private settleMinimums(): void {
+    if (!this.minimums.size || !this.fabric.getBoundingClientRect) return;
+    const stale = [...this.minimums].filter((node) => this.minimumIsStale(node));
+    if (!stale.length) return this.reshare();
+    const texts = stale.flatMap(textsUnder);
+    this.settling = true;
+    try {
+      for (const node of stale) node.shareOff = true;
+      this.narrowed = new Set(stale);
+      const narrow = stale.flatMap((node) => this.noWiderThanRoom(node));
+      this.touch([...stale, ...texts, ...narrow]);
+      this.commitTree();
+      for (const node of stale) {
+        if (node.shareMin) node.shareMin.width = this.boxOf(node)?.[2];
+        node.shareOff = undefined;
+      }
+      this.narrowed = null;
+      this.touch([...stale, ...texts, ...narrow, ...this.sharedAgain()]);
+      this.commitTree();
+    } finally {
+      this.narrowed = null;
+      this.settling = false;
+    }
+  }
+
+  /** The boxes under a node whose width is capped at a share of what they are in. */
+  private noWiderThanRoom(node: EngineNode): EngineNode[] {
+    const found: EngineNode[] = [];
+    for (const child of node.childList) {
+      if (child.nodeKind !== 'element') continue;
+      const cap = readStyle(child, 'maxWidth');
+      if (typeof cap === 'string' && cap.endsWith('%')) found.push(child);
+      found.push(...this.noWiderThanRoom(child));
+    }
+    return found;
+  }
+
+  /** Share each row out again where its room or its items changed, with no minimum to read. */
+  private reshare(): void {
+    const changed = this.sharedAgain();
+    if (!changed.length) return;
+    this.settling = true;
+    try {
+      this.touch(changed);
+      this.commitTree();
+    } finally {
+      this.settling = false;
+    }
+  }
+
+  /**
+   * Work out each item's share of its line again, for every row whose items all grow into it
+   * from nothing, and answer the items whose share is another than it was. A row with any other
+   * item in it, one with a width or as wide as its content, is left to Yoga with its items'
+   * minimums: what such an item takes of a line is not known until the line is laid out.
+   */
+  private sharedAgain(): EngineNode[] {
+    const changed: EngineNode[] = [];
+    const rows = new Set<EngineNode>();
+    for (const node of this.minimums) {
+      // A row in no room that can have changed, and whose items did not, shares out as it did.
+      if (node.parent && this.mayHaveMoved(node.parent)) rows.add(node.parent);
+    }
+    for (const row of rows) {
+      const items = row.childList.filter(
+        (child) => child.nodeKind === 'element' && this.inFlowOfRow(child),
+      );
+      const sharers = items.map((item) => this.sharerOf(item));
+      const all = sharers.every((each) => each !== undefined);
+      const room = all ? this.roomIn(row) : Infinity;
+      const widths = Number.isFinite(room)
+        ? lineShares(sharers as Sharer[], room, this.gapOf(row), this.wrapsRow(row))
+        : [];
+      items.forEach((item, at) => {
+        const share = widths[at];
+        if (!item.shareMin || sameShare(item.shareMin.share, share)) return;
+        item.shareMin.share = share;
+        changed.push(item);
+      });
+    }
+    return changed;
+  }
+
+  /** An item of a row that is laid out in it: displayed, and not out of the flow. */
+  private inFlowOfRow(node: EngineNode): boolean {
+    if (readStyle(node, 'display') === 'none') return false;
+    return !OUT_OF_FLOW.has(readStyle(node, 'position') as string);
+  }
+
+  /** An item as `lineShares` takes one, or nothing for one that does not grow from nothing. */
+  private sharerOf(node: EngineNode): Sharer | undefined {
+    if (!node.shareMin) return this.unsharing(node);
+    const least = node.shareMin?.width;
+    const basis = readStyle(node, 'flexBasis');
+    const flex = readStyle(node, 'flex');
+    const grow = typeof flex === 'number' ? flex : readStyle(node, 'flexGrow');
+    const fromNothing = typeof flex === 'number' || basis === 0 || basis === '0%';
+    // One that does not grow is held at its least: `flex: 0`.
+    const grows = typeof grow === 'number' ? grow : 0;
+    if (least === undefined || !fromNothing) return undefined;
+    return { grow: grows, least, around: marginsAlong(node) };
+  }
+
+  /**
+   * An item that takes no share of its row, as what it takes of a line: the width it was laid
+   * out at. Nothing for one that grows from its content, whose width is the line's to give.
+   */
+  private unsharing(node: EngineNode): Sharer | undefined {
+    const grow = readStyle(node, 'flexGrow');
+    if (typeof readStyle(node, 'flex') === 'number' || (typeof grow === 'number' && grow > 0)) {
+      return undefined;
+    }
+    const box = this.boxOf(node);
+    return box ? { grow: 0, least: box[2]!, around: marginsAlong(node) } : undefined;
+  }
+
+  private gapOf(row: EngineNode): number {
+    const gap = readStyle(row, 'columnGap') ?? readStyle(row, 'gap');
+    return typeof gap === 'number' ? gap : 0;
+  }
+
+  private wrapsRow(row: EngineNode): boolean {
+    const wrap = readStyle(row, 'flexWrap');
+    return wrap === 'wrap' || wrap === 'wrap-reverse';
+  }
+
+  /** Whether an item's minimum is to be read: it never was, or something in it moved or grew. */
+  private minimumIsStale(node: EngineNode): boolean {
+    if (!node.shareMin || this.topOf(node) !== this.root) {
+      this.minimums.delete(node);
+      return false;
+    }
+    if (node.shareMin.width === undefined) return true;
+    for (const box of this.movedBoxes) if (box !== node && isWithin(box, node)) return true;
+    for (const box of this.grownBoxes) if (isWithin(box, node)) return true;
+    return false;
+  }
+
+  /** Reconcile what is dirty and hand the tree to Fabric, which lays it out before returning. */
+  private commitTree(): void {
+    // What `:has()` answers is kept for the commit, where a sheet asks it: see `keepHasAnswers`.
+    keepHasAnswers(this.hasSheets);
+    try {
+      this.commitWhole();
+    } finally {
+      keepHasAnswers(false);
+      this.markedBefore.clear();
+      this.placesMarked.clear();
+      this.placesMarkedAfter.clear();
+    }
+  }
+
+  private commitWhole(): void {
+    // One epoch per commit. Node props do not change while a commit runs, so every node can be
+    // resolved once and shared with each of its descendants for the length of this walk.
+    this.styleEpoch++;
+    const set = this.fabric.createChildSet(this.rootTag);
+    let handles = this.rootHandles();
+    // Again, where transitions it laid out where they end are to be eased from JavaScript.
+    if (this.layOut()) {
+      handles = this.rootHandles();
+      // What that found resized is the transitions themselves, at the frame they are eased to.
+      this.movesOthers = false;
+    }
+    for (const handle of handles) this.fabric.appendChildToSet(set, handle);
+    this.clearFlags(this.root);
+    this.announceCommit();
+    this.fabric.completeRoot(this.rootTag, set);
+  }
+
+  /**
+   * What the engine lays out in Yoga's place, for a node being reconciled: a block's flow, a
+   * box in a line, a share and a sum. Asked of every node reconciled, and most are none of these.
+   */
+  private relayout(node: EngineNode): void {
+    if (node.nodeKind !== 'element') return;
+    // A box given other styles may give what is in it other room: see `settleFits`.
+    if (node.propsDirty && this.fits.size && !this.settling) this.restyled.add(node);
+    if (!(this.asked & CSS_LAYOUT)) {
+      // Asked here, and not by a call: most apps have neither a share nor a sum.
+      if (this.asked & LAYOUTS && !this.settling) this.replanPlain(node);
+      return;
+    }
+    if (this.inlines) this.settleInlines(node);
+    this.replan(node);
+  }
+
+  /**
+   * `replan` for an app nothing in which has asked for a layout of CSS's: what a box of plain
+   * flex can still need of the engine, a share of a box as wide as its content and a
+   * percentage with a length added. See `asked`.
+   */
+  private replanPlain(node: EngineNode): void {
+    if (node.mixed) node.mixed.dirty = true;
+    if (this.asked & SHARED_WIDTHS) this.noteFits(node);
+  }
+
+  /**
+   * What has been asked for that the engine works out in Yoga's place, as the bits of `asks`:
+   * by a sheet, a style or a package that gives elements a browser's defaults. Until something
+   * asks, a node is asked none of what that takes, which is most of what is asked of one: an
+   * app of native views and flex is laid out by Yoga alone. Nothing is taken back, as a sheet
+   * is never forgotten.
+   */
+  private asked = askMode() === 'all' ? EVERYTHING : 0;
+  private readonly checksAsks = askMode() === 'check';
+  /** The boxes that asked for a layout of CSS's as they were merged: see `laidOut`. */
+  private readonly askedLate = new Set<EngineNode>();
+
+  private want(bits: number): void {
+    // A layout asked for in a commit has none of what changed before it noted: see `heldIn`.
+    if (bits & LAYOUTS & ~this.asked) {
+      this.changesHeld = false;
+      this.holders = undefined;
+    }
+    this.asked |= bits;
+    this.notesMoves = this.asked !== 0;
+  }
+
+  /** The sheets whose asks are in `asked` already: read once each, as a sheet does not change. */
+  private readonly askingSheets = new WeakSet<StyleSheet>();
+
+  private watchLayout(sheet: StyleSheet | null | undefined): void {
+    // Asked for every element a component's sheet is given to.
+    if (!sheet || this.asked === EVERYTHING || this.askingSheets.has(sheet)) return;
+    this.askingSheets.add(sheet);
+    this.want(sheetAsks(sheet));
+  }
+
+  /**
+   * Commit the tree, and again where a box asked for a layout of CSS's as it was merged, by
+   * what it came to and no one declaration: it had been planned as a box of plain flex by
+   * then, so it is planned and merged again, now that it is asked what it was not.
+   */
+  private commitAsAsked(): void {
+    this.commitTree();
+    if (!this.askedLate.size) return;
+    this.touch([...this.askedLate]);
+    this.askedLate.clear();
+    this.commitTree();
+  }
+
+  /**
+   * A test run's check that nothing was left unasked: throw where a node being merged would
+   * be laid out by what no declaration has asked for, which a sheet or a style is not read for.
+   */
+  private checkAsked(node: EngineNode, merged: Record<string, unknown>): void {
+    const missed = this.asked & CSS_LAYOUT ? [] : this.unaskedLayout(node, merged);
+    if (!(this.asked & MIXED_SIZES) && takeMixed(node, { ...merged })) missed.push('a sum');
+    if (!(this.asked & SHARED_WIDTHS) && sharesWidth(node)) missed.push('a share');
+    if (missed.length) throw new Error(`Laid out by what nothing asked for: ${missed.join(', ')}`);
+  }
+
+  /** What a layout of CSS's would make of a node that no declaration asked for one of. */
+  private unaskedLayout(node: EngineNode, merged: Record<string, unknown>): string[] {
+    const copy = { ...merged };
+    const [autoMin, shareMin] = [node.autoMin, node.shareMin];
+    this.flowed(node, copy);
+    autoMinimum(node, copy);
+    shareMinimum(node, copy);
+    notNative(copy);
+    const missed = node.autoMin || node.shareMin ? ['a minimum'] : [];
+    [node.autoMin, node.shareMin] = [autoMin, shareMin];
+    for (const key of new Set([...Object.keys(copy), ...Object.keys(merged)])) {
+      if (!Object.is(copy[key], merged[key])) missed.push(key);
+    }
+    return [...missed, ...unaskedPlan(node)];
+  }
+
+  /** Whether any element has been said to be inline: only then is any looked for. */
+  private inlines = false;
+
+  /**
+   * Settle the display of a box that is inline in a browser, and of each such box it holds:
+   * those first, since the plan about to be made for this one reads them, and each is reconciled
+   * after it.
+   */
+  private settleInlines(node: EngineNode): void {
+    for (const child of node.childList) {
+      if (child.inlineLevel === 'unless-block') this.settleInline(child);
+      else if (child.inlineLevel === 'always') this.settleLine(child);
+    }
+    if (node.inlineLevel === 'unless-block') this.settleInline(node);
+    else if (node.inlineLevel === 'always') this.settleLine(node);
+  }
+
+  /**
+   * Give an element that is text in a browser, a span or a label, a line to lay out what it
+   * holds in, once it holds a box: a label's words and the arrow after them are one line in a
+   * browser, and a view's children are a column. Nothing where it holds only text, which a text
+   * element lays out itself, or where it has a display of its own.
+   *
+   * ponytail: the elements that are text and nothing else. A button or a link with no display
+   * is inline too, and is left the flex box it has been: one as wide as an item that is as wide
+   * as its content, `width: 100%`, is as wide as the room where it sits in a line. Fit the item
+   * to its content first if a library leaves a button's display to the browser.
+   */
+  private settleLine(node: EngineNode): void {
+    this.settleBoxed(node);
+    const holds =
+      inlineText(node) &&
+      !isTextElement(node) &&
+      node.childList.some((child) => child.nodeKind === 'element');
+    if (holds === (node.lined === true)) return;
+    const { display, ...rest } = node.defaultStyle ?? {};
+    if (holds && display != null) return;
+    node.lined = holds || undefined;
+    node.defaultStyle = holds ? { ...rest, display: 'inline-block' } : rest;
+    node.propsDirty = true;
+  }
+
+  /**
+   * A span that is a flex box or a grid by its own style is a view, and each span in it an item
+   * of it with a paragraph of its own: a toolbar's count, title and description, with a gap
+   * between them. Text all the way down is one paragraph otherwise, whatever its display.
+   */
+  private settleBoxed(node: EngineNode): void {
+    const boxed = LAYS_OUT_ITSELF.has(readStyle(node, 'display') as string) || undefined;
+    if (boxed === node.boxed) return;
+    node.boxed = boxed;
+    node.propsDirty = true;
+  }
+
+  /** Give an element that is inline in a browser the display it has for what it holds now. */
+  private settleInline(node: EngineNode): void {
+    this.flowStyles.clear();
+    const display = this.holdsBlock(node) ? 'block' : 'inline-block';
+    this.flowStyles.clear();
+    if (node.defaultStyle?.['display'] === display) return;
+    node.defaultStyle = { ...node.defaultStyle, display };
+    node.propsDirty = true;
+  }
+
+  /** Whether a box holds a block-level box in its flow, through any box that is only inline. */
+  private holdsBlock(node: EngineNode): boolean {
+    for (const child of node.childList) {
+      if (child.nodeKind !== 'element' || this.committedElsewhere(child)) continue;
+      const style = this.flowStyle(child);
+      const display = style['display'];
+      if (display === 'none' || OUT_OF_FLOW.has(style['position'] as string)) continue;
+      // By what it holds, where its own display is the engine's or it has no box at all.
+      const through = display === 'contents' || this.inlineByDefault(child, style);
+      if (through ? this.holdsBlock(child) : !sitsInLine(child, display)) return true;
+    }
+    return false;
+  }
+
+  /** Whether a box's display is the one the engine gave it for being inline in a browser. */
+  private inlineByDefault(node: EngineNode, style: Record<string, unknown>): boolean {
+    return (
+      node.inlineLevel === 'unless-block' && style['display'] === node.defaultStyle?.['display']
+    );
+  }
+
+  private replan(node: EngineNode): void {
+    if (node.parent && readStyle(node, 'order') != null) node.parent.ordered = true;
+    this.reflow(node, readStyle(node, 'display'));
+    this.reminimum(node);
+    // Something in it changed, which can change the box its percentages are of.
+    if (node.mixed && !this.settling) node.mixed.dirty = true;
+    if (!this.settling) this.noteFits(node);
+  }
+
+  /** Have a box fitted to its content again, and the item of a row it is a share of. */
+  private noteFits(node: EngineNode): void {
+    if (this.sitsInLine(node) || (this.fits.has(node) && this.fitsContent(node))) {
+      this.refitted(node);
+    }
+    if (!sharesWidth(node)) return;
+    // The box it is a share of, or one further up that this one is as wide as: each box between
+    // has no width of its own, and is as wide as the one it is in.
+    for (let around = node.parent; around?.nodeKind === 'element'; around = around.parent) {
+      if (this.fitsContent(around)) return this.refitted(around);
+      if (!this.wideAsItsBox(around)) return;
+    }
+  }
+
+  /** Whether a box is as wide as what it holds: an item of a row, or out of the flow. */
+  private fitsContent(node: EngineNode): boolean {
+    return this.itemOfRow(node) || shrunkOutOfFlow(node);
+  }
+
+  /**
+   * Whether a box with no width of its own is as wide as the box it is in: a block in the flow,
+   * or an item a column stretches. A share of it is then a share of that box.
+   */
+  private wideAsItsBox(node: EngineNode): boolean {
+    const around = node.parent;
+    if (around?.nodeKind !== 'element' || readStyle(node, 'width') != null) return false;
+    if (readStyle(node, 'display') === 'contents') return false;
+    if (OUT_OF_FLOW.has(readStyle(node, 'position') as string)) return false;
+    if (around.flow) return !this.sitsInLine(node);
+    return !isRow(around) && stretched(node, around);
+  }
+
+  private refitted(node: EngineNode): void {
+    this.fits.add(node);
+    node.fit = { ...node.fit, dirty: true };
+  }
+
+  /**
+   * Whether a box is an item of a flex row with no width, share or basis of its own, which is
+   * as wide as its content: a dialog's pane, in a wrapper that centres it. A box in it that is
+   * `width: 100%` is as wide as the item, where to Yoga it is as wide as the room.
+   */
+  private itemOfRow(node: EngineNode): boolean {
+    const row = node.parent;
+    if (!row || row.nodeKind !== 'element' || row.flow) return false;
+    // One that is `display: contents` is no box, and its children are the row's items.
+    if (readStyle(node, 'width') != null || readStyle(node, 'display') === 'contents') return false;
+    if (OUT_OF_FLOW.has(readStyle(node, 'position') as string)) return false;
+    // An item of a column is as wide as its content too, where the column does not stretch it.
+    if (!isRow(row)) return !stretched(node, row);
+    return !sharesRow(node) || this.growsFromField(node);
+  }
+
+  /**
+   * Whether an item grows into its row from the width of what it holds, `flex: 1 1 auto`, and
+   * holds a text field as wide as it is. A browser starts it at the field's own width, its
+   * characters, and wraps the row on that; a native field holds nothing to be measured by, so
+   * the item is fitted as one with no share is, and grows from the width it comes to.
+   */
+  private growsFromField(node: EngineNode): boolean {
+    const basis = readStyle(node, 'flexBasis');
+    if (typeof readStyle(node, 'flex') === 'number' || (basis != null && basis !== 'auto')) {
+      return false;
+    }
+    return this.sizedByRoom(node).some((each) => each.props[FIELD_SIZE] != null);
+  }
+
+  /**
+   * Ask an automatic minimum again: of this node when something under it changed, and of its
+   * children when it turns between a row and a column. See `autoMinimum`.
+   */
+  private reminimum(node: EngineNode): void {
+    if (node.autoMin) node.propsDirty = true;
+    const row = isRow(node);
+    if (node.row !== undefined && node.row !== row) {
+      this.touch(node.childList.filter((child) => child.nodeKind === 'element'));
+    }
+    node.row = row;
+  }
+
+  /** The boxes that sit in a line of a block, and so are as wide as their content. */
+  private readonly fits = new Set<EngineNode>();
+
+  /** Whether a box is an inline-level one in a block's flow: on a line, at its content's width. */
+  private sitsInLine(node: EngineNode): boolean {
+    const plan = flowOver(node)?.plan;
+    return plan !== undefined && (plan.kind === 'lines' || plan.inline.has(node));
+  }
+
+  /**
+   * Size each box that sits in a line from its content, where Yoga would size it from the room
+   * on offer: a box holding a row with a percentage width, or cells that share a row from a
+   * basis of nothing. The box is committed with those set aside, its width is read back, and it
+   * is committed at that width, which the percentages and the shares are then of.
+   */
+  private settleFits(): void {
+    if (!this.fits.size || !this.fabric.getBoundingClientRect) return;
+    this.refitUnderRestyled();
+    this.standFitted();
+    this.settling = true;
+    try {
+      // One that is not to be fitted again, and in no room that can have changed, is left.
+      let waiting = [...this.fits].filter(
+        (node) => (node.fit?.dirty || this.mayHaveMoved(node)) && this.toFit(node),
+      );
+      // From the innermost: a box is fitted to what it holds, a fitted box among it.
+      while (waiting.length) {
+        const around = waiting.filter((node) =>
+          waiting.some((other) => other !== node && isWithin(other, node)),
+        );
+        this.fitTogether(waiting.filter((node) => !around.includes(node)));
+        waiting = around.filter((node) => this.toFit(node));
+      }
+    } finally {
+      this.settling = false;
+    }
+  }
+
+  /** The boxes the commit being settled resized or moved, or moved others by: see `noteMoved`. */
+  private readonly movedBoxes = new Set<EngineNode>();
+  /** Those that only came to hold more: words added to, a child more than there was. */
+  private readonly grownBoxes = new Set<EngineNode>();
+
+  /** The nodes the commit being settled changed: their props, their style or their children. */
+  private readonly changed = new Set<EngineNode>();
+  /**
+   * Those of them cloned with nothing that lays a box out: a colour, or what a screen reader
+   * is told, as a progress bar's value is each time it ticks. And those cloned with more.
+   */
+  private readonly quietly = new Set<EngineNode>();
+  private readonly loudly = new Set<EngineNode>();
+  /** Unset where a box went or the conditions changed, which can move any box: see `heldIn`. */
+  private changesHeld = true;
+  /** What `heldIn` answered, until something more is changed. */
+  private holders: readonly EngineNode[] | null | undefined;
+
+  /** Asked only where a layout of the engine's reads it: see `want` for one asked in a commit. */
+  private noteChanged(node: EngineNode): void {
+    this.changed.add(node);
+    this.holders = undefined;
+  }
+
+  /**
+   * The boxes every change of the commit being settled is inside, where each is out of the flow
+   * with a width and a height of its own, or nothing where any change is not inside one. Yoga
+   * lays such a box out at the size it is given, so nothing in it moves a box outside it: a
+   * progress bar's indicator, in a track of a set size, can tick on a timer without anything
+   * else on the page being read back to see whether it has to be laid out again.
+   */
+  private heldIn(): readonly EngineNode[] | null {
+    if (this.holders !== undefined) return this.holders;
+    if (!this.changesHeld) return (this.holders = null);
+    const holders = new Set<EngineNode>();
+    for (const node of this.changed) {
+      if (!this.movedItself(node)) continue;
+      const holder = this.holderOf(node);
+      if (!holder) return (this.holders = null);
+      holders.add(holder);
+    }
+    return (this.holders = [...holders]);
+  }
+
+  /** The nearest box above a node that holds what changes in it, unchanged itself. */
+  private holderOf(node: EngineNode): EngineNode | null {
+    for (let up = node.parent; up && up !== this.root; up = up.parent) {
+      if (!this.movedItself(up) && holdsItsContent(up)) return up;
+      // One committed under another view than its parent is laid out in that one.
+      if (this.hoisted.has(up)) return null;
+    }
+    return null;
+  }
+
+  /** Note whether a node is cloned with more than how it is painted: see `heldIn`. */
+  private noteHow(node: EngineNode, payload: Record<string, unknown> | null): void {
+    const loud = node.structureDirty || node.remeasure === true || !paintsOnly(payload);
+    (loud ? this.loudly : this.quietly).add(node);
+    this.holders = undefined;
+  }
+
+  /** Whether a node was changed in the commit being settled by more than how it is painted. */
+  private movedItself(node: EngineNode): boolean {
+    return this.changed.has(node) && (this.loudly.has(node) || !this.quietly.has(node));
+  }
+
+  /**
+   * Whether a box can have moved in the commit being settled: see `heldIn`. One asked to be
+   * merged again is asked, too: a box read back at a new width is marked for nothing else.
+   */
+  private mayHaveMoved(node: EngineNode): boolean {
+    if (this.changed.has(node)) return true;
+    const holders = this.heldIn();
+    return holders === null || holders.some((holder) => isWithin(node, holder));
+  }
+
+  /**
+   * Leave each box that is fitted already as it is, where nothing in it or above it moved: a
+   * button pressed and painted another colour leaves the box around it the width it has. One
+   * as wide as its room is left as what it holds grows, too: an answer written a letter at a
+   * time wraps, and is no wider.
+   *
+   * ponytail: a word added that cannot wrap, and is wider than the room, is not reached past
+   * the room for until the box is next fitted. Read how far the content reaches if one is seen.
+   */
+  private standFitted(): void {
+    const moved = [...this.movedBoxes];
+    const grown = [...this.grownBoxes];
+    for (const node of this.fits) {
+      const fit = node.fit;
+      if (!fit?.dirty || fit.width === undefined) continue;
+      if (moved.some((box) => isWithin(box, node) || isWithin(node, box))) continue;
+      const fuller = grown.some((box) => isWithin(box, node));
+      // As it is laid out: one whose content is all a share of it is fitted to nothing.
+      const width = Math.max(fit.width, this.boxOf(node)?.[2] ?? 0);
+      if (!fuller || width + 0.5 >= this.roomOf(node)) fit.dirty = false;
+    }
+  }
+
+  /** The boxes whose own styles changed in this commit, while any box is fitted. */
+  private readonly restyled = new Set<EngineNode>();
+
+  /**
+   * Have each fitted box under a box that was restyled fitted again. The room a box is in can
+   * come from far above it, through boxes that are each as wide as what they hold: an overlay's
+   * outer box is given the screen, and nothing between it and a calendar says so. The room
+   * read from the box's own parent is then the box's own width, and never changes.
+   */
+  private refitUnderRestyled(): void {
+    if (!this.restyled.size) return;
+    for (const node of this.fits) {
+      if (!node.fit || node.fit.dirty) continue;
+      for (let up = node.parent; up; up = up.parent) {
+        if (!this.restyled.has(up)) continue;
+        node.fit.dirty = true;
+        break;
+      }
+    }
+    this.restyled.clear();
+  }
+
+  /**
+   * Whether a box is to be fitted to its content again. One that is no longer fitted at all, or
+   * holds nothing sized by the room, is let go here, and one that stands as it is is left.
+   */
+  private toFit(node: EngineNode): boolean {
+    const fit = node.fit;
+    const fitted =
+      this.topOf(node) === this.root && (this.sitsInLine(node) || this.fitsContent(node));
+    if (!fit || !fitted || readStyle(node, 'width') != null) {
+      this.unfit(node);
+      return false;
+    }
+    if (this.fitStands(node, fit)) return false;
+    if (this.sizedByRoom(node).length) return true;
+    fit.dirty = false;
+    this.unfit(node, true);
+    return false;
+  }
+
+  /**
+   * Fit boxes with nothing of each other in them: all committed with what is sized by the room
+   * set aside, read, and committed at the widths they came to. Two commits for all of them,
+   * where one at a time is two commits of the whole screen for each.
+   */
+  private fitTogether(nodes: readonly EngineNode[]): void {
+    if (!nodes.length) return;
+    const boxes = nodes.map((node) => ({ node, fit: node.fit!, inside: this.sizedByRoom(node) }));
+    for (const { node, fit, inside } of boxes) {
+      fit.dirty = false;
+      fit.width = undefined;
+      for (const each of inside) each.fitOff = true;
+      // One that grows into its row is measured without its share, as what is in it is.
+      if (sharesRow(node)) node.fitOff = true;
+      this.touch([node, ...inside, ...this.ungrow(fit)]);
+    }
+    this.commitTree();
+    for (const { node, fit, inside } of boxes) {
+      const { width, grown } = this.fittedWidth(node);
+      for (const each of [node, ...inside]) each.fitOff = undefined;
+      fit.width = width;
+      fit.grown = grown;
+      this.touch([node, ...inside, ...grown]);
+    }
+    this.commitTree();
+    for (const { node, fit } of boxes) fit.room = this.roomOf(node);
+  }
+
+  /**
+   * The width a box comes to from the commit just made of it, with what is sized by the room
+   * set aside. No wider than the room, and no narrower than what in it cannot get narrower:
+   * text wraps to the room, and a row of cells with a least width does not, so it reaches past
+   * the box's edge. A browser's box is that wide, and overflows the room it is in.
+   */
+  private fittedWidth(node: EngineNode): { width: number; grown: EngineNode[] } {
+    this.flowStyles.clear();
+    const box = this.boxOf(node);
+    const within = Math.min(box?.[2] ?? 0, this.roomIn(node.parent));
+    // An item of a row is as wide as it was laid out with its shares set aside, and no wider
+    // than the row: what reaches past it, a drawer waiting off to one side, is no part of it.
+    if (!this.sitsInLine(node)) return { width: within, grown: [] };
+    // Its content's reach, and its own padding and border after that.
+    const edge = insets(this.flowStyle(node)).Right;
+    const width = box ? Math.max(within, this.reachOf(node, box[0]) - box[0] + edge) : within;
+    const grown = width > within ? this.growAround(node, width) : [];
+    this.flowStyles.clear();
+    return { width, grown };
+  }
+
+  /**
+   * Hold the boxes around a fitted box that overflows its room to its width: each one that is
+   * as wide as its content, out to the first with a width of its own or with room enough. A
+   * popover's panel around a calendar wider than the room the panel was given: in a browser a
+   * flex item is no narrower than its content, and the panel is drawn under all of the calendar.
+   */
+  private growAround(node: EngineNode, width: number): EngineNode[] {
+    const around: { box: EngineNode; needed: number }[] = [];
+    // How many of them are in a box sized by what it holds: the ones past the last such box
+    // are as wide as their room, a page and the screen it is on, and are left so.
+    let held = 0;
+    let needed = width;
+    for (
+      let up = node.parent;
+      up && up !== this.root && up.nodeKind === 'element';
+      up = up.parent
+    ) {
+      const style = this.flowStyle(up);
+      if (style['width'] != null && style['width'] !== 'auto') break;
+      const edge = insets(style);
+      needed += edge.Left + edge.Right;
+      if ((this.boxOf(up)?.[2] ?? Infinity) >= needed) break;
+      around.push({ box: up, needed });
+      if (this.sizedByWhatItHolds(up, style)) held = around.length;
+    }
+    const grown = around.slice(0, held);
+    for (const each of grown) each.box.fitMin = each.needed;
+    return grown.map((each) => each.box);
+  }
+
+  /**
+   * Whether a box is as wide as its content and not as its room: out of the flow, on a line, an
+   * item of a row, or kept from stretching across a column. A block, and an item stretched
+   * across a column, is as wide as the room whatever it holds.
+   */
+  private sizedByWhatItHolds(node: EngineNode, style: Record<string, unknown>): boolean {
+    if (OUT_OF_FLOW.has(style['position'] as string) || this.sitsInLine(node)) return true;
+    const parent = node.parent;
+    if (!parent || parent.nodeKind !== 'element' || parent.flow) return false;
+    if (isRow(parent)) return true;
+    const align = style['alignSelf'] ?? readStyle(parent, 'alignItems');
+    return align != null && !STRETCHES.has(align as string);
+  }
+
+  /** Let go of the boxes a fit was holding wider, and answer them, to be committed again. */
+  private ungrow(fit: NonNullable<EngineNode['fit']>): EngineNode[] {
+    const grown = fit.grown ?? [];
+    for (const each of grown) each.fitMin = undefined;
+    fit.grown = undefined;
+    return grown;
+  }
+
+  /**
+   * Whether a box's fit still holds: nothing about it changed, and it was fitted in the room
+   * it is in now. A box is no wider than its room, so it is fitted again when that grows or
+   * shrinks, though nothing about the box did.
+   */
+  private fitStands(node: EngineNode, fit: NonNullable<EngineNode['fit']>): boolean {
+    if (fit.dirty) return false;
+    return fit.width === undefined || this.roomOf(node) === fit.room;
+  }
+
+  /** How far right the boxes in a node reach, in the window: past its own edge where they overflow. */
+  private reachOf(node: EngineNode, least: number): number {
+    let reach = least;
+    for (const child of node.childList) {
+      if (child.nodeKind !== 'element' || !child.committed) continue;
+      const box = this.boxOf(child);
+      if (box) reach = Math.max(reach, box[0] + box[2]);
+      reach = Math.max(reach, this.reachOf(child, reach));
+    }
+    return reach;
+  }
+
+  /** The room a fitted box is in now, as its parent was last laid out. */
+  private roomOf(node: EngineNode): number {
+    this.flowStyles.clear();
+    const room = this.roomIn(node.parent);
+    this.flowStyles.clear();
+    return room;
+  }
+
+  /** Stop fitting a box, and commit it again as written where it had been given a width. */
+  private unfit(node: EngineNode, keep = false): void {
+    const had = node.fit?.width !== undefined;
+    const grown = node.fit ? this.ungrow(node.fit) : [];
+    if (keep) node.fit = { dirty: false };
+    else {
+      node.fit = undefined;
+      this.fits.delete(node);
+    }
+    if (!had && !grown.length) return;
+    this.touch([node, ...grown]);
+    this.commitTree();
+  }
+
+  /**
+   * The boxes inside `node` that Yoga sizes from the room on offer and not from their content:
+   * one with a percentage width, and one that takes a share of a row from a basis of nothing.
+   * Nothing under a box with a width of its own in points is looked at: that width is its
+   * content's room whatever it holds.
+   */
+  private sizedByRoom(node: EngineNode): EngineNode[] {
+    const found: EngineNode[] = [];
+    for (const child of node.childList) {
+      if (child.nodeKind !== 'element') continue;
+      const width = readStyle(child, 'width');
+      const shares =
+        typeof readStyle(child, 'flex') === 'number' || isNoBasis(readStyle(child, 'flexBasis'));
+      if (typeof width === 'string' || shares || isShare(readStyle(child, 'minWidth'))) {
+        found.push(child);
+      }
+      if (typeof width !== 'number') found.push(...this.sizedByRoom(child));
+    }
+    return found;
+  }
+
+  /** The boxes a percentage height in them is of, or may be: see `settleHeld`. */
+  private readonly holds = new Set<EngineNode>();
+
+  /** Note the box a node's percentage height or basis is of, which may be held for it. */
+  private noteShare(node: EngineNode, style: Record<string, unknown>): void {
+    const shares = ['height', 'minHeight', 'flexBasis'].some((key) => isShareOrSum(style[key]));
+    const parent = shares ? layoutParent(node) : null;
+    // The surface is as tall as native makes it, and never held.
+    if (parent?.nodeKind === 'element' && parent !== this.root) this.holds.add(parent);
+  }
+
+  /**
+   * Hold each box that a percentage height in it is of, and that is as tall as its content, at
+   * the height that came to: once the column it is in has sized it, a browser takes the
+   * percentage of that height (CSS Flexbox 9.8), where Yoga takes it of the space on offer. The
+   * box is read from a commit with each percentage in it set aside, as a browser sizes it, and
+   * committed at that height, which a percentage in it is then of and adds nothing to. It is read
+   * again when anything in it or beside it moves, and when its width changes.
+   */
+  private settleHeld(): void {
+    if (!this.holds.size || !this.fabric.getBoundingClientRect) return;
+    const stale = [...this.holds].filter((node) => this.heldIsStale(node));
+    if (!stale.length) return;
+    this.settling = true;
+    try {
+      // Let go first: the commit just made had a box not held as tall as its content already.
+      const held = stale.filter((node) => node.heldAt !== undefined);
+      for (const node of held) node.heldAt = undefined;
+      this.commitTouched(held);
+      const holding = stale.filter((node) => {
+        const holds = this.holdsHeight(node);
+        if (!holds) this.holds.delete(node);
+        return holds;
+      });
+      for (const node of holding) node.heldAt = this.heldBox(node);
+      this.commitTouched(holding);
+    } finally {
+      this.settling = false;
+    }
+  }
+
+  /** A box's height as it was just committed, and the height of its content box then. */
+  private heldBox(node: EngineNode): EngineNode['heldAt'] {
+    const box = this.boxOf(node);
+    if (!box) return undefined;
+    const edge = insets(node.committed?.props ?? {});
+    return { width: box[2], height: box[3], inner: Math.max(box[3] - edge.Top - edge.Bottom, 0) };
+  }
+
+  /** Whether a box is to be read again: not held yet, moved, or with something in it moved. */
+  private heldIsStale(node: EngineNode): boolean {
+    if (this.topOf(node) !== this.root) {
+      this.holds.delete(node);
+      // Merged again if it comes back, without the height it had here.
+      if (node.heldAt) node.propsDirty = true;
+      node.heldAt = undefined;
+      return false;
+    }
+    if (!node.heldAt) return true;
+    if (this.boxOf(node)?.[2] !== node.heldAt.width) return true;
+    // Beside it too: across a row, a box beside it can make the row taller.
+    const around = node.parent ?? node;
+    for (const box of this.movedBoxes) if (isWithin(box, around)) return true;
+    for (const box of this.grownBoxes) if (isWithin(box, around)) return true;
+    return false;
+  }
+
+  /** Whether a box is held: as tall as its content, sized by flex, and a percentage is of it. */
+  private holdsHeight(node: EngineNode): boolean {
+    if (definiteHeight(node) || !NO_HEIGHT.has(ownLayout(node, 'height') as string)) return false;
+    return sizedByFlex(node) && holdsShares(node);
+  }
+
+  /** The boxes with a declaration that is a percentage and a length: see `settleMixed`. */
+  private readonly mixeds = new Set<EngineNode>();
+
+  /**
+   * Finish each `calc()` of a percentage and a length from the commit just made: read the box
+   * the percentage is of, and commit the box at what the sum comes to. A box in the flow is
+   * committed first with those declarations set aside, since the box it is in may be as wide as
+   * its content, and in a browser the percentage is of that width without them. It is worked out
+   * again when the box or anything in it changes, and when the box it is of changes size.
+   * Whether any was worked out.
+   */
+  private settleMixed(): boolean {
+    if (!this.mixeds.size || !this.fabric.getBoundingClientRect) return false;
+    this.settling = true;
+    try {
+      let waiting = [...this.mixeds].filter((node) => this.mixedIsStale(node));
+      const settled = waiting.length > 0;
+      // From the outermost: a share of a box is of the size that box is finished at.
+      while (waiting.length) {
+        const inside = waiting.filter((node) =>
+          waiting.some((other) => other !== node && isWithin(node, other)),
+        );
+        this.settleMixedTogether(waiting.filter((node) => !inside.includes(node)));
+        waiting = inside.filter((node) => this.mixedIsStale(node, true));
+      }
+      return settled;
+    } finally {
+      this.settling = false;
+    }
+  }
+
+  /** Whether a box is to be worked out: it changed, or the box it is a share of did. */
+  private mixedIsStale(node: EngineNode, waited = false): boolean {
+    const mixed = node.mixed;
+    if (!mixed || this.topOf(node) !== this.root) {
+      this.mixeds.delete(node);
+      return false;
+    }
+    const base = this.mixedBase(node);
+    return base !== undefined && (waited || mixed.dirty || !sameBase(base, mixed.base));
+  }
+
+  /**
+   * Work out boxes that are not in one another with two commits between them: one with each
+   * set aside, to read what it is a share of, and one with each at what it comes to. A fitted
+   * box is sized from its content in commits of its own.
+   */
+  private settleMixedTogether(nodes: readonly EngineNode[]): void {
+    const alone = (node: EngineNode) => node.fit !== undefined;
+    for (const node of nodes) node.mixed!.dirty = false;
+    const measured = nodes.filter((node) => !this.mixedOnlyMoves(node) && this.mixedInFlow(node));
+    const plain = measured.filter((node) => !alone(node));
+    for (const node of plain) node.mixedOff = true;
+    this.commitTouched(plain);
+    for (const node of plain) node.mixedOff = undefined;
+    const bases = new Map(plain.map((node) => [node, this.mixedBase(node)]));
+    for (const node of measured.filter(alone)) bases.set(node, this.measuredBase(node));
+    for (const node of nodes) this.workOutMixed(node, bases.get(node));
+    this.commitTouched(nodes.filter((node) => !alone(node)));
+    for (const node of nodes.filter(alone)) this.commitMixed(node);
+    // A fitted box sized again may have been merged with no sum left: the width it came to.
+    for (const node of nodes) if (node.mixed) node.mixed.base = this.mixedBase(node);
+  }
+
+  /** What a node's sums come to against the box they are of, read now where none was given. */
+  private workOutMixed(node: EngineNode, base: readonly [number, number | undefined] | undefined) {
+    const against = base ?? this.mixedBase(node);
+    if (!against || !node.mixed) return;
+    const inColumn = node.parent !== null && !isRow(node.parent);
+    node.mixed.values = mixedValues(node.mixed.parts, against, this.boxOf(node), inColumn);
+  }
+
+  private commitTouched(nodes: readonly EngineNode[]): void {
+    if (!nodes.length) return;
+    this.touch(nodes);
+    this.commitTree();
+  }
+
+  /** A translate moves nothing but the box itself: nothing is measured again for one. */
+  private mixedOnlyMoves(node: EngineNode): boolean {
+    return Object.keys(node.mixed!.parts).every((key) => key.startsWith('translate'));
+  }
+
+  private mixedInFlow(node: EngineNode): boolean {
+    const position = readStyle(node, 'position');
+    return position !== 'absolute' && position !== 'fixed';
+  }
+
+  /**
+   * Commit a node whose mixed declarations were set aside or worked out. A box in a line is
+   * sized from its content and keeps the width that came to, so it is sized again from the
+   * start: left as it was, it would be measured at the width its last limit gave it.
+   */
+  private commitMixed(node: EngineNode): void {
+    this.touch([node]);
+    this.commitTree();
+    if (!node.fit) return;
+    node.fit.dirty = true;
+    if (this.toFit(node)) this.fitTogether([node]);
+  }
+
+  /**
+   * The box a node's percentages are of, with its mixed declarations set aside: a box in the
+   * flow can be what makes its container as wide as it is. One out of the flow makes nothing
+   * wider, so the box it is placed in is read as it stands.
+   */
+  private measuredBase(node: EngineNode): readonly [number, number | undefined] | undefined {
+    node.mixedOff = true;
+    this.commitMixed(node);
+    node.mixedOff = undefined;
+    return this.mixedBase(node);
+  }
+
+  /**
+   * The width and height a node's percentages are of: the padding box of what an out-of-flow
+   * box is placed in, and the content box of its parent for any other. The height is nothing
+   * where the parent was given none, as a percentage of an `auto` height is in a browser.
+   */
+  private mixedBase(node: EngineNode): readonly [number, number | undefined] | undefined {
+    const position = readStyle(node, 'position');
+    if (position === 'absolute' || position === 'fixed') {
+      const box = this.paddingBox(this.containingBlock(node));
+      return box && [box[2], box[3]];
+    }
+    const parent = node.parent;
+    if (!parent || parent === this.root)
+      return this.paddingBox(this.root)?.slice(2) as [number, number];
+    const box = this.boxOf(parent);
+    if (!box) return undefined;
+    this.flowStyles.clear();
+    const style = this.flowStyle(parent);
+    const edge = insets(style);
+    this.flowStyles.clear();
+    // Written, or given by the layout around it, or held at its content's: see `settleHeld`.
+    const given = (style['height'] != null && style['height'] !== 'auto') || definiteHeight(parent);
+    return [box[2] - edge.Left - edge.Right, given ? box[3] - edge.Top - edge.Bottom : undefined];
+  }
+
+  /** The box Yoga positions an out-of-flow node by: the nearest ancestor that is not static. */
+  private containingBlock(node: EngineNode): EngineNode {
+    for (let up = node.parent; up; up = up.parent) {
+      if (up.nodeKind !== 'element' || readStyle(up, 'position') !== 'static') return up;
+    }
+    return this.root;
+  }
+
+  /** A box inside its border, which insets are measured from. The root's is the window. */
+  private paddingBox(node: EngineNode): readonly [number, number, number, number] | undefined {
+    if (node === this.root) {
+      const { width, height } = this.viewportSize;
+      return width > 0 && height > 0 ? [0, 0, width, height] : undefined;
+    }
+    const box = this.boxOf(node);
+    if (!box) return undefined;
+    const edge = this.borderInsets(node);
+    const [width, height] = [box[2] - edge.Left - edge.Right, box[3] - edge.Top - edge.Bottom];
+    return [box[0] + edge.Left, box[1] + edge.Top, width, height];
+  }
+
+  /** A container's borders alone: an inset is measured from inside the border. */
+  private borderInsets(container: EngineNode) {
+    if (container.nodeKind !== 'element') return NO_INSETS;
+    const style = this.flowStyle(container);
+    return insets(
+      Object.fromEntries(Object.entries(style).filter(([key]) => key.startsWith('border'))),
+    );
+  }
+  /**
+   * Set while boxes read back are laid out again, when a node is reconciled for a phase and not
+   * for a change.
+   */
+  private settling = false;
+
+  private boxOf(node: EngineNode): readonly [number, number, number, number] | undefined {
+    const handle = node.committed?.handle;
+    return handle ? this.fabric.getBoundingClientRect?.(handle, false) : undefined;
+  }
+
+  /** Have these nodes merged again in the next commit, without asking the host for one. */
+  private touch(nodes: Iterable<EngineNode>): void {
+    for (const node of nodes) {
+      node.propsDirty = true;
+      for (let up = node.parent; up && !up.subtreeDirty; up = up.parent) up.subtreeDirty = true;
+    }
+  }
+
+  /** The width inside a box's padding and border, which is the most a child of it is given. */
+  private roomIn(node: EngineNode | null): number {
+    const box = node && this.boxOf(node);
+    if (!node || !box) return Infinity;
+    const edge = node.nodeKind === 'element' ? insets(this.flowStyle(node)) : NO_INSETS;
+    return box[2] - edge.Left - edge.Right;
+  }
+
+  /** What the root is committed with: the app's top views, or the strict view around them. */
+  private rootHandles(): FabricNode[] {
+    const handles: FabricNode[] = [];
+    for (const child of this.visibleChildren(this.root)) {
+      if (!this.withheld(child)) handles.push(this.reconcileUnder(this.root, child));
+    }
+    return this.strict ? [this.inStrictView(handles)] : handles;
+  }
+
+  /** The `LayoutConformance` view the app is committed in. See `EngineOptions`. */
+  private strictView: FabricNode | null = null;
+  private strictChildren: FabricNode[] | null = null;
+
+  /** The app's top views inside the strict view: the same view each commit, with these in it. */
+  private inStrictView(children: FabricNode[]): FabricNode {
+    if (this.strictView && this.strictChildren && sameHandles(children, this.strictChildren)) {
+      return this.strictView;
+    }
+    this.strictChildren = children;
+    this.strictView = this.strictView
+      ? this.fabric.cloneNodeWithNewChildren(this.strictView)
+      : this.fabric.createNode(
+          nextTag(),
+          'LayoutConformance',
+          this.rootTag,
+          { mode: 'strict', display: 'contents' },
+          this.root,
+        );
+    for (const child of children) this.fabric.appendChild(this.strictView, child);
+    return this.strictView;
+  }
+
   /** Anchors take part in sibling ordering but never reach Fabric. */
   private visibleChildren(node: EngineNode): EngineNode[] {
     // A view that takes its text as a prop has no text children to commit. See `ViewNameOptions`.
@@ -5090,8 +7925,14 @@ export class Engine implements HostEngine {
     underOwnShorthands(style, inline, node.boundByProp, node.styleCache?.important);
   }
 
+  /**
+   * Exempt from the complexity limit deliberately, as `matchesCompound` is: a flat sequence of
+   * steps, each guarded by what it reads, run for every node merged. Moving the guards into calls
+   * of their own measured slower in `pnpm bench` and `pnpm bench:tailwind`.
+   */
+  // eslint-disable-next-line complexity
   private mergeProps(node: EngineNode, viewName: string): Record<string, unknown> {
-    if (node.nodeKind === 'text') return { text: paragraphText(node) };
+    if (node.nodeKind === 'text') return this.textProps(node);
     if (this.dev) this.checkProps(node);
     this.registerSheet(node.templateSheet);
     this.registerSheet(node.hostSheet);
@@ -5108,7 +7949,10 @@ export class Engine implements HostEngine {
     nativePointerEvents(node, style, resolved);
     // Before an image's own size: `fit-content` is no size, so the image's is what it gets.
     fitContent(node, style);
+    if (this.asked & SHARED_HEIGHTS) this.noteShare(node, style);
     percentHeight(node, style);
+    if (style['rowGap'] !== undefined) percentGap(node, style);
+    if (this.asked & CSS_LAYOUT) this.flowed(node, style);
     placeholderFaded(style);
     const intrinsic = node.props[INTRINSIC_SIZE] as IntrinsicSize | undefined;
     if (intrinsic) applyIntrinsicSize(style, intrinsic);
@@ -5117,28 +7961,22 @@ export class Engine implements HostEngine {
     holdLoadingFamily(node, style);
     // Once the face is matched: a family a view's own font names is the face its weight chose.
     renameFonts(viewName, style, this.postScriptName);
-    if (viewName === PARAGRAPH) {
-      alignText(style, this.directionOf(node, style));
-      this.wholeWords(node, style);
-      lineTall(style, this.tallestRun(node, style, 0), this.fontScale);
-    }
+    if (viewName === PARAGRAPH) this.paragraphStyled(node, style);
     if (this.fontsRefreshed) this.capForFonts(node, style);
-    alignMultiline(viewName, style);
-    rowsTall(viewName, style, this.fontScale);
+    const field = TEXT_INPUTS.has(viewName);
+    if (field) fieldStyled(viewName, style, this.fontScale);
     const merged = composeTransform(node, this.eased(node, style));
     // On iOS: Android's field says the baseline of the line it is sized and centred by.
-    // Still under the row that marked it: a row taken away is not committed again to unmark it.
-    const row = node.onBaseline;
-    const onBaseline = viewName === 'TextInput' && row !== undefined && isWithin(node, row);
-    centreSingleLine(viewName, merged, this.fontScale, onBaseline);
+    if (field) centreSingleLine(viewName, merged, this.fontScale, isOnBaseline(node, viewName));
     // After a transition, which eases the basis as the basis it was written as.
     basisAsSize(node, merged);
-    // After the basis, which is a size given where it is committed as one.
-    ratioForAutoSize(merged);
-    wrappedLinesStretch(merged);
-    stretchedOverRatio(node, merged);
-    leastWins(merged, 'Height');
-    leastWins(merged, 'Width');
+    // Each asked of the key it reads first, here and in `engineLayout`: it is asked of every node
+    // merged. After the basis, which is a size given where it is committed as one.
+    if (merged['aspectRatio'] != null) {
+      ratioForAutoSize(merged);
+      stretchedOverRatio(node, merged);
+    }
+    if (merged['flexWrap'] !== undefined) wrappedLinesStretch(merged);
     noOutline(merged);
     this.borderInText(node, merged);
     // Last, on what is committed: an override or an animation can hide a box, or place it.
@@ -5149,7 +7987,339 @@ export class Engine implements HostEngine {
     this.movePaint(node, merged);
     if (node.raised !== undefined) merged['zIndex'] ??= node.raised;
     keptForNative(node, merged);
+    this.laidOut(node, merged);
     return merged;
+  }
+
+  /** What a paragraph alone is styled with: how its text is aligned, cut off and held tall. */
+  private paragraphStyled(node: EngineNode, style: Record<string, unknown>): void {
+    alignText(style, this.directionOf(node, style));
+    this.wholeWords(node, style);
+    lineTall(style, this.tallestRun(node, style, 0), this.fontScale);
+  }
+
+  /** A run of text as it is committed: a word to a line while how narrow it goes is read. */
+  private textProps(node: EngineNode): Record<string, unknown> {
+    const text = paragraphText(node);
+    const words = this.narrowed !== null && this.inWords(node);
+    return { text: words ? text.trim().replace(/\s+/g, '\n') : text };
+  }
+
+  /** A node's part in a block's flow, where a layout of CSS's has been asked for. */
+  private flowed(node: EngineNode, style: Record<string, unknown>): void {
+    percentBasis(node, style);
+    flowLayout(node, style, this.fontScale);
+    this.alignLine(node, style);
+    onBaseline(node, style);
+    alignedInLine(node, style);
+  }
+
+  /** What the engine lays out in Yoga's place, of what has been asked for: see `asked`. */
+  private laidOut(node: EngineNode, merged: Record<string, unknown>): void {
+    const asked = this.asked;
+    if (this.checksAsks) this.checkAsked(node, merged);
+    engineLayout(node, merged, asked);
+    const placed = merged['position'] === 'absolute';
+    if (placed && !(asked & CSS_LAYOUT) && asksOfPlaced(merged)) {
+      this.want(CSS_LAYOUT);
+      this.askedLate.add(node);
+    }
+    if (asked & LAYOUTS) this.noteSettled(node, merged);
+  }
+
+  /** What a node's rules give it. */
+  private ruleStyle(node: EngineNode): Readonly<Record<string, unknown>> {
+    return this.styles.resolve(node, this.styleEpoch).style;
+  }
+
+  /** Each node's layout styles while one container is planned, so each is merged once. */
+  private readonly flowStyles = new Map<EngineNode, Record<string, unknown>>();
+
+  /** A node's own layout styles, in the order `mergeProps` applies them. */
+  private flowStyle(node: EngineNode): Record<string, unknown> {
+    let style = this.flowStyles.get(node);
+    if (style) return style;
+    style = { ...node.defaultStyle, ...this.ruleStyle(node) };
+    for (const key of FLOW_PROPS) {
+      if (node.props[key] !== undefined) style[key] = node.props[key];
+    }
+    flattenStyle(node.props['style'], style);
+    flattenStyle(node.props[STYLE_OVERRIDE], style);
+    this.flowStyles.set(node, style);
+    return style;
+  }
+
+  /** The engine's nodes as `planFlow` reads them. A run of text is a box with no style. */
+  private readonly flowTree: FlowTree<EngineNode> = {
+    children: (node) => {
+      const boxes: EngineNode[] = [];
+      for (const child of node.childList) {
+        if (child.nodeKind === 'text' && child.nodeText.trim() !== '') boxes.push(child);
+        // An element committed somewhere else, an overlay say, is laid out there.
+        if (child.nodeKind !== 'element' || this.committedElsewhere(child)) continue;
+        const display = this.flowStyle(child)['display'];
+        if (display === 'none') continue;
+        // No box of its own: its children are laid out here.
+        if (display === 'contents') boxes.push(...this.flowTree.children(child));
+        else boxes.push(child);
+      }
+      return boxes;
+    },
+    style: (node, key) => {
+      if (node.nodeKind !== 'element') return undefined;
+      const style = this.flowStyle(node);
+      // Fixed is out of the flow as absolute is.
+      if (key === 'position' && style['position'] === 'fixed') return 'absolute';
+      for (const source of FLOW_SOURCES[key]) {
+        if (style[source] != null) return style[source];
+      }
+      // An element said to be always inline, a span, with no display given: a box in a line.
+      if (key === 'display' && inlineText(node)) return 'inline-block';
+      return undefined;
+    },
+    hasText: (node) =>
+      isTextElement(node) && node.childList.some((child) => child.nodeKind === 'text'),
+    isText: (node) => node.nodeKind === 'text',
+  };
+
+  /**
+   * Whether a node is a block container, or was one when it was last planned. A text element
+   * lays out text, not boxes: it has no flow to plan, whatever its display.
+   */
+  private flows(node: EngineNode, display: unknown): boolean {
+    if (node.flow !== undefined) return true;
+    return isBlockContainer(display) && !isTextElement(node);
+  }
+
+  /**
+   * Plan a block container's flow again, and have merged again each child the plan lays out
+   * differently: one whose collapsed margins moved, one that joined the flow or left it. A child
+   * is planned from its siblings, so nothing about it need have changed for this to change.
+   */
+  private reflow(node: EngineNode, display: unknown): void {
+    if (!this.flows(node, display)) return;
+    this.flowStyles.clear();
+    const before = node.flow;
+    const after = isTextElement(node) ? undefined : this.planFlow(node);
+    this.flowStyles.clear();
+    if (!before && !after) return;
+    node.flow = after;
+    if (before?.plan.kind !== after?.plan.kind) node.propsDirty = true;
+    leaveFlow(node, before, after);
+    joinFlow(node, before, after);
+    this.hang(node, before, after);
+  }
+
+  /**
+   * Work out the room each line needs under its baseline, and how far over the bottom of it
+   * each box on it sits, and have merged again the container and each box where that changed:
+   * every one of them is placed by it. See `liftLines`.
+   */
+  private hang(node: EngineNode, before: Flow | undefined, after: Flow | undefined): void {
+    if (after) this.liftLines(node, after);
+    if (sameHang(before, after)) return;
+    node.propsDirty = true;
+    for (const child of node.childList) {
+      if (child.nodeKind !== 'text') child.propsDirty = true;
+      else for (const box of paragraphsOf(child)) box.propsDirty = true;
+    }
+  }
+
+  /**
+   * A browser sits each box on a line by its baseline, and the line has its strut's room under
+   * the baseline at least. The engine sits the boxes on the bottom of a row instead, so each is
+   * given a margin under it: the room under the line's baseline, the most any box or the strut
+   * needs, less the room under the box's own. An empty box's baseline is its bottom edge, and a
+   * box of text or of lines has its last line's under it, with its padding and border.
+   *
+   * ponytail: read from the sheets and the props, where a library's struts are. A shift bound on
+   * an element is not seen here until the inline form compiles to one.
+   */
+  private liftLines(node: EngineNode, flow: Flow): void {
+    const runs =
+      flow.plan.kind === 'lines'
+        ? [this.onLines(node)]
+        : [...flow.plan.lines.values()].map((line) => line.boxes);
+    if (!runs.some((boxes) => boxes.length)) return;
+    const below = this.strutBelow(node);
+    const lifts = new Map<EngineNode, number>();
+    const unders = new Map<EngineNode, number>();
+    const rises = this.riseLines(node, runs);
+    for (const boxes of runs) {
+      // A box a keyword aligns to the top, middle or bottom of its line is not on its baseline.
+      const aligned = boxes.map((box) => this.alignedOnLine(box));
+      const depths = boxes.map((box, i) => (aligned[i] ? 0 : this.depthOnLine(box, below)));
+      const under = Math.max(below, ...depths);
+      boxes.forEach((box, i) => {
+        const lift = aligned[i] ? 0 : Math.round((under - depths[i]!) * 1000) / 1000;
+        // A run of text is placed as its paragraphs.
+        for (const placed of box.nodeKind === 'text' ? paragraphsOf(box) : [box])
+          lifts.set(placed, lift);
+      });
+      if (boxes[0]) unders.set(boxes[0], under);
+    }
+    flow.lifts = lifts;
+    flow.unders = unders;
+    flow.rises = rises;
+    flow.risen = runs.every((boxes) => boxes.some((box) => rises.has(box)));
+    if (flow.plan.kind === 'lines') flow.under = Math.max(below, ...unders.values());
+  }
+
+  /**
+   * The room over a line's baseline, as its boxes keep it: a box whose height is known is moved
+   * down by a top margin to reach as high as the strut does, so the line is as tall over its
+   * baseline as a browser has it without a least height of the row it is in. That holds a line
+   * in a box with a height of its own, which the row's least height cannot, and lets a line
+   * taller than the box it is in reach down out of it, where the row's lines on its bottom
+   * would reach up.
+   */
+  private riseLines(
+    node: EngineNode,
+    runs: readonly (readonly EngineNode[])[],
+  ): Map<EngineNode, number> {
+    const inherited = this.styles.resolve(node, this.styleEpoch).inherited;
+    const above = strutOf(inherited).above * textScale(inherited, this.fontScale);
+    const rises = new Map<EngineNode, number>();
+    for (const box of runs.flat()) {
+      const reach = this.knownAbove(box, node);
+      if (reach !== undefined) rises.set(box, Math.round(Math.max(above - reach, 0) * 1000) / 1000);
+    }
+    return rises;
+  }
+
+  /**
+   * How high over the baseline an empty box on a line reaches, with its margins, where that
+   * is known before layout: a height in points, or a share of a box of lines held at its
+   * content's height, and its padding and border. Nothing for a box aligned another way.
+   */
+  private knownAbove(box: EngineNode, container: EngineNode): number | undefined {
+    if (box.nodeKind !== 'element' || isTextElement(box) || MEASURED_VIEWS.has(viewNameOf(box)))
+      return undefined;
+    const rule = this.ruleStyle(box);
+    if (hungBy(rule) || rule['textAlignVertical'] !== undefined || this.onLines(box).length)
+      return undefined;
+    const style = this.flowStyle(box);
+    // An empty inline-block's baseline is the bottom edge of its margin: both margins are over
+    // it. An empty flex or grid box's is the bottom of its border box: see `depthOnLine`.
+    const margins = [
+      firstOf(style, ['marginTop', 'marginVertical', 'margin']),
+      this.emptyFlexOnALine(box, style)
+        ? 0
+        : firstOf(style, ['marginBottom', 'marginVertical', 'margin']),
+    ].map((margin) => (margin == null || margin === 'auto' ? 0 : margin));
+    if (margins.some((margin) => typeof margin !== 'number')) return undefined;
+    const height = knownHeight(style, blockContentHeight(container));
+    return height === undefined
+      ? undefined
+      : height + (margins[0] as number) + (margins[1] as number);
+  }
+
+  /** Whether `vertical-align` sets a box to the top, the middle or the bottom of its line. */
+  private alignedOnLine(box: EngineNode): boolean {
+    return (
+      box.nodeKind === 'element' &&
+      LINE_ALIGNED[this.ruleStyle(box)['textAlignVertical'] as string] !== undefined
+    );
+  }
+
+  /** The boxes in a block's lines: those in its flow, a run of text among them. */
+  private onLines(node: EngineNode): EngineNode[] {
+    return this.flowTree
+      .children(node)
+      .filter(
+        (child) =>
+          child.nodeKind === 'text' ||
+          !OUT_OF_FLOW.has(this.flowStyle(child)['position'] as string),
+      );
+  }
+
+  /**
+   * How far under a line's baseline a box on it reaches: a run of text, of the line's font, as
+   * far as the strut's room, `below`. See `liftLines`.
+   */
+  private depthOnLine(box: EngineNode, below: number): number {
+    if (box.nodeKind === 'text') return below;
+    if (isTextElement(box) || MEASURED_VIEWS.has(viewNameOf(box))) return this.strutBelow(box);
+    const style = this.flowStyle(box);
+    const own = this.ownUnder(box, style);
+    // An empty flex or grid box sits on the baseline by the bottom of its border box, with its
+    // bottom margin under it; an empty inline-block, by the bottom of that margin.
+    //
+    // ponytail: the margin under a box of text or of lines is not counted, which Chrome counts.
+    // Count it once a box's lines are told from the blocks in it.
+    const margin = this.emptyFlexOnALine(box, style) ? marginUnder(style) : 0;
+    return hungBy(this.ruleStyle(box)) + own + margin;
+  }
+
+  /** An inline-flex or inline-grid box with nothing in it: its baseline is its border box's bottom. */
+  private emptyFlexOnALine(box: EngineNode, style: Record<string, unknown>): boolean {
+    return FLEX_ON_A_LINE.has(style['display'] as string) && this.onLines(box).length === 0;
+  }
+
+  /**
+   * The room under a box's own baseline, inside its margin: none where it has no line in it,
+   * or clips what it holds, and its last line's room and its padding and border where it has.
+   *
+   * ponytail: a box of blocks with text in them is taken to end on a line of its own font.
+   */
+  private ownUnder(box: EngineNode, style: Record<string, unknown>): number {
+    if (clipsToEdge(box, style, this.ruleStyle(box))) return 0;
+    const lines = isBlockContainer(style['display']) && this.holdsLines(box);
+    const room = lines ? this.lineUnder(box) : holdsText(box) ? this.strutBelow(box) : 0;
+    if (room === 0) return 0;
+    // A height of its own: its one line is at the top of it, and so is its baseline.
+    const tall = this.belowFirstLine(box, style);
+    if (tall !== undefined) return tall;
+    const border = firstOf(style, ['borderBottomWidth', 'borderWidth']);
+    return room + paddingUnder(style) + (typeof border === 'number' ? border : 0);
+  }
+
+  /**
+   * How far under the baseline of its first line a box with a height in points reaches.
+   *
+   * ponytail: one line of its own font, as an input or a badge has. A box of a set height with
+   * lines of words in it ends lower; count the lines if one is seen.
+   */
+  private belowFirstLine(box: EngineNode, style: Record<string, unknown>): number | undefined {
+    const height = style['height'];
+    if (typeof height !== 'number') return undefined;
+    const edge = insets(style);
+    const border = style['boxSizing'] === 'content-box' ? height + edge.Top + edge.Bottom : height;
+    const inherited = this.styles.resolve(box, this.styleEpoch).inherited;
+    const above = strutOf(inherited).above * textScale(inherited, this.fontScale);
+    return Math.max(border - edge.Top - above, 0);
+  }
+
+  /** Whether a block container holds lines: something in its flow, and nothing a block. */
+  private holdsLines(box: EngineNode): boolean {
+    return this.onLines(box).length > 0 && !this.holdsBlock(box);
+  }
+
+  /** The room under the baseline of a box's lines, as `liftLines` works it out for it. */
+  private lineUnder(box: EngineNode): number {
+    const below = this.strutBelow(box);
+    return Math.max(below, ...this.onLines(box).map((child) => this.depthOnLine(child, below)));
+  }
+
+  /** The room under the baseline of a node's strut, as native scales its text. */
+  private strutBelow(node: EngineNode): number {
+    const inherited = this.styles.resolve(node, this.styleEpoch).inherited;
+    const below = strutOf(inherited).below * textScale(inherited, this.fontScale);
+    return Math.round(below * 1000) / 1000;
+  }
+
+  private planFlow(node: EngineNode): Flow | undefined {
+    const inBlock = flowOver(node)?.plan.kind === 'block';
+    const plan = planFlow(this.flowTree, node, inBlock);
+    if (!plan) return undefined;
+    const members = new Set(
+      this.flowTree
+        .children(node)
+        .filter((child) => this.flowTree.style(child, 'position') !== 'absolute'),
+    );
+    const lined = new Map<EngineNode, EngineNode>();
+    for (const [first, line] of plan.lines) for (const box of line.boxes) lined.set(box, first);
+    return { plan, members, lined };
   }
 
   /**
@@ -5367,6 +8537,7 @@ export class Engine implements HostEngine {
     if (sheet === next && this.knownSheets.has(sheet)) return;
     this.unwatchHas(sheet);
     this.watchHas(next);
+    this.watchLayout(next);
     this.unwatchActive(sheet);
     this.watchActive(next);
     const at = this.sheetOrder.indexOf(sheet);
@@ -5691,57 +8862,6 @@ export class Engine implements HostEngine {
     // was committed with as it played: native has drawn it elsewhere since.
     const committed = node.committed;
     if (node.owned && committed) this.setOwned(node, RESET_OWNED, committed.props);
-  }
-
-  /** A graph of native's was connected to a view: see `Touched`. */
-  private touchedNatively(node: EngineNode, tag: number, keys: readonly string[]): void {
-    const taken = keys.filter((key) => key === 'opacity' || key === 'transform');
-    if (!taken.length) return;
-    if (node.owned?.tag !== tag) node.owned = { tag, keys: new Set() };
-    for (const key of taken) node.owned.keys.add(key);
-  }
-
-  /**
-   * Set on native a change of a prop a graph of native's has set on the view before, while no
-   * graph of its holds it: the commit cannot change it (see `Touched`). The payload is committed
-   * as well, so the shadow node is as the view is drawn. A transform native cannot take as
-   * numbers, a matrix, is left committed alone.
-   */
-  private setOwned(
-    node: EngineNode,
-    payload: Readonly<Record<string, unknown>>,
-    props: Record<string, unknown>,
-  ): void {
-    const owned = node.owned!;
-    const tag = node.committed?.tag;
-    if (tag === undefined || owned.tag !== tag || !this.scrollDriver) return;
-    const held = this.scrollDriver.held(node);
-    const free = (key: string) => key in payload && owned.keys.has(key) && !held.has(key);
-    const values: SetValues = {};
-    if (free('opacity')) {
-      const opacity = props['opacity'];
-      values.opacity = typeof opacity === 'number' ? opacity : 1;
-    }
-    if (free('transform')) {
-      const transform = heldTransform(props['transform'], () => this.boxSize(node));
-      if (transform) values.transform = transform;
-    }
-    if (values.opacity !== undefined || values.transform) {
-      this.scrollDriver.set(node, tag, values);
-    }
-  }
-
-  /** The size a view is laid out at, where it has been. */
-  private boxSize(node: EngineNode): { width: number; height: number } | undefined {
-    let size: { width: number; height: number } | undefined;
-    this.measure(node, (frame) => (size = frame));
-    return size;
-  }
-
-  /** Forget the props native set on a node's view, which is gone or made again. */
-  private disown(node: EngineNode): void {
-    node.owned = undefined;
-    this.scrollDriver?.forget(node);
   }
 
   /** Take an animation back from native, which stops it there. The caller plays it on, or not. */
@@ -6133,53 +9253,6 @@ export class Engine implements HostEngine {
     if (this.easedNatively.has(node)) props['collapsable'] = false;
   }
 
-  /** The root's children as the views they are committed as, each reconciled. */
-  private rootHandles(): FabricNode[] {
-    const handles: FabricNode[] = [];
-    for (const child of this.visibleChildren(this.root)) {
-      if (!this.withheld(child)) handles.push(this.reconcileUnder(this.root, child));
-    }
-    return handles;
-  }
-
-  /** The transitions this commit lays out where they end, for native to move the views to. */
-  private laying: { node: EngineNode; key: string; eased: Transition }[] = [];
-  /** Whether this commit resizes or moves a box that is in no such transition. */
-  private movesOthers = false;
-
-  /**
-   * Commit where it ends each transition of a size or a place that just started, for native to
-   * move the view there: a layout animation, which the commit asks for once it is known that
-   * nothing else in it moves. One still on its way is committed where it ends too. On a host
-   * with no layout animation they are eased from JavaScript, but for one sent on again and again.
-   *
-   * A width eased from JavaScript is a commit a frame, and a commit lays the whole screen out.
-   */
-  private layEased(
-    node: EngineNode,
-    state: Map<string, Transition>,
-    started: readonly string[],
-    props: Record<string, unknown>,
-    now: number,
-  ): void {
-    const native = this.fabric.configureNextLayoutAnimation !== undefined;
-    for (const key of started) {
-      const eased = state.get(key)!;
-      if (!LAID_OUT.has(key) || eased.start > now || eased.duration <= 0) continue;
-      if (this.sentOnAgain(node, key, eased, now)) {
-        // Where it ends, at once: see `sentOnAgain`.
-        Object.assign(eased, { current: eased.to, done: true });
-        this.emitTransition(node, 'topTransitionend', key);
-        props[key] = eased.to;
-        continue;
-      }
-      if (!native) continue;
-      eased.laid = true;
-      this.laying.push({ node, key, eased });
-    }
-    for (const [key, eased] of state) if (eased.laid && !eased.done) props[key] = eased.to;
-  }
-
   /** When each size in transition was last started, and how many starts in a row came soon. */
   private readonly laidStarts = new WeakMap<
     EngineNode,
@@ -6244,6 +9317,51 @@ export class Engine implements HostEngine {
     if (this.pending) this.commit();
   }
 
+  /** The transitions this commit lays out where they end, for native to move the views to. */
+  private laying: { node: EngineNode; key: string; eased: Transition }[] = [];
+  /** Whether this commit resizes or moves a box that is in no such transition. */
+  private movesOthers = false;
+  /**
+   * Whether the boxes a commit moves or resizes are noted: for what the engine lays out in
+   * Yoga's place, which is laid out again around them, and for a transition native lays out,
+   * which is eased from JavaScript where anything else moves. An app with neither has no use
+   * for the note. Kept by `want`, as what is asked grows.
+   */
+  private notesMoves = this.asked !== 0;
+
+  /**
+   * Commit where it ends each transition of a size or a place that just started, for native to
+   * move the view there: a layout animation, which the commit asks for once it is known that
+   * nothing else in it moves. One still on its way is committed where it ends too. On a host
+   * with no layout animation they are eased from JavaScript, but for one sent on again and again.
+   *
+   * A width eased from JavaScript is a commit a frame, and a commit lays the whole screen out.
+   */
+  private layEased(
+    node: EngineNode,
+    state: Map<string, Transition>,
+    started: readonly string[],
+    props: Record<string, unknown>,
+    now: number,
+  ): void {
+    const native = this.fabric.configureNextLayoutAnimation !== undefined;
+    for (const key of started) {
+      const eased = state.get(key)!;
+      if (!LAID_OUT.has(key) || eased.start > now || eased.duration <= 0) continue;
+      if (this.sentOnAgain(node, key, eased, now)) {
+        // Where it ends, at once: see `sentOnAgain`.
+        Object.assign(eased, { current: eased.to, done: true });
+        this.emitTransition(node, 'topTransitionend', key);
+        props[key] = eased.to;
+        continue;
+      }
+      if (!native) continue;
+      eased.laid = true;
+      this.laying.push({ node, key, eased });
+    }
+    for (const [key, eased] of state) if (eased.laid && !eased.done) props[key] = eased.to;
+  }
+
   /**
    * Before a commit is handed over: ask native to move what it lays out, and take back to
    * ease from JavaScript whatever it cannot: all of it where the commit moves anything else,
@@ -6302,26 +9420,6 @@ export class Engine implements HostEngine {
     }
     for (const { node, running } of played) {
       if (running.laid) setTimeout(() => this.endLaidPlayed(node, running), duration);
-    }
-  }
-
-  /**
-   * Note a commit that resizes or moves a box in no transition native lays out: a prop of one
-   * that moves boxes, children that came or went, text longer or shorter than it was.
-   */
-  private noteMoved(
-    node: EngineNode,
-    payload: Record<string, unknown> | null,
-    resized: boolean,
-    words: unknown,
-  ): void {
-    if (this.movesOthers) return;
-    if (resized) this.movesOthers = true;
-    for (const key in payload) {
-      if (laidByNative(node, key)) continue;
-      // Text as long as it was is taken to be as wide, as a grid takes it: see `shapeOf`.
-      const longer = key === 'text' && String(payload[key]).length !== String(words).length;
-      if (MOVES_BOXES.has(key) || longer) this.movesOthers = true;
     }
   }
 
@@ -6483,6 +9581,57 @@ export class Engine implements HostEngine {
     }
     clock.stop();
     this.forgetEased(node);
+  }
+
+  /** A graph of native's was connected to a view: see `Touched`. */
+  private touchedNatively(node: EngineNode, tag: number, keys: readonly string[]): void {
+    const taken = keys.filter((key) => key === 'opacity' || key === 'transform');
+    if (!taken.length) return;
+    if (node.owned?.tag !== tag) node.owned = { tag, keys: new Set() };
+    for (const key of taken) node.owned.keys.add(key);
+  }
+
+  /**
+   * Set on native a change of a prop a graph of native's has set on the view before, while no
+   * graph of its holds it: the commit cannot change it (see `Touched`). The payload is committed
+   * as well, so the shadow node is as the view is drawn. A transform native cannot take as
+   * numbers, a matrix, is left committed alone.
+   */
+  private setOwned(
+    node: EngineNode,
+    payload: Readonly<Record<string, unknown>>,
+    props: Record<string, unknown>,
+  ): void {
+    const owned = node.owned!;
+    const tag = node.committed?.tag;
+    if (tag === undefined || owned.tag !== tag || !this.scrollDriver) return;
+    const held = this.scrollDriver.held(node);
+    const free = (key: string) => key in payload && owned.keys.has(key) && !held.has(key);
+    const values: SetValues = {};
+    if (free('opacity')) {
+      const opacity = props['opacity'];
+      values.opacity = typeof opacity === 'number' ? opacity : 1;
+    }
+    if (free('transform')) {
+      const transform = heldTransform(props['transform'], () => this.boxSize(node));
+      if (transform) values.transform = transform;
+    }
+    if (values.opacity !== undefined || values.transform) {
+      this.scrollDriver.set(node, tag, values);
+    }
+  }
+
+  /** The size a view is laid out at, where it has been. */
+  private boxSize(node: EngineNode): { width: number; height: number } | undefined {
+    let size: { width: number; height: number } | undefined;
+    this.measure(node, (frame) => (size = frame));
+    return size;
+  }
+
+  /** Forget the props native set on a node's view, which is gone or made again. */
+  private disown(node: EngineNode): void {
+    node.owned = undefined;
+    this.scrollDriver?.forget(node);
   }
 
   /** Let go of what native is easing on an element that is going, or gone. */
@@ -6683,7 +9832,7 @@ export class Engine implements HostEngine {
    * the field is merged, and unmark it when the row is aligned another way.
    */
   private noteBaselineFields(row: EngineNode): void {
-    const aligned = ownLayout(row, 'alignItems') === 'baseline';
+    const aligned = readStyle(row, 'alignItems') === 'baseline';
     const before = row.baselineFields;
     if (!aligned && !before) return;
     const now = new Set(
@@ -6751,6 +9900,7 @@ export class Engine implements HostEngine {
   }
 
   private clearFlags(node: EngineNode): void {
+    if ((node.propsDirty || node.structureDirty) && this.asked & LAYOUTS) this.noteChanged(node);
     node.propsDirty = false;
     node.structureDirty = false;
     node.subtreeDirty = false;
@@ -6764,9 +9914,12 @@ export class Engine implements HostEngine {
     const style = node.nodeKind === 'element' ? this.styles.resolve(node, this.styleEpoch) : null;
     const styleChanged = node.styleCommitted !== style;
     if (this.isClean(node) && !styleChanged) return node.committed!.handle;
+    // What a commit changed is noted, and a box planned again, for a layout of the engine's.
+    if (styleChanged && this.asked & LAYOUTS) this.noteChanged(node);
     node.styleCommitted = style;
     repaint(node);
     this.refitChildren(node);
+    if (this.asked & LAYOUTS) this.relayout(node);
 
     const viewName = committedViewName(node);
     this.forgetRenamed(node, viewName);
@@ -6779,7 +9932,55 @@ export class Engine implements HostEngine {
     this.notePresented(node, viewName);
     if (!previous)
       return this.create(node, viewName, this.mergeProps(node, viewName), childHandles);
+    return this.recloned(node, viewName, childHandles, styleChanged, previous);
+  }
 
+  /**
+   * Note a commit that resizes or moves a box in no transition native lays out: a prop of one
+   * that moves boxes, children that came or went, text longer or shorter than it was.
+   */
+  private noteMoved(
+    node: EngineNode,
+    payload: Record<string, unknown> | null,
+    children: number,
+    words: unknown,
+  ): void {
+    if (children) this.movesOthers = !!this.movedOrGrown(children).add(node);
+    for (const key in payload) {
+      // Text as long as it was is taken to be as wide, as a grid takes it: see `shapeOf`.
+      const change = key === 'text' ? String(payload[key]).length - String(words).length : 0;
+      if (!MOVES_BOXES.has(key) && !change) continue;
+      this.movedOrGrown(change).add(node);
+      if (!laidByNative(node, key)) this.movesOthers = true;
+    }
+  }
+
+  /** Note a clone that moves or resizes a box, where moves are noted: see `notesMoves`. */
+  private noteClone(
+    node: EngineNode,
+    payload: Record<string, unknown> | null,
+    childrenChanged: boolean,
+    childHandles: readonly FabricNode[],
+    previous: NonNullable<EngineNode['committed']>,
+  ): void {
+    if (!this.laying.length && !payload && !childrenChanged) return;
+    const by = childHandles.length - previous.childHandles.length;
+    this.noteMoved(node, payload, by, previous.props['text']);
+  }
+
+  /** Where a box is noted that holds this many more children or letters: none is another change. */
+  private movedOrGrown(more: number): Set<EngineNode> {
+    return more > 0 ? this.grownBoxes : this.movedBoxes;
+  }
+
+  /** A node that is committed, cloned for what changed of it: its props, its children. */
+  private recloned(
+    node: EngineNode,
+    viewName: string,
+    childHandles: FabricNode[],
+    styleChanged: boolean,
+    previous: NonNullable<EngineNode['committed']>,
+  ): FabricNode {
     // `propsDirty` is precise: Angular only calls setProperty when a binding actually changed.
     // It is not sufficient on its own, though. A node whose ancestor's class changed inherits
     // something new without any binding of its own having moved, so it is not propsDirty and
@@ -6787,15 +9988,13 @@ export class Engine implements HostEngine {
     // is here only because something beneath it moved has the props it had.
     const propsMoved = node.propsDirty || styleChanged;
     const props = propsMoved ? this.mergeProps(node, viewName) : previous.props;
-    const propsPayload = propsMoved ? this.propsPayload(node, previous.props, props) : null;
+    const payload = propsMoved ? this.propsPayload(node, previous.props, props) : null;
 
+    if (this.asked & LAYOUTS) this.noteHow(node, payload);
     const childrenChanged = this.childrenMoved(node, childHandles, previous.childHandles);
-    this.noteMoved(
-      node,
-      propsPayload,
-      childHandles.length !== previous.childHandles.length,
-      previous.props['text'],
-    );
+    const propsPayload = payload;
+    if (this.notesMoves)
+      this.noteClone(node, propsPayload, childrenChanged, childHandles, previous);
 
     let handle = previous.handle;
     if (childrenChanged || propsPayload) {
@@ -6857,6 +10056,19 @@ export class Engine implements HostEngine {
     const context = style?.context;
     if (HOIST_ONLY.has(node.tag)) return this.reconcileOnlyHoisted(node);
     if (HOIST_TARGETS.has(node.tag)) return this.reconcileHoistTarget(node, context);
+    if (node.flow !== undefined) return this.reconcileInFlow(node, node.flow, viewName, context);
+    return this.reconcileEach(node, viewName, context);
+  }
+
+  /**
+   * `reconcileChildren` for a node with no flow of its own, which holds nothing in a line:
+   * each child is its own view under it, asked here and not through a call for each.
+   */
+  private reconcileEach(
+    node: EngineNode,
+    viewName: string,
+    context: object | undefined,
+  ): FabricNode[] {
     const handles: FabricNode[] = [];
     for (const child of node.childList) {
       const clean = this.cleanUnder(node, child, context);
@@ -6867,14 +10079,193 @@ export class Engine implements HostEngine {
       if (child.nodeKind === 'anchor' || this.committedElsewhere(child) || this.withheld(child)) {
         continue;
       }
-      if (child.nodeKind === 'text') {
-        const handle = this.reconcileText(node, child, viewName, context);
-        if (handle) handles.push(handle);
-        continue;
-      }
-      handles.push(this.reconcileUnder(node, child, context));
+      const handle =
+        child.nodeKind === 'text'
+          ? this.reconcileText(node, child, viewName, context)
+          : this.reconcileUnder(node, child, context);
+      if (handle) handles.push(handle);
     }
-    return handles;
+    return node.ordered ? this.inOrder(node, handles) : handles;
+  }
+
+  /** `reconcileChildren` for a block: its children, with each run of boxes in its line box. */
+  private reconcileInFlow(
+    node: EngineNode,
+    flow: Flow,
+    viewName: string,
+    context: object | undefined,
+  ): FabricNode[] {
+    const handles: FabricNode[] = [];
+    // The node each handle is of, kept only where some of them are to share a line box.
+    const lines = flow.plan.lines.size ? flow : undefined;
+    const owners: EngineNode[] = [];
+    // Asked once of the node, and not of each child: most hold no words beside a box.
+    const worded = wordedLine(node) && holdsParagraphs(viewName);
+    for (const child of node.childList) {
+      // A clean child is stepped over here as it is under a box with no flow: a block of
+      // examples one of which ticks is most of a commit otherwise. See `cleanUnder`.
+      const handle =
+        this.cleanUnder(node, child, context) ??
+        (worded && child.nodeKind === 'text'
+          ? this.reconcileWordsInto(node, child, context, handles)
+          : this.reconcileChild(node, child, viewName, context));
+      if (!handle) continue;
+      handles.push(handle);
+      if (lines) owners.push(child);
+    }
+    if (lines) return this.inLines(node, lines, handles, owners);
+    return node.ordered ? this.inOrder(node, handles) : handles;
+  }
+
+  /**
+   * A run of text beside a box in a line: its words are each a view, which are added to
+   * `handles` here, and it has no one view to answer with.
+   */
+  private reconcileWordsInto(
+    node: EngineNode,
+    child: EngineNode,
+    context: object | undefined,
+    handles: FabricNode[],
+  ): undefined {
+    handles.push(...this.reconcileWords(node, child, context));
+    return undefined;
+  }
+
+  /** One child's view under `node`, or nothing for a child that has none there. */
+  private reconcileChild(
+    node: EngineNode,
+    child: EngineNode,
+    viewName: string,
+    context: object | undefined,
+  ): FabricNode | null | undefined {
+    if (child.nodeKind === 'anchor' || this.committedElsewhere(child) || this.withheld(child)) {
+      return undefined;
+    }
+    if (child.nodeKind === 'text') return this.reconcileText(node, child, viewName, context);
+    // A box in a line box is under that view, which is named by the line's first box: one that
+    // joins a line, leaves it, or changes lines is made again, as native never moves one.
+    const first = node.flow?.lined.get(child);
+    return this.reconcileUnder(first ? this.lineOf(node, first) : node, child, context);
+  }
+
+  /**
+   * A block's children with each run of inline-level boxes in its line box: the view is where
+   * the first box of the run was, and holds the run. The same view is committed while its boxes
+   * and the margin over it are the same, so a commit that changes neither sends nothing for it.
+   */
+  private inLines(
+    container: EngineNode,
+    flow: Flow,
+    handles: readonly FabricNode[],
+    owners: readonly EngineNode[],
+  ): FabricNode[] {
+    const boxes = new Map<EngineNode, FabricNode[]>();
+    const out: (FabricNode | EngineNode)[] = [];
+    handles.forEach((handle, i) => {
+      const first = flow.lined.get(owners[i]!);
+      if (!first) {
+        out.push(handle);
+        return;
+      }
+      const inside = boxes.get(first);
+      if (inside) inside.push(handle);
+      else {
+        out.push(first);
+        boxes.set(first, [handle]);
+      }
+    });
+    return out.map((each) => {
+      const inside = boxes.get(each as EngineNode);
+      if (!inside) return each as FabricNode;
+      const first = each as EngineNode;
+      return this.lineBox(container, first, flow.plan.lines.get(first)!, inside);
+    });
+  }
+
+  private lineBox(
+    container: EngineNode,
+    first: EngineNode,
+    { top }: { top: number },
+    handles: readonly FabricNode[],
+  ): FabricNode {
+    const line = this.lineOf(container, first);
+    const was = line.handle;
+    const along = this.alongLine(container);
+    const inherited = this.styles.resolve(container, this.styleEpoch).inherited;
+    const strut = lineStrut(inherited, container, first, this.fontScale);
+    const placed = line.top === top && line.along === along && sameStrut(line.strut, strut);
+    const same =
+      placed &&
+      line.handles.length === handles.length &&
+      handles.every((handle, i) => handle === line.handles[i]);
+    if (was && same) return was;
+    const where = { marginTop: top, justifyContent: along ?? 'flex-start', ...strut };
+    const handle = was
+      ? this.clone(was, placed ? null : where, [...handles])
+      : this.fabric.createNode(
+          nextTag(),
+          'View',
+          this.rootTag,
+          { ...LINE_BOX, ...where },
+          container,
+        );
+    if (!was) for (const child of handles) this.fabric.appendChild(handle, child);
+    Object.assign(line, { handle, top, along, strut, handles });
+    return handle;
+  }
+
+  /**
+   * Where `text-align` puts the boxes of a line in `container`, as the row the line is places
+   * its items: a browser sets inline-level boxes where it would set the line's words. Nothing
+   * at the start, which is where a row has them.
+   *
+   * ponytail: `end` and `right` are both the row's end, which is the left in a right-to-left
+   * layout: right for `end` and wrong for `right`. Read the direction if that is ever seen.
+   */
+  private alongLine(container: EngineNode): string | undefined {
+    const align = this.styles.resolve(container, this.styleEpoch).inherited['textAlign'];
+    return ALONG_A_LINE[align as string];
+  }
+
+  /**
+   * A box's part in that: the container of lines and nothing else is the row itself. A line
+   * among blocks is a line box, which `lineBox` sets its boxes along.
+   */
+  private alignLine(node: EngineNode, props: Record<string, unknown>): void {
+    if (node.flow?.plan.kind !== 'lines') return;
+    const along = this.alongLine(node);
+    if (along) props['justifyContent'] = along;
+  }
+
+  /**
+   * The line box `first` starts in `container`: the one it has, or a new one with no view yet.
+   * A line box is a view of its container's, so in another container it is another one, and so
+   * is the one of a first box that has been made again.
+   */
+  private lineOf(container: EngineNode, first: EngineNode): LineBox {
+    if (first.line?.in !== container) {
+      first.line = { handle: null, top: 0, handles: [], in: container };
+    }
+    return first.line;
+  }
+
+  /**
+   * A flex container's children in the order their `order` gives, as written among equals. A
+   * block lays its children out as written whatever they say, and text in the container has no
+   * order of its own.
+   */
+  private inOrder(node: EngineNode, handles: FabricNode[]): FabricNode[] {
+    if (!node.ordered || isBlockContainer(readStyle(node, 'display'))) return handles;
+    const orders = new Map<FabricNode, number>();
+    for (const child of node.childList) {
+      const order = child.committed && Number(readStyle(child, 'order') ?? 0);
+      if (order) orders.set(child.committed!.handle, order);
+    }
+    if (!orders.size) return handles;
+    return handles
+      .map((handle, i) => ({ handle, order: orders.get(handle) ?? 0, i }))
+      .sort((a, b) => a.order - b.order || a.i - b.i)
+      .map((each) => each.handle);
   }
 
   /**
@@ -6906,20 +10297,63 @@ export class Engine implements HostEngine {
     return box ? this.reconcileUnder(parent, box, context) : null;
   }
 
-  private looseText(parent: EngineNode, text: EngineNode, drawnBy = 'text'): EngineNode | null {
-    if (!trimEnds(text.nodeText)) return null;
-    let box = text.box;
+  /**
+   * A run of text beside a box in a line, as the paragraphs of its words: a browser breaks the
+   * line between any two of them, and what follows the run is where its last word ends. One
+   * paragraph is a box as wide as its longest line, with the next box under all of it.
+   */
+  private reconcileWords(parent: EngineNode, text: EngineNode, context?: object): FabricNode[] {
+    if (text.box?.committed) this.forgetCommitted(text.box);
+    text.box = undefined;
+    return this.wordBoxes(parent, text).map((box) => this.reconcileUnder(parent, box, context));
+  }
+
+  /** The paragraph of each word of a run, kept for the word in its place while there is one. */
+  private wordBoxes(parent: EngineNode, text: EngineNode): EngineNode[] {
+    const at = parent.childList.indexOf(text);
+    const words = wordsOf(text.nodeText, at > 0, at < parent.childList.length - 1);
+    const boxes = (text.words ??= []);
+    for (const gone of boxes.splice(words.length)) if (gone.committed) this.forgetCommitted(gone);
+    words.forEach((word, i) => {
+      const box = (boxes[i] ??= this.wordBox());
+      box.parent = parent;
+      if (truncationMoved(box, parent)) box.propsDirty = true;
+      const run = box.childList[0]!;
+      if (run.nodeText !== word) this.setText(run, word);
+    });
+    this.clearFlags(text);
+    return boxes;
+  }
+
+  private wordBox(): EngineNode {
+    const box = new RetainedNode('element', 'text', this);
+    box.anonymous = true;
+    const run = new RetainedNode('text', '', this);
+    run.parent = box;
+    box.childList = [run];
+    return box;
+  }
+
+  /** The box a run of loose text is drawn by: the one it has, or one made for the element. */
+  private boxFor(text: EngineNode, drawnBy: string): EngineNode {
     // One made for another element, before the view was registered again, is done with.
-    if (box && box.tag !== drawnBy) {
-      if (box.committed) this.forgetCommitted(box);
-      box = undefined;
+    if (text.box && text.box.tag !== drawnBy) {
+      if (text.box.committed) this.forgetCommitted(text.box);
+      text.box = undefined;
     }
-    if (!box) {
-      box = new RetainedNode('element', drawnBy, this);
-      box.anonymous = true;
-      box.childList = [text];
-      text.box = box;
-    }
+    if (text.box) return text.box;
+    const box = new RetainedNode('element', drawnBy, this);
+    box.anonymous = true;
+    box.childList = [text];
+    text.box = box;
+    return box;
+  }
+
+  private looseText(parent: EngineNode, text: EngineNode, drawnBy = 'text'): EngineNode | null {
+    for (const word of text.words ?? []) if (word.committed) this.forgetCommitted(word);
+    text.words = undefined;
+    if (!trimEnds(text.nodeText)) return null;
+    const box = this.boxFor(text, drawnBy);
     box.parent = parent;
     // Merged before the view is, so the view's truncation is read here: see `truncatedAs`.
     if (truncationMoved(box, parent)) box.propsDirty = true;
@@ -7026,6 +10460,25 @@ export class Engine implements HostEngine {
   }
 
   /**
+   * What a hoist target takes of a child written in it: the child's handle, `direct` for one
+   * hoisted into it, which goes after its siblings, or null for none.
+   */
+  private takenByTarget(
+    node: EngineNode,
+    child: EngineNode,
+    context: object | undefined,
+  ): FabricNode | 'direct' | null {
+    if (this.hoisted.has(child)) {
+      if (this.committedElsewhere(child) || this.withheld(child)) return null;
+      return 'direct';
+    }
+    const clean = this.cleanUnder(node, child, context);
+    if (clean) return clean;
+    if (child.nodeKind === 'anchor' || this.withheld(child)) return null;
+    return this.reconcileUnder(node, child, context);
+  }
+
+  /**
    * `reconcileHoistTarget` for a node that commits only what is hoisted into it
    * (`HoistOptions.only`): those nodes, in the order they were written, and none of its own.
    */
@@ -7061,7 +10514,11 @@ export class Engine implements HostEngine {
    * therefore created afresh, with everything under it, as React creates an element that moves.
    * Its native state goes with it, as it would there.
    */
-  private reconcileUnder(parent: EngineNode, child: EngineNode, context?: object): FabricNode {
+  private reconcileUnder(
+    parent: EngineNode | LineBox,
+    child: EngineNode,
+    context?: object,
+  ): FabricNode {
     if (child.committed && child.committedUnder !== parent) this.forgetCommitted(child);
     const handle = this.stillCommitted(child, context) ?? this.reconcile(child);
     child.committedUnder = parent;
@@ -7094,10 +10551,19 @@ export class Engine implements HostEngine {
       this.stopScrolled(follower);
       this.markProps(follower, false);
     }
-    if (node.box?.committed) this.forgetCommitted(node.box);
+    if (node.box || node.words) this.forgetParagraphs(node);
     for (const child of node.childList) {
-      if (child.committed || child.box?.committed) this.forgetCommitted(child);
+      // A line box is a view of this node's, which it is losing: the box that starts one starts
+      // another. A box made again on its own keeps the line box it is in.
+      child.line = undefined;
+      if (child.committed || child.box || child.words) this.forgetCommitted(child);
     }
+  }
+
+  /** The paragraphs a run of text is drawn in, let go with it: see `paragraphsOf`. */
+  private forgetParagraphs(text: EngineNode): void {
+    if (text.box?.committed) this.forgetCommitted(text.box);
+    for (const word of text.words ?? NO_WORDS) if (word.committed) this.forgetCommitted(word);
   }
 
   /** A hoisted node, which commits into an ancestor further up than the parent it is in. */
@@ -7151,28 +10617,9 @@ export class Engine implements HostEngine {
   }
 
   /**
-   * What a hoist target takes of a child written in it: the child's handle, `direct` for one
-   * hoisted into it, which goes after its siblings, or null for none.
-   */
-  private takenByTarget(
-    node: EngineNode,
-    child: EngineNode,
-    context: object | undefined,
-  ): FabricNode | 'direct' | null {
-    if (this.hoisted.has(child)) {
-      if (this.committedElsewhere(child) || this.withheld(child)) return null;
-      return 'direct';
-    }
-    const clean = this.cleanUnder(node, child, context);
-    if (clean) return clean;
-    if (child.nodeKind === 'anchor' || this.withheld(child)) return null;
-    return this.reconcileUnder(node, child, context);
-  }
-
-  /**
-   * A clean element's handle under `parent`, before anything else is asked of it: one committed
-   * there and unchanged since was displayed and in its place, and is still. The siblings of what
-   * changed are most of what a commit steps over: a list one row of which ticks.
+   * A clean child's handle under `parent`, before anything else is asked of it: one committed
+   * there and unchanged since was displayed, in its place, and is still. The siblings of what
+   * changed are most of what a commit steps over: a page of examples one of which ticks.
    */
   private cleanUnder(
     parent: EngineNode,
@@ -7246,6 +10693,8 @@ export class Engine implements HostEngine {
       this.checkKnown(node);
     }
     const tag = nextTag();
+    if (this.notesMoves)
+      (node.nodeKind === 'element' ? this.movedBoxes : this.grownBoxes).add(node);
     this.stats.createdNodes++;
     // instanceHandle is the retained node itself: it is what Fabric hands back on events.
     const handle = this.fabric.createNode(
@@ -7475,6 +10924,32 @@ export class Engine implements HostEngine {
   dispatchCommand(node: EngineNode, name: string, args: readonly unknown[] = []): void {
     const handle = node.committed?.handle;
     if (handle && this.fabric.dispatchCommand) this.fabric.dispatchCommand(handle, name, args);
+  }
+
+  /**
+   * Where a node is, in window coordinates.
+   *
+   * `(layout)` reports a frame in the parent's coordinates, which sizes a view and says nothing
+   * about where it is relative to anything else. This is what an anchored overlay needs: a
+   * popover and its trigger live in different parts of the tree and can only be compared in the
+   * window's frame.
+   *
+   * The callback is the platform's own shape rather than a promise, and on the new architecture
+   * it fires before this returns - so a caller that needs the value immediately can capture it,
+   * and one that does not is unaffected if that ever changes.
+   *
+   * Silent when the node has never been committed, or when the host has no `measureInWindow`.
+   * Reporting zeroes would be worse than reporting nothing: a zero frame is a position, and an
+   * overlay would believe it and place itself in the corner.
+   */
+  /**
+   * A node's box as it is laid out, with no transform on it or above it: nothing where it has
+   * not been committed, or on a host that cannot say. `measure` answers where it is drawn,
+   * which is smaller for a panel scaling in.
+   */
+  layoutOf(node: EngineNode): WindowFrame | undefined {
+    const box = this.boxOf(node);
+    return box && { x: box[0], y: box[1], width: box[2], height: box[3] };
   }
 
   /**

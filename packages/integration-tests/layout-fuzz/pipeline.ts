@@ -148,6 +148,7 @@ export function layOutInPipeline(
   const fabric = createYogaFabric(conformance, backend);
   const engine = new Engine(fabric, 1, {
     globalStyles: sheet,
+    layoutConformance: conformance === 'strict' ? 'strict' : 'compatibility',
     conditions: { width: 400, height: 800, colorScheme: 'light' },
   });
   const all = boxes(test.root);

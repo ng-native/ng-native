@@ -14,6 +14,8 @@ import { fileURLToPath } from 'node:url';
 import { firstDifference } from './compare.ts';
 import { fixtureNames, parseFixture, type Box } from './fixture.ts';
 import { layOutToday } from './yoga-baseline.ts';
+import { lowerBlocks } from './flow-lowering.ts';
+import { correctFromLayout } from './read-back.ts';
 
 const file = (name: string) => fileURLToPath(new URL(`../oracle/${name}`, import.meta.url));
 const oracle = JSON.parse(readFileSync(file('chrome.json'), 'utf8')) as Record<string, Box>;
@@ -31,6 +33,10 @@ function attempt(compare: () => string | undefined): string | undefined {
 const CANDIDATES = {
   today: (name: string) => layOutToday(parseFixture(name)),
   strict: (name: string) => layOutToday(parseFixture(name), 'strict'),
+  lowering: (name: string) => layOutToday(lowerBlocks(parseFixture(name))),
+  'lowering-strict': (name: string) => layOutToday(lowerBlocks(parseFixture(name)), 'strict'),
+  'read-back': (name: string) =>
+    layOutToday(correctFromLayout(lowerBlocks(parseFixture(name)), 'strict'), 'strict'),
 } as const;
 
 for (const [candidate, layOut] of Object.entries(CANDIDATES)) {

@@ -130,7 +130,7 @@ export function ours(style: Style, property: string): unknown {
     case 'touch-action':
       return style['touchAction'];
     case 'vertical-align':
-      return style['textAlignVertical'];
+      return style['baselineShift'] ?? style['textAlignVertical'];
     case 'text-decoration-line':
       return style['textDecorationLine'];
     case 'transition-duration':
@@ -153,7 +153,19 @@ const NUMBER = /^(opacity|z-index|flex-grow|flex-shrink|order)$/;
 
 /** Keywords that mean the same on both sides, where the spelling differs. */
 const SAME_KEYWORD: Record<string, Record<string, readonly unknown[]>> = {
-  display: { block: ['flex', undefined], flex: ['flex'], none: ['none'], contents: ['contents'] },
+  // A block container is one here too, and commits as flex. An inline or inline-block box that
+  // is a flex item is a block to a browser. The old flexbox `line-clamp` is written with is a
+  // flow-root to a browser, and a flex box here.
+  display: {
+    block: ['block', 'inline-block', 'flex', undefined],
+    'flow-root': ['flow-root', 'flex'],
+    'inline-block': ['inline-block'],
+    // A flex box that is a flex item is not in a line, whatever it was written as.
+    flex: ['flex', 'inline-flex'],
+    'inline-flex': ['inline-flex'],
+    none: ['none'],
+    contents: ['contents'],
+  },
   'justify-content': {
     start: ['flex-start'],
     end: ['flex-end'],
@@ -207,7 +219,11 @@ export function compare(property: string, browser: string, style: Style, box: nu
       browser === 'ellipsis' ? value === undefined || value === 'tail' : value === browser,
     );
   }
-  if (property === 'vertical-align') return verdict((VERTICAL[browser] ?? browser) === value);
+  if (property === 'vertical-align') {
+    // A length is the baseline shift the engine lays a line out by.
+    const ours = typeof value === 'number' ? `${value}px` : value;
+    return verdict((VERTICAL[browser] ?? browser) === ours);
+  }
   if (property.startsWith('animation-')) return verdict(sameAnimation(property, browser, value));
   if (property === 'background-size') return verdict(sameBackgroundSize(browser, value));
   if (property === 'background-repeat') return verdict(sameBackgroundRepeat(browser, value));

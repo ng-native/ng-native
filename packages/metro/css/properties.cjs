@@ -351,6 +351,7 @@ const KEYWORD = new Set([
 ]);
 
 const NUMBER = new Set([
+  'order',
   'opacity',
   'flex-grow',
   'flex-shrink',
@@ -468,7 +469,6 @@ const NO_NATIVE_EQUIVALENT = new Set([
   'grid-column',
   'grid-row',
   'justify-items',
-  'justify-self',
   'place-items',
   'place-self',
   'columns',
@@ -486,7 +486,6 @@ const NO_NATIVE_EQUIVALENT = new Set([
   // it. Yoga has no `order`, and the rest are the browser's own furniture. `white-space` and
   // `text-overflow` are not here: they become the Text component's `numberOfLines` and
   // `ellipsizeMode` props, which is how native truncates (see `truncation` below).
-  'order',
   'appearance',
   'text-wrap',
   'word-wrap',
@@ -525,10 +524,12 @@ function displayName(value, word) {
 }
 
 /**
- * The display values Yoga has: `block` is read as flex above, and the rest have no layout meaning
- * there. `contents` is Yoga's own, and removes the box while keeping its children in the layout.
+ * The display values Yoga has. `contents` is Yoga's own, and removes the box while keeping its
+ * children in the layout.
  */
 const DISPLAY = new Set(['flex', 'none', 'contents']);
+/** The block containers, which the engine lays out as flex and commits as flex. */
+const FLOW_DISPLAYS = new Set(['block', 'flow-root', 'inline-block']);
 
 const SIDES = { top: 'Top', right: 'Right', bottom: 'Bottom', left: 'Left' };
 const CORNERS = {
@@ -1420,8 +1421,27 @@ const each = (properties, handler) => properties.map((property) => [property, ha
  * The properties with a form of their own, each with the handler that writes it. A handler takes
  * `(property, value, out, context)`; `translate` tries `FALLBACKS` for a name that is not here.
  */
+/** `justify-self`, as the keyword, with `safe` kept in front of it. */
+function justify(value, context) {
+  if (value?.type === 'baseline-position') {
+    return value.value === 'last' ? 'last baseline' : 'baseline';
+  }
+  const word = value?.value ?? value?.type;
+  if (typeof word !== 'string') {
+    throw new CssUnsupported(`${context}: expected an alignment keyword`);
+  }
+  return value.overflow === 'safe' ? `safe ${word}` : word;
+}
+
 const TRANSLATORS = new Map([
   ...each(['white-space', 'text-overflow', 'line-clamp', '-webkit-line-clamp'], truncation),
+  [
+    'justify-self',
+    // No style of a native view: where a block in a block sits along its line (`flow.ts`).
+    (property, value, out) => {
+      out.justifySelf = justify(value, property);
+    },
+  ],
   [
     'box-orient',
     (property, value, out) => {
@@ -1443,7 +1463,11 @@ const TRANSLATORS = new Map([
   [
     'vertical-align',
     (property, value, out) => {
-      out.textAlignVertical = renamed(VERTICAL_ALIGN, value, property);
+      // A length is how far over the baseline a box in a line sits, which the engine lays the
+      // line out by: see `onBaseline` in the engine. A percentage is of the line height.
+      const shift = value?.type === 'length' ? length(value, property) : undefined;
+      if (typeof shift === 'number') out.baselineShift = shift;
+      else out.textAlignVertical = renamed(VERTICAL_ALIGN, value, property);
     },
   ],
   [
@@ -1642,18 +1666,30 @@ const TRANSLATORS = new Map([
         out[WEBKIT_BOX] = true;
         return;
       }
-      // A native view stacks its children in a column, which is what a block does with its own.
-      // Reading block as flex is what lets `.d-none` then `.d-md-block` show an element again.
-      // Every native view is a flex item, and a browser computes an inline or inline-block flex
-      // item as block, so those are read the same way. A flow-root is a block that contains its
-      // floats, which a flex item already does.
-      if (['block', 'inline', 'inline-block', 'flow-root'].includes(displayName(value, word))) {
+      // A block container is kept as one: the engine lays it out as a flex column, which stacks
+      // its children as a block does, and settles from the tree what a column does differently
+      // (`flow.ts` in fabric). It commits `flex`, so `.d-none` then `.d-md-block` shows an
+      // element again. An inline-block is a block container too, and sits in a line with others.
+      const written = displayName(value, word);
+      if (FLOW_DISPLAYS.has(written)) {
+        out.display = written;
+        return;
+      }
+      // An inline box has no layout of its own on native, where every view is a box: read as flex,
+      // which is what a browser computes for one that is a flex item.
+      if (written === 'inline') {
         out.display = 'flex';
+        return;
+      }
+      // A flex box that sits in a line is kept as that: in a block the engine keeps it at its
+      // content's width, and anywhere else it is the flex box it holds.
+      if (written === 'inline-flex') {
+        out.display = written;
         return;
       }
       if (!DISPLAY.has(word)) {
         throw new CssUnsupported(
-          `display: ${displayName(value, word)} does not exist on native; only flex, block (read as flex), contents and none do`,
+          `display: ${displayName(value, word)} does not exist on native; only flex, block, inline-block, inline-flex, contents and none do`,
         );
       }
       out.display = word;

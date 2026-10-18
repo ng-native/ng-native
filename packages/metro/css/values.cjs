@@ -88,6 +88,7 @@ function length(value, context) {
     case 'calc': {
       const { offset, unit, factor } = evaluateCalc(value.value, context);
       if (!unit) return round(offset);
+      if (unit === '%') return mixed(factor, offset, context);
       return { __defer: { unit, factor: round(factor), offset: round(offset) } };
     }
     case 'value':
@@ -108,6 +109,31 @@ function length(value, context) {
         `${context}: expected a length, and ${NOT_A_LENGTH[value?.type] ?? `'${value?.type}'`} is not one`,
       );
   }
+}
+
+/**
+ * The properties whose percentage is of a box the engine can read: the one an element is laid
+ * out in, for its size, its basis, its insets, its margins and its padding, and the element's
+ * own for a `translate`. The engine finishes a sum of one and a length for these, once that box has been
+ * laid out.
+ */
+const OF_A_BOX =
+  /^((min-|max-)?(width|height|inline-size|block-size)|flex-basis|top|right|bottom|left|inset(-.*)?|(margin|padding)(-.*)?|translate)$/;
+
+/**
+ * A percentage with a length added: `calc(100% - 2rem)`. A percentage alone is that percentage.
+ * With a length it is kept as the two, in points, which the engine resolves once the box the
+ * percentage is of has been laid out: Yoga takes a number or a percentage, and not their sum.
+ */
+function mixed(percent, points, context) {
+  if (!points) return `${round(percent)}%`;
+  if (!OF_A_BOX.test(context)) {
+    throw new CssUnsupported(
+      `${context}: calc() can add a length to a percentage for a box's size, insets, margins, ` +
+        `padding and translate, where the percentage is of a box. Here it is not.`,
+    );
+  }
+  return `calc(${round(percent)}% + ${round(points)}px)`;
 }
 
 /**
@@ -141,10 +167,11 @@ function evaluateCalc(node, context) {
       const resolved = length(node.value, context);
       if (typeof resolved === 'number') return { offset: resolved };
       if (resolved?.__defer) return { offset: 0, ...resolved.__defer };
-      throw new CssUnsupported(
-        `${context}: calc() can only combine absolute lengths here. A percentage is resolved ` +
-          `during native layout, and there is no expression evaluator on device to finish it.`,
-      );
+      // A percentage is a unit like the others: of a box, which layout resolves. See `mixed`.
+      if (typeof resolved === 'string' && resolved.endsWith('%')) {
+        return { offset: 0, unit: '%', factor: parseFloat(resolved) };
+      }
+      throw new CssUnsupported(`${context}: calc() cannot use '${resolved}' here`);
     }
     default:
       throw new CssUnsupported(`${context}: calc() cannot use '${node.type}' here`);
@@ -1180,7 +1207,43 @@ function fallbackChain(raw, context) {
   return { alternatives, token: token ?? null };
 }
 
+/**
+ * A custom property whose whole value is a percentage with a length added, `calc(100% - 2px)`, as
+ * the token it is: the same text a declaration of it compiles to, which the property that reads
+ * it hands to the engine. Null for anything else.
+ */
+function mixedToken(parts) {
+  const terms = calcTerms(parts);
+  if (!terms) return null;
+  const sign = { '+': 1, '-': -1 }[terms[1].value.value];
+  const [first, second] = [mixedTerm(terms[0]), mixedTerm(terms[2])];
+  if (!sign || !first || !second || first.unit === second.unit) return null;
+  // A percentage taken from a length is not a percentage with a length added.
+  if (second.unit === '%' && sign === -1) return null;
+  const [percent, points] = first.unit === '%' ? [first, second] : [second, first];
+  const added = points === second ? sign * points.value : points.value;
+  return { length: `calc(${round(percent.value)}% + ${round(added)}px)` };
+}
+
+/** The three terms of a value that is one `calc()` of two things and a sign between them. */
+function calcTerms(parts) {
+  const [only, ...rest] = parts;
+  if (rest.length || only?.type !== 'function' || only.value.name !== 'calc') return null;
+  const terms = only.value.arguments.filter((part) => part.value?.type !== 'white-space');
+  return terms.length === 3 && terms[1].value?.type === 'delim' ? terms : null;
+}
+
+/** One side of such a sum: a percentage, or a length in points. Null for anything else. */
+function mixedTerm(part) {
+  if (part.value?.type === 'percentage') return { unit: '%', value: part.value.value * 100 };
+  if (part.type !== 'length') return null;
+  const { unit, value } = part.value;
+  if (unit === 'px') return { unit: 'px', value };
+  return unit === 'rem' ? { unit: 'px', value: value * REM } : null;
+}
+
 module.exports = {
+  mixedToken,
   CssUnsupported,
   withRefusals,
   drawnSolid,

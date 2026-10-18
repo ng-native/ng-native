@@ -4,12 +4,16 @@
  * prove that does not happen.
  */
 import assert from 'node:assert/strict';
+import { createRequire } from 'node:module';
 import { before, beforeEach, describe, it } from 'node:test';
 import type { Type } from '@angular/core';
 import { Engine } from '@ng-native/fabric';
 import { mount, type MountResult } from '@ng-native/platform';
 import { createFakeFabric, type FakeFabric, type FakeFabricNode } from '@ng-native/testing';
 import { compileFixture } from './compile.ts';
+
+const require = createRequire(import.meta.url);
+const { compileCss } = require('@ng-native/metro/css/compile.cjs');
 
 const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
 
@@ -145,10 +149,16 @@ describe('incremental commit', () => {
 });
 
 describe('incremental commit, of one child among many', () => {
-  it('asks nothing of the siblings that did not change, past that they did not', () => {
+  /**
+   * Change the twentieth of fifty children, and answer how many nodes had their style resolved
+   * and how many were asked whether they are displayed: the one that changed, and those it is in.
+   */
+  function askedFor(css?: string): { resolved: number; displayed: number } {
     const fabric = createFakeFabric();
-    const engine = new Engine(fabric, 1);
+    const globalStyles = css ? (compileCss(css, 'app.css') as never) : undefined;
+    const engine = new Engine(fabric, 1, { globalStyles });
     const box = engine.createElement('view');
+    engine.setClasses(box, 'box');
     engine.appendChild(engine.root, box);
     const children = Array.from({ length: 50 }, () => {
       const child = engine.createElement('view');
@@ -156,22 +166,38 @@ describe('incremental commit, of one child among many', () => {
       return child;
     });
     engine.commit();
-    // Each one resolved is one whose style was asked for again: the one that changed, and those
-    // it is in.
-    const styles = (engine as unknown as { styles: { resolve: (...all: unknown[]) => unknown } })
-      .styles;
+    const inside = engine as unknown as {
+      styles: { resolve: (...all: unknown[]) => unknown };
+      withheld: (...all: unknown[]) => unknown;
+    };
+    const { styles } = inside;
     const { resolve } = styles;
-    let asked = 0;
-    styles.resolve = (...all) => (asked++, resolve.apply(styles, all));
+    const withheld = inside.withheld;
+    const asked = { resolved: 0, displayed: 0 };
+    styles.resolve = (...all) => (asked.resolved++, resolve.apply(styles, all));
+    inside.withheld = (...all) => (asked.displayed++, withheld.apply(engine, all));
     try {
       engine.setProp(children[20]!, 'nativeID', 'changed');
       engine.commit();
     } finally {
       styles.resolve = resolve;
+      delete (inside as { withheld?: unknown }).withheld;
     }
-    assert.ok(asked < 10, `${asked} resolved`);
     const [committedBox] = fabric.committed;
     assert.equal(committedBox!.children.length, 50);
     assert.equal(committedBox!.children[20]!.props['nativeID'], 'changed');
+    return asked;
+  }
+
+  it('asks nothing of the siblings that did not change, past that they did not', () => {
+    const { resolved } = askedFor();
+    assert.ok(resolved < 10, `${resolved} resolved`);
+  });
+
+  it('asks nothing of them in a block either, past what its flow is planned from', () => {
+    // A block plans its flow from every child's style, which is resolved for that; whether
+    // each is displayed, and the rest of what reconciling it asks, is not asked again.
+    const { displayed } = askedFor('.box { display: block }');
+    assert.ok(displayed < 5, `${displayed} asked whether displayed`);
   });
 });

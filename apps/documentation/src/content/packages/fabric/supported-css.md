@@ -222,33 +222,75 @@ line-clamp idiom compiles; `-webkit-box-orient` without it is ignored, as a brow
 which keep spaces and line breaks, are dropped. `font-variant-numeric` takes `tabular-nums`,
 `proportional-nums`, `lining-nums` and `oldstyle-nums`, as `fontVariant`.
 
-`display` takes `flex`, `none`, `block` and `contents`. An element that is `display: none` has no
-native view, nor has anything inside it: its views are made when it is displayed and go when it is
-not, so what a view holds of its own, a scroll offset, is not kept across a spell of
-`display: none`. To keep a view while it is out of sight, take it out of the flow and give it no
-opacity. Every native view is already a flex
-container stacking its children in a column, which is what a block does with its own, so `block` is
-read as `flex`: that is what lets `.d-none` followed by `.d-md-block` show an element again at a
-breakpoint. `inline-flex` is read as `flex` for the same reason. `inline` and `inline-block` are
-read as `flex` too, because every native view sits in a flex container, and a browser lays out a
-flex container's inline children as blocks. `flow-root` is read as `flex` as well: it is a block
-that contains its floats, which a flex item already does. `contents` is Yoga's own: the element
-draws no box of its own (no background, border or padding) and its children are laid out as if they
-were its parent's. `grid` and the table values are dropped, because a column of flex children
-cannot pretend to lay them out in a grid. `display: var(--d)` reads the token on device the same
-way, in a stylesheet or set on the element, and reads the two-keyword form, `inline flex` or
-`block flow`, as the one-word value it stands for. A token of any other value, such as `grid` or a
-table value, unsets `display`, and the element is laid out as a flex column. In development the
-engine logs a warning naming the token and its value, since the compiler only sees the token's
-name. A written fallback is read the same way, `var(--d, inline flex)` included. One native has no
-layout for, such as `var(--d, grid)`, is dropped with a build warning, and the token is still read
-where it is set.
+`display` takes `flex`, `none`, `contents`, the block containers `block`, `flow-root` and
+`inline-block`, and `inline-flex`. An element that is `display: none` has no native view, nor has
+anything inside it: its views are made when it is displayed and go when it is not, so what a view
+holds of its own, a scroll offset, is not kept across a spell of `display: none`. To keep a view
+while it is out of sight, take it out of the flow and give it no opacity. Yoga lays out flex boxes
+and nothing else, so a block container is committed as a flex column, which stacks its children as
+a block does, and the engine settles what a column does differently before layout:
+
+- Adjoining vertical margins collapse, as CSS has them: between two children of a block, through
+  an empty block, and between a block and its first or last child where the block is itself a
+  child of a block and no padding or border separates them. A margin of `20px` above one of
+  `10px` leaves 20, where a flex column leaves 30.
+- The flex properties on a block container (`flex-direction`, `justify-content`, `align-items`,
+  `gap`) and on the boxes in its flow (`flex`, `flex-grow`, `flex-shrink`, `flex-basis`,
+  `align-self`) are ignored, as a browser ignores them. `justify-self` places a block of a set
+  width along its line, and `margin: 0 auto` centres one.
+- An `inline-block` or `inline-flex` box sits in a line. Where a block container holds nothing
+  else in its flow, they are laid out in lines, a row that wraps, each on the baseline of its
+  line. Among blocks, each run of them shares a line of its own, wrapping when it is full: each
+  box as wide as its content, with margins that do not collapse. The engine commits a view
+  around a run of two or more, which no element of the template stands for; a box that joins
+  such a run or leaves it is created again natively, so a scroll position or a focus inside it is
+  lost. `vertical-align` takes `top`, `middle` and `bottom` for a box on a line, and a length,
+  how far over the baseline it sits.
+
+A box in a line is as wide as its content, and that includes content Yoga would size from the
+room on offer: a row with a percentage width, as a `w-full` header is, and cells that share a row
+from a basis of nothing, as `flex-1` cells do. The engine commits such a box with those set aside,
+reads its width back, and commits it at that width, which the percentage and the shares are then
+of. It costs the box two more commits when something in it changes.
+
+Only margins in points collapse. Beside a percentage margin in the same container every margin
+stays as written, because a percentage is of a width nothing knows before layout. In a flex
+container an inline-level box is an item like any other, as a browser has it. `.d-none` followed
+by `.d-md-block` shows an element again at a breakpoint. `inline` is read as `flex`, because every
+native view is a box, and a browser lays out a flex container's inline children as blocks.
+`contents` is Yoga's own: the element draws no box of its own (no background, border or padding)
+and its children are laid out as if they were its parent's. `grid` and the table values are
+dropped, because a column of flex children cannot pretend to lay them out in a grid.
+`display: var(--d)` reads the token on device the same way, in a stylesheet or set on the element,
+and reads the two-keyword form, `inline flex` or `block flow`, as the one-word value it stands for.
+A token of any other value, such as `grid` or a table value, unsets `display`, and the element is
+laid out as a flex column. In development the engine logs a warning naming the token and its
+value, since the compiler only sees the token's name. A written fallback is read the same way,
+`var(--d, inline flex)` included. One native has no layout for, such as `var(--d, grid)`, is
+dropped with a build warning, and the token is still read where it is set.
+
+### Order
+
+`order` moves a child of a flex container among its siblings, as in a browser: Tailwind's
+`order-first`, `order-last` and `order-2`. Yoga has no such property, so the engine commits the
+children in that order. A block lays its children out as written, whatever their `order`.
 
 `width: fit-content` and `height: fit-content` keep a box at the size of its content. Along its
 container's main axis a box is that size already. Across it, where a box stretches, it stops
 stretching and sits at the start, as in a browser, unless the container's `align-items` or its own
-`align-self` already places it. `max-content` and `min-content` are dropped with a warning, as is
-`fit-content` on `min-width`, `max-width` and the two heights.
+`align-self` already places it. `max-content` is read as `fit-content` on a width or a height,
+and on `max-width` or `max-height` caps a box that would fill its container at its content.
+`min-content` is dropped with a warning, as is `fit-content` on `min-width`, `max-width`,
+`min-height` and `max-height`.
+
+`min-width: auto` and `min-height: auto` keep a flex item that shrinks from shrinking under its
+content, as a browser keeps every flex item: Tailwind's `min-w-auto` and `min-h-auto`. Yoga's
+minimum is nothing, so the engine stops the item shrinking where its content cannot get smaller:
+down a column, and along a row when no text in it has a space to wrap at. An item holding text
+that wraps still shrinks, under its longest word if the row is that crowded, and so does one with
+a `width`, a `flex-basis`, a `flex` or an `aspect-ratio` of its own. An item with `overflow` other
+than `visible` shrinks as it does in a browser. A native view has no minimum unless it is given
+one, so nothing changes for an item that does not say `auto`.
 
 `overflow` is one value for both axes - Yoga has no separate `overflow-x`/`overflow-y` - so a rule
 that gives them different values is dropped with a warning rather than silently picking one.
@@ -357,6 +399,19 @@ absolute lengths, `+ - * /` and brackets: `calc((var(--end) - var(--start)) * 1p
 out on device, where a token that is a length counts in points and a bare number multiplies. A
 percentage, an em or a viewport unit beside a token is dropped, since it needs layout the device
 does not do there.
+
+`calc()` may also add a length to a percentage, `calc(100% - 2rem)`, for a box's `width` and
+`height`, their minimums and maximums, its insets, its margins and its padding: Tailwind's
+`max-w-[calc(100%-2rem)]`. And for `translate`, where the percentage is of the box's own size:
+`translate-x-[calc(100%-2px)]`, which is how a switch's thumb slides over. The length is in
+points or rem. Yoga takes a number or a percentage
+and not their sum, so the engine commits the box with the declaration set aside, reads the box
+the percentage is of, and commits it at what the sum comes to, all in the one task. That is two
+more commits when the box or anything in it changes, and one read on every commit after. A
+percentage of a height is of a parent that was given a height; under an `auto` height the
+declaration is set aside, as a browser sets it aside. In a grid item, and on a host with no
+layout to read, it is set aside too. Anywhere else, `font-size` or `gap` say, the sum is
+dropped with a warning.
 
 The keywords that switch a property off - `max-width: none`, `z-index: auto`,
 `letter-spacing: normal`, `filter: none`, `box-shadow: none` - clear it back to native's default.

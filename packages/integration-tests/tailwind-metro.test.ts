@@ -151,7 +151,7 @@ describe('the generated stylesheet module', () => {
     assert.match(warnings[0]!, /: dropped 'display': display: grid does not exist on native/);
   });
 
-  it('reads inline and inline-block as flex, without a warning', (t) => {
+  it('reads inline as flex and keeps inline-block, without a warning', (t) => {
     // Tailwind writes .inline for the word anywhere in a file it scans, such as a README, so the
     // warning named a class nobody wrote. Chrome lays out an inline flex item as a block.
     const warn = t.mock.method(console, 'warn', () => {});
@@ -166,7 +166,8 @@ describe('the generated stylesheet module', () => {
       [],
     );
     assert.deepEqual(styleOf(sheet, 'inline'), { display: 'flex' });
-    assert.deepEqual(styleOf(sheet, 'inline-block'), { display: 'flex' });
+    // A block container that sits in a line: the engine lays it out, and commits it as flex.
+    assert.deepEqual(styleOf(sheet, 'inline-block'), { display: 'inline-block' });
   });
 
   it('is a module a bundler can read, not a string of CSS', () => {

@@ -45,6 +45,11 @@ close gaps a browser never had:
 - **`globalStyles`** is the one stylesheet allowed to match a node regardless of which component
   created it: your Tailwind output, or any app-wide reset, goes here. See
   [Metro](/packages/metro) and [Tailwind](/packages/tailwind).
+- **`layoutConformance: 'strict'`** lays the app out without Yoga's legacy quirks, as a browser
+  would: a percentage `top`, `left`, `width` or `height` on a `position: absolute` box is of its
+  container's padding box rather than its content box, and one with no inset starts inside the
+  padding. The default, `'compatibility'`, keeps the quirks, as React Native does, for layouts
+  written against them.
 - **`providers`** are extra `Provider`/`EnvironmentProviders` merged into the environment injector
   `mount` creates, the same shape you would pass to `bootstrapApplication`.
 - **`inputs`** sets the root component's inputs, by their public names, before its first change

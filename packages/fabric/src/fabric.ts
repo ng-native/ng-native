@@ -31,6 +31,7 @@ export const FABRIC_METHODS = [
   'setIsJSResponder',
   'dispatchCommand',
   'measureInWindow',
+  'getBoundingClientRect',
 ] as const satisfies readonly (keyof FabricUIManager)[];
 
 /**

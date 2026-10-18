@@ -1,7 +1,7 @@
 {
   "bootstrap": {
-    "rules": 2531,
-    "dropped": 677,
+    "rules": 2579,
+    "dropped": 629,
     "emitted": [
       "$animation",
       "$animationDelay",
@@ -75,6 +75,7 @@
       "minWidth",
       "numberOfLines",
       "opacity",
+      "order",
       "outlineOffset",
       "outlineWidth",
       "overflow",
@@ -212,12 +213,12 @@
         "cursor: wait is not supported. Native has two cursors, auto and pointer, for an iPad with a pointer attached.": 1
       },
       "display": {
-        "display: grid does not exist on native; only flex, block (read as flex), contents and none do": 6,
-        "display: inline-grid does not exist on native; only flex, block (read as flex), contents and none do": 6,
-        "display: list-item does not exist on native; only flex, block (read as flex), contents and none do": 1,
-        "display: table does not exist on native; only flex, block (read as flex), contents and none do": 6,
-        "display: table-cell does not exist on native; only flex, block (read as flex), contents and none do": 6,
-        "display: table-row does not exist on native; only flex, block (read as flex), contents and none do": 6
+        "display: grid does not exist on native; only flex, block, inline-block, inline-flex, contents and none do": 6,
+        "display: inline-grid does not exist on native; only flex, block, inline-block, inline-flex, contents and none do": 6,
+        "display: list-item does not exist on native; only flex, block, inline-block, inline-flex, contents and none do": 1,
+        "display: table does not exist on native; only flex, block, inline-block, inline-flex, contents and none do": 6,
+        "display: table-cell does not exist on native; only flex, block, inline-block, inline-flex, contents and none do": 6,
+        "display: table-row does not exist on native; only flex, block, inline-block, inline-flex, contents and none do": 6
       },
       "fill": {
         "'fill' is not mapped yet. React Native may well support it; nothing here translates it. Check RN's style types, then add it to css/properties.cjs.": 1
@@ -257,9 +258,6 @@
       "min-height": {
         "arithmetic with tokens in it cannot take 'em' here. What the device works out is numbers, points, degrees and var(), with + - * / and brackets; a percentage, an em or a viewport unit beside a token needs layout the device does not do here.": 5,
         "arithmetic with tokens in it cannot take 'percentage' here. What the device works out is numbers, points, degrees and var(), with + - * / and brackets; a percentage, an em or a viewport unit beside a token needs layout the device does not do here.": 1
-      },
-      "order": {
-        "'order' has no React Native equivalent: no style prop of a native view does what it does. Yoga lays children out in the order they are written: change the order in the template.": 48
       },
       "overflow": {
         "overflow: native has one overflow for both axes, so 'hidden auto' cannot be applied": 1
@@ -329,8 +327,8 @@
     }
   },
   "bulma": {
-    "rules": 3282,
-    "dropped": 1817,
+    "rules": 3288,
+    "dropped": 1807,
     "emitted": [
       "$animation",
       "$animationDelay",
@@ -409,6 +407,7 @@
       "minWidth",
       "numberOfLines",
       "opacity",
+      "order",
       "outlineWidth",
       "overflow",
       "paddingBottom",
@@ -549,7 +548,7 @@
         "cursor: not-allowed is not supported. Native has two cursors, auto and pointer, for an iPad with a pointer attached.": 2
       },
       "display": {
-        "display: grid does not exist on native; only flex, block (read as flex), contents and none do": 11
+        "display: grid does not exist on native; only flex, block, inline-block, inline-flex, contents and none do": 11
       },
       "float": {
         "'float' has no React Native equivalent: no style prop of a native view does what it does. Lay the row out with flexbox: flex-direction: row on the parent.": 3
@@ -596,9 +595,6 @@
       },
       "min-height": {
         "arithmetic with tokens in it cannot take 'vh' here. What the device works out is numbers, points, degrees and var(), with + - * / and brackets; a percentage, an em or a viewport unit beside a token needs layout the device does not do here.": 1
-      },
-      "order": {
-        "'order' has no React Native equivalent: no style prop of a native view does what it does. Yoga lays children out in the order they are written: change the order in the template.": 10
       },
       "overflow": {
         "overflow: native has one overflow for both axes, so 'auto hidden' cannot be applied": 3,
@@ -843,7 +839,7 @@
       },
       "display": {
         "'display: initial' is a CSS-wide keyword, which this cascade does not implement. Write the value it stands for.": 1,
-        "display: grid does not exist on native; only flex, block (read as flex), contents and none do": 1
+        "display: grid does not exist on native; only flex, block, inline-block, inline-flex, contents and none do": 1
       },
       "fill": {
         "'fill' is not mapped yet. React Native may well support it; nothing here translates it. Check RN's style types, then add it to css/properties.cjs.": 1
@@ -1027,7 +1023,7 @@
         "'color-scheme' is not mapped yet. React Native may well support it; nothing here translates it. Check RN's style types, then add it to css/properties.cjs.": 2
       },
       "display": {
-        "display: grid does not exist on native; only flex, block (read as flex), contents and none do": 2
+        "display: grid does not exist on native; only flex, block, inline-block, inline-flex, contents and none do": 2
       },
       "field-sizing": {
         "'field-sizing' is not mapped yet. React Native may well support it; nothing here translates it. Check RN's style types, then add it to css/properties.cjs.": 2
@@ -1077,8 +1073,8 @@
     }
   },
   "tailwind": {
-    "rules": 1044,
-    "dropped": 104,
+    "rules": 1045,
+    "dropped": 103,
     "emitted": [
       "$animation",
       "$transition",
@@ -1144,6 +1140,7 @@
       "mixBlendMode",
       "numberOfLines",
       "opacity",
+      "order",
       "outlineColor",
       "overflow",
       "paddingBottom",
@@ -1187,13 +1184,10 @@
         "'columns' has no React Native equivalent: no style prop of a native view does what it does.": 1
       },
       "display": {
-        "display: grid does not exist on native; only flex, block (read as flex), contents and none do": 1
+        "display: grid does not exist on native; only flex, block, inline-block, inline-flex, contents and none do": 1
       },
       "fill": {
         "'fill' is not mapped yet. React Native may well support it; nothing here translates it. Check RN's style types, then add it to css/properties.cjs.": 30
-      },
-      "order": {
-        "'order' has no React Native equivalent: no style prop of a native view does what it does. Yoga lays children out in the order they are written: change the order in the template.": 1
       },
       "overflow-wrap": {
         "'overflow-wrap' has no React Native equivalent: no style prop of a native view does what it does.": 1
@@ -1211,8 +1205,8 @@
     }
   },
   "tailwind-v3": {
-    "rules": 1041,
-    "dropped": 83,
+    "rules": 1042,
+    "dropped": 82,
     "emitted": [
       "$animation",
       "$animationDelay",
@@ -1280,6 +1274,7 @@
       "mixBlendMode",
       "numberOfLines",
       "opacity",
+      "order",
       "outlineColor",
       "overflow",
       "paddingBottom",
@@ -1324,13 +1319,10 @@
         "'columns' has no React Native equivalent: no style prop of a native view does what it does.": 1
       },
       "display": {
-        "display: grid does not exist on native; only flex, block (read as flex), contents and none do": 1
+        "display: grid does not exist on native; only flex, block, inline-block, inline-flex, contents and none do": 1
       },
       "fill": {
         "'fill' is not mapped yet. React Native may well support it; nothing here translates it. Check RN's style types, then add it to css/properties.cjs.": 30
-      },
-      "order": {
-        "'order' has no React Native equivalent: no style prop of a native view does what it does. Yoga lays children out in the order they are written: change the order in the template.": 1
       },
       "overflow-wrap": {
         "'overflow-wrap' has no React Native equivalent: no style prop of a native view does what it does.": 1

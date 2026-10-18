@@ -39,6 +39,7 @@ export { EngineIntersectionObserver, installDeferTriggers } from './defer-trigge
 export { installNodeGlobal } from './node-global.ts';
 export { faceName, registeredFaces } from './font-faces.ts';
 export { firstFamily } from './inline-token.ts';
+export { isBlockContainer, planFlow, type FlowKey, type FlowPlan, type FlowTree } from './flow.ts';
 export {
   DIRECT_EVENTS,
   Engine,

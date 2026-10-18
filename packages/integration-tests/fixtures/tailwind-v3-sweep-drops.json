@@ -1839,55 +1839,55 @@
     "!cursor-[var(--x)]",
     "cursor-[var(--x)]"
   ],
-  "dropped 'display': display: grid does not exist on native; only flex, block (read as flex), contents and none do": [
+  "dropped 'display': display: grid does not exist on native; only flex, block, inline-block, inline-flex, contents and none do": [
     "!grid",
     "grid"
   ],
-  "dropped 'display': display: inline-grid does not exist on native; only flex, block (read as flex), contents and none do": [
+  "dropped 'display': display: inline-grid does not exist on native; only flex, block, inline-block, inline-flex, contents and none do": [
     "!inline-grid",
     "inline-grid"
   ],
-  "dropped 'display': display: inline-table does not exist on native; only flex, block (read as flex), contents and none do": [
+  "dropped 'display': display: inline-table does not exist on native; only flex, block, inline-block, inline-flex, contents and none do": [
     "!inline-table",
     "inline-table"
   ],
-  "dropped 'display': display: list-item does not exist on native; only flex, block (read as flex), contents and none do": [
+  "dropped 'display': display: list-item does not exist on native; only flex, block, inline-block, inline-flex, contents and none do": [
     "!list-item",
     "list-item"
   ],
-  "dropped 'display': display: table does not exist on native; only flex, block (read as flex), contents and none do": [
+  "dropped 'display': display: table does not exist on native; only flex, block, inline-block, inline-flex, contents and none do": [
     "!table",
     "table"
   ],
-  "dropped 'display': display: table-caption does not exist on native; only flex, block (read as flex), contents and none do": [
+  "dropped 'display': display: table-caption does not exist on native; only flex, block, inline-block, inline-flex, contents and none do": [
     "!table-caption",
     "table-caption"
   ],
-  "dropped 'display': display: table-cell does not exist on native; only flex, block (read as flex), contents and none do": [
+  "dropped 'display': display: table-cell does not exist on native; only flex, block, inline-block, inline-flex, contents and none do": [
     "!table-cell",
     "table-cell"
   ],
-  "dropped 'display': display: table-column does not exist on native; only flex, block (read as flex), contents and none do": [
+  "dropped 'display': display: table-column does not exist on native; only flex, block, inline-block, inline-flex, contents and none do": [
     "!table-column",
     "table-column"
   ],
-  "dropped 'display': display: table-column-group does not exist on native; only flex, block (read as flex), contents and none do": [
+  "dropped 'display': display: table-column-group does not exist on native; only flex, block, inline-block, inline-flex, contents and none do": [
     "!table-column-group",
     "table-column-group"
   ],
-  "dropped 'display': display: table-footer-group does not exist on native; only flex, block (read as flex), contents and none do": [
+  "dropped 'display': display: table-footer-group does not exist on native; only flex, block, inline-block, inline-flex, contents and none do": [
     "!table-footer-group",
     "table-footer-group"
   ],
-  "dropped 'display': display: table-header-group does not exist on native; only flex, block (read as flex), contents and none do": [
+  "dropped 'display': display: table-header-group does not exist on native; only flex, block, inline-block, inline-flex, contents and none do": [
     "!table-header-group",
     "table-header-group"
   ],
-  "dropped 'display': display: table-row does not exist on native; only flex, block (read as flex), contents and none do": [
+  "dropped 'display': display: table-row does not exist on native; only flex, block, inline-block, inline-flex, contents and none do": [
     "!table-row",
     "table-row"
   ],
-  "dropped 'display': display: table-row-group does not exist on native; only flex, block (read as flex), contents and none do": [
+  "dropped 'display': display: table-row-group does not exist on native; only flex, block, inline-block, inline-flex, contents and none do": [
     "!table-row-group",
     "table-row-group"
   ],
@@ -2596,18 +2596,6 @@
     "justify-items-start",
     "justify-items-stretch"
   ],
-  "dropped 'justify-self': '…' has no React Native equivalent: no style prop of a native view does what it does.": [
-    "!justify-self-auto",
-    "!justify-self-center",
-    "!justify-self-end",
-    "!justify-self-start",
-    "!justify-self-stretch",
-    "justify-self-auto",
-    "justify-self-center",
-    "justify-self-end",
-    "justify-self-start",
-    "justify-self-stretch"
-  ],
   "dropped 'left': '…' is not a value native can take": [
     "!inset-x-[#1a2b3c]",
     "!inset-x-[200ms]",
@@ -3124,20 +3112,6 @@
     "opacity-[calc(1rem+2px)]",
     "opacity-[rgb(10,20,30)]"
   ],
-  "dropped 'order': '…' has no React Native equivalent: no style prop of a native view does what it does. Yoga lays children out in the order they are written: change the order in the template.": [
-    "!-order-8",
-    "!order-1",
-    "!order-10",
-    "!order-6",
-    "!order-[3]",
-    "!order-none",
-    "-order-8",
-    "order-1",
-    "order-10",
-    "order-6",
-    "order-[3]",
-    "order-none"
-  ],
   "dropped 'order': '…' is not a value native can take": [
     "!-order-[13px]",
     "!order-[#1a2b3c]",
@@ -3159,10 +3133,6 @@
     "order-[37%]",
     "order-[calc(1rem+2px)]",
     "order-[rgb(10,20,30)]"
-  ],
-  "dropped 'order': var() cannot be used in the '…' shorthand, because which native property the value lands in depends on the value, and there is no CSS parser on device. Use the longhand.": [
-    "!order-[var(--x)]",
-    "order-[var(--x)]"
   ],
   "dropped 'outline-color': '…' is not a value native can take": [
     "!outline-[200ms]",
@@ -4776,6 +4746,12 @@
     "align-[30deg]",
     "align-[rgb(10,20,30)]"
   ],
+  "dropped 'vertical-align': a length needs a unit: '…' is a bare number, which a browser drops. Write Npx, or N for none.": [
+    "!align-[0.35]",
+    "!align-[3]",
+    "align-[0.35]",
+    "align-[3]"
+  ],
   "dropped 'vertical-align': var() cannot be used in the '…' shorthand, because which native property the value lands in depends on the value, and there is no CSS parser on device. Use the longhand.": [
     "!align-[var(--x)]",
     "align-[var(--x)]"
@@ -4793,18 +4769,8 @@
     "align-text-top"
   ],
   "dropped 'vertical-align': vertical-align: native takes a keyword here, not a length": [
-    "!align-[0.35]",
-    "!align-[1.25rem]",
-    "!align-[13px]",
     "!align-[37%]",
-    "!align-[3]",
-    "!align-[calc(1rem+2px)]",
-    "align-[0.35]",
-    "align-[1.25rem]",
-    "align-[13px]",
-    "align-[37%]",
-    "align-[3]",
-    "align-[calc(1rem+2px)]"
+    "align-[37%]"
   ],
   "dropped 'visibility': '…' has no React Native equivalent: no style prop of a native view does what it does. Use opacity: N to hide a box and keep its space, or display: none to remove it.": [
     "!collapse",

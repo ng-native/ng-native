@@ -5054,33 +5054,42 @@ function referenced(
 }
 
 /**
- * What native displays for a keyword: flex, none or contents. A block, inline, inline-block,
- * flow-root or inline-flex box is flex, as the compiler reads one written out, and so is `flow`,
- * which is a block. Anything else, a grid or a table, is no display native has, so the property
- * is unset.
+ * What a display keyword is laid out as: flex, none, contents, or one of the block containers,
+ * which the engine lays out as a flex column and commits as flex (`flow.ts`). An inline box is
+ * flex, as the compiler reads one written out, an inline-flex box sits in a line, and `flow` is
+ * a block.
+ * Anything else, a grid or a table, is no display native has, so the property is unset.
  */
 const DISPLAYS: ReadonlyMap<string, string> = new Map([
-  ...['flex', 'block', 'inline', 'inline-block', 'flow-root', 'inline-flex', 'flow'].map(
-    (word) => [word, 'flex'] as const,
+  ...['flex', 'inline'].map((word) => [word, 'flex'] as const),
+  ...['block', 'flow-root', 'inline-block', 'inline-flex', 'none', 'contents'].map(
+    (word) => [word, word] as const,
   ),
-  ['none', 'none'],
-  ['contents', 'contents'],
+  ['flow', 'block'],
 ]);
 
 /**
- * The two-keyword form, an outer display and an inner one in either order: `inline flex` is
- * `inline-flex` and `block flow` is `block`, as Chrome computes them, so each is flex here.
+ * The two-keyword form, an outer display and an inner one in either order, as Chrome computes
+ * it: `inline flex` is `inline-flex`, `block flow` is `block`, `inline flow-root` is
+ * `inline-block`.
  */
 const OUTER = new Set(['block', 'inline']);
 const INNER = new Set(['flow', 'flow-root', 'flex']);
+const PAIRS: Readonly<Record<string, string>> = {
+  'block flow': 'block',
+  'block flow-root': 'flow-root',
+  'inline flow-root': 'inline-block',
+  'inline flex': 'inline-flex',
+};
 
 function displayOf(value: unknown): string | undefined {
   if (typeof value !== 'string') return undefined;
   const words = value.toLowerCase().split(CSS_SPACE);
   if (words.length === 1) return DISPLAYS.get(words[0]!);
-  const [first, second] = words as [string, string];
-  const pair = (OUTER.has(first) && INNER.has(second)) || (INNER.has(first) && OUTER.has(second));
-  return words.length === 2 && pair ? 'flex' : undefined;
+  if (words.length !== 2) return undefined;
+  const [outer, inner] = (OUTER.has(words[0]!) ? words : [words[1], words[0]]) as [string, string];
+  if (!OUTER.has(outer) || !INNER.has(inner)) return undefined;
+  return PAIRS[`${outer} ${inner}`] ?? 'flex';
 }
 
 /**
@@ -5749,7 +5758,9 @@ function wholePercentage(
   if (Array.isArray(marker.expression)) return undefined;
   const leaf = marker.expression as { reference: string };
   const value = formOf(tokens[leaf.reference], 'length');
-  return typeof value === 'string' && value.endsWith('%') ? value : undefined;
+  // And one holding a percentage with a length added, which the engine finishes: `calc(100% + -2px)`.
+  const whole = typeof value === 'string' && (value.endsWith('%') || value.startsWith('calc('));
+  return whole ? (value as string) : undefined;
 }
 
 function calculated(

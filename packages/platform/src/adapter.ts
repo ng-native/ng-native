@@ -323,7 +323,7 @@ class NativeRenderer implements Renderer2 {
     if (current && current === el.ownStyle) {
       if (current[key] === next) return;
       current[key] = next;
-      this.engine.styleChanged(el);
+      this.engine.styleChanged(el, key);
       return;
     }
     const owned = { ...(current ?? {}), [key]: next };
@@ -1057,9 +1057,9 @@ export function mount(
   const host = componentRef.location.nativeElement as EngineNode;
   // The full height of the surface, as the web's mount point is given, so a template's `flex: 1`
   // still fills the screen. A height rather than `flex: 1`, which a `:host` height would lose to.
-  // The app's own `:host` overrides it.
-  engine.setDefaultStyle(host, ROOT_HOST_STYLE);
+  // The app's own `:host` overrides it. Given under the root, which it is a share of.
   engine.appendChild(engine.root, host);
+  engine.setDefaultStyle(host, ROOT_HOST_STYLE);
   hideWhileRestoring((hidden) => {
     engine.setDefaultStyle(host, hidden ? { ...ROOT_HOST_STYLE, opacity: 0 } : ROOT_HOST_STYLE);
     factory.commitSoon();

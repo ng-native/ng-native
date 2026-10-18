@@ -1,9 +1,10 @@
 /**
  * `display: var(--d)`: the token is read on device, as one of the values native has. `flex`,
- * `none` and `contents` are themselves; `block`, `inline`, `inline-block`, `flow-root` and
- * `inline-flex` are flex, as the compiler reads them written out, and so is each of them in
- * the two-keyword form, `inline flex`. Anything else unsets display, which is flex on native,
- * and says so in development, since native has no grid or table to lay out.
+ * `none` and `contents` are themselves. The block containers, `block`, `flow-root` and
+ * `inline-block`, are laid out by the engine and committed as flex, and `inline` and
+ * `inline-flex` are flex, as the compiler reads each written out; so is each of them in the
+ * two-keyword form, `inline flex`. Anything else unsets display, which is flex on native, and
+ * says so in development, since native has no grid or table to lay out.
  *
  * Chrome's values for the stylesheet path are in the oracle (`css-oracle-cases.ts`); this covers
  * a token set on an element, and one that changes after the first commit.
