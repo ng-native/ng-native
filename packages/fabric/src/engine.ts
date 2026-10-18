@@ -7250,8 +7250,11 @@ export class Engine implements HostEngine {
   /** Mark a node for a frame of its animation or transition, which moved these props. */
   private tick(node: EngineNode, keys: readonly string[]): void {
     this.paintTick = keys.every((key) => PAINT_ONLY_KEYS.has(key));
-    this.markProps(node, false);
-    this.paintTick = false;
+    try {
+      this.markProps(node, false);
+    } finally {
+      this.paintTick = false;
+    }
   }
 
   private markPath(node: EngineNode | null): void {

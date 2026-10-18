@@ -88,24 +88,60 @@ describe('a frame of an animation that only paints', () => {
     s.engine.removeChild(s.nodes.get('p')!, added);
     assert.ok(s.frame(100) > 0);
   });
+  // A listener that throws leaves no frame painting only: what comes next is laid out.
+  it('lays out a change after a frame whose listener threw', () => {
+    const fabric = createLaidOutFabric();
+    let now = 0;
+    let fail = false;
+    const engine = new Engine(fabric, 1, {
+      globalStyles: compileCss(CSS, 'app.css') as never,
+      now: () => now,
+      onDirty: () => {
+        if (fail) throw new Error('listener');
+      },
+    });
+    const add = (name: string, parent: EngineNode) => {
+      const node = engine.createElement('view');
+      engine.setClasses(node, name);
+      engine.setProp(node, 'nativeID', name);
+      engine.appendChild(parent, node);
+      return node;
+    };
+    const p = add('p', engine.root);
+    const centre = add('centre', p);
+    add('spin', p);
+    engine.commit();
+    now += 100;
+    fail = true;
+    assert.throws(() => engine.advanceAnimations(), /listener/);
+    fail = false;
+    engine.setClasses(centre, 'centre wide');
+    engine.commit();
+    assert.equal(fabric.box('centre').left, 50);
+  });
 });
 
 describe('a frame that only paints, beside a sticky box and a sum', () => {
   it('reads neither back, where a frame that moves layout reads both', () => {
     const fabric = createLaidOutFabric();
-    let reads = 0;
+    // Which views are read back, by name.
+    let reads = new Set<unknown>();
     const read = (fabric as FabricUIManager).getBoundingClientRect!;
-    (fabric as FabricUIManager).getBoundingClientRect = (...args) => (reads++, read(...args));
+    (fabric as FabricUIManager).getBoundingClientRect = (...args) => {
+      reads.add((args[0] as { props?: Record<string, unknown> }).props?.['nativeID']);
+      return read(...args);
+    };
     let now = 0;
     const sheet = compileCss(
       `${CSS} .scroll { height: 300px } .head { position: sticky; top: 0; height: 20px }` +
-        ' .sum { width: calc(100% - 20px); height: 10px }',
+        ' .sum { width: calc(100% - 20px); height: 10px } .narrow { width: 200px }',
       'app.css',
     );
     const engine = new Engine(fabric, 1, { globalStyles: sheet as never, now: () => now });
     const add = (element: string, name: string, parent: EngineNode) => {
       const node = engine.createElement(element);
       engine.setClasses(node, name);
+      engine.setProp(node, 'nativeID', name);
       engine.appendChild(parent, node);
       return node;
     };
@@ -115,22 +151,25 @@ describe('a frame that only paints, beside a sticky box and a sum', () => {
     const spinner = add('view', 'spin', scroll);
     engine.commit();
     const frame = () => {
-      reads = 0;
+      reads = new Set();
       now += 16;
       engine.advanceAnimations();
       engine.commit();
-      return reads;
+      return [...reads];
     };
-    assert.equal(frame(), 0);
-    assert.equal(frame(), 0);
+    assert.deepEqual(frame(), []);
+    assert.deepEqual(frame(), []);
     // The window changing size, which marks no node: what is laid out from it is read again.
-    reads = 0;
+    reads = new Set();
     engine.updateConditions({ width: 300, height: 800, colorScheme: 'light' });
-    assert.ok(reads > 0);
-    assert.equal(frame(), 0);
+    assert.ok(reads.has('head'), `${[...reads]}`);
+    assert.deepEqual(frame(), []);
     // An animation of a size beside them: a frame of layout, which reads them.
+    // With the scroll view narrower in the same frame: the sticky box is read and the sum follows.
+    assert.equal(fabric.box('sum').width, 380);
     engine.setClasses(spinner, 'grow');
-    engine.commit();
-    assert.ok(frame() > 0);
+    engine.setClasses(scroll, 'scroll narrow');
+    assert.ok(frame().includes('head'));
+    assert.equal(fabric.box('sum').width, 180);
   });
 });
