@@ -115,6 +115,14 @@ it('hoists a destroyed element again when it comes back', () => {
   engine.appendChild(frame, wrap);
   assert.deepEqual(tree(), [['host', ['frame', ['wrap']], ['still'], ['other']]]);
   assert.equal(other.parent, wrap);
+  // And taken out first, then put in by a call of its own, with a commit between.
+  engine.appendChild(wrap, config);
+  engine.removeChild(frame, wrap);
+  assert.deepEqual(tree(), [['host', ['frame']]]);
+  engine.removeChild(wrap, config);
+  assert.deepEqual(tree(), [['host', ['frame']]]);
+  engine.appendChild(frame, config);
+  assert.deepEqual(tree(), [['host', ['frame'], ['still']]], 'hoisted after a separate removal');
 
   // And one destroyed before it was ever put in is not held: no removal comes to let it go.
   const hoisted = (engine as unknown as { hoisted: Set<EngineNode> }).hoisted;

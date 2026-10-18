@@ -3847,7 +3847,6 @@ export class Engine implements HostEngine {
   }
 
   appendChild(parent: EngineNode, child: EngineNode): void {
-    if (child.parent) this.carryHoists(child);
     this.markAdopted(child, parent);
     this.detach(child);
     this.markReturned(child);
@@ -3859,7 +3858,6 @@ export class Engine implements HostEngine {
   }
 
   insertBefore(parent: EngineNode, child: EngineNode, ref: EngineNode | null): void {
-    if (child.parent) this.carryHoists(child);
     this.markAdopted(child, parent);
     this.detach(child);
     this.markReturned(child);
@@ -3887,6 +3885,7 @@ export class Engine implements HostEngine {
     if (!target) return;
     const at = target.childList.indexOf(child);
     if (at < 0) return;
+    this.carryHoists(child);
     target.childList.splice(at, 1);
     child.parent = null;
     this.outSince.set(child, this.classesAbove);
@@ -3920,9 +3919,9 @@ export class Engine implements HostEngine {
   }
 
   /**
-   * A node moving out of a subtree that left the tree can take hoisted nodes of the subtree's with
+   * A node taken out of a subtree that left the tree can take hoisted nodes of the subtree's with
    * it, as content projected inside an element of an `@if` moves into the element made again when
-   * the block opens. All of the subtree's are woken, and the commit, which the move's removal makes
+   * the block opens. All of the subtree's are woken, and the commit, which the removal makes
    * release, puts each back with the subtree it is in.
    */
   private carryHoists(child: EngineNode): void {
