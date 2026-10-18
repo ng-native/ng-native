@@ -1131,11 +1131,17 @@ function ownLayout(node: EngineNode, key: string): unknown {
 
 /**
  * A container's main axis and how it aligns across it, as `row` or `column` and a keyword. A
- * `display: contents` node is no container: its children are laid out in the one above it.
+ * `display: contents` node is no container: its children are laid out in the one above it. With
+ * no direction of its own, the axis is its view's default, as Android's horizontal scroll view
+ * commits a row.
  */
 function containerOf(node: EngineNode): string {
   if (ownLayout(node, 'display') === 'contents') return 'contents';
-  const direction = String(ownLayout(node, 'flexDirection') ?? 'column');
+  const direction = String(
+    ownLayout(node, 'flexDirection') ??
+      DEFAULT_PROPS[viewNameOf(node)]?.['flexDirection'] ??
+      'column',
+  );
   return `${direction.startsWith('row') ? 'row' : 'column'} ${ownLayout(node, 'alignItems') ?? 'stretch'}`;
 }
 

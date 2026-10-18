@@ -156,6 +156,28 @@ describe('a horizontal scroll view on Android', () => {
     assert.equal(fabric.committed[0]?.children[0]?.viewName, 'View');
   });
 
+  it('lays a child out along the row its default direction makes, with no component on it', () => {
+    // Nothing binds `flexDirection`, so the row is the horizontal scroll view's default alone.
+    const fabric = createFakeFabric();
+    const engine = new Engine(fabric, 1);
+    const scroll = engine.createElement('scroll-view');
+    const content = engine.createElement('view');
+    engine.setProp(content, 'style', { flexBasis: 120 });
+    engine.appendChild(scroll, content);
+    engine.appendChild(engine.root, scroll);
+    engine.setProp(scroll, 'horizontal', true);
+    engine.commit();
+    const committed = fabric.committed[0]!;
+    assert.equal(committed.props['flexDirection'], 'row');
+    assert.equal(committed.children[0]?.props['width'], 120, 'the basis is a width in a row');
+    assert.equal(committed.children[0]?.props['height'], undefined);
+    engine.setProp(scroll, 'horizontal', null);
+    engine.commit();
+    const vertical = fabric.committed[0]!.children[0]!;
+    assert.equal(vertical.props['height'], 120, 'and a height again in a column');
+    assert.equal(vertical.props['width'], undefined);
+  });
+
   it('raises the content view over its siblings with what it holds, as a plain view is', () => {
     const fabric = createFakeFabric();
     const engine = new Engine(fabric, 1);
