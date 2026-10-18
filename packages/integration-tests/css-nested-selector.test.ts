@@ -400,3 +400,66 @@ describe("Tailwind's group-has-* and peer-has-*", () => {
     assert.deepEqual(s.reports, []);
   });
 });
+
+describe('a change that is told what it can restyle', () => {
+  it('restyles under an element for [class] as its first class comes and its last goes', () => {
+    // `[class]` asks the attribute as a whole: no classes is no attribute, any class is one.
+    const s = scene('[class] .cell { opacity: 0.5 }');
+    const box = s.el('box');
+    s.el('cell', 'cell', box);
+    assert.equal(s.opacity('cell'), null);
+    s.engine.addClass(box, 'a');
+    assert.equal(s.opacity('cell'), 0.5, 'its first class');
+    s.engine.addClass(box, 'b');
+    assert.equal(s.opacity('cell'), 0.5);
+    s.engine.removeClass(box, 'a');
+    s.engine.removeClass(box, 'b');
+    assert.equal(s.opacity('cell'), null, 'its last class gone');
+    assert.deepEqual(s.reports, []);
+  });
+
+  it('restyles under a box an element asks about by its place, nested in :is() over it', () => {
+    // `.cell:is(:is(.a + .row) *)`: a cell under a row right after an `.a`.
+    const s = scene('.cell:is(:is(.a + .row) *) { opacity: 0.5 }');
+    const row = s.el('row', 'row');
+    s.el('cell', 'cell', row);
+    assert.equal(s.opacity('cell'), null);
+    const a = s.engine.createElement('view');
+    s.engine.setClasses(a, 'a');
+    s.engine.insertBefore(s.engine.root, a, row);
+    assert.equal(s.opacity('cell'), 0.5, 'an .a put before the row');
+    s.engine.removeChild(s.engine.root, a);
+    assert.equal(s.opacity('cell'), null, 'and taken away');
+    assert.deepEqual(s.reports, []);
+  });
+
+  it('restyles under a box whose place a compound before the last of a nested selector reads', () => {
+    // `.cell:is(.row:is(.a + *) .cell)`: the row's own `:is()` asks what is right before it.
+    const s = scene('.cell:is(.row:is(.a + *) .cell) { opacity: 0.5 }');
+    const row = s.el('row', 'row');
+    s.el('cell', 'cell', row);
+    assert.equal(s.opacity('cell'), null);
+    const a = s.engine.createElement('view');
+    s.engine.setClasses(a, 'a');
+    s.engine.insertBefore(s.engine.root, a, row);
+    assert.equal(s.opacity('cell'), 0.5, 'an .a put before the row');
+    s.engine.removeChild(s.engine.root, a);
+    assert.equal(s.opacity('cell'), null, 'and taken away');
+    assert.deepEqual(s.reports, []);
+  });
+
+  it('restyles under a row whose place a selector nested in the styled element reads', () => {
+    // `.cell:is(.row + .row .cell)`: a cell under a row that has a row before it.
+    const s = scene('.cell:is(.row + .row .cell) { opacity: 0.5 }');
+    const first = s.el('first', 'row');
+    s.el('cell', 'cell', first);
+    assert.equal(s.opacity('cell'), null);
+    const before = s.engine.createElement('view');
+    s.engine.setClasses(before, 'row');
+    s.engine.insertBefore(s.engine.root, before, first);
+    assert.equal(s.opacity('cell'), 0.5, 'a row put before it');
+    s.engine.removeChild(s.engine.root, before);
+    assert.equal(s.opacity('cell'), null, 'and taken away');
+    assert.deepEqual(s.reports, []);
+  });
+});
