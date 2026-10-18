@@ -44,10 +44,22 @@ function named(sizes, lineNames) {
   return [...sizes.flatMap((size, at) => [...names(at), size]), ...names(sizes.length)].join(' ');
 }
 
+/** A size an `auto-fill` or `auto-fit` repeat can count with: a length on one side at least. */
+const fixedSize = (value) =>
+  value.type === 'track-breadth'
+    ? value.value.type === 'length'
+    : value.type === 'min-max' && (value.min.type === 'length' || value.max.type === 'length');
+
 function trackItem(item, context) {
   if (item.type === 'track-size') return trackSize(item.value, context);
   const { count, lineNames, trackSizes } = item.value;
   const times = count.type === 'number' ? count.value : count.type;
+  // A browser drops the declaration: there is no counting how many of a track with no size fit.
+  if (typeof times === 'string' && !trackSizes.every(fixedSize)) {
+    throw new CssUnsupported(
+      `${context}: repeat(${times}) takes only tracks with a fixed size, a length on one side at least`,
+    );
+  }
   const sizes = trackSizes.map((size) => trackSize(size, context));
   return `repeat(${times}, ${named(sizes, lineNames)})`;
 }

@@ -82,6 +82,31 @@ describe('grid track lists', () => {
     });
   });
 
+  it('refuses an auto-fill or auto-fit repeat of a track with no fixed size, as a browser does', () => {
+    // Each track repeated needs a length on one side at least: Chrome's CSS.supports for each.
+    for (const tracks of [
+      'auto',
+      'minmax(auto, 1fr)',
+      'fit-content(100px)',
+      '1fr',
+      'min-content',
+    ]) {
+      const css = `grid-template-columns: repeat(auto-fill, ${tracks})`;
+      const { warnings, declarations } = refused(css);
+      assert.deepEqual(declarations, {}, css);
+      assert.match(warnings[0]!, /auto-fill/, css);
+    }
+    for (const tracks of [
+      'minmax(0, 1fr)',
+      'minmax(auto, 100px)',
+      'minmax(100px, auto)',
+      '100px 20%',
+    ]) {
+      const css = `grid-template-columns: repeat(auto-fit, ${tracks})`;
+      assert.equal(refused(css).warnings.length, 0, css);
+    }
+  });
+
   it('refuses a track in a unit that needs the element, which a track is read without', () => {
     for (const css of ['grid-template-columns: 2em 1fr', 'grid-auto-rows: 10vw']) {
       const { warnings, declarations } = refused(css);

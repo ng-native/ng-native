@@ -8485,7 +8485,8 @@ export class Engine implements HostEngine {
 
   private gridIsStale(node: EngineNode): boolean {
     if (this.topOf(node) !== this.root) {
-      this.grids.delete(node);
+      // All of it goes: a grid put back is laid out from the start, as a new one is.
+      this.ungrid(node);
       return false;
     }
     const state = node.grid!;

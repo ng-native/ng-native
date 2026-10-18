@@ -802,6 +802,14 @@ describe('a grid read in other ways', () => {
     assert.deepEqual(t.box('c'), [0, 50, 155, 20]);
   });
 
+  it('repeats a track with no fixed size of its own a point wide at the least', () => {
+    // CSS Grid 7.2.3.2: Chrome makes 300 tracks of 1px here, where there would be no end of them.
+    const css = `.g { display: grid; width: 300px; grid-template-columns: repeat(auto-fill, minmax(0, 1fr)) } ${CELLS}`;
+    const s = scene(css, ['g', ['a'], ['b']]);
+    assert.deepEqual(s.box('a'), [0, 0, 1, 30]);
+    assert.deepEqual(s.box('b'), [1, 0, 1, 50]);
+  });
+
   it('takes a percentage track of the width its other tracks give a grid with none of its own', () => {
     const css =
       '.r { flex-direction: row; align-items: flex-start } .g { display: grid; grid-template-columns: 100px 25% } ' +
@@ -809,5 +817,35 @@ describe('a grid read in other ways', () => {
     const s = scene(css, ['r', ['g', ['a'], ['b']]]);
     assert.deepEqual(s.box('g'), [0, 0, 100, 50]);
     assert.deepEqual(s.box('b'), [100, 0, 25, 50]);
+  });
+});
+
+describe('a grid taken out of the tree and put back', () => {
+  it('is laid out again, and follows its items after', () => {
+    const css = `.g { display: grid; grid-template-columns: 100px 150px } ${CELLS} .tall { height: 80px }`;
+    const s = scene(css, ['top', FOUR]);
+    assert.deepEqual(s.box('d'), [100, 50, 150, 10]);
+    const [top, grid] = [s.nodes.get('top')!, s.nodes.get('g')!];
+    // Out for a commit, as a view container detaches a view and inserts it again.
+    s.engine.removeChild(top, grid);
+    s.engine.commit();
+    s.engine.appendChild(top, grid);
+    assert.deepEqual(s.box('d'), [100, 50, 150, 10]);
+    // And still a grid: an item grown makes its row taller, and moves the row under it.
+    s.engine.setClasses(s.nodes.get('a')!, 'a tall');
+    assert.deepEqual(s.box('c'), [0, 80, 100, 20]);
+    assert.deepEqual(s.box('d'), [100, 80, 150, 10]);
+  });
+
+  it('is laid out again where it comes back with other items', () => {
+    const css = `.g { display: grid; grid-template-columns: 100px 150px } ${CELLS} .e { height: 5px }`;
+    const s = scene(css, ['top', FOUR]);
+    s.box('d');
+    const [top, grid] = [s.nodes.get('top')!, s.nodes.get('g')!];
+    s.engine.removeChild(top, grid);
+    s.engine.commit();
+    s.build(['e'], grid);
+    s.engine.appendChild(top, grid);
+    assert.deepEqual(s.box('e'), [0, 70, 100, 5]);
   });
 });

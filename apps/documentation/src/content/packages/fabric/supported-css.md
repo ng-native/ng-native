@@ -276,10 +276,12 @@ holds. It follows CSS Grid Level 1:
 
 - `grid-template-columns` and `grid-template-rows` take lengths, percentages, `fr`, `auto`,
   `min-content`, `max-content`, `minmax()`, `fit-content()` and `repeat()`, with `auto-fill` and
-  `auto-fit`. `grid-auto-columns`, `grid-auto-rows` and `grid-auto-flow` size and fill the tracks
-  the template does not name.
+  `auto-fit`, which repeat only tracks with a length on one side at least, as in a browser, and
+  each a point wide at the least. `grid-auto-columns`, `grid-auto-rows` and `grid-auto-flow` size
+  and fill the tracks the template does not name.
 - `grid-column`, `grid-row`, their `-start` and `-end`, and `grid-area` place an item by line
-  number, by `span`, or by name. An item with no placement takes the next free cell.
+  number, by `span`, or by name. An item with no placement takes the next free cell. A
+  `position: absolute` child is no item: Yoga places it against the grid's box, not its lines.
 - `grid-template-areas` names areas, which `grid-area: head` places an item in, and whose edges
   are the lines `head-start` and `head-end`. A track list names its own lines,
   `[content-start] 1fr [content-end]`, and `grid-column: content` is the two of them. A name

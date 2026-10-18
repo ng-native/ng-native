@@ -161,7 +161,12 @@ function repetitions(
   gap: number,
 ): number {
   if (whole === undefined) return 1;
-  const size = repeated.reduce((sum, each) => sum + fixedSize(each), 0);
+  // Each repeat a point at the least, as CSS Grid 7.2.3.2 has it, so one of tracks with no fixed
+  // size, `minmax(0, 1fr)`, comes to an end: a point wide each, as many as fit.
+  const size = Math.max(
+    repeated.reduce((sum, each) => sum + fixedSize(each), 0),
+    1,
+  );
   let count = 1;
   const total = (n: number) => otherSize + n * size + (others + n * repeated.length - 1) * gap;
   while (count < CAP && total(count + 1) <= whole) count += 1;
