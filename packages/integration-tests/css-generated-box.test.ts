@@ -504,3 +504,50 @@ describe('a generated box a rule gives to the element with an id', () => {
     assert.deepEqual(names(card), []);
   });
 });
+
+describe('a generated box, to a selector that names no element', () => {
+  it('is no element to *, and no child to :has()', () => {
+    const s = scene(
+      '.row > * { width: 9px } .row::before { content: ""; height: 3px }' +
+        ' .a:has(> *) { height: 7px } .a::before { content: "" }',
+    );
+    const row = s.element('row');
+    s.element('x', row);
+    const a = s.element('a');
+    s.engine.commit();
+    const committed = (node: EngineNode) => node.committed?.props ?? {};
+    const box = row.childList[0]!;
+    assert.equal(box.tag, '::before');
+    assert.equal(committed(box)['width'], undefined, 'a browser never matches * against it');
+    assert.equal(committed(row.childList[1]!)['width'], 9, 'the element beside it still is one');
+    assert.equal(committed(a)['height'], undefined, 'a box alone is not something :has(> *) finds');
+  });
+});
+
+describe("a component's :host::before", () => {
+  it('is drawn in each host of the component, styled by the rule, and in no other element', () => {
+    const fabric = createFakeFabric();
+    const engine = new Engine(fabric, 1);
+    const sheet = generated(':host::before { content: ""; width: 3px }') as never;
+    const host = (id: string) => {
+      const node = engine.createElement('view');
+      engine.setProp(node, 'nativeID', id);
+      engine.appendChild(engine.root, node);
+      engine.setHostSheet(node, sheet);
+      return node;
+    };
+    const first = host('first');
+    const other = engine.createElement('view');
+    engine.appendChild(engine.root, other);
+    const second = host('second');
+    engine.commit();
+    for (const node of [first, second]) {
+      assert.deepEqual(
+        node.childList.map((child) => child.tag),
+        ['::before'],
+      );
+      assert.equal(node.childList[0]!.committed?.props['width'], 3, 'styled by the host rule');
+    }
+    assert.deepEqual(other.childList, [], 'an element that is no host has no box');
+  });
+});

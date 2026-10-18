@@ -5788,6 +5788,8 @@ interface GeneratedFor {
   readonly ids: Set<string>;
   /** The attributes a rule names its element by alone, as a headless library's do. */
   readonly attributes: Set<string>;
+  /** The sheets whose `:host` a rule names: a host of one, and no other element, has the box. */
+  readonly hosts: Set<StyleSheet>;
   every: boolean;
 }
 
@@ -5799,6 +5801,7 @@ const generatedFor = (): GeneratedFor => ({
   names: new Set(),
   ids: new Set(),
   attributes: new Set(),
+  hosts: new Set(),
   every: false,
 });
 
@@ -5810,7 +5813,7 @@ function generatedIn(sheet: StyleSheet): Generated | null {
   for (const rule of sheet.rules) {
     const box = rule.compounds.at(-1)?.type;
     if ((box !== BEFORE && box !== AFTER) || !givesContent(rule)) continue;
-    noteGenerated((boxes ??= noGenerated())[box], rule.compounds.at(-2));
+    noteGenerated((boxes ??= noGenerated())[box], rule.compounds.at(-2), sheet);
   }
   return boxes;
 }
@@ -5827,6 +5830,7 @@ function joinGenerated(all: Iterable<Generated | null>): Generated | null {
       for (const key of ['classes', 'names', 'ids', 'attributes'] as const) {
         for (const each of from[key]) into[key].add(each);
       }
+      for (const each of from.hosts) into.hosts.add(each);
       into.every ||= from.every;
     }
   }
@@ -5839,29 +5843,39 @@ function joinGenerated(all: Iterable<Generated | null>): Generated | null {
  * of each alternative of a `:is()` it is named in, or an attribute it must have. With none of
  * those any element could be the one.
  */
-function noteGenerated(boxes: GeneratedFor, origin: Compound | undefined): void {
+function noteGenerated(boxes: GeneratedFor, origin: Compound | undefined, sheet: StyleSheet): void {
   if (!origin) boxes.every = true;
+  else if (origin.host !== undefined) boxes.hosts.add(sheet);
   else if (origin.classes[0] !== undefined) boxes.classes.add(origin.classes[0]);
   else if (origin.id !== undefined) boxes.ids.add(origin.id);
   else if (origin.type !== undefined) boxes.names.add(origin.type);
-  else noteUnnamed(boxes, origin);
+  else noteUnnamed(boxes, origin, sheet);
 }
 
 /** Note the element of a rule that names it by neither a class nor its name. */
-function noteUnnamed(boxes: GeneratedFor, origin: Compound): void {
+function noteUnnamed(boxes: GeneratedFor, origin: Compound, sheet: StyleSheet): void {
   const alternatives = origin.is?.[0];
   // Named inside `:is()`, as Tailwind writes a state: each alternative is the element itself.
-  if (alternatives?.length) for (const each of alternatives) noteGenerated(boxes, each);
+  if (alternatives?.length) for (const each of alternatives) noteGenerated(boxes, each, sheet);
   // By an attribute it has to have, where that is all that names it.
   else if (origin.attributes?.length) boxes.attributes.add(origin.attributes[0]!.name);
   else boxes.every = true;
 }
 
+/** Whether an element hosts a component whose `:host` a rule gives the box to. */
+const hostsGenerated = (node: EngineNode, boxes: GeneratedFor): boolean =>
+  node.hostSheet !== null && boxes.hosts.has(node.hostSheet);
+
 function wantsGenerated(node: EngineNode, boxes: GeneratedFor): boolean {
-  if (boxes.every || boxes.names.has(node.tag)) return true;
+  if (boxes.every || boxes.names.has(node.tag) || hostsGenerated(node, boxes)) return true;
   const id = node.props['nativeID'];
   if (typeof id === 'string' && boxes.ids.has(id)) return true;
   if (node.classes) for (const name of node.classes) if (boxes.classes.has(name)) return true;
+  return hasGeneratedAttribute(node, boxes);
+}
+
+/** Whether an element has an attribute a rule gives the box to by that alone. */
+function hasGeneratedAttribute(node: EngineNode, boxes: GeneratedFor): boolean {
   for (const name of boxes.attributes) {
     const value = node.props[name];
     if (value !== undefined && value !== null && value !== false) return true;
@@ -6713,6 +6727,8 @@ export class Engine implements HostEngine {
     this.watchLayout(sheet);
     this.watchActive(sheet);
     this.watchGenerated(sheet);
+    // A sheet seen before gives this host its box here: a second host of the component, say.
+    this.generate(node);
     this.markProps(node);
   }
 

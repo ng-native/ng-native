@@ -1007,6 +1007,9 @@ function matchesEach(node: StyleTarget, compound: Compound, sheet: StyleSheet | 
  * same thing. It is also the hottest function in the matcher, called tens of thousands of times
  * per commit, so splitting each guard into its own call would cost more than it reads better.
  */
+/** The first character of a generated box's tag, `::before` or `::after`. */
+const COLON = 58;
+
 // eslint-disable-next-line complexity
 function matchesCompound(node: StyleTarget, compound: Compound, sheet: StyleSheet | null): boolean {
   styleStats.compoundTests++;
@@ -1017,7 +1020,11 @@ function matchesCompound(node: StyleTarget, compound: Compound, sheet: StyleShee
       if (state === 'focus' ? !node.focused : !node.active) return false;
     }
   }
-  if (compound.type !== undefined && compound.type !== node.tag) return false;
+  if (compound.type !== undefined) {
+    if (compound.type !== node.tag) return false;
+    // A generated box is no element to a compound that names none, `*` or a class alone, as a
+    // pseudo-element is none in a browser: one character told from any element's name.
+  } else if (node.tag.charCodeAt(0) === COLON) return false;
   if (compound.own !== undefined && !ownedBy(node, compound, sheet)) return false;
   if (compound.id !== undefined && node.props['nativeID'] !== compound.id) return false;
   for (const className of compound.classes) {
@@ -3830,6 +3837,8 @@ export class StyleResolver {
     return (
       node.templateSheet === null &&
       node.hostSheet === null &&
+      // A generated box matches the `:host::before` of the component its element hosts.
+      !(node.tag.charCodeAt(0) === COLON && node.parent?.hostSheet) &&
       this.deepSheets.size === 0 &&
       this.globalSheet === null &&
       this.addedSheets.length === 0 &&
@@ -3919,6 +3928,10 @@ export class StyleResolver {
     if (this.globalSheet) this.placeLayers(this.globalSheet);
     const indexes: RuleIndex[] = [];
     if (node.hostSheet) indexes.push(this.ownIndex(node.hostSheet, HOSTS));
+    // A generated box is tried against the rules of the component its element hosts too, where
+    // `:host::before` is written: it is no host itself, so a bare `:host` rule still misses it.
+    const host = node.tag.charCodeAt(0) === COLON ? node.parent?.hostSheet : undefined;
+    if (host) indexes.push(this.ownIndex(host, HOSTS));
     if (node.templateSheet) indexes.push(this.ownIndex(node.templateSheet, CREATED));
     if (this.deepSheets.size) this.reachedFromAbove(node, indexes);
     indexes.push(this.sharedIndex());
