@@ -22,6 +22,7 @@ const {
 const { backgroundImage } = require('./gradients.cjs');
 const { filter, backgroundSize, backgroundRepeat, backgroundPosition } = require('./filters.cjs');
 const { LOGICAL } = require('./shorthands.cjs');
+const grid = require('./grid.cjs');
 
 const LENGTH = new Set([
   'width',
@@ -459,18 +460,6 @@ const NO_NATIVE_EQUIVALENT = new Set([
   'empty-cells',
   'grid',
   'grid-template',
-  'grid-template-areas',
-  'grid-template-columns',
-  'grid-template-rows',
-  'grid-auto-flow',
-  'grid-auto-columns',
-  'grid-auto-rows',
-  'grid-area',
-  'grid-column',
-  'grid-row',
-  'justify-items',
-  'place-items',
-  'place-self',
   'columns',
   'column-count',
   'column-width',
@@ -530,6 +519,8 @@ function displayName(value, word) {
 const DISPLAY = new Set(['flex', 'none', 'contents']);
 /** The block containers, which the engine lays out as flex and commits as flex. */
 const FLOW_DISPLAYS = new Set(['block', 'flow-root', 'inline-block']);
+/** A grid, which the engine lays out too. */
+const GRID_DISPLAYS = new Set(['grid', 'inline-grid']);
 
 const SIDES = { top: 'Top', right: 'Right', bottom: 'Bottom', left: 'Left' };
 const CORNERS = {
@@ -1421,27 +1412,67 @@ const each = (properties, handler) => properties.map((property) => [property, ha
  * The properties with a form of their own, each with the handler that writes it. A handler takes
  * `(property, value, out, context)`; `translate` tries `FALLBACKS` for a name that is not here.
  */
-/** `justify-self`, as the keyword, with `safe` kept in front of it. */
-function justify(value, context) {
-  if (value?.type === 'baseline-position') {
-    return value.value === 'last' ? 'last baseline' : 'baseline';
-  }
-  const word = value?.value ?? value?.type;
-  if (typeof word !== 'string') {
-    throw new CssUnsupported(`${context}: expected an alignment keyword`);
-  }
-  return value.overflow === 'safe' ? `safe ${word}` : word;
-}
+/** A grid property the engine reads as text, under the prop it is kept in. */
+const gridText = (prop, read) => (property, value, out) => {
+  out[prop] = read(value, property);
+};
 
-const TRANSLATORS = new Map([
-  ...each(['white-space', 'text-overflow', 'line-clamp', '-webkit-line-clamp'], truncation),
+const GRID = [
+  ['grid-template-columns', gridText('gridTemplateColumns', grid.trackList)],
+  ['grid-template-rows', gridText('gridTemplateRows', grid.trackList)],
+  ['grid-template-areas', gridText('gridTemplateAreas', grid.areas)],
+  ['grid-auto-columns', gridText('gridAutoColumns', grid.autoTracks)],
+  ['grid-auto-rows', gridText('gridAutoRows', grid.autoTracks)],
   [
-    'justify-self',
-    // No style of a native view: where a block in a block sits along its line (`flow.ts`).
+    'grid-auto-flow',
     (property, value, out) => {
-      out.justifySelf = justify(value, property);
+      // As a browser computes it: `row dense` is `dense`, since row is the flow already.
+      const { direction, dense } = value;
+      out.gridAutoFlow = !dense ? direction : direction === 'row' ? 'dense' : `${direction} dense`;
     },
   ],
+  // Each shorthand as its longhands, so a later `grid-column-start` replaces only the start.
+  ...['column', 'row'].map((axis) => [
+    `grid-${axis}`,
+    (property, value, out) => {
+      // Both sides read before either is written: one refused is the declaration refused.
+      const sides = [grid.line(value.start, property), grid.line(value.end, property)];
+      [out[camel(`grid-${axis}-start`)], out[camel(`grid-${axis}-end`)]] = sides;
+    },
+  ]),
+  ['grid-column-start', gridText('gridColumnStart', grid.line)],
+  ['grid-column-end', gridText('gridColumnEnd', grid.line)],
+  ['grid-row-start', gridText('gridRowStart', grid.line)],
+  ['grid-row-end', gridText('gridRowEnd', grid.line)],
+  [
+    'grid-area',
+    (property, value, out) => {
+      const side = (key) => grid.line(value[key], property);
+      const sides = [side('rowStart'), side('rowEnd'), side('columnStart'), side('columnEnd')];
+      [out.gridRowStart, out.gridRowEnd, out.gridColumnStart, out.gridColumnEnd] = sides;
+    },
+  ],
+  ['justify-items', gridText('justifyItems', grid.justify)],
+  ['justify-self', gridText('justifySelf', grid.justify)],
+  [
+    'place-items',
+    (property, value, out) => {
+      out.alignItems = alignment('align-items', value.align);
+      out.justifyItems = grid.justify(value.justify, property);
+    },
+  ],
+  [
+    'place-self',
+    (property, value, out) => {
+      out.alignSelf = alignment('align-self', value.align);
+      out.justifySelf = grid.justify(value.justify, property);
+    },
+  ],
+];
+
+const TRANSLATORS = new Map([
+  ...GRID,
+  ...each(['white-space', 'text-overflow', 'line-clamp', '-webkit-line-clamp'], truncation),
   [
     'box-orient',
     (property, value, out) => {
@@ -1681,15 +1712,15 @@ const TRANSLATORS = new Map([
         out.display = 'flex';
         return;
       }
-      // A flex box that sits in a line is kept as that: in a block the engine keeps it at its
-      // content's width, and anywhere else it is the flex box it holds.
-      if (written === 'inline-flex') {
+      // A grid and a flex box that sit in a line are kept as that: in a block the engine keeps
+      // them at their content's width, and anywhere else they are the grid or flex box they hold.
+      if (GRID_DISPLAYS.has(written) || written === 'inline-flex') {
         out.display = written;
         return;
       }
       if (!DISPLAY.has(word)) {
         throw new CssUnsupported(
-          `display: ${displayName(value, word)} does not exist on native; only flex, block, inline-block, inline-flex, contents and none do`,
+          `display: ${displayName(value, word)} does not exist on native; only flex, block, inline-block, inline-flex, grid, contents and none do`,
         );
       }
       out.display = word;

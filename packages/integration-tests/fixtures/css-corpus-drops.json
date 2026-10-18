@@ -1,7 +1,7 @@
 {
   "bootstrap": {
-    "rules": 2579,
-    "dropped": 629,
+    "rules": 2591,
+    "dropped": 617,
     "emitted": [
       "$animation",
       "$animationDelay",
@@ -213,12 +213,10 @@
         "cursor: wait is not supported. Native has two cursors, auto and pointer, for an iPad with a pointer attached.": 1
       },
       "display": {
-        "display: grid does not exist on native; only flex, block, inline-block, inline-flex, contents and none do": 6,
-        "display: inline-grid does not exist on native; only flex, block, inline-block, inline-flex, contents and none do": 6,
-        "display: list-item does not exist on native; only flex, block, inline-block, inline-flex, contents and none do": 1,
-        "display: table does not exist on native; only flex, block, inline-block, inline-flex, contents and none do": 6,
-        "display: table-cell does not exist on native; only flex, block, inline-block, inline-flex, contents and none do": 6,
-        "display: table-row does not exist on native; only flex, block, inline-block, inline-flex, contents and none do": 6
+        "display: list-item does not exist on native; only flex, block, inline-block, inline-flex, grid, contents and none do": 1,
+        "display: table does not exist on native; only flex, block, inline-block, inline-flex, grid, contents and none do": 6,
+        "display: table-cell does not exist on native; only flex, block, inline-block, inline-flex, grid, contents and none do": 6,
+        "display: table-row does not exist on native; only flex, block, inline-block, inline-flex, grid, contents and none do": 6
       },
       "fill": {
         "'fill' is not mapped yet. React Native may well support it; nothing here translates it. Check RN's style types, then add it to css/properties.cjs.": 1
@@ -327,8 +325,8 @@
     }
   },
   "bulma": {
-    "rules": 3288,
-    "dropped": 1807,
+    "rules": 3308,
+    "dropped": 1795,
     "emitted": [
       "$animation",
       "$animationDelay",
@@ -390,6 +388,7 @@
       "fontSize",
       "fontStyle",
       "fontWeight",
+      "gridTemplateRows",
       "height",
       "justifyContent",
       "left",
@@ -547,9 +546,6 @@
       "cursor": {
         "cursor: not-allowed is not supported. Native has two cursors, auto and pointer, for an iPad with a pointer attached.": 2
       },
-      "display": {
-        "display: grid does not exist on native; only flex, block, inline-block, inline-flex, contents and none do": 11
-      },
       "float": {
         "'float' has no React Native equivalent: no style prop of a native view does what it does. Lay the row out with flexbox: flex-direction: row on the parent.": 3
       },
@@ -567,9 +563,6 @@
       },
       "grid-template-columns": {
         "'grid-template-columns' mixes var() with other values, which needs a parser on device. calc() of tokens, numbers and points, max(var(--x), <length>), colours and transforms are understood; anything else has to be worked out at build time.": 3
-      },
-      "grid-template-rows": {
-        "'grid-template-rows' has no React Native equivalent: no style prop of a native view does what it does.": 1
       },
       "height": {
         "'height: initial' is a CSS-wide keyword, which this cascade does not implement. Write the value it stands for.": 1
@@ -657,8 +650,8 @@
     }
   },
   "pico": {
-    "rules": 472,
-    "dropped": 292,
+    "rules": 473,
+    "dropped": 289,
     "emitted": [
       "$animation",
       "$animationDelay",
@@ -714,6 +707,7 @@
       "fontSize",
       "fontStyle",
       "fontWeight",
+      "gridTemplateColumns",
       "height",
       "justifyContent",
       "left",
@@ -838,8 +832,7 @@
         "cursor: not-allowed is not supported. Native has two cursors, auto and pointer, for an iPad with a pointer attached.": 1
       },
       "display": {
-        "'display: initial' is a CSS-wide keyword, which this cascade does not implement. Write the value it stands for.": 1,
-        "display: grid does not exist on native; only flex, block, inline-block, inline-flex, contents and none do": 1
+        "'display: initial' is a CSS-wide keyword, which this cascade does not implement. Write the value it stands for.": 1
       },
       "fill": {
         "'fill' is not mapped yet. React Native may well support it; nothing here translates it. Check RN's style types, then add it to css/properties.cjs.": 1
@@ -849,9 +842,6 @@
       },
       "font-weight": {
         "font-weight: 'bolder' is relative to the inherited weight, and native takes an absolute one. Write the weight: bold, or a number from 100 to 900.": 1
-      },
-      "grid-template-columns": {
-        "'grid-template-columns' has no React Native equivalent: no style prop of a native view does what it does.": 2
       },
       "line-height": {
         "'line-height: initial' is a CSS-wide keyword, which this cascade does not implement. Write the value it stands for.": 1
@@ -920,8 +910,9 @@
   },
   "open-props": {
     "rules": 87,
-    "dropped": 182,
+    "dropped": 179,
     "emitted": [
+      "alignItems",
       "aspectRatio",
       "backgroundColor",
       "borderBottomColor",
@@ -961,6 +952,7 @@
       "fontStyle",
       "fontWeight",
       "height",
+      "justifyItems",
       "letterSpacing",
       "lineHeight",
       "marginBottom",
@@ -1022,9 +1014,6 @@
       "color-scheme": {
         "'color-scheme' is not mapped yet. React Native may well support it; nothing here translates it. Check RN's style types, then add it to css/properties.cjs.": 2
       },
-      "display": {
-        "display: grid does not exist on native; only flex, block, inline-block, inline-flex, contents and none do": 2
-      },
       "field-sizing": {
         "'field-sizing' is not mapped yet. React Native may well support it; nothing here translates it. Check RN's style types, then add it to css/properties.cjs.": 2
       },
@@ -1042,9 +1031,6 @@
       },
       "padding-block": {
         "padding-block: unit 'ch' has no meaning on native (px, rem, em, %, vw, vh, vmin and vmax are)": 1
-      },
-      "place-items": {
-        "'place-items' has no React Native equivalent: no style prop of a native view does what it does.": 1
       },
       "resize": {
         "'resize' has no React Native equivalent: no style prop of a native view does what it does.": 1
@@ -1073,8 +1059,8 @@
     }
   },
   "tailwind": {
-    "rules": 1045,
-    "dropped": 103,
+    "rules": 1046,
+    "dropped": 102,
     "emitted": [
       "$animation",
       "$transition",
@@ -1183,9 +1169,6 @@
       "columns": {
         "'columns' has no React Native equivalent: no style prop of a native view does what it does.": 1
       },
-      "display": {
-        "display: grid does not exist on native; only flex, block, inline-block, inline-flex, contents and none do": 1
-      },
       "fill": {
         "'fill' is not mapped yet. React Native may well support it; nothing here translates it. Check RN's style types, then add it to css/properties.cjs.": 30
       },
@@ -1205,8 +1188,8 @@
     }
   },
   "tailwind-v3": {
-    "rules": 1042,
-    "dropped": 82,
+    "rules": 1043,
+    "dropped": 81,
     "emitted": [
       "$animation",
       "$animationDelay",
@@ -1317,9 +1300,6 @@
       },
       "columns": {
         "'columns' has no React Native equivalent: no style prop of a native view does what it does.": 1
-      },
-      "display": {
-        "display: grid does not exist on native; only flex, block, inline-block, inline-flex, contents and none do": 1
       },
       "fill": {
         "'fill' is not mapped yet. React Native may well support it; nothing here translates it. Check RN's style types, then add it to css/properties.cjs.": 30

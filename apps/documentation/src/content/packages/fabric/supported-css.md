@@ -223,12 +223,13 @@ which keep spaces and line breaks, are dropped. `font-variant-numeric` takes `ta
 `proportional-nums`, `lining-nums` and `oldstyle-nums`, as `fontVariant`.
 
 `display` takes `flex`, `none`, `contents`, the block containers `block`, `flow-root` and
-`inline-block`, and `inline-flex`. An element that is `display: none` has no native view, nor has
-anything inside it: its views are made when it is displayed and go when it is not, so what a view
-holds of its own, a scroll offset, is not kept across a spell of `display: none`. To keep a view
-while it is out of sight, take it out of the flow and give it no opacity. Yoga lays out flex boxes
-and nothing else, so a block container is committed as a flex column, which stacks its children as
-a block does, and the engine settles what a column does differently before layout:
+`inline-block`, `inline-flex`, and `grid` and `inline-grid`. An element that is `display: none` has
+no native view, nor has anything inside it: its views are made when it is displayed and go when it
+is not, so what a view holds of its own, a scroll offset, is not kept across a spell of `display:
+none`. To keep a view while it is out of sight, take it out of the flow and give it no opacity. Yoga
+lays out flex boxes and nothing else, so a block container is committed as a flex column, which
+stacks its children as a block does, and the engine settles what a column does differently before
+layout:
 
 - Adjoining vertical margins collapse, as CSS has them: between two children of a block, through
   an empty block, and between a block and its first or last child where the block is itself a
@@ -238,14 +239,14 @@ a block does, and the engine settles what a column does differently before layou
   `gap`) and on the boxes in its flow (`flex`, `flex-grow`, `flex-shrink`, `flex-basis`,
   `align-self`) are ignored, as a browser ignores them. `justify-self` places a block of a set
   width along its line, and `margin: 0 auto` centres one.
-- An `inline-block` or `inline-flex` box sits in a line. Where a block container holds nothing
-  else in its flow, they are laid out in lines, a row that wraps, each on the baseline of its
-  line. Among blocks, each run of them shares a line of its own, wrapping when it is full: each
-  box as wide as its content, with margins that do not collapse. The engine commits a view
-  around a run of two or more, which no element of the template stands for; a box that joins
-  such a run or leaves it is created again natively, so a scroll position or a focus inside it is
-  lost. `vertical-align` takes `top`, `middle` and `bottom` for a box on a line, and a length,
-  how far over the baseline it sits.
+- An `inline-block`, `inline-flex` or `inline-grid` box sits in a line. Where a block container
+  holds nothing else in its flow, they are laid out in lines, a row that wraps, each on the baseline
+  of its line. Among blocks, each run of them shares a line of its own, wrapping when it is full:
+  each box as wide as its content, with margins that do not collapse. The engine commits a view
+  around a run of two or more, which no element of the template stands for; a box that joins such a
+  run or leaves it is created again natively, so a scroll position or a focus inside it is lost.
+  `vertical-align` takes `top`, `middle` and `bottom` for a box on a line, and a length, how far
+  over the baseline it sits.
 
 A box in a line is as wide as its content, and that includes content Yoga would size from the
 room on offer: a row with a percentage width, as a `w-full` header is, and cells that share a row
@@ -253,21 +254,61 @@ from a basis of nothing, as `flex-1` cells do. The engine commits such a box wit
 reads its width back, and commits it at that width, which the percentage and the shares are then
 of. It costs the box two more commits when something in it changes.
 
-Only margins in points collapse. Beside a percentage margin in the same container every margin
-stays as written, because a percentage is of a width nothing knows before layout. In a flex
-container an inline-level box is an item like any other, as a browser has it. `.d-none` followed
-by `.d-md-block` shows an element again at a breakpoint. `inline` is read as `flex`, because every
+Only margins in points collapse. Beside a percentage margin in the same container every margin stays
+as written, because a percentage is of a width nothing knows before layout. In a flex container or a
+grid an inline-level box is an item like any other, as a browser has it. `.d-none` followed by
+`.d-md-block` shows an element again at a breakpoint. `inline` is read as `flex`, because every
 native view is a box, and a browser lays out a flex container's inline children as blocks.
-`contents` is Yoga's own: the element draws no box of its own (no background, border or padding)
-and its children are laid out as if they were its parent's. `grid` and the table values are
-dropped, because a column of flex children cannot pretend to lay them out in a grid.
-`display: var(--d)` reads the token on device the same way, in a stylesheet or set on the element,
-and reads the two-keyword form, `inline flex` or `block flow`, as the one-word value it stands for.
-A token of any other value, such as `grid` or a table value, unsets `display`, and the element is
-laid out as a flex column. In development the engine logs a warning naming the token and its
-value, since the compiler only sees the token's name. A written fallback is read the same way,
-`var(--d, inline flex)` included. One native has no layout for, such as `var(--d, grid)`, is
-dropped with a build warning, and the token is still read where it is set.
+`contents` is Yoga's own: the element draws no box of its own (no background, border or padding) and
+its children are laid out as if they were its parent's. The table values are dropped. `display:
+var(--d)` reads the token on device the same way, in a stylesheet or set on the element, and reads
+the two-keyword form, `inline flex` or `block flow`, as the one-word value it stands for. A token of
+any other value, such as a table value, unsets `display`, and the element is laid out as a flex
+column. In development the engine logs a warning naming the token and its value, since the compiler
+only sees the token's name. A written fallback is read the same way, `var(--d, inline flex)`
+included. One native has no layout for, such as `var(--d, table)`, is dropped with a build warning,
+and the token is still read where it is set.
+
+### Grid
+
+`display: grid` is laid out by the engine, since Yoga has no grid, and so is what an `inline-grid`
+holds. It follows CSS Grid Level 1:
+
+- `grid-template-columns` and `grid-template-rows` take lengths, percentages, `fr`, `auto`,
+  `min-content`, `max-content`, `minmax()`, `fit-content()` and `repeat()`, with `auto-fill` and
+  `auto-fit`. `grid-auto-columns`, `grid-auto-rows` and `grid-auto-flow` size and fill the tracks
+  the template does not name.
+- `grid-column`, `grid-row`, their `-start` and `-end`, and `grid-area` place an item by line
+  number, by `span`, or by name. An item with no placement takes the next free cell.
+- `grid-template-areas` names areas, which `grid-area: head` places an item in, and whose edges
+  are the lines `head-start` and `head-end`. A track list names its own lines,
+  `[content-start] 1fr [content-end]`, and `grid-column: content` is the two of them. A name
+  given to several lines is counted: `col 2`.
+- `gap`, `justify-content`, `align-content`, `justify-items`, `align-items`, `justify-self`,
+  `align-self`, `place-items` and `place-self` space and align, `safe` included.
+
+A grid needs to read sizes back from native to place its items: its own width, the width each
+item's content wants, and each item's height at its column's width. It commits, reads, and
+commits again, in the one task, so only the placed grid is drawn. That costs a few times what a
+flex container costs, and a grid changed inside is laid out again. Some limits follow from it:
+
+- A grid with no width of its own, and none from its container, is as wide as its tracks come
+  to, up to the room it is in: a centred dialog whose content is a grid. Its items are measured
+  at the width that room allows.
+- The narrowest an item's content can be is read where a track asks for it, a `min-content` or
+  `fit-content()` track or an item that is not stretched: its text is committed one word to a
+  line, and the widest is that width. A script that breaks anywhere, or a hyphenated word, is
+  measured as the whole word.
+- Text written straight into a grid is not an item. Put it in a `<text>`.
+- `subgrid`, the `grid` and `grid-template` shorthands, and a span counted in named lines,
+  `span col 2`, are dropped with a warning.
+- `align-items: baseline` and `align-self: baseline` line up the items that start in one row by
+  their first baselines, read from native. `last baseline` is read as `start`, and an item that
+  is itself a grid has its bottom edge for a baseline.
+- An item with an `aspect-ratio` and no height is as tall as its width makes it, where an item
+  without one is stretched over its row.
+
+On a host with no layout to read, such as a test's fake Fabric, a grid is a flex column.
 
 ### Order
 
@@ -409,9 +450,9 @@ and not their sum, so the engine commits the box with the declaration set aside,
 the percentage is of, and commits it at what the sum comes to, all in the one task. That is two
 more commits when the box or anything in it changes, and one read on every commit after. A
 percentage of a height is of a parent that was given a height; under an `auto` height the
-declaration is set aside, as a browser sets it aside. In a grid item, and on a host with no
-layout to read, it is set aside too. Anywhere else, `font-size` or `gap` say, the sum is
-dropped with a warning.
+declaration is set aside, as a browser sets it aside. In a grid item the percentage is of the
+item's area. On a host with no layout to read the declaration is set aside too. Anywhere else,
+`font-size` or `gap` say, the sum is dropped with a warning.
 
 The keywords that switch a property off - `max-width: none`, `z-index: auto`,
 `letter-spacing: normal`, `filter: none`, `box-shadow: none` - clear it back to native's default.
@@ -455,7 +496,7 @@ the color of an SF Symbol. It takes a token as any color does.
 These are dropped with a warning that says so, not declarations that quietly do nothing:
 
 - `float`
-- `grid` and its whole family
+- `subgrid`, and the `grid` and `grid-template` shorthands
 - `list-style`
 - Table layout: `table-layout`, `border-collapse`, `caption-side`, `empty-cells`
 - Multi-column layout

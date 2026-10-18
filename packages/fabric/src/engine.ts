@@ -90,6 +90,7 @@ import {
   scrollChannels,
   sharesAsPoints,
 } from './scroll-animation.ts';
+import { layOutGrid, type GridItem, type GridLayout, type Rect } from './grid.ts';
 import {
   isBlockContainer,
   placeInFlow,
@@ -247,8 +248,8 @@ export interface FabricUIManager {
   /**
    * A node's box as the last commit laid it out: x, y, width, height. Fabric lays a commit out
    * before `completeRoot` returns, so this answers for a commit made a line earlier, and what
-   * was read can be committed again before anything is drawn. That is how a box fitted to its
-   * content is laid out. Optional because a test's fabric has no layout to read.
+   * was read can be committed again before anything is drawn. That is how a grid is laid out.
+   * Optional because a test's fabric has no layout to read.
    */
   getBoundingClientRect?(
     node: FabricNode,
@@ -618,6 +619,10 @@ export interface EngineNode extends HostNode {
   shareOff?: boolean;
   /** Whether this node's children were last laid out along a row. See `autoMinimum`. */
   row?: boolean;
+  /** How this node lays its children out as a grid. Unset on every node that is not one. */
+  grid?: GridState;
+  /** The grid this node was last an item of. Its `grid` says whether it still is. */
+  gridIn?: EngineNode;
   /** The block container whose flow this node was last in. Its `flow` says whether it still is. */
   flowIn?: EngineNode;
   /**
@@ -967,6 +972,14 @@ function firstInFlow(node: EngineNode): EngineNode | undefined {
     if (!OUT_OF_FLOW.has(readStyle(child, 'position') as string)) return child;
   }
   return undefined;
+}
+
+/** A box and every box in it that is a grid, the outermost first. */
+function gridsIn(box: EngineNode): EngineNode[] {
+  const inside = box.childList.flatMap((child) =>
+    child.nodeKind === 'element' ? gridsIn(child) : [],
+  );
+  return box.grid ? [box, ...inside] : inside;
 }
 
 const isNode = (node: EngineNode | undefined): node is EngineNode => node !== undefined;
@@ -1424,6 +1437,8 @@ const isSizedBasis = (basis: unknown): boolean =>
 function basisAsSize(node: EngineNode, props: Record<string, unknown>): void {
   const basis = props['flexBasis'];
   if (!isSizedBasis(basis) || props['position'] === 'absolute') return;
+  // A grid places its items, and reads no basis: see `gridItem`.
+  if (gridOver(node)) return;
   const parent = layoutParent(node);
   if (!parent) return;
   const container = containerOf(parent);
@@ -1469,7 +1484,7 @@ function sizedByFlex(node: EngineNode): boolean {
   const position = ownLayout(node, 'position');
   if (position === 'absolute' || position === 'fixed') return false;
   const parent = layoutParent(node);
-  if (!parent || parent.flow !== undefined) return false;
+  if (!parent || parent.flow !== undefined || parent.grid !== undefined) return false;
   const [direction, align] = containerOf(parent).split(' ');
   const self = ownLayout(node, 'alignSelf') as string | undefined;
   if (direction === 'row' && !(STRETCHES.has(self) && align === 'stretch')) return false;
@@ -1500,8 +1515,15 @@ function sizesItself(node: EngineNode, height: unknown): boolean {
   return ownLayout(node, 'position') === 'absolute' || ownLayout(node, 'aspectRatio') != null;
 }
 
-/** Whether the container a box is in gives it a height: a row's, or a share of a column's. */
+/**
+ * Whether the container a box is in gives it a height: a row's, or a share of a column's, or a
+ * grid's area that stretches it, which a browser takes a percentage of once the rows are sized.
+ */
 function heightFromLayout(node: EngineNode, parent: EngineNode): boolean {
+  if (parent.grid !== undefined) {
+    const margins = ['marginTop', 'marginBottom', 'marginVertical', 'margin'];
+    return stretched(node, parent) && margins.every((key) => ownLayout(node, key) !== 'auto');
+  }
   const [direction, align] = containerOf(parent).split(' ');
   if (direction === 'row') {
     // Stretched across a row, it is as tall as the row, where the row has a height to be. One
@@ -1559,7 +1581,7 @@ function stretchedOverRatio(node: EngineNode, props: Record<string, unknown>): v
   if (!isSet(props['aspectRatio']) || OUT_OF_FLOW.has(props['position'] as string)) return;
   if (viewNameOf(node) !== DEFAULT_VIEW) return;
   const parent = layoutParent(node);
-  if (!parent || parent.flow !== undefined) return;
+  if (!parent || parent.flow !== undefined || parent.grid !== undefined) return;
   const container = containerOf(parent);
   // Remembered on the container, so the item is merged again when its direction changes.
   parent.fitContainer = container;
@@ -1689,6 +1711,18 @@ function noOutline(props: Record<string, unknown>): void {
   for (const key of OUTLINE_KEYS) delete props[key];
 }
 
+/** Keep what was read of a grid item at a width. */
+function noteAt(
+  all: Map<EngineNode, Map<number, number>>,
+  member: EngineNode,
+  width: number,
+  value: number,
+): void {
+  const read = all.get(member) ?? new Map<number, number>();
+  read.set(width, value);
+  all.set(member, read);
+}
+
 const sameBase = (
   a: readonly [number, number | undefined],
   b: readonly [number, number | undefined] | undefined,
@@ -1727,11 +1761,256 @@ function holdsItsContent(node: EngineNode): boolean {
   );
 }
 
+/**
+ * A grid container between the commit that changed it and the commit that places its items.
+ *
+ * Yoga has no grid, so its items are taken out of the flow and placed by the engine, from sizes
+ * read back from Fabric. `measuring` commits each item with no size, to be read at the size its
+ * content wants; `sizing` commits the items whose height at a column's width is wanted, at that
+ * width; `placed` commits each where the grid puts it.
+ */
+interface GridState {
+  phase: 'measuring' | 'words' | 'sizing' | 'placed';
+  /** Laid out since it or anything in it last changed. */
+  settled: boolean;
+  members: readonly EngineNode[];
+  /** Each item's size with its content as wide as it wants. */
+  content: Map<EngineNode, { width: number; height: number }>;
+  /**
+   * Each item's width with its content as narrow as it goes, read where the layout asked: its
+   * text is committed one word to a line, `words`, and the widest of them is that width.
+   */
+  narrow: Map<EngineNode, number>;
+  /** Set by a layout that asked for a width `narrow` does not have yet. */
+  wantsNarrow: boolean;
+  /** Each item's height at a width, for the widths the layout asked about. */
+  heights: Map<EngineNode, Map<number, number>>;
+  /** The widths being asked about, while `sizing`. */
+  widths: Map<EngineNode, number>;
+  /** Where each item goes, against the container's padding box, once `placed`. */
+  rects: Map<EngineNode, Rect>;
+  /** The width of the box it was last laid out in, and the height it then came to, if its own. */
+  width?: number;
+  height?: number;
+  /** The width its tracks came to, where nothing else gives it one. */
+  ownWidth?: number;
+  /**
+   * How far down each item's baseline is at a width, read as Yoga lines items up in a row: see
+   * `gridWithHeights`. Set on `inRow` while the items are committed that way to be read.
+   */
+  baselines: Map<EngineNode, Map<number, number>>;
+  /** Each item whose baseline the last layout asked for, and the width it asked at. */
+  asked: Map<EngineNode, number>;
+  wantsBaseline?: boolean;
+  inRow?: boolean;
+  /** The grid lines a placement names, from the last layout: what an out-of-flow child is against. */
+  area?: GridLayout['area'];
+  stopListening?: () => void;
+  /** Its style and each item's as it was last laid out, and what each item held: see `follows`. */
+  styled?: string;
+  styles?: Map<EngineNode, string>;
+  shapes?: Map<EngineNode, string>;
+  /**
+   * The items changed in or beneath since it was laid out, with no cause yet to lay it out
+   * again, and how far the content of each reached before the change.
+   */
+  followed?: Map<EngineNode, Reach>;
+  /** How far each of those reached after the last such change, which is before the next. */
+  reached?: Map<EngineNode, Reach>;
+}
+
+/** How far down an item's content reaches in it, and whether it reaches past its right edge. */
+interface Reach {
+  bottom: number;
+  over: boolean;
+}
+
+/** A style as a grid is laid out from it: what is only paint moves nothing, and is left out. */
+const asAKey = (style: Record<string, unknown>): string =>
+  JSON.stringify(style, (key, value: unknown) => (PAINT_ONLY_KEYS.has(key) ? undefined : value));
+
+/**
+ * How much an item holds: its elements, and the letters of its text. Text as long as it was is
+ * taken to be as wide, and a box neither added nor taken away to leave the others as they were.
+ */
+function shapeOf(node: EngineNode): string {
+  let elements = 0;
+  let letters = 0;
+  const count = (each: EngineNode): void => {
+    if (each.nodeKind === 'text') letters += each.nodeText.length;
+    else if (each.nodeKind === 'element') elements++;
+    for (const child of each.childList) count(child);
+  };
+  for (const child of node.childList) count(child);
+  return `${elements}:${letters}`;
+}
+
+/** The props only the engine's grid layout reads. None of them is a React Native style. */
+const GRID_KEYS = [
+  'gridTemplateColumns',
+  'gridTemplateRows',
+  'gridTemplateAreas',
+  'gridAutoColumns',
+  'gridAutoRows',
+  'gridAutoFlow',
+  'gridColumnStart',
+  'gridColumnEnd',
+  'gridRowStart',
+  'gridRowEnd',
+  'justifyItems',
+  'justifySelf',
+];
+/** What places a box among its siblings, which the grid does for an item instead. */
+const PLACING_KEYS = [
+  ...['margin', 'marginVertical', 'marginHorizontal'],
+  ...['marginTop', 'marginRight', 'marginBottom', 'marginLeft', 'marginStart', 'marginEnd'],
+  ...['top', 'right', 'bottom', 'left', 'start', 'end'],
+  ...['flex', 'flexGrow', 'flexShrink', 'flexBasis', 'alignSelf'],
+];
+const SIZE_LIMITS = ['minWidth', 'maxWidth', 'minHeight', 'maxHeight'];
+
 /** Every run of text under a node. */
 function textsUnder(node: EngineNode): EngineNode[] {
   return node.childList.flatMap((child) =>
     child.nodeKind === 'text' ? [child] : textsUnder(child),
   );
+}
+
+/** Whether a `display` is a grid, in a line or not: what it holds is laid out the same. */
+const isGrid = (display: unknown): boolean => display === 'grid' || display === 'inline-grid';
+
+/** The grid a node is an item of, where it is still a child of that grid. */
+function gridOver(node: EngineNode): GridState | undefined {
+  const container = node.gridIn;
+  return container && node.parent === container && container.grid?.members.includes(node)
+    ? container.grid
+    : undefined;
+}
+
+/**
+ * A grid container and its items, as the views Yoga lays out: the container a plain box as tall
+ * as its rows, and each item out of the flow, at the size the grid's current phase wants.
+ */
+function gridLayout(node: EngineNode, props: Record<string, unknown>): void {
+  // Asked of every node, and read before it is deleted: most have none of these.
+  for (const key of GRID_KEYS) if (props[key] !== undefined) delete props[key];
+  if (isGrid(props['display'])) {
+    props['display'] = 'flex';
+    if (node.grid) gridContainer(node, node.grid, props);
+    // Its items are placed out of the flow, and it is what they are placed in: a static box
+    // would leave them to whatever further up is positioned.
+    if (node.grid && props['position'] === 'static') props['position'] = 'relative';
+  }
+  const state = gridOver(node);
+  if (state) gridItem(node, state, props);
+}
+
+/**
+ * A grid container as a plain box. While it is measured it stacks its items at their content's
+ * width, so a container nothing gives a width comes out as wide as its widest item, and one that
+ * is given a width keeps it. Placed, it is the width and height its tracks came to where its own
+ * were not set.
+ */
+function gridContainer(node: EngineNode, state: GridState, props: Record<string, unknown>): void {
+  if (state.phase === 'measuring' || state.phase === 'words') {
+    props['flexDirection'] = 'column';
+    props['flexWrap'] = 'nowrap';
+    return;
+  }
+  if (state.phase === 'sizing' && state.inRow) {
+    // Yoga knows a baseline, and lines items up by theirs in a row: where each lands says it.
+    Object.assign(props, { flexDirection: 'row', flexWrap: 'nowrap', alignItems: 'baseline' });
+    return;
+  }
+  if (state.ownWidth !== undefined) props['width'] = state.ownWidth;
+  if (state.height !== undefined) rowsHeight(node, state.height, props, state.width);
+}
+
+/**
+ * A grid's rows' height, as the height of what it holds: its height down a column, which it
+ * grows and shrinks from, and the least it is across a row, which stretches it taller. A basis
+ * written as its height is its height, whatever its rows come to. With an aspect ratio, its
+ * height is what the ratio gives its width, or its rows where they are taller.
+ */
+function rowsHeight(
+  node: EngineNode,
+  rows: number,
+  props: Record<string, unknown>,
+  width?: number,
+): void {
+  if (props['height'] != null && !NO_HEIGHT.has(props['height'] as string)) return;
+  const ratio = props['aspectRatio'];
+  const sized = typeof ratio === 'number' && ratio > 0 && width !== undefined;
+  const height = sized ? Math.max(rows, width / ratio) : rows;
+  if (sized) delete props['aspectRatio'];
+  if (!node.parent || !isRow(node.parent)) {
+    props['height'] = height;
+    return;
+  }
+  const least = props['minHeight'];
+  props['minHeight'] = typeof least === 'number' ? Math.max(least, height) : height;
+}
+
+/** A grid item, in the flow at its content's width while its grid is measured, and out of it after. */
+function gridItem(node: EngineNode, state: GridState, props: Record<string, unknown>): void {
+  const shift = relativeShift(props);
+  for (const key of PLACING_KEYS) delete props[key];
+  if (state.phase === 'placed') {
+    props['position'] = 'absolute';
+    for (const key of SIZE_LIMITS) delete props[key];
+    const rect = state.rects.get(node);
+    if (rect) Object.assign(props, asCommitted(rect, shift, props));
+    return;
+  }
+  // A percentage is of the item's area, which is not known while it is measured.
+  for (const key of ['width', 'height', ...SIZE_LIMITS]) {
+    if (typeof props[key] === 'string') delete props[key];
+  }
+  if (state.phase === 'measuring' || state.phase === 'words') {
+    props['position'] = 'relative';
+    props['alignSelf'] = 'flex-start';
+    return;
+  }
+  props['position'] = state.inRow ? 'relative' : 'absolute';
+  const width = state.widths.get(node);
+  if (width !== undefined) props['width'] = width - contentFrame(props).width;
+}
+
+/** How far an item's own offsets move it from its area, as a relative box. Static or sticky, nothing. */
+function relativeShift(props: Record<string, unknown>): { x: number; y: number } {
+  // A sticky box's offsets are where it sticks in its scroll view, not a move.
+  if (props['position'] === 'static' || props['position'] === 'sticky') return { x: 0, y: 0 };
+  const at = (start: string, end: string) => {
+    const [from, to] = [props[start], props[end]];
+    if (typeof from === 'number') return from;
+    return typeof to === 'number' ? -to : 0;
+  };
+  return { x: at('left', 'right'), y: at('top', 'bottom') };
+}
+
+/**
+ * The padding and border a size written on a box leaves out: all of them where its
+ * `box-sizing` is `content-box`, and none otherwise.
+ */
+function contentFrame(props: Record<string, unknown>): { width: number; height: number } {
+  if (props['boxSizing'] !== 'content-box') return { width: 0, height: 0 };
+  const edge = insets(props);
+  return { width: edge.Left + edge.Right, height: edge.Top + edge.Bottom };
+}
+
+/** Where a grid puts an item's border box, as the props that put it there. */
+function asCommitted(
+  rect: Rect,
+  shift: { x: number; y: number },
+  props: Record<string, unknown>,
+): Rect {
+  const frame = contentFrame(props);
+  return {
+    left: rect.left + shift.x,
+    top: rect.top + shift.y,
+    width: Math.max(rect.width - frame.width, 0),
+    height: Math.max(rect.height - frame.height, 0),
+  };
 }
 
 /**
@@ -1807,6 +2086,7 @@ function engineLayout(node: EngineNode, props: Record<string, unknown>, asked: n
 /** The part of `engineLayout` that a layout something asked for sets a node up for. */
 function askedLayout(node: EngineNode, props: Record<string, unknown>, asked: number): void {
   const css = (asked & CSS_LAYOUT) !== 0;
+  if (css) gridLayout(node, props);
   if (asked & MIXED_SIZES) {
     mixedLayout(node, props);
     // A basis a sum came to is a size too, as one written is: see `basisAsSize`.
@@ -2052,7 +2332,7 @@ const SIZE_KEYS = new Set([
   ...['width', 'height', 'minWidth', 'minHeight', 'maxWidth', 'maxHeight', 'flexBasis'],
 ]);
 /** What only the engine reads, whatever it is set to: no native view lays out by any of them. */
-const LAID_OUT_HERE = new Set(['order', 'justifySelf']);
+const LAID_OUT_HERE = new Set([...GRID_KEYS, 'order']);
 const POSITIONS_HERE = new Set(['static']);
 
 /** What a declaration can ask of the engine that an app of plain flex does not: see `asks`. */
@@ -2134,7 +2414,7 @@ function asksOfPlaced(props: Record<string, unknown>): boolean {
 function unaskedPlan(node: EngineNode): string[] {
   const missed: string[] = [];
   const [display, position] = [readStyle(node, 'display'), readStyle(node, 'position')];
-  if (isBlockContainer(display)) missed.push(`display ${String(display)}`);
+  if (isBlockContainer(display) || isGrid(display)) missed.push(`display ${String(display)}`);
   if (position === 'static') missed.push(`position ${position}`);
   if (readStyle(node, 'order') != null) missed.push('order');
   return missed;
@@ -2416,6 +2696,15 @@ function pictureWide(node: EngineNode, props: Record<string, unknown>): void {
   if (own && !isSet(props['width'])) props['width'] = own.width;
 }
 
+/** A length as the grid layout reads one: points with their unit, a percentage as written. */
+/** A length as `layOutGrid` reads one: a sum of a share and points as `50% + -8px`. */
+function cssLength(value: unknown): string | undefined {
+  if (typeof value === 'number') return `${value}px`;
+  if (typeof value !== 'string') return undefined;
+  const sum = mixedParts(value);
+  return sum ? `${sum.percent}% + ${sum.points}px` : value;
+}
+
 /** The first of these a style sets: a side, then the shorthands React Native reads it from. */
 function firstOf(style: Record<string, unknown>, keys: readonly string[]): unknown {
   for (const key of keys) if (style[key] != null) return style[key];
@@ -2441,6 +2730,117 @@ function insets(
     points(firstOf(style, [`padding${name}`, `padding${AXIS[name]}`, 'padding'])) +
     (border ? points(firstOf(style, [`border${name}Width`, 'borderWidth'])) : 0);
   return { Top: side('Top'), Right: side('Right'), Bottom: side('Bottom'), Left: side('Left') };
+}
+
+/** A grid container's style in the CSS terms `layOutGrid` reads. */
+function gridContainerStyle(style: Record<string, unknown>): Record<string, string> {
+  const css: Record<string, string | undefined> = {
+    'grid-template-columns': style['gridTemplateColumns'] as string | undefined,
+    'grid-template-rows': style['gridTemplateRows'] as string | undefined,
+    'grid-template-areas': style['gridTemplateAreas'] as string | undefined,
+    'grid-auto-columns': style['gridAutoColumns'] as string | undefined,
+    'grid-auto-rows': style['gridAutoRows'] as string | undefined,
+    'grid-auto-flow': style['gridAutoFlow'] as string | undefined,
+    'column-gap': cssLength(style['columnGap'] ?? style['gap']),
+    'row-gap': cssLength(style['rowGap'] ?? style['gap']),
+    'justify-content': style['justifyContent'] as string | undefined,
+    'align-content': style['alignContent'] as string | undefined,
+    'justify-items': style['justifyItems'] as string | undefined,
+    'align-items': style['alignItems'] as string | undefined,
+    direction: style['direction'] as string | undefined,
+  };
+  return defined(css);
+}
+
+/** A grid item's style in the CSS terms `layOutGrid` reads. */
+function gridItemStyle(style: Record<string, unknown>): Record<string, string> {
+  const css: Record<string, string | undefined> = {
+    'grid-column-start': style['gridColumnStart'] as string | undefined,
+    'grid-column-end': style['gridColumnEnd'] as string | undefined,
+    'grid-row-start': style['gridRowStart'] as string | undefined,
+    'grid-row-end': style['gridRowEnd'] as string | undefined,
+    'justify-self': style['justifySelf'] as string | undefined,
+    'align-self': style['alignSelf'] as string | undefined,
+    width: cssLength(style['width']),
+    height: cssLength(style['height']),
+    'min-width': cssLength(style['minWidth']),
+    'max-width': cssLength(style['maxWidth']),
+    'min-height': cssLength(style['minHeight']),
+    'max-height': cssLength(style['maxHeight']),
+    'aspect-ratio': style['aspectRatio'] == null ? undefined : String(style['aspectRatio']),
+  };
+  for (const side of SIDES) {
+    css[`margin-${side.toLowerCase()}`] = cssLength(
+      firstOf(style, [`margin${side}`, `margin${AXIS[side]}`, 'margin']),
+    );
+  }
+  return defined(css);
+}
+
+/** A grid item as `layOutGrid` reads it: its style, and its padding and border on each axis. */
+interface GridItemOf {
+  style: Record<string, string>;
+  frame: { width: number; height: number };
+}
+
+function gridItemOf(style: Record<string, unknown>): GridItemOf {
+  const edge = insets(style);
+  const css = gridItemStyle(style);
+  if (style['boxSizing'] === 'content-box') css['box-sizing'] = 'content-box';
+  return { style: css, frame: { width: edge.Left + edge.Right, height: edge.Top + edge.Bottom } };
+}
+
+/**
+ * Whether a box in the flow is as wide as the column it is in, which stretches it: no auto
+ * margin across, nothing aligning it to a side, and not in a line.
+ */
+function stretchedAcross(node: EngineNode, style: Record<string, unknown>): boolean {
+  const parent = node.parent;
+  if (!parent || OUT_OF_FLOW.has(style['position'] as string)) return false;
+  if (style['display'] === 'inline-grid' || isRow(parent)) return false;
+  if (style['marginLeft'] === 'auto' || style['marginRight'] === 'auto') return false;
+  return parent.nodeKind !== 'element' || stretched(node, parent);
+}
+
+/** Whether an item of a grid is stretched down its area: aligned to nothing, with no auto margin. */
+function stretchedDown(node: EngineNode, style: Record<string, unknown>): boolean {
+  if (style['marginTop'] === 'auto' || style['marginBottom'] === 'auto') return false;
+  return isAuto(style['height']) && stretched(node, node.parent!);
+}
+
+/**
+ * A width a box is given by its style, in points. A share of the box it is in may be of a box
+ * as wide as what it holds, which is then the grid's tracks: that is left to `gridWidth`.
+ */
+const ownsWidth = (width: unknown): boolean => typeof width === 'number';
+
+/** The least and the most a box's content box may be, from the points its style writes. */
+interface SizeLimits {
+  minWidth: number;
+  maxWidth: number;
+  minHeight: number;
+  maxHeight: number;
+}
+
+/** A box's limits as its content box's, `across` and `down` being its padding and border. */
+function sizeLimits(style: Record<string, unknown>, across: number, down: number): SizeLimits {
+  const off = (frame: number) => (style['boxSizing'] === 'content-box' ? 0 : frame);
+  const points = (key: string, none: number, frame: number) => {
+    const value = style[key];
+    return typeof value === 'number' ? Math.max(value - off(frame), 0) : none;
+  };
+  return {
+    minWidth: points('minWidth', 0, across),
+    maxWidth: points('maxWidth', Infinity, across),
+    minHeight: points('minHeight', 0, down),
+    maxHeight: points('maxHeight', Infinity, down),
+  };
+}
+
+function defined(css: Record<string, string | undefined>): Record<string, string> {
+  return Object.fromEntries(
+    Object.entries(css).filter(([, value]) => value !== undefined),
+  ) as Record<string, string>;
 }
 
 /** A block container's plan, and the children it covers. */
@@ -3052,7 +3452,7 @@ const onLineAmongBlocks = (node: EngineNode): boolean => flowOver(node)?.lined.h
  * offer. A grid works out its own gaps, and a block has none.
  */
 function percentGap(node: EngineNode, props: Record<string, unknown>): void {
-  if (!isPercent(props['rowGap']) || node.flow !== undefined) return;
+  if (!isPercent(props['rowGap']) || node.grid !== undefined || node.flow !== undefined) return;
   if (!definiteHeight(node)) props['rowGap'] = 0;
 }
 
@@ -3087,6 +3487,24 @@ function blockContentHeight(node: EngineNode): number | undefined {
 function heldLeast(props: Record<string, unknown>, inner: number): void {
   props['minHeight'] = (Number.parseFloat(props['minHeight'] as string) / 100) * inner;
 }
+
+/** Whether a box's height is a percentage of a box that has no height of its own to share. */
+function sharesNoHeight(node: EngineNode, style: Record<string, unknown>): boolean {
+  if (!isPercent(style['height']) || style['position'] === 'absolute') return false;
+  const parent = layoutParent(node);
+  return parent != null && !definiteHeight(parent);
+}
+
+/** Whether a grid has a height of its own, and not its rows': written, and of something. */
+const ownsHeight = (node: EngineNode, style: Record<string, unknown>): boolean =>
+  !NO_HEIGHT.has(style['height'] as string) && !sharesNoHeight(node, style);
+
+/**
+ * What a grid was laid out from, to tell when it is to be laid out again: its own style, and
+ * whether its height was a share of a box with none, which is no style of its own.
+ */
+const gridKey = (node: EngineNode, style: Record<string, unknown>): string =>
+  asAKey(style) + (sharesNoHeight(node, style) ? ' of no height' : '');
 
 const INLINE_ROWS = new Set(['inline-flex', 'inline-block', 'inline-grid']);
 
@@ -6762,10 +7180,12 @@ export class Engine implements HostEngine {
   /** Everything the engine lays out in Yoga's place, from the commit just made. */
   private settleLayout(): void {
     this.settleMinimums();
+    this.settleGrids();
     this.settleFits();
     this.settleHeld();
-    // A sum can move what is in a held box: it again, and the sums of it after.
+    // A sum can size a grid or move what is in a held box: each again, and the sums of it after.
     if (this.settleMixed()) {
+      this.settleGrids();
       this.settleHeld();
       this.settleMixed();
     }
@@ -6787,6 +7207,8 @@ export class Engine implements HostEngine {
   private narrowed: ReadonlySet<EngineNode> | null = null;
 
   private inWords(node: EngineNode): boolean {
+    // While a grid's words are read: see `readNarrow`.
+    if (this.wordsOf !== null && isWithin(node, this.wordsOf)) return true;
     if (!this.narrowed) return false;
     for (let up = node.parent; up; up = up.parent) if (this.narrowed.has(up)) return true;
     return false;
@@ -7056,6 +7478,7 @@ export class Engine implements HostEngine {
     const copy = { ...merged };
     const [autoMin, shareMin] = [node.autoMin, node.shareMin];
     this.flowed(node, copy);
+    gridLayout(node, copy);
     autoMinimum(node, copy);
     shareMinimum(node, copy);
     notNative(copy);
@@ -7153,8 +7576,10 @@ export class Engine implements HostEngine {
   }
 
   private replan(node: EngineNode): void {
+    const display = readStyle(node, 'display');
     if (node.parent && readStyle(node, 'order') != null) node.parent.ordered = true;
-    this.reflow(node, readStyle(node, 'display'));
+    this.reflow(node, display);
+    this.regrid(node, display);
     this.reminimum(node);
     // Something in it changed, which can change the box its percentages are of.
     if (node.mixed && !this.settling) node.mixed.dirty = true;
@@ -7436,6 +7861,7 @@ export class Engine implements HostEngine {
       this.touch([node, ...inside, ...this.ungrow(fit)]);
     }
     this.commitTree();
+    for (const { node } of boxes) this.gridsAgain(node);
     for (const { node, fit, inside } of boxes) {
       const { width, grown } = this.fittedWidth(node);
       for (const each of [node, ...inside]) each.fitOff = undefined;
@@ -7444,7 +7870,27 @@ export class Engine implements HostEngine {
       this.touch([node, ...inside, ...grown]);
     }
     this.commitTree();
-    for (const { node, fit } of boxes) fit.room = this.roomOf(node);
+    for (const { node, fit } of boxes) {
+      this.gridsAgain(node);
+      fit.room = this.roomOf(node);
+    }
+  }
+
+  /**
+   * Lay out again each grid in a box whose content's share of the room was just set aside or
+   * given back. A grid keeps the width its tracks came to, which was worked out in whatever
+   * width it had then: a share of a pane not yet fitted is a share of nothing, and its columns
+   * are as narrow as a word.
+   */
+  private gridsAgain(box: EngineNode): void {
+    const grids = gridsIn(box);
+    if (!grids.length) return;
+    // All started over at once, so that one inside another is measured with nothing around it
+    // sized yet, and then laid out from the innermost: a grid is sized from what it holds.
+    for (const grid of grids) this.restartGrid(grid, grid.grid!.members);
+    this.touch(grids.flatMap((grid) => [grid, ...grid.grid!.members]));
+    this.commitTree();
+    for (const grid of grids.reverse()) this.settleGrid(grid);
   }
 
   /**
@@ -7702,11 +8148,11 @@ export class Engine implements HostEngine {
 
   /**
    * Work out boxes that are not in one another with two commits between them: one with each
-   * set aside, to read what it is a share of, and one with each at what it comes to. A fitted
-   * box is sized from its content in commits of its own.
+   * set aside, to read what it is a share of, and one with each at what it comes to. A grid and
+   * a fitted box are sized from their content in commits of their own.
    */
   private settleMixedTogether(nodes: readonly EngineNode[]): void {
-    const alone = (node: EngineNode) => node.fit !== undefined;
+    const alone = (node: EngineNode) => node.grid !== undefined || node.fit !== undefined;
     for (const node of nodes) node.mixed!.dirty = false;
     const measured = nodes.filter((node) => !this.mixedOnlyMoves(node) && this.mixedInFlow(node));
     const plain = measured.filter((node) => !alone(node));
@@ -7718,7 +8164,7 @@ export class Engine implements HostEngine {
     for (const node of nodes) this.workOutMixed(node, bases.get(node));
     this.commitTouched(nodes.filter((node) => !alone(node)));
     for (const node of nodes.filter(alone)) this.commitMixed(node);
-    // A fitted box sized again may have been merged with no sum left: the width it came to.
+    // A grid laid out again may have been merged with no sum left: a size of its tracks'.
     for (const node of nodes) if (node.mixed) node.mixed.base = this.mixedBase(node);
   }
 
@@ -7747,11 +8193,12 @@ export class Engine implements HostEngine {
   }
 
   /**
-   * Commit a node whose mixed declarations were set aside or worked out. A box in a line is
-   * sized from its content and keeps the width that came to, so it is sized again from the
-   * start: left as it was, it would be measured at the width its last limit gave it.
+   * Commit a node whose mixed declarations were set aside or worked out. A grid, and a box in
+   * a line, is sized from its content and keeps the width that came to, so it is sized again
+   * from the start: left as it was, it would be measured at the width its last limit gave it.
    */
   private commitMixed(node: EngineNode): void {
+    if (node.grid) return this.settleGrid(node);
     this.touch([node]);
     this.commitTree();
     if (!node.fit) return;
@@ -7825,11 +8272,177 @@ export class Engine implements HostEngine {
       Object.fromEntries(Object.entries(style).filter(([key]) => key.startsWith('border'))),
     );
   }
-  /**
-   * Set while boxes read back are laid out again, when a node is reconciled for a phase and not
-   * for a change.
-   */
+  /** Set while grids are laid out, when a node is reconciled for a phase and not for a change. */
   private settling = false;
+
+  /** Every grid container in the tree, or once in it. */
+  private readonly grids = new Set<EngineNode>();
+
+  /** The children a grid places: elements in its flow, committed under it. */
+  private gridMembers(node: EngineNode): EngineNode[] {
+    const members = node.childList.filter((child) => {
+      if (child.nodeKind !== 'element' || this.committedElsewhere(child)) return false;
+      const style = this.flowStyle(child);
+      const position = style['position'];
+      return style['display'] !== 'none' && position !== 'absolute' && position !== 'fixed';
+    });
+    // Placed in the order their `order` gives, as written among equals (CSS Grid 8.5).
+    const order = (member: EngineNode) => Number(this.flowStyle(member)['order'] ?? 0) || 0;
+    return members.some((member) => order(member) !== 0)
+      ? members
+          .map((member, i) => ({ member, i }))
+          .sort((a, b) => order(a.member) - order(b.member) || a.i - b.i)
+          .map(({ member }) => member)
+      : members;
+  }
+
+  /**
+   * Note a grid container reconciled for a change, in it or beneath it: its items are committed
+   * unsized in this commit, to be read and placed straight after it. Nothing is noted on a host
+   * with no layout to read back, where a grid stays the column it would otherwise be.
+   */
+  private regrid(node: EngineNode, display: unknown): void {
+    if (this.settling) return;
+    const grid = isGrid(display) && !!this.fabric.getBoundingClientRect;
+    if (!grid && !node.grid) return;
+    this.flowStyles.clear();
+    const members = grid ? this.gridMembers(node) : [];
+    const follows = this.follows(node, members);
+    this.flowStyles.clear();
+    if (follows) return;
+    // Every item is merged again, and so is one that has just stopped being an item.
+    for (const child of new Set([...(node.grid?.members ?? []), ...members])) {
+      child.propsDirty = true;
+    }
+    for (const child of members) child.gridIn = node;
+    node.propsDirty = true;
+    if (grid) this.restartGrid(node, members);
+    else this.ungrid(node);
+  }
+
+  /**
+   * Whether a grid laid out already stays as it is for this commit: its own style and each
+   * item's are what it was laid out from, and its items are the same ones. What changed is then
+   * in an item or beneath one, and is committed as any change is; whether the grid has to be
+   * laid out again for it is asked once it has been, of what the change did: see `outgrown`.
+   *
+   * Laying a grid out is three commits, and most of what changes in one changes nothing it is
+   * sized from: a colour, a state, a bar a share of its track wide, a number as long as the last.
+   *
+   * ponytail: content that comes to want another width with no other sign of it (text of the
+   * same length in wider letters, a box beneath given a width) keeps the track it had until the
+   * grid is next laid out. Read each item's content width where a track is sized by it if a
+   * grid is seen a few points out.
+   */
+  private follows(node: EngineNode, members: readonly EngineNode[]): boolean {
+    const state = node.grid;
+    if (!state?.settled || state.phase !== 'placed' || !this.asLaidOut(node, state, members)) {
+      return false;
+    }
+    const followed = (state.followed ??= new Map<EngineNode, Reach>());
+    // Read now, of the layout before this commit: after it is what it is compared with.
+    for (const member of members) {
+      if (this.isClean(member) || followed.has(member)) continue;
+      // As it was last read, where nothing has been laid out again since: one read a commit.
+      followed.set(member, state.reached?.get(member) ?? this.reach(member));
+    }
+    return true;
+  }
+
+  /** Whether a grid's style and its items, and each item's style, are what it was laid out from. */
+  private asLaidOut(node: EngineNode, state: GridState, members: readonly EngineNode[]): boolean {
+    const styles = state.styles;
+    if (!styles || members.length !== state.members.length) return false;
+    if (state.styled !== gridKey(node, this.flowStyle(node))) return false;
+    return members.every(
+      (member, at) =>
+        member === state.members[at] && styles.get(member) === asAKey(this.flowStyle(member)),
+    );
+  }
+
+  /** How far the content of a grid's item reaches, as it is laid out now. */
+  private reach(member: EngineNode): Reach {
+    const own = this.boxOf(member);
+    let bottom = 0;
+    let right = 0;
+    const note = (box: EngineNode): void => {
+      const [left, top, width, height] = this.boxOf(box) ?? [0, 0, 0, 0];
+      bottom = Math.max(bottom, top + height);
+      right = Math.max(right, left + width);
+    };
+    for (const child of member.childList) {
+      if (child.nodeKind === 'text') paragraphsOf(child).forEach(note);
+      else if (
+        child.nodeKind === 'element' &&
+        !OUT_OF_FLOW.has(readStyle(child, 'position') as string)
+      ) {
+        note(child);
+      }
+    }
+    if (!own) return { bottom: 0, over: false };
+    return { bottom: Math.round(bottom - own[1]), over: right > own[0] + own[2] + 0.5 };
+  }
+
+  /**
+   * Whether a change a grid was not laid out again for turns out to need it: an item holds
+   * more or less than it did, or its content reaches further down, or past its edge.
+   */
+  private outgrown(state: GridState): boolean {
+    const followed = state.followed;
+    if (!followed) return false;
+    state.followed = undefined;
+    for (const [member, before] of followed) {
+      if (state.shapes?.get(member) !== shapeOf(member)) return true;
+      const now = this.reach(member);
+      if (now.bottom !== before.bottom || now.over !== before.over) return true;
+      (state.reached ??= new Map()).set(member, now);
+    }
+    return false;
+  }
+
+  /** Start a grid over: its items unsized, and nothing known about them. */
+  private restartGrid(node: EngineNode, members: readonly EngineNode[]): void {
+    const state = (node.grid ??= this.newGrid(node));
+    state.followed = undefined;
+    state.reached = undefined;
+    Object.assign(state, { phase: 'measuring', settled: false, members });
+    Object.assign(state, { height: undefined, ownWidth: undefined });
+    state.content.clear();
+    state.narrow.clear();
+    state.heights.clear();
+    state.baselines.clear();
+  }
+
+  private ungrid(node: EngineNode): void {
+    node.grid?.stopListening?.();
+    node.grid = undefined;
+    this.grids.delete(node);
+  }
+
+  private newGrid(node: EngineNode): GridState {
+    this.grids.add(node);
+    return {
+      phase: 'measuring',
+      settled: false,
+      members: [],
+      content: new Map(),
+      narrow: new Map(),
+      wantsNarrow: false,
+      heights: new Map(),
+      baselines: new Map(),
+      asked: new Map(),
+      widths: new Map(),
+      rects: new Map(),
+      // A width native gives it later, on a rotation say, lays it out again.
+      stopListening: this.setEventListener(node, 'topLayout', () => this.regridIfResized(node)),
+    };
+  }
+
+  private regridIfResized(node: EngineNode): void {
+    const state = node.grid;
+    if (!state?.settled || !this.gridResized(node, state)) return;
+    this.markProps(node, false);
+  }
 
   private boxOf(node: EngineNode): readonly [number, number, number, number] | undefined {
     const handle = node.committed?.handle;
@@ -7844,12 +8457,365 @@ export class Engine implements HostEngine {
     }
   }
 
+  /**
+   * Lay out every grid that changed, or whose box did: read sizes from the commit just made,
+   * and commit again with each item placed. An inner grid is laid out once the outer one has
+   * given it a width, and the outer one again once the inner one has a height, so this repeats
+   * until nothing moves. All of it is in one task, so only the last commit is drawn.
+   */
+  private settleGrids(): void {
+    if (!this.grids.size) return;
+    this.settling = true;
+    try {
+      for (let pass = 0; pass < 4; pass++) {
+        const stale = [...this.grids].filter((node) => this.gridIsStale(node));
+        if (!stale.length) return;
+        // One in another is laid out in the box the other gives it, so after a commit of that.
+        const nested = this.gridsNested(stale);
+        const apart = stale.filter((node) => !nested.has(node));
+        this.measureGrids(apart);
+        for (const node of apart) this.settleGrid(node, false);
+        if (apart.length) this.commitTree();
+        for (const node of nested) this.settleGrid(node);
+      }
+    } finally {
+      this.settling = false;
+    }
+  }
+
+  private gridIsStale(node: EngineNode): boolean {
+    if (this.topOf(node) !== this.root) {
+      this.grids.delete(node);
+      return false;
+    }
+    const state = node.grid!;
+    if (node.committed !== null && this.outgrown(state)) state.settled = false;
+    if (node.committed === null) return false;
+    return !state.settled || (this.mayHaveMoved(node) && this.gridResized(node, state));
+  }
+
+  /**
+   * Whether a grid is another width than it was laid out at. Native answers in floats, and a
+   * box at a third of a point across is a hair off the width it was given.
+   */
+  private gridResized(node: EngineNode, state: GridState): boolean {
+    const width = this.boxOf(node)?.[2];
+    return width === undefined || state.width === undefined || Math.abs(width - state.width) > 0.5;
+  }
+
+  /** Those of some grids that are in another of them, or have another of them inside. */
+  private gridsNested(grids: readonly EngineNode[]): Set<EngineNode> {
+    const all = new Set(grids);
+    const nested = new Set<EngineNode>();
+    for (const node of grids) {
+      for (let up = node.parent; up; up = up.parent) {
+        if (all.has(up)) nested.add(up).add(node);
+      }
+    }
+    return nested;
+  }
+
+  /** Commit grids as stacks of their items, to read what each item holds: one commit for all. */
+  private measureGrids(grids: readonly EngineNode[]): void {
+    const placed = grids.filter((node) => node.grid!.phase !== 'measuring');
+    for (const node of placed) {
+      this.restartGrid(node, node.grid!.members);
+      this.touch([node, ...node.grid!.members]);
+    }
+    if (placed.length) this.commitTree();
+  }
+
+  private settleGrid(node: EngineNode, commit = true): void {
+    const state = node.grid!;
+    const before = { width: state.ownWidth, height: state.height };
+    this.measureGrids([node]);
+    const box = this.boxOf(node);
+    if (!box) return;
+    for (const member of state.members) {
+      const [, , width, height] = this.boxOf(member) ?? [0, 0, 0, 0];
+      state.content.set(member, { width, height });
+    }
+    const run = this.gridRun(node, state, box);
+    const layout = this.gridRows(node, state, run);
+    const height = this.placeGrid(state, run, layout);
+    this.touch([node, ...state.members]);
+    if (commit) this.commitTree();
+    // A grid this one is in sized a row by the height it had, and a column by its width. One
+    // it is an item of placed it, at a height that is not its rows' where it stretched it.
+    const resized = run.item ? state.height !== before.height : height !== box[3];
+    if (resized || state.ownWidth !== before.width) this.unsettleAbove(node);
+  }
+
+  /** Note where a grid's layout puts it and its items, and answer how tall it came to. */
+  private placeGrid(
+    state: GridState,
+    run: ReturnType<Engine['gridRun']>,
+    layout: GridLayout,
+  ): number {
+    const height = run.ownHeight ? run.box[3]! : run.rows + run.down;
+    // Committed as its style writes a size: of its content box, where that is what it sizes.
+    const content = run.style['boxSizing'] === 'content-box';
+    state.phase = 'placed';
+    state.settled = true;
+    state.ownWidth = run.inner === undefined ? undefined : run.inner + (content ? 0 : run.across);
+    state.width = run.available.width + run.across;
+    state.height = run.ownHeight ? undefined : height - (content ? run.down : 0);
+    state.area = layout.area;
+    // Yoga places an item out of the flow inside the grid's border: its padding is added here.
+    const { Left, Top } = run.padding;
+    state.rects = new Map(
+      state.members.map((member, i) => {
+        const rect = layout.items[i]!;
+        return [member, { ...rect, left: rect.left + Left, top: rect.top + Top }];
+      }),
+    );
+    return height;
+  }
+
+  /** What a grid is laid out from, read from its style and from the commit that measured it. */
+  private gridRun(node: EngineNode, state: GridState, box: readonly number[]) {
+    this.flowStyles.clear();
+    const style = this.flowStyle(node);
+    // The width of the box the grid is in, which a padding written as a share is of: the
+    // window's, at the top.
+    const within = this.roomIn(node.parent);
+    const room = Number.isFinite(within) ? within : this.viewportSize.width || Infinity;
+    const whole = Number.isFinite(room) ? room : 0;
+    const edge = insets(style, whole);
+    const container = gridContainerStyle(style);
+    const items = state.members.map((member) => gridItemOf(this.flowStyle(member)));
+    state.styled = gridKey(node, style);
+    state.styles = new Map(state.members.map((each) => [each, asAKey(this.flowStyle(each))]));
+    state.shapes = new Map(state.members.map((each) => [each, shapeOf(each)]));
+    this.flowStyles.clear();
+
+    const across = edge.Left + edge.Right;
+    const down = edge.Top + edge.Bottom;
+    const given = box[2]! - across;
+    const limits = sizeLimits(style, across, down);
+    // An item of another grid is placed at the width that one gives it, which it measured from
+    // the width its tracks come to: worked out whatever width it was given last.
+    const item = gridOver(node) !== undefined;
+    const stretched = !item && stretchedAcross(node, style);
+    const inner =
+      !item && ownsWidth(style['width'])
+        ? undefined
+        : this.gridWidth(
+            state,
+            {
+              measured: item ? 0 : given,
+              room: room - across,
+              stretched,
+              shared: isShare(style['width']),
+            },
+            {
+              container,
+              items,
+              limits,
+            },
+          );
+    // `fit-content` is its rows' height too: no height of its own. Nor is a share of a box
+    // with no height to take it of, which is `auto`: see `percentHeight`.
+    const ownHeight = ownsHeight(node, style);
+    const available = {
+      width: item ? given : (inner ?? given),
+      height: ownHeight ? box[3]! - down : undefined,
+    };
+    const padding = insets(style, whole, false);
+    return {
+      style,
+      container,
+      items,
+      item,
+      inner,
+      ownHeight,
+      available,
+      limits,
+      padding,
+      across,
+      down,
+      box,
+      rows: 0,
+    };
+  }
+
+  /**
+   * A grid laid out in the width it has: its rows as tall as they come to, or held to its own
+   * least and most, or laid out in the row of the grid it is in where that stretches it. `rows`
+   * is set to what they came to, before any stretch.
+   */
+  private gridRows(node: EngineNode, state: GridState, run: ReturnType<Engine['gridRun']>) {
+    const { container, items, available, limits, down } = run;
+    let layout = this.gridWithHeights(node, state, container, items, available);
+    run.rows = Math.max(Math.min(layout.height, limits.maxHeight), limits.minHeight);
+    if (run.ownHeight) return layout;
+    if (run.rows !== layout.height) {
+      // Held to a minimum or a maximum, its rows are laid out in that height, as one it has.
+      available.height = run.rows;
+      layout = this.gridWithHeights(node, state, container, items, available);
+    }
+    const stretch = run.box[3]! - down;
+    if (run.item && stretchedDown(node, run.style) && stretch !== run.rows) {
+      // Stretched down the row of the grid it is in, it is as tall as that row: its own rows
+      // are laid out in that, and what it measures at is still what they come to.
+      available.height = stretch;
+      layout = this.gridWithHeights(node, state, container, items, available);
+    }
+    return layout;
+  }
+
+  /**
+   * The width a grid gives itself, or nothing where something else gives it one. It was
+   * measured as a stack of its items at their content's width: wider than the widest of them,
+   * something gave it that width, and it is kept. As wide as the widest and no wider, nothing
+   * did, and it is as wide as its tracks come to, up to the width of what holds it, and within
+   * its own least and most.
+   */
+  private gridWidth(
+    state: GridState,
+    given: { measured: number; room: number; stretched: boolean; shared: boolean },
+    from: { container: Record<string, string>; items: readonly GridItemOf[]; limits: SizeLimits },
+  ): number | undefined {
+    const { measured, room, stretched } = given;
+    const { container, items, limits } = from;
+    const widest = Math.max(0, ...state.members.map((member) => state.content.get(member)!.width));
+    if (measured > widest + 0.5) return undefined;
+    // Narrower than the box it is stretched across, or a share narrower than its items: its
+    // own limit or its own width made it so.
+    if (stretched && measured < room - 0.5) return undefined;
+    if (given.shared && measured < widest - 0.5) return undefined;
+    const wanted = this.layOutGrid(state, container, items, {
+      width: undefined,
+      height: undefined,
+    });
+    // Stretched, it is no wider than the box it is in: what is in that box may be as wide as
+    // the grid is. Otherwise it goes no narrower than its tracks do, with no room to grow.
+    const least = stretched
+      ? measured
+      : this.layOutGrid(state, container, items, { width: 0, height: undefined }).usedWidth;
+    state.widths = new Map();
+    const width = Math.min(wanted.width, Math.max(least, room));
+    return Math.max(Math.min(width, limits.maxWidth), limits.minWidth);
+  }
+
   /** The width inside a box's padding and border, which is the most a child of it is given. */
   private roomIn(node: EngineNode | null): number {
     const box = node && this.boxOf(node);
     if (!node || !box) return Infinity;
     const edge = node.nodeKind === 'element' ? insets(this.flowStyle(node)) : NO_INSETS;
     return box[2] - edge.Left - edge.Right;
+  }
+
+  private unsettleAbove(node: EngineNode): void {
+    for (let up = node.parent; up; up = up.parent) if (up.grid) up.grid.settled = false;
+  }
+
+  /**
+   * The grid laid out, with each height it asks for read from a commit of those items at that
+   * width: a row is as tall as its items are at their columns' widths, which only laying them
+   * out there says.
+   */
+  private gridWithHeights(
+    node: EngineNode,
+    state: GridState,
+    container: Record<string, string>,
+    items: readonly GridItemOf[],
+    available: { width: number; height: number | undefined },
+  ) {
+    let layout = this.layOutGrid(state, container, items, available);
+    if (state.wantsNarrow) {
+      this.readNarrow(node, state);
+      layout = this.layOutGrid(state, container, items, available);
+    }
+    for (let round = 0; state.widths.size && round < 3; round++) {
+      state.phase = 'sizing';
+      this.readSizes(node, state);
+      layout = this.layOutGrid(state, container, items, available);
+    }
+    state.inRow = false;
+    return layout;
+  }
+
+  /**
+   * Commit the items a layout asked the height of, each at the width it asked at, and read them.
+   * Baselines are read from a row of every item, lined up by them: see `gridContainer`. Each is
+   * counted from that row's baseline, so all that were asked for are read from the one row, and
+   * none is kept from a row before it.
+   */
+  private readSizes(node: EngineNode, state: GridState): void {
+    state.inRow = state.wantsBaseline;
+    if (state.inRow) {
+      for (const [member, width] of state.asked) state.widths.set(member, width);
+      state.baselines.clear();
+    }
+    this.touch(state.inRow ? [node, ...state.members] : state.widths.keys());
+    this.commitTree();
+    for (const [member, width] of state.widths) {
+      const box = this.boxOf(member);
+      noteAt(state.heights, member, width, box?.[3] ?? 0);
+      if (state.inRow && state.asked.has(member)) {
+        noteAt(state.baselines, member, width, -(box?.[1] ?? 0));
+      }
+    }
+  }
+
+  /** The grid whose items' text is committed one word to a line, while their words are read. */
+  private wordsOf: EngineNode | null = null;
+
+  /**
+   * Read how narrow each item's content goes, which Yoga has no way to say: commit the grid's
+   * text one word to a line, with each item at its content's width, and the widest line is the
+   * longest word. A box inside that has a width of its own keeps it, as it would in a browser.
+   */
+  private readNarrow(node: EngineNode, state: GridState): void {
+    const texts = state.members.flatMap(textsUnder);
+    state.phase = 'words';
+    this.wordsOf = node;
+    this.touch([node, ...state.members, ...texts]);
+    this.commitTree();
+    for (const member of state.members) state.narrow.set(member, this.boxOf(member)?.[2] ?? 0);
+    // Written back as they were by the next commit, which is the one that sizes or places them.
+    this.wordsOf = null;
+    this.touch(texts);
+  }
+
+  /** One run of the grid layout, noting in `widths` each height it wanted and nothing has read. */
+  private layOutGrid(
+    state: GridState,
+    container: Record<string, string>,
+    styles: readonly GridItemOf[],
+    available: { width: number | undefined; height: number | undefined },
+  ) {
+    state.widths = new Map();
+    state.wantsNarrow = false;
+    state.wantsBaseline = false;
+    state.asked = new Map();
+    const items: GridItem[] = state.members.map((member, i) => ({
+      ...styles[i]!,
+      measure: (width) => {
+        // Not something Yoga answers: asked for, and read from a commit of its words. See
+        // `readNarrow`.
+        if (width === 'min') {
+          const narrow = state.narrow.get(member);
+          if (narrow === undefined) state.wantsNarrow = true;
+          return { width: narrow ?? 0, height: 0 };
+        }
+        if (width === 'max') return state.content.get(member)!;
+        const height = state.heights.get(member)?.get(width);
+        if (height === undefined) state.widths.set(member, width);
+        return { width, height: height ?? 0 };
+      },
+      baseline: (width) => {
+        state.asked.set(member, width);
+        const baseline = state.baselines.get(member)?.get(width);
+        if (baseline === undefined) {
+          state.widths.set(member, width);
+          state.wantsBaseline = true;
+        }
+        return baseline ?? 0;
+      },
+    }));
+    return layOutGrid(container, items, available);
   }
 
   /** What the root is committed with: the app's top views, or the strict view around them. */
@@ -8001,7 +8967,8 @@ export class Engine implements HostEngine {
   /** A run of text as it is committed: a word to a line while how narrow it goes is read. */
   private textProps(node: EngineNode): Record<string, unknown> {
     const text = paragraphText(node);
-    const words = this.narrowed !== null && this.inWords(node);
+    // While a grid's words are read: see `readNarrow`.
+    const words = (this.wordsOf !== null || this.narrowed !== null) && this.inWords(node);
     return { text: words ? text.trim().replace(/\s+/g, '\n') : text };
   }
 

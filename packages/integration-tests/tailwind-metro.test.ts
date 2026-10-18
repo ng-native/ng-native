@@ -130,25 +130,25 @@ describe('the generated stylesheet module', () => {
     // them; the selector is what to search the app for.
     const warn = t.mock.method(console, 'warn', () => {});
     compileSheetModule(
-      '.p-1 { padding: 4px }\n.grid { display: grid }\n' +
-        '@media (width >= 48rem) {\n  .md\\:grid { display: grid }\n}\n' +
-        '.\\32 xl\\:grid { display: grid }\n.a,\n.b {\n  display: grid;\n  opacity: 0.5;\n}\n' +
+      '.p-1 { padding: 4px }\n.table { display: table }\n' +
+        '@media (width >= 48rem) {\n  .md\\:table { display: table }\n}\n' +
+        '.\\32 xl\\:table { display: table }\n.a,\n.b {\n  display: table;\n  opacity: 0.5;\n}\n' +
         // An arbitrary variant can quote a `;` or a `{`, which ends nothing.
-        '.q[data-x=";{"] { display: grid; opacity: 0.25 }\n',
+        '.q[data-x=";{"] { display: table; opacity: 0.25 }\n',
       '/app/.angular-native/app.tailwind.css',
     );
     const warnings = warn.mock.calls.map((call) => String(call.arguments[0]));
     assert.deepEqual(
       warnings.map((warning) => warning.slice(0, warning.indexOf(': dropped'))),
       [
-        '[angular-native] .grid (Tailwind)',
-        '[angular-native] .md:grid (Tailwind)',
-        '[angular-native] .2xl:grid (Tailwind)',
+        '[angular-native] .table (Tailwind)',
+        '[angular-native] .md:table (Tailwind)',
+        '[angular-native] .2xl:table (Tailwind)',
         '[angular-native] .a, .b (Tailwind)',
         '[angular-native] .q[data-x=";{"] (Tailwind)',
       ],
     );
-    assert.match(warnings[0]!, /: dropped 'display': display: grid does not exist on native/);
+    assert.match(warnings[0]!, /: dropped 'display': display: table does not exist on native/);
   });
 
   it('reads inline as flex and keeps inline-block, without a warning', (t) => {

@@ -14,6 +14,7 @@ import { fileURLToPath } from 'node:url';
 import { firstDifference } from './compare.ts';
 import { fixtureNames, parseFixture, type Box } from './fixture.ts';
 import { layOutToday } from './yoga-baseline.ts';
+import { layOutWithGrids } from './grid-yoga.ts';
 import { lowerBlocks } from './flow-lowering.ts';
 import { correctFromLayout } from './read-back.ts';
 
@@ -35,6 +36,8 @@ const CANDIDATES = {
   strict: (name: string) => layOutToday(parseFixture(name), 'strict'),
   lowering: (name: string) => layOutToday(lowerBlocks(parseFixture(name))),
   'lowering-strict': (name: string) => layOutToday(lowerBlocks(parseFixture(name)), 'strict'),
+  grid: (name: string) =>
+    layOutWithGrids(correctFromLayout(lowerBlocks(parseFixture(name)), 'strict'), 'strict'),
   'read-back': (name: string) =>
     layOutToday(correctFromLayout(lowerBlocks(parseFixture(name)), 'strict'), 'strict'),
 } as const;

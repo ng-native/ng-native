@@ -9,13 +9,6 @@ import type { FabricNode, FabricUIManager } from '@ng-native/fabric';
 import { createFakeFabric, type FakeFabric, type FakeFabricNode } from '@ng-native/testing';
 import { layOutRects, type Box } from './layout.ts';
 
-/** A Fabric that answers where a committed node is, as React Native's does. */
-type ReadsBack = FabricUIManager & {
-  getBoundingClientRect?: (
-    handle: FabricNode,
-  ) => readonly [number, number, number, number] | undefined;
-};
-
 export const SCREEN = { width: 400, height: 800 };
 const GLYPH = 10;
 const LINE = 20;
@@ -126,7 +119,7 @@ export function layOutFabric(
     const box = node && boxes().get(node);
     return box ? ([box.left, box.top, box.width, box.height] as const) : undefined;
   };
-  (laidOut as ReadsBack).getBoundingClientRect = rect;
+  (laidOut as FabricUIManager).getBoundingClientRect = rect;
   if (options.measure) {
     (laidOut as FabricUIManager).measureInWindow = (handle, onSuccess) => {
       const box = rect(handle);

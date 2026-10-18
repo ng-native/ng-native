@@ -155,6 +155,73 @@ describe('a calc() of a percentage and a length', () => {
     assert.equal(s.box('c')[2], 218);
   });
 
+  it('limits a grid that is as wide as its content, and keeps it there as it changes', () => {
+    // A dialog's content: a grid in a pane as wide as that content, held 32 points inside it.
+    const css = `.pane { align-self: flex-start } .g { display: grid; padding: 24px; max-width: calc(100% - 32px) } .in { width: 200px; height: 10px } .b { height: 20px }`;
+    const s = scene(css, ['top', ['pane', ['g', ['w', ['in']], ['b']]]]);
+    assert.equal(s.box('g')[2], 216);
+    assert.equal(s.box('w')[2], 168);
+    // Something in it changes, twice: it is measured again from its content each time, and
+    // not from the width the limit left it at.
+    s.engine.setProp(s.nodes.get('b')!, 'style', { height: 30 });
+    assert.equal(s.box('g')[2], 216);
+    s.engine.setProp(s.nodes.get('b')!, 'style', { height: 40 });
+    assert.equal(s.box('g')[2], 216);
+    assert.equal(s.box('w')[2], 168);
+  });
+
+  it('fits a pane to a grid that fills it, and limits the grid by the pane it then is', () => {
+    // A dialog in the middle of the screen: a pane as wide as its content, a container that
+    // fills the pane, and the dialog a grid that fills the container, sized by its border, with
+    // its limit 32 points inside. A share of a width that is the content's own says nothing
+    // about how wide the content is: the grid's column is as wide as its longest line.
+    const css =
+      '.top { position: absolute; top: 0; left: 0; width: 400px; height: 800px; display: flex; flex-direction: row; justify-content: center; align-items: center }' +
+      ' .pane { display: flex; flex-direction: row; max-width: 100%; max-height: 100% }' +
+      ' .box { display: block; width: 100%; max-height: 100% }' +
+      ' .g { display: grid; box-sizing: border-box; width: 100%; max-width: calc(100% - 32px); gap: 24px; padding: 24px; margin-left: auto; margin-right: auto }' +
+      ' .head { display: flex; flex-direction: column; gap: 8px }';
+    const s = scene(css, ['top', ['pane', ['box', ['g', ['head', ['a'], ['b']], ['foot']]]]]);
+    for (const [name, words] of [
+      ['a', 'Delete file?'],
+      ['b', 'This cannot be undone.'],
+      ['foot', 'Delete'],
+    ] as const) {
+      const text = s.engine.createElement('text');
+      s.engine.appendChild(text, s.engine.createText(words));
+      s.engine.appendChild(s.nodes.get(name)!, text);
+    }
+    // Twenty-two characters at ten points, and the padding either side.
+    assert.equal(s.box('pane')[2], 268);
+    assert.equal(s.box('g')[2], 236);
+    assert.equal(s.box('head')[2], 188);
+  });
+
+  it('fits a pane to a grid whose heading is a grid of its own', () => {
+    // An alert dialog: the heading and what is said under it are in a grid inside the dialog's.
+    // Each is as wide as its longest line, and so is the pane, up to the dialog's own limit.
+    const css =
+      '.top { position: absolute; top: 0; left: 0; width: 400px; height: 800px; display: flex; flex-direction: row; justify-content: center; align-items: center }' +
+      ' .pane { display: flex; flex-direction: row; max-width: 100%; max-height: 100% }' +
+      ' .box { display: block; width: 100%; max-height: 100% }' +
+      ' .g { display: grid; box-sizing: border-box; width: 100%; max-width: 320px; gap: 24px; padding: 24px }' +
+      ' .head { display: grid; gap: 6px }';
+    const s = scene(css, ['top', ['pane', ['box', ['g', ['head', ['a'], ['b']], ['foot']]]]]);
+    for (const [name, words] of [
+      ['a', 'Are you absolutely sure?'],
+      ['b', 'This cannot be undone.'],
+      ['foot', 'Continue'],
+    ] as const) {
+      const text = s.engine.createElement('text');
+      s.engine.appendChild(text, s.engine.createText(words));
+      s.engine.appendChild(s.nodes.get(name)!, text);
+    }
+    // Twenty-four characters at ten points, and the padding either side.
+    assert.equal(s.box('pane')[2], 288);
+    assert.equal(s.box('head')[2], 240);
+    assert.equal(s.box('a')[3], 20, 'on one line');
+  });
+
   it('limits a box in a line that is fitted to its content, and keeps it there', () => {
     const css = `.pane { display: block; align-self: flex-start } .i { display: inline-flex; flex-direction: column; max-width: calc(100% - 32px) } .full { width: 100%; height: 5px } .w { width: 200px; height: 10px } .b { height: 20px }`;
     const s = scene(css, ['top', ['pane', ['i', ['full'], ['w']], ['b']]]);

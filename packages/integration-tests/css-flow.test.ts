@@ -309,15 +309,19 @@ describe('flex properties on a block', () => {
 
 describe('an inline-level box in a block', () => {
   it('is as wide as its content, in a line box of its own, where a block fills the width', () => {
-    const css = '.p { display: block } .i { display: inline-flex } .b { height: 10px }';
-    // On a line of its own, between blocks: the line box is a row, which does not stretch the
-    // box across the width, and holds the line at least as tall as its strut.
-    const s = scene(css, ['p', ['b'], ['i'], ['b two']]);
+    const css =
+      '.p { display: block } .i { display: inline-flex } .g { display: inline-grid } .b { height: 10px }';
+    // Each on a line of its own, between blocks: the line box is a row, which does not stretch
+    // the box across the width, and holds the line at least as tall as its strut.
+    const s = scene(css, ['p', ['b'], ['i'], ['b mid'], ['g'], ['b two']]);
     s.engine.commit();
     const lines = s.fabric.committed[0]!.children.filter((each) => !each.props['nativeID']);
     assert.deepEqual(
       lines.map((line) => [line.props['flexDirection'], line.children[0]!.props['nativeID']]),
-      [['row', 'i']],
+      [
+        ['row', 'i'],
+        ['row', 'g'],
+      ],
     );
     assert.equal('alignSelf' in s.props('i'), false);
     assert.equal('alignSelf' in s.props('b'), false);

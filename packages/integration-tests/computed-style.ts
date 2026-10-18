@@ -160,9 +160,11 @@ const SAME_KEYWORD: Record<string, Record<string, readonly unknown[]>> = {
     block: ['block', 'inline-block', 'flex', undefined],
     'flow-root': ['flow-root', 'flex'],
     'inline-block': ['inline-block'],
-    // A flex box that is a flex item is not in a line, whatever it was written as.
+    // A flex box or a grid that is a flex item is not in a line, whatever it was written as.
     flex: ['flex', 'inline-flex'],
+    grid: ['grid', 'inline-grid'],
     'inline-flex': ['inline-flex'],
+    'inline-grid': ['inline-grid'],
     none: ['none'],
     contents: ['contents'],
   },

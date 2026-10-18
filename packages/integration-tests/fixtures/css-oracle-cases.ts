@@ -221,8 +221,9 @@ const CHANNEL_CASES = (
 
 /**
  * A display token in the two-keyword form, or one native has no layout for. Chrome computes
- * `inline flex` as `inline-flex` and `block flow` as `block`, which native reads as flex; a grid,
- * a table, a list item and the old flexbox keep their own value, and native has none of them.
+ * `inline flex` as `inline-flex` and `block flow` as `block`, which native reads as flex or keeps; a
+ * table, a list item and the old flexbox keep their own value, and native has none of them. A grid
+ * is kept, and laid out by the engine.
  */
 const DISPLAY_CASES = [
   'block flex',

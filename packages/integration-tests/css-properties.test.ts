@@ -596,8 +596,8 @@ describe('what it refuses, and how it says so', () => {
 
   it('names the display value that was written, not the one lightningcss reads it as', () => {
     // `display: inline-block` is `inline flow-root` to the parser, and the message named that.
-    assert.throws(() => declarationsOf('display: inline-grid'), /display: inline-grid\b/);
-    assert.throws(() => declarationsOf('display: grid'), /display: grid\b/);
+    assert.throws(() => declarationsOf('display: inline-table'), /display: inline-table\b/);
+    assert.throws(() => declarationsOf('display: table'), /display: table\b/);
   });
 
   it('reads display: inline as flex, which Chrome makes of a flex item', () => {

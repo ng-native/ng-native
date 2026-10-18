@@ -3785,55 +3785,47 @@
     "cursor-(--x)",
     "cursor-(--x)!"
   ],
-  "dropped 'display': display: grid does not exist on native; only flex, block, inline-block, inline-flex, contents and none do": [
-    "grid",
-    "grid!"
-  ],
-  "dropped 'display': display: inline-grid does not exist on native; only flex, block, inline-block, inline-flex, contents and none do": [
-    "inline-grid",
-    "inline-grid!"
-  ],
-  "dropped 'display': display: inline-table does not exist on native; only flex, block, inline-block, inline-flex, contents and none do": [
+  "dropped 'display': display: inline-table does not exist on native; only flex, block, inline-block, inline-flex, grid, contents and none do": [
     "inline-table",
     "inline-table!"
   ],
-  "dropped 'display': display: list-item does not exist on native; only flex, block, inline-block, inline-flex, contents and none do": [
+  "dropped 'display': display: list-item does not exist on native; only flex, block, inline-block, inline-flex, grid, contents and none do": [
     "list-item",
     "list-item!"
   ],
-  "dropped 'display': display: table does not exist on native; only flex, block, inline-block, inline-flex, contents and none do": [
+  "dropped 'display': display: table does not exist on native; only flex, block, inline-block, inline-flex, grid, contents and none do": [
     "table",
     "table!"
   ],
-  "dropped 'display': display: table-caption does not exist on native; only flex, block, inline-block, inline-flex, contents and none do": [
+  "dropped 'display': display: table-caption does not exist on native; only flex, block, inline-block, inline-flex, grid, contents and none do": [
     "table-caption",
     "table-caption!"
   ],
-  "dropped 'display': display: table-cell does not exist on native; only flex, block, inline-block, inline-flex, contents and none do": [
+  "dropped 'display': display: table-cell does not exist on native; only flex, block, inline-block, inline-flex, grid, contents and none do": [
     "table-cell",
     "table-cell!"
   ],
-  "dropped 'display': display: table-column does not exist on native; only flex, block, inline-block, inline-flex, contents and none do": [
+  "dropped 'display': display: table-column does not exist on native; only flex, block, inline-block, inline-flex, grid, contents and none do": [
     "table-column",
     "table-column!"
   ],
-  "dropped 'display': display: table-column-group does not exist on native; only flex, block, inline-block, inline-flex, contents and none do": [
+  "dropped 'display': display: table-column-group does not exist on native; only flex, block, inline-block, inline-flex, grid, contents and none do": [
     "table-column-group",
     "table-column-group!"
   ],
-  "dropped 'display': display: table-footer-group does not exist on native; only flex, block, inline-block, inline-flex, contents and none do": [
+  "dropped 'display': display: table-footer-group does not exist on native; only flex, block, inline-block, inline-flex, grid, contents and none do": [
     "table-footer-group",
     "table-footer-group!"
   ],
-  "dropped 'display': display: table-header-group does not exist on native; only flex, block, inline-block, inline-flex, contents and none do": [
+  "dropped 'display': display: table-header-group does not exist on native; only flex, block, inline-block, inline-flex, grid, contents and none do": [
     "table-header-group",
     "table-header-group!"
   ],
-  "dropped 'display': display: table-row does not exist on native; only flex, block, inline-block, inline-flex, contents and none do": [
+  "dropped 'display': display: table-row does not exist on native; only flex, block, inline-block, inline-flex, grid, contents and none do": [
     "table-row",
     "table-row!"
   ],
-  "dropped 'display': display: table-row-group does not exist on native; only flex, block, inline-block, inline-flex, contents and none do": [
+  "dropped 'display': display: table-row-group does not exist on native; only flex, block, inline-block, inline-flex, grid, contents and none do": [
     "table-row-group",
     "table-row-group!"
   ],
@@ -4179,28 +4171,6 @@
     "gap-[3]",
     "gap-[3]!"
   ],
-  "dropped 'grid-auto-columns': '…' has no React Native equivalent: no style prop of a native view does what it does.": [
-    "auto-cols-[0.35]",
-    "auto-cols-[0.35]!",
-    "auto-cols-[1.25rem]",
-    "auto-cols-[1.25rem]!",
-    "auto-cols-[13px]",
-    "auto-cols-[13px]!",
-    "auto-cols-[37%]",
-    "auto-cols-[37%]!",
-    "auto-cols-[3]",
-    "auto-cols-[3]!",
-    "auto-cols-[calc(1rem+2px)]",
-    "auto-cols-[calc(1rem+2px)]!",
-    "auto-cols-auto",
-    "auto-cols-auto!",
-    "auto-cols-fr",
-    "auto-cols-fr!",
-    "auto-cols-max",
-    "auto-cols-max!",
-    "auto-cols-min",
-    "auto-cols-min!"
-  ],
   "dropped 'grid-auto-columns': '…' is not a value native can take": [
     "auto-cols-[#1a2b3c]",
     "auto-cols-[#1a2b3c]!",
@@ -4211,45 +4181,19 @@
     "auto-cols-[rgb(10,20,30)]",
     "auto-cols-[rgb(10,20,30)]!"
   ],
+  "dropped 'grid-auto-columns': a length needs a unit: '…' is a bare number, which a browser drops. Write Npx, or N for none.": [
+    "auto-cols-[0.35]",
+    "auto-cols-[0.35]!",
+    "auto-cols-[3]",
+    "auto-cols-[3]!"
+  ],
   "dropped 'grid-auto-columns': var() cannot be used in the '…' shorthand, because which native property the value lands in depends on the value, and there is no CSS parser on device. Use the longhand.": [
     "auto-cols-(--x)",
     "auto-cols-(--x)!"
   ],
-  "dropped 'grid-auto-flow': '…' has no React Native equivalent: no style prop of a native view does what it does.": [
-    "grid-flow-col",
-    "grid-flow-col!",
-    "grid-flow-col-dense",
-    "grid-flow-col-dense!",
-    "grid-flow-row",
-    "grid-flow-row!",
-    "grid-flow-row-dense",
-    "grid-flow-row-dense!"
-  ],
   "dropped 'grid-auto-flow': '…' is not a value native can take": [
     "grid-flow-dense",
     "grid-flow-dense!"
-  ],
-  "dropped 'grid-auto-rows': '…' has no React Native equivalent: no style prop of a native view does what it does.": [
-    "auto-rows-[0.35]",
-    "auto-rows-[0.35]!",
-    "auto-rows-[1.25rem]",
-    "auto-rows-[1.25rem]!",
-    "auto-rows-[13px]",
-    "auto-rows-[13px]!",
-    "auto-rows-[37%]",
-    "auto-rows-[37%]!",
-    "auto-rows-[3]",
-    "auto-rows-[3]!",
-    "auto-rows-[calc(1rem+2px)]",
-    "auto-rows-[calc(1rem+2px)]!",
-    "auto-rows-auto",
-    "auto-rows-auto!",
-    "auto-rows-fr",
-    "auto-rows-fr!",
-    "auto-rows-max",
-    "auto-rows-max!",
-    "auto-rows-min",
-    "auto-rows-min!"
   ],
   "dropped 'grid-auto-rows': '…' is not a value native can take": [
     "auto-rows-[#1a2b3c]",
@@ -4260,6 +4204,12 @@
     "auto-rows-[30deg]!",
     "auto-rows-[rgb(10,20,30)]",
     "auto-rows-[rgb(10,20,30)]!"
+  ],
+  "dropped 'grid-auto-rows': a length needs a unit: '…' is a bare number, which a browser drops. Write Npx, or N for none.": [
+    "auto-rows-[0.35]",
+    "auto-rows-[0.35]!",
+    "auto-rows-[3]",
+    "auto-rows-[3]!"
   ],
   "dropped 'grid-auto-rows': var() cannot be used in the '…' shorthand, because which native property the value lands in depends on the value, and there is no CSS parser on device. Use the longhand.": [
     "auto-rows-(--x)",
@@ -4302,22 +4252,6 @@
     "col-end-[calc(1rem+2px)]!",
     "col-end-[rgb(10,20,30)]",
     "col-end-[rgb(10,20,30)]!"
-  ],
-  "dropped 'grid-column-end': '…' is not mapped yet. React Native may well support it; nothing here translates it. Check RN's style types, then add it to css/properties.cjs.": [
-    "-col-end-7",
-    "-col-end-7!",
-    "-col-end-[3]",
-    "-col-end-[3]!",
-    "col-end-1",
-    "col-end-1!",
-    "col-end-10",
-    "col-end-10!",
-    "col-end-5",
-    "col-end-5!",
-    "col-end-[3]",
-    "col-end-[3]!",
-    "col-end-auto",
-    "col-end-auto!"
   ],
   "dropped 'grid-column-end': var() cannot be used in the '…' shorthand, because which native property the value lands in depends on the value, and there is no CSS parser on device. Use the longhand.": [
     "-col-end-(--x)",
@@ -4363,45 +4297,11 @@
     "col-start-[rgb(10,20,30)]",
     "col-start-[rgb(10,20,30)]!"
   ],
-  "dropped 'grid-column-start': '…' is not mapped yet. React Native may well support it; nothing here translates it. Check RN's style types, then add it to css/properties.cjs.": [
-    "-col-start-7",
-    "-col-start-7!",
-    "-col-start-[3]",
-    "-col-start-[3]!",
-    "col-start-1",
-    "col-start-1!",
-    "col-start-10",
-    "col-start-10!",
-    "col-start-5",
-    "col-start-5!",
-    "col-start-[3]",
-    "col-start-[3]!",
-    "col-start-auto",
-    "col-start-auto!"
-  ],
   "dropped 'grid-column-start': var() cannot be used in the '…' shorthand, because which native property the value lands in depends on the value, and there is no CSS parser on device. Use the longhand.": [
     "-col-start-(--x)",
     "-col-start-(--x)!",
     "col-start-(--x)",
     "col-start-(--x)!"
-  ],
-  "dropped 'grid-column': '…' has no React Native equivalent: no style prop of a native view does what it does.": [
-    "-col-[3]",
-    "-col-[3]!",
-    "col-[3]",
-    "col-[3]!",
-    "col-auto",
-    "col-auto!",
-    "col-span-1",
-    "col-span-1!",
-    "col-span-5",
-    "col-span-5!",
-    "col-span-9",
-    "col-span-9!",
-    "col-span-[3]",
-    "col-span-[3]!",
-    "col-span-full",
-    "col-span-full!"
   ],
   "dropped 'grid-column': '…' is not a value native can take": [
     "-col-[#1a2b3c]",
@@ -4507,22 +4407,6 @@
     "row-end-[rgb(10,20,30)]",
     "row-end-[rgb(10,20,30)]!"
   ],
-  "dropped 'grid-row-end': '…' is not mapped yet. React Native may well support it; nothing here translates it. Check RN's style types, then add it to css/properties.cjs.": [
-    "-row-end-7",
-    "-row-end-7!",
-    "-row-end-[3]",
-    "-row-end-[3]!",
-    "row-end-1",
-    "row-end-1!",
-    "row-end-10",
-    "row-end-10!",
-    "row-end-5",
-    "row-end-5!",
-    "row-end-[3]",
-    "row-end-[3]!",
-    "row-end-auto",
-    "row-end-auto!"
-  ],
   "dropped 'grid-row-end': var() cannot be used in the '…' shorthand, because which native property the value lands in depends on the value, and there is no CSS parser on device. Use the longhand.": [
     "-row-end-(--x)",
     "-row-end-(--x)!",
@@ -4567,45 +4451,11 @@
     "row-start-[rgb(10,20,30)]",
     "row-start-[rgb(10,20,30)]!"
   ],
-  "dropped 'grid-row-start': '…' is not mapped yet. React Native may well support it; nothing here translates it. Check RN's style types, then add it to css/properties.cjs.": [
-    "-row-start-7",
-    "-row-start-7!",
-    "-row-start-[3]",
-    "-row-start-[3]!",
-    "row-start-1",
-    "row-start-1!",
-    "row-start-10",
-    "row-start-10!",
-    "row-start-5",
-    "row-start-5!",
-    "row-start-[3]",
-    "row-start-[3]!",
-    "row-start-auto",
-    "row-start-auto!"
-  ],
   "dropped 'grid-row-start': var() cannot be used in the '…' shorthand, because which native property the value lands in depends on the value, and there is no CSS parser on device. Use the longhand.": [
     "-row-start-(--x)",
     "-row-start-(--x)!",
     "row-start-(--x)",
     "row-start-(--x)!"
-  ],
-  "dropped 'grid-row': '…' has no React Native equivalent: no style prop of a native view does what it does.": [
-    "-row-[3]",
-    "-row-[3]!",
-    "row-[3]",
-    "row-[3]!",
-    "row-auto",
-    "row-auto!",
-    "row-span-1",
-    "row-span-1!",
-    "row-span-5",
-    "row-span-5!",
-    "row-span-9",
-    "row-span-9!",
-    "row-span-[3]",
-    "row-span-[3]!",
-    "row-span-full",
-    "row-span-full!"
   ],
   "dropped 'grid-row': '…' is not a value native can take": [
     "-row-[#1a2b3c]",
@@ -4673,26 +4523,6 @@
     "row-(--x)",
     "row-(--x)!"
   ],
-  "dropped 'grid-template-columns': '…' has no React Native equivalent: no style prop of a native view does what it does.": [
-    "grid-cols-1",
-    "grid-cols-1!",
-    "grid-cols-10",
-    "grid-cols-10!",
-    "grid-cols-5",
-    "grid-cols-5!",
-    "grid-cols-[0.35]",
-    "grid-cols-[0.35]!",
-    "grid-cols-[1.25rem]",
-    "grid-cols-[1.25rem]!",
-    "grid-cols-[13px]",
-    "grid-cols-[13px]!",
-    "grid-cols-[37%]",
-    "grid-cols-[37%]!",
-    "grid-cols-[3]",
-    "grid-cols-[3]!",
-    "grid-cols-[calc(1rem+2px)]",
-    "grid-cols-[calc(1rem+2px)]!"
-  ],
   "dropped 'grid-template-columns': '…' is not a value native can take": [
     "grid-cols-[#1a2b3c]",
     "grid-cols-[#1a2b3c]!",
@@ -4705,29 +4535,15 @@
     "grid-cols-subgrid",
     "grid-cols-subgrid!"
   ],
+  "dropped 'grid-template-columns': a length needs a unit: '…' is a bare number, which a browser drops. Write Npx, or N for none.": [
+    "grid-cols-[0.35]",
+    "grid-cols-[0.35]!",
+    "grid-cols-[3]",
+    "grid-cols-[3]!"
+  ],
   "dropped 'grid-template-columns': var() cannot be used in the '…' shorthand, because which native property the value lands in depends on the value, and there is no CSS parser on device. Use the longhand.": [
     "grid-cols-(--x)",
     "grid-cols-(--x)!"
-  ],
-  "dropped 'grid-template-rows': '…' has no React Native equivalent: no style prop of a native view does what it does.": [
-    "grid-rows-1",
-    "grid-rows-1!",
-    "grid-rows-10",
-    "grid-rows-10!",
-    "grid-rows-5",
-    "grid-rows-5!",
-    "grid-rows-[0.35]",
-    "grid-rows-[0.35]!",
-    "grid-rows-[1.25rem]",
-    "grid-rows-[1.25rem]!",
-    "grid-rows-[13px]",
-    "grid-rows-[13px]!",
-    "grid-rows-[37%]",
-    "grid-rows-[37%]!",
-    "grid-rows-[3]",
-    "grid-rows-[3]!",
-    "grid-rows-[calc(1rem+2px)]",
-    "grid-rows-[calc(1rem+2px)]!"
   ],
   "dropped 'grid-template-rows': '…' is not a value native can take": [
     "grid-rows-[#1a2b3c]",
@@ -4740,6 +4556,12 @@
     "grid-rows-[rgb(10,20,30)]!",
     "grid-rows-subgrid",
     "grid-rows-subgrid!"
+  ],
+  "dropped 'grid-template-rows': a length needs a unit: '…' is a bare number, which a browser drops. Write Npx, or N for none.": [
+    "grid-rows-[0.35]",
+    "grid-rows-[0.35]!",
+    "grid-rows-[3]",
+    "grid-rows-[3]!"
   ],
   "dropped 'grid-template-rows': var() cannot be used in the '…' shorthand, because which native property the value lands in depends on the value, and there is no CSS parser on device. Use the longhand.": [
     "grid-rows-(--x)",
@@ -5108,22 +4930,6 @@
   "dropped 'justify-content': justify-content: '…' is not an alignment Yoga has. Use one of: flex-start, center, flex-end, space-between, space-around, space-evenly.": [
     "justify-stretch",
     "justify-stretch!"
-  ],
-  "dropped 'justify-items': '…' has no React Native equivalent: no style prop of a native view does what it does.": [
-    "justify-items-center",
-    "justify-items-center!",
-    "justify-items-center-safe",
-    "justify-items-center-safe!",
-    "justify-items-end",
-    "justify-items-end!",
-    "justify-items-end-safe",
-    "justify-items-end-safe!",
-    "justify-items-normal",
-    "justify-items-normal!",
-    "justify-items-start",
-    "justify-items-start!",
-    "justify-items-stretch",
-    "justify-items-stretch!"
   ],
   "dropped 'left': '…' is not a value native can take": [
     "-left-[#1a2b3c]",
@@ -8433,38 +8239,6 @@
     "place-content-start!",
     "place-content-stretch",
     "place-content-stretch!"
-  ],
-  "dropped 'place-items': '…' has no React Native equivalent: no style prop of a native view does what it does.": [
-    "place-items-baseline",
-    "place-items-baseline!",
-    "place-items-center",
-    "place-items-center!",
-    "place-items-center-safe",
-    "place-items-center-safe!",
-    "place-items-end",
-    "place-items-end!",
-    "place-items-end-safe",
-    "place-items-end-safe!",
-    "place-items-start",
-    "place-items-start!",
-    "place-items-stretch",
-    "place-items-stretch!"
-  ],
-  "dropped 'place-self': '…' has no React Native equivalent: no style prop of a native view does what it does.": [
-    "place-self-auto",
-    "place-self-auto!",
-    "place-self-center",
-    "place-self-center!",
-    "place-self-center-safe",
-    "place-self-center-safe!",
-    "place-self-end",
-    "place-self-end!",
-    "place-self-end-safe",
-    "place-self-end-safe!",
-    "place-self-start",
-    "place-self-start!",
-    "place-self-stretch",
-    "place-self-stretch!"
   ],
   "dropped 'position': position: fixed is not supported. Yoga has no viewport to fix to and no scroll container to stick within. Use `position: absolute` inside the element you meant to pin to; for a header that should stay put, put it outside the scroll view rather than inside it.": [
     "fixed",

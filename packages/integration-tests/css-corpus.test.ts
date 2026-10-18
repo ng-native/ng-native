@@ -365,9 +365,6 @@ function agrees(property: CorpusProperty, browser: string, value: unknown): bool
  * by design does not, match the browser. A difference not listed here fails; so does a listed one
  * that has gone away, so this list cannot rot.
  */
-const FLEX_ONLY =
-  'Yoga lays out flex boxes, and the engine block containers and lines of boxes on them. A grid ' +
-  "is refused (ADR 0001), and the box keeps native's flex.";
 const BODY_LINE_HEIGHT =
   'Inherited from `body`, which native has no element for, and as a ratio: CSS inherits ' +
   "`line-height: 1.5` as a multiple of each descendant's own font size, native's lineHeight is " +
@@ -403,7 +400,6 @@ const DELIBERATE: Record<string, Partial<Record<CorpusProperty, string>>> = {
   },
   'bulma .is-size-3': { 'line-height': BODY_LINE_HEIGHT },
   'bulma .tag': { 'background-color': HSL_TOKENS },
-  'pico .grid': { display: FLEX_ONLY },
 };
 
 describe('what a browser does with the corpus', () => {

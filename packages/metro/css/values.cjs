@@ -725,16 +725,17 @@ function withRefusals(report, run) {
 /** The displays the device lays out, as it reads one (`displayOf` in fabric's css.ts). */
 const NATIVE_DISPLAYS = new Set([
   ...['flex', 'block', 'inline', 'inline-block', 'flow-root', 'inline-flex', 'flow'],
+  ...['grid', 'inline-grid'],
   ...['none', 'contents'],
 ]);
 const OUTER_DISPLAYS = new Set(['block', 'inline']);
-const INNER_DISPLAYS = new Set(['flow', 'flow-root', 'flex']);
+const INNER_DISPLAYS = new Set(['flow', 'flow-root', 'flex', 'grid']);
 
 /** A fallback, refused where it is a display native has no layout for, as `display` is. */
 function laidOut(fallback, kind, context) {
   if (kind !== 'display' || fallback === undefined || nativeDisplay(fallback)) return fallback;
   refuse(
-    `${context}: display: ${fallback} does not exist on native; only flex, block (read as flex), contents and none do`,
+    `${context}: display: ${fallback} does not exist on native; only flex, block, inline-block, inline-flex, grid, contents and none do`,
   );
   return undefined;
 }

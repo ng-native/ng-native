@@ -5065,6 +5065,8 @@ const DISPLAYS: ReadonlyMap<string, string> = new Map([
   ...['block', 'flow-root', 'inline-block', 'inline-flex', 'none', 'contents'].map(
     (word) => [word, word] as const,
   ),
+  ['grid', 'grid'],
+  ['inline-grid', 'inline-grid'],
   ['flow', 'block'],
 ]);
 
@@ -5074,11 +5076,13 @@ const DISPLAYS: ReadonlyMap<string, string> = new Map([
  * `inline-block`.
  */
 const OUTER = new Set(['block', 'inline']);
-const INNER = new Set(['flow', 'flow-root', 'flex']);
+const INNER = new Set(['flow', 'flow-root', 'flex', 'grid']);
 const PAIRS: Readonly<Record<string, string>> = {
   'block flow': 'block',
   'block flow-root': 'flow-root',
   'inline flow-root': 'inline-block',
+  'block grid': 'grid',
+  'inline grid': 'inline-grid',
   'inline flex': 'inline-flex',
 };
 

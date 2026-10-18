@@ -3551,6 +3551,10 @@ const takesUnits = (name) =>
 /** Lengths `kindOf` does not name, whose values are one or more lengths. */
 const UNIT_SHORTHANDS = new Set([
   'vertical-align',
+  'grid-template-columns',
+  'grid-template-rows',
+  'grid-auto-columns',
+  'grid-auto-rows',
   'translate',
   'gap',
   'inset',

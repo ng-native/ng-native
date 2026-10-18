@@ -464,11 +464,14 @@ describe('the room a line keeps over its baseline', () => {
     near(s.box('s')[1], 25, 'the box in it');
   });
 
-  it('stays at the top of a box a row stretches taller than it', () => {
+  it('stays at the top of a box a row or a grid stretches taller than it', () => {
     // Chrome has the box 14 down, on the line's baseline, and not on the bottom of the box.
     const row = scene(`${LINE} .r { flex-direction: row; height: 50px }`, ['r', ['h', ['i']]]);
     assert.deepEqual(row.box('h'), [0, 0, 200, 50]);
     assert.ok(row.box('i')[1]! <= 14, `the box at ${row.box('i')[1]}`);
+    const grid = scene(`${LINE} .g { display: grid; height: 50px }`, ['g', ['h', ['i']]]);
+    assert.equal(grid.box('h')[3], 50);
+    assert.ok(grid.box('i')[1]! <= 14, `the box at ${grid.box('i')[1]}`);
   });
 });
 
