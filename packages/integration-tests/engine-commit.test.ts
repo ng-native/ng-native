@@ -12,7 +12,7 @@ import {
   type StyleSheet,
 } from '@ng-native/fabric';
 import { resetStyleStats, styleStats } from '../fabric/src/css.ts';
-import { createFakeFabric, type FakeFabric } from '@ng-native/testing';
+import { createFakeFabric, type FakeFabric, type FakeFabricNode } from '@ng-native/testing';
 
 const sheet: StyleSheet = {
   rules: [
@@ -399,5 +399,90 @@ describe('what a commit sends', () => {
       style: { aspectRatio: 1 },
     });
     assert.deepEqual([props['width'], props['height'], props['aspectRatio']], [100, undefined, 1]);
+  });
+});
+
+describe('a clone with new children', () => {
+  /** A box of views named by `nativeID`, and what each commit hands native for it. */
+  function scene(names: readonly string[]) {
+    const fabric = createFakeFabric();
+    const engine = new Engine(fabric, 1);
+    const box = engine.createElement('view');
+    engine.setProp(box, 'nativeID', 'box');
+    engine.appendChild(engine.root, box);
+    const views = new Map<string, EngineNode>();
+    for (const name of names) {
+      const view = engine.createElement('view');
+      engine.setProp(view, 'nativeID', name);
+      engine.appendChild(box, view);
+      views.set(name, view);
+    }
+    engine.commit();
+    const handed: unknown[][] = [];
+    let appended = 0;
+    const { cloneNodeWithNewChildren, cloneNodeWithNewChildrenAndProps, appendChild } = fabric;
+    fabric.cloneNodeWithNewChildren = (...args) => {
+      handed.push(args);
+      return cloneNodeWithNewChildren(...args);
+    };
+    fabric.cloneNodeWithNewChildrenAndProps = (...args) => {
+      handed.push(args);
+      return cloneNodeWithNewChildrenAndProps(...args);
+    };
+    fabric.appendChild = (...args) => (appended++, appendChild(...args));
+    const inBox = (): string[] =>
+      fabric.committed[0]!.children.map((child) => String(child.props['nativeID']));
+    return { fabric, engine, box, views, handed, inBox, appended: () => appended };
+  }
+
+  it('hands native the children as an array in the one call, appending none after', () => {
+    const s = scene(['a', 'b']);
+    const c = s.engine.createElement('view');
+    s.engine.setProp(c, 'nativeID', 'c');
+    s.engine.appendChild(s.box, c);
+    s.engine.commit();
+    assert.deepEqual(s.inBox(), ['a', 'b', 'c']);
+    const [call] = s.handed;
+    assert.equal(s.handed.length, 1);
+    assert.equal(call!.length, 2, 'the node and its children, and no props that did not change');
+    assert.ok(Array.isArray(call![1]));
+    assert.deepEqual(
+      (call![1] as FakeFabricNode[]).map((child) => child.props['nativeID']),
+      ['a', 'b', 'c'],
+    );
+    assert.equal(s.appended(), 0);
+  });
+
+  it('hands them before the props where the props changed as well', () => {
+    const s = scene(['a']);
+    s.engine.setProp(s.box, 'testID', 'changed');
+    s.engine.removeChild(s.box, s.views.get('a')!);
+    s.engine.commit();
+    const [call] = s.handed;
+    assert.equal(call!.length, 3);
+    assert.deepEqual(call![1], []);
+    assert.equal((call![2] as Record<string, unknown>)['testID'], 'changed');
+    assert.deepEqual(s.inBox(), []);
+    assert.equal(s.fabric.committed[0]!.props['testID'], 'changed');
+  });
+
+  it('commits the children as they are now: none, one, many, reordered', () => {
+    const s = scene(['a', 'b', 'c', 'd']);
+    const at = (name: string) => s.views.get(name)!;
+    s.engine.insertBefore(s.box, at('d'), at('a'));
+    s.engine.insertBefore(s.box, at('b'), null);
+    s.engine.commit();
+    assert.deepEqual(s.inBox(), ['d', 'a', 'c', 'b']);
+    s.engine.removeChild(s.box, at('a'));
+    s.engine.removeChild(s.box, at('c'));
+    s.engine.commit();
+    assert.deepEqual(s.inBox(), ['d', 'b']);
+    s.engine.removeChild(s.box, at('d'));
+    s.engine.commit();
+    assert.deepEqual(s.inBox(), ['b']);
+    s.engine.removeChild(s.box, at('b'));
+    s.engine.commit();
+    assert.deepEqual(s.inBox(), []);
+    assert.equal(s.appended(), 0);
   });
 });

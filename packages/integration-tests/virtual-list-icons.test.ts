@@ -36,7 +36,8 @@ function sentToIcons(fabric: FakeFabric): unknown[] {
   const withBoth = fabric.cloneNodeWithNewChildrenAndProps.bind(fabric);
   fabric.createNode = (...args) => record(create(...args), args[3] as object);
   fabric.cloneNodeWithNewProps = (node, props) => record(withProps(node, props), props);
-  fabric.cloneNodeWithNewChildrenAndProps = (node, props) => record(withBoth(node, props), props);
+  fabric.cloneNodeWithNewChildrenAndProps = (node, children, props) =>
+    record(withBoth(node, children, props), props);
   return sent;
 }
 

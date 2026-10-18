@@ -3507,9 +3507,9 @@ export class StyleResolver {
    */
   private readonly additions: Addition[] = [];
 
-  /** Whether a sheet could match a node: one of its rules is written for it. */
-  couldMatch(sheet: StyleSheet, node: StyleTarget): boolean {
-    return writtenFor(subjectsOf(sheet), node);
+  /** What the rules of several sheets are for, as one: see `isFor`. */
+  subjectsOfAll(sheets: readonly StyleSheet[]): Subjects {
+    return sheets.length === 1 ? subjectsOf(sheets[0]!) : joinSubjects(sheets.map(subjectsOf));
   }
 
   /** How far each class named by the sheets met so far reaches: see `classReach`. */

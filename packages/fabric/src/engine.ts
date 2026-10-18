@@ -213,11 +213,15 @@ export interface FabricUIManager {
     instanceHandle: unknown,
   ): FabricNode;
   /** Clone with the *given* children (omitting the argument means none) and the same props. */
-  cloneNodeWithNewChildren(node: FabricNode): FabricNode;
+  cloneNodeWithNewChildren(node: FabricNode, children?: readonly FabricNode[]): FabricNode;
   /** Clone with the given props and the *same* children. */
   cloneNodeWithNewProps(node: FabricNode, newProps: object): FabricNode;
-  /** Clone with the given props and the given children (omitting them means none). */
-  cloneNodeWithNewChildrenAndProps(node: FabricNode, newProps: object): FabricNode;
+  /** Clone with the given children and the given props. */
+  cloneNodeWithNewChildrenAndProps(
+    node: FabricNode,
+    children: readonly FabricNode[],
+    newProps: object,
+  ): FabricNode;
   appendChild(parent: FabricNode, child: FabricNode): FabricNode;
   /**
    * Have native move each view whose frame the next commit changes to where it ends up, over a
@@ -6588,21 +6592,36 @@ export class Engine implements HostEngine {
     this.watchActive(sheet);
     this.watchGenerated(sheet);
     this.markPath(this.root);
-    this.markWrittenFor(sheet, this.root);
+    this.sheetsAdded.push(sheet);
     return true;
   }
 
   /**
-   * Have styled again each node a sheet just added could match. The rest keep the style they
-   * have, which the resolver lets stand for a node none of the sheet's rules is written for,
-   * so a commit steps over them: the walk here is what finds the ones it must not step over.
+   * The sheets added since the last commit, whose nodes are not yet marked: see `markAdded`.
+   * Emptied by each commit. One taken away before it stays in the list, which only marks nodes
+   * it could have matched: taking a sheet away styles everything again in any case.
    */
-  private markWrittenFor(sheet: StyleSheet, node: EngineNode): void {
-    if (node.nodeKind === 'element' && this.styles.couldMatch(sheet, node)) {
+  private readonly sheetsAdded: StyleSheet[] = [];
+
+  /**
+   * Have styled again each node a sheet added since the last commit could match. The rest keep
+   * the style they have, which the resolver lets stand for a node none of the sheets' rules is
+   * written for, so a commit steps over them: the walk here is what finds the ones it must not
+   * step over. One walk for all of them: a screen of a component library adds a sheet for each
+   * component it renders for the first time.
+   */
+  private markAdded(): void {
+    if (!this.sheetsAdded.length) return;
+    const subjects = this.styles.subjectsOfAll(this.sheetsAdded.splice(0));
+    this.markWrittenFor(subjects, this.root);
+  }
+
+  private markWrittenFor(subjects: Subjects, node: EngineNode): void {
+    if (node.nodeKind === 'element' && this.styles.isFor(subjects, node)) {
       node.styleDirty = true;
       this.markPath(node);
     }
-    for (const child of node.childList) this.markWrittenFor(sheet, child);
+    for (const child of node.childList) this.markWrittenFor(subjects, child);
   }
 
   /**
@@ -8117,6 +8136,7 @@ export class Engine implements HostEngine {
     // completeRoot that changes nothing: during a fling that is one wasted native commit per
     // frame, since any listener firing marks the view for refresh.
     this.settleCreated();
+    this.markAdded();
     this.markUnderHas();
     // The marks are taken up by the commit from here: see `markedBefore` and `placesMarked`.
     this.markedBefore.clear();
@@ -8544,6 +8564,9 @@ export class Engine implements HostEngine {
 
   /** Reconcile what is dirty and hand the tree to Fabric, which lays it out before returning. */
   private commitTree(): void {
+    // A commit of its own, such as a grid's once native has measured it, styles what a sheet
+    // added since the last `commit` matches as well.
+    this.markAdded();
     // What `:has()` answers is kept for the commit, where a sheet asks it: see `keepHasAnswers`.
     keepHasAnswers(this.hasSheets);
     try {
@@ -14349,11 +14372,11 @@ export class Engine implements HostEngine {
    * `children` is null when the child list is unchanged, in which case Fabric keeps the previous
    * revision's children and there is nothing to append.
    *
-   * Otherwise this clones the way React does: the no-children form, then `appendChild` per child.
-   * Omitting the child list gives the clone *empty* children, not the old ones, and whether a
-   * binding takes that argument cannot be feature-detected - `UIManagerBinding.cpp` registers
-   * both clone methods with a fixed `paramCount` and argument validation is commented out - so
-   * `fn.length` says nothing. One code path, no detection.
+   * Otherwise the clone is handed its children in the one call, as an array: a call into native
+   * for each of them is most of what cloning a box of hundreds costs, and each box over a change
+   * is cloned on every commit. React Native's binding (`UIManagerBinding.cpp`, the one on iOS
+   * and Android) reads an array there in every version the packages support, and takes it as the
+   * second argument of three where there are props as well.
    */
   private clone(
     previous: FabricNode,
@@ -14364,11 +14387,9 @@ export class Engine implements HostEngine {
 
     if (children === null) return this.fabric.cloneNodeWithNewProps(previous, props!);
 
-    const handle = props
-      ? this.fabric.cloneNodeWithNewChildrenAndProps(previous, props)
-      : this.fabric.cloneNodeWithNewChildren(previous);
-    for (const child of children) this.fabric.appendChild(handle, child);
-    return handle;
+    return props
+      ? this.fabric.cloneNodeWithNewChildrenAndProps(previous, children, props)
+      : this.fabric.cloneNodeWithNewChildren(previous, children);
   }
 
   private detach(child: EngineNode): void {
