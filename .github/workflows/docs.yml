@@ -55,8 +55,10 @@ jobs:
       # The branch decides the kind of deployment: the production branch (main, set on the
       # project) is the site itself, and any other is a preview at <branch>.<project>.pages.dev.
       # Wrangler runs through npx: the Cloudflare action installs it into the workspace root,
-      # which pnpm refuses.
+      # which pnpm refuses. A Dependabot pull request gets Dependabot's secrets, which have no
+      # Cloudflare token, so it is built, to check a bump, and not deployed.
       - id: deploy
+        if: github.event.pull_request.user.login != 'dependabot[bot]'
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
@@ -70,7 +72,7 @@ jobs:
             "$WRANGLER_OUTPUT_FILE_DIRECTORY"/*.json >> "$GITHUB_OUTPUT"
 
       - name: Link the preview from the pull request
-        if: github.event_name == 'pull_request'
+        if: steps.deploy.outcome == 'success' && github.event_name == 'pull_request'
         env:
           GH_TOKEN: ${{ github.token }}
           URL: ${{ steps.deploy.outputs.url }}
