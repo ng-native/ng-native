@@ -2250,7 +2250,7 @@ function committedViewName(node: EngineNode): string {
 
 /** Whether a node is a horizontal scroll view, whose children hold its content. */
 const holdsContentOf = (parent: EngineNode | null): boolean =>
-  parent !== null && parent.kind === 'element' && viewNameOf(parent) === HORIZONTAL_SCROLL;
+  parent !== null && parent.nodeKind === 'element' && viewNameOf(parent) === HORIZONTAL_SCROLL;
 
 /**
  * The native view a node commits as: `Paragraph` for a `<text>`, `VirtualText` for one nested in
