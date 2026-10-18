@@ -2279,11 +2279,13 @@ function stickyLayout(node: EngineNode, props: Record<string, unknown>): void {
   props['position'] = 'relative';
   // Over what is written after it, as a browser paints a positioned box over the flow.
   props['zIndex'] ??= 1;
+  // With no inset on the axis it moves along it sticks nowhere, whatever it moved by before.
+  const state = node.sticky;
+  const inset = props[state?.axis === 'x' ? 'left' : 'top'];
   for (const key of ['top', 'right', 'bottom', 'left', 'start', 'end']) {
     if (props[key] !== undefined) delete props[key];
   }
-  const state = node.sticky;
-  if (!state?.shift) return;
+  if (!state?.shift || typeof inset !== 'number') return;
   moveBeforeOwn(props, { [state.axis === 'x' ? 'translateX' : 'translateY']: state.shift });
 }
 
@@ -9016,7 +9018,13 @@ export class Engine implements HostEngine {
 
   private stick(node: EngineNode, scroll: EngineNode): void {
     const span = this.stickySpan(node, scroll);
-    if (!span) return;
+    if (!span) {
+      // With no inset it sticks nowhere, as a relative box: its move goes, and it is still asked
+      // again, for an inset that comes back. A layout not read yet leaves it as it is.
+      const inset = ['top', 'left'].some((key) => typeof readStyle(node, key) === 'number');
+      if (!inset && node.sticky) this.loosen(node);
+      return;
+    }
     // No span yet, so the first one read is a change, and starts the drive.
     const state = (node.sticky ??= {
       scroll,
@@ -9059,6 +9067,11 @@ export class Engine implements HostEngine {
 
   private unstick(node: EngineNode): void {
     this.stickies.delete(node);
+    this.loosen(node);
+  }
+
+  /** Let a sticky box's move go: native stops driving it, and it is committed where it is. */
+  private loosen(node: EngineNode): void {
     node.sticky?.drive?.stop();
     if (node.sticky?.shift) this.markProps(node, false);
     node.sticky = undefined;

@@ -155,6 +155,23 @@ describe('position: sticky', () => {
     assert.equal(scroll.listeners?.get('topScroll')?.size, 0);
   });
 
+  it('stops moving when its inset goes, as a sticky box with none sticks nowhere', () => {
+    const s = scene(`${PAGE} .loose { top: auto }`, TWO);
+    assert.equal(s.shiftAt('head', 120), 70);
+    s.engine.setClasses(s.nodes.get('head')!, 'head loose');
+    assert.equal(s.shiftAt('head', 150), 0);
+  });
+
+  it('has native stop moving it when its inset goes', () => {
+    const { native, drives } = recorder();
+    const s = scene(`${PAGE} .loose { top: auto }`, TWO, native);
+    const head = s.committed('head').reactTag;
+    assert.equal(drives().has(head), true);
+    s.engine.setClasses(s.nodes.get('head')!, 'head loose');
+    s.engine.commit();
+    assert.equal(drives().has(head), false);
+  });
+
   it('is let go when it stops being sticky', () => {
     const s = scene(`${PAGE} .plain { position: relative; height: 30px }`, TWO);
     assert.equal(s.shiftAt('head', 120), 70);
