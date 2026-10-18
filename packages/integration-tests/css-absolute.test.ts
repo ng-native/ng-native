@@ -69,6 +69,12 @@ describe('margin: auto on an absolute box', () => {
     assert.deepEqual(scene(css, ['p', ['a']]).box('a'), [10, 0, 40, 20]);
   });
 
+  it('keeps the margin written on the side of its one inset, beside an auto margin', () => {
+    // Chrome: 200 less the inset, the margin and the width.
+    const css = `${FRAME} .a { ${BOX} right: 10px; top: 0; margin-left: auto; margin-right: 20px }`;
+    assert.deepEqual(scene(css, ['p', ['a']]).box('a'), [130, 0, 40, 20]);
+  });
+
   it('follows its container changing size', () => {
     const s = scene(`${FRAME} .a { ${BOX} inset: 0; margin: auto }`, ['p', ['a']]);
     assert.deepEqual(s.box('a'), [80, 40, 40, 20]);
@@ -92,6 +98,48 @@ describe('margin: auto on an absolute box', () => {
     assert.deepEqual(s.box('a'), [80, 40, 40, 20]);
     s.engine.setClasses(s.nodes.get('a')!, 'b');
     assert.deepEqual(s.box('a'), [5, 5, 40, 20]);
+  });
+
+  it('is placed again after a commit that placed it failed', () => {
+    const s = scene(`${FRAME} .a { ${BOX} inset: 0; margin: auto }`, ['p', ['a']]);
+    assert.deepEqual(s.box('a'), [80, 40, 40, 20]);
+    // The commit that places it again throws, as a native prop that stops the app would.
+    const complete = s.fabric.completeRoot.bind(s.fabric);
+    let calls = 0;
+    s.fabric.completeRoot = (...args) => {
+      if (++calls === 2) throw new Error('native refused the commit');
+      return complete(...args);
+    };
+    s.engine.setClasses(s.nodes.get('p')!, 'big');
+    assert.throws(() => s.engine.commit(), /native refused/);
+    s.fabric.completeRoot = complete;
+    // A box that comes after it is placed: nothing is left thinking a placement is under way.
+    const late = s.engine.createElement('view');
+    s.engine.setClasses(late, 'a');
+    s.engine.setProp(late, 'nativeID', 'late');
+    s.engine.appendChild(s.nodes.get('p')!, late);
+    assert.deepEqual(s.box('late'), [130, 40, 40, 20]);
+  });
+
+  it('is placed again where it comes back after a commit out of the tree', () => {
+    const s = scene(`${FRAME} .a { ${BOX} inset: 0; margin: auto }`, ['top', ['p', ['a']]]);
+    assert.deepEqual(s.box('a'), [80, 40, 40, 20]);
+    const [top, p] = [s.nodes.get('top')!, s.nodes.get('p')!];
+    s.engine.removeChild(top, p);
+    s.engine.commit();
+    s.engine.setClasses(p, 'big');
+    s.engine.appendChild(top, p);
+    assert.deepEqual(s.box('a'), [130, 40, 40, 20]);
+  });
+
+  it('is let go when it leaves the tree, where it would be kept for the life of the app', () => {
+    const s = scene(`${FRAME} .a { ${BOX} inset: 0; margin: auto }`, ['top', ['p', ['a']]]);
+    s.box('a');
+    const placing = (s.engine as unknown as { unplaced: Set<unknown> }).unplaced;
+    assert.equal(placing.has(s.nodes.get('a')), true);
+    s.engine.removeChild(s.nodes.get('top')!, s.nodes.get('p')!);
+    s.engine.commit();
+    assert.equal(placing.has(s.nodes.get('a')), false);
   });
 
   it('settles in the commit it was changed in, with no pass left over', () => {

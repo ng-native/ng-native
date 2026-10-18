@@ -1804,7 +1804,8 @@ function autoMargins(
   const lead = before !== 'auto' ? fixed : after === 'auto' ? Math.max(free / 2, 0) : free;
   return {
     [`margin${axis.start}`]: lead,
-    [`margin${axis.end}`]: 0,
+    // A length written on the other side stays: with one inset, at the end, it still places it.
+    [`margin${axis.end}`]: after === 'auto' ? 0 : (resolveLength(after, room) ?? 0),
     // The start inset and the margin place it now, and both insets would stretch it.
     ...(between ? { [axis.end.toLowerCase()]: null } : null),
   };
@@ -6400,6 +6401,23 @@ export class Engine implements HostEngine {
   }
 
   /**
+   * Let go of what is placed from here, and of the pages fixed boxes are on, out of the tree: a
+   * box that comes back is placed again from the start.
+   */
+  private releasePlacements(): void {
+    for (const node of this.unplaced) {
+      if (this.topOf(node) === this.root) continue;
+      this.unplaced.delete(node);
+      node.resolved = undefined;
+    }
+    for (const [page, fixed] of this.fixedIn) {
+      if (page === this.root || this.topOf(page) === this.root) continue;
+      for (const node of fixed) if (node.fixedTo === page) node.fixedTo = undefined;
+      this.fixedIn.delete(page);
+    }
+  }
+
+  /**
    * Let go of everything the engine holds for nodes that have left the tree.
    *
    * Removal is the only signal a destroyed subtree reliably sends. Angular calls `destroyNode` for
@@ -6425,6 +6443,7 @@ export class Engine implements HostEngine {
    */
   private releaseDetached(): void {
     this.forgetDetached();
+    this.releasePlacements();
     for (const node of this.hoisted) {
       const top = this.topOf(node);
       if (top === this.root) continue;
@@ -8761,9 +8780,12 @@ export class Engine implements HostEngine {
     }
     if (!moved.length) return;
     this.settling = true;
-    this.touch(moved);
-    this.commitTree();
-    this.settling = false;
+    try {
+      this.touch(moved);
+      this.commitTree();
+    } finally {
+      this.settling = false;
+    }
   }
 
   /**
@@ -9002,6 +9024,11 @@ export class Engine implements HostEngine {
     });
     this.followScroll(scroll);
     if (state.start !== span.start || state.stop !== span.stop || state.scroll !== scroll) {
+      // Moved to another scroll view: the drive is fed by the offset of the one it was in.
+      if (state.scroll !== scroll) {
+        state.drive?.stop();
+        state.drive = null;
+      }
       Object.assign(state, span, { scroll });
       const range = pinnedRange(span.start, span.stop);
       if (state.drive) state.drive.update(range);

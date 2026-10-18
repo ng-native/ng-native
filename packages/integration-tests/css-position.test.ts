@@ -36,8 +36,12 @@ describe('position', () => {
     });
   }
 
-  it('refuses a position there is none of, naming it and the ones there are', () => {
-    const { dropped } = compile('position: running(header)');
-    assert.ok(dropped, 'must not compile');
+  it('refuses a position there is none of, naming it', () => {
+    for (const value of ['running', 'running(header)']) {
+      const { dropped } = compile(`position: ${value}`);
+      assert.ok(dropped, `position: ${value} must not compile`);
+      assert.match(dropped, /position/, 'the message names the property');
+    }
+    assert.match(compile('position: running').dropped!, /running/, 'and the value');
   });
 });

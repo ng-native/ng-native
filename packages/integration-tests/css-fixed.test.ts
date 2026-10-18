@@ -155,6 +155,17 @@ describe('position: fixed', () => {
     assert.deepEqual(s.tree(), [['app', ['page', ['scroll'], ['row'], ['bar']]]]);
   });
 
+  it('lets the page go with what is fixed to it when the page leaves the tree', () => {
+    const s = scene(FIXED, ['app', ['page', ['scroll', ['bar']], ['row']]]);
+    s.tree();
+    const fixedIn = (s.engine as unknown as { fixedIn: Map<unknown, unknown> }).fixedIn;
+    assert.equal(fixedIn.has(s.nodes.get('page')), true);
+    s.engine.removeChild(s.nodes.get('app')!, s.nodes.get('page')!);
+    s.engine.commit();
+    assert.equal(fixedIn.has(s.nodes.get('page')), false);
+    assert.equal(s.nodes.get('bar')!.fixedTo, undefined);
+  });
+
   it('settles in the commit it appears in, with no pass left over', () => {
     const s = scene(FIXED, ['app', ['scroll', ['bar']]]);
     assert.equal(s.engine.commit(), true);

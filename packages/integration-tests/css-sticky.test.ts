@@ -33,7 +33,7 @@ function scene(css: string, spec: Spec, nativeAnimated: NativeAnimated | null = 
   const build = ([name, ...children]: Spec, parent: EngineNode): EngineNode => {
     // A table's parts are elements of their own names, as a web library writes them.
     const [first = ''] = name.split(' ');
-    const element = name === 'scroll' ? 'scroll-view' : TABLE_PARTS.has(first) ? first : 'view';
+    const element = first === 'scroll' ? 'scroll-view' : TABLE_PARTS.has(first) ? first : 'view';
     const node = engine.createElement(element);
     // An element of a web library's that scrolls what overflows it, where its style says so.
     engine.setClasses(node, name);
@@ -121,6 +121,26 @@ describe('position: sticky', () => {
     assert.equal(ranges.length, 2);
     assert.deepEqual(ranges[0]!.inputRange, [50, 270]);
     assert.deepEqual(ranges[0]!.outputRange, [0, 220]);
+  });
+
+  it('has native follow the scroll view it is moved into, and no longer the one it left', () => {
+    const { native, named } = recorder();
+    const s = scene(
+      PAGE,
+      ['page', ['scroll', ['section', ['lead'], ['head']]], ['scroll two']],
+      native,
+    );
+    const tag = (name: string) => s.committed(name).reactTag;
+    const fed = (view: number) => named('event').filter((call) => call[1] === view).length;
+    const unfed = (view: number) => named('removeEvent').filter((call) => call[1] === view).length;
+    const [first, second] = [tag('scroll'), tag('scroll two')];
+    assert.equal(fed(first), 1);
+    const section = s.nodes.get('section')!;
+    s.engine.removeChild(s.nodes.get('scroll')!, section);
+    s.engine.appendChild(s.nodes.get('scroll two')!, section);
+    s.engine.commit();
+    assert.equal(fed(second), 1);
+    assert.equal(unfed(first), 1);
   });
 
   it('stops listening to a scroll view once nothing in it is sticky', () => {
