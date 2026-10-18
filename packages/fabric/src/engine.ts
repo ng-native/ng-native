@@ -38,6 +38,7 @@ import {
   type StyleSheet,
   type Subjects,
   type TokenValue,
+  isGenerated,
 } from './css.ts';
 import { applyAria } from './aria-props.ts';
 import { STYLED_ELEMENTS } from './element-styles.ts';
@@ -3596,11 +3597,22 @@ function strutted(node: EngineNode, props: Record<string, unknown>): boolean {
   return !tall && !held && !holdsText(node);
 }
 
+/**
+ * Whether a generated box has text for its content, a space included: nothing is seen of a
+ * space, but a browser lays its line out as one with text on it, which has the room of its own
+ * font.
+ */
+function writesText(node: EngineNode): boolean {
+  if (!isGenerated(node.tag)) return false;
+  const content = readStyle(node, 'content');
+  return typeof content === 'string' && content !== '' && content !== 'none';
+}
+
 /** Whether there is text anywhere in what a node holds, typed into a field or written. */
 function holdsText(node: EngineNode): boolean {
   return node.childList.some((child) => {
     if (child.nodeKind === 'text') return child.nodeText.trim() !== '';
-    return MEASURED_VIEWS.has(viewNameOf(child)) || holdsText(child);
+    return MEASURED_VIEWS.has(viewNameOf(child)) || writesText(child) || holdsText(child);
   });
 }
 
@@ -4278,7 +4290,8 @@ function truncatedAs(box: EngineNode, props: Record<string, unknown>): void {
  * one paragraph: nothing is placed after them, and a paragraph is one view for all of them.
  */
 const wordedLine = (node: EngineNode): boolean =>
-  node.flow?.plan.kind === 'lines' && node.childList.some((child) => child.nodeKind === 'element');
+  node.flow?.plan.kind === 'lines' &&
+  node.childList.some((child) => child.nodeKind === 'element' && !isGenerated(child.tag));
 
 /** The paragraphs the engine made for a run of text written straight into a view. */
 const paragraphsOf = (text: EngineNode): readonly EngineNode[] =>
@@ -5753,6 +5766,130 @@ function inOrder(a: ReadonlySet<string>, b: ReadonlySet<string>): boolean {
   return true;
 }
 
+const BEFORE = '::before';
+const AFTER = '::after';
+type GeneratedBox = typeof BEFORE | typeof AFTER;
+
+/**
+ * Whether a rule for a generated box gives it `content`, which is what makes a box: a rule
+ * without it, a reset for every `::before` there is, styles the ones other rules make and makes
+ * none of its own.
+ */
+function givesContent(rule: StyleSheet['rules'][number]): boolean {
+  const content = rule.declarations['content'] ?? rule.important?.['content'];
+  return content !== undefined && content !== 'none';
+}
+
+/** The elements a sheet's rules give one generated box to: by class, id, name or attribute, or all. */
+interface GeneratedFor {
+  readonly classes: Set<string>;
+  readonly names: Set<string>;
+  /** The ids a rule names its element by, as a page names one element. */
+  readonly ids: Set<string>;
+  /** The attributes a rule names its element by alone, as a headless library's do. */
+  readonly attributes: Set<string>;
+  every: boolean;
+}
+
+/** What one or more sheets' rules give each generated box to. */
+type Generated = Record<GeneratedBox, GeneratedFor>;
+
+const generatedFor = (): GeneratedFor => ({
+  classes: new Set(),
+  names: new Set(),
+  ids: new Set(),
+  attributes: new Set(),
+  every: false,
+});
+
+const noGenerated = (): Generated => ({ [BEFORE]: generatedFor(), [AFTER]: generatedFor() });
+
+/** What a sheet's `::before` and `::after` rules with a content give a box to, or null for none. */
+function generatedIn(sheet: StyleSheet): Generated | null {
+  let boxes: Generated | null = null;
+  for (const rule of sheet.rules) {
+    const box = rule.compounds.at(-1)?.type;
+    if ((box !== BEFORE && box !== AFTER) || !givesContent(rule)) continue;
+    noteGenerated((boxes ??= noGenerated())[box], rule.compounds.at(-2));
+  }
+  return boxes;
+}
+
+/** What every sheet in `all` gives a box to together, or null where none gives one. */
+function joinGenerated(all: Iterable<Generated | null>): Generated | null {
+  let joined: Generated | null = null;
+  for (const boxes of all) {
+    if (!boxes) continue;
+    joined ??= noGenerated();
+    for (const box of [BEFORE, AFTER] as const) {
+      const into = joined[box];
+      const from = boxes[box];
+      for (const key of ['classes', 'names', 'ids', 'attributes'] as const) {
+        for (const each of from[key]) into[key].add(each);
+      }
+      into.every ||= from.every;
+    }
+  }
+  return joined;
+}
+
+/**
+ * Note the element a rule draws a box in, by the compound its selector names it with: one of its
+ * classes, or its name, either of which the element must have for the rule to match, or those
+ * of each alternative of a `:is()` it is named in, or an attribute it must have. With none of
+ * those any element could be the one.
+ */
+function noteGenerated(boxes: GeneratedFor, origin: Compound | undefined): void {
+  if (!origin) boxes.every = true;
+  else if (origin.classes[0] !== undefined) boxes.classes.add(origin.classes[0]);
+  else if (origin.id !== undefined) boxes.ids.add(origin.id);
+  else if (origin.type !== undefined) boxes.names.add(origin.type);
+  else noteUnnamed(boxes, origin);
+}
+
+/** Note the element of a rule that names it by neither a class nor its name. */
+function noteUnnamed(boxes: GeneratedFor, origin: Compound): void {
+  const alternatives = origin.is?.[0];
+  // Named inside `:is()`, as Tailwind writes a state: each alternative is the element itself.
+  if (alternatives?.length) for (const each of alternatives) noteGenerated(boxes, each);
+  // By an attribute it has to have, where that is all that names it.
+  else if (origin.attributes?.length) boxes.attributes.add(origin.attributes[0]!.name);
+  else boxes.every = true;
+}
+
+function wantsGenerated(node: EngineNode, boxes: GeneratedFor): boolean {
+  if (boxes.every || boxes.names.has(node.tag)) return true;
+  const id = node.props['nativeID'];
+  if (typeof id === 'string' && boxes.ids.has(id)) return true;
+  if (node.classes) for (const name of node.classes) if (boxes.classes.has(name)) return true;
+  for (const name of boxes.attributes) {
+    const value = node.props[name];
+    if (value !== undefined && value !== null && value !== false) return true;
+  }
+  return false;
+}
+
+/** What a generated box has before any rule: a browser's is not positioned, where a view is. */
+const GENERATED_STYLE = { position: 'static' };
+const NOT_GENERATED = { display: 'none' };
+
+/**
+ * A generated box's style from its rules. `content` is what makes the box: with none, or with
+ * `none`, there is no box, however much else is written for it.
+ */
+function generatedStyle(style: Readonly<Record<string, unknown>>): Record<string, unknown> {
+  const { content, ...drawn } = style;
+  return content === undefined || content === 'none' ? NOT_GENERATED : drawn;
+}
+
+/** Where a child put last goes: before the `::after` box, which stays last. */
+function endOf(parent: EngineNode, child: EngineNode): number {
+  const last = parent.childList.at(-1);
+  return last?.tag === AFTER && child.tag !== AFTER
+    ? parent.childList.length - 1
+    : parent.childList.length;
+}
+
 /**
  * Whether a node could be the element a compound is written for, by its classes alone: its own,
  * and those of one alternative of each `:is()` on it, which is where Tailwind names a group or
@@ -5934,6 +6071,7 @@ export class Engine implements HostEngine {
     this.watchLayout(options.globalStyles);
     this.watchHas(options.globalStyles);
     this.watchActive(options.globalStyles);
+    this.watchGenerated(options.globalStyles);
     this.dev = options.dev ?? (globalThis as { __DEV__?: boolean }).__DEV__ === true;
     this.strict = options.layoutConformance === 'strict';
     if (this.dev) {
@@ -6100,6 +6238,7 @@ export class Engine implements HostEngine {
     this.watchLayout(sheet);
     this.watchHas(sheet);
     this.watchActive(sheet);
+    this.watchGenerated(sheet);
     this.markPath(this.root);
     this.markWrittenFor(sheet, this.root);
     return true;
@@ -6367,7 +6506,9 @@ export class Engine implements HostEngine {
     this.watchLayout(sheet);
     this.watchHas(sheet);
     this.watchActive(sheet);
+    this.watchGenerated(sheet);
     if (HOISTS[name]) this.hoisted.add(node);
+    this.generate(node);
     return node;
   }
 
@@ -6375,12 +6516,14 @@ export class Engine implements HostEngine {
     const was = this.classAttribute(node);
     (node.classes ??= new Set()).add(name);
     this.markClasses(node, [name], was);
+    this.generate(node);
   }
 
   removeClass(node: EngineNode, name: string): void {
     const was = this.classAttribute(node);
     node.classes?.delete(name);
     this.markClasses(node, [name], was);
+    this.generate(node);
   }
 
   /**
@@ -6483,6 +6626,79 @@ export class Engine implements HostEngine {
     }
   }
 
+  /** What the sheets in play give a generated box to, by the last thing their selectors name. */
+  private generated: Generated | null = null;
+  /** What each sheet in play gives a generated box to: `generated` is all of them together. */
+  private readonly generatedBySheet = new Map<StyleSheet, Generated | null>();
+
+  /**
+   * Note the elements a sheet's `::before` and `::after` rules are written for, and give the
+   * ones there already their boxes. Only a sheet compiled with them has any, which is a
+   * library's the build names as a browser's; for every other this reads the sheet once.
+   */
+  private watchGenerated(sheet: StyleSheet | null | undefined): void {
+    if (!sheet || this.generatedBySheet.has(sheet)) return;
+    const boxes = generatedIn(sheet);
+    this.generatedBySheet.set(sheet, boxes);
+    if (!boxes) return;
+    this.generated = joinGenerated([this.generated, boxes]);
+    if (this.root) this.generateBeneath(this.root);
+  }
+
+  /**
+   * A sheet has left play, by a hot swap or by being removed: the boxes only it gave go, from
+   * every element in the tree.
+   */
+  private unwatchGenerated(sheet: StyleSheet): void {
+    const boxes = this.generatedBySheet.get(sheet);
+    if (!this.generatedBySheet.delete(sheet) || !boxes) return;
+    const left = joinGenerated(this.generatedBySheet.values());
+    // Asked for none, so each box there is goes; then none is asked for again.
+    this.generated = left ?? noGenerated();
+    if (this.root) this.generateBeneath(this.root);
+    this.generated = left;
+  }
+
+  /** `next` in play where `sheet` was: noted first, so a box both give is kept, not made again. */
+  private swapGenerated(sheet: StyleSheet, next: StyleSheet | null): void {
+    this.watchGenerated(next);
+    if (next !== sheet) this.unwatchGenerated(sheet);
+  }
+
+  /** An attribute or the id a rule gives a generated box by came or went on an element. */
+  private generateFor(node: EngineNode, key: string): void {
+    const boxes = this.generated;
+    if (boxes === null) return;
+    if (boxes[BEFORE].attributes.has(key) || boxes[AFTER].attributes.has(key)) {
+      this.generate(node);
+    } else if (key === 'nativeID' && (boxes[BEFORE].ids.size || boxes[AFTER].ids.size)) {
+      this.generate(node);
+    }
+  }
+
+  private generateBeneath(node: EngineNode): void {
+    if (node.nodeKind !== 'element' || isGenerated(node.tag)) return;
+    this.generate(node);
+    for (const child of [...node.childList]) this.generateBeneath(child);
+  }
+
+  /** Keep a box first and last in an element a rule could draw one for, and nowhere else. */
+  private generate(node: EngineNode): void {
+    if (this.generated === null || node.nodeKind !== 'element' || isGenerated(node.tag)) return;
+    this.keepGenerated(node, BEFORE, node.childList[0]);
+    this.keepGenerated(node, AFTER, node.childList.at(-1));
+  }
+
+  private keepGenerated(node: EngineNode, box: GeneratedBox, at: EngineNode | undefined): void {
+    const there = at?.tag === box ? at : undefined;
+    if (wantsGenerated(node, this.generated![box]) === (there !== undefined)) return;
+    if (there) return this.removeChild(node, there);
+    const made = this.createElement(box, node.templateSheet);
+    this.setDefaultStyle(made, GENERATED_STYLE);
+    if (box === BEFORE) this.insertBefore(node, made, node.childList[0] ?? null);
+    else this.appendChild(node, made);
+  }
+
   /**
    * The sheet of the component `node` hosts, whose `:host` rules it matches. Set again when a hot
    * swap replaces the component's sheet, which recreates the views inside but not the host, so the
@@ -6496,6 +6712,7 @@ export class Engine implements HostEngine {
     this.watchHas(sheet);
     this.watchLayout(sheet);
     this.watchActive(sheet);
+    this.watchGenerated(sheet);
     this.markProps(node);
   }
 
@@ -6551,6 +6768,7 @@ export class Engine implements HostEngine {
     const reordered =
       !changed.length && !!before && !!node.classes && !inOrder(before, node.classes);
     this.markClasses(node, reordered ? node.classes! : changed, was);
+    this.generate(node);
   }
 
   /** Angular's `@if`/`@for`/`ViewContainerRef` markers. Ordered, never committed. */
@@ -6569,7 +6787,9 @@ export class Engine implements HostEngine {
     this.detach(child);
     this.markReturned(child);
     child.parent = parent;
-    parent.childList.push(child);
+    // Before a generated `::after`, once a sheet gives one: see `endOf`.
+    if (this.generated === null) parent.childList.push(child);
+    else parent.childList.splice(endOf(parent, child), 0, child);
     if (child.dormantHoists) this.wakeHoists(child);
     this.markStructure(parent, child, parent.childList.length - 1);
     this.markTextContent(parent, child);
@@ -6581,8 +6801,8 @@ export class Engine implements HostEngine {
     this.markReturned(child);
     child.parent = parent;
     const at = ref ? parent.childList.indexOf(ref) : -1;
-    if (at < 0) parent.childList.push(child);
-    else parent.childList.splice(at, 0, child);
+    if (at < 0 && this.generated === null) parent.childList.push(child);
+    else parent.childList.splice(at < 0 ? endOf(parent, child) : at, 0, child);
     if (child.dormantHoists) this.wakeHoists(child);
     this.markStructure(parent, child, at < 0 ? parent.childList.length - 1 : at);
     this.markTextContent(parent, child);
@@ -6870,6 +7090,7 @@ export class Engine implements HostEngine {
     // And only a prop some selector names: `aria-valuenow` on every tick of a progress bar, a
     // field's text on every key, match nothing they did not.
     const read = key === 'style' ? this.inlineReachesStyle(node) : this.styles.reads(key);
+    this.generateFor(node, key);
     // And restyles the elements after it only where a rule asks the prop of an element before
     // another, `[data-on] ~ .x`: a point of a chart set as a finger moves leaves those after it.
     this.markProps(node, read || heirs, this.styles.readsBeside(key));
@@ -10045,7 +10266,7 @@ export class Engine implements HostEngine {
     this.registerSheet(node.templateSheet);
     this.registerSheet(node.hostSheet);
     const props: Record<string, unknown> = { ...DEFAULT_PROPS[viewName], ...node.defaultStyle };
-    Object.assign(props, this.styles.resolve(node, this.styleEpoch).style);
+    Object.assign(props, this.ruleStyle(node));
     const resolved = props['pointerEvents'];
     writeOwnProps(node.props, props, node.attributeOnly);
     withTextContent(node, viewName, props);
@@ -10136,9 +10357,11 @@ export class Engine implements HostEngine {
     if (asked & LAYOUTS) this.noteSettled(node, merged);
   }
 
-  /** What a node's rules give it. */
+  /** What a node's rules give it: for a generated box with no content, nothing but `display: none`. */
   private ruleStyle(node: EngineNode): Readonly<Record<string, unknown>> {
-    return this.styles.resolve(node, this.styleEpoch).style;
+    const { style } = this.styles.resolve(node, this.styleEpoch);
+    // Asked of every node a commit: told from a generated box here, without a call.
+    return node.tag.startsWith('::') ? generatedStyle(style) : style;
   }
 
   /** Each node's layout styles while one container is planned, so each is merged once. */
@@ -10649,6 +10872,7 @@ export class Engine implements HostEngine {
     this.watchLayout(next);
     this.unwatchActive(sheet);
     this.watchActive(next);
+    this.swapGenerated(sheet, next);
     const at = this.sheetOrder.indexOf(sheet);
     if (at === -1) {
       this.registerSheet(next);
@@ -12518,6 +12742,7 @@ export class Engine implements HostEngine {
    * when it is shown again, as Modal.js creates it afresh. Committed again, it ignores every touch.
    */
   private withheld(child: EngineNode): boolean {
+    if (child.tag.startsWith('::')) return this.undrawn(child);
     if (this.undisplayed(child)) return true;
     if (child.props['visible'] !== false || child.presented) return false;
     if (viewNameOf(child) !== MODAL_HOST) return false;
@@ -12545,6 +12770,36 @@ export class Engine implements HostEngine {
     }
     settlePaths(child);
     return true;
+  }
+
+  /**
+   * Whether a generated box is one no rule draws, which has no view. A view that is not
+   * displayed would do for what is seen, but Yoga marks one as laid out each time it measures
+   * what holds it, as `undisplayed` says. An element holds two of these for every rule that could
+   * draw it one.
+   */
+  private undrawn(box: EngineNode): boolean {
+    if (this.ruleStyle(box) !== NOT_GENERATED) {
+      this.writeContent(box);
+      return false;
+    }
+    if (box.committed) this.forgetCommitted(box);
+    return true;
+  }
+
+  /**
+   * The words a generated box's `content` writes, as the text the box holds: a label a library
+   * hangs on an element by its `::before`. Read as the box is about to be committed, which is
+   * when its rules are known, and before what it holds is.
+   */
+  private writeContent(box: EngineNode): void {
+    const content = this.styles.resolve(box, this.styleEpoch).style['content'];
+    const words = typeof content === 'string' ? content : '';
+    const text = box.childList[0];
+    if ((text?.nodeText ?? '') === words) return;
+    if (!text) this.appendChild(box, this.createText(words));
+    else if (words) this.setText(text, words);
+    else this.removeChild(box, text);
   }
 
   /**
@@ -12980,6 +13235,8 @@ export class Engine implements HostEngine {
   private checkKnown(node: EngineNode): void {
     if (node.nodeKind !== 'element' || node.componentHost || node.tag in VIEW_NAMES) return;
     if (this.declaredElements.has(node.tag) || this.reported.has(node.tag)) return;
+    // A generated box is the engine's own, for a rule: nobody misspelt it.
+    if (isGenerated(node.tag)) return;
     this.reported.add(node.tag);
     console.error(
       `[angular-native] <${node.tag}> is not a known element: no component, directive or ` +

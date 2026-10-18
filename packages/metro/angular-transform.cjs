@@ -1089,7 +1089,8 @@ function buildWarnings() {
  * draws is dropped with a warning in the build for the other; with none, as under a test, the
  * sheet has to suit both. CSS that does not parse fails the build, unless `recover` is set, as
  * it is for a library's: then the rule is dropped and reported like the rest. `module` is the one
- * the sheet is emitted in, which a font's `require` is resolved from.
+ * the sheet is emitted in, which a font's `require` is resolved from. `generated` draws the
+ * sheet's `::before` and `::after` boxes, for a library's the build names as a browser's.
  */
 function componentSheet(
   css,
@@ -1100,6 +1101,7 @@ function componentSheet(
   warn,
   recover = false,
   module = filename,
+  generated = false,
 ) {
   if (!css.trim()) return null;
 
@@ -1113,6 +1115,7 @@ function componentSheet(
     ...locating(parts, className, module),
     onUnsupported: warn,
     recover: recover || copied,
+    generated,
   };
 
   const sheet = compileCss(css, context, options);
@@ -1385,11 +1388,13 @@ function declaredSheet(declared, filename, platform, warn, library) {
     .map((entry) => ({ text: entry.value, file: filename, line: entry.line, exact: entry.exact }));
   if (!parts.length) return null;
   const css = parts.map((part) => part.text).join('\n');
-  // Asked for by `@ng-native/web-compat`, for the libraries it names: the sheet's flex
-  // containers are rows, as the browser it was written for lays them out. A library written for
-  // native is listed for its styles and not named there.
-  const sheet = componentSheet(css, filename, type ?? 'a component', platform, parts, warn, true);
-  return sheet && isBrowsers(library) ? withRows(sheet) : sheet;
+  // Asked for by `@ng-native/web-compat`, for the libraries it names: the sheet is read as the
+  // browser it was written for reads it, with its flex containers as rows and its `::before` and
+  // `::after` boxes. A library written for native is listed for its styles and not named there.
+  const browser = isBrowsers(library);
+  const name = type ?? 'a component';
+  const sheet = componentSheet(css, filename, name, platform, parts, warn, true, filename, browser);
+  return sheet && browser ? withRows(sheet) : sheet;
 }
 
 const FLEX = new Set(['flex', 'inline-flex']);

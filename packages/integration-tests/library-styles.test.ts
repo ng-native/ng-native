@@ -612,6 +612,50 @@ describe("a library's sheet, attached to its definition", () => {
   });
 });
 
+describe("a library's ::before and ::after, in a build told the library is a browser's", () => {
+  const BOX = `import {Component} from '@angular/core';
+@Component({
+  selector: 'acme-box',
+  template: '<text>box</text>',
+  styles: ['.box::before { content: ""; width: 2px }'],
+})
+export class Box {}`;
+  const source = partial(BOX, FILE);
+  const compiled = async (named: string | undefined) => {
+    const before = process.env['ANGULAR_NATIVE_LIBRARY_BROWSER'];
+    if (named === undefined) delete process.env['ANGULAR_NATIVE_LIBRARY_BROWSER'];
+    else process.env['ANGULAR_NATIVE_LIBRARY_BROWSER'] = named;
+    try {
+      const { result, warnings } = warned(() =>
+        transformAngular(source, FILE, {
+          dev: false,
+          platform: 'ios',
+          libraryStyles: ['@acme/ui'],
+        }),
+      );
+      return { sheet: await sheetOf(result.code, 'Box'), warnings };
+    } finally {
+      if (before === undefined) delete process.env['ANGULAR_NATIVE_LIBRARY_BROWSER'];
+      else process.env['ANGULAR_NATIVE_LIBRARY_BROWSER'] = before;
+    }
+  };
+
+  it('draws them for a library the build names among others', async () => {
+    const { sheet } = await compiled('@other/web,@acme/ui');
+    const box = sheet!.rules.find((rule) => 'content' in rule.declarations)!;
+    assert.deepEqual(box.compounds, [{ classes: ['box'] }, { classes: [], type: '::before' }]);
+    assert.deepEqual(box.declarations, { content: '', width: 2 });
+  });
+
+  it('drops them, as for any sheet, for a library the build does not name', async () => {
+    for (const named of [undefined, '@other/web']) {
+      const { sheet, warnings } = await compiled(named);
+      assert.equal(sheet, null);
+      assert.match(warnings.join('\n'), /pseudo-element/);
+    }
+  });
+});
+
 describe('CSS a library writes that does not parse', () => {
   it('drops that rule with a warning and keeps the rest, as Chrome does', async () => {
     // Chrome 154 drops `.ripple::after:not(:empty)` and applies `.ripple` and `:host`.

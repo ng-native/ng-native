@@ -645,10 +645,11 @@ export interface StyleCache {
 
 /**
  * Whether a child is one `:empty` sees. An anchor is a comment on the web, which it does not;
- * nor text of no length, which a binding to nothing leaves behind.
+ * nor text of no length, which a binding to nothing leaves behind; nor a box a rule generated,
+ * which is not in the tree a selector is matched against.
  */
 export function fills(child: StyleTarget): boolean {
-  if (child.nodeKind === 'anchor') return false;
+  if (child.nodeKind === 'anchor' || isGenerated(child.tag)) return false;
   return child.nodeKind !== 'text' || (child as { nodeText?: string }).nodeText !== '';
 }
 
@@ -1491,7 +1492,15 @@ function takesParents(rule: StyleRule): boolean {
 }
 
 /** Whether a node is one of the children CSS counts. Text and anchors are children, not elements. */
-const isElement = (node: StyleTarget) => node.nodeKind === undefined || node.nodeKind === 'element';
+const isElement = (node: StyleTarget) =>
+  // Asked of each sibling a rule counts: told from a generated box here, without a call.
+  (node.nodeKind === undefined || node.nodeKind === 'element') && !node.tag.startsWith('::');
+
+/**
+ * Whether an element's name is a generated box's, `::before` or `::after`: a child the engine
+ * keeps for a rule that draws one, which no selector counts among the element's children.
+ */
+export const isGenerated = (name: string): boolean => name.startsWith('::');
 
 /** A node's first `count` elements, or its last, skipping everything that is not one. */
 export function elementsAtEnd<T extends StyleTarget>(
@@ -2327,16 +2336,21 @@ export function ruleKey(rule: StyleRule): string {
  * `:is()` of compounds that each have a key: it is filed under each of theirs, since a node it
  * matches has one of them.
  *
- * A rule that says nothing of the node's own name can still say whose child it is, `.row > *`.
- * It is filed under the parent's class, and offered to the children of an element that has it.
+ * Two kinds of rule say nothing of the node's own name and still say whose child it is: one for
+ * a generated box, `.card::before`, which is `.card > ::before` here, and one for any child,
+ * `.row > *`. Each is filed under the parent's class, and offered to the children of an element
+ * that has it. Filed by the box's own name, every `::before` rule there is would be offered to
+ * every such box.
  */
 export function ruleKeys(rule: StyleRule): readonly string[] {
   const key = rule.compounds[rule.compounds.length - 1];
   if (!key) return EVERY_NODE;
   if (key.classes.length) return [`class:${key.classes[0]}`];
   if (key.id !== undefined) return [`id:${key.id}`];
-  if (key.type !== undefined) return [`type:${key.type}`];
   const held = parentClass(rule, key);
+  if (key.type !== undefined && !(held !== undefined && isGenerated(key.type))) {
+    return [`type:${key.type}`];
+  }
   if (held !== undefined) return [`in:${held}`];
   return alternativeKeys(key) ?? attributeKey(key) ?? ancestorKeys(rule, key) ?? EVERY_NODE;
 }
