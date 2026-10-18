@@ -14,6 +14,20 @@
 pnpm install
 ```
 
+On Windows, `scripts/setup-windows.ps1` does all of this: it checks for Git and Node and installs
+what is missing (with winget, or nvm-windows or fnm when Node is managed by one), enables pnpm
+through corepack, clones the repository and runs `pnpm install`. Run it straight from GitHub in a
+PowerShell prompt:
+
+```powershell
+& ([scriptblock]::Create((irm https://raw.githubusercontent.com/ng-native/ng-native/main/scripts/setup-windows.ps1)))
+```
+
+It clones into `$HOME\ng-native` unless given `-Path`; `-Browser` also installs the Chromium the
+browser suite needs, and `-Verify` runs `pnpm typecheck` at the end. From a checkout, run
+`powershell -ExecutionPolicy Bypass -File .\scripts\setup-windows.ps1` to set that checkout up in
+place.
+
 Nx sits on top of pnpm workspaces for task running, caching, and module-boundary enforcement, so
 run these through the root scripts rather than calling the underlying tools directly:
 
