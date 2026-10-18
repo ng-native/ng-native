@@ -663,9 +663,16 @@ export function fills(child: StyleTarget): boolean {
   return child.nodeKind !== 'text' || (child as { nodeText?: string }).nodeText !== '';
 }
 
+/** The name a type selector matches a node by. */
+const typeOf = (node: StyleTarget): string => node.typeName ?? node.tag;
+
 /** What the matcher needs of a node. The engine's node satisfies this structurally. */
 export interface StyleTarget {
   readonly tag: string;
+  /** The name a type selector reads, where it is not `tag`: see `EngineNode.typeName`. */
+  readonly typeName?: string;
+  /** Set on a node of a library's drawing: see `EngineNode.namespace`. */
+  readonly namespace?: string;
   readonly parent: StyleTarget | null;
   /**
    * Needed only by the selectors that ask about a node's place among its siblings, which is why
@@ -787,6 +794,21 @@ const INHERITED = new Set([
  * children do already, so neither is handed down.
  */
 const INHERITED_POINTER_EVENTS = new Set(['none', 'auto']);
+
+/**
+ * A shape's paint, which SVG hands down: a path under an `<svg>` with a `fill` has that fill.
+ * Inherited only in a library's drawing (`StyleTarget.namespace`). An icon's shapes are left to
+ * react-native-svg, which hands a group's paint down itself, from what the shape set as its own.
+ */
+const SHAPE_PAINT_INHERITED: ReadonlySet<string> = new Set(['fill', 'stroke', 'strokeWidth']);
+
+/** Whether a prop of a shape in a drawing is a paint it hands down: see `inheritFrom`. */
+export const handsDownPaint = (key: string): boolean =>
+  key === 'propList' || SHAPE_PAINT_INHERITED.has(key);
+
+/** Whether a key is inherited, by a node of a library's drawing or by any other. */
+const inherits = (key: string, drawing: boolean): boolean =>
+  INHERITED.has(key) || (drawing && SHAPE_PAINT_INHERITED.has(key));
 
 /**
  * `border-style: none`, which the compiler writes as a style native does not have. On the web it
@@ -1045,7 +1067,7 @@ function matchesCompound(node: StyleTarget, compound: Compound, sheet: StyleShee
     }
   }
   if (compound.type !== undefined) {
-    if (compound.type !== node.tag) return false;
+    if (compound.type !== typeOf(node)) return false;
     // A generated box is no element to a compound that names none, `*` or a class alone, as a
     // pseudo-element is none in a browser: one character told from any element's name.
   } else if (boxesDrawn && node.tag.charCodeAt(0) === COLON) return false;
@@ -1499,7 +1521,7 @@ function bitsAbove(node: StyleTarget): Bits {
   };
   for (let up = node.parent; up; up = up.parent) {
     if (up.classes) for (const className of up.classes) add(bitOf('.', className));
-    if (up.tag !== undefined) add(bitOf('<', up.tag));
+    if (up.tag !== undefined) add(bitOf('<', typeOf(up)));
     const id = up.props?.['nativeID'];
     if (typeof id === 'string') add(bitOf('#', id));
   }
@@ -2275,7 +2297,7 @@ function countPosition(
   let position = 0;
   let seen = 0;
   for (const sibling of siblings) {
-    if (!isElement(sibling) || (ofType && sibling.tag !== node.tag)) continue;
+    if (!isElement(sibling) || (ofType && typeOf(sibling) !== typeOf(node))) continue;
     seen++;
     if (sibling === node) position = seen;
   }
@@ -2501,7 +2523,7 @@ function reach(node: StyleTarget, index: RuleIndex, found: IndexedEntry[]): void
     if (bucket) found.push(...bucket);
   };
   if (index.universal.length) found.push(...index.universal);
-  take(`type:${node.tag}`);
+  take(`type:${typeOf(node)}`);
   const id = node.props['nativeID'];
   if (typeof id === 'string') take(`id:${id}`);
   if (node.classes) for (const name of node.classes) take(`class:${name}`);
@@ -2742,7 +2764,7 @@ export function hasAbove(sheet: StyleSheet): readonly HasAbove[] {
 
 /** Whether `node` can be the box a `:has()` rule asks: it has the classes and is the element. */
 export function couldAsk(reader: HasAbove, node: StyleTarget): boolean {
-  if (reader.type !== undefined && reader.type !== node.tag) return false;
+  if (reader.type !== undefined && reader.type !== typeOf(node)) return false;
   return reader.classes.every((name) => node.classes?.has(name));
 }
 
@@ -3142,7 +3164,7 @@ function boxAround(rule: StyleRule): string | undefined {
 
 /** Whether a rule among these could be for a node: never no where one is. */
 function writtenFor(of: Subjects, node: StyleTarget): boolean {
-  if (of.any || of.types.has(node.tag)) return true;
+  if (of.any || of.types.has(typeOf(node))) return true;
   for (const name of node.classes ?? []) if (of.classes.has(name)) return true;
   if (!of.inside.size) return false;
   for (let over = node.parent; over; over = over.parent) {
@@ -3233,10 +3255,12 @@ function unstyledStyle(
 function inheritFrom(
   parentInherited: Record<string, unknown>,
   own: Record<string, unknown>,
+  node?: StyleTarget,
 ): Record<string, unknown> {
-  let inherited = parentInherited;
+  const drawing = node?.namespace !== undefined;
+  let inherited = drawing ? ownPaint(node!, parentInherited, own) : parentInherited;
   for (const key of Object.keys(own)) {
-    if (!INHERITED.has(key)) continue;
+    if (!inherits(key, drawing)) continue;
     // `pointer-events: inherit`, which only an inline style on an element no rule matches still
     // holds here: what the parent hands down stands.
     if (key === 'pointerEvents' && own[key] === 'inherit') continue;
@@ -3246,6 +3270,41 @@ function inheritFrom(
     } else {
       inherited[key] = own[key];
     }
+  }
+  return inherited;
+}
+
+/** What a node no rule matches hands down: its inline style's, or a drawing's own paint. */
+function handedOn(
+  node: StyleTarget,
+  parentInherited: Record<string, unknown>,
+  inline: Record<string, unknown> | null,
+  drawing: boolean,
+): Record<string, unknown> {
+  return inline || drawing ? inheritFrom(parentInherited, inline ?? {}, node) : parentInherited;
+}
+
+/**
+ * What a shape of a drawing hands down of the paint it set itself, as an attribute its
+ * `propList` names, over a paint it inherits: a `<g stroke="none">` under a stroked `<svg>`
+ * strokes nothing inside it, as in a browser. A style of its own stands over either.
+ */
+function ownPaint(
+  node: StyleTarget,
+  parentInherited: Record<string, unknown>,
+  own: Record<string, unknown>,
+): Record<string, unknown> {
+  const named = node.props['propList'];
+  if (!Array.isArray(named)) return parentInherited;
+  let inherited = parentInherited;
+  for (const key of named as readonly string[]) {
+    if (!SHAPE_PAINT_INHERITED.has(key) || key in own) continue;
+    const value = node.props[key];
+    // A paint named and not set is `none`, as react-native-svg reads a list naming it.
+    const paint = value ?? (key === 'strokeWidth' ? undefined : 'none');
+    if (paint === undefined || inherited[key] === paint) continue;
+    if (inherited === parentInherited) inherited = { ...parentInherited };
+    inherited[key] = paint;
   }
   return inherited;
 }
@@ -3280,11 +3339,11 @@ function drawsLine(line: unknown): boolean {
 }
 
 /** Whether an inline style sets a property children inherit. Allocates nothing: it runs per set. */
-export function setsInherited(style: unknown): boolean {
+export function setsInherited(style: unknown, drawing = false): boolean {
   if (!style || typeof style !== 'object') return false;
-  if (Array.isArray(style)) return style.some(setsInherited);
+  if (Array.isArray(style)) return style.some((entry) => setsInherited(entry, drawing));
   for (const key in style) {
-    if (INHERITED.has(key) && (style as Record<string, unknown>)[key] != null) return true;
+    if (inherits(key, drawing) && (style as Record<string, unknown>)[key] != null) return true;
   }
   return false;
 }
@@ -3294,11 +3353,11 @@ export function setsInherited(style: unknown): boolean {
  * strongest normal declaration on its element, so what it sets is inherited, and read by
  * `color: inherit` and `currentColor`, as a rule's would be.
  */
-export function inlineInherited(style: unknown): Record<string, unknown> | null {
+export function inlineInherited(style: unknown, drawing = false): Record<string, unknown> | null {
   let out: Record<string, unknown> | null = null;
   // Flattened first, as native applies it, so a later entry's null clears an earlier value.
   for (const [key, value] of Object.entries(flattenInline(style, {}))) {
-    if (INHERITED.has(key) && value !== undefined && value !== null) (out ??= {})[key] = value;
+    if (inherits(key, drawing) && value !== undefined && value !== null) (out ??= {})[key] = value;
   }
   return out;
 }
@@ -3895,7 +3954,8 @@ export class StyleResolver {
     const tokens = parent ? parent.tokens : this.tokensOnRoot;
     const parentContext = parent ? parent.context : ROOT_CONTEXT;
     // What inline style sets is inherited too, with no rule to read it against.
-    const inline = node.inlineInherits ? inlineInherited(node.props['style']) : null;
+    const drawing = node.namespace !== undefined;
+    const inline = node.inlineInherits ? inlineInherited(node.props['style'], drawing) : null;
     const nothing =
       !inline &&
       parentInherited === EMPTY &&
@@ -3912,7 +3972,7 @@ export class StyleResolver {
       scope: scope ?? context,
       parentScope,
       style: unstyledStyle(parentInherited, inline),
-      inherited: inline ? inheritFrom(parentInherited, inline) : parentInherited,
+      inherited: handedOn(node, parentInherited, inline, drawing),
       tokens,
     };
     node.styleCache = passthrough;
@@ -4089,9 +4149,17 @@ export class StyleResolver {
     parentInherited: Record<string, unknown>,
   ): Styled {
     // Shared between nodes that match alike, unless the node sets something of its own.
-    const inline = node.inlineInherits ? inlineInherited(node.props['style']) : null;
-    // Nor one that takes a value from its parent's own style, which two parents differ in.
-    if (node.customProperties || inline || node.boundStyle || matched.some(takesParents)) {
+    const drawing = node.namespace !== undefined;
+    const inline = node.inlineInherits ? inlineInherited(node.props['style'], drawing) : null;
+    // Nor one that takes a value from its parent's own style, which two parents differ in, nor
+    // a node of a drawing, which hands down paint another node with its rules does not.
+    if (
+      node.customProperties ||
+      inline ||
+      node.boundStyle ||
+      drawing ||
+      matched.some(takesParents)
+    ) {
       return this.style(node, matched, parentTokens, parentInherited, inline);
     }
     if (this.sharedGeneration !== this.generation) {
@@ -4163,7 +4231,7 @@ export class StyleResolver {
     if (own['pointerEvents'] === 'inherit') delete own['pointerEvents'];
     const style = { ...parentInherited, ...own };
     settleLineHeight(style);
-    const inherited = decorate(style, inheritFrom(parentInherited, own), own);
+    const inherited = decorate(style, inheritFrom(parentInherited, own, node), own);
     const rtl = (style['direction'] ?? this.conditions.direction) === 'rtl';
     const important = importantNames(result, () => TWIN[rtl ? 'rtl' : 'ltr']);
     return important ? { style, inherited, tokens, important } : { style, inherited, tokens };

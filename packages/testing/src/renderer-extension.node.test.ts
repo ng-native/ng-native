@@ -366,3 +366,41 @@ test('an extension is told of a node taken out once, not again for one already o
     undo();
   }
 });
+
+test('an extension names an element written in a namespace, which a type selector still reads', async () => {
+  // Angular creates what is written inside an `<svg>` in the `svg` namespace: its `text` is the
+  // drawing's, not the app's.
+  const asked: string[] = [];
+  const undo = extendRenderer({
+    named(name, namespace) {
+      asked.push(`${namespace}:${name}`);
+      return namespace === 'svg' && name === 'text' ? 'svg:text' : undefined;
+    },
+  });
+  try {
+    const { componentRef } = await render(Clicks);
+    const renderer = rendererOf(componentRef.injector);
+    const drawn = renderer.createElement('text', 'svg') as EngineNode;
+    assert.equal(drawn.tag, 'svg:text');
+    assert.equal(drawn.typeName, 'text');
+    const kept = renderer.createElement('g', 'svg') as EngineNode;
+    assert.equal(kept.tag, 'g');
+    assert.equal(kept.typeName, undefined, 'a name kept as written has no other');
+    // Both are a library's drawing to the engine; what is created by name alone is not.
+    assert.deepEqual([drawn.namespace, kept.namespace], ['svg', 'svg']);
+    const alone = renderer.createElement('text') as EngineNode;
+    assert.deepEqual([alone.tag, alone.namespace], ['text', undefined]);
+    assert.deepEqual(asked, ['svg:text', 'svg:g'], 'asked only of a name in a namespace');
+  } finally {
+    undo();
+  }
+  // Nor is anything, with no extension that names elements: an icon's, or with another kind.
+  const other = extendRenderer({ created: () => {} });
+  try {
+    const { componentRef } = await render(Clicks);
+    const drawn = rendererOf(componentRef.injector).createElement('text', 'svg') as EngineNode;
+    assert.deepEqual([drawn.tag, drawn.namespace], ['text', undefined]);
+  } finally {
+    other();
+  }
+});

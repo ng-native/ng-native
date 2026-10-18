@@ -17,6 +17,7 @@ import {
   fills,
   inlineInherited,
   setsInherited,
+  handsDownPaint,
   StyleResolver,
   underOwnShorthands,
   usesActive,
@@ -491,6 +492,18 @@ export interface EngineNode extends HostNode {
   readonly tag: string;
   /** `tag` again, for Angular 22.0, which reads it on a component's host element. */
   readonly tagName: string;
+  /**
+   * The element's name as a stylesheet's type selector reads it, where it is not `tag`: a
+   * drawing's `text` is kept as `svg:text` and is still `text` to `.chart text`.
+   */
+  typeName?: string;
+  /**
+   * The namespace a renderer created the element in where an extension names elements in one,
+   * as Angular creates what is written inside an `<svg>`: a library's drawing, whose shapes are
+   * painted and given their font as a browser does. An icon's shapes are created by name alone
+   * and have none, and commit as they always have.
+   */
+  namespace?: string;
   props: Record<string, unknown>;
   nodeText: string;
   childList: EngineNode[];
@@ -4241,12 +4254,7 @@ export function registerViewName(
   registrations.set(elementName, entry);
   nameView(elementName, registration);
   for (const name of typeof viewName === 'string' ? [viewName] : [viewName.ios, viewName.android]) {
-    if (defaultProps) DEFAULT_PROPS[name] = defaultProps;
-    if (options?.textContent) TEXT_CONTENT_PROPS[name] = options.textContent;
-    if (options?.looseText) LOOSE_TEXT[name] = options.looseText;
-    else delete LOOSE_TEXT[name];
-    if (options?.fontNames) FONT_NAMES[name] = options.fontNames;
-    else delete FONT_NAMES[name];
+    describeView(name, defaultProps, options);
   }
   // Takes this registration away, for a package that registers a name for as long as an app that
   // asked for it is up. The newest one still there names the element, and what it was before any
@@ -4266,6 +4274,22 @@ export function registerViewName(
     else YIELDING.delete(elementName);
     if (original.text) TEXT_ELEMENTS.add(elementName);
   };
+}
+
+/** Note what a registration says of a native view: see `ViewNameOptions`. */
+function describeView(
+  name: string,
+  defaultProps: Record<string, unknown> | undefined,
+  options: ViewNameOptions | undefined,
+): void {
+  if (defaultProps) DEFAULT_PROPS[name] = defaultProps;
+  if (options?.textContent) TEXT_CONTENT_PROPS[name] = options.textContent;
+  if (options?.spacedText) SPACED_TEXT.add(name);
+  else SPACED_TEXT.delete(name);
+  if (options?.looseText) LOOSE_TEXT[name] = options.looseText;
+  else delete LOOSE_TEXT[name];
+  if (options?.fontNames) FONT_NAMES[name] = options.fontNames;
+  else delete FONT_NAMES[name];
 }
 
 /** What else a registered view needs the engine to know about it. */
@@ -4290,6 +4314,12 @@ export interface ViewNameOptions {
    */
   readonly looseText?: string;
   /**
+   * Whether the text content it takes as a prop keeps its spaces, as a span of an SVG text does:
+   * a run of them is one space, dropped only before the first words of what it is in and after
+   * the last, since the next span's words follow on the same line.
+   */
+  readonly spacedText?: boolean;
+  /**
    * Where a view's own props name a font that must reach native by another name, as SwiftUI's
    * `font` modifier must name a face by its file's PostScript name: rewrites `props` in place,
    * given that name for each name the app's `@font-face` faces are registered under. Called on
@@ -4313,6 +4343,12 @@ function renameFonts(
   FONT_NAMES[viewName]?.(props, postScriptName);
 }
 
+/** The views whose text content keeps its spaces. See `ViewNameOptions`. */
+const SPACED_TEXT = new Set<string>();
+/** Whether a view may hold spans that keep their spaces: one its loose words are drawn by. */
+const SPACED_PARENT = (viewName: string): boolean =>
+  SPACED_TEXT.has(viewName) || LOOSE_TEXT[viewName] !== undefined;
+
 /** The element loose text in a view is drawn by, for the views that say. See `ViewNameOptions`. */
 const LOOSE_TEXT: Record<string, string> = {};
 
@@ -4331,8 +4367,28 @@ function takesTextAsProp(node: EngineNode): boolean {
 function withTextContent(node: EngineNode, viewName: string, props: Record<string, unknown>): void {
   const prop = TEXT_CONTENT_PROPS[viewName];
   if (!prop || node.props[prop] !== undefined) return;
-  const text = textContent(node);
+  const text = SPACED_TEXT.has(viewName) ? spacedContent(node) : textContent(node);
   if (text) props[prop] = text;
+}
+
+/**
+ * The text of a view that keeps its spaces: each run of them one space, and none before the
+ * first words of what it is in or after the last.
+ */
+function spacedContent(node: EngineNode): string {
+  const own = node.childList
+    .map((child) => (child.nodeKind === 'text' ? child.nodeText : ''))
+    .join('')
+    .replace(/[ \t\n\r\f]+/g, ' ');
+  // The box the engine draws loose words by is in their place, which is the words' own.
+  const self = node.anonymous ? (node.childList[0] ?? node) : node;
+  const siblings = self.parent?.childList ?? [];
+  const at = siblings.indexOf(self);
+  const worded = (each: EngineNode) =>
+    each.nodeKind === 'element' || (each.nodeKind === 'text' && !!trimEnds(each.nodeText));
+  const first = !siblings.slice(0, at).some(worded);
+  const last = !siblings.slice(at + 1).some(worded);
+  return (last ? trimEnd : (text: string) => text)(first ? trimStart(own) : own);
 }
 
 /**
@@ -5420,6 +5476,8 @@ const ENGINE_NODE_FIELDS = {
   nodeKind: true,
   tag: true,
   tagName: true,
+  typeName: true,
+  namespace: true,
   props: true,
   nodeText: true,
   childList: true,
@@ -5702,6 +5760,119 @@ const NESTED_COLOR_LIST_PROPS = new Set(['boxShadow']);
 
 /** The props of an SVG shape that take a brush, not a colour. */
 const BRUSH_PROPS = new Set(['fill', 'stroke']);
+/** The brush that paints a shape in the colour of the view it is in: `currentColor`. */
+const CURRENT_BRUSH = { type: 2 };
+
+/** The paint a stylesheet can give a shape, which native reads only where `propList` names it. */
+const SHAPE_PAINT = ['fill', 'stroke', 'strokeWidth', 'strokeDasharray', 'strokeDashoffset'];
+
+/**
+ * Name in a shape's `propList` each paint its style gave it. react-native-svg takes a paint from
+ * the shape only where the list says the shape set it, and from the group above otherwise, so
+ * one a stylesheet set would be passed over. The list is kept from one commit to the next while
+ * what it names is the same, as a prop that is a new array is a change to send.
+ */
+function namePaint(node: EngineNode, props: Record<string, unknown>): void {
+  const written = (node.props['propList'] as readonly string[] | undefined) ?? [];
+  const painted = SHAPE_PAINT.filter((key) => key in props && !written.includes(key));
+  const before = node.committed?.props['propList'] as readonly string[] | undefined;
+  if (!painted.length && !written.length) {
+    if (before?.length) props['propList'] = before === NAMES_NO_PAINT ? before : NAMES_NO_PAINT;
+    return;
+  }
+  if (!painted.length) return;
+  const names = [...written, ...painted];
+  const same = before?.length === names.length && names.every((name, i) => before[i] === name);
+  props['propList'] = same ? before : names;
+}
+
+/**
+ * The list of a shape that once named a paint and names none now. react-native-svg keeps the
+ * list it had where it is sent none, on Android, or an empty one, on iOS: the shape would keep
+ * the paint as its own, and draw in a colour no sheet gives it any more, or in none. This names
+ * `vector-effect` instead, which SVG does not inherit, so naming it as the shape's own changes
+ * nothing it draws.
+ */
+const NAMES_NO_PAINT: readonly string[] = ['vectorEffect'];
+
+/**
+ * What CSS draws and places as a box, which a shape in a drawing has none of: a browser draws no
+ * background, border or shadow on one and gives it no padding or margin. Native would: a shape is
+ * a view, whose background is drawn over the drawing it is in, and hides what is drawn after it.
+ */
+const BOX = /^(experimental_)?background|^(border|padding|margin|outline)|^boxShadow$/;
+
+/** Take the box off a shape's style: see `BOX`. Not off the drawing, nor its HTML in it. */
+function noBoxOnShape(viewName: string, props: Record<string, unknown>): void {
+  if (viewName.startsWith('RNSVGSvgView') || viewName === 'RNSVGForeignObject') return;
+  for (const key of Object.keys(props)) if (BOX.test(key)) delete props[key];
+}
+
+/** The views of a drawing that read a font: a group passes its own on to what is in it. */
+const FONTED: ReadonlySet<string> = new Set([
+  'RNSVGGroup',
+  'RNSVGText',
+  'RNSVGTSpan',
+  'RNSVGTextPath',
+]);
+
+/** The parts of a font a view of a drawing is also sent alone, from its style. */
+const FONT_PARTS = ['fontSize', 'fontWeight'] as const;
+
+/** The font last sent to each view, kept while what it was made of is the same: see `fontInOne`. */
+const oneFonts = new WeakMap<EngineNode, { from: readonly unknown[]; font: object }>();
+
+/**
+ * Send a view of a drawing its size and weight inside its `font`, not beside it. On Android,
+ * react-native-svg sets the whole font from a `fontSize` or a `fontWeight` sent alone, in
+ * whichever order the props come, so one sent beside a `font` with a weight in it could drop the
+ * weight. What the font itself says is kept over the style's: an attribute on the shape over a
+ * size inherited from the text it is in. The same object while its parts are, as a new one is a
+ * change to send.
+ */
+function fontInOne(node: EngineNode, merged: Record<string, unknown>): void {
+  const own = merged['font'] as Record<string, unknown> | undefined;
+  const parts = FONT_PARTS.map((key) => merged[key]);
+  if (parts.every((part) => part == null)) return;
+  for (const key of FONT_PARTS) delete merged[key];
+  const from = [own, ...parts];
+  const kept = oneFonts.get(node);
+  if (kept && kept.from.every((part, i) => part === from[i])) {
+    merged['font'] = kept.font;
+    return;
+  }
+  const font: Record<string, unknown> = {};
+  FONT_PARTS.forEach((key, i) => {
+    if (parts[i] != null) font[key] = parts[i];
+  });
+  Object.assign(font, own);
+  oneFonts.set(node, { from, font });
+  merged['font'] = font;
+}
+
+/**
+ * A paint of `currentColor`, as a sheet read as a browser reads it keeps one: the brush of the
+ * colour of the view it is in, which native follows as that changes.
+ */
+function currentPaint(merged: Record<string, unknown>): void {
+  for (const key of BRUSH_PROPS) {
+    const paint = merged[key];
+    if (typeof paint === 'string' && paint.toLowerCase() === 'currentcolor') {
+      merged[key] = CURRENT_BRUSH;
+    }
+  }
+}
+
+/**
+ * What a view of a library's drawing is drawn with of its style: see the helpers above. Only a
+ * drawing's (`EngineNode.namespace`): an icon's shapes commit their style as any view does.
+ */
+function drawnAsShape(node: EngineNode, viewName: string, merged: Record<string, unknown>): void {
+  noBoxOnShape(viewName, merged);
+  currentPaint(merged);
+  namePaint(node, merged);
+  if (platformOS === 'android' && FONTED.has(viewName)) fontInOne(node, merged);
+}
 
 /** Styles arrive as objects, arrays, nested arrays and nulls. Reduce to one object. */
 /**
@@ -7007,6 +7178,18 @@ export class Engine implements HostEngine {
     if (child.nodeKind === 'anchor') return;
     if (takesTextAsProp(parent)) this.markProps(parent);
     else if (isTextElement(parent)) this.markWords(parent, child.nodeKind === 'element');
+    // A span that keeps its spaces drops them only at the ends of what it is in: the ones
+    // beside a span or words that came or went may be at an end now, or no longer. Only under
+    // a view whose loose words a span draws, an SVG text and what is in one, and only once a
+    // view keeps its spaces at all.
+    if (!SPACED_TEXT.size || parent.nodeKind !== 'element') return;
+    if (!SPACED_PARENT(viewNameOf(parent))) return;
+    const spaced = (node: EngineNode) =>
+      node.nodeKind === 'element' && SPACED_TEXT.has(viewNameOf(node));
+    for (const each of parent.childList) {
+      const drawn = each.nodeKind === 'text' ? each.box : each;
+      if (drawn && spaced(drawn)) this.markProps(drawn);
+    }
   }
 
   /**
@@ -7256,7 +7439,10 @@ export class Engine implements HostEngine {
     const heirs = node.styleCache?.heirs === true;
     // And only a prop some selector names: `aria-valuenow` on every tick of a progress bar, a
     // field's text on every key, match nothing they did not.
-    const read = key === 'style' ? this.inlineReachesStyle(node) : this.styles.reads(key);
+    const read =
+      key === 'style'
+        ? this.inlineReachesStyle(node)
+        : this.styles.reads(key) || (node.namespace !== undefined && handsDownPaint(key));
     if (this.generated !== null) this.generateFor(node, key);
     // And restyles the elements after it only where a rule asks the prop of an element before
     // another, `[data-on] ~ .x`: a point of a chart set as a finger moves leaves those after it.
@@ -7338,7 +7524,7 @@ export class Engine implements HostEngine {
    * or until now set, a property its children inherit.
    */
   private inlineReachesStyle(node: EngineNode): boolean {
-    const inherits = setsInherited(node.props['style']);
+    const inherits = setsInherited(node.props['style'], node.namespace !== undefined);
     const inherited = node.inlineInherits === true;
     node.inlineInherits = inherits;
     return this.noteInlineDirection(node) || inherits || inherited;
@@ -7813,7 +7999,7 @@ export class Engine implements HostEngine {
   private placeReadFromUnder(node: EngineNode): boolean {
     for (const { compound, above, child } of this.placeElsewhere) {
       // By its element name as well, `text:nth-child(odd) .label`, where the compound has one.
-      if (compound.type !== undefined && compound.type !== node.tag) continue;
+      if (compound.type !== undefined && compound.type !== (node.typeName ?? node.tag)) continue;
       if (!hasClasses(node, compound.classes)) continue;
       // And by what the rule has it in, which a compound with no class is told from.
       if (!above?.length) return true;
@@ -10484,6 +10670,10 @@ export class Engine implements HostEngine {
     if (this.asked & CSS_LAYOUT) seenByCss(merged);
     this.heldFor(node, merged);
     this.movePaint(node, merged);
+    // Asked of the namespace first: it is asked of every node merged.
+    if (node.namespace !== undefined && viewName.startsWith('RNSVG')) {
+      drawnAsShape(node, viewName, merged);
+    }
     if (node.raised !== undefined) merged['zIndex'] ??= node.raised;
     keptForNative(node, merged);
     this.laidOut(node, merged);
@@ -13858,7 +14048,7 @@ export class Engine implements HostEngine {
    * bubble for the rest, as in the DOM.
    */
   dispatchEvent(instanceHandle: unknown, topLevelType: string, nativeEvent: unknown): void {
-    const target = instanceHandle as EngineNode | null;
+    const target = this.touchTarget(instanceHandle as EngineNode | null, topLevelType, nativeEvent);
     this.trace(target, topLevelType);
     // What has the focus does not take it again: native answering a focus it was told of, where
     // whoever asked has already said so.
@@ -13883,6 +14073,40 @@ export class Engine implements HostEngine {
       this.reportEventError(error, topLevelType);
     }
     this.propagate(target, topLevelType, event);
+  }
+
+  /**
+   * Where a touch is taken to be, by a package that finds it better than native's hit test: a
+   * drawing's shape a browser finds by its box, where native finds none. Asked as a touch
+   * starts, and kept for each finger until it lifts, as a touch stays on what it started on.
+   */
+  private retarget: ((target: EngineNode, nativeEvent: unknown) => EngineNode) | null = null;
+  private readonly fingersOn = new Map<unknown, EngineNode>();
+
+  /** Say where a touch that starts on a node is taken to be, or nothing to leave it to native. */
+  setTouchTarget(
+    retarget: ((target: EngineNode, nativeEvent: unknown) => EngineNode) | null,
+  ): void {
+    this.retarget = retarget;
+    this.fingersOn.clear();
+  }
+
+  private touchTarget(
+    target: EngineNode | null,
+    type: string,
+    nativeEvent: unknown,
+  ): EngineNode | null {
+    if (!this.retarget || !target || !type.startsWith('topTouch')) return target;
+    const finger = (nativeEvent as { identifier?: unknown } | null)?.identifier;
+    if (type === TOUCH_START) {
+      const taken = this.retarget(target, nativeEvent);
+      if (taken === target) this.fingersOn.delete(finger);
+      else this.fingersOn.set(finger, taken);
+      return taken;
+    }
+    const taken = this.fingersOn.get(finger) ?? target;
+    if (type === 'topTouchEnd' || type === 'topTouchCancel') this.fingersOn.delete(finger);
+    return taken;
   }
 
   /** The screen whose swipe back is held off while a finger is on what keeps a sideways drag. */

@@ -216,8 +216,15 @@ class NativeRenderer implements Renderer2 {
 
   destroy(): void {}
 
-  createElement(name: string): EngineNode {
-    const node = this.engine.createElement(name, this.sheet);
+  createElement(name: string, namespace?: string | null): EngineNode {
+    const named = namespace && namers ? nameIn(name, namespace) : name;
+    const node = this.engine.createElement(named, this.sheet);
+    if (namespace && namers) {
+      // Drawn as a library's drawing: see `EngineNode.namespace`.
+      node.namespace = namespace;
+      // Still the element it was written as to a stylesheet: a drawing's `text` is kept as another.
+      if (named !== name) node.typeName = name;
+    }
     if (extensions.length) {
       for (const extension of extensions) extension.created?.(node, this.engine);
     }
@@ -470,6 +477,14 @@ class NativeRenderer implements Renderer2 {
 /** What a package outside core changes about how a template is rendered. */
 export interface RendererExtension {
   /**
+   * Answer the element a name stands for in a namespace, where it is another than the name
+   * alone is: Angular creates an element written inside an `<svg>` in the `svg` namespace, and
+   * a `<text>` there is the drawing's text, not the app's. Every element created in a namespace
+   * while an extension has this member is a library's drawing to the engine, painted and given
+   * its font as a browser does: see `EngineNode.namespace`.
+   */
+  named?(name: string, namespace: string): string | undefined;
+  /**
    * Take a listener over: answer what removes it, or nothing to leave it to the renderer. The
    * target is a node, or the name Angular gives a global one: `'window'`, `'document'`, `'body'`.
    */
@@ -515,6 +530,18 @@ export interface RendererExtension {
  */
 let extensions: readonly RendererExtension[] = [];
 
+/** How many of the extensions name elements in a namespace: see `RendererExtension.named`. */
+let namers = 0;
+
+/** The element a name in a namespace stands for: the first extension's answer, or the name. */
+function nameIn(name: string, namespace: string): string {
+  for (const extension of extensions) {
+    const named = extension.named?.(name, namespace);
+    if (named) return named;
+  }
+  return name;
+}
+
 /**
  * Add to what the renderer does, for every app in the process. Returns what takes it away again.
  *
@@ -525,6 +552,7 @@ let extensions: readonly RendererExtension[] = [];
 export function extendRenderer(extension: RendererExtension): () => void {
   // An entry of this call's own: the same extension added twice is removed once by each.
   const entry: RendererExtension = {
+    named: extension.named && ((...args) => extension.named?.(...args)),
     listen: (...args) => extension.listen?.(...args),
     created: (...args) => extension.created?.(...args),
     inserted: (...args) => extension.inserted?.(...args),
@@ -533,7 +561,10 @@ export function extendRenderer(extension: RendererExtension): () => void {
     style: (...args) => extension.style?.(...args),
   };
   extensions = [...extensions, entry];
+  if (entry.named) namers++;
   return () => {
+    if (!extensions.includes(entry)) return;
+    if (entry.named) namers--;
     extensions = extensions.filter((each) => each !== entry);
   };
 }

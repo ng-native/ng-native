@@ -28,6 +28,7 @@ const {
   withRefusals,
   mixedToken,
   OF_A_BOX,
+  color,
 } = require('./values.cjs');
 const {
   translate,
@@ -2771,6 +2772,51 @@ function undrawn(name, context) {
   );
 }
 
+/** A shape's lengths, which react-native-svg takes as numbers under these names. */
+const SHAPE_LENGTHS = {
+  'stroke-width': 'strokeWidth',
+  'stroke-dashoffset': 'strokeDashoffset',
+};
+const PAINTS = new Set(['fill', 'stroke']);
+
+/**
+ * A declaration that paints an SVG shape, as the props a native shape is drawn with: for a sheet
+ * compiled with `generated`, read as a browser reads a library's, whose `<svg>` is drawn
+ * natively. Answers whether the declaration was one. A paint is kept as written, `none` and
+ * `currentColor` included, for the engine to make the brush of.
+ */
+function shapePaint(declaration, out, deferred, context) {
+  if (declaration.property === 'unparsed') {
+    const name = declaration.value?.propertyId?.property;
+    if (SHAPE_LENGTHS[name]) {
+      // As a length is read, with its fallbacks, and written to the shape's own prop.
+      const read = deferVar({ ...declaration.value, propertyId: { property: 'width' } }, context);
+      deferred.push({ ...read, props: [SHAPE_LENGTHS[name]] });
+      return true;
+    }
+    if (!PAINTS.has(name)) return false;
+    // As a colour is read, with its fallbacks, and written to the paint it is for.
+    const read = deferVar({ ...declaration.value, propertyId: { property: 'color' } }, context);
+    deferred.push({ ...read, props: [name] });
+    return true;
+  }
+  const { property: name, value } = declaration;
+  if (PAINTS.has(name)) {
+    out[name] = value.type === 'none' ? 'none' : paintOf(value.value, context);
+    return true;
+  }
+  if (SHAPE_LENGTHS[name]) {
+    out[SHAPE_LENGTHS[name]] = round(value.value.value);
+    return true;
+  }
+  if (name !== 'stroke-dasharray' || value.type !== 'values') return false;
+  out.strokeDasharray = value.value.map((dash) => round(dash.value.value));
+  return true;
+}
+
+const paintOf = (colour, context) =>
+  colour.type === 'currentcolor' ? 'currentColor' : color(colour, context);
+
 /**
  * @param source CSS text.
  * @param context Name used in messages, normally the file and component.
@@ -2787,7 +2833,8 @@ function undrawn(name, context) {
  *   `generated` reads the sheet as the browser it was written for reads it, for components made
  *   for one: `::before` and `::after` as boxes of their own with the `content` they are given,
  *   `visibility`, a clip to nothing, `overflow` along one axis and a control's state, which an
- *   app's own sheet is told to write another way.
+ *   app's own sheet is told to write another way. An SVG shape's `fill`, `stroke` and stroke lengths
+ *   are kept for a drawing of it, where another sheet is refused them.
  */
 function compileCss(source, context = 'styles', options = {}) {
   const rules = [];
@@ -2872,9 +2919,11 @@ function compileCss(source, context = 'styles', options = {}) {
   /** A generated box's `content`, or `none` and the report of why where it is one no box draws. */
   /**
    * A declaration only a sheet read as a browser reads it has a meaning for: a generated box's
-   * `content`, reported where it is one no box draws, or what `asABrowserReads` takes.
+   * `content`, reported where it is one no box draws, an SVG shape's paint, or what
+   * `asABrowserReads` takes.
    */
-  function readBrowsers(declaration, out, context) {
+  function readBrowsers(declaration, out, deferred, context) {
+    if (shapePaint(declaration, out, deferred, context)) return true;
     if (!isContent(declaration)) return asABrowserReads(declaration, out);
     declareContent(declaration, out, context);
     return true;
@@ -3174,7 +3223,7 @@ function compileCss(source, context = 'styles', options = {}) {
       for (const stated of list ?? []) {
         const declaration = ownToken(stated, raw);
         if (declaration === null) continue;
-        if (options.generated && readBrowsers(declaration, out, context)) continue;
+        if (options.generated && readBrowsers(declaration, out, deferred, context)) continue;
         if (easedByToken(declaration, out, deferred, context)) continue;
         if (timedByToken(declaration, out, context)) continue;
         const before = deferred.length;
