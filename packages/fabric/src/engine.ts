@@ -2289,11 +2289,32 @@ function stickyLayout(node: EngineNode, props: Record<string, unknown>): void {
   moveBeforeOwn(props, { [state.axis === 'x' ? 'translateX' : 'translateY']: state.shift });
 }
 
-/** A move of the engine's written before a box's own transform. */
+/** The moves the engine writes before a box's own transform: see `moveBeforeOwn`. */
+const ENGINE_MOVES = new WeakSet<object>();
+
+/**
+ * A move of the engine's written before a box's own transform, once: one already there, as on
+ * a transform read back from what was committed, is taken off first.
+ */
 function moveBeforeOwn(props: Record<string, unknown>, move: Record<string, number>): void {
-  const own = props['transform'];
+  ENGINE_MOVES.add(move);
+  const own = ownTransform(props['transform']);
   props['transform'] = Array.isArray(own) ? [move, ...own] : [move];
 }
+
+/**
+ * A transform as the box's styles wrote it, without the moves the engine put before it: what a
+ * transition eases from, where it reads what was committed. Nothing where that was all it had.
+ */
+function ownTransform(value: unknown): unknown {
+  if (!Array.isArray(value) || !ENGINE_MOVES.has(value[0] as object)) return value;
+  const own = value.filter((entry) => !ENGINE_MOVES.has(entry as object));
+  return own.length ? own : undefined;
+}
+
+/** Whether two transform lists hold the same operations, one for one. */
+const sameEntries = (a: unknown, b: readonly unknown[]): boolean =>
+  a === b || (Array.isArray(a) && a.length === b.length && a.every((entry, i) => entry === b[i]));
 
 /**
  * Take off what is read here and is no style of a native view: `order`, by the container in
@@ -11026,8 +11047,11 @@ export class Engine implements HostEngine {
     // A view that paints its background on a child does not commit it as its own.
     if (!painted || node.paintsOn) return undefined;
     if (node.bornIn !== undefined && node.bornIn >= this.unseen) return undefined;
+    // What the styles wrote: a move the engine made before it is no part of what was eased.
+    const own = ownTransform(painted['transform']);
+    const read = (key: string) => (key === 'transform' ? own : painted[key]);
     const composed = node.composedTransform;
-    if (!composed || painted['transform'] !== composed.value) return (key) => painted[key];
+    if (!composed || !sameEntries(own, composed.value)) return read;
     return (key) => {
       if (key === 'transform') return composed.parts[3];
       const part = (INDIVIDUAL_TRANSFORMS as readonly string[]).indexOf(key);

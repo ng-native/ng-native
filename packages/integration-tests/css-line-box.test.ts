@@ -607,6 +607,29 @@ describe('a relatively positioned box in a line', () => {
 
   // A transition that arrives with no change eases nothing: what was committed, with the move
   // in it, is not where the box was before. Material turns a label's transitions on once drawn.
+
+  // A transition that arrives with no change eases nothing: what was committed, with the move
+  // in it, is not where the box was before. Material turns a label's transitions on once drawn.
+  it('keeps its move once as a transition of its transform comes in', () => {
+    const s = scene(
+      `${LINE} .i { top: 28px; transform: translateY(-50%) } .ease { transition: transform 150ms }`,
+      ['p', ['i']],
+    );
+    assert.deepEqual(props(s, 'i').transform, [{ translateY: 28 }, { translateY: '-50%' }]);
+    s.engine.addClass(s.nodes.get('i')!, 'ease');
+    assert.deepEqual(props(s, 'i').transform, [{ translateY: 28 }, { translateY: '-50%' }]);
+  });
+
+  it('eases its translate from where it was, as a transition comes in with a change of it', () => {
+    const s = scene(
+      `${LINE} .i { top: 28px; translate: 0 -50% } .ease { transition: translate 150ms; translate: 0 0 }`,
+      ['p', ['i']],
+    );
+    const resting = props(s, 'i').transform;
+    s.engine.addClass(s.nodes.get('i')!, 'ease');
+    // Where it was, with the move made once, on the first frame of its way to where it goes.
+    assert.deepEqual(props(s, 'i').transform, resting);
+  });
 });
 
 describe('a run of inline-level boxes among blocks', () => {
