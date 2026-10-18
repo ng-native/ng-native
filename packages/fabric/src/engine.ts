@@ -14048,7 +14048,11 @@ export class Engine implements HostEngine {
    * bubble for the rest, as in the DOM.
    */
   dispatchEvent(instanceHandle: unknown, topLevelType: string, nativeEvent: unknown): void {
-    const target = this.touchTarget(instanceHandle as EngineNode | null, topLevelType, nativeEvent);
+    const target = this.guardedTarget(
+      instanceHandle as EngineNode | null,
+      topLevelType,
+      nativeEvent,
+    );
     this.trace(target, topLevelType);
     // What has the focus does not take it again: native answering a focus it was told of, where
     // whoever asked has already said so.
@@ -14082,6 +14086,23 @@ export class Engine implements HostEngine {
    */
   private retarget: ((target: EngineNode, nativeEvent: unknown) => EngineNode) | null = null;
   private readonly fingersOn = new Map<unknown, EngineNode>();
+
+  /**
+   * The target a touch is dispatched to, where a package's retarget runs: nothing it throws may
+   * reach native, so a throw is reported and the touch goes to native's own target.
+   */
+  private guardedTarget(
+    hit: EngineNode | null,
+    topLevelType: string,
+    nativeEvent: unknown,
+  ): EngineNode | null {
+    try {
+      return this.touchTarget(hit, topLevelType, nativeEvent);
+    } catch (error) {
+      this.reportEventError(error, topLevelType);
+      return hit;
+    }
+  }
 
   /** Say where a touch that starts on a node is taken to be, or nothing to leave it to native. */
   setTouchTarget(

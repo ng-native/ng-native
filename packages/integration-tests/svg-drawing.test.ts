@@ -513,3 +513,61 @@ describe('the name a type selector reads', () => {
     assert.equal(fabric.committed[1]!.props['opacity'], undefined);
   });
 });
+
+describe("a library sheet's shape paint, refused", () => {
+  it('costs only its own declaration, as any refused declaration does', () => {
+    const dropped: string[] = [];
+    const { rules } = compileCss('.icon { width: 24px; fill: CanvasText }', 'library.css', {
+      generated: true,
+      onUnsupported: (message) => dropped.push(message),
+    });
+    assert.equal(rules.length, 1, 'the rule is kept');
+    const declarations = rules[0]!['declarations'] as Record<string, unknown>;
+    assert.equal(declarations['width'], 24);
+    assert.equal(declarations['fill'], undefined);
+    assert.equal(dropped.length, 1);
+    assert.match(dropped[0]!, /fill/);
+  });
+
+  it('is replaced by a later one, as any declaration is', () => {
+    const { rules } = generated('.icon { fill: var(--brand); fill: red }');
+    const rule = rules[0]!;
+    const declarations = rule['declarations'] as Record<string, unknown>;
+    assert.ok(declarations['fill'] !== undefined, 'the later paint is kept');
+    const deferred = (rule['deferred'] ?? []) as { props: string[] }[];
+    assert.equal(
+      deferred.some((each) => each.props.includes('fill')),
+      false,
+      'the earlier token paint is not settled over it',
+    );
+  });
+});
+
+describe('a touch a package finds a target for', () => {
+  it("goes to native's own target where the package throws, and is reported", () => {
+    const { engine, drawing, heard } = (() => {
+      const fabric = createFakeFabric();
+      const engine = new Engine(fabric, 1);
+      const drawing = engine.createElement('view');
+      engine.appendChild(engine.root, drawing);
+      const heard: string[] = [];
+      engine.setEventListener(drawing, 'topTouchStart', () => heard.push('drawing'));
+      engine.commit();
+      return { engine, drawing, heard };
+    })();
+    const logged: unknown[] = [];
+    const error = console.error;
+    console.error = (...args: unknown[]) => void logged.push(args);
+    try {
+      engine.setTouchTarget(() => {
+        throw new Error('no layout yet');
+      });
+      assert.doesNotThrow(() => engine.dispatchEvent(drawing, 'topTouchStart', { identifier: 1 }));
+      assert.deepEqual(heard, ['drawing']);
+      assert.equal(logged.length, 1);
+    } finally {
+      console.error = error;
+      engine.setTouchTarget(null);
+    }
+  });
+});

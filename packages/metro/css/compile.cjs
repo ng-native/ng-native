@@ -2916,25 +2916,50 @@ function compileCss(source, context = 'styles', options = {}) {
     }
   }
 
-  /** A generated box's `content`, or `none` and the report of why where it is one no box draws. */
   /**
    * A declaration only a sheet read as a browser reads it has a meaning for: a generated box's
    * `content`, reported where it is one no box draws, an SVG shape's paint, or what
-   * `asABrowserReads` takes.
+   * `asABrowserReads` takes. Answers whether it was one.
    */
-  function readBrowsers(declaration, out, deferred, context) {
+  function readAsABrowser(declaration, out, deferred, context) {
     if (shapePaint(declaration, out, deferred, context)) return true;
     if (!isContent(declaration)) return asABrowserReads(declaration, out);
     declareContent(declaration, out, context);
     return true;
   }
 
+  /** A generated box's `content`, or `none` and the report of why where it is one no box draws. */
   function declareContent(declaration, out, context) {
     const content = contentOf(declaration);
     out.content = content ?? 'none';
     if (content !== null) return;
     const why = 'a generated box draws one string, so it draws none for this';
     onUnsupported?.(reported(context, "dropped 'content'", why));
+  }
+
+  /**
+   * A declaration a sheet read as a browser reads it has a meaning for, read as `declare` reads
+   * any: a value refused costs only that declaration, reported, and what it writes replaces what
+   * an earlier one left to settle on device. Answers whether it was one.
+   */
+  function readBrowsers(declaration, out, deferred, context) {
+    const before = deferred.length;
+    const written = new Set();
+    const tracked = new Proxy(out, {
+      set(target, key, value) {
+        written.add(key);
+        target[key] = value;
+        return true;
+      },
+    });
+    try {
+      if (!readAsABrowser(declaration, tracked, deferred, context)) return false;
+      supersede(deferred, before, written);
+    } catch (error) {
+      if (!onUnsupported || !(error instanceof CssUnsupported)) throw error;
+      onUnsupported(reported(context, `dropped '${declaration.property}'`, error.message));
+    }
+    return true;
   }
 
   /**
