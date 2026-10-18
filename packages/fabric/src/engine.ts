@@ -5776,7 +5776,7 @@ type GeneratedBox = typeof BEFORE | typeof AFTER;
  * none of its own.
  */
 function givesContent(rule: StyleSheet['rules'][number]): boolean {
-  const content = rule.declarations['content'] ?? rule.important?.['content'];
+  const content = rule.important?.['content'] ?? rule.declarations['content'];
   return content !== undefined && content !== 'none';
 }
 

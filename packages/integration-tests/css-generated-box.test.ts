@@ -574,3 +574,11 @@ describe('a generated box, in a node that adopts another scope', () => {
     assert.equal(box?.committed?.props['width'], 3);
   });
 });
+
+describe('a generated box whose content is declared twice', () => {
+  it('takes the !important content, as the cascade does', () => {
+    const s = scene('.a::before { content: none; content: "x" !important; width: 1px }');
+    s.element('a');
+    assert.deepEqual(s.held('a'), [1]);
+  });
+});
