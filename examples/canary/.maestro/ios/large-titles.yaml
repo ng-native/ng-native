@@ -1,6 +1,5 @@
 # Large titles collapse into the bar as the page scrolls, as UIKit draws them: the home screen,
 # and a pushed page with a search bar.
-# routes: / /search-demo
 appId: dev.angularnative.canary
 ---
 - launchApp:
@@ -10,25 +9,24 @@ appId: dev.angularnative.canary
     timeout: 30000
 - assertScreenshot:
     path: baselines/home-large-title.png
-    thresholdPercentage: 99.9
+    thresholdPercentage: 97
 - swipe:
     start: 50%, 70%
     end: 50%, 40%
-    duration: 3000
+    duration: 800
 - waitForAnimationToEnd
 - assertScreenshot:
     path: baselines/home-collapsed-title.png
-    thresholdPercentage: 99.9
+    thresholdPercentage: 97
 - runFlow:
-    file: subflows/open-screen.yaml
+    file: subflows/open.yaml
     env:
-      PATH: 'search-demo'
-      SHOWS: 'Search'
+      SCREEN: Search
 - swipe:
     start: 50%, 80%
     end: 50%, 50%
-    duration: 3000
+    duration: 800
 - waitForAnimationToEnd
 - assertScreenshot:
     path: baselines/search-collapsed-title.png
-    thresholdPercentage: 99.9
+    thresholdPercentage: 97

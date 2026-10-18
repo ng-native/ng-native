@@ -8,25 +8,24 @@
  * - the tests that already existed and were changed or deleted, which the description says why of;
  * - that a change to a package's code comes with a version plan;
  * - what every canary screen sends native, on both sides (see `native-output.mjs`);
- * - the Node benchmarks, run in turn on each side so drift falls on both, against a limit;
- * - with `--app`, the iOS screenshots of the screens whose native output changed, each side's
- *   bundle in that simulator release build of the canary, on a simulator of its own.
+ * - the Node benchmarks, run in turn on each side so drift falls on both, against a limit.
+ *
+ * What it does not do is look at a device: for a change that draws, the `screens-check` skill
+ * compares the screens whose native output changed on a simulator.
  *
  * Usage:
  *
  *   node scripts/pr-gate.mjs                       # against origin/main
  *   node scripts/pr-gate.mjs --base origin/main --rounds 3 --limit 3 --out gate.md
  *   node scripts/pr-gate.mjs --skip-bench          # all but the benchmarks
- *   node scripts/pr-gate.mjs --app canary.app      # and the screenshots, on a simulator
  *
  * It exits 1 where a check failed, and fails closed: a step that cannot run is a failed step.
  */
 import { spawnSync } from 'node:child_process';
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import url from 'node:url';
-import { changed } from './native-output.mjs';
 
 const ROOT = path.resolve(path.dirname(url.fileURLToPath(import.meta.url)), '..');
 
@@ -52,7 +51,6 @@ function options(argv) {
     limit: Number(value('--limit', '3')),
     out: value('--out', undefined),
     bench: !argv.includes('--skip-bench'),
-    app: value('--app', undefined),
   };
 }
 
@@ -147,93 +145,6 @@ export function needsPlan(nameStatus) {
     ([status, file]) => status === 'A' && file.startsWith('.nx/version-plans/'),
   );
   return shipped && !plan;
-}
-
-/** The screens whose native output changed, from `native-output.mjs diff --json`. */
-export const changedRoutes = ({ results }) => results.filter(changed).map((one) => one.url);
-
-/**
- * The screenshots of the flows that open `routes`, base against change: each side's bundle put into
- * a copy of `app`, compared on a simulator made for it. One app serves both sides only where they
- * share a native half; where they do not, that is said, and the comparison is left to two builds.
- * A difference is for review, not a failure; a comparison that could not be made is.
- */
-function screenshots(app, baseDir, routes, lines, check) {
-  const canary = (dir) => path.join(dir, 'examples/canary');
-  // Fail closed: a fingerprint or a flow list that could not be had is not an answer.
-  const output = (result, what) => {
-    if (!result.ok) throw new Error(`could not ${what}:\n${tail(result.output)}`);
-    return result.output.trim();
-  };
-  const fingerprint = (dir) =>
-    output(
-      run(process.execPath, ['scripts/ios-app.mjs', 'fingerprint'], canary(dir)),
-      'take the native fingerprint',
-    );
-  if (fingerprint(baseDir) !== fingerprint(ROOT)) {
-    lines.push(
-      'Not compared: the change touches the native half, which one app cannot be on both sides of. Compare two builds with `pnpm e2e:ios:compare`.',
-    );
-    return;
-  }
-  const compare = path.join(canary(ROOT), '.maestro/ios/compare-builds.mjs');
-  const flows = routes.length
-    ? output(
-        run(process.execPath, [compare, 'flows', '--routes', routes.join(',')]),
-        'list the flows',
-      )
-    : '';
-  if (!flows) {
-    lines.push("None compared: no screen's native output changed.");
-    return;
-  }
-  const out = mkdtempSync(path.join(tmpdir(), 'pr-gate-screens-'));
-  // Each side bundled with a temp dir of its own: Metro's and Expo's caches are kept there, and
-  // one side's left behind sends the other's DOM components to its files.
-  for (const [side, dir] of [
-    ['base', baseDir],
-    ['change', ROOT],
-  ]) {
-    const bundled = run(
-      process.execPath,
-      ['scripts/ios-app.mjs', 'rebundle', app, path.join(out, `${side}.app`)],
-      canary(dir),
-      {
-        TMPDIR: mkdtempSync(path.join(tmpdir(), `pr-gate-${side}-`)),
-      },
-    );
-    if (!bundled.ok) {
-      check(`the ${side}'s bundle put into the app`, false, tail(bundled.output));
-      return;
-    }
-  }
-  const list = flows.split('\n').join(',');
-  // A simulator of its own, deleted when the shell exits: see ios-simulator.sh.
-  const compared = run('bash', [
-    '-c',
-    `source "$1" pr-gate && node "$2" compare --base "$3/base.app" --change "$3/change.app" --device "$udid" --out "$3/diff" --flows "$4"`,
-    'pr-gate',
-    path.join(canary(ROOT), 'scripts/ios-simulator.sh'),
-    compare,
-    out,
-    list,
-  ]);
-  const report = path.join(out, 'diff/report.json');
-  if (!existsSync(report)) {
-    check('screenshots compared', false, tail(compared.output));
-    return;
-  }
-  const { differ, compared: done } = JSON.parse(readFileSync(report, 'utf8'));
-  check(
-    `screenshots of ${list.replaceAll(',', ', ')} compared`,
-    done,
-    done ? '' : 'a flow failed: see the output above',
-  );
-  lines.push(
-    differ.length
-      ? `${differ.length} differ, each beside the base's with the difference marked, in \`${path.join(out, 'diff')}\`:\n\n${differ.map((one) => `- \`${one.shot}\``).join('\n')}`
-      : 'None differ.',
-  );
 }
 
 /** A checkout of `ref` beside this one, with its dependencies, and what removes it. */
@@ -353,23 +264,6 @@ function main() {
       // that could not compare is.
       if (diff.status === 0 || diff.status === 1) lines.push(diff.output.trim());
       else check('native output compared', false, tail(diff.output));
-      if (opts.app && (diff.status === 0 || diff.status === 1)) {
-        const json = run(process.execPath, [
-          script,
-          'diff',
-          path.join(out, 'base'),
-          path.join(out, 'head'),
-          '--json',
-        ]);
-        lines.push('', '### iOS screenshots', '');
-        screenshots(
-          path.resolve(opts.app),
-          base.dir,
-          changedRoutes(JSON.parse(json.output)),
-          lines,
-          check,
-        );
-      }
     }
     rmSync(out, { recursive: true, force: true });
 
@@ -429,7 +323,7 @@ function main() {
     '',
     '### By hand',
     '',
-    ...(opts.app ? [] : ['- [ ] the iOS screenshots, with `--app`, for a change that draws']),
+    '- [ ] the iOS screens, with the `screens-check` skill, for a change that draws',
     '- [ ] the `review-change` skill on the final diff',
   );
   const text = lines.join('\n');

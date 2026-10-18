@@ -2,7 +2,6 @@ import { Component } from '@angular/core';
 import { ScrollView, Text, View } from '@ng-native/components';
 import { NativeHeader } from '@ng-native/router';
 import { page } from '../screen-styles.ts';
-import { ScreenScroll } from '../screen-scroll.ts';
 
 /**
  * Tailwind utilities that make one value out of several classes, drawn: the cases a stylesheet
@@ -18,7 +17,7 @@ import { ScreenScroll } from '../screen-scroll.ts';
  * screens have classes of their own: keep the utility names out of the prose.
  */ @Component({
   selector: 'x-tailwind',
-  imports: [ScreenScroll, NativeHeader, ScrollView, Text, View],
+  imports: [NativeHeader, ScrollView, Text, View],
   template: `
     <native-header title="Tailwind" />
     <scroll-view class="screen" [contentContainerStyle]="page.content">

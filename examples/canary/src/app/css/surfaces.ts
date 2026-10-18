@@ -3,7 +3,6 @@ import { Pressable, ScrollView, Text, View } from '@ng-native/components';
 import { NativeHeader } from '@ng-native/router';
 import { Example, Section } from '../example.ts';
 import { page } from '../screen-styles.ts';
-import { ScreenScroll } from '../screen-scroll.ts';
 
 /**
  * What a view can look like: borders, corners, shadows, transforms and the effects the renderer
@@ -16,7 +15,7 @@ import { ScreenScroll } from '../screen-scroll.ts';
  */
 @Component({
   selector: 'x-surfaces',
-  imports: [ScreenScroll, Example, NativeHeader, Pressable, ScrollView, Section, Text, View],
+  imports: [Example, NativeHeader, Pressable, ScrollView, Section, Text, View],
   template: `
     <native-header title="Surfaces" />
     <scroll-view class="screen" [contentContainerStyle]="page.content">

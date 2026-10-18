@@ -3,11 +3,10 @@ import { ScrollView, Text } from '@ng-native/components';
 import { NativeHeader } from '@ng-native/router';
 import { CssDemo } from './css-demo.ts';
 import { page } from '../screen-styles.ts';
-import { ScreenScroll } from '../screen-scroll.ts';
 
 @Component({
   selector: 'x-css-page',
-  imports: [ScreenScroll, NativeHeader, ScrollView, CssDemo, Text],
+  imports: [NativeHeader, ScrollView, CssDemo, Text],
   template: `
     <native-header title="CSS" />
     <scroll-view class="screen" [contentContainerStyle]="page.content">

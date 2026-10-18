@@ -16,7 +16,46 @@ out=$2
 flows="$(dirname "$0")/../.maestro/release"
 mkdir -p "$out"
 
-source "$(dirname "$0")/ios-simulator.sh" canary-smoke
+# The newest runtime's first iPhone: every runtime ships a set of devices made for it.
+read -r runtime type < <(xcrun simctl list devices available -j | jq -r '
+  .devices | to_entries | map(select(.key | test("iOS"))) | sort_by(.key) | last
+  | "\(.key) \(.value | map(select(.name | startswith("iPhone"))) | first | .deviceTypeIdentifier)"')
+if [ -z "${runtime:-}" ] || [ -z "${type:-}" ] || [ "$type" = null ]; then
+  echo "No iOS runtime with an iPhone simulator found (or jq is missing): see xcrun simctl list" >&2
+  exit 1
+fi
+# Booting and the driver's start are minutes of a run with nothing to print, so each step says
+# when it starts.
+step() { echo "[$(date +%T)] $*"; }
+# What a boot is waiting on, each time that changes. bootstatus repeats itself every second, and a
+# new simulator's first boot is minutes of one-time setup on a CI Mac: this says which part.
+boot_phases() {
+  local line waiting='' reason=''
+  while read -r line; do
+    case $line in
+      Waiting\ on* | Finished)
+        if [ "$line" != "$waiting" ]; then step "boot: $line"; fi
+        waiting=$line
+        ;;
+      Reason:*)
+        if [ "$line" != "$reason" ]; then step "boot: $line"; fi
+        reason=$line
+        ;;
+    esac
+  done
+}
+step "creating a $type on $runtime"
+udid=$(xcrun simctl create canary-smoke "$type" "$runtime") || exit 1
+trap 'xcrun simctl shutdown "$udid" 2>/dev/null; xcrun simctl delete "$udid"' EXIT
+
+step "booting it"
+xcrun simctl boot "$udid" && xcrun simctl bootstatus "$udid" -b | boot_phases || exit 1
+# A fresh simulator posts follow-up notifications of its own, "Ready for Apple Intelligence" among
+# them, at any point after it boots. The banner covers the top of the screen, so
+# a tap on a header button lands on the banner and opens Settings over the app. followupd posts
+# them, so it is stopped here, and stays disabled when the retry below reboots the simulator.
+xcrun simctl spawn "$udid" launchctl disable system/com.apple.followupd 2>/dev/null
+xcrun simctl spawn "$udid" launchctl bootout system/com.apple.followupd 2>/dev/null
 step "installing the app"
 xcrun simctl install "$udid" "$app" || exit 1
 # Maestro drives the simulator through an XCTest runner of its own, which a loaded CI Mac has

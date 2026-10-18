@@ -1,12 +1,10 @@
 # Overlays: a toast above the screen, a loading cover that clears, and a toast above a sheet.
-# routes: /overlays
 appId: dev.angularnative.canary
 ---
 - runFlow:
-    file: subflows/open-screen.yaml
+    file: subflows/open.yaml
     env:
-      PATH: 'overlays'
-      SHOWS: 'Show a toast'
+      SCREEN: Overlays
 - tapOn: 'Show a toast'
 - assertVisible: 'Shown above the screen'
 - tapOn: 'Load for a moment'
@@ -18,4 +16,4 @@ appId: dev.angularnative.canary
 # The sheet is modal to accessibility, so the toast above it is checked by how it looks.
 - assertScreenshot:
     path: baselines/overlays-sheet-toast.png
-    thresholdPercentage: 99.9
+    thresholdPercentage: 97

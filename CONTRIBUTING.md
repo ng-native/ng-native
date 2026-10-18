@@ -184,34 +184,13 @@ a report for its description:
 - `pnpm bench`, `bench:tailwind` and `bench:screens` in `packages/integration-tests`, run in turn
   on each side. A measure fails where it is more than 3% slower and every round of the change was
   slower than every round of main; one past 3% whose rounds overlap is marked, to be run again with
-  more rounds;
-- with `--app <canary.app>`, a simulator release build of the canary, the iOS screenshots of the
-  screens whose native output changed: each side's bundle put into a copy of that app, and the
-  flows that open those screens compared on a simulator made for the run. A difference is listed
-  for review, with the images, and does not fail the gate.
+  more rounds.
 
 `--base <ref>`, `--rounds <n>`, `--limit <percent>` and `--out <file>` change what it compares with
 and how, and `--skip-bench` leaves the benchmarks out. It exits 1 where a check failed.
 
-For a change to the native half, which one app cannot be on both sides of, compare two iOS release
-builds of the canary on one simulator:
-
-```sh
-cd examples/canary
-pnpm e2e:ios:compare --base main.app --change pr.app --device <udid> --out visual-diff
-```
-
-It records every screenshot the flows assert from the first build, asserts them on the second, and
-puts the committed baselines back. `--flows visual/css.yaml,chat.yaml` compares only those flows.
-Each screenshot that differs goes in `visual-diff` with the difference marked.
-
-The baselines committed in `examples/canary/.maestro/ios/baselines`, which `pnpm e2e:ios` compares
-with, are recorded with `examples/canary/scripts/record-ios.sh <canary.app>`, on a simulator made
-for it with the status bar held still and the keyboard's predictions off.
-
-A flow says which screens it opens in a `# routes:` line, which is how the gate picks the flows for
-the screens that changed; one that names none is always compared. A flow opens its screen by link,
-and reaches further down a page with `?scroll=<points>` in the link, which lands on the same point
-every run where a swipe does not.
+What the native output cannot show is how native draws it. For a change that draws, the
+`screens-check` skill (`.claude/skills/screens-check`) opens each screen whose native output changed
+on a simulator, in main's bundle and the change's, and compares the two screenshots.
 
 For maintainers cutting a release, see [RELEASING.md](./docs/RELEASING.md).

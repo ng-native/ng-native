@@ -25,5 +25,3 @@ examples/*/.angular-native/
 .all-contributorsrc
 # Written by nx release changelog, which leaves a double blank line between sections.
 CHANGELOG.md
-# What Maestro writes while the screenshot baselines are recorded, gitignored beside them.
-examples/canary/.maestro/ios/.recording/

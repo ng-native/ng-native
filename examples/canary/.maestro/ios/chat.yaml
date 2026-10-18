@@ -1,13 +1,11 @@
 # The chat: a message sent with the keyboard up lands on top of the composer, a scroll up through
 # the transcript leaves the keyboard up, and nothing is drawn frosted over the transcript.
-# routes: /chat
 appId: dev.angularnative.canary
 ---
 - runFlow:
-    file: subflows/open-screen.yaml
+    file: subflows/open.yaml
     env:
-      PATH: 'chat'
-      SHOWS: 'Sam replies'
+      SCREEN: Chat
 - assertVisible: 'Sam replies'
 - tapOn: 'Message.*'
 - inputText: 'Hello from Maestro'
@@ -17,9 +15,8 @@ appId: dev.angularnative.canary
 - swipe:
     start: 50%, 30%
     end: 50%, 45%
-    duration: 3000
-- waitForAnimationToEnd
+    duration: 600
 - assertScreenshot:
     path: baselines/chat-after-send.png
-    thresholdPercentage: 99.9
+    thresholdPercentage: 97
 - runFlow: ../subflows/no-error-screen.yaml

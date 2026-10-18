@@ -3,12 +3,11 @@ import { ScrollView, Text, View } from '@ng-native/components';
 import { NativeHeader } from '@ng-native/router';
 import { Palette } from '../palette.ts';
 import { page } from '../screen-styles.ts';
-import { ScreenScroll } from '../screen-scroll.ts';
 
 /** Nested text must be a span (VirtualText), not a nested paragraph, or it renders raised. */
 @Component({
   selector: 'x-text-nesting',
-  imports: [ScreenScroll, NativeHeader, ScrollView, Text, View],
+  imports: [NativeHeader, ScrollView, Text, View],
   template: `
     <native-header title="Text nesting" />
     <scroll-view class="screen" [contentContainerStyle]="page.content">

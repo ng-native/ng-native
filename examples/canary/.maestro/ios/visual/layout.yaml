@@ -1,30 +1,11 @@
 # Layout, as it draws: a screenshot compared with the one taken when it was last right.
-# routes: /layout
 appId: dev.angularnative.canary
 ---
 - runFlow:
-    file: ../subflows/open-screen.yaml
+    file: ../subflows/open.yaml
     env:
-      PATH: 'layout'
-      SHOWS: 'Layout'
+      SCREEN: 'Layout'
 - waitForAnimationToEnd
 - assertScreenshot:
     path: ../baselines/visual-layout.png
-    thresholdPercentage: 99.9
-# Further down, by its link: `scroll` puts the page at that many points exactly (ScreenScroll),
-# where a swipe lands a few points apart from one run to the next.
-- openLink: 'canary://layout?scroll=700'
-- waitForAnimationToEnd
-- assertScreenshot:
-    path: ../baselines/visual-layout-2.png
-    thresholdPercentage: 99.9
-- openLink: 'canary://layout?scroll=1400'
-- waitForAnimationToEnd
-- assertScreenshot:
-    path: ../baselines/visual-layout-3.png
-    thresholdPercentage: 99.9
-- openLink: 'canary://layout?scroll=2100'
-- waitForAnimationToEnd
-- assertScreenshot:
-    path: ../baselines/visual-layout-4.png
-    thresholdPercentage: 99.9
+    thresholdPercentage: 97

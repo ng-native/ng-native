@@ -3,12 +3,9 @@
  * pull request is slower, has changed existing tests, or owes a version plan.
  */
 import assert from 'node:assert/strict';
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import path from 'node:path';
 import { describe, it } from 'node:test';
 // A script of the repository's, not a package: loaded by its path, which no import can name.
-const { changedRoutes, compareBenches, editedTests, medians, needsPlan } = await import(
+const { compareBenches, editedTests, medians, needsPlan } = await import(
   new URL('../../scripts/pr-gate.mjs', import.meta.url).href
 );
 
@@ -92,98 +89,5 @@ describe('pr-gate', () => {
     );
     assert.equal(needsPlan('M\tpackages/integration-tests/css.test.ts'), false);
     assert.equal(needsPlan('A\tscripts/pr-gate.mjs\nM\texamples/canary/src/app/app.ts'), false);
-  });
-
-  it('takes the screens whose native output changed, gained a note or went', () => {
-    assert.deepEqual(
-      changedRoutes({
-        results: [
-          { url: '/same', changes: [], notes: [] },
-          { url: '/props', changes: [{ kind: 'props' }], notes: [] },
-          { url: '/noted', changes: [], notes: ['threw'] },
-          { url: '/gone', missing: 'head', changes: [] },
-        ],
-      }),
-      ['/props', '/noted', '/gone'],
-    );
-  });
-
-  it('compares the flows of the screens that changed, and those that name no screen', async () => {
-    const { flowsFor, routesOf } = await import(
-      new URL('../../examples/canary/.maestro/ios/compare-builds.mjs', import.meta.url).href
-    );
-    assert.deepEqual(routesOf('# routes: / /search-demo\n- launchApp\n'), ['/', '/search-demo']);
-    assert.deepEqual(routesOf('- launchApp\n'), []);
-    const root = mkdtempSync(path.join(tmpdir(), 'flows-'));
-    try {
-      const flow = (name: string, text: string) => {
-        writeFileSync(path.join(root, name), text);
-        return path.join(root, name);
-      };
-      const css = flow('css.yaml', '# routes: /css\n');
-      const titles = flow('titles.yaml', '# routes: / /search-demo\n');
-      const unnamed = flow('unnamed.yaml', '- launchApp\n');
-      const all = [css, titles, unnamed];
-      assert.deepEqual(flowsFor(all, ['/search-demo']), [titles, unnamed]);
-      assert.deepEqual(flowsFor(all, ['/css', '/layout']), [css, unnamed]);
-      assert.deepEqual(flowsFor(all, ['/layout']), [unnamed]);
-    } finally {
-      rmSync(root, { recursive: true, force: true });
-    }
-  });
-
-  it('makes each screenshot of a flow optional for the comparison, and nothing else', async () => {
-    const { comparing } = await import(
-      new URL('../../examples/canary/.maestro/ios/compare-builds.mjs', import.meta.url).href
-    );
-    const flow = [
-      '- tapOn: Done',
-      '- assertScreenshot:',
-      '    path: ../baselines/a.png',
-      '    thresholdPercentage: 99.9',
-      '- assertScreenshot:',
-      '    path: ../baselines/b.png',
-      '- assertVisible: Done',
-      '',
-    ].join('\n');
-    assert.equal(
-      comparing(flow),
-      [
-        '- tapOn: Done',
-        '- assertScreenshot:',
-        '    path: ../baselines/a.png',
-        '    thresholdPercentage: 99.9',
-        '    optional: true',
-        '- assertScreenshot:',
-        '    path: ../baselines/b.png',
-        '    optional: true',
-        '- assertVisible: Done',
-        '',
-      ].join('\n'),
-    );
-  });
-
-  it("finds the canary's flows that assert a screenshot, past those that assert none", async () => {
-    const { screenshotFlows } = await import(
-      new URL('../../examples/canary/.maestro/ios/compare-builds.mjs', import.meta.url).href
-    );
-    const root = mkdtempSync(path.join(tmpdir(), 'flows-'));
-    try {
-      mkdirSync(path.join(root, 'visual'));
-      writeFileSync(path.join(root, 'plain.yaml'), '- tapOn: Done\n');
-      writeFileSync(path.join(root, 'shot.yaml'), '- assertScreenshot:\n    path: a.png\n');
-      writeFileSync(path.join(root, 'shot.recording.yaml'), '- takeScreenshot: a\n');
-      writeFileSync(
-        path.join(root, 'shot.comparing.yaml'),
-        '- assertScreenshot:\n    path: a.png\n',
-      );
-      writeFileSync(path.join(root, 'visual/page.yaml'), '- assertScreenshot:\n    path: b.png\n');
-      assert.deepEqual(
-        screenshotFlows(root).map((file: string) => path.relative(root, file)),
-        ['shot.yaml', path.join('visual', 'page.yaml')],
-      );
-    } finally {
-      rmSync(root, { recursive: true, force: true });
-    }
   });
 });
