@@ -9036,22 +9036,31 @@ export class Engine implements HostEngine {
     });
     this.followScroll(scroll);
     const turned = state.axis !== span.axis;
-    const fed = state.scroll === scroll && !turned;
-    if (state.start !== span.start || state.stop !== span.stop || !fed) {
-      // Moved to another scroll view, or to stick along the other axis: the drive is fed by the
-      // offset it was made for.
-      if (!fed) {
-        state.drive?.stop();
-        state.drive = null;
-      }
-      Object.assign(state, span, { scroll });
-      const range = pinnedRange(span.start, span.stop);
-      if (state.drive) state.drive.update(range);
-      else state.drive = this.driveByScroll(node, scroll, span.axis, range);
-    }
+    this.redrive(node, state, span, scroll);
     this.shiftSticky(node);
     // A move along the other axis, though it may be by as much: committed as the other move.
     if (turned) this.markProps(node, false);
+  }
+
+  /** Have native move a sticky box between these offsets, of this scroll view on this axis. */
+  private redrive(
+    node: EngineNode,
+    state: StickyState,
+    span: { axis: ScrollAxis; start: number; stop: number },
+    scroll: EngineNode,
+  ): void {
+    const fed = state.scroll === scroll && state.axis === span.axis;
+    if (fed && state.start === span.start && state.stop === span.stop) return;
+    // Moved to another scroll view, or to stick along the other axis: the drive is fed by the
+    // offset it was made for.
+    if (!fed) {
+      state.drive?.stop();
+      state.drive = null;
+    }
+    Object.assign(state, span, { scroll });
+    const range = pinnedRange(span.start, span.stop);
+    if (state.drive) state.drive.update(range);
+    else state.drive = this.driveByScroll(node, scroll, span.axis, range);
   }
 
   /**
