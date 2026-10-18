@@ -1245,6 +1245,7 @@ function mixedTerm(part) {
 
 module.exports = {
   mixedToken,
+  OF_A_BOX,
   CssUnsupported,
   withRefusals,
   drawnSolid,

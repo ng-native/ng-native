@@ -13,8 +13,8 @@ import { createRequire } from 'node:module';
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
-import { Engine, type StyleSheet } from '@ng-native/fabric';
-import { createFakeFabric } from '@ng-native/testing';
+import { Engine, type EngineNode, type StyleSheet } from '@ng-native/fabric';
+import { createFakeFabric, type FakeFabricNode } from '@ng-native/testing';
 import { resolvedClasses } from './tailwind-cli.ts';
 
 const require = createRequire(import.meta.url);
@@ -24,7 +24,12 @@ const { withTailwind, compileSheetModule, localImports, watchesByDefault } =
       config: object,
       options: { input: string; output?: string; watch?: boolean },
     ): object;
-    compileSheetModule(css: string, context?: string): string;
+    compileSheetModule(
+      css: string,
+      context?: string,
+      paths?: undefined,
+      browser?: readonly string[],
+    ): string;
     localImports(css: string, cwd: string): string[];
     watchesByDefault(argv: string[], env: Record<string, string | undefined>): boolean;
   };
@@ -36,6 +41,7 @@ interface Sheet {
     tokens?: Record<string, unknown>;
     condition?: unknown;
     compounds: { classes: string[] }[];
+    specificity?: number;
   }[];
 }
 
@@ -80,6 +86,86 @@ describe('the generated stylesheet module', () => {
       paddingBottom: 16,
       paddingLeft: 16,
     });
+  });
+
+  it('reads the sheet as a browser does under the classes named, and not anywhere else', () => {
+    // Components written for a browser and styled by the app's own Tailwind sheet: a flex
+    // container under them is a row, `::before` draws a box, and one axis of overflow scrolls.
+    const css =
+      '.bar { display: flex } .stack { display: flex; flex-direction: column } ' +
+      '.line::before { content: ""; height: 1px } .list { overflow-y: auto }';
+    const rowsOf = (sheet: ReturnType<typeof evaluate>) =>
+      sheet.rules
+        .filter((rule) => rule.declarations['flexDirection'] === 'row')
+        .map((rule) => ({ compounds: rule.compounds, specificity: rule.specificity }));
+    const quiet = <T>(run: () => T): T => {
+      const warn = console.warn;
+      console.warn = () => {};
+      try {
+        return run();
+      } finally {
+        console.warn = warn;
+      }
+    };
+
+    const browser = evaluate(compileSheetModule(css, 'app.css', undefined, ['.ui', '.overlay']));
+    // Ahead of the rule it stands in for, with no specificity: a direction any rule names wins.
+    assert.deepEqual(rowsOf(browser), [
+      {
+        compounds: [
+          {
+            classes: ['bar'],
+            ancestors: [{ classes: [], is: [[{ classes: ['ui'] }, { classes: ['overlay'] }]] }],
+          },
+        ],
+        specificity: 0,
+      },
+    ]);
+    assert.equal(styleOf(browser, 'list')['overflow'], 'scroll');
+    assert.ok(JSON.stringify(browser).includes('::before'), 'and the generated box has its rule');
+
+    const native = quiet(() => evaluate(compileSheetModule(css, 'app.css')));
+    assert.equal(JSON.stringify(native).includes('::before'), false);
+    assert.deepEqual(rowsOf(native), []);
+    assert.equal(styleOf(native, 'list')['overflow'], undefined);
+  });
+
+  it('lays a flex container out as a row under a class named, and as a column elsewhere', () => {
+    const css = '.bar { display: flex } .stack { display: flex; flex-direction: column }';
+    const sheet = evaluate(compileSheetModule(css, 'app.css', undefined, ['.ui']));
+    const fabric = createFakeFabric();
+    const engine = new Engine(fabric, 1, { globalStyles: sheet as unknown as StyleSheet });
+    const add = (parent: EngineNode, id: string, classes: string) => {
+      const node = engine.createElement('view');
+      engine.setClasses(node, classes);
+      engine.setProp(node, 'nativeID', id);
+      engine.appendChild(parent, node);
+      return node;
+    };
+    const ui = add(engine.root, 'ui', 'ui');
+    add(ui, 'row', 'bar');
+    add(ui, 'column', 'bar stack');
+    add(engine.root, 'outside', 'bar');
+    engine.commit();
+    const direction = (id: string) => {
+      const find = (nodes: readonly FakeFabricNode[]): FakeFabricNode | undefined => {
+        for (const node of nodes) {
+          if (node.props['nativeID'] === id) return node;
+          const found = find(node.children);
+          if (found) return found;
+        }
+        return undefined;
+      };
+      return find(fabric.committed)?.props['flexDirection'] ?? 'column';
+    };
+    assert.equal(direction('row'), 'row');
+    assert.equal(direction('column'), 'column');
+    assert.equal(direction('outside'), 'column');
+  });
+
+  it('refuses a scope that is not a class', () => {
+    assert.throws(() => compileSheetModule('.a { display: flex }', 'app.css', undefined, ['ui']));
+    assert.throws(() => compileSheetModule('.a { display: flex }', 'app.css', undefined, []));
   });
 
   it('keeps a light-dark() as the two schemes it names', () => {

@@ -2583,11 +2583,9 @@
     "my-[3]"
   ],
   "dropped 'margin-bottom': arithmetic with tokens in it cannot take '…' here. What the device works out is numbers, points, degrees and var(), with + - * / and brackets; a percentage, an em or a viewport unit beside a token needs layout the device does not do here.": [
-    "!mb-safe-[37%]",
     "!space-y-[0.35]",
     "!space-y-[37%]",
     "!space-y-[3]",
-    "mb-safe-[37%]",
     "space-y-[0.35]",
     "space-y-[37%]",
     "space-y-[3]"
@@ -2767,11 +2765,9 @@
     "my-[3]"
   ],
   "dropped 'margin-top': arithmetic with tokens in it cannot take '…' here. What the device works out is numbers, points, degrees and var(), with + - * / and brackets; a percentage, an em or a viewport unit beside a token needs layout the device does not do here.": [
-    "!mt-safe-[37%]",
     "!space-y-[0.35]",
     "!space-y-[37%]",
     "!space-y-[3]",
-    "mt-safe-[37%]",
     "space-y-[0.35]",
     "space-y-[37%]",
     "space-y-[3]"
@@ -3091,9 +3087,7 @@
   ],
   "dropped 'padding-bottom': arithmetic with tokens in it cannot take '…' here. What the device works out is numbers, points, degrees and var(), with + - * / and brackets; a percentage, an em or a viewport unit beside a token needs layout the device does not do here.": [
     "!min-pb-safe-[37%]",
-    "!pb-safe-[37%]",
-    "min-pb-safe-[37%]",
-    "pb-safe-[37%]"
+    "min-pb-safe-[37%]"
   ],
   "dropped 'padding-inline-end': '…' is not a value native can take": [
     "!pe-[#1a2b3c]",
@@ -3238,9 +3232,7 @@
   ],
   "dropped 'padding-top': arithmetic with tokens in it cannot take '…' here. What the device works out is numbers, points, degrees and var(), with + - * / and brackets; a percentage, an em or a viewport unit beside a token needs layout the device does not do here.": [
     "!min-pt-safe-[37%]",
-    "!pt-safe-[37%]",
-    "min-pt-safe-[37%]",
-    "pt-safe-[37%]"
+    "min-pt-safe-[37%]"
   ],
   "dropped 'padding': '…' is not a value native can take": [
     "!p-[#1a2b3c]",

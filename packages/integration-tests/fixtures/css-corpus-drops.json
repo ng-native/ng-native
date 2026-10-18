@@ -1,7 +1,7 @@
 {
   "bootstrap": {
-    "rules": 2593,
-    "dropped": 579,
+    "rules": 2594,
+    "dropped": 577,
     "emitted": [
       "$animation",
       "$animationDelay",
@@ -232,8 +232,7 @@
         "font-weight: 'lighter' is relative to the inherited weight, and native takes an absolute one. Write the weight: bold, or a number from 100 to 900.": 1
       },
       "height": {
-        "arithmetic with tokens in it cannot take 'em' here. What the device works out is numbers, points, degrees and var(), with + - * / and brackets; a percentage, an em or a viewport unit beside a token needs layout the device does not do here.": 3,
-        "arithmetic with tokens in it cannot take 'percentage' here. What the device works out is numbers, points, degrees and var(), with + - * / and brackets; a percentage, an em or a viewport unit beside a token needs layout the device does not do here.": 1
+        "arithmetic with tokens in it cannot take 'em' here. What the device works out is numbers, points, degrees and var(), with + - * / and brackets; a percentage, an em or a viewport unit beside a token needs layout the device does not do here.": 3
       },
       "line-break": {
         "'line-break' has no React Native equivalent: no style prop of a native view does what it does.": 2
@@ -254,8 +253,7 @@
         "'mask-size' is not mapped yet. React Native may well support it; nothing here translates it. Check RN's style types, then add it to css/properties.cjs.": 2
       },
       "min-height": {
-        "arithmetic with tokens in it cannot take 'em' here. What the device works out is numbers, points, degrees and var(), with + - * / and brackets; a percentage, an em or a viewport unit beside a token needs layout the device does not do here.": 5,
-        "arithmetic with tokens in it cannot take 'percentage' here. What the device works out is numbers, points, degrees and var(), with + - * / and brackets; a percentage, an em or a viewport unit beside a token needs layout the device does not do here.": 1
+        "arithmetic with tokens in it cannot take 'em' here. What the device works out is numbers, points, degrees and var(), with + - * / and brackets; a percentage, an em or a viewport unit beside a token needs layout the device does not do here.": 5
       },
       "overflow": {
         "overflow: native has one overflow for both axes, so 'hidden auto' cannot be applied": 1
@@ -321,8 +319,8 @@
     }
   },
   "bulma": {
-    "rules": 3310,
-    "dropped": 1788,
+    "rules": 3312,
+    "dropped": 1786,
     "emitted": [
       "$animation",
       "$animationDelay",
@@ -515,9 +513,6 @@
       "border-top-style": {
         "var() cannot be used in the 'border-top-style' shorthand, because which native property the value lands in depends on the value, and there is no CSS parser on device. Use the longhand.": 1
       },
-      "bottom": {
-        "arithmetic with tokens in it cannot take 'percentage' here. What the device works out is numbers, points, degrees and var(), with + - * / and brackets; a percentage, an em or a viewport unit beside a token needs layout the device does not do here.": 1
-      },
       "box-shadow": {
         "a shadow whose lengths are one token, such as 'var(--size) <colour>', needs its lengths written out or the whole shadow in the token: a token is read in one form, and one length is not four.": 2
       },
@@ -619,7 +614,7 @@
         "'text-size-adjust' has no React Native equivalent: no style prop of a native view does what it does.": 1
       },
       "top": {
-        "arithmetic with tokens in it cannot take 'percentage' here. What the device works out is numbers, points, degrees and var(), with + - * / and brackets; a percentage, an em or a viewport unit beside a token needs layout the device does not do here.": 3
+        "arithmetic with tokens in it cannot take 'percentage' here. What the device works out is numbers, points, degrees and var(), with + - * / and brackets; a percentage, an em or a viewport unit beside a token needs layout the device does not do here.": 2
       },
       "vertical-align": {
         "vertical-align: 'baseline' has no native equivalent (auto, top, bottom, middle do)": 1

@@ -56,6 +56,19 @@ describe('a calc() of a percentage and a length', () => {
     assert.deepEqual(s.box('c'), [10, 10, 240, 10]);
   });
 
+  it('takes the length from a token, settled where the box is: a switch track less its handle', () => {
+    const css =
+      `${BASE} .p { --handle: 40px } .c { width: calc(100% - var(--handle)) } ` +
+      '.wide { --handle: 100px } .d { height: 5px; width: calc(var(--missing, 30px) + 50%) }';
+    const s = scene(css, ['p', ['c'], ['d']]);
+    assert.deepEqual(s.box('c'), [10, 10, 240, 10]);
+    assert.deepEqual(s.box('d'), [10, 20, 170, 5]);
+    s.engine.addClass(s.nodes.get('p')!, 'wide');
+    assert.deepEqual(s.box('c'), [10, 10, 180, 10]);
+    s.engine.removeClass(s.nodes.get('p')!, 'wide');
+    assert.deepEqual(s.box('c'), [10, 10, 240, 10], 'and back once the token is its own again');
+  });
+
   it('refuses a token with a percentage where the percentage is of no box', () => {
     const dropped: string[] = [];
     compileCss('.c { letter-spacing: calc(50% + var(--x)) }', 'app.css', {

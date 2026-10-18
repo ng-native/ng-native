@@ -2616,8 +2616,11 @@ function mixedValues(
 const SIZE_KEYS = new Set([
   ...['width', 'height', 'minWidth', 'minHeight', 'maxWidth', 'maxHeight', 'flexBasis'],
 ]);
-/** What only the engine reads, whatever it is set to: no native view lays out by any of them. */
-const LAID_OUT_HERE = new Set([...GRID_KEYS, 'order']);
+/**
+ * What only the engine reads, whatever it is set to: no native view lays out by any of them, or
+ * draws by `visibility` or a clip to nothing (`seenByCss`).
+ */
+const LAID_OUT_HERE = new Set([...GRID_KEYS, 'order', 'visibility', 'clipped']);
 const POSITIONS_HERE = new Set(['static', 'fixed', 'sticky']);
 
 /** What a declaration can ask of the engine that an app of plain flex does not: see `asks`. */
@@ -4036,6 +4039,39 @@ const MODAL_HOST = 'ModalHostView';
  * read when the finger came down, before anything here had heard of the touch.
  */
 const NO_SWIPE = Object.freeze({ start: -1, end: 0, top: -1, bottom: -1 });
+
+/**
+ * What a box clipped to nothing is committed with: `clip: rect(0 0 0 0)`, how a library hides
+ * what is for a screen reader alone. A view is clipped to no smaller than itself, its shadow is
+ * drawn outside it and a minimum size is over the pixel it is given, so each of those is taken
+ * away. It keeps its opacity: a view with none is not read out, which is all this one is for.
+ */
+const CLIPPED_AWAY = {
+  boxShadow: [],
+  backgroundColor: 'rgba(0, 0, 0, 0)',
+  minWidth: 0,
+  minHeight: 0,
+  overflow: 'hidden',
+  pointerEvents: 'none',
+};
+
+/** What a box that is `visibility: hidden` is committed with: there, and not seen or touched. */
+const UNSEEN = Object.freeze({ opacity: 0, pointerEvents: 'none' });
+
+/** What a box is seen as, of what only a sheet read as a browser reads it says. */
+function seenByCss(merged: Record<string, unknown>): void {
+  // `visibility`: a hidden box keeps its room and is not seen or touched, and nothing of a
+  // native view is called visibility.
+  if (merged['visibility'] !== undefined) {
+    if (merged['visibility'] === 'hidden') Object.assign(merged, UNSEEN);
+    delete merged['visibility'];
+  }
+  // A box such a sheet clips to nothing: see `CLIPPED_AWAY`.
+  if (merged['clipped'] !== undefined) {
+    delete merged['clipped'];
+    Object.assign(merged, CLIPPED_AWAY);
+  }
+}
 
 /** A screen of a native stack, which is what the swipe back is a gesture of. */
 const STACK_SCREEN = 'RNSScreen';
@@ -10350,6 +10386,8 @@ export class Engine implements HostEngine {
     hiddenOutOfFlow(merged);
     delete merged['touchAction'];
     if (this.responders.has(node)) stillTouched(merged);
+    // Each read here, so asked for as a layout of CSS's is: see `LAID_OUT_HERE`.
+    if (this.asked & CSS_LAYOUT) seenByCss(merged);
     this.heldFor(node, merged);
     this.movePaint(node, merged);
     if (node.raised !== undefined) merged['zIndex'] ??= node.raised;

@@ -386,6 +386,11 @@ export interface DeferredDeclaration {
     readonly offset?: number;
     readonly floor?: number;
     /**
+     * A percentage the length is added to, `calc(100% - var(--x))`: written as that sum, which
+     * the engine works out once the box the percentage is of has been laid out.
+     */
+    readonly percent?: number;
+    /**
      * The reference is multiplied by a length, so it is a number: `calc(var(--n) * 1px)`. Without
      * this it is a length, and a number token is no such thing, as CSS types a calc().
      */
@@ -6056,6 +6061,10 @@ function adjusted(value: unknown, adjust: NonNullable<DeferredDeclaration['adjus
   if (em && adjust.floor === undefined) return adjustedEm(em, adjust);
   if (typeof value !== 'number') return value;
   const scaled = value * (adjust.scale ?? 1) + (adjust.offset ?? 0);
+  // With nothing to add, the percentage alone, which needs no second pass.
+  if (adjust.percent !== undefined) {
+    return scaled === 0 ? `${adjust.percent}%` : `calc(${adjust.percent}% + ${scaled}px)`;
+  }
   return adjust.floor === undefined ? scaled : Math.max(scaled, adjust.floor);
 }
 

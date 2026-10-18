@@ -27,6 +27,7 @@ const {
   round,
   withRefusals,
   mixedToken,
+  OF_A_BOX,
 } = require('./values.cjs');
 const {
   translate,
@@ -67,7 +68,7 @@ const pack = (ids, classes, types) => ids * 1_000_000 + classes * 1_000 + types;
  * variable in a divisor, a `min()` - returns null and is refused, because the alternative is a
  * calc engine on device, which is a CSS parser by another name.
  */
-function linear(part, context) {
+function linear(part, context, ofABox = false) {
   const { name, arguments: args } = part.value ?? {};
   if (name !== 'calc' && name !== 'max') return null;
 
@@ -75,11 +76,47 @@ function linear(part, context) {
   if (found.length !== 1) return null;
   const reference = found[0];
 
-  const value =
-    name === 'max'
-      ? floored(meaningful(args), reference, context)
-      : evaluateLinear(meaningful(args), reference, context);
-  return value?.scale ? { reference, adjust: trim(value) } : null;
+  if (name === 'max') {
+    const floor = floored(meaningful(args), reference, context);
+    return floor?.scale ? { reference, adjust: trim(floor) } : null;
+  }
+  const adjust = linearSum(meaningful(args), reference, context, ofABox);
+  return adjust && { reference, adjust };
+}
+
+/** A `calc()` as `scale * var + offset`, with the percentage it is added to where one is of a box. */
+function linearSum(list, reference, context, ofABox) {
+  // Only where a percentage is of a box: anywhere else it is a number, or nothing at all.
+  const { rest, percent } = ofABox ? withoutPercentage(list) : { rest: list };
+  const value = evaluateLinear(rest, reference, context);
+  if (!value?.scale) return null;
+  return { ...trim(value), ...(percent === undefined ? {} : { percent: round(percent) }) };
+}
+
+const isPercentage = (term) => term?.type === 'token' && term.value?.type === 'percentage';
+const NOTHING = { type: 'length', value: { unit: 'px', value: 0 } };
+const isSign = (term) => operator(term) === '+' || operator(term) === '-';
+const multiplied = (list, i) =>
+  operator(list[i - 1]) === '*' || ['*', '/'].includes(operator(list[i + 1]));
+
+/**
+ * A sum with the percentages added in it taken out, and what they come to: `100% - var(--x)` is
+ * `0px - var(--x)` and 100. The device settles the rest to a length, and the engine adds it to
+ * the percentage once the box the percentage is of has been laid out, as it does a written
+ * `calc(100% - 24px)`. A percentage that is multiplied is left in, and refused with the rest.
+ */
+function withoutPercentage(list) {
+  const rest = [];
+  let percent;
+  let sign = 1;
+  list.forEach((term, i) => {
+    if (isSign(term)) sign = operator(term) === '+' ? 1 : -1;
+    if (!isPercentage(term) || multiplied(list, i)) return void rest.push(term);
+    percent = (percent ?? 0) + sign * term.value.value * 100;
+    // The sign before it goes too, or stays in front of nothing where it was the first term.
+    if (isSign(rest.at(-1))) rest.pop();
+  });
+  return { rest: isSign(rest[0]) ? [NOTHING, ...rest] : rest, percent };
 }
 
 /** `max(<linear>, <length>)` in either order: the same value, with a lower bound on it. */
@@ -633,7 +670,9 @@ function deferVar(value, context) {
   if (motion) return motion;
 
   const arithmetic =
-    parts.length === 1 && parts[0]?.type === 'function' ? linear(parts[0], context) : null;
+    parts.length === 1 && parts[0]?.type === 'function'
+      ? linear(parts[0], context, OF_A_BOX.test(property))
+      : null;
   const varPart = arithmetic ? arithmetic.reference : parts.length === 1 ? parts[0] : null;
 
   if (varPart?.type !== 'var') {
@@ -1102,6 +1141,106 @@ function isLoneLiteral(parts) {
   const written = meaningful(parts);
   return written.length === 1 && !mentionsVar(written);
 }
+
+/** A rule with each control's state in its selectors as the prop the control keeps it in. */
+function withControlStates(rule) {
+  const selectors = rule.value.selectors.map((written) => written.map(controlState));
+  return { ...rule, value: { ...rule.value, selectors } };
+}
+
+const attribute = (name) => ({ type: 'attribute', namespace: null, name, operation: null });
+
+/**
+ * A control's state as the property the control has it as, which is where an element made for a
+ * browser's `<input>` keeps it: `:checked` is `[checked]`, and `:enabled` is not `[disabled]`.
+ * Through any `:not()` or `:is()` it is written in.
+ */
+function controlState(part) {
+  if (part.type !== 'pseudo-class') return part;
+  if (part.kind === 'checked' || part.kind === 'indeterminate') return attribute(part.kind);
+  if (part.kind === 'enabled') {
+    return { type: 'pseudo-class', kind: 'not', selectors: [[attribute('disabled')]] };
+  }
+  if (!part.selectors) return part;
+  return { ...part, selectors: part.selectors.map((parts) => parts.map(controlState)) };
+}
+
+/**
+ * Take a declaration only a sheet read as a browser reads it has a meaning for: a clip along one
+ * axis, a box that is clipped to nothing, a box that is not seen. Answers whether it was one.
+ */
+function asABrowserReads(declaration, out) {
+  return (
+    clippedOnAnAxis(declaration, out) ||
+    clippedToNothing(declaration, out) ||
+    seenOrNot(declaration, out)
+  );
+}
+
+/**
+ * `visibility`, in a sheet read as a browser reads it: kept as it is written, for the engine to
+ * draw a hidden box with no opacity and no touch, which is what hidden is where a box keeps its
+ * room. `collapse` is `hidden` for anything but a table's rows. A value that is a token is left
+ * to be refused.
+ */
+function seenOrNot(declaration, out) {
+  if (declaration.property !== 'visibility' || typeof declaration.value !== 'string') return false;
+  out.visibility = declaration.value === 'visible' ? 'visible' : 'hidden';
+  return true;
+}
+
+/** A `clip` rectangle with nothing in it: four edges that are all the same length. */
+const EMPTY_RECT = /^rect\(\s*(\d+(?:px)?)(?:[\s,]+\1){3}\s*\)$/;
+
+/**
+ * `clip` or `clip-path` that leaves nothing of a box, in a sheet read as a browser reads it: how
+ * a library hides what is for a screen reader alone. Kept as a mark for the engine, which draws
+ * nothing of the box and leaves it there to be read: no other declaration draws a box that is
+ * clipped away, whatever its rule's place in the cascade. Any other clip is left to be refused.
+ */
+function clippedToNothing(declaration, out) {
+  const nothing = emptyClip(declaration) || insetByHalf(declaration);
+  if (nothing) out.clipped = true;
+  return nothing;
+}
+
+/** `clip: rect()` with nothing in it. The parser has no name for `clip`, and hands its terms over. */
+function emptyClip({ property, value }) {
+  if (property !== 'custom' || value?.name !== 'clip') return false;
+  try {
+    return EMPTY_RECT.test(cssText(value.value, 'clip').trim());
+  } catch {
+    return false;
+  }
+}
+
+/** `clip-path: inset(50%)`: each edge brought in to the middle. */
+function insetByHalf({ property, value }) {
+  if (property !== 'clip-path' || value?.shape?.type !== 'inset') return false;
+  return value.shape.value.rect.every((edge) => edge.type === 'percentage' && edge.value === 0.5);
+}
+
+/**
+ * `overflow-x: hidden`, in a sheet read as a browser reads it: a view clips on both axes or on
+ * neither, so what a library clips along one is clipped. A progress bar's track clips the bar
+ * that slides across it. A list that scrolls down the page, `overflow-y: auto`, scrolls. Any
+ * other value on one axis is no clipping, which a view has by default.
+ */
+function clippedOnAnAxis(declaration, out) {
+  if (declaration.property !== 'overflow-x' && declaration.property !== 'overflow-y') return false;
+  if (declaration.value === 'hidden' || declaration.value === 'clip') out.overflow = 'hidden';
+  // Down the page is the way a scroll view scrolls.
+  //
+  // ponytail: across is left unclipped, as before. A scroll view has `horizontal` for it; set
+  // that from `overflow-x` if a library scrolls a row of tabs or a wide table this way.
+  else if (declaration.property === 'overflow-y' && SCROLLS.has(declaration.value)) {
+    // `scroll`, as `overflow: auto` is written: a view has no `auto`, and draws what is past it.
+    out.overflow = 'scroll';
+  }
+  return true;
+}
+
+const SCROLLS = new Set(['auto', 'scroll']);
 
 /** The query a rule's dark side is under: native has the app's one scheme, which this reads. */
 const DARK = { feature: 'prefers-color-scheme', value: 'dark' };
@@ -2642,8 +2781,10 @@ function undrawn(name, context) {
  *   the app's own fails the build, where the mistake is its author's to see. `asset` is given each
  *   font's url and the line of the sheet it is on, and answers the path to require it by: a caller
  *   that joined sheets from several directories resolves each url against its own sheet.
- *   `generated` reads `::before` and `::after` as a browser does, as boxes of their own with the
- *   `content` they are given, for a library's sheet the build is told was written for one.
+ *   `generated` reads the sheet as the browser it was written for reads it, for components made
+ *   for one: `::before` and `::after` as boxes of their own with the `content` they are given,
+ *   `visibility`, a clip to nothing, `overflow` along one axis and a control's state, which an
+ *   app's own sheet is told to write another way.
  */
 function compileCss(source, context = 'styles', options = {}) {
   const rules = [];
@@ -2726,6 +2867,16 @@ function compileCss(source, context = 'styles', options = {}) {
   }
 
   /** A generated box's `content`, or `none` and the report of why where it is one no box draws. */
+  /**
+   * A declaration only a sheet read as a browser reads it has a meaning for: a generated box's
+   * `content`, reported where it is one no box draws, or what `asABrowserReads` takes.
+   */
+  function readBrowsers(declaration, out, context) {
+    if (!isContent(declaration)) return asABrowserReads(declaration, out);
+    declareContent(declaration, out, context);
+    return true;
+  }
+
   function declareContent(declaration, out, context) {
     const content = contentOf(declaration);
     out.content = content ?? 'none';
@@ -2801,7 +2952,7 @@ function compileCss(source, context = 'styles', options = {}) {
   function styleRule(written) {
     const context = locationOf(written);
     if (written.type !== 'style') throw refusedAtRule(written, context);
-    const rule = options.generated ? withGeneratedBoxes(written) : written;
+    const rule = options.generated ? withControlStates(withGeneratedBoxes(written)) : written;
 
     // Compiled once per set of platforms its selectors can apply on, because a declaration one
     // platform ignores is refused only where it could apply there. A selector list is one rule to
@@ -3020,10 +3171,7 @@ function compileCss(source, context = 'styles', options = {}) {
       for (const stated of list ?? []) {
         const declaration = ownToken(stated, raw);
         if (declaration === null) continue;
-        if (options.generated && isContent(declaration)) {
-          declareContent(declaration, out, context);
-          continue;
-        }
+        if (options.generated && readBrowsers(declaration, out, context)) continue;
         if (easedByToken(declaration, out, deferred, context)) continue;
         if (timedByToken(declaration, out, context)) continue;
         const before = deferred.length;
