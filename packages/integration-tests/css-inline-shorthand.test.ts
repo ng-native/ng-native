@@ -174,6 +174,15 @@ describe('an inline shorthand over a longhand from a stylesheet', () => {
     assert.deepEqual(read(), [0, 2, 'auto'], 'and gives each back when it goes');
   });
 
+  it('leaves flex longhands the stylesheet marks important under an inline flex', () => {
+    const css =
+      '.a { flex-grow: 4 !important; flex-shrink: 2 !important; flex-basis: auto !important }';
+    const s = scene(css, 'a');
+    s.style({ flex: 1 });
+    const props = s.props();
+    assert.deepEqual([props['flexGrow'], props['flexShrink'], props['flexBasis']], [4, 2, 'auto']);
+  });
+
   it('leaves the longhand under an inline shorthand that is null, which sets nothing', () => {
     const s = scene('.a { padding-top: 4px }', 'a');
     s.style({ padding: null });
