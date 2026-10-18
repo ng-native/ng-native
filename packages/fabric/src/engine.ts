@@ -6468,6 +6468,15 @@ export class Engine implements HostEngine {
     this.watchLayout(sheet);
     this.watchHas(sheet);
     this.watchActive(sheet);
+    this.watchGenerated(sheet);
+    // Its generated boxes are matched against the sheet it now has, as it is.
+    for (const child of node.childList) {
+      if (isGenerated(child.tag) && child.templateSheet !== sheet) {
+        child.templateSheet = sheet;
+        this.markProps(child);
+      }
+    }
+    this.generate(node);
     this.markProps(node);
   }
 

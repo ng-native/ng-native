@@ -551,3 +551,26 @@ describe("a component's :host::before", () => {
     assert.deepEqual(other.childList, [], 'an element that is no host has no box');
   });
 });
+
+describe('a generated box, in a node that adopts another scope', () => {
+  it("is drawn from the adopted sheet's rules, and its box follows the sheet", () => {
+    const fabric = createFakeFabric();
+    const engine = new Engine(fabric, 1);
+    const own = generated('.c { height: 4px }') as never;
+    const adopted = generated('.c::before { content: ""; width: 3px }') as never;
+    const host = engine.createElement('view', adopted);
+    const node = engine.createElement('view', own);
+    engine.setClasses(node, 'c');
+    engine.appendChild(engine.root, host);
+    engine.appendChild(engine.root, node);
+    engine.commit();
+    // Kept for the rule another sheet has for its class, but drawn by none of its own sheet's.
+    assert.ok(!node.childList[0]?.committed, 'its own sheet draws no box');
+    engine.adoptScope(node, host);
+    engine.commit();
+    const box = node.childList[0];
+    assert.equal(box?.tag, '::before');
+    assert.equal(box?.templateSheet, adopted, 'the box is matched against the adopted sheet');
+    assert.equal(box?.committed?.props['width'], 3);
+  });
+});
