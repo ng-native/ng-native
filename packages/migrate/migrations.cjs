@@ -18,6 +18,7 @@
  *   what is left for the developer to do, one line each.
  */
 const { deviceReactNativeImport } = require('./device-react-native-import.cjs');
+const { engineNodeFields } = require('./engine-node-fields.cjs');
 const { engineNodeTag } = require('./engine-node-tag.cjs');
 const { splitStoreAndPlayer } = require('./split-store-and-player.cjs');
 const { syncAppVersions } = require('./sync-app-versions.cjs');
@@ -58,6 +59,12 @@ const migrations = [
     version: '0.14.0',
     description: "Read an engine node's element tag as tag rather than name.",
     run: engineNodeTag,
+  },
+  {
+    name: 'engine-node-fields',
+    version: '0.17.0',
+    description: "Read an engine node's children, text, kind, host and sheet by their new names.",
+    run: engineNodeFields,
   },
 ];
 

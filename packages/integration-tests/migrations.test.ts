@@ -539,6 +539,90 @@ describe('engine-node-tag, through nx migrate, ng update and ng-native-migrate',
   });
 });
 
+describe('engine-node-fields, through nx migrate, ng update and ng-native-migrate', () => {
+  const files = {
+    'src/app/walk.ts': [
+      "import { ElementRef, inject } from '@angular/core';",
+      "import type { EngineNode, HostNode } from '@ng-native/fabric';",
+      "import type { BrowserNode } from '@ng-native/web';",
+      '',
+      'export function words(node: EngineNode): string {',
+      "  if (node.kind === 'text') return node.text;",
+      "  return node.children.map((child) => words(child)).join('');",
+      '}',
+      '',
+      'export function first(node: HostNode | null, page: BrowserNode): unknown[] {',
+      '  const { kind, children } = node!;',
+      "  return [kind, children[0]?.text, page['children'], node?.host, page.parent?.kind];",
+      '}',
+      '',
+      'export class Probe {',
+      '  private readonly ref = inject<ElementRef<EngineNode>>(ElementRef);',
+      '  sheet() {',
+      '    return this.ref.nativeElement.sheet;',
+      '  }',
+      '}',
+      '',
+      "export const made: HostNode = { kind: 'element', props: {}, text: '', children: [], parent: null };",
+      '',
+    ].join('\n'),
+    'src/app/unsure.ts': [
+      "import type { EngineNode } from '@ng-native/fabric';",
+      '',
+      'export function described(lookup: () => EngineNode | undefined, message: { text: string }) {',
+      '  return [lookup()?.text, message.text];',
+      '}',
+      '',
+    ].join('\n'),
+    'src/app/plain.ts': [
+      'export function plain(item: { kind: string; children: unknown[]; text: string }) {',
+      '  return [item.kind, item.children, item.text];',
+      '}',
+      '',
+    ].join('\n'),
+  };
+
+  it("reads a node's renamed fields by their new names where it is a node's", async () => {
+    const { nx, angular, cli } = await acrossAdapters(files, 'engine-node-fields', '0.13.0');
+    assert.equal(
+      nx.files['src/app/walk.ts'],
+      files['src/app/walk.ts']
+        .replace(
+          "node.kind === 'text') return node.text;",
+          "node.nodeKind === 'text') return node.nodeText;",
+        )
+        .replace('node.children.map', 'node.childList.map')
+        .replace(
+          'const { kind, children } = node!;',
+          'const { nodeKind: kind, childList: children } = node!;',
+        )
+        .replace(
+          "children[0]?.text, page['children'], node?.host, page.parent?.kind",
+          "children[0]?.text, page['childList'], node?.engine, page.parent?.nodeKind",
+        )
+        .replace('nativeElement.sheet;', 'nativeElement.templateSheet;')
+        .replace(
+          "{ kind: 'element', props: {}, text: '', children: [], parent: null }",
+          "{ nodeKind: 'element', props: {}, nodeText: '', childList: [], parent: null }",
+        ),
+    );
+    assert.equal(nx.files['src/app/unsure.ts'], files['src/app/unsure.ts']);
+    assert.equal(nx.files['src/app/plain.ts'], files['src/app/plain.ts']);
+    assert.deepEqual(nx.notes, [
+      "src/app/unsure.ts:4: lookup()?.text may be an engine node's text, which is now nodeText. If it is, read lookup()?.nodeText instead.",
+      "src/app/walk.ts:12: children[0]?.text may be an engine node's text, which is now nodeText. If it is, read children[0]?.nodeText instead.",
+    ]);
+    assert.deepEqual(angular, nx);
+    assert.deepEqual(cli, nx);
+  });
+
+  it('changes nothing the second time', async () => {
+    const first = await viaNx(files, 'engine-node-fields');
+    const again = await viaNx(first.files as Record<string, string>, 'engine-node-fields');
+    assert.deepEqual(again.files, first.files);
+  });
+});
+
 describe('ng-native-migrate', () => {
   const app = {
     'package.json': JSON.stringify({ dependencies: { '@ng-native/components': '^0.1.3' } }),
