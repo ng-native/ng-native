@@ -1235,7 +1235,14 @@ function isBrowserSource(filename, root = process.cwd()) {
   if (!named) return false;
   // Metro names a file from the project, and a test by where it is.
   const absolute = path.resolve(root, filename);
-  return named.split(path.delimiter).some((directory) => absolute.startsWith(directory + path.sep));
+  // An empty entry, from a separator doubled or left at the end, names no directory.
+  return named
+    .split(path.delimiter)
+    .filter(Boolean)
+    .map((directory) => path.normalize(directory))
+    .some((directory) =>
+      absolute.startsWith(directory.endsWith(path.sep) ? directory : directory + path.sep),
+    );
 }
 
 /** What a file's selectors add to the elements the app lays out as a browser's, to end it with. */

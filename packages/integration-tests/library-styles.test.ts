@@ -230,6 +230,11 @@ export class Panel {}`;
     assert.equal(named('/app/src/helmet/panel.ts', both), false, 'a directory beside it');
     assert.equal(named('/app/src/page/panel.ts', both), false);
     assert.equal(named('/app/src/helm/panel/panel.ts', undefined), false);
+    // A directory written with its separator at the end is the same directory, and an empty
+    // entry, from a separator doubled or left at the end of the list, names none.
+    assert.equal(named('/app/src/helm/panel/panel.ts', `/app/src/helm${path.sep}`), true);
+    const empty = ['', '/app/src/helm', ''].join(path.delimiter);
+    assert.equal(named('/app/src/page/panel.ts', empty), false, 'an empty entry');
   });
 
   it("reads its component styles as a browser does, and no other directory's", () => {
