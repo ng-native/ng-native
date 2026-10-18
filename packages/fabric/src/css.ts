@@ -39,12 +39,16 @@ export interface Compound {
   readonly is?: readonly (readonly Compound[])[];
   /**
    * `:is()` / `:where()` with an argument of more than a compound, `:is(.a + .b)`, once for each
-   * written: the node is the last element of one of these.
+   * written: the node is the last element of one of these. Read only where `is` is set, which
+   * the compiler sets beside it, so a compound with no `:is()` pays nothing for it.
    */
   readonly isComplex?: readonly (readonly ComplexSelector[])[];
   /** `:not()` arguments: the compound matches only if none of these do. */
   readonly not?: readonly Compound[];
-  /** `:not()` with an argument of more than a compound: the node is the last of none of these. */
+  /**
+   * `:not()` with an argument of more than a compound: the node is the last of none of these.
+   * Read only where `not` is set, as `isComplex` is.
+   */
   readonly notComplex?: readonly ComplexSelector[];
   /** `:host`: the node must be the host of the component whose sheet is being evaluated. */
   readonly host?: true;
@@ -972,6 +976,27 @@ function ownedBy(node: StyleTarget, compound: Compound, sheet: StyleSheet | null
   return node.templateSheet === sheet;
 }
 
+/** `:not()`: the node is none of its arguments, a compound or a longer selector. */
+function matchesNone(node: StyleTarget, compound: Compound, sheet: StyleSheet | null): boolean {
+  for (const excluded of compound.not!) {
+    if (matchesCompound(node, excluded, sheet)) return false;
+  }
+  for (const excluded of compound.notComplex ?? []) {
+    if (matchesComplex(node, excluded, sheet)) return false;
+  }
+  return true;
+}
+
+/** `:is()` and `:where()`: the node is one of each list of alternatives. */
+function matchesEach(node: StyleTarget, compound: Compound, sheet: StyleSheet | null): boolean {
+  for (const alternatives of compound.is!) {
+    if (!alternatives.some((option) => matchesCompound(node, option, sheet))) return false;
+  }
+  for (const alternatives of compound.isComplex ?? []) {
+    if (!alternatives.some((option) => matchesComplex(node, option, sheet))) return false;
+  }
+  return true;
+}
 /*
  * Exempt from the complexity limit deliberately. This is a flat conjunction of independent
  * guards, not nested logic: cyclomatic complexity scores the two the same, and they are not the
@@ -1005,26 +1030,8 @@ function matchesCompound(node: StyleTarget, compound: Compound, sheet: StyleShee
       if (!matchesNth(node, test)) return false;
     }
   }
-  if (compound.not) {
-    for (const excluded of compound.not) {
-      if (matchesCompound(node, excluded, sheet)) return false;
-    }
-  }
-  if (compound.is) {
-    for (const alternatives of compound.is) {
-      if (!alternatives.some((option) => matchesCompound(node, option, sheet))) return false;
-    }
-  }
-  if (compound.notComplex) {
-    for (const excluded of compound.notComplex) {
-      if (matchesComplex(node, excluded, sheet)) return false;
-    }
-  }
-  if (compound.isComplex) {
-    for (const alternatives of compound.isComplex) {
-      if (!alternatives.some((option) => matchesComplex(node, option, sheet))) return false;
-    }
-  }
+  if (compound.not && !matchesNone(node, compound, sheet)) return false;
+  if (compound.is && !matchesEach(node, compound, sheet)) return false;
   if (compound.has) {
     for (const test of compound.has) {
       if (!hasBeneath(node, test, sheet)) return false;

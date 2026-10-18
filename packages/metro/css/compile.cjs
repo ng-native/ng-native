@@ -1055,10 +1055,16 @@ function compound(parts, context) {
         if (nested.parents?.length) (out.parents ??= []).push(...nested.parents);
         if (part.kind === 'not') {
           if (nested.compounds.length) (out.not ??= []).push(...nested.compounds);
-          if (nested.complex.length) (out.notComplex ??= []).push(...nested.complex);
+          if (nested.complex.length) {
+            // With `not` beside it, so the engine asks for these only of a compound with a `:not()`.
+            out.not ??= [];
+            (out.notComplex ??= []).push(...nested.complex);
+          }
         } else if (nested.complex.length) {
           // One list: the compounds alongside are selectors of one compound each.
           const alone = nested.compounds.map((one) => ({ compounds: [one], combinators: [] }));
+          // With `is` beside it, so the engine asks for these only of a compound with an `:is()`.
+          out.is ??= [];
           (out.isComplex ??= []).push([...alone, ...nested.complex]);
         } else if (nested.compounds.length) (out.is ??= []).push(nested.compounds);
         break;
