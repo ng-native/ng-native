@@ -29,9 +29,15 @@ ROUTES=$(jq -r '.results[] | select(.missing or (.changes | length > 0) or ((.no
 echo "$ROUTES"
 ```
 
-`ROUTES` empty: nothing to compare, say so, clean up (step 6) and stop. The screens `diff.json` lists under
-`skipped` (they throw or never yield in Node) are not covered by the native output: add any the
-change could affect by hand.
+The native output does not cover the screens that throw in Node or never yield there, so add any
+the change could affect first:
+
+```sh
+jq -r '(.results[] | select(.threw) | .url), (.skipped | keys[] | "/" + ltrimstr("/"))' "$out/diff.json"
+ROUTES="$ROUTES /worklets"   # each of those the change could affect
+```
+
+Only then, with `ROUTES` still empty: nothing to compare, say so, clean up (step 6) and stop.
 
 ## 2. One app, both bundles
 
