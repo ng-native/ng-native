@@ -164,6 +164,10 @@ describe('an inline shorthand over a longhand from a stylesheet', () => {
     assert.deepEqual(read(), [0, 0, 'auto']);
     s.style({ flex: 'auto' });
     assert.deepEqual(read(), [0, 2, 'auto'], 'and covers nothing with a flex that is no number');
+    s.style({ flex: Number.NaN });
+    assert.deepEqual(read(), [0, 2, 'auto'], 'nor with one that is no finite number');
+    s.style({ flex: Number.POSITIVE_INFINITY });
+    assert.deepEqual(read(), [0, 2, 'auto']);
     s.style({ flex: 1, flexShrink: 3 });
     assert.deepEqual(read(), [1, 3, 0], 'and leaves one the element sets itself');
     s.style(null);

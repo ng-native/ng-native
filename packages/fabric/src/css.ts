@@ -1930,10 +1930,10 @@ const COVERS: ReadonlyMap<string, readonly string[]> = new Map([
 /**
  * The longhands Yoga reads `flex` as when none is set (`Node::resolveFlexGrow`,
  * `resolveFlexShrink`, `processFlexBasis`), so an inline `flex` means the same over a class's.
- * Null for a value that is no number, which covers nothing.
+ * Null for a value that is no finite number, which covers nothing.
  */
 function flexParts(n: unknown): Record<string, unknown> | null {
-  if (typeof n !== 'number') return null;
+  if (typeof n !== 'number' || !Number.isFinite(n)) return null;
   return { flexGrow: n > 0 ? n : 0, flexShrink: n < 0 ? -n : 0, flexBasis: n > 0 ? 0 : 'auto' };
 }
 
