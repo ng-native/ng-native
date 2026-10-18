@@ -64,6 +64,7 @@ import { transformList } from './inline-transform.ts';
 import { tokenFromValue } from './inline-token.ts';
 import {
   NativeScrollDriver,
+  pinnedRange,
   scrollFeed,
   type DrivenProperty,
   type EventFeed,
@@ -577,6 +578,19 @@ export interface EngineNode extends HostNode {
    * followed. Unset on every node that is not a block container. See `flow.ts`.
    */
   flow?: Flow;
+  /**
+   * What an out-of-flow box is committed with in place of what Yoga cannot resolve: its `auto`
+   * margins as lengths, or the place it would have had in the flow. A null takes the prop away.
+   * See `settleAbsolute`.
+   */
+  resolved?: Readonly<Record<string, number | null>>;
+  /** Where a `position: sticky` box sticks, and how far it is moved now. See `settleSticky`. */
+  sticky?: StickyState;
+  /**
+   * The node a `position: fixed` box is committed under in place of its parent: the page it is
+   * on, or the root. Unset on every node that is not fixed.
+   */
+  fixedTo?: EngineNode;
   /**
    * Set once a child of this node has had an `order`: its children are then committed in that
    * order, which Yoga has no property for. Left set, since sorting children with none is nothing.
@@ -1543,6 +1557,12 @@ const MARGIN_KEYS = [
   ...['marginLeft', 'marginRight', 'marginTop', 'marginBottom'],
 ];
 
+/** The two axes an out-of-flow box is resolved on, as the props and the box indexes of each. */
+const ABSOLUTE_AXES = [
+  { start: 'Left', end: 'Right', across: 'Horizontal', at: 0, size: 2 },
+  { start: 'Top', end: 'Bottom', across: 'Vertical', at: 1, size: 3 },
+] as const;
+
 /**
  * What a removed prop travels as: null, which native resets the prop on, except `pointerEvents`,
  * which react-native-svg's Android root reads as a string and stops the app on a null. `auto` is
@@ -1555,6 +1575,36 @@ function resolveLength(value: unknown, whole: number): number | undefined {
   if (typeof value === 'number') return value;
   if (typeof value !== 'string' || !value.endsWith('%')) return undefined;
   return (Number.parseFloat(value) / 100) * whole;
+}
+
+/**
+ * The `auto` margins of an out-of-flow box on one axis, as lengths (CSS 2.2, 10.3.7 and 10.6.4):
+ * between two insets they take the room left over, shared when both are auto, and without both
+ * insets they are nothing. `room` is the container's padding box on the axis and `size` the
+ * box's own.
+ */
+const INSETS: ReadonlySet<string> = new Set(['top', 'right', 'bottom', 'left']);
+
+/**
+ * What a percentage is a share of a width for, and of a height: a size, its limits, an inset. A
+ * margin is a share of the width on either axis (CSS 2.2, 8.3), where Yoga takes a margin down
+ * an out-of-flow box of the height.
+ */
+const SHARED_SIZES = [
+  ...(['width', 'minWidth', 'maxWidth', 'left', 'right'] as const).map((key) => [key, 2] as const),
+  ...(['margin', 'marginVertical', 'marginTop', 'marginBottom'] as const).map(
+    (key) => [key, 2] as const,
+  ),
+  ...(['height', 'minHeight', 'maxHeight', 'top', 'bottom'] as const).map(
+    (key) => [key, 3] as const,
+  ),
+];
+
+/** A box's layout styles with the sizes and insets set on the element itself over them. */
+function withOwnSizes(node: EngineNode, style: Record<string, unknown>): Record<string, unknown> {
+  const own: Record<string, unknown> = {};
+  for (const [key] of SHARED_SIZES) if (node.props[key] != null) own[key] = node.props[key];
+  return { ...style, ...own };
 }
 
 /**
@@ -1711,6 +1761,81 @@ function noOutline(props: Record<string, unknown>): void {
   for (const key of OUTLINE_KEYS) delete props[key];
 }
 
+/**
+ * A percentage size or inset of an out-of-flow box, as the length it is: a share of the
+ * padding box of the box it is placed against (CSS 2.2, 10.2 and 10.5). Yoga takes it of what
+ * is inside its parent's padding, which is a different box under a parent with padding and
+ * another one altogether under a parent that is not positioned.
+ *
+ * ponytail: only for a box the engine places itself, in a block or under a parent that is not
+ * positioned. One in a flex container with padding keeps Yoga's share; note it in `reabsolute`
+ * if a stylesheet depends on the difference.
+ */
+function shareOfBlock(
+  style: Record<string, unknown>,
+  against: readonly number[],
+  insets: boolean,
+): Record<string, number> {
+  const out: Record<string, number> = {};
+  for (const [key, at] of SHARED_SIZES) {
+    if (!insets && INSETS.has(key)) continue;
+    const share = style[key];
+    if (isPercent(share)) out[key] = (against[at]! * Number.parseFloat(String(share))) / 100;
+  }
+  return out;
+}
+
+function autoMargins(
+  style: Record<string, unknown>,
+  axis: (typeof ABSOLUTE_AXES)[number],
+  room: number,
+  size: number,
+): Record<string, number | null> | null {
+  const margin = (side: string) =>
+    firstOf(style, [`margin${side}`, `margin${axis.across}`, 'margin']);
+  const [before, after] = [margin(axis.start), margin(axis.end)];
+  if (before !== 'auto' && after !== 'auto') return null;
+  const start = resolveLength(style[axis.start.toLowerCase()], room);
+  const end = resolveLength(style[axis.end.toLowerCase()], room);
+  const between = start !== undefined && end !== undefined;
+  const fixed = (resolveLength(before, room) ?? 0) + (resolveLength(after, room) ?? 0);
+  const free = between ? room - start - end - size - fixed : 0;
+  // Two auto margins centre the box, unless it overflows: then the start edge holds.
+  const lead = before !== 'auto' ? fixed : after === 'auto' ? Math.max(free / 2, 0) : free;
+  return {
+    [`margin${axis.start}`]: lead,
+    [`margin${axis.end}`]: 0,
+    // The start inset and the margin place it now, and both insets would stretch it.
+    ...(between ? { [axis.end.toLowerCase()]: null } : null),
+  };
+}
+
+/**
+ * A fixed box's insets and percentage sizes, which are of its page, as lengths against the box
+ * Yoga positions it by: each inset moved by how far the two boxes' edges are apart. `by` and
+ * `page` are those boxes inside their borders, in the window.
+ */
+function againstPage(
+  style: Record<string, unknown>,
+  by: readonly number[],
+  page: readonly number[],
+): Record<string, number> {
+  const out: Record<string, number> = {};
+  for (const axis of ABSOLUTE_AXES) {
+    const [start, end, size] = [axis.start.toLowerCase(), axis.end.toLowerCase(), axis.size];
+    const room = page[size]!;
+    const [near, far] = [resolveLength(style[start], room), resolveLength(style[end], room)];
+    if (near !== undefined) out[start] = near + page[axis.at]! - by[axis.at]!;
+    if (far !== undefined) out[end] = far + by[axis.at]! + by[size]! - page[axis.at]! - room;
+    const key = axis.at === 0 ? 'width' : 'height';
+    if (typeof style[key] === 'string') {
+      const length = resolveLength(style[key], room);
+      if (length !== undefined) out[key] = length;
+    }
+  }
+  return out;
+}
+
 /** Keep what was read of a grid item at a width. */
 function noteAt(
   all: Map<EngineNode, Map<number, number>>,
@@ -1735,6 +1860,8 @@ const PAINT_ONLY_KEYS = new Set([
   ...['shadowColor', 'shadowOpacity', 'shadowRadius', 'shadowOffset', 'outlineColor'],
   ...['textDecorationColor', 'textShadowColor'],
 ]);
+
+const LINE_KEYS = ['gridColumnStart', 'gridColumnEnd', 'gridRowStart', 'gridRowEnd'];
 /**
  * Whether the props a node is cloned with change nothing about where any box is: none, or only
  * how it is painted and what a screen reader is told of it.
@@ -1760,6 +1887,77 @@ function holdsItsContent(node: EngineNode): boolean {
     typeof props['height'] === 'number'
   );
 }
+
+/** Whether a box's placement names a grid line on any side. */
+const namesLines = (read: (key: string) => unknown): boolean =>
+  LINE_KEYS.some((key) => read(key) != null && read(key) !== 'auto');
+
+/**
+ * Where an out-of-flow box with no inset on an axis sits in the grid area it is placed against,
+ * as Chrome places it: at the area's start, or moved within it by its `justify-self` across and
+ * its `align-self` down, or the grid's items' where its own is `auto`. `by` is the box Yoga
+ * positions it by, and `box` its own as last laid out.
+ */
+function startOfArea(
+  style: Record<string, unknown>,
+  grid: Record<string, unknown>,
+  boxes: { by: readonly number[]; area: readonly number[]; box: readonly number[] },
+): Record<string, number> {
+  const { by, area, box } = boxes;
+  const out: Record<string, number> = {};
+  for (const axis of ABSOLUTE_AXES) {
+    const [start, end] = [axis.start.toLowerCase(), axis.end.toLowerCase()];
+    if (style[start] != null || style[end] != null) continue;
+    const [self, items] =
+      axis.at === 0 ? ['justifySelf', 'justifyItems'] : ['alignSelf', 'alignItems'];
+    const own = isAuto(style[self]) || style[self] === 'normal' ? grid[items] : style[self];
+    // Its margins are added to the inset where it is placed, and take from the room left over.
+    const margins = marginOf(style, axis.start) + marginOf(style, axis.end);
+    const free = area[axis.size]! - box[axis.size]! - margins;
+    out[start] = area[axis.at]! - by[axis.at]! + free * alignedAt(own);
+  }
+  return out;
+}
+
+/** A box's margin on one side, in points: nothing where it is a share or `auto`. */
+function marginOf(style: Record<string, unknown>, side: (typeof SIDES)[number]): number {
+  const value = firstOf(style, [`margin${side}`, `margin${AXIS[side]}`, 'margin']);
+  return typeof value === 'number' ? value : 0;
+}
+
+/** How far into the room left over an alignment puts a box: none, half or all of it. */
+function alignedAt(align: unknown): number {
+  const word = typeof align === 'string' ? align.replace(/^(safe|unsafe)\s+/, '') : '';
+  if (word === 'center') return 0.5;
+  return ['end', 'flex-end', 'self-end'].includes(word) ? 1 : 0;
+}
+
+const sameResolved = (
+  a: Readonly<Record<string, number | null>> | undefined,
+  b: Readonly<Record<string, number | null>> | undefined,
+): boolean => {
+  const keys = Object.keys(a ?? {});
+  return keys.length === Object.keys(b ?? {}).length && keys.every((key) => a![key] === b?.[key]);
+};
+
+/** A sticky box: the scroll offsets it moves between, and what moves it. */
+interface StickyState {
+  scroll: EngineNode;
+  axis: ScrollAxis;
+  /** The offset it starts moving at, and the one it stops at: the end of its parent. */
+  start: number;
+  stop: number;
+  /** How far it is moved, as written on its transform. */
+  shift: number;
+  drive: ScrollDrive | null;
+}
+
+/**
+ * How long scrolling pauses before a natively moved box's shift is written to its transform, so
+ * the shadow tree a touch is hit-tested against catches up. React Native's own sticky headers
+ * wait as long.
+ */
+const STICKY_SETTLE_MS = 64;
 
 /**
  * A grid container between the commit that changed it and the commit that places its items.
@@ -1978,7 +2176,7 @@ function gridItem(node: EngineNode, state: GridState, props: Record<string, unkn
 
 /** How far an item's own offsets move it from its area, as a relative box. Static or sticky, nothing. */
 function relativeShift(props: Record<string, unknown>): { x: number; y: number } {
-  // A sticky box's offsets are where it sticks in its scroll view, not a move.
+  // A sticky box's offsets are where it sticks in its scroll view: see `Engine.settleSticky`.
   if (props['position'] === 'static' || props['position'] === 'sticky') return { x: 0, y: 0 };
   const at = (start: string, end: string) => {
     const [from, to] = [props[start], props[end]];
@@ -2054,6 +2252,37 @@ function sharesWidth(node: EngineNode): boolean {
 /** A percentage: of the box a node is in, for a width or the least it may be. */
 const isShare = (value: unknown): boolean => typeof value === 'string' && value.endsWith('%');
 
+/** The parts of a table, which stick within the table and not within the part they are in. */
+const TABLE_PARTS = new Set(['thead', 'tbody', 'tfoot', 'tr', 'th', 'td']);
+
+/**
+ * The box a sticky box does not leave: its parent, or for a part of a table the table, since a
+ * header row is no taller than the cells that stick in it. A web library's elements have these
+ * names; an app's own views have none of them.
+ */
+function stickyBlock(node: EngineNode): EngineNode {
+  let block = node.parent!;
+  if (!TABLE_PARTS.has(node.tag)) return block;
+  while (block.parent && TABLE_PARTS.has(block.tag)) block = block.parent;
+  return block;
+}
+
+/**
+ * A sticky box as Yoga lays it out: where it is written, since its insets say where it sticks
+ * and not where it sits, moved by however far its scroll view has pushed it.
+ */
+function stickyLayout(node: EngineNode, props: Record<string, unknown>): void {
+  props['position'] = 'relative';
+  // Over what is written after it, as a browser paints a positioned box over the flow.
+  props['zIndex'] ??= 1;
+  for (const key of ['top', 'right', 'bottom', 'left', 'start', 'end']) {
+    if (props[key] !== undefined) delete props[key];
+  }
+  const state = node.sticky;
+  if (!state?.shift) return;
+  moveBeforeOwn(props, { [state.axis === 'x' ? 'translateX' : 'translateY']: state.shift });
+}
+
 /** A move of the engine's written before a box's own transform. */
 function moveBeforeOwn(props: Record<string, unknown>, move: Record<string, number>): void {
   const own = props['transform'];
@@ -2079,7 +2308,10 @@ function engineLayout(node: EngineNode, props: Record<string, unknown>, asked: n
   // Asked of every node merged, so asked here first: nearly none has a most size.
   if (props['maxHeight'] !== undefined) leastWins(props, 'Height');
   if (props['maxWidth'] !== undefined) leastWins(props, 'Width');
-  if (asked & CSS_LAYOUT) notNative(props);
+  if (asked & CSS_LAYOUT) {
+    notNative(props);
+    if (node.resolved) resolvedOnto(node.resolved, props);
+  }
   if (props['position'] !== undefined) positioned(node, props);
 }
 
@@ -2129,8 +2361,22 @@ function fitted(node: EngineNode, props: Record<string, unknown>): void {
   props['minWidth'] = Math.max(own, node.fitMin);
 }
 
+/** What an out-of-flow box was resolved to, written on its props or taken off them. */
+function resolvedOnto(
+  resolved: NonNullable<EngineNode['resolved']>,
+  props: Record<string, unknown>,
+): void {
+  for (const [key, value] of Object.entries(resolved)) {
+    if (value === null) delete props[key];
+    else props[key] = value;
+  }
+}
+
 /** What a box's `position` needs of the engine, where Yoga does not do what CSS means by it. */
 function positioned(node: EngineNode, props: Record<string, unknown>): void {
+  // Out of the flow is what fixed means, whether in place or committed under its page.
+  if (props['position'] === 'fixed') props['position'] = 'absolute';
+  if (props['position'] === 'sticky') stickyLayout(node, props);
   if (props['position'] === 'relative' && inWrappingRow(node)) offsetAcrossLines(props);
 }
 
@@ -2333,7 +2579,7 @@ const SIZE_KEYS = new Set([
 ]);
 /** What only the engine reads, whatever it is set to: no native view lays out by any of them. */
 const LAID_OUT_HERE = new Set([...GRID_KEYS, 'order']);
-const POSITIONS_HERE = new Set(['static']);
+const POSITIONS_HERE = new Set(['static', 'fixed', 'sticky']);
 
 /** What a declaration can ask of the engine that an app of plain flex does not: see `asks`. */
 const CSS_LAYOUT = 1;
@@ -2415,7 +2661,9 @@ function unaskedPlan(node: EngineNode): string[] {
   const missed: string[] = [];
   const [display, position] = [readStyle(node, 'display'), readStyle(node, 'position')];
   if (isBlockContainer(display) || isGrid(display)) missed.push(`display ${String(display)}`);
-  if (position === 'static') missed.push(`position ${position}`);
+  if (position === 'static' || position === 'fixed' || position === 'sticky') {
+    missed.push(`position ${position}`);
+  }
   if (readStyle(node, 'order') != null) missed.push('order');
   return missed;
 }
@@ -2962,6 +3210,26 @@ const underLine = (container: EngineNode, first: EngineNode): number =>
 
 const sameStrut = (a: LineStrut | undefined, b: LineStrut): boolean =>
   a?.minHeight === b.minHeight && a.alignContent === b.alignContent;
+
+/**
+ * Whether a fixed box is committed under its page wherever it is: on Android, whose screen and
+ * root views clip each view in them to its bounds, where a fixed box draws past its own, as a
+ * toaster of no height draws its toasts above itself. See `fixedHandles`.
+ */
+const clipsFixed = (position: unknown): boolean =>
+  position === 'fixed' && nativePlatform() === 'android';
+
+/** What the view a page's fixed boxes are committed in is: see `fixedHandles`. */
+const FIXED_LAYER = {
+  position: 'absolute',
+  top: 0,
+  left: 0,
+  right: 0,
+  bottom: 0,
+  pointerEvents: 'box-none',
+  // A view of layout alone is flattened into its parent, which is the view that clips.
+  collapsable: false,
+};
 
 const LINE_BOX = {
   flexDirection: 'row',
@@ -3707,6 +3975,11 @@ const TEXT_ALIGN: Readonly<Record<TextDirection, ReadonlyMap<string, string>>> =
 const MODAL_HOST = 'ModalHostView';
 
 /**
+ * The views that hold a page: what `position: fixed` is pinned to, where a browser pins it to
+ * the viewport. A screen of a native stack stays mounted under the one pushed over it, so a box
+ * fixed to the root would stay on top of every screen after its own.
+ */
+/**
  * A screen's `gestureResponseDistance` that no touch is within: how far from each edge a swipe
  * back may start, with -1 for no limit, and none at all from the leading edge. It is what
  * `react-native-screens` reads as the swipe is about to begin; whether the swipe is enabled it
@@ -3716,6 +3989,8 @@ const NO_SWIPE = Object.freeze({ start: -1, end: 0, top: -1, bottom: -1 });
 
 /** A screen of a native stack, which is what the swipe back is a gesture of. */
 const STACK_SCREEN = 'RNSScreen';
+
+const FIXED_BOUNDARIES = new Set([MODAL_HOST, STACK_SCREEN, 'RNSFullWindowOverlay']);
 
 /** What an element's `touch-action` is: bound on it, or from the rules it matches. */
 function touchActionOf(node: EngineNode): unknown {
@@ -7179,6 +7454,7 @@ export class Engine implements HostEngine {
 
   /** Everything the engine lays out in Yoga's place, from the commit just made. */
   private settleLayout(): void {
+    this.moveFixed();
     this.settleMinimums();
     this.settleGrids();
     this.settleFits();
@@ -7189,6 +7465,8 @@ export class Engine implements HostEngine {
       this.settleHeld();
       this.settleMixed();
     }
+    this.settleAbsolute();
+    this.settleSticky();
   }
 
   /** Note a node that is settled after layout: by a sum of a share and a length, or its least. */
@@ -7390,9 +7668,191 @@ export class Engine implements HostEngine {
     this.fabric.completeRoot(this.rootTag, set);
   }
 
+  /** The fixed boxes each page, or the root, is committed with. */
+  private readonly fixedIn = new Map<EngineNode, Set<EngineNode>>();
+  /** Boxes found to be fixed while they were being committed under their parent. */
+  private readonly fixedLate = new Set<EngineNode>();
+
+  /** What a finger is on, while one is down. */
+  private fingerOn: EngineNode | null = null;
+  /** Boxes that became fixed or absolute with the finger on them, left under their parents. */
+  private readonly fixedUnderFinger = new Set<EngineNode>();
+
+  /** Note what a finger comes down on, and once the last has lifted move what waited for it. */
+  private trackFinger(target: EngineNode | null, type: string, nativeEvent: unknown): void {
+    const fingers = (nativeEvent as { touches?: readonly unknown[] } | null)?.touches?.length ?? 0;
+    // The first finger down is a new touch, whether or not the last one's end was heard.
+    if (type === TOUCH_START && fingers <= 1) this.fingerOn = target;
+    if ((type !== 'topTouchEnd' && type !== 'topTouchCancel') || fingers > 0) return;
+    this.fingerOn = null;
+    for (const node of this.fixedUnderFinger) {
+      if (!isWithin(node, this.root)) continue;
+      this.refix(node, readStyle(node, 'position'));
+      this.markProps(node, false);
+    }
+    this.fixedUnderFinger.clear();
+  }
+
+  /** The page a box is on: the nearest view that holds one, or the root. */
+  private pageOf(node: EngineNode): EngineNode | null {
+    let page = node.parent;
+    while (page?.parent && !FIXED_BOUNDARIES.has(viewNameOf(page))) {
+      page = page.parent;
+    }
+    return page;
+  }
+
+  /** Whether anything between a box and its page scrolls or clips what is inside it. */
+  private scrollsOrClips(node: EngineNode, page: EngineNode): boolean {
+    for (let up = node.parent; up && up !== page; up = up.parent) {
+      if (up.nodeKind !== 'element') continue;
+      if (SCROLL_VIEWS.has(viewNameOf(up))) return true;
+      if ((readStyle(up, 'overflow') ?? 'visible') !== 'visible') return true;
+    }
+    return false;
+  }
+
+  /**
+   * Note a node that has become `position: fixed` inside something that scrolls or clips, which
+   * a fixed box does neither with: it is committed under its page in place of its parent. It is
+   * being reconciled under its parent as this is asked, so it is committed there once more and
+   * moved straight after: see `moveFixed`. Anywhere else a fixed box stays where it is, and is
+   * placed against its page by `settleAbsolute`.
+   */
+  private refix(node: EngineNode, position: unknown): void {
+    if (node.fixedTo !== undefined) return;
+    // A view that is moved loses its touch: one a finger is on is moved when the finger lifts.
+    if (isWithin(this.fingerOn, node)) return void this.fixedUnderFinger.add(node);
+    const page = position === 'fixed' ? this.pageOf(node) : this.placedAbove(node);
+    if (!page || !(this.scrollsOrClips(node, page) || clipsFixed(position))) return;
+    node.fixedTo = page;
+    const held = this.fixedIn.get(page) ?? new Set();
+    this.fixedIn.set(page, held.add(node));
+    this.fixedLate.add(node);
+  }
+
+  /**
+   * The box an absolute box is placed against, where that is further up than its parent: one
+   * under a parent that is not positioned. A browser clips such a box by nothing between the
+   * two, where a native view is clipped by every view it is in, so where one of them clips it is
+   * committed under the box it is placed against, as a fixed box is under its page.
+   */
+  private placedAbove(node: EngineNode): EngineNode | null {
+    const block = this.containingBlock(node);
+    return block === node.parent ? null : block;
+  }
+
+  /**
+   * Whether a child is committed under its page, and not under its parent. On Android a fixed box
+   * is taken there before its parent commits it, so that it is never moved: Android mounts a
+   * view moved out of boxes of layout alone wrongly. See `clipsFixed`.
+   */
+  private onPage(child: EngineNode, context: object | undefined): boolean {
+    // A fixed box asks for a layout of CSS's: an app that has none reads no child's position.
+    if (
+      child.fixedTo === undefined &&
+      this.asked & CSS_LAYOUT &&
+      child.nodeKind === 'element' &&
+      nativePlatform() === 'android'
+    ) {
+      this.styles.resolve(child, this.styleEpoch);
+      const position = readStyle(child, 'position');
+      if (clipsFixed(position)) this.refix(child, position);
+    }
+    return child.fixedTo !== undefined && this.staysFixed(child, context);
+  }
+
+  /** Whether a box committed under another still is to be: asked in place of committing it under its parent. */
+  private staysFixed(child: EngineNode, context: object | undefined): boolean {
+    if (this.stillCommitted(child, context)) return true;
+    this.styles.resolve(child, this.styleEpoch);
+    const position = readStyle(child, 'position');
+    if (position === 'fixed') return true;
+    // An absolute one, for as long as it is placed against the same box and still clipped.
+    const above = position === 'absolute' ? this.placedAbove(child) : null;
+    if (above === child.fixedTo && above && this.scrollsOrClips(child, above)) return true;
+    this.fixedIn.get(child.fixedTo!)?.delete(child);
+    child.fixedTo = undefined;
+    return false;
+  }
+
+  /** The view each page's fixed boxes are committed in, and what it was last committed with. */
+  private readonly fixedLayers = new WeakMap<
+    EngineNode,
+    { handle: FabricNode; handles: FabricNode[] }
+  >();
+
+  /**
+   * The fixed boxes pinned to `page`, committed after its own children so they draw over them,
+   * in a view over the whole page: Android's screen view clips each view in it to that view's
+   * bounds, and a fixed box draws past its own, as a toaster of no height draws its toasts.
+   */
+  private fixedHandles(page: EngineNode, into: FabricNode[]): void {
+    const fixed: FabricNode[] = [];
+    this.fixedBoxes(page, fixed);
+    if (fixed.length) into.push(this.fixedLayer(page, fixed));
+  }
+
+  /** The view `fixedHandles` puts a page's fixed boxes in: the same view each commit. */
+  private fixedLayer(page: EngineNode, handles: FabricNode[]): FabricNode {
+    const was = this.fixedLayers.get(page);
+    if (
+      was &&
+      was.handles.length === handles.length &&
+      handles.every((h, i) => h === was.handles[i])
+    )
+      return was.handle;
+    const handle = was
+      ? this.clone(was.handle, null, [...handles])
+      : this.fabric.createNode(nextTag(), 'View', this.rootTag, { ...FIXED_LAYER }, page);
+    if (!was) for (const child of handles) this.fabric.appendChild(handle, child);
+    this.fixedLayers.set(page, { handle, handles });
+    return handle;
+  }
+
+  /** The fixed boxes pinned to `page`, as they are committed. */
+  private fixedBoxes(page: EngineNode, into: FabricNode[]): void {
+    const held = this.fixedIn.get(page);
+    if (!held) return;
+    for (const node of held) {
+      if (node.fixedTo !== page || !isWithin(node, page)) {
+        held.delete(node);
+        if (node.fixedTo === page) node.fixedTo = undefined;
+        continue;
+      }
+      // Inside something that is not displayed, it is not either: nothing of it is committed.
+      if (this.hiddenBelow(node, page)) continue;
+      const parent = node.parent!;
+      const context =
+        parent.nodeKind === 'element'
+          ? this.styles.resolve(parent, this.styleEpoch).context
+          : undefined;
+      into.push(this.reconcileUnder(page, node, context));
+    }
+  }
+
+  /** Whether anything between a node and `page` is `display: none`. */
+  private hiddenBelow(node: EngineNode, page: EngineNode): boolean {
+    for (let up = node.parent; up && up !== page; up = up.parent) {
+      if (up.nodeKind !== 'element') continue;
+      this.styles.resolve(up, this.styleEpoch);
+      if (readStyle(up, 'display') === 'none') return true;
+    }
+    return false;
+  }
+
+  /** Commit again with each box that has just become fixed under its page, in the same task. */
+  private moveFixed(): void {
+    if (!this.fixedLate.size) return;
+    this.touch(this.fixedLate);
+    this.fixedLate.clear();
+    this.commitTree();
+  }
+
   /**
    * What the engine lays out in Yoga's place, for a node being reconciled: a block's flow, a
-   * box in a line, a share and a sum. Asked of every node reconciled, and most are none of these.
+   * grid, and a fixed, sticky or out-of-flow box. Its display and position are read once here,
+   * since this is asked of every node reconciled and most are none of these.
    */
   private relayout(node: EngineNode): void {
     if (node.nodeKind !== 'element') return;
@@ -7577,12 +8037,16 @@ export class Engine implements HostEngine {
 
   private replan(node: EngineNode): void {
     const display = readStyle(node, 'display');
+    const position = readStyle(node, 'position');
     if (node.parent && readStyle(node, 'order') != null) node.parent.ordered = true;
     this.reflow(node, display);
     this.regrid(node, display);
     this.reminimum(node);
     // Something in it changed, which can change the box its percentages are of.
     if (node.mixed && !this.settling) node.mixed.dirty = true;
+    if (position === 'fixed' || position === 'absolute') this.refix(node, position);
+    else if (position === 'sticky') this.stickies.add(node);
+    if (position === 'absolute' || position === 'fixed') this.reabsolute(node, position);
     if (!this.settling) this.noteFits(node);
   }
 
@@ -7753,7 +8217,7 @@ export class Engine implements HostEngine {
     for (let up = node.parent; up && up !== this.root; up = up.parent) {
       if (!this.movedItself(up) && holdsItsContent(up)) return up;
       // One committed under another view than its parent is laid out in that one.
-      if (this.hoisted.has(up)) return null;
+      if (this.hoisted.has(up) || this.fixedLate.has(up) || this.isFixedIn(up)) return null;
     }
     return null;
   }
@@ -7768,6 +8232,11 @@ export class Engine implements HostEngine {
   /** Whether a node was changed in the commit being settled by more than how it is painted. */
   private movedItself(node: EngineNode): boolean {
     return this.changed.has(node) && (this.loudly.has(node) || !this.quietly.has(node));
+  }
+
+  private isFixedIn(node: EngineNode): boolean {
+    for (const fixed of this.fixedIn.values()) if (fixed.has(node)) return true;
+    return false;
   }
 
   /**
@@ -8226,7 +8695,7 @@ export class Engine implements HostEngine {
   private mixedBase(node: EngineNode): readonly [number, number | undefined] | undefined {
     const position = readStyle(node, 'position');
     if (position === 'absolute' || position === 'fixed') {
-      const box = this.paddingBox(this.containingBlock(node));
+      const box = this.paddingBox(node.fixedTo ?? this.containingBlock(node));
       return box && [box[2], box[3]];
     }
     const parent = node.parent;
@@ -8241,6 +8710,173 @@ export class Engine implements HostEngine {
     // Written, or given by the layout around it, or held at its content's: see `settleHeld`.
     const given = (style['height'] != null && style['height'] !== 'auto') || definiteHeight(parent);
     return [box[2] - edge.Left - edge.Right, given ? box[3] - edge.Top - edge.Bottom : undefined];
+  }
+
+  /** The out-of-flow boxes Yoga does not place as CSS does: see `settleAbsolute`. */
+  private readonly unplaced = new Set<EngineNode>();
+
+  /**
+   * Note a fixed box, an out-of-flow one with an `auto` margin or no inset in a block, and one
+   * in a grid.
+   */
+  private reabsolute(node: EngineNode, position: unknown): void {
+    if (this.settling) return;
+    // Styled again itself: its own insets, margins or lines may be others. See `concernedBy`.
+    if (node.propsDirty) this.restyledPlaced.add(node);
+    // A fixed box is placed against its page, wherever in the page it is written.
+    const auto = () => MARGIN_KEYS.some((key) => readStyle(node, key) === 'auto');
+    // In a grid: placed against the lines it names, or aligned in the grid's padding box.
+    const inGrid = () => node.parent?.grid !== undefined;
+    // Under a box that is not positioned, it is placed against one further up, and a share of
+    // a size is a share of that one's.
+    const through = () => node.parent != null && readStyle(node.parent, 'position') === 'static';
+    // In a block, or in a line of one: a container the engine lays out as a browser's flow.
+    const block = node.parent?.flow !== undefined;
+    if (position === 'fixed' || block || auto() || inGrid() || through()) this.unplaced.add(node);
+  }
+
+  /**
+   * Resolve from the commit just made what Yoga leaves undone for an out-of-flow box, and commit
+   * again where anything changed: `auto` margins between two insets, which centre it, and the
+   * place in a block's flow it has with no inset. Both need its size and its container's.
+   */
+  private settleAbsolute(): void {
+    // Emptied whatever comes of it: a screen that has gone is not kept by what was styled in it.
+    const restyled = new Set(this.restyledPlaced);
+    this.restyledPlaced.clear();
+    if (!this.unplaced.size || !this.fabric.getBoundingClientRect) return;
+    const concerns = this.concernedBy(restyled);
+    const moved: EngineNode[] = [];
+    for (const node of this.unplaced) {
+      const placed = node.resolved !== undefined || this.placedAsWritten.has(node);
+      if (placed && !concerns(node)) continue;
+      const resolved = this.resolveAbsolute(node);
+      if (resolved === undefined && !node.resolved) {
+        this.unplaced.delete(node);
+        this.placedAsWritten.add(node);
+      }
+      if (sameResolved(resolved, node.resolved)) continue;
+      node.resolved = resolved;
+      moved.push(node);
+    }
+    if (!moved.length) return;
+    this.settling = true;
+    this.touch(moved);
+    this.commitTree();
+    this.settling = false;
+  }
+
+  /**
+   * Whether the commit being settled can have changed where an out-of-flow box is placed: it
+   * resized or moved something in the box it is placed against, or that box or one above it.
+   * A box is placed from its own size, its container's and what comes before it there, each
+   * read back from native, and a screen of buttons has one in each: read on every commit, a
+   * few hundred reads for a colour that changed somewhere else.
+   *
+   * A fixed box is asked every time: it is placed against its page, wherever it is written.
+   * So is one styled again itself, whose insets, margins or lines may be others while what it
+   * is committed with is the same.
+   */
+  /**
+   * The out-of-flow boxes found to need nothing resolved, placed as written: noted again each
+   * time one is reconciled, and placed again only for what concerns it, as one resolved is.
+   */
+  private readonly placedAsWritten = new WeakSet<EngineNode>();
+
+  /** The out-of-flow boxes whose own styles changed since they were last placed. */
+  private readonly restyledPlaced = new Set<EngineNode>();
+
+  private concernedBy(restyled: ReadonlySet<EngineNode>): (node: EngineNode) => boolean {
+    const boxes = new Set([...this.movedBoxes, ...this.grownBoxes]);
+    // Every box with one of them in it, itself among them.
+    const around = new Set<EngineNode>();
+    for (const box of boxes) {
+      for (let up: EngineNode | null = box; up && !around.has(up); up = up.parent) around.add(up);
+    }
+    // Each change held in a box of a size of its own, which moves nothing outside it, the box
+    // itself included: see `heldIn`.
+    const holders = this.heldIn();
+    return (node) => {
+      // Not in one of those boxes: a holder restyled was so in how it is painted alone, or held
+      // nothing, since a change that moves it is not held.
+      if (holders?.length && !holders.some((holder) => holder !== node && isWithin(node, holder))) {
+        return false;
+      }
+      if (restyled.has(node)) return true;
+      if (node.fixedTo || readStyle(node, 'position') === 'fixed') return true;
+      const block = this.containingBlock(node);
+      if (around.has(block)) return true;
+      for (let up: EngineNode | null = block; up; up = up.parent) if (boxes.has(up)) return true;
+      return false;
+    };
+  }
+
+  private resolveAbsolute(node: EngineNode): Record<string, number | null> | undefined {
+    if (this.topOf(node) !== this.root) return undefined;
+    this.flowStyles.clear();
+    const style = this.flowStyle(node);
+    const boxes = this.boxesFor(node, style['position']);
+    this.flowStyles.clear();
+    if (!boxes) return undefined;
+    const { box, by, against } = boxes;
+    const resolved: Record<string, number | null> = {};
+    if (by !== against) Object.assign(resolved, againstPage(style, by, against));
+    if (boxes.inArea) {
+      const grid = this.flowStyle(node.parent!);
+      Object.assign(resolved, startOfArea(style, grid, { by, area: against, box }));
+    }
+    // Its sizes always; its insets where it is placed by the box it is placed against, which a
+    // fixed box is not: those are worked out against its page above.
+    Object.assign(resolved, shareOfBlock(withOwnSizes(node, style), against, by === against));
+    for (const axis of ABSOLUTE_AXES) {
+      Object.assign(resolved, autoMargins(style, axis, against[axis.size], box[axis.size]));
+    }
+    const top = this.flowPlace(node, style, by[1]);
+    if (top !== undefined) resolved['top'] = top;
+    return Object.keys(resolved).length ? resolved : undefined;
+  }
+
+  /**
+   * An out-of-flow box, the box Yoga positions it by and the box CSS positions it against, each
+   * of the last two inside its border. They are one box unless it is fixed in place, where CSS
+   * means its page.
+   */
+  /** The area of a grid an out-of-flow item is placed in: none for a fixed one, on its page. */
+  private areaFor(node: EngineNode, block: EngineNode, page: EngineNode, by: readonly number[]) {
+    return block === node.parent && page === block ? this.gridArea(node, by) : undefined;
+  }
+
+  private boxesFor(node: EngineNode, position: unknown) {
+    if (position !== 'absolute' && position !== 'fixed') return null;
+    const block = node.fixedTo ?? this.containingBlock(node);
+    const page = position === 'fixed' ? (this.pageOf(node) ?? block) : block;
+    const [box, by] = [this.boxOf(node), this.paddingBox(block)];
+    if (!box || !by) return null;
+    const area = this.areaFor(node, block, page, by);
+    const against = area ?? (page === block ? by : this.paddingBox(page));
+    return against ? { box, by, against, inArea: area !== undefined } : null;
+  }
+
+  /**
+   * What an out-of-flow child of a grid is placed against: the area between the lines its
+   * placement names, in the window. A side it names no line for, or one the grid has not got,
+   * is the grid's padding edge. `by` is the grid's box inside its border.
+   */
+  private gridArea(node: EngineNode, by: readonly number[]): number[] | undefined {
+    const grid = node.parent!;
+    const style = this.flowStyle(node);
+    if (!grid.grid?.area) return undefined;
+    // Placed against no lines, its area is the grid's padding box.
+    if (!namesLines((key) => style[key])) return [...by];
+    const at = grid.grid.area(gridItemStyle(style));
+    const box = this.boxOf(grid)!;
+    const edge = insets(this.flowStyle(grid));
+    const [left, top] = [box[0] + edge.Left, box[1] + edge.Top];
+    const x = at.left === undefined ? by[0]! : left + at.left;
+    const y = at.top === undefined ? by[1]! : top + at.top;
+    const right = at.right === undefined ? by[0]! + by[2]! : left + at.right;
+    const bottom = at.bottom === undefined ? by[1]! + by[3]! : top + at.bottom;
+    return [x, y, Math.max(right - x, 0), Math.max(bottom - y, 0)];
   }
 
   /** The box Yoga positions an out-of-flow node by: the nearest ancestor that is not static. */
@@ -8272,11 +8908,167 @@ export class Engine implements HostEngine {
       Object.fromEntries(Object.entries(style).filter(([key]) => key.startsWith('border'))),
     );
   }
-  /** Set while grids are laid out, when a node is reconciled for a phase and not for a change. */
-  private settling = false;
+
+  /**
+   * Where a box with no vertical inset would have been in its block's flow: under the in-flow
+   * sibling before it and that sibling's bottom margin, which an out-of-flow box does not
+   * collapse with: Chrome has it under the margin, and its own margin under that. `origin` is the
+   * top of the container's padding box.
+   *
+   * ponytail: the sibling's own bottom margin, of points and over none. One its last child's
+   * margin collapses into, or a negative one, is a few points out; read the plan's margins if a
+   * box under a card's last paragraph is ever seen out.
+   */
+  private flowPlace(
+    node: EngineNode,
+    style: Record<string, unknown>,
+    origin: number,
+  ): number | undefined {
+    const flow = node.parent?.flow;
+    if (flow?.plan.kind !== 'block' || style['top'] != null || style['bottom'] != null) {
+      return undefined;
+    }
+    const siblings = node.parent!.childList;
+    for (let i = siblings.indexOf(node) - 1; i >= 0; i--) {
+      const sibling = siblings[i]!;
+      const first = flow.lined.get(sibling);
+      // A box on a line is in its line box, which the box is under.
+      if (first) return this.lineBottom(node.parent!, first, origin);
+      const box = flow.members.has(sibling) ? this.boxOf(sibling) : undefined;
+      if (box) return box[1] + box[3] + this.marginUnder(sibling) - origin;
+    }
+    return undefined;
+  }
+
+  /** The bottom of the line box `first` starts in `container`, from `origin`, once it is laid out. */
+  private lineBottom(container: EngineNode, first: EngineNode, origin: number): number | undefined {
+    const handle = first.line?.in === container ? first.line.handle : null;
+    const box = handle ? this.fabric.getBoundingClientRect?.(handle, false) : undefined;
+    return box ? box[1] + box[3] - origin : undefined;
+  }
+
+  /** A box's own bottom margin, where it is points over none. */
+  private marginUnder(node: EngineNode): number {
+    const margin = this.flowTree.style(node, 'marginBottom');
+    return typeof margin === 'number' && margin > 0 ? margin : 0;
+  }
+
+  /** Every `position: sticky` box in the tree. */
+  private readonly stickies = new Set<EngineNode>();
+  /** Each scroll view with a sticky box in it: its offset, and what stops listening for it. */
+  private readonly stickyScrolls = new Map<
+    EngineNode,
+    { x: number; y: number; timer?: ReturnType<typeof setTimeout>; stop: () => void }
+  >();
+
+  /**
+   * Work out where each sticky box sticks from the commit just made: its place in its scroll
+   * view, and the end of its parent, which it does not leave. Native moves it between the two
+   * where it can. A host with no layout to read leaves it where it is written.
+   */
+  private settleSticky(): void {
+    if (!this.stickies.size || !this.fabric.getBoundingClientRect) return;
+    for (const node of this.stickies) {
+      const scroll = this.stickyScroll(node);
+      if (scroll) this.stick(node, scroll);
+      else this.unstick(node);
+    }
+    // A scroll view nothing sticks in any more is no longer listened to, or kept.
+    for (const [scroll, offset] of this.stickyScrolls) {
+      if ([...this.stickies].some((node) => node.sticky?.scroll === scroll)) continue;
+      clearTimeout(offset.timer);
+      offset.stop();
+      this.stickyScrolls.delete(scroll);
+    }
+  }
+
+  /** The scroll view a box sticks in, or nothing once it is no longer sticky or in the tree. */
+  private stickyScroll(node: EngineNode): EngineNode | null {
+    if (this.topOf(node) !== this.root || readStyle(node, 'position') !== 'sticky') return null;
+    return this.scrollSourceOf(node);
+  }
+
+  private stick(node: EngineNode, scroll: EngineNode): void {
+    const span = this.stickySpan(node, scroll);
+    if (!span) return;
+    // No span yet, so the first one read is a change, and starts the drive.
+    const state = (node.sticky ??= {
+      scroll,
+      axis: span.axis,
+      start: NaN,
+      stop: NaN,
+      shift: 0,
+      drive: null,
+    });
+    this.followScroll(scroll);
+    if (state.start !== span.start || state.stop !== span.stop || state.scroll !== scroll) {
+      Object.assign(state, span, { scroll });
+      const range = pinnedRange(span.start, span.stop);
+      if (state.drive) state.drive.update(range);
+      else state.drive = this.driveByScroll(node, scroll, span.axis, range);
+    }
+    this.shiftSticky(node);
+  }
+
+  /**
+   * The scroll offsets a sticky box moves between, read from where the last commit laid it out:
+   * from its place in the scroll view less its inset, to the end of its parent.
+   */
+  private stickySpan(node: EngineNode, scroll: EngineNode) {
+    const top = readStyle(node, 'top');
+    const axis: ScrollAxis = typeof top === 'number' ? 'y' : 'x';
+    const inset = axis === 'y' ? top : readStyle(node, 'left');
+    const [box, within, around] = [node, scroll, stickyBlock(node)].map((each) => this.boxOf(each));
+    if (typeof inset !== 'number' || !box || !within || !around) return null;
+    const [at, size] = axis === 'y' ? [1, 3] : [0, 2];
+    const start = box[at]! - within[at]! - inset;
+    const end = around[at]! + around[size]! - within[at]! - box[size]! - inset;
+    return { axis, start, stop: Math.max(start, end) };
+  }
+
+  private unstick(node: EngineNode): void {
+    this.stickies.delete(node);
+    node.sticky?.drive?.stop();
+    if (node.sticky?.shift) this.markProps(node, false);
+    node.sticky = undefined;
+  }
+
+  /** Write how far a sticky box is moved at its scroll view's offset, where that has changed. */
+  private shiftSticky(node: EngineNode): void {
+    const state = node.sticky;
+    const offset = state && this.stickyScrolls.get(state.scroll);
+    if (!state || !offset) return;
+    const past = offset[state.axis] - state.start;
+    const shift = Math.min(Math.max(0, past), state.stop - state.start);
+    if (shift === state.shift) return;
+    state.shift = shift;
+    this.markProps(node, false);
+  }
+
+  /** Keep a scroll view's offset, and move its sticky boxes as it changes. */
+  private followScroll(scroll: EngineNode): void {
+    if (this.stickyScrolls.has(scroll)) return;
+    const offset = { x: 0, y: 0, timer: undefined as ReturnType<typeof setTimeout> | undefined };
+    const apply = () => {
+      for (const node of this.stickies) if (node.sticky?.scroll === scroll) this.shiftSticky(node);
+    };
+    const stop = this.setEventListener(scroll, 'topScroll', (event) => {
+      const at = (event as { nativeEvent?: { contentOffset?: { x?: number; y?: number } } })
+        .nativeEvent?.contentOffset;
+      offset.x = at?.x ?? 0;
+      offset.y = at?.y ?? 0;
+      // Native is moving them already: the transform is written once the scroll pauses.
+      if (!this.drivesScroll) return apply();
+      clearTimeout(offset.timer);
+      offset.timer = setTimeout(apply, STICKY_SETTLE_MS);
+    });
+    this.stickyScrolls.set(scroll, Object.assign(offset, { stop }));
+  }
 
   /** Every grid container in the tree, or once in it. */
   private readonly grids = new Set<EngineNode>();
+  /** Set while grids are laid out, when a node is reconciled for a phase and not for a change. */
+  private settling = false;
 
   /** The children a grid places: elements in its flow, committed under it. */
   private gridMembers(node: EngineNode): EngineNode[] {
@@ -8823,8 +9615,10 @@ export class Engine implements HostEngine {
   private rootHandles(): FabricNode[] {
     const handles: FabricNode[] = [];
     for (const child of this.visibleChildren(this.root)) {
+      if (this.onPage(child, undefined)) continue;
       if (!this.withheld(child)) handles.push(this.reconcileUnder(this.root, child));
     }
+    this.fixedHandles(this.root, handles);
     return this.strict ? [this.inStrictView(handles)] : handles;
   }
 
@@ -10059,8 +10853,8 @@ export class Engine implements HostEngine {
   /** The scroll view a scroll-driven animation on `node` follows: the nearest one it is inside. */
   private scrollSourceOf(node: EngineNode): EngineNode | null {
     for (let up = node.parent; up; up = up.parent) {
-      const name = viewNameOf(up);
-      if (name === 'ScrollView' || name === 'AndroidHorizontalScrollView') return up;
+      // As it is committed: an element that scrolls its overflow is a scroll view too.
+      if (SCROLL_VIEWS.has(committedViewName(up))) return up;
     }
     return null;
   }
@@ -10894,6 +11688,7 @@ export class Engine implements HostEngine {
     this.noteBaselineFields(node);
     this.freshBaselines(node);
     const childHandles = this.reconcileChildren(node, viewName, style);
+    if (this.fixedIn.size) this.fixedHandles(node, childHandles);
     this.raise(node, viewName);
     noteTouches(node, style);
     const previous = node.committed;
@@ -11044,7 +11839,13 @@ export class Engine implements HostEngine {
         handles.push(clean);
         continue;
       }
-      if (child.nodeKind === 'anchor' || this.committedElsewhere(child) || this.withheld(child)) {
+      if (
+        child.nodeKind === 'anchor' ||
+        this.committedElsewhere(child) ||
+        this.withheld(child) ||
+        // Committed under its page: see `fixedHandles`. Only a layout of CSS's fixes a box.
+        (this.asked & CSS_LAYOUT && this.onPage(child, context))
+      ) {
         continue;
       }
       const handle =
@@ -11109,6 +11910,8 @@ export class Engine implements HostEngine {
     if (child.nodeKind === 'anchor' || this.committedElsewhere(child) || this.withheld(child)) {
       return undefined;
     }
+    // Committed under its page: see `fixedHandles`.
+    if (this.onPage(child, context)) return undefined;
     if (child.nodeKind === 'text') return this.reconcileText(node, child, viewName, context);
     // A box in a line box is under that view, which is named by the line's first box: one that
     // joins a line, leaves it, or changes lines is made again, as native never moves one.
@@ -11595,6 +12398,7 @@ export class Engine implements HostEngine {
     context: object | undefined,
   ): FabricNode | null {
     if (child.nodeKind !== 'element' || child.committedUnder !== parent) return null;
+    if (child.fixedTo !== undefined) return null;
     return this.stillCommitted(child, context);
   }
 
@@ -12199,6 +13003,7 @@ export class Engine implements HostEngine {
         this.measuredScroll(target, nativeEvent);
       }
       this.holdSwipe(target, topLevelType, nativeEvent);
+      this.trackFinger(target, topLevelType, nativeEvent);
       this.trackFocus(target, topLevelType);
       if (target) this.cancelPressForScroll(target, topLevelType, event as ResponderEvent);
       if (target) this.runResponder(target, topLevelType, event as ResponderEvent);

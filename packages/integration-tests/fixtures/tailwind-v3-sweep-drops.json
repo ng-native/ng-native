@@ -3276,14 +3276,6 @@
     "place-content-start",
     "place-content-stretch"
   ],
-  "dropped 'position': position: fixed is not supported. Yoga has no viewport to fix to and no scroll container to stick within. Use `position: absolute` inside the element you meant to pin to; for a header that should stay put, put it outside the scroll view rather than inside it.": [
-    "!fixed",
-    "fixed"
-  ],
-  "dropped 'position': position: sticky is not supported. Yoga has no viewport to fix to and no scroll container to stick within. Use `position: absolute` inside the element you meant to pin to; for a header that should stay put, put it outside the scroll view rather than inside it.": [
-    "!sticky",
-    "sticky"
-  ],
   "dropped 'resize': '…' has no React Native equivalent: no style prop of a native view does what it does.": [
     "!resize",
     "!resize-none",

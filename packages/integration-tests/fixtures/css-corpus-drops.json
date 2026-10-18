@@ -1,7 +1,7 @@
 {
   "bootstrap": {
-    "rules": 2591,
-    "dropped": 617,
+    "rules": 2593,
+    "dropped": 579,
     "emitted": [
       "$animation",
       "$animationDelay",
@@ -269,10 +269,6 @@
       "overflow-y": {
         "'overflow-y': native has one overflow for both axes. Write 'overflow'.": 24
       },
-      "position": {
-        "position: fixed is not supported. Yoga has no viewport to fix to and no scroll container to stick within. Use `position: absolute` inside the element you meant to pin to; for a header that should stay put, put it outside the scroll view rather than inside it.": 12,
-        "position: sticky is not supported. Yoga has no viewport to fix to and no scroll container to stick within. Use `position: absolute` inside the element you meant to pin to; for a header that should stay put, put it outside the scroll view rather than inside it.": 26
-      },
       "print-color-adjust": {
         "'print-color-adjust' has no React Native equivalent: no style prop of a native view does what it does.": 2
       },
@@ -325,8 +321,8 @@
     }
   },
   "bulma": {
-    "rules": 3308,
-    "dropped": 1795,
+    "rules": 3310,
+    "dropped": 1788,
     "emitted": [
       "$animation",
       "$animationDelay",
@@ -610,10 +606,6 @@
       "padding-top": {
         "'padding-top: initial' is a CSS-wide keyword, which this cascade does not implement. Write the value it stands for.": 1
       },
-      "position": {
-        "position: fixed is not supported. Yoga has no viewport to fix to and no scroll container to stick within. Use `position: absolute` inside the element you meant to pin to; for a header that should stay put, put it outside the scroll view rather than inside it.": 6,
-        "position: sticky is not supported. Yoga has no viewport to fix to and no scroll container to stick within. Use `position: absolute` inside the element you meant to pin to; for a header that should stay put, put it outside the scroll view rather than inside it.": 1
-      },
       "resize": {
         "'resize' has no React Native equivalent: no style prop of a native view does what it does.": 3
       },
@@ -651,7 +643,7 @@
   },
   "pico": {
     "rules": 473,
-    "dropped": 289,
+    "dropped": 288,
     "emitted": [
       "$animation",
       "$animationDelay",
@@ -873,9 +865,6 @@
       "overflow-x": {
         "'overflow-x': native has one overflow for both axes. Write 'overflow'.": 1
       },
-      "position": {
-        "position: fixed is not supported. Yoga has no viewport to fix to and no scroll container to stick within. Use `position: absolute` inside the element you meant to pin to; for a header that should stay put, put it outside the scroll view rather than inside it.": 1
-      },
       "resize": {
         "'resize' has no React Native equivalent: no style prop of a native view does what it does.": 1
       },
@@ -1059,8 +1048,8 @@
     }
   },
   "tailwind": {
-    "rules": 1046,
-    "dropped": 102,
+    "rules": 1048,
+    "dropped": 100,
     "emitted": [
       "$animation",
       "$transition",
@@ -1178,18 +1167,14 @@
       "overflow-x": {
         "'overflow-x': native has one overflow for both axes. Write 'overflow'.": 1
       },
-      "position": {
-        "position: fixed is not supported. Yoga has no viewport to fix to and no scroll container to stick within. Use `position: absolute` inside the element you meant to pin to; for a header that should stay put, put it outside the scroll view rather than inside it.": 1,
-        "position: sticky is not supported. Yoga has no viewport to fix to and no scroll container to stick within. Use `position: absolute` inside the element you meant to pin to; for a header that should stay put, put it outside the scroll view rather than inside it.": 1
-      },
       "transform": {
         "transform: skewX() is not drawn on Android. React Native breaks a transform down into the rotation, scale and translation an Android view has, and a view has no skew, so this would leave the view unskewed, or turned, on an Android phone. Scope the rule to iOS with a .platform-ios ancestor (Tailwind's ios: variant).": 9
       }
     }
   },
   "tailwind-v3": {
-    "rules": 1043,
-    "dropped": 81,
+    "rules": 1045,
+    "dropped": 79,
     "emitted": [
       "$animation",
       "$animationDelay",
@@ -1309,10 +1294,6 @@
       },
       "overflow-x": {
         "'overflow-x': native has one overflow for both axes. Write 'overflow'.": 1
-      },
-      "position": {
-        "position: fixed is not supported. Yoga has no viewport to fix to and no scroll container to stick within. Use `position: absolute` inside the element you meant to pin to; for a header that should stay put, put it outside the scroll view rather than inside it.": 1,
-        "position: sticky is not supported. Yoga has no viewport to fix to and no scroll container to stick within. Use `position: absolute` inside the element you meant to pin to; for a header that should stay put, put it outside the scroll view rather than inside it.": 1
       },
       "transform": {
         "transform: skewX() is not drawn on Android. React Native breaks a transform down into the rotation, scale and translation an Android view has, and a view has no skew, so this would leave the view unskewed, or turned, on an Android phone. Scope the rule to iOS with a .platform-ios ancestor (Tailwind's ios: variant).": 2,

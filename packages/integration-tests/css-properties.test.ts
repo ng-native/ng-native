@@ -621,9 +621,12 @@ describe('what it refuses, and how it says so', () => {
     assert.deepEqual(declarationsOf('display: contents'), { display: 'contents' });
   });
 
-  it('gives a prefixed sticky the same explanation as sticky', () => {
+  it('reads a prefixed sticky as sticky', () => {
     // `position: -webkit-sticky` reported "expected a keyword, got {...}".
-    assert.throws(() => declarationsOf('position: -webkit-sticky'), /sticky is not supported/);
+    assert.deepEqual(declarationsOf('position: -webkit-sticky; top: 0'), {
+      position: 'sticky',
+      top: 0,
+    });
   });
 
   it('refuses a relative font weight, which native would ignore without a word', () => {

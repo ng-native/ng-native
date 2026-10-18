@@ -172,12 +172,10 @@ function renamed(table, value, property) {
  */
 const KEYWORD_VALUES = {
   position: {
-    allowed: new Set(['relative', 'absolute', 'static']),
-    // Named rather than generic, because "unsupported" leaves the reader to work out the fix.
-    hint:
-      'Yoga has no viewport to fix to and no scroll container to stick within. ' +
-      'Use `position: absolute` inside the element you meant to pin to; for a header that ' +
-      'should stay put, put it outside the scroll view rather than inside it.',
+    // `fixed` and `sticky` are the engine's: Yoga has neither, so a fixed box is committed under
+    // the page it is on, and a sticky one is moved by its scroll view. See fabric's engine.
+    allowed: new Set(['relative', 'absolute', 'static', 'fixed', 'sticky']),
+    hint: 'Native positions a box relative, absolute, static, fixed or sticky.',
   },
   'text-align': {
     allowed: new Set(['auto', 'start', 'end', 'left', 'center', 'right', 'justify']),

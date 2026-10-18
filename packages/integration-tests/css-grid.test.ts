@@ -136,6 +136,28 @@ describe('display: grid', () => {
     assert.deepEqual(s.box('c'), [90, 20, 10, 10]);
   });
 
+  it('places an out-of-flow child against the grid lines it names', () => {
+    const css = `.g { display: grid; position: relative; grid-template-columns: 100px 200px; grid-template-rows: 20px 40px; padding: 10px } .o { position: absolute } .fill { grid-column: 2 / 3; grid-row: 2 / 3; inset: 0 } .part { grid-column: 2 / 3; grid-row: 1 / 3; left: 10px; top: 5px; width: 50%; height: 50% } .bare { grid-column: 2; grid-row: 2; width: 8px; height: 8px } .open { grid-column: 2 / auto; grid-row: auto / 2; inset: 0 }`;
+    const s = scene(css, ['g', ['o fill'], ['o part'], ['o bare'], ['o open']]);
+    assert.deepEqual(s.box('o fill'), [110, 30, 200, 40]);
+    // Insets from the area's edges, and percentages of its size.
+    assert.deepEqual(s.box('o part'), [120, 15, 100, 30]);
+    // With no inset it sits at the start of its area.
+    assert.deepEqual(s.box('o bare'), [110, 30, 8, 8]);
+    // A side that is auto is the container's padding edge: its padding is inside the area.
+    assert.deepEqual(s.box('o open'), [110, 0, 290, 30]);
+  });
+
+  it('moves an out-of-flow child with its lines, and back to the padding box with none', () => {
+    const css = `.g { display: grid; position: relative; grid-template-columns: 100px 200px; grid-auto-rows: 20px; width: 400px } .wide { grid-template-columns: 150px 200px } .o { position: absolute; inset: 0 } .at { grid-column: 2 / 3 } .a { height: 20px }`;
+    const s = scene(css, ['g', ['a'], ['o at']]);
+    assert.deepEqual(s.box('o at'), [100, 0, 200, 20]);
+    s.engine.setClasses(s.nodes.get('g')!, 'g wide');
+    assert.deepEqual(s.box('o at'), [150, 0, 200, 20]);
+    s.engine.setClasses(s.nodes.get('o at')!, 'o');
+    assert.deepEqual(s.box('o at'), [0, 0, 400, 20]);
+  });
+
   it('keeps an item to its aspect ratio, where a stretched item would fill its row', () => {
     const css = `.g { display: grid; width: 100px; height: 100px } .a { aspect-ratio: 2 }`;
     assert.deepEqual(scene(css, ['g', ['a']]).box('a'), [0, 0, 100, 50]);
@@ -600,6 +622,12 @@ describe('a grid laid out where Chrome lays it out', () => {
     assert.deepEqual(strict(css, ['p', ['o', ['g', ['a']]]]).box('a'), [0, 0, 95, 0]);
   });
 
+  it('leaves a sticky item where it is placed, with no scroll view to stick in', () => {
+    // Chrome, with nothing scrolled: the offsets of a sticky box are not a relative box's.
+    const css = '.g { display: grid } .s { position: sticky; top: 10px; right: 4px }';
+    assert.deepEqual(strict(css, ['g', ['s']]).box('s'), [0, 0, 400, 0]);
+  });
+
   it('is laid out, and does not throw, with a ratio and a sum for its width', () => {
     // Merged again as its tracks lay it out, the grid is left with no sum to finish.
     const css =
@@ -690,6 +718,20 @@ describe('a grid laid out where Chrome lays it out', () => {
     assert.deepEqual(strict(css, ['g', ['a']]).box('a'), [0, 0, 400, 100]);
   });
 
+  it('places an out-of-flow child with no inset at its padding edge, aligned by its own', () => {
+    const at = (css: string) =>
+      strict(`.g { display: grid } .o { position: absolute } ${css}`, ['g', ['o']]).box('o');
+    assert.deepEqual(at('.g { padding: 50px }'), [0, 0, 0, 0]);
+    assert.deepEqual(at('.o { justify-self: center }'), [200, 0, 0, 0]);
+    assert.deepEqual(at('.o { justify-self: end }'), [400, 0, 0, 0]);
+    assert.deepEqual(at('.o { align-self: center }'), [0, 0, 0, 0]);
+    assert.deepEqual(at('.g { align-items: center }'), [0, 0, 0, 0]);
+    assert.deepEqual(
+      at('.g { height: 100px } .o { align-self: end; height: 10px }'),
+      [0, 90, 0, 10],
+    );
+  });
+
   it('gives a grid that is an item and is not stretched the width of its tracks', () => {
     const at = (css: string) => strict(css, ['g', ['h']]).box('h');
     const inner = '.h { display: grid; grid-template-columns: 100px }';
@@ -754,6 +796,14 @@ describe('a grid laid out where Chrome lays it out', () => {
     const css =
       '.g { display: grid; grid-template-columns: 50px; max-width: 100px } .a { width: 100px }';
     assert.deepEqual(strict(css, ['top', ['g', ['a']]]).box('g'), [0, 0, 100, 0]);
+  });
+
+  it('aligns an out-of-flow child with no inset by its margins too', () => {
+    const at = (css: string) =>
+      strict(`.g { display: grid } .o { position: absolute } ${css}`, ['g', ['o']]).box('o');
+    assert.deepEqual(at('.g { justify-items: center } .o { margin-right: 50px }'), [175, 0, 0, 0]);
+    assert.deepEqual(at('.g { justify-items: end } .o { margin: 10px }'), [390, 10, 0, 0]);
+    assert.deepEqual(at('.g { align-items: center } .o { margin-top: -50px }'), [0, -25, 0, 0]);
   });
 
   it('keeps an item no smaller than its padding when it centres it', () => {

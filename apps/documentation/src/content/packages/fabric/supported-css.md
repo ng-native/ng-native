@@ -280,8 +280,12 @@ holds. It follows CSS Grid Level 1:
   each a point wide at the least. `grid-auto-columns`, `grid-auto-rows` and `grid-auto-flow` size
   and fill the tracks the template does not name.
 - `grid-column`, `grid-row`, their `-start` and `-end`, and `grid-area` place an item by line
-  number, by `span`, or by name. An item with no placement takes the next free cell. A
-  `position: absolute` child is no item: Yoga places it against the grid's box, not its lines.
+  number, by `span`, or by name. An item with no placement takes the next free cell.
+- A `position: absolute` child of a grid that is itself positioned is placed against the lines
+  its `grid-column` and `grid-row` name: its insets are from the edges of that area and its
+  percentages are of it. A side with no line, or `auto`, is the grid's padding edge. With no
+  inset on an axis it sits at the start of the area, moved along it by its `justify-self` or
+  `align-self`, or by the grid's `justify-items` or `align-items` where its own is `auto`.
 - `grid-template-areas` names areas, which `grid-area: head` places an item in, and whose edges
   are the lines `head-start` and `head-end`. A track list names its own lines,
   `[content-start] 1fr [content-end]`, and `grid-column: content` is the two of them. A name
@@ -317,6 +321,40 @@ On a host with no layout to read, such as a test's fake Fabric, a grid is a flex
 `order` moves a child of a flex container among its siblings, as in a browser: Tailwind's
 `order-first`, `order-last` and `order-2`. Yoga has no such property, so the engine commits the
 children in that order. A block lays its children out as written, whatever their `order`.
+
+### Position
+
+`position` takes `relative`, `absolute` and `static`, which Yoga lays out, and `fixed` and
+`sticky`, which the engine does.
+
+A `position: fixed` box is positioned against the page it is on: the screen of a native stack or
+a modal it is inside, and otherwise the whole app. Its insets and percentage sizes are of the page,
+wherever in the page it is written. It stays where it is written in every other way, so it draws
+in the order it is written in and takes an ancestor's `opacity`, as in a browser. The engine reads
+the page's place back from native to work its insets out, as it does a grid's sizes.
+
+Where something between a fixed box and its page scrolls or clips, a scroll view or an
+`overflow: hidden` box, the fixed box is committed under the page instead, so it neither scrolls
+nor is clipped. There it draws over the page's other content, and an ancestor's `opacity` or
+`transform` no longer reaches it; it is still styled by rules that match through its parent, its
+events still bubble to its parent, and it is not shown while anything it is inside is
+`display: none`. A transformed ancestor does not become what a fixed box is fixed to, as one does
+in a browser.
+
+Two things Yoga leaves undone for a `position: absolute` or `fixed` box are put right from its
+laid-out size, read back from native as a grid's sizes are. `margin: auto` between two insets
+takes the room left over, so `inset: 0; margin: auto` centres a box of a set size in its
+container, and one `auto` margin pushes it to the far side. And a box with no `top` or `bottom` in
+a block container sits under the sibling before it, where it would have been in the flow. In a
+flex container such a box is placed by the container's alignment, as Yoga and a browser both do.
+
+A `position: sticky` box is laid out where it is written, and moves with its scroll view once the
+scroll passes it: `top` is how far from the scroll view's top edge it sticks, and it goes no
+further than the end of its parent. In a horizontal scroll view `left` does the same. It sticks
+at any depth inside the scroll view, and native moves it on each frame the scroll view moves.
+Sticking to the bottom or the right edge is not supported, and neither is a box with a
+`transform` of its own that also sticks, whose transform the engine writes. It needs layout read
+back from native, so on a host with none it stays where it is written.
 
 `width: fit-content` and `height: fit-content` keep a box at the size of its content. Along its
 container's main axis a box is that size already. Across it, where a box stretches, it stops

@@ -141,7 +141,7 @@ root instead, so the host page looks exactly as it did.
 Tailwind classes and global stylesheets style an island as they would anything else. A component's
 own `styles:` apply too, scoped to that component by Angular's emulated encapsulation, as they are
 on a device. The browser is more forgiving than the native compiler, though: a declaration a
-native build drops with a warning, such as `grid-template-columns`, still works here, so check a
+native build drops with a warning, such as `float`, still works here, so check a
 stylesheet on a device before relying on it.
 
 ## What cannot cross
