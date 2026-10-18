@@ -54,11 +54,12 @@ describe('grid track lists', () => {
       gridTemplateColumns: 'repeat(3, minmax(0px, 1fr))',
     });
     assert.deepEqual(
-      declarationsOf(
-        'grid-template-columns: repeat(auto-fill, minmax(80px, 1fr)) fit-content(40%)',
-      ),
-      { gridTemplateColumns: 'repeat(auto-fill, minmax(80px, 1fr)) fit-content(40%)' },
+      declarationsOf('grid-template-columns: repeat(auto-fill, minmax(80px, 1fr)) 40%'),
+      { gridTemplateColumns: 'repeat(auto-fill, minmax(80px, 1fr)) 40%' },
     );
+    assert.deepEqual(declarationsOf('grid-template-columns: 1fr fit-content(40%)'), {
+      gridTemplateColumns: '1fr fit-content(40%)',
+    });
   });
 
   it('reads none as no explicit tracks', () => {
@@ -103,6 +104,34 @@ describe('grid track lists', () => {
       '100px 20%',
     ]) {
       const css = `grid-template-columns: repeat(auto-fit, ${tracks})`;
+      assert.equal(refused(css).warnings.length, 0, css);
+    }
+  });
+
+  it('refuses a track beside an auto-fill repeat with no fixed size, as a browser does', () => {
+    // Beside an automatic repeat every track needs a length on one side, and there is one such
+    // repeat at the most: Chrome's CSS.supports for each.
+    for (const tracks of [
+      'repeat(auto-fill, 100px) 1fr',
+      '1fr repeat(auto-fill, 100px)',
+      'repeat(auto-fill, 100px) auto',
+      'fit-content(10px) repeat(auto-fill, 50px)',
+      'repeat(2, 1fr) repeat(auto-fill, 50px)',
+      'repeat(auto-fill, 50px) repeat(auto-fit, 50px)',
+    ]) {
+      const css = `grid-template-columns: ${tracks}`;
+      const { warnings, declarations } = refused(css);
+      assert.deepEqual(declarations, {}, css);
+      assert.equal(warnings.length, 1, css);
+    }
+    for (const tracks of [
+      '100px repeat(auto-fill, 100px) 20%',
+      'minmax(0, 1fr) repeat(auto-fit, 50px)',
+      'repeat(2, 50px) repeat(auto-fill, 50px)',
+      '[a] 50px [b] repeat(auto-fill, [c] 50px) [d]',
+      'repeat(2, 1fr) 1fr',
+    ]) {
+      const css = `grid-template-columns: ${tracks}`;
       assert.equal(refused(css).warnings.length, 0, css);
     }
   });

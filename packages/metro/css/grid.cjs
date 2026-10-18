@@ -50,16 +50,30 @@ const fixedSize = (value) =>
     ? value.value.type === 'length'
     : value.type === 'min-max' && (value.min.type === 'length' || value.max.type === 'length');
 
+/**
+ * A list with an `auto-fill` or `auto-fit` repeat has one, and every track in it and beside it
+ * has a length on one side at least: there is no counting how many repeats fit otherwise, and a
+ * browser drops the declaration.
+ */
+function fixedBesideAutoRepeat(items, context) {
+  const auto = items.filter(
+    (item) => item.type !== 'track-size' && item.value.count.type !== 'number',
+  );
+  if (!auto.length) return;
+  const sizes = items.flatMap((item) =>
+    item.type === 'track-size' ? [item.value] : item.value.trackSizes,
+  );
+  if (auto.length > 1 || !sizes.every(fixedSize)) {
+    throw new CssUnsupported(
+      `${context}: beside repeat(${auto[0].value.count.type}) every track needs a fixed size, a length on one side at least, and there is one such repeat at the most`,
+    );
+  }
+}
+
 function trackItem(item, context) {
   if (item.type === 'track-size') return trackSize(item.value, context);
   const { count, lineNames, trackSizes } = item.value;
   const times = count.type === 'number' ? count.value : count.type;
-  // A browser drops the declaration: there is no counting how many of a track with no size fit.
-  if (typeof times === 'string' && !trackSizes.every(fixedSize)) {
-    throw new CssUnsupported(
-      `${context}: repeat(${times}) takes only tracks with a fixed size, a length on one side at least`,
-    );
-  }
   const sizes = trackSizes.map((size) => trackSize(size, context));
   return `repeat(${times}, ${named(sizes, lineNames)})`;
 }
@@ -70,6 +84,7 @@ function trackList(value, context) {
   if (value?.type !== 'track-list') {
     throw new CssUnsupported(`${context}: only a list of track sizes is supported`);
   }
+  fixedBesideAutoRepeat(value.items, context);
   return named(
     value.items.map((item) => trackItem(item, context)),
     value.lineNames,
