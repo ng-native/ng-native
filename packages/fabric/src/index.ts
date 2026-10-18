@@ -53,6 +53,7 @@ export {
   fontsRegistered,
   fontsSettled,
   markComponentHost,
+  scrollsOverflow,
   nativePlatform,
   onFontsRegistered,
   onFontsSettled,

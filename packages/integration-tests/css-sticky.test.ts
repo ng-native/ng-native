@@ -8,7 +8,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { createRequire } from 'node:module';
-import { Engine, type EngineNode, type NativeAnimated } from '@ng-native/fabric';
+import { Engine, scrollsOverflow, type EngineNode, type NativeAnimated } from '@ng-native/fabric';
 import type { FakeFabricNode } from '@ng-native/testing';
 import { createLaidOutFabric } from './laid-out-fabric.ts';
 import { recorder } from './native-animated.ts';
@@ -36,6 +36,7 @@ function scene(css: string, spec: Spec, nativeAnimated: NativeAnimated | null = 
     const element = first === 'scroll' ? 'scroll-view' : TABLE_PARTS.has(first) ? first : 'view';
     const node = engine.createElement(element);
     // An element of a web library's that scrolls what overflows it, where its style says so.
+    if (name === 'scroller') scrollsOverflow(node);
     engine.setClasses(node, name);
     engine.setProp(node, 'nativeID', name);
     engine.appendChild(parent, node);
@@ -240,6 +241,19 @@ describe('a sticky part of a table', () => {
     assert.equal(row.shiftAt('tr stuck', 150), 100);
     const group = scene(TABLE, ['scroll', ['lead'], ['table', ['thead stuck', ['tr']], ['tbody']]]);
     assert.equal(group.shiftAt('thead stuck', 150), 100);
+  });
+});
+
+describe('a sticky box in an element that scrolls what overflows it', () => {
+  // A web library's box with `overflow: auto`, which is a scroll view around one view.
+  const CSS =
+    '.scroll { height: 600px } .scroller { height: 200px; overflow: auto } .lead { height: 50px } ' +
+    '.section { height: 500px } .head { position: sticky; top: 0; height: 30px }';
+
+  it('sticks in that element, not in the scroll view the element is in', () => {
+    const s = scene(CSS, ['scroll', ['scroller', ['section', ['lead'], ['head']]]]);
+    assert.equal(s.shiftAt('head', 120, 'scroller'), 70);
+    assert.equal(s.shiftAt('head', 0, 'scroller'), 0);
   });
 });
 
