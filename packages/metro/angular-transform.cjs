@@ -1103,21 +1103,37 @@ function componentSheet(
 ) {
   if (!css.trim()) return null;
 
+  // A component of the app's own in a directory named as written for a browser: read as a named
+  // library's is, with its rows, and what native has nothing for dropped under a warning where
+  // an app's own CSS fails the build.
+  const copied = isBrowserSource(filename, sourceRoot);
   const context = `${filename} (${className})`;
   const options = {
     platform,
-    ...(parts ? { locate: locator(parts, className), asset: assetFrom(parts, module) } : {}),
+    ...locating(parts, className, module),
     onUnsupported: warn,
-    recover,
+    recover: recover || copied,
   };
 
   const sheet = compileCss(css, context, options);
-  if (sheet.fonts) {
-    const from = path.dirname(path.resolve(transformRoot, module));
-    nameFaces(sheet, from, (file) => noteRead(module, file), warn);
-  }
-  return sheet.rules.length || sheet.fonts ? sheet : null;
+  if (sheet.fonts) nameModuleFaces(sheet, module, warn);
+  if (!sheet.rules.length && !sheet.fonts) return null;
+  return copied ? withRows(sheet) : sheet;
 }
+
+/** Where a sheet's rules and assets are read from, where the transform says. */
+function locating(parts, className, module) {
+  return parts ? { locate: locator(parts, className), asset: assetFrom(parts, module) } : {};
+}
+
+/** Name each face a sheet declares by its file, read from where `module` is. */
+function nameModuleFaces(sheet, module, warn) {
+  const from = path.dirname(path.resolve(transformRoot, module));
+  nameFaces(sheet, from, (file) => noteRead(module, file), warn);
+}
+
+/** The project the file being transformed is in, which Metro names its files from. */
+let sourceRoot;
 
 /**
  * A compiled sheet as source, with its font files as `require`s.
@@ -1178,8 +1194,9 @@ function link(src, filename, options) {
   const listed =
     owner !== null &&
     (owner.name.startsWith('@ng-native/') || styles(options.libraryStyles, owner.name));
+  const sheeted = listed ? withLibrarySheets(src, filename, owner, options.platform) : src;
   const { code } = linkAngularPackageSync(
-    listed ? withLibrarySheets(src, filename, owner, options.platform) : src,
+    owner !== null && isBrowsers(owner.name) ? withBrowserElements(sheeted) : sheeted,
     filename,
   );
   const strip = options.dev !== true && options.platform !== 'web';
@@ -1189,6 +1206,54 @@ function link(src, filename, options) {
 /** Whether a library's styles are compiled: every library's, or the ones the app narrowed to. */
 const styles = (libraryStyles, name) =>
   libraryStyles === undefined || (Array.isArray(libraryStyles) && libraryStyles.includes(name));
+
+/** Whether `@ng-native/web-compat` was given a library as one written for a browser. */
+function isBrowsers(library) {
+  const named = process.env['ANGULAR_NATIVE_LIBRARY_BROWSER'];
+  return named ? named.split(',').includes(library) : false;
+}
+
+/**
+ * A file of a library written for a browser, telling the app as it loads which elements are
+ * the library's: the element each of its components' and directives' selectors names, as
+ * `mat-card-title` is of `mat-card-title, [mat-card-title]`. `@ng-native/web-compat` lays those
+ * out as a browser lays a custom element out, and leaves every other the native view it is. An
+ * attribute selector names no element: what it is on is an HTML element, or somebody else's.
+ *
+ * Added after the file's last line, so nothing in it moves.
+ *
+ * ponytail: every `selector: "..."` in the file is read, not only a declaration's own. One
+ * that is something else names an element nothing creates.
+ */
+function withBrowserElements(src) {
+  return src + browserElements(src);
+}
+
+/** Whether a file of the app's own is in a directory `@ng-native/web-compat` was given as `sources`. */
+function isBrowserSource(filename, root = process.cwd()) {
+  const named = process.env['ANGULAR_NATIVE_SOURCE_BROWSER'];
+  if (!named) return false;
+  // Metro names a file from the project, and a test by where it is.
+  const absolute = path.resolve(root, filename);
+  return named.split(path.delimiter).some((directory) => absolute.startsWith(directory + path.sep));
+}
+
+/** What a file's selectors add to the elements the app lays out as a browser's, to end it with. */
+function browserElements(src) {
+  const names = new Set();
+  for (const [, , selector] of src.matchAll(/\bselector:\s*(["'`])((?:\\.|(?!\1)[^\\])*)\1/g)) {
+    // Each alternative's own element: no comma is inside the brackets of one before its name.
+    for (const part of selector.split(/,(?![^[(]*[\])])/)) {
+      const element = /^\s*([A-Za-z][\w-]*)/.exec(part);
+      if (element) names.add(element[1].toLowerCase());
+    }
+  }
+  if (!names.size) return '';
+  return (
+    `\n;(globalThis.ɵngNativeBrowserElements ??= new Set());` +
+    `${JSON.stringify([...names])}.forEach((name) => globalThis.ɵngNativeBrowserElements.add(name));\n`
+  );
+}
 
 /**
  * The npm package a file belongs to, `{ name, file }` with the file's path inside the package, or
@@ -1282,7 +1347,7 @@ function withLibrarySheets(src, filename, owner, platform) {
     .sort((a, b) => a.start - b.start)
     .map((declared) => ({
       declared,
-      sheet: declaredSheet(declared, filename, platform, report.warn),
+      sheet: declaredSheet(declared, filename, platform, report.warn, owner.name),
     }))
     .filter(({ sheet }) => sheet);
   report.done(compiled.length);
@@ -1298,7 +1363,7 @@ function withLibrarySheets(src, filename, owner, platform) {
 }
 
 /** The sheet one declaration's CSS compiles to, or null, saying why when it cannot be read. */
-function declaredSheet(declared, filename, platform, warn) {
+function declaredSheet(declared, filename, platform, warn, library) {
   const { type, styles } = declared;
   if (!styles) return null;
   if (!styles.entries) {
@@ -1313,7 +1378,39 @@ function declaredSheet(declared, filename, platform, warn) {
     .map((entry) => ({ text: entry.value, file: filename, line: entry.line, exact: entry.exact }));
   if (!parts.length) return null;
   const css = parts.map((part) => part.text).join('\n');
-  return componentSheet(css, filename, type ?? 'a component', platform, parts, warn, true);
+  // Asked for by `@ng-native/web-compat`, for the libraries it names: the sheet's flex
+  // containers are rows, as the browser it was written for lays them out. A library written for
+  // native is listed for its styles and not named there.
+  const sheet = componentSheet(css, filename, type ?? 'a component', platform, parts, warn, true);
+  return sheet && isBrowsers(library) ? withRows(sheet) : sheet;
+}
+
+const FLEX = new Set(['flex', 'inline-flex']);
+const names = (rule, prop) =>
+  prop in rule.declarations ||
+  prop in (rule.important ?? {}) ||
+  (rule.deferred ?? []).some((deferred) => deferred.props.includes(prop));
+
+/**
+ * A library's sheet with its flex containers rows, as the browser it was written for lays them
+ * out, in an app that asked for that (`@ng-native/web-compat` does, for the packages it is
+ * given as `libraries`). Everywhere else a flex container is a column, and stays one.
+ *
+ * Each rule that makes a flex container and names no direction gets a rule ahead of it for the
+ * same elements with no specificity at all, so a direction named by any rule still wins, as the
+ * initial value it stands in for would lose to any.
+ */
+function withRows(sheet) {
+  const rules = [];
+  for (const rule of sheet.rules) {
+    const flex = FLEX.has(rule.declarations.display) || FLEX.has(rule.important?.display);
+    if (flex && !names(rule, 'flexDirection')) {
+      const { tokens: _tokens, deferred: _deferred, important: _important, ...matched } = rule;
+      rules.push({ ...matched, specificity: 0, declarations: { flexDirection: 'row' } });
+    }
+    rules.push(rule);
+  }
+  return { ...sheet, rules };
 }
 
 /**
@@ -1369,6 +1466,7 @@ function reasonOf(message) {
  * @returns {{ code: string, dependencies: string[], map?: string, mapLineOffset?: number }}
  */
 function transformAngular(src, filename, options = {}) {
+  sourceRoot = options.projectRoot;
   resourcesRead.delete(filename);
   transformRoot = projectRootOf(options);
   // A template or stylesheet is only in the graph to carry its component's edits: empty in a
@@ -1424,12 +1522,14 @@ function transformAngular(src, filename, options = {}) {
     const warn = buildWarnings();
     const styles = styleBlock(src, filename, components, resources, platform, warn);
     const { quiet, hmr } = hotParts(src, filename, components, resources, options, warn);
+    // Components copied into the app from a library written for a browser: see `browserElements`.
+    const named = isBrowserSource(filename, options.projectRoot) ? browserElements(src) : '';
     // Dev keeps the emitted CSS: the bundle size does not matter there, and the HMR path is
     // easier to reason about when the compiler's output is untouched.
     const compiled =
       options.dev === true ? result.code : stripComponentStyles(result.code, filename);
     return {
-      code: edges + quiet + compiled + styles + hmr,
+      code: edges + quiet + compiled + styles + hmr + named,
       dependencies,
       map: result.map,
       // The resource imports are prepended, so everything the map describes has moved down by
