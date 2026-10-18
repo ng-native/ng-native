@@ -252,6 +252,29 @@ describe(':has() of a relative selector', () => {
     assert.deepEqual(s.reports, []);
   });
 
+  it('takes either side of an :is() split into an ancestor test and a compound, after + too', () => {
+    // `.x:is(.p *, .y)` is an element `.x` that is under a `.p`, or is `.y`: either one.
+    const next = scene('.c:has(+ .x:is(.p *, .y)) { opacity: 0.5 }');
+    next.el('c', 'c');
+    const x = next.el('x', 'x');
+    assert.equal(next.opacity('c'), null);
+    next.engine.addClass(x, 'y');
+    assert.equal(next.opacity('c'), 0.5, '.y alone, with no .p above it');
+    assert.deepEqual(next.reports, []);
+
+    const under = scene('.c:has(+ .x:is(.p *, .y)) { opacity: 0.5 }');
+    const p = under.el('p', 'p');
+    under.el('c', 'c', p);
+    under.el('x', 'x', p);
+    assert.equal(under.opacity('c'), 0.5, 'a .p above it alone, with no .y');
+
+    const listed = scene('.c:has(> .a, .x:is(.p *, .y)) { opacity: 0.5 }');
+    const c = listed.el('c', 'c');
+    listed.el('x', 'x y', listed.el('inner', '', c));
+    assert.equal(listed.opacity('c'), 0.5, 'in a list beside a child test');
+    assert.deepEqual(listed.reports, []);
+  });
+
   it('finds what is under a later sibling', () => {
     const s = scene('.x:has(~ .panel .mark) { opacity: 0.5 }');
     s.el('x', 'x');

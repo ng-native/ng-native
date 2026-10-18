@@ -1520,10 +1520,13 @@ function hasTest(part, context) {
     const any = parsed.flatMap((one) => one.any ?? [one.selector.compounds[0]]);
     has = RELATION[parsed[0].leading] ? { child: true, any } : { any };
   } else {
-    const relative = parsed.map(({ leading, selector }) => ({
-      compounds: selector.compounds,
-      combinators: [leading ?? 'descendant', ...selector.combinators],
-    }));
+    // An argument `hasArgument` split is one compound, so each alternative is a selector of its own.
+    const relative = parsed.flatMap(({ leading, selector, any }) =>
+      (any ?? [null]).map((alternative) => ({
+        compounds: alternative ? [alternative] : selector.compounds,
+        combinators: [leading ?? 'descendant', ...selector.combinators],
+      })),
+    );
     has = { any: [], relative };
   }
   return { has, ids: top.ids, classes: top.classes, types: top.types };
