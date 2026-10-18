@@ -221,13 +221,13 @@ function build(spec: CaseNode, parent: StyleTarget | null): StyleTarget[] {
     parent,
     classes: new Set(spec.classes ?? []),
     props: { ...(spec.id ? { nativeID: spec.id } : {}), ...(spec.attrs ?? {}) },
-    sheet: null,
+    templateSheet: null,
     hostSheet: null,
     styleCache: null,
     styleDirty: true,
   };
   const children = (spec.children ?? []).flatMap((child) => build(child, node));
-  (node as { children?: StyleTarget[] }).children = children.filter((c) => c.parent === node);
+  (node as { childList?: StyleTarget[] }).childList = children.filter((c) => c.parent === node);
   return [node, ...children];
 }
 

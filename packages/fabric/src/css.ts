@@ -616,8 +616,8 @@ export interface StyleCache {
  * nor text of no length, which a binding to nothing leaves behind.
  */
 export function fills(child: StyleTarget): boolean {
-  if (child.kind === 'anchor') return false;
-  return child.kind !== 'text' || (child as { text?: string }).text !== '';
+  if (child.nodeKind === 'anchor') return false;
+  return child.nodeKind !== 'text' || (child as { nodeText?: string }).nodeText !== '';
 }
 
 /** What the matcher needs of a node. The engine's node satisfies this structurally. */
@@ -629,13 +629,13 @@ export interface StyleTarget {
    * it is read through the parent rather than kept as an index: an index would have to be right
    * after every insertion and removal, and this is right by construction.
    */
-  readonly children?: readonly StyleTarget[];
+  readonly childList?: readonly StyleTarget[];
   /**
    * Only elements are counted by the selectors that ask about position. Text is not one, and
    * neither is the anchor a structural directive leaves behind - the same reason a browser does
    * not count a comment. Absent means element, so a hand-built target needs nothing extra.
    */
-  readonly kind?: string;
+  readonly nodeKind?: string;
   readonly classes: ReadonlySet<string> | null;
   readonly props: Readonly<Record<string, unknown>>;
   /**
@@ -657,9 +657,9 @@ export interface StyleTarget {
    * created it. Read from the node rather than passed in, because a node's ancestors usually
    * belong to other components and must be matched against their own sheets, not this one's.
    */
-  readonly sheet: StyleSheet | null;
+  readonly templateSheet: StyleSheet | null;
   /**
-   * The sheet of the component this node is the *host* of, if it is one. Distinct from `sheet`,
+   * The sheet of the component this node is the *host* of, if it is one. Distinct from `templateSheet`,
    * which is the sheet of the component that *created* it: a host node is created by the parent,
    * so those two are always different sheets and `:host` needs the second.
    */
@@ -941,7 +941,7 @@ function matchesValue(
  */
 function ownedBy(node: StyleTarget, compound: Compound, sheet: StyleSheet | null): boolean {
   if (compound.host !== undefined || compound.hostContext !== undefined) return true;
-  return node.sheet === sheet;
+  return node.templateSheet === sheet;
 }
 
 /*
@@ -971,7 +971,7 @@ function matchesCompound(node: StyleTarget, compound: Compound, sheet: StyleShee
       if (!matchesAttribute(node, test)) return false;
     }
   }
-  if (compound.empty !== undefined && node.children?.some(fills)) return false;
+  if (compound.empty !== undefined && node.childList?.some(fills)) return false;
   if (compound.nth !== undefined) {
     for (const test of compound.nth) {
       if (!matchesNth(node, test)) return false;
@@ -1024,8 +1024,8 @@ function matchesCompound(node: StyleTarget, compound: Compound, sheet: StyleShee
 
 /** Whether some element beneath `node`, or some child of it for `:has(> x)`, matches the test. */
 function hasBeneath(node: StyleTarget, test: HasTest, sheet: StyleSheet | null): boolean {
-  for (const child of node.children ?? []) {
-    if (child.kind !== undefined && child.kind !== 'element') continue;
+  for (const child of node.childList ?? []) {
+    if (child.nodeKind !== undefined && child.nodeKind !== 'element') continue;
     if (test.any.some((option) => matchesCompound(child, option, sheet))) return true;
     if (!test.child && hasBeneath(child, test, sheet)) return true;
   }
@@ -1051,7 +1051,7 @@ export function matches(
   if (
     sheet !== null &&
     sheet === node.hostSheet &&
-    sheet !== node.sheet &&
+    sheet !== node.templateSheet &&
     subject.host === undefined
   ) {
     return false;
@@ -1221,7 +1221,7 @@ function takesParents(rule: StyleRule): boolean {
 }
 
 /** Whether a node is one of the children CSS counts. Text and anchors are children, not elements. */
-const isElement = (node: StyleTarget) => node.kind === undefined || node.kind === 'element';
+const isElement = (node: StyleTarget) => node.nodeKind === undefined || node.nodeKind === 'element';
 
 /** A node's first `count` elements, or its last, skipping everything that is not one. */
 export function elementsAtEnd<T extends StyleTarget>(
@@ -1427,7 +1427,7 @@ const nestedCompounds = (compound: Compound): Compound[] => [
 
 /** The element before this one, skipping everything that is not one. */
 function previousElement(node: StyleTarget): StyleTarget | null {
-  const siblings = node.parent?.children;
+  const siblings = node.parent?.childList;
   if (!siblings) return null;
   for (let i = siblings.indexOf(node) - 1; i >= 0; i--) {
     if (isElement(siblings[i]!)) return siblings[i]!;
@@ -1443,7 +1443,7 @@ function previousElement(node: StyleTarget): StyleTarget | null {
  * counting, and the rest wait for a list that is actually slow.
  */
 function matchesNth(node: StyleTarget, test: NthTest): boolean {
-  const siblings = node.parent?.children;
+  const siblings = node.parent?.childList;
   if (!siblings) return false;
 
   if (test.a === 0 && test.b === 1 && !test.ofType) {
@@ -2654,7 +2654,7 @@ function flattenInline(style: unknown, into: Record<string, unknown>): Record<st
  *
  * Correctness first. Walking up meant matching every ancestor against the *starting node's*
  * sheet, but an ancestor almost always belongs to a different component, so a component's rules
- * reached nodes it did not own while a parent's real values never arrived. Reading `sheet` off
+ * reached nodes it did not own while a parent's real values never arrived. Reading `templateSheet` off
  * each node fixes both directions at once.
  *
  * Cost second. Walking up re-derived, for every node, everything its parent had already worked
@@ -3186,7 +3186,7 @@ export class StyleResolver {
    */
   private hasNoRules(node: StyleTarget): boolean {
     return (
-      node.sheet === null &&
+      node.templateSheet === null &&
       node.hostSheet === null &&
       this.deepSheets.size === 0 &&
       this.globalSheet === null &&
@@ -3277,7 +3277,7 @@ export class StyleResolver {
     if (this.globalSheet) this.placeLayers(this.globalSheet);
     const indexes: RuleIndex[] = [];
     if (node.hostSheet) indexes.push(this.ownIndex(node.hostSheet, HOSTS));
-    if (node.sheet) indexes.push(this.ownIndex(node.sheet, CREATED));
+    if (node.templateSheet) indexes.push(this.ownIndex(node.templateSheet, CREATED));
     if (this.deepSheets.size) this.reachedFromAbove(node, indexes);
     indexes.push(this.sharedIndex());
     return candidateRules(node, indexes, this.cascadeOrder);
@@ -3290,7 +3290,7 @@ export class StyleResolver {
   private reachedFromAbove(node: StyleTarget, indexes: RuleIndex[]): void {
     for (let up = node.parent; up; up = up.parent) {
       const sheet = up.hostSheet;
-      if (!sheet || sheet === node.sheet || sheet === node.hostSheet) continue;
+      if (!sheet || sheet === node.templateSheet || sheet === node.hostSheet) continue;
       if (this.deepSheets.has(sheet)) indexes.push(this.deepIndex(sheet));
     }
   }

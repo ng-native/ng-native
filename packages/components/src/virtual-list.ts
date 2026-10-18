@@ -951,8 +951,8 @@ export class VirtualList<T> extends ScrollViewProps {
   private driveStickyRows(): void {
     if (!this.pinning() && this.drives.size === 0) return;
     const canvas = this.canvasView().nativeElement as HostNode;
-    const views = canvas.children
-      .filter((child) => child.kind === 'element')
+    const views = canvas.childList
+      .filter((child) => child.nodeKind === 'element')
       .slice(this.measuring() ? 1 : 0);
     const axis = this.horizontal() ? 'x' : 'y';
     const live = new Set<HostNode>();

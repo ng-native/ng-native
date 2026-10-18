@@ -140,7 +140,7 @@ describe('what CSS costs', () => {
           parent: node,
           classes: new Set([`c${i % 30}`]),
           props: {},
-          sheet,
+          templateSheet: sheet,
           hostSheet: null,
           styleCache: null,
           styleDirty: true,
@@ -187,7 +187,7 @@ describe('what CSS costs', () => {
     for (let i = 0; i < 10; i++) engine.appendChild(list, row());
     engine.commit();
 
-    engine.insertBefore(list, row(), list.children[0]!);
+    engine.insertBefore(list, row(), list.childList[0]!);
     resetStyleStats();
     engine.commit();
     assert.equal(styleStats.ruleTests, 11, 'the one rule, tried against each of eleven rows');

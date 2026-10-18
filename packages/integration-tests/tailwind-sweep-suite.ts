@@ -482,13 +482,13 @@ function resolverFor(
     parent,
     classes: new Set(classes),
     props,
-    sheet: null,
+    templateSheet: null,
     hostSheet: null,
     styleCache: null,
     styleDirty: true,
   });
   const withChildren = (node: StyleTarget, children: StyleTarget[]) => {
-    (node as { children?: StyleTarget[] }).children = children;
+    (node as { childList?: StyleTarget[] }).childList = children;
   };
   const root = target('view', world.rootClasses.split(' '), null);
   /** With `inside`, the node holds that many views instead, as the layout scene's case does. */

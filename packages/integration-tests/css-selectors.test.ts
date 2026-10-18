@@ -22,7 +22,7 @@ function node(
     parent,
     classes: new Set(classes),
     props,
-    sheet: null,
+    templateSheet: null,
     hostSheet: null,
     styleCache: null,
     styleDirty: true,
@@ -364,16 +364,16 @@ describe('an id', () => {
  * selectors skip as the web skips a text node.
  */
 function family(names: string[]): StyleTarget[] {
-  const parent: StyleTarget & { children: StyleTarget[] } = { ...node('view'), children: [] };
+  const parent: StyleTarget & { childList: StyleTarget[] } = { ...node('view'), childList: [] };
   for (const name of names) {
     const child: StyleTarget = {
       ...node(name === '#text' ? '#text' : name, {}, [], parent),
-      kind: name === '#text' ? 'text' : 'element',
-      children: [],
+      nodeKind: name === '#text' ? 'text' : 'element',
+      childList: [],
     };
-    parent.children.push(child);
+    parent.childList.push(child);
   }
-  return parent.children;
+  return parent.childList;
 }
 
 describe('position among siblings', () => {
@@ -415,16 +415,16 @@ describe('position among siblings', () => {
     const [bare] = family(['view']);
     assert.equal(hits('view:empty', bare!), true);
     const [full] = family(['view']);
-    (full!.children as StyleTarget[]).push(node('text', {}, [], full!));
+    (full!.childList as StyleTarget[]).push(node('text', {}, [], full!));
     assert.equal(hits('view:empty', full!), false);
   });
 
   it('matches :empty over text of no length, which a binding to nothing leaves', () => {
     const [bound] = family(['view']);
-    const text = { ...node('#text', {}, [], bound!), kind: 'text' as const, text: '' };
-    (bound!.children as StyleTarget[]).push(text);
+    const text = { ...node('#text', {}, [], bound!), nodeKind: 'text' as const, nodeText: '' };
+    (bound!.childList as StyleTarget[]).push(text);
     assert.equal(hits('view:empty', bound!), true);
-    text.text = ' ';
+    text.nodeText = ' ';
     assert.equal(hits('view:empty', bound!), false);
   });
 });

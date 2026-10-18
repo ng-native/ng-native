@@ -89,7 +89,7 @@ export class NativeSearchBar {
   readonly searchBlur = output<void>();
 
   private readonly node = inject(ElementRef).nativeElement as EngineNode;
-  private readonly engine = this.node.host ?? inject(HostEngine);
+  private readonly engine = this.node.engine ?? inject(HostEngine);
   /** What the field last said it holds, to tell a query set from code from the field's echo. */
   private fieldText = '';
 

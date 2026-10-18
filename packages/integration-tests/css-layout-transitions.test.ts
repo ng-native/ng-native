@@ -430,7 +430,7 @@ describe('a @keyframes animation of a height', () => {
     assert.deepEqual(s.asked, [{ duration: 200, update: { type: 'easeInEaseOut' } }]);
     assert.equal(s.height(), 40);
     assert.equal(s.engine.animating, true, 'the bar, from JavaScript');
-    assert.equal(s.engine.root.children[2]!.committed!.props['width'], 10);
+    assert.equal(s.engine.root.childList[2]!.committed!.props['width'], 10);
   });
 
   it('is played from JavaScript where another box is resized in the commit', () => {

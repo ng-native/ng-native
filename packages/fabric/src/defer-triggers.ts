@@ -57,10 +57,10 @@ export class EngineIntersectionObserver {
   observe(target: EngineNode): void {
     if (this.watched.has(target)) return;
     const check = () => this.check(target);
-    const stops = [target.host!.setEventListener(target, 'topLayout', check)];
+    const stops = [target.engine!.setEventListener(target, 'topLayout', check)];
     for (let at = target.parent; at; at = at.parent) {
       if (!SCROLLERS.has(viewNameOf(at))) continue;
-      stops.push(at.host!.setEventListener(at, 'topScroll', check));
+      stops.push(at.engine!.setEventListener(at, 'topScroll', check));
     }
     this.watched.set(target, { stops });
     // A node laid out before it was observed sends no layout event of its own. Measured now,
@@ -110,7 +110,7 @@ const box = (frame: WindowFrame): Box => ({
 
 function measured(node: EngineNode): Box | null {
   let found: Box | null = null;
-  node.host!.measure(node, (frame) => (found = box(frame)));
+  node.engine!.measure(node, (frame) => (found = box(frame)));
   return found;
 }
 
@@ -134,7 +134,7 @@ function visibleShare(target: EngineNode): number | null {
     const scroller = measured(at);
     if (scroller) clip(visible, scroller);
   }
-  const window = (target.host as { viewport?: { width: number; height: number } }).viewport;
+  const window = (target.engine as { viewport?: { width: number; height: number } }).viewport;
   if (window && window.width > 0 && window.height > 0) {
     clip(visible, { left: 0, top: 0, right: window.width, bottom: window.height });
   }

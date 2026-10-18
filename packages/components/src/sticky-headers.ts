@@ -55,7 +55,7 @@ export class StickyHeaders {
 
   /** Find the sticky children again, after a pass that may have changed them. */
   track(content: HostNode | undefined, indices: readonly number[]): void {
-    const children = (content?.children ?? []).filter((child) => child.kind === 'element');
+    const children = (content?.childList ?? []).filter((child) => child.nodeKind === 'element');
     const headers = indices.flatMap((index) => children[index] ?? []);
     for (const node of this.headers) {
       if (!headers.includes(node)) this.release(node);

@@ -257,15 +257,21 @@ describe('host primitives', () => {
 describe('platform view names', () => {
   it('answers what a node commits as, for a host that is not the engine', async () => {
     const { viewNameOf } = await import('@ng-native/fabric');
-    const paragraph = { kind: 'element', tag: 'text', parent: null };
+    const paragraph = { nodeKind: 'element', tag: 'text', parent: null };
 
-    assert.equal(viewNameOf({ kind: 'element', tag: 'view', parent: null }), 'View');
+    assert.equal(viewNameOf({ nodeKind: 'element', tag: 'view', parent: null }), 'View');
     assert.equal(viewNameOf(paragraph), 'Paragraph');
-    assert.equal(viewNameOf({ kind: 'element', tag: 'text', parent: paragraph }), 'VirtualText');
-    assert.equal(viewNameOf({ kind: 'text', tag: '#text', parent: paragraph }), 'RawText');
-    assert.equal(viewNameOf({ kind: 'element', tag: 'pressable', parent: null }), 'View');
-    assert.equal(viewNameOf({ kind: 'element', tag: 'scroll-view', parent: null }), 'ScrollView');
-    assert.equal(viewNameOf({ kind: 'element', tag: 'app-habit-row', parent: null }), 'View');
+    assert.equal(
+      viewNameOf({ nodeKind: 'element', tag: 'text', parent: paragraph }),
+      'VirtualText',
+    );
+    assert.equal(viewNameOf({ nodeKind: 'text', tag: '#text', parent: paragraph }), 'RawText');
+    assert.equal(viewNameOf({ nodeKind: 'element', tag: 'pressable', parent: null }), 'View');
+    assert.equal(
+      viewNameOf({ nodeKind: 'element', tag: 'scroll-view', parent: null }),
+      'ScrollView',
+    );
+    assert.equal(viewNameOf({ nodeKind: 'element', tag: 'app-habit-row', parent: null }), 'View');
   });
 
   it('swaps the components Android registers differently', async () => {

@@ -481,7 +481,7 @@ export type UiDateChangeEvent = NativeSyntheticEvent<{ readonly date: number | s
  */
 function listen(event: string, handle: (payload: Record<string, unknown>) => void): void {
   const node = inject(ElementRef).nativeElement as HostNode;
-  const engine = node.host ?? inject(HostEngine);
+  const engine = node.engine ?? inject(HostEngine);
   const stop = engine.setEventListener(node, event, (raw) =>
     handle((raw as NativeSyntheticEvent<Record<string, unknown>>)?.nativeEvent ?? {}),
   );
@@ -1559,7 +1559,7 @@ export interface UiBottomSheetViewFunctions {
 /** The window's width as the engine knows it, or undefined before the platform has said. */
 function windowWidth(): Signal<number | undefined> {
   const node = inject(ElementRef).nativeElement as HostNode;
-  const engine = (node.host ?? inject(HostEngine)) as Partial<
+  const engine = (node.engine ?? inject(HostEngine)) as Partial<
     Pick<Engine, 'viewport' | 'watchViewport'>
   >;
   const read = () => engine.viewport?.width || undefined;

@@ -38,7 +38,7 @@ import type { ResponderHandlers, WindowFrame } from './engine.ts';
 /** What a host node has to be able to answer. `EngineNode` and a DOM element both can. */
 export interface HostNode {
   /** `element` or `text`, so a caller can tell a node from the words inside it. */
-  readonly kind: string;
+  readonly nodeKind: string;
   /**
    * The props the host is holding for this node.
    *
@@ -46,9 +46,9 @@ export interface HostNode {
    * directive consumes has to stop being an attribute the host writes through.
    */
   props: Record<string, unknown>;
-  /** The text, when `kind` is `text`. Empty otherwise. */
-  text: string;
-  children: readonly HostNode[];
+  /** The text, when `nodeKind` is `text`. Empty otherwise. */
+  nodeText: string;
+  childList: readonly HostNode[];
   parent: HostNode | null;
   /**
    * Set by `claimHost` from every host primitive's constructor, so a host can tell an element a
@@ -66,7 +66,7 @@ export interface HostNode {
    * runs once per element on screen. A host whose nodes cannot carry it leaves it out, and the
    * primitive injects as before.
    */
-  readonly host?: HostEngine;
+  readonly engine?: HostEngine;
 }
 
 /** Something that writes its node's props once it has its inputs. See `HostEngine.settle`. */

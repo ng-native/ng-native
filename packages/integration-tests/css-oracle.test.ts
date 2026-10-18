@@ -53,7 +53,7 @@ function build(
     classes: new Set(spec.classes ?? []),
     // An id is `nativeID` here, which is the prop React Native gives a view for the purpose.
     props: { ...(spec.id ? { nativeID: spec.id } : {}), ...(spec.attrs ?? {}) },
-    sheet: spec.scope === 'none' ? null : sheet,
+    templateSheet: spec.scope === 'none' ? null : sheet,
     hostSheet: null,
     styleCache: null,
     styleDirty: true,

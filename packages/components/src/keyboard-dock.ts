@@ -294,13 +294,13 @@ export class KeyboardDock extends ViewBase {
 
   /** The controller's or the motion view, the one whose events carry the keyboard. */
   private controllerView(): HostNode {
-    this.source ??= this.node.children.find((child) => child.kind === 'element') ?? this.node;
+    this.source ??= this.node.childList.find((child) => child.nodeKind === 'element') ?? this.node;
     return this.source;
   }
 
   /** The view holding the content, the last of the dock's own. */
   private barView(): HostNode | undefined {
-    return this.node.children.filter((child) => child.kind === 'element').at(-1);
+    return this.node.childList.filter((child) => child.nodeKind === 'element').at(-1);
   }
 
   protected onKeyboardMove(event: unknown): void {
