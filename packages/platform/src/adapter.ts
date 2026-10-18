@@ -217,7 +217,11 @@ class NativeRenderer implements Renderer2 {
   destroy(): void {}
 
   createElement(name: string): EngineNode {
-    return this.engine.createElement(name, this.sheet);
+    const node = this.engine.createElement(name, this.sheet);
+    if (extensions.length) {
+      for (const extension of extensions) extension.created?.(node, this.engine);
+    }
+    return node;
   }
 
   createComment(): EngineNode {
@@ -230,11 +234,18 @@ class NativeRenderer implements Renderer2 {
 
   appendChild(parent: EngineNode, newChild: EngineNode): void {
     this.engine.appendChild(parent, newChild);
+    if (extensions.length) this.inserted(parent, newChild);
   }
 
   insertBefore(parent: EngineNode, newChild: EngineNode, refChild: EngineNode | null): void {
     if (!parent) return;
     this.engine.insertBefore(parent, newChild, refChild);
+    if (extensions.length) this.inserted(parent, newChild);
+  }
+
+  /** Tell the extensions a node was put under a parent. */
+  private inserted(parent: EngineNode, child: EngineNode): void {
+    for (const extension of extensions) extension.inserted?.(child, parent, this.engine);
   }
 
   removeChild(_parent: EngineNode | null, oldChild: EngineNode): void {
@@ -242,6 +253,9 @@ class NativeRenderer implements Renderer2 {
     // handed is whatever the caller had, and a library's may be no parent of it at all. One in
     // no parent is out already.
     if (oldChild.parent) this.engine.removeChild(oldChild.parent, oldChild);
+    if (extensions.length) {
+      for (const extension of extensions) extension.removed?.(oldChild, this.engine);
+    }
   }
 
   selectRootElement(selectorOrNode: string | EngineNode): EngineNode {
@@ -277,7 +291,7 @@ class NativeRenderer implements Renderer2 {
       attributeStyles.set(el, Object.keys(declared));
       return;
     }
-    this.engine.setProp(el, name, value);
+    this.set(el, name, value);
   }
 
   removeAttribute(el: EngineNode, name: string): void {
@@ -288,7 +302,16 @@ class NativeRenderer implements Renderer2 {
       attributeStyles.delete(el);
       return;
     }
-    this.engine.setProp(el, name, null);
+    this.set(el, name, null);
+  }
+
+  /** Set a prop, unless an extension takes the attribute or property it was written as. */
+  private set(el: EngineNode, name: string, value: unknown): void {
+    if (!extensions.length) return this.engine.setProp(el, name, value);
+    for (const extension of extensions) {
+      if (extension.set?.(el, name, value, this.engine)) return;
+    }
+    this.engine.setProp(el, name, value);
   }
 
   /** Takes out what an element's `style` attribute declared and `kept` does not. */
@@ -311,11 +334,17 @@ class NativeRenderer implements Renderer2 {
       this.engine.setCustomProperty(el, customPropertyName(style), value);
       return;
     }
+    if (extensions.length && this.restyled(el, style, value)) return;
     // A number bound to the CSS name is a CSS number, a multiple of the font size, as a browser's
     // `style.setProperty` reads it. A style object's `lineHeight: 24` stays React Native's points.
     if (style === 'line-height' && typeof value === 'number') value = String(value);
     const key = styleKey(style);
     if (this.setShorthand(el, key, value)) return;
+    this.setDeclaration(el, key, value);
+  }
+
+  /** Set one declaration of an element's inline style, by the key the view reads. */
+  private setDeclaration(el: EngineNode, key: string, value: unknown): void {
     // A `var()` is for the cascade to settle, with the tokens in scope, not a value of the style.
     if (this.engine.setBoundStyle(el, key, value)) return this.dropStyle(el, key);
     const next = declaredValue(key, value);
@@ -360,10 +389,32 @@ class NativeRenderer implements Renderer2 {
       this.engine.setCustomProperty(el, customPropertyName(style), null);
       return;
     }
+    if (extensions.length && this.restyled(el, style, null)) return;
     const key = styleKey(style);
     if (SHORTHANDS.has(key)) this.dropLonghands(el, key, null);
+    this.dropDeclaration(el, key);
+  }
+
+  private dropDeclaration(el: EngineNode, key: string): void {
     this.engine.setBoundStyle(el, key, null);
     this.dropStyle(el, key);
+  }
+
+  /**
+   * Ask the extensions what a declaration is set as: the first to answer has each of its
+   * declarations set, or removed for a `null`, in place of the one written.
+   */
+  private restyled(el: EngineNode, style: string, value: unknown): boolean {
+    for (const extension of extensions) {
+      const declarations = extension.style?.(el, style, value, this.engine);
+      if (!declarations) continue;
+      for (const [key, next] of Object.entries(declarations)) {
+        if (next == null) this.dropDeclaration(el, key);
+        else this.setDeclaration(el, key, next);
+      }
+      return true;
+    }
+    return false;
   }
 
   /** Takes out the longhands `key` was written as, but for the ones it is about to be again. */
@@ -393,7 +444,7 @@ class NativeRenderer implements Renderer2 {
 
   setProperty(el: EngineNode, name: string, value: unknown): void {
     if (this.engine.dev) reportUnboundFormsInput(this.engine, el, name);
-    this.engine.setProp(el, name, value);
+    this.set(el, name, value);
   }
 
   setValue(node: EngineNode, value: string): void {
@@ -405,10 +456,83 @@ class NativeRenderer implements Renderer2 {
     eventName: string,
     callback: (event: unknown) => boolean | void,
   ): () => void {
+    for (const extension of extensions) {
+      const unlisten = extension.listen?.(target, eventName, callback, this.engine);
+      if (unlisten) return unlisten;
+    }
     // Angular's names for a global target, 'window', 'document' and 'body': there is none here.
     if (typeof target === 'string') return () => {};
     return this.engine.setEventListener(target, topLevelType(eventName), callback);
   }
+}
+
+/** What a package outside core changes about how a template is rendered. */
+export interface RendererExtension {
+  /**
+   * Take a listener over: answer what removes it, or nothing to leave it to the renderer. The
+   * target is a node, or the name Angular gives a global one: `'window'`, `'document'`, `'body'`.
+   */
+  listen?(
+    target: EngineNode | string,
+    eventName: string,
+    callback: (event: unknown) => boolean | void,
+    engine: Engine,
+  ): (() => void) | undefined;
+  /**
+   * Told of each element a template creates, before it has attributes or children: where an
+   * element gets what it has for its name alone, as a `button` has its role.
+   */
+  created?(node: EngineNode, engine: Engine): void;
+  /**
+   * Told of each node put under a parent, the first time and each time it is moved: where an
+   * element gets what depends on what holds it.
+   */
+  inserted?(node: EngineNode, parent: EngineNode, engine: Engine): void;
+  /** Told of each node taken out of its parent by the renderer, once it is out. */
+  removed?(node: EngineNode, engine: Engine): void;
+  /**
+   * Take an attribute or a property over, `null` for one being removed: answer true once it is
+   * set as the props the element's view reads, as an `<input>`'s `value` is a text field's text.
+   */
+  set?(node: EngineNode, name: string, value: unknown, engine: Engine): boolean;
+  /**
+   * Take a bound style over, `null` for one being removed: answer the declarations it is set as,
+   * by the keys the view reads, each `null` to remove it. As CSS's `inset-inline: 4px 8px` is a
+   * `start` and an `end`.
+   */
+  style?(
+    node: EngineNode,
+    name: string,
+    value: unknown,
+    engine: Engine,
+  ): Record<string, unknown> | undefined;
+}
+
+/** Asked for their length before each is called: an app with none pays nothing an element. */
+const extensions: RendererExtension[] = [];
+
+/**
+ * Add to what the renderer does, for every app in the process. Returns what takes it away again.
+ *
+ * For a package that renders templates written for another host, as a web-compatibility layer
+ * delivers a `click` from a press and gives `(document:keydown)` something to listen on. The
+ * extensions are asked in the order they were added, and the first to answer takes the listener.
+ */
+export function extendRenderer(extension: RendererExtension): () => void {
+  // An entry of this call's own: the same extension added twice is removed once by each.
+  const entry: RendererExtension = {
+    listen: (...args) => extension.listen?.(...args),
+    created: (...args) => extension.created?.(...args),
+    inserted: (...args) => extension.inserted?.(...args),
+    removed: (...args) => extension.removed?.(...args),
+    set: (...args) => extension.set?.(...args) ?? false,
+    style: (...args) => extension.style?.(...args),
+  };
+  extensions.push(entry);
+  return () => {
+    const index = extensions.indexOf(entry);
+    if (index !== -1) extensions.splice(index, 1);
+  };
 }
 
 /**

@@ -99,6 +99,42 @@ and the root is always the window.
 }
 ```
 
+## Extending the renderer
+
+Two functions let a package outside these change how a template is rendered, for every app in the
+process. They are what a compatibility layer for templates written for another host is built on,
+and neither puts that host's API in the engine or the renderer.
+
+**`extendRenderer(extension)`**, from `@ng-native/platform`, adds hooks the renderer calls. Each
+is optional, and the extensions are asked in the order they were added:
+
+- `listen(target, eventName, callback, engine)` takes a listener over: it answers what removes the
+  listener, or nothing to leave it to the renderer. The target is a node, or the name Angular gives
+  a global one: `'window'`, `'document'` or `'body'`.
+- `created(node, engine)` is told of each element a template creates, before it has attributes
+  or children.
+- `inserted(node, parent, engine)` is told each time a node is put under a parent, and
+  `removed(node, engine)` each time the renderer takes one out.
+- `set(node, name, value, engine)` takes an attribute or a property over, `null` for one being
+  removed, and answers `true` once it has set the props the view reads.
+- `style(node, name, value, engine)` takes a bound style over and answers the declarations it is
+  set as, by the keys the view reads, each `null` to remove it.
+
+An app with no extension added pays one length check for each of these calls.
+
+**`extendNodes(members)`**, from `@ng-native/fabric`, gives every node the property descriptors
+it is passed, a getter or a method, on the prototype the nodes share. The engine reads none of
+them. A field the engine keeps on a node, such as `nodeKind` or `props`, is refused. A member a
+node already has on that prototype, such as `classList`, is replaced and put back when the
+extension is taken away, so what replaces it has to keep doing what Angular relied on. Two
+extensions of the same member can be taken away in either order.
+
+**`registerViewName()`** returns a function that puts the element name back to the view it named
+before, so a package can register names only for as long as it is in use.
+
+Each returns a function that takes the extension away again, which is what a test calls when it
+is done.
+
 ## Reading commit stats
 
 `engine.stats` tracks commit counts and timings - worst commit, worst render span, slow-commit
