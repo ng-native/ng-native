@@ -163,16 +163,40 @@ describe('position: sticky', () => {
   });
 
   it('has native follow the other axis where its inset there is the one left', () => {
-    const { native, named } = recorder();
+    const { native, named, connected } = recorder();
     const s = scene(`${PAGE} .both { left: 0 } .loose { top: auto }`, TWO, native);
     s.engine.setClasses(s.nodes.get('head')!, 'head both');
     s.engine.commit();
+    const head = s.committed('head').reactTag;
     const paths = () =>
       named('event').map((call) => JSON.stringify(call[3] ?? call[2]).includes('"x"'));
     assert.equal(paths().includes(true), false);
+    const before = connected().get(head);
+    assert.equal(before?.length, 1);
     s.engine.setClasses(s.nodes.get('head')!, 'head both loose');
     s.engine.commit();
     assert.equal(paths().includes(true), true);
+    // The box's own view: the props node it was driven by is let go, and another connected.
+    const after = connected().get(head);
+    assert.equal(after?.length, 1);
+    assert.notEqual(after![0], before![0]);
+  });
+
+  it('moves along the other axis where its inset there is the one left, by the same amount too', () => {
+    const css = `${PAGE} .narrow { width: 30px; left: 0 } .loose { top: auto }`;
+    const s = scene(css, TWO);
+    s.engine.setClasses(s.nodes.get('head')!, 'head narrow');
+    s.engine.commit();
+    // 70 down the page, and 70 across: the box sticks 70 along whichever axis it sticks on.
+    s.fabric.emit(s.committed('scroll'), 'topScroll', { contentOffset: { x: 70, y: 120 } });
+    s.engine.commit();
+    const move = () => (s.committed('head').props['transform'] as Record<string, number>[])[0];
+    assert.deepEqual(move(), { translateY: 70 });
+    s.engine.setClasses(s.nodes.get('head')!, 'head narrow loose');
+    // The commit the change is in, and the one the box marked for its move along the new axis.
+    s.engine.commit();
+    s.engine.commit();
+    assert.deepEqual(move(), { translateX: 70 });
   });
 
   it('has native stop moving it when its inset goes', () => {

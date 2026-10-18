@@ -9035,7 +9035,8 @@ export class Engine implements HostEngine {
       drive: null,
     });
     this.followScroll(scroll);
-    const fed = state.scroll === scroll && state.axis === span.axis;
+    const turned = state.axis !== span.axis;
+    const fed = state.scroll === scroll && !turned;
     if (state.start !== span.start || state.stop !== span.stop || !fed) {
       // Moved to another scroll view, or to stick along the other axis: the drive is fed by the
       // offset it was made for.
@@ -9049,6 +9050,8 @@ export class Engine implements HostEngine {
       else state.drive = this.driveByScroll(node, scroll, span.axis, range);
     }
     this.shiftSticky(node);
+    // A move along the other axis, though it may be by as much: committed as the other move.
+    if (turned) this.markProps(node, false);
   }
 
   /**
