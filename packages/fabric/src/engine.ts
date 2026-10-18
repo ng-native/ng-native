@@ -2312,6 +2312,10 @@ function ownTransform(value: unknown): unknown {
   return own.length ? own : undefined;
 }
 
+/** The moves the engine put before a transform: see `moveBeforeOwn`. */
+const engineMoves = (value: unknown): unknown[] =>
+  Array.isArray(value) ? value.filter((entry) => ENGINE_MOVES.has(entry as object)) : [];
+
 /** Whether two transform lists hold the same operations, one for one. */
 const sameEntries = (a: unknown, b: readonly unknown[]): boolean =>
   a === b || (Array.isArray(a) && a.length === b.length && a.every((entry, i) => entry === b[i]));
@@ -11325,8 +11329,15 @@ export class Engine implements HostEngine {
     const first = state.get(keys[0]!)!;
     // Where the view is committed: one that takes a touch stops short of no opacity.
     const touched = this.responders.has(node);
-    const seen = (key: string, value: unknown) =>
-      touched && key === 'opacity' ? stillTouched({ ...props, opacity: value })['opacity'] : value;
+    // The moves the engine put before the transform: native paints the transform it eases whole.
+    const moves = engineMoves(node.committed?.props['transform']);
+    const seen = (key: string, value: unknown) => {
+      if (key === 'transform' && moves.length)
+        return [...moves, ...(Array.isArray(value) ? value : [])];
+      return touched && key === 'opacity'
+        ? stillTouched({ ...props, opacity: value })['opacity']
+        : value;
+    };
     const tracks = new Map(
       keys.map((key) => {
         const { current, to, easing } = state.get(key)!;

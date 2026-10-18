@@ -10,6 +10,7 @@ import { createRequire } from 'node:module';
 import { Engine, type EngineNode } from '@ng-native/fabric';
 import type { FakeFabricNode } from '@ng-native/testing';
 import { createLaidOutFabric } from './laid-out-fabric.ts';
+import { recorder } from './native-animated.ts';
 
 const require = createRequire(import.meta.url);
 const { compileCss } = require('@ng-native/metro/css/compile.cjs');
@@ -629,6 +630,49 @@ describe('a relatively positioned box in a line', () => {
     s.engine.addClass(s.nodes.get('i')!, 'ease');
     // Where it was, with the move made once, on the first frame of its way to where it goes.
     assert.deepEqual(props(s, 'i').transform, resting);
+  });
+
+  // Native moves the view by the transform it is given while it eases, so that keeps the move.
+  it('keeps its move while native eases a transition of its transform', () => {
+    const rec = recorder();
+    const engine = new Engine(createLaidOutFabric('classic'), 1, {
+      globalStyles: compileCss(
+        `${LINE} .i { top: 28px; transform: translateX(0); transition: transform 100ms linear }` +
+          ' .go { transform: translateX(10px) }',
+        'app.css',
+      ) as never,
+      nativeAnimated: rec.native,
+      now: () => 0,
+    });
+    const p = engine.createElement('view');
+    const i = engine.createElement('view');
+    engine.setClasses(p, 'p');
+    engine.setClasses(i, 'i');
+    engine.appendChild(p, i);
+    engine.appendChild(engine.root, p);
+    engine.commit();
+    engine.advanceAnimations();
+    engine.addClass(i, 'go');
+    engine.commit();
+    assert.equal(rec.named('start').length, 1);
+    const transforms = rec
+      .named('create')
+      .map(([, , config]) => config as { type: string; transforms?: { property: string }[] })
+      .find((config) => config.type === 'transform')!.transforms!;
+    assert.deepEqual(
+      transforms.map((entry) => entry.property),
+      ['translateY', 'translateX'],
+    );
+    // Held where the engine moved it, however far the transition has got.
+    const move = rec
+      .named('create')
+      .find(([, tag]) => tag === (transforms[0] as { nodeTag?: unknown }).nodeTag)![2] as {
+      outputRange: number[];
+    };
+    assert.ok(
+      move.outputRange.every((value) => value === 28),
+      `${move.outputRange}`,
+    );
   });
 });
 
