@@ -60,8 +60,10 @@ Never the one someone is using. The newest iPhone on the newest runtime, the sta
 still:
 
 ```sh
-type=$(xcrun simctl list devicetypes iPhone -j | jq -r '.devicetypes | last | .identifier')
-udid=$(xcrun simctl create screens-check "$type")
+read -r runtime type < <(xcrun simctl list devices available -j | jq -r '
+  .devices | to_entries | map(select(.key | test("iOS"))) | sort_by(.key) | last
+  | "\(.key) \(.value | map(select(.name | startswith("iPhone"))) | first | .deviceTypeIdentifier)"')
+udid=$(xcrun simctl create screens-check "$type" "$runtime")
 xcrun simctl boot "$udid" && xcrun simctl bootstatus "$udid" -b > /dev/null
 xcrun simctl status_bar "$udid" override --time 9:41 --batteryState charged --batteryLevel 100 --wifiBars 3
 ```
@@ -85,7 +87,7 @@ appId: dev.angularnative.canary
 EOF
 
 shoot() { # side route
-  local file="$out/$1/$(echo "${2#/}" | tr / - | sed 's/^$/home/').png" last=
+  local file="$out/shots/$1/$(echo "${2#/}" | tr / - | sed 's/^$/home/').png" last=
   xcrun simctl terminate "$udid" dev.angularnative.canary 2> /dev/null
   xcrun simctl openurl "$udid" "canary://${2#/}"
   # Until two screenshots a second apart are the same, for at most twenty seconds.
@@ -99,23 +101,30 @@ shoot() { # side route
 }
 
 for side in base change; do
-  mkdir -p "$out/$side"
+  mkdir -p "$out/shots/$side"
   xcrun simctl install "$udid" "$out/$side.app"
   JAVA_HOME=${JAVA_HOME:-/opt/homebrew/opt/openjdk@21} maestro --device "$udid" test "$out/allow.yaml"
-  for route in $ROUTES; do shoot "$side" "$route"; done
+  for route in $(echo $ROUTES); do shoot "$side" "$route"; done
 done
 ```
 
-`ROUTES` is the list from step 1, space separated. A screen that never settles (a spinner, a
+`ROUTES` is the list from step 1, space separated (`$(echo $ROUTES)` splits it in zsh as in bash). A screen that never settles (a spinner, a
 looping animation) is taken at twenty seconds and will differ for that alone.
 
 ## 5. Compare
 
-Pair by pair: the same bytes is the same screen.
+By pixels, not bytes: simctl does not encode the same screen to the same PNG twice. A BMP is the
+pixels uncompressed, so the bytes that differ between two of them are the pixels that do. Under
+0.01% of them is noise (antialiasing, the status bar) and the same screen:
 
 ```sh
-for file in "$out"/base/*.png; do
-  cmp -s "$file" "$out/change/$(basename "$file")" && echo "same: $(basename "$file")" || echo "differs: $(basename "$file")"
+for file in "$out"/shots/base/*.png; do
+  name=$(basename "$file" .png)
+  sips -s format bmp "$file" --out "$out/a.bmp" > /dev/null
+  sips -s format bmp "$out/shots/change/$name.png" --out "$out/b.bmp" > /dev/null
+  differ=$(cmp -l "$out/a.bmp" "$out/b.bmp" | wc -l | tr -d ' ')
+  total=$(stat -f %z "$out/a.bmp")
+  if [ "$differ" -lt $((total / 10000)) ]; then echo "same: $name"; else echo "differs: $name ($differ of $total bytes)"; fi
 done
 ```
 
