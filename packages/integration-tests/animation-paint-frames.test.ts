@@ -15,11 +15,17 @@ const { compileCss } = require('@ng-native/metro/css/compile.cjs');
 
 const CSS = `
   @keyframes spin { to { transform: rotate(360deg) } }
+  @keyframes turn { to { rotate: 360deg } }
+  @keyframes slide { to { translate: 10px 0 } }
+  @keyframes swell { to { scale: 2 } }
   @keyframes grow { from { height: 10px } to { height: 110px } }
   .p { position: relative; width: 300px; height: 200px }
   .centre { position: absolute; left: 0; right: 0; margin: 0 auto; width: 100px; height: 10px }
   .spin { width: 20px; height: 20px; animation: spin 1s linear infinite }
   .grow { animation: grow 1s linear infinite }
+  .turn { width: 20px; height: 20px; animation: turn 1s linear infinite }
+  .slide { width: 20px; height: 20px; animation: slide 1s linear infinite }
+  .swell { width: 20px; height: 20px; animation: swell 1s linear infinite }
   .wide { width: 200px }
 `;
 
@@ -88,6 +94,37 @@ describe('a frame of an animation that only paints', () => {
     s.engine.removeChild(s.nodes.get('p')!, added);
     assert.ok(s.frame(100) > 0);
   });
+  // What a listener changes as a frame marks the tree is laid out with it.
+  it('lays out what its dirty listener changes', () => {
+    const fabric = createLaidOutFabric();
+    let now = 0;
+    let centre: EngineNode | undefined;
+    let widen = false;
+    const engine = new Engine(fabric, 1, {
+      globalStyles: compileCss(CSS, 'app.css') as never,
+      now: () => now,
+      onDirty: () => {
+        if (widen) engine.setClasses(centre!, 'centre wide');
+      },
+    });
+    const add = (name: string, parent: EngineNode) => {
+      const node = engine.createElement('view');
+      engine.setClasses(node, name);
+      engine.setProp(node, 'nativeID', name);
+      engine.appendChild(parent, node);
+      return node;
+    };
+    const p = add('p', engine.root);
+    centre = add('centre', p);
+    add('spin', p);
+    engine.commit();
+    now += 100;
+    widen = true;
+    engine.advanceAnimations();
+    engine.commit();
+    assert.equal(fabric.box('centre').left, 50);
+  });
+
   // A listener that throws leaves no frame painting only: what comes next is laid out.
   it('lays out a change after a frame whose listener threw', () => {
     const fabric = createLaidOutFabric();
@@ -159,6 +196,14 @@ describe('a frame that only paints, beside a sticky box and a sum', () => {
     };
     assert.deepEqual(frame(), []);
     assert.deepEqual(frame(), []);
+    // A rotate, a translate or a scale written on its own is folded into the transform it paints.
+    for (const name of ['turn', 'slide', 'swell']) {
+      engine.setClasses(spinner, name);
+      frame();
+      assert.deepEqual(frame(), [], name);
+    }
+    engine.setClasses(spinner, 'spin');
+    frame();
     // The window changing size, which marks no node: what is laid out from it is read again.
     reads = new Set();
     engine.updateConditions({ width: 300, height: 800, colorScheme: 'light' });

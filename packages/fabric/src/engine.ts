@@ -1860,6 +1860,8 @@ const sameBase = (
 /** The props an animation can move without moving any box: what a frame of it only paints. */
 const PAINT_ONLY_KEYS = new Set([
   ...['transform', 'opacity', 'color', 'backgroundColor', 'tintColor', 'filter', 'boxShadow'],
+  // A rotate, a translate or a scale of its own, folded into the transform it paints.
+  ...['__translate', '__rotate', '__scale'],
   ...['borderColor', 'borderTopColor', 'borderRightColor', 'borderBottomColor', 'borderLeftColor'],
   ...['shadowColor', 'shadowOpacity', 'shadowRadius', 'shadowOffset', 'outlineColor'],
   ...['textDecorationColor', 'textShadowColor'],
@@ -6959,7 +6961,7 @@ export class Engine implements HostEngine {
       node.subtreeDirty = true;
       if (this.hasReaders.size) this.changedBeneath.add(node);
     }
-    if (wasClean && this.root.subtreeDirty) this.onDirty?.();
+    if (wasClean && this.root.subtreeDirty) this.dirtied();
   }
 
   /** `markBefore` for a change to `changed` in `parent`'s list, or one coming or going at `at`. */
@@ -7257,6 +7259,17 @@ export class Engine implements HostEngine {
     }
   }
 
+  /** Tell the host the tree is dirty: what its listener changes is no frame that only paints. */
+  private dirtied(): void {
+    const paintTick = this.paintTick;
+    this.paintTick = false;
+    try {
+      this.onDirty?.();
+    } finally {
+      this.paintTick = paintTick;
+    }
+  }
+
   private markPath(node: EngineNode | null): void {
     if (!this.paintTick) this.layoutStale = true;
     const wasClean = !this.root.structureDirty && !this.root.subtreeDirty;
@@ -7266,7 +7279,7 @@ export class Engine implements HostEngine {
     // The tree has just gone from clean to dirty. Inside a change-detection pass that means
     // nothing, because the pass ends in a commit; outside one it means the change has no commit
     // coming, and the host has to arrange a frame.
-    if (wasClean && this.root.subtreeDirty) this.onDirty?.();
+    if (wasClean && this.root.subtreeDirty) this.dirtied();
   }
 
   private isClean(node: EngineNode): boolean {
