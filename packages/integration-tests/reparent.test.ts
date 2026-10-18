@@ -104,6 +104,18 @@ it('hoists a destroyed element again when it comes back', () => {
   engine.setProp(config, 'nativeID', 'still');
   assert.deepEqual(tree(), [['host', ['frame'], ['still']]]);
 
+  // Moved out of a subtree that left, it takes its hoisting along, and leaves the subtree its own.
+  const wrap = add('view', 'wrap', frame);
+  const other = add('reparent-config', 'other', wrap);
+  engine.appendChild(wrap, config);
+  engine.removeChild(frame, wrap);
+  assert.deepEqual(tree(), [['host', ['frame']]]);
+  engine.insertBefore(frame, config, null);
+  assert.deepEqual(tree(), [['host', ['frame'], ['still']]], 'hoisted where it went');
+  engine.appendChild(frame, wrap);
+  assert.deepEqual(tree(), [['host', ['frame', ['wrap']], ['still'], ['other']]]);
+  assert.equal(other.parent, wrap);
+
   // And one destroyed before it was ever put in is not held: no removal comes to let it go.
   const hoisted = (engine as unknown as { hoisted: Set<EngineNode> }).hoisted;
   const never = engine.createElement('reparent-config');
@@ -149,4 +161,24 @@ it('keeps the listeners of content projected into an @if when the @if opens agai
   fabric.emit(screen.getByTestId('press'), 'topPointerEnter', {});
   await settle();
   assert.equal(instance.pressable().hovered(), true, 'the pressable still hears the pointer');
+});
+
+it('hoists content projected inside an element of an @if when the @if opens again', async () => {
+  // The element is made again and the content moved into the new one, out of the old one, which
+  // left with the block: what hoists in it must hoist from the new one.
+  registerHoist('reparent-config', 'reparent-host');
+  const { fabric, instance } = await render(
+    mod['WrappedHoist'] as Type<{ fold(): { open: { set(value: boolean): void } } }>,
+  );
+  const walk = (all: readonly FakeFabricNode[]): unknown[] =>
+    all.map((node) => [node.props['nativeID'] ?? node.viewName, ...walk(node.children)]);
+  const open = walk(fabric.committed);
+  assert.deepEqual(open, [['View', ['host', ['View', ['box', ['wrap']]], ['config']]]]);
+
+  instance.fold().open.set(false);
+  await settle();
+  assert.deepEqual(walk(fabric.committed), [['View', ['host', ['View', ['box']]]]]);
+  instance.fold().open.set(true);
+  await settle();
+  assert.deepEqual(walk(fabric.committed), open, 'into its host, not inside the new element');
 });

@@ -58,3 +58,35 @@ export class Folded {
   readonly fold = viewChild.required(Fold);
   readonly pressable = viewChild.required(Pressable);
 }
+
+/** As `Fold`, with the content inside an element of the block, which is made again each time. */
+@Component({
+  selector: 'x-wrapped-fold',
+  imports: [View],
+  template: `<view nativeID="box">
+    @if (open()) {
+      <view nativeID="wrap"><ng-content /></view>
+    }
+  </view>`,
+})
+export class WrappedFold {
+  readonly open = signal(true);
+}
+
+/** Elements the test registers `reparent-config` to hoist into `reparent-host`. */
+@Component({ selector: 'reparent-host', template: '<ng-content />' })
+export class ReparentHost {}
+
+@Component({ selector: 'reparent-config', template: '' })
+export class ReparentConfig {}
+
+@Component({
+  selector: 'x-wrapped-hoist',
+  imports: [ReparentConfig, ReparentHost, WrappedFold],
+  template: `<reparent-host nativeID="host"
+    ><x-wrapped-fold><reparent-config nativeID="config" /></x-wrapped-fold
+  ></reparent-host>`,
+})
+export class WrappedHoist {
+  readonly fold = viewChild.required(WrappedFold);
+}
