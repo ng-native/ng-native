@@ -1,0 +1,23 @@
+{
+  "name": "@ng-native/layout",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Layout conformance for Angular Native: fixtures laid out by Chrome, and compared with what the engine lays out.",
+  "type": "module",
+  "scripts": {
+    "test": "node --test \"src/**/*.test.ts\"",
+    "record": "node scripts/record-oracle.mjs",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "nx": {
+    "tags": [
+      "scope:layout",
+      "layer:tests"
+    ]
+  },
+  "devDependencies": {
+    "yoga-layout": "3.2.1",
+    "@ng-native/fabric": "workspace:*"
+  },
+  "license": "MIT"
+}

@@ -1629,6 +1629,9 @@ importers:
       open-props:
         specifier: 1.7.23
         version: 1.7.23
+      playwright:
+        specifier: ^1.63.0
+        version: 1.63.0
       react:
         specifier: 19.2.3
         version: 19.2.3
@@ -1659,6 +1662,15 @@ importers:
       vitest:
         specifier: ^5.0.2
         version: 5.0.2(@types/node@26.6.3)(@vitest/browser-playwright@5.0.2)(@vitest/coverage-v8@5.0.2)(@vitest/ui@5.0.2)(jsdom@27.4.0)(vite@8.3.1(@types/node@26.6.3)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.51.2)(yaml@2.9.1))
+      yoga-layout:
+        specifier: 3.2.1
+        version: 3.2.1
+
+  packages/layout:
+    devDependencies:
+      '@ng-native/fabric':
+        specifier: workspace:*
+        version: link:../fabric
       yoga-layout:
         specifier: 3.2.1
         version: 3.2.1

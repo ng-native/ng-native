@@ -25,3 +25,7 @@ examples/*/.angular-native/
 .all-contributorsrc
 # Written by nx release changelog, which leaves a double blank line between sections.
 CHANGELOG.md
+
+# Vendored layout fixtures, kept as upstream wrote them, and the boxes Chrome recorded for them.
+packages/layout/fixtures/taffy
+packages/layout/oracle
