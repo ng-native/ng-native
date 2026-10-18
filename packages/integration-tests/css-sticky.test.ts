@@ -162,6 +162,19 @@ describe('position: sticky', () => {
     assert.equal(s.shiftAt('head', 150), 0);
   });
 
+  it('has native follow the other axis where its inset there is the one left', () => {
+    const { native, named } = recorder();
+    const s = scene(`${PAGE} .both { left: 0 } .loose { top: auto }`, TWO, native);
+    s.engine.setClasses(s.nodes.get('head')!, 'head both');
+    s.engine.commit();
+    const paths = () =>
+      named('event').map((call) => JSON.stringify(call[3] ?? call[2]).includes('"x"'));
+    assert.equal(paths().includes(true), false);
+    s.engine.setClasses(s.nodes.get('head')!, 'head both loose');
+    s.engine.commit();
+    assert.equal(paths().includes(true), true);
+  });
+
   it('has native stop moving it when its inset goes', () => {
     const { native, drives } = recorder();
     const s = scene(`${PAGE} .loose { top: auto }`, TWO, native);

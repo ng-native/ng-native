@@ -9035,9 +9035,11 @@ export class Engine implements HostEngine {
       drive: null,
     });
     this.followScroll(scroll);
-    if (state.start !== span.start || state.stop !== span.stop || state.scroll !== scroll) {
-      // Moved to another scroll view: the drive is fed by the offset of the one it was in.
-      if (state.scroll !== scroll) {
+    const fed = state.scroll === scroll && state.axis === span.axis;
+    if (state.start !== span.start || state.stop !== span.stop || !fed) {
+      // Moved to another scroll view, or to stick along the other axis: the drive is fed by the
+      // offset it was made for.
+      if (!fed) {
         state.drive?.stop();
         state.drive = null;
       }
