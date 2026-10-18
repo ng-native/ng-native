@@ -89,5 +89,8 @@ describe('pr-gate', () => {
     );
     assert.equal(needsPlan('M\tpackages/integration-tests/css.test.ts'), false);
     assert.equal(needsPlan('A\tscripts/pr-gate.mjs\nM\texamples/canary/src/app/app.ts'), false);
+    // A package that is never published, as its package.json says, is released by no plan.
+    assert.equal(needsPlan('A\tpackages/layout/src/compare.ts', new Set(['layout'])), false);
+    assert.equal(needsPlan('M\tpackages/fabric/src/css.ts', new Set(['layout'])), true);
   });
 });

@@ -22,7 +22,7 @@
  * It exits 1 where a check failed, and fails closed: a step that cannot run is a failed step.
  */
 import { spawnSync } from 'node:child_process';
-import { existsSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import url from 'node:url';
@@ -134,13 +134,27 @@ export function editedTests(nameStatus) {
     .map(([status, file, renamed]) => ({ status: status[0], file, renamed }));
 }
 
+/** The packages, by directory, that their package.json says are never published. */
+function privatePackages() {
+  const dir = path.join(ROOT, 'packages');
+  return new Set(
+    readdirSync(dir).filter((name) => {
+      const file = path.join(dir, name, 'package.json');
+      return existsSync(file) && JSON.parse(readFileSync(file, 'utf8')).private === true;
+    }),
+  );
+}
+
 /** Whether a change to what is shipped comes with a version plan. */
-export function needsPlan(nameStatus) {
+export function needsPlan(nameStatus, unpublished = privatePackages()) {
   const files = nameStatus
     .split('\n')
     .map((line) => line.split('\t'))
     .filter(([, file]) => file);
-  const shipped = files.some(([, file]) => SHIPPED.test(file) && !TEST.test(file));
+  const shipped = files.some(
+    ([, file]) =>
+      SHIPPED.test(file) && !TEST.test(file) && !unpublished.has(file.split('/')[1] ?? ''),
+  );
   const plan = files.some(
     ([status, file]) => status === 'A' && file.startsWith('.nx/version-plans/'),
   );
