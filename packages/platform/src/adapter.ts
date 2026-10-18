@@ -508,8 +508,11 @@ export interface RendererExtension {
   ): Record<string, unknown> | undefined;
 }
 
-/** Asked for their length before each is called: an app with none pays nothing an element. */
-const extensions: RendererExtension[] = [];
+/**
+ * Asked for their length before each is called: an app with none pays nothing an element. A new
+ * array on each change, so an extension that takes itself away during a hook skips no other.
+ */
+let extensions: readonly RendererExtension[] = [];
 
 /**
  * Add to what the renderer does, for every app in the process. Returns what takes it away again.
@@ -528,10 +531,9 @@ export function extendRenderer(extension: RendererExtension): () => void {
     set: (...args) => extension.set?.(...args) ?? false,
     style: (...args) => extension.style?.(...args),
   };
-  extensions.push(entry);
+  extensions = [...extensions, entry];
   return () => {
-    const index = extensions.indexOf(entry);
-    if (index !== -1) extensions.splice(index, 1);
+    extensions = extensions.filter((each) => each !== entry);
   };
 }
 

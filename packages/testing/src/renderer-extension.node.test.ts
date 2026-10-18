@@ -279,3 +279,55 @@ test('two extensions of one member are taken away in either order', async () => 
     );
   }
 });
+
+test('a field the engine assigns only in a commit is refused', () => {
+  // Not on a node made fresh: the engine writes them later, and a getter in their place would
+  // make that write throw.
+  for (const name of ['focused', 'flow', 'sticky', 'committed']) {
+    assert.throws(() => extendNodes({ [name]: { value: 1 } }), /is a field the engine keeps/, name);
+  }
+});
+
+test('an extension that takes itself away during a hook skips no other', async () => {
+  const seen: string[] = [];
+  const undoFirst = extendRenderer({
+    created: (node) => {
+      seen.push(`first ${node.tag}`);
+      undoFirst();
+    },
+  });
+  const undoSecond = extendRenderer({ created: (node) => void seen.push(`second ${node.tag}`) });
+  try {
+    await render(Clicks);
+    assert.deepEqual(seen, ['first x-clicks', 'second x-clicks', 'second view', 'second text']);
+  } finally {
+    undoFirst();
+    undoSecond();
+  }
+});
+
+test('two registrations of one element name are taken away in either order', () => {
+  const viewName = () => {
+    const fabric = createFakeFabric();
+    const engine = new Engine(fabric, 1);
+    engine.appendChild(engine.root, engine.createElement('x-shared'));
+    engine.commit();
+    return fabric.committed.at(-1)!.viewName;
+  };
+  const before = viewName();
+  for (const order of ['newest first', 'oldest first'] as const) {
+    const undoA = registerViewName('x-shared', 'RCTViewA');
+    const undoB = registerViewName('x-shared', 'RCTViewB');
+    assert.equal(viewName(), 'RCTViewB', order);
+    if (order === 'newest first') {
+      undoB();
+      assert.equal(viewName(), 'RCTViewA', order);
+      undoA();
+    } else {
+      undoA();
+      assert.equal(viewName(), 'RCTViewB', 'the later one stays');
+      undoB();
+    }
+    assert.equal(viewName(), before, `${order}: the original is back`);
+  }
+});

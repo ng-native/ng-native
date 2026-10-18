@@ -4063,6 +4063,31 @@ const keeps = (actions: readonly string[] | undefined, pans: readonly string[]):
 /** How far a finger moves before a browser has settled which way a drag is going. */
 const DRAG_SLOP = 4;
 
+interface ViewNameRegistration {
+  readonly viewName: string | PlatformViewName;
+  readonly yielding: boolean;
+}
+
+/**
+ * What each element name was before it was first registered, and its registrations, oldest
+ * first: two packages can register one name and be taken away in either order.
+ */
+const registrations = new Map<
+  string,
+  {
+    original: { viewName?: string | PlatformViewName; yielding: boolean; text: boolean };
+    stack: ViewNameRegistration[];
+  }
+>();
+
+function nameView(elementName: string, { viewName, yielding }: ViewNameRegistration): void {
+  VIEW_NAMES[elementName] = viewName;
+  if (yielding) YIELDING.add(elementName);
+  else YIELDING.delete(elementName);
+  // A name the app registers is the app's: no longer decided by what the element holds.
+  TEXT_ELEMENTS.delete(elementName);
+}
+
 /**
  * Register a codegen'd third-party Fabric component, e.g.
  * `registerViewName('rns-screen', 'RNSScreen')`, which is how the router reaches
@@ -4079,16 +4104,18 @@ export function registerViewName(
   defaultProps?: Record<string, unknown>,
   options?: ViewNameOptions,
 ): () => void {
-  const before = {
-    viewName: VIEW_NAMES[elementName],
-    yielding: YIELDING.has(elementName),
-    text: TEXT_ELEMENTS.has(elementName),
+  const entry = registrations.get(elementName) ?? {
+    original: {
+      viewName: VIEW_NAMES[elementName],
+      yielding: YIELDING.has(elementName),
+      text: TEXT_ELEMENTS.has(elementName),
+    },
+    stack: [],
   };
-  VIEW_NAMES[elementName] = viewName;
-  if (options?.yieldsToComponents) YIELDING.add(elementName);
-  else YIELDING.delete(elementName);
-  // A name the app registers is the app's: no longer decided by what the element holds.
-  TEXT_ELEMENTS.delete(elementName);
+  const registration = { viewName, yielding: options?.yieldsToComponents === true };
+  entry.stack.push(registration);
+  registrations.set(elementName, entry);
+  nameView(elementName, registration);
   for (const name of typeof viewName === 'string' ? [viewName] : [viewName.ios, viewName.android]) {
     if (defaultProps) DEFAULT_PROPS[name] = defaultProps;
     if (options?.textContent) TEXT_CONTENT_PROPS[name] = options.textContent;
@@ -4097,16 +4124,23 @@ export function registerViewName(
     if (options?.fontNames) FONT_NAMES[name] = options.fontNames;
     else delete FONT_NAMES[name];
   }
-  // What the element name was before, for a package that registers one for as long as an app
-  // that asked for it is up. The native view's own defaults and text prop stay: they are the
+  // Takes this registration away, for a package that registers a name for as long as an app that
+  // asked for it is up. The newest one still there names the element, and what it was before any
+  // comes back after the last. The native view's own defaults and text prop stay: they are the
   // view's, whichever element names it.
   return () => {
-    if (VIEW_NAMES[elementName] !== viewName) return;
-    if (before.viewName === undefined) delete VIEW_NAMES[elementName];
-    else VIEW_NAMES[elementName] = before.viewName;
-    if (before.yielding) YIELDING.add(elementName);
+    const index = entry.stack.indexOf(registration);
+    if (index === -1) return;
+    entry.stack.splice(index, 1);
+    const top = entry.stack.at(-1);
+    if (top) return nameView(elementName, top);
+    registrations.delete(elementName);
+    const { original } = entry;
+    if (original.viewName === undefined) delete VIEW_NAMES[elementName];
+    else VIEW_NAMES[elementName] = original.viewName;
+    if (original.yielding) YIELDING.add(elementName);
     else YIELDING.delete(elementName);
-    if (before.text) TEXT_ELEMENTS.add(elementName);
+    if (original.text) TEXT_ELEMENTS.add(elementName);
   };
 }
 
@@ -5236,14 +5270,101 @@ class RetainedNode {
 }
 
 /**
- * The fields kept on a node, which an extension may not shadow: the ones a node is made with, and
- * the two assigned later, by the engine and by Angular.
+ * Every field the engine keeps on a node, including the ones it assigns only later, in a commit:
+ * an extension may shadow none of them, or the engine's own write would go through the
+ * extension's getter. Typed against `EngineNode`, so a field added there and not here fails the
+ * typecheck.
  */
-const NODE_FIELDS = new Set([
-  ...Object.keys(new RetainedNode('element', '', null as never)),
-  'defaultStyle',
-  '__ngContext__',
-]);
+const ENGINE_NODE_FIELDS = {
+  nodeKind: true,
+  tag: true,
+  tagName: true,
+  props: true,
+  nodeText: true,
+  childList: true,
+  parent: true,
+  listeners: true,
+  classes: true,
+  templateSheet: true,
+  hostSheet: true,
+  customProperties: true,
+  styleCache: true,
+  styleDirty: true,
+  ownDirty: true,
+  hasDirty: true,
+  stateDirty: true,
+  heldFamily: true,
+  inlineInherits: true,
+  boundStyle: true,
+  boundByProp: true,
+  touchWithin: true,
+  box: true,
+  words: true,
+  anonymous: true,
+  styled: true,
+  focused: true,
+  active: true,
+  ownStyle: true,
+  styleCommitted: true,
+  fitContainer: true,
+  inlineLevel: true,
+  scrollView: true,
+  lined: true,
+  boxed: true,
+  flow: true,
+  resolved: true,
+  sticky: true,
+  fixedTo: true,
+  ordered: true,
+  fit: true,
+  fitMin: true,
+  fitOff: true,
+  mixed: true,
+  mixedOff: true,
+  line: true,
+  autoMin: true,
+  shareMin: true,
+  shareOff: true,
+  row: true,
+  grid: true,
+  gridIn: true,
+  flowIn: true,
+  heightBasis: true,
+  heldAt: true,
+  transitions: true,
+  playing: true,
+  scrolled: true,
+  owned: true,
+  composedTransform: true,
+  bornIn: true,
+  boundTransform: true,
+  claimed: true,
+  componentHost: true,
+  nativeView: true,
+  attributeOnly: true,
+  writes: true,
+  paintsOn: true,
+  paintTaker: true,
+  paintTaken: true,
+  defaultStyle: true,
+  dormantHoists: true,
+  committed: true,
+  committedUnder: true,
+  kept: true,
+  onBaseline: true,
+  baselineFields: true,
+  remeasure: true,
+  oneWord: true,
+  raised: true,
+  presented: true,
+  propsDirty: true,
+  structureDirty: true,
+  subtreeDirty: true,
+  engine: true,
+} satisfies Record<keyof EngineNode, true>;
+
+/** The fields an extension may not shadow: the engine's, and the one Angular assigns. */
+const NODE_FIELDS = new Set([...Object.keys(ENGINE_NODE_FIELDS), '__ngContext__']);
 
 /**
  * Give every node members of a package's own, on the prototype they share: a getter, a method.

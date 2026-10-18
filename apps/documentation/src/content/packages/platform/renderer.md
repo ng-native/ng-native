@@ -101,9 +101,9 @@ and the root is always the window.
 
 ## Extending the renderer
 
-Two functions let a package outside these change how a template is rendered, for every app in the
-process. They are what a compatibility layer for templates written for another host is built on,
-and neither puts that host's API in the engine or the renderer.
+Three functions let a package other than `@ng-native/platform` and `@ng-native/fabric` change how a
+template is rendered, for every app in the process. A compatibility layer for templates written for
+another host is built on them, and none of them puts that host's API in the engine or the renderer.
 
 **`extendRenderer(extension)`**, from `@ng-native/platform`, adds hooks the renderer calls. Each
 is optional, and the extensions are asked in the order they were added:
@@ -129,8 +129,10 @@ node already has on that prototype, such as `classList`, is replaced and put bac
 extension is taken away, so what replaces it has to keep doing what Angular relied on. Two
 extensions of the same member can be taken away in either order.
 
-**`registerViewName()`** returns a function that puts the element name back to the view it named
-before, so a package can register names only for as long as it is in use.
+**`registerViewName()`** returns a function that takes the registration away again, so a package
+can register names only for as long as it is in use. Two registrations of one name can be taken
+away in either order: the newest still there names the element, and the original comes back after
+the last.
 
 Each returns a function that takes the extension away again, which is what a test calls when it
 is done.
