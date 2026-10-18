@@ -331,3 +331,18 @@ test('two registrations of one element name are taken away in either order', () 
     assert.equal(viewName(), before, `${order}: the original is back`);
   }
 });
+
+test('an extension is told of a node taken out once, not again for one already out', async () => {
+  const removed: string[] = [];
+  const undo = extendRenderer({ removed: (node) => void removed.push(node.tag) });
+  try {
+    const { componentRef } = await render(Clicks);
+    const renderer = rendererOf(componentRef.injector);
+    const box = componentRef.injector.get(Engine).root.childList[0]!.childList[0]!;
+    renderer.removeChild(box.parent, box);
+    renderer.removeChild(null, box);
+    assert.deepEqual(removed, ['view']);
+  } finally {
+    undo();
+  }
+});

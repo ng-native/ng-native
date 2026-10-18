@@ -252,7 +252,8 @@ class NativeRenderer implements Renderer2 {
     // From the parent it has, as Angular's DOM renderer takes a node out: the parent it is
     // handed is whatever the caller had, and a library's may be no parent of it at all. One in
     // no parent is out already.
-    if (oldChild.parent) this.engine.removeChild(oldChild.parent, oldChild);
+    if (!oldChild.parent) return;
+    this.engine.removeChild(oldChild.parent, oldChild);
     if (extensions.length) {
       for (const extension of extensions) extension.removed?.(oldChild, this.engine);
     }
