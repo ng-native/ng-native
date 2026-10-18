@@ -178,6 +178,8 @@ describe('an inline shorthand over a longhand from a stylesheet', () => {
     const s = scene('.a { padding-top: 4px }', 'a');
     s.style({ padding: null });
     assert.equal(s.props()['paddingTop'], 4);
+    s.style({ padding: null, borderRadius: 10 });
+    assert.equal(s.props()['paddingTop'], 4, 'beside one that is set');
   });
 
   it('covers a longhand from a class added after the inline shorthand', () => {

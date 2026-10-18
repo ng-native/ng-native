@@ -1961,11 +1961,69 @@ function partsOf(shorthand: string, value: unknown): Record<string, unknown> | n
 }
 
 /**
+ * How late React Native applies a shorthand to an edge it shares with another
+ * (`YogaLayoutableShadowNode`): the box's own name, then its axis, then the logical axis.
+ */
+function rankOf(shorthand: string): number {
+  if (/(Inline|Block)$/.test(shorthand)) return 2;
+  return /(Horizontal|Vertical|BlockColor)$/.test(shorthand) ? 1 : 0;
+}
+
+/** The shorthands covering each prop, the one React Native reads first ahead of the rest. */
+const COVERED_BY: ReadonlyMap<string, readonly string[]> = (() => {
+  const by = new Map<string, string[]>();
+  for (const [shorthand, keys] of COVERS) {
+    for (const key of keys) by.set(key, [...(by.get(key) ?? []), shorthand]);
+  }
+  for (const shorthands of by.values()) shorthands.sort((a, b) => rankOf(b) - rankOf(a));
+  return by;
+})();
+
+/** Whether an element sets a shorthand itself, inline or bound from a token. */
+const setsItself = (
+  shorthand: string,
+  inline: Readonly<Record<string, unknown>>,
+  bound: ReadonlyMap<string, unknown> | undefined,
+): boolean => inline[shorthand] != null || bound?.has(shorthand) === true;
+
+/** Whether an element sets any shorthand that covers a prop, so that there is anything to do. */
+function setsAnyShorthand(
+  inline: Readonly<Record<string, unknown>>,
+  bound: ReadonlyMap<string, unknown> | undefined,
+): boolean {
+  for (const key in inline) if (inline[key] != null && COVERS.has(key)) return true;
+  if (bound) for (const key of bound.keys()) if (COVERS.has(key)) return true;
+  return false;
+}
+
+const UNCOVERED = Symbol('uncovered');
+
+/** What `key` takes from the first of its shorthands the element sets and that gives it one. */
+function coveredValue(
+  key: string,
+  shorthands: readonly string[],
+  style: Readonly<Record<string, unknown>>,
+  inline: Readonly<Record<string, unknown>>,
+  bound: ReadonlyMap<string, unknown> | undefined,
+): unknown {
+  for (const shorthand of shorthands) {
+    if (!setsItself(shorthand, inline, bound)) continue;
+    const parts = partsOf(shorthand, style[shorthand]);
+    if (parts !== null) return parts ? parts[key] : style[shorthand];
+  }
+  return UNCOVERED;
+}
+
+/**
  * Gives each prop in `style` that a shorthand the element sets itself covers the shorthand's
  * value: one in its inline style, `inline`, or bound from a token, `bound`. The value rather than
  * nothing, so a transition of the side eases to it, as in a browser. Not a prop the element sets
  * as well, which Yoga reads over its shorthand as before, nor one a rule marked `!important`,
- * which beats the element's own declaration.
+ * which beats the element's own declaration. Of two shorthands over one prop, the one React Native
+ * reads: `paddingInline` over `paddingHorizontal`, whichever was written first.
+ *
+ * Per commit for every element with a style of its own, so it walks the props in `style`, a few,
+ * rather than every side and corner a shorthand covers.
  */
 export function underOwnShorthands(
   style: Record<string, unknown>,
@@ -1973,33 +2031,15 @@ export function underOwnShorthands(
   bound: ReadonlyMap<string, unknown> | undefined,
   important: ReadonlySet<string> | undefined,
 ): void {
-  const own = (key: string) => key in inline || bound?.has(key) || important?.has(key);
-  const cover = (shorthand: string) => {
-    const value = style[shorthand];
-    const parts = partsOf(shorthand, value);
-    if (parts === null) return;
-    for (const key of COVERS.get(shorthand) ?? []) {
-      if (!(key in style) || own(key)) continue;
-      const next = parts ? parts[key] : value;
-      if (next == null) delete style[key];
-      else style[key] = next;
-    }
-  };
-  const set: string[] = [];
-  for (const key in inline) if (inline[key] != null && COVERS.has(key)) set.push(key);
-  if (bound) for (const key of bound.keys()) if (COVERS.has(key)) set.push(key);
-  // The one native reads last: React Native applies `paddingInline` over `paddingHorizontal`.
-  if (set.length > 1) set.sort((a, b) => rankOf(a) - rankOf(b));
-  for (const key of set) cover(key);
-}
-
-/**
- * How late React Native applies a shorthand to an edge it shares with another
- * (`YogaLayoutableShadowNode`): the box's own name, then its axis, then the logical axis.
- */
-function rankOf(shorthand: string): number {
-  if (/(Inline|Block)$/.test(shorthand)) return 2;
-  return /(Horizontal|Vertical|BlockColor)$/.test(shorthand) ? 1 : 0;
+  if (!setsAnyShorthand(inline, bound)) return;
+  for (const key in style) {
+    const shorthands = COVERED_BY.get(key);
+    if (!shorthands || key in inline || bound?.has(key) || important?.has(key)) continue;
+    const next = coveredValue(key, shorthands, style, inline, bound);
+    if (next === UNCOVERED) continue;
+    if (next == null) delete style[key];
+    else style[key] = next;
+  }
 }
 
 /** The properties of a rule that have another form, plain and important, or null for neither. */
