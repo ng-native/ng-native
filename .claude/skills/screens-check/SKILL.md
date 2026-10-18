@@ -1,6 +1,6 @@
 ---
 name: screens-check
-description: Compare how a change draws the canary's screens on iOS against main - the screens whose native output changed, each opened by deep link on one simulator in main's bundle and in the change's, screenshotted with simctl and compared pair by pair. Use for a change that draws (the CSS engine, components, layout, text), when asked to check a pull request's screens, or when the PR gate's native output lists changed screens.
+description: Compare how a change draws the canary's screens on iOS against main - the screens whose native output changed, each opened by deep link on one simulator in main's bundle and in the change's, tapped through with idb where a screen needs it, screenshotted with simctl and compared pair by pair. Use for a change that draws (the CSS engine, components, layout, text), when asked to check a pull request's screens, or when the PR gate's native output lists changed screens.
 ---
 
 # Check a change's screens
@@ -70,46 +70,67 @@ xcrun simctl status_bar "$udid" override --time 9:41 --batteryState charged --ba
 
 ## 4. Each screen, on each side
 
-For each side, base first: install its app, answer iOS's "Open in canary?" once (a simulator asks
-the first time an app is handed a link of its scheme), then open each route by link and screenshot
-it once it has stopped changing.
+For each side, base first: install its app, then open each route by link, answering iOS's "Open in
+canary?" where it asks, and screenshot it once it has stopped changing. `idb` taps: `tap` finds an element by its accessibility label in
+`idb ui describe-all` and taps its centre.
 
 ```sh
-cat > "$out/allow.yaml" <<'EOF'
-appId: dev.angularnative.canary
----
-- openLink: canary://
-- runFlow:
-    when:
-      visible: Open
-    commands:
-      - tapOn: Open
-EOF
+tap() { # label
+  local frame x y
+  frame=$(idb ui describe-all --udid "$udid" | jq -c --arg l "$1" 'first(.[] | select(.AXLabel == $l) | .frame)')
+  [ -n "$frame" ] && [ "$frame" != null ] || { echo "no \"$1\" on screen" >&2; return 1; }
+  read -r x y < <(jq -r '"\((.x + .width / 2) | floor) \((.y + .height / 2) | floor)"' <<< "$frame")
+  idb ui tap --udid "$udid" "$x" "$y"
+}
 
-shoot() { # side route
-  local file="$out/shots/$1/$(echo "${2#/}" | tr / - | sed 's/^$/home/').png" last=
-  xcrun simctl terminate "$udid" dev.angularnative.canary 2> /dev/null
-  xcrun simctl openurl "$udid" "canary://${2#/}"
-  # Until two screenshots a second apart are the same, for at most twenty seconds.
+settle() { # file: screenshot into it until two a second apart are the same, at most twenty seconds
+  local last= now
   for _ in $(seq 20); do
     sleep 1
-    xcrun simctl io "$udid" screenshot "$file" 2> /dev/null
-    now=$(md5 -q "$file")
-    [ "$now" = "$last" ] && break
+    xcrun simctl io "$udid" screenshot "$1" 2> /dev/null
+    now=$(md5 -q "$1")
+    [ "$now" = "$last" ] && return
     last=$now
   done
+}
+
+shoot() { # side route [label to tap first]...
+  local side=$1 route=$2 file
+  shift 2
+  file="$out/shots/$side/$(echo "${route#/}" $* | tr '/ ' '--' | sed 's/^-*//;s/^$/home/').png"
+  xcrun simctl terminate "$udid" dev.angularnative.canary 2> /dev/null
+  xcrun simctl openurl "$udid" "canary://${route#/}"
+  sleep 3
+  # iOS asks "Open in canary?" for a link simctl hands over, and asks again each time.
+  if idb ui describe-all --udid "$udid" | jq -e '.[] | select(.AXLabel | startswith("Open in"))' > /dev/null; then
+    tap Open
+  fi
+  settle "$file"
+  [ $# -gt 0 ] || return 0
+  # Taps on a screen that has stopped moving, then a screenshot two seconds on: what a tap shows
+  # can go again by itself (a toast), so this one does not wait for the screen to settle.
+  for label in "$@"; do tap "$label" && sleep 1; done
+  sleep 1
+  xcrun simctl io "$udid" screenshot "$file" 2> /dev/null
 }
 
 for side in base change; do
   mkdir -p "$out/shots/$side"
   xcrun simctl install "$udid" "$out/$side.app"
-  JAVA_HOME=${JAVA_HOME:-/opt/homebrew/opt/openjdk@21} maestro --device "$udid" test "$out/allow.yaml"
   for route in $(echo $ROUTES); do shoot "$side" "$route"; done
 done
 ```
 
-`ROUTES` is the list from step 1, space separated (`$(echo $ROUTES)` splits it in zsh as in bash). A screen that never settles (a spinner, a
-looping animation) is taken at twenty seconds and will differ for that alone.
+`ROUTES` is the list from step 1, space separated (`$(echo $ROUTES)` splits it in zsh as in bash).
+A screen that never settles (a spinner, a looping animation) is taken at twenty seconds and will
+differ for that alone.
+
+What a screen shows after a tap (a sheet, a toast, a field's error) is a screenshot of its own:
+`shoot base /overlays "Show a toast"` taps the button named "Show a toast" before the screenshot,
+and the same on the change's side. `idb ui swipe --udid "$udid" x1 y1 x2 y2` swipes. Typing
+(`idb ui text`) leaves the simulator thinking a hardware keyboard is attached, so the software
+keyboard stops appearing: clear `AutomaticMinimizationEnabled` and `HardwareKeyboardLastSeen` in
+`com.apple.keyboard.preferences` inside the simulator afterwards.
 
 ## 5. Compare
 
