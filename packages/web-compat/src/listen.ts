@@ -36,6 +36,9 @@ import { together } from './mutation-observer.ts';
 import { setSvg, stopChanged, svgInserted, svgNamed, wordsInSpans } from './svg.ts';
 import { styleShape } from './svg-box.ts';
 
+/** Markup that is an icon's drawing, as `@ng-icons/core` binds it to a `<template>`. */
+const ICON_MARKUP = /^\s*<svg[\s>]/i;
+
 /** Elements whose own component already turns a touch into a press. */
 const PRESSABLES = new Set(['pressable', 'touchable-opacity']);
 
@@ -69,9 +72,9 @@ const SETTERS: Readonly<
     return true;
   },
   // A binding to `innerHTML` replaces what the element holds with what the markup is. But for
-  // an icon's, set on a `<template>` and long, which `@ng-native/icons` draws from its name.
+  // an icon's `<svg>`, set on a `<template>`, which `@ng-native/icons` draws from its name.
   innerHTML(node, value, engine) {
-    if (node.tag === 'template') holdIconBox(node, engine);
+    if (node.tag === 'template' && ICON_MARKUP.test(String(value))) holdIconBox(node, engine);
     else together(node, () => setMarkup(node, value, engine));
     return true;
   },

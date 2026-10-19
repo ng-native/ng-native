@@ -3,6 +3,8 @@ import { canvasColour } from './canvas-colour.ts';
 /** What a channel of eight bits rounds to nothing at: a paint fainter than this is not seen. */
 const FAINTEST = 1 / 510;
 
+const MARKERS = ['marker-start', 'marker-mid', 'marker-end'];
+
 /** How solid a paint is as written, with its own opacity: nothing for `none`. */
 function solidity(paint: string, opacity: string | undefined): number {
   if (paint.trim() === 'none') return 0;
@@ -14,7 +16,7 @@ function solidity(paint: string, opacity: string | undefined): number {
 
 /**
  * Whether a shape is painted too faintly to see, by its fill and its stroke both written on it:
- * a paint left unwritten may be its group's. Such a shape is drawn with no opacity, which
+ * a paint left unwritten may be its group's, and a marker on it is painted on its own. Such a shape is drawn with no opacity, which
  * react-native-svg skips drawing and still hit tests.
  *
  * Highcharts lays a wide, all but transparent line over each series to take touches near it.
@@ -24,6 +26,8 @@ function solidity(paint: string, opacity: string | undefined): number {
 export function isUnseen(attrs: Readonly<Record<string, string>>): boolean {
   const { fill, stroke } = attrs;
   if (fill === undefined || stroke === undefined) return false;
+  // A marker has a paint of its own, and is drawn only with the shape it is on.
+  if (MARKERS.some((marker) => attrs[marker] !== undefined)) return false;
   return (
     solidity(fill, attrs['fill-opacity']) < FAINTEST &&
     solidity(stroke, attrs['stroke-opacity']) < FAINTEST

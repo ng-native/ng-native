@@ -48,10 +48,27 @@ export function fontSizeOf(node: EngineNode | null): number {
   const own =
     shapeAttributes(node)['font-size'] ??
     (node.props['style'] as Record<string, unknown> | undefined)?.['fontSize'];
-  if (own == null) return fontSizeOf(node.parent);
+  if (own == null) {
+    const ruled = ruledFontSize(node);
+    return ruled ?? fontSizeOf(node.parent);
+  }
   // A size already in points is asked of nothing above it.
   const points = /^[\d.]+(px)?$/.test(String(own).trim());
   return lengthOf(own, points ? ROOT_FONT : fontSizeOf(node.parent)) ?? ROOT_FONT;
+}
+
+/**
+ * The font size a sheet's rule gives a node, as the engine settled it for the view, which draws
+ * at that size: one other than the size its parent hands down, which a shape's own attribute
+ * above it stands over.
+ *
+ * ponytail: a rule giving the size handed down reads as none, and the attribute above stands.
+ * Read the matched rules if a drawing is seen to differ by it.
+ */
+function ruledFontSize(node: EngineNode): number | undefined {
+  const settled = node.styleCache?.style['fontSize'];
+  const handed = node.parent?.styleCache?.inherited['fontSize'];
+  return typeof settled === 'number' && settled !== handed ? settled : undefined;
 }
 
 /** The weight a node's text is drawn in: its own, or the nearest one above it. */

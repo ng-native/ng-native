@@ -100,4 +100,11 @@ describe('textWidth', () => {
     assert.ok(textWidth('東京', 12, 400) >= 20);
     assert.equal(textWidth('', 12, 400), 0);
   });
+  it('has a width for every character of each font, in every weight, as the tooltip bullet needs', () => {
+    for (const font of [SYSTEM_FONT, HELVETICA, ROBOTO]) {
+      const count = [...font.chars].length;
+      for (const widths of Object.values(font.weights)) assert.equal(widths.length, count);
+    }
+    near(textWidth('\u25cf', 1000, 700, HELVETICA), 604, 0.01);
+  });
 });

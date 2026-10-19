@@ -121,6 +121,26 @@ const SUITES = [
     report: (out) => path.join(out, 'testing.info'),
   },
   {
+    // `@ng-native/web-compat`'s own suite. The native suite loads the package too, for the icons
+    // drawn beside a library's drawing, and reaches little of it.
+    name: 'web-compat',
+    cwd: 'packages/web-compat',
+    command: 'node',
+    args: (destination) => [
+      '--import',
+      '@ng-native/testing/register',
+      '--test',
+      '--experimental-test-coverage',
+      ...EXCLUDE.map((pattern) => `--test-coverage-exclude=${pattern}`),
+      '--test-reporter=lcov',
+      `--test-reporter-destination=${destination}`,
+      '--test-reporter=dot',
+      '--test-reporter-destination=stdout',
+      'src/*.test.ts',
+    ],
+    report: (out) => path.join(out, 'web-compat.info'),
+  },
+  {
     name: 'browser',
     cwd: 'packages/web',
     command: 'pnpm',

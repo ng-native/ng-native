@@ -154,5 +154,14 @@ describe('@ng-native/web-compat, what a drawing defines', () => {
     tracker.setAttribute('stroke', '#000');
     await settle();
     assert.equal(view(tracker).props['opacity'], 0.5);
+    // A marker is painted by its own shapes, and drawn with the path it is on.
+    const arrow = make('path', {
+      d: 'M 0 0 L 50 50',
+      fill: 'none',
+      stroke: 'rgba(192,192,192,0.0001)',
+      'marker-end': 'url(#head)',
+    });
+    await settle();
+    assert.equal(view(arrow).props['opacity'] ?? null, null);
   });
 });

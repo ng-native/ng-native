@@ -66,6 +66,14 @@ describe('@ng-native/web-compat markup', () => {
     assert.equal(svg.parentNode, card);
     assert.equal(svg.children.length, 0);
   });
+
+  it('builds other markup a <template> is bound to, as a browser does', async () => {
+    const { app } = await mount();
+    const template = app.instance.renderer.createElement('template');
+    app.instance.renderer.setProperty(template, 'innerHTML', '<p class="row">One</p>');
+    assert.equal(template.content.firstElementChild.className, 'row');
+    assert.equal(template.content.firstElementChild.textContent, 'One');
+  });
 });
 
 @Component({
@@ -120,6 +128,19 @@ class SizedIcon {}
   `,
 })
 class ThemedText {}
+
+@Component({
+  selector: 'x-paged-text',
+  template: `
+    <div class="page">
+      <svg viewBox="0 0 100 100">
+        <g font-size="20"><text>2020</text></g>
+        <text font-size="20">2020</text>
+      </svg>
+    </div>
+  `,
+})
+class PagedText {}
 
 @Component({
   selector: 'x-grouped-text',
@@ -643,6 +664,31 @@ describe('@ng-native/web-compat svg definitions', () => {
     label.firstChild!.textContent = 'Italy';
     await settle();
     assert.equal(span().props['content'], 'Italy');
+  });
+
+  it("measures a text at the size a sheet's rule gives it, as it is drawn", async () => {
+    await render(ThemedText, {
+      providers: [provideWebCompat()],
+      globalStyles: compileCss('.chart text { font-size: 32px }', 'global', LIBRARY) as never,
+    });
+    await settle();
+    const label: Dom = document.querySelector('text');
+    const sized: Dom = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+    sized.setAttribute('font-size', '32');
+    sized.textContent = '2020';
+    document.querySelector('svg')!.append(sized);
+    await settle();
+    assert.equal(label.getComputedTextLength(), sized.getComputedTextLength());
+  });
+
+  it("measures a text by its group's size over the page's, which a sheet gives the HTML above", async () => {
+    await render(PagedText, {
+      providers: [provideWebCompat()],
+      globalStyles: compileCss('.page { font-size: 10px }', 'global', LIBRARY) as never,
+    });
+    await settle();
+    const [grouped, own]: Dom[] = [...document.querySelectorAll('text')];
+    assert.equal(grouped.getComputedTextLength(), own.getComputedTextLength());
   });
 
   it("measures a text as Chrome does, by its size and its weight, a style's or one above it", async () => {
