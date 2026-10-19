@@ -52,10 +52,10 @@ much one that passes more, so a change that makes a test pass records it with `-
 same pull request. How a file ended is recorded but not compared, since a file that passes nothing
 lands either side of its time limit from one run to the next.
 
-Continuous integration runs `--check` on the DOM, selector and CSSOM suites when
-`packages/web-compat` or the engine's CSS changes. The full run takes over eight minutes, one
-process at a time, so a change to the other suites (events, geometry, the observers, canvas,
-parsing) runs `node wpt/run.mjs --check` locally before its pull request opens, and records with
-`--update` from a full run so `summary.txt` stays whole.
+Continuous integration runs `--check` on the DOM, selector, CSSOM, `html/dom` and `domparsing`
+suites when `packages/web-compat` or the engine's CSS changes. The full run takes over eight
+minutes, one process at a time, so a change to the other suites (events, geometry, the observers,
+canvas, HTML parsing) runs `node wpt/run.mjs --check` locally before its pull request opens, and
+records with `--update` from a full run so `summary.txt` stays whole.
 [CONTRIBUTING.md](https://github.com/ng-native/ng-native/blob/main/CONTRIBUTING.md#web-platform-tests)
 has the same steps.

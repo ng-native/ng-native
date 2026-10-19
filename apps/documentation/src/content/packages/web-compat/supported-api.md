@@ -81,8 +81,10 @@ Gaps:
 - A pseudo-element's style (`::first-line`) and its `content` are not read, and neither is a value
   the engine drops, `display: table` among them.
 - An `@import` loads nothing, so the sheet it makes is empty.
-- `element.style` does not check a value against what the property takes, and puts no keyword in
-  a form of its own: `RED` stays `RED`. The shorthands it splits into longhands are those of
+- `element.style` checks a value against what the property takes for the properties a script
+  commonly sets, and drops one that does not match; any other longhand takes any value. A colour
+  is written in lower case, and another keyword keeps the case it was written in:
+  `display: BLOCK` stays `BLOCK`. The shorthands it splits into longhands are those of
   sides, of pairs, and `border`, `border-radius`, `flex`, `font`, `list-style`,
   `background-position` and `all`; `background`, `transition` and the rest are declared as
   themselves.
@@ -103,11 +105,12 @@ Gaps:
 - `ResizeObserver`, and `IntersectionObserver` with a root, a margin and thresholds. An app that
   observes nothing pays nothing for them.
 
-Gaps: elements have no browser default styles of their own: a `<div>` is laid out as the engine
-lays out a view, and sized by its border box. The window does not scroll. An inline element over
-two lines is one box around both, where a browser has two. `IntersectionObserver` takes
-`trackVisibility` but its `isVisible` is never true, since nothing tells it whether something is
-drawn over an element.
+Gaps: `ResizeObserver` has no `device-pixel-content-box`, and `scrollIntoView` reads no
+`scroll-margin` or `scroll-padding`. Elements have no browser default styles of their own: a `<div>`
+is laid out as the engine lays out a view, and sized by its border box. The window does not scroll.
+An inline element over two lines is one box around both, where a browser has two.
+`IntersectionObserver` takes `trackVisibility` but its `isVisible` is never true, since nothing
+tells it whether something is drawn over an element.
 
 ## Events
 
@@ -129,7 +132,7 @@ drawn over an element.
 
 Gaps: `DragEvent`, `ClipboardEvent` and the other kinds not named here are not there. A handler
 written as an attribute's text is not compiled, and the window and the document have no handler
-properties. A field native refuses the focus to, a disabled one, is taken to have it until the
+properties. A field native refuses the focus to, a read-only one, is taken to have it until the
 next focus or blur.
 
 ## Forms
@@ -149,12 +152,17 @@ next focus or blur.
   `:out-of-range`, `:placeholder-shown`, `:checked`, `:indeterminate` and `:default` match.
 - A field has `selectionStart`, `selectionEnd`, `setSelectionRange()` and `select()`, and a
   `<textarea>` says how tall its text is as `scrollHeight`.
-- A file input's `click()` opens the system's file picker, where `@ng-native/expo` and
-  `expo-document-picker` are installed.
+- A file input's `click()` opens the system's file picker, where `expo-document-picker` is
+  installed.
 - A form has `elements`, `requestSubmit()` and `reset()`, is submitted only once its controls pass
   their constraints, and `document.forms` lists the forms.
 
 A plain app's `<text-input>` is unchanged.
+
+Gaps: a `<select>` has one option chosen at a time, with no `multiple`, and no keyboard. A
+submitted form goes nowhere, there being no page to leave, and its `submit` event has no
+`submitter`. `form.submit()` does nothing. A key's `keyCode` is there for letters, digits, a comma
+and the named keys, not for other punctuation.
 
 ## SVG
 
@@ -171,7 +179,9 @@ A plain app's `<text-input>` is unchanged.
 Gaps: without react-native-svg's native views a drawing shows nothing, as an icon does. A
 stylesheet's attribute selector does not match a drawing's attributes: `svg[width="16"]` matches
 nothing. A marker is drawn from the `marker-start`, `marker-mid` and `marker-end` attributes, not
-from a style.
+from a style. A filter draws its drop shadow and its blur; each other step passes on what it
+is given. A paint written as `var()` is not followed to its token. `getBBox` does not follow a
+rotation or a skew, and a curve's box includes its handles.
 
 ## Canvas
 
@@ -195,6 +205,8 @@ Gaps:
 - Every shape drawn since the canvas was last cleared is a view, which suits a chart of some tens
   of shapes redrawn each frame and not one of thousands.
 - `isPointInPath` takes no `Path2D` of its own.
+- The `hue`, `saturation`, `color` and `luminosity` ways of laying a drawing over what is there are
+  laid as `source-over`.
 - What a script writes inside a canvas, its fallback in a browser, is not hidden.
 - On a device `toBlob` hands its callback `null`, since React Native's `Blob` is not made of
   bytes. `toDataURL` answers there.
