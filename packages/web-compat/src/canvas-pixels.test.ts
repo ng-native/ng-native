@@ -156,6 +156,9 @@ describe('@ng-native/web-compat canvas pixels', () => {
     assert.deepEqual(context.getTransform(), { a: 3, b: 0, c: 0, d: 1, e: 0, f: 4 });
     assert.throws(() => context.setTransform({ a: 2, m11: 3 }), TypeError);
     assert.equal(context.getTransform().a, 3);
+    // A member said as null is said, and is 0 as a number, as Chrome has it.
+    context.setTransform({ a: null, m22: null });
+    assert.deepEqual([context.getTransform().a, context.getTransform().d], [0, 0]);
   });
 
   it('lays a colour that lets some through over what is under it', async () => {
@@ -302,6 +305,8 @@ describe('@ng-native/web-compat canvas pixels', () => {
     assert.throws(() => context.getImageData(0, 0, 0, 1), { name: 'IndexSizeError' });
     assert.throws(() => context.getImageData(Number.NaN, 0, 1, 1), TypeError);
     assert.throws(() => context.getImageData(10, 0xffffffff, 1, 1), TypeError);
+    // A BigInt is no number a canvas takes, as Chrome has it, though Number() reads one.
+    assert.throws(() => context.getImageData(1n, 0, 1, 1), TypeError);
   });
 
   it('says whether a point is in the path, on the canvas grid', async () => {
@@ -522,6 +527,12 @@ describe('@ng-native/web-compat ImageData', () => {
     assert.equal(held.height, 2);
     assert.throws(() => new ImageData(0, 1), { name: 'IndexSizeError' });
     assert.throws(() => new ImageData(new Uint8ClampedArray(6), 1), { name: 'InvalidStateError' });
+    // A size is an unsigned long, as Chrome converts one: past 32 bits it wraps, and one of more
+    // bytes than 32 bits count throws before anything is made.
+    assert.equal(new ImageData(2 ** 32 + 1, 1).width, 1);
+    assert.equal(new ImageData(new Uint8ClampedArray(4), 2 ** 32 + 1).width, 1);
+    assert.throws(() => new ImageData(-1, 1), { name: 'IndexSizeError' });
+    assert.throws(() => new ImageData(1n, 1), TypeError);
     // What it holds is its own: a script that sets a name of its own changes none of it.
     Object.assign(blank, { pixels: null, wide: 9, high: 9 });
     assert.deepEqual([blank.width, blank.height, blank.data.length], [2, 3, 24]);

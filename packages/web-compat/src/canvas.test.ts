@@ -278,6 +278,37 @@ describe('@ng-native/web-compat canvas', () => {
     assert.equal(free!.viewName, 'RNSVGPath');
   });
 
+  it('fills and clips by the rule each was given, where native and a browser read it', async () => {
+    const { context } = await canvas();
+    const ring = () => {
+      context.beginPath();
+      context.rect(0, 0, 40, 40);
+      context.rect(10, 10, 20, 20);
+    };
+    ring();
+    context.fill('evenodd');
+    context.fill();
+    context.save();
+    context.clip('evenodd');
+    context.fillRect(0, 0, 100, 50);
+    context.restore();
+    context.save();
+    ring();
+    context.clip();
+    context.fillRect(0, 0, 100, 40);
+    await settle();
+    const [odd, nonzero, oddDefined, oddClipped, defined, clipped] = shapes();
+    // 0 is even-odd and 1 non-zero; a path's fill is non-zero with none said.
+    assert.equal(odd!.props['fillRule'], 0);
+    assert.equal(nonzero!.props['fillRule'], undefined);
+    // Native reads the rule on what is clipped, and is even-odd with none said; a browser reads
+    // it on the clip's path.
+    assert.equal(oddClipped!.props['clipRule'], 0);
+    assert.equal(oddDefined!.children[0]!.children[0]!.props['clipRule'], 0);
+    assert.equal(clipped!.props['clipRule'], 1);
+    assert.equal(defined!.children[0]!.children[0]!.props['clipRule'], 1);
+  });
+
   it('runs a gradient under the transform it is filled under, not the one it was made under', async () => {
     const { context } = await canvas();
     const fade = context.createLinearGradient(0, 0, 10, 0);
@@ -426,6 +457,10 @@ describe('@ng-native/web-compat canvas, as what it was given changes and goes', 
 
   it('has as attributes only what it was given, and not the view box it is drawn by', async () => {
     const { node } = await canvas();
+    assert.deepEqual(node.getAttributeNames(), ['width', 'height']);
+    // Each where it was, sized again, as Chrome keeps an attribute set again in its place.
+    node.width = 50;
+    node.setAttribute('width', '60');
     assert.deepEqual(node.getAttributeNames(), ['width', 'height']);
     assert.equal(node.getAttribute('align'), null);
     assert.ok(!node.outerHTML.includes('align'), node.outerHTML);

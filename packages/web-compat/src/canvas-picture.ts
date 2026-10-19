@@ -142,7 +142,8 @@ export function matrixOf(init: unknown): Matrix {
     if (one !== undefined && other !== undefined && !Object.is(Number(one), Number(other))) {
       throw new TypeError(`${short} and ${long} say different things.`);
     }
-    return Number(one ?? other ?? start);
+    // Said as null is said: it is 0 as a number, as a browser converts one.
+    return Number(one !== undefined ? one : other !== undefined ? other : start);
   }) as unknown as Matrix;
 }
 

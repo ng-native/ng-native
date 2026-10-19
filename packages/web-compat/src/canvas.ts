@@ -113,6 +113,8 @@ interface Shape {
   readonly words?: string;
   /** The name of what it is clipped by, which is on the canvas's grid and not its own. */
   readonly clippedBy?: string;
+  /** The rule of what it is clipped by, which native reads on what is clipped. */
+  readonly clipRule?: FillRule;
   /** The colours along a gradient, for a shape that is one. */
   readonly colours?: Gradient['colours'];
   /** A picture shown: by an image in its place, `place`, inside a pattern's tile for one. */
@@ -534,7 +536,9 @@ class Context2D {
     if (!this.path.length) return;
     const d = this.path.join('');
     this.copied();
-    this.add('path', { d, ...this.filled() });
+    const odd: Record<string, string> =
+      ruleOf(rule) === 'evenodd' ? { 'fill-rule': 'evenodd' } : {};
+    this.add('path', { d, ...odd, ...this.filled() });
     const { fillStyle, globalAlpha: alpha, clips, matrix, composite } = this.state;
     const style = styleOf(fillStyle, matrix);
     this.operation({ kind: 'fill', d, rule: ruleOf(rule), style, alpha, clips, composite });
@@ -965,8 +969,12 @@ class Context2D {
     const clip = this.state.clip;
     if (clip === '') return;
     const id = clip ? `canvas-clip-${this.clips++}` : undefined;
-    if (clip && id) this.pending.push({ name: 'clipPath', attrs: { id, d: clip } });
-    this.pending.push({ name, attrs, words, clippedBy: id, ...more });
+    // The rule of the last clip set, which is the one drawn.
+    const clipRule = this.state.clips.at(-1)?.rule;
+    if (clip && id) {
+      this.pending.push({ name: 'clipPath', attrs: { id, d: clip, 'clip-rule': clipRule! } });
+    }
+    this.pending.push({ name, attrs, words, clippedBy: id, clipRule, ...more });
     this.draw();
   }
 
@@ -1151,7 +1159,17 @@ const kindOf = (shape: Shape): string =>
     shape.cropBy ? ' cut' : '',
   ].join('');
 
-const clipping = (id: string): Record<string, string> => ({ 'clip-path': `url(#${id})` });
+/**
+ * What clips by a clip path: with its rule said, as native is even-odd with none said where a
+ * canvas is non-zero.
+ */
+const clipping = (id: string, rule: FillRule = 'nonzero'): Record<string, string> => ({
+  'clip-path': `url(#${id})`,
+  'clip-rule': rule,
+});
+
+/** The path a clip path holds: its rule as well, which is where a browser reads it. */
+const clipPathOf = ({ id: _, ...path }: Readonly<Record<string, string>>) => path;
 
 /** A shape as the nodes that draw it. What clips others holds the path it clips to. */
 function slotOf(shape: Shape, engine: Engine): Slot {
@@ -1164,7 +1182,7 @@ function slotOf(shape: Shape, engine: Engine): Slot {
   if (shape.name === 'clipPath') {
     // Inside a definition: Android warns on every draw of a clip path outside one.
     const clip = shapeOf(engine, 'clipPath', { id: shape.attrs['id']! });
-    const path = shapeOf(engine, 'path', { d: shape.attrs['d']! });
+    const path = shapeOf(engine, 'path', clipPathOf(shape.attrs));
     engine.appendChild(clip, path);
     const node = shapeOf(engine, 'defs', {});
     engine.appendChild(node, clip);
@@ -1177,7 +1195,7 @@ function slotOf(shape: Shape, engine: Engine): Slot {
   if (shape.clippedBy === undefined) return { kind, node: drawn, shape: drawn };
   // Around the shape, and not on it: a clip is read where what it clips is drawn, and a text
   // is moved to its place by a transform of its own.
-  const node = shapeOf(engine, 'g', clipping(shape.clippedBy));
+  const node = shapeOf(engine, 'g', clipping(shape.clippedBy, shape.clipRule));
   engine.appendChild(node, drawn);
   return { kind, node, shape: drawn };
 }
@@ -1201,9 +1219,9 @@ function pictureSlot(shape: Shape, engine: Engine): Slot {
     engine.appendChild(defined, pattern);
     return { kind, node: defined, shape: image };
   }
-  for (const by of [shape.cropBy, shape.clippedBy]) {
+  for (const [by, rule] of [[shape.cropBy], [shape.clippedBy, shape.clipRule]] as const) {
     if (by === undefined) continue;
-    const group = shapeOf(engine, 'g', clipping(by));
+    const group = shapeOf(engine, 'g', clipping(by, rule));
     engine.appendChild(group, node);
     node = group;
   }
@@ -1215,7 +1233,7 @@ function repictured(slot: Slot, shape: Shape, engine: Engine): void {
   setPictureProps(engine, slot.shape, imageProps(shape.picture!, shape.place!));
   if (shape.tile) return setPictureProps(engine, slot.shape.parent!, shape.tile);
   if (shape.cropBy) reshape(engine, slot.shape.parent!, clipping(shape.cropBy));
-  if (shape.clippedBy) reshape(engine, slot.node, clipping(shape.clippedBy));
+  if (shape.clippedBy) reshape(engine, slot.node, clipping(shape.clippedBy, shape.clipRule));
 }
 
 /** Give the nodes of a shape what another of its kind says. */
@@ -1227,10 +1245,12 @@ function redrawn(slot: Slot, shape: Shape, engine: Engine): void {
   }
   if (shape.name === 'clipPath') {
     reshape(engine, slot.shape.parent!, { id: shape.attrs['id']! });
-    return reshape(engine, slot.shape, { d: shape.attrs['d']! });
+    return reshape(engine, slot.shape, clipPathOf(shape.attrs));
   }
   reshape(engine, slot.shape, shape.attrs);
-  if (shape.clippedBy !== undefined) reshape(engine, slot.node, clipping(shape.clippedBy));
+  if (shape.clippedBy !== undefined) {
+    reshape(engine, slot.node, clipping(shape.clippedBy, shape.clipRule));
+  }
   // A text's words are all it holds.
   const words = slot.shape.childList[0];
   if (shape.words !== undefined && words && words.nodeText !== shape.words) {
@@ -1310,7 +1330,9 @@ export function setCanvasSize(
 ): boolean {
   if (node.tag !== 'canvas' || (side !== 'width' && side !== 'height')) return false;
   const { [side]: _, ...rest } = canvasAttributes(node);
-  written.set(node, value == null ? rest : { ...rest, [side]: String(value) });
+  // One set again keeps its place, as a browser keeps an attribute's.
+  const given = { ...canvasAttributes(node), [side]: String(value) };
+  written.set(node, value == null ? rest : given);
   sizeCanvas(node, engine);
   contexts.get(node)?.reset();
   return true;

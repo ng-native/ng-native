@@ -38,6 +38,9 @@ function rowsOf(width: number, height: number, rgba: ArrayLike<number>): Uint8Ar
   return raw;
 }
 
+/** The most bytes zlib sums before it reduces, which keep the sums inside 32 bits. */
+const ADLER_RUN = 5552;
+
 /** Bytes as a zlib stream of stored blocks, with the checksum it ends with. */
 function stored(raw: Uint8Array): Uint8Array {
   const blocks = Math.max(1, Math.ceil(raw.length / BLOCK));
@@ -56,9 +59,15 @@ function stored(raw: Uint8Array): Uint8Array {
     to += 5 + part.length;
   }
   let [a, b] = [1, 0];
-  for (let at = 0; at < raw.length; at++) {
-    a = (a + raw[at]!) % 65521;
-    b = (b + a) % 65521;
+  // Summed a run at a time and only then reduced, as zlib sums: the checksum is the same.
+  for (let start = 0; start < raw.length; start += ADLER_RUN) {
+    const end = Math.min(start + ADLER_RUN, raw.length);
+    for (let at = start; at < end; at++) {
+      a += raw[at]!;
+      b += a;
+    }
+    a %= 65521;
+    b %= 65521;
   }
   new DataView(out.buffer).setUint32(to, ((b << 16) | a) >>> 0);
   return out;

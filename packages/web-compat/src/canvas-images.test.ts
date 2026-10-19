@@ -120,10 +120,16 @@ describe('@ng-native/web-compat canvas pictures', () => {
   });
 
   it('answers toDataURL for a canvas with no context, and none for one of no size', async () => {
-    const { source } = await canvases();
-    sameBytes(fromUrl(source.toDataURL()).data, new Array(10 * 10 * 4).fill(0));
-    source.width = 0;
-    assert.equal(source.toDataURL(), 'data:,');
+    await canvases();
+    // Made here: each canvas of the page was asked for a context.
+    const bare = document().createElement('canvas');
+    bare.width = 10;
+    bare.height = 10;
+    const png = fromUrl(bare.toDataURL());
+    assert.deepEqual([png.width, png.height], [10, 10]);
+    sameBytes(png.data, new Array(10 * 10 * 4).fill(0));
+    bare.width = 0;
+    assert.equal(bare.toDataURL(), 'data:,');
   });
 
   it('hands toBlob a PNG blob, later', async () => {

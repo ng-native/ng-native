@@ -94,10 +94,19 @@ const asWritten = (name: string, value: boolean): string =>
  */
 const written = new WeakMap<EngineNode, Map<string, string>>();
 
+/** The names a script wrote that were attributes already: each keeps the place it had. */
+const placed = new WeakMap<EngineNode, Set<string>>();
+
 export function noteWritten(node: EngineNode, name: string, value: string | null): void {
   let all = written.get(node);
-  if (value === null) return void all?.delete(name);
+  if (value === null) {
+    placed.get(node)?.delete(name);
+    return void all?.delete(name);
+  }
   if (!all) written.set(node, (all = new Map()));
+  if (!all.has(name) && hasAttribute(node, name)) {
+    placed.set(node, (placed.get(node) ?? new Set()).add(name));
+  }
   all.set(name, value);
 }
 
@@ -105,18 +114,23 @@ export function noteWritten(node: EngineNode, name: string, value: string | null
 export function copyWritten(from: EngineNode, to: EngineNode): void {
   const all = written.get(from);
   if (all) written.set(to, new Map(all));
+  const kept = placed.get(from);
+  if (kept) placed.set(to, new Set(kept));
 }
 
 /**
  * Names in the order they were set: those set some other way first, a template's, as they come,
- * then those a script wrote, in the order it first wrote them.
+ * then those a script wrote, in the order it first wrote them. One a script wrote again where it
+ * was set already keeps its place, as a browser keeps an attribute's.
  */
 function inWrittenOrder(node: EngineNode, names: readonly string[]): string[] {
   const all = written.get(node);
   if (!all) return [...names];
+  const kept = placed.get(node);
+  const added = (name: string) => all.has(name) && !kept?.has(name);
   return [
-    ...names.filter((name) => !all.has(name)),
-    ...[...all.keys()].filter((name) => names.includes(name)),
+    ...names.filter((name) => !added(name)),
+    ...[...all.keys()].filter((name) => names.includes(name) && added(name)),
   ];
 }
 
