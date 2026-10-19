@@ -401,8 +401,9 @@ class Context2D {
     this.transform(cos, sin, -sin, cos, 0, 0);
   }
   transform(a: number, b: number, c: number, d: number, e: number, f: number): void {
+    if (!finite(a, b, c, d, e, f)) return;
     const by: Matrix = [a, b, c, d, e, f].map(Number) as unknown as Matrix;
-    if (finite(...by)) this.state.matrix = multiplied(this.state.matrix, by);
+    this.state.matrix = multiplied(this.state.matrix, by);
   }
   /** To six numbers, or to what a `DOMMatrix` of one has: none at all is the identity. */
   setTransform(...given: unknown[]): void {
@@ -537,7 +538,8 @@ class Context2D {
     this.quarter([left + sx * ll.x, bottom - sy * ll.y], ll, [0, sy], [-sx, 0]);
     this.quarter([left + sx * ul.x, top + sy * ul.y], ul, [-sx, 0], [0, -sy]);
     this.closePath();
-    this.moveTo(left, top);
+    // A new subpath at the corner it is drawn from, the top left of it, as Chrome has it.
+    this.moveTo(Math.min(left, right), Math.min(top, bottom));
   }
   /** A quarter of an ellipse around a centre, from one side of it to the next, the short way. */
   private quarter(centre: Point, radii: Corner, from: Point, to: Point): void {

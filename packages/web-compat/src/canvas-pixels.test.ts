@@ -80,6 +80,12 @@ describe('@ng-native/web-compat canvas pixels', () => {
     // One made the size of another is in its colour space.
     const wide = new (globalThis as Dom).ImageData(1, 1, { colorSpace: 'display-p3' });
     assert.equal(context.createImageData(wide).colorSpace, 'display-p3');
+    assert.throws(() => context.transform(1n, 0, 0, 1, 0, 0), TypeError);
+    // A rounded box drawn backwards starts what comes next at its top left, as Chrome does.
+    context.beginPath();
+    context.roundRect(20, 20, -10, -10, 0);
+    context.lineTo(50, 50);
+    assert.equal(context.isPointInStroke(11, 11), true);
     // And a font of no size is no size, not the default.
     context.font = '0px sans-serif';
     assert.equal(context.measureText('Sales').width, 0);
