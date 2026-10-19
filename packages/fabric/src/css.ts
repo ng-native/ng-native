@@ -806,10 +806,6 @@ const SHAPE_PAINT_INHERITED: ReadonlySet<string> = new Set(['fill', 'stroke', 's
 export const handsDownPaint = (key: string): boolean =>
   key === 'propList' || SHAPE_PAINT_INHERITED.has(key);
 
-/** Whether a key is inherited, by a node of a library's drawing or by any other. */
-const inherits = (key: string, drawing: boolean): boolean =>
-  INHERITED.has(key) || (drawing && SHAPE_PAINT_INHERITED.has(key));
-
 /**
  * `border-style: none`, which the compiler writes as a style native does not have. On the web it
  * makes every border width 0, whichever rule set the width, so `border-hidden border-x` draws no
@@ -3260,7 +3256,7 @@ function inheritFrom(
   const drawing = node?.namespace !== undefined;
   let inherited = drawing ? ownPaint(node!, parentInherited, own) : parentInherited;
   for (const key of Object.keys(own)) {
-    if (!inherits(key, drawing)) continue;
+    if (!(INHERITED.has(key) || (drawing && SHAPE_PAINT_INHERITED.has(key)))) continue;
     // `pointer-events: inherit`, which only an inline style on an element no rule matches still
     // holds here: what the parent hands down stands.
     if (key === 'pointerEvents' && own[key] === 'inherit') continue;
@@ -3338,12 +3334,19 @@ function drawsLine(line: unknown): boolean {
   return line !== undefined && line !== 'none';
 }
 
-/** Whether an inline style sets a property children inherit. Allocates nothing: it runs per set. */
+/**
+ * Whether an inline style sets a property children inherit, by a node of a library's drawing or by
+ * any other. Allocates nothing, and calls nothing a key: it runs per set.
+ */
 export function setsInherited(style: unknown, drawing = false): boolean {
   if (!style || typeof style !== 'object') return false;
   if (Array.isArray(style)) return style.some((entry) => setsInherited(entry, drawing));
   for (const key in style) {
-    if (inherits(key, drawing) && (style as Record<string, unknown>)[key] != null) return true;
+    if (
+      (INHERITED.has(key) || (drawing && SHAPE_PAINT_INHERITED.has(key))) &&
+      (style as Record<string, unknown>)[key] != null
+    )
+      return true;
   }
   return false;
 }
@@ -3357,7 +3360,12 @@ export function inlineInherited(style: unknown, drawing = false): Record<string,
   let out: Record<string, unknown> | null = null;
   // Flattened first, as native applies it, so a later entry's null clears an earlier value.
   for (const [key, value] of Object.entries(flattenInline(style, {}))) {
-    if (inherits(key, drawing) && value !== undefined && value !== null) (out ??= {})[key] = value;
+    if (
+      (INHERITED.has(key) || (drawing && SHAPE_PAINT_INHERITED.has(key))) &&
+      value !== undefined &&
+      value !== null
+    )
+      (out ??= {})[key] = value;
   }
   return out;
 }

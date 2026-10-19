@@ -349,10 +349,26 @@ class NativeRenderer implements Renderer2 {
     if (style === 'line-height' && typeof value === 'number') value = String(value);
     const key = styleKey(style);
     if (this.setShorthand(el, key, value)) return;
-    this.setDeclaration(el, key, value);
+    // `setDeclaration`, written out: Angular calls this for every declaration of every bound
+    // style, where the call more measured slower in `pnpm bench`. The two change together.
+    if (this.engine.setBoundStyle(el, key, value)) return this.dropStyle(el, key);
+    const next = declaredValue(key, value);
+    const current = el.props['style'] as Record<string, unknown> | undefined;
+    if (current && current === el.ownStyle) {
+      if (current[key] === next) return;
+      current[key] = next;
+      this.engine.styleChanged(el, key);
+      return;
+    }
+    const owned = { ...(current ?? {}), [key]: next };
+    el.ownStyle = owned;
+    this.engine.setProp(el, 'style', owned);
   }
 
-  /** Set one declaration of an element's inline style, by the key the view reads. */
+  /**
+   * Set one declaration of an element's inline style, by the key the view reads, as an extension
+   * restyles it. `setStyle` does the same for the declaration Angular sets.
+   */
   private setDeclaration(el: EngineNode, key: string, value: unknown): void {
     // A `var()` is for the cascade to settle, with the tokens in scope, not a value of the style.
     if (this.engine.setBoundStyle(el, key, value)) return this.dropStyle(el, key);

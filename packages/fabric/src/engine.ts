@@ -2900,7 +2900,12 @@ function styleAsks(style: unknown): number {
     for (const each of style) asked |= styleAsks(each);
     return asked;
   }
-  for (const key in style) asked |= asks(key, (style as Record<string, unknown>)[key]);
+  for (const key in style) {
+    const value = (style as Record<string, unknown>)[key];
+    // A number asks for nothing but by a key the engine alone reads, as in `Engine.setProp`: told
+    // here without the call, as most declarations are numbers.
+    if (typeof value !== 'number' || LAID_OUT_HERE.has(key)) asked |= asks(key, value);
+  }
   return asked;
 }
 
@@ -5379,14 +5384,13 @@ const BOUND_TOKEN =
  * A bound value kept as a declaration the cascade settles: a `var()`, a colour made of tokens, or
  * a relative length.
  */
-/** The text each bound declaration was read from, to know one bound again as it was. */
+/**
+ * The text each bound declaration was read from, to know one bound again as it was: see
+ * `Engine.setBoundStyle`.
+ */
 const BOUND_TEXT = new WeakMap<DeferredDeclaration, string>();
 
-/** Bound again as it is: a chart writes each of its points' paints again as a finger moves. */
-const boundAsIs = (had: DeferredDeclaration | undefined, text: string | undefined): boolean =>
-  had !== undefined && text !== undefined && BOUND_TEXT.get(had) === text;
-
-/** `boundFrom`, remembering the text it was read from: see `boundAsIs`. */
+/** `boundFrom`, remembering the text it was read from. */
 function boundRead(prop: string, text: string, on: string): DeferredDeclaration | null {
   const bound = boundFrom(prop, text, on);
   if (bound) BOUND_TEXT.set(bound, text);
@@ -6987,11 +6991,14 @@ export class Engine implements HostEngine {
       if (html.role) node.props['accessibilityRole'] = html.role;
       node.styled = html.styled;
     }
-    this.watchStructure(sheet);
-    this.watchLayout(sheet);
-    this.watchHas(sheet);
-    this.watchActive(sheet);
-    this.watchGenerated(sheet);
+    // Each watch is of a sheet, and most elements are made with none: told here, not five calls in.
+    if (sheet !== null) {
+      this.watchStructure(sheet);
+      this.watchLayout(sheet);
+      this.watchHas(sheet);
+      this.watchActive(sheet);
+      this.watchGenerated(sheet);
+    }
     if (HOISTS[name]) this.hoisted.add(node);
     if (this.generated !== null) this.generate(node);
     return node;
@@ -7582,8 +7589,12 @@ export class Engine implements HostEngine {
       if (node.props[key] === value) return;
       node.props[key] = value;
       // A number asks for nothing but by a key the engine alone reads: see `asks`.
-      const asks = typeof value !== 'number' || LAID_OUT_HERE.has(key);
-      if (asks && this.asked !== EVERYTHING) this.askedBy(key, value);
+      // `askedBy`, written out: this runs for every prop Angular writes.
+      if ((typeof value !== 'number' || LAID_OUT_HERE.has(key)) && this.asked !== EVERYTHING) {
+        const bits =
+          key === 'style' || key === STYLE_OVERRIDE ? styleAsks(value) : asks(key, value);
+        if (bits & ~this.asked) this.want(bits);
+      }
     }
     // Inline style is applied after the cascade and inherited by nothing, so it cannot change
     // what any node matches or inherits. Every other prop can: `[disabled]` is a selector. An
@@ -7742,7 +7753,9 @@ export class Engine implements HostEngine {
   setBoundStyle(node: EngineNode, prop: string, value: unknown): boolean {
     const text = typeof value === 'string' ? value : undefined;
     const had = node.boundByProp?.get(prop);
-    if (boundAsIs(had, text)) return true;
+    // Bound again as it is: a chart writes each of its points' paints again as a finger moves.
+    // Asked here, without a call, as this runs for every declaration of every inline style.
+    if (had !== undefined && text !== undefined && BOUND_TEXT.get(had) === text) return true;
     const refused = text !== undefined && this.refusedBound(node, prop, text);
     const bound = text === undefined || refused ? null : boundRead(prop, text, node.tag);
     if (bound || had) this.keepBound(node, prop, bound);
