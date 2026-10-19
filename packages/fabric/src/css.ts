@@ -192,6 +192,11 @@ export interface Conditions {
    */
   readonly fontScale?: number;
   /**
+   * The screen's pixels in a point: `PixelRatio.get()`. Nothing in the engine reads it; a
+   * package answering a page's `devicePixelRatio` does. Optional, and 1 when absent.
+   */
+  readonly pixelRatio?: number;
+  /**
    * The direction the app is laid out in, which is the device's unless the app forced one:
    * `I18nManager.isRTL`. Optional, and left to right when absent. It decides which physical
    * corner or edge a logical one is, where an element has both and no `direction` of its own.

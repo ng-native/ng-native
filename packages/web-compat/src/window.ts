@@ -359,6 +359,8 @@ const SIZES: Readonly<Record<string, () => number>> = {
   screenY: () => 0,
   screenLeft: () => 0,
   screenTop: () => 0,
+  // The screen's pixels in a point, which a canvas is drawn sharp by: 1 where it was not told.
+  devicePixelRatio: () => engines.at(-1)?.conditions?.pixelRatio ?? 1,
   scrollX: () => 0,
   scrollY: () => 0,
   pageXOffset: () => 0,

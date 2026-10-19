@@ -442,6 +442,19 @@ describe('window geometry', () => {
     assert.equal(globals.visualViewport.offsetTop, 0);
   });
 
+  it("answers the screen's pixel ratio as devicePixelRatio, and 1 where it was not told", async () => {
+    await page();
+    assert.equal(globals.devicePixelRatio, 1);
+    cleanup();
+    await render(Page, {
+      providers: [provideWebCompat()],
+      conditions: { width: 400, height: 800, colorScheme: 'light', pixelRatio: 3 },
+    });
+    assert.equal(globals.devicePixelRatio, 3);
+    cleanup();
+    assert.equal('devicePixelRatio' in globals, false, 'gone with the package');
+  });
+
   it('tells a visual viewport resize listener when the window changes', async () => {
     const { engine } = await page();
     const heard: number[] = [];

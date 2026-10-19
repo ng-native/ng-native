@@ -50,6 +50,8 @@ export function currentConditions(): Conditions {
     // already on screen, so nothing is lost by learning it a tick late.
     reducedMotion: false,
     fontScale: fontScale(),
+    // Fixed for as long as the app is open, as the hairline in `deviceTokens` is.
+    pixelRatio: reactNative()?.PixelRatio.get() ?? 1,
     // Settled while the native side starts up, and fixed until the app restarts.
     direction: directionSource().current(),
   };

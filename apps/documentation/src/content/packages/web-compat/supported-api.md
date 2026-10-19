@@ -108,14 +108,16 @@ Gaps:
 - Scrolling: an element whose style says `overflow: auto` or `scroll` scrolls what overflows it,
   with `scrollTop` and `scrollLeft` to read and write, `scroll`, `scrollTo`, `scrollBy` and
   `scrollIntoView`. `document.scrollingElement` is the root.
-- The window: `screen`, `visualViewport`, and `matchMedia` with a `change` listener.
+- The window: `screen`, `visualViewport`, `devicePixelRatio` as the screen's pixels in a point,
+  and `matchMedia` with a `change` listener.
 - `ResizeObserver`, and `IntersectionObserver` with a root, a margin and thresholds. An app that
   observes nothing pays nothing for them.
 
-Gaps: `ResizeObserver` has no `device-pixel-content-box`, and `scrollIntoView` reads no
-`scroll-margin` or `scroll-padding`. An element's browser defaults are its box sizing and whether
-it is a block, with no margins and no heading sizes, and a table is not laid out as a table. The
-window does not scroll.
+Gaps: `ResizeObserver` has no `device-pixel-content-box`, `matchMedia` does not read
+`resolution` or `-webkit-device-pixel-ratio`, and `scrollIntoView` reads no `scroll-margin` or
+`scroll-padding`. An element's browser defaults are its box sizing and whether it is a block,
+with no margins and no heading sizes, and a table is not laid out as a table. The window does not
+scroll.
 An inline element over two lines is one box around both, where a browser has two.
 `IntersectionObserver` takes `trackVisibility` but its `isVisible` is never true, since nothing
 tells it whether something is drawn over an element.

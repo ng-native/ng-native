@@ -221,6 +221,11 @@ describe('watchConditions and the text size', () => {
     assert.equal(currentConditions().fontScale, 1.25);
   });
 
+  it("starts with the screen's pixel ratio in the conditions", () => {
+    // What a page reads as `devicePixelRatio` with web-compat, to draw a canvas sharp.
+    assert.equal(currentConditions().pixelRatio, 3);
+  });
+
   it("starts with the app's layout direction in the conditions", () => {
     // Which physical corner a logical one is, for the cascade to settle the two as one.
     assert.equal(currentConditions().direction, 'ltr');

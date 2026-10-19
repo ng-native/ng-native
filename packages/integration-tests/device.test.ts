@@ -631,6 +631,7 @@ describe('the engine conditions', () => {
       colorScheme: 'light',
       reducedMotion: false,
       fontScale: 1,
+      pixelRatio: 1,
       direction: 'ltr',
     });
 
