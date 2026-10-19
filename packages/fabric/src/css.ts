@@ -649,7 +649,7 @@ export interface StyleCache {
  * which is not in the tree a selector is matched against.
  */
 export function fills(child: StyleTarget): boolean {
-  if (child.nodeKind === 'anchor' || isGenerated(child.tag)) return false;
+  if (child.nodeKind === 'anchor' || (boxesDrawn && isGenerated(child.tag))) return false;
   return child.nodeKind !== 'text' || (child as { nodeText?: string }).nodeText !== '';
 }
 
@@ -1010,6 +1010,20 @@ function matchesEach(node: StyleTarget, compound: Compound, sheet: StyleSheet | 
 /** The first character of a generated box's tag, `::before` or `::after`. */
 const COLON = 58;
 
+/**
+ * Whether any sheet in the process has drawn a generated box: until one has, no node is one, and
+ * the checks for one below cost a boolean read. Set once and left set.
+ *
+ * ponytail: never turned off again, as the checks are only a cost once it is on; count the
+ * engines with boxes if an app that drops its last library sheet needs the matching back.
+ */
+let boxesDrawn = false;
+
+/** Note that a sheet in play draws generated boxes: see `boxesDrawn`. */
+export function noteGeneratedBoxes(): void {
+  boxesDrawn = true;
+}
+
 // eslint-disable-next-line complexity
 function matchesCompound(node: StyleTarget, compound: Compound, sheet: StyleSheet | null): boolean {
   styleStats.compoundTests++;
@@ -1024,7 +1038,7 @@ function matchesCompound(node: StyleTarget, compound: Compound, sheet: StyleShee
     if (compound.type !== node.tag) return false;
     // A generated box is no element to a compound that names none, `*` or a class alone, as a
     // pseudo-element is none in a browser: one character told from any element's name.
-  } else if (node.tag.charCodeAt(0) === COLON) return false;
+  } else if (boxesDrawn && node.tag.charCodeAt(0) === COLON) return false;
   if (compound.own !== undefined && !ownedBy(node, compound, sheet)) return false;
   if (compound.id !== undefined && node.props['nativeID'] !== compound.id) return false;
   for (const className of compound.classes) {
@@ -1501,7 +1515,8 @@ function takesParents(rule: StyleRule): boolean {
 /** Whether a node is one of the children CSS counts. Text and anchors are children, not elements. */
 const isElement = (node: StyleTarget) =>
   // Asked of each sibling a rule counts: told from a generated box here, without a call.
-  (node.nodeKind === undefined || node.nodeKind === 'element') && !node.tag.startsWith('::');
+  (node.nodeKind === undefined || node.nodeKind === 'element') &&
+  !(boxesDrawn && node.tag.charCodeAt(0) === COLON);
 
 /**
  * Whether an element's name is a generated box's, `::before` or `::after`: a child the engine
@@ -3838,7 +3853,7 @@ export class StyleResolver {
       node.templateSheet === null &&
       node.hostSheet === null &&
       // A generated box matches the `:host::before` of the component its element hosts.
-      !(node.tag.charCodeAt(0) === COLON && node.parent?.hostSheet) &&
+      !(boxesDrawn && node.tag.charCodeAt(0) === COLON && node.parent?.hostSheet) &&
       this.deepSheets.size === 0 &&
       this.globalSheet === null &&
       this.addedSheets.length === 0 &&
@@ -3930,7 +3945,8 @@ export class StyleResolver {
     if (node.hostSheet) indexes.push(this.ownIndex(node.hostSheet, HOSTS));
     // A generated box is tried against the rules of the component its element hosts too, where
     // `:host::before` is written: it is no host itself, so a bare `:host` rule still misses it.
-    const host = node.tag.charCodeAt(0) === COLON ? node.parent?.hostSheet : undefined;
+    const host =
+      boxesDrawn && node.tag.charCodeAt(0) === COLON ? node.parent?.hostSheet : undefined;
     if (host) indexes.push(this.ownIndex(host, HOSTS));
     if (node.templateSheet) indexes.push(this.ownIndex(node.templateSheet, CREATED));
     if (this.deepSheets.size) this.reachedFromAbove(node, indexes);

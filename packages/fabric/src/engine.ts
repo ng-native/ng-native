@@ -39,6 +39,7 @@ import {
   type Subjects,
   type TokenValue,
   isGenerated,
+  noteGeneratedBoxes,
 } from './css.ts';
 import { applyAria } from './aria-props.ts';
 import { STYLED_ELEMENTS } from './element-styles.ts';
@@ -6476,7 +6477,7 @@ export class Engine implements HostEngine {
         this.markProps(child);
       }
     }
-    this.generate(node);
+    if (this.generated !== null) this.generate(node);
     this.markProps(node);
   }
 
@@ -6531,7 +6532,7 @@ export class Engine implements HostEngine {
     this.watchActive(sheet);
     this.watchGenerated(sheet);
     if (HOISTS[name]) this.hoisted.add(node);
-    this.generate(node);
+    if (this.generated !== null) this.generate(node);
     return node;
   }
 
@@ -6539,14 +6540,14 @@ export class Engine implements HostEngine {
     const was = this.classAttribute(node);
     (node.classes ??= new Set()).add(name);
     this.markClasses(node, [name], was);
-    this.generate(node);
+    if (this.generated !== null) this.generate(node);
   }
 
   removeClass(node: EngineNode, name: string): void {
     const was = this.classAttribute(node);
     node.classes?.delete(name);
     this.markClasses(node, [name], was);
-    this.generate(node);
+    if (this.generated !== null) this.generate(node);
   }
 
   /**
@@ -6664,6 +6665,7 @@ export class Engine implements HostEngine {
     const boxes = generatedIn(sheet);
     this.generatedBySheet.set(sheet, boxes);
     if (!boxes) return;
+    noteGeneratedBoxes();
     this.generated = joinGenerated([this.generated, boxes]);
     if (this.root) this.generateBeneath(this.root);
   }
@@ -6737,7 +6739,7 @@ export class Engine implements HostEngine {
     this.watchActive(sheet);
     this.watchGenerated(sheet);
     // A sheet seen before gives this host its box here: a second host of the component, say.
-    this.generate(node);
+    if (this.generated !== null) this.generate(node);
     this.markProps(node);
   }
 
@@ -6793,7 +6795,7 @@ export class Engine implements HostEngine {
     const reordered =
       !changed.length && !!before && !!node.classes && !inOrder(before, node.classes);
     this.markClasses(node, reordered ? node.classes! : changed, was);
-    this.generate(node);
+    if (this.generated !== null) this.generate(node);
   }
 
   /** Angular's `@if`/`@for`/`ViewContainerRef` markers. Ordered, never committed. */
@@ -7115,7 +7117,7 @@ export class Engine implements HostEngine {
     // And only a prop some selector names: `aria-valuenow` on every tick of a progress bar, a
     // field's text on every key, match nothing they did not.
     const read = key === 'style' ? this.inlineReachesStyle(node) : this.styles.reads(key);
-    this.generateFor(node, key);
+    if (this.generated !== null) this.generateFor(node, key);
     // And restyles the elements after it only where a rule asks the prop of an element before
     // another, `[data-on] ~ .x`: a point of a chart set as a finger moves leaves those after it.
     this.markProps(node, read || heirs, this.styles.readsBeside(key));
@@ -10386,7 +10388,7 @@ export class Engine implements HostEngine {
   private ruleStyle(node: EngineNode): Readonly<Record<string, unknown>> {
     const { style } = this.styles.resolve(node, this.styleEpoch);
     // Asked of every node a commit: told from a generated box here, without a call.
-    return node.tag.startsWith('::') ? generatedStyle(style) : style;
+    return this.generated !== null && isGenerated(node.tag) ? generatedStyle(style) : style;
   }
 
   /** Each node's layout styles while one container is planned, so each is merged once. */
@@ -12767,7 +12769,7 @@ export class Engine implements HostEngine {
    * when it is shown again, as Modal.js creates it afresh. Committed again, it ignores every touch.
    */
   private withheld(child: EngineNode): boolean {
-    if (child.tag.startsWith('::')) return this.undrawn(child);
+    if (this.generated !== null && isGenerated(child.tag)) return this.undrawn(child);
     if (this.undisplayed(child)) return true;
     if (child.props['visible'] !== false || child.presented) return false;
     if (viewNameOf(child) !== MODAL_HOST) return false;
