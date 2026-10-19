@@ -45,6 +45,9 @@ that resolves `initialUrl()` races the first navigation and neither order is gua
 
 `open(url)` hands a url to whatever else on the device handles it: a browser, Maps, another app.
 
+`follow(path)` hands a path of the app's own to what `subscribe()` was given, as a link that
+arrived from outside is handed, so the router navigates to it.
+
 `openSettings()` opens the app's own page in the system settings, where a person turns on a
 permission the platform no longer asks for (see [Permissions](/packages/expo/permissions)). Android
 has no url for that page, so `open()` cannot reach it there.
