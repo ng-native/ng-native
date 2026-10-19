@@ -7,7 +7,7 @@ import { afterEach, describe, it } from 'node:test';
 import { Component, DOCUMENT, ElementRef, inject, signal } from '@angular/core';
 import { Text, TextInput, View } from '@ng-native/components';
 import { registeredViewName } from '@ng-native/fabric';
-import { cleanup, fireEvent, render, screen, userEvent } from '@ng-native/testing';
+import { cleanup, fireEvent, render, screen, settle, userEvent } from '@ng-native/testing';
 
 afterEach(cleanup);
 
@@ -70,6 +70,35 @@ class Drawn {}
   template: `<svg testID="drawing" viewBox="0 0 2 2"><path testID="shape" d="M0 0" /></svg>`,
 })
 class Shape {}
+
+@Component({
+  selector: 'x-canvas',
+  template: `<canvas testID="canvas" width="20" height="10"></canvas>`,
+})
+class Canvas {}
+
+/** The names a canvas's views are registered by, and the globals a script asks its drawing by. */
+const CANVAS_NAMES = ['canvas', 'canvas:image', 'canvas:pattern'];
+const CANVAS_GLOBALS = ['ImageData', 'CanvasRenderingContext2D', 'CanvasGradient', 'CanvasPattern'];
+
+/** Whether the canvas of a `Canvas` app draws: its context, its views and its globals. */
+async function canvasIsUp(): Promise<void> {
+  assert.deepEqual(
+    CANVAS_NAMES.map((name) => registeredViewName(name)),
+    ['RNSVGSvgView', 'RNSVGImage', 'RNSVGPattern'],
+  );
+  for (const name of CANVAS_GLOBALS) assert.equal(typeof (globalThis as Dom)[name], 'function');
+  const node = (globalThis as Dom).document.querySelector('canvas');
+  const context = node.getContext('2d');
+  assert.ok(context instanceof (globalThis as Dom).CanvasRenderingContext2D);
+  assert.equal(node.width, 20);
+  context.fillRect(0, 0, 5, 5);
+  await settle();
+  const view = screen.getByTestId('canvas');
+  assert.deepEqual([view.props['vbWidth'], view.props['vbHeight']], [20, 10]);
+  assert.equal(view.children[0]!.children[0]!.viewName, 'RNSVGPath');
+  assert.deepEqual([...context.getImageData(0, 0, 1, 1).data], [0, 0, 0, 255]);
+}
 
 /** The package, read the first time a test asks for it: see the first test. */
 const load = () => import('./index.ts');
@@ -282,6 +311,50 @@ describe('provideWebCompat', () => {
     );
   });
 
+  it('draws on a canvas while the app is up, and takes its names and globals away after', async () => {
+    const { provideWebCompat } = await load();
+    const before = CANVAS_NAMES.map((name) => registeredViewName(name));
+    await render(Canvas);
+    const plain = screen.getByTestId('canvas').viewName;
+    cleanup();
+
+    await render(Canvas, { providers: [provideWebCompat()] });
+    const node: Dom = screen.getByTestId('canvas').instanceHandle;
+    await canvasIsUp();
+
+    cleanup();
+    assert.deepEqual(
+      CANVAS_NAMES.map((name) => registeredViewName(name)),
+      before,
+      'every name as it was',
+    );
+    assert.deepEqual(before, [undefined, undefined, undefined], 'none of them a name before');
+    for (const name of CANVAS_GLOBALS) assert.equal((globalThis as Dom)[name], undefined, name);
+    assert.deepEqual(
+      [node.getContext, node.toDataURL, node.toBlob],
+      [undefined, undefined, undefined],
+    );
+    // And a canvas is what the renderer makes of one again, with nothing drawn in it.
+    await render(Canvas);
+    assert.equal(screen.getByTestId('canvas').viewName, plain);
+    assert.deepEqual(screen.getByTestId('canvas').children, []);
+  });
+
+  it("leaves a runtime's own ImageData as it is, while the app is up and after", async () => {
+    const { provideWebCompat } = await load();
+    class OwnImageData {}
+    const globals = globalThis as Dom;
+    globals.ImageData = OwnImageData;
+    try {
+      await render(Canvas, { providers: [provideWebCompat()] });
+      assert.equal(globals.ImageData, OwnImageData);
+      cleanup();
+      assert.equal(globals.ImageData, OwnImageData);
+    } finally {
+      delete globals.ImageData;
+    }
+  });
+
   it('stays while any app that asked for it is up, and gives the document to the newest', async () => {
     const { provideWebCompat } = await load();
     const before = Object.getOwnPropertyDescriptor(globalThis, 'document');
@@ -346,6 +419,12 @@ describe('provideWebCompat', () => {
     await render(Shape);
     assert.equal(screen.getByTestId('drawing').props['viewBox'], '0 0 2 2');
     assert.equal(screen.getByTestId('shape').props['fill'], undefined);
+    // A canvas is given no group to draw in and no grid, and has no context to draw with.
+    await render(Canvas);
+    const canvas = screen.getByTestId('canvas');
+    assert.deepEqual(canvas.children, []);
+    assert.deepEqual([canvas.props['width'], canvas.props['vbWidth']], ['20', undefined]);
+    assert.equal((canvas.instanceHandle as Dom).getContext('2d'), null);
     // A style it binds is set as written, as the renderer sets one: no inset read as a side.
     await render(Inset);
     assert.equal(screen.getByTestId('inset').props['start'], undefined);

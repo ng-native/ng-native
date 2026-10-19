@@ -1,6 +1,7 @@
 import type { Engine, EngineNode } from '@ng-native/fabric';
 import type { Renderer2 } from '@angular/core';
 import { attributeRemoved } from './attr.ts';
+import { canvasAttributes } from './canvas.ts';
 import { isCDATASection } from './cdata-section.ts';
 import { isCharacterData, setData, wordsOf } from './character-data.ts';
 import { classAttribute, classListOf, setClassAttribute } from './class-list.ts';
@@ -128,6 +129,10 @@ function setAsWritten(node: EngineNode, name: string, value: unknown): void {
   if (!renderer) engine.setProp(node, propOf(name), value);
 }
 
+/** The attributes an element keeps as written, where the props it is drawn by are another thing. */
+const keptAttributes = (node: EngineNode): Readonly<Record<string, string>> =>
+  node.tag === 'canvas' ? canvasAttributes(node) : shapeAttributes(node);
+
 /** Whether an element has an attribute. */
 function hasAttribute(node: EngineNode, name: string): boolean {
   if (name === 'class') return classAttribute(node) !== null;
@@ -152,7 +157,7 @@ function attributeOf(node: EngineNode, name: string): string | null {
   if (name === 'style') return text ?? null;
   if (text === undefined && isEngineState(node, name)) return null;
   // A shape's attribute is kept as written: the prop it is drawn by is another thing.
-  const value = shapeAttributes(node)[name] ?? node.props[propOf(name)];
+  const value = keptAttributes(node)[name] ?? node.props[propOf(name)];
   if (value == null) return null;
   if (typeof value !== 'boolean') return String(value);
   // A boolean prop is what the text was coerced to: the text itself is what was written.
@@ -273,7 +278,7 @@ function attributeNames(node: EngineNode): string[] {
     .filter((key) => !(isShape(node) || node.tag === 'svg') || isKeptOnShape(key))
     .filter((key) => key !== 'style' && node.props[key] != null && !isNativeOnly(node, key))
     .map((key) => (key === 'nativeID' ? 'id' : key));
-  const drawn = Object.keys(shapeAttributes(node)).filter((name) => !names.includes(name));
+  const drawn = Object.keys(keptAttributes(node)).filter((name) => !names.includes(name));
   const all = [
     ...(classAttribute(node) === null ? [] : ['class']),
     ...(written.get(node)?.has('style') ? ['style'] : []),
@@ -332,6 +337,12 @@ function attachNatively(node: EngineNode, type: string, heard: Heard, core: Core
 
 /** The event types core's own `addEventListener` attaches, for `@defer`, but for a click. */
 const DEFER_TRIGGERS = new Set(['keydown', 'mouseenter', 'focusin']);
+
+/** The elements a script draws pictures from, by what `Object.prototype.toString` says of them. */
+const PICTURE_TAGS: Readonly<Record<string, string>> = {
+  canvas: 'HTMLCanvasElement',
+  img: 'HTMLImageElement',
+};
 
 const get = (read: (this: Dom) => unknown, write?: (this: Dom, value: unknown) => void) => ({
   get: read,
@@ -441,6 +452,13 @@ export const nodeMembers = (core: CoreNode): PropertyDescriptorMap => ({
     return null;
   }),
   createSVGRect: method(() => ({ x: 0, y: 0, width: 0, height: 0 })),
+
+  // What a chart library tells a picture it draws from an object by: see `canvas-picture.ts`.
+  // A method, as the engine's members are named by strings and not by `Symbol.toStringTag`.
+  toString: method(function () {
+    const tag = PICTURE_TAGS[this.tag];
+    return tag ? `[object ${tag}]` : Object.prototype.toString.call(this);
+  }),
 
   // A library disables a control by the property as often as by the attribute: one is the other.
   // A form control's own is HTML's, in `reflected-attributes.ts`.

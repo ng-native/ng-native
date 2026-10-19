@@ -1,4 +1,5 @@
 import type { EngineNode } from '@ng-native/fabric';
+import { CANVAS_MEMBERS } from './canvas.ts';
 import { datasetOf } from './dataset.ts';
 import { nameOf } from './document.ts';
 import { isFragment } from './document-fragment.ts';
@@ -18,8 +19,8 @@ import { engineOf } from './window.ts';
  * The properties of HTML elements, by element: what reflects an attribute
  * (`reflected-attributes.ts`), what a form control answers of itself (`form-controls.ts`,
  * `validity.ts`, `text-selection.ts`), a table's parts (`table-parts.ts`), an element's `text`
- * (`element-text.ts`), a `<style>`'s `sheet` (`runtime-style.ts`), and `dataset`. Nodes share one
- * prototype, so each property here asks
+ * (`element-text.ts`), a `<style>`'s `sheet` (`runtime-style.ts`), a `<canvas>`'s context and
+ * size (`canvas.ts`), and `dataset`. Nodes share one prototype, so each property here asks
  * which element it is read on: one with nothing of its own for the name answers what the package
  * had for it before, and a text or an element of another namespace always does.
  */
@@ -112,6 +113,7 @@ export function withHtmlMembers(base: PropertyDescriptorMap): PropertyDescriptor
     TABLE_PARTS,
     ELEMENT_TEXT,
     STYLE_SHEETS,
+    CANVAS_MEMBERS,
     BY_ELEMENT,
   ];
   const names = new Set([...Object.keys(GLOBAL), ...namesOf(...tables)]);

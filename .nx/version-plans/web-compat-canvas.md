@@ -1,0 +1,5 @@
+---
+__default__: patch
+---
+
+`@ng-native/web-compat` draws a library's `<canvas>`. Its 2D context draws with react-native-svg's native views, the ones an `<svg>` is drawn by: paths, rectangles, arcs and rounded corners, strokes with their caps, joins and dashes, text, gradients, patterns, clips, transforms and `globalAlpha`. A canvas drawn again each frame moves the shapes it has rather than making new ones. What is drawn can be read back with `getImageData`, put with `putImageData`, drawn onto another canvas with `drawImage`, and written as a PNG by `toDataURL` and `toBlob`. `isPointInPath`, `isPointInStroke`, `measureText` and `globalCompositeOperation` are there too, and so are `ImageData`, `CanvasRenderingContext2D`, `CanvasGradient` and `CanvasPattern` where the runtime has none. A canvas's `width` and `height` set the grid it draws on. Drawing an `<img>` on a canvas draws nothing yet. There is no bitmap: a clear of part of a canvas, and the ways of laying a drawing over what is there other than `source-over` (and `copy` where nothing clips it), change only the pixels read back.

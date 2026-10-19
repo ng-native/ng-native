@@ -1,6 +1,7 @@
 import type { Engine, EngineNode } from '@ng-native/fabric';
 import type { RendererExtension } from '@ng-native/platform';
 import { activate, ancestry, clickElement, disabled } from './activation.ts';
+import { canvasCreated, setCanvasSize } from './canvas.ts';
 import { documentOf, heldForMenu, listenAnywhere, type CompatDocument } from './document.ts';
 import { isTextField } from './element-focus.ts';
 import { giveRole, hoverWritten, scrollWhereStyled } from './elements.ts';
@@ -158,6 +159,8 @@ export const webListen: RendererExtension = {
     wordsInSpans(node);
     // A stylesheet is read, and has no box of its own: see `runtime-style.ts`.
     if (node.tag === 'style' && documentOf(engine)) styleMade(node, engine);
+    // A canvas is given the group what it draws goes in: see `canvas.ts`.
+    if (documentOf(engine)) canvasCreated(node, engine);
   },
   // What a select shows, and whether a field is in a disabled fieldset, follow where an option
   // and a field are put: see `select.ts` and `fieldset.ts`. What a drawing's own elements are
@@ -180,8 +183,11 @@ export const webListen: RendererExtension = {
     checkControl(node, name, value, engine);
     setLabel(node, name, value, engine);
     const own = SETTERS[name];
-    // An attribute of a shape in a drawing is what it draws: see `setSvg`.
-    const took = own ? own(node, value, engine) : setSvg(node, name, value, engine);
+    // A canvas's size is the grid it draws on, and an attribute of a shape in a drawing is what
+    // it draws: see `setCanvasSize` and `setSvg`.
+    const took = own
+      ? own(node, value, engine)
+      : setCanvasSize(node, name, value, engine) || setSvg(node, name, value, engine);
     // A field's and a select's own: see `field.ts` and `select.ts`.
     return setSelect(node, name, value, engine) || setField(node, name, value, engine) || took;
   },

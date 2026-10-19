@@ -12,6 +12,7 @@ import { Engine, extendNodes } from '@ng-native/fabric';
 import { extendRenderer } from '@ng-native/platform';
 import { documentFor } from './document.ts';
 import { webListen } from './listen.ts';
+import { registerCanvas } from './canvas.ts';
 import { attributeMembers } from './attribute-members.ts';
 import { characterDataMembers } from './character-data.ts';
 import { forgetCommits } from './commit-watch.ts';
@@ -69,6 +70,9 @@ function install(engine: Engine): void {
     registerElements(),
     // The drawing's own elements, as react-native-svg's native views: see `svg.ts`.
     registerSvg(),
+    // A canvas, drawn by the same views, and the globals its drawing is asked about by: see
+    // `canvas.ts`.
+    registerCanvas(),
   ];
 }
 
@@ -115,6 +119,8 @@ function setGlobalDocument(document: unknown): void {
  *   is. See `field.ts`, `select.ts`, `form-controls.ts`, `validity.ts` and `form.ts`.
  * - An `<svg>` is drawn by react-native-svg's native views, with SVG's names, namespace and
  *   geometry members: see `svg.ts`.
+ * - A `<canvas>` has a 2D context, whose drawing is shapes those views draw, read back as pixels
+ *   and as a PNG: see `canvas.ts`.
  *
  * Nothing is added until this is called, and all of it is taken away again when the last app
  * that asked for it is destroyed.
