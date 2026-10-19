@@ -5,9 +5,9 @@
  * that is counted in the summary, or is a support file, which is counted too.
  */
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
-import { dirname, join, posix } from 'node:path';
+import { dirname, join, posix, resolve, sep } from 'node:path';
 import { CHECKOUT } from './pin.mjs';
-import { scriptSources } from './page.mjs';
+import { hasModuleScript, scriptSources } from './page.mjs';
 
 /** Directories that hold what tests load, not tests. */
 const SUPPORT_DIRECTORY = /(^|\/)(resources|support|tools|reference|references)\//;
@@ -36,6 +36,15 @@ export function resolveScript(src, from) {
   return path.startsWith('/') ? path.slice(1) : posix.join(dirname(from), path);
 }
 
+/**
+ * Where a path from the root of the checkout is on disk, where that is inside the checkout: a
+ * `..` a test wrote, or one an encoded slash hid from a URL, does not reach what is beside it.
+ */
+export function inCheckout(path) {
+  const file = resolve(CHECKOUT, path);
+  return file.startsWith(resolve(CHECKOUT) + sep) ? file : undefined;
+}
+
 /** The harness's own report, which the runner stands in for. */
 export const isReport = (path) => path === 'resources/testharnessreport.js';
 
@@ -59,7 +68,8 @@ function byScripts(sources, path) {
     if (/testdriver/.test(script)) return 'needs testdriver (input automation)';
     if (/\.sub\.|\?pipe=/.test(src)) return 'needs a server (.sub. script)';
     if (isReport(script)) continue;
-    if (!existsSync(join(CHECKOUT, script))) return 'loads a script outside the checkout';
+    const file = inCheckout(script);
+    if (!file || !existsSync(file)) return 'loads a script outside the checkout';
   }
   return undefined;
 }
@@ -69,7 +79,11 @@ function pageSkip(path, source) {
   const sources = scriptSources(source);
   const harness = sources.some((src) => resolveScript(src, path) === 'resources/testharness.js');
   if (!harness) return 'no testharness (a reference, visual or print page)';
-  return byScripts(sources, path);
+  const loads = byScripts(sources, path);
+  if (loads) return loads;
+  return hasModuleScript(source)
+    ? 'module script (the runner runs classic scripts only)'
+    : undefined;
 }
 
 /** The `// META:` lines at the head of a script test, by key. */

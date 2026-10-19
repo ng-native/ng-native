@@ -50,6 +50,12 @@ test('a file passing more, where one it passed fails now, is worse', () => {
     compare(was, grown, () => true).map((each: { kind: string }) => each.kind),
     ['changed'],
   );
+  // And so is passing as many, where the subtests are others: one renamed, say.
+  const renamed = { 'c.html': result('OK', ['one', 'two', 'four'], ['four']) };
+  assert.deepEqual(
+    compare(was, renamed, () => true).map((each: { kind: string }) => each.kind),
+    ['changed'],
+  );
 });
 
 test('a file that ends another way, passing the same subtests, is no change', () => {

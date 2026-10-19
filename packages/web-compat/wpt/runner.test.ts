@@ -6,12 +6,13 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { verify } from './fetch.mjs';
-import { COMMIT, SUITES, SUPPORT } from './pin.mjs';
+import { CHECKOUT, COMMIT, SUITES, SUPPORT } from './pin.mjs';
+import { inCheckout } from './tests.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 
@@ -32,26 +33,54 @@ function done() {
 }
 `;
 
-/** A page of two tests, the second passing where `passes` is. */
+/**
+ * A page of two tests. The second passes where `PASSING` names the page, and the process dies
+ * where `CRASH` does: what a run finds changes with the environment it is given, and the
+ * checkout, which the runner refuses where it changed, stays as it was committed.
+ */
 const page = (body: string) =>
   `<!doctype html><script src="/resources/testharness.js"></script><script>${body}</script>`;
-const twoTests = (passes: boolean) =>
+const twoTests = (name: string) =>
   page(
-    `test(function () {}, 'one'); test(function () { if (!${passes}) throw 1; }, 'two'); done();`,
+    `if (process.env.CRASH === '${name}') process.exit(9);
+    test(function () {}, 'one');
+    test(function () { if (!(process.env.PASSING || '').includes('${name}')) throw 1; }, 'two');
+    done();`,
   );
 
-/** A checkout as a fetch that finished leaves it, of every suite, with two tests in one. */
-function checkout(root: string, stamp: object = {}) {
+/** `git -C at ...args`, committing as anyone. */
+const gitIn = (at: string, ...args: string[]) =>
+  spawnSync(
+    'git',
+    ['-C', at, '-c', 'user.name=t', '-c', 'user.email=t@t', '-c', 'commit.gpgsign=false', ...args],
+    { encoding: 'utf8' },
+  ).stdout.trim();
+
+/**
+ * A checkout as a fetch that finished leaves it, of every suite, with two tests in one: a git
+ * repository with what it holds committed, stamped as fetched at that commit.
+ */
+function checkout(root: string, stamp: object = {}, pages: Record<string, string> = {}) {
   const at = join(root, 'cache', 'wpt');
   for (const directory of SUITES) mkdirSync(join(at, directory), { recursive: true });
   mkdirSync(join(at, 'resources'), { recursive: true });
   writeFileSync(join(at, 'resources', 'testharness.js'), HARNESS);
-  writeFileSync(join(at, 'dom', 'nodes', 'a.html'), twoTests(false));
-  writeFileSync(join(at, 'dom', 'nodes', 'b.html'), twoTests(true));
-  const stamped = { commit: COMMIT, paths: [...SUITES, ...SUPPORT], files: 3, ...stamp };
+  const all = { 'a.html': twoTests('a'), 'b.html': twoTests('b'), ...pages };
+  for (const [name, text] of Object.entries(all))
+    writeFileSync(join(at, 'dom', 'nodes', name), text);
+  gitIn(at, 'init', '--quiet');
+  gitIn(at, 'add', '.');
+  gitIn(at, 'commit', '--quiet', '-m', 'tests');
+  const stamped = { commit: commitOf(root), paths: [...SUITES, ...SUPPORT], files: 3, ...stamp };
   writeFileSync(join(root, 'cache', '.fetched.json'), JSON.stringify(stamped));
   return at;
 }
+
+/** The commit the checkout in `root` is at, which the runner is pinned to there. */
+const commitOf = (root: string) =>
+  existsSync(join(root, 'cache', 'wpt', '.git'))
+    ? gitIn(join(root, 'cache', 'wpt'), 'rev-parse', 'HEAD')
+    : COMMIT;
 
 function inTemp(name: string, body: (root: string) => void) {
   const root = mkdtempSync(join(tmpdir(), `ng-native-wpt-${name}-`));
@@ -62,37 +91,44 @@ function inTemp(name: string, body: (root: string) => void) {
   }
 }
 
-/** `node wpt/<script> ...args`, with the cache and the expectations in `root`. */
-function node(root: string, script: string, ...args: string[]) {
+/**
+ * `node wpt/<script> ...args`, with the cache and the expectations in `root`, pinned to the
+ * commit of the checkout there, and `PASSING` page b's second test, as `env` does not say.
+ */
+function nodeWith(env: Record<string, string>, root: string, script: string, ...args: string[]) {
   const ran = spawnSync(process.execPath, [join(HERE, script), ...args], {
     cwd: join(HERE, '..'),
     encoding: 'utf8',
+    // A run that never ends fails the test, not the suite.
+    timeout: 60_000,
     env: {
       ...process.env,
       WPT_CACHE: join(root, 'cache'),
       WPT_EXPECTATIONS: join(root, 'expectations.json'),
       WPT_REPOSITORY: join(root, 'no-repository'),
+      WPT_COMMIT: commitOf(root),
+      PASSING: 'b',
+      ...env,
     },
   });
   return { status: ran.status, out: `${ran.stdout}${ran.stderr}` };
 }
+const node = (root: string, script: string, ...args: string[]) =>
+  nodeWith({}, root, script, ...args);
 
 test('--check passes on what --update recorded, and fails on a file passing less or more', () => {
   inTemp('check', (root) => {
-    const at = checkout(root);
+    checkout(root);
     assert.equal(node(root, 'run.mjs', '--update').status, 0);
     const recorded = JSON.parse(readFileSync(join(root, 'expectations.json'), 'utf8'));
     assert.equal(recorded.files['dom/nodes/a.html'].pass, 1);
     assert.equal(node(root, 'run.mjs', '--check').status, 0);
 
-    writeFileSync(join(at, 'dom', 'nodes', 'a.html'), twoTests(true));
-    const better = node(root, 'run.mjs', '--check');
+    const better = nodeWith({ PASSING: 'a b' }, root, 'run.mjs', '--check');
     assert.equal(better.status, 1, better.out);
     assert.match(better.out, /1 files differ from the expectations: record them with --update/);
 
-    writeFileSync(join(at, 'dom', 'nodes', 'b.html'), twoTests(false));
-    writeFileSync(join(at, 'dom', 'nodes', 'a.html'), twoTests(false));
-    const worse = node(root, 'run.mjs', '--check');
+    const worse = nodeWith({ PASSING: '' }, root, 'run.mjs', '--check');
     assert.equal(worse.status, 1, worse.out);
     assert.match(worse.out, /1 files pass less than expected/);
   });
@@ -111,16 +147,19 @@ test('a full --update records afresh after the pin moves, and anything else fail
     assert.equal(filtered.status, 2, filtered.out);
     assert.equal(node(root, 'run.mjs', '--update').status, 0);
     const recorded = JSON.parse(readFileSync(join(root, 'expectations.json'), 'utf8'));
-    assert.equal(recorded.commit, COMMIT);
+    assert.equal(recorded.commit, commitOf(root));
     assert.equal(recorded.files['dom/nodes/gone.html'], undefined, 'none of the old carried over');
   });
 });
 
 test('--check fails where a recorded file was not run, with a filter too', () => {
   inTemp('missing', (root) => {
-    const at = checkout(root);
+    checkout(root);
     assert.equal(node(root, 'run.mjs', '--update').status, 0);
-    rmSync(join(at, 'dom', 'nodes', 'a.html'));
+    const path = join(root, 'expectations.json');
+    const recorded = JSON.parse(readFileSync(path, 'utf8'));
+    recorded.files['dom/nodes/gone.html'] = recorded.files['dom/nodes/a.html'];
+    writeFileSync(path, JSON.stringify(recorded));
     const run = node(root, 'run.mjs', '--check');
     assert.equal(run.status, 1, run.out);
     assert.match(run.out, /expected, not run: 1/);
@@ -133,27 +172,41 @@ test('--check fails where a recorded file was not run, with a filter too', () =>
 
 test('a test process that dies is a CRASH, which --check fails', () => {
   inTemp('crash', (root) => {
-    const at = checkout(root);
+    checkout(root);
     assert.equal(node(root, 'run.mjs', '--update').status, 0);
-    writeFileSync(join(at, 'dom', 'nodes', 'a.html'), page('process.exit(9);'));
-    const run = node(root, 'run.mjs', '--check');
+    const run = nodeWith({ CRASH: 'a' }, root, 'run.mjs', '--check');
     assert.equal(run.status, 1, run.out);
     assert.match(run.out, /CRASH dom\/nodes\/a\.html/);
   });
 });
 
-test('the runner refuses a checkout that is missing, of another commit, or not whole', () => {
+test('the runner refuses a checkout that is missing, of another commit, changed or not whole', () => {
   inTemp('refuse', (root) => {
-    const missing = node(root, 'run.mjs', '--check');
-    assert.equal(missing.status, 2, missing.out);
-    assert.match(missing.out, /the tests are not fetched/);
+    const refused = (run: { status: number | null; out: string }) => {
+      assert.equal(run.status, 2, run.out);
+      assert.match(run.out, /the tests are not fetched/);
+    };
+    refused(node(root, 'run.mjs', '--check'));
 
     const at = checkout(root, { commit: 'another' });
-    assert.match(node(root, 'run.mjs', '--check').out, /the tests are not fetched/);
+    refused(node(root, 'run.mjs', '--check'));
 
+    // Stamped as fetched at the pinned commit, and checked out at another since.
     checkout(root);
+    const pinned = commitOf(root);
+    gitIn(at, 'commit', '--quiet', '--allow-empty', '-m', 'moved');
+    refused(nodeWith({ WPT_COMMIT: pinned }, root, 'run.mjs', '--check'));
+
+    // A test changed, a file added and the harness gone are each not what was fetched.
+    checkout(root);
+    writeFileSync(join(at, 'dom', 'nodes', 'a.html'), twoTests('b'));
+    refused(node(root, 'run.mjs', '--check'));
+    gitIn(at, 'checkout', '--', '.');
+    writeFileSync(join(at, 'dom', 'nodes', 'c.html'), twoTests('c'));
+    refused(node(root, 'run.mjs', '--check'));
+    rmSync(join(at, 'dom', 'nodes', 'c.html'));
     rmSync(join(at, 'resources', 'testharness.js'));
-    assert.match(node(root, 'run.mjs', '--check').out, /the tests are not fetched/);
+    refused(node(root, 'run.mjs', '--check'));
 
     checkout(root);
     rmSync(join(at, SUITES.at(-1)), { recursive: true });
@@ -161,6 +214,60 @@ test('the runner refuses a checkout that is missing, of another commit, or not w
     assert.equal(partial.status, 2, partial.out);
     assert.match(partial.out, /wpt run failed: ENOENT/);
   });
+});
+
+test('a count that is not a whole number above nothing is refused, not run on', () => {
+  inTemp('options', (root) => {
+    checkout(root);
+    for (const flag of ['--batch=0', '--batch=-1', '--batch=many', '--timeout=0', '--hang=1.5']) {
+      const run = node(root, 'run.mjs', flag);
+      assert.equal(run.status, 2, `${flag}: ${run.out}`);
+      assert.match(run.out, /must be a whole number above 0/);
+    }
+  });
+});
+
+test('a page with a module script is skipped, not run as a classic one', () => {
+  inTemp('module', (root) => {
+    const module = page('').replace('<script>', '<script type="module">');
+    checkout(
+      root,
+      {},
+      { 'm.html': `${module}<script>test(function () {}, 'one'); done();</script>` },
+    );
+    const run = node(root, 'run.mjs', '--update');
+    assert.equal(run.status, 0, run.out);
+    const recorded = JSON.parse(readFileSync(join(root, 'expectations.json'), 'utf8'));
+    assert.equal(recorded.files['dom/nodes/m.html'], undefined, run.out);
+    assert.ok(recorded.files['dom/nodes/a.html']);
+    assert.match(run.out, /module script/);
+  });
+});
+
+test('a page that loads a script from outside the checkout is skipped, not run', () => {
+  inTemp('outside', (root) => {
+    const outside = '<script src="../../../outside.js"></script>';
+    checkout(root, {}, { 'o.html': page('').replace('<script></script>', outside) });
+    writeFileSync(join(root, 'cache', 'outside.js'), "test(function () {}, 'one'); done();");
+    const run = node(root, 'run.mjs', '--update');
+    assert.equal(run.status, 0, run.out);
+    const recorded = JSON.parse(readFileSync(join(root, 'expectations.json'), 'utf8'));
+    assert.equal(recorded.files['dom/nodes/o.html'], undefined, run.out);
+    assert.match(run.out, /loads a script outside the checkout/);
+  });
+});
+
+test('a path that climbs out of the checkout, or an encoded slash hides climbing, is not in it', () => {
+  assert.equal(inCheckout('dom/nodes/a.html'), join(CHECKOUT, 'dom/nodes/a.html'));
+  // What a frame's URL is read as, with `%2f` decoded after the URL took out its own `..`.
+  const frame = new URL('http://web-platform.test:8000/dom/..%2f..%2foutside.html');
+  for (const path of [
+    '../outside.js',
+    'dom/../../outside.js',
+    decodeURIComponent(frame.pathname),
+  ]) {
+    assert.equal(inCheckout(path), undefined, path);
+  }
 });
 
 test('--check refuses to run with no expectations to check against', () => {
@@ -178,6 +285,22 @@ test('a fetch that fails exits non-zero and leaves no stamp', () => {
     assert.equal(fetched.status, 1, fetched.out);
     assert.match(fetched.out, /wpt fetch failed/);
     assert.match(node(root, 'run.mjs', '--check').out, /the tests are not fetched/);
+  });
+});
+
+test('a fetch run from a path a URL escapes still runs, and fails closed', () => {
+  inTemp('escaped', (root) => {
+    const at = join(root, 'a #1 %20');
+    mkdirSync(at);
+    for (const script of ['fetch.mjs', 'pin.mjs']) {
+      writeFileSync(join(at, script), readFileSync(join(HERE, script)));
+    }
+    const ran = spawnSync(process.execPath, [join(at, 'fetch.mjs')], {
+      encoding: 'utf8',
+      env: { ...process.env, WPT_CACHE: join(root, 'cache'), WPT_REPOSITORY: join(root, 'none') },
+    });
+    assert.equal(ran.status, 1, `${ran.stdout}${ran.stderr}`);
+    assert.match(ran.stderr, /wpt fetch failed/);
   });
 });
 

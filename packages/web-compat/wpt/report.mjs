@@ -61,10 +61,13 @@ export function writeExpectations(commit, files) {
  */
 function change(path, was, now) {
   if (!was) return { path, kind: 'new' };
-  const fewer = now.pass < was.pass || (now.pass === was.pass && now.passed !== was.passed);
-  if (fewer || lostOne(was, now)) return { path, kind: 'failing', was, now };
-  // Passing more of other subtests is no gain anything can vouch for: it is told as a change.
+  // Passing more, or as many, of other subtests is nothing anything can vouch for: it is told
+  // as a change.
   const others = was.names !== undefined && was.names !== now.names;
+  const swapped = now.pass === was.pass && now.passed !== was.passed && !others;
+  if (now.pass < was.pass || swapped || lostOne(was, now)) {
+    return { path, kind: 'failing', was, now };
+  }
   if (now.pass > was.pass && !others) return { path, kind: 'passing', was, now };
   if (others) return { path, kind: 'changed', was, now };
   // As many passing, the same ones, and more or fewer subtests failing.

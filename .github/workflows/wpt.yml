@@ -2,53 +2,43 @@ name: Web Platform Tests
 
 # `@ng-native/web-compat` against the Web Platform Tests it records expectations for
 # (packages/web-compat/wpt). `--check` fails where a file passes less than recorded, and as much
-# where it passes more or ended another way: an improvement is recorded with `--update` in the
+# where it passes more or has other subtests: an improvement is recorded with `--update` in the
 # change that made it, so the expectations never go stale.
 #
-# Only when what the tests exercise changed: the package, the engine's CSS (the cascade and what
-# reads a value out of it, which web-compat's styles and computed style are built on), the
-# layout the page is laid out with, and the runner's own workflow.
+# Only when what the tests run on changed: the package, the engine and the renderer under it,
+# the layout the page is laid out with, the testing package and the loader the runner starts its
+# processes with, the lockfile, and this workflow and the setup it uses.
 on:
   push:
     branches: [main]
     paths:
       - 'packages/web-compat/**'
       - '!packages/web-compat/**/*.md'
-      - 'packages/fabric/src/css*.ts'
-      - 'packages/fabric/src/engine.ts'
-      - 'packages/fabric/src/element-styles.ts'
-      - 'packages/fabric/src/inline-*.ts'
-      - 'packages/fabric/src/color-mix.ts'
-      - 'packages/fabric/src/relative-colour.ts'
-      - 'packages/fabric/src/background-layers.ts'
-      - 'packages/fabric/src/premultiplied-stops.ts'
-      - 'packages/fabric/src/font-faces.ts'
-      - 'packages/fabric/src/transition.ts'
+      - 'packages/fabric/src/**'
+      - 'packages/platform/src/**'
       - 'packages/integration-tests/laid-out-fabric.ts'
       - 'packages/integration-tests/layout.ts'
       - 'packages/testing/src/**'
+      - 'packages/testing/runner/**'
+      - 'packages/testing/package.json'
       - 'pnpm-lock.yaml'
       - '.github/workflows/wpt.yml'
+      - '.github/actions/setup/**'
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review]
     paths:
       - 'packages/web-compat/**'
       - '!packages/web-compat/**/*.md'
-      - 'packages/fabric/src/css*.ts'
-      - 'packages/fabric/src/engine.ts'
-      - 'packages/fabric/src/element-styles.ts'
-      - 'packages/fabric/src/inline-*.ts'
-      - 'packages/fabric/src/color-mix.ts'
-      - 'packages/fabric/src/relative-colour.ts'
-      - 'packages/fabric/src/background-layers.ts'
-      - 'packages/fabric/src/premultiplied-stops.ts'
-      - 'packages/fabric/src/font-faces.ts'
-      - 'packages/fabric/src/transition.ts'
+      - 'packages/fabric/src/**'
+      - 'packages/platform/src/**'
       - 'packages/integration-tests/laid-out-fabric.ts'
       - 'packages/integration-tests/layout.ts'
       - 'packages/testing/src/**'
+      - 'packages/testing/runner/**'
+      - 'packages/testing/package.json'
       - 'pnpm-lock.yaml'
       - '.github/workflows/wpt.yml'
+      - '.github/actions/setup/**'
   workflow_dispatch:
 
 permissions:
@@ -84,9 +74,9 @@ jobs:
           path: packages/web-compat/wpt/.cache/
           key: wpt-${{ steps.pin.outputs.commit }}-${{ hashFiles('packages/web-compat/wpt/pin.mjs') }}
 
-      # Always: it does nothing on a checkout it stamped as whole, and fetches again otherwise. It
-      # exits non-zero on a fetch that failed or came back short, and the runner does not run
-      # without its stamp.
+      # Always: it does nothing on a checkout it stamped as whole that is still at the pinned commit
+      # with nothing changed, and fetches again otherwise. It exits non-zero on a fetch that failed
+      # or came back short, and the runner does not run without its stamp.
       - run: node packages/web-compat/wpt/fetch.mjs
 
       - if: steps.cache.outputs.cache-hit != 'true'

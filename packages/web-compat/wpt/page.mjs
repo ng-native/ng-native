@@ -11,7 +11,9 @@
 import { parse } from 'parse5';
 
 const HTML = 'http://www.w3.org/1999/xhtml';
-const JAVASCRIPT = /^(|module|(text|application)\/(java|ecma)script)$/i;
+/** A classic script's type. A module script is not run: `tests.mjs` skips the page it is on. */
+const JAVASCRIPT = /^(|(text|application)\/(java|ecma)script)$/i;
+const MODULE = /^[\t\n\f\r ]*module[\t\n\f\r ]*$/i;
 const SPACE = /^[\t\n\f\r ]*$/;
 /** What holds text that is not markup: given it whole as it ends, as the page wrote it. */
 const RAW = new Set(
@@ -35,6 +37,19 @@ export function scriptSources(source) {
     if (src) found.push(src.value);
   }
   return found;
+}
+
+/**
+ * Whether a page has a module script, which imports, has a scope of its own and runs after the
+ * page is parsed, none of which the classic scripts here do.
+ */
+export function hasModuleScript(source) {
+  for (const element of elementsOf(parse(source))) {
+    if (element.tagName !== 'script') continue;
+    const type = element.attrs.find(({ name }) => name === 'type');
+    if (type && MODULE.test(type.value)) return true;
+  }
+  return false;
 }
 
 /** An element's attributes as parse5 has them. */

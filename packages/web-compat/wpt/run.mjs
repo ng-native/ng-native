@@ -19,7 +19,7 @@
  *   was on recorded as a CRASH. `--batch=100` is how many files a process runs before a new one.
  *
  * One process at a time. The tests are fetched by `fetch.mjs`, and nothing runs from a checkout
- * that is not the pinned commit, whole.
+ * that is not the pinned commit, whole and unchanged.
  */
 import { fork } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
@@ -38,7 +38,13 @@ function options(argv) {
   const flags = argv.filter((arg) => arg.startsWith('--'));
   const number = (name, otherwise) => {
     const flag = flags.find((each) => each.startsWith(`--${name}=`));
-    return flag ? Number(flag.slice(name.length + 3)) : otherwise;
+    if (!flag) return otherwise;
+    // A batch of none would fork a process a turn for good, and a time of none ends every file.
+    const value = Number(flag.slice(name.length + 3));
+    if (!Number.isInteger(value) || value < 1) {
+      throw new Error(`${flag}: --${name} must be a whole number above 0`);
+    }
+    return value;
   };
   return {
     filters: argv.filter((arg) => !arg.startsWith('--')),
@@ -213,7 +219,9 @@ function expectations(opts) {
 async function main() {
   const opts = options(process.argv.slice(2));
   if (!fetched()) {
-    throw new Error(`the tests are not fetched at ${COMMIT}: run node wpt/fetch.mjs`);
+    throw new Error(
+      `the tests are not fetched at ${COMMIT}, or changed since: run node wpt/fetch.mjs`,
+    );
   }
   const { run, skipped, support } = plan(opts.filters);
   if (!run.length) throw new Error('no test matches: nothing was run');

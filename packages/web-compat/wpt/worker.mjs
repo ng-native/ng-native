@@ -31,7 +31,7 @@ import { layOutFabric } from '../../integration-tests/laid-out-fabric.ts';
 import { Page } from './host.ts';
 import { CHECKOUT } from './pin.mjs';
 import { buildPage } from './page.mjs';
-import { isReport, metaOf, resolveScript } from './tests.mjs';
+import { inCheckout, isReport, metaOf, resolveScript } from './tests.mjs';
 
 /**
  * A module of the package that is not there in every version of it: the address a page is at
@@ -75,8 +75,8 @@ function loadFrame(url) {
   if (!url.startsWith(`${ORIGIN}/`)) return undefined;
   const path = decodeURIComponent(new URL(url).pathname.slice(1));
   if (/\.py$|\.sub\./.test(path)) return undefined;
-  const file = join(CHECKOUT, path);
-  if (!existsSync(file) || !statSync(file).isFile()) return undefined;
+  const file = inCheckout(path);
+  if (!file || !existsSync(file) || !statSync(file).isFile()) return undefined;
   const headers = existsSync(`${file}.headers`) ? readFileSync(`${file}.headers`, 'utf8') : '';
   const said = /^content-type:\s*(.+)$/im.exec(headers)?.[1]?.trim();
   const extension = path.slice(path.lastIndexOf('.') + 1).toLowerCase();
@@ -136,7 +136,9 @@ const loaded = new Map();
 function scriptAt(path) {
   let script = loaded.get(path);
   if (script === undefined) {
-    script = hoist(readFileSync(join(CHECKOUT, path), 'utf8'));
+    const file = inCheckout(path);
+    if (!file) throw new Error(`${path} is outside the checkout`);
+    script = hoist(readFileSync(file, 'utf8'));
     loaded.set(path, script);
   }
   return script;
@@ -458,10 +460,12 @@ async function runFile(path, limit) {
     return { status: 'CRASH', message: short(describe(error)), subtests: file.finished, ms: 0 };
   } finally {
     current = undefined;
-    untrack();
     emptyPage();
     if (before) restore(before);
     if (prototypes) restorePrototypes(prototypes);
+    // After the global object is put back: the snapshot was taken with the timers tracked, and
+    // would put the tracking back where this has just taken it away.
+    untrack();
     try {
       await cleanup();
     } catch {

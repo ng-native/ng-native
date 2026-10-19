@@ -4,11 +4,20 @@
  *
  * Fails closed. A fetch that fails, a checkout that is another commit, a directory that came
  * back empty or a file git lists that is not on disk all exit non-zero and leave no stamp, and
- * the runner does not run without the stamp.
+ * the runner does not run without the stamp, nor from a checkout changed since it was stamped.
  */
 import { execFileSync } from 'node:child_process';
-import { existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import {
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  realpathSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from 'node:fs';
 import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { CACHE, CHECKOUT, COMMIT, REPOSITORY, STAMP, SUITES, SUPPORT } from './pin.mjs';
 
 const gitIn = (checkout, ...args) =>
@@ -24,16 +33,19 @@ const wanted = () => ({ commit: COMMIT, paths: [...SUITES, ...SUPPORT] });
 
 /**
  * Whether the checkout is the one `pin.mjs` asks for, whole: a fetch finished, it was of this
- * commit and these directories, and the checkout it stamped is still there.
+ * commit and these directories, and the checkout it stamped is still at that commit with nothing
+ * changed, added or taken away. Git answers that from its index in well under a second, where
+ * `verify` reads every file.
  */
 export function fetched() {
   if (!existsSync(STAMP)) return false;
   try {
     const { files, ...stamped } = JSON.parse(readFileSync(STAMP, 'utf8'));
+    if (!(files > 0) || JSON.stringify(stamped) !== JSON.stringify(wanted())) return false;
+    const quiet = (...args) =>
+      execFileSync('git', ['-C', CHECKOUT, ...args], { encoding: 'utf8', stdio: 'pipe' });
     return (
-      files > 0 &&
-      JSON.stringify(stamped) === JSON.stringify(wanted()) &&
-      existsSync(join(CHECKOUT, 'resources/testharness.js'))
+      quiet('rev-parse', 'HEAD').trim() === COMMIT && quiet('status', '--porcelain').trim() === ''
     );
   } catch {
     return false;
@@ -94,7 +106,7 @@ function main() {
   console.log(`fetched wpt ${COMMIT.slice(0, 12)}: ${files} files`);
 }
 
-if (import.meta.url === new URL(process.argv[1], 'file:').href) {
+if (process.argv[1] && realpathSync(process.argv[1]) === fileURLToPath(import.meta.url)) {
   try {
     main();
   } catch (error) {

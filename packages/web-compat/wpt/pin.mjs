@@ -11,8 +11,11 @@ import { fileURLToPath } from 'node:url';
 /** Where the tests are fetched from. `WPT_REPOSITORY` replaces it, for the fetch's own tests. */
 export const REPOSITORY = process.env.WPT_REPOSITORY || 'https://github.com/web-platform-tests/wpt';
 
-/** The commit of `web-platform-tests/wpt` the expectations were recorded against. */
-export const COMMIT = '6dcecaab61b33a51e04f49be43941461808193cc';
+/**
+ * The commit of `web-platform-tests/wpt` the expectations were recorded against. `WPT_COMMIT`
+ * replaces it, for the runner's own tests.
+ */
+export const COMMIT = process.env.WPT_COMMIT || '6dcecaab61b33a51e04f49be43941461808193cc';
 
 /** The directories whose tests are run. */
 export const SUITES = [
