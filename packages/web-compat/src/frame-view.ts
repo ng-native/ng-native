@@ -258,6 +258,8 @@ const sizeBy =
 const ATTRIBUTES: Readonly<Record<string, Take>> = {
   src: (view, given, engine) => {
     view.src = given;
+    // The page it goes to is the one it is at, before it has loaded: see `originOf`.
+    if (view.srcdoc === null) view.url = pendingUrl(view);
     showSource(view, given, engine);
   },
   srcdoc: (view, given, engine) => {
@@ -307,6 +309,12 @@ const ATTRIBUTES: Readonly<Record<string, Take>> = {
   credentialless: leftOutBy('credentialless'),
   allowpaymentrequest: leftOutBy('allowpaymentrequest'),
 };
+
+/** The address `src` names, resolved against the page's, or a blank page for none. */
+function pendingUrl(view: FrameView): string {
+  const base = String((view.node as unknown as { baseURI?: string }).baseURI ?? '');
+  return (view.src ? parseUrl(view.src, base)?.href : undefined) ?? 'about:blank';
+}
 
 /** What the view shows: what `srcdoc` holds, or the page `src` names, or an empty page. */
 function sourceOf(view: FrameView): Record<string, unknown> {
@@ -428,12 +436,17 @@ function windowFor(view: FrameView): object {
           : ((options as { targetOrigin?: string } | undefined)?.targetOrigin ?? '/');
       const origin = originOf(view);
       if (!addressed(target, origin, pageOrigin())) return;
-      // Asked again of the page itself, which may have gone elsewhere since it last said where.
-      const wanted = JSON.stringify(target === '*' || origin === pageOrigin() ? null : origin);
+      // Asked again of the page itself, which may have gone elsewhere since it last said where, or
+      // not yet have gone where it is going. What is for the app's own origin is for a page with
+      // it, or one with no web origin, as what `srcdoc` holds reads on Android: not a page of
+      // another site still there.
+      const wanted = JSON.stringify(target === '*' ? null : origin);
+      const own = origin === pageOrigin();
       const json = JSON.stringify({ data: message }) ?? '{}';
       engine.dispatchCommand(node, 'injectJavaScript', [
         // The source is set after: a browser's event takes none but a window or a port.
-        `(function () { if (${wanted} !== null && window.location.origin !== ${wanted}) return; ` +
+        `(function () { var at = window.location; if (${wanted} !== null && at.origin !== ` +
+          `${wanted} && !(${own} && !/^https?:$/.test(at.protocol))) return; ` +
           `var data = JSON.parse(${JSON.stringify(json)}).data; ` +
           `var event = new MessageEvent('message', { data: data, ` +
           `origin: ${JSON.stringify(pageOrigin())} }); ` +

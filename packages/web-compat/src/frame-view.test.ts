@@ -336,6 +336,43 @@ describe('iframe as a web view', () => {
     assert.equal(messages[0].source, iframe.contentWindow);
   });
 
+  it('sends nothing for the app to a page of another origin that is still loading', async () => {
+    installWebView();
+    const { document, fabric } = await page();
+    const iframe = await framed(document, { src: 'https://video.example/embed' });
+    const sent = () => fabric.commands.filter((each) => each.name === 'injectJavaScript');
+    // Before it has loaded, the frame is at the page it is going to, not the app's.
+    iframe.contentWindow.postMessage('secret', '/');
+    assert.equal(sent().length, 0);
+    iframe.contentWindow.postMessage('hello', 'https://video.example');
+    assert.equal(sent().length, 1);
+  });
+
+  it('delivers what is for the app to what srcdoc holds, and not to the page it replaces', async () => {
+    installWebView();
+    const { document, fabric } = await page();
+    const iframe = await framed(document, { srcdoc: '<p>Hi</p>' });
+    const sent = () => fabric.commands.filter((each) => each.name === 'injectJavaScript');
+    iframe.contentWindow.postMessage('secret', '/');
+    assert.equal(sent().length, 1);
+    const heard: Dom[] = [];
+    const deliverAt = (location: { origin: string; protocol: string }) =>
+      runInNewContext(String(sent()[0]!.args[0]), {
+        window: { parent: {}, location, dispatchEvent: (event: Dom) => heard.push(event) },
+        MessageEvent: class {
+          constructor(type: string, init: object) {
+            Object.assign(this, { type }, init);
+          }
+        },
+      });
+    // The page of another site the frame showed, until what srcdoc holds has loaded.
+    deliverAt({ origin: 'https://video.example', protocol: 'https:' });
+    assert.equal(heard.length, 0);
+    // What srcdoc holds, with no web origin, as Android loads it.
+    deliverAt({ origin: 'null', protocol: 'about:' });
+    assert.equal(heard.length, 1);
+  });
+
   it("gives a srcdoc frame that goes to a web address that address's origin", async () => {
     installWebView();
     const { document, fabric } = await page();
