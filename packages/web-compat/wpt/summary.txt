@@ -3,45 +3,45 @@ wpt 6dcecaab61b33a51e04f49be43941461808193cc, every suite, 2000 ms a file
 
 PASS RATE
 suite                                                                          files run  all passing  files skipped  subtests passed  of     rate
-dom/nodes                                                                      347        167 (48.1%)  129            7248             8912   81.3%
-dom/events                                                                     99         24 (24.2%)   91             206              720    28.6%
+dom/nodes                                                                      347        195 (56.2%)  129            11903            12949  91.9%
+dom/events                                                                     99         59 (59.6%)   91             439              731    60.1%
 dom/collections                                                                12         10 (83.3%)   1              56               60     93.3%
-css/selectors                                                                  223        92 (41.3%)   618            4122             4625   89.1%
-html/canvas/element                                                            1091       0 (0.0%)     658            0                1255   0.0%
-css/cssom                                                                      257        152 (59.1%)  36             1725             1967   87.7%
-uievents                                                                       15         0 (0.0%)     104            0                54     0.0%
-dom/traversal                                                                  18         15 (83.3%)   10             1600             1608   99.5%
-html/dom                                                                       211        47 (22.3%)   166            62514            64370  97.1%
-html/editing/the-hidden-attribute                                              10         2 (20.0%)    15             19               42     45.2%
-html/interaction/focus/sequential-focus-navigation-and-the-tabindex-attribute  3          1 (33.3%)    4              5                10     50.0%
-css/cssom-view                                                                 220        19 (8.6%)    27             321              1512   21.2%
-resize-observer                                                                32         0 (0.0%)     7              0                13     0.0%
-intersection-observer                                                          137        2 (1.5%)     17             46               226    20.4%
-domparsing                                                                     68         20 (29.4%)   20             603              1826   33.0%
+css/selectors                                                                  223        126 (56.5%)  618            4670             5665   82.4%
+html/canvas/element                                                            1091       747 (68.5%)  658            799              1257   63.6%
+css/cssom                                                                      257        155 (60.3%)  36             1757             1972   89.1%
+uievents                                                                       15         10 (66.7%)   104            44               56     78.6%
+dom/traversal                                                                  18         16 (88.9%)   10             1602             1608   99.6%
+html/dom                                                                       211        56 (26.5%)   166            63892            64450  99.1%
+html/editing/the-hidden-attribute                                              10         2 (20.0%)    15             20               42     47.6%
+html/interaction/focus/sequential-focus-navigation-and-the-tabindex-attribute  3          1 (33.3%)    4              8                10     80.0%
+css/cssom-view                                                                 220        47 (21.4%)   27             682              1713   39.8%
+resize-observer                                                                32         7 (21.9%)    7              16               48     33.3%
+intersection-observer                                                          137        27 (19.7%)   17             145              337    43.0%
+domparsing                                                                     68         21 (30.9%)   20             614              1856   33.1%
 html/syntax/serializing-html-fragments                                         8          6 (75.0%)    1              368              375    98.1%
-html/syntax/parsing                                                            65         21 (32.3%)   20             2549             2631   96.9%
-html/syntax/parsing-html-fragments                                             13         1 (7.7%)     3              10               25     40.0%
+html/syntax/parsing                                                            65         22 (33.8%)   20             2671             2739   97.5%
+html/syntax/parsing-html-fragments                                             13         2 (15.4%)    3              13               25     52.0%
 
 "all passing" is a file whose harness finished and every subtest passed.
 
 HOW EACH FILE ENDED
-dom/nodes: ERROR 6, OK 306, TIMEOUT 35
-dom/events: ERROR 6, OK 81, TIMEOUT 12
+dom/nodes: ERROR 5, OK 329, TIMEOUT 13
+dom/events: ERROR 3, OK 90, TIMEOUT 6
 dom/collections: OK 12
-css/selectors: ERROR 16, OK 202, TIMEOUT 5
-html/canvas/element: ERROR 1, OK 1090
-css/cssom: ERROR 17, OK 225, TIMEOUT 15
-uievents: ERROR 3, OK 11, TIMEOUT 1
-dom/traversal: OK 17, TIMEOUT 1
-html/dom: ERROR 48, OK 152, TIMEOUT 11
-html/editing/the-hidden-attribute: ERROR 5, OK 5
-html/interaction/focus/sequential-focus-navigation-and-the-tabindex-attribute: ERROR 1, OK 1, TIMEOUT 1
-css/cssom-view: ERROR 30, OK 172, TIMEOUT 18
-resize-observer: ERROR 20, OK 9, TIMEOUT 3
-intersection-observer: ERROR 15, OK 72, TIMEOUT 50
-domparsing: ERROR 9, OK 51, TIMEOUT 8
+css/selectors: ERROR 14, OK 209
+html/canvas/element: OK 1089, TIMEOUT 2
+css/cssom: ERROR 15, OK 231, TIMEOUT 11
+uievents: OK 15
+dom/traversal: OK 18
+html/dom: ERROR 47, OK 153, TIMEOUT 11
+html/editing/the-hidden-attribute: OK 5, TIMEOUT 5
+html/interaction/focus/sequential-focus-navigation-and-the-tabindex-attribute: ERROR 1, OK 2
+css/cssom-view: ERROR 17, OK 189, TIMEOUT 14
+resize-observer: ERROR 1, OK 24, TIMEOUT 7
+intersection-observer: ERROR 14, OK 119, TIMEOUT 4
+domparsing: ERROR 9, OK 56, TIMEOUT 3
 html/syntax/serializing-html-fragments: OK 8
-html/syntax/parsing: ERROR 5, OK 43, TIMEOUT 17
+html/syntax/parsing: ERROR 4, OK 60, TIMEOUT 1
 html/syntax/parsing-html-fragments: OK 13
 
 SKIPPED
@@ -147,212 +147,207 @@ html/syntax/parsing-html-fragments: 13 support files, not tests
       2  no testharness (a reference, visual or print page)
       1  XML document (the runner reads HTML only)
 
-FAILURES BY CAUSE (9198 failures in 282 causes; the first 60)
+FAILURES BY CAUSE (6401 failures in 259 causes; the first 60)
 A failure is a subtest that did not pass, or a file that did not run to its end.
-  1. 1843 in 205 files: assert_equals: wrong value
-       dom/nodes/Document-cloneNode-base-url-xml.window.js: Clone of an XHTML document with a <base>: assert_equals: source expected "http://example.com/foo/bar" but got "about:blank"
-       dom/nodes/Document-cloneNode-base-url.window.js: Deep clone of a document with a <base>: assert_equals: source expected "http://example.com/foo/bar" but got "about:blank"
-       dom/nodes/Document-constructor.html: new Document(): metadata: assert_equals: expected function "class Element { static [Symbol.hasInstance](value ) { return isEngineNode(value); } }" but got function "class RetainedNode { static { Objec
-  2. 1246 in 1088 files: canvas.getContext is not a function
-       html/canvas/element/2d.conformance.requirements.basics.html: void methods return undefined: canvas.getContext is not a function
-       html/canvas/element/2d.conformance.requirements.delete.html: window.CanvasRenderingContext2D is Configurable: canvas.getContext is not a function
-       html/canvas/element/2d.conformance.requirements.drawings.html: void methods return undefined: canvas.getContext is not a function
-  3. 1007 in 89 files: subtest NOTRUN
-       dom/nodes/Document-characterSet-normalization-1.html: Name "UTF-8" has label "unicode-1-1-utf-8" (characterSet): NOTRUN
-       dom/nodes/Document-characterSet-normalization-2.html: Name "KOI8-R" has label "cskoi8r" (characterSet): NOTRUN
-       dom/nodes/Document-cloneNode-about-base-url.window.js: Deep clone of an about:blank document: NOTRUN
-  4. 560 in 151 files: assert_equals: got undefined
-       dom/nodes/DOMImplementation-createDocument-no-browsing-context.html: createHTMLDocument: iframe should not load in a document without a browsing context: assert_equals: contentWindow should be null before setting src expected (object) null but got (undefined) undefined
-       dom/nodes/Document-adoptNode.html: Adopting an Element should adopt its Attr nodes.: assert_equals: expected (object) Document node with 2 children but got (undefined) undefined
-       dom/nodes/Node-mutation-adoptNode.html: Adopting an element into a different document update's the element's owner doc as well as the owner docs of it's attributes: assert_equals: expected (object) Document node with 2 children but got (und
-  5. 490 in 4 files: Cannot read properties of undefined (reading 'documentElement')
-       dom/nodes/Document-createElement.html: createElement(undefined) in XML document: Cannot read properties of undefined (reading 'documentElement')
-       dom/nodes/Document-createElementNS.html: createElementNS test in XML document: null,null,null: Cannot read properties of undefined (reading 'documentElement')
-       css/cssom/getComputedStyle-detached-subtree.html: (file ERROR) TypeError: Cannot read properties of undefined (reading 'documentElement')
-  6. 337 in 68 files: .attachShadow is not a function
+  1. 2157 in 443 files: assert_equals: wrong value
+       dom/nodes/Comment-constructor.html: new Comment() should get the correct ownerDocument across globals: assert_equals: expected Document node with 1 child but got Document node with 2 children
+       dom/nodes/Document-URL.html: Document.URL with redirect: assert_equals: expected "http://web-platform.test:8000/common/blank.html" but got "about:blank"
+       dom/nodes/Document-characterSet-normalization-1.html: Name "IBM866" has label "866" (characterSet): assert_equals: expected "IBM866" but got "UTF-8"
+  2. 506 in 5 files: Cannot read properties of null (reading 'cssRules')
+       css/selectors/attribute-selectors/attribute-case/semantics.html: [foo='BAR'] /* sanity check (match) */ <div foo="BAR"> in standards mode: Cannot read properties of null (reading 'cssRules')
+       css/selectors/attribute-selectors/attribute-case/syntax.html: [foo='BAR'] /* sanity check (valid) */ in standards mode: Cannot read properties of null (reading 'cssRules')
+       css/cssom/CSSStyleSheet-modify-after-removal.html: Modify sheet from removed iframe: Cannot read properties of null (reading 'cssRules')
+  3. 340 in 71 files: .attachShadow is not a function
        dom/nodes/Document-adoptNode-DocumentFragment-with-host.window.js: adoptNode() shadow root: throws HierarchyRequestError: host.attachShadow is not a function
        dom/nodes/Node-isConnected-shadow-dom.html: Node.isConnected in a closed shadow tree: host.attachShadow is not a function
        dom/nodes/ParentNode-querySelector-host-pseudo-class.html: Using :host pseudo-class selector in shadow DOM: section.attachShadow is not a function
-  7. 268 in 3 files: unhandled rejection: TypeError: placeholder[method] is not a function
+  4. 268 in 3 files: unhandled rejection: TypeError: placeholder[method] is not a function
        domparsing/tentative/stream-html-defer-async-script.html: element.streamAppendHTMLUnsafe with defer/async scripts: promise_test: Unhandled rejection with value: object "TypeError: placeholder[method] is not a function"
        domparsing/tentative/stream-html-run-scripts-option.html: element.streamAppendHTMLUnsafe with runScripts: true: promise_test: Unhandled rejection with value: object "TypeError: placeholder[method] is not a function"
        domparsing/tentative/stream-html-sanitizer.html: element.streamHTML with sanitizer {removeElements}: promise_test: Unhandled rejection with value: object "TypeError: placeholder[method] is not a function"
-  8. 200 in 1 files: assert_greater_than_equal: wrong value
-       css/cssom-view/scrollWidthHeight-negative-margin-002.html: scrollWidth with negative margins: display: flow-root; overflow: visible; direction: ltr; writing-mode: horizontal-tb; flex-direction: row;: assert_greater_than_equal: scrollWidth should be at least p
-  9. 191 in 132 files: Test timed out
-       dom/nodes/Comment-constructor.html: new Comment() should get the correct ownerDocument across globals: Test timed out
-       dom/nodes/Document-URL.html: Document.URL with redirect: Test timed out
-       dom/nodes/Document-cloneNode-about-base-url.window.js: An about:blank document inherits the initiator base URL: Test timed out
- 10. 177 in 177 files: file TIMEOUT
-       dom/nodes/Comment-constructor.html: (file TIMEOUT) 
-       dom/nodes/Document-URL.html: (file TIMEOUT) 
-       dom/nodes/Document-characterSet-normalization-1.html: (file TIMEOUT) 
- 11. 168 in 66 files: assert_true: wrong value
-       dom/nodes/attributes.html: toggleAttribute should lowercase its name argument (mixed case attribute): assert_true: expected true got false
-       dom/nodes/insertion-removing-steps/Node-appendChild-script-and-custom-from-fragment.html: An earlier-inserted script can upgrade a later-inserted custom element, whose upgrading is synchronously observable to the script, since DOM insertion has been completed by the time it runs: assert_tr
-       dom/nodes/insertion-removing-steps/insertion-removing-steps-iframe.window.js: Insertion steps: load event fires synchronously *after* iframe DOM insertion, as part of the iframe element's insertion steps: assert_true: iframe1 loaded expected true got false
- 12. 159 in 11 files: .click is not a function
-       dom/events/Event-dispatch-click.html: basic with click(): input.click is not a function
-       dom/events/Event-dispatch-click.tentative.html: disabled checkbox should not be checked from label click: label.click is not a function
-       dom/events/Event-dispatch-detached-input-and-change.html: detached checkbox should not emit input or change events on click().: input.click is not a function
- 13. 117 in 14 files: assert_equals: got null
-       dom/nodes/Document-createElement-namespace.html: Created element's namespace in created XHTML document by DOMParser ('application/xhtml+xml'): assert_equals: expected (string) "http://www.w3.org/1999/xhtml" but got (object) null
-       dom/nodes/attributes.html: setAttribute should set the first attribute with the given name: assert_equals: attributes[0]: namespaceURI expected (string) "ab" but got (object) null
-       dom/nodes/getElementById-namespaced-id.html: append a namespaced ID preserves ID lookup and form association: assert_equals: expected Element node <form id="unrelated"></form> but got null
- 14. 110 in 19 files: .scrollTo is not a function
-       css/cssom-view/background-change-during-smooth-scroll.html: (file ERROR) TypeError: container.scrollTo is not a function
-       css/cssom-view/element-scroll-arguments.html: scrollTo with 0 arguments: promise_test: Unhandled rejection with value: object "TypeError: container.scrollTo is not a function"
-       css/cssom-view/elementScroll.html: Element scrollTo test (two arguments): section.scrollTo is not a function
- 15. 102 in 59 files: .getBoundingClientRect is not a function
-       dom/nodes/moveBefore/child-style-preserve.html: Untitled: item.getBoundingClientRect is not a function
-       dom/nodes/moveBefore/continue-css-transition-left-pseudo.html: Node.moveBefore should preserve CSS transition state on pseudo-elements (left): promise_test: Unhandled rejection with value: object "TypeError: item.getBoundingClientRect is not a function"
-       dom/nodes/moveBefore/continue-css-transition-left.html: Node.moveBefore should preserve CSS transition state (left): promise_test: Unhandled rejection with value: object "TypeError: item.getBoundingClientRect is not a function"
- 16. 99 in 33 files: assert_array_equals: wrong value
+  5. 221 in 40 files: assert_array_equals: wrong value
        dom/nodes/Document-getElementsByTagName.html: Element in non-HTML namespace, prefix, lowercase name: assert_array_equals: lengths differ, expected array [] length 0, got object "[object HTMLCollection]" length 1
        dom/nodes/Document-getElementsByTagNameNS.html: getElementsByTagNameNS('http://www.w3.org/1999/xhtml', '*'): assert_array_equals: lengths differ, expected array [Element node <html class="platform-ios"><body><div id="log"></div> <sc..., Element nod
        dom/nodes/Element-children.html: HTMLCollection edge cases 1: assert_array_equals: lengths differ, expected array ["0", "1", "2", "3", "4", "5", "foo", "bar", "baz"] length 9, got ["0", "1", "2", "3", "4", "5", "foo", "bar", "baz", "
- 17. 83 in 2 files: unhandled rejection: TypeError: target[m.name] is not a function
+  6. 218 in 99 files: assert_true: wrong value
+       dom/nodes/Element-matches.html: In-document Element.matches: :target pseudo-class selector, matching the element referenced by the URL fragment identifier (with no refNodes): :target: assert_true: The element #target should match th
+       dom/nodes/Element-webkitMatchesSelector.html: In-document Element.webkitMatchesSelector: :target pseudo-class selector, matching the element referenced by the URL fragment identifier (with no refNodes): :target: assert_true: The element #target s
+       dom/nodes/ParentNode-querySelector-All.html: Document.querySelectorAll returns NodeList instance: assert_true: The result should be an instance of a NodeList expected true got false
+  7. 192 in 41 files: subtest NOTRUN
+       dom/nodes/Node-parentNode.html: Removed iframe: NOTRUN
+       dom/nodes/moveBefore/relevant-mutations.html: Moving <img> into a <picture> triggers a relevant mutation on the <img>, loading <source>: NOTRUN
+       dom/nodes/query-target-in-load-event.html: document.querySelector(":target") must work when called in the window.load event: NOTRUN
+  8. 186 in 65 files: assert_approx_equals: wrong value
+       html/canvas/element/color-type/2d.color.type.u8p3.to.u8srgb.to.u8p3.html: test srgb unorm8 canvas storing 8-bit display-p3 data accurately: assert_approx_equals: expected 116 +/- 2 but got 5
+       html/canvas/element/color-type/2d.color.type.u8srgb.to.u8p3.to.u8srgb.html: test display-p3 unorm8 canvas not storing 8-bit srgb data accurately: assert_approx_equals: expected 9 +/- 2 but got 5
+       html/canvas/element/drawing-images-to-the-canvas/2d.drawImage.animated.gif.html: drawImage() of an animated GIF draws the first frame: assert_approx_equals: Green channel of the pixel at (50, 25) expected 255 +/- 2 but got 0
+  9. 147 in 63 files: assert_equals: got undefined
+       dom/nodes/Document-adoptNode.html: Adopting an Element should adopt its Attr nodes.: assert_equals: expected (object) Document node with 2 children but got (undefined) undefined
+       dom/nodes/Node-mutation-adoptNode.html: Adopting an element into a different document update's the element's owner doc as well as the owner docs of it's attributes: assert_equals: expected (object) Document node with 2 children but got (und
+       dom/nodes/Node-properties.html: document.compatMode: assert_equals: expected (string) "CSS1Compat" but got (undefined) undefined
+ 10. 94 in 18 files: assert_equals: got null
+       dom/nodes/Document-createElement-namespace.html: Created element's namespace in created XHTML document by DOMParser ('application/xhtml+xml'): assert_equals: expected (string) "http://www.w3.org/1999/xhtml" but got (object) null
+       dom/nodes/attributes.html: setAttribute should set the first attribute with the given name: assert_equals: attributes[0]: namespaceURI expected (string) "ab" but got (object) null
+       dom/nodes/getElementById-namespaced-id.html: append a namespaced ID preserves ID lookup and form association: assert_equals: expected Element node <form id="unrelated"></form> but got null
+ 11. 83 in 2 files: unhandled rejection: TypeError: target[m.name] is not a function
        domparsing/tentative/stream-sanitizer-img-ctor.html: Sanitizer bypass check for streamHTML with default safe config: promise_test: Unhandled rejection with value: object "TypeError: target[m.name] is not a function"
        domparsing/tentative/stream-sanitizer-resource-fetch.html: streamHTML prevents server-observable resource fetch when src attribute is sanitized: promise_test: Unhandled rejection with value: object "TypeError: target[m.name] is not a function"
- 18. 82 in 30 files: document.createEvent is not a function
-       dom/nodes/Document-createEvent-touchevent.window.js: document.createEvent('TouchEvent') should throw if 'expose legacy touch event APIs' is false: assert_throws_dom: function "() => { document.createEvent(variant); }" threw object "TypeError: document.c
-       dom/events/CustomEvent.html: CustomEvent dispatching.: document.createEvent is not a function
-       dom/events/Event-cancelBubble.html: cancelBubble must be false when an event is initially created.: document.createEvent is not a function
- 19. 76 in 8 files: '..' is not a valid selector.
+ 12. 79 in 9 files: .getBoxQuads is not a function
+       css/cssom-view/cssom-geometryutils-element-types.html: getBoxQuads() bounds match getBoundingClientRect() for HTML element: element.getBoxQuads is not a function
+       css/cssom-view/cssom-geometryutils-fragmentation.html: getBoxQuads() returns every multicol fragment: fragmented.getBoxQuads is not a function
+       css/cssom-view/cssom-geometryutils-getBoxQuads-options.html: getBoxQuads({box: "margin"}) returns the requested CSS box: target.getBoxQuads is not a function
+ 13. 77 in 77 files: file TIMEOUT
+       dom/nodes/Document-contentType/contentType/contenttype_datauri_02.html: (file TIMEOUT) 
+       dom/nodes/MutationObserver-childList.html: (file TIMEOUT) 
+       dom/nodes/Node-parentNode.html: (file TIMEOUT) 
+ 14. 76 in 8 files: '..' is not a valid selector.
        css/selectors/class-prefix-selector-has-matching.tentative.html: :has(.foo-*) matches an element with a descendant, at any depth, whose class matches the prefix: ':has(.foo-*)' is not a valid selector.
        css/selectors/class-prefix-selector-matching-quirks.tentative.html: class="foo-bar" matches .foo-* in quirks mode: '.foo-*' is not a valid selector.
        css/selectors/class-prefix-selector-matching.tentative.html: class="foo-bar-baz" matches .foo-*: '.foo-*' is not a valid selector.
- 20. 67 in 7 files: .getBoxQuads is not a function
-       css/cssom-view/cssom-geometryutils-element-types.html: getBoxQuads() bounds match getBoundingClientRect() for HTML element: element.getBoxQuads is not a function
-       css/cssom-view/cssom-geometryutils-fragmentation.html: getBoxQuads({relativeTo}) works when relativeTo is a fragmented element: target.getBoxQuads is not a function
-       css/cssom-view/cssom-geometryutils-getBoxQuads-options.html: getBoxQuads({box: "margin"}) returns the requested CSS box: target.getBoxQuads is not a function
- 21. 66 in 3 files: Cannot set properties of undefined (setting 'scrollLeft')
-       css/cssom-view/scroll-behavior-main-frame-root.html: Main frame with auto scroll-behavior ; scroll() with default behavior: Cannot set properties of undefined (setting 'scrollLeft')
-       css/cssom-view/scroll-behavior-main-frame-window.html: Main frame with auto scroll-behavior ; scroll() with default behavior: Cannot set properties of undefined (setting 'scrollLeft')
-       css/cssom-view/scrollIntoView-root-overflow-clip.html: scrollIntoView scrolls the viewport when overflow-x: clip is applied to the root element: Cannot set properties of undefined (setting 'scrollLeft')
- 22. 60 in 1 files: unhandled rejection: TypeError: inner[method] is not a function
-       domparsing/tentative/stream-positional.html: streamAppendHTML({}) with A and B: promise_test: Unhandled rejection with value: object "TypeError: inner[method] is not a function"
- 23. 59 in 45 files: assert_false: wrong value
+ 15. 71 in 53 files: assert_false: wrong value
        dom/nodes/Document-createElementNS.html: Lower-case non-HTML element without a prefix: assert_false: Should not be an HTMLElement expected false got true
        dom/nodes/Document-getElementsByTagName.html: hasOwnProperty, getOwnPropertyDescriptor, getOwnPropertyNames: assert_false: expected false got true
        dom/nodes/Element-getElementsByTagName.html: hasOwnProperty, getOwnPropertyDescriptor, getOwnPropertyNames: assert_false: expected false got true
- 24. 52 in 8 files: .scroll is not a function
-       css/cssom-view/dom-element-scroll.html: Element test for having scrolling box: section1.scroll is not a function
-       css/cssom-view/elementScroll.html: Element scroll test (two arguments): section.scroll is not a function
-       css/cssom-view/scroll-back-to-initial-position.html: Element should scroll back to initial position with smooth behavior: scrollingElement.scroll is not a function
- 25. 49 in 7 files: window.scrollTo is not a function
-       css/cssom-view/position-sticky-root-scroller-with-scroll-behavior.html: Sticky elements work with the root (document) scroller: promise_test: Unhandled rejection with value: object "TypeError: window.scrollTo is not a function"
-       css/cssom-view/scroll-behavior-smooth-navigation.html: (file ERROR) TypeError: window.scrollTo is not a function
-       css/cssom-view/scrollIntoView-inline-image.html: Scrolling an inline element with a large line height uses the bounding rect: window.scrollTo is not a function
- 26. 47 in 6 files: assert_equals: expected a undefined, got a string
-       dom/nodes/Node-baseURI.html: For elements belonging to document, baseURI should be document URL: assert_equals: expected (undefined) undefined but got (string) "about:blank"
-       html/dom/reflection-forms-weekmonth.html: input.formAction: IDL get with DOM attribute unset: assert_equals: expected (undefined) undefined but got (string) "about:blank"
-       html/dom/reflection-forms.html: form.action: IDL get with DOM attribute unset: assert_equals: expected (undefined) undefined but got (string) "about:blank"
- 27. 45 in 11 files: document.createRange is not a function
+ 16. 66 in 60 files: Test timed out
+       dom/nodes/Document-contentType/contentType/contenttype_datauri_02.html: Data URI document.contentType === 'text/html' when data URI MIME type is set: Test timed out
+       dom/nodes/MutationObserver-childList.html: childList Node.replaceChild: self internal replacement mutation: Test timed out
+       dom/nodes/ParentNode-replaceChildren.html: There should be a MutationRecord for the node removed from another parent node.: Test timed out
+ 17. 60 in 54 files: Cannot read properties of undefined (reading 'ready')
+       html/canvas/element/text/2d.text.draw.align.center.html: textAlign center is the center of the em squares (not the bounding box): promise_test: Unhandled rejection with value: object "TypeError: Cannot read properties of undefined (reading 'ready')"
+       html/canvas/element/text/2d.text.draw.align.end.ltr.html: textAlign end with ltr is the right edge: promise_test: Unhandled rejection with value: object "TypeError: Cannot read properties of undefined (reading 'ready')"
+       html/canvas/element/text/2d.text.draw.align.end.rtl.html: textAlign end with rtl is the left edge: promise_test: Unhandled rejection with value: object "TypeError: Cannot read properties of undefined (reading 'ready')"
+ 18. 60 in 16 files: document.elementFromPoint is not a function
+       css/cssom-view/CaretPosition-001.html: Element at (400, 100): document.elementFromPoint is not a function
+       css/cssom-view/elementFromPoint-001.html: (file ERROR) TypeError: document.elementFromPoint is not a function
+       css/cssom-view/elementFromPoint-002.html: Checking whether dynamic changes to visibility interact correctly with table anonymous boxes: document.elementFromPoint is not a function
+ 19. 60 in 1 files: unhandled rejection: TypeError: inner[method] is not a function
+       domparsing/tentative/stream-positional.html: streamAppendHTML({}) with A and B: promise_test: Unhandled rejection with value: object "TypeError: inner[method] is not a function"
+ 20. 56 in 56 files: fetch of a relative URL: Failed to parse URL
+       html/canvas/element/compositing/2d.composite.canvas.clear.html: Canvas test: 2d.composite.canvas.clear: promise_test: Unhandled rejection with value: object "TypeError: Failed to parse URL from /images/yellow75.png"
+       html/canvas/element/compositing/2d.composite.canvas.copy.html: Canvas test: 2d.composite.canvas.copy: promise_test: Unhandled rejection with value: object "TypeError: Failed to parse URL from /images/yellow75.png"
+       html/canvas/element/compositing/2d.composite.canvas.destination-atop.html: Canvas test: 2d.composite.canvas.destination-atop: promise_test: Unhandled rejection with value: object "TypeError: Failed to parse URL from /images/yellow75.png"
+ 21. 50 in 2 files: .getIndexFromOffset is not a function
+       html/canvas/element/text/2d.text.measure.index-from-offset-edges.tentative.html: Check that TextMetrics::getIndexFromOffset() gives correct edges when the requested point is outside the range, with direction ltr and text align left.: tm.getIndexFromOffset is not a function
+       html/canvas/element/text/2d.text.measure.index-from-offset.tentative.html: Check that TextMetrics::getIndexFromOffset() matches its DOM equivalent, where possible, with direction ltr, text align left, 0px letter spacing and no-directional-override.: tm.getIndexFromOffset is 
+ 22. 46 in 12 files: document.createRange is not a function
        dom/nodes/MutationObserver-characterData.html: Range (r70) is created: document.createRange is not a function
        dom/nodes/MutationObserver-childList.html: Range (r70) is created: document.createRange is not a function
        dom/nodes/Node-normalize-2.html: normalize should move range's end boundary point into t1: document.createRange is not a function
- 28. 44 in 10 files: MouseEvent is not defined
-       dom/events/Event-dispatch-click.html: basic with dispatchEvent(): MouseEvent is not defined
-       dom/events/Event-dispatch-click.tentative.html: disabled checkbox should not be checked from label click by dispatchEvent: MouseEvent is not defined
-       dom/events/Event-dispatch-detached-input-and-change.html: detached checkbox should not emit input or change events on dispatchEvent(new MouseEvent('click')).: MouseEvent is not defined
- 29. 43 in 43 files: document.write is not a function
+ 23. 44 in 44 files: document.write is not a function
        html/dom/render-blocking/element-render-blocking-001.html: (file ERROR) TypeError: document.write is not a function
        html/dom/render-blocking/element-render-blocking-002.html: (file ERROR) TypeError: document.write is not a function
        html/dom/render-blocking/element-render-blocking-003.html: (file ERROR) TypeError: document.write is not a function
- 30. 38 in 17 files: customElements is not defined
+ 24. 40 in 15 files: document.elementsFromPoint is not a function
+       css/cssom-view/elementFromPoint-negative-z-index-inline.html: elementsFromPoint places a negative z-index child before its stacking context background: document.elementsFromPoint is not a function
+       css/cssom-view/elementsFromPoint-inline-htb-ltr.html: elementsFromPoint should return all elements under a point: document.elementsFromPoint is not a function
+       css/cssom-view/elementsFromPoint-inline-htb-rtl.html: elementsFromPoint should return all elements under a point: document.elementsFromPoint is not a function
+ 25. 38 in 17 files: customElements is not defined
        dom/nodes/Node-appendChild-cereactions-vs-script.window.js: Custom element reactions follow script execution: customElements is not defined
        dom/nodes/moveBefore/Node-moveBefore.html: No custom element callbacks are run during disconnected moveBefore(): promise_test: Unhandled rejection with value: object "ReferenceError: customElements is not defined"
        dom/nodes/moveBefore/custom-element-move-reactions.html: the disconnected/connected callbacks should be called when no other callback is defined: promise_test: Unhandled rejection with value: object "ReferenceError: customElements is not defined"
- 31. 36 in 1 files: self[iface] is not a constructor
-       dom/events/Event-subclasses-constructors.html: UIEvent constructor (no argument): self[iface] is not a constructor
- 32. 36 in 1 files: unhandled rejection: TypeError: ref_node[method] is not a function
-       domparsing/tentative/stream-html-with-declarative-shadow-root.html: element.streamHTML (sanitization===remove-shadow-root): promise_test: Unhandled rejection with value: object "TypeError: ref_node[method] is not a function"
- 33. 34 in 3 files: .streamHTMLUnsafe is not a function
+ 26. 37 in 3 files: .streamHTMLUnsafe is not a function
        domparsing/tentative/stream-html-parser-blocking-script.html: streamHTMLUnsafe with parser blocking script should process in order: promise_test: Unhandled rejection with value: object "TypeError: placeholder.streamHTMLUnsafe is not a function"
        domparsing/tentative/stream-html-unsafe.html: piping a response into streamHTMLUnsafe(): promise_test: Unhandled rejection with value: object "TypeError: placeholder.streamHTMLUnsafe is not a function"
        domparsing/tentative/stream-html-with-declarative-shadow-root.html: streamHTMLUnsafe does not enable declarative shadow roots for subsequent innerHTML or document.write(): promise_test: Unhandled rejection with value: object "TypeError: streamTarget.streamHTMLUnsafe i
- 34. 30 in 13 files: assert_implements: wrong value
-       dom/events/non-cancelable-when-passive/synthetic-events-cancelable.html: Synthetic wheel event with interface WheelEvent is not cancelable: assert_implements: WheelEvent should be supported undefined
+ 27. 36 in 1 files: unhandled rejection: TypeError: ref_node[method] is not a function
+       domparsing/tentative/stream-html-with-declarative-shadow-root.html: element.streamHTML (sanitization===remove-shadow-root): promise_test: Unhandled rejection with value: object "TypeError: ref_node[method] is not a function"
+ 28. 33 in 19 files: assert_not_equals: wrong value
+       dom/nodes/DOMImplementation-createDocument.html: createDocument test: null,undefined,null,null: assert_not_equals: got disallowed value null
+       dom/nodes/Document-adoptNode-DocumentFragment-with-host.window.js: adoptNode() <template> element: content follows via template adopting steps: assert_not_equals: content moved to a new template-contents owner document got disallowed value Document node with 2 childr
+       dom/nodes/ParentNode-querySelector-All.html: Document.querySelector: :target pseudo-class selector, matching the element referenced by the URL fragment identifier: :target: assert_not_equals: The method should return a match. got disallowed valu
+ 29. 26 in 3 files: .getSelectionRects is not a function
+       html/canvas/element/text/2d.text.measure.selection-rects-baselines.tentative.html: Check that TextMetrics::getSelectionRects() works correctly with textBaseline.: tm.getSelectionRects is not a function or its return value is not iterable
+       html/canvas/element/text/2d.text.measure.selection-rects-exceptions.tentative.html: Check that TextMetrics::getSelectionRects() throws when using invalid indexes.: assert_throws_dom: function "() => tm.getSelectionRects(text.length + 1, 0)" threw object "TypeError: tm.getSelectionRec
+       html/canvas/element/text/2d.text.measure.selection-rects.tentative.html: Check that TextMetrics::getSelectionRects() matches its DOM equivalent, with direction ltr, text align left, 0px letter spacing, and no-directional-override.: tm.getSelectionRects is not a function
+ 30. 24 in 1 files: assert_throws_dom: threw the wrong error: TypeError: target[method] is not a function
+       domparsing/tentative/stream-html-script-safe.html: Streaming setter streamHTML targeting an HTML <script> element throws NotSupportedError and preserves children: assert_throws_dom: function "() => { target[method](); }" threw object "TypeError: targe
+ 31. 24 in 1 files: unhandled rejection: TypeError: target[prop] is not a function
+       domparsing/tentative/stream-html-sanitizer-safe.html: Element.streamHTML should use the safe sanitizer: promise_test: Unhandled rejection with value: object "TypeError: target[prop] is not a function"
+ 32. 23 in 11 files: assert_implements: wrong value
        css/selectors/invalidation/media-pseudo-classes-in-has.html: Test :playing pseudo-class: assert_implements: :playing is not supported undefined
        css/selectors/media/media-playback-state-timing.html: Test :playing and :paused timing without media resource: assert_implements: :playing is not supported undefined
- 35. 26 in 16 files: .getClientRects is not a function
-       css/cssom-view/DOMRectList.html: Element getClientRects(): element.getClientRects is not a function
-       css/cssom-view/cssom-geometryutils-fragmentation.html: getBoxQuads() returns every multicol fragment: fragmented.getClientRects is not a function
-       css/cssom-view/cssom-geometryutils-getBoxQuads-options.html: getBoxQuads({box: "margin"}) applies box edges to inline fragments: inline.getClientRects is not a function
- 36. 26 in 11 files: document.elementsFromPoint is not a function
-       css/cssom-view/elementsFromPoint-inline-htb-ltr.html: elementsFromPoint should return all elements under a point: document.elementsFromPoint is not a function
-       css/cssom-view/elementsFromPoint-inline-htb-rtl.html: elementsFromPoint should return all elements under a point: document.elementsFromPoint is not a function
-       css/cssom-view/elementsFromPoint-inline-vlr-ltr.html: elementsFromPoint should return all elements under a point: document.elementsFromPoint is not a function
- 37. 26 in 26 files: ResizeObserver is not defined
-       resize-observer/calculate-depth-for-node.html: "Calculate depth for node" algorithm with Shadow DOM: ResizeObserver is not defined
-       resize-observer/change-layout-in-error.html: Changing layout in window error handler should not result in lifecyle loop when resize observer loop limit is reached.: ResizeObserver is not defined
-       resize-observer/fragments.html: (file ERROR) ReferenceError: ResizeObserver is not defined
- 38. 24 in 1 files: assert_throws_dom: threw the wrong error: TypeError: target[method] is not a function
-       domparsing/tentative/stream-html-script-safe.html: Streaming setter streamHTML targeting an HTML <script> element throws NotSupportedError and preserves children: assert_throws_dom: function "() => { target[method](); }" threw object "TypeError: targe
- 39. 24 in 1 files: unhandled rejection: TypeError: target[prop] is not a function
-       domparsing/tentative/stream-html-sanitizer-safe.html: Element.streamHTML should use the safe sanitizer: promise_test: Unhandled rejection with value: object "TypeError: target[prop] is not a function"
- 40. 23 in 6 files: document.elementFromPoint is not a function
-       css/cssom-view/CaretPosition-001.html: Element at (400, 100): document.elementFromPoint is not a function
-       css/cssom-view/elementFromPoint-001.html: (file ERROR) TypeError: document.elementFromPoint is not a function
-       css/cssom-view/elementFromPoint-dynamic-anon-box.html: Link should be clickable after hiding a scrollbox with an anonymous table inside: document.elementFromPoint is not a function
- 41. 22 in 11 files: Cannot read properties of undefined (reading 'document')
-       dom/nodes/node-creation-realm.html: importNode() imports into the target document's realm: Cannot read properties of undefined (reading 'document')
-       dom/nodes/node-realm-mixed-across-adoption.html: Element parsed into an adopted container takes the node-document realm, not the container's creation realm: Cannot read properties of undefined (reading 'document')
-       dom/nodes/node-realm-preserved-across-adoption.html: Built-in element keeps its creation realm after adoption: Cannot read properties of undefined (reading 'document')
- 42. 20 in 1 files: unhandled rejection: TypeError: scrollingElement[scrollFunction] is not a function
-       css/cssom-view/scroll-behavior-smooth-positions.html: Scroll positions when performing smooth scrolling from (0, 0) to (500, 250) using scroll() : promise_test: Unhandled rejection with value: object "TypeError: scrollingElement[scrollFunction] is not a 
- 43. 19 in 1 files: .convertPointFromNode is not a function
-       css/cssom-view/cssom-geometryutils-convertPointFromNode.html: convertPointFromNode() maps margin origin to margin coordinates: target.convertPointFromNode is not a function
- 44. 19 in 11 files: Cannot read properties of undefined (reading 'length')
-       dom/nodes/insertion-removing-steps/Node-appendChild-script-with-mutation-observer-takeRecords.html: An inserted script should be able to observe its own mutation record with takeRecords: Cannot read properties of undefined (reading 'length')
-       dom/nodes/insertion-removing-steps/insertion-removing-steps-script.window.js: Script execution happens after all batched DOM insertions complete through post-connection steps: promise_test: Unhandled rejection with value: object "TypeError: Cannot read properties of undefined (
-       uievents/legacy/Event-subclasses-init.html: Call initUIEvent without parameters: Cannot read properties of undefined (reading 'length')
- 45. 19 in 5 files: KeyboardEvent is not defined
-       dom/events/Event-init-while-dispatching.html: Calling initKeyboardEvent while dispatching.: KeyboardEvent is not defined
-       dom/events/KeyEvent-initKeyEvent.html: KeyboardEvent.initKeyEvent shouldn't be defined (created by constructor): KeyboardEvent is not defined
-       uievents/constructors/event-getmodifierstate.html: KeyboardEvent.getModifierState() returns false for every modifier when none are set: KeyboardEvent is not defined
- 46. 19 in 1 files: unhandled rejection: TypeError: parent[method_name] is not a function
-       domparsing/tentative/stream-insertion-logic.html: streamAppendHTML without a ref node: promise_test: Unhandled rejection with value: object "TypeError: parent[method_name] is not a function"
- 47. 19 in 1 files: unhandled rejection: TypeError: placeholder[method_name] is not a function
-       domparsing/tentative/stream-insertion-logic.html: streamReplaceWithHTML with a ref_node at end: promise_test: Unhandled rejection with value: object "TypeError: placeholder[method_name] is not a function"
- 48. 19 in 1 files: unhandled rejection: TypeError: ref_node[method_name] is not a function
-       domparsing/tentative/stream-insertion-logic.html: streamBeforeHTML with a ref_node at end: promise_test: Unhandled rejection with value: object "TypeError: ref_node[method_name] is not a function"
- 49. 18 in 1 files: CustomElementRegistry is not defined
-       domparsing/tentative/stream-html-custom-element.html: streamHTML with replaceWithChildrenElements preserves scoped customElementRegistry: promise_test: Unhandled rejection with value: object "ReferenceError: CustomElementRegistry is not defined"
- 50. 18 in 1 files: DOMQuad is not defined
-       css/cssom-view/cssom-geometryutils-convertQuadFromNode.html: convertQuadFromNode() maps margin quad to margin coordinates: DOMQuad is not defined
- 51. 18 in 1 files: DOMRect is not defined
-       css/cssom-view/cssom-geometryutils-convertRectFromNode.html: convertRectFromNode() maps margin rect to margin coordinates: DOMRect is not defined
- 52. 17 in 17 files: .animate is not a function
+       css/selectors/media/media-playback-state.html: Test :playing pseudo-class: assert_implements: :playing is not supported undefined
+ 33. 20 in 11 files: Image is not defined
+       html/canvas/element/drawing-images-to-the-canvas/2d.drawImage.incomplete.immediate.html: Canvas test: 2d.drawImage.incomplete.immediate: Image is not defined
+       html/canvas/element/drawing-images-to-the-canvas/2d.drawImage.incomplete.nosrc.html: Canvas test: 2d.drawImage.incomplete.nosrc: Image is not defined
+       html/canvas/element/drawing-images-to-the-canvas/2d.drawImage.svg.html: drawImage() of an SVG image: promise_test: Unhandled rejection with value: object "ReferenceError: Image is not defined"
+ 34. 19 in 19 files: .animate is not a function
        css/cssom-view/element-scroll-promise-after-removal.html: (file ERROR) TypeError: document.body.animate is not a function
        css/cssom-view/element-scroll-promise-interruption.html: (file ERROR) TypeError: document.body.animate is not a function
        css/cssom-view/element-scroll-promises.html: (file ERROR) TypeError: document.body.animate is not a function
- 53. 17 in 8 files: .scrollIntoView is not a function
-       css/cssom-view/elementFromPoint.html: SVG element at x,y: svg.scrollIntoView is not a function
-       css/cssom-view/elementsFromPoint.html: SVG element at x,y: svg.scrollIntoView is not a function
-       css/cssom-view/scrollIntoView-align-scrollport-covering-child.html: scrollIntoView scrolls scrollport-covering child in both axes: child.scrollIntoView is not a function
- 54. 17 in 4 files: frames is not defined
-       dom/nodes/Node-appendChild.html: Appending a document: frames is not defined
-       dom/nodes/Node-removeChild.html: Passing a detached element from a frame document to removeChild should not affect it.: frames is not defined
-       dom/events/event-global-is-still-set-when-reporting-exception-onerror.html: window.onerror handler restores window.event after it reports an exception: frames is not defined
- 55. 16 in 4 files: .streamAppendHTMLUnsafe is not a function
+ 35. 19 in 1 files: .convertPointFromNode is not a function
+       css/cssom-view/cssom-geometryutils-convertPointFromNode.html: convertPointFromNode() maps margin origin to margin coordinates: target.convertPointFromNode is not a function
+ 36. 19 in 17 files: ctx.beginLayer is not a function
+       html/canvas/element/filters/2d.filter.layers.colorMatrix.tentative.html: Test the functionality of ColorMatrix filters: ctx.beginLayer is not a function
+       html/canvas/element/filters/2d.filter.layers.convolveMatrix.exceptions.tentative.html: Test exceptions on CanvasFilter() convolveMatrix: ctx.beginLayer is not a function
+       html/canvas/element/filters/2d.filter.layers.dropShadow.exceptions.tentative.html: Test exceptions on CanvasFilter() dropShadow object: ctx.beginLayer is not a function
+ 37. 19 in 1 files: unhandled rejection: TypeError: parent[method_name] is not a function
+       domparsing/tentative/stream-insertion-logic.html: streamAppendHTML without a ref node: promise_test: Unhandled rejection with value: object "TypeError: parent[method_name] is not a function"
+ 38. 19 in 1 files: unhandled rejection: TypeError: placeholder[method_name] is not a function
+       domparsing/tentative/stream-insertion-logic.html: streamReplaceWithHTML with a ref_node at end: promise_test: Unhandled rejection with value: object "TypeError: placeholder[method_name] is not a function"
+ 39. 19 in 1 files: unhandled rejection: TypeError: ref_node[method_name] is not a function
+       domparsing/tentative/stream-insertion-logic.html: streamBeforeHTML with a ref_node at end: promise_test: Unhandled rejection with value: object "TypeError: ref_node[method_name] is not a function"
+ 40. 18 in 1 files: .convertRectFromNode is not a function
+       css/cssom-view/cssom-geometryutils-convertRectFromNode.html: convertRectFromNode() maps margin rect to margin coordinates: target.convertRectFromNode is not a function
+ 41. 18 in 1 files: CustomElementRegistry is not defined
+       domparsing/tentative/stream-html-custom-element.html: streamHTML with replaceWithChildrenElements preserves scoped customElementRegistry: promise_test: Unhandled rejection with value: object "ReferenceError: CustomElementRegistry is not defined"
+ 42. 18 in 1 files: DOMQuad is not defined
+       css/cssom-view/cssom-geometryutils-convertQuadFromNode.html: convertQuadFromNode() maps margin quad to margin coordinates: DOMQuad is not defined
+ 43. 16 in 4 files: .streamAppendHTMLUnsafe is not a function
        html/dom/partial-updates/tentative/stream-append-has-invalidation.html: HTML partial updates - :has invalidation with streaming: promise_test: Unhandled rejection with value: object "TypeError: container.streamAppendHTMLUnsafe is not a function"
        html/dom/partial-updates/tentative/stream-append-positional-pseudo-class-invalidation.html:  HTML partial updates - positional pseudo class invalidation with streaming : promise_test: Unhandled rejection with value: object "TypeError: container.streamAppendHTMLUnsafe is not a function"
        html/dom/partial-updates/tentative/stream-append-with-template-for.html: streamHTML methods can apply template with for: promise_test: Unhandled rejection with value: object "TypeError: document.body.streamAppendHTMLUnsafe is not a function"
- 56. 15 in 1 files: .streamAppendHTML is not a function
+ 44. 16 in 10 files: assert_unreached: wrong value
+       dom/nodes/MutationObserver-document.html: parser insertion mutations: assert_unreached: document observer did not trigger Reached unreachable code
+       resize-observer/fragments.html: Single fragment: assert_unreached: Missing ResizeObserver notification Reached unreachable code
+       resize-observer/notify.html: test2: remove/appendChild trigger notification: assert_unreached: Timed out waiting for notification. (1000ms) Reached unreachable code
+ 45. 16 in 7 files: Cannot read properties of undefined (reading 'querySelector')
+       dom/nodes/moveBefore/css-transition-cross-shadow.html: Moving an element with a transition across shadow boundaries preserves the transition: promise_test: Unhandled rejection with value: object "TypeError: Cannot read properties of undefined (reading 'qu
+       dom/nodes/moveBefore/moveBefore-shadow-inside.html: moveBefore-shadow-inside: promise_test: Unhandled rejection with value: object "TypeError: Cannot read properties of undefined (reading 'querySelector')"
+       dom/nodes/remove-next-sibling-during-replace-with.html: remove-next-sibling-during-replace-with: Cannot read properties of undefined (reading 'querySelector')
+ 46. 15 in 1 files: .streamAppendHTML is not a function
        domparsing/tentative/stream-append-html.html: piping a response into streamAppendHTML(): promise_test: Unhandled rejection with value: object "TypeError: placeholder.streamAppendHTML is not a function"
- 57. 15 in 15 files: Cannot read properties of undefined (reading 'left')
-       intersection-observer/containing-block.html: In containing block and intersecting.: Cannot read properties of undefined (reading 'left')
-       intersection-observer/edge-inclusive-intersection.html: First rAF.: Cannot read properties of undefined (reading 'left')
-       intersection-observer/initial-observation-with-threshold.html: First rAF: Cannot read properties of undefined (reading 'left')
- 58. 14 in 1 files: .streamHTML is not a function
+ 47. 15 in 11 files: assert_throws_dom: did not throw
+       dom/nodes/Document-createEvent-touchevent.window.js: document.createEvent('TouchEvent') should throw if 'expose legacy touch event APIs' is false: assert_throws_dom: function "() => { document.createEvent(variant); }" did not throw
+       dom/nodes/Element-insertAdjacentElement.html: Adding more than one child to document should cause a HierarchyRequestError exception: assert_throws_dom: function "function() { var el = docElement.insertAdjacentElement("beforebegin", document.getEl
+       dom/nodes/Element-insertAdjacentText.html: Adding more than one child to document should cause a HierarchyRequestError exception: assert_throws_dom: function "function() { docElement.insertAdjacentText("beforebegin", "text1") }" did not throw
+ 48. 14 in 1 files: .streamHTML is not a function
        domparsing/tentative/stream-html.html: piping a response into streamHTML(): promise_test: Unhandled rejection with value: object "TypeError: placeholder.streamHTML is not a function"
- 59. 14 in 8 files: assert_not_equals: wrong value
-       dom/nodes/DOMImplementation-createDocument.html: createDocument test: null,undefined,null,null: assert_not_equals: got disallowed value null
-       dom/nodes/Document-adoptNode-DocumentFragment-with-host.window.js: adoptNode() <template> element: content follows via template adopting steps: assert_not_equals: content moved to a new template-contents owner document got disallowed value Document node with 2 childr
-       dom/nodes/adoption.window.js: appendChild() and DocumentFragment with host: assert_not_equals: got disallowed value Document node with 2 children
- 60. 14 in 5 files: assert_own_property: wrong value
-       dom/events/event-global.html: event exists on window, which is initially set to undefined: assert_own_property: expected property "event" missing
-       resize-observer/eventloop.html: ResizeObserver implemented: assert_own_property: expected property "ResizeObserver" missing
-       resize-observer/notify.html: ResizeObserver implemented: assert_own_property: expected property "ResizeObserver" missing
+ 49. 14 in 9 files: Cannot read properties of undefined (reading 'length')
+       dom/nodes/insertion-removing-steps/Node-appendChild-script-with-mutation-observer-takeRecords.html: An inserted script should be able to observe its own mutation record with takeRecords: Cannot read properties of undefined (reading 'length')
+       dom/nodes/insertion-removing-steps/insertion-removing-steps-script.window.js: Script execution happens after all batched DOM insertions complete through post-connection steps: promise_test: Unhandled rejection with value: object "TypeError: Cannot read properties of undefined (
+       html/dom/documents/dom-tree-accessors/document.embeds-document.plugins-01.html: No plugins: Cannot read properties of undefined (reading 'length')
+ 50. 13 in 3 files: Cannot read properties of undefined (reading 'call')
+       dom/nodes/Node-insertBefore.html: Should check the 'parent' type before checking whether 'child' is a child of 'parent': assert_throws_dom: function "function() { insertFunc.call(parent, node, child); }" threw object "TypeError: Canno
+       dom/nodes/Node-replaceChild.html: Should check the 'parent' type before checking whether 'child' is a child of 'parent': assert_throws_dom: function "function() { insertFunc.call(parent, node, child); }" threw object "TypeError: Canno
+       dom/nodes/node-creation-realm.html: Document.createCDATASection() creates a node in the target document's realm: Cannot read properties of undefined (reading 'call')
+ 51. 13 in 13 files: DOMPoint is not defined
+       html/canvas/element/path-objects/2d.path.roundrect.1.radius.dompoint.html: Verify that when one radius is given to roundRect(), specified as a DOMPoint, it applies to all corners.: DOMPoint is not defined
+       html/canvas/element/path-objects/2d.path.roundrect.1.radius.dompoint.single.argument.html: Verify that when one radius is given to roundRect() as a non-array argument, specified as a DOMPoint, it applies to all corners.: DOMPoint is not defined
+       html/canvas/element/path-objects/2d.path.roundrect.2.radii.1.dompoint.html: Verify that when two radii are given to roundRect(), the first radius, specified as a DOMPoint, applies to the top-left and bottom-right corners.: DOMPoint is not defined
+ 52. 13 in 13 files: entries is not defined
+       intersection-observer/empty-root-margin.html: (file ERROR) entries is not defined
+       intersection-observer/intersection-ratio-ib-split.html: (file ERROR) entries is not defined
+       intersection-observer/multicol-2.html: (file ERROR) entries is not defined
+ 53. 13 in 5 files: OffscreenCanvas is not defined
+       html/canvas/element/drawing-images-to-the-canvas/2d.drawImage.detachedcanvas.html: drawImage with detached OffscreenCanvas as the source should throw exception: OffscreenCanvas is not defined
+       html/canvas/element/global-hdr-headroom/attribute.html: attribute: OffscreenCanvas is not defined
+       html/canvas/element/global-hdr-headroom/clli-mdcv-png.html: No CLLI or MDCV: promise_test: Unhandled rejection with value: object "ReferenceError: OffscreenCanvas is not defined"
+ 54. 12 in 1 files: .scrollParent is not a function
+       css/cssom-view/scrollParent.html: scrollParent returns the nearest scroll container.: normalChild.scrollParent is not a function
+ 55. 12 in 1 files: Sanitizer is not defined
+       domparsing/tentative/stream-html-sanitizer.html: element.streamHTML: mutating the sanitizer while streaming does not effect the originally given sanitizer: promise_test: Unhandled rejection with value: object "ReferenceError: Sanitizer is not define
+ 56. 12 in 1 files: unhandled rejection: TypeError: el[method] is not a function
+       domparsing/tentative/stream-tokenizer-context.html: streamHTMLUnsafe on <xmp> initializes tokenizer in RAWTEXT state: promise_test: Unhandled rejection with value: object "TypeError: el[method] is not a function"
+ 57. 11 in 2 files: .createRange is not a function
+       domparsing/createContextualFragment.html: <html> and <body> must work the same, 1: element1.ownerDocument.createRange is not a function
+       html/syntax/serializing-html-fragments/escaping.html: document.implementation.createHTMLDocument and createContextualFragment: doc.createRange is not a function
+ 58. 11 in 2 files: assert_less_than: wrong value
+       css/cssom-view/scroll-behavior-element.html: Element with smooth scroll-behavior ; scroll() with default behavior: assert_less_than: Should not set scrollLeft immediately expected a number less than 500 but got 500
+       css/cssom-view/scroll-behavior-scrollintoview-nested.html: scrollIntoView with nested elements with different scroll-behavior: assert_less_than: Element with smooth behavior should not scroll immediately expected a number less than 500 but got 500
+ 59. 11 in 6 files: Cannot read properties of undefined (reading 'addEventListener')
+       dom/events/event-listener-not-fully-active-target.html: EventTarget created in a removed iframe: promise_test: Unhandled rejection with value: object "TypeError: Cannot read properties of undefined (reading 'addEventListener')"
+       dom/events/mouse-event-retarget.html: offsetX is correctly adjusted: Cannot read properties of undefined (reading 'addEventListener')
+       css/selectors/focus-visible-014.html: :focus-visible matches after script focus move: Cannot read properties of undefined (reading 'addEventListener')
+ 60. 10 in 1 files: assert_own_property: wrong value
+       domparsing/positional-methods.html: afterHTML is exposed via the NonDocumentTypeChildNode mixin: assert_own_property: expected property "afterHTML" missing
