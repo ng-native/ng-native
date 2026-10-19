@@ -153,7 +153,7 @@ describe('position: sticky', () => {
     assert.equal(scroll.listeners?.get('topScroll')?.size, 1);
     s.engine.setClasses(s.nodes.get('head')!, 'plain');
     s.engine.commit();
-    assert.equal(scroll.listeners?.get('topScroll')?.size, 0);
+    assert.equal(scroll.listeners?.get('topScroll'), undefined);
   });
 
   it('stops moving when its inset goes, as a sticky box with none sticks nowhere', () => {

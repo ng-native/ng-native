@@ -112,9 +112,8 @@ describe('the renderer', () => {
 
     // Each is taken off by whoever added it: the template's through `listen()`'s teardown, and
     // the pressable's own when it is destroyed. `destroyNode` leaves them, since Angular calls it
-    // for projected content it puts back too.
-    const left = [...pressable.listeners!].filter(([, set]) => set.size).map(([type]) => type);
-    assert.deepEqual(left, [], 'every listener went with the view');
+    // for projected content it puts back too, so the teardowns are what empty the node.
+    assert.equal(pressable.listeners, null, 'every listener went with the view');
     assert.equal(findEngineNode(app.engine.root, 'pressable'), undefined, 'node detached');
   });
 });
