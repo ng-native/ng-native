@@ -1,6 +1,6 @@
 import type { EngineNode } from '@ng-native/fabric';
 import type { Argument, Complex, Nth } from './parse-selector.ts';
-import { documentOfRoot } from './document-roots.ts';
+import { documentOfRoot, topOf } from './document-roots.ts';
 import { directionOf } from './directionality.ts';
 import {
   attributeOf,
@@ -13,6 +13,7 @@ import {
   parentElement,
   positionOf,
 } from './element-tree.ts';
+import { pageUrl } from './page-address.ts';
 import { XHTML } from './qualified-name.ts';
 import { engineOf } from './window.ts';
 
@@ -21,8 +22,6 @@ import { engineOf } from './window.ts';
  * app has no reading of (`:hover` with no pointer, `:visited`, a media element playing) matches
  * nothing, as it would in a browser where it is not the case.
  * A form control's state is read off its own properties: `:checked`, `:valid` and the rest.
- *
- * ponytail: `:target` matches nothing, which needs the location.
  */
 
 /** The element the selector is matched for: `:scope`, and the one a `:has()` is asked of. */
@@ -211,6 +210,27 @@ const isHeading = (node: EngineNode): boolean => isHtml(node, ...HEADINGS);
 
 const linked: Test = (node) => isHtml(node, 'a', 'area') && hasAttribute(node, 'href');
 
+/**
+ * `:target`: the element in the page whose id the fragment of the page's address names, as the
+ * router's route has it. An element out of the page, or of a document a script made, is none.
+ *
+ * ponytail: by its id alone, so each of two elements with the same id is one, and an `<a name>`
+ * is not.
+ */
+const targeted: Test = (node) => {
+  const engine = engineOf(node);
+  const url = pageUrl(engine);
+  const at = url.indexOf('#');
+  if (at === -1 || at === url.length - 1 || topOf(node) !== engine.root) return false;
+  let id = url.slice(at + 1);
+  try {
+    id = decodeURIComponent(id);
+  } catch {
+    // A fragment that is not percent-encoded is its own id.
+  }
+  return attributeOf(node, 'id') === id;
+};
+
 /** `:focus-within`: the focused element is this one or is inside it. */
 const focusWithin: Test = (node) => {
   for (let at = focusedIn(node); at; at = at.parent) if (at === node) return true;
@@ -242,6 +262,7 @@ const PLAIN: Readonly<Record<string, Test>> = {
   'focus-visible': (node) => focusedIn(node) === node,
   'focus-within': focusWithin,
   active: (node) => node.active === true,
+  target: targeted,
   link: linked,
   'any-link': linked,
   '-webkit-any-link': linked,

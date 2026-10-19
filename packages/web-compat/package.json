@@ -48,23 +48,30 @@
     }
   },
   "dependencies": {
+    "@ng-native/device": "workspace:*",
     "@ng-native/fabric": "workspace:*",
     "@ng-native/platform": "workspace:*",
     "parse5": "^7.3.0"
   },
   "peerDependencies": {
+    "@angular/common": "^22.0.0",
     "@angular/core": "^22.0.0",
     "@ng-native/icons": "workspace:*",
-    "expo-document-picker": "^57.0.0"
+    "expo-document-picker": "^57.0.0",
+    "react-native-webview": ">=13.16.1"
   },
   "peerDependenciesMeta": {
     "expo-document-picker": {
+      "optional": true
+    },
+    "react-native-webview": {
       "optional": true
     }
   },
   "devDependencies": {
     "@angular/common": "22.2.0",
     "@angular/core": "22.2.0",
+    "@babel/core": "^7.29.7",
     "@emotion/css": "^11.13.5",
     "@ng-native/components": "workspace:*",
     "@ng-native/testing": "workspace:*",

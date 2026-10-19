@@ -34,6 +34,9 @@ import {
 } from './select.ts';
 import { engineOf } from './window.ts';
 import { together } from './mutation-observer.ts';
+import { frameAttributeSet, frameCreated } from './frame.ts';
+import { setFrameView } from './frame-view.ts';
+import { keepTaken } from './node-members.ts';
 import { setSvg, stopChanged, svgInserted, svgNamed, wordsInSpans } from './svg.ts';
 import { styleShape } from './svg-box.ts';
 
@@ -161,6 +164,8 @@ export const webListen: RendererExtension = {
     if (node.tag === 'style' && documentOf(engine)) styleMade(node, engine);
     // A canvas is given the group what it draws goes in: see `canvas.ts`.
     if (documentOf(engine)) canvasCreated(node, engine);
+    // A web view, or a document of its own: see `frame-view.ts` and `frame.ts`.
+    frameCreated(node, engine);
   },
   // What a select shows, and whether a field is in a disabled fieldset, follow where an option
   // and a field are put: see `select.ts` and `fieldset.ts`. What a drawing's own elements are
@@ -177,6 +182,12 @@ export const webListen: RendererExtension = {
     optionRemoved(node, engine);
   },
   set(node, name, value, engine) {
+    frameAttributeSet(node, name);
+    // What an iframe's web view took is kept as written as well, to read back.
+    if (setFrameView(node, name, value, engine)) {
+      keepTaken(node, name, value);
+      return true;
+    }
     if (!documentOf(engine)) return false;
     // A checkbox, a radio or a button an input is takes a press, and a label's `for` its
     // control's: both are kept as written as well.

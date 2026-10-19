@@ -411,3 +411,38 @@ describe('a track and the text of an element', () => {
     assert.equal(body.getAttribute('text'), '#333');
   });
 });
+
+describe("a link's URL", () => {
+  it("reads a link's URL by its parts, and writes a part back to href", async () => {
+    const { make } = await page();
+    const link = make('a', { href: 'https://user:pw@site.example:8080/docs/a?q=1#top' });
+    assert.equal(link.host, 'site.example:8080');
+    assert.equal(link.hostname, 'site.example');
+    assert.equal(link.port, '8080');
+    assert.equal(link.protocol, 'https:');
+    assert.equal(link.username, 'user');
+    assert.equal(link.password, 'pw');
+    assert.equal(link.pathname, '/docs/a');
+    assert.equal(link.search, '?q=1');
+    assert.equal(link.hash, '#top');
+    assert.equal(link.origin, 'https://site.example:8080');
+    link.host = 'other.example';
+    assert.equal(link.getAttribute('href'), 'https://user:pw@other.example:8080/docs/a?q=1#top');
+    link.pathname = 'b';
+    assert.equal(link.href, 'https://user:pw@other.example:8080/b?q=1#top');
+    const area = make('area', { href: 'http://site.example' });
+    assert.equal(area.host, 'site.example');
+    assert.equal(area.href, 'http://site.example/', 'serialised');
+  });
+
+  it('reads a link that is no URL as the spec has no URL read', async () => {
+    const { make } = await page();
+    const link = make('a', { href: 'http://[docs' });
+    assert.equal(link.href, 'http://[docs');
+    assert.equal(link.host, '');
+    assert.equal(link.protocol, ':');
+    link.host = 'site.example';
+    assert.equal(link.getAttribute('href'), 'http://[docs', 'nothing to set a part of');
+    assert.equal(make('a').host, '');
+  });
+});

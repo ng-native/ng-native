@@ -1,3 +1,4 @@
+import { PlatformLocation } from '@angular/common';
 import {
   DestroyRef,
   DOCUMENT,
@@ -9,8 +10,13 @@ import {
   type EnvironmentProviders,
 } from '@angular/core';
 import { Engine, extendNodes } from '@ng-native/fabric';
+import { DeepLinks } from '@ng-native/device';
 import { extendRenderer } from '@ng-native/platform';
 import { documentFor } from './document.ts';
+import { loadFramesWith, type FrameLoader } from './frame.ts';
+import { registerFrameViews, showFramesAs, type FrameMode } from './frame-view.ts';
+import { StillLocation } from './location.ts';
+import { detectedRoot, installLocation, openPage } from './page-address.ts';
 import { webListen } from './listen.ts';
 import { registerCanvas } from './canvas.ts';
 import { attributeMembers } from './attribute-members.ts';
@@ -73,6 +79,10 @@ function install(engine: Engine): void {
     // A canvas, drawn by the same views, and the globals its drawing is asked about by: see
     // `canvas.ts`.
     registerCanvas(),
+    // An iframe's native web view, and Angular's `Location` where no router gives one: see
+    // `frame-view.ts` and `page-address.ts`.
+    registerFrameViews(),
+    installLocation(),
   ];
 }
 
@@ -90,6 +100,34 @@ function setGlobalDocument(document: unknown): void {
   if (document !== undefined) globals.document = document;
   else if (original) Object.defineProperty(globalThis, 'document', original);
   else delete globals.document;
+}
+
+/** How `provideWebCompat` is set up. */
+export interface WebCompatOptions {
+  /**
+   * The app's address, which the page's address is, with the route on it: what `document.URL`
+   * and `window.location` say, and what a relative link resolves against. Expo's where it is not
+   * given: the link Expo Go opens the app with, or the app config's scheme in a build (`canary://`
+   * is a page at `canary:///orders`). `app://` with neither.
+   */
+  readonly url?: string;
+  /**
+   * What reads the URL an `<iframe>`'s `src` names, for the document the frame shows: `fetch`,
+   * for an `http` or `https` URL, where it is not given. Answers nothing for one it cannot read.
+   */
+  readonly loadFrame?: FrameLoader;
+  /**
+   * How an `<iframe>` is shown. `'webview'`, where it is not given: a native web view, from
+   * react-native-webview, which shows the page in it as a browser does, and has no
+   * `contentDocument`, as a frame of another origin has none; messages cross with `postMessage`.
+   * Where react-native-webview is not installed, it is the emulated document all the same.
+   *
+   * `'emulated'`: a document of the app's own for each frame, from `about:blank`, `srcdoc` or
+   * what `src` names (read with `loadFrame`), which a script reads and writes as a document of
+   * the same origin. It is not drawn, and no script in it runs. For what measures or prints in a
+   * frame, and for tests that ask what a frame's document holds.
+   */
+  readonly frames?: FrameMode;
 }
 
 /**
@@ -121,15 +159,23 @@ function setGlobalDocument(document: unknown): void {
  *   geometry members: see `svg.ts`.
  * - A `<canvas>` has a 2D context, whose drawing is shapes those views draw, read back as pixels
  *   and as a PNG: see `canvas.ts`.
+ * - The page has an address, the app's own URL and its route, in `document.URL`, `baseURI` and
+ *   `window.location`; a relative link resolves against it. See `WebCompatOptions.url`.
+ *   `location.assign()` to a page of the app follows it as a link to it is followed, and opens
+ *   any other with `Linking`.
+ * - Angular's `Location` has a platform to stand on in an app with no router. List this before
+ *   `provideNativeRouter()`, which provides its own.
+ * - An `<iframe>` is a native web view, or a document of its own: see `WebCompatOptions.frames`.
  *
  * Nothing is added until this is called, and all of it is taken away again when the last app
  * that asked for it is destroyed.
  */
-export function provideWebCompat(): EnvironmentProviders {
+export function provideWebCompat(options: WebCompatOptions = {}): EnvironmentProviders {
   // Now, not when the app starts: a library reads `window` as it is imported.
   removeWindow ??= installWindow();
   return makeEnvironmentProviders([
     { provide: DOCUMENT, useFactory: () => documentFor(inject(Engine)) },
+    { provide: PlatformLocation, useClass: StillLocation },
     provideEnvironmentInitializer(() => {
       const engine = inject(Engine);
       if (apps === 0) install(engine);
@@ -148,10 +194,24 @@ export function provideWebCompat(): EnvironmentProviders {
       // A field's blur is told at once, and native's answer to it passed over: see `element-focus.ts`.
       const heedBlurs = passOverToldBlurs(engine);
       const unwatchStyles = watchStyles(engine);
+      const forgetFrames = loadFramesWith(engine, options.loadFrame);
+      const forgetFrameMode = showFramesAs(engine, options.frames ?? 'webview');
+      const injector = inject(Injector);
+      // Read as they are asked for: the router's history is made after this runs.
+      const history = () => injector.get(PlatformLocation);
+      const closePage = openPage(engine, {
+        root: options.url ?? detectedRoot(),
+        route: () => `${history().pathname}${history().search}${history().hash}`,
+        follow: (route) => injector.get(DeepLinks).follow(route),
+        open: (url) => injector.get(DeepLinks).open(url),
+      });
       // Where a file input's click finds the system's file picker: see `file-input.ts`.
-      const forgetPicker = pickWith(engine, inject(Injector));
+      const forgetPicker = pickWith(engine, injector);
       inject(DestroyRef).onDestroy(() => {
         forgetPicker();
+        closePage();
+        forgetFrameMode();
+        forgetFrames();
         unwatchStyles();
         // What an observer still watching in it heard of its commits: see `commit-watch.ts`.
         forgetCommits(engine);

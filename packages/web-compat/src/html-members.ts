@@ -9,6 +9,8 @@ import { CONTROLS } from './form-controls.ts';
 import { nameRecordOf, XHTML } from './qualified-name.ts';
 import { own, type Reflecting, type Reflection } from './reflect.ts';
 import { BY_ELEMENT, GLOBAL } from './reflected-attributes.ts';
+import { FRAMES } from './frame.ts';
+import { HYPERLINKS } from './hyperlink.ts';
 import { STYLE_SHEETS } from './runtime-style.ts';
 import { TABLE_PARTS } from './table-parts.ts';
 import { SELECTION } from './text-selection.ts';
@@ -18,7 +20,8 @@ import { engineOf } from './window.ts';
 /**
  * The properties of HTML elements, by element: what reflects an attribute
  * (`reflected-attributes.ts`), what a form control answers of itself (`form-controls.ts`,
- * `validity.ts`, `text-selection.ts`), a table's parts (`table-parts.ts`), an element's `text`
+ * `validity.ts`, `text-selection.ts`), a table's parts (`table-parts.ts`), a link's URL
+ * (`hyperlink.ts`), an iframe's document and window (`frame.ts`), an element's `text`
  * (`element-text.ts`), a `<style>`'s `sheet` (`runtime-style.ts`), a `<canvas>`'s context and
  * size (`canvas.ts`), and `dataset`. Nodes share one prototype, so each property here asks
  * which element it is read on: one with nothing of its own for the name answers what the package
@@ -111,6 +114,8 @@ export function withHtmlMembers(base: PropertyDescriptorMap): PropertyDescriptor
     VALIDATION,
     SELECTION,
     TABLE_PARTS,
+    HYPERLINKS,
+    FRAMES,
     ELEMENT_TEXT,
     STYLE_SHEETS,
     CANVAS_MEMBERS,

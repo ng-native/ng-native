@@ -6,7 +6,7 @@ import assert from 'node:assert/strict';
 import { afterEach, describe, it } from 'node:test';
 import { Component, DOCUMENT, ElementRef, inject, signal } from '@angular/core';
 import { Text, TextInput, View } from '@ng-native/components';
-import { registeredViewName } from '@ng-native/fabric';
+import { registeredViewName, viewNameOf } from '@ng-native/fabric';
 import { cleanup, fireEvent, render, screen, settle, userEvent } from '@ng-native/testing';
 
 afterEach(cleanup);
@@ -99,6 +99,17 @@ async function canvasIsUp(): Promise<void> {
   assert.equal(view.children[0]!.children[0]!.viewName, 'RNSVGPath');
   assert.deepEqual([...context.getImageData(0, 0, 1, 1).data], [0, 0, 0, 255]);
 }
+
+@Component({
+  selector: 'x-framed',
+  template: '<iframe src="https://video.example/embed"></iframe>',
+})
+class Framed {
+  readonly host: Dom = inject(ElementRef).nativeElement;
+}
+
+/** What an engine's children are changed by, which an app with an iframe watches. */
+const WATCHED = ['appendChild', 'insertBefore', 'removeChild'] as const;
 
 /** The package, read the first time a test asks for it: see the first test. */
 const load = () => import('./index.ts');
@@ -210,8 +221,29 @@ describe('provideWebCompat', () => {
     geometryIsUp(app, host, div, engineObserver);
     eventsAreUp(app, div);
     const input = formsAreUp(app);
+    // The page's address, and its frames: each a document of its own here, with no web view.
+    const page = ['location', 'frames', 'postMessage'];
+    assert.equal((globalThis as Dom).location.href, 'app:///');
+    assert.equal(app.instance.document.URL, 'app:///');
+    const engine = host.engine;
+    const unwatched = WATCHED.map((name) => engine[name]);
+    const iframe = app.instance.document.createElement('iframe');
+    app.instance.document.body.appendChild(iframe);
+    assert.equal((globalThis as Dom).frames.length, 1);
+    assert.equal(iframe.contentWindow.parent, globalThis);
+    assert.notDeepEqual(
+      WATCHED.map((name) => engine[name]),
+      unwatched,
+      'the engine watched for iframes',
+    );
 
     cleanup();
+    for (const name of page) assert.equal((globalThis as Dom)[name], undefined, name);
+    // Unwatched again: an iframe the engine puts in the page is opened as no frame.
+    const late = engine.createElement('iframe');
+    engine.appendChild(engine.root, late);
+    const { contentWindowOf } = await import('./frame.ts');
+    assert.equal(contentWindowOf(late), null);
     assert.deepEqual(globalsNow(), globals, 'every global as it was, the document too');
     assert.deepEqual(membersOf(host), members, 'every node member as it was');
     assert.equal(host.getAttribute, undefined);
@@ -442,6 +474,40 @@ describe('provideWebCompat', () => {
     assert.deepEqual([asked['paddingTop'], typeof asked['width']], [0, 'number']);
     cleanup();
     await plainFieldsAreAsThey();
+  });
+
+  it('shows an iframe as a web view in the app that asked alone, and only while it is up', async () => {
+    const { provideWebCompat } = await load();
+    const scope = globalThis as Dom;
+    const had = Object.getOwnPropertyDescriptor(scope, '__nativeComponentRegistry__hasComponent');
+    // React Native's answer on a device with react-native-webview installed.
+    scope.__nativeComponentRegistry__hasComponent = (name: string) => name === 'RNCWebView';
+    try {
+      const before = registeredViewName('iframe');
+      const asking = await render(Page, { providers: [provideWebCompat()] });
+      const plain = await render(Framed);
+      assert.equal(registeredViewName('iframe'), 'RNCWebView');
+      const engine = plain.instance.host.engine;
+      const unwatched = WATCHED.map((name) => engine[name]);
+      const theirs = plain.instance.host.firstChild;
+      const ours = asking.instance.document.createElement('iframe');
+      asking.instance.document.body.appendChild(ours);
+      await settle();
+      // The plain app's is the plain view it is without the package, and nothing watches it.
+      assert.equal(viewNameOf(theirs), 'View');
+      assert.equal(viewNameOf(ours), 'RNCWebView');
+      assert.equal(theirs.props['newSource'], undefined);
+      assert.equal(theirs.props['src'], 'https://video.example/embed', 'its src a prop as written');
+      assert.deepEqual(
+        WATCHED.map((name) => engine[name]),
+        unwatched,
+      );
+      cleanup();
+      assert.equal(registeredViewName('iframe'), before);
+    } finally {
+      if (had) Object.defineProperty(scope, '__nativeComponentRegistry__hasComponent', had);
+      else delete scope.__nativeComponentRegistry__hasComponent;
+    }
   });
 
   it('adds it all again for an app that asks after the last one went', async () => {

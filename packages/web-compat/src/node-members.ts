@@ -116,6 +116,22 @@ export function copyWritten(from: EngineNode, to: EngineNode): void {
   if (all) written.set(to, new Map(all));
   const kept = placed.get(from);
   if (kept) placed.set(to, new Set(kept));
+  const own = taken.get(from);
+  if (own) taken.set(to, new Map(own));
+}
+
+/**
+ * Each attribute an element's own view took, which is no prop to read it back from: an iframe's
+ * `width`, which its web view is sized by, and its `src`, which it is shown as. Kept as written.
+ */
+const taken = new WeakMap<EngineNode, Map<string, string>>();
+
+/** An attribute set as something else, or `null` for one taken away: see `taken`. */
+export function keepTaken(node: EngineNode, name: string, value: unknown): void {
+  const all = taken.get(node);
+  if (value == null || value === false) return void all?.delete(name);
+  if (all) all.set(name, String(value));
+  else taken.set(node, new Map([[name, String(value)]]));
 }
 
 /**
@@ -171,7 +187,10 @@ function attributeOf(node: EngineNode, name: string): string | null {
   const text = written.get(node)?.get(name);
   if (name === 'style') return text ?? null;
   if (text === undefined && isEngineState(node, name)) return null;
-  // A shape's attribute is kept as written: the prop it is drawn by is another thing.
+  // What an iframe's web view took, and a shape's attribute, are kept as written: the prop each
+  // is set as is another thing.
+  const kept = taken.get(node)?.get(name);
+  if (kept !== undefined) return kept;
   const value = keptAttributes(node)[name] ?? node.props[propOf(name)];
   if (value == null) return null;
   if (typeof value !== 'boolean') return String(value);
@@ -299,6 +318,7 @@ function attributeNames(node: EngineNode): string[] {
     ...(written.get(node)?.has('style') ? ['style'] : []),
     ...names,
     ...drawn,
+    ...[...(taken.get(node)?.keys() ?? [])].filter((name) => !names.includes(name) && !drawn.includes(name)),
   ];
   return inWrittenOrder(node, all);
 }

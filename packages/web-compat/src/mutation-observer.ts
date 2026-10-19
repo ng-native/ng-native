@@ -358,6 +358,36 @@ const childListRecord = (
  * `replaceChildren` and a fragment put in each are, to a browser.
  */
 export function together<T>(node: EngineNode, change: () => T): T {
+  depth++;
+  try {
+    return recorded(node, change);
+  } finally {
+    if (--depth === 0) runAfterwards();
+  }
+}
+
+/** How deep in `together` a script's change is, and what is to run once it is out. */
+let depth = 0;
+let afterwards: (() => void)[] = [];
+
+function runAfterwards(): void {
+  while (afterwards.length) {
+    const steps = afterwards;
+    afterwards = [];
+    for (const step of steps) step();
+  }
+}
+
+/**
+ * Run a step once the script's change it comes of is over, every node it puts in being in: an
+ * iframe's insertion steps, which see the rest of what was put in with it. At once outside one.
+ */
+export function afterTogether(step: () => void): void {
+  if (depth) afterwards.push(step);
+  else step();
+}
+
+function recorded<T>(node: EngineNode, change: () => T): T {
   if (batch || !watchOf(node)) return change();
   batch = new Map();
   try {

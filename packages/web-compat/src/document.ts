@@ -16,6 +16,7 @@ import { asMouse } from './mouse-after-touch.ts';
 import { madeByScript } from './html-tree.ts';
 import { elementsUnder } from './element-tree.ts';
 import { descendants } from './in-document.ts';
+import { baseUrl, locationOf, pageUrl } from './page-address.ts';
 import { delivering, touchFields } from './listen.ts';
 import { NODE_CONSTANTS } from './node-constants.ts';
 import { brandNode } from './node-interfaces.ts';
@@ -442,6 +443,19 @@ export function documentFor(engine: Engine): CompatDocument {
     },
     readyState: 'complete',
     visibilityState: 'visible',
+    // The app's own URL, and what a relative one resolves against: see `page-address.ts`.
+    get URL() {
+      return pageUrl(engine);
+    },
+    get documentURI() {
+      return pageUrl(engine);
+    },
+    get baseURI() {
+      return baseUrl(engine, head);
+    },
+    get location() {
+      return locationOf(engine);
+    },
     // The field the keyboard belongs to, which a library reads to know one is being typed in.
     get activeElement() {
       return engine.focused ?? body;

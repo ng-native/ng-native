@@ -250,6 +250,27 @@ function appCopy(resolve, context, name, platform, resolution, projectRoot) {
   }
 }
 
+const EXPO_ASYNC_REQUIRE = /[\\/]expo[\\/]src[\\/]async-require[\\/][^\\/]+$/;
+
+/**
+ * Expo's lazy chunk URL on native, built by its file that asks the dev server.
+ *
+ * Expo's native `buildUrlForBundle` builds on `location.origin` wherever there is a global
+ * `location`, and web-compat gives the page one: the app's address, `exp://` in Expo Go, which
+ * React Native fetches nothing from. Its other file asks the dev server alone, as the native one
+ * does where there is no `location`.
+ *
+ * @param {{ originModulePath?: string }} context
+ * @param {string} name
+ * @param {string | null} platform
+ */
+function expoChunkUrl(context, name, platform) {
+  const from = context.originModulePath;
+  if (name !== './buildUrlForBundle' || platform === 'web' || !from) return undefined;
+  if (!EXPO_ASYNC_REQUIRE.test(from)) return undefined;
+  return { type: 'sourceFile', filePath: path.join(path.dirname(from), 'buildUrlForBundle.ts') };
+}
+
 /** Marks a resolver this preset already wrapped, so applying the preset twice wraps it once. */
 const WRAPPED = Symbol.for('ng-native.resolveRequest');
 
@@ -275,6 +296,8 @@ function withTypeScriptJsImports(next, projectRoot) {
   if (next?.[WRAPPED]) return next;
   const resolveRequest = (context, name, platform) => {
     const resolve = next ?? context.resolveRequest;
+    const chunkUrl = expoChunkUrl(context, name, platform);
+    if (chunkUrl) return chunkUrl;
     if (projectRoot && /^@babel\/runtime(\/|$)/.test(name)) {
       try {
         const fromProject = {
