@@ -192,11 +192,32 @@ class Gradient {
  * any word before the size, after a style or a variant as much as before one.
  */
 function fontOf(font: string): { size: number; weight: string | undefined } {
-  const sized = /([\d.]+)px/i.exec(font);
+  const sized = /([\d.]+)(px|pt|pc|in|cm|mm|q|rem|em|%)/i.exec(font);
   const before = sized ? font.slice(0, sized.index) : '';
   const weight = /(?:^|\s)(bold|[1-9]00)(?=\s)/i.exec(before)?.[1];
-  return { size: Number(sized?.[1]) || 10, weight };
+  const size = sized ? Number(sized[1]) * POINTS_PER[sized[2]!.toLowerCase()]! : 0;
+  return { size: size || 10, weight };
 }
+
+/**
+ * How many points each unit a font's size is written in is. One relative to a font is to the
+ * canvas element's, which is 16 as a browser's is.
+ *
+ * ponytail: a canvas whose own font size a stylesheet sets is still 16 here. Read its computed
+ * size if a library is seen to size a canvas's text in `em`.
+ */
+const POINTS_PER: Readonly<Record<string, number>> = {
+  px: 1,
+  pt: 4 / 3,
+  pc: 16,
+  in: 96,
+  cm: 96 / 2.54,
+  mm: 96 / 25.4,
+  q: 96 / 101.6,
+  em: 16,
+  rem: 16,
+  '%': 0.16,
+};
 
 /** Where a text's baseline is against the `y` it is drawn at, as a share of its font size. */
 const BASELINES: Readonly<Record<string, number>> = {
@@ -906,7 +927,8 @@ class Context2D {
     const id = `canvas-paint-${this.paints++}`;
     const { name, attrs } = gradientAttributes(style.geometry, this.state.matrix);
     // As they are now: a colour added after it is drawn with is not on what was drawn.
-    this.pending.push({ name, attrs: { ...attrs, id }, colours: [...style.colours] });
+    const colours = stopsDrawn(style.geometry, style.colours);
+    this.pending.push({ name, attrs: { ...attrs, id }, colours });
     return `url(#${id})`;
   }
 
@@ -1057,6 +1079,21 @@ function gradientAttributes(
   const r = round(geometry.r1 * Math.sqrt(Math.abs(a * d - b * c)));
   const circles = { fx: fx!, fy: fy!, cx: cx!, cy: cy!, r };
   return { name: 'radialGradient', attrs: { ...stringsOf(circles), ...userSpace } };
+}
+
+/**
+ * A gradient's colours as the native one draws them. SVG's radial gradient starts at its centre,
+ * and a canvas's at the edge of its inner circle, so the stops move out to start there.
+ *
+ * ponytail: exact where the two circles share a centre, as they mostly do. Where they do not, the
+ * native one is drawn from the inner centre out; the pixels read back are exact either way.
+ */
+function stopsDrawn(geometry: GradientGeometry, colours: Gradient['colours']): Gradient['colours'] {
+  if (geometry.kind !== 'radial' || geometry.r0 <= 0 || geometry.r1 <= geometry.r0) {
+    return [...colours];
+  }
+  const inner = geometry.r0 / geometry.r1;
+  return colours.map(([at, colour]) => [inner + at * (1 - inner), colour]);
 }
 
 const stringsOf = (numbers: Record<string, number>): Record<string, string> =>

@@ -170,6 +170,11 @@ describe('@ng-native/web-compat canvas', () => {
     assert.ok(Math.abs(context.measureText('Sales').fontBoundingBoxDescent) < 1);
     context.textBaseline = 'alphabetic';
     // A weight after a style, as Chart.js writes a font: `normal bold 12px`.
+    // A size in another unit is the points it is, as Chrome measures one.
+    context.font = '12pt sans-serif';
+    const points = context.measureText('Sales').width;
+    context.font = '16px sans-serif';
+    assert.equal(points, context.measureText('Sales').width);
     context.font = 'normal bold 12px sans-serif';
     context.fillText('Sales', 50, 40);
     await settle();
@@ -243,6 +248,15 @@ describe('@ng-native/web-compat canvas', () => {
     // In the order they come along it, whatever order they were given in.
     assert.deepEqual(gradient!.props['gradient'], [0, 'red', 1, 'blue']);
     assert.deepEqual(filled!.props['fill'], { type: 1, brushRef: gradient!.props['name'] });
+    // A radial one with an inner circle starts at its edge, as the pixels read back do.
+    const ring = context.createRadialGradient(50, 25, 10, 50, 25, 20);
+    ring.addColorStop(0, 'red');
+    ring.addColorStop(1, 'blue');
+    context.fillStyle = ring;
+    context.fillRect(0, 0, 100, 50);
+    await settle();
+    const drawn = shapes().find((shape) => shape.viewName === 'RNSVGRadialGradient');
+    assert.deepEqual(drawn!.props['gradient'], [0.5, 'red', 1, 'blue']);
     // One with no colours fills nothing, as a canvas has it.
     context.clearRect(0, 0, 100, 50);
     context.fillStyle = context.createRadialGradient(50, 25, 0, 50, 25, 20);
