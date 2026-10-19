@@ -3687,7 +3687,8 @@ const paddingUnder = (props: Record<string, unknown>): number => {
  */
 function strutted(node: EngineNode, props: Record<string, unknown>): boolean {
   const tall =
-    (props['height'] != null && props['height'] !== 'auto') || isSet(props['aspectRatio']);
+    (props['height'] != null && props['height'] !== 'auto') ||
+    (isSet(props['aspectRatio']) && props['aspectRatio'] !== 'auto');
   // Between two insets an out-of-flow box is as tall as they leave it.
   const held =
     OUT_OF_FLOW.has(props['position'] as string) && isSet(props['top']) && isSet(props['bottom']);
