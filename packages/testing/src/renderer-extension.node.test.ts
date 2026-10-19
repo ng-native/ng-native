@@ -288,6 +288,26 @@ test('a field the engine assigns only in a commit is refused', () => {
   }
 });
 
+test('a getter the engine only reads, on the prototype, is replaced and put back', async () => {
+  // Angular reads tagName on a host element; the engine never writes it, so a package that
+  // presents nodes as a browser's may answer it with the name a browser gives.
+  const { componentRef } = await render(Clicks);
+  const box = componentRef.injector.get(Engine).root.childList[0] as EngineNode;
+  const undo = extendNodes({
+    tagName: {
+      get(this: EngineNode) {
+        return this.tag.toUpperCase();
+      },
+    },
+  });
+  try {
+    assert.equal(box.tagName, box.tag.toUpperCase());
+  } finally {
+    undo();
+  }
+  assert.equal(box.tagName, box.tag);
+});
+
 test('an extension that takes itself away during a hook skips no other', async () => {
   const seen: string[] = [];
   const undoFirst = extendRenderer({

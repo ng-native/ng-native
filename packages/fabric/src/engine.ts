@@ -5363,8 +5363,18 @@ const ENGINE_NODE_FIELDS = {
   engine: true,
 } satisfies Record<keyof EngineNode, true>;
 
-/** The fields an extension may not shadow: the engine's, and the one Angular assigns. */
-const NODE_FIELDS = new Set([...Object.keys(ENGINE_NODE_FIELDS), '__ngContext__']);
+/**
+ * The fields an extension may not shadow: the engine's, and the one Angular assigns. A getter
+ * the prototype only reads out, as `tagName` is for Angular, is a member like `classList`, which
+ * an extension may replace: the engine never writes it.
+ */
+const NODE_FIELDS = new Set([
+  ...Object.keys(ENGINE_NODE_FIELDS).filter((name) => {
+    const own = Object.getOwnPropertyDescriptor(RetainedNode.prototype, name);
+    return !(own?.get && !own.set);
+  }),
+  '__ngContext__',
+]);
 
 /**
  * Give every node members of a package's own, on the prototype they share: a getter, a method.
