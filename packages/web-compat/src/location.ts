@@ -6,7 +6,7 @@ import { Injectable } from '@angular/core';
  * Angular's `Location`, whose own platform half reads `window.location` and `history`, which do
  * not exist here. This one is a single page that never navigates.
  *
- * The native router provides its own, and wins when it is listed after `provideWebCompat()`.
+ * The native router provides its own, which is used instead wherever it is: see `NATIVE_HISTORY`.
  */
 @Injectable()
 export class StillLocation extends PlatformLocation {

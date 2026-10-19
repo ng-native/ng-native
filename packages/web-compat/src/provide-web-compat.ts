@@ -10,7 +10,7 @@ import {
   type EnvironmentProviders,
 } from '@angular/core';
 import { Engine, extendNodes } from '@ng-native/fabric';
-import { DeepLinks } from '@ng-native/device';
+import { DeepLinks, NATIVE_HISTORY } from '@ng-native/device';
 import { extendRenderer } from '@ng-native/platform';
 import { documentFor } from './document.ts';
 import { loadFramesWith, type FrameLoader } from './frame.ts';
@@ -163,8 +163,8 @@ export interface WebCompatOptions {
  *   `window.location`; a relative link resolves against it. See `WebCompatOptions.url`.
  *   `location.assign()` to a page of the app follows it as a link to it is followed, and opens
  *   any other with `Linking`.
- * - Angular's `Location` has a platform to stand on in an app with no router. List this before
- *   `provideNativeRouter()`, which provides its own.
+ * - Angular's `Location` has a platform to stand on in an app with no router. In one with the
+ *   native router, it is the router's.
  * - An `<iframe>` is a native web view, or a document of its own: see `WebCompatOptions.frames`.
  *
  * Nothing is added until this is called, and all of it is taken away again when the last app
@@ -175,7 +175,13 @@ export function provideWebCompat(options: WebCompatOptions = {}): EnvironmentPro
   removeWindow ??= installWindow();
   return makeEnvironmentProviders([
     { provide: DOCUMENT, useFactory: () => documentFor(inject(Engine)) },
-    { provide: PlatformLocation, useClass: StillLocation },
+    // The router's history where it has one, in whichever order the two are provided.
+    {
+      provide: PlatformLocation,
+      useFactory: () =>
+        (inject(NATIVE_HISTORY, { optional: true }) as PlatformLocation | null) ??
+        new StillLocation(),
+    },
     provideEnvironmentInitializer(() => {
       const engine = inject(Engine);
       if (apps === 0) install(engine);

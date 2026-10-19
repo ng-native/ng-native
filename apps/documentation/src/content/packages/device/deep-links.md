@@ -48,6 +48,10 @@ that resolves `initialUrl()` races the first navigation and neither order is gua
 `follow(path)` hands a path of the app's own to what `subscribe()` was given, as a link that
 arrived from outside is handed, so the router navigates to it.
 
+`NATIVE_HISTORY` is the native router's `PlatformLocation`, which `provideNativeRouter()` provides.
+A package that stands in a `PlatformLocation` for an app with no router reads it first, so the
+router's is kept in whichever order the two are provided.
+
 `openSettings()` opens the app's own page in the system settings, where a person turns on a
 permission the platform no longer asks for (see [Permissions](/packages/expo/permissions)). Android
 has no url for that page, so `open()` cannot reach it there.

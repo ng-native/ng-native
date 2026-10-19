@@ -210,20 +210,28 @@ describe('iframe as a web view', () => {
     const heard: Dom[] = [];
     const window: Dom = {
       parent: { stub: true },
+      location: { origin: 'https://video.example' },
       dispatchEvent: (event: Dom) => heard.push(event),
     };
-    runInNewContext(String(sent()[0]!.args[0]), {
-      window,
-      MessageEvent: class {
-        type: string;
-        constructor(type: string, init: { source?: unknown }) {
-          // A browser takes no source but a window or a port, which the page's parent is not.
-          if (init.source != null) throw new TypeError('source is not a Window or a MessagePort');
-          this.type = type;
-          Object.assign(this, init);
-        }
-      },
-    });
+    const run = (script: unknown) =>
+      runInNewContext(String(script), {
+        window,
+        MessageEvent: class {
+          type: string;
+          constructor(type: string, init: { source?: unknown }) {
+            // A browser takes no source but a window or a port, which the page's parent is not.
+            if (init.source != null) throw new TypeError('source is not a Window or a MessagePort');
+            this.type = type;
+            Object.assign(this, init);
+          }
+        },
+      });
+    // A page that has gone to another origin since it last said where it is hears nothing.
+    window.location.origin = 'https://elsewhere.example';
+    run(sent()[0]!.args[0]);
+    assert.equal(heard.length, 0);
+    window.location.origin = 'https://video.example';
+    run(sent()[0]!.args[0]);
     assert.equal(heard.length, 1);
     assert.equal(heard[0].type, 'message');
     // Made in the page's realm, so compared by what it holds.
@@ -326,6 +334,21 @@ describe('iframe as a web view', () => {
     // A srcdoc frame is the page's own origin.
     assert.equal(messages[0].origin, 'https://shop.example');
     assert.equal(messages[0].source, iframe.contentWindow);
+  });
+
+  it("gives a srcdoc frame that goes to a web address that address's origin", async () => {
+    installWebView();
+    const { document, fabric } = await page();
+    const iframe = await framed(document, {
+      srcdoc: '<a href="https://elsewhere.example/">Go</a>',
+    });
+    fabric.emit(view(fabric), 'topLoadingFinish', { url: 'https://elsewhere.example/' });
+    const sent = () => fabric.commands.filter((each) => each.name === 'injectJavaScript');
+    // What is for the app's own origin is not sent to a page that has left it.
+    iframe.contentWindow.postMessage('secret', 'https://shop.example');
+    assert.equal(sent().length, 0);
+    iframe.contentWindow.postMessage('hello', 'https://elsewhere.example');
+    assert.equal(sent().length, 1);
   });
 
   it('runs no script in a sandbox that does not allow scripts, and says what it leaves out', async () => {

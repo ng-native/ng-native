@@ -262,6 +262,8 @@ const ATTRIBUTES: Readonly<Record<string, Take>> = {
   },
   srcdoc: (view, given, engine) => {
     view.srcdoc = given;
+    // Where the page the frame showed was is not where what it holds is.
+    if (given !== null) view.url = 'about:srcdoc';
     showSource(view, given, engine);
   },
   width: sizeBy('width'),
@@ -365,9 +367,13 @@ function resize(view: FrameView): void {
   view.engine.setDefaultStyle(view.node, { width: 300, height: 150, ...view.size });
 }
 
-/** The origin of the page in the frame: the app's, for what `srcdoc` holds or a blank page. */
+/**
+ * The origin of the page in the frame: the app's, for a blank page and for what `srcdoc` holds
+ * until it goes to a web address of its own.
+ */
 function originOf(view: FrameView): string {
-  if (view.srcdoc !== null || /^about:/i.test(view.url)) return pageOrigin();
+  if (/^about:/i.test(view.url)) return pageOrigin();
+  if (view.srcdoc !== null && !/^https?:/i.test(view.url)) return pageOrigin();
   return parseUrl(view.url)?.origin ?? 'null';
 }
 
@@ -420,11 +426,15 @@ function windowFor(view: FrameView): object {
         typeof options === 'string'
           ? options
           : ((options as { targetOrigin?: string } | undefined)?.targetOrigin ?? '/');
-      if (!addressed(target, originOf(view), pageOrigin())) return;
+      const origin = originOf(view);
+      if (!addressed(target, origin, pageOrigin())) return;
+      // Asked again of the page itself, which may have gone elsewhere since it last said where.
+      const wanted = JSON.stringify(target === '*' || origin === pageOrigin() ? null : origin);
       const json = JSON.stringify({ data: message }) ?? '{}';
       engine.dispatchCommand(node, 'injectJavaScript', [
         // The source is set after: a browser's event takes none but a window or a port.
-        `(function () { var data = JSON.parse(${JSON.stringify(json)}).data; ` +
+        `(function () { if (${wanted} !== null && window.location.origin !== ${wanted}) return; ` +
+          `var data = JSON.parse(${JSON.stringify(json)}).data; ` +
           `var event = new MessageEvent('message', { data: data, ` +
           `origin: ${JSON.stringify(pageOrigin())} }); ` +
           `Object.defineProperty(event, 'source', { value: window.parent }); ` +

@@ -5,8 +5,10 @@
 import assert from 'node:assert/strict';
 import { afterEach, before, it } from 'node:test';
 import type { Type } from '@angular/core';
+import { PlatformLocation } from '@angular/common';
 import { Router, type Routes } from '@angular/router';
 import { cleanup, render, screen } from '@ng-native/testing';
+import { NativePlatformLocation } from '../router/src/native-platform-location.ts';
 import { provideNativeRouter } from '../router/src/provide-native-router.ts';
 import { provideWebCompat } from '../web-compat/src/index.ts';
 import { compileFixture } from './compile.ts';
@@ -43,4 +45,17 @@ it("follows the router's route, and navigates it", async () => {
   location().assign('about/team');
   assert.ok(await screen.findByText('Our team'));
   assert.equal(location().href, 'canary:///about/team');
+});
+
+it("keeps the router's history when web-compat is provided after it", async () => {
+  const { componentRef } = await render(mod['App'] as Type<unknown>, {
+    providers: [
+      provideNativeRouter(mod['routes'] as Routes),
+      provideWebCompat({ url: 'canary://' }),
+    ],
+  });
+  assert.ok(await screen.findByText('Home'));
+  assert.ok(componentRef.injector.get(PlatformLocation) instanceof NativePlatformLocation);
+  await componentRef.injector.get(Router).navigateByUrl('/about');
+  assert.equal(location().pathname, '/about');
 });

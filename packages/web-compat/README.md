@@ -119,8 +119,8 @@ export const appConfig = {
 };
 ```
 
-In an app with the native router, list it before `provideNativeRouter()`: it gives Angular's
-`Location` a platform to stand on in an app with none, and the router provides its own.
+It gives Angular's `Location` a platform to stand on in an app with no router. In an app with the
+native router, `Location` is the router's, in whichever order the two are listed.
 
 ## Name what is written for a browser
 

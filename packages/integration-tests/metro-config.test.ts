@@ -286,15 +286,15 @@ describe('the Metro preset', () => {
    * the page an address, `exp://` in Expo Go, and React Native fetches nothing from that.
    */
   describe("Expo's lazy chunk URL", () => {
-    type Context = { resolveRequest: Resolve; originModulePath: string };
+    type Context = { resolveRequest: Resolve; originModulePath: string; dev: boolean };
     const dir = '/ws/node_modules/expo/src/async-require';
     const metro: Resolve = (context, name, platform) => ({
       type: 'sourceFile',
       filePath: `${path.dirname((context as Context).originModulePath)}/${name.slice(2)}.${platform}.ts`,
     });
-    const resolve = (origin: string, name: string, platform: string) =>
+    const resolve = (origin: string, name: string, platform: string, dev = true) =>
       (withAngularNative(base()) as MetroConfig).resolver.resolveRequest!(
-        { resolveRequest: metro, originModulePath: origin } as Context,
+        { resolveRequest: metro, originModulePath: origin, dev } as Context,
         name,
         platform,
       );
@@ -319,6 +319,11 @@ describe('the Metro preset', () => {
       assert.deepEqual(resolve(`${dir}/loadBundle.ts`, './getDevServer', 'ios'), {
         type: 'sourceFile',
         filePath: `${dir}/getDevServer.ios.ts`,
+      });
+      // A release build hosts its chunks where `location.origin` says, which it is not asked of.
+      assert.deepEqual(resolve(`${dir}/loadBundle.ts`, './buildUrlForBundle', 'ios', false), {
+        type: 'sourceFile',
+        filePath: `${dir}/buildUrlForBundle.ios.ts`,
       });
     });
   });
