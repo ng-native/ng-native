@@ -1,7 +1,7 @@
 /**
  * `ngNative()`: the Vite plugin that lets Vitest run Angular Native code in Node, with no DOM.
  *
- * Seven things, each of which Vitest would otherwise get wrong on its own:
+ * Eight things, each of which Vitest would otherwise get wrong on its own:
  *
  * - It compiles. Every decorated `.ts` goes through `@ng-native/metro`'s AOT transform and every
  *   partial-compiled package through the linker (see `compile.mjs`), before Vite strips types.
@@ -20,11 +20,14 @@
  * - It resolves as Metro does. A workspace library's copy of a package at the app's version
  *   resolves to the app's copy (`appCopy`), so a test has one `@ng-native/components`, as the
  *   bundle does.
+ * - It cleans up. Vitest leaves a copy of every module it ran in the system temp directory; the
+ *   plugin removes it as Vitest closes (`removeModuleCopies`).
  *
  * The environment is Vitest's default, `node`. There is no DOM to emulate: the renderer talks to
  * a fake Fabric, and jsdom would only give Angular a `document` to misread.
  */
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { defaultClientConditions, defaultServerConditions } from 'vite';
@@ -246,6 +249,25 @@ function compiled(context, source, file, options) {
 }
 
 /**
+ * Removes, as Vitest closes, the directory in the system temp directory it copies each transformed
+ * module into for the forks pool, which it leaves behind when the config has no `projects`: a
+ * project removes the directory it made itself, but the modules go to the one Vitest made, and
+ * nothing removes that. One is left by every run, a hundred megabytes for an app's suite.
+ *
+ * ponytail: `_tmpDir` is Vitest 5's own, unexported; on a Vitest without it this does nothing.
+ *
+ * @param {{ _tmpDir?: unknown, onClose(fn: () => void): void }} vitest
+ */
+function removeModuleCopies(vitest) {
+  const dir = vitest._tmpDir;
+  if (typeof dir !== 'string' || path.dirname(dir) !== path.resolve(tmpdir())) return;
+  vitest.onClose(() => rmSync(dir, { recursive: true, force: true }));
+}
+
+/** @type {WeakSet<object>} */
+const cleaned = new WeakSet();
+
+/**
  * @param {{ inline?: (string | RegExp)[], libraryStyles?: string[] | false }} [options]
  * @returns {import('vitest/config').Plugin}
  */
@@ -271,6 +293,12 @@ export function ngNative(options = {}) {
     }),
     configResolved(config) {
       root = config.root;
+    },
+    // Once for each project; the directory is the Vitest instance's, so it is removed once.
+    configureVitest({ vitest }) {
+      if (cleaned.has(vitest)) return;
+      cleaned.add(vitest);
+      removeModuleCopies(vitest);
     },
     resolveId(source, importer, resolveOptions) {
       if (Object.hasOwn(STAND_INS, source)) return STAND_INS[source];
