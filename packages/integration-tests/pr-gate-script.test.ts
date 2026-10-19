@@ -93,8 +93,32 @@ describe('pr-gate', () => {
     assert.equal(needsPlan('M\tpackages/integration-tests/css.test.ts'), false);
     assert.equal(needsPlan('A\tscripts/pr-gate.mjs\nM\texamples/canary/src/app/app.ts'), false);
     // A package that is never published, as its package.json says, is released by no plan.
-    assert.equal(needsPlan('A\tpackages/layout/src/compare.ts', new Set(['layout'])), false);
-    assert.equal(needsPlan('M\tpackages/fabric/src/css.ts', new Set(['layout'])), true);
+    assert.equal(needsPlan('A\tpackages/layout/src/compare.ts', { layout: null }), false);
+    assert.equal(needsPlan('M\tpackages/fabric/src/css.ts', { layout: null }), true);
+  });
+
+  it('asks for a plan only for a file the package publishes, or one its build is made from', () => {
+    // Each read from the package.json and tsconfig.build.json on disk.
+    // web-compat publishes `dist`, built from `src`, and `build.cjs`, but not its WPT runner.
+    assert.equal(needsPlan('M\tpackages/web-compat/src/dom/node.ts'), true);
+    assert.equal(needsPlan('M\tpackages/web-compat/build.cjs'), true);
+    assert.equal(needsPlan('A\tpackages/web-compat/wpt/run.mjs'), false);
+    // web publishes `dist` and `vite.mjs`, not the browser tests' page.
+    assert.equal(needsPlan('M\tpackages/web/vite.mjs'), true);
+    assert.equal(needsPlan('M\tpackages/web/src/reset.css'), true);
+    assert.equal(needsPlan('M\tpackages/web/browser/boot.ts'), false);
+    assert.equal(needsPlan('M\tpackages/web/vitest.config.ts'), false);
+    // A pattern in `files` is anchored at the package, and `*` stays within a directory.
+    assert.equal(needsPlan('M\tpackages/metro/transformer.cjs'), true);
+    assert.equal(needsPlan('M\tpackages/metro/css/compile.cjs'), true);
+    assert.equal(needsPlan('M\tpackages/metro/css/tools/generate.cjs'), false);
+    assert.equal(needsPlan('M\tpackages/nx/application/index.cjs'), true);
+    assert.equal(needsPlan('M\tpackages/nx/files/src/main.ts'), true);
+    assert.equal(needsPlan('M\tpackages/testing/runner/loader.mjs'), true);
+    assert.equal(needsPlan('M\tpackages/testing/vitest.config.ts'), false);
+    // A package with no `files` publishes all of it but its tests.
+    assert.equal(needsPlan('M\tpackages/thing/tools/make.mjs', { thing: undefined }), true);
+    assert.equal(needsPlan('M\tpackages/thing/tools/make.test.mjs', { thing: undefined }), false);
   });
 
   it('prints its usage for --help and -h, and runs nothing', () => {

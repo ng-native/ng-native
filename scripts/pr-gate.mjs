@@ -33,8 +33,9 @@ const ROOT = path.resolve(path.dirname(url.fileURLToPath(import.meta.url)), '..'
 const BENCHES = ['bench', 'bench:tailwind', 'bench:screens'];
 
 /**
- * A path whose change is a change someone using the packages could see: code in a package, but
- * not its tests or fixtures, nor the integration tests, which ship nothing.
+ * A path whose change could be a change someone using the packages could see: code in a package,
+ * but not its tests or fixtures, nor the integration tests, which ship nothing. Whether the
+ * package publishes it is `published`'s to say.
  */
 const SHIPPED =
   /^packages\/(?!integration-tests\/)[^/]+\/(?!.*\/fixtures\/).+\.(ts|cjs|mjs|js|css)$/;
@@ -163,26 +164,64 @@ export function editedTests(nameStatus) {
     .map(([status, file, renamed]) => ({ status: status[0], file, renamed }));
 }
 
-/** The packages, by directory, that their package.json says are never published. */
-function privatePackages() {
+/**
+ * What each package publishes, by directory: the patterns of its package.json `files`, `null`
+ * for one that is never published, and `undefined` for one with no `files`, which publishes all
+ * of itself. A pattern naming what the package builds, `dist`, stands for what it is built from,
+ * the `rootDir` of its tsconfig.build.json, since a change there is what changes it.
+ */
+function publishedPackages() {
   const dir = path.join(ROOT, 'packages');
-  return new Set(
-    readdirSync(dir).filter((name) => {
-      const file = path.join(dir, name, 'package.json');
-      return existsSync(file) && JSON.parse(readFileSync(file, 'utf8')).private === true;
-    }),
-  );
+  const found = {};
+  for (const name of readdirSync(dir)) {
+    const file = path.join(dir, name, 'package.json');
+    if (!existsSync(file)) continue;
+    const manifest = JSON.parse(readFileSync(file, 'utf8'));
+    if (manifest.private === true) found[name] = null;
+    else if (!Array.isArray(manifest.files)) found[name] = undefined;
+    else {
+      const build = path.join(dir, name, 'tsconfig.build.json');
+      const { outDir, rootDir } = existsSync(build)
+        ? (JSON.parse(readFileSync(build, 'utf8')).compilerOptions ?? {})
+        : {};
+      found[name] = manifest.files.map((pattern) =>
+        outDir && rootDir && path.posix.normalize(pattern) === path.posix.normalize(outDir)
+          ? path.posix.normalize(rootDir)
+          : pattern,
+      );
+    }
+  }
+  return found;
+}
+
+/**
+ * Whether `file`, a path in `packages/<name>/`, is one its package publishes. A pattern matches
+ * as npm reads `files`: from the package's own directory, with `*` within one directory, and a
+ * directory standing for everything in it.
+ */
+function published(file, packages) {
+  const [, name = '', ...rest] = file.split('/');
+  if (!Object.hasOwn(packages, name) || packages[name] === undefined) return true;
+  if (packages[name] === null) return false;
+  const inside = rest.join('/');
+  return packages[name].some((pattern) => {
+    const source = pattern
+      .replace(/\/+$/, '')
+      .split('*')
+      .map((part) => part.replace(/[.+?^${}()|[\]\\]/g, '\\$&'))
+      .join('[^/]*');
+    return new RegExp(`^${source}(/.*)?$`).test(inside);
+  });
 }
 
 /** Whether a change to what is shipped comes with a version plan. */
-export function needsPlan(nameStatus, unpublished = privatePackages()) {
+export function needsPlan(nameStatus, packages = publishedPackages()) {
   const files = nameStatus
     .split('\n')
     .map((line) => line.split('\t'))
     .filter(([, file]) => file);
   const shipped = files.some(
-    ([, file]) =>
-      SHIPPED.test(file) && !TEST.test(file) && !unpublished.has(file.split('/')[1] ?? ''),
+    ([, file]) => SHIPPED.test(file) && !TEST.test(file) && published(file, packages),
   );
   const plan = files.some(
     ([status, file]) => status === 'A' && file.startsWith('.nx/version-plans/'),
