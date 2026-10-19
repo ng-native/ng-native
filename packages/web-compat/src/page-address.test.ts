@@ -258,6 +258,41 @@ describe('window.location', () => {
     assert.throws(() => location.assign('http://[bad'), { name: 'SyntaxError' });
   });
 
+  it("follows a path off Expo Go's /-- into the app, and keeps a build's scheme", async () => {
+    const opened: string[] = [];
+    const source: DeepLinkSource = {
+      launchUrl: () => Promise.resolve(null),
+      subscribe: () => () => {},
+      open: (url) => void opened.push(url),
+    };
+    const followed: string[] = [];
+    const go = async (url: string, targets: string[]) => {
+      const { app } = await page([
+        provideWebCompat({ url }),
+        { provide: DeepLinks.SOURCE, useValue: source },
+      ]);
+      const links = app.componentRef.injector.get(DeepLinks);
+      const stop = links.subscribe((path) => followed.push(path));
+      for (const target of targets) (globalThis as Dom).location.assign(target);
+      stop();
+      await cleanup();
+    };
+    // `/team` is `exp://127.0.0.1:8081/team` against the page, which is outside `/--`.
+    await go('exp://127.0.0.1:8081/--/', [
+      '/team',
+      'exp://127.0.0.1:8081/--/orders',
+      'exps://127.0.0.1:8081/cart',
+      'exp://127.0.0.1:8082/team',
+    ]);
+    await go('canary://', ['/team', 'other://team']);
+    assert.deepEqual(followed, ['/team', '/orders', '/team']);
+    assert.deepEqual(opened, [
+      'exps://127.0.0.1:8081/cart',
+      'exp://127.0.0.1:8082/team',
+      'other://team',
+    ]);
+  });
+
   it('speaks for the newest app still up, and for none of one that is gone', async () => {
     const one = await page([provideWebCompat({ url: 'https://one.example/' })]);
     const two = await page([provideWebCompat({ url: 'https://two.example/' })]);

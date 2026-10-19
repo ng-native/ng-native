@@ -126,6 +126,16 @@ describe('iframe', () => {
     assert.equal(globals.answer, undefined);
   });
 
+  it('is at the page’s origin at about:blank and srcdoc, as a browser has it', async () => {
+    const document = await page();
+    const blank = document.createElement('iframe');
+    document.body.appendChild(blank);
+    assert.equal(blank.contentWindow.location.origin, 'https://shop.example');
+    const held = await framed(document, { srcdoc: '<p>Own</p>' });
+    assert.equal(held.contentWindow.location.href, 'about:srcdoc');
+    assert.equal(held.contentWindow.location.origin, 'https://shop.example');
+  });
+
   it('makes elements its document owns', async () => {
     const document = await page();
     const iframe = document.createElement('iframe');

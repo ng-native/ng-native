@@ -757,7 +757,7 @@ class FrameLocation {
   }
   get origin(): string {
     const url = this.href;
-    if (url.startsWith('about:')) return (globalThis as { origin?: string }).origin ?? 'null';
+    if (url.startsWith('about:')) return pageOrigin();
     return parseUrl(url)?.origin ?? 'null';
   }
   get protocol(): string {

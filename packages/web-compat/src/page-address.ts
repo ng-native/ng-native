@@ -88,12 +88,25 @@ export function baseUrl(engine: Engine, head: EngineNode | null): string {
 export const locationOf = (engine: Engine): PageLocation | null =>
   pages.get(engine)?.location ?? null;
 
-/** The route of the app a URL is at, or null for one that is not the app's. */
-function routeIn(page: Page, url: string): string | null {
-  if (!url.startsWith(page.root)) return null;
-  const rest = url.slice(page.root.length);
+/** The route a URL is at under an address, or null for one that is not under it. */
+function routeAfter(address: string, url: string): string | null {
+  if (!url.startsWith(address)) return null;
+  const rest = url.slice(address.length);
   if (rest && !'/?#'.includes(rest[0]!)) return null;
   return rest.startsWith('/') ? rest : `/${rest}`;
+}
+
+/** The scheme and host of Expo Go's address, `exp://127.0.0.1:8081/--`: the route is after `--`. */
+const EXPO_GO = /^(exps?:\/\/[^/?#]+)\/(?:[^?#]*\/)?--$/i;
+
+/**
+ * The route of the app a URL is at, or null for one that is not the app's. In Expo Go a path
+ * outside `/--`, as `/team` resolves against the page, is the app's too: the host is the app's
+ * own development server, and Expo Go would open the URL as another project.
+ */
+function routeIn(page: Page, url: string): string | null {
+  const expoGo = EXPO_GO.exec(page.root)?.[1];
+  return routeAfter(page.root, url) ?? (expoGo ? routeAfter(expoGo, url) : null);
 }
 
 type Part = 'protocol' | 'host' | 'hostname' | 'port' | 'pathname' | 'search' | 'hash';

@@ -5,10 +5,12 @@
  */
 import assert from 'node:assert/strict';
 import { afterEach, beforeEach, describe, it } from 'node:test';
+import { setFlagsFromString } from 'node:v8';
 import { runInNewContext } from 'node:vm';
 import { Component, DOCUMENT, inject } from '@angular/core';
 import { cleanup, render, settle, type FakeFabric, type FakeFabricNode } from '@ng-native/testing';
 import { provideWebCompat, type WebCompatOptions } from './index.ts';
+import { framesHeard } from './frame-view.ts';
 
 type Dom = any;
 
@@ -91,6 +93,34 @@ const view = (fabric: FakeFabric): FakeFabricNode => {
   assert.ok(found, fabric.render());
   return found;
 };
+
+/** What the app has posted into the page in its frames. */
+const sent = (fabric: FakeFabric) =>
+  fabric.commands.filter((each) => each.name === 'injectJavaScript');
+
+/** The `message` events the app's window hears from what a function does. */
+async function heard(send: () => void): Promise<Dom[]> {
+  const messages: Dom[] = [];
+  const listener = (event: Dom) => messages.push(event);
+  globalThis.addEventListener('message', listener);
+  try {
+    send();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  } finally {
+    globalThis.removeEventListener('message', listener);
+  }
+  return messages;
+}
+
+/** Collect what nothing holds, as a long-running app's runtime does in time. */
+async function collectGarbage(): Promise<void> {
+  setFlagsFromString('--expose-gc');
+  const gc = runInNewContext('gc') as () => void;
+  // A `WeakRef` holds what it refers to until the job that read it is over.
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  gc();
+  await new Promise((resolve) => setTimeout(resolve, 0));
+}
 
 describe('iframe as a web view', () => {
   it('commits as RNCWebView, showing src resolved against the page address', async () => {
@@ -388,6 +418,83 @@ describe('iframe as a web view', () => {
     assert.equal(sent().length, 1);
   });
 
+  it('is the app’s origin again once srcdoc replaces a page that loaded', async () => {
+    installWebView();
+    const { document, fabric } = await page();
+    const iframe = await framed(document, { src: 'https://video.example/embed' });
+    fabric.emit(view(fabric), 'topLoadingFinish', { url: 'https://video.example/embed' });
+    iframe.setAttribute('srcdoc', '<p>Hi</p>');
+    await settle();
+    const messages = await heard(() =>
+      fabric.emit(view(fabric), 'topMessage', { url: 'about:srcdoc', data: 'hi' }),
+    );
+    assert.deepEqual(
+      messages.map((each) => each.origin),
+      ['https://shop.example'],
+    );
+    iframe.contentWindow.postMessage('hello', '/');
+    assert.equal(sent(fabric).length, 1);
+  });
+
+  it('takes where a message says it is from for that message, and not for the frame', async () => {
+    installWebView();
+    const { document, fabric } = await page();
+    const iframe = await framed(document, { src: 'https://video.example/embed' });
+    fabric.emit(view(fabric), 'topLoadingFinish', { url: 'https://video.example/embed' });
+    // Android says the frame in the page a message is from: here, an advert's.
+    const messages = await heard(() => {
+      fabric.emit(view(fabric), 'topMessage', { url: 'https://ads.example/slot', data: 'ad' });
+      fabric.emit(view(fabric), 'topMessage', { url: 'https://video.example/embed', data: 'hi' });
+    });
+    assert.deepEqual(
+      messages.map((each) => each.origin),
+      ['https://ads.example', 'https://video.example'],
+    );
+    fabric.emit(view(fabric), 'topMessage', { url: 'https://ads.example/slot', data: 'ad' });
+    iframe.contentWindow.postMessage('hello', 'https://video.example');
+    assert.equal(sent(fabric).length, 1);
+  });
+
+  it('gives a sandbox without allow-same-origin no origin, as the attribute changes', async () => {
+    installWebView();
+    const { document, fabric } = await page();
+    const iframe = await framed(document, { sandbox: 'allow-scripts', srcdoc: '<p>Hi</p>' });
+    const origins = async () =>
+      (
+        await heard(() =>
+          fabric.emit(view(fabric), 'topMessage', { url: 'about:srcdoc', data: 'x' }),
+        )
+      ).map((each) => each.origin);
+    // No base of the app's to load from, nothing for the app's origin, and heard from none.
+    assert.deepEqual(view(fabric).props['newSource'], { html: '<p>Hi</p>' });
+    iframe.contentWindow.postMessage('secret', '/');
+    iframe.contentWindow.postMessage('secret', 'https://shop.example');
+    assert.equal(sent(fabric).length, 0);
+    iframe.contentWindow.postMessage('anyone', '*');
+    assert.equal(sent(fabric).length, 1);
+    assert.deepEqual(await origins(), ['null']);
+    iframe.setAttribute('sandbox', 'allow-scripts allow-same-origin');
+    await settle();
+    assert.deepEqual(view(fabric).props['newSource'], {
+      html: '<p>Hi</p>',
+      baseUrl: 'https://shop.example/orders/',
+    });
+    iframe.contentWindow.postMessage('secret', '/');
+    assert.equal(sent(fabric).length, 2);
+    assert.deepEqual(await origins(), ['https://shop.example']);
+    iframe.setAttribute('sandbox', 'allow-scripts');
+    await settle();
+    assert.deepEqual(await origins(), ['null']);
+    assert.deepEqual(view(fabric).props['newSource'], { html: '<p>Hi</p>' });
+    iframe.removeAttribute('sandbox');
+    await settle();
+    assert.deepEqual(await origins(), ['https://shop.example']);
+    assert.equal(
+      (view(fabric).props['newSource'] as { baseUrl?: string }).baseUrl,
+      'https://shop.example/orders/',
+    );
+  });
+
   it('runs no script in a sandbox that does not allow scripts, and says what it leaves out', async () => {
     installWebView();
     const { document, fabric } = await page();
@@ -447,6 +554,18 @@ describe('iframe as a web view', () => {
       globalThis.removeEventListener('message', listener);
     }
     assert.deepEqual(messages, []);
+  });
+
+  it('forgets the name of a frame that is gone, while its app is still up', async () => {
+    installWebView();
+    const { document } = await page();
+    const before = framesHeard();
+    // Made and taken out in a scope of its own, so nothing here holds it after.
+    await (async () => (await framed(document)).remove())();
+    await settle();
+    await collectGarbage();
+    await framed(document);
+    assert.equal(framesHeard(), before + 1);
   });
 
   it('is the emulated document where react-native-webview is not installed, said once', async () => {

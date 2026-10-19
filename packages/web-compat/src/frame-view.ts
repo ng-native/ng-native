@@ -26,7 +26,8 @@ import { parseUrl } from './parse-url.ts';
  *   frame's `contentWindow` and its origin. What the page sends with
  *   `window.ReactNativeWebView.postMessage` is heard so too, as the string it is.
  * - The page is the frame's `Referer`, as its `referrerpolicy` says.
- * - `sandbox` without `allow-scripts` runs no script; `allow` turns on autoplay, fullscreen and
+ * - `sandbox` without `allow-scripts` runs no script, and without `allow-same-origin` gives the
+ *   page no origin, `'null'`, as a browser does; `allow` turns on autoplay, fullscreen and
  *   picture in picture where it lists them, as `allowfullscreen` does fullscreen; `scrolling="no"`
  *   does not scroll; `title` is what a screen reader says. What else is given is left out, and
  *   said in development.
@@ -102,6 +103,8 @@ interface FrameView {
   src: string | null;
   srcdoc: string | null;
   referrerPolicy: string;
+  /** Whether `sandbox` is there without `allow-same-origin`, which gives the page no origin. */
+  opaque: boolean;
   /** The URL of the page in the view, as it last said. */
   url: string;
   size: Record<string, number | string>;
@@ -129,6 +132,14 @@ export function showFramesAs(engine: Engine, mode: FrameMode): () => void {
     }
   };
 }
+
+/** Forget the name of each view whose iframe is gone, as one is made. */
+function forgetFramesGone(): void {
+  for (const [name, node] of byModule) if (!node.deref()) byModule.delete(name);
+}
+
+/** How many views Android's messages are heard for: for a test to see each is forgotten. */
+export const framesHeard = (): number => byModule.size;
 
 /**
  * Commit `<iframe>` as the web view where it is installed. Answers what takes it back.
@@ -180,6 +191,7 @@ export function frameViewCreated(node: EngineNode, engine: Engine): boolean {
     }
     return false;
   }
+  forgetFramesGone();
   const moduleName = `NgNativeFrame${++count}`;
   const view = {
     node,
@@ -188,6 +200,7 @@ export function frameViewCreated(node: EngineNode, engine: Engine): boolean {
     src: null,
     srcdoc: null,
     referrerPolicy: '',
+    opaque: false,
     url: 'about:blank',
     size: {},
   } as unknown as FrameView;
@@ -254,6 +267,9 @@ const sizeBy =
     resize(view);
   };
 
+/** What of `sandbox` the view does: scripts, and the page's origin. */
+const SANDBOX_TAKEN = new Set(['allow-scripts', 'allow-same-origin']);
+
 /** Each attribute of an iframe the view takes, and what it does with it. */
 const ATTRIBUTES: Readonly<Record<string, Take>> = {
   src: (view, given, engine) => {
@@ -270,10 +286,17 @@ const ATTRIBUTES: Readonly<Record<string, Take>> = {
   },
   width: sizeBy('width'),
   height: sizeBy('height'),
-  sandbox: ({ node }, given, engine) => {
+  sandbox: (view, given, engine) => {
     const tokens = (given ?? '').toLowerCase().split(/\s+/).filter(Boolean);
-    engine.setProp(node, 'javaScriptEnabled', given === null || tokens.includes('allow-scripts'));
-    const unmapped = tokens.filter((token) => token !== 'allow-scripts');
+    engine.setProp(
+      view.node,
+      'javaScriptEnabled',
+      given === null || tokens.includes('allow-scripts'),
+    );
+    view.opaque = given !== null && !tokens.includes('allow-same-origin');
+    // What `srcdoc` holds loads from the page's address only where it is of the page's origin.
+    showSource(view, given, engine);
+    const unmapped = tokens.filter((token) => !SANDBOX_TAKEN.has(token));
     if (unmapped.length) leftOut('sandbox', unmapped.join(' '));
   },
   allow: ({ node }, given, engine) => {
@@ -320,8 +343,9 @@ function pendingUrl(view: FrameView): string {
 function sourceOf(view: FrameView): Record<string, unknown> {
   const base = String((view.node as unknown as { baseURI?: string }).baseURI ?? '');
   if (view.srcdoc !== null) {
-    // A base the web view can load from: the page's address where it is a web address.
-    return /^(https?|file):/i.test(base)
+    // A base the web view can load from: the page's address where it is a web address, and the
+    // frame is of the page's origin.
+    return !view.opaque && /^(https?|file):/i.test(base)
       ? { html: view.srcdoc, baseUrl: base }
       : { html: view.srcdoc };
   }
@@ -376,10 +400,12 @@ function resize(view: FrameView): void {
 }
 
 /**
- * The origin of the page in the frame: the app's, for a blank page and for what `srcdoc` holds
- * until it goes to a web address of its own.
+ * The origin of the page in the frame: none, `'null'`, in a sandbox without `allow-same-origin`,
+ * as a browser has it, and otherwise the app's for a blank page and for what `srcdoc` holds until
+ * it goes to a web address of its own.
  */
 function originOf(view: FrameView): string {
+  if (view.opaque) return 'null';
   if (/^about:/i.test(view.url)) return pageOrigin();
   if (view.srcdoc !== null && !/^https?:/i.test(view.url)) return pageOrigin();
   return parseUrl(view.url)?.origin ?? 'null';
@@ -467,9 +493,8 @@ function windowFor(view: FrameView): object {
 
 /** A message from the page: a `message` event on the app's window, where it is for the app. */
 function receive(view: FrameView, event: { data?: unknown; url?: string }): void {
-  if (event.url && !/^about:/i.test(event.url)) view.url = event.url;
   const data = typeof event.data === 'string' ? event.data : String(event.data ?? '');
-  const origin = originOf(view);
+  const origin = senderOf(view, event.url);
   if (!data.startsWith(SENT)) {
     deliverMessage(globalThis, data, origin, view.window);
     return;
@@ -483,6 +508,16 @@ function receive(view: FrameView, event: { data?: unknown; url?: string }): void
   }
   if (!addressed(String(sent.target ?? '/'), pageOrigin(), origin)) return;
   deliverMessage(globalThis, sent.data, origin, view.window);
+}
+
+/**
+ * The origin of what sent a message, by the URL the view says it is from: on Android, that of the
+ * frame in the page that sent it, which may be another site's. It says where that one message is
+ * from, and not where the page is: that is for the page's loads to say.
+ */
+function senderOf(view: FrameView, url: string | undefined): string {
+  if (view.opaque || !url || /^about:/i.test(url)) return originOf(view);
+  return parseUrl(url)?.origin ?? originOf(view);
 }
 
 /** Let a navigation go ahead, where the platform holds it until it is told: iOS, every time. */
