@@ -323,6 +323,49 @@ describe('a percentage height, laid out', () => {
   });
 });
 
+// The parent's height is read back rounded to the screen's pixels, which can be a fraction of a
+// pixel less than its content: a column that wraps then broke a line where a browser has none.
+describe('a percentage height in a column that wraps, laid out', () => {
+  const WRAPS =
+    '.p { flex-wrap: wrap; align-items: flex-end } .nowrap { flex-wrap: nowrap; align-items: flex-end }' +
+    ' .c { height: 10%; min-height: 10.1px; width: 50px } .d { height: 20px; width: 50px }';
+  const across = (s: ReturnType<typeof laidOut>) => [s.box('c')[0], s.box('d')[0]];
+
+  it('keeps on one line content that just fits the height it gives the parent', () => {
+    // Chrome: the parent is 30.09 tall, and both boxes are at 350 on the one line.
+    const s = laidOut(WRAPS, ['p', ['c'], ['d']]);
+    assert.deepEqual(across(s), [350, 350]);
+    // Wrapped the other way, the line starts at the far edge.
+    const reversed = laidOut(`${WRAPS} .p { flex-wrap: wrap-reverse; align-items: flex-start }`, [
+      'p',
+      ['c'],
+      ['d'],
+    ]);
+    assert.deepEqual(across(reversed), [350, 350]);
+  });
+
+  it('is so for a basis, and a margin that is a share of the width', () => {
+    // A case the layout fuzzer found (seed 14700), and Chrome's numbers for it.
+    const css =
+      '.p { flex-direction: column-reverse; flex-wrap: wrap; align-items: flex-end; padding-bottom: 5px; margin: 6px }' +
+      ' .c { width: 136px; height: 50%; max-width: 2px; min-height: 47px; margin: 4px; margin-bottom: 10%;' +
+      ' flex-grow: 1; flex-shrink: 0; flex-basis: 30%; box-sizing: content-box; border-width: 7px }' +
+      ' .d { width: 100%; min-width: 145px; box-sizing: content-box; margin-top: -14px; flex-shrink: 1 }';
+    const s = laidOut(css, ['p', ['c'], ['d']]);
+    // To the point: the box grows into the fraction the parent is held taller by.
+    assert.deepEqual(s.box('c').map(Math.round), [374, -4, 16, 61]);
+    assert.equal(s.box('d')[0], 6);
+  });
+
+  it('gives the parent back its height as read once it stops wrapping', () => {
+    const s = laidOut(WRAPS, ['p', ['c'], ['d']]);
+    assert.ok(s.box('p')[3] > 30);
+    s.engine.setClasses(s.nodes.get('p')!, 'nowrap');
+    assert.deepEqual(s.box('p'), [0, 0, 400, 30]);
+    assert.deepEqual(across(s), [350, 350]);
+  });
+});
+
 describe('a percentage least height', () => {
   // Yoga takes a least height in a column as a share of the box above the parent, whatever the
   // parent's height: here the screen's, which made both boxes 400 high.

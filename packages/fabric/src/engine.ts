@@ -2472,8 +2472,25 @@ function askedLayout(node: EngineNode, props: Record<string, unknown>, asked: nu
 function heldHeight(node: EngineNode, props: Record<string, unknown>): void {
   if (node.heldAt === undefined || !NO_HEIGHT.has(props['height'] as string)) return;
   const edge = props['boxSizing'] === 'content-box' ? insets(props) : NO_INSETS;
-  props['height'] = Math.max(node.heldAt.height - edge.Top - edge.Bottom, 0);
+  const slack = wrapsDown(props) ? ROUNDING_SLACK : 0;
+  props['height'] = Math.max(node.heldAt.height + slack - edge.Top - edge.Bottom, 0);
 }
+
+/**
+ * How much taller than it was read a column that wraps is held. The height is read back rounded
+ * to the screen's pixels, up to a pixel less than its content, and Yoga then breaks the column's
+ * line where content that just fits overflows it, which a browser does not. A third of a point
+ * is a pixel at three times the scale, and too little to keep content that does not fit on one
+ * line. It is also too little to be seen, though a box that grows takes it up.
+ *
+ * ponytail: at a lower scale the height can still come out short by more than that.
+ */
+const ROUNDING_SLACK = 1 / 3;
+
+/** Whether a flex container is a column that wraps. */
+const wrapsDown = (props: Record<string, unknown>): boolean =>
+  (props['flexWrap'] === 'wrap' || props['flexWrap'] === 'wrap-reverse') &&
+  !String(props['flexDirection'] ?? 'column').startsWith('row');
 
 /** A box with its share of a row set aside, while the box it is in is measured. */
 function setAsideToFit(node: EngineNode, props: Record<string, unknown>): void {
@@ -2521,6 +2538,12 @@ const inlineText = (node: EngineNode): boolean =>
 function sitsInLine(node: EngineNode, display: unknown): boolean {
   if (INLINE_DISPLAYS.has(display as string)) return true;
   return display == null && (node.inlineLevel === 'always' || isTextElement(node));
+}
+
+/** Whether a box is laid out in a line of a block container's flow, as the plan for it has it. */
+function inALine(node: EngineNode): boolean {
+  const plan = flowOver(node)?.plan;
+  return plan !== undefined && (plan.kind === 'lines' || plan.inline.has(node));
 }
 
 /** Whether a box is an item of a row that wraps: lines the engine lays out, or a row written so. */
@@ -3941,7 +3964,8 @@ function percentBasis(node: EngineNode, props: Record<string, unknown>): void {
     return;
   }
   if (fitsWidth(parent)) delete props['flexBasis'];
-  else if (INLINE_ROWS.has(readStyle(parent, 'display') as string)) {
+  // Only where it sits in a line: an item of a flex container is as wide as that makes it.
+  else if (INLINE_ROWS.has(readStyle(parent, 'display') as string) && inALine(parent)) {
     const width = readStyle(parent, 'width');
     if (width == null || width === 'auto') delete props['flexBasis'];
   }
@@ -9095,8 +9119,7 @@ export class Engine implements HostEngine {
 
   /** Whether a box is an inline-level one in a block's flow: on a line, at its content's width. */
   private sitsInLine(node: EngineNode): boolean {
-    const plan = flowOver(node)?.plan;
-    return plan !== undefined && (plan.kind === 'lines' || plan.inline.has(node));
+    return inALine(node);
   }
 
   /**

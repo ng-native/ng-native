@@ -112,6 +112,27 @@ describe('an inline-level row holding a percentage flex basis', () => {
     assert.equal(s.box('cell')[2], 100);
   });
 
+  it('keeps the share where the row is an item of a flex container, which stretches it', () => {
+    // An inline-flex box in a flex container is a flex item, as wide as the column makes it, and
+    // sits in no line: the share is of that width. Chrome: the cell is 300 wide.
+    const css = `${CHIP} .p { display: flex; flex-direction: column } .cell { width: 10% }`;
+    const s = scene(css, ['p', ['chip', ['cell', ['label']]]], 'strict');
+    say(s, 'label', 'One fish');
+    assert.equal(s.box('chip')[2], 300);
+    assert.equal(s.box('cell')[2], 300);
+  });
+
+  it('follows the row coming to sit in a line and leaving it', () => {
+    const css = `${CHIP} .col { display: flex; flex-direction: column; width: 300px }`;
+    const s = scene(css, ['p', ['chip', ['cell', ['label']]]], 'strict');
+    say(s, 'label', 'One fish');
+    assert.equal(s.box('cell')[2], 80);
+    s.engine.setClasses(s.nodes.get('p')!, 'col');
+    assert.equal(s.box('cell')[2], 300);
+    s.engine.setClasses(s.nodes.get('p')!, 'p');
+    assert.equal(s.box('cell')[2], 80);
+  });
+
   it('follows the row gaining a width and losing it', () => {
     const s = scene(`${CHIP} .wide { width: 200px }`, ['p', ['chip', ['cell', ['label']]]]);
     say(s, 'label', 'One fish');
