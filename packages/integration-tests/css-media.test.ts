@@ -313,4 +313,14 @@ describe("the engine's conditions", () => {
       ['dark', true, 400],
     );
   });
+
+  it("are the constructor's where it is given them, as an app's engine is made", () => {
+    assert.equal(new Engine(createFakeFabric(), 1).conditions, undefined);
+    const dark = new Engine(createFakeFabric(), 1, {
+      conditions: { width: 400, height: 800, colorScheme: 'dark' },
+    });
+    assert.equal(dark.conditions?.colorScheme, 'dark');
+    dark.updateConditions({ width: 400, height: 800, colorScheme: 'light' });
+    assert.equal(dark.conditions?.colorScheme, 'light');
+  });
 });

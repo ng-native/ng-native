@@ -6418,6 +6418,7 @@ export class Engine implements HostEngine {
     this.fabric = fabric;
     this.rootTag = rootTag;
     const conditions = options.conditions ?? { width: 0, height: 0, colorScheme: 'light' };
+    this.lastConditions = options.conditions;
     this.styles = new StyleResolver(options.globalStyles ?? null, conditions);
     this.viewportSize = { width: conditions.width, height: conditions.height };
     this.fontScale = conditions.fontScale;
@@ -6858,7 +6859,8 @@ export class Engine implements HostEngine {
   }
 
   /**
-   * The conditions last given to `updateConditions`, or undefined before any: what a package
+   * The conditions given to the constructor or to `updateConditions` last, or undefined before
+   * any, when the engine settles colours as light and has no size: what a package
    * answering a media query from a script, `matchMedia`, reads the colour scheme and the motion
    * preference from.
    */
