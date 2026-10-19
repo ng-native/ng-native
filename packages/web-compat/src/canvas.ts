@@ -1,4 +1,10 @@
-import { nativePlatform, registerViewName, type Engine, type EngineNode } from '@ng-native/fabric';
+import {
+  nativePlatform,
+  registerHoist,
+  registerViewName,
+  type Engine,
+  type EngineNode,
+} from '@ng-native/fabric';
 import { viewBoxProps } from '@ng-native/icons';
 import { acceptedColour, canvasColour, serializedColour } from './canvas-colour.ts';
 import { isComposite, isUnbounded } from './canvas-composite.ts';
@@ -1310,6 +1316,14 @@ function redrawn(slot: Slot, shape: Shape, engine: Engine): void {
   }
 }
 
+/**
+ * The group a canvas draws in, which is all of the canvas that is committed (`registerHoist`
+ * with `only`). What a template or a script puts in a canvas is its fallback content, for a
+ * browser with no canvas: in the document, where a script reads it, and drawn by none that has
+ * one, whatever its styles say. Its text, too. Taken out of the canvas, it is drawn where it is.
+ */
+const LAYER = 'canvas:layer';
+
 const contexts = new WeakMap<EngineNode, Context2D>();
 const layers = new WeakMap<EngineNode, EngineNode>();
 
@@ -1320,13 +1334,14 @@ const layers = new WeakMap<EngineNode, EngineNode>();
  */
 export function canvasCreated(node: EngineNode, engine: Engine): EngineNode | undefined {
   if (node.tag !== 'canvas') return;
-  const layer = shapeOf(engine, 'g', {});
+  const layer = shapeOf(engine, LAYER, {});
   // What it draws is its own, and no child a script sees: see `keptOwn`.
   keptOwn.add(layer);
   engine.appendChild(node, layer);
   layers.set(node, layer);
   return layer;
 }
+
 /** The `width` and `height` each canvas was given, as written: what its size is read from. */
 const written = new WeakMap<EngineNode, Record<string, string>>();
 
@@ -1414,12 +1429,13 @@ function sizeCanvas(node: EngineNode, engine: Engine) {
 /** Register the canvas element, and answer what takes it away again. */
 export function registerCanvas(): () => void {
   const root = nativePlatform() === 'android' ? 'RNSVGSvgViewAndroid' : 'RNSVGSvgView';
-  const unregisterCanvas = registerViewName('canvas', root);
-  const unregisterPictures = registerPictures();
-  const unregister = () => {
-    unregisterCanvas();
-    unregisterPictures();
-  };
+  const undo = [
+    registerViewName('canvas', root),
+    registerViewName(LAYER, 'RNSVGGroup'),
+    registerHoist(LAYER, 'canvas', { only: true }),
+    registerPictures(),
+  ];
+  const unregister = () => undo.forEach((each) => each());
   // What a script asks a context or a paint is, and makes pixels with to put on a canvas, where
   // the runtime has none of its own.
   const target = globalThis as Record<string, unknown>;

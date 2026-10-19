@@ -4754,18 +4754,30 @@ const HOIST_STOPS: Record<string, ReadonlySet<string>> = {};
  * just after the ancestor's child it was written in, or after all of them when it was written in
  * the ancestor itself, which keeps a page's scroll view ahead of its header as UIKit's large
  * title wants. A node with no such ancestor commits where it is.
+ *
+ * Answers what takes the registration away again, for a package that can be taken out.
  */
 export function registerHoist(
   elementName: string,
   ancestorName: string,
   options: HoistOptions = {},
-): void {
+): () => void {
   HOISTS[elementName] = ancestorName;
   HOIST_TARGETS.add(ancestorName);
   if (options.standIn) STAND_INS[elementName] = options.standIn;
   if (options.only) HOIST_ONLY.add(ancestorName);
   if (options.stopAt) HOIST_STOPS[elementName] = new Set(options.stopAt);
   else delete HOIST_STOPS[elementName];
+  return () => {
+    // Registered again since, it is the later registration's to take away.
+    if (HOISTS[elementName] !== ancestorName) return;
+    delete HOISTS[elementName];
+    delete STAND_INS[elementName];
+    delete HOIST_STOPS[elementName];
+    if (Object.values(HOISTS).includes(ancestorName)) return;
+    HOIST_TARGETS.delete(ancestorName);
+    HOIST_ONLY.delete(ancestorName);
+  };
 }
 
 export interface HoistOptions {

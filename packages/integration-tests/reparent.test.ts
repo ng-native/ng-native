@@ -64,6 +64,36 @@ it('creates what a destroyed node holds again when the node comes back', () => {
   assert.notEqual(engine.tagOf(line), before, 'a new view under the new caret');
 });
 
+it('commits a hoisted element where it is once its registration is taken away', () => {
+  const tree = () => {
+    const fabric = createFakeFabric();
+    const engine = new Engine(fabric, 1, {});
+    const add = (name: string, id: string, parent: EngineNode) => {
+      const node = engine.createElement(name);
+      engine.setProp(node, 'nativeID', id);
+      engine.appendChild(parent, node);
+      return node;
+    };
+    const host = add('undo-host', 'host', engine.root);
+    add('undo-config', 'config', add('view', 'frame', host));
+    engine.commit();
+    const walk = (all: readonly FakeFabricNode[]): unknown[] =>
+      all.map((node) => [node.props['nativeID'], ...walk(node.children)]);
+    return walk(fabric.committed);
+  };
+  const undo = registerHoist('undo-config', 'undo-host', { only: true });
+  assert.deepEqual(tree(), [['host', ['config']]]);
+  undo();
+  assert.deepEqual(tree(), [['host', ['frame', ['config']]]]);
+  // A registration made again since is the later one's to take away.
+  const first = registerHoist('undo-config', 'view');
+  const later = registerHoist('undo-config', 'undo-host');
+  first();
+  assert.deepEqual(tree(), [['host', ['frame'], ['config']]]);
+  later();
+  assert.deepEqual(tree(), [['host', ['frame', ['config']]]]);
+});
+
 it('hoists a destroyed element again when it comes back', () => {
   // A header projected into an `@if` is destroyed when the `@if` closes and put back when it opens.
   registerHoist('reparent-config', 'reparent-host');

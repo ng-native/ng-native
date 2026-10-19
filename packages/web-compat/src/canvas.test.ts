@@ -4,7 +4,7 @@
  */
 import assert from 'node:assert/strict';
 import { afterEach, describe, it } from 'node:test';
-import { Component } from '@angular/core';
+import { Component, signal } from '@angular/core';
 import { NgIcon } from '@ng-native/icons';
 import { cleanup, render, screen, settle } from '@ng-native/testing';
 import { provideWebCompat } from './index.ts';
@@ -589,5 +589,132 @@ describe('@ng-native/web-compat canvas a script makes', () => {
     assert.deepEqual([copy.props['vbWidth'], copy.props['vbHeight']], [300, 150]);
     // And one never drawn on is no size until it is, as what it is a copy of is not.
     assert.equal(document().createElement('canvas').cloneNode(false).defaultStyle, undefined);
+  });
+});
+
+@Component({
+  template: `
+    <canvas testID="fallback">
+      Your browser does not support canvas
+      <p id="inline" style="display: flex; opacity: 0.25">Inline</p>
+      <p id="styled" class="shown">Styled</p>
+      @if (said()) {
+        <p id="said">No canvas</p>
+      }
+    </canvas>
+    <div testID="beside" id="beside"></div>
+  `,
+  styles: `
+    .shown {
+      display: flex;
+      opacity: 0.5;
+    }
+  `,
+})
+class Fallback {
+  readonly said = signal(true);
+}
+
+@Component({ template: `<canvas testID="unaided"><view></view></canvas>` })
+class Unaided {}
+
+describe('@ng-native/web-compat canvas fallback content', () => {
+  // What is committed under each view: a canvas holds the group it draws in, and nothing else.
+  const views = (id: string) => screen.getByTestId(id).children.map((view) => view.viewName);
+
+  it('draws nothing of its text, nor of an element a style displays', async () => {
+    await render(Fallback, { providers: [provideWebCompat()] });
+    await settle();
+    const canvas = document().querySelector('canvas');
+    assert.match(canvas.textContent, /Your browser does not support canvas/);
+    assert.equal(canvas.querySelector('#inline').textContent, 'Inline');
+    assert.equal(canvas.querySelector('#styled').textContent, 'Styled');
+    assert.equal(canvas.querySelector('#said').textContent, 'No canvas');
+    assert.deepEqual(views('fallback'), ['RNSVGGroup']);
+  });
+
+  it('draws nothing a script writes in it, a text, a script or a template', async () => {
+    await render(Fallback, { providers: [provideWebCompat()] });
+    await settle();
+    const canvas = document().querySelector('canvas');
+    const made = document().createElement('p');
+    made.textContent = 'Nor this';
+    made.style.display = 'flex';
+    canvas.append(made, 'Nor these words');
+    canvas.insertAdjacentHTML('beforeend', '<span>Nor this either</span>');
+    const script = document().createElement('script');
+    script.textContent = 'void 0';
+    const template = document().createElement('template');
+    canvas.append(script, template);
+    await settle();
+    assert.equal(canvas.children.length, 7);
+    assert.match(canvas.textContent, /Nor these words/);
+    assert.deepEqual(views('fallback'), ['RNSVGGroup']);
+  });
+
+  it('draws what is taken out of it where it is put, with its own styles', async () => {
+    const app = await render(Fallback, { providers: [provideWebCompat()] });
+    await settle();
+    const canvas = document().querySelector('canvas');
+    const beside = document().getElementById('beside');
+    beside.append(canvas.querySelector('#inline'), canvas.querySelector('#styled'));
+    await settle();
+    const moved = screen.getByTestId('beside').children;
+    assert.deepEqual(
+      moved.map((view) => view.props['opacity']),
+      [0.25, 0.5],
+    );
+    // And put back, it is drawn no more, until it is taken out again.
+    const inline = beside.firstElementChild;
+    canvas.append(inline);
+    await settle();
+    assert.equal(views('beside').length, 1);
+    assert.deepEqual(views('fallback'), ['RNSVGGroup']);
+    beside.prepend(inline);
+    await settle();
+    assert.deepEqual(
+      screen.getByTestId('beside').children.map((view) => view.props['opacity']),
+      [0.25, 0.5],
+    );
+    app.instance.said.set(false);
+    await settle();
+    assert.equal(canvas.querySelector('#said'), null);
+    assert.deepEqual(views('fallback'), ['RNSVGGroup']);
+  });
+
+  it('keeps the drawing of a canvas a script made, put in after a commit that removed one', async () => {
+    const app = await render(Fallback, { providers: [provideWebCompat()] });
+    await settle();
+    const made = document().createElement('canvas');
+    made.setAttribute('testID', 'made');
+    made.append('No canvas');
+    // A commit with a removal in it, while the canvas is in no tree.
+    app.instance.said.set(false);
+    await settle();
+    document().getElementById('beside').append(made);
+    made.getContext('2d').fillRect(0, 0, 5, 5);
+    await settle();
+    const [group] = screen.getByTestId('made').children;
+    assert.deepEqual(views('made'), ['RNSVGGroup']);
+    assert.equal(group!.children[0]!.viewName, 'RNSVGPath');
+  });
+
+  it('is drawn in an app without the package once the package is taken out', async () => {
+    await render(Fallback, { providers: [provideWebCompat()] });
+    cleanup();
+    await render(Unaided);
+    assert.deepEqual(views('unaided'), ['View']);
+  });
+
+  it('keeps what the canvas draws drawn', async () => {
+    await render(Fallback, { providers: [provideWebCompat()] });
+    await settle();
+    const canvas = document().querySelector('canvas');
+    canvas.getContext('2d').fillRect(0, 0, 5, 5);
+    canvas.append('More words');
+    await settle();
+    assert.deepEqual(views('fallback'), ['RNSVGGroup']);
+    const [group] = screen.getByTestId('fallback').children;
+    assert.equal(group!.children[0]!.viewName, 'RNSVGPath');
   });
 });
