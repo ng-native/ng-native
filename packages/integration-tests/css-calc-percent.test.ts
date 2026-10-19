@@ -69,6 +69,14 @@ describe('a calc() of a percentage and a length', () => {
     assert.deepEqual(s.box('c'), [10, 10, 240, 10], 'and back once the token is its own again');
   });
 
+  it('adds a percentage token to the percentage', () => {
+    const s = scene(`${BASE} .c { --handle: 20%; width: calc(100% - var(--handle)) }`, [
+      'p',
+      ['c'],
+    ]);
+    assert.equal(s.box('c')[2], 224, 'a share less a share is a share: 80% of 280');
+  });
+
   it('refuses a token with a percentage where the percentage is of no box', () => {
     const dropped: string[] = [];
     compileCss('.c { letter-spacing: calc(50% + var(--x)) }', 'app.css', {

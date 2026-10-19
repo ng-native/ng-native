@@ -142,10 +142,12 @@ end margin beat a left or right one whatever the cascade says (see [what CSS rea
 device](/packages/fabric/supported-css)). Use `ms-*` and `me-*` on those children. `divide-double`
 is dropped with a warning, as a native border has no double style.
 
-Variants and utilities that style a pseudo-element, `before:`, `file:` and the rest, style nothing:
-native has no element for a pseudo-element to be. `placeholder:` is the exception: its text colour
-is a text input's placeholder colour, so `placeholder:text-gray-400` works, and anything else after
-it is dropped with a warning. A rule that is only for one is
+Without the `browser` option, variants and utilities that style a pseudo-element, `before:`,
+`file:` and the rest, style nothing: native has no element for a pseudo-element to be. With it,
+`before:` and `after:` draw their boxes, as above, and the rest still style nothing.
+`placeholder:` is the exception: its text colour is a text input's placeholder colour, so
+`placeholder:text-gray-400` works, and anything else after it is dropped with a warning. A rule
+that is only for one is
 refused with a build warning; where a pseudo-element shares a selector list with real elements, as
 in Tailwind's own resets, it is taken out of the list and the rest of the rule is kept.
 

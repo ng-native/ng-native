@@ -42,10 +42,12 @@ native, and a stylesheet written for the web puts its tokens there.
 
 A rule with one of these selectors is dropped with a warning.
 
-`::before`, `::after` and every other pseudo-element are permanently unsupported, not a "not yet".
-Rendering one would mean synthesizing a node no template declared, which would make the style
-engine responsible for view hierarchy a template never wrote - so the fix, when a design wants one,
-is to write the element.
+In an app's own sheet, `::before`, `::after` and every other pseudo-element are unsupported, not a
+"not yet". Rendering one would mean synthesizing a node no template declared, which would make the
+style engine responsible for view hierarchy a template never wrote - so the fix, when a design
+wants one, is to write the element. A
+[sheet read as a browser reads it](#a-sheet-read-as-a-browser-reads-it), for components written for
+one, is the exception for `::before` and `::after`.
 
 `::placeholder` is the exception, because it needs no node: a text input draws its own placeholder,
 and its `placeholderTextColor` is the colour. `.field::placeholder { color: #8b8b96 }`, or
