@@ -1,7 +1,7 @@
 import type { Engine, EngineNode } from '@ng-native/fabric';
 import type { RendererExtension } from '@ng-native/platform';
 import { documentOf, listenAnywhere, type CompatDocument } from './document.ts';
-import { giveRole } from './elements.ts';
+import { giveRole, scrollWhereStyled } from './elements.ts';
 import { listen, type Heard } from './events.ts';
 import { buildAs, setMarkup } from './html.ts';
 import { inlineStyle } from './inline-style.ts';
@@ -73,6 +73,8 @@ export const webListen: RendererExtension = {
   // A button and a link have their roles: see `elements.ts`.
   created(node, engine) {
     giveRole(node, engine);
+    // What overflows it scrolls, where its style says so: see `elements.ts`.
+    scrollWhereStyled(node, engine);
     // A stylesheet is read, and has no box of its own: see `runtime-style.ts`.
     if (node.tag === 'style' && documentOf(engine)) styleMade(node, engine);
   },

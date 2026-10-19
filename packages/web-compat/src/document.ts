@@ -400,6 +400,8 @@ export function documentFor(engine: Engine): CompatDocument {
       return engine.focused ?? body;
     },
     defaultView: globalThis,
+    // What scrolls the page, which is its root: the window does not scroll here.
+    scrollingElement: engine.root,
     // Its name checked and in lower case, and given what a template's element of the name is.
     createElement(...args: unknown[]) {
       required(args, 1, 'createElement');

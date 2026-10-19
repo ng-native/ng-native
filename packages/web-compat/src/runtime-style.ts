@@ -9,6 +9,7 @@ import {
 } from '@ng-native/fabric';
 import { CSSStyleSheet, DETACH, sheetOfElement, type CSSRule } from './css-style-sheet.ts';
 import { supportsCondition } from './supports-condition.ts';
+import { mediaCondition } from './media-query.ts';
 import { transitionOf, transitionPart } from './transition-style.ts';
 import { declarationsIn, pieces, withoutComments } from './css-style-declaration.ts';
 import { partsOf } from './css-grammar.ts';
@@ -36,7 +37,7 @@ import { domError } from './dom-error.ts';
  * stylesheet is compiled when the app is built, so a small one made on the device is read here.
  *
  * ponytail: what a component writes this way and no more. Selectors as `runtime-selector.ts`
- * reads them; `@media` by a width; lengths in `px`, `rem` and `%`, or one token; the layout
+ * reads them; `@media` as `media-query.ts` reads it; lengths in `px`, `rem` and `%`, or one token; the layout
  * properties below, and colours as they are written. No shorthand but `flex`, `margin`,
  * `padding` and `inset`. A rule or a declaration outside that is passed over and said.
  * `@supports` holds for what is read here, which is `CSS.supports` too. A library's whole theme
@@ -317,20 +318,14 @@ function ruleFor(
   } as StyleRule;
 }
 
-/** `@media screen and (max-width: 920px)` as the width it is for. */
+/**
+ * `@media screen and (max-width: 920px)` as the condition its rules are held to: see
+ * `media-query.ts`. `null` for one that cannot be read, and for any other at-rule.
+ */
 function conditionOf(media: string): StyleRule['condition'] | null | undefined {
   if (!media) return undefined;
-  // The one shape it reads, whole: any other query, or a part of one, is passed over and said.
-  const [, bound, value] =
-    /^@media\s+(?:(?:only\s+)?(?:screen|all)\s+and\s+)?\((max|min)-width:\s*([\d.]+)px\)\s*$/i.exec(
-      media.trim(),
-    ) ?? [];
-  if (!bound) return null;
-  return {
-    feature: 'width',
-    op: bound.toLowerCase() === 'max' ? 'lte' : 'gte',
-    value: Number(value),
-  } as StyleRule['condition'];
+  const query = /^@media\s([\s\S]*)$/i.exec(media);
+  return query ? mediaCondition(query[1]!) : null;
 }
 
 /**
@@ -354,7 +349,7 @@ function tokensIn(block: string, tokens: Record<string, string>): ReadonlySet<st
 }
 
 /**
- * Read what an at-rule holds, and answer whether it was one: under `@media` by its width, and
+ * Read what an at-rule holds, and answer whether it was one: under `@media` by its query, and
  * under `@supports` where the condition holds as this reader answers it.
  */
 function readAtRule(

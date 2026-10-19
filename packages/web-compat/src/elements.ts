@@ -1,4 +1,10 @@
-import { registerViewName, type Engine, type EngineNode } from '@ng-native/fabric';
+import {
+  registeredViewName,
+  registerViewName,
+  scrollsOverflow,
+  type Engine,
+  type EngineNode,
+} from '@ng-native/fabric';
 import { documentOf } from './document.ts';
 
 /**
@@ -45,4 +51,40 @@ export function giveRole(node: EngineNode, engine: Engine): void {
   engine.setProp(node, 'accessible', true);
   // A keyboard, a switch control or a remote can reach it, which is where `:focus` comes from.
   engine.setProp(node, 'focusable', true);
+}
+
+/** HTML's elements that the engine has a view for already, and so a registered name. */
+const HTML_ELEMENTS = new Set([
+  ...['div', 'section', 'article', 'header', 'footer', 'main', 'nav', 'ul', 'ol', 'li'],
+  ...['span', 'p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'label', 'strong', 'b', 'em', 'i'],
+  ...['u', 's', 'small', 'code', 'mark', 'abbr', 'cite', 'time', 'img'],
+  ...Object.keys(ROLES),
+  ...PLAIN,
+  ...UNDRAWN,
+]);
+
+/**
+ * Whether a custom element is a browser's: one a library the app named to the build has a
+ * selector for, which the build lists as each of its modules loads. Every other custom element
+ * is the native view it is without this package.
+ */
+const named = (name: string): boolean =>
+  (globalThis as { ɵngNativeBrowserElements?: ReadonlySet<string> }).ɵngNativeBrowserElements?.has(
+    name.toLowerCase(),
+  ) ?? false;
+
+/** Whether a name is an element a browser has: one of HTML's, or a custom element named as one. */
+const isHtml = (name: string): boolean =>
+  HTML_ELEMENTS.has(name) ||
+  (registeredViewName(name) === undefined && (!name.includes('-') || named(name)));
+
+/**
+ * Have an element made in an app that asked for this package scroll what overflows it where its
+ * style says `overflow: auto` or `scroll`, as a browser's does: a list of options in a panel. The
+ * engine's own views, a `<view>` or a `<scroll-view>`, keep what they are, and a text field
+ * scrolls its own text, and is no field as a scroll view.
+ */
+export function scrollWhereStyled(node: EngineNode, engine: Engine): void {
+  if (node.tag === 'input' || node.tag === 'textarea') return;
+  if (isHtml(node.tag) && documentOf(engine)) scrollsOverflow(node);
 }

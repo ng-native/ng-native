@@ -7,6 +7,7 @@ import { documentOf } from './document.ts';
 import { tokenize } from './css-tokens.ts';
 import { SYSTEM_COLOURS } from './css-colour-names.ts';
 import { serializeString } from './css-value.ts';
+import { drawn, sizeOf, styled } from './geometry.ts';
 
 /**
  * `getComputedStyle`: a node's style as a browser resolves it, read only.
@@ -21,8 +22,9 @@ import { serializeString } from './css-value.ts';
  * computed value: a colour as `rgb()` or `rgba()`, a length in pixels, a transform as a matrix,
  * a shorthand of its sides as few as say them.
  *
- * ponytail: what only layout knows is not answered: a `width` or `height` with none of its own
- * is `auto`, and a percentage is as written. A custom property is written back from the forms the engine
+ * ponytail: what only layout knows is answered from where native last laid the element out
+ * where it is drawn, for `width` and `height` with none of their own, and as written otherwise:
+ * a percentage is not worked out. A custom property is written back from the forms the engine
  * keeps of it, not as the words it was given. No property is `!important`.
  */
 
@@ -312,15 +314,6 @@ const KEYWORDS: Readonly<Record<string, string>> = {
   'revert-layer': 'unset',
 };
 
-/** What a node is styled with for one property: on itself, by a rule, or for its name. */
-const styled = (node: EngineNode, key: string): unknown =>
-  // An inline style is under a rule's important declaration, as the engine has it.
-  (node.styleCache?.important?.has(key)
-    ? undefined
-    : (node.props['style'] as Record<string, unknown> | undefined)?.[key]) ??
-  node.styleCache?.style[key] ??
-  (node.defaultStyle as Record<string, unknown> | undefined)?.[key];
-
 const inlineOf = (node: EngineNode): Inline | undefined =>
   (node as unknown as { style?: Inline }).style;
 
@@ -500,10 +493,31 @@ function isKnown(name: string): boolean {
 }
 const WHOLE = new Set(['border', 'font', 'cssFloat']);
 
-/** What layout settles of a value: a minimum of `auto`, and the box of an item of a flex or grid container. */
+/** What only layout knows: a `width` or `height` with none of its own, where it is drawn. */
+function laidOut(node: EngineNode, key: 'width' | 'height'): string | undefined {
+  if (!drawn(node)) return undefined;
+  const size = sizeOf(node)[key];
+  const [from, to] = key === 'width' ? ['Left', 'Right'] : ['Top', 'Bottom'];
+  const inside = ['padding', 'border'].reduce((sum, edge) => {
+    const suffix = edge === 'border' ? 'Width' : '';
+    const near = Number.parseFloat(resolved(node, `${edge}${from}${suffix}`)) || 0;
+    const far = Number.parseFloat(resolved(node, `${edge}${to}${suffix}`)) || 0;
+    return sum + near + far;
+  }, 0);
+  const border = resolved(node, 'boxSizing') === 'border-box';
+  return `${Math.max(0, border ? size : size - inside)}px`;
+}
+
+/**
+ * What layout settles of a value: a size with none of its own, a minimum of `auto`, and the
+ * box of an item of a flex or grid container.
+ */
 function settled(node: EngineNode, key: string, value: string): string {
   if (key === 'display') return blockified(node, value);
   if (value !== 'auto') return value;
+  // A box that is none, or is its children's, has no size of its own to lay out.
+  const display = key === 'width' || key === 'height' ? resolved(node, 'display') : 'none';
+  if (!/^(none|contents)$/.test(display)) return laidOut(node, key as 'width') ?? value;
   return key === 'minWidth' || key === 'minHeight' ? minimum(node) : value;
 }
 

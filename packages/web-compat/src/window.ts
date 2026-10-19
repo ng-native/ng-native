@@ -1,10 +1,11 @@
-import type { Engine, EngineNode } from '@ng-native/fabric';
+import { installDeferTriggers, type Engine, type EngineNode } from '@ng-native/fabric';
 import { Attr } from './attr.ts';
 import { computedStyle } from './computed-style.ts';
 import { cssNamespace } from './css-namespace.ts';
 import * as cssom from './css-style-sheet.ts';
 import { DOMStringMap } from './dataset.ts';
 import { Document, XMLDocument } from './dom-implementation.ts';
+import { DOMRect, DOMRectList, DOMRectReadOnly } from './dom-rect.ts';
 import { DocumentType } from './document-type.ts';
 import { elementInterfaces } from './element-interfaces.ts';
 import {
@@ -16,12 +17,20 @@ import {
   unlistenAll,
 } from './events.ts';
 import { domParser } from './html.ts';
+import {
+  IntersectionObserver,
+  IntersectionObserverEntry,
+  watchOthersWith,
+} from './intersection-observer.ts';
 import { HTMLCollection, NodeList } from './live-list.ts';
+import { MediaQueryList, mediaQueryList } from './match-media.ts';
 import { MediaList } from './media-list.ts';
 import { MutationObserver, MutationRecord } from './mutation-observer.ts';
 import { NODE_CONSTANTS } from './node-constants.ts';
 import { nodeInterfaces } from './node-interfaces.ts';
 import { installNamedProperties } from './named-properties.ts';
+import { ResizeObserver, ResizeObserverEntry, ResizeObserverSize } from './resize-observer.ts';
+import { scrollAsked, scrollPromise } from './scroll-offset.ts';
 import { NodeFilter, NodeIterator, TreeWalker } from './traversal.ts';
 import { listenOnWindow, windowListensTo } from './window-listeners.ts';
 import { XMLSerializer } from './xml-serializer.ts';
@@ -44,6 +53,87 @@ function anyElement(before: unknown): object {
     }
   };
 }
+
+const noop = () => {};
+
+/**
+ * `window.matchMedia`: whether a media query matches the window of the app `window` speaks for,
+ * read each time it is asked, and a listener told when the answer changes: the device turning.
+ * See `match-media.ts`.
+ */
+function matchMedia(...args: unknown[]): MediaQueryList {
+  if (args.length === 0) {
+    throw new TypeError("Failed to execute 'matchMedia': 1 argument required, but only 0 present.");
+  }
+  return mediaQueryList(String(args[0]), {
+    screen: size,
+    watch: (changed) => {
+      const engine = engines.at(-1);
+      return engine ? listenToResize(engine, changed) : noop;
+    },
+  });
+}
+
+/**
+ * `window.screen`: the window, as nothing here is drawn outside it. Read each time, as the
+ * device can turn.
+ */
+const screen = Object.freeze({
+  get width() {
+    return size().width;
+  },
+  get height() {
+    return size().height;
+  },
+  get availWidth() {
+    return size().width;
+  },
+  get availHeight() {
+    return size().height;
+  },
+  availLeft: 0,
+  availTop: 0,
+  colorDepth: 24,
+  pixelDepth: 24,
+  get orientation() {
+    const { width, height } = size();
+    const portrait = height >= width;
+    return { type: portrait ? 'portrait-primary' : 'landscape-primary', angle: portrait ? 0 : 90 };
+  },
+});
+
+/**
+ * `window.visualViewport`: the part of the page in sight, which is the window, unzoomed and at
+ * the top. A library places an overlay by it, and listens for its `resize`, which is the
+ * window's.
+ */
+const visualViewport = {
+  get width() {
+    return size().width;
+  },
+  get height() {
+    return size().height;
+  },
+  offsetLeft: 0,
+  offsetTop: 0,
+  pageLeft: 0,
+  pageTop: 0,
+  scale: 1,
+  onresize: null,
+  onscroll: null,
+  onscrollend: null,
+  addEventListener(type: string, listener: unknown, options?: unknown) {
+    listen(visualViewport, type, listener, options, (heard) => {
+      const engine = engines.at(-1);
+      if (type !== 'resize' || !engine) return undefined;
+      return listenToResize(engine, () => heard({ type, target: visualViewport }));
+    });
+  },
+  removeEventListener(type: string, listener: unknown, options?: unknown) {
+    unlisten(visualViewport, type, listener, options);
+  },
+  dispatchEvent: (event: unknown) => dispatch(event, [visualViewport]),
+};
 
 /** What a library reads from `window`, some of it as it loads. */
 const GLOBALS: Readonly<Record<string, unknown>> = {
@@ -97,6 +187,25 @@ const GLOBALS: Readonly<Record<string, unknown>> = {
   // What `childNodes` and `getElementsByTagName` answer: see `live-list.ts`.
   HTMLCollection,
   NodeList,
+  // Whether a media query matches the window: see `match-media.ts`.
+  matchMedia,
+  MediaQueryList,
+  // All three: a library's scroll blocking calls `scroll`, and restores the page with it. The
+  // window does not scroll here, so each only checks what it is given, as a browser does.
+  scroll: (...args: unknown[]) => scrollPromise(() => void scrollAsked(args)),
+  scrollTo: (...args: unknown[]) => scrollPromise(() => void scrollAsked(args)),
+  scrollBy: (...args: unknown[]) => scrollPromise(() => void scrollAsked(args)),
+  screen,
+  visualViewport,
+  // What `getBoundingClientRect` answers, which a library makes rectangles of its own with.
+  DOMRect,
+  DOMRectReadOnly,
+  DOMRectList,
+  // See `resize-observer.ts` and `intersection-observer.ts`.
+  ResizeObserver,
+  ResizeObserverEntry,
+  ResizeObserverSize,
+  IntersectionObserverEntry,
 };
 
 /**
@@ -123,7 +232,19 @@ export function installWindow(): () => void {
   for (const name of sized) {
     Object.defineProperty(target, name, { configurable: true, get: SIZES[name] });
   }
+  // Over the engine's own, which `@defer (on viewport)` is given where this package is not: a
+  // library reads the whole of an entry, and sets a root, a margin and thresholds. The engine's
+  // is put in first, so that it is not put in over this one when the app mounts.
+  installDeferTriggers();
+  const intersecting = target['IntersectionObserver'];
+  target['IntersectionObserver'] = IntersectionObserver;
+  // And an app that did not ask is watched by the engine's, as it is without this package.
+  watchOthersWith(intersecting);
   return () => {
+    if (target['IntersectionObserver'] === IntersectionObserver) {
+      target['IntersectionObserver'] = intersecting;
+    }
+    watchOthersWith(undefined);
     for (const name of added) if (target[name] === GLOBALS[name]) delete target[name];
     for (const name of sized) delete target[name];
     // What was added with them goes with them, as a page's listeners go with its window.
@@ -186,7 +307,13 @@ export function windowOf(engine: Engine): () => void {
 export const listenToResize = (engine: Engine, listener: () => void): (() => void) =>
   engine.watchViewport(listener);
 
-const size = () => engines.at(-1)?.viewport ?? { width: 0, height: 0 };
+/** The size of an app's window, which is the screen's: nothing is drawn outside it. */
+export const windowSize = (engine: Engine): { width: number; height: number } => engine.viewport;
+
+const size = () => {
+  const engine = engines.at(-1);
+  return engine ? windowSize(engine) : { width: 0, height: 0 };
+};
 
 /**
  * The window's size, read each time: a library positions an overlay from it, and the device can
@@ -195,9 +322,13 @@ const size = () => engines.at(-1)?.viewport ?? { width: 0, height: 0 };
 const SIZES: Readonly<Record<string, () => number>> = {
   innerWidth: () => size().width,
   innerHeight: () => size().height,
-  // The window is the whole of what an app has.
+  // The window is the whole of what an app has, and where it is on the screen is its corner.
   outerWidth: () => size().width,
   outerHeight: () => size().height,
+  screenX: () => 0,
+  screenY: () => 0,
+  screenLeft: () => 0,
+  screenTop: () => 0,
   scrollX: () => 0,
   scrollY: () => 0,
   pageXOffset: () => 0,

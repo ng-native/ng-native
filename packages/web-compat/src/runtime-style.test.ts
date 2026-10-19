@@ -81,31 +81,33 @@ describe('a stylesheet read while the app runs', () => {
     assert.deepEqual(rule!.condition, { feature: 'width', op: 'lte', value: 920 });
   });
 
-  it('passes over a query it reads only part of, and says so', () => {
+  it('reads a whole query, and passes over one it cannot and says so', () => {
+    const condition = (media: string) => {
+      const closing = media.includes('{') ? ' }' : '';
+      return sheetOf(`@media ${media} { .a { width: 4px } }${closing}`).rules.map(
+        (rule) => rule.condition,
+      );
+    };
+    const width = (op: string, value: number) => ({ feature: 'width', op, value });
+    assert.deepEqual(condition('(min-width: 600px) and (max-width: 959px)'), [
+      { all: [width('gte', 600), width('lte', 959)] },
+    ]);
+    // Print is a medium the app is never in.
+    assert.deepEqual(condition('print and (max-width: 600px)'), [
+      { all: [{ any: [] }, width('lte', 600)] },
+    ]);
+    assert.deepEqual(condition('(max-width: 600px), print'), [width('lte', 600)]);
     const said: unknown[] = [];
     const warn = console.warn;
     console.warn = (...all: unknown[]) => said.push(all.join(' '));
     try {
-      for (const media of [
-        '(min-width: 600px) and (max-width: 959px)',
-        'print and (max-width: 600px)',
-        'not all and (max-width: 600px)',
-        '(max-width: 600px), print',
-        '(min-width: 600px) { @media (max-width: 959px)',
-      ]) {
-        const closing = media.includes('{') ? ' }' : '';
-        const { rules } = sheetOf(`@media ${media} { .a { width: 4px } }${closing}`);
-        assert.deepEqual(rules, [], media);
-      }
+      assert.deepEqual(condition('not all and (max-width: 600px)'), []);
+      // One query inside another is both, which is not read.
+      assert.deepEqual(condition('(min-width: 600px) { @media (max-width: 959px)'), []);
     } finally {
       console.warn = warn;
     }
-    assert.equal(said.length, 5);
-    // The one shape it reads, with or without the screen it is for.
-    for (const media of ['(max-width: 600px)', 'only screen and (max-width: 600px)']) {
-      const [rule] = sheetOf(`@media ${media} { .a { width: 4px } }`).rules;
-      assert.deepEqual(rule!.condition, { feature: 'width', op: 'lte', value: 600 }, media);
-    }
+    assert.equal(said.length, 2);
   });
 
   it('reads the bound of a width query in any case', () => {
@@ -137,6 +139,51 @@ describe('a stylesheet read while the app runs', () => {
     ]);
     // What it is not for weighs as what it names does, as in a browser.
     assert.equal(rule!.specificity, 3000);
+  });
+
+  it('reads a query by the window and what the user asked for, and passes over one it cannot read', () => {
+    const conditions = (css: string) => sheetOf(css).rules.map((rule) => rule.condition);
+    const warn = console.warn;
+    const said: string[] = [];
+    console.warn = (message: string) => void said.push(message);
+    try {
+      assert.deepEqual(
+        conditions(
+          '@media (min-width: 600px) and (prefers-color-scheme: dark) { .a { width: 1px } } ' +
+            '@media (orientation: landscape), print { .b { width: 1px } } ' +
+            '@media only screen and (400px <= height < 50em) { .c { width: 1px } } ' +
+            '@media (prefers-reduced-motion) { .d { width: 1px } } ' +
+            '@media screen { .e { width: 1px } }',
+        ),
+        [
+          {
+            all: [
+              { feature: 'width', op: 'gte', value: 600 },
+              { feature: 'prefers-color-scheme', value: 'dark' },
+            ],
+          },
+          { feature: 'orientation', value: 'landscape' },
+          {
+            all: [
+              { feature: 'height', op: 'gte', value: 400 },
+              { feature: 'height', op: 'lt', value: 800 },
+            ],
+          },
+          { feature: 'prefers-reduced-motion', value: 'reduce' },
+          undefined,
+        ],
+      );
+      // What it cannot read is no rule, and is said: a negation, a feature the engine has no
+      // answer for, and a query of something other than the window.
+      const passed = sheetOf(
+        '@media not print { .a { width: 1px } } @media (hover: hover) { .b { width: 1px } } ' +
+          '@container (max-width: 400px) { .c { width: 1px } }',
+      );
+      assert.equal(passed.rules.length, 0);
+      assert.equal(said.length, 3);
+    } finally {
+      console.warn = warn;
+    }
   });
 
   it('leaves a token to be settled where the rule applies, and reads the first and last of a list', () => {
@@ -261,6 +308,28 @@ describe('a <style> a component adds to the page', () => {
     style.textContent = '#strip .item { width: 10% }';
     await settle();
     assert.equal(wide('one'), '10%');
+  });
+
+  it('styles by the colour scheme and the way up the window, as they change', async () => {
+    const app = await render(Strip, {
+      providers: [provideWebCompat()],
+      conditions: { width: 400, height: 800, colorScheme: 'light' },
+    });
+    const engine = app.componentRef.injector.get(Engine);
+    const document = app.fixture.componentInstance.document;
+    const style = document.createElement('style');
+    document.head.appendChild(style);
+    style.innerHTML =
+      '@media (prefers-color-scheme: dark) and (min-width: 300px) { #strip .item { width: 30% } } ' +
+      '@media (orientation: landscape) { #strip .wide { width: 70% } }';
+    await settle();
+    assert.deepEqual([wide('one') ?? null, wide('two') ?? null], [null, null]);
+    engine.updateConditions({ width: 400, height: 800, colorScheme: 'dark' });
+    await settle();
+    assert.deepEqual([wide('one'), wide('two')], ['30%', '30%']);
+    engine.updateConditions({ width: 800, height: 400, colorScheme: 'dark' });
+    await settle();
+    assert.deepEqual([wide('one'), wide('two')], ['30%', '70%']);
   });
 
   it('styles nothing once it is taken out of the page', async () => {

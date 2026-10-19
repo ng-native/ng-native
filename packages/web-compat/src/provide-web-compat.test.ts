@@ -83,6 +83,8 @@ describe('provideWebCompat', () => {
     const globals = globalsNow();
     const windowPrototype = Object.getPrototypeOf(globalThis);
     const buttonView = registeredViewName('button');
+    // The engine's own, which `@defer (on viewport)` is given by the platform.
+    const engineObserver = (globalThis as Dom).IntersectionObserver;
 
     const app = await render(Clicks, { providers: [provideWebCompat()] });
     const host = app.instance.host;
@@ -145,14 +147,41 @@ describe('provideWebCompat', () => {
     app.instance.document.head.appendChild(style);
     assert.equal(app.instance.document.styleSheets.length, 1);
     assert.equal(style.sheet.cssRules.length, 1);
+    // Geometry: where an element is and how big, scrolling it, the window, media queries and the
+    // observers, over the engine's own `IntersectionObserver`.
+    const geometry = ['DOMRect', 'DOMRectReadOnly', 'DOMRectList', 'ResizeObserver'];
+    geometry.push('ResizeObserverEntry', 'ResizeObserverSize', 'IntersectionObserverEntry');
+    geometry.push('MediaQueryList', 'matchMedia', 'scroll', 'scrollTo', 'scrollBy');
+    for (const name of geometry) {
+      assert.equal(typeof (globalThis as Dom)[name], 'function', name);
+    }
+    assert.notEqual((globalThis as Dom).IntersectionObserver, engineObserver);
+    assert.equal(typeof (globalThis as Dom).IntersectionObserver, 'function');
+    assert.equal((globalThis as Dom).matchMedia('(min-width: 0px)').matches, true);
+    assert.equal(typeof (globalThis as Dom).screen.width, 'number');
+    assert.equal(typeof (globalThis as Dom).visualViewport.height, 'number');
+    assert.equal((globalThis as Dom).screenX, 0);
+    const placed = ['getBoundingClientRect', 'getClientRects', 'scrollIntoView', 'scrollBy'];
+    for (const name of placed) assert.equal(typeof div[name], 'function', name);
+    assert.deepEqual([div.offsetWidth, div.clientHeight, div.scrollTop], [0, 0, 0]);
+    assert.equal(app.instance.document.scrollingElement, host.engine.root);
+    assert.equal(div.scrollsOverflow, true, 'what overflows it scrolls, where its style says');
 
     cleanup();
     assert.deepEqual(globalsNow(), globals, 'every global as it was, the document too');
     assert.deepEqual(membersOf(host), members, 'every node member as it was');
     assert.equal(host.getAttribute, undefined);
     // The runtime's own `getComputedStyle` is back, which the comparison above says.
-    for (const name of [...tree, ...html, ...cssom, 'CSS', 'MediaList']) {
+    for (const name of [...tree, ...html, ...cssom, 'CSS', 'MediaList', ...geometry]) {
       assert.equal((globalThis as Dom)[name], undefined, name);
+    }
+    assert.equal((globalThis as Dom).IntersectionObserver, engineObserver);
+    assert.deepEqual(
+      [(globalThis as Dom).screen, (globalThis as Dom).screenX],
+      [undefined, undefined],
+    );
+    for (const name of [...placed, 'offsetWidth', 'scrollTop']) {
+      assert.equal(div[name], undefined, name);
     }
     assert.deepEqual([div.style, style.sheet], [undefined, undefined]);
     assert.deepEqual(
@@ -205,6 +234,24 @@ describe('provideWebCompat', () => {
     const box = plain.instance.host.lastElementChild.previousElementSibling;
     assert.deepEqual([box.props['id'], box.props['nativeID']], ['clicks', undefined]);
     assert.equal(box.ownerDocument, null);
+    // What overflows its elements is laid out as it is without the package: none scrolls.
+    assert.equal(box.scrollsOverflow, undefined);
+    // An element of it watched for being in sight is watched by the engine's own observer, which
+    // hears none of its commits.
+    plain.fabric.frames.set(String(box.committed.viewName), { x: 0, y: 0, width: 5, height: 5 });
+    const seen: Dom[] = [];
+    const observer = new (globalThis as Dom).IntersectionObserver(function (
+      this: unknown,
+      entries: Dom[],
+    ) {
+      seen.push(this, ...entries);
+    });
+    observer.observe(box);
+    await Promise.resolve();
+    assert.equal(Object.hasOwn(box.engine, 'commit'), false);
+    assert.equal(seen[0] === observer && seen[1].target === box, true);
+    assert.equal(seen[1].isIntersecting, true);
+    observer.disconnect();
     // Its button has no role given it, and its element with an id is no global.
     assert.equal(plain.instance.host.lastElementChild.props['accessibilityRole'], undefined);
     assert.equal((globalThis as Dom).clicks, undefined);

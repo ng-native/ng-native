@@ -28,12 +28,22 @@ Experimental and partial. It has:
   too, with `replace`, `replaceSync` and `adoptedStyleSheets`), its rules with `insertRule` and
   `deleteRule`, and the rest of the CSSOM's rule classes. A `<style>` a library makes while the
   app runs is read and applied, for the layout properties, colours, custom properties and
-  transitions it declares, `@media` by the window's width, and `@supports`.
+  transitions it declares, `@media` by the window's width and height, which way up it is and the
+  colour scheme and motion the user asked for, and `@supports`.
 - `element.style` as a `CSSStyleDeclaration`: `cssText`, `setProperty`, `getPropertyValue`,
   `removeProperty` and each property by name, shorthands as their longhands, and the `style`
   attribute as its text. A style a library binds is set as what a native view reads.
-- `getComputedStyle`, a `hidden` element drawn as `display: none`, and `CSS.escape` and
-  `CSS.supports`.
+- `getComputedStyle`, with a `width` or `height` an element has none of its own of as it is
+  drawn, a `hidden` element drawn as `display: none`, and `CSS.escape` and `CSS.supports`.
+- Geometry: `getBoundingClientRect` and `getClientRects` as `DOMRect`s, `offsetParent` and the
+  `offset`, `client` and `scroll` sizes and positions, each read from where native last laid the
+  element out with what is pending committed first.
+- Scrolling: an element whose style says `overflow: auto` or `scroll` scrolls what overflows it,
+  with `scrollTop` and `scrollLeft` to read and write, `scroll`, `scrollTo`, `scrollBy` and
+  `scrollIntoView`. The window does not scroll, and `document.scrollingElement` is its root.
+- The window: `screen`, `visualViewport`, `matchMedia` with a `change` listener, and
+  `ResizeObserver` and `IntersectionObserver`, with a root, a margin and thresholds. An app that
+  observes nothing pays nothing for them.
 - `MutationObserver`, with `childList`, `attributes`, `characterData`, `subtree` and old values.
 - A `document` that creates engine nodes and fragments, with a `body` that draws over the screen
   for overlays, a doctype, `createElementNS`, `createTreeWalker` and `createNodeIterator`, and a
@@ -45,7 +55,7 @@ Experimental and partial. It has:
 - A `<button>` and an `<a>` with their roles, and a table's and a form's elements as views.
 - A `click` listener that hears a press.
 
-Geometry, the other observers, forms and the rest of the DOM are not part of it yet.
+Forms and the rest of the DOM are not part of it yet.
 
 Nothing in an app changes until it adds the provider, and everything the provider adds is taken
 away again when the app is destroyed.

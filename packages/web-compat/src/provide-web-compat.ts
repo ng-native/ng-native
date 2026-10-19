@@ -13,13 +13,16 @@ import { documentFor } from './document.ts';
 import { webListen } from './listen.ts';
 import { attributeMembers } from './attribute-members.ts';
 import { characterDataMembers } from './character-data.ts';
+import { forgetCommits } from './commit-watch.ts';
 import { registerElements } from './elements.ts';
+import { geometryMembers } from './geometry.ts';
 import { withHtmlMembers } from './html-members.ts';
 import { htmlMethods } from './html-methods.ts';
 import { markupMembers } from './markup-members.ts';
 import { nodeMembers, setAttributesWith, type CoreNode } from './node-members.ts';
 import { relationMembers } from './node-relations.ts';
 import { watchStyles } from './runtime-style.ts';
+import { scrollingMembers } from './scrolling.ts';
 import { selectorMembers } from './selector-members.ts';
 import { treeMembers } from './tree-members.ts';
 import { installWindow, windowOf } from './window.ts';
@@ -49,6 +52,8 @@ function install(engine: Engine): void {
         ...markupMembers,
         ...htmlMethods,
         ...selectorMembers,
+        ...geometryMembers,
+        ...scrollingMembers,
       }),
     ),
     extendRenderer(webListen),
@@ -84,9 +89,12 @@ function setGlobalDocument(document: unknown): void {
  * - `DOCUMENT`, and the global `document`, create engine nodes, with a `body` that draws over the
  *   screen for overlays, it finds elements by a selector, and its `implementation` makes
  *   documents that are never drawn.
- * - The `window` globals a library reads exist: its listeners, `Event`, its size,
- *   `MutationObserver`, which hears what changes in the tree, `DOMParser` and `XMLSerializer`,
- *   the interfaces of HTML's elements, and an element with an id as a global of that name.
+ * - Elements say where they are and how big, and one whose style says so scrolls what overflows
+ *   it, to be read and written as a browser's is.
+ * - The `window` globals a library reads exist: its listeners, `Event`, its size, `screen`,
+ *   `matchMedia`, `MutationObserver`, which hears what changes in the tree, `ResizeObserver` and
+ *   `IntersectionObserver`, `DOMParser` and `XMLSerializer`, the interfaces of HTML's elements,
+ *   and an element with an id as a global of that name.
  * - A `click` listener hears a press.
  *
  * Nothing is added until this is called, and all of it is taken away again when the last app
@@ -115,6 +123,8 @@ export function provideWebCompat(): EnvironmentProviders {
       const unwatchStyles = watchStyles(engine);
       inject(DestroyRef).onDestroy(() => {
         unwatchStyles();
+        // What an observer still watching in it heard of its commits: see `commit-watch.ts`.
+        forgetCommits(engine);
         forgetRenderer();
         leaveWindow();
         // In whatever order the apps go: the newest still up, or what was there before any.
