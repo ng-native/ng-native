@@ -84,12 +84,14 @@ describe('the renderer', () => {
   });
 
   it('inserts a component through ViewContainerRef and commits it', async () => {
-    // A frame an earlier test left pending commits whatever is dirty when it fires, and firing
-    // between the insert and its change detection would count as a second commit. Off a device
-    // the frame is a 16ms timer, so waiting one out leaves only this insert's own commit.
-    await new Promise((resolve) => setTimeout(resolve, 20));
+    // The insert dirties the tree and asks for a frame, and Angular schedules its change detection
+    // on a timer of its own. A frame that fires between the two commits the half-built tree, and
+    // change detection then commits it again, which is two commits for the insert, whenever the
+    // process is held up for longer than a frame between them. Running the pass in the same task
+    // as the insert leaves no timer to fire between, and the frame behind it finds nothing dirty.
     const before = fabric.calls.completeRoot;
     const ref = instance.insert();
+    app.applicationRef.tick();
     await settle();
 
     assert.equal(fabric.calls.completeRoot - before, 1, 'one commit for the insert');
