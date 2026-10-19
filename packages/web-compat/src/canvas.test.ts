@@ -126,6 +126,15 @@ describe('@ng-native/web-compat canvas', () => {
     assert.equal(shapes()[0]!.props['d'], 'M0 0L10 10');
   });
 
+  it("holds nothing a script sees, as a browser's canvas holds nothing", async () => {
+    const { node, context } = await canvas();
+    context.fillRect(0, 0, 5, 5);
+    await settle();
+    assert.equal(node.childNodes.length, 0);
+    assert.ok(node.outerHTML.endsWith('></canvas>'), node.outerHTML);
+    assert.equal(node.innerHTML, '');
+  });
+
   it('draws a text where it is asked, set against that place as it is aligned', async () => {
     const { context } = await canvas();
     context.font = 'bold 12px sans-serif';

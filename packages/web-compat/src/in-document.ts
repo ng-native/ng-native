@@ -1,13 +1,17 @@
 import type { EngineNode } from '@ng-native/fabric';
 import { KEPT } from './svg-filter.ts';
 
+/** The nodes a drawing keeps of its own that are named as a script's are: a canvas's group. */
+export const keptOwn = new WeakSet<EngineNode>();
+
 /**
  * What a node holds as a browser's document has it: without the boxes a rule generated, its
  * `::before` and `::after`, which the engine keeps among its children and a browser nowhere, nor
- * a node a drawing keeps of its own: see `KEPT` in `svg-filter.ts`.
+ * a node a drawing keeps of its own: see `KEPT` in `svg-filter.ts`, and `keptOwn`.
  */
 export const isInDocument = (child: EngineNode): boolean =>
-  child.nodeKind !== 'element' || !(child.tag.startsWith('::') || child.tag.startsWith(KEPT));
+  child.nodeKind !== 'element' ||
+  !(child.tag.startsWith('::') || child.tag.startsWith(KEPT) || keptOwn.has(child));
 
 export const inDocument = (node: EngineNode): EngineNode[] => node.childList.filter(isInDocument);
 

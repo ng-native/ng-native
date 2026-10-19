@@ -32,6 +32,7 @@ import type { LineStyle } from './canvas-stroke.ts';
 import { documentOf } from './document.ts';
 import { domError } from './dom-error.ts';
 import { ImageData, whole } from './image-data.ts';
+import { keptOwn } from './in-document.ts';
 import { pngOf } from './png.ts';
 import { method, own, type Reflection } from './reflect.ts';
 import { gradientShapeOf, reshape, shapeOf, textShapeOf } from './svg.ts';
@@ -1195,6 +1196,8 @@ const layers = new WeakMap<EngineNode, EngineNode>();
 export function canvasCreated(node: EngineNode, engine: Engine): EngineNode | undefined {
   if (node.tag !== 'canvas') return;
   const layer = shapeOf(engine, 'g', {});
+  // What it draws is its own, and no child a script sees: see `keptOwn`.
+  keptOwn.add(layer);
   engine.appendChild(node, layer);
   layers.set(node, layer);
   return layer;
