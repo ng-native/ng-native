@@ -4203,6 +4203,9 @@ const DRAG_SLOP = 4;
 interface ViewNameRegistration {
   readonly viewName: string | PlatformViewName;
   readonly yielding: boolean;
+  /** What it says of the native view, said again when a later registration is taken away. */
+  readonly defaultProps: Record<string, unknown> | undefined;
+  readonly options: ViewNameOptions | undefined;
 }
 
 /**
@@ -4249,23 +4252,30 @@ export function registerViewName(
     },
     stack: [],
   };
-  const registration = { viewName, yielding: options?.yieldsToComponents === true };
+  const registration = {
+    viewName,
+    yielding: options?.yieldsToComponents === true,
+    defaultProps,
+    options,
+  };
   entry.stack.push(registration);
   registrations.set(elementName, entry);
   nameView(elementName, registration);
-  for (const name of typeof viewName === 'string' ? [viewName] : [viewName.ios, viewName.android]) {
-    describeView(name, defaultProps, options);
-  }
+  describeViews(registration);
   // Takes this registration away, for a package that registers a name for as long as an app that
-  // asked for it is up. The newest one still there names the element, and what it was before any
-  // comes back after the last. The native view's own defaults and text prop stay: they are the
-  // view's, whichever element names it.
+  // asked for it is up. The newest one still there names the element and says again what it said
+  // of the native view, which this one may have cleared, and what the element was before any
+  // comes back after the last. The native view's own defaults and text prop stay after the last:
+  // they are the view's, whichever element names it.
   return () => {
     const index = entry.stack.indexOf(registration);
     if (index === -1) return;
     entry.stack.splice(index, 1);
     const top = entry.stack.at(-1);
-    if (top) return nameView(elementName, top);
+    if (top) {
+      nameView(elementName, top);
+      return describeViews(top);
+    }
     registrations.delete(elementName);
     const { original } = entry;
     if (original.viewName === undefined) delete VIEW_NAMES[elementName];
@@ -4274,6 +4284,13 @@ export function registerViewName(
     else YIELDING.delete(elementName);
     if (original.text) TEXT_ELEMENTS.add(elementName);
   };
+}
+
+/** Note what a registration says of each native view it names. */
+function describeViews({ viewName, defaultProps, options }: ViewNameRegistration): void {
+  for (const name of typeof viewName === 'string' ? [viewName] : [viewName.ios, viewName.android]) {
+    describeView(name, defaultProps, options);
+  }
 }
 
 /** Note what a registration says of a native view: see `ViewNameOptions`. */

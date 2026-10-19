@@ -2772,7 +2772,7 @@ function undrawn(name, context) {
   );
 }
 
-/** A shape's lengths, which react-native-svg takes as numbers under these names. */
+/** A shape's lengths, which react-native-svg takes as numbers or percentages under these names. */
 const SHAPE_LENGTHS = {
   'stroke-width': 'strokeWidth',
   'stroke-dashoffset': 'strokeDashoffset',
@@ -2806,12 +2806,26 @@ function shapePaint(declaration, out, deferred, context) {
     return true;
   }
   if (SHAPE_LENGTHS[name]) {
-    out[SHAPE_LENGTHS[name]] = round(value.value.value);
+    strokeLength(SHAPE_LENGTHS[name], length(value, context), out, deferred);
     return true;
   }
-  if (name !== 'stroke-dasharray' || value.type !== 'values') return false;
-  out.strokeDasharray = value.value.map((dash) => round(dash.value.value));
+  if (name !== 'stroke-dasharray') return false;
+  // `none` is a dash the shape names as its own and sets to nothing, which react-native-svg
+  // draws solid over a dash it would otherwise take from the group it is in.
+  const dashes = value.type === 'none' ? null : value.value.map((dash) => length(dash, context));
+  strokeLength('strokeDasharray', dashes, out, deferred);
   return true;
+}
+
+/**
+ * A shape's length as `length` reads it: points, a percentage string, or an `em` left for the
+ * device to settle against the shape's font, as a length of a box is.
+ */
+function strokeLength(prop, value, out, deferred) {
+  delete out[prop];
+  if (value?.__defer) deferred.push({ props: [prop], compute: value.__defer });
+  else if (holdsMarker(value)) deferred.push({ props: [prop], within: value });
+  else out[prop] = value;
 }
 
 const paintOf = (colour, context) =>

@@ -571,3 +571,97 @@ describe('a touch a package finds a target for', () => {
     }
   });
 });
+
+describe('a span registered again by another package', () => {
+  it('keeps its spaces again once the registration that did not is taken away', () => {
+    const undo = [
+      registerViewName('x-text', 'RNSVGText', undefined, { looseText: 'x-span' }),
+      registerViewName('x-span', 'RNSVGTSpan', undefined, {
+        textContent: 'content',
+        spacedText: true,
+      }),
+    ];
+    try {
+      registerViewName('x-span', 'RNSVGTSpan', undefined, { textContent: 'content' })();
+      const { fabric, engine, add } = scene();
+      const label = add('x-text');
+      for (const words of ['  ●  ', '1903 ']) {
+        engine.appendChild(add('x-span', label), engine.createText(words));
+      }
+      engine.commit();
+      assert.deepEqual(
+        fabric.committed[0]!.children.map((each) => each.props['content']),
+        ['● ', '1903'],
+      );
+    } finally {
+      undo.forEach((each) => each());
+    }
+  });
+});
+
+describe("a library sheet's stroke length", () => {
+  const declared = (css: string) => {
+    const dropped: string[] = [];
+    const { rules } = compileCss(`.a { ${css} }`, 'library.css', {
+      generated: true,
+      onUnsupported: (message) => dropped.push(message),
+    });
+    return { declarations: rules[0]?.['declarations'] as Record<string, unknown>, dropped };
+  };
+
+  it('is a number for points and a percentage string for a percentage, as native takes them', () => {
+    assert.equal(declared('stroke-width: 2px').declarations['strokeWidth'], 2);
+    assert.equal(declared('stroke-width: 50%').declarations['strokeWidth'], '50%');
+    assert.equal(declared('stroke-dashoffset: 1rem').declarations['strokeDashoffset'], 16);
+    assert.deepEqual(declared('stroke-dasharray: 4px 50%').declarations['strokeDasharray'], [
+      4,
+      '50%',
+    ]);
+  });
+
+  it('is reported where native has no length for its unit, not drawn as a bare number', () => {
+    for (const css of ['stroke-width: 1in', 'stroke-dasharray: 4px 1in']) {
+      const { declarations, dropped } = declared(`width: 4px; ${css}`);
+      assert.equal(declarations['width'], 4, 'the rest of the rule is kept');
+      assert.equal(declarations['strokeWidth'] ?? declarations['strokeDasharray'], undefined);
+      assert.equal(dropped.length, 1);
+      assert.match(dropped[0]!, /stroke-(width|dasharray)/);
+    }
+  });
+
+  it('is settled against the font of the shape it is on, for an em', () => {
+    withViews(SHAPES, () => {
+      const { fabric, engine, add } = scene(
+        '.a { font-size: 10px; stroke-width: 2em; stroke-dasharray: 1em 2px }',
+      );
+      add('x-path', engine.root, 'a');
+      engine.commit();
+      const { strokeWidth, strokeDasharray } = fabric.committed[0]!.props;
+      assert.deepEqual(
+        { strokeWidth, strokeDasharray },
+        { strokeWidth: 20, strokeDasharray: [10, 2] },
+      );
+    });
+  });
+});
+
+describe("a library drawing's stroke-dasharray: none", () => {
+  it('draws a shape in a dashed group solid, as a dash it names as its own and sets none', () => {
+    withViews(SHAPES, () => {
+      const { fabric, engine, add } = scene(
+        '.dashed { stroke-dasharray: 4px 2px } .solid { stroke-dasharray: none }',
+      );
+      const group = add('x-g', engine.root, 'dashed');
+      add('x-path', group, 'solid');
+      add('x-path', group);
+      engine.commit();
+      const [g] = fabric.committed;
+      assert.deepEqual(g!.props['strokeDasharray'], [4, 2]);
+      const [solid, dashed] = g!.children;
+      assert.ok('strokeDasharray' in solid!.props, 'the shape sends one of its own');
+      assert.equal(solid!.props['strokeDasharray'], null);
+      assert.ok((solid!.props['propList'] as string[]).includes('strokeDasharray'));
+      assert.equal(dashed!.props['strokeDasharray'], undefined, 'native hands the dash down');
+    });
+  });
+});
