@@ -69,8 +69,10 @@ import {
   NativeScrollDriver,
   pinnedRange,
   scrollFeed,
+  type ComposedDrive,
   type DrivenProperty,
   type EventFeed,
+  type FollowingTransform,
   type NativeAnimated,
   type ScrollAxis,
   type ScrollDrive,
@@ -2044,7 +2046,9 @@ interface StickyState {
   stop: number;
   /** How far it is moved, as written on its transform. */
   shift: number;
-  drive: ScrollDrive | null;
+  drive: ComposedDrive | null;
+  /** Its own transform as a transition native plays has it, which the drive applies after it. */
+  lent?: readonly FollowingTransform[];
 }
 
 /**
@@ -8292,6 +8296,19 @@ export class Engine implements HostEngine {
     statics: readonly StaticTransform[] = [],
     shift: number | null = null,
   ): ScrollDrive | null {
+    return this.composedDrive(view, source, feed, property, range, statics, shift);
+  }
+
+  /** See `driveByEvent`: a drive whose transform after its move can change. */
+  private composedDrive(
+    view: EngineNode,
+    source: EngineNode,
+    feed: EventFeed,
+    property: DrivenProperty,
+    range: ScrollRange,
+    statics: readonly StaticTransform[] = [],
+    shift: number | null = null,
+  ): ComposedDrive | null {
     if (!this.scrollDriver) return null;
     // As Animated does: Fabric flattens a view that only lays out, and then there is no native
     // view for the animation to move.
@@ -9944,6 +9961,7 @@ export class Engine implements HostEngine {
     this.followScroll(scroll);
     const turned = state.axis !== span.axis;
     this.redrive(node, state, span, scroll);
+    this.composeSticky(node);
     this.shiftSticky(node);
     // A move along the other axis, though it may be by as much: committed as the other move.
     if (turned) this.markProps(node, false);
@@ -9967,7 +9985,10 @@ export class Engine implements HostEngine {
     Object.assign(state, span, { scroll });
     const range = pinnedRange(span.start, span.stop);
     if (state.drive) state.drive.update(range);
-    else state.drive = this.driveByScroll(node, scroll, span.axis, range);
+    else {
+      const property = span.axis === 'x' ? 'translateX' : 'translateY';
+      state.drive = this.composedDrive(node, scroll, scrollFeed(span.axis), property, range);
+    }
   }
 
   /**
@@ -9991,11 +10012,41 @@ export class Engine implements HostEngine {
     this.loosen(node);
   }
 
-  /** Let a sticky box's move go: native stops driving it, and it is committed where it is. */
+  /**
+   * Have native apply a sticky box's own transform after the move it drives: as a transition
+   * native plays has it while one does, and as it is committed otherwise.
+   */
+  private composeSticky(node: EngineNode, transform = node.committed?.props['transform']): void {
+    const state = node.sticky;
+    if (!state?.drive) return;
+    const own = ownTransform(transform);
+    const held = heldTransform(own, () => this.boxSize(node), platformOS !== 'android');
+    state.drive.follow(state.lent ?? held ?? []);
+  }
+
+  /**
+   * Let a sticky box's move go: native stops driving it, and it is committed where it is. A
+   * transition of its transform native was easing in the drive is eased on from here.
+   */
   private loosen(node: EngineNode): void {
-    node.sticky?.drive?.stop();
-    if (node.sticky?.shift) this.markProps(node, false);
+    const state = node.sticky;
+    const lent = state?.lent && node.transitions?.get('transform')?.native;
+    if (lent) this.backToScriptEased(node, lent, this.now());
+    state?.drive?.stop();
+    if (state?.shift) this.markProps(node, false);
     node.sticky = undefined;
+    if (state?.drive) this.undriven(node, state.shift);
+  }
+
+  /**
+   * Native goes on drawing what a drive set last once it is gone, which no commit changes (see
+   * `Touched`): a box's own transform is set there where it has one or the drive had moved it.
+   */
+  private undriven(node: EngineNode, moved: number): void {
+    const own = ownTransform(node.committed?.props['transform']);
+    if ((moved || own !== undefined) && node.owned) {
+      this.setOwned(node, { transform: own }, { transform: own });
+    }
   }
 
   /** Write how far a sticky box is moved at its scroll view's offset, where that has changed. */
@@ -12221,8 +12272,17 @@ export class Engine implements HostEngine {
     const first = state.get(keys[0]!)!;
     // Where the view is committed: one that takes a touch stops short of no opacity.
     const touched = this.responders.has(node);
+    // A sticky box's drive moves it, and applies the transform eased here after the move.
+    const sticky = keys.includes('transform') ? node.sticky : undefined;
+    const lend = sticky?.drive
+      ? (entries: readonly FollowingTransform[] | null) => {
+          if (node.sticky !== sticky) return;
+          sticky.lent = entries ?? undefined;
+          this.composeSticky(node);
+        }
+      : undefined;
     // The moves the engine put before the transform: native paints the transform it eases whole.
-    const moves = engineMoves(node.committed?.props['transform']);
+    const moves = lend ? [] : engineMoves(node.committed?.props['transform']);
     const seen = (key: string, value: unknown) => {
       if (key === 'transform' && moves.length)
         return [...moves, ...(Array.isArray(value) ? value : [])];
@@ -12261,6 +12321,7 @@ export class Engine implements HostEngine {
       { frames, toValue: 1, iterations: 1 },
       (view) => this.tagOf(view as EngineNode),
       () => this.endedEased(node, clock),
+      lend,
     );
     if (!native) return;
     clock.stop = () => native.stop();
@@ -12851,6 +12912,10 @@ export class Engine implements HostEngine {
     const payload = diffProps(previous, props);
     if (payload) borderColoursAgain(payload, props);
     if (payload && node.owned) this.setOwned(node, payload, props);
+    // A frame of a transform is committed with no layout settled after it: see `composeSticky`.
+    if (payload && node.sticky?.drive && 'transform' in payload) {
+      this.composeSticky(node, props['transform']);
+    }
     if (payload && this.fontsRefreshed && this.fontResends.delete(node)) {
       payload['fontFamily'] = props['fontFamily'];
     }
