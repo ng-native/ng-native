@@ -57,7 +57,7 @@ describe('CSS.supports', () => {
     assert.equal(supports('color', 'color-mix(in srgb,red,blue 9%)'), true);
     assert.equal(supports('width', 'color-mix(in srgb,red,blue 9%)'), false);
     // But not a mix of a token, which the engine does not work out.
-    assert.equal(supports('fill', 'color-mix(in srgb, var(--a), white 20%)'), false);
+    assert.equal(supports('fill', 'color-mix(in srgb, var(--a), white 20%)'), true);
     // What that reader passes over: a library told yes would write what is dropped.
     assert.equal(supports('display', 'table-cell'), false);
     assert.equal(supports('transform', 'rotate(1deg)'), false);

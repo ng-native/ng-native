@@ -217,13 +217,10 @@ function propsOf(name: string): { props: string[]; kind: string } | undefined {
  * stylesheet the build compiled is. Nothing for a value that is more than the one token.
  */
 function deferred(name: string, value: string): Deferred | undefined {
-  // A colour made of others, `color-mix(in srgb, red, white 20%)`, worked out the same way:
-  // what a chart library brightens a colour of its palette with, having asked if it may.
-  //
-  // ponytail: not a mix of a token, `color-mix(in srgb, var(--brand), white 20%)`, which the
-  // engine does not work out yet: passed over and said, and `CSS.supports` says no to it.
+  // A colour made of others, `color-mix(in srgb, var(--brand), white 20%)`, worked out the same
+  // way, from its tokens where it is used: what a chart library brightens a colour of its
+  // palette with, having asked if it may.
   if (/^color-mix\(/i.test(value) && (COLOURS.has(name) || PAINTED.has(name))) {
-    if (/var\(/i.test(value)) return undefined;
     return boundDeclaration(camel(name), tokenFromValue(value)) ?? undefined;
   }
   const [, reference] = /^var\(\s*(--[\w-]+)\s*\)$/.exec(value) ?? [];

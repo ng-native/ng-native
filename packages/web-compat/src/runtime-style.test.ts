@@ -287,13 +287,14 @@ describe('a <style> a component adds to the page', () => {
     assert.equal(wide('one') ?? null, null);
   });
 
-  it('reads a mix of colours, and passes over a mix of a token and says so', async () => {
+  it('reads a mix of colours, and a mix of a token worked out from the token', async () => {
     const { style } = await strip();
     const said: unknown[] = [];
     const warn = console.warn;
     console.warn = (...all: unknown[]) => said.push(all.join(' '));
     try {
       style.textContent =
+        '#strip { --brand: rgb(0, 0, 255) } ' +
         '#strip .item { background-color: color-mix(in srgb, red, blue 50%) } ' +
         '#strip .wide { color: color-mix(in srgb, var(--brand), white 20%) }';
       await settle();
@@ -302,9 +303,8 @@ describe('a <style> a component adds to the page', () => {
     }
     const props = (id: string) => screen.getByTestId(id).props;
     assert.notEqual(props('one')['backgroundColor'] ?? null, null);
-    assert.equal(props('two')['color'] ?? null, null);
-    assert.equal(said.length, 1);
-    assert.match(String(said[0]), /color-mix\(in srgb, var\(--brand\), white 20%\)/);
+    assert.notEqual(props('two')['color'] ?? null, null);
+    assert.deepEqual(said, []);
   });
 
   it('is left to the build where it is a library’s whole theme', async () => {
