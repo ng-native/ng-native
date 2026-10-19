@@ -115,8 +115,8 @@ is optional, and the extensions are asked in the order they were added:
   stylesheet as a browser paints them, and a type selector still matches it by the name it was
   written as. Answering nothing leaves the element the app's own. The hook is asked for every app
   in the process, with the engine the element is created in, so an extension that should draw
-  only for the apps that asked for it checks the engine and answers nothing for any other. An icon's shapes are created by name alone, and render as
-  they always have.
+  only for the apps that asked for it checks the engine and answers nothing for any other. An
+  icon's shapes are created by name alone, and render as they always have.
 - `listen(target, eventName, callback, engine)` takes a listener over: it answers what removes the
   listener, or nothing to leave it to the renderer. The target is a node, or the name Angular gives
   a global one: `'window'`, `'document'` or `'body'`.
