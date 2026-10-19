@@ -85,12 +85,28 @@ describe('provideWebCompat', () => {
     assert.equal(typeof (globalThis as Dom).HTMLElement, 'function');
     assert.equal((globalThis as Dom).Node.ELEMENT_NODE, 1);
     assert.equal(typeof (globalThis as Dom).innerWidth, 'number');
+    // The tree: its live lists, its observer and its walks, and the document as a node.
+    const tree = ['MutationObserver', 'NodeList', 'HTMLCollection', 'TreeWalker', 'NodeFilter'];
+    for (const name of [...tree, 'Text', 'DocumentFragment', 'DocumentType']) {
+      assert.equal(typeof (globalThis as Dom)[name], name === 'NodeFilter' ? 'object' : 'function');
+    }
+    const children = host.childNodes;
+    assert.equal(children.length, host.childList.length);
+    assert.equal(typeof host.cloneNode, 'function');
+    assert.equal(app.instance.document.doctype.parentNode, app.instance.document);
+    const observer = new (globalThis as Dom).MutationObserver(() => {});
+    observer.observe(host, { childList: true, subtree: true });
     assert.equal(await pressHeard(), true);
 
     cleanup();
     assert.deepEqual(globalsNow(), globals, 'every global as it was, the document too');
     assert.deepEqual(membersOf(host), members, 'every node member as it was');
     assert.equal(host.getAttribute, undefined);
+    for (const name of tree) assert.equal((globalThis as Dom)[name], undefined, name);
+    assert.deepEqual(
+      [host.childNodes, host.cloneNode, host.append],
+      [undefined, undefined, undefined],
+    );
     // The engine's own, which has no more than `contains`.
     assert.equal(host.classList.add, undefined);
     // The window's listeners went with it, and the renderer's extension.

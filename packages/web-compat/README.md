@@ -5,13 +5,25 @@ for the DOM on the elements it renders: `getAttribute`, `classList`, `addEventLi
 package gives the engine's nodes those members, each going through the engine's own mutation API,
 so such a library can render as native views.
 
-Experimental and partial. This first release has the core: node names and kinds, attributes and
-classes, the nodes around one, `appendChild`, `insertBefore` and `removeChild`, `textContent`, and
-listeners with `dispatchEvent`. It provides a `document` that creates engine nodes, with a `body`
-that draws over the screen for overlays; the basic `window` globals (its listeners, `Event`,
-`CustomEvent`, `HTMLElement`, `Node` and the window's size); and a `click` listener that hears a
-press. Selectors, `element.style`, computed style, geometry, observers, forms and the rest of the
-DOM are not part of it yet.
+Experimental and partial. It has:
+
+- Node names and kinds, attributes and classes, `textContent`, and listeners with
+  `dispatchEvent`.
+- The tree: live `childNodes` and `children`, the nodes around one, `appendChild`,
+  `insertBefore`, `removeChild`, `replaceChild`, `append`, `prepend`, `replaceChildren`,
+  `before`, `after`, `replaceWith`, `insertAdjacentElement`, `moveBefore`, `cloneNode`,
+  `getRootNode`, `compareDocumentPosition`, `isEqualNode` and `normalize`, each checked as a
+  browser checks an insertion. Texts and comments have `data` and the rest of `CharacterData`.
+- Live `getElementsByTagName`, `getElementsByClassName` and `getElementsByName`.
+- `MutationObserver`, with `childList`, `attributes`, `characterData`, `subtree` and old values.
+- A `document` that creates engine nodes and fragments, with a `body` that draws over the screen
+  for overlays, a doctype, `createTreeWalker` and `createNodeIterator`.
+- The basic `window` globals: its listeners, `Event`, `CustomEvent`, `HTMLElement`, `Node`,
+  `Text`, `Comment`, `DocumentFragment`, `NodeList`, `HTMLCollection` and the window's size.
+- A `click` listener that hears a press.
+
+Markup (`innerHTML`), selectors, `element.style`, computed style, geometry, the other observers,
+forms and the rest of the DOM are not part of it yet.
 
 Nothing in an app changes until it adds the provider, and everything the provider adds is taken
 away again when the app is destroyed.

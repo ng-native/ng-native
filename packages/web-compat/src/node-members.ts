@@ -1,10 +1,15 @@
 import type { Engine, EngineNode } from '@ng-native/fabric';
 import type { Renderer2 } from '@angular/core';
+import { isCharacterData, setData, wordsOf } from './character-data.ts';
 import { classAttribute, classListOf, setClassAttribute } from './class-list.ts';
 import { documentOf, eventPath, nameOf } from './document.ts';
-import { domError, required, withLength } from './dom-error.ts';
+import { isFragment } from './document-fragment.ts';
+import { documentOfRoot, topOf } from './document-roots.ts';
+import { required } from './dom-error.ts';
 import { dispatch, listen, unlisten, type Heard } from './events.ts';
+import { inDocument, isInDocument, lastInDocument } from './in-document.ts';
 import { listenNatively, hasCapture, topLevel } from './listen.ts';
+import { observing, removingAttribute, settingAttribute, together } from './mutation-observer.ts';
 import { NODE_CONSTANTS } from './node-constants.ts';
 import { engineOf } from './window.ts';
 
@@ -76,6 +81,12 @@ function noteWritten(node: EngineNode, name: string, value: string | null): void
   all.set(name, value);
 }
 
+/** Give a copy of a node the text of each attribute a script wrote on it: see `cloneNode`. */
+export function copyWritten(from: EngineNode, to: EngineNode): void {
+  const all = written.get(from);
+  if (all) written.set(to, new Map(all));
+}
+
 /** Set an attribute as a template sets one: through its app's renderer where it has one. */
 function setAsWritten(node: EngineNode, name: string, value: unknown): void {
   const engine = engineOf(node);
@@ -105,42 +116,35 @@ function attributeOf(node: EngineNode, name: string): string | null {
   return asWritten(name, value);
 }
 
-/** The kind of node a value is, where it is one of the engine's. */
-const isNode = (value: unknown): value is EngineNode =>
-  !!value && typeof value === 'object' && 'nodeKind' in value && 'childList' in value;
+/** What a node is in: its parent, or the document it is at the top of a tree in. */
+type TopOf = { readonly childNodes?: ArrayLike<EngineNode> };
+const parentOf = (node: EngineNode): EngineNode | TopOf | null =>
+  node.parent ?? (documentOfRoot(node) as TopOf | undefined) ?? null;
 
-/** The node a method is handed, or the error a browser throws for anything else. */
-function nodeGiven(value: unknown, method: string): EngineNode {
-  if (isNode(value)) return value;
-  throw new TypeError(`Failed to execute '${method}': parameter 1 is not of type 'Node'.`);
-}
-
-/** Refuse to put a node inside itself, or inside what it holds. */
-function checkPlace(parent: EngineNode, child: EngineNode): void {
-  for (let at: EngineNode | null = parent; at; at = at.parent) {
-    if (at === child) {
-      throw domError('The new child contains the parent.', 'HierarchyRequestError');
-    }
-  }
+/** The nodes beside a node: its parent's, or its document's where it is at the top of one. */
+function siblingsOf(node: EngineNode): readonly EngineNode[] {
+  if (node.parent) return inDocument(node.parent);
+  return Array.from((documentOfRoot(node) as TopOf | undefined)?.childNodes ?? []);
 }
 
 const sibling = (node: EngineNode, by: number): EngineNode | null => {
-  const siblings = node.parent?.childList ?? [];
+  const siblings = siblingsOf(node);
   const at = siblings.indexOf(node);
   return at === -1 ? null : (siblings[at + by] ?? null);
 };
 
 /** The nearest element before or after a node under its parent, past any text between. */
 function elementBeside(node: EngineNode, step: 1 | -1): EngineNode | null {
-  const all = node.parent?.childList ?? [];
+  const all = node.parent ? inDocument(node.parent) : [];
   for (let at = all.indexOf(node) + step; at >= 0 && at < all.length; at += step) {
     if (all[at]!.nodeKind === 'element') return all[at]!;
   }
   return null;
 }
 
+/** The words of a text, and of every text under an element: none of a comment's. */
 const textOf = (node: EngineNode): string =>
-  node.nodeKind === 'element' ? node.childList.map(textOf).join('') : node.nodeText;
+  node.nodeKind === 'text' ? node.nodeText : inDocument(node).map(textOf).join('');
 
 /** An element's name as the DOM says it, in the upper case an HTML document has it in. */
 const domName = (node: EngineNode): string => nameOf(node, engineOf(node)).toUpperCase();
@@ -173,26 +177,32 @@ const get = (read: (this: Dom) => unknown, write?: (this: Dom, value: unknown) =
 });
 const method = (value: (this: Dom, ...args: never[]) => unknown) => ({ value, writable: true });
 
+/** Whether a node is an element of the DOM's: no text, no comment, no fragment. */
+const isElement = (node: EngineNode): boolean => node.nodeKind === 'element' && !isFragment(node);
+
 /**
  * The DOM members every engine node answers to, for `extendNodes`. `core` is the node prototype
- * as it was: its listeners are what Angular's `@defer` triggers go through, and still do.
+ * as it was: its listeners are what Angular's `@defer` triggers go through, and still do. The
+ * tree's own are in `tree-members.ts`.
  */
 export const nodeMembers = (core: CoreNode): PropertyDescriptorMap => ({
   // Upper case, as the DOM has an HTML element's: a library walking up stops at `HTML` or `BODY`.
   nodeName: get(function () {
+    if (isFragment(this)) return '#document-fragment';
     if (this.nodeKind === 'anchor') return '#comment';
     if (this.nodeKind === 'text') return '#text';
     return domName(this);
   }),
   // An element's own name, as `nodeName` gives it: the DOM has none for a text or a comment.
   tagName: get(function () {
-    return this.nodeKind === 'element' ? domName(this) : undefined;
+    return isElement(this) ? domName(this) : undefined;
   }),
   localName: get(function () {
-    return this.nodeKind === 'element' ? nameOf(this, engineOf(this)) : null;
+    return isElement(this) ? nameOf(this, engineOf(this)) : null;
   }),
   // The kind of node it is: the engine says an element of everything, for Angular's own check.
   nodeType: get(function () {
+    if (isFragment(this)) return 11;
     if (this.nodeKind === 'anchor') return 8;
     return this.nodeKind === 'text' ? 3 : 1;
   }),
@@ -203,17 +213,21 @@ export const nodeMembers = (core: CoreNode): PropertyDescriptorMap => ({
       return this.props['nativeID'] ?? '';
     },
     function (value) {
-      engineOf(this).setProp(this, 'nativeID', value);
+      settingAttribute(this, 'id', () => engineOf(this).setProp(this, 'nativeID', value));
     },
   ),
 
+  // Told to an observer as it is named, even where it is set to what it was: see
+  // `mutation-observer.ts`.
   setAttribute: method(function (...args: unknown[]) {
     required(args, 2, 'setAttribute');
     const name = String(args[0]);
     const value = String(args[1]);
-    if (name === 'class') return setClassAttribute(this, value);
-    noteWritten(this, name, value);
-    setAsWritten(this, name, attributeValue(name, value));
+    settingAttribute(this, name, () => {
+      if (name === 'class') return setClassAttribute(this, value);
+      noteWritten(this, name, value);
+      setAsWritten(this, name, attributeValue(name, value));
+    });
   }),
   getAttribute: method(function (name: unknown) {
     return attributeOf(this, String(name));
@@ -223,10 +237,12 @@ export const nodeMembers = (core: CoreNode): PropertyDescriptorMap => ({
   }),
   removeAttribute: method(function (given: unknown) {
     const name = String(given);
-    if (name === 'class') return setClassAttribute(this, null);
-    if (!hasAttribute(this, name)) return;
-    noteWritten(this, name, null);
-    setAsWritten(this, name, null);
+    removingAttribute(this, name, () => {
+      if (name === 'class') return setClassAttribute(this, null);
+      if (!hasAttribute(this, name)) return;
+      noteWritten(this, name, null);
+      setAsWritten(this, name, null);
+    });
   }),
   toggleAttribute: method(function (given: unknown, force?: boolean) {
     const name = String(given);
@@ -254,26 +270,24 @@ export const nodeMembers = (core: CoreNode): PropertyDescriptorMap => ({
     },
   ),
 
-  // The root is in the document, which is what a walk up from any node ends at.
+  // The root is in the document, which is what a walk up from any node ends at, and so is a
+  // comment a script put in the document beside it: see `document-children.ts`.
   parentNode: get(function () {
-    if (this.parent) return this.parent;
-    const engine = engineOf(this);
-    return (engine.root === this && documentOf(engine)) || null;
+    return parentOf(this);
   }),
+  // None where it is in a fragment, which is no element.
   parentElement: get(function () {
-    return this.parent;
+    return this.parent && !isFragment(this.parent) ? this.parent : null;
   }),
+  // What it holds as a browser has it: no box a rule generated.
   firstChild: get(function () {
-    return this.childList[0] ?? null;
+    return this.childList.find(isInDocument) ?? null;
   }),
   lastChild: get(function () {
-    return this.childList.at(-1) ?? null;
+    return lastInDocument(this) ?? null;
   }),
   firstElementChild: get(function () {
-    return this.childList.find((child) => child.nodeKind === 'element') ?? null;
-  }),
-  lastElementChild: get(function () {
-    return [...this.childList].reverse().find((child) => child.nodeKind === 'element') ?? null;
+    return inDocument(this).find((child) => child.nodeKind === 'element') ?? null;
   }),
   nextSibling: get(function () {
     return sibling(this, 1);
@@ -287,10 +301,10 @@ export const nodeMembers = (core: CoreNode): PropertyDescriptorMap => ({
   previousElementSibling: get(function () {
     return elementBeside(this, -1);
   }),
+  // In the page's document: under its root, or beside it there.
   isConnected: get(function () {
-    let at: EngineNode = this;
-    while (at.parent) at = at.parent;
-    return at === engineOf(this).root;
+    const top = topOf(this);
+    return top === engineOf(this).root || documentOfRoot(top) !== undefined;
   }),
   contains: method(function (other: EngineNode | null) {
     for (let at = other; at; at = at.parent) if (at === this) return true;
@@ -298,71 +312,37 @@ export const nodeMembers = (core: CoreNode): PropertyDescriptorMap => ({
   }),
   textContent: get(
     function () {
-      return textOf(this);
+      return this.nodeKind === 'anchor' ? this.nodeText : textOf(this);
     },
     function (value) {
       const engine = engineOf(this);
       const text = value == null ? '' : String(value);
-      if (this.nodeKind === 'text') return engine.setText(this, text);
-      if (this.nodeKind === 'anchor') return void (this.nodeText = text);
+      if (isCharacterData(this)) return setData(this, text);
       // An element's text is all it holds: one text node, kept when it is all there already is,
-      // and none for no text.
+      // and none for no text. Where something observes it, a new one, as a browser makes, and
+      // one change for all of it.
       const [only] = this.childList;
-      if (text && this.childList.length === 1 && only!.nodeKind === 'text') {
+      if (text && this.childList.length === 1 && only!.nodeKind === 'text' && !observing(this)) {
         return engine.setText(only!, text);
       }
-      for (const child of [...this.childList]) engine.removeChild(this, child);
-      if (text) engine.appendChild(this, engine.createText(text));
+      together(this, () => {
+        for (const child of inDocument(this)) engine.removeChild(this, child);
+        if (text) engine.appendChild(this, engine.createText(text));
+      });
     },
   ),
   // The words of a text or a comment, and nothing of an element's, which is left as it is.
   nodeValue: get(
     function () {
-      return this.nodeKind === 'element' ? null : this.nodeText;
+      return isCharacterData(this) ? this.nodeText : null;
     },
     function (value) {
-      if (this.nodeKind === 'element') return;
-      this['textContent'] = (value === null ? '' : value) as never;
+      setData(this, wordsOf(value));
     },
   ),
   // The page's document, for a node of an app that asked for one.
   ownerDocument: get(function () {
     return documentOf(engineOf(this)) ?? null;
-  }),
-
-  appendChild: method(function (value: unknown) {
-    const child = nodeGiven(value, 'appendChild');
-    checkPlace(this, child);
-    engineOf(this).appendChild(this, child);
-    return child;
-  }),
-  insertBefore: method(
-    withLength(2, function (this: EngineNode, ...args: unknown[]) {
-      required(args, 2, 'insertBefore');
-      const child = nodeGiven(args[0], 'insertBefore');
-      const before = (args[1] ?? null) as EngineNode | null;
-      if (before !== null && before.parent !== this) {
-        throw domError(
-          'The node before which to insert is not a child of this node.',
-          'NotFoundError',
-        );
-      }
-      checkPlace(this, child);
-      // Before itself is where it is: before what comes after it.
-      engineOf(this).insertBefore(this, child, before === child ? sibling(child, 1) : before);
-      return child;
-    }),
-  ),
-  removeChild: method(function (value: unknown) {
-    const child = nodeGiven(value, 'removeChild');
-    if (child.parent !== this) {
-      throw domError('The node to be removed is not a child of this node.', 'NotFoundError');
-    }
-    engineOf(this).removeChild(this, child);
-    return child;
-  }),
-  remove: method(function () {
-    if (this.parent) engineOf(this).removeChild(this.parent, this);
   }),
 
   // A touch stays with the node that took it until it ends, so there is no capture to set or to

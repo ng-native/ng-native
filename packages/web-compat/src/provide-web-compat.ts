@@ -11,7 +11,10 @@ import { Engine, extendNodes } from '@ng-native/fabric';
 import { extendRenderer } from '@ng-native/platform';
 import { documentFor } from './document.ts';
 import { webListen } from './listen.ts';
+import { characterDataMembers } from './character-data.ts';
 import { nodeMembers, setAttributesWith, type CoreNode } from './node-members.ts';
+import { relationMembers } from './node-relations.ts';
+import { treeMembers } from './tree-members.ts';
 import { installWindow, windowOf } from './window.ts';
 
 /** How many apps in the process asked for it: nodes share one prototype, and globals are global. */
@@ -28,7 +31,12 @@ function install(engine: Engine): void {
   // Read now: once extended, the prototype's listeners are this package's.
   const { addEventListener, removeEventListener } = core;
   removals = [
-    extendNodes(nodeMembers({ addEventListener, removeEventListener })),
+    extendNodes({
+      ...nodeMembers({ addEventListener, removeEventListener }),
+      ...treeMembers,
+      ...characterDataMembers,
+      ...relationMembers,
+    }),
     extendRenderer(webListen),
   ];
 }
@@ -53,10 +61,12 @@ function setGlobalDocument(document: unknown): void {
  * Let a component library written for the browser render in this app.
  *
  * - Nodes answer to the DOM members such a library calls on its elements: their names,
- *   attributes and classes, the tree around them, and their listeners.
+ *   attributes and classes, the tree around them and every way to change it, and their
+ *   listeners.
  * - `DOCUMENT`, and the global `document`, create engine nodes, with a `body` that draws over the
  *   screen for overlays.
- * - The `window` globals a library reads exist: its listeners, `Event`, its size.
+ * - The `window` globals a library reads exist: its listeners, `Event`, its size, and
+ *   `MutationObserver`, which hears what changes in the tree.
  * - A `click` listener hears a press.
  *
  * Nothing is added until this is called, and all of it is taken away again when the last app

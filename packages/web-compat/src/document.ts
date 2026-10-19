@@ -1,7 +1,17 @@
 import { claimHost, type Engine, type EngineNode } from '@ng-native/fabric';
+import { createComment } from './character-data.ts';
+import { documentChildren } from './document-children.ts';
+import { markFragment } from './document-fragment.ts';
+import { documentNodeMembers } from './document-node.ts';
+import { markRoot } from './document-roots.ts';
+import { createDocumentType } from './document-type.ts';
 import { required } from './dom-error.ts';
+import { byClassName, byName, byTagName } from './elements-by.ts';
 import { dispatch, listen, passiveFor, unlisten } from './events.ts';
+import { descendants } from './in-document.ts';
 import { delivering, touchFields } from './listen.ts';
+import { brandNode } from './node-interfaces.ts';
+import { createNodeIterator, createTreeWalker } from './traversal.ts';
 import { listenToResize } from './window.ts';
 
 /** The document a library is given: what it creates elements with and appends overlays to. */
@@ -263,14 +273,6 @@ export function eventPath(engine: Engine, node: EngineNode): object[] {
   return [...path, document, globalThis];
 }
 
-/** Every node under one, in the order of the page. */
-function* descendants(node: EngineNode): Generator<EngineNode> {
-  for (const child of node.childList) {
-    yield child;
-    yield* descendants(child);
-  }
-}
-
 /** The app's document, made the first time it is asked for. */
 export function documentFor(engine: Engine): CompatDocument {
   const existing = documents.get(engine);
@@ -278,6 +280,12 @@ export function documentFor(engine: Engine): CompatDocument {
   // Somewhere for a library's style elements to go: never in the tree, so never drawn.
   const head = ownView(engine);
   const body = createBody(engine);
+  // The head and then the page, as a document has them: a library looks for a stylesheet it
+  // added before it adds one.
+  function* everything(): Generator<EngineNode> {
+    yield* descendants(head);
+    yield* descendants(engine.root);
+  }
   // A listener on the body hears the whole page, as one on the document does.
   const bodyListeners = anywhere(engine, body);
   Object.defineProperties(body, {
@@ -299,6 +307,8 @@ export function documentFor(engine: Engine): CompatDocument {
     ownerDocument: null,
     parentNode: null,
     parentElement: null,
+    previousSibling: null,
+    nextSibling: null,
     readyState: 'complete',
     visibilityState: 'visible',
     // The field the keyboard belongs to, which a library reads to know one is being typed in.
@@ -317,22 +327,34 @@ export function documentFor(engine: Engine): CompatDocument {
     // A comment is the engine's anchor, which is never drawn, with its words kept on it.
     createComment(...args: unknown[]) {
       required(args, 1, 'createComment');
-      const comment = engine.createAnchor();
-      comment.nodeText = String(args[0]);
-      return comment;
+      return createComment(engine, args[0]);
     },
-    // The head and then the page, as a document has them.
+    // A box that is never drawn, which puts what it holds where it is put: see
+    // `document-fragment.ts`.
+    createDocumentFragment: () => markFragment(ownView(engine)),
+    // Walked as they are asked: see `traversal.ts`.
+    createTreeWalker,
+    createNodeIterator,
     getElementById(id: unknown) {
       const wanted = String(id);
-      for (const top of [head, engine.root]) {
-        for (const node of descendants(top)) if (node.props['nativeID'] === wanted) return node;
-      }
+      for (const node of everything()) if (node.props['nativeID'] === wanted) return node;
       return null;
     },
+    // Live lists, which a library keeps and reads again: see `live-list.ts`.
+    getElementsByTagName: (name: unknown) => byTagName(engine, everything, name),
+    getElementsByClassName: (names: unknown) => byClassName(engine, everything, names),
+    getElementsByName: (name: unknown) => byName(engine, everything, name),
     dispatchEvent: (event: unknown) => dispatch(event, [created, globalThis]),
     hasFocus: () => true,
   };
   Object.assign(created, anywhere(engine, created));
+  Object.assign(created, documentNodeMembers(created as never));
+  // Its doctype, which is HTML's own, and the root: see `document-children.ts`.
+  const doctype = createDocumentType(created, 'html');
+  Object.defineProperties(created, documentChildren(created, { element: engine.root, doctype }));
+  markRoot(engine.root, created);
+  // A node, to `instanceof Node`, as an element is.
+  brandNode(created);
   passiveFor(created, body, engine.root);
   documents.set(engine, created);
   return created;

@@ -1,4 +1,5 @@
 import type { Engine, EngineNode } from '@ng-native/fabric';
+import { DocumentType } from './document-type.ts';
 import {
   CompatCustomEvent,
   CompatEvent,
@@ -7,7 +8,11 @@ import {
   unlisten,
   unlistenAll,
 } from './events.ts';
+import { HTMLCollection, NodeList } from './live-list.ts';
+import { MutationObserver, MutationRecord } from './mutation-observer.ts';
 import { NODE_CONSTANTS } from './node-constants.ts';
+import { nodeInterfaces } from './node-interfaces.ts';
+import { NodeFilter, NodeIterator, TreeWalker } from './traversal.ts';
 import { listenOnWindow, windowListensTo } from './window-listeners.ts';
 
 /** The engine a node is in. */
@@ -48,6 +53,20 @@ const GLOBALS: Readonly<Record<string, unknown>> = {
   parent: globalThis,
   top: globalThis,
   frameElement: null,
+  // What hears a change to the tree: see `mutation-observer.ts`.
+  MutationObserver,
+  MutationRecord,
+  // `Text`, `Comment` and the rest: see `node-interfaces.ts`. A mutation's anchor is a comment.
+  ...nodeInterfaces,
+  // A document's `<!DOCTYPE>`: see `document-type.ts`.
+  DocumentType,
+  // What a walk of the tree is told to show, and what its filter answers of each node.
+  NodeFilter,
+  TreeWalker,
+  NodeIterator,
+  // What `childNodes` and `getElementsByTagName` answer: see `live-list.ts`.
+  HTMLCollection,
+  NodeList,
 };
 
 /**
