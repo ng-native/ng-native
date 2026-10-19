@@ -56,6 +56,9 @@ export class BoardingPass {
 - **`restore()`** - puts the system's brightness back at once, whatever is still set. Available
   directly if a screen needs to put the brightness back without waiting for teardown.
 
+Levels stack across every app the runtime mounts, and an app that is destroyed puts back its own.
+On Android, an activity that comes to the front is given the level again.
+
 ## Without the module
 
 On iOS and Android, a missing `expo-brightness` - never installed, or installed without the app

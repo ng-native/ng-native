@@ -61,6 +61,13 @@ export {
   type StatusBarStyle,
 } from './status-bar.ts';
 export {
+  TopClaim,
+  WindowClaims,
+  onWindowFront,
+  sharedBySource,
+  type Claim,
+} from './window-claims.ts';
+export {
   NavigationBar,
   navigationBarSource,
   type NavigationBarSource,

@@ -8,7 +8,7 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { Injector, runInInjectionContext } from '@angular/core';
 import { ScreenCapture, type NativeScreenCapture } from '@ng-native/expo/screen-capture';
-import { serviceWith } from './injected.ts';
+import { inAppWith, serviceWith } from './injected.ts';
 
 function platform(granted = true) {
   const calls: unknown[][] = [];
@@ -98,3 +98,58 @@ describe('screen capture', () => {
     await capture.unprotectAppSwitcher();
   });
 });
+
+describe('screen capture two apps hold', () => {
+  // Android recreates an activity after a font size change: the new app mounts and prevents
+  // capture, and only then is the old app destroyed, letting go of what it held.
+  const appOn = (native: NativeScreenCapture) =>
+    inAppWith(ScreenCapture.SOURCE, native, () => new ScreenCapture());
+  const allowed = (native: ReturnType<typeof platform>) =>
+    native.calls.filter(([name]) => name === 'allowScreenCaptureAsync');
+
+  it('keeps a key a later app holds when the earlier app allows it', async () => {
+    const native = platform();
+    const old = appOn(native);
+    await old.service.prevent('card');
+    const current = appOn(native);
+    await current.service.prevent('card');
+
+    await old.service.allow('card');
+    old.destroy();
+    await settle();
+    assert.deepEqual(allowed(native), []);
+  });
+
+  it('releases the keys an app still holds when it goes, and not another app', async () => {
+    const native = platform();
+    const old = appOn(native);
+    await old.service.prevent('card');
+    await old.service.prevent();
+    const current = appOn(native);
+    await current.service.prevent('card');
+
+    old.destroy();
+    await settle();
+    assert.deepEqual(allowed(native), [['allowScreenCaptureAsync', 'default']]);
+  });
+
+  it('prevents capture again in a window that comes to the front, while a key is held', async () => {
+    let front = () => {};
+    let again = 0;
+    const native = Object.assign(platform(), {
+      onWindowFront: (listener: () => void) => ((front = listener), () => {}),
+      preventAgain: async () => void again++,
+    });
+    const capture = serviceOn(native);
+    front();
+    assert.equal(again, 0, 'nothing held yet');
+    await capture.prevent('card');
+    front();
+    assert.equal(again, 1);
+    await capture.allow('card');
+    front();
+    assert.equal(again, 1, 'nothing held any more');
+  });
+});
+
+const settle = () => new Promise((resolve) => setTimeout(resolve, 0));

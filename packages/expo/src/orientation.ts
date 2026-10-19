@@ -6,7 +6,8 @@
  * This is what a camera preview or a video player needs - a screen locked to portrait still has a
  * phone that is sideways.
  */
-import { InjectionToken, Service, computed, inject, type Signal } from '@angular/core';
+import { DestroyRef, InjectionToken, Service, computed, inject, type Signal } from '@angular/core';
+import { TopClaim, onWindowFront, sharedBySource } from '@ng-native/device';
 import { observed, observedFrom, type Observed } from './observed.ts';
 import { expoModule, present } from './native.ts';
 
@@ -20,6 +21,8 @@ export interface OrientationSource {
   readonly reported: Observed<Orientation> | null;
   lock(lock: OrientationLock): Promise<void>;
   unlock(): Promise<void>;
+  /** Calls `listener` when a window comes to the front, to be locked again. */
+  onWindowFront?(listener: () => void): () => void;
 }
 
 const NOTHING: OrientationSource = {
@@ -57,7 +60,8 @@ export class DeviceOrientation {
           landscape: expo.OrientationLock.LANDSCAPE,
         };
 
-        return {
+        // One per module, so every app the runtime mounts locks the same screen.
+        return sharedBySource(expo, () => ({
           reported: observedFrom(
             async () => ORIENTATIONS[await expo.getOrientationAsync()] ?? 'unknown',
             (listener) =>
@@ -67,7 +71,8 @@ export class DeviceOrientation {
           ),
           lock: (lock) => expo.lockAsync(LOCKS[lock]),
           unlock: () => expo.unlockAsync(),
-        };
+          onWindowFront,
+        }));
       },
     },
   );
@@ -78,6 +83,19 @@ export class DeviceOrientation {
 
   readonly landscape: Signal<boolean> = computed(() => this.orientation().startsWith('landscape'));
 
+  /** Every app's locks: the screen is the runtime's, not an app's. */
+  private readonly window = sharedBySource(this.source, () => lockWindow(this.source));
+  /** This app, among the apps locking the screen. */
+  private readonly owner = {};
+
+  constructor() {
+    inject(DestroyRef).onDestroy(() => {
+      // An app that goes takes its locks with it, and leaves the screen to the apps still here.
+      this.window.claims.drop(this.owner);
+      this.window.apply();
+    });
+  }
+
   /**
    * Pin the screen. Returns the function that unpins it, so a screen that wants landscape while
    * it is up can hand it to `DestroyRef.onDestroy` and not think about it again.
@@ -85,19 +103,19 @@ export class DeviceOrientation {
   lock(lock: OrientationLock): () => void {
     // A stack, as the status bar's is: a screen pushed over one with a lock of its own releases
     // only its own, and the lock beneath it comes back rather than the whole app unlocking.
-    const entry = { lock };
-    this.locks.push(entry);
-    void this.source.lock(lock);
+    const drop = this.window.claims.push(this.owner, lock);
+    this.window.apply();
     return () => {
-      const at = this.locks.indexOf(entry);
-      if (at === -1) return;
-      this.locks.splice(at, 1);
-      if (at < this.locks.length) return;
-      const below = this.locks.at(-1);
-      void (below ? this.source.lock(below.lock) : this.source.unlock());
+      drop();
+      this.window.apply();
     };
   }
+}
 
-  /** Every lock not yet released, the one in force last. */
-  private readonly locks: { readonly lock: OrientationLock }[] = [];
+function lockWindow(source: OrientationSource): TopClaim<OrientationLock> {
+  return new TopClaim(
+    (lock) => void source.lock(lock),
+    () => void source.unlock(),
+    source.onWindowFront,
+  );
 }

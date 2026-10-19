@@ -28,6 +28,12 @@ claim on top of whatever is there and returns the function that drops it, ready 
 order, later ones winning per property. Anything a claim leaves unset falls through to the claim
 underneath it.
 
+The bar is the device's, not one app's. Every app the runtime mounts claims the same stack, an app's
+claims above those of an app that claimed before it, and an app's claims, its base claim included,
+leave the stack when the app is destroyed. On Android, each time an activity comes to the front, a
+recreated one included, the bar is given every claimed property again, since a new activity starts
+with the platform's own bar.
+
 `StatusBarState` takes `style` (`'default' | 'light' | 'dark' | 'auto'`, `'light'` meaning light
 _content_ for a dark bar, as CSS would), `hidden` and `animated`.
 

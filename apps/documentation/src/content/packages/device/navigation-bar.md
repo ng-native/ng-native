@@ -26,7 +26,9 @@ export class Player {
 `set()` replaces the base claim, for an app that configures the bar once at startup. `push()` adds a
 claim on top of whatever is there and returns the function that drops it. `state` is every claim in
 the stack merged in order, later ones winning per property. Anything a claim leaves unset falls
-through to the claim underneath it.
+through to the claim underneath it. As for the [status bar](/packages/device/status-bar), every app
+the runtime mounts claims the same stack, an app's claims leave it when the app is destroyed, and
+an activity that comes to the front is given the bar again.
 
 `NavigationBarState` takes `style` and `hidden`:
 

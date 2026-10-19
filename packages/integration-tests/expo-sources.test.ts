@@ -510,14 +510,14 @@ describe('the background task source', () => {
 });
 
 describe('the screen capture source', () => {
-  it('is expo-screen-capture itself, whose functions the service calls by their own names', () => {
+  it("calls expo-screen-capture's own functions, and is one source for every app", () => {
     const expoScreenCapture = { addScreenshotListener: () => ({ remove() {} }) };
-    assert.equal(
-      withModules({ 'expo-screen-capture': expoScreenCapture }, () =>
-        defaultSource(ScreenCapture.SOURCE),
-      ),
-      expoScreenCapture,
-    );
+    const [first, second] = withModules({ 'expo-screen-capture': expoScreenCapture }, () => [
+      defaultSource(ScreenCapture.SOURCE),
+      defaultSource(ScreenCapture.SOURCE),
+    ]);
+    assert.equal(first?.addScreenshotListener, expoScreenCapture.addScreenshotListener);
+    assert.equal(first, second);
   });
 
   it('is inert with no expo-screen-capture installed', () => {
