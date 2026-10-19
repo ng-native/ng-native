@@ -856,9 +856,28 @@ describe('IntersectionObserver', () => {
     place(item, { x: 0, y: 0, width: 10, height: 10 });
     let calls = 0;
     const observer = new globals.IntersectionObserver(() => calls++);
-    observer.observe(item);
-    await new Promise((resolve) => globals.requestAnimationFrame(resolve));
-    assert.equal(observer.takeRecords().length, 1, 'looked at, and not yet told');
+    // Telling is a task of its own after the frame that looked, and which frame looks is not this
+    // test's to say: one armed earlier can look before a frame asked for here. So telling is held
+    // until the queue is taken, and the queue is taken whenever the look has been made.
+    const realSetTimeout = globalThis.setTimeout;
+    const held: (() => void)[] = [];
+    globalThis.setTimeout = ((run: () => void, delay?: number, ...rest: unknown[]) => {
+      if (delay !== undefined) return realSetTimeout(run, delay, ...rest);
+      held.push(run);
+      return 0;
+    }) as typeof setTimeout;
+    const taken: unknown[] = [];
+    try {
+      observer.observe(item);
+      for (let tries = 0; !taken.length && tries < 500; tries++) {
+        await new Promise((resolve) => realSetTimeout(resolve, 4));
+        taken.push(...observer.takeRecords());
+      }
+    } finally {
+      globalThis.setTimeout = realSetTimeout;
+      for (const run of held) realSetTimeout(run);
+    }
+    assert.equal(taken.length, 1, 'looked at, and not yet told');
     await nextFrame();
     assert.equal(calls, 0, 'what was taken is not told');
     observer.unobserve(item);
