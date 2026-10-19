@@ -3,8 +3,10 @@
  * pull request is slower, has changed existing tests, or owes a version plan.
  */
 import assert from 'node:assert/strict';
+import { spawnSync } from 'node:child_process';
 import { describe, it } from 'node:test';
 // A script of the repository's, not a package: loaded by its path, which no import can name.
+const script = new URL('../../scripts/pr-gate.mjs', import.meta.url);
 const { compareBenches, editedTests, medians, needsPlan } = await import(
   new URL('../../scripts/pr-gate.mjs', import.meta.url).href
 );
@@ -92,5 +94,30 @@ describe('pr-gate', () => {
     // A package that is never published, as its package.json says, is released by no plan.
     assert.equal(needsPlan('A\tpackages/layout/src/compare.ts', new Set(['layout'])), false);
     assert.equal(needsPlan('M\tpackages/fabric/src/css.ts', new Set(['layout'])), true);
+  });
+
+  it('prints its usage for --help and -h, and runs nothing', () => {
+    for (const flag of ['--help', '-h']) {
+      const result = spawnSync(process.execPath, [script.pathname, flag], {
+        encoding: 'utf8',
+        timeout: 20_000,
+      });
+      assert.equal(result.status, 0, `${flag} exits 0`);
+      assert.match(result.stdout, /Usage: node scripts\/pr-gate\.mjs/);
+      assert.match(result.stdout, /--base <ref>/);
+      assert.doesNotMatch(result.stdout, /✅|❌/, 'no check ran');
+    }
+  });
+
+  it('exits non-zero with its usage on a flag it does not know, running nothing', () => {
+    for (const argv of [['--bogus'], ['--base'], ['stray']]) {
+      const result = spawnSync(process.execPath, [script.pathname, ...argv], {
+        encoding: 'utf8',
+        timeout: 20_000,
+      });
+      assert.notEqual(result.status, 0, `${argv.join(' ')} fails`);
+      assert.match(result.stderr, /Usage: node scripts\/pr-gate\.mjs/);
+      assert.doesNotMatch(result.stdout, /✅|❌/, 'no check ran');
+    }
   });
 });

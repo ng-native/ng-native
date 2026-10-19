@@ -40,17 +40,40 @@ const SHIPPED =
   /^packages\/(?!integration-tests\/)[^/]+\/(?!.*\/fixtures\/).+\.(ts|cjs|mjs|js|css)$/;
 const TEST = /\.test\.(ts|mts|mjs)$/;
 
-function options(argv) {
-  const value = (name, fallback) => {
-    const at = argv.indexOf(name);
-    return at === -1 ? fallback : argv[at + 1];
-  };
+export const USAGE = `Usage: node scripts/pr-gate.mjs [options]
+
+Options:
+  --base <ref>      the branch the change goes into (default: origin/main)
+  --rounds <n>      benchmark rounds on each side (default: 3)
+  --limit <percent> how much slower a benchmark may be (default: 3)
+  --out <file>      also write the report to this file
+  --skip-bench      run all but the benchmarks
+  -h, --help        print this and exit
+`;
+
+/**
+ * The options in `argv`, or `{ help: true }` for `--help`. Throws on a flag it does not know, one
+ * missing its value, or a stray argument, so a typo never runs the gate against the wrong base.
+ */
+export function options(argv) {
+  const values = { '--base': 'origin/main', '--rounds': '3', '--limit': '3', '--out': undefined };
+  let bench = true;
+  for (let at = 0; at < argv.length; at++) {
+    const arg = argv[at];
+    if (arg === '--help' || arg === '-h') return { help: true };
+    if (arg === '--skip-bench') bench = false;
+    else if (arg in values) {
+      const next = argv[++at];
+      if (next === undefined || next.startsWith('--')) throw new Error(`${arg} needs a value`);
+      values[arg] = next;
+    } else throw new Error(`unknown option ${arg}`);
+  }
   return {
-    base: value('--base', 'origin/main'),
-    rounds: Number(value('--rounds', '3')),
-    limit: Number(value('--limit', '3')),
-    out: value('--out', undefined),
-    bench: !argv.includes('--skip-bench'),
+    base: values['--base'],
+    rounds: Number(values['--rounds']),
+    limit: Number(values['--limit']),
+    out: values['--out'],
+    bench,
   };
 }
 
@@ -180,6 +203,10 @@ function baseCheckout(ref) {
 
 function main() {
   const opts = options(process.argv.slice(2));
+  if (opts.help) {
+    console.log(USAGE);
+    return;
+  }
   const lines = [];
   let failed = false;
   const check = (name, ok, detail = '') => {
@@ -358,6 +385,8 @@ if (import.meta.url === url.pathToFileURL(process.argv[1] ?? '').href) {
     main();
   } catch (error) {
     console.error(`pr-gate: ${error.message}`);
+    if (/^(unknown option|--\w[\w-]* needs a value)/.test(error.message))
+      console.error(`\n${USAGE}`);
     process.exitCode = 1;
   }
 }
