@@ -45,7 +45,10 @@ the two talk with `postMessage`. `iframe.contentWindow.postMessage(data, origin)
 event in the page, from the app's origin, whose `source` the page answers through. The page's
 `window.parent.postMessage(data, origin)`, and `window.ReactNativeWebView.postMessage`, are a
 `message` event on the app's `window`, whose `source` is the frame's `contentWindow`. Messages
-cross as JSON. `window.frames` lists the frames.
+cross as JSON. A message for an origin goes only to a page with that origin, checked again in the
+page as it arrives: one for the app's own goes to what `srcdoc` holds and to a blank page, and not
+to a page of another site that a frame is still leaving or loading. `window.frames` lists the
+frames.
 
 The page is sent as the frame's `Referer`, as `referrerpolicy` says, where its address is a web
 address. A video embed that asks who embeds it needs `provideWebCompat({ url })` to give one in

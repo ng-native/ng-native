@@ -103,7 +103,8 @@ Gaps:
 - `ResizeObserver`, and `IntersectionObserver` with a root, a margin and thresholds. An app that
   observes nothing pays nothing for them.
 
-Gaps: the window does not scroll. An inline element over two lines is one box around both, where
+Gaps: elements have no browser default styles of their own: a `<div>` is laid out as the engine
+lays out a view, and sized by its border box. The window does not scroll. An inline element over two lines is one box around both, where
 a browser has two. `IntersectionObserver` takes `trackVisibility` but its `isVisible` is never
 true, since nothing tells it whether something is drawn over an element.
 
@@ -162,10 +163,14 @@ A plain app's `<text-input>` is unchanged.
   a drop shadow and HTML in a `foreignObject`.
 - Its elements have SVG's names and namespace, `className` as an object with `baseVal`,
   `getBBox`, `getComputedTextLength`, `ownerSVGElement` and `createSVGRect`.
-- A style a script sets on a shape is its paint or its font, and a paint that names a token is
-  that token's colour.
+- A style a script sets on a shape is its paint or its font, a paint that names a token is that
+  token's colour, and a `light-dark()` paint is the side for the app's colour scheme, drawn again
+  as the scheme changes.
 
-Gaps: without react-native-svg's native views a drawing shows nothing, as an icon does.
+Gaps: without react-native-svg's native views a drawing shows nothing, as an icon does. A
+stylesheet's attribute selector does not match a drawing's attributes: `svg[width="16"]` matches
+nothing. A marker is drawn from the `marker-start`, `marker-mid` and `marker-end` attributes, not
+from a style.
 
 ## Canvas
 
@@ -189,6 +194,7 @@ Gaps:
 - Every shape drawn since the canvas was last cleared is a view, which suits a chart of some tens
   of shapes redrawn each frame and not one of thousands.
 - `isPointInPath` takes no `Path2D` of its own.
+- What a script writes inside a canvas, its fallback in a browser, is not hidden.
 - On a device `toBlob` hands its callback `null`, since React Native's `Blob` is not made of
   bytes. `toDataURL` answers there.
 
