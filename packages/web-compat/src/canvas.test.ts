@@ -109,6 +109,110 @@ describe('@ng-native/web-compat canvas', () => {
     // The line is as wide as the transform makes it too.
     assert.deepEqual([scaled!.props['d'], scaled!.props['strokeWidth']], ['M10 10L20 10', '6']);
     assert.deepEqual([plain!.props['d'], plain!.props['strokeWidth']], ['M0 0L5 0', '1']);
+    // A transform that makes a stroke as wide every way is not on the shape.
+    assert.equal(scaled!.props['matrix'], undefined);
+  });
+
+  it('strokes a path where it was given and then transforms it, under a transform that stretches one way more', async () => {
+    const { context } = await canvas();
+    context.translate(10, 5);
+    context.scale(4, 1);
+    context.lineWidth = 2;
+    context.setLineDash([3, 1]);
+    context.strokeRect(0, 0, 5, 5);
+    await settle();
+    const [box] = shapes();
+    // As Chrome draws it: 8 wide along x and 2 down y, which no one width on the grid is.
+    assert.deepEqual(
+      ['d', 'matrix', 'strokeWidth', 'strokeDasharray'].map((key) => box!.props[key]),
+      ['M0 0L5 0L5 5L0 5Z', [4, 0, 0, 1, 10, 5], '2', ['3', '1']],
+    );
+  });
+
+  it('strokes a path under a skew in the space of the transform there is when it is stroked', async () => {
+    const { context } = await canvas();
+    context.moveTo(4, 0);
+    context.transform(2, 0, 0.5, 1, 0, 0);
+    context.lineTo(1, 10);
+    context.lineWidth = 3;
+    context.stroke();
+    await settle();
+    const [line] = shapes();
+    // The point given before the skew is where the skew puts the canvas's 4, 0.
+    assert.deepEqual(
+      ['d', 'matrix', 'strokeWidth'].map((key) => line!.props[key]),
+      ['M2 0L1 10', [2, 0, 0.5, 1, 0, 0], '3'],
+    );
+  });
+
+  it('runs the gradient a stretched stroke is drawn with in the space it is stroked in', async () => {
+    const { context } = await canvas();
+    const fade = context.createLinearGradient(0, 0, 10, 0);
+    fade.addColorStop(0, 'red');
+    fade.addColorStop(1, 'blue');
+    context.scale(4, 1);
+    context.strokeStyle = fade;
+    context.strokeRect(0, 0, 10, 10);
+    await settle();
+    const [gradient, box] = shapes();
+    assert.deepEqual(
+      ['x1', 'y1', 'x2', 'y2'].map((key) => gradient!.props[key]),
+      ['0', '0', '10', '0'],
+    );
+    assert.deepEqual(box!.props['matrix'], [4, 0, 0, 1, 0, 0]);
+  });
+
+  it('keeps a clip on the grid of the canvas around a stroke drawn under a transform of its own', async () => {
+    const { context } = await canvas();
+    context.rect(0, 0, 20, 20);
+    context.clip();
+    context.scale(4, 1);
+    context.strokeRect(1, 1, 2, 2);
+    await settle();
+    const [defined, clipped] = shapes();
+    assert.equal(defined!.children[0]!.children[0]!.props['d'], 'M0 0L20 0L20 20L0 20Z');
+    const [box] = clipped!.children;
+    assert.equal(clipped!.props['matrix'], undefined);
+    assert.deepEqual(
+      [box!.props['d'], box!.props['matrix']],
+      ['M1 1L3 1L3 3L1 3Z', [4, 0, 0, 1, 0, 0]],
+    );
+  });
+
+  it('takes the transform off a stroke drawn again over one that had it', async () => {
+    const { context } = await canvas();
+    context.scale(4, 1);
+    context.strokeRect(0, 0, 5, 5);
+    await settle();
+    const [first] = shapes();
+    context.resetTransform();
+    context.clearRect(0, 0, 100, 50);
+    context.strokeRect(0, 0, 5, 5);
+    await settle();
+    const [again] = shapes();
+    // The same view, moved: not one made afresh.
+    assert.equal(again!.reactTag, first!.reactTag);
+    // Taken off natively as a prop gone is: set to nothing, which is no transform.
+    assert.deepEqual([again!.props['d'], again!.props['matrix']], ['M0 0L5 0L5 5L0 5Z', null]);
+  });
+
+  it("strokes a text as wide as the line, which the text's own transform then scales", async () => {
+    const { context } = await canvas();
+    context.scale(2, 2);
+    context.lineWidth = 3;
+    const fade = context.createLinearGradient(0, 0, 10, 0);
+    fade.addColorStop(0, 'red');
+    context.strokeStyle = fade;
+    context.strokeText('Sales', 20, 10);
+    await settle();
+    const [gradient, text] = shapes();
+    assert.deepEqual(text!.props['matrix'], [2, 0, 0, 2, 40, 20]);
+    assert.equal(text!.props['strokeWidth'], '3');
+    // From where the text is drawn: its own 0 is the canvas's 20.
+    assert.deepEqual(
+      ['x1', 'x2'].map((key) => gradient!.props[key]),
+      ['-20', '-10'],
+    );
   });
 
   it('does nothing for a call given what is no number, as a canvas does not', async () => {

@@ -21,6 +21,17 @@ export function inverted([a, b, c, d, e, f]: Matrix): Matrix | null {
   return [d / det, -b / det, -c / det, a / det, (c * f - d * e) / det, (b * e - a * f) / det];
 }
 
+const POINT = /(-?(?:\d+\.?\d*|\.\d+)(?:e[-+]?\d+)?) (-?(?:\d+\.?\d*|\.\d+)(?:e[-+]?\d+)?)/gi;
+
+/** A path as `canvas.ts` writes one, with each point moved by a transform. */
+export function pathUnder(path: string, [a, b, c, d, e, f]: Matrix): string {
+  const round = (value: number) => Math.round(value * 100) / 100;
+  return path.replace(POINT, (_, given: string, other: string) => {
+    const [x, y] = [Number(given), Number(other)];
+    return `${round(a * x + c * y + e)} ${round(b * x + d * y + f)}`;
+  });
+}
+
 /** Some runs with each point moved by a transform. */
 export function mapped(runs: readonly Subpath[], [a, b, c, d, e, f]: Matrix): Subpath[] {
   return runs.map(({ points, closed }) => {

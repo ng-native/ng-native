@@ -343,6 +343,22 @@ describe('@ng-native/web-compat canvas pictures', () => {
     assert.equal(tile!.children[0]!.viewName, 'RNSVGImage');
   });
 
+  it('lays a pattern a stretched stroke is drawn with in the space it is stroked in', async () => {
+    const { context, source, sourceContext } = await canvases();
+    sourceContext.fillRect(0, 0, 5, 5);
+    const pattern = context.createPattern(source, 'repeat');
+    pattern.setTransform({ a: 1, b: 0, c: 0, d: 1, e: 3, f: 0 });
+    context.scale(4, 1);
+    context.strokeStyle = pattern;
+    context.strokeRect(0, 0, 10, 10);
+    await settle();
+    const [defined, stroked] = shapes();
+    const tile = defined!.children[0]!;
+    // The stroke's own transform puts it on the canvas: its pattern is not stretched again.
+    assert.deepEqual(tile.props['patternTransform'], [1, 0, 0, 1, 3, 0]);
+    assert.deepEqual(stroked!.props['matrix'], [4, 0, 0, 1, 0, 0]);
+  });
+
   it('keeps the way it lays a drawing over what is there as a browser does', async () => {
     const { context } = await canvases();
     assert.equal(context.globalCompositeOperation, 'source-over');

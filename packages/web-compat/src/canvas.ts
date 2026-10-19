@@ -2,7 +2,7 @@ import { nativePlatform, registerViewName, type Engine, type EngineNode } from '
 import { viewBoxProps } from '@ng-native/icons';
 import { acceptedColour, canvasColour, serializedColour } from './canvas-colour.ts';
 import { isComposite, isUnbounded } from './canvas-composite.ts';
-import { inverted, type FillRule, type Matrix } from './canvas-path.ts';
+import { inverted, pathUnder, type FillRule, type Matrix } from './canvas-path.ts';
 import {
   fitted,
   IMAGE,
@@ -568,7 +568,7 @@ class Context2D {
     this.copied();
     const odd: Record<string, string> =
       ruleOf(rule) === 'evenodd' ? { 'fill-rule': 'evenodd' } : {};
-    this.add('path', { d, ...odd, ...this.filled() });
+    this.add('path', { d, ...odd, ...this.filled(this.state.matrix) });
     const { fillStyle, globalAlpha: alpha, clips, matrix, composite } = this.state;
     const style = styleOf(fillStyle, matrix);
     this.operation({ kind: 'fill', d, rule: ruleOf(rule), style, alpha, clips, composite });
@@ -577,7 +577,7 @@ class Context2D {
     if (!this.path.length) return;
     const d = this.path.join('');
     this.copied();
-    this.add('path', { d, ...this.stroked() });
+    this.add('path', this.strokedPath(d));
     const { strokeStyle, globalAlpha: alpha, clips, matrix, composite } = this.state;
     const [style, line] = [styleOf(strokeStyle, matrix), this.line()];
     this.operation({ kind: 'stroke', d, line, matrix, style, alpha, clips, composite });
@@ -614,11 +614,13 @@ class Context2D {
     this.version++;
     this.startOver();
   }
+  // A text is drawn from its own place under a transform of its own: its paint is from there,
+  // and its line is as wide as the transform then makes it.
   fillText(text: string, x: number, y: number): void {
-    this.text(text, x, y, this.filled());
+    this.text(text, x, y, this.filled(textSpace(x, y)));
   }
   strokeText(text: string, x: number, y: number): void {
-    this.text(text, x, y, this.stroked());
+    this.text(text, x, y, this.stroked(textSpace(x, y), 1));
   }
   measureText(text: string): Record<string, number> {
     const { size, weight } = fontOf(this.state.font);
@@ -930,17 +932,21 @@ class Context2D {
     );
   }
 
-  private filled(): Record<string, string> {
-    return { fill: this.paint(this.state.fillStyle), ...this.seenThrough() };
+  private filled(space: Matrix): Record<string, string> {
+    return { fill: this.paint(this.state.fillStyle, space), ...this.seenThrough() };
   }
 
-  /** A paint as a shape names it: a colour, or a gradient kept to be drawn before the shape. */
-  private paint(style: unknown): string {
-    if (style instanceof Pattern) return this.tiled(style);
+  /**
+   * A paint as a shape names it: a colour, or a gradient kept to be drawn before the shape. The
+   * space is where the shape is drawn, from the canvas's own: the transform there is, for one
+   * drawn on the canvas's grid.
+   */
+  private paint(style: unknown, space: Matrix): string {
+    if (style instanceof Pattern) return this.tiled(style, space);
     if (!(style instanceof Gradient)) return typeof style === 'string' ? style : '#000';
     if (!style.colours.length) return 'none';
     const id = `canvas-paint-${this.paints++}`;
-    const { name, attrs } = gradientAttributes(style.geometry, this.state.matrix);
+    const { name, attrs } = gradientAttributes(style.geometry, space);
     // As they are now: a colour added after it is drawn with is not on what was drawn.
     const colours = stopsDrawn(style.geometry, style.colours);
     this.pending.push({ name, attrs: { ...attrs, id }, colours });
@@ -949,14 +955,14 @@ class Context2D {
 
   /**
    * A pattern kept to be drawn before the shape: a tile of its picture, on the grid of the
-   * transform there is. Along a side it does not repeat, the tile is as long as the canvas is
-   * there, so that no other picture of it is on the canvas.
+   * transform there is, put in the space the shape is drawn in. Along a side it does not repeat,
+   * the tile is as long as the canvas is there, so that no other picture of it is on the canvas.
    */
-  private tiled(pattern: Pattern): string {
+  private tiled(pattern: Pattern, space: Matrix): string {
     const id = `canvas-paint-${this.paints++}`;
-    const matrix = multiplied(this.state.matrix, pattern.matrix);
     const { width, height } = pattern.picture;
-    const [x, y, wide, high] = tileOf(matrix, pattern, canvasSize(this.canvas));
+    const grid = multiplied(this.state.matrix, pattern.matrix);
+    const [x, y, wide, high] = tileOf(grid, pattern, canvasSize(this.canvas));
     const tile = {
       name: id,
       x,
@@ -965,19 +971,33 @@ class Context2D {
       height: high,
       patternUnits: 1,
       patternContentUnits: 1,
-      patternTransform: [...matrix],
+      patternTransform: [...multiplied(space, pattern.matrix)],
     };
     const place = { x: 0, y: 0, width, height };
     this.pending.push({ name: 'pattern', attrs: {}, picture: pattern.picture, place, tile });
     return `url(#${id})`;
   }
 
-  private stroked(): Record<string, string> {
+  /**
+   * A stroked path as a shape draws it. A browser strokes a path where it was given and then
+   * transforms the stroke, which a transform that stretches one way more than another, or skews,
+   * makes wider one way than another: no one width on the canvas's grid is that, so the shape is
+   * drawn where it was given with the transform on it. Under any other, it is on the grid.
+   */
+  private strokedPath(d: string): Record<string, string> {
+    const { matrix } = this.state;
+    const undo = isUniform(matrix) ? null : inverted(matrix);
+    if (!undo) return { d, ...this.stroked(matrix, this.stretch) };
+    const transform = `matrix(${matrix.join(' ')})`;
+    return { d: pathUnder(d, undo), transform, ...this.stroked(IDENTITY, 1) };
+  }
+
+  /** A line in a space, which is as much longer than the canvas's own as `stretch`. */
+  private stroked(space: Matrix, stretch: number): Record<string, string> {
     const { lineWidth, lineCap, lineJoin, miterLimit, dash, lineDashOffset } = this.state;
-    const stretch = this.stretch;
     return {
       fill: 'none',
-      stroke: this.paint(this.state.strokeStyle),
+      stroke: this.paint(this.state.strokeStyle, space),
       'stroke-width': String(round(lineWidth * stretch)),
       'stroke-linecap': lineCap,
       'stroke-linejoin': lineJoin,
@@ -1073,11 +1093,21 @@ const styleRead = (style: unknown): unknown =>
 
 const ruleOf = (rule: unknown): FillRule => (rule === 'evenodd' ? 'evenodd' : 'nonzero');
 
+/** Whether a transform makes a length as much longer every way it runs: it moves, turns, scales. */
+function isUniform([a, b, c, d]: Matrix): boolean {
+  const near = (x: number, y: number) => Math.abs(x - y) <= 1e-9 * Math.max(1, Math.abs(x));
+  return near(a * a + b * b, c * c + d * d) && near(a * c + b * d, 0);
+}
+
+/** Where a text is drawn from, from the canvas's own space: its place there is its own 0, 0. */
+const textSpace = (x: number, y: number): Matrix => [1, 0, 0, 1, -Number(x), -Number(y)];
+
 /**
- * A gradient as a shape draws it, on the canvas's grid under a transform: the points it runs
- * between where the transform puts them, and its outer circle's radius as long as the transform
- * makes a length. A radial one drawn under a transform that stretches one way more than another
- * is drawn as a circle, not the ellipse it is in the pixels read back.
+ * A gradient as a shape draws it, in the space the shape is drawn in: the points it runs between
+ * where that space has them, and its outer circle's radius as long as it makes a length. A radial
+ * one filled on the canvas's grid under a transform that stretches one way more than another is
+ * drawn as a circle, not the ellipse it is in the pixels read back. One stroked under such a
+ * transform is drawn under it, see `strokedPath`, and is the ellipse.
  */
 function gradientAttributes(
   geometry: GradientGeometry,
