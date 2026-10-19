@@ -56,9 +56,9 @@ added to, and no `new`. A comment before or after an HTML document's `<html>` is
   [Forms](#forms)), of focus (`:focus`, under [Events](#events)) and of the address (`:target`,
   under [Iframes and the page address](#iframes-and-the-page-address)).
 
-Gaps: a state nothing here reads matches nothing, as it does in a browser where it is not the
-case: `:hover`, `:visited` and a media element playing. A button or a link a pointer is over is
-marked `data-hover` instead, which the Tailwind preset's `hover:` reads.
+Gaps: `:hover`, `:visited` and the state of a playing media element match nothing, as they do in
+a browser where the state is not the case. A button or a link a pointer is over is marked
+`data-hover` instead, which the Tailwind preset's `hover:` reads.
 
 ## CSSOM
 
@@ -87,8 +87,7 @@ Gaps:
   is written in lower case, and another keyword keeps the case it was written in:
   `display: BLOCK` stays `BLOCK`. The shorthands it splits into longhands are those of
   sides, of pairs, and `border`, `border-radius`, `flex`, `font`, `list-style`,
-  `background-position` and `all`; `background`, `transition` and the rest are declared as
-  themselves.
+  `background` and `all`; `transition` and the rest are declared as themselves.
 - `getComputedStyle` answers a percentage as written, reads no vertical writing mode, and answers
   a transform other than a move or a scale as written.
 
@@ -154,7 +153,7 @@ next focus or blur.
 - A field has `selectionStart`, `selectionEnd`, `setSelectionRange()` and `select()`, and a
   `<textarea>` says how tall its text is as `scrollHeight`.
 - A file input's `click()` opens the system's file picker through `expo-document-picker`, which
-  the app installs, or through a picker provided as `FILE_PICKER`.
+  the app installs.
 - A form has `elements`, `requestSubmit()` and `reset()`, is submitted only once its controls pass
   their constraints, and `document.forms` lists the forms.
 
@@ -192,7 +191,8 @@ rotation or a skew, and a curve's box includes its handles.
 - A canvas's `width` and `height` set the grid it draws on. A canvas drawn again each frame moves
   the shapes it has rather than making new ones.
 - What is drawn reads back with `getImageData`, is put with `putImageData`, draws on another
-  canvas with `drawImage`, and is written as a PNG by `toDataURL` and `toBlob`.
+  canvas with `drawImage`, and is written as a PNG by `toDataURL` and `toBlob`. Text is not in
+  those pixels, so it is not read back or drawn onto another canvas.
 - `isPointInPath`, `isPointInStroke`, `measureText` and `globalCompositeOperation`, and
   `ImageData`, `CanvasRenderingContext2D`, `CanvasGradient` and `CanvasPattern` where the runtime
   has none.

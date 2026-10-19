@@ -22,7 +22,7 @@ The suites, listed in `wpt/pin.mjs`, are:
 - Events and observers: `uievents`, `resize-observer` and `intersection-observer`.
 
 The tests are fetched at a pinned commit of `web-platform-tests/wpt`, into a cache git ignores.
-A file the runner cannot read is skipped and counted with its reason, among them an XML document, a
+A file the runner cannot run is skipped and counted with its reason, among them an XML document, a
 manual test, a reftest, a crash test, a worker-only test, a reference or print page with no test
 harness, and a test that needs a server or input automation from `testdriver`.
 
