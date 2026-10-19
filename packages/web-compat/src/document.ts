@@ -229,7 +229,10 @@ export function listenAnywhere(
       composedPath: () => path,
       cancelable: true,
       defaultPrevented: false,
-      preventDefault() {},
+      // Kept, for a move: a listener that is not passive keeps a drag from the page with it.
+      preventDefault(this: { defaultPrevented: boolean }) {
+        this.defaultPrevented = true;
+      },
       stopPropagation() {},
     });
   };

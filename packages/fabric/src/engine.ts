@@ -14318,7 +14318,7 @@ export class Engine implements HostEngine {
     if (!handle || !this.fabric.setIsJSResponder) return;
     const asked = this.responders.get(node)?.blockNativeResponder ?? false;
     // And for a drag an element's `touch-action` keeps from the page: see `holdSwipe`.
-    const block = asked || this.drag?.held === true;
+    const block = asked || this.drag?.held === true || this.dragKept;
     this.fabric.setIsJSResponder(handle, isResponder, block);
   }
 
@@ -14494,7 +14494,7 @@ export class Engine implements HostEngine {
     // A first finger down is a new touch: the last one's end never came where what it was on
     // went from under the finger.
     const fingers = (nativeEvent as { touches?: readonly unknown[] } | null)?.touches?.length;
-    if (this.drag && fingers === 1) this.releaseSwipe(null);
+    if ((this.drag || this.dragKept) && fingers === 1) this.releaseSwipe(null);
     if (this.drag || !target) return;
     const actions = touchActions(target);
     if (!keeps(actions, PANS_ACROSS)) return;
@@ -14509,6 +14509,22 @@ export class Engine implements HostEngine {
 
   /** The scroll view whose scrolling is off while a drag over it is an element's own. */
   private scrollHeld: EngineNode | null = null;
+
+  /** Whether a package has kept the drag now under way from the page: see `keepDrag`. */
+  private dragKept = false;
+
+  /**
+   * Keep the drag now under way from the page, as a browser does for a `touchmove` a listener
+   * prevented the default of: the scroll view the node is in stops scrolling, and native is told
+   * that whoever holds the touch keeps it, until the last finger lifts. Told from a move, a
+   * frame or so after native saw it, so a scroll that had already begun stops where it is.
+   */
+  keepDrag(node: EngineNode): void {
+    if (this.dragKept) return;
+    this.dragKept = true;
+    if (this.currentResponder) this.tellNative(this.currentResponder, true);
+    if (!this.scrollHeld) this.holdScroll(node);
+  }
 
   /**
    * Stop the scroll view a node is in from scrolling, until the touch ends. Telling native who
@@ -14543,6 +14559,7 @@ export class Engine implements HostEngine {
     const left = (nativeEvent as { touches?: readonly unknown[] } | null)?.touches?.length ?? 0;
     if (left > 0) return;
     this.drag = null;
+    this.dragKept = false;
     for (const held of [this.scrollHeld, this.swipeHeld]) {
       if (held === this.scrollHeld) this.scrollHeld = null;
       else this.swipeHeld = null;

@@ -110,9 +110,28 @@ export function listen(
     // One taken off is told nothing that comes later: the mouse after a touch is told so.
     if (entry.removed) return;
     if (once) removeEntry();
-    return call(entry, target, event) as boolean | void;
+    const prevented = defaultPrevented(event);
+    const answer = call(entry, target, event) as boolean | void;
+    if (!prevented && !entry.passive) keepDrag(entry.type, event);
+    return answer;
   });
   return removeEntry;
+}
+
+const defaultPrevented = (event: unknown): boolean =>
+  (event as { defaultPrevented?: unknown } | null)?.defaultPrevented === true;
+
+/** The moves a listener keeps a drag from the page with, by preventing their default. */
+const MOVES = new Set(['touchmove', 'pointermove']);
+
+/**
+ * Keep the drag a move is of from the page, where the listener just told of it prevented its
+ * default: a browser scrolls no further for it. See `Engine.keepDrag`.
+ */
+function keepDrag(type: string, event: unknown): void {
+  if (!MOVES.has(type) || !defaultPrevented(event)) return;
+  const target = (event as { target?: { engine?: { keepDrag?(node: unknown): void } } }).target;
+  target?.engine?.keepDrag?.(target);
 }
 
 /** What a listener on the window, the document, its root or its body is passive to unless told. */
