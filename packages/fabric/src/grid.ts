@@ -6,8 +6,7 @@
  * one's content is through `measure`, and gets back a rectangle for each against the container's
  * content box.
  *
- * Not here: named lines and areas, subgrid, baseline alignment (read as start), and
- * right-to-left columns.
+ * Not here: subgrid, last-baseline alignment (read as start), and right-to-left columns.
  */
 
 export type Style = Readonly<Record<string, string>>;
