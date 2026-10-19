@@ -37,6 +37,7 @@ const FILES: Record<string, { body: string; contentType?: string }> = {
     contentType: 'application/xhtml+xml',
   },
   'https://shop.example/notes.txt': { body: 'a < b', contentType: 'text/plain' },
+  'https://other.example/frame.html': { body: '<p id="theirs">Elsewhere</p>' },
 };
 
 const read: FrameLoader = (url) => FILES[url];
@@ -136,6 +137,41 @@ describe('iframe', () => {
     assert.equal(held.contentWindow.location.origin, 'https://shop.example');
   });
 
+  it('is at the origin of the document it is in at about:blank, there or in another frame', async () => {
+    const document = await page();
+    const outer = await framed(document, { src: 'https://other.example/frame.html' });
+    const inner = outer.contentDocument.createElement('iframe');
+    outer.contentDocument.body.appendChild(inner);
+    assert.equal(inner.contentWindow.location.origin, 'https://other.example');
+  });
+
+  it("is at the page's own origin, and not at a location the runtime had", async () => {
+    const scope = globalThis as Dom;
+    scope.location = { href: 'http://runtime.example/', origin: 'http://runtime.example' };
+    try {
+      const document = await page();
+      const iframe = document.createElement('iframe');
+      document.body.appendChild(iframe);
+      const window = iframe.contentWindow;
+      assert.equal(window.location.origin, 'https://shop.example');
+      const heard: string[] = [];
+      window.addEventListener('message', (event: Dom) => heard.push(event.origin));
+      window.postMessage('hi', '/');
+      await new Promise((resolve) => setTimeout(resolve, 5));
+      assert.deepEqual(heard, ['https://shop.example']);
+    } finally {
+      delete scope.location;
+    }
+  });
+
+  it('resolves against the first <base> with an href', async () => {
+    const document = await page();
+    const iframe = await framed(document, {
+      srcdoc: '<base target="_top"><base href="https://cdn.example/">',
+    });
+    assert.equal(iframe.contentDocument.baseURI, 'https://cdn.example/');
+  });
+
   it('makes elements its document owns', async () => {
     const document = await page();
     const iframe = document.createElement('iframe');
@@ -222,6 +258,45 @@ describe('iframe', () => {
     assert.equal(iframe.contentDocument.URL, 'about:blank');
   });
 
+  it('is about:blank again where a page it goes to after one cannot be read', async () => {
+    const document = await page();
+    const iframe = await framed(document, { src: '/frame.html' });
+    const loading = loadOf(iframe);
+    iframe.src = '/missing.html';
+    await loading;
+    assert.equal(iframe.contentDocument.URL, 'about:blank');
+    assert.equal(iframe.contentDocument.getElementById('here'), null);
+  });
+
+  it('goes to a fragment of its document in place, with no load', async () => {
+    const asked: string[] = [];
+    const document = await page((url) => (asked.push(url), read(url)));
+    const iframe = await framed(document, { src: '/frame.html' });
+    const inner = iframe.contentDocument;
+    iframe.contentWindow.location.hash = 'here';
+    await framesLoaded();
+    assert.equal(iframe.contentDocument, inner);
+    assert.equal(inner.URL, 'https://shop.example/frame.html#here');
+    assert.deepEqual(asked, ['https://shop.example/frame.html']);
+    iframe.contentWindow.location.reload();
+    await framesLoaded();
+    assert.equal(asked.length, 2, 'a reload reads it again');
+  });
+
+  it('closes the frames of a document it replaces', async () => {
+    const document = await page();
+    const outer = await framed(document, { src: '/frame.html' });
+    const inner = outer.contentDocument.createElement('iframe');
+    outer.contentDocument.body.appendChild(inner);
+    const window = inner.contentWindow;
+    assert.equal(window.closed, false);
+    const loading = loadOf(outer);
+    outer.src = '/quirky.html';
+    await loading;
+    assert.equal(window.closed, true);
+    assert.equal(window.parent, null);
+  });
+
   it('goes where src says once it is set again, and the window stays', async () => {
     const document = await page();
     const iframe = await framed(document, { src: '/frame.html' });
@@ -296,6 +371,20 @@ describe('iframe', () => {
     assert.equal(heard.length, 1);
     assert.deepEqual(heard[0].data, { say: 'hi' });
     assert.equal(heard[0].source, globalThis);
+  });
+
+  it('hears a message for the origin it is at, and throws for one that cannot be copied', async () => {
+    const document = await page();
+    const iframe = await framed(document, { src: 'https://other.example/frame.html' });
+    const window = iframe.contentWindow;
+    const heard: string[] = [];
+    window.addEventListener('message', (event: Dom) => heard.push(event.data));
+    window.postMessage('theirs', 'https://other.example');
+    window.postMessage('ours', 'https://shop.example');
+    window.postMessage('own', '/');
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    assert.deepEqual(heard, ['theirs']);
+    assert.throws(() => window.postMessage(() => {}, '*'), { name: 'DataCloneError' });
   });
 
   it('calls its own window’s onload, and not the page’s', async () => {

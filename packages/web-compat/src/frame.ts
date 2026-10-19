@@ -77,6 +77,8 @@ interface Frame {
 }
 
 const frames = new WeakMap<EngineNode, Frame>();
+/** Each frame document's URL, which a fragment changes in place. */
+const addresses = new WeakMap<object, string>();
 /** Each frame's documents, as they are or were. */
 const frameOfDocument = new WeakMap<object, Frame>();
 const loaders = new WeakMap<Engine, FrameLoader>();
@@ -266,7 +268,12 @@ function close(frame: Frame): void {
   frame.live = false;
   frame.navigation++;
   frames.delete(frame.element);
-  const top = frame.document['documentElement'] as EngineNode | null;
+  closeFramesIn(frame.document);
+}
+
+/** Every frame in a document that is gone: out of the page, or replaced by another. */
+function closeFramesIn(document: Members): void {
+  const top = document['documentElement'] as EngineNode | null;
   if (!top) return;
   for (const element of iframesIn(top)) {
     const inner = frames.get(element);
@@ -327,13 +334,10 @@ function navigate(frame: Frame, to: { url: string } | { srcdoc: string }): void 
       }
     }
     if (navigation !== frame.navigation) return;
-    if (response) {
-      frame.url = response.url ?? url;
-      frame.document = documentOfResponse(frame, response);
-    } else if (url === 'about:blank') {
-      frame.url = url;
-      frame.document = blankDocument(frame);
-    }
+    closeFramesIn(frame.document);
+    // What cannot be read is a blank page, and not the one the frame was at before.
+    frame.url = response ? (response.url ?? url) : 'about:blank';
+    frame.document = response ? documentOfResponse(frame, response) : blankDocument(frame);
     loaded(frame);
   })();
   pending.add(settled);
@@ -442,7 +446,8 @@ function windowFor(frame: Frame): Members {
       unlisten(window, type, listener, options),
     dispatchEvent: (event: unknown) => dispatch(event, [window]),
     getComputedStyle: computedStyle,
-    postMessage: (message: unknown, options?: unknown) => postMessage(window, message, options),
+    postMessage: (message: unknown, options?: unknown) =>
+      postMessage(window, message, options, originOfFrame(frame), pageOrigin(frame.engine)),
     close() {},
     focus() {},
     blur() {},
@@ -501,27 +506,30 @@ function framesOf(frame: Frame): EngineNode[] {
 }
 
 /**
- * `postMessage`: a `message` event on the window, after the task that sent it, with the origin
- * of the page. `source` is the page's window, which is what sends to a frame here.
+ * `postMessage`: a `message` event on the window, after the task that sent it, where it is for
+ * the origin the window is at, with the origin of the page. `source` is the page's window, which
+ * is what sends to a frame here. What cannot be copied throws, as it does in a browser.
  */
-export function postMessage(window: object, message: unknown, options: unknown): void {
+export function postMessage(
+  window: object,
+  message: unknown,
+  options: unknown,
+  at = pageOrigin(),
+  from = pageOrigin(),
+): void {
   const target =
     typeof options === 'string'
       ? options
       : ((options as { targetOrigin?: string } | undefined)?.targetOrigin ?? '/');
-  const origin = pageOrigin();
-  if (target !== '*' && target !== '/' && parseUrl(target)?.origin !== origin) return;
-  deliverMessage(window, structuredCopy(message), origin, globalThis);
+  const copy = structuredCopy(message);
+  const wanted = target === '/' ? from : parseUrl(target)?.origin;
+  if (target !== '*' && wanted !== at) return;
+  deliverMessage(window, copy, from, globalThis);
 }
 
 const structuredCopy = (value: unknown): unknown => {
   const clone = (globalThis as { structuredClone?: (value: unknown) => unknown }).structuredClone;
-  if (!clone) return value;
-  try {
-    return clone(value);
-  } catch {
-    return value;
-  }
+  return clone ? clone(value) : value;
 };
 
 // The documents
@@ -546,8 +554,8 @@ function emptyDocument(frame: Frame, contentType: string): Members {
     );
   }
   frameOfDocument.set(document, frame);
-  const url = frame.url;
-  windowed(frame, document, contentType, url);
+  addresses.set(document, frame.url);
+  windowed(frame, document, contentType);
   return document;
 }
 
@@ -612,18 +620,17 @@ function htmlDocument(frame: Frame, markup: string, contentType: string): Member
 }
 
 /** What a document has in a window, over what a made document has. */
-function windowed(frame: Frame, document: Members, contentType: string, url: string): void {
+function windowed(frame: Frame, document: Members, contentType: string): void {
   const location = new FrameLocation(frame, document);
+  const url = () => addresses.get(document)!;
   let written: string | null = null;
   const writing = (markup: string) => {
     written = (written ?? '') + markup;
     replaceWith(frame, document, written);
   };
   const members: Members = {
-    URL: url,
-    documentURI: url,
     get baseURI() {
-      return baseOf(frame, document, url);
+      return baseOf(frame, document, url());
     },
     contentType,
     readyState: 'complete',
@@ -670,8 +677,8 @@ function windowed(frame: Frame, document: Members, contentType: string, url: str
   const clone = document['cloneNode'] as (deep?: unknown) => Members;
   Object.defineProperties(document, {
     ...Object.getOwnPropertyDescriptors(members),
-    URL: { get: () => url, configurable: true },
-    documentURI: { get: () => url, configurable: true },
+    URL: { get: url, configurable: true },
+    documentURI: { get: url, configurable: true },
     cloneNode: { value: (deep?: unknown) => cloned(document, clone(deep)), configurable: true },
   });
 }
@@ -712,7 +719,9 @@ function replaceWith(frame: Frame, document: Members, markup: string): void {
 /** What a URL in a frame's document resolves against: a `<base>`, else its URL or its parent's. */
 function baseOf(frame: Frame, document: Members, url: string): string {
   const head = document['head'] as EngineNode | null;
-  const base = head?.childList.find((node) => node.tag === 'base') as Dom | undefined;
+  const base = head?.childList.find(
+    (node) => node.tag === 'base' && (node as Dom).hasAttribute('href'),
+  ) as Dom | undefined;
   const fallback =
     url === 'about:srcdoc' || url === 'about:blank'
       ? String((frame.element as Dom).baseURI ?? url)
@@ -721,9 +730,31 @@ function baseOf(frame: Frame, document: Members, url: string): string {
   return (href != null && parseUrl(href, fallback)?.href) || fallback;
 }
 
+/**
+ * Go to a URL: one that differs from the document's only by a fragment, it is at in place, as a
+ * browser scrolls to it, with no load.
+ *
+ * ponytail: no `hashchange`, as the page sends none either: see `page-address.ts`.
+ */
 function locate(frame: Frame, value: unknown): void {
   const url = parseUrl(String(value), String(frame.document['baseURI']))?.href;
-  if (url) navigate(frame, { url });
+  if (!url) return;
+  const unfragmented = (at: string) => at.split('#')[0];
+  if (!url.includes('#') || unfragmented(url) !== unfragmented(String(frame.document['URL']))) {
+    navigate(frame, { url });
+    return;
+  }
+  addresses.set(frame.document, url);
+  frame.url = url;
+}
+
+/**
+ * The origin a frame is at: that of the document it is in, at `about:blank` and `srcdoc`, as a
+ * browser has it, and else its URL's. None once it is out of the page.
+ */
+function originOfFrame(frame: Frame): string {
+  const location = frame.document['location'] as { origin?: string } | null;
+  return location?.origin ?? 'null';
 }
 
 type Part = 'protocol' | 'host' | 'hostname' | 'port' | 'pathname' | 'search' | 'hash';
@@ -757,8 +788,11 @@ class FrameLocation {
   }
   get origin(): string {
     const url = this.href;
-    if (url.startsWith('about:')) return pageOrigin();
-    return parseUrl(url)?.origin ?? 'null';
+    if (!url.startsWith('about:')) return parseUrl(url)?.origin ?? 'null';
+    const parent = (this.#frame.element as Dom).ownerDocument?.['location'] as {
+      origin?: string;
+    } | null;
+    return parent?.origin ?? pageOrigin(this.#frame.engine);
   }
   get protocol(): string {
     return this.#part('protocol');
@@ -809,7 +843,7 @@ class FrameLocation {
     locate(this.#frame, url);
   }
   reload(): void {
-    locate(this.#frame, this.href);
+    navigate(this.#frame, { url: this.href });
   }
   toString(): string {
     return this.href;

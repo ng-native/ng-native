@@ -1,4 +1,6 @@
+import type { Engine } from '@ng-native/fabric';
 import { dispatch, newEvent, report } from './events.ts';
+import { locationOf, newestLocation } from './page-address.ts';
 
 /**
  * A `message` event on a window, after the task that sent it, as `postMessage` delivers one: its
@@ -31,6 +33,9 @@ export function deliverMessage(
   }, 0);
 }
 
-/** The origin a page's window is at: `null` where it has none. */
-export const pageOrigin = (): string =>
-  (globalThis as { location?: { origin?: string } }).location?.origin ?? 'null';
+/**
+ * The origin an app's page is at, or the newest app's for none given: `null` where it has none.
+ * The page's own, and not a `location` the runtime had before it.
+ */
+export const pageOrigin = (engine?: Engine): string =>
+  (engine ? locationOf(engine) : newestLocation())?.origin ?? 'null';

@@ -13,6 +13,8 @@ import { required } from './dom-error.ts';
 import { marksHover } from './elements.ts';
 import { dispatch, listen, unlisten, type Heard } from './events.ts';
 import { isField } from './field.ts';
+import { frameCreated } from './frame.ts';
+import { setFrameView } from './frame-view.ts';
 import { inDocument, isInDocument, lastInDocument } from './in-document.ts';
 import { announcesDisabled, listenNatively, hasCapture, topLevel } from './listen.ts';
 import { observing, removingAttribute, settingAttribute, together } from './mutation-observer.ts';
@@ -114,10 +116,15 @@ export function noteWritten(node: EngineNode, name: string, value: string | null
 export function copyWritten(from: EngineNode, to: EngineNode): void {
   const all = written.get(from);
   if (all) written.set(to, new Map(all));
-  const kept = placed.get(from);
-  if (kept) placed.set(to, new Set(kept));
-  const own = taken.get(from);
-  if (own) taken.set(to, new Map(own));
+  const placedThere = placed.get(from);
+  if (placedThere) placed.set(to, new Set(placedThere));
+  // A copy of an iframe is a frame of its own, which a copy is not made as: see `frame.ts`.
+  frameCreated(to, engineOf(to));
+  const kept = taken.get(from);
+  if (!kept) return;
+  taken.set(to, new Map(kept));
+  // And its view is shown by what the one it is a copy of took.
+  for (const [name, value] of kept) setFrameView(to, name, value, engineOf(to));
 }
 
 /**

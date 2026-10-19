@@ -182,6 +182,24 @@ describe('what resolves against it', () => {
     assert.equal(document.baseURI, 'https://shop.example/');
   });
 
+  it('resolves against the first <base> with an href, past one without', async () => {
+    const { document } = await page();
+    const target = document.createElement('base');
+    target.setAttribute('target', '_top');
+    const base = document.createElement('base');
+    base.setAttribute('href', '/shop/');
+    document.head.append(target, base);
+    assert.equal(document.baseURI, 'https://shop.example/shop/');
+  });
+
+  it('is what a link is as a string', async () => {
+    const { document } = await page();
+    const link = document.getElementById('link');
+    assert.equal(String(link), 'https://shop.example/docs/a?q=1#top');
+    assert.equal(`${document.createElement('area')}`, '');
+    assert.equal(String(document.createElement('div')), '[object Object]');
+  });
+
   it('leaves a document a script made at about:blank', async () => {
     const { document } = await page();
     const made = document.implementation.createHTMLDocument('');
@@ -256,6 +274,26 @@ describe('window.location', () => {
     assert.deepEqual(followed, ['/orders?open=1', '/cart#top', '/help', '/search']);
     assert.deepEqual(opened, ['https://elsewhere.example/a']);
     assert.throws(() => location.assign('http://[bad'), { name: 'SyntaxError' });
+  });
+
+  it("is set as the document's location as well", async () => {
+    const source: DeepLinkSource = {
+      launchUrl: () => Promise.resolve(null),
+      subscribe: () => () => {},
+      open: () => {},
+    };
+    const { app, document } = await page([
+      provideWebCompat({ url: 'https://shop.example/' }),
+      { provide: DeepLinks.SOURCE, useValue: source },
+    ]);
+    const followed: string[] = [];
+    const stop = app.componentRef.injector.get(DeepLinks).subscribe((path) => followed.push(path));
+    try {
+      document.location = '/account';
+    } finally {
+      stop();
+    }
+    assert.deepEqual(followed, ['/account']);
   });
 
   it("follows a path off Expo Go's /-- into the app, and keeps a build's scheme", async () => {
@@ -354,5 +392,28 @@ describe(':target', () => {
     assert.equal(section.matches(':target'), false, 'out of the page');
     Object.assign(history, { hash: '#' });
     assert.equal(document.querySelector(':target'), null, 'an empty fragment');
+  });
+
+  it('is the first element with the id, else the first <a> of the name, as written first', async () => {
+    const history = new StillLocation();
+    const { document } = await page([
+      provideWebCompat({ url: 'https://shop.example/' }),
+      { provide: PlatformLocation, useValue: history },
+    ]);
+    const [first, second, anchor, literal] = ['p', 'p', 'a', 'p'].map((tag) => {
+      const element = document.createElement(tag);
+      document.body.appendChild(element);
+      return element;
+    });
+    first.id = 'twice';
+    second.id = 'twice';
+    anchor.setAttribute('name', 'named');
+    literal.id = 'a%20b';
+    Object.assign(history, { hash: '#twice' });
+    assert.deepEqual(Array.from(document.querySelectorAll(':target')), [first]);
+    Object.assign(history, { hash: '#named' });
+    assert.equal(document.querySelector(':target'), anchor);
+    Object.assign(history, { hash: '#a%20b' });
+    assert.equal(document.querySelector(':target'), literal, 'the id as it is written');
   });
 });

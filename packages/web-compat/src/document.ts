@@ -456,6 +456,11 @@ export function documentFor(engine: Engine): CompatDocument {
     get location() {
       return locationOf(engine);
     },
+    // Set as the window's is, by its `href`.
+    set location(value: unknown) {
+      const location = locationOf(engine);
+      if (location) location.href = String(value);
+    },
     // The field the keyboard belongs to, which a library reads to know one is being typed in.
     get activeElement() {
       return engine.focused ?? body;

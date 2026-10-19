@@ -1,5 +1,5 @@
 import { parseUrl, type UrlRecord } from './parse-url.ts';
-import { baseOf, contentOf, own, type Reflecting, type Reflection } from './reflect.ts';
+import { baseOf, contentOf, method, own, type Reflecting, type Reflection } from './reflect.ts';
 
 /**
  * HTML's `HTMLHyperlinkElementUtils`, which an `<a>` and an `<area>` have: `href` and the parts of
@@ -59,6 +59,10 @@ const HYPERLINK: Readonly<Record<string, Reflection>> = {
   pathname: part('pathname'),
   search: part('search'),
   hash: part('hash'),
+  // A link is its URL as a string, as a template interpolates it.
+  toString: method(function (this: Reflecting) {
+    return urlOf(this)?.href ?? contentOf(this, 'href', 'href') ?? '';
+  }),
 };
 
 export const HYPERLINKS: Readonly<Record<string, Readonly<Record<string, Reflection>>>> = {

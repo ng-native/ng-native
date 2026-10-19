@@ -19,6 +19,15 @@ class Page {
   readonly document: Dom = inject(DOCUMENT);
 }
 
+/** A frame whose template writes its attribute's name in capitals, which the renderer keeps. */
+@Component({
+  selector: 'x-capital-frame',
+  template: '<iframe SRC="https://video.example/embed"></iframe>',
+})
+class CapitalFrame {
+  readonly document: Dom = inject(DOCUMENT);
+}
+
 type Host = Record<string, unknown>;
 const host = globalThis as Host;
 const NAMES = [
@@ -506,6 +515,82 @@ describe('iframe as a web view', () => {
     iframe.setAttribute('loading', 'eager');
     assert.equal(warnings.filter((each) => each.includes('loading=')).length, 1);
     assert.equal(view(fabric).props['loading'], undefined);
+  });
+
+  it('says a src page in a sandbox without allow-same-origin keeps its own origin', async () => {
+    installWebView();
+    const { document } = await page();
+    await framed(document, { sandbox: 'allow-scripts', srcdoc: '<p>Hi</p>' });
+    assert.equal(warnings.filter((each) => each.includes('its own origin')).length, 0);
+    await framed(document, { sandbox: 'allow-scripts', src: 'https://video.example/embed' });
+    assert.equal(warnings.filter((each) => each.includes('its own origin')).length, 1);
+  });
+
+  it('allows fullscreen while allow lists it or allowfullscreen is there', async () => {
+    installWebView();
+    const { document, fabric } = await page();
+    const iframe = await framed(document, { allow: 'fullscreen', allowfullscreen: '' });
+    const fullscreen = () => view(fabric).props['allowsFullscreenVideo'];
+    assert.equal(fullscreen(), true);
+    iframe.removeAttribute('allowfullscreen');
+    await settle();
+    assert.equal(fullscreen(), true, 'allow still lists it');
+    iframe.setAttribute('allow', 'autoplay');
+    await settle();
+    assert.equal(fullscreen(), false);
+  });
+
+  it('sends no name, password or fragment of the page as the referrer, by any policy', async () => {
+    installWebView();
+    const { document, fabric } = await page({ url: 'https://me:secret@shop.example/orders/#paid' });
+    const iframe = await framed(document, { src: 'next.html', referrerpolicy: 'unsafe-url' });
+    const referrer = () =>
+      (view(fabric).props['newSource'] as { headers?: { value: string }[] }).headers?.[0]?.value;
+    assert.equal(referrer(), 'https://shop.example/orders/');
+    // A policy no browser has is the default, and not one of every object's members.
+    iframe.setAttribute('referrerpolicy', 'constructor');
+    iframe.setAttribute('src', 'https://video.example/embed');
+    await settle();
+    assert.equal(referrer(), 'https://shop.example/');
+  });
+
+  it('is at where src says again once srcdoc is taken away', async () => {
+    installWebView();
+    const { document, fabric } = await page();
+    const iframe = await framed(document, {
+      src: 'https://video.example/embed',
+      srcdoc: '<p>Hi</p>',
+    });
+    iframe.removeAttribute('srcdoc');
+    await settle();
+    iframe.contentWindow.postMessage('secret', 'https://shop.example');
+    assert.equal(sent(fabric).length, 0);
+    iframe.contentWindow.postMessage('hello', 'https://video.example');
+    assert.equal(sent(fabric).length, 1);
+  });
+
+  it('takes an attribute a template writes in capitals by its name', async () => {
+    installWebView();
+    const app = await render(CapitalFrame, {
+      providers: [provideWebCompat({ url: 'https://shop.example/' })],
+    });
+    await settle();
+    const iframe = app.fixture.componentInstance.document.querySelector('iframe');
+    assert.equal(iframe.getAttribute('src'), 'https://video.example/embed');
+  });
+
+  it('shows a copy of an iframe as the iframe it is a copy of', async () => {
+    installWebView();
+    const { document, fabric } = await page();
+    const iframe = await framed(document, { width: '560', src: 'https://video.example/embed' });
+    const copy = iframe.cloneNode();
+    iframe.remove();
+    document.body.appendChild(copy);
+    await settle();
+    assert.equal(view(fabric).props['width'], 560);
+    fabric.emit(view(fabric), 'topLoadingFinish', { url: 'https://video.example/embed' });
+    copy.contentWindow.postMessage('hello', 'https://video.example');
+    assert.equal(sent(fabric).length, 1);
   });
 
   it('is the emulated document where the app asks for it', async () => {

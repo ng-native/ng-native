@@ -14,8 +14,8 @@ import { parseUrl } from './parse-url.ts';
  * react-native-svg's; none of the library's JavaScript is imported.
  *
  * - `src`, resolved against the page's address, is the view's `newSource.uri`; `srcdoc` is its
- *   `newSource.html`, with the page's address as its base where that is a web address, and
- *   neither, or `about:blank`, is an empty page.
+ *   `newSource.html`, with the page's address as its base where that is an `http`, `https` or
+ *   `file` address and the frame has an origin, and neither, or `about:blank`, is an empty page.
  * - It is 300 by 150 points, as a browser has an iframe, under its `width` and `height` and any
  *   stylesheet.
  * - `load` is heard as the page in it finishes loading, or fails to.
@@ -27,7 +27,7 @@ import { parseUrl } from './parse-url.ts';
  *   `window.ReactNativeWebView.postMessage` is heard so too, as the string it is.
  * - The page is the frame's `Referer`, as its `referrerpolicy` says.
  * - `sandbox` without `allow-scripts` runs no script, and without `allow-same-origin` gives the
- *   page no origin, `'null'`, as a browser does; `allow` turns on autoplay, fullscreen and
+ *   page no origin, `'null'`, in the messages the app sends and hears; `allow` turns on autoplay, fullscreen and
  *   picture in picture where it lists them, as `allowfullscreen` does fullscreen; `scrolling="no"`
  *   does not scroll; `title` is what a screen reader says. What else is given is left out, and
  *   said in development.
@@ -37,7 +37,9 @@ import { parseUrl } from './parse-url.ts';
  * that document instead with `provideWebCompat({ frames: 'emulated' })`.
  *
  * ponytail: messages cross as JSON, so a `Map`, a `Date` or a port does not arrive as it was
- * sent, and the page's `window.parent` is a stand-in with `postMessage` alone. The default
+ * sent, and the page's `window.parent` is a stand-in with `postMessage` alone. A sandbox without
+ * `allow-same-origin` is no sandbox for a `src` page: the web view loads it at its own origin,
+ * with its storage, and has no way to give it none. The default
  * border a browser draws is not drawn.
  */
 
@@ -105,6 +107,8 @@ interface FrameView {
   referrerPolicy: string;
   /** Whether `sandbox` is there without `allow-same-origin`, which gives the page no origin. */
   opaque: boolean;
+  /** Whether `allow` lists fullscreen, and whether `allowfullscreen` is there: either allows it. */
+  fullscreen: { allow: boolean; attribute: boolean };
   /** The URL of the page in the view, as it last said. */
   url: string;
   size: Record<string, number | string>;
@@ -201,6 +205,7 @@ export function frameViewCreated(node: EngineNode, engine: Engine): boolean {
     srcdoc: null,
     referrerPolicy: '',
     opaque: false,
+    fullscreen: { allow: false, attribute: false },
     url: 'about:blank',
     size: {},
   } as unknown as FrameView;
@@ -255,8 +260,24 @@ const leftOutBy =
     if (given !== null) leftOut(attribute, given);
   };
 
-const showSource: Take = (view, _, engine) =>
+const showSource: Take = (view, _, engine) => {
   engine.setProp(view.node, 'newSource', sourceOf(view));
+  if (view.opaque && view.srcdoc === null && view.src !== null) {
+    warnOnce(
+      'opaque',
+      "an <iframe>'s sandbox without allow-same-origin gives its src page no origin in the " +
+        'messages the app sends and hears, but a native web view still loads the page at its own ' +
+        'origin, with its storage and cookies.',
+    );
+  }
+};
+
+const showFullscreen = (view: FrameView, engine: Engine) =>
+  engine.setProp(
+    view.node,
+    'allowsFullscreenVideo',
+    view.fullscreen.allow || view.fullscreen.attribute,
+  );
 
 const sizeBy =
   (side: 'width' | 'height'): Take =>
@@ -280,8 +301,8 @@ const ATTRIBUTES: Readonly<Record<string, Take>> = {
   },
   srcdoc: (view, given, engine) => {
     view.srcdoc = given;
-    // Where the page the frame showed was is not where what it holds is.
-    if (given !== null) view.url = 'about:srcdoc';
+    // Where the page the frame showed was is not where what it holds is, and the other way.
+    view.url = given !== null ? 'about:srcdoc' : pendingUrl(view);
     showSource(view, given, engine);
   },
   width: sizeBy('width'),
@@ -299,21 +320,25 @@ const ATTRIBUTES: Readonly<Record<string, Take>> = {
     const unmapped = tokens.filter((token) => !SANDBOX_TAKEN.has(token));
     if (unmapped.length) leftOut('sandbox', unmapped.join(' '));
   },
-  allow: ({ node }, given, engine) => {
+  allow: (view, given, engine) => {
+    const { node } = view;
     const features = (given ?? '')
       .split(';')
       .map((feature) => feature.trim().split(/\s+/)[0]!.toLowerCase())
       .filter(Boolean);
     engine.setProp(node, 'mediaPlaybackRequiresUserAction', !features.includes('autoplay'));
-    if (features.includes('fullscreen')) engine.setProp(node, 'allowsFullscreenVideo', true);
+    view.fullscreen.allow = features.includes('fullscreen');
+    showFullscreen(view, engine);
     engine.setProp(
       node,
       'allowsPictureInPictureMediaPlayback',
       given === null || features.includes('picture-in-picture'),
     );
   },
-  allowfullscreen: ({ node }, given, engine) =>
-    engine.setProp(node, 'allowsFullscreenVideo', given !== null),
+  allowfullscreen: (view, given, engine) => {
+    view.fullscreen.attribute = given !== null;
+    showFullscreen(view, engine);
+  },
   scrolling: ({ node }, given, engine) =>
     engine.setProp(node, 'scrollEnabled', given?.toLowerCase() !== 'no'),
   title: ({ node }, given, engine) => engine.setProp(node, 'accessibilityLabel', given),
@@ -366,13 +391,21 @@ function referrerOf(policy: string, page: string, url: string): string | undefin
   const from = parseUrl(page);
   const to = parseUrl(url);
   if (!from || !to || !/^https?:$/.test(from.protocol)) return undefined;
+  // Never the name and password the page's address may hold, or its fragment.
+  const bare = parseUrl(page)!;
+  bare.username = '';
+  bare.password = '';
+  bare.hash = '';
   const sent = {
-    whole: from.href.split('#')[0]!,
+    whole: bare.href,
     origin: `${from.origin}/`,
     same: from.origin === to.origin,
     downgrade: from.protocol === 'https:' && to.protocol !== 'https:',
   };
-  return (REFERRER_POLICIES[policy] ?? REFERRER_POLICIES['strict-origin-when-cross-origin']!)(sent);
+  const known = Object.hasOwn(REFERRER_POLICIES, policy)
+    ? policy
+    : 'strict-origin-when-cross-origin';
+  return REFERRER_POLICIES[known]!(sent);
 }
 
 interface Sent {
@@ -406,8 +439,8 @@ function resize(view: FrameView): void {
  */
 function originOf(view: FrameView): string {
   if (view.opaque) return 'null';
-  if (/^about:/i.test(view.url)) return pageOrigin();
-  if (view.srcdoc !== null && !/^https?:/i.test(view.url)) return pageOrigin();
+  if (/^about:/i.test(view.url)) return pageOrigin(view.engine);
+  if (view.srcdoc !== null && !/^https?:/i.test(view.url)) return pageOrigin(view.engine);
   return parseUrl(view.url)?.origin ?? 'null';
 }
 
@@ -461,13 +494,13 @@ function windowFor(view: FrameView): object {
           ? options
           : ((options as { targetOrigin?: string } | undefined)?.targetOrigin ?? '/');
       const origin = originOf(view);
-      if (!addressed(target, origin, pageOrigin())) return;
+      if (!addressed(target, origin, pageOrigin(engine))) return;
       // Asked again of the page itself, which may have gone elsewhere since it last said where, or
       // not yet have gone where it is going. What is for the app's own origin is for a page with
       // it, or one with no web origin, as what `srcdoc` holds reads on Android: not a page of
       // another site still there.
       const wanted = JSON.stringify(target === '*' ? null : origin);
-      const own = origin === pageOrigin();
+      const own = origin === pageOrigin(engine);
       const json = JSON.stringify({ data: message }) ?? '{}';
       engine.dispatchCommand(node, 'injectJavaScript', [
         // The source is set after: a browser's event takes none but a window or a port.
@@ -475,7 +508,7 @@ function windowFor(view: FrameView): object {
           `${wanted} && !(${own} && !/^https?:$/.test(at.protocol))) return; ` +
           `var data = JSON.parse(${JSON.stringify(json)}).data; ` +
           `var event = new MessageEvent('message', { data: data, ` +
-          `origin: ${JSON.stringify(pageOrigin())} }); ` +
+          `origin: ${JSON.stringify(pageOrigin(engine))} }); ` +
           `Object.defineProperty(event, 'source', { value: window.parent }); ` +
           `window.dispatchEvent(event); })(); true;`,
       ]);
@@ -506,7 +539,7 @@ function receive(view: FrameView, event: { data?: unknown; url?: string }): void
     report(error);
     return;
   }
-  if (!addressed(String(sent.target ?? '/'), pageOrigin(), origin)) return;
+  if (!addressed(String(sent.target ?? '/'), pageOrigin(view.engine), origin)) return;
   deliverMessage(globalThis, sent.data, origin, view.window);
 }
 

@@ -46,7 +46,8 @@ that resolves `initialUrl()` races the first navigation and neither order is gua
 `open(url)` hands a url to whatever else on the device handles it: a browser, Maps, another app.
 
 `follow(path)` hands a path of the app's own to what `subscribe()` was given, as a link that
-arrived from outside is handed, so the router navigates to it.
+arrived from outside is handed, so the router navigates to it. With nothing subscribed, as in an
+app without `provideNativeRouter()`, the path goes nowhere: it is not kept for a listener later.
 
 `NATIVE_HISTORY` is the native router's `PlatformLocation`, which `provideNativeRouter()` provides.
 A package that stands in a `PlatformLocation` for an app with no router reads it first, so the

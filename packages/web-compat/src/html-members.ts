@@ -64,10 +64,13 @@ function resolve(name: string, tables: readonly ByElement[]) {
   const byElement = new Map<string, Reflection>();
   const elements = new Set(tables.flatMap((table) => Object.keys(table)));
   for (const element of elements) {
-    const own = tables.map((table) => table[element]?.[name]).find(Boolean);
+    // By their own members only: `toString` is every object's.
+    const own = tables
+      .map((table) => table[element])
+      .find((members) => members && Object.hasOwn(members, name))?.[name];
     if (own) byElement.set(element, own);
   }
-  const global = GLOBAL[name];
+  const global = Object.hasOwn(GLOBAL, name) ? GLOBAL[name] : undefined;
   // The page's body is a view, and has a body's own members, `bgColor` and the rest, as well.
   const body = byElement.get('body');
   return (node: EngineNode): Reflection | undefined => {

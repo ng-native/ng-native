@@ -182,10 +182,12 @@ export const webListen: RendererExtension = {
     optionRemoved(node, engine);
   },
   set(node, name, value, engine) {
-    frameAttributeSet(node, name);
+    // By the name HTML has it, as a template may write it in capitals.
+    const attribute = name.toLowerCase();
+    frameAttributeSet(node, attribute);
     // What an iframe's web view took is kept as written as well, to read back.
-    if (setFrameView(node, name, value, engine)) {
-      keepTaken(node, name, value);
+    if (setFrameView(node, attribute, value, engine)) {
+      keepTaken(node, attribute, value);
       return true;
     }
     if (!documentOf(engine)) return false;

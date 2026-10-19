@@ -211,25 +211,45 @@ const isHeading = (node: EngineNode): boolean => isHtml(node, ...HEADINGS);
 const linked: Test = (node) => isHtml(node, 'a', 'area') && hasAttribute(node, 'href');
 
 /**
- * `:target`: the element in the page whose id the fragment of the page's address names, as the
- * router's route has it. An element out of the page, or of a document a script made, is none.
- *
- * ponytail: by its id alone, so each of two elements with the same id is one, and an `<a name>`
- * is not.
+ * `:target`: the element in the page the fragment of the page's address names, as the router's
+ * route has it: the first with it as its id, or else the first `<a>` with it as its name, by the
+ * fragment as written and then percent-decoded, as a browser finds it. An element out of the
+ * page, or of a document a script made, is none.
  */
 const targeted: Test = (node) => {
   const engine = engineOf(node);
   const url = pageUrl(engine);
   const at = url.indexOf('#');
   if (at === -1 || at === url.length - 1 || topOf(node) !== engine.root) return false;
-  let id = url.slice(at + 1);
-  try {
-    id = decodeURIComponent(id);
-  } catch {
-    // A fragment that is not percent-encoded is its own id.
-  }
-  return attributeOf(node, 'id') === id;
+  const raw = url.slice(at + 1);
+  const decoded = percentDecoded(raw);
+  // The page is looked through only for an element the fragment names at all.
+  if (!namedBy(node, raw) && !namedBy(node, decoded)) return false;
+  return (firstNamed(engine.root, raw) ?? firstNamed(engine.root, decoded)) === node;
 };
+
+function percentDecoded(fragment: string): string {
+  try {
+    return decodeURIComponent(fragment);
+  } catch {
+    // A fragment that is not percent-encoded is its own name.
+    return fragment;
+  }
+}
+
+const namedBy = (node: EngineNode, fragment: string): boolean =>
+  attributeOf(node, 'id') === fragment ||
+  (isHtml(node, 'a') && attributeOf(node, 'name') === fragment);
+
+/** The first element under a root with a fragment as its id, or else the first `<a>` of it. */
+function firstNamed(root: EngineNode, fragment: string): EngineNode | null {
+  let anchor: EngineNode | null = null;
+  for (const each of elementsUnder(root)) {
+    if (attributeOf(each, 'id') === fragment) return each;
+    if (!anchor && isHtml(each, 'a') && attributeOf(each, 'name') === fragment) anchor = each;
+  }
+  return anchor;
+}
 
 /** `:focus-within`: the focused element is this one or is inside it. */
 const focusWithin: Test = (node) => {

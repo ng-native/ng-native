@@ -171,8 +171,8 @@ provideWebCompat({ url: 'https://shop.example/' });
 ```
 
 `location.assign()`, `replace()` and setting `href` or a part of it go to a page of the app the
-way a link to it does, through the router, and open any other URL with `Linking`. `reload()`
-does nothing.
+way a link to it does, through the router, and open any other URL with `Linking`. In an app
+without the native router, a page of the app goes nowhere. `reload()` does nothing.
 
 ## Frames
 
@@ -184,7 +184,8 @@ npx expo install react-native-webview
 ```
 
 `src` resolves against the page's address, and `srcdoc` is shown with the page's address as its
-base where that is a web address. A frame is 300 by 150 points, as in a browser, under its
+base where that is an `http`, `https` or `file` address and no `sandbox` takes the frame's origin
+away. A frame is 300 by 150 points, as in a browser, under its
 `width` and `height` and any stylesheet, and hears `load` as its page finishes loading.
 
 The app has the frame as a browser has a frame of another origin: `contentDocument` is `null`,
@@ -192,13 +193,19 @@ and the two talk with `postMessage`. `iframe.contentWindow.postMessage(data, ori
 `message` event in the page, from the app's origin, whose `source` the page answers through. The
 page's `window.parent.postMessage(data, origin)`, and `window.ReactNativeWebView.postMessage`,
 are a `message` event on the app's `window`, whose `source` is the frame's `contentWindow`.
-Messages cross as JSON.
+The `postMessage` methods cross as JSON; what `ReactNativeWebView.postMessage` sends arrives as
+the string it is.
 
 The page is sent as the frame's `Referer`, as `referrerpolicy` says, where its address is a web
 address: a video embed that asks who embeds it needs `provideWebCompat({ url })` to be one in
 Expo Go, whose `exp://` address is not. `sandbox` without `allow-scripts` runs no script, and
 `allow` turns on autoplay, fullscreen and picture in picture where it lists them. `loading` and
 the rest of `sandbox` are left out, and development says so.
+
+`sandbox` without `allow-same-origin` gives the frame the origin `null` in the messages the app
+sends and hears, and shows `srcdoc` with no base. A native web view cannot give a page no origin,
+so a `src` page in such a sandbox still loads at its own origin, with its storage and cookies,
+and development says so. The sandbox says who the app talks to; it does not isolate the page.
 
 Where `react-native-webview` is not installed, and in Node, a frame is an emulated document
 instead: a document of the app's own, from `about:blank`, `srcdoc` or what `src` names, which a

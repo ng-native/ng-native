@@ -78,7 +78,9 @@ export function pageUrl(engine: Engine): string {
 export function baseUrl(engine: Engine, head: EngineNode | null): string {
   const url = pageUrl(engine);
   const base = head?.childList.find(
-    (node) => node.tag === 'base' && (node as { getAttribute?: unknown }).getAttribute,
+    (node) =>
+      node.tag === 'base' &&
+      (node as { hasAttribute?: (name: string) => boolean }).hasAttribute?.('href'),
   ) as { getAttribute(name: string): string | null } | undefined;
   const href = base?.getAttribute('href');
   return (href != null && parseUrl(href, url)?.href) || url;
@@ -87,6 +89,12 @@ export function baseUrl(engine: Engine, head: EngineNode | null): string {
 /** `document.location` and `window.location` of an app's page, or null for one with none. */
 export const locationOf = (engine: Engine): PageLocation | null =>
   pages.get(engine)?.location ?? null;
+
+/** The location of the newest app up, which `window.location` is: null with none. */
+export function newestLocation(): PageLocation | null {
+  const newest = opened.at(-1);
+  return newest ? locationOf(newest) : null;
+}
 
 /** The route a URL is at under an address, or null for one that is not under it. */
 function routeAfter(address: string, url: string): string | null {
@@ -234,13 +242,9 @@ export function installLocation(): () => void {
   if (typeof scope.location !== 'undefined') return () => {};
   Object.defineProperty(scope, 'location', {
     configurable: true,
-    get: () => {
-      const newest = opened.at(-1);
-      return newest && locationOf(newest);
-    },
+    get: () => newestLocation() ?? undefined,
     set: (value: unknown) => {
-      const newest = opened.at(-1);
-      const location = newest && locationOf(newest);
+      const location = newestLocation();
       if (location) location.href = String(value);
     },
   });
