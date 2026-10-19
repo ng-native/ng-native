@@ -8,8 +8,7 @@ import { createRequire, stripTypeScriptTypes } from 'node:module';
 import { afterEach, describe, it } from 'node:test';
 import { Component, DOCUMENT, inject, signal } from '@angular/core';
 import { cleanup, fireEvent, render, screen, settle, userEvent } from '@ng-native/testing';
-import { FILE_PICKER } from './file-input.ts';
-import { provideWebCompat } from './index.ts';
+import { FILE_PICKER, provideWebCompat, type FilePicker } from './index.ts';
 
 /** What a library sees of an element or a document: loosely typed, as its own code would be. */
 type Dom = any;
@@ -212,6 +211,20 @@ describe('a file input', () => {
     input.click();
     await settle();
     assert.equal(heard.length, 3, 'not while it is disabled');
+  });
+
+  it("is the app's own picker where it provides one through the package", async () => {
+    const asked: string[] = [];
+    const own: FilePicker = {
+      getDocumentAsync: async ({ type }) => (asked.push(String(type)), picked),
+    };
+    const { document } = await order([{ provide: FILE_PICKER, useValue: own }]);
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.click();
+    await settle();
+    assert.deepEqual(asked, ['*/*']);
+    assert.equal(input.files.item(0).name, 'a.pdf');
   });
 
   it('says cancel when the picker fails, as when it is closed', async () => {

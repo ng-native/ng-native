@@ -96,7 +96,9 @@ Experimental and partial. It has:
   `selectionStart` and `setSelectionRange()`, and its `form`, which has `elements`,
   `requestSubmit()` and `reset()`. A disabled `<fieldset>` disables what is in it, a file input's
   `click()` opens the system's file picker through `expo-document-picker`, and `:valid`, `:checked`,
-  `:placeholder-shown` and the rest match.
+  `:placeholder-shown` and the rest match. An app opens a picker of its own instead by providing
+  `FILE_PICKER`, an object with the `getDocumentAsync()` of `expo-document-picker` (its type is
+  `FilePicker`).
 
 The rest of the DOM is not part of it yet.
 
