@@ -460,8 +460,7 @@ export function documentFor(engine: Engine): CompatDocument {
     // The sheet of each `<style>` in the page, which a script reads the rules of. Those compiled
     // with the app are held by the engine, in no form a browser has, and are not among them.
     get styleSheets() {
-      const list = styleSheetsOf(engine);
-      return Object.defineProperty(list, 'item', { value: (at: number) => list[at] ?? null });
+      return styleSheetsOf(engine);
     },
     get adoptedStyleSheets() {
       return adoptedOf(engine);

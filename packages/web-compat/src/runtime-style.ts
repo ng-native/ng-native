@@ -328,7 +328,7 @@ function conditionOf(media: string): StyleRule['condition'] | null | undefined {
   if (!bound) return null;
   return {
     feature: 'width',
-    op: bound === 'max' ? 'lte' : 'gte',
+    op: bound.toLowerCase() === 'max' ? 'lte' : 'gte',
     value: Number(value),
   } as StyleRule['condition'];
 }
@@ -784,9 +784,46 @@ export const STYLE_SHEETS: Readonly<Record<string, Readonly<Record<string, Refle
   link: { sheet: own(() => null) },
 };
 
-/** `document.styleSheets`: the sheet of each `<style>` in the page. */
-export const styleSheetsOf = (engine: Engine): CSSStyleSheet[] =>
+/** The sheet of each `<style>` in the page, now. */
+const currentSheets = (engine: Engine): CSSStyleSheet[] =>
   [...pageOf(engine)].map((node) => sheetOfStyle(node, engine)).filter((sheet) => sheet !== null);
+
+/** A browser's `StyleSheetList`: read through, so it is never behind the page. */
+export interface StyleSheetList extends ArrayLike<CSSStyleSheet>, Iterable<CSSStyleSheet> {
+  item(at: number): CSSStyleSheet | null;
+}
+
+const lists = new WeakMap<Engine, StyleSheetList>();
+
+/**
+ * `document.styleSheets`: the sheet of each `<style>` in the page. One object per document, the
+ * same each time it is read, which holds no sheets of its own: every read asks the page, so a
+ * sheet added, removed or moved out of the page since is seen by a list saved before.
+ */
+export function styleSheetsOf(engine: Engine): StyleSheetList {
+  let list = lists.get(engine);
+  if (!list) {
+    const item = (at: number) => currentSheets(engine)[at] ?? null;
+    list = new Proxy([] as CSSStyleSheet[], {
+      get: (_, key) =>
+        key === 'length'
+          ? currentSheets(engine).length
+          : key === 'item'
+            ? item
+            : key === Symbol.iterator
+              ? () => currentSheets(engine)[Symbol.iterator]()
+              : typeof key === 'string' && isIndex(key)
+                ? (item(Number(key)) ?? undefined)
+                : undefined,
+      has: (_, key) =>
+        typeof key === 'string' && isIndex(key)
+          ? Number(key) < currentSheets(engine).length
+          : key === 'length' || key === 'item' || key === Symbol.iterator,
+    }) as unknown as StyleSheetList;
+    lists.set(engine, list);
+  }
+  return list;
+}
 
 /** The sheets a script made that each document has adopted, each with what stops applying it. */
 const adopted = new WeakMap<Engine, Map<CSSStyleSheet, () => void>>();

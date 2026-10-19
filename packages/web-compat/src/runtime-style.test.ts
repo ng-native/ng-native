@@ -108,6 +108,16 @@ describe('a stylesheet read while the app runs', () => {
     }
   });
 
+  it('reads the bound of a width query in any case', () => {
+    for (const [media, op] of [
+      ['(MAX-width: 600px)', 'lte'],
+      ['(MIN-WIDTH: 600px)', 'gte'],
+    ] as const) {
+      const [rule] = sheetOf(`@media ${media} { .a { width: 4px } }`).rules;
+      assert.deepEqual(rule!.condition, { feature: 'width', op, value: 600 }, media);
+    }
+  });
+
   it('reads what a rule is not for, and a share of the window', () => {
     // A dialog's breakpoints: no wider than most of the window on a phone, unless maximized.
     const [rule, tall] = sheetOf(

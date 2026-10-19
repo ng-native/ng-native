@@ -151,6 +151,32 @@ describe('the sheet of a <style> in the page', () => {
     assert.deepEqual(Array.from(document.styleSheets), []);
   });
 
+  it('lists sheets as one live list: the same object, behind no change to the page', async () => {
+    const document = await page();
+    const list = document.styleSheets as ArrayLike<Sheet> &
+      Iterable<Sheet> & { item(at: number): Sheet | null };
+    assert.equal(document.styleSheets, list);
+    assert.equal(list.length, 0);
+    const style = styleIn(document, '.a { width: 1px }');
+    assert.equal(list.length, 1);
+    assert.equal(list[0], style.sheet);
+    assert.equal(list.item(0), style.sheet);
+    assert.equal(list.item(1), null);
+    assert.equal(1 in list, false);
+    const other = styleIn(document);
+    assert.deepEqual([...list], [style.sheet, other.sheet]);
+    style.remove();
+    assert.deepEqual([...list], [other.sheet]);
+    assert.equal(list[1], undefined);
+    // Moved out of the page into an element that is not in it, and put back.
+    const box = document.createElement('div');
+    box.appendChild(other);
+    assert.equal(list.length, 0);
+    assert.equal(document.styleSheets, list);
+    document.head.appendChild(other);
+    assert.equal(list.length, 1);
+  });
+
   it('styles what a rule inserted is for, without writing the text of the element', async () => {
     const document = await page();
     const style = styleIn(document);
