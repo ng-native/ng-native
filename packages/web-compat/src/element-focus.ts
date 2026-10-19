@@ -108,6 +108,16 @@ export function passOverToldBlurs(engine: Engine): () => void {
   };
 }
 
+/**
+ * Take the focus off an element that is moved, or off the one in it that has it: a browser takes
+ * an element out of the tree before it puts it back, and what is taken out is not focused.
+ */
+export function loseFocusMoving(node: EngineNode): void {
+  const engine = engineOf(node);
+  const had = engine.focused;
+  for (let at = had; at; at = at.parent) if (at === node) return giveUpFocus(engine, had!);
+}
+
 /** Focus an element as `focus()` does: see above. */
 function focus(node: EngineNode): void {
   const engine = engineOf(node);

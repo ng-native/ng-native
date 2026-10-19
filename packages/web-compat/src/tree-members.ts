@@ -6,6 +6,7 @@ import { checkInDocument } from './document-children.ts';
 import { documentOfRoot, topOf } from './document-roots.ts';
 import { insertedFor, isFragment, markFragment } from './document-fragment.ts';
 import { domError, required, withLength } from './dom-error.ts';
+import { loseFocusMoving } from './element-focus.ts';
 import { marksHover } from './elements.ts';
 import { byClassName, byTagName, byTagNameNS } from './elements-by.ts';
 import { insertedByScript, removedByScript } from './html-tree.ts';
@@ -46,12 +47,16 @@ const childLists = new WeakMap<EngineNode, NodeList>();
 /** And each element's or fragment's `children`. */
 const elementLists = new WeakMap<EngineNode, HTMLCollection>();
 
+/** While `moveBefore` moves a node, which keeps the focus that a removal and an insertion lose. */
+let keepsFocus = false;
+
 /**
  * Put a node in a parent before another of its children, or at its end: out of the document
  * first, where it is at the top of a tree in it.
  */
 function putIn(parent: EngineNode, child: EngineNode, before: EngineNode | null): void {
   if (!child.parent) holderOf(child)?.removeChild(child);
+  else if (!keepsFocus) loseFocusMoving(child);
   const engine = engineOf(parent);
   engine.insertBefore(parent, child, before);
   // What a template's element is told of as it is put in place: see `listen.ts`.
@@ -230,7 +235,12 @@ export const treeMembers: PropertyDescriptorMap = {
       if (isFragment(node)) {
         throw domError('Only an element or character data moves.', 'HierarchyRequestError');
       }
-      this.insertBefore(node, (args[1] ?? null) as EngineNode | null);
+      keepsFocus = true;
+      try {
+        this.insertBefore(node, (args[1] ?? null) as EngineNode | null);
+      } finally {
+        keepsFocus = false;
+      }
     }),
   ),
   removeChild: method(function (value: unknown) {
