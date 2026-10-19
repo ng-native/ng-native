@@ -12,6 +12,7 @@
  */
 export {
   StyleResolver,
+  boundDeclaration,
   matches,
   styleSheetOf,
   type AttributeTest,
@@ -38,7 +39,7 @@ export { ELEMENT_STYLES, ELEMENT_STYLES_CSS } from './element-styles.ts';
 export { EngineIntersectionObserver, installDeferTriggers } from './defer-triggers.ts';
 export { installNodeGlobal } from './node-global.ts';
 export { faceName, registeredFaces } from './font-faces.ts';
-export { firstFamily } from './inline-token.ts';
+export { firstFamily, tokenFromValue } from './inline-token.ts';
 export { layOutGrid, type Edges, type GridItem, type GridLayout, type Rect } from './grid.ts';
 export { isBlockContainer, planFlow, type FlowKey, type FlowPlan, type FlowTree } from './flow.ts';
 export {
@@ -96,6 +97,8 @@ export {
 export {
   bezier,
   interpolate,
+  isNamedColor,
+  parseColor,
   redirect,
   sample,
   settled,
