@@ -187,7 +187,7 @@ function listenToScrolls(engine: Engine, listener: Listener): () => void {
 
 const watched = new WeakSet<Engine>();
 /** Where the touch now down began, by engine: a touch that ends far from there was a drag. */
-const began = new WeakMap<Engine, { x: number; y: number }>();
+const began = new WeakMap<Engine, { x: number; y: number; dragged: boolean }>();
 /** How far a finger wanders in a press. Further is a drag, which a browser ends in no click. */
 const DRAG = 10;
 
@@ -196,7 +196,14 @@ function watchTouches(engine: Engine): void {
   if (watched.has(engine)) return;
   watched.add(engine);
   engine.setEventListener(engine.root, 'topTouchStart', (event) => {
-    began.set(engine, placeOf(event));
+    began.set(engine, { ...placeOf(event), dragged: false });
+  });
+  // As far as the finger went, not where it ends: out and back is a drag, as an element's says.
+  engine.setEventListener(engine.root, 'topTouchMove', (event) => {
+    const from = began.get(engine);
+    if (!from || from.dragged) return;
+    const to = placeOf(event);
+    if (Math.hypot(to.x - from.x, to.y - from.y) > DRAG) from.dragged = true;
   });
 }
 
@@ -217,6 +224,7 @@ const placeOf = (event: unknown): { x: number; y: number } => {
 function wasDrag(engine: Engine, event: unknown): boolean {
   const from = began.get(engine);
   if (!from) return false;
+  if (from.dragged) return true;
   const to = placeOf(event);
   return Math.hypot(to.x - from.x, to.y - from.y) > DRAG;
 }

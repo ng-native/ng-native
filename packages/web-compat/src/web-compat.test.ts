@@ -465,6 +465,11 @@ describe('@ng-native/web-compat document and window', () => {
     await fireEvent(area, 'touchStart', finger(40, 60));
     await fireEvent(area, 'touchEnd', finger(43, 64, false));
     assert.equal(clicks, 1);
+    // Out and back, as a list scrolled down and up again: still a drag, as an element's click says.
+    await fireEvent(area, 'touchStart', finger(40, 60));
+    await fireEvent(area, 'touchMove', finger(40, 140));
+    await fireEvent(area, 'touchEnd', finger(41, 61, false));
+    assert.equal(clicks, 1, 'a finger that went far and came back was dragging');
   });
 
   it('has the size of the window, and tells a resize listener when it changes', async () => {

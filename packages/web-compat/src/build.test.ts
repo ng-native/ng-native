@@ -45,6 +45,11 @@ describe("a library's sheets read as a browser reads them, asked for by the buil
     assert.equal(process.env[LIBRARIES], '@b/web,@a/web');
     // Named in the cache version: a library transformed before it was named is cached without.
     assert.equal(config.transformer.cacheVersion, 'app-library-browser-@a/web,@b/web');
+    // And Metro's own, which every transformer's cache key starts from, a custom one's included.
+    assert.match(
+      (config as { cacheVersion?: string }).cacheVersion ?? '',
+      /library-browser-@a\/web,@b\/web/,
+    );
   });
 
   it('is asked of Vitest', () => {

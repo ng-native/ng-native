@@ -64,8 +64,14 @@ function withWebCompat(config, options) {
   const libraries = askForBrowser(options);
   const sources = askForBrowserSources(options, config.projectRoot);
   const named = ['library-browser', [...libraries].sort().join(','), ...sources].join('-');
-  const cacheVersion = [config.transformer?.cacheVersion, named].filter(Boolean).join('-');
-  return { ...config, transformer: { ...config.transformer, cacheVersion } };
+  const join = (version) => [version, named].filter(Boolean).join('-');
+  // In Metro's own version too, which every transformer's cache key starts from: a transformer
+  // of the app's own need not read the one the preset's transformer hashes.
+  return {
+    ...config,
+    cacheVersion: join(config.cacheVersion),
+    transformer: { ...config.transformer, cacheVersion: join(config.transformer?.cacheVersion) },
+  };
 }
 
 /** The same for Vitest, as a Vite plugin: `plugins: [ngNative(), webCompat({ libraries })]`. */
