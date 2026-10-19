@@ -79,7 +79,7 @@ describe('getBoundingClientRect and getClientRects', () => {
     assert.equal(rect instanceof globals.DOMRect, true);
     assert.equal(Object.prototype.toString.call(rect), '[object DOMRect]');
     assert.equal(sides(rect), '10 20 40 60');
-    assert.equal(JSON.stringify(rect.toJSON()), JSON.stringify(rect.toJSON()));
+    assert.equal(JSON.stringify(rect), JSON.stringify(rect.toJSON()));
     assert.equal(rect.toJSON().bottom, 60);
     const own = new globals.DOMRect(5, 5, -10, 20);
     assert.equal(sides(own), '-5 5 5 25', 'a negative width has its left at the smaller edge');
