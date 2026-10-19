@@ -144,7 +144,13 @@ const round = (value: number): number => Math.round(value * 100) / 100;
  * not, which is how a chart leaves a point out of a line, and a path with one in it draws
  * nothing natively and stops the app in a debug build.
  */
-const finite = (...numbers: unknown[]): boolean => numbers.map(Number).every(Number.isFinite);
+/** Whether each is a finite number, as Web IDL converts one; a BigInt is a TypeError there. */
+function finite(...numbers: unknown[]): boolean {
+  if (numbers.some((number) => typeof number === 'bigint')) {
+    throw new TypeError('A BigInt is not a number here.');
+  }
+  return numbers.map(Number).every(Number.isFinite);
+}
 
 const multiplied = (a: Matrix, b: Matrix): Matrix => [
   a[0] * b[0] + a[2] * b[1],
@@ -196,7 +202,8 @@ function fontOf(font: string): { size: number; weight: string | undefined } {
   const before = sized ? font.slice(0, sized.index) : '';
   const weight = /(?:^|\s)(bold|[1-9]00)(?=\s)/i.exec(before)?.[1];
   const size = sized ? Number(sized[1]) * POINTS_PER[sized[2]!.toLowerCase()]! : 0;
-  return { size: size || 10, weight };
+  // A size of nothing is nothing: only a font with none written is the default.
+  return { size: sized ? size : 10, weight };
 }
 
 /**
@@ -700,7 +707,9 @@ class Context2D {
   }
   createImageData(widthOrImage: unknown, height?: unknown): ImageData {
     if (isImageData(widthOrImage)) {
-      return new (imageDataClass())(widthOrImage.width, widthOrImage.height);
+      // In the colour space of the one it is the size of, as a browser makes it.
+      const { colorSpace } = widthOrImage as { colorSpace?: string };
+      return new (imageDataClass())(widthOrImage.width, widthOrImage.height, { colorSpace });
     }
     const [wide, high] = [whole(widthOrImage), whole(height)];
     if (!wide || !high) throw domError('The width and height must not be zero.', 'IndexSizeError');
@@ -712,6 +721,10 @@ class Context2D {
    */
   putImageData(image: unknown, dx: unknown, dy: unknown, ...dirty: unknown[]): void {
     if (!isImageData(image)) throw new TypeError('The image is not an ImageData.');
+    // Three arguments or seven, as Web IDL has it: a dirty box is all four of its numbers.
+    if (dirty.length > 0 && dirty.length < 4) {
+      throw new TypeError('A dirty box takes its x, y, width and height.');
+    }
     const [x, y] = [whole(dx), whole(dy)];
     const box =
       dirty.length >= 4 ? dirty.slice(0, 4).map(whole) : [0, 0, image.width, image.height];
@@ -1486,6 +1499,7 @@ const side = (name: 'width' | 'height'): Reflection =>
   );
 
 function unsignedOf(value: unknown, fallback: number): number {
+  if (typeof value === 'bigint') throw new TypeError('A BigInt is not a size.');
   const number = Number(value);
   const whole = Number.isFinite(number) ? Math.trunc(number) : 0;
   const unsigned = ((whole % 2 ** 32) + 2 ** 32) % 2 ** 32;

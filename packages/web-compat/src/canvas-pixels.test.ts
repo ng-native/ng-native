@@ -68,6 +68,23 @@ describe('@ng-native/web-compat canvas pixels', () => {
     assert.ok(edge > 150 && edge < 250, `${edge} is not near Chrome's 215`);
   });
 
+  it('converts its arguments as Web IDL does, as Chrome takes them', async () => {
+    const { node, context } = await canvas();
+    // A BigInt is a TypeError, where a number of another kind is converted.
+    assert.throws(() => context.createLinearGradient(1n, 0, 1, 0), TypeError);
+    assert.throws(() => (node.width = 10n), TypeError);
+    // Three arguments or seven: a dirty box with some of its numbers is a TypeError.
+    const image = context.createImageData(2, 2);
+    assert.throws(() => context.putImageData(image, 0, 0, 1), TypeError);
+    assert.throws(() => context.putImageData(image, 0, 0, 1, 1, 2), TypeError);
+    // One made the size of another is in its colour space.
+    const wide = new (globalThis as Dom).ImageData(1, 1, { colorSpace: 'display-p3' });
+    assert.equal(context.createImageData(wide).colorSpace, 'display-p3');
+    // And a font of no size is no size, not the default.
+    context.font = '0px sans-serif';
+    assert.equal(context.measureText('Sales').width, 0);
+  });
+
   it('draws a path where the transform puts it', async () => {
     const { context } = await canvas();
     context.scale(10, 10);
