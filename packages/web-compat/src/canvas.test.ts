@@ -147,6 +147,14 @@ describe('@ng-native/web-compat canvas', () => {
     assert.ok(wide('Sales and more') > wide('Sales'));
     context.font = '24px sans-serif';
     assert.ok(wide('Sales') > 40);
+    // Measured from the baseline asked, as Chrome measures: a text set by its top rises nothing
+    // above it, and one set by its bottom falls nothing below it.
+    context.textBaseline = 'top';
+    assert.ok(context.measureText('Sales').actualBoundingBoxAscent <= 0);
+    assert.ok(context.measureText('Sales').actualBoundingBoxDescent > 20);
+    context.textBaseline = 'bottom';
+    assert.ok(Math.abs(context.measureText('Sales').fontBoundingBoxDescent) < 1);
+    context.textBaseline = 'alphabetic';
     // A weight after a style, as Chart.js writes a font: `normal bold 12px`.
     context.font = 'normal bold 12px sans-serif';
     context.fillText('Sales', 50, 40);

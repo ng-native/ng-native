@@ -596,14 +596,16 @@ class Context2D {
   measureText(text: string): Record<string, number> {
     const { size, weight } = fontOf(this.state.font);
     const width = widthOf(String(text), size, weight);
+    // From the baseline `textBaseline` names, as a browser measures and `text` draws.
+    const shift = (BASELINES[this.state.textBaseline] ?? 0) * size;
     return {
       width,
       actualBoundingBoxLeft: 0,
       actualBoundingBoxRight: width,
-      actualBoundingBoxAscent: size * 0.75,
-      actualBoundingBoxDescent: size * 0.22,
-      fontBoundingBoxAscent: size * 0.88,
-      fontBoundingBoxDescent: size * 0.22,
+      actualBoundingBoxAscent: size * 0.75 - shift,
+      actualBoundingBoxDescent: size * 0.22 + shift,
+      fontBoundingBoxAscent: size * 0.88 - shift,
+      fontBoundingBoxDescent: size * 0.22 + shift,
     };
   }
   createLinearGradient(x1: number, y1: number, x2: number, y2: number): Gradient {
