@@ -2971,7 +2971,12 @@ function compileCss(source, context = 'styles', options = {}) {
       supersede(deferred, before, written);
     } catch (error) {
       if (!onUnsupported || !(error instanceof CssUnsupported)) throw error;
-      onUnsupported(reported(context, `dropped '${declaration.property}'`, error.message));
+      // A declaration with a token in it is `unparsed`, named by the property it is for.
+      const name =
+        declaration.property === 'unparsed'
+          ? declaration.value?.propertyId?.property
+          : declaration.property;
+      onUnsupported(reported(context, `dropped '${name}'`, error.message));
     }
     return true;
   }

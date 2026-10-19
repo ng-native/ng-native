@@ -599,6 +599,37 @@ describe('a span registered again by another package', () => {
   });
 });
 
+describe('two elements that name the same span view', () => {
+  it('each keep their spaces, or not, as their own registration says', () => {
+    const undo = [
+      registerViewName('x-text', 'RNSVGText', undefined, { looseText: 'x-span' }),
+      registerViewName('x-span', 'RNSVGTSpan', undefined, {
+        textContent: 'content',
+        spacedText: true,
+      }),
+      registerViewName('y-span', 'RNSVGTSpan', undefined, { textContent: 'content' }),
+    ];
+    try {
+      const { fabric, engine, add } = scene();
+      const label = add('x-text');
+      for (const [name, words] of [
+        ['x-span', '  ●  '],
+        ['x-span', '1903 '],
+        ['y-span', ' kept '],
+      ] as const) {
+        engine.appendChild(add(name, label), engine.createText(words));
+      }
+      engine.commit();
+      assert.deepEqual(
+        fabric.committed[0]!.children.map((each) => each.props['content']),
+        ['● ', '1903 ', 'kept'],
+      );
+    } finally {
+      undo.forEach((each) => each());
+    }
+  });
+});
+
 describe("a library sheet's stroke length", () => {
   const declared = (css: string) => {
     const dropped: string[] = [];
@@ -627,6 +658,13 @@ describe("a library sheet's stroke length", () => {
       assert.equal(dropped.length, 1);
       assert.match(dropped[0]!, /stroke-(width|dasharray)/);
     }
+  });
+
+  it('is reported by its own name where a token in it cannot be read', () => {
+    const { declarations, dropped } = declared('width: 4px; stroke-width: calc(var(--x) * 1in)');
+    assert.equal(declarations['width'], 4);
+    assert.equal(dropped.length, 1);
+    assert.match(dropped[0]!, /dropped 'stroke-width'/);
   });
 
   it('is settled against the font of the shape it is on, for an em', () => {

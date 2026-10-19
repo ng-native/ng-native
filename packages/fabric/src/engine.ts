@@ -4261,7 +4261,7 @@ export function registerViewName(
   entry.stack.push(registration);
   registrations.set(elementName, entry);
   nameView(elementName, registration);
-  describeViews(registration);
+  describeViews(elementName, registration);
   // Takes this registration away, for a package that registers a name for as long as an app that
   // asked for it is up. The newest one still there names the element and says again what it said
   // of the native view, which this one may have cleared, and what the element was before any
@@ -4274,7 +4274,7 @@ export function registerViewName(
     const top = entry.stack.at(-1);
     if (top) {
       nameView(elementName, top);
-      return describeViews(top);
+      return describeViews(elementName, top);
     }
     registrations.delete(elementName);
     const { original } = entry;
@@ -4283,14 +4283,21 @@ export function registerViewName(
     if (original.yielding) YIELDING.add(elementName);
     else YIELDING.delete(elementName);
     if (original.text) TEXT_ELEMENTS.add(elementName);
+    SPACED_TEXT.delete(elementName);
   };
 }
 
-/** Note what a registration says of each native view it names. */
-function describeViews({ viewName, defaultProps, options }: ViewNameRegistration): void {
+/** Note what a registration says of each native view it names, and of the element. */
+function describeViews(
+  elementName: string,
+  { viewName, defaultProps, options }: ViewNameRegistration,
+): void {
   for (const name of typeof viewName === 'string' ? [viewName] : [viewName.ios, viewName.android]) {
     describeView(name, defaultProps, options);
   }
+  // The element's, not the view's: another element may name the same view without it.
+  if (options?.spacedText) SPACED_TEXT.add(elementName);
+  else SPACED_TEXT.delete(elementName);
 }
 
 /** Note what a registration says of a native view: see `ViewNameOptions`. */
@@ -4301,8 +4308,6 @@ function describeView(
 ): void {
   if (defaultProps) DEFAULT_PROPS[name] = defaultProps;
   if (options?.textContent) TEXT_CONTENT_PROPS[name] = options.textContent;
-  if (options?.spacedText) SPACED_TEXT.add(name);
-  else SPACED_TEXT.delete(name);
   if (options?.looseText) LOOSE_TEXT[name] = options.looseText;
   else delete LOOSE_TEXT[name];
   if (options?.fontNames) FONT_NAMES[name] = options.fontNames;
@@ -4360,11 +4365,11 @@ function renameFonts(
   FONT_NAMES[viewName]?.(props, postScriptName);
 }
 
-/** The views whose text content keeps its spaces. See `ViewNameOptions`. */
+/** The elements whose text content keeps its spaces. See `ViewNameOptions`. */
 const SPACED_TEXT = new Set<string>();
 /** Whether a view may hold spans that keep their spaces: one its loose words are drawn by. */
-const SPACED_PARENT = (viewName: string): boolean =>
-  SPACED_TEXT.has(viewName) || LOOSE_TEXT[viewName] !== undefined;
+const SPACED_PARENT = (node: EngineNode): boolean =>
+  SPACED_TEXT.has(node.tag) || LOOSE_TEXT[viewNameOf(node)] !== undefined;
 
 /** The element loose text in a view is drawn by, for the views that say. See `ViewNameOptions`. */
 const LOOSE_TEXT: Record<string, string> = {};
@@ -4384,7 +4389,7 @@ function takesTextAsProp(node: EngineNode): boolean {
 function withTextContent(node: EngineNode, viewName: string, props: Record<string, unknown>): void {
   const prop = TEXT_CONTENT_PROPS[viewName];
   if (!prop || node.props[prop] !== undefined) return;
-  const text = SPACED_TEXT.has(viewName) ? spacedContent(node) : textContent(node);
+  const text = SPACED_TEXT.has(node.tag) ? spacedContent(node) : textContent(node);
   if (text) props[prop] = text;
 }
 
@@ -7200,9 +7205,8 @@ export class Engine implements HostEngine {
     // a view whose loose words a span draws, an SVG text and what is in one, and only once a
     // view keeps its spaces at all.
     if (!SPACED_TEXT.size || parent.nodeKind !== 'element') return;
-    if (!SPACED_PARENT(viewNameOf(parent))) return;
-    const spaced = (node: EngineNode) =>
-      node.nodeKind === 'element' && SPACED_TEXT.has(viewNameOf(node));
+    if (!SPACED_PARENT(parent)) return;
+    const spaced = (node: EngineNode) => node.nodeKind === 'element' && SPACED_TEXT.has(node.tag);
     for (const each of parent.childList) {
       const drawn = each.nodeKind === 'text' ? each.box : each;
       if (drawn && spaced(drawn)) this.markProps(drawn);
