@@ -4,6 +4,7 @@ import { computedStyle } from './computed-style.ts';
 import { cssNamespace } from './css-namespace.ts';
 import * as cssom from './css-style-sheet.ts';
 import { DOMStringMap } from './dataset.ts';
+import { ValidityState } from './validity.ts';
 import { Document, XMLDocument } from './dom-implementation.ts';
 import { DOMRect, DOMRectList, DOMRectReadOnly } from './dom-rect.ts';
 import { DocumentType } from './document-type.ts';
@@ -175,6 +176,8 @@ const GLOBALS: Readonly<Record<string, unknown>> = {
   ...elementInterfaces,
   // What `element.dataset` is: see `dataset.ts`.
   DOMStringMap,
+  // What a control's `validity` is: see `validity.ts`.
+  ValidityState,
   // What Angular's sanitizer parses the markup of an `innerHTML` binding with: see `html.ts`.
   DOMParser: domParser(() => engines.at(-1)),
   // What a chart library exports a drawing as markup with: see `xml-serializer.ts`.

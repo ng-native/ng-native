@@ -30,8 +30,14 @@ const CHANGING = [
 ];
 
 /**
- * The count of an engine's changes, kept from the first time it is asked for. A `name` set or
- * taken off is one too, by a script or a template's binding: a list is found by it.
+ * The props a list is found by, besides the tree: a `name`, and what a form's `elements` reads,
+ * the `form` a control names by its id and the `type` that makes an input no listed one.
+ */
+const COUNTED = new Set(['name', 'form', 'type', 'nativeID']);
+
+/**
+ * The count of an engine's changes, kept from the first time it is asked for. A prop above set
+ * or taken off is one too, by a script or a template's binding: a list is found by it.
  */
 function changesOf(engine: Engine): { count: number } {
   const known = changes.get(engine);
@@ -48,7 +54,7 @@ function changesOf(engine: Engine): { count: number } {
   }
   const { setProp } = engine;
   engine.setProp = function (node, key, value) {
-    if (key === 'name') counted.count++;
+    if (COUNTED.has(key)) counted.count++;
     setProp.call(this, node, key, value);
   };
   return counted;

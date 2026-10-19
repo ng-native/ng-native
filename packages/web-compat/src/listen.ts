@@ -6,11 +6,32 @@ import { isTextField } from './element-focus.ts';
 import { giveRole, hoverWritten, scrollWhereStyled } from './elements.ts';
 import { nativeEvent } from './event-classes.ts';
 import { listen, type Heard } from './events.ts';
+import {
+  FIELD_EVENTS,
+  createField,
+  isField,
+  keyOf,
+  refuseEdit,
+  setField,
+  wasRefused,
+} from './field.ts';
+import { fenceUnder } from './fieldset.ts';
+import { implicitSubmit } from './form.ts';
+import { setChecked } from './form-controls.ts';
 import { buildAs, setMarkup } from './html.ts';
 import { inlineStyle } from './inline-style.ts';
 import { labelPress, setLabel } from './label.ts';
 import { MOUSE_OF_TOUCH, TOUCH_EVENTS, asMouse, heardTouch } from './mouse-after-touch.ts';
 import { styleMade } from './runtime-style.ts';
+import {
+  createSelect,
+  isSelect,
+  optionInserted,
+  optionRemoved,
+  pressSelect,
+  setSelect,
+} from './select.ts';
+import { engineOf } from './window.ts';
 import { together } from './mutation-observer.ts';
 
 /** Elements whose own component already turns a touch into a press. */
@@ -52,6 +73,14 @@ const SETTERS: Readonly<
   },
   // HTML's `hidden` bound to `false` is no attribute: the element has none to read back. A
   // hidden element is drawn as `display: none`: see `hide`.
+  // A template's `[checked]` is the checkbox's state, as a script's `checked` is, and kept as the
+  // attribute, which is there or not: see `form-controls.ts`.
+  checked(node, value, engine) {
+    if (node.tag !== 'input') return false;
+    setChecked(node, on(value));
+    engine.setProp(node, 'checked', on(value) ? '' : null);
+    return true;
+  },
   hidden(node, value, engine) {
     engine.setProp(node, 'hidden', value === false ? null : value);
     hide(node, on(value) && value !== 'until-found', engine);
@@ -68,6 +97,11 @@ const SETTERS: Readonly<
   // ponytail: an `aria-disabled` the library wrote itself is replaced, with the same answer
   // wherever the two agree. Keep the library's apart if one is found that differs.
   disabled(node, value, engine) {
+    // A fieldset disables the fields in it, once it has the attribute: see `fieldset.ts`.
+    if (node.tag === 'fieldset') {
+      engine.setProp(node, 'disabled', value);
+      fenceUnder(node, engine);
+    }
     const off = on(value);
     if (off || announced.has(node)) engine.setProp(node, 'aria-disabled', off ? true : null);
     if (off) announced.add(node);
@@ -101,10 +135,26 @@ export const webListen: RendererExtension = {
   // A button and a link have their roles, and take a press with no listener: see `elements.ts`.
   created(node, engine) {
     if (giveRole(node, engine)) takesPress(engine, node);
+    // An input and a text area are the platform's text field, and a select opens a list of its
+    // options when pressed: see `field.ts` and `select.ts`.
+    createField(node, engine);
+    if (isField(node)) submitOnReturn(engine, node);
+    if (createSelect(node, engine)) onTouch(engine, node, 'click', () => pressSelect(node, engine));
     // What overflows it scrolls, where its style says so: see `elements.ts`.
     scrollWhereStyled(node, engine);
     // A stylesheet is read, and has no box of its own: see `runtime-style.ts`.
     if (node.tag === 'style' && documentOf(engine)) styleMade(node, engine);
+  },
+  // What a select shows, and whether a field is in a disabled fieldset, follow where an option
+  // and a field are put: see `select.ts` and `fieldset.ts`.
+  inserted(node, parent, engine) {
+    if (!documentOf(engine)) return;
+    optionInserted(node, parent, engine);
+    if (node.tag === 'legend' && parent.tag === 'fieldset') fenceUnder(parent, engine);
+    else fenceUnder(node, engine);
+  },
+  removed(node, engine) {
+    optionRemoved(node, engine);
   },
   set(node, name, value, engine) {
     if (!documentOf(engine)) return false;
@@ -113,7 +163,9 @@ export const webListen: RendererExtension = {
     checkControl(node, name, value, engine);
     setLabel(node, name, value, engine);
     const own = SETTERS[name];
-    return own ? own(node, value, engine) : false;
+    const took = own ? own(node, value, engine) : false;
+    // A field's and a select's own: see `field.ts` and `select.ts`.
+    return setSelect(node, name, value, engine) || setField(node, name, value, engine) || took;
   },
   // A style a library binds is set as what a native view reads: see `inline-style.ts`.
   style(node, name, value, engine) {
@@ -169,18 +221,127 @@ export function listenNatively(
   return listenOn(engine, target, eventName, callback);
 }
 
-/** Listen on one element: a touch as a pointer or a click, or a native event by its name. */
+/**
+ * Listen on one element: a field's own events, a touch as a pointer or a click, or a native event
+ * by its name.
+ */
 function listenOn(
   engine: Engine,
   target: EngineNode,
   eventName: string,
   callback: Heard,
 ): (() => void) | undefined {
+  const changed = listenToChange(engine, target, eventName, callback);
+  if (changed) return changed;
+  const field = isField(target) ? FIELD_EVENTS[eventName] : undefined;
+  if (field === KEY_PRESS) return listenToKeys(engine, target, eventName, callback);
+  if (field) return listenToNative(engine, target, eventName, field, callback);
   if (POINTER_EVENTS.has(eventName)) return onTouch(engine, target, eventName, callback);
   const native = NATIVE_NAMES[eventName];
   if (native) return listenToNative(engine, target, eventName, native, callback);
   if (eventName !== 'click' || PRESSABLES.has(target.tag)) return undefined;
   return onTouch(engine, target, 'click', callback);
+}
+
+/**
+ * `change` on an input: the end of editing for a text field, and a press for a checkbox or a
+ * radio. Which it is goes by its type, which a binding sets after the listener is added, so both
+ * are listened for and the one that is the input's own at the time is told.
+ */
+function listenToChange(
+  engine: Engine,
+  target: EngineNode,
+  eventName: string,
+  callback: Heard,
+): (() => void) | undefined {
+  if (target.tag !== 'input' || eventName !== 'change') return undefined;
+  const tell = (field: boolean) => (event: unknown) => {
+    if (isField(target) !== field) return;
+    deliverAs(event, () => callback(dom('change', target, event)));
+  };
+  const stops = [
+    engine.setEventListener(target, FIELD_EVENTS['change']!, tell(true)),
+    engine.setEventListener(target, 'topChange', tell(false)),
+  ];
+  return () => stops.forEach((stop) => stop());
+}
+
+const KEY_PRESS = 'topKeyPress';
+/** When each field last said Enter was pressed, as a key: a submit just after is that press. */
+const entered = new WeakMap<EngineNode, number>();
+/** When a listener last stopped Enter in each field: a return just after submits no form. */
+const stoppedEnter = new WeakMap<EngineNode, number>();
+
+/**
+ * Return in a field of one line: its form is submitted as a browser submits it, once every
+ * listener has heard the Enter key, unless one stopped it. See `implicitSubmit`.
+ */
+function submitOnReturn(engine: Engine, node: EngineNode): void {
+  if (node.tag !== 'input') return;
+  engine.setEventListener(node, 'topSubmitEditing', () => {
+    queueMicrotask(() => {
+      const stopped = Date.now() - (stoppedEnter.get(node) ?? -Infinity) < 100;
+      stoppedEnter.delete(node);
+      if (isField(node) && !stopped) implicitSubmit(node);
+    });
+  });
+}
+
+/** How many listeners each field of one line has for its keys. */
+const keyed = new WeakMap<EngineNode, number>();
+
+/**
+ * Tell a field's listener of each key: `keydown` as native says it was pressed, and `keyup`
+ * after every listener has heard it down, since native says the two as one press.
+ *
+ * Return in a field of one line is no key press to native but a submit, which is told as the
+ * Enter key. Native also takes the focus from the field as it submits, and the keyboard with
+ * it, where a browser leaves both: a library that hears the keys makes something of what was
+ * typed and goes on typing. So a field of one line keeps the focus on return for as long as
+ * anything listens to its keys, and is as native has it otherwise.
+ */
+function listenToKeys(
+  engine: Engine,
+  target: EngineNode,
+  eventName: string,
+  callback: Heard,
+): () => void {
+  /** Tell the listener, answering whether it stopped a key it heard go down. */
+  const tell = (event: unknown): boolean => {
+    const told = dom(eventName, target, event);
+    if (eventName === 'keyup') queueMicrotask(() => void deliverAs(event, () => callback(told)));
+    else deliverAs(event, () => callback(told));
+    return (told as { defaultPrevented: boolean }).defaultPrevented;
+  };
+  const stops = [
+    engine.setEventListener(target, KEY_PRESS, (event) => {
+      const key = (event as { nativeEvent?: { key?: unknown } }).nativeEvent?.key;
+      if (key === 'Enter') entered.set(target, Date.now());
+      const stopped = tell(event);
+      if (stopped && key === 'Enter') stoppedEnter.set(target, Date.now());
+      // ponytail: return alone, in a field of several lines, which is what a composer stops.
+      // Any other key stopped is still typed: refuse those too if a library filters keys.
+      if (stopped && key === 'Enter' && target.tag === 'textarea') refuseEdit(target);
+    }),
+    engine.setEventListener(target, 'topSubmitEditing', () => {
+      if (Date.now() - (entered.get(target) ?? 0) < 100) return;
+      if (tell({ nativeEvent: { key: 'Enter' } })) stoppedEnter.set(target, Date.now());
+    }),
+    keepsFocus(engine, target),
+  ];
+  return () => stops.forEach((stop) => stop());
+}
+
+/** Count a listener to the keys of a field of one line, which keeps its focus on return while any is. */
+function keepsFocus(engine: Engine, target: EngineNode): () => void {
+  if (target.tag !== 'input') return () => {};
+  const count = (by: number) => {
+    const now = (keyed.get(target) ?? 0) + by;
+    keyed.set(target, now);
+    engine.setProp(target, 'submitBehavior', now > 0 ? 'submit' : null);
+  };
+  count(1);
+  return () => count(-1);
 }
 
 /** Listen for what native says by the name it has, a touch or the mouse a touch is among them. */
@@ -191,7 +352,8 @@ function listenToNative(
   native: string,
   callback: Heard,
 ): () => void {
-  const tell = (event: unknown) => deliverAs(event, () => callback(dom(eventName, target, event)));
+  const tell = (event: unknown) =>
+    wasRefused(event) ? undefined : deliverAs(event, () => callback(dom(eventName, target, event)));
   if (MOUSE_OF_TOUCH.has(eventName)) {
     // The mouse a touch is, told as a browser tells it: see `mouse-after-touch.ts`.
     return engine.setEventListener(target, native, (event) => {
@@ -422,9 +584,14 @@ function checkControl(node: EngineNode, name: string, value: unknown, engine: En
   else letGoOfPress(node);
 }
 
-// A label's control clicked as `click()` clicks it. One typed into is focused instead.
+// A label's control clicked as `click()` clicks it. One typed into is focused instead, and a
+// select opens its list, as a press on it does.
 labelPress.click = (control) => {
   if (isTextField(control)) return false;
+  if (isSelect(control)) {
+    if (!disabled(control)) pressSelect(control, engineOf(control));
+    return true;
+  }
   if (!disabled(control)) clickElement(control);
   return true;
 };
@@ -547,12 +714,17 @@ function dom(type: string, target: EngineNode, event: unknown): object {
 /** What native said of events a listener has cancelled. */
 const cancelled = new WeakSet<object>();
 
+/** Whether a listener cancelled the event native said, or this package sent as native would. */
+export const wasCancelled = (native: object): boolean => cancelled.has(native);
+
 /** What a DOM event says of itself: its type, its target, and the native event behind it. */
 function domFields(type: string, target: EngineNode, event: unknown): Record<string, unknown> {
   // What native said, which every element the event goes up through is told of.
   const native = (event as { nativeEvent?: object } | undefined)?.nativeEvent;
   return {
     ...touchFields(native),
+    // The key a field says was pressed: see `field.ts`.
+    ...keyOf(native as { key?: unknown } | undefined),
     type,
     // What the event was sent to, which a listener on a box around it tells from that box.
     target: (event as { target?: EngineNode | null } | undefined)?.target ?? target,

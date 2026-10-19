@@ -3,17 +3,23 @@ import { datasetOf } from './dataset.ts';
 import { nameOf } from './document.ts';
 import { isFragment } from './document-fragment.ts';
 import { ELEMENT_TEXT } from './element-text.ts';
+import { FORM_METHODS } from './form.ts';
+import { CONTROLS } from './form-controls.ts';
 import { nameRecordOf, XHTML } from './qualified-name.ts';
 import { own, type Reflecting, type Reflection } from './reflect.ts';
 import { BY_ELEMENT, GLOBAL } from './reflected-attributes.ts';
 import { STYLE_SHEETS } from './runtime-style.ts';
 import { TABLE_PARTS } from './table-parts.ts';
+import { SELECTION } from './text-selection.ts';
+import { VALIDATION } from './validity.ts';
 import { engineOf } from './window.ts';
 
 /**
  * The properties of HTML elements, by element: what reflects an attribute
- * (`reflected-attributes.ts`), a table's parts (`table-parts.ts`), an element's `text`
- * (`element-text.ts`), a `<style>`'s `sheet` (`runtime-style.ts`), and `dataset`. Nodes share one prototype, so each property here asks
+ * (`reflected-attributes.ts`), what a form control answers of itself (`form-controls.ts`,
+ * `validity.ts`, `text-selection.ts`), a table's parts (`table-parts.ts`), an element's `text`
+ * (`element-text.ts`), a `<style>`'s `sheet` (`runtime-style.ts`), and `dataset`. Nodes share one
+ * prototype, so each property here asks
  * which element it is read on: one with nothing of its own for the name answers what the package
  * had for it before, and a text or an element of another namespace always does.
  */
@@ -95,7 +101,16 @@ function member(name: string, before: Before, of: (node: EngineNode) => Reflecti
 
 /** The members of `base` with the HTML properties over them, for `extendNodes`. */
 export function withHtmlMembers(base: PropertyDescriptorMap): PropertyDescriptorMap {
-  const tables: ByElement[] = [TABLE_PARTS, ELEMENT_TEXT, STYLE_SHEETS, BY_ELEMENT];
+  const tables: ByElement[] = [
+    CONTROLS,
+    FORM_METHODS,
+    VALIDATION,
+    SELECTION,
+    TABLE_PARTS,
+    ELEMENT_TEXT,
+    STYLE_SHEETS,
+    BY_ELEMENT,
+  ];
   const names = new Set([...Object.keys(GLOBAL), ...namesOf(...tables)]);
   const members: PropertyDescriptorMap = { ...base };
   for (const name of names) members[name] = member(name, base[name], resolve(name, tables));

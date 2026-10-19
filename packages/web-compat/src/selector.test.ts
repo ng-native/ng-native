@@ -465,7 +465,7 @@ describe('selectors that ask more of the page', () => {
 
   it('matches no state the app has no reading of', async () => {
     const { main } = await page();
-    for (const selector of [':hover', ':visited', ':checked', ':valid', ':target', ':playing']) {
+    for (const selector of [':hover', ':visited', ':target', ':playing']) {
       assert.equal(main.querySelector(selector), null, selector);
     }
   });

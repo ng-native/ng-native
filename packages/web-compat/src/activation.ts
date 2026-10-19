@@ -3,6 +3,9 @@ import { activation, dispatch } from './events.ts';
 import { CompatMouseEvent, scriptClick } from './event-classes.ts';
 import { eventPath } from './document.ts';
 import { engineOf } from './window.ts';
+import { fenced } from './fieldset.ts';
+import { resetForm, submitForm } from './form.ts';
+import { groupOf, isChecked, setChecked } from './form-controls.ts';
 import { controlOf, pressControl } from './label.ts';
 
 /**
@@ -14,25 +17,30 @@ import { controlOf, pressControl } from './label.ts';
  * `listen.ts`, and anything sent with `dispatchEvent` from `events.ts`. A listener that prevents
  * the click's default cancels it, and a checkbox goes back to what it was.
  *
- * ponytail: a radio's group is not unchecked when one of it is checked, and a radio that was
- * checked already says `change` again. A library that draws its own radios keeps their state.
- * Uncheck the group here if one reads a sibling's `checked`. And a form is submitted from a
- * button only: return in one of its fields submits it in a browser too; say so from the field's
- * own submit if a library waits for one.
+ * A radio checked unchecks the others of its group, and one that was checked already says nothing.
+ * A form is submitted only once its controls pass their constraints: see `form.ts`.
+ *
+ * ponytail: a form is submitted from a button only: return in one of its fields submits it in
+ * a browser too; say so from the field's own submit if a library waits for one.
  */
 
 /** What runs once a click is over, told whether a listener cancelled it. */
 export type Activated = (done: boolean) => void;
 
-/** Whether the node has HTML's `disabled`, on which a browser delivers no click. */
+/** The controls a disabled fieldset around them disables: see `fieldset.ts`. */
+const FENCED = new Set(['button', 'input', 'select', 'textarea']);
+
+/**
+ * Whether the node has HTML's `disabled`, on which a browser delivers no click, or is a control
+ * in a fieldset that does.
+ */
 export function disabled(node: EngineNode): boolean {
   const value = node.props['disabled'];
-  return value != null && value !== false && value !== 'false';
+  if (value != null && value !== false && value !== 'false') return true;
+  return FENCED.has(node.tag) && fenced(node);
 }
 
 const CHECKS = new Set(['checkbox', 'radio']);
-/** What each kind of button does to its form. */
-const FORM_EVENTS: Readonly<Record<string, string>> = { submit: 'topSubmit', reset: 'topReset' };
 /** What a button of each type does that is not a submit: a plain button does nothing. */
 const BUTTON_ACTIONS: Readonly<Record<string, string | undefined>> = {
   button: undefined,
@@ -71,17 +79,21 @@ export function activates(node: EngineNode): boolean {
  * library with no state of its own reads it off the `change`. Put back if the click was cancelled.
  */
 function check(node: EngineNode): Activated {
-  const control = node as EngineNode & { checked?: boolean };
-  const was = !!control.checked;
-  control.checked = typeOf(node) === 'radio' || !was;
+  const radio = typeOf(node) === 'radio';
+  const was = isChecked(node);
+  // The radio of the group that was checked, which is checked again if the click is cancelled.
+  const before = radio ? groupOf(node as never).find((other) => isChecked(other)) : undefined;
+  setChecked(node, radio || !was);
   return (done) => {
     if (!done) {
-      control.checked = was;
+      setChecked(node, was);
+      if (before) setChecked(before, true);
       return;
     }
     const engine = engineOf(node);
-    // One not in the page is checked, and says nothing of it, as a browser has it.
-    if (!ancestry(node).includes(engine.root)) return;
+    // One not in the page is checked, and says nothing of it, as a browser has it. Nor does a
+    // radio that was checked already, which changed nothing.
+    if (!ancestry(node).includes(engine.root) || (radio && was)) return;
     engine.dispatchEvent(node, 'topInput', {});
     engine.dispatchEvent(node, 'topChange', {});
   };
@@ -93,11 +105,11 @@ function check(node: EngineNode): Activated {
  */
 function submit(node: EngineNode, action: string): Activated {
   return (done) => {
-    let form = node.parent;
-    while (form && form.tag !== 'form') form = form.parent;
+    const form = (node as { form?: EngineNode | null }).form;
     if (!done || !form || disabled(node)) return;
-    const engine = engineOf(node);
-    if (ancestry(form).includes(engine.root)) engine.dispatchEvent(form, FORM_EVENTS[action]!, {});
+    // Validated first, as a browser does: see `form.ts`.
+    if (action === 'submit') submitForm(form, node);
+    else resetForm(form);
   };
 }
 

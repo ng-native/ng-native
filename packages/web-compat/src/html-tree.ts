@@ -52,6 +52,16 @@ export function madeByScript(node: EngineNode, engine: Engine): void {
   asATemplates.created?.(node, engine);
 }
 
+/** Tell of an element a script put in a parent, as a template's is told of. */
+export function insertedByScript(node: EngineNode, parent: EngineNode, engine: Engine): void {
+  if (node.nodeKind === 'element') asATemplates.inserted?.(node, parent, engine);
+}
+
+/** Tell of a node a script took out of its parent, as a template's is told of. */
+export function removedByScript(node: EngineNode, engine: Engine): void {
+  asATemplates.removed?.(node, engine);
+}
+
 /** Each `<template>`'s content: a fragment of its own, which its children are not. */
 const contents = new WeakMap<EngineNode, EngineNode>();
 /** The contents, which are in a document of their own that runs nothing. */

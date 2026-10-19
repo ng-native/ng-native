@@ -8,6 +8,7 @@ import { insertedFor, isFragment, markFragment } from './document-fragment.ts';
 import { domError, required, withLength } from './dom-error.ts';
 import { marksHover } from './elements.ts';
 import { byClassName, byTagName, byTagNameNS } from './elements-by.ts';
+import { insertedByScript, removedByScript } from './html-tree.ts';
 import { descendants, inDocument } from './in-document.ts';
 import { liveCollection, liveNodeList, type HTMLCollection, type NodeList } from './live-list.ts';
 import { adopt, adoptFirst, together } from './mutation-observer.ts';
@@ -51,7 +52,17 @@ const elementLists = new WeakMap<EngineNode, HTMLCollection>();
  */
 function putIn(parent: EngineNode, child: EngineNode, before: EngineNode | null): void {
   if (!child.parent) holderOf(child)?.removeChild(child);
-  engineOf(parent).insertBefore(parent, child, before);
+  const engine = engineOf(parent);
+  engine.insertBefore(parent, child, before);
+  // What a template's element is told of as it is put in place: see `listen.ts`.
+  insertedByScript(child, parent, engine);
+}
+
+/** Take a node out of its parent, told of as a template's is. */
+function takeOut(parent: EngineNode, child: EngineNode): void {
+  const engine = engineOf(parent);
+  engine.removeChild(parent, child);
+  removedByScript(child, engine);
 }
 
 /** What a script hands a node to put in: a node, or the text of anything else. */
@@ -224,7 +235,7 @@ export const treeMembers: PropertyDescriptorMap = {
   ),
   removeChild: method(function (value: unknown) {
     const child = checkRemoval(this, value);
-    engineOf(this).removeChild(this, child);
+    takeOut(this, child);
     return child;
   }),
   replaceChild: method(
@@ -239,14 +250,14 @@ export const treeMembers: PropertyDescriptorMap = {
       adopt(child);
       together(this, () => {
         for (const each of insertedFor(child)) putIn(this, each, old);
-        engineOf(this).removeChild(this, old);
+        takeOut(this, old);
       });
       return old;
     }),
   ),
   // Out of its parent, or out of the document it is at the top of: see `document-children.ts`.
   remove: method(function () {
-    if (this.parent) engineOf(this).removeChild(this.parent, this);
+    if (this.parent) takeOut(this.parent, this);
     else holderOf(this)?.removeChild(this);
   }),
 
@@ -275,7 +286,7 @@ export const treeMembers: PropertyDescriptorMap = {
     checkEach(this, nodes);
     adoptFirst(nodes);
     together(this, () => {
-      for (const child of inDocument(this)) engineOf(this).removeChild(this, child);
+      for (const child of inDocument(this)) takeOut(this, child);
       for (const node of nodes.flatMap(insertedFor)) putIn(this, node, null);
     });
   }),

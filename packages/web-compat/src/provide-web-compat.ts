@@ -1,6 +1,7 @@
 import {
   DestroyRef,
   DOCUMENT,
+  Injector,
   RendererFactory2,
   inject,
   makeEnvironmentProviders,
@@ -15,6 +16,7 @@ import { attributeMembers } from './attribute-members.ts';
 import { characterDataMembers } from './character-data.ts';
 import { forgetCommits } from './commit-watch.ts';
 import { eventHandlerMembers } from './event-handlers.ts';
+import { pickWith } from './file-input.ts';
 import { focusMembers, passOverToldBlurs } from './element-focus.ts';
 import { registerElements } from './elements.ts';
 import { geometryMembers } from './geometry.ts';
@@ -104,6 +106,10 @@ function setGlobalDocument(document: unknown): void {
  * - A `click` listener hears a press, as a `PointerEvent`, and a click does what it does in a
  *   browser: see `activation.ts`. Events are of the kinds a browser has, and `focus()` takes
  *   effect at once: see `event-classes.ts` and `element-focus.ts`.
+ * - An `<input>` and a `<textarea>` are the platform's text field, a `<select>` opens a list of
+ *   its options, and controls answer as a browser's do: their value, whether they are checked,
+ *   their validity and selection, and their form, which is submitted and reset as a browser's
+ *   is. See `field.ts`, `select.ts`, `form-controls.ts`, `validity.ts` and `form.ts`.
  *
  * Nothing is added until this is called, and all of it is taken away again when the last app
  * that asked for it is destroyed.
@@ -131,7 +137,10 @@ export function provideWebCompat(): EnvironmentProviders {
       // A field's blur is told at once, and native's answer to it passed over: see `element-focus.ts`.
       const heedBlurs = passOverToldBlurs(engine);
       const unwatchStyles = watchStyles(engine);
+      // Where a file input's click finds the system's file picker: see `file-input.ts`.
+      const forgetPicker = pickWith(engine, inject(Injector));
       inject(DestroyRef).onDestroy(() => {
+        forgetPicker();
         unwatchStyles();
         // What an observer still watching in it heard of its commits: see `commit-watch.ts`.
         forgetCommits(engine);

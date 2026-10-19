@@ -66,8 +66,17 @@ Experimental and partial. It has:
   while held) and marked `data-hover` while a pointer is over it, a disabled one announced as
   disabled, and a table's and a form's elements as views.
 - A `click` listener that hears a press.
+- Forms: an `<input>` and a `<textarea>` are the platform's text field, with `value` and
+  `defaultValue`, its keys, `change` once an edit ends, the keyboard its `type` and `inputmode`
+  ask for, and `readOnly` and `disabled` making it one that cannot be typed into. A `<select>`
+  shows its chosen `<option>` and opens a list of them when it or its label is pressed. A control
+  has `checked`, `validity` with `checkValidity()`, `reportValidity()` and `setCustomValidity()`,
+  `selectionStart` and `setSelectionRange()`, and its `form`, which has `elements`,
+  `requestSubmit()` and `reset()`. A disabled `<fieldset>` disables what is in it, a file input's
+  `click()` opens the system's file picker through `@ng-native/expo`, and `:valid`, `:checked`,
+  `:placeholder-shown` and the rest match.
 
-Forms and the rest of the DOM are not part of it yet.
+The rest of the DOM is not part of it yet.
 
 Nothing in an app changes until it adds the provider, and everything the provider adds is taken
 away again when the app is destroyed.

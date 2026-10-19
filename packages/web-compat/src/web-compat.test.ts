@@ -1897,11 +1897,11 @@ describe('@ng-native/web-compat checkboxes and radios', () => {
       await userEvent.press(screen.getByTestId(id));
       await settle();
     }
-    // A checkbox is checked and then not; a radio is checked and stays so.
+    // A checkbox is checked and then not; a radio is checked and stays so, which changes nothing
+    // the second time.
     assert.deepEqual(read, [
       [true, true],
       [true, false],
-      [true, true],
       [true, true],
     ]);
   });

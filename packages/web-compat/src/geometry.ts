@@ -200,6 +200,24 @@ function offsetOf(node: EngineNode): { x: number; y: number } {
 }
 
 /**
+ * How tall a `<textarea>`'s text is, with its padding: what `scrollHeight` is for one, which a
+ * library reads to grow the field with what is typed. Native says a field's height and not its
+ * text's, so the field is measured once as tall as its text, with no `rows` and no height of its
+ * own to hold it, and put back. Nothing is drawn between: the commit after is the one painted.
+ */
+function textHeight(node: EngineNode): number {
+  const engine = engineOf(node);
+  const { rows, style } = node.props;
+  engine.setProp(node, 'rows', undefined);
+  const free = { height: 'auto', minHeight: undefined, maxHeight: undefined };
+  engine.setProp(node, 'style', { ...(style as object | undefined), ...free });
+  const { height } = frameOf(node);
+  engine.setProp(node, 'rows', rows);
+  engine.setProp(node, 'style', style);
+  return Math.max(height, frameOf(node).height);
+}
+
+/**
  * A size or offset as a getter reads it: a whole pixel, as the CSSOM's are. A 1080-pixel Android
  * screen at 2.625 is 411.43 points across, which a browser reads as 411.
  */
@@ -238,5 +256,7 @@ export const geometryMembers: PropertyDescriptorMap = {
   clientTop: sized((node) => border(node, 'Top')),
   clientLeft: sized((node) => border(node, 'Left')),
   scrollWidth: sized((node) => contentOf(node).width),
-  scrollHeight: sized((node) => contentOf(node).height),
+  scrollHeight: sized((node) =>
+    node.tag === 'textarea' ? textHeight(node) : contentOf(node).height,
+  ),
 };

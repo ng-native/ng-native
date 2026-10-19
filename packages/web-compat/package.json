@@ -53,13 +53,20 @@
     "parse5": "^7.3.0"
   },
   "peerDependencies": {
-    "@angular/core": "^22.0.0"
+    "@angular/core": "^22.0.0",
+    "@ng-native/expo": "workspace:*"
+  },
+  "peerDependenciesMeta": {
+    "@ng-native/expo": {
+      "optional": true
+    }
   },
   "devDependencies": {
     "@angular/common": "22.2.0",
     "@angular/core": "22.2.0",
     "@emotion/css": "^11.13.5",
     "@ng-native/components": "workspace:*",
+    "@ng-native/expo": "workspace:*",
     "@ng-native/testing": "workspace:*"
   },
   "nx": {

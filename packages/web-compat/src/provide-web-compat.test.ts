@@ -5,7 +5,7 @@
 import assert from 'node:assert/strict';
 import { afterEach, describe, it } from 'node:test';
 import { Component, DOCUMENT, ElementRef, inject, signal } from '@angular/core';
-import { Text, View } from '@ng-native/components';
+import { Text, TextInput, View } from '@ng-native/components';
 import { registeredViewName } from '@ng-native/fabric';
 import { cleanup, fireEvent, render, screen, userEvent } from '@ng-native/testing';
 
@@ -49,6 +49,16 @@ class Buttons {
 })
 class Inset {}
 
+@Component({
+  selector: 'x-plain-fields',
+  imports: [TextInput],
+  template: `<text-input testID="plain-field" /><input testID="plain-input" />`,
+})
+class PlainFields {}
+
+@Component({ selector: 'x-asking-fields', template: '<input testID="asked-field" />' })
+class AskingFields {}
+
 /** The package, read the first time a test asks for it: see the first test. */
 const load = () => import('./index.ts');
 
@@ -91,6 +101,7 @@ describe('provideWebCompat', () => {
     const globals = globalsNow();
     const windowPrototype = Object.getPrototypeOf(globalThis);
     const buttonView = registeredViewName('button');
+    const inputView = registeredViewName('input');
     // The engine's own, which `@defer (on viewport)` is given by the platform.
     const engineObserver = (globalThis as Dom).IntersectionObserver;
 
@@ -157,13 +168,23 @@ describe('provideWebCompat', () => {
     assert.equal(style.sheet.cssRules.length, 1);
     geometryIsUp(app, host, div, engineObserver);
     eventsAreUp(app, div);
+    const input = formsAreUp(app);
 
     cleanup();
     assert.deepEqual(globalsNow(), globals, 'every global as it was, the document too');
     assert.deepEqual(membersOf(host), members, 'every node member as it was');
     assert.equal(host.getAttribute, undefined);
     // The runtime's own `getComputedStyle` is back, which the comparison above says.
-    for (const name of [...tree, ...html, ...cssom, 'CSS', 'MediaList', ...GEOMETRY_GLOBALS]) {
+    const gone = [
+      ...tree,
+      ...html,
+      ...cssom,
+      'CSS',
+      'MediaList',
+      ...GEOMETRY_GLOBALS,
+      ...FORM_GLOBALS,
+    ];
+    for (const name of gone) {
       assert.equal((globalThis as Dom)[name], undefined, name);
     }
     assert.equal((globalThis as Dom).IntersectionObserver, engineObserver);
@@ -195,6 +216,7 @@ describe('provideWebCompat', () => {
     for (const name of ['onclick', 'onload', 'blur', 'click']) assert.equal(div[name], undefined);
     assert.equal((globalThis as Dom).clicks, undefined);
     assert.equal(registeredViewName('button'), buttonView);
+    formsAreDown(input, inputView);
     // The engine's own, which has no more than `contains`.
     assert.equal(host.classList.add, undefined);
     // The window's listeners went with it, and the renderer's extension.
@@ -270,6 +292,20 @@ describe('provideWebCompat', () => {
     // A style it binds is set as written, as the renderer sets one: no inset read as a side.
     await render(Inset);
     assert.equal(screen.getByTestId('inset').props['start'], undefined);
+    // Its text field has none of a browser's defaults, and its `<input>` is no text field, beside
+    // an asking app's that has them.
+    await render(AskingFields, { providers: [provideWebCompat()] });
+    assert.match(screen.getByTestId('asked-field').viewName, /TextInput$/);
+    await plainFieldsAreAsThey();
+  });
+
+  it("leaves no field default on an app's text fields once the last app that asked is gone", async () => {
+    const { provideWebCompat } = await load();
+    await render(AskingFields, { providers: [provideWebCompat()] });
+    const asked = screen.getByTestId('asked-field').props;
+    assert.deepEqual([asked['paddingTop'], typeof asked['width']], [0, 'number']);
+    cleanup();
+    await plainFieldsAreAsThey();
   });
 
   it('adds it all again for an app that asks after the last one went', async () => {
@@ -327,4 +363,50 @@ function geometryIsUp(app: Dom, host: Dom, div: Dom, engineObserver: unknown): v
   assert.deepEqual([div.offsetWidth, div.clientHeight, div.scrollTop], [0, 0, 0]);
   assert.equal(app.instance.document.scrollingElement, host.engine.root);
   assert.equal(div.scrollsOverflow, true, 'what overflows it scrolls, where its style says');
+}
+
+/** The members a form control has while an app that asked is up. */
+const CONTROL_MEMBERS = ['validity', 'checkValidity', 'setCustomValidity', 'selectionStart'];
+CONTROL_MEMBERS.push('setSelectionRange', 'form', 'checked', 'value');
+
+/** The globals of forms an asking app puts on the window. */
+const FORM_GLOBALS = ['ValidityState'];
+
+/** C8's members and globals, while an app that asked is up: answers an input it made. */
+function formsAreUp(app: Dom): Dom {
+  const document = app.instance.document;
+  for (const name of FORM_GLOBALS) {
+    assert.equal(typeof (globalThis as Dom)[name], 'function', name);
+  }
+  assert.match(String(registeredViewName('input')), /TextInput$/);
+  const input = document.createElement('input');
+  for (const name of CONTROL_MEMBERS) assert.equal(name in input, true, name);
+  input.value = 'typed';
+  assert.equal(input.value, 'typed');
+  assert.equal(input.defaultStyle.underlineColorAndroid, 'transparent');
+  assert.equal(input.validity.valid, true);
+  assert.equal(document.forms.length, 0);
+  return input;
+}
+
+/** C8's, once the last app that asked is gone. */
+function formsAreDown(input: Dom, inputView: unknown): void {
+  assert.equal(registeredViewName('input'), inputView);
+  for (const name of CONTROL_MEMBERS) assert.equal(input[name], undefined, name);
+}
+
+/**
+ * What the package gives a field of an asking app, which a `<text-input>` has none of. Its
+ * defaults stay with the view once given, for every app in the process, so these are asked of
+ * it outright and not against one rendered earlier.
+ */
+const FIELD_PROPS = ['paddingTop', 'paddingBottom', 'width', 'size'];
+
+/** The text field and the `<input>` of an app that did not ask, as the package leaves them. */
+async function plainFieldsAreAsThey(): Promise<void> {
+  await render(PlainFields);
+  const field = screen.getByTestId('plain-field');
+  assert.match(field.viewName, /TextInput$/);
+  for (const prop of FIELD_PROPS) assert.equal(field.props[prop], undefined, prop);
+  assert.equal(screen.getByTestId('plain-input').viewName, 'View');
 }

@@ -1,5 +1,8 @@
 import { viewNameOf, type Engine, type EngineNode } from '@ng-native/fabric';
-import { clickElement } from './activation.ts';
+import { clickElement, disabled } from './activation.ts';
+import { eventPath } from './document.ts';
+import { dispatch, newEvent } from './events.ts';
+import { isFileInput, pickFiles } from './file-input.ts';
 import { attributeOf } from './element-tree.ts';
 import { engineOf } from './window.ts';
 
@@ -136,8 +139,17 @@ export const focusMembers: PropertyDescriptorMap = {
     const engine = engineOf(this);
     if (engine.focused === this) giveUpFocus(engine, this);
   }),
-  // A click, which does what a press does: see `activation.ts`.
+  // A click, which does what a press does: see `activation.ts`. A file input's is the system's
+  // file picker, and its own listeners hear what comes of it, `change` or `cancel`: a library
+  // makes the input itself, and never puts it in a template. See `file-input.ts`.
   click: method(function () {
-    clickElement(this);
+    if (!isFileInput(this)) return clickElement(this);
+    if (disabled(this)) return;
+    const engine = engineOf(this);
+    void pickFiles(this, engine).then((type) => {
+      // What was picked is `input` and then `change`, as a browser tells it.
+      const told = type === 'change' ? ['input', 'change'] : ['cancel'];
+      for (const each of told) dispatch(newEvent(each, { bubbles: true }), eventPath(engine, this));
+    });
   }),
 };

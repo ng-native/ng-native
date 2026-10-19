@@ -4,6 +4,7 @@ import { documentOfRoot } from './document-roots.ts';
 import { directionOf } from './directionality.ts';
 import {
   attributeOf,
+  elementsUnder,
   hasAttribute,
   isElement,
   isHtml,
@@ -19,9 +20,9 @@ import { engineOf } from './window.ts';
  * What each pseudo-class tests of an element, as `querySelector` and `matches` ask. A state the
  * app has no reading of (`:hover` with no pointer, `:visited`, a media element playing) matches
  * nothing, as it would in a browser where it is not the case.
+ * A form control's state is read off its own properties: `:checked`, `:valid` and the rest.
  *
- * ponytail: nor does a state only a form control's own properties say, `:checked`, `:valid`,
- * `:placeholder-shown` and the rest, nor `:target`, which needs the location.
+ * ponytail: `:target` matches nothing, which needs the location.
  */
 
 /** The element the selector is matched for: `:scope`, and the one a `:has()` is asked of. */
@@ -107,6 +108,54 @@ function editable(node: EngineNode): boolean {
     if (value === null || value.toLowerCase() === 'inherit') continue;
     return ['', 'true', 'plaintext-only'].includes(value.toLowerCase());
   }
+  return false;
+}
+
+/** An element's own members, as a script reads them. */
+const dom = (node: EngineNode): Record<string, unknown> =>
+  node as unknown as Record<string, unknown>;
+
+const isCheckable = (node: EngineNode): boolean =>
+  isHtml(node, 'input') && ['checkbox', 'radio'].includes(typeOf(node));
+
+/** Whether an element is subject to constraint validation, and what its validity says. */
+function validity(node: EngineNode): boolean | undefined {
+  if (isHtml(node, 'form', 'fieldset')) {
+    for (const each of elementsUnder(node)) if (validity(each) === false) return false;
+    return true;
+  }
+  if (dom(node)['willValidate'] !== true) return undefined;
+  return (dom(node)['validity'] as { valid?: boolean }).valid !== false;
+}
+
+/** The input types that have a range, which `min` and `max` give one. */
+const RANGED = new Set(['number', 'range', 'date', 'month', 'week', 'time', 'datetime-local']);
+
+/** Whether a field with a `min` or a `max` is within it, or nothing for one with neither. */
+function inRange(node: EngineNode): boolean | undefined {
+  if (!isHtml(node, 'input') || !RANGED.has(typeOf(node))) return undefined;
+  if (!hasAttribute(node, 'min') && !hasAttribute(node, 'max') && typeOf(node) !== 'range') {
+    return undefined;
+  }
+  if (dom(node)['willValidate'] !== true) return undefined;
+  const state = dom(node)['validity'] as { rangeUnderflow?: boolean; rangeOverflow?: boolean };
+  return !state.rangeUnderflow && !state.rangeOverflow;
+}
+
+/** A button that submits its form: one of no type is one. */
+const submits = (node: EngineNode): boolean =>
+  (isHtml(node, 'button') && !['reset', 'button'].includes(typeOf(node))) ||
+  (isHtml(node, 'input') && ['submit', 'image'].includes(typeOf(node)));
+
+/** `:default`: a box checked to begin with, an option selected so, a form's first submit button. */
+function byDefault(node: EngineNode): boolean {
+  if (isCheckable(node)) return hasAttribute(node, 'checked');
+  if (isHtml(node, 'option')) return hasAttribute(node, 'selected');
+  if (!submits(node)) return false;
+  const form = dom(node)['form'] as EngineNode | null | undefined;
+  if (!form) return false;
+  const elements = dom(form)['elements'] as Iterable<EngineNode>;
+  for (const each of elements) if (submits(each)) return each === node;
   return false;
 }
 
@@ -201,6 +250,21 @@ const PLAIN: Readonly<Record<string, Test>> = {
   required: (node) => isHtml(node, 'input', 'select', 'textarea') && hasAttribute(node, 'required'),
   optional: (node) =>
     isHtml(node, 'input', 'select', 'textarea') && !hasAttribute(node, 'required'),
+  checked: (node) =>
+    (isCheckable(node) && dom(node)['checked'] === true) ||
+    (isHtml(node, 'option') && dom(node)['selected'] === true),
+  indeterminate: (node) =>
+    (isHtml(node, 'input') && typeOf(node) === 'checkbox' && dom(node)['indeterminate'] === true) ||
+    (isHtml(node, 'progress') && !hasAttribute(node, 'value')),
+  default: byDefault,
+  'placeholder-shown': (node) =>
+    (isHtml(node, 'textarea') || (isHtml(node, 'input') && TYPED.has(typeOf(node)))) &&
+    hasAttribute(node, 'placeholder') &&
+    dom(node)['value'] === '',
+  valid: (node) => validity(node) === true,
+  invalid: (node) => validity(node) === false,
+  'in-range': (node) => inRange(node) === true,
+  'out-of-range': (node) => inRange(node) === false,
   'read-write': editable,
   'read-only': (node) => !editable(node),
   defined,

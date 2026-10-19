@@ -30,12 +30,24 @@ const UNDRAWN = [
   ...['area', 'base', 'datalist', 'noembed', 'noframes', 'param', 'rp'],
 ];
 
+/**
+ * The platform's text field, which an `<input>` and a `<textarea>` are. With no defaults of the
+ * view's: the engine keeps those after the name is given back, for every app's `<text-input>`.
+ * A field's own are given it as it is made: see `field.ts`.
+ */
+const TEXT_FIELD = { ios: 'TextInput', android: 'AndroidTextInput' };
+
 /** Register the elements above, and answer what takes them away again. */
 export function registerElements(): () => void {
   const yieldsToComponents = { yieldsToComponents: true };
-  const undo = [...Object.keys(ROLES), ...PLAIN, ...UNDRAWN].map((name) =>
-    registerViewName(name, 'View', undefined, yieldsToComponents),
-  );
+  const undo = [
+    ...[...Object.keys(ROLES), ...PLAIN, ...UNDRAWN].map((name) =>
+      registerViewName(name, 'View', undefined, yieldsToComponents),
+    ),
+    ...['input', 'textarea'].map((name) =>
+      registerViewName(name, TEXT_FIELD, undefined, yieldsToComponents),
+    ),
+  ];
   return () => undo.forEach((each) => each());
 }
 
@@ -80,7 +92,7 @@ export const hoverWritten = (node: EngineNode): void => void hovered.delete(node
 const HTML_ELEMENTS = new Set([
   ...['div', 'section', 'article', 'header', 'footer', 'main', 'nav', 'ul', 'ol', 'li'],
   ...['span', 'p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'label', 'strong', 'b', 'em', 'i'],
-  ...['u', 's', 'small', 'code', 'mark', 'abbr', 'cite', 'time', 'img'],
+  ...['u', 's', 'small', 'code', 'mark', 'abbr', 'cite', 'time', 'img', 'input', 'textarea'],
   ...Object.keys(ROLES),
   ...PLAIN,
   ...UNDRAWN,

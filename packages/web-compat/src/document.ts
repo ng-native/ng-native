@@ -10,6 +10,7 @@ import { createDocumentType } from './document-type.ts';
 import { required } from './dom-error.ts';
 import { implementationFor } from './dom-implementation.ts';
 import { byClassName, byName, byTagName, byTagNameNS } from './elements-by.ts';
+import type { HTMLCollection } from './live-list.ts';
 import { createEvent, dispatch, listen, passiveFor, unlisten } from './events.ts';
 import { asMouse } from './mouse-after-touch.ts';
 import { madeByScript } from './html-tree.ts';
@@ -391,6 +392,8 @@ export function documentFor(engine: Engine): CompatDocument {
   const bodyListeners = anywhere(engine, body);
   /** Its `implementation`, made the first time it is asked for. */
   let implementation: object | undefined;
+  /** `forms`, made the first time it is asked: a live list, which follows the page. */
+  let forms: HTMLCollection | undefined;
   Object.defineProperties(body, {
     addEventListener: { value: bodyListeners.addEventListener },
     removeEventListener: { value: bodyListeners.removeEventListener },
@@ -487,6 +490,10 @@ export function documentFor(engine: Engine): CompatDocument {
     querySelectorAll: (...args: unknown[]) => {
       required(args, 1, 'querySelectorAll');
       return query(elements(), args[0], engine.root, false);
+    },
+    // Every form in the page, as a library finds one by its name: `document.forms.login`.
+    get forms() {
+      return (forms ??= byTagName(engine, everything, 'form'));
     },
     // Documents a script makes for itself, which are never drawn: see `dom-implementation.ts`.
     get implementation() {

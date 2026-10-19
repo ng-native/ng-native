@@ -11,6 +11,7 @@ import { documentOfRoot, topOf } from './document-roots.ts';
 import { required } from './dom-error.ts';
 import { marksHover } from './elements.ts';
 import { dispatch, listen, unlisten, type Heard } from './events.ts';
+import { isField } from './field.ts';
 import { inDocument, isInDocument, lastInDocument } from './in-document.ts';
 import { announcesDisabled, listenNatively, hasCapture, topLevel } from './listen.ts';
 import { observing, removingAttribute, settingAttribute, together } from './mutation-observer.ts';
@@ -294,12 +295,13 @@ export function writeAttribute(
 /**
  * Attach a listener `addEventListener` was given to what native says of its type. Core maps the
  * events a `@defer` trigger listens for to the native ones that stand for them, and does nothing
- * with any other type. But a click is the press a template's listener hears, with the event that
+ * with any other type. But a key down in a field is a key, and a click is the press a template's listener hears, with the event that
  * one is given: a library stops the click it acts on, which core's own event has nothing to stop
  * with. Any other type is the native event of its name.
  */
 function attachNatively(node: EngineNode, type: string, heard: Heard, core: CoreNode) {
-  if (DEFER_TRIGGERS.has(type)) {
+  // A key down in a field is a key, which native says: not the focus core takes it for.
+  if (DEFER_TRIGGERS.has(type) && !(type === 'keydown' && isField(node))) {
     core.addEventListener.call(node, type, heard);
     return () => core.removeEventListener.call(node, type, heard);
   }
