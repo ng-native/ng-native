@@ -45,9 +45,9 @@ npx expo install react-native-webview
 
 ## Providing it
 
-`provideWebCompat()` goes in the providers `mount` is given. In an app with the native router, list
-it before `provideNativeRouter()`: it gives Angular's `Location` a platform to stand on in an app
-with none, and the router provides its own.
+`provideWebCompat()` goes in the providers `mount` is given. It gives Angular's `Location` a
+platform to stand on in an app with no router. In an app with the native router, `Location` is the
+router's, in whichever order the two are listed.
 
 ```ts
 import { AppRegistry } from 'react-native';
