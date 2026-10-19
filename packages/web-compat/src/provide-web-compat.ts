@@ -15,7 +15,7 @@ import { attributeMembers } from './attribute-members.ts';
 import { characterDataMembers } from './character-data.ts';
 import { forgetCommits } from './commit-watch.ts';
 import { eventHandlerMembers } from './event-handlers.ts';
-import { focusMembers } from './element-focus.ts';
+import { focusMembers, passOverToldBlurs } from './element-focus.ts';
 import { registerElements } from './elements.ts';
 import { geometryMembers } from './geometry.ts';
 import { withHtmlMembers } from './html-members.ts';
@@ -128,6 +128,8 @@ export function provideWebCompat(): EnvironmentProviders {
         inject(RendererFactory2).createRenderer(null, null),
       );
       const leaveWindow = windowOf(engine);
+      // A field's blur is told at once, and native's answer to it passed over: see `element-focus.ts`.
+      const heedBlurs = passOverToldBlurs(engine);
       const unwatchStyles = watchStyles(engine);
       inject(DestroyRef).onDestroy(() => {
         unwatchStyles();
@@ -135,6 +137,7 @@ export function provideWebCompat(): EnvironmentProviders {
         forgetCommits(engine);
         forgetRenderer();
         leaveWindow();
+        heedBlurs();
         // In whatever order the apps go: the newest still up, or what was there before any.
         documents.splice(documents.indexOf(document), 1);
         setGlobalDocument(documents.at(-1));

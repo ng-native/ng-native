@@ -25,6 +25,8 @@ type Dom = any;
       <a id="bare">Bare</a>
       <a id="link" href="/somewhere">Link</a>
       <text-input id="field" />
+      <button id="reachable" disabled tabindex="0">Reachable</button>
+      <text-input id="closed" disabled />
     </div>
   `,
 })
@@ -131,6 +133,54 @@ describe('focus on what is not a text field', () => {
     assert.equal(heard, 1);
     field.blur();
     assert.equal(fabric.commands.filter((command) => command.name === 'blur').length, 1);
+  });
+
+  it('is not taken by a disabled control, whatever its tabindex, nor by a disabled field', async () => {
+    const { document, fabric } = await page();
+    for (const id of ['reachable', 'closed']) {
+      const control = document.getElementById(id);
+      const heard = hear(control);
+      control.focus();
+      assert.equal(active(document), 'body', id);
+      assert.deepEqual(heard, [], id);
+    }
+    assert.equal(fabric.commands.filter((command) => command.name === 'focus').length, 0);
+  });
+
+  it('is given up by a field at once, so it is taken again before native says it blurred', async () => {
+    const { document, fabric } = await page();
+    const field = document.getElementById('field');
+    field.focus();
+    const native = fabric.commands.find((command) => command.name === 'focus')!.node!;
+    const heard = hear(field);
+    field.blur();
+    assert.equal(active(document), 'body');
+    assert.deepEqual(heard, ['blur', 'focusout']);
+    field.focus();
+    assert.equal(active(document), 'field');
+    assert.equal(fabric.commands.filter((command) => command.name === 'focus').length, 2);
+    // Native answers the blur, then the focus: neither is news, and the field keeps the focus.
+    fabric.emit(native, 'topBlur');
+    fabric.emit(native, 'topFocus');
+    assert.equal(active(document), 'field');
+    assert.deepEqual(heard, ['blur', 'focusout', 'focus', 'focusin']);
+    // A blur native says of itself after that is one.
+    fabric.emit(native, 'topBlur');
+    assert.equal(active(document), 'body');
+    assert.deepEqual(heard.slice(4), ['blur', 'focusout']);
+  });
+
+  it('forgets a blur native never answered once native focuses the field of itself', async () => {
+    // Native gives no blur for a field it never had: the next one it says is no answer to it.
+    const { document, fabric } = await page();
+    const field = document.getElementById('field');
+    field.focus();
+    const native = fabric.commands.find((command) => command.name === 'focus')!.node!;
+    field.blur();
+    fabric.emit(native, 'topFocus');
+    assert.equal(active(document), 'field');
+    fabric.emit(native, 'topBlur');
+    assert.equal(active(document), 'body');
   });
 
   it('is heard of on the document and the body, focusin and focusout, as a focus monitor listens', async () => {

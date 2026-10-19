@@ -1673,8 +1673,36 @@ describe('@ng-native/web-compat buttons and links', () => {
     // On the node, where a stylesheet matches it: a `data-` attribute is not a native prop.
     const node = globals.document.querySelector('button');
     await fireEvent(screen.getByTestId('button'), 'topPointerEnter');
-    assert.equal(node.getAttribute('data-hover'), 'true');
+    assert.equal(node.props['data-hover'], true);
+    // And no attribute of it: a browser's hovered button has none to read or copy.
+    assert.equal(node.getAttribute('data-hover'), null);
+    assert.equal(node.hasAttribute('data-hover'), false);
+    assert.equal(node.getAttributeNames().includes('data-hover'), false);
+    assert.equal(node.outerHTML.includes('data-hover'), false);
+    // Nor of a copy, which no pointer is over.
+    assert.equal(node.cloneNode().props['data-hover'], undefined);
     await fireEvent(screen.getByTestId('button'), 'topPointerLeave');
+    assert.equal(node.props['data-hover'], undefined);
+  });
+
+  it('leaves a data-hover the app writes on a button as it wrote it, a pointer over or not', async () => {
+    await render(Links, { providers: [provideWebCompat()] });
+    const node = globals.document.querySelector('button');
+    const button = screen.getByTestId('button');
+    node.setAttribute('data-hover', 'mine');
+    await fireEvent(button, 'topPointerEnter');
+    await fireEvent(button, 'topPointerLeave');
+    assert.equal(node.getAttribute('data-hover'), 'mine');
+    // Written while the pointer is over it, it is the app's from then on.
+    node.removeAttribute('data-hover');
+    await fireEvent(button, 'topPointerEnter');
+    node.setAttribute('data-hover', 'late');
+    await fireEvent(button, 'topPointerLeave');
+    assert.equal(node.getAttribute('data-hover'), 'late');
+    // And taken away again, the pointer marks it once more.
+    node.removeAttribute('data-hover');
+    await fireEvent(button, 'topPointerEnter');
+    assert.equal(node.props['data-hover'], true);
     assert.equal(node.hasAttribute('data-hover'), false);
   });
 

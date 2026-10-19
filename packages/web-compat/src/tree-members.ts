@@ -6,6 +6,7 @@ import { checkInDocument } from './document-children.ts';
 import { documentOfRoot, topOf } from './document-roots.ts';
 import { insertedFor, isFragment, markFragment } from './document-fragment.ts';
 import { domError, required, withLength } from './dom-error.ts';
+import { marksHover } from './elements.ts';
 import { byClassName, byTagName, byTagNameNS } from './elements-by.ts';
 import { descendants, inDocument } from './in-document.ts';
 import { liveCollection, liveNodeList, type HTMLCollection, type NodeList } from './live-list.ts';
@@ -141,7 +142,11 @@ function cloned(engine: Engine, node: EngineNode, deep: boolean): EngineNode {
   if (isFragment(node)) markFragment(copy);
   const classes = classAttribute(node);
   if (classes !== null) setClassAttribute(copy, classes);
-  for (const [key, value] of Object.entries(node.props)) engine.setProp(copy, key, ownCopy(value));
+  for (const [key, value] of Object.entries(node.props)) {
+    // The pointer over the element is not over its copy: see `giveRole`.
+    if (key === 'data-hover' && marksHover(node)) continue;
+    engine.setProp(copy, key, ownCopy(value));
+  }
   copyWritten(node, copy);
   copyDeclarations(node, copy);
   if (copy.tag === 'style') styleMade(copy, engine);

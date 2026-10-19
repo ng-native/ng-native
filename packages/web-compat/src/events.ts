@@ -107,6 +107,8 @@ export function listen(
   const removeEntry = () => remove(target, entry);
   signal?.addEventListener?.('abort', removeEntry);
   entry.stop = attach?.((event) => {
+    // One taken off is told nothing that comes later: the mouse after a touch is told so.
+    if (entry.removed) return;
     if (once) removeEntry();
     return call(entry, target, event) as boolean | void;
   });

@@ -120,4 +120,21 @@ describe('@ng-native/web-compat, the mouse a touch is', () => {
     assert.deepEqual(heard, ['mousedown', 'document touchstart']);
     send('End', 10);
   });
+
+  it('is told to no listener taken off before it comes, as a dialog closed by the tap takes its own', async () => {
+    const { document, element, heard, send, turn } = await page();
+    const listeners = [element, document].map((target, at) => {
+      const each = (event: Dom) => heard.push(`${at} ${event.type}`);
+      for (const type of ['mousedown', 'mouseup']) target.addEventListener(type, each);
+      return () => {
+        for (const type of ['mousedown', 'mouseup']) target.removeEventListener(type, each);
+      };
+    });
+    element.addEventListener('touchstart', () => undefined);
+    send('Start', 10);
+    send('End', 10);
+    for (const remove of listeners) remove();
+    await turn();
+    assert.deepEqual(heard, []);
+  });
 });

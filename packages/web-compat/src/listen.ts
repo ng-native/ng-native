@@ -3,7 +3,7 @@ import type { RendererExtension } from '@ng-native/platform';
 import { activate, ancestry, clickElement, disabled } from './activation.ts';
 import { documentOf, heldForMenu, listenAnywhere, type CompatDocument } from './document.ts';
 import { isTextField } from './element-focus.ts';
-import { giveRole, scrollWhereStyled } from './elements.ts';
+import { giveRole, hoverWritten, scrollWhereStyled } from './elements.ts';
 import { nativeEvent } from './event-classes.ts';
 import { listen, type Heard } from './events.ts';
 import { buildAs, setMarkup } from './html.ts';
@@ -72,6 +72,11 @@ const SETTERS: Readonly<
     if (off || announced.has(node)) engine.setProp(node, 'aria-disabled', off ? true : null);
     if (off) announced.add(node);
     else announced.delete(node);
+    return false;
+  },
+  // A `data-hover` the app writes is its own, which a pointer leaving does not take away.
+  'data-hover'(node) {
+    hoverWritten(node);
     return false;
   },
 };

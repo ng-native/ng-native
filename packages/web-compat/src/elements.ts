@@ -55,10 +55,26 @@ export function giveRole(node: EngineNode, engine: Engine): boolean {
   // `:hover`, for the devices with a pointer: the Tailwind preset reads it as `data-hover`.
   // ponytail: on the elements a pointer is aimed at. A stylesheet's `:hover` on any other
   // element never matches; track every element with a hover rule if a library needs it.
-  engine.setEventListener(node, 'topPointerEnter', () => engine.setProp(node, 'data-hover', true));
-  engine.setEventListener(node, 'topPointerLeave', () => engine.setProp(node, 'data-hover', null));
+  // One the app wrote is the app's, and left as it is.
+  engine.setEventListener(node, 'topPointerEnter', () => {
+    if (node.props['data-hover'] != null) return;
+    hovered.add(node);
+    engine.setProp(node, 'data-hover', true);
+  });
+  engine.setEventListener(node, 'topPointerLeave', () => {
+    if (hovered.delete(node)) engine.setProp(node, 'data-hover', null);
+  });
   return true;
 }
+
+/** The elements whose `data-hover` is the pointer over them, and no attribute. */
+const hovered = new WeakSet<EngineNode>();
+
+/** Whether an element's `data-hover` is the one the pointer over it gives, and no attribute. */
+export const marksHover = (node: EngineNode): boolean => hovered.has(node);
+
+/** An app wrote an element's `data-hover`, which is its own from then on. */
+export const hoverWritten = (node: EngineNode): void => void hovered.delete(node);
 
 /** HTML's elements that the engine has a view for already, and so a registered name. */
 const HTML_ELEMENTS = new Set([
