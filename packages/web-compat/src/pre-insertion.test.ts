@@ -412,6 +412,23 @@ describe('moveBefore on a document', () => {
 });
 
 describe('moveBefore, and what a node keeps', () => {
+  it('keeps a focused field focused, with no blur', async () => {
+    const document = await page();
+    const parent = document.getElementById('page');
+    const other = parent.appendChild(document.createElement('div'));
+    // The platform's text field, by the name the engine has for it.
+    const field = parent.appendChild(document.createElement('text-input'));
+    await settle();
+    field.focus();
+    const heard: string[] = [];
+    for (const type of ['blur', 'focusout', 'focus', 'focusin'])
+      field.addEventListener(type, () => heard.push(type));
+    other.moveBefore(field, null);
+    await settle();
+    assert.equal(document.activeElement, field);
+    assert.deepEqual(heard, []);
+  });
+
   it('keeps a transition running, where it had got to', async () => {
     let now = 1000;
     const app = await render(Page, { providers: [provideWebCompat()], now: () => now });

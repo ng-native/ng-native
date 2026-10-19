@@ -42,15 +42,22 @@ export function registerElements(): () => void {
 /**
  * Give an element made in an app that asked for this package the role a browser gives one of
  * its name: a button is a button, and a link a link, to accessibility and to a keyboard. Props a
- * binding can replace, as it can any other: `role="tab"` on a button is a tab.
+ * binding can replace, as it can any other: `role="tab"` on a button is a tab. Answers whether it
+ * is one, which a press is aimed at.
  */
-export function giveRole(node: EngineNode, engine: Engine): void {
+export function giveRole(node: EngineNode, engine: Engine): boolean {
   const role = ROLES[node.tag];
-  if (!role || !documentOf(engine)) return;
+  if (!role || !documentOf(engine)) return false;
   engine.setProp(node, 'accessibilityRole', role);
   engine.setProp(node, 'accessible', true);
   // A keyboard, a switch control or a remote can reach it, which is where `:focus` comes from.
   engine.setProp(node, 'focusable', true);
+  // `:hover`, for the devices with a pointer: the Tailwind preset reads it as `data-hover`.
+  // ponytail: on the elements a pointer is aimed at. A stylesheet's `:hover` on any other
+  // element never matches; track every element with a hover rule if a library needs it.
+  engine.setEventListener(node, 'topPointerEnter', () => engine.setProp(node, 'data-hover', true));
+  engine.setEventListener(node, 'topPointerLeave', () => engine.setProp(node, 'data-hover', null));
+  return true;
 }
 
 /** HTML's elements that the engine has a view for already, and so a registered name. */

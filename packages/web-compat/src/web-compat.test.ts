@@ -5,7 +5,7 @@
 import assert from 'node:assert/strict';
 import { afterEach, describe, it } from 'node:test';
 import { Component, DOCUMENT, ElementRef, Renderer2, inject, signal } from '@angular/core';
-import { Text, View } from '@ng-native/components';
+import { Text, TextInput, View } from '@ng-native/components';
 import { Engine } from '@ng-native/fabric';
 import { cleanup, fireEvent, render, screen, settle, userEvent } from '@ng-native/testing';
 import { provideWebCompat } from './index.ts';
@@ -1174,6 +1174,71 @@ describe('@ng-native/web-compat events a script dispatches', () => {
     assert.deepEqual(heard, ['inner', 'outer']);
   });
 
+  it('has `window.event` while a listener is told one, and one a script sets in its place', async () => {
+    const { card } = await mount();
+    const seen: unknown[] = [];
+    card.addEventListener('picked', () => void seen.push(globals.event));
+    const event = new Event('picked');
+    card.dispatchEvent(event);
+    assert.deepEqual(seen, [event]);
+    assert.equal(globals.event, undefined);
+    // Written by a script, it is kept, and no event is put there again.
+    globals.event = 'mine';
+    card.dispatchEvent(new Event('picked'));
+    assert.deepEqual(seen, [event, 'mine']);
+  });
+
+  it('makes an event with `document.createEvent`, to be given its type before it is sent', async () => {
+    // How a chart library fires its own events once a document has `createEvent`.
+    const { app, card } = await mount();
+    const document = app.instance.document;
+    const heard: Dom[] = [];
+    card.addEventListener('legendItemClick', (event: Dom) => {
+      heard.push(event);
+      event.preventDefault();
+    });
+    const unsent = document.createEvent('Events');
+    assert.throws(() => card.dispatchEvent(unsent), { name: 'InvalidStateError' });
+    const event = document.createEvent('Events');
+    event.initEvent('legendItemClick', true, true);
+    Object.assign(event, { legendItem: 'first' });
+    assert.equal(card.dispatchEvent(event), false);
+    assert.equal(heard.length, 1);
+    assert.equal(heard[0].legendItem, 'first');
+    assert.equal(heard[0].type, 'legendItemClick');
+    assert.equal(event.defaultPrevented, true);
+    const custom = document.createEvent('CustomEvent');
+    custom.initCustomEvent('picked', false, false, { at: 3 });
+    let detail: unknown;
+    card.addEventListener('picked', (each: Dom) => (detail = each.detail));
+    card.dispatchEvent(custom);
+    assert.deepEqual(detail, { at: 3 });
+    assert.throws(() => document.createEvent('NoSuchEvent'), { name: 'NotSupportedError' });
+    // Where the runtime has no `Event`, this package's is made, and it too has no type yet.
+    const runtime = globals.Event;
+    try {
+      globals.Event = undefined;
+      const made = document.createEvent('Events');
+      assert.throws(() => card.dispatchEvent(made), { name: 'InvalidStateError' });
+    } finally {
+      globals.Event = runtime;
+    }
+  });
+
+  it('clicks an element from `click()` once, though a listener of the click calls it again', async () => {
+    const { app } = await mount();
+    const button = app.instance.document.createElement('button');
+    let clicks = 0;
+    button.addEventListener('click', () => {
+      clicks++;
+      button.click();
+    });
+    button.click();
+    assert.equal(clicks, 1);
+    button.click();
+    assert.equal(clicks, 2, 'and again once that click is over');
+  });
+
   it('has an `Event` and a `CustomEvent` where the runtime has none', async () => {
     const target = globalThis as Dom;
     const [Native, NativeCustom] = [target.Event, target.CustomEvent];
@@ -1499,5 +1564,408 @@ describe('@ng-native/web-compat getComputedStyle', () => {
     // What is written on the element is over the rule, as it is in the cascade.
     list.style.paddingLeft = '12px';
     assert.equal(parseFloat(computed(list)['paddingLeft']!), 12);
+  });
+});
+
+@Component({
+  selector: 'x-links',
+  template: `
+    <button testID="button">Save</button><a testID="link" role="tab">More</a>
+    <button testID="off" [disabled]="off()" aria-expanded="true">Off</button>
+  `,
+})
+class Links {
+  readonly off = signal(true);
+}
+
+@Component({
+  selector: 'x-held',
+  template: `
+    <div testID="area" (contextmenu)="menus.push($event)" (click)="clicks.set(clicks() + 1)"></div>
+    <div testID="plain"></div>
+  `,
+})
+class Held {
+  readonly menus: MouseEvent[] = [];
+  readonly clicks = signal(0);
+}
+
+@Component({
+  selector: 'x-form',
+  template: `
+    <form testID="form" (submit)="sent($event)" (reset)="said('reset')">
+      <button testID="send">Send</button>
+      <button testID="plain" type="button">Plain</button>
+      <button testID="held" type="submit" (click)="$event.preventDefault()">Held</button>
+      <button testID="clear" type="reset">Clear</button>
+    </form>
+    <button testID="outside">Outside</button>
+  `,
+})
+class Form {
+  readonly heard: string[] = [];
+  said(what: string): void {
+    this.heard.push(what);
+  }
+  sent(event: { preventDefault(): void; target: { localName?: string } }): void {
+    // A library stops the page from loading again, which is what a browser does with a form.
+    event.preventDefault();
+    this.heard.push(`submit ${event.target.localName}`);
+  }
+}
+
+@Component({
+  selector: 'x-checks',
+  template: `
+    <label testID="label" for="agree">Agree</label>
+    <input
+      testID="check"
+      id="agree"
+      type="checkbox"
+      (click)="said('click')"
+      (change)="said('change')"
+    />
+    <input testID="radio" type="radio" (click)="said('click')" (change)="said('change')" />
+    <label testID="off-label" for="off">Off</label>
+    <input testID="off" id="off" type="checkbox" disabled (change)="said('change')" />
+    <input testID="bound" [attr.type]="kind" (change)="said('bound')" />
+    <label testID="switch-label" for="switch">Switch</label>
+    <button testID="switch" id="switch" role="switch" (click)="said('switch')">On</button>
+  `,
+})
+class Checks {
+  readonly kind = 'checkbox';
+  readonly heard: string[] = [];
+  said(what: string): void {
+    this.heard.push(what);
+  }
+}
+
+@Component({
+  selector: 'x-label-for',
+  imports: [TextInput],
+  template: `
+    <label testID="label" for="name">Full name</label>
+    <text-input testID="name" id="name" />
+    <label for="named">Other</label>
+    <text-input testID="named" id="named" aria-label="Already named" />
+    <text-input testID="third" id="third" />
+  `,
+})
+class LabelFor {}
+
+describe('@ng-native/web-compat buttons and links', () => {
+  it('announces a disabled button as disabled, beside its other states, until it is enabled', async () => {
+    const app = await render(Links, { providers: [provideWebCompat()] });
+    const state = () => screen.getByTestId('off').props['accessibilityState'];
+    assert.deepEqual(state(), { disabled: true, expanded: true });
+    // Announced, and no attribute a library wrote.
+    const off = globals.document.querySelectorAll('button')[1];
+    assert.equal(off.hasAttribute('aria-disabled'), false);
+    app.instance.off.set(false);
+    await settle();
+    assert.deepEqual(state(), { expanded: true });
+    assert.equal(screen.getByTestId('button').props['accessibilityState'], undefined);
+  });
+
+  it('marks a button a pointer is over, for a hover style', async () => {
+    await render(Links, { providers: [provideWebCompat()] });
+    // On the node, where a stylesheet matches it: a `data-` attribute is not a native prop.
+    const node = globals.document.querySelector('button');
+    await fireEvent(screen.getByTestId('button'), 'topPointerEnter');
+    assert.equal(node.getAttribute('data-hover'), 'true');
+    await fireEvent(screen.getByTestId('button'), 'topPointerLeave');
+    assert.equal(node.hasAttribute('data-hover'), false);
+  });
+
+  it('takes a press on a button or a link with no listener, which is :active while held', async () => {
+    await render(Links, { providers: [provideWebCompat()] });
+    const [button] = globals.document.querySelectorAll('button');
+    const link = globals.document.querySelector('a');
+    // And still once a listener it was given is taken off again.
+    const listener = () => {};
+    button.addEventListener('click', listener);
+    button.removeEventListener('click', listener);
+    for (const [id, node] of [
+      ['button', button],
+      ['link', link],
+    ] as const) {
+      await fireEvent(screen.getByTestId(id), 'touchStart', finger(5, 5));
+      assert.equal(node.matches(':active'), true, id);
+      await fireEvent(screen.getByTestId(id), 'touchEnd', finger(5, 5, false));
+      assert.equal(node.matches(':active'), false, id);
+    }
+  });
+});
+
+describe('@ng-native/web-compat context menus', () => {
+  it('delivers a finger held still as a context menu at the finger, and no click after', async () => {
+    const app = await render(Held, { providers: [provideWebCompat()] });
+    const area = screen.getByTestId('area');
+    await fireEvent(area, 'touchStart', finger(40, 60));
+    await new Promise((resolve) => setTimeout(resolve, 550));
+    await fireEvent(area, 'touchEnd', finger(40, 60, false));
+    assert.equal(app.instance.menus.length, 1);
+    const { type, clientX, clientY, button } = app.instance.menus[0]!;
+    assert.deepEqual(
+      { type, clientX, clientY, button },
+      { type: 'contextmenu', clientX: 40, clientY: 60, button: 0 },
+    );
+    assert.equal(app.instance.clicks(), 0, 'the hold was the menu, not a press');
+    // None for a press, nor for a finger that moves away.
+    await userEvent.press(area);
+    assert.equal(app.instance.clicks(), 1);
+    await fireEvent(area, 'touchStart', finger(40, 60));
+    await fireEvent(area, 'touchMove', finger(80, 60));
+    await new Promise((resolve) => setTimeout(resolve, 550));
+    await fireEvent(area, 'touchEnd', finger(80, 60, false));
+    assert.equal(app.instance.menus.length, 1);
+  });
+
+  it('tells the document of no click for a hold either, which would close the menu it opened', async () => {
+    await render(Held, { providers: [provideWebCompat()] });
+    let clicks = 0;
+    globals.document.addEventListener('click', () => clicks++);
+    await settle();
+    const area = screen.getByTestId('area');
+    await fireEvent(area, 'touchStart', finger(40, 60));
+    await new Promise((resolve) => setTimeout(resolve, 550));
+    await fireEvent(area, 'touchEnd', finger(40, 60, false));
+    assert.equal(clicks, 0);
+    // On an element with no listener of its own, which is what a press outside a menu lands on.
+    await userEvent.press(screen.getByTestId('plain'));
+    assert.equal(clicks, 1, 'and of the next press as before');
+  });
+});
+
+describe('@ng-native/web-compat mouse events of a touch', () => {
+  it('hears a touch on the document where it landed, and its mouse event after', async () => {
+    const { card } = await mount();
+    card.setAttribute('testID', 'pressed');
+    await settle();
+    const heard: unknown[] = [];
+    const listen = (type: string) =>
+      globals.document.addEventListener(type, (event: Dom) => {
+        const { target, clientX, changedTouches } = event;
+        // A touch is read by its place in the list, either way a library writes that.
+        assert.equal(changedTouches?.item(0), changedTouches?.[0]);
+        heard.push([type, target instanceof HTMLElement, clientX, changedTouches?.[0]?.clientY]);
+        // Added while the touch is heard, as Material makes a ripple's own listener: it is in
+        // time for the mouse event of the same press, which a browser sends afterwards.
+        if (type === 'touchstart') listen('mousedown');
+      });
+    listen('touchstart');
+    await settle();
+    await touch('pressed', 'Start');
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    assert.deepEqual(heard, [
+      ['touchstart', true, 30, 20],
+      ['mousedown', true, 30, 20],
+    ]);
+  });
+
+  it('tells the document of the mouse a press is, to a listener added as the element heard it', async () => {
+    // A ripple listens on its own element for the touch, and from there for the mouse on the
+    // document: it is in time for the mouse of that same press.
+    const { card } = await mount();
+    const heard: string[] = [];
+    card.addEventListener('touchstart', () =>
+      globals.document.addEventListener('mousedown', () => void heard.push('mousedown')),
+    );
+    await settle();
+    await touch('card', 'Start');
+    await touch('card', 'End');
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    assert.deepEqual(heard, ['mousedown']);
+  });
+
+  it('tells an element of a touch on it as the mouse going down and up, with where it is', async () => {
+    // A handle that is dragged starts on its own `mousedown`, and asks whether that is a
+    // `MouseEvent` to know where to read the place from: it is one, as a browser's is after a
+    // touch, and says the place both ways, so either reading finds the finger.
+    const { card } = await mount();
+    const heard: unknown[] = [];
+    const hear = (event: Dom) =>
+      heard.push([
+        event.type,
+        event instanceof MouseEvent,
+        event.clientX,
+        event.touches?.[0]?.clientX,
+        // The primary button, held while the finger is down, and one press.
+        `${event.button} ${event.buttons} ${event.detail}`,
+      ]);
+    card.addEventListener('mousedown', hear);
+    card.addEventListener('mouseup', hear);
+    await settle();
+    await touch('card', 'Start');
+    await touch('card', 'End');
+    assert.deepEqual(heard[0], ['mousedown', true, 30, 30, '0 1 1']);
+    assert.deepEqual((heard[1] as unknown[])[0], 'mouseup');
+    assert.deepEqual((heard[1] as unknown[])[4], '0 0 1');
+  });
+
+  it('gives a press to a template listener as a PointerEvent, a click among them', async () => {
+    const app = await render(Drag, { providers: [provideWebCompat()] });
+    const track = screen.getByTestId('track');
+    await fireEvent(track, 'touchStart', finger(10, 5));
+    await fireEvent(track, 'touchEnd', finger(10, 5, false));
+    const clicked = app.instance.clicked as unknown;
+    assert.equal(clicked instanceof PointerEvent, true);
+    assert.equal(clicked instanceof MouseEvent, true);
+  });
+});
+
+describe('@ng-native/web-compat forms', () => {
+  it('submits a form from a press on its button, and resets it from its reset button', async () => {
+    const app = await render(Form, { providers: [provideWebCompat()] });
+    await settle();
+    const { heard } = app.fixture.componentInstance;
+    // A button with no type is a submit button; one that says `button` is not.
+    for (const id of ['send', 'plain', 'clear', 'outside']) {
+      await userEvent.press(screen.getByTestId(id));
+      await settle();
+    }
+    assert.deepEqual(heard, ['submit form', 'reset']);
+    // And a click a listener stopped submits nothing.
+    await userEvent.press(screen.getByTestId('held'));
+    await settle();
+    assert.deepEqual(heard, ['submit form', 'reset']);
+  });
+});
+
+describe('@ng-native/web-compat checkboxes and radios', () => {
+  const checks = async () => {
+    const app = await render(Checks, { providers: [provideWebCompat()] });
+    await settle();
+    return app.fixture.componentInstance.heard;
+  };
+
+  it('say click and then change when pressed', async () => {
+    const heard = await checks();
+    await userEvent.press(screen.getByTestId('check'));
+    await settle();
+    assert.deepEqual(heard, ['click', 'change']);
+    await userEvent.press(screen.getByTestId('radio'));
+    await settle();
+    assert.deepEqual(heard, ['click', 'change', 'click', 'change']);
+  });
+
+  it('are checked by the time they say so, as a listener reads off what changed', async () => {
+    // A library that keeps no state of its own reads `event.target.checked` in its `change`
+    // listener, after asking whether the target is an input at all.
+    await checks();
+    const document = globals.document;
+    const read: unknown[] = [];
+    for (const input of [
+      document.querySelector('#agree'),
+      document.querySelector('[type=radio]'),
+    ]) {
+      input.addEventListener('change', (event: Dom) =>
+        read.push([event.target instanceof globals.HTMLInputElement, event.target.checked]),
+      );
+    }
+    await settle();
+    for (const id of ['check', 'check', 'radio', 'radio']) {
+      await userEvent.press(screen.getByTestId(id));
+      await settle();
+    }
+    // A checkbox is checked and then not; a radio is checked and stays so.
+    assert.deepEqual(read, [
+      [true, true],
+      [true, false],
+      [true, true],
+      [true, true],
+    ]);
+  });
+
+  it('takes a press for as long as it is a checkbox, a radio or a button, and no longer', async () => {
+    // One a library makes and listens to nothing on: the press is its type's alone.
+    await checks();
+    const input = globals.document.createElement('input');
+    input.setAttribute('testID', 'made');
+    globals.document.body.appendChild(input);
+    await settle();
+    const held = async () => {
+      await fireEvent(screen.getByTestId('made'), 'touchStart', finger(5, 5));
+      const active = input.matches(':active');
+      await fireEvent(screen.getByTestId('made'), 'touchEnd', finger(5, 5, false));
+      return active;
+    };
+    assert.equal(await held(), false);
+    input.setAttribute('type', 'checkbox');
+    assert.equal(await held(), true);
+    input.setAttribute('type', 'text');
+    assert.equal(await held(), false);
+    input.setAttribute('type', 'radio');
+    assert.equal(await held(), true);
+    input.removeAttribute('type');
+    assert.equal(await held(), false);
+  });
+
+  it('say change where the type is bound, and so set after the listener is added', async () => {
+    // A library binds the type of the input it keeps under each choice it draws.
+    const heard = await checks();
+    await userEvent.press(screen.getByTestId('bound'));
+    await settle();
+    assert.deepEqual(heard, ['bound']);
+  });
+
+  it('say the same when their label is pressed, and nothing when disabled', async () => {
+    const heard = await checks();
+    await userEvent.press(screen.getByTestId('label'));
+    await userEvent.press(screen.getByTestId('off'));
+    await userEvent.press(screen.getByTestId('off-label'));
+    await settle();
+    assert.deepEqual(heard, ['click', 'change']);
+  });
+
+  it('are not the only controls a label clicks: a button is clicked by its label too', async () => {
+    const heard = await checks();
+    await userEvent.press(screen.getByTestId('switch-label'));
+    await settle();
+    assert.deepEqual(heard, ['switch']);
+  });
+});
+
+describe('@ng-native/web-compat labels', () => {
+  it('names the control a label is for, unless it has a name of its own', async () => {
+    await render(LabelFor, { providers: [provideWebCompat()] });
+    await settle();
+    assert.equal(screen.getByTestId('name').props['accessibilityLabel'], 'Full name');
+    assert.equal(screen.getByTestId('named').props['accessibilityLabel'], 'Already named');
+    // Given another before the first was named, it names only the one it is for now.
+    const label = globals.document.querySelector('label');
+    label.setAttribute('for', 'third');
+    label.setAttribute('for', 'name');
+    await settle();
+    assert.equal(screen.getByTestId('third').props['accessibilityLabel'] ?? null, null);
+    assert.equal(screen.getByTestId('name').props['accessibilityLabel'], 'Full name');
+  });
+
+  it('focuses the control when its label is pressed, until the label is for another', async () => {
+    const app = await render(LabelFor, { providers: [provideWebCompat()] });
+    await settle();
+    await userEvent.press(screen.getByTestId('label'));
+    const focused = () =>
+      app.fabric.commands
+        .filter((command) => command.name === 'focus')
+        .map((command) => command.node?.props['testID']);
+    assert.deepEqual(focused(), ['name']);
+    const label = globals.document.querySelector('label');
+    label.setAttribute('for', 'named');
+    await userEvent.press(screen.getByTestId('label'));
+    assert.deepEqual(focused(), ['name', 'named']);
+    // The control it was for is named by it no longer, and the one it names has its own name.
+    await settle();
+    assert.equal(screen.getByTestId('name').props['accessibilityLabel'] ?? null, null);
+    assert.equal(screen.getByTestId('named').props['accessibilityLabel'], 'Already named');
+    label.setAttribute('for', 'name');
+    await settle();
+    assert.equal(screen.getByTestId('name').props['accessibilityLabel'], 'Full name');
+    label.removeAttribute('for');
+    await userEvent.press(screen.getByTestId('label'));
+    assert.deepEqual(focused(), ['name', 'named'], 'and none once it names none');
+    await settle();
+    assert.equal(screen.getByTestId('name').props['accessibilityLabel'] ?? null, null);
   });
 });

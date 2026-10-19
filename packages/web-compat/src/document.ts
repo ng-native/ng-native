@@ -10,7 +10,8 @@ import { createDocumentType } from './document-type.ts';
 import { required } from './dom-error.ts';
 import { implementationFor } from './dom-implementation.ts';
 import { byClassName, byName, byTagName, byTagNameNS } from './elements-by.ts';
-import { dispatch, listen, passiveFor, unlisten } from './events.ts';
+import { createEvent, dispatch, listen, passiveFor, unlisten } from './events.ts';
+import { asMouse } from './mouse-after-touch.ts';
 import { madeByScript } from './html-tree.ts';
 import { elementsUnder } from './element-tree.ts';
 import { descendants } from './in-document.ts';
@@ -142,6 +143,7 @@ function createBody(engine: Engine): EngineNode {
 const DOCUMENT_EVENTS: Readonly<Record<string, string>> = {
   pointerdown: 'topTouchStart',
   touchstart: 'topTouchStart',
+  mousedown: 'topTouchStart',
   // A finger moving, which a drag is followed by: it goes on over whatever it crosses.
   pointermove: 'topTouchMove',
   touchmove: 'topTouchMove',
@@ -149,6 +151,7 @@ const DOCUMENT_EVENTS: Readonly<Record<string, string>> = {
   touchcancel: 'topTouchCancel',
   pointerup: 'topTouchEnd',
   touchend: 'topTouchEnd',
+  mouseup: 'topTouchEnd',
   click: 'topTouchEnd',
   // The focus moving anywhere in the page, which a focus monitor and a focus trap listen for.
   focusin: 'topFocus',
@@ -156,6 +159,12 @@ const DOCUMENT_EVENTS: Readonly<Record<string, string>> = {
 };
 
 type Listener = (event: unknown) => unknown;
+
+/**
+ * The apps whose touch in progress was held for a context menu. Lifting that finger is no click,
+ * here or on the element: a library closes the menu it just opened on a click outside it.
+ */
+export const heldForMenu = new WeakSet<Engine>();
 
 /**
  * Which pointer an event is of, as the element it is on was told: a library that follows a drag
@@ -192,11 +201,12 @@ export function listenAnywhere(
   if (!native) return undefined;
   watchTouches(engine);
   // Not for the event it is added during: a listener a press adds on the document, as opening an
-  // overlay does, is added after a browser has passed the document for that press.
-  const during = delivering();
-  return engine.setEventListener(engine.root, native, (event) => {
+  // overlay does, is added after a browser has passed the document for that press. But a
+  // `mousedown` is sent after its touch, and is owed the touch it is added during.
+  const during = type === 'mousedown' ? undefined : delivering();
+  const tell = (event: unknown) => {
     if (event === during) return;
-    if (type === 'click' && wasDrag(engine, event)) return;
+    if (type === 'click' && (heldForMenu.has(engine) || wasDrag(engine, event))) return;
     const target = (event as { target: EngineNode | null }).target;
     const path: EngineNode[] = [];
     for (let node = target; node; node = node.parent) path.push(node);
@@ -213,7 +223,25 @@ export function listenAnywhere(
       preventDefault() {},
       stopPropagation() {},
     });
-  });
+  };
+  // The mouse a touch is, told as a browser tells it: see `mouse-after-touch.ts`.
+  if (type === 'mouseup') {
+    return engine.setEventListener(engine.root, native, (event) =>
+      asMouse(engine, type, event, () => tell(event)),
+    );
+  }
+  if (type !== 'mousedown') return engine.setEventListener(engine.root, native, tell);
+  // A browser sends a touch its mouse events once the touch events have been heard, so a
+  // listener one of those adds for `mousedown` hears this press: Material's ripple is made so.
+  let told: unknown;
+  const later = (event: unknown) =>
+    setTimeout(() => {
+      // Once for a touch, whether it was handed over below or heard at the root as well.
+      if (event !== told) asMouse(engine, type, (told = event), () => tell(event));
+    });
+  const down = touching.get(engine);
+  if (down) later(down);
+  return engine.setEventListener(engine.root, native, later);
 }
 
 /**
@@ -250,6 +278,8 @@ function listenToScrolls(engine: Engine, listener: Listener): () => void {
 }
 
 const watched = new WeakSet<Engine>();
+/** The touch that began in this turn, by engine: what a `mousedown` listener added in it is due. */
+const touching = new WeakMap<Engine, unknown>();
 /** Where the touch now down began, by engine: a touch that ends far from there was a drag. */
 const began = new WeakMap<Engine, { x: number; y: number; dragged: boolean }>();
 /** How far a finger wanders in a press. Further is a drag, which a browser ends in no click. */
@@ -261,6 +291,9 @@ function watchTouches(engine: Engine): void {
   watched.add(engine);
   engine.setEventListener(engine.root, 'topTouchStart', (event) => {
     began.set(engine, { ...placeOf(event), dragged: false });
+    // Until the turn it began in is over.
+    touching.set(engine, event);
+    setTimeout(() => touching.delete(engine));
   });
   // As far as the finger went, not where it ends: out and back is a drag, as an element's says.
   engine.setEventListener(engine.root, 'topTouchMove', (event) => {
@@ -471,6 +504,8 @@ export function documentFor(engine: Engine): CompatDocument {
       adopt(engine, sheets);
     },
     dispatchEvent: (event: unknown) => dispatch(event, [created, globalThis]),
+    // An event to be given its type before it is sent: see `events.ts`.
+    createEvent,
     hasFocus: () => true,
   };
   Object.assign(created, anywhere(engine, created));

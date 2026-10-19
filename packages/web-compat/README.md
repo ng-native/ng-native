@@ -48,11 +48,23 @@ Experimental and partial. It has:
 - A `document` that creates engine nodes and fragments, with a `body` that draws over the screen
   for overlays, a doctype, `createElementNS`, `createTreeWalker` and `createNodeIterator`, and a
   `document.implementation` that makes HTML and XML documents that are never drawn.
+- Events: `MouseEvent`, `PointerEvent`, `KeyboardEvent`, `FocusEvent`, `TouchEvent` and the
+  other kinds, `document.createEvent` with each kind's `init*Event`, `window.event`, and handler
+  properties, `onclick` to `onload`. A press is a `PointerEvent`, and a touch is the mouse going
+  down and up as a phone's browser has it. A held finger is a `contextmenu`.
+- What a click does: a checkbox or a radio is checked and says `input` and `change`, a button
+  submits or resets its form, and a label clicks or focuses its control, for a press, a click a
+  script sends and `element.click()`.
+- `focus()` and `blur()` as a browser has them: at once, on a button, a link or what has a
+  `tabindex` as on a text field, with `document.activeElement`, `:focus` and `focusin` and
+  `focusout` on the document.
 - The basic `window` globals: its listeners, `Event`, `CustomEvent`, `HTMLElement`, `Node`,
   `Text`, `Comment`, `DocumentFragment`, `NodeList`, `HTMLCollection`, `DOMParser`,
   `XMLSerializer`, `Document`, `Attr`, `CSS`, `MediaList`, the window's size, and an element
   with an id as a global by it.
-- A `<button>` and an `<a>` with their roles, and a table's and a form's elements as views.
+- A `<button>` and an `<a>` with their roles, each taking a press with no listener (`:active`
+  while held) and marked `data-hover` while a pointer is over it, a disabled one announced as
+  disabled, and a table's and a form's elements as views.
 - A `click` listener that hears a press.
 
 Forms and the rest of the DOM are not part of it yet.

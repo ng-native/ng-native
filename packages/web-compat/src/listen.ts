@@ -1,10 +1,15 @@
 import type { Engine, EngineNode } from '@ng-native/fabric';
 import type { RendererExtension } from '@ng-native/platform';
-import { documentOf, listenAnywhere, type CompatDocument } from './document.ts';
+import { activate, ancestry, clickElement, disabled } from './activation.ts';
+import { documentOf, heldForMenu, listenAnywhere, type CompatDocument } from './document.ts';
+import { isTextField } from './element-focus.ts';
 import { giveRole, scrollWhereStyled } from './elements.ts';
+import { nativeEvent } from './event-classes.ts';
 import { listen, type Heard } from './events.ts';
 import { buildAs, setMarkup } from './html.ts';
 import { inlineStyle } from './inline-style.ts';
+import { labelPress, setLabel } from './label.ts';
+import { MOUSE_OF_TOUCH, TOUCH_EVENTS, asMouse, heardTouch } from './mouse-after-touch.ts';
 import { styleMade } from './runtime-style.ts';
 import { together } from './mutation-observer.ts';
 
@@ -57,7 +62,25 @@ const SETTERS: Readonly<
     engine.setProp(node, 'nativeID', value);
     return true;
   },
+  // HTML's `disabled` is announced, as `aria-disabled` is, beside the element's other states.
+  // Kept as written too: `:disabled` is the attribute, and a press reads it.
+  //
+  // ponytail: an `aria-disabled` the library wrote itself is replaced, with the same answer
+  // wherever the two agree. Keep the library's apart if one is found that differs.
+  disabled(node, value, engine) {
+    const off = on(value);
+    if (off || announced.has(node)) engine.setProp(node, 'aria-disabled', off ? true : null);
+    if (off) announced.add(node);
+    else announced.delete(node);
+    return false;
+  },
 };
+
+/** The elements whose `disabled` this set an `aria-disabled` for, to take it away again. */
+const announced = new WeakSet<EngineNode>();
+
+/** Whether an element's `aria-disabled` is the one its `disabled` announces, and no attribute. */
+export const announcesDisabled = (node: EngineNode): boolean => announced.has(node);
 
 /**
  * How a listener a web library adds is attached, in an app that asked for this package.
@@ -70,16 +93,21 @@ const SETTERS: Readonly<
  * A pressable's own hit testing is the upgrade.
  */
 export const webListen: RendererExtension = {
-  // A button and a link have their roles: see `elements.ts`.
+  // A button and a link have their roles, and take a press with no listener: see `elements.ts`.
   created(node, engine) {
-    giveRole(node, engine);
+    if (giveRole(node, engine)) takesPress(engine, node);
     // What overflows it scrolls, where its style says so: see `elements.ts`.
     scrollWhereStyled(node, engine);
     // A stylesheet is read, and has no box of its own: see `runtime-style.ts`.
     if (node.tag === 'style' && documentOf(engine)) styleMade(node, engine);
   },
   set(node, name, value, engine) {
-    const own = documentOf(engine) ? SETTERS[name] : undefined;
+    if (!documentOf(engine)) return false;
+    // A checkbox, a radio or a button an input is takes a press, and a label's `for` its
+    // control's: both are kept as written as well.
+    checkControl(node, name, value, engine);
+    setLabel(node, name, value, engine);
+    const own = SETTERS[name];
     return own ? own(node, value, engine) : false;
   },
   // A style a library binds is set as what a native view reads: see `inline-style.ts`.
@@ -145,13 +173,35 @@ function listenOn(
 ): (() => void) | undefined {
   if (POINTER_EVENTS.has(eventName)) return onTouch(engine, target, eventName, callback);
   const native = NATIVE_NAMES[eventName];
-  if (native) {
-    return engine.setEventListener(target, native, (event) =>
-      deliverAs(event, () => callback(dom(eventName, target, event))),
-    );
-  }
+  if (native) return listenToNative(engine, target, eventName, native, callback);
   if (eventName !== 'click' || PRESSABLES.has(target.tag)) return undefined;
   return onTouch(engine, target, 'click', callback);
+}
+
+/** Listen for what native says by the name it has, a touch or the mouse a touch is among them. */
+function listenToNative(
+  engine: Engine,
+  target: EngineNode,
+  eventName: string,
+  native: string,
+  callback: Heard,
+): () => void {
+  const tell = (event: unknown) => deliverAs(event, () => callback(dom(eventName, target, event)));
+  if (MOUSE_OF_TOUCH.has(eventName)) {
+    // The mouse a touch is, told as a browser tells it: see `mouse-after-touch.ts`.
+    return engine.setEventListener(target, native, (event) => {
+      const told = dom(eventName, target, event);
+      asMouse(engine, eventName, event, () => void deliverAs(event, () => callback(told)));
+    });
+  }
+  const stop = engine.setEventListener(target, native, tell);
+  if (!TOUCH_EVENTS.has(eventName)) return stop;
+  // A touch listener is counted, so a mouse listener knows the page hears touches itself.
+  const counted = heardTouch(engine, target);
+  return () => {
+    counted();
+    stop();
+  };
 }
 
 /** A boolean HTML attribute or property: present, and not `false`. */
@@ -184,9 +234,6 @@ function hide(node: EngineNode, gone: boolean, engine: Engine): void {
   engine.setProp(node, 'style', style);
 }
 
-/** Whether an element is disabled, which takes no press: a browser sends it no click. */
-const disabled = (node: EngineNode): boolean => on(node.props['disabled']);
-
 /**
  * Events a browser has another name for than native does. A finger on an element is what a
  * library listens for where it knows it is on a phone, as Material's tooltip does.
@@ -200,6 +247,13 @@ const NATIVE_NAMES: Readonly<Record<string, string>> = {
   touchmove: 'topTouchMove',
   touchend: 'topTouchEnd',
   touchcancel: 'topTouchCancel',
+  // A touch is the mouse going down and up too, on the element it is on: a handle that is
+  // dragged starts on its own `mousedown`.
+  mousedown: 'topTouchStart',
+  mouseup: 'topTouchEnd',
+  // A form's own, said from a press on one of its buttons: see `activation.ts`.
+  submit: 'topSubmit',
+  reset: 'topReset',
   focusin: 'topFocus',
   focusout: 'topBlur',
   focus: 'topFocus',
@@ -207,9 +261,13 @@ const NATIVE_NAMES: Readonly<Record<string, string>> = {
 };
 
 /** The events a touch is delivered as, beside the `click` its release is. */
-const POINTER_EVENTS = new Set(['pointerdown', 'pointermove', 'pointerup', 'pointercancel']);
+const POINTER_EVENTS = new Set([
+  ...['pointerdown', 'pointermove', 'pointerup', 'pointercancel'],
+  'contextmenu',
+]);
 
-/** How far a finger may drift in a press: the platforms' own. Further is a drag. */
+/** How long a finger is held for a context menu, and how far it may drift: the platforms' own. */
+const HOLD = 500;
 const SLOP = 10;
 
 type Listener = (event: unknown) => boolean | void;
@@ -247,6 +305,9 @@ function touchedOf(engine: Engine, node: EngineNode): Touched {
   let down = { x: 0, y: 0 };
   /** Whether the finger went further than a press does: a drag, which ends in no click. */
   let dragged = false;
+  /** The wait for a finger held still, and whether it ran out: the hold was a context menu. */
+  let holding: ReturnType<typeof setTimeout> | undefined;
+  let menu = false;
   const tell = (type: string, event: unknown) => {
     const told = listeners.get(type);
     if (!told?.size && type !== 'click') return;
@@ -254,7 +315,21 @@ function touchedOf(engine: Engine, node: EngineNode): Touched {
     const sent = pointer(type, type === 'click' ? node : landed, node, event) as Bubbling;
     deliverAs(event, () => deliver(node, type, told, sent));
   };
+  /** A finger held where it landed is what asks for a context menu with no second button. */
+  const hold = (event: unknown) => {
+    holding = setTimeout(() => {
+      menu = true;
+      // Until the next touch, wherever it lands: lifting this finger is no click anywhere.
+      heldForMenu.add(engine);
+      const stop = engine.setEventListener(engine.root, 'topTouchStart', () => {
+        heldForMenu.delete(engine);
+        stop();
+      });
+      tell('contextmenu', event);
+    }, HOLD);
+  };
   const over = (type: string, event: unknown) => {
+    clearTimeout(holding);
     tell(type, event);
     capturing.delete(node);
     capturing.delete(landed);
@@ -269,20 +344,26 @@ function touchedOf(engine: Engine, node: EngineNode): Touched {
       capturing.add(node);
       capturing.add(landed);
       dragged = false;
+      menu = false;
       down = pointOf(event);
       tell('pointerdown', event);
+      if (listeners.get('contextmenu')?.size) hold(event);
     },
     onResponderMove: (event) => {
       const at = pointOf(event);
-      if (Math.hypot(at.x - down.x, at.y - down.y) > SLOP) dragged = true;
+      if (Math.hypot(at.x - down.x, at.y - down.y) > SLOP) {
+        clearTimeout(holding);
+        dragged = true;
+      }
       tell('pointermove', event);
     },
     onResponderRelease: (event) => {
       over('pointerup', event);
-      // A drag is not a press: a list moved under a finger is not the option it was lifted from.
+      // A hold that opened a menu is not a press as well, nor is a drag: a list moved under a
+      // finger is not the option it was lifted from.
       const at = pointOf(event);
       dragged ||= Math.hypot(at.x - down.x, at.y - down.y) > SLOP;
-      if (!disabled(node) && !dragged) tell('click', event);
+      if (!disabled(node) && !menu && !dragged) tell('click', event);
     },
     onResponderTerminate: (event) => over('pointercancel', event),
   });
@@ -298,11 +379,14 @@ interface Bubbling {
 
 /** Tell a node's listeners of what a touch was, and those above it of a click or a pointer down. */
 function deliver(node: EngineNode, type: string, told: Set<Listener> | undefined, sent: Bubbling) {
+  // What the click does, as a click a script sends does it: see `activation.ts`.
+  const activated = type === 'click' ? activate(ancestry(node), true) : undefined;
   // A copy: a listener may remove itself, or another, as it runs.
   for (const each of [...(told ?? [])]) each(sent);
   // A click bubbles, and so does a pointer coming down, which is where a drag starts: an area
   // told of it follows the finger from the document, though it came down on a thumb inside it.
   if (type === 'click' || type === 'pointerdown') bubble(node, sent, type);
+  activated?.(!sent.defaultPrevented);
 }
 
 /**
@@ -319,6 +403,47 @@ function bubble(from: EngineNode, event: Bubbling, type: string): void {
   }
 }
 
+/** The inputs a press does something on: see `activation.ts`. */
+const PRESSED_INPUTS = new Set(['checkbox', 'radio', 'submit', 'image', 'reset']);
+
+/**
+ * A checkbox, a radio or a button an input is, which a library keeps out of sight under one it
+ * draws: it takes the touch, and what a press on it does is in `activation.ts`. Of any other
+ * type, or of none, it lets the touch go again.
+ */
+function checkControl(node: EngineNode, name: string, value: unknown, engine: Engine): void {
+  if (name !== 'type' || node.tag !== 'input') return;
+  if (PRESSED_INPUTS.has(String(value))) takesPress(engine, node);
+  else letGoOfPress(node);
+}
+
+// A label's control clicked as `click()` clicks it. One typed into is focused instead.
+labelPress.click = (control) => {
+  if (isTextField(control)) return false;
+  if (!disabled(control)) clickElement(control);
+  return true;
+};
+
+/**
+ * Have a node take the touch whether or not anything listens for its click, as a button or a
+ * link does in a browser: it is `:active` while held, which is where its pressed style comes from.
+ */
+export function takesPress(engine: Engine, node: EngineNode): void {
+  held.add(touchedOf(engine, node));
+}
+
+/** The entries `takesPress` made, which keep their responder with no listener left. */
+const held = new WeakSet<object>();
+
+/** Have a node no longer take the touch for its own sake: only for as long as a listener asks. */
+function letGoOfPress(node: EngineNode): void {
+  const entry = touched.get(node);
+  if (!entry || !held.delete(entry)) return;
+  if ([...entry.listeners.values()].some((each) => each.size)) return;
+  touched.delete(node);
+  entry.stop();
+}
+
 /** Add a click or pointer listener to a node, which takes the touch for as long as it has one. */
 function onTouch(engine: Engine, node: EngineNode, type: string, listener: Listener): () => void {
   const entry = touchedOf(engine, node);
@@ -329,7 +454,7 @@ function onTouch(engine: Engine, node: EngineNode, type: string, listener: Liste
   return () => {
     told.delete(listener);
     const left = [...listeners.values()].some((each) => each.size);
-    if (left || touched.get(node) !== entry) return;
+    if (left || held.has(entry) || touched.get(node) !== entry) return;
     touched.delete(node);
     stop();
   };
@@ -348,6 +473,12 @@ const asTouch = (touch: Touch): object => ({
   clientY: touch.pageY ?? 0,
 });
 
+/** A list of touches, which a library reads one of by its place: `touches.item(0)`. */
+const touchList = (touches: readonly Touch[] | undefined): object[] => {
+  const list = (touches ?? []).map(asTouch);
+  return Object.assign(list, { item: (index: number) => list[index] ?? null });
+};
+
 /**
  * Where a touch is, as a DOM event says it: the finger that changed at the page and the client,
  * and the fingers down as `touches`.
@@ -363,24 +494,37 @@ export function touchFields(native: unknown): Record<string, unknown> {
     clientY: y,
     pageX: x,
     pageY: y,
-    touches: (said.touches ?? []).map(asTouch),
-    changedTouches: (said.changedTouches ?? []).map(asTouch),
+    touches: touchList(said.touches),
+    changedTouches: touchList(said.changedTouches),
   };
 }
 
-/** A pointer event as a listener reads one: where the finger is, and which pointer it is. */
+/**
+ * A pointer event as a listener reads one: where the finger is, and which pointer it is. Of the
+ * kind a browser sends it as, a `PointerEvent`: see `event-classes.ts`.
+ */
 function pointer(type: string, target: EngineNode, current: EngineNode, event: unknown): object {
   const touch = (event as { nativeEvent?: { identifier?: number } }).nativeEvent;
-  return {
-    ...dom(type, target, event),
+  return nativeEvent(type, {
+    ...domFields(type, target, event),
     currentTarget: current,
     pointerId: touch?.identifier ?? 0,
     pointerType: 'touch',
     isPrimary: true,
     // How many presses a click is, which is none for a pointer event.
     detail: type === 'click' ? 1 : 0,
+    ...noKeysHeld(type),
+  });
+}
+
+/**
+ * The button of a mouse event a touch is, and no key held with a finger: a listener that leaves a
+ * modified click to the browser reads these, as a router's link does.
+ */
+function noKeysHeld(type: string): object {
+  return {
     button: 0,
-    buttons: type === 'pointerdown' || type === 'pointermove' ? 1 : 0,
+    buttons: type === 'pointerdown' || type === 'pointermove' || type === 'mousedown' ? 1 : 0,
     ctrlKey: false,
     shiftKey: false,
     altKey: false,
@@ -388,11 +532,18 @@ function pointer(type: string, target: EngineNode, current: EngineNode, event: u
   };
 }
 
+/** A DOM event as a listener reads one, of the kind a browser sends it as. */
+function dom(type: string, target: EngineNode, event: unknown): object {
+  const fields = domFields(type, target, event);
+  const mouse = MOUSE_OF_TOUCH.has(type);
+  return nativeEvent(type, mouse ? { ...fields, ...noKeysHeld(type), detail: 1 } : fields);
+}
+
 /** What native said of events a listener has cancelled. */
 const cancelled = new WeakSet<object>();
 
-/** A DOM event as a listener reads one: its type, its target, and the native event behind it. */
-function dom(type: string, target: EngineNode, event: unknown): Record<string, unknown> {
+/** What a DOM event says of itself: its type, its target, and the native event behind it. */
+function domFields(type: string, target: EngineNode, event: unknown): Record<string, unknown> {
   // What native said, which every element the event goes up through is told of.
   const native = (event as { nativeEvent?: object } | undefined)?.nativeEvent;
   return {

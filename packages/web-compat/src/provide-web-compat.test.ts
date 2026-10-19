@@ -7,7 +7,7 @@ import { afterEach, describe, it } from 'node:test';
 import { Component, DOCUMENT, ElementRef, inject, signal } from '@angular/core';
 import { Text, View } from '@ng-native/components';
 import { registeredViewName } from '@ng-native/fabric';
-import { cleanup, render, screen, userEvent } from '@ng-native/testing';
+import { cleanup, fireEvent, render, screen, userEvent } from '@ng-native/testing';
 
 afterEach(cleanup);
 
@@ -33,6 +33,14 @@ class Clicks {
 class Page {
   readonly host: Dom = inject(ElementRef).nativeElement;
   readonly document: Dom = inject(DOCUMENT);
+}
+
+@Component({
+  selector: 'x-buttons',
+  template: `<button testID="off" disabled>Off</button><button testID="on">On</button>`,
+})
+class Buttons {
+  readonly host: Dom = inject(ElementRef).nativeElement;
 }
 
 @Component({
@@ -147,32 +155,15 @@ describe('provideWebCompat', () => {
     app.instance.document.head.appendChild(style);
     assert.equal(app.instance.document.styleSheets.length, 1);
     assert.equal(style.sheet.cssRules.length, 1);
-    // Geometry: where an element is and how big, scrolling it, the window, media queries and the
-    // observers, over the engine's own `IntersectionObserver`.
-    const geometry = ['DOMRect', 'DOMRectReadOnly', 'DOMRectList', 'ResizeObserver'];
-    geometry.push('ResizeObserverEntry', 'ResizeObserverSize', 'IntersectionObserverEntry');
-    geometry.push('MediaQueryList', 'matchMedia', 'scroll', 'scrollTo', 'scrollBy');
-    for (const name of geometry) {
-      assert.equal(typeof (globalThis as Dom)[name], 'function', name);
-    }
-    assert.notEqual((globalThis as Dom).IntersectionObserver, engineObserver);
-    assert.equal(typeof (globalThis as Dom).IntersectionObserver, 'function');
-    assert.equal((globalThis as Dom).matchMedia('(min-width: 0px)').matches, true);
-    assert.equal(typeof (globalThis as Dom).screen.width, 'number');
-    assert.equal(typeof (globalThis as Dom).visualViewport.height, 'number');
-    assert.equal((globalThis as Dom).screenX, 0);
-    const placed = ['getBoundingClientRect', 'getClientRects', 'scrollIntoView', 'scrollBy'];
-    for (const name of placed) assert.equal(typeof div[name], 'function', name);
-    assert.deepEqual([div.offsetWidth, div.clientHeight, div.scrollTop], [0, 0, 0]);
-    assert.equal(app.instance.document.scrollingElement, host.engine.root);
-    assert.equal(div.scrollsOverflow, true, 'what overflows it scrolls, where its style says');
+    geometryIsUp(app, host, div, engineObserver);
+    eventsAreUp(app, div);
 
     cleanup();
     assert.deepEqual(globalsNow(), globals, 'every global as it was, the document too');
     assert.deepEqual(membersOf(host), members, 'every node member as it was');
     assert.equal(host.getAttribute, undefined);
     // The runtime's own `getComputedStyle` is back, which the comparison above says.
-    for (const name of [...tree, ...html, ...cssom, 'CSS', 'MediaList', ...geometry]) {
+    for (const name of [...tree, ...html, ...cssom, 'CSS', 'MediaList', ...GEOMETRY_GLOBALS]) {
       assert.equal((globalThis as Dom)[name], undefined, name);
     }
     assert.equal((globalThis as Dom).IntersectionObserver, engineObserver);
@@ -180,7 +171,7 @@ describe('provideWebCompat', () => {
       [(globalThis as Dom).screen, (globalThis as Dom).screenX],
       [undefined, undefined],
     );
-    for (const name of [...placed, 'offsetWidth', 'scrollTop']) {
+    for (const name of [...PLACED, 'offsetWidth', 'scrollTop']) {
       assert.equal(div[name], undefined, name);
     }
     assert.deepEqual([div.style, style.sheet], [undefined, undefined]);
@@ -196,6 +187,12 @@ describe('provideWebCompat', () => {
       assert.equal(host[name], undefined, name);
     }
     assert.equal(Object.getPrototypeOf(globalThis), windowPrototype, 'no named properties');
+    for (const name of EVENT_GLOBALS) {
+      assert.equal((globalThis as Dom)[name], undefined, name);
+    }
+    assert.equal('event' in globalThis, false);
+    assert.equal((Event.prototype as Dom).AT_TARGET, undefined, "on Node's `Event` alone again");
+    for (const name of ['onclick', 'onload', 'blur', 'click']) assert.equal(div[name], undefined);
     assert.equal((globalThis as Dom).clicks, undefined);
     assert.equal(registeredViewName('button'), buttonView);
     // The engine's own, which has no more than `contains`.
@@ -255,6 +252,21 @@ describe('provideWebCompat', () => {
     // Its button has no role given it, and its element with an id is no global.
     assert.equal(plain.instance.host.lastElementChild.props['accessibilityRole'], undefined);
     assert.equal((globalThis as Dom).clicks, undefined);
+    // A disabled button is not announced, and no button takes a press or marks a hover.
+    const buttons = await render(Buttons);
+    const off = screen.getByTestId('off');
+    assert.equal(off.props['aria-disabled'], undefined);
+    assert.equal(off.props['accessibilityState'], undefined);
+    await fireEvent(screen.getByTestId('on'), 'topPointerEnter');
+    assert.equal(screen.getByTestId('on').props['data-hover'], undefined);
+    await fireEvent(screen.getByTestId('on'), 'touchStart', {
+      identifier: 0,
+      pageX: 1,
+      pageY: 1,
+      touches: [{ identifier: 0, pageX: 1, pageY: 1 }],
+      changedTouches: [{ identifier: 0, pageX: 1, pageY: 1 }],
+    });
+    assert.equal(buttons.instance.host.childList[1].active, undefined, 'no press taken');
     // A style it binds is set as written, as the renderer sets one: no inset read as a side.
     await render(Inset);
     assert.equal(screen.getByTestId('inset').props['start'], undefined);
@@ -270,3 +282,49 @@ describe('provideWebCompat', () => {
     assert.equal(await pressHeard(), true);
   });
 });
+
+/** The event kinds an asking app puts on the window. */
+const EVENT_GLOBALS = ['UIEvent', 'MouseEvent', 'PointerEvent', 'KeyboardEvent', 'FocusEvent'];
+EVENT_GLOBALS.push('InputEvent', 'TouchEvent', 'Touch', 'WheelEvent', 'MediaQueryListEvent');
+
+/** C6's members and globals, while an app that asked is up. */
+function eventsAreUp(app: Dom, div: Dom): void {
+  // Events: their kinds, `window.event`, `createEvent`, the phases on every event, a handler
+  // as a property, and focus and a click from a script.
+  for (const name of EVENT_GLOBALS) {
+    assert.equal(typeof (globalThis as Dom)[name], 'function', name);
+  }
+  assert.equal('event' in globalThis, true);
+  assert.equal(typeof app.instance.document.createEvent, 'function');
+  assert.equal((Event.prototype as Dom).AT_TARGET, 2);
+  const nodeEvents = ['onclick', 'onload', 'focus', 'blur', 'click'];
+  for (const name of nodeEvents) assert.equal(name in div, true, name);
+  assert.equal(div.onclick, null);
+}
+
+/** The geometry an asking app puts on the window. */
+const GEOMETRY_GLOBALS = ['DOMRect', 'DOMRectReadOnly', 'DOMRectList', 'ResizeObserver'];
+GEOMETRY_GLOBALS.push('ResizeObserverEntry', 'ResizeObserverSize', 'IntersectionObserverEntry');
+GEOMETRY_GLOBALS.push('MediaQueryList', 'matchMedia', 'scroll', 'scrollTo', 'scrollBy');
+
+/** The members an asking app's elements say where they are with. */
+const PLACED = ['getBoundingClientRect', 'getClientRects', 'scrollIntoView', 'scrollBy'];
+
+/** C7's members and globals, while an app that asked is up. */
+function geometryIsUp(app: Dom, host: Dom, div: Dom, engineObserver: unknown): void {
+  // Geometry: where an element is and how big, scrolling it, the window, media queries and the
+  // observers, over the engine's own `IntersectionObserver`.
+  for (const name of GEOMETRY_GLOBALS) {
+    assert.equal(typeof (globalThis as Dom)[name], 'function', name);
+  }
+  assert.notEqual((globalThis as Dom).IntersectionObserver, engineObserver);
+  assert.equal(typeof (globalThis as Dom).IntersectionObserver, 'function');
+  assert.equal((globalThis as Dom).matchMedia('(min-width: 0px)').matches, true);
+  assert.equal(typeof (globalThis as Dom).screen.width, 'number');
+  assert.equal(typeof (globalThis as Dom).visualViewport.height, 'number');
+  assert.equal((globalThis as Dom).screenX, 0);
+  for (const name of PLACED) assert.equal(typeof div[name], 'function', name);
+  assert.deepEqual([div.offsetWidth, div.clientHeight, div.scrollTop], [0, 0, 0]);
+  assert.equal(app.instance.document.scrollingElement, host.engine.root);
+  assert.equal(div.scrollsOverflow, true, 'what overflows it scrolls, where its style says');
+}

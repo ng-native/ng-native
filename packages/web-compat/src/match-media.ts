@@ -1,5 +1,6 @@
 import type { MediaCondition } from '@ng-native/fabric';
-import { CompatEvent, dispatch, listen, unlisten } from './events.ts';
+import { CompatMediaQueryListEvent } from './event-classes.ts';
+import { dispatch, listen, unlisten } from './events.ts';
 import { readMedia } from './media-query.ts';
 
 /**
@@ -93,10 +94,7 @@ function heard(list: MediaQueryList, state: Kept): () => void {
       const matches = mediaMatches(state.media, state.source.screen());
       if (matches === state.last) return;
       state.last = matches;
-      // ponytail: a plain event with the list's `media` and `matches`, where a browser sends a
-      // `MediaQueryListEvent`: that class comes with the rest of the event classes.
-      const event = Object.assign(new CompatEvent('change'), { media: state.media, matches });
-      dispatch(event, [list]);
+      dispatch(new CompatMediaQueryListEvent('change', { media: state.media, matches }), [list]);
     });
   }
   return () => {

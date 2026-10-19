@@ -220,11 +220,9 @@ describe('the sheet of a <style> in the page', () => {
 
   it('tells a <style> its sheet has loaded, in a task after it is put in', async () => {
     const document = await page();
-    const style = document.createElement('style') as Made & {
-      addEventListener(type: string, listener: () => void): void;
-    };
+    const style = document.createElement('style') as Made & { onload: (() => void) | null };
     let loads = 0;
-    style.addEventListener('load', () => loads++);
+    style.onload = () => loads++;
     style.textContent = '#strip .item { width: 1px }';
     document.head.appendChild(style);
     assert.equal(loads, 0);

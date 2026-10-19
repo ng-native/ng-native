@@ -14,6 +14,8 @@ import { webListen } from './listen.ts';
 import { attributeMembers } from './attribute-members.ts';
 import { characterDataMembers } from './character-data.ts';
 import { forgetCommits } from './commit-watch.ts';
+import { eventHandlerMembers } from './event-handlers.ts';
+import { focusMembers } from './element-focus.ts';
 import { registerElements } from './elements.ts';
 import { geometryMembers } from './geometry.ts';
 import { withHtmlMembers } from './html-members.ts';
@@ -44,6 +46,8 @@ function install(engine: Engine): void {
     // The properties of HTML elements over the rest: see `html-members.ts`.
     extendNodes(
       withHtmlMembers({
+        // `onclick` and the rest: see `event-handlers.ts`.
+        ...eventHandlerMembers,
         ...nodeMembers({ addEventListener, removeEventListener }),
         ...treeMembers,
         ...characterDataMembers,
@@ -54,6 +58,8 @@ function install(engine: Engine): void {
         ...selectorMembers,
         ...geometryMembers,
         ...scrollingMembers,
+        // `focus()`, `blur()` and `click()`: see `element-focus.ts`.
+        ...focusMembers,
       }),
     ),
     extendRenderer(webListen),
@@ -95,7 +101,9 @@ function setGlobalDocument(document: unknown): void {
  *   `matchMedia`, `MutationObserver`, which hears what changes in the tree, `ResizeObserver` and
  *   `IntersectionObserver`, `DOMParser` and `XMLSerializer`, the interfaces of HTML's elements,
  *   and an element with an id as a global of that name.
- * - A `click` listener hears a press.
+ * - A `click` listener hears a press, as a `PointerEvent`, and a click does what it does in a
+ *   browser: see `activation.ts`. Events are of the kinds a browser has, and `focus()` takes
+ *   effect at once: see `event-classes.ts` and `element-focus.ts`.
  *
  * Nothing is added until this is called, and all of it is taken away again when the last app
  * that asked for it is destroyed.

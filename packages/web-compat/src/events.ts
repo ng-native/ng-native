@@ -13,6 +13,9 @@ import { domError } from './dom-error.ts';
  * Native's), the one below where the runtime has none, or a plain object. Its target, phase and
  * flags are kept here and read through members set on the event itself, since neither runtime's
  * `Event` lets anything but its own `EventTarget` set them.
+ *
+ * A `click` that is a `MouseEvent` does what a press does once it has been heard, unless a
+ * listener prevented it: see `activation.ts`.
  */
 
 /** A listener as `addEventListener` takes one: a function, or an object with `handleEvent`. */
@@ -262,7 +265,7 @@ function isEvent(event: object): boolean {
  * The state of an event, kept from the first time it is sent or made here. What the event says
  * of itself then is where it starts: its type, and whether it was already stopped or prevented.
  */
-function stateOf(event: Event, init?: EventInit & { type: string }): State {
+function stateOf(event: Event, init?: EventInit & { type: string }, initialized = true): State {
   const had = states.get(event);
   if (had) return had;
   const given = init ?? event;
@@ -281,7 +284,7 @@ function stateOf(event: Event, init?: EventInit & { type: string }): State {
     canceled: event['defaultPrevented'] === true,
     passive: false,
     dispatching: false,
-    initialized: true,
+    initialized,
   };
   states.set(event, state);
   addMembers(event, state);
@@ -290,10 +293,12 @@ function stateOf(event: Event, init?: EventInit & { type: string }): State {
 
 /** Give an event the members it is read and stopped through, where its own are not enough. */
 function addMembers(event: Event, state: State): void {
-  const real = isEvent(event);
+  // One this package sent for a press is written to as a plain object was: see `nativeEvent`.
+  const real = isEvent(event) && !fromNative.has(event);
   Object.defineProperties(event, membersOf(state, !real));
-  // A custom event's `initCustomEvent`, which neither Node's nor React Native's has.
-  if (real && 'detail' in event && typeof event['initCustomEvent'] !== 'function') {
+  // A custom event's `initCustomEvent`, which neither Node's nor React Native's has. Not a UI
+  // event's, whose `detail` is its own.
+  if (real && 'detail' in event && typeof event['initCustomEvent'] !== 'function' && !isUi(event)) {
     state.detail = event['detail'];
     Object.defineProperties(event, customMembers(state));
   }
@@ -302,6 +307,37 @@ function addMembers(event: Event, state: State): void {
     if (!(name in event)) Object.defineProperty(event, name, { value: phase });
   }
 }
+
+const isUi = (event: Event): boolean => typeof event['initUIEvent'] === 'function';
+
+/** The events this package made for what native said, which it writes to as it sends them. */
+const fromNative = new WeakSet<object>();
+
+/**
+ * An event made for what native said, which is sent from here as a plain object was: its state
+ * is made afresh if a script sends it on, and its members are written to.
+ */
+export function sentByNative(event: object): void {
+  states.delete(event);
+  fromNative.add(event);
+}
+
+/** Whether an event is being sent now, in which a legacy `init*Event` does nothing. */
+export const isDispatching = (event: object): boolean => states.get(event)?.dispatching === true;
+
+/** What a legacy `init*Event` sets of every event: see `initEvent`. */
+export function initLegacy(event: object, type: unknown, bubbles: unknown, cancelable: unknown) {
+  initEvent(stateOf(event as Event), type, bubbles, cancelable);
+}
+
+/**
+ * What a `click` does once it has been heard, set by what knows the elements: for the click and
+ * the path it is sent along, what to run once it is over, told whether it was cancelled. Run
+ * before any listener hears it, as a checkbox is checked before its listeners are told.
+ */
+export const activation: {
+  of?: (event: object, type: string, path: readonly object[]) => ((done: boolean) => void) | void;
+} = {};
 
 /** Report what a listener threw, as a browser does, and go on to the next. */
 export function report(error: unknown): void {
@@ -330,6 +366,26 @@ export function report(error: unknown): void {
 /** Whether an error is being reported now, which an error in reporting it is not. */
 let reporting = false;
 
+/** The event a listener is being told now, which is `window.event`. */
+let current: unknown;
+
+/**
+ * `window.event`: the event a listener is being told, while it is told it. One a script sets is
+ * kept in its place, and no event is put there again, as a browser has it.
+ */
+export const windowEvent: PropertyDescriptor = {
+  get: () => current,
+  set: (value: unknown) =>
+    Object.defineProperty(globalThis, 'event', {
+      value,
+      writable: true,
+      configurable: true,
+      enumerable: true,
+    }),
+  configurable: true,
+  enumerable: true,
+};
+
 /** Tell the listeners of one target on the path, for one of its phases. */
 function invoke(event: Event, state: State, target: object, phase: number, capture: boolean): void {
   if (state.stop) return;
@@ -340,10 +396,14 @@ function invoke(event: Event, state: State, target: object, phase: number, captu
     if (entry.removed || entry.type !== state.type || entry.capture !== capture) continue;
     if (entry.once) remove(target, entry);
     state.passive = entry.passive;
+    const outer = current;
+    current = event;
     try {
       call(entry, target, event);
     } catch (error) {
       report(error);
+    } finally {
+      current = outer;
     }
     state.passive = false;
     if (state.stopNow) return;
@@ -377,6 +437,7 @@ export function dispatch(event: unknown, path: readonly object[]): boolean {
     );
   }
   Object.assign(state, { dispatching: true, target: path[0] ?? null, path });
+  const activated = activation.of?.(event, state.type, path);
   try {
     sendAlong(event as Event, state, path);
   } finally {
@@ -389,6 +450,7 @@ export function dispatch(event: unknown, path: readonly object[]): boolean {
       stopNow: false,
     });
   }
+  activated?.(!state.canceled);
   return !state.canceled;
 }
 
@@ -423,6 +485,55 @@ for (const target of [CompatEvent, CompatEvent.prototype]) {
   for (const [name, phase] of Object.entries(PHASES)) {
     Object.defineProperty(target, name, { value: phase, enumerable: true });
   }
+}
+
+/** The kinds `document.createEvent` makes, by the name it is given in lower case. */
+const KINDS = new Set([
+  'event',
+  'events',
+  'htmlevents',
+  'svgevents',
+  'customevent',
+  'uievent',
+  'uievents',
+  'mouseevent',
+  'mouseevents',
+  'keyboardevent',
+  'focusevent',
+  'touchevent',
+  'dragevent',
+  'compositionevent',
+  'textevent',
+  'messageevent',
+  'storageevent',
+  'hashchangeevent',
+  'beforeunloadevent',
+  'devicemotionevent',
+  'deviceorientationevent',
+]);
+
+/** The kinds `createEvent` makes of their own, by name: see `event-classes.ts`. */
+export const eventKinds: Record<string, () => new (type: string) => object> = {};
+
+/**
+ * `document.createEvent`: an event of the runtime's `Event`, with no type until `initEvent`
+ * gives it one, and refused by `dispatchEvent` until then. A custom event takes its detail from
+ * `initCustomEvent`, and a UI, mouse, key or touch event its members from its own `init*Event`.
+ * Any other kind is an event, as one with no members of its own.
+ */
+export function createEvent(kind: unknown): object {
+  const name = String(kind).toLowerCase();
+  if (!KINDS.has(name))
+    throw domError(`The event kind '${String(kind)}' is not supported.`, 'NotSupportedError');
+  const Made =
+    eventKinds[name]?.() ??
+    (globalThis as { Event?: new (type: string) => object }).Event ??
+    CompatEvent;
+  const event = new Made('') as Event;
+  // Made afresh, as not yet given its type: this package's `Event` makes its state as it is made.
+  states.delete(event);
+  const state = stateOf(event, { type: '' }, false);
+  return name === 'customevent' ? Object.defineProperties(event, customMembers(state)) : event;
 }
 
 /** A custom event's `detail` over its state, and `initCustomEvent` to set it with the rest. */

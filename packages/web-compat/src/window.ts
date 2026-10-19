@@ -15,7 +15,9 @@ import {
   listen,
   unlisten,
   unlistenAll,
+  windowEvent,
 } from './events.ts';
+import { EVENT_CLASSES, phasesOnEvent } from './event-classes.ts';
 import { domParser } from './html.ts';
 import {
   IntersectionObserver,
@@ -147,6 +149,8 @@ const GLOBALS: Readonly<Record<string, unknown>> = {
   // What a script makes an event with, where the runtime has none: see `events.ts`.
   Event: CompatEvent,
   CustomEvent: CompatCustomEvent,
+  // `MouseEvent`, `KeyboardEvent` and the rest: a library asks whether an event is one.
+  ...EVENT_CLASSES,
   // There for a device that takes touches, which is how a library asks.
   ontouchstart: null,
   // The page's window is the top one, in no frame.
@@ -228,6 +232,10 @@ export function installWindow(): () => void {
   const unplaced = placeNodes(target);
   // An element with an id is a global by it: see `named-properties.ts`.
   const unnamed = installNamedProperties(target);
+  // The event a listener is being told: see `events.ts`.
+  const evented = !('event' in target);
+  if (evented) Object.defineProperty(target, 'event', windowEvent);
+  const unphased = phasesOnEvent();
   const sized = Object.keys(SIZES).filter((name) => typeof target[name] === 'undefined');
   for (const name of sized) {
     Object.defineProperty(target, name, { configurable: true, get: SIZES[name] });
@@ -251,6 +259,8 @@ export function installWindow(): () => void {
     unlistenAll(globalThis);
     unplaced();
     unnamed();
+    unphased();
+    if (evented) delete target['event'];
     if (windowed) delete target['window'];
     if (target['getComputedStyle'] === computedStyle) target['getComputedStyle'] = computed;
     if (target['HTMLElement'] !== ours) return;

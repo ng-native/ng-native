@@ -508,7 +508,10 @@ describe('matchMedia', () => {
     const { engine } = await page();
     const list = globals.matchMedia('(min-width: 500px)');
     const heard: string[] = [];
-    const listener = (event: Dom) => heard.push(`fn ${event.matches} ${event.type}`);
+    const listener = (event: Dom) =>
+      heard.push(
+        `fn ${event.matches} ${event.type} ${event instanceof globals.MediaQueryListEvent}`,
+      );
     list.addListener(listener);
     list.addEventListener('change', listener);
     list.addEventListener('change', {
@@ -516,7 +519,7 @@ describe('matchMedia', () => {
     });
     list.onchange = (event: Dom) => heard.push(`on ${event.matches}`);
     engine.updateConditions({ width: 600, height: 800, colorScheme: 'light' });
-    assert.deepEqual(heard, ['fn true change', 'object (min-width: 500px)', 'on true']);
+    assert.deepEqual(heard, ['fn true change true', 'object (min-width: 500px)', 'on true']);
     engine.updateConditions({ width: 650, height: 800, colorScheme: 'light' });
     assert.equal(heard.length, 3, 'not told where the answer is the same');
     heard.length = 0;
