@@ -78,8 +78,9 @@ Gaps:
 
 - A rule in a sheet made while the app runs is passed over where its selector has a namespace,
   `:nth-child(... of S)` or a pseudo-class the engine does not track, `:hover` among them.
-- A pseudo-element's style (`::first-line`) and its `content` are not read, and neither is a value
-  the engine drops, `display: table` among them.
+- A rule for a pseudo-element other than `::before` and `::after` (`::first-line`, `::selection`)
+  is passed over, as is a `content` other than a string or `none` (a counter or `attr()`, say), and
+  a value the engine drops, `display: table` among them.
 - An `@import` loads nothing, so the sheet it makes is empty.
 - `element.style` checks a value against what the property takes for the properties a script
   commonly sets, and drops one that does not match; any other longhand takes any value. A colour
@@ -118,7 +119,7 @@ tells it whether something is drawn over an element.
   other kinds, with the members their init dictionaries give, and `document.createEvent` with
   each kind's `init*Event`.
 - `window.event`, the event a listener is being told.
-- Handler properties, `onclick` to `onload`.
+- Handler properties, `onclick` to `onwheel`.
 - A press reaches a listener as a `PointerEvent`, a touch is the mouse going down and up as a
   phone's browser tells it, and a finger held still is a `contextmenu`.
 - What a click does, from a press, a script or `element.click()`: a checkbox or a radio is checked
@@ -152,8 +153,8 @@ next focus or blur.
   `:out-of-range`, `:placeholder-shown`, `:checked`, `:indeterminate` and `:default` match.
 - A field has `selectionStart`, `selectionEnd`, `setSelectionRange()` and `select()`, and a
   `<textarea>` says how tall its text is as `scrollHeight`.
-- A file input's `click()` opens the system's file picker, where `expo-document-picker` is
-  installed.
+- A file input's `click()` opens the system's file picker through `expo-document-picker`, which
+  the app installs, or through a picker provided as `FILE_PICKER`.
 - A form has `elements`, `requestSubmit()` and `reset()`, is submitted only once its controls pass
   their constraints, and `document.forms` lists the forms.
 
