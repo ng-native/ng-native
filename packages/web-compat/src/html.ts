@@ -121,7 +121,8 @@ export function holdIconBox(template: EngineNode, engine: Engine): void {
 /** Replace what an element holds with the elements, text and comments some markup is. */
 export function setMarkup(node: EngineNode, markup: unknown, engine: Engine): void {
   const into = node.tag === 'template' && !isFragment(node) ? contentOf(node, engine) : node;
-  for (const child of [...into.childList]) engine.removeChild(into, child);
+  // What the engine or a drawing keeps of its own stays: see `in-document.ts`.
+  for (const child of inDocument(into)) engine.removeChild(into, child);
   if (markup === null || markup === '') return;
   parseInto(String(markup), node, into, into, engine);
 }

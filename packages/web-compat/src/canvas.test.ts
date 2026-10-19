@@ -133,6 +133,11 @@ describe('@ng-native/web-compat canvas', () => {
     assert.equal(node.childNodes.length, 0);
     assert.ok(node.outerHTML.endsWith('></canvas>'), node.outerHTML);
     assert.equal(node.innerHTML, '');
+    // And it draws as it did once a script writes markup in it, as a fallback is written.
+    node.innerHTML = '<p>No canvas</p>';
+    context.fillRect(10, 10, 5, 5);
+    await settle();
+    assert.equal(shapes().length, 2);
   });
 
   it('draws a text where it is asked, set against that place as it is aligned', async () => {
