@@ -18,6 +18,9 @@
  * `ElementRef` holds `any` unless it is told otherwise. So is a field read from, or taken out of,
  * a node cast to another type: `(node as { name?: string }).name` still compiles once the field is
  * gone, and reads `undefined`.
+ *
+ * A read from a node's `props` is neither rewritten nor noted: a prop has the name the native view
+ * gives it, so a text input's `props['text']` is its value under any version.
  */
 const { applied, scriptKind, SOURCE, typescript } = require('./move-imports.cjs');
 const { files } = require('./host.cjs');
@@ -311,10 +314,13 @@ class Reader {
     return Boolean(items) && this.notNodes(items, depth + 1);
   }
 
-  /** Whether `x.y` is certainly not a node: a constructor, or a member typed otherwise. */
+  /**
+   * Whether `x.y` is certainly not a node: a constructor, a node's `props`, which are keyed by the
+   * native view's own names and keep them, or a member typed otherwise.
+   */
   notNodeMember(access, depth) {
     const ts = this.ts;
-    if (access.name.text === 'constructor') return true;
+    if (access.name.text === 'constructor' || access.name.text === 'props') return true;
     const of = unwrapped(ts, access.expression);
     if (of.kind === ts.SyntaxKind.ThisKeyword) {
       const field = this.thisField(access);

@@ -616,6 +616,34 @@ describe('engine-node-fields, through nx migrate, ng update and ng-native-migrat
     assert.deepEqual(cli, nx);
   });
 
+  it("leaves a node's props alone, and says nothing of them", async () => {
+    // A prop is read by the name the native view gives it, which no rename touches: a text
+    // input's `props['text']` is its value, from before 0.17.0 and after it.
+    const props = {
+      'src/app/field.ts': [
+        "import { ElementRef, inject } from '@angular/core';",
+        "import type { EngineNode } from '@ng-native/fabric';",
+        '',
+        'export function value(node: EngineNode, found: () => EngineNode) {',
+        "  return [node.props['text'], node.props.text, found().props['text'], node['props'].kind];",
+        '}',
+        '',
+        'export class Field {',
+        '  private readonly ref = inject(ElementRef);',
+        '  value() {',
+        "    return this.ref.nativeElement.props['text'];",
+        '  }',
+        '}',
+        '',
+      ].join('\n'),
+    };
+    const { nx, angular, cli } = await acrossAdapters(props, 'engine-node-fields', '0.13.0');
+    assert.equal(nx.files['src/app/field.ts'], props['src/app/field.ts']);
+    assert.deepEqual(nx.notes, []);
+    assert.deepEqual(angular, nx);
+    assert.deepEqual(cli, nx);
+  });
+
   it('changes nothing the second time', async () => {
     const first = await viaNx(files, 'engine-node-fields');
     const again = await viaNx(first.files as Record<string, string>, 'engine-node-fields');
