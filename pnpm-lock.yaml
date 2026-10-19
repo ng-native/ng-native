@@ -1977,9 +1977,6 @@ importers:
       '@ng-native/components':
         specifier: workspace:*
         version: link:../components
-      '@ng-native/expo':
-        specifier: workspace:*
-        version: link:../expo
       '@ng-native/testing':
         specifier: workspace:*
         version: link:../testing

@@ -102,11 +102,10 @@ export default tseslint.config(
             },
             {
               // A package that presents the engine to code written for another host. It sits on
-              // the platform as well as the engine, to extend the renderer, and reads the file
-              // picker of `@ng-native/expo` where an app has it, for a file input. Nothing that
-              // ships depends on it.
+              // the platform as well as the engine, to extend the renderer. Nothing that ships
+              // depends on it.
               sourceTag: 'layer:compat',
-              onlyDependOnLibsWithTags: ['layer:runtime', 'scope:platform', 'scope:expo'],
+              onlyDependOnLibsWithTags: ['layer:runtime', 'scope:platform'],
               bannedExternalImports: ['lightningcss', '@oxc-angular/*'],
             },
             {
