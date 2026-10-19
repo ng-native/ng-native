@@ -181,17 +181,20 @@ function isEngineState(node: EngineNode, key: string): boolean {
   return key === 'data-hover' && marksHover(node);
 }
 
+/**
+ * An attribute kept as written, where the prop it is set as is another thing: one an iframe's web
+ * view took, or a shape's.
+ */
+const keptAs = (node: EngineNode, name: string): string | undefined =>
+  taken.get(node)?.get(name) ?? keptAttributes(node)[name];
+
 /** An attribute as `getAttribute` answers it: the text written, or what the prop says. */
 function attributeOf(node: EngineNode, name: string): string | null {
   if (name === 'class') return classAttribute(node);
   const text = written.get(node)?.get(name);
   if (name === 'style') return text ?? null;
   if (text === undefined && isEngineState(node, name)) return null;
-  // What an iframe's web view took, and a shape's attribute, are kept as written: the prop each
-  // is set as is another thing.
-  const kept = taken.get(node)?.get(name);
-  if (kept !== undefined) return kept;
-  const value = keptAttributes(node)[name] ?? node.props[propOf(name)];
+  const value = keptAs(node, name) ?? node.props[propOf(name)];
   if (value == null) return null;
   if (typeof value !== 'boolean') return String(value);
   // A boolean prop is what the text was coerced to: the text itself is what was written.
@@ -318,7 +321,9 @@ function attributeNames(node: EngineNode): string[] {
     ...(written.get(node)?.has('style') ? ['style'] : []),
     ...names,
     ...drawn,
-    ...[...(taken.get(node)?.keys() ?? [])].filter((name) => !names.includes(name) && !drawn.includes(name)),
+    ...[...(taken.get(node)?.keys() ?? [])].filter(
+      (name) => !names.includes(name) && !drawn.includes(name),
+    ),
   ];
   return inWrittenOrder(node, all);
 }
