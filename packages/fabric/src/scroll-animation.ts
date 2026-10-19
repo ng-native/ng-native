@@ -222,9 +222,10 @@ function heldGroup(resting: unknown): TransformChannel[] | null {
 export function heldTransform(
   value: unknown,
   sizeOf: () => { width: number; height: number } | undefined,
+  skews: boolean,
 ): { property: string; value: number }[] | null {
   const size = sharesIn(value) ? sizeOf() : undefined;
-  const channels = heldGroup(flatMatrices(size ? inPoints(value, size) : value));
+  const channels = heldGroup(flatMatrices(size ? inPoints(value, size) : value, skews));
   return channels as { property: string; value: number }[] | null;
 }
 
@@ -245,22 +246,23 @@ const FLAT_REST: readonly [number, number][] = [
 ];
 
 /** A transform list with each flat matrix in it as the entries `flatMatrix` makes of it. */
-function flatMatrices(value: unknown): unknown {
+function flatMatrices(value: unknown, skews: boolean): unknown {
   const matrixOf = (entry: unknown) => (entry as { matrix?: unknown } | null)?.matrix;
   if (!Array.isArray(value) || !value.some((entry) => matrixOf(entry) !== undefined)) return value;
-  return value.flatMap((entry) => flatMatrix(matrixOf(entry)) ?? [entry]);
+  return value.flatMap((entry) => flatMatrix(matrixOf(entry), skews) ?? [entry]);
 }
 
 /**
  * A matrix in two dimensions as the move, turn, skew and scale it is, in that order, as CSS
- * decomposes one: numbers native's transform node takes. Null for one in three dimensions, or
- * one that flattens the view to a line, which native cannot be set to.
+ * decomposes one: numbers native's transform node takes. Null for one in three dimensions, one
+ * that flattens the view to a line, or one with a skew where the platform draws none, which
+ * native cannot be set to.
  *
  * Once a graph has set a view's transform, no commit changes it again (see `Touched`), so a
  * matrix bound after a native animation that native is not set to leaves the view where the
  * animation ended.
  */
-function flatMatrix(raw: unknown): Record<string, number>[] | null {
+function flatMatrix(raw: unknown, skews: boolean): Record<string, number>[] | null {
   if (!Array.isArray(raw) || raw.length !== 16 || !raw.every(Number.isFinite)) return null;
   const m = raw as number[];
   if (FLAT_REST.some(([index, value]) => m[index] !== value)) return null;
@@ -271,6 +273,8 @@ function flatMatrix(raw: unknown): Record<string, number>[] | null {
   const shear = cos * c + sin * d;
   const scaleY = cos * (d - sin * shear) - sin * (c - cos * shear);
   if (scaleY === 0) return null;
+  // Android draws no skew: React Native leaves `skewX` out there, so a sheared matrix is left as it is.
+  if (!skews && Math.abs(shear) > 1e-9) return null;
   return [
     { translateX: m[FLAT.e]! },
     { translateY: m[FLAT.f]! },

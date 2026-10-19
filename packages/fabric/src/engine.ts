@@ -12337,7 +12337,11 @@ export class Engine implements HostEngine {
       values.opacity = typeof opacity === 'number' ? opacity : 1;
     }
     if (free('transform')) {
-      const transform = heldTransform(props['transform'], () => this.boxSize(node));
+      const transform = heldTransform(
+        props['transform'],
+        () => this.boxSize(node),
+        platformOS !== 'android',
+      );
       if (transform) values.transform = transform;
     }
     if (values.opacity !== undefined || values.transform) {

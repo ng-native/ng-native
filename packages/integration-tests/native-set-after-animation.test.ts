@@ -7,7 +7,7 @@
  */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { Engine, type StyleSheet } from '@ng-native/fabric';
+import { Engine, registerPlatformComponents, type StyleSheet } from '@ng-native/fabric';
 import { compileCss, createFakeFabric } from '@ng-native/testing';
 import { recorder } from './native-animated.ts';
 
@@ -173,6 +173,29 @@ describe('a view a native animation has let go', () => {
     assert.deepEqual(s.props()['transform'], [
       { matrix: [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, -0.002, 150, 0, 0, 1] },
     ]);
+  });
+
+  it('leaves a sheared matrix committed alone on Android, which draws no skew', () => {
+    // React Native on Android breaks a transform into what an Android view has, and a view has
+    // no skew: a matrix with one is left committed, as before, where a flat one is still set.
+    registerPlatformComponents('android');
+    try {
+      const sheared = scene('slide');
+      sheared.classesTo('slide moved');
+      sheared.finish(sheared.started()[0]!);
+      const sets = sheared.rec.named('set').length;
+      sheared.engine.setProp(sheared.view, 'style', { transform: 'matrix(1, 0, 0.5, 1, 150, 0)' });
+      sheared.classesTo('');
+      assert.equal(sheared.rec.named('set').length, sets, 'nothing set on native');
+      const flat = scene('slide');
+      flat.classesTo('slide moved');
+      flat.finish(flat.started()[0]!);
+      flat.engine.setProp(flat.view, 'style', { transform: 'matrix(1, 0, 0, 1, 150, 0)' });
+      flat.classesTo('');
+      assert.equal((flat.set()['transform'] as unknown[])[0] !== undefined, true);
+    } finally {
+      registerPlatformComponents('ios');
+    }
   });
 
   it('sets nothing while an animation of the prop plays, and lets go when one starts', () => {
