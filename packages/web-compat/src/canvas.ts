@@ -176,12 +176,15 @@ class Gradient {
   }
 }
 
-const FONT = /(?:(bold|[1-9]00)\s+)?(?:[a-z-]+\s+)*?([\d.]+)px/i;
-
-/** A font's size in points and its weight, from the shorthand a context is given. */
+/**
+ * A font's size in points and its weight, from the shorthand a context is given: the weight is
+ * any word before the size, after a style or a variant as much as before one.
+ */
 function fontOf(font: string): { size: number; weight: string | undefined } {
-  const [, weight, size] = FONT.exec(font) ?? [];
-  return { size: Number(size) || 10, weight };
+  const sized = /([\d.]+)px/i.exec(font);
+  const before = sized ? font.slice(0, sized.index) : '';
+  const weight = /(?:^|\s)(bold|[1-9]00)(?=\s)/i.exec(before)?.[1];
+  return { size: Number(sized?.[1]) || 10, weight };
 }
 
 /** Where a text's baseline is against the `y` it is drawn at, as a share of its font size. */

@@ -147,6 +147,11 @@ describe('@ng-native/web-compat canvas', () => {
     assert.ok(wide('Sales and more') > wide('Sales'));
     context.font = '24px sans-serif';
     assert.ok(wide('Sales') > 40);
+    // A weight after a style, as Chart.js writes a font: `normal bold 12px`.
+    context.font = 'normal bold 12px sans-serif';
+    context.fillText('Sales', 50, 40);
+    await settle();
+    assert.equal((shapes()[1]!.props['font'] as { fontWeight?: string }).fontWeight, 'bold');
   });
 
   it('is a new drawing once it is cleared, and once it is another size', async () => {

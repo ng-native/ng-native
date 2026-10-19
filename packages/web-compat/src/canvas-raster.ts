@@ -253,17 +253,36 @@ export class Raster {
       ? { left: 0, top: 0, width: this.width, height: this.height }
       : covered;
     if (!box) return;
-    const { data, width } = this;
+    const unbounded = isUnbounded(mode);
     for (let y = box.top; y < box.top + box.height; y++) {
       for (let x = box.left; x < box.left + box.width; x++) {
-        const through = mask ? mask[y * width + x]! : 1;
-        if (through <= 0) continue;
-        const share = covered ? coveredAt(covered, x, y) : 0;
-        const colour = share > 0 ? paint(x + 0.5, y + 0.5) : null;
-        const shown = colour ? colour[3] * alpha * share : 0;
-        laidBy(mode, data, (y * width + x) * 4, colour, shown, through);
+        const clipped = mask ? mask[y * this.width + x]! : 1;
+        if (clipped > 0) this.layAt(x, y, mode, unbounded, covered, paint, alpha, clipped);
       }
     }
+  }
+
+  /**
+   * Lay a paint over one pixel by a way other than source-over, as much as a clip lets through.
+   * A bounded way changes only what the shape covers, by as much as it covers it, as Chrome lays
+   * one: `clear` empties a pixel under any source at all.
+   */
+  private layAt(
+    x: number,
+    y: number,
+    mode: string,
+    unbounded: boolean,
+    covered: Coverage | null,
+    paint: Paint,
+    alpha: number,
+    clipped: number,
+  ): void {
+    const share = covered ? coveredAt(covered, x, y) : 0;
+    if (!unbounded && share <= 0) return;
+    const colour = share > 0 ? paint(x + 0.5, y + 0.5) : null;
+    const shown = colour ? colour[3] * alpha * (unbounded ? share : 1) : 0;
+    const through = unbounded ? clipped : clipped * share;
+    laidBy(mode, this.data, (y * this.width + x) * 4, colour, shown, through);
   }
 
   /** Pixels written as they are, over what was there: `putImageData`. */

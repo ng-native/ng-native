@@ -51,6 +51,23 @@ describe('@ng-native/web-compat canvas pixels', () => {
     assert.deepEqual([...context.getImageData(16, 16, -1, -1).data], [0, 255, 0, 255]);
   });
 
+  it("clears only what a shape covers, by as much as it covers it, under 'clear'", async () => {
+    const { context } = await canvas();
+    context.fillStyle = '#f00';
+    context.fillRect(0, 0, 100, 50);
+    context.globalCompositeOperation = 'clear';
+    context.beginPath();
+    context.arc(50, 25, 20, 0, Math.PI * 2);
+    context.fill();
+    assert.deepEqual(pixel(context, 50, 25), [0, 0, 0, 0]);
+    // The corner of the box around the circle, which the circle does not reach.
+    assert.deepEqual(pixel(context, 32, 7), [255, 0, 0, 255]);
+    // And an edge it half covers is half cleared, as Chrome draws it.
+    const [red, , , edge] = pixel(context, 69, 30);
+    assert.equal(red, 255);
+    assert.ok(edge > 150 && edge < 250, `${edge} is not near Chrome's 215`);
+  });
+
   it('draws a path where the transform puts it', async () => {
     const { context } = await canvas();
     context.scale(10, 10);
