@@ -244,7 +244,8 @@ function expectations(opts) {
   if (expected && expected.commit !== COMMIT) {
     if (opts.update && opts.filters.length === 0 && !opts.check) return undefined;
     throw new Error(
-      `expectations.json was recorded at ${expected.commit}: run every suite with --update`,
+      `expectations.json was recorded at ${expected.commit}: run every suite with --update, ` +
+        'without --check, which cannot compare with another commit',
     );
   }
   return expected;

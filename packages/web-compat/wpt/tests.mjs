@@ -104,12 +104,12 @@ function pageSkip(path, source) {
 /** The `// META:` lines at the head of a script test, by key. */
 export function metaOf(source) {
   const meta = { script: [], global: undefined, timeout: undefined, title: undefined };
-  for (const line of source.split('\n')) {
-    const found = /^\/\/\s*META:\s*(\w+)=(.*)$/.exec(line.trim());
+  for (const line of source.split('\n').map((each) => each.trim())) {
+    const found = /^\/\/\s*META:\s*(\w+)=(.*)$/.exec(line);
     if (found) {
       if (found[1] === 'script') meta.script.push(found[2].trim());
       else meta[found[1]] = found[2].trim();
-    } else if (line.trim() !== '' && !line.startsWith('//')) break;
+    } else if (line !== '' && !line.startsWith('//')) break;
   }
   return meta;
 }

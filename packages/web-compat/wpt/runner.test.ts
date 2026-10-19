@@ -20,7 +20,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { verify } from './fetch.mjs';
 import { CHECKOUT, COMMIT, SUITES, SUPPORT } from './pin.mjs';
-import { inCheckout } from './tests.mjs';
+import { inCheckout, metaOf } from './tests.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 
@@ -506,6 +506,14 @@ test('a page that loads a script from outside the checkout is skipped, not run',
   });
 });
 
+test("reads a script test's META lines past an indented comment", () => {
+  const meta = metaOf(
+    '  // a note, indented\n// META: timeout=long\n// META: script=/common/a.js\ntest();',
+  );
+  assert.equal(meta.timeout, 'long');
+  assert.deepEqual(meta.script, ['/common/a.js']);
+});
+
 test('a path that climbs out of the checkout, or an encoded slash hides climbing, is not in it', () => {
   assert.equal(inCheckout('dom/nodes/a.html'), join(CHECKOUT, 'dom/nodes/a.html'));
   // What a frame's URL is read as, with `%2f` decoded after the URL took out its own `..`.
@@ -513,7 +521,8 @@ test('a path that climbs out of the checkout, or an encoded slash hides climbing
   for (const path of [
     '../outside.js',
     'dom/../../outside.js',
-    decodeURIComponent(frame.pathname),
+    // As the worker reads it: the path's first slash taken off, then decoded.
+    decodeURIComponent(frame.pathname.slice(1)),
   ]) {
     assert.equal(inCheckout(path), undefined, path);
   }
