@@ -632,6 +632,12 @@ export function setSvg(node: EngineNode, name: string, value: unknown, engine: E
   return drawn && setShape(node, name, value, engine);
 }
 
+/** Give a copy of a shape, or of an `<svg>`, the attributes it was given: see `cloneNode`. */
+export function copyShape(from: EngineNode, to: EngineNode, engine: Engine): void {
+  for (const [name, value] of Object.entries(shapeAttributes(from)))
+    setSvg(to, name, value, engine);
+}
+
 function setShape(node: EngineNode, name: string, value: unknown, engine: Engine): boolean {
   const root = node.tag === 'svg';
   // An `id` is the renderer's, and the name of what a definition is referred to by as well.

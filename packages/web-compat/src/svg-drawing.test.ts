@@ -67,6 +67,24 @@ describe('@ng-native/web-compat markup', () => {
     assert.equal(svg.children.length, 0);
   });
 
+  it("keeps a drawing's attributes on a copy of it, as cloneNode does", async () => {
+    const { host } = await mount();
+    host.innerHTML =
+      `<svg xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 4 4">` +
+      `<path d="M0 0 L1 1" stroke="red"></path></svg>`;
+    const copy = host.querySelector('svg').cloneNode(true);
+    const attr = copy.attributes[0];
+    assert.deepEqual(
+      [attr?.name, attr?.namespaceURI, attr?.value],
+      ['xmlns:xlink', 'http://www.w3.org/2000/xmlns/', 'http://www.w3.org/1999/xlink'],
+    );
+    assert.equal(copy.getAttribute('viewBox'), '0 0 4 4');
+    assert.deepEqual(
+      [copy.firstChild.getAttribute('d'), copy.firstChild.getAttribute('stroke')],
+      ['M0 0 L1 1', 'red'],
+    );
+  });
+
   it('builds other markup a <template> is bound to, as a browser does', async () => {
     const { app } = await mount();
     const template = app.instance.renderer.createElement('template');
