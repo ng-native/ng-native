@@ -4786,6 +4786,21 @@ function committedViewName(node: EngineNode): string {
     : name;
 }
 
+/**
+ * The nearest scroll view a node is in that scrolls up and down: a sideways carousel on a page
+ * is not what moves a field clear of the bottom of the screen.
+ */
+function scrollingDown(node: EngineNode): EngineNode | null {
+  let scroll = node.parent;
+  while (
+    scroll &&
+    !(SCROLL_VIEWS.has(committedViewName(scroll)) && scroll.props['horizontal'] !== true)
+  ) {
+    scroll = scroll.parent;
+  }
+  return scroll;
+}
+
 /** Whether a node is a horizontal scroll view, whose children hold its content. */
 const holdsContentOf = (parent: EngineNode | null): boolean =>
   parent !== null && parent.nodeKind === 'element' && viewNameOf(parent) === HORIZONTAL_SCROLL;
@@ -6533,20 +6548,12 @@ export class Engine implements HostEngine {
    * far its content's top edge is above its own.
    */
   reveal(node: EngineNode, options: { visibleBottom?: number; margin?: number } = {}): void {
-    // The nearest scroll view that scrolls up and down: a sideways carousel on a page is not
-    // what moves a field clear of the bottom of the screen.
-    let scroll = node.parent;
-    while (
-      scroll &&
-      !(SCROLL_VIEWS.has(viewNameOf(scroll)) && scroll.props['horizontal'] !== true)
-    ) {
-      scroll = scroll.parent;
-    }
-    const content = scroll && this.visibleChildren(scroll)[0];
+    const scroll = scrollingDown(node);
+    const content = scroll && this.contentOf(scroll);
     if (!scroll || !content) return;
     const margin = options.margin ?? 16;
     this.measure(scroll, (view) => {
-      this.measure(content, (inner) => {
+      this.measureHandle(content, (inner) => {
         this.measure(node, (target) => {
           const offset = view.y - inner.y;
           const top = view.y + margin;
@@ -6559,6 +6566,14 @@ export class Engine implements HostEngine {
         });
       });
     });
+  }
+
+  /**
+   * The view a scroll view's content is in: an element that scrolls its overflow holds its
+   * children in one of its own, and any other scroll view's first child is it.
+   */
+  private contentOf(scroll: EngineNode): FabricNode | undefined {
+    return scroll.inside?.handle ?? this.visibleChildren(scroll)[0]?.committed?.handle;
   }
 
   /**
@@ -13591,8 +13606,12 @@ export class Engine implements HostEngine {
    */
   measure(node: EngineNode, into: (frame: WindowFrame) => void): void {
     const handle = node.committed?.handle;
-    if (!handle || !this.fabric.measureInWindow) return;
-    this.fabric.measureInWindow(handle, (x, y, width, height) => into({ x, y, width, height }));
+    if (handle) this.measureHandle(handle, into);
+  }
+
+  /** `measure` for a committed view by its handle, which a node's own may not be. */
+  private measureHandle(handle: FabricNode, into: (frame: WindowFrame) => void): void {
+    this.fabric.measureInWindow?.(handle, (x, y, width, height) => into({ x, y, width, height }));
   }
 
   /**
@@ -13919,7 +13938,7 @@ export class Engine implements HostEngine {
    */
   private holdScroll(node: EngineNode): void {
     for (let up = node.parent; up; up = up.parent) {
-      if (up.nodeKind !== 'element' || !SCROLL_VIEWS.has(viewNameOf(up))) continue;
+      if (up.nodeKind !== 'element' || !SCROLL_VIEWS.has(committedViewName(up))) continue;
       this.scrollHeld = up;
       this.tellScreen(up);
       return;

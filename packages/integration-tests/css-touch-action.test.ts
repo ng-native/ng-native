@@ -6,16 +6,18 @@
  */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { Engine, registerViewName, type EngineNode } from '@ng-native/fabric';
+import { Engine, registerViewName, scrollsOverflow, type EngineNode } from '@ng-native/fabric';
 import { compileCss, createFakeFabric, type FakeFabricNode } from '@ng-native/testing';
 
 registerViewName('rns-screen', 'RNSScreen');
 
 const CSS =
   '.slider { touch-action: pan-y } .map { touch-action: none } .row { touch-action: pan-x }' +
-  ' .plain { touch-action: manipulation } .both { touch-action: pan-x pan-y }';
+  ' .plain { touch-action: manipulation } .both { touch-action: pan-x pan-y }' +
+  ' .scroller { overflow: auto }';
 
-function scene() {
+/** A screen with a page that scrolls: a scroll view, or an element that scrolls its overflow. */
+function scene(kind: 'scroll-view' | 'overflow' = 'scroll-view') {
   const reports: string[] = [];
   const fabric = createFakeFabric();
   const engine = new Engine(fabric, 1, {
@@ -31,7 +33,11 @@ function scene() {
     return node;
   };
   const screen = add('rns-screen', '', engine.root);
-  const page = add('scroll-view', 'page', screen);
+  const page = add(kind === 'scroll-view' ? 'scroll-view' : 'view', 'page', screen);
+  if (kind === 'overflow') {
+    scrollsOverflow(page);
+    engine.setClasses(page, 'page scroller');
+  }
   const nodes: Record<string, EngineNode> = { screen, page };
   for (const name of ['slider', 'map', 'row', 'plain', 'both', 'button']) {
     nodes[name] = add('view', name, page);
@@ -177,6 +183,22 @@ describe('touch-action', () => {
     s.finger('slider', 'End', 108, 101);
     assert.deepEqual(s.told.at(-1), [false, false], 'and given back with the touch');
     assert.equal(scrolls(), true);
+  });
+
+  it('keeps a drag that set off sideways from an element under it that scrolls its overflow', () => {
+    // The page is a scroll view only by its CSS: the same drag holds that one off.
+    const s = scene('overflow');
+    const scrolls = () => s.props('page')['scrollEnabled'] !== false;
+    s.finger('slider', 'Start', 100, 100);
+    s.finger('slider', 'Move', 101, 108);
+    assert.equal(scrolls(), true, 'set off down the page: the page may scroll');
+    s.finger('slider', 'End', 101, 108);
+
+    s.finger('slider', 'Start', 100, 100);
+    s.finger('slider', 'Move', 108, 101);
+    assert.equal(scrolls(), false, 'set off across: the page it is in does not scroll');
+    s.finger('slider', 'End', 108, 101);
+    assert.equal(scrolls(), true, 'given back with the touch');
   });
 
   it('keeps every drag from a scroll view where the element takes them all', () => {

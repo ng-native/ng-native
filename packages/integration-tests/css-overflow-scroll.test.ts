@@ -160,6 +160,38 @@ describe('an element that scrolls its overflow', () => {
     assert.equal(panel.children.length, 1);
     assert.deepEqual(s.ids(panel.children[0]!), ['a', 'b', 'c', 'd']);
   });
+
+  it('is what scrolls to bring something in it on screen, measured from its content view', () => {
+    // A panel that scrolls, on a page that does too: the panel is the nearest scroll view.
+    const fabric = createFakeFabric();
+    const engine = new Engine(fabric, 1, { globalStyles: compileCss(CSS, 'app.css') as never });
+    const page = engine.createElement('scroll-view');
+    engine.setProp(page, 'nativeID', 'page');
+    engine.appendChild(engine.root, page);
+    const panel = engine.createElement('view');
+    scrollsOverflow(panel);
+    engine.setClasses(panel, 'panel');
+    engine.setProp(panel, 'nativeID', 'panel');
+    engine.appendChild(page, panel);
+    const rows = ['a', 'b', 'c'].map((id) => {
+      const row = engine.createElement('view');
+      engine.setClasses(row, 'row');
+      engine.setProp(row, 'nativeID', id);
+      engine.appendChild(panel, row);
+      return row;
+    });
+    engine.commit();
+    fabric.frames.set('page', { x: 0, y: 0, width: 400, height: 800 });
+    fabric.frames.set('panel', { x: 0, y: 100, width: 400, height: 100 });
+    // The panel's content view, scrolled 20 down; its first row sits below its padding.
+    fabric.frames.set('View', { x: 0, y: 80, width: 400, height: 168 });
+    fabric.frames.set('a', { x: 0, y: 88, width: 400, height: 48 });
+    fabric.frames.set('c', { x: 0, y: 192, width: 400, height: 48 });
+    engine.focus(rows[2]!);
+    const scrolls = fabric.commands.filter((command) => command.name === 'scrollTo');
+    assert.equal(scrolls[0]?.node?.props['nativeID'], 'panel');
+    assert.deepEqual(scrolls, [{ viewName: 'ScrollView', name: 'scrollTo', args: [0, 76, true] }]);
+  });
 });
 
 describe('an element not said to scroll its overflow', () => {
