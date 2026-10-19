@@ -184,11 +184,15 @@ function publishedPackages() {
       const { outDir, rootDir } = existsSync(build)
         ? (JSON.parse(readFileSync(build, 'utf8')).compilerOptions ?? {})
         : {};
-      found[name] = manifest.files.map((pattern) =>
-        outDir && rootDir && path.posix.normalize(pattern) === path.posix.normalize(outDir)
-          ? path.posix.normalize(rootDir)
-          : pattern,
-      );
+      // A build whose source it cannot read is taken to publish all of the package: fail closed.
+      const built = (pattern) =>
+        outDir && path.posix.normalize(pattern) === path.posix.normalize(outDir);
+      found[name] =
+        outDir && !rootDir && manifest.files.some(built)
+          ? undefined
+          : manifest.files.map((pattern) =>
+              built(pattern) ? path.posix.normalize(rootDir) : pattern,
+            );
     }
   }
   return found;
@@ -205,11 +209,17 @@ function published(file, packages) {
   if (packages[name] === null) return false;
   const inside = rest.join('/');
   return packages[name].some((pattern) => {
+    // `**/` is any directories, none included, `**` anything, and `*` stays within a directory.
+    const within = (side) =>
+      side
+        .split('*')
+        .map((part) => part.replace(/[.+?^${}()|[\]\\]/g, '\\$&'))
+        .join('[^/]*');
     const source = pattern
       .replace(/\/+$/, '')
-      .split('*')
-      .map((part) => part.replace(/[.+?^${}()|[\]\\]/g, '\\$&'))
-      .join('[^/]*');
+      .split('**/')
+      .map((part) => part.split('**').map(within).join('.*'))
+      .join('(?:.*/)?');
     return new RegExp(`^${source}(/.*)?$`).test(inside);
   });
 }

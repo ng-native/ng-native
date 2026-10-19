@@ -108,6 +108,10 @@ describe('pr-gate', () => {
     assert.equal(needsPlan('M\tpackages/web/src/reset.css'), true);
     assert.equal(needsPlan('M\tpackages/web/browser/boot.ts'), false);
     assert.equal(needsPlan('M\tpackages/web/vitest.config.ts'), false);
+    // `**` reaches into any directory under it.
+    assert.equal(needsPlan('M\tpackages/kit/lib/a/b/file.cjs', { kit: ['lib/**/*.cjs'] }), true);
+    assert.equal(needsPlan('M\tpackages/kit/lib/file.cjs', { kit: ['lib/**/*.cjs'] }), true);
+    assert.equal(needsPlan('M\tpackages/kit/other/file.cjs', { kit: ['lib/**/*.cjs'] }), false);
     // A pattern in `files` is anchored at the package, and `*` stays within a directory.
     assert.equal(needsPlan('M\tpackages/metro/transformer.cjs'), true);
     assert.equal(needsPlan('M\tpackages/metro/css/compile.cjs'), true);
