@@ -320,7 +320,11 @@ function ruleFor(
 /** `@media screen and (max-width: 920px)` as the width it is for. */
 function conditionOf(media: string): StyleRule['condition'] | null | undefined {
   if (!media) return undefined;
-  const [, bound, value] = /\((max|min)-width:\s*([\d.]+)px\)/.exec(media) ?? [];
+  // The one shape it reads, whole: any other query, or a part of one, is passed over and said.
+  const [, bound, value] =
+    /^@media\s+(?:(?:only\s+)?(?:screen|all)\s+and\s+)?\((max|min)-width:\s*([\d.]+)px\)\s*$/i.exec(
+      media.trim(),
+    ) ?? [];
   if (!bound) return null;
   return {
     feature: 'width',
@@ -361,7 +365,8 @@ function readAtRule(
 ): boolean {
   if (!head.startsWith('@')) return false;
   const supports = /^@supports\s([\s\S]*)$/i.exec(head);
-  if (!supports) read(body, head);
+  // One query inside another is both, which no query read here is: passed over.
+  if (!supports) read(body, media ? `${media} ${head}` : head);
   else if (readsCondition(supports[1]!)) read(body, media);
   return true;
 }
