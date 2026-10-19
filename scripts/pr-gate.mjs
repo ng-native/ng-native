@@ -176,26 +176,33 @@ function publishedPackages() {
   for (const name of readdirSync(dir)) {
     const file = path.join(dir, name, 'package.json');
     if (!existsSync(file)) continue;
-    const manifest = JSON.parse(readFileSync(file, 'utf8'));
-    if (manifest.private === true) found[name] = null;
-    else if (!Array.isArray(manifest.files)) found[name] = undefined;
-    else {
-      const build = path.join(dir, name, 'tsconfig.build.json');
-      const { outDir, rootDir } = existsSync(build)
-        ? (JSON.parse(readFileSync(build, 'utf8')).compilerOptions ?? {})
-        : {};
-      // A build whose source it cannot read is taken to publish all of the package: fail closed.
-      const built = (pattern) =>
-        outDir && path.posix.normalize(pattern) === path.posix.normalize(outDir);
-      found[name] =
-        outDir && !rootDir && manifest.files.some(built)
-          ? undefined
-          : manifest.files.map((pattern) =>
-              built(pattern) ? path.posix.normalize(rootDir) : pattern,
-            );
-    }
+    const build = path.join(dir, name, 'tsconfig.build.json');
+    found[name] = publishedOf(
+      JSON.parse(readFileSync(file, 'utf8')),
+      existsSync(build) ? JSON.parse(readFileSync(build, 'utf8')).compilerOptions : undefined,
+    );
   }
   return found;
+}
+
+/**
+ * What one package publishes, from its manifest and its tsconfig.build `compilerOptions`: see
+ * `publishedPackages`. The build's output stands for its `rootDir`, and where that cannot be read,
+ * or is the package itself, all of the package counts: the gate fails closed.
+ *
+ * ponytail: the build's `exclude` is not read, so a source file the build leaves out still asks
+ * for a plan. That asks for one too many, never one too few.
+ */
+export function publishedOf(manifest, build) {
+  if (manifest.private === true) return null;
+  if (!Array.isArray(manifest.files)) return undefined;
+  const bare = (pattern) => path.posix.normalize(pattern).replace(/(\/\*\*)?\/*$/, '');
+  const out = build?.outDir ? bare(build.outDir) : 'dist';
+  const isBuilt = (pattern) => bare(pattern) === out;
+  if (!manifest.files.some(isBuilt)) return manifest.files;
+  const source = build?.rootDir ? bare(build.rootDir) : '';
+  if (!build?.outDir || source === '' || source === '.') return undefined;
+  return manifest.files.map((pattern) => (isBuilt(pattern) ? source : pattern));
 }
 
 /**

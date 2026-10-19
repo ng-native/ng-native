@@ -8,7 +8,7 @@ import { describe, it } from 'node:test';
 import { fileURLToPath } from 'node:url';
 // A script of the repository's, not a package: loaded by its path, which no import can name.
 const script = new URL('../../scripts/pr-gate.mjs', import.meta.url);
-const { compareBenches, editedTests, medians, needsPlan, options } = await import(
+const { compareBenches, editedTests, medians, needsPlan, options, publishedOf } = await import(
   new URL('../../scripts/pr-gate.mjs', import.meta.url).href
 );
 
@@ -95,6 +95,23 @@ describe('pr-gate', () => {
     // A package that is never published, as its package.json says, is released by no plan.
     assert.equal(needsPlan('A\tpackages/layout/src/compare.ts', { layout: null }), false);
     assert.equal(needsPlan('M\tpackages/fabric/src/css.ts', { layout: null }), true);
+  });
+
+  it('reads a build as the source it is made from, and fails closed where it cannot', () => {
+    const build = { outDir: 'dist', rootDir: 'src' };
+    assert.deepEqual(publishedOf({ files: ['dist'] }, build), ['src']);
+    // As written with a slash or every file under it.
+    assert.deepEqual(publishedOf({ files: ['dist/'] }, build), ['src']);
+    assert.deepEqual(publishedOf({ files: ['dist/**'] }, { outDir: 'dist/', rootDir: 'src/' }), [
+      'src',
+    ]);
+    // A build of the package itself, one with no source, and none at all: all of it counts.
+    assert.equal(publishedOf({ files: ['dist'] }, { outDir: 'dist', rootDir: '.' }), undefined);
+    assert.equal(publishedOf({ files: ['dist'] }, { outDir: 'dist' }), undefined);
+    assert.equal(publishedOf({ files: ['dist'] }, undefined), undefined);
+    // What is not built is published as written, and a private package not at all.
+    assert.deepEqual(publishedOf({ files: ['index.cjs'] }, undefined), ['index.cjs']);
+    assert.equal(publishedOf({ private: true, files: ['dist'] }, build), null);
   });
 
   it('asks for a plan only for a file the package publishes, or one its build is made from', () => {
