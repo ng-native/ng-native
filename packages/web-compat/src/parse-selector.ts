@@ -452,7 +452,7 @@ class Parser {
   }
 
   private functional(name: string, afterElement: string | undefined): Simple {
-    const takes = FUNCTIONS[name] ?? fail();
+    const takes = Object.hasOwn(FUNCTIONS, name) ? FUNCTIONS[name]! : fail();
     const allowed = afterElement === 'part' ? ['forgiving', 'lang', 'ident'] : ['forgiving'];
     if (afterElement !== undefined && !allowed.includes(takes)) fail();
     if (name === 'has' && this.nesting.has) fail();
@@ -637,7 +637,8 @@ const WORDS: Readonly<Record<string, { a: number; b: number }>> = {
 /** `an+b`, from the tokens at the parser's place. */
 function readAnB(at: Parser): { a: number; b: number } {
   const token = at.next();
-  const word = token?.type === 'ident' ? WORDS[lower(token.value)] : undefined;
+  const key = token?.type === 'ident' ? lower(token.value) : undefined;
+  const word = key !== undefined && Object.hasOwn(WORDS, key) ? WORDS[key] : undefined;
   if (word) {
     at.take();
     return word;

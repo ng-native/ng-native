@@ -252,6 +252,7 @@ function nthOf(argument: Argument, fromEnd: boolean, compile: Compile): Test {
 
 /** The test a pseudo-class is, with its argument where it has one. Unknown ones match nothing. */
 export function pseudoClass(name: string, argument: Argument | undefined, compile: Compile): Test {
-  if (argument) return FUNCTIONAL[name]?.(argument, compile) ?? never;
-  return PLAIN[name] ?? never;
+  if (argument)
+    return (Object.hasOwn(FUNCTIONAL, name) && FUNCTIONAL[name]?.(argument, compile)) || never;
+  return (Object.hasOwn(PLAIN, name) && PLAIN[name]) || never;
 }

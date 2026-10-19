@@ -267,6 +267,24 @@ describe('selectors on each kind of node', () => {
     assert.equal(document.createTextNode('x').matches('*'), false, 'a text is no element');
   });
 
+  it('throws a SyntaxError for names that only Object.prototype has', async () => {
+    const { document, main } = await page();
+    for (const name of ['constructor', 'toString', 'hasOwnProperty', '__proto__']) {
+      for (const selector of [`:${name}(a)`, `:nth-child(${name})`, `:${name}`]) {
+        assert.throws(() => main.querySelector(selector), { name: 'SyntaxError' }, selector);
+        assert.throws(() => document.querySelectorAll(selector), { name: 'SyntaxError' }, selector);
+      }
+    }
+  });
+
+  it('looks at the head of a document, as well as what is in it', async () => {
+    const { document } = await page();
+    const meta = document.createElement('meta');
+    document.head.appendChild(meta);
+    assert.ok(Array.from(document.querySelectorAll('*')).includes(document.head));
+    assert.equal(document.querySelectorAll('*:has(> meta)')[0], document.head);
+  });
+
   it('finds the elements of a fragment, and not the fragment, which is no parent element', async () => {
     const { document } = await page();
     const fragment = document.createDocumentFragment();

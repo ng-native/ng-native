@@ -342,6 +342,7 @@ export function documentFor(engine: Engine): CompatDocument {
   /** The elements a query of the document looks at: `<html>`, then the head, then the page. */
   function* elements(): Generator<EngineNode> {
     yield engine.root;
+    yield head;
     yield* elementsUnder(head);
     yield* elementsUnder(engine.root);
   }
