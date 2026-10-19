@@ -22,7 +22,7 @@ html/syntax/serializing-html-fragments                                         8
 html/syntax/parsing                                                            65         23 (35.4%)   20             2672             2739   97.6%
 html/syntax/parsing-html-fragments                                             13         2 (15.4%)    3              13               25     52.0%
 
-"all passing" is a file whose harness finished and every subtest passed.
+"all passing" is a file whose harness finished, with at least one subtest, every one passed.
 
 HOW EACH FILE ENDED
 A file ends OK, ERROR, TIMEOUT, PRECONDITION_FAILED or CRASH, where its process died or hung; an ending no file had is not listed.

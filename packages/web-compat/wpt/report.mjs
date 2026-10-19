@@ -75,8 +75,8 @@ function change(path, was, now) {
 }
 
 /**
- * What `--check` makes of a run's changes: `worse`, the files that pass less than recorded or
- * were not run, and `unrecorded`, those that pass more, are new, or have more or fewer subtests. Either
+ * What `--check` makes of a run's changes: `worse`, the files where a subtest passes that no
+ * longer did, however many others start to, or that were not run, and `unrecorded`, those that pass more, are new, or have more or fewer subtests. Either
  * fails it: an improvement not recorded with `--update` leaves the expectations stale, and a
  * later regression to where they say would pass unseen.
  */
@@ -334,7 +334,7 @@ export function summarize({ commit, suites, results, skipped, support, filters, 
     'PASS RATE',
     ratesTable(rows),
     '',
-    '"all passing" is a file whose harness finished and every subtest passed.',
+    '"all passing" is a file whose harness finished, with at least one subtest, every one passed.',
     '',
     'HOW EACH FILE ENDED',
     'A file ends OK, ERROR, TIMEOUT, PRECONDITION_FAILED or CRASH, where its process died or hung; an ending no file had is not listed.',

@@ -63,8 +63,17 @@ function options(argv) {
     timeout: number('timeout', 2000),
     hang: number('hang', 30_000),
     batch: number('batch', 100),
-    dump: flags.find((each) => each.startsWith('--dump='))?.slice('--dump='.length),
+    dump: dumpOf(flags),
   };
+}
+
+/** Where `--dump=<file>` writes, refused with no file named, which would write nothing. */
+function dumpOf(flags) {
+  const flag = flags.find((each) => each.startsWith('--dump='));
+  if (flag === undefined) return undefined;
+  const file = flag.slice('--dump='.length);
+  if (!file) throw new Error('--dump= names no file to write');
+  return file;
 }
 
 /** Whether a path is one a run with these filters is asked for: any, with none. */

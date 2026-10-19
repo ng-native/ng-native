@@ -4,7 +4,7 @@
  * Nothing is dropped without a reason: every file under a suite is run, skipped with a reason
  * that is counted in the summary, or is a support file, which is counted too.
  */
-import { readFileSync, readdirSync, statSync } from 'node:fs';
+import { readFileSync, readdirSync, realpathSync, statSync } from 'node:fs';
 import { dirname, join, posix, resolve, sep } from 'node:path';
 import { CHECKOUT } from './pin.mjs';
 import { hasModuleScript, scriptSources } from './page.mjs';
@@ -42,8 +42,20 @@ export function resolveScript(src, from) {
  */
 export function inCheckout(path) {
   const file = resolve(CHECKOUT, path);
-  return file.startsWith(resolve(CHECKOUT) + sep) ? file : undefined;
+  if (!file.startsWith(resolve(CHECKOUT) + sep)) return undefined;
+  // And where it really is, past any link: one in the checkout that leads out of it is not in it.
+  // A file that is not there is told of as missing, where it is asked for.
+  const real = realPath(file);
+  return real === undefined || real.startsWith(realPath(CHECKOUT) + sep) ? file : undefined;
 }
+
+const realPath = (path) => {
+  try {
+    return realpathSync(path);
+  } catch {
+    return undefined;
+  }
+};
 
 /** The harness's own report, which the runner stands in for. */
 export const isReport = (path) => path === 'resources/testharnessreport.js';

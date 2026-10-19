@@ -6,7 +6,15 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -122,6 +130,33 @@ function nodeWith(env: Record<string, string>, root: string, script: string, ...
 }
 const node = (root: string, script: string, ...args: string[]) =>
   nodeWith({}, root, script, ...args);
+
+test('takes no file a link in the checkout leads out of it to', () => {
+  const root = mkdtempSync(join(tmpdir(), 'wpt-link-'));
+  try {
+    mkdirSync(join(root, 'cache', 'wpt', 'dom'), { recursive: true });
+    writeFileSync(join(root, 'outside.js'), 'secret');
+    writeFileSync(join(root, 'cache', 'wpt', 'dom', 'inside.js'), 'ours');
+    symlinkSync(join(root, 'outside.js'), join(root, 'cache', 'wpt', 'dom', 'link.js'));
+    const asked = (path: string) =>
+      spawnSync(
+        process.execPath,
+        [
+          '--input-type=module',
+          '-e',
+          `import { inCheckout } from ${JSON.stringify(join(HERE, 'tests.mjs'))};` +
+            `console.log(String(inCheckout(${JSON.stringify(path)}) !== undefined));`,
+        ],
+        { encoding: 'utf8', env: { ...process.env, WPT_CACHE: join(root, 'cache') } },
+      ).stdout.trim();
+    assert.equal(asked('dom/inside.js'), 'true');
+    assert.equal(asked('dom/link.js'), 'false');
+    // One not there yet is no way out of it: it is told of as missing where it is asked for.
+    assert.equal(asked('dom/missing.js'), 'true');
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
 
 test('--check passes on what --update recorded, and fails on a file passing less or more', () => {
   inTemp('check', (root) => {
