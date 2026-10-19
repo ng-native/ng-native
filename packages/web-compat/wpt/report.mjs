@@ -6,18 +6,44 @@ import { createHash } from 'node:crypto';
 
 const passedOf = (result) => result.subtests.filter((test) => test.status === 'PASS');
 
-/** A file's result as the expectations keep it: its status, its counts, and which passed. */
+const digestOf = (names) =>
+  createHash('sha1')
+    .update([...names].sort().join('\n'))
+    .digest('hex')
+    .slice(0, 10);
+const hashOf = (name) => createHash('sha1').update(name).digest('hex').slice(0, 8);
+
+/**
+ * A file's result as the expectations keep it: its status, its counts, which passed, which
+ * subtests it has, and a short hash of each that did not pass, so a subtest that passed and no
+ * longer does is seen however many others start to.
+ */
 export function expectationOf(result) {
   const passed = passedOf(result).map((test) => test.name);
-  const digest = createHash('sha1').update(passed.sort().join('\n')).digest('hex').slice(0, 10);
   const total = result.subtests.length;
   return {
     status: result.status,
     pass: passed.length,
     fail: total - passed.length,
     total,
-    passed: digest,
+    passed: digestOf(passed),
+    names: digestOf(result.subtests.map((test) => test.name)),
+    failed: result.subtests
+      .filter((test) => test.status !== 'PASS')
+      .map((test) => hashOf(test.name))
+      .sort(),
   };
+}
+
+/**
+ * Whether a subtest the file passed when it was recorded no longer passes: one that fails now
+ * and did not then, among the same subtests. Where the subtests are others, nothing can say,
+ * and an expectation recorded without them says nothing either.
+ */
+function lostOne(was, now) {
+  if (was.names === undefined || was.names !== now.names) return false;
+  const failed = new Set(was.failed);
+  return now.failed.some((hash) => !failed.has(hash));
 }
 
 /** The expectations as the file holds them: a line a file, in order, so a change reads as one. */
@@ -35,9 +61,12 @@ export function writeExpectations(commit, files) {
  */
 function change(path, was, now) {
   if (!was) return { path, kind: 'new' };
-  const worse = now.pass < was.pass || (now.pass === was.pass && now.passed !== was.passed);
-  if (worse) return { path, kind: 'failing', was, now };
-  if (now.pass > was.pass) return { path, kind: 'passing', was, now };
+  const fewer = now.pass < was.pass || (now.pass === was.pass && now.passed !== was.passed);
+  if (fewer || lostOne(was, now)) return { path, kind: 'failing', was, now };
+  // Passing more of other subtests is no gain anything can vouch for: it is told as a change.
+  const others = was.names !== undefined && was.names !== now.names;
+  if (now.pass > was.pass && !others) return { path, kind: 'passing', was, now };
+  if (others) return { path, kind: 'changed', was, now };
   // As many passing, the same ones, and more or fewer subtests failing.
   return now.total === was.total ? undefined : { path, kind: 'changed', was, now };
 }

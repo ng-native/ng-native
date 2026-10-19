@@ -98,6 +98,24 @@ test('--check passes on what --update recorded, and fails on a file passing less
   });
 });
 
+test('a full --update records afresh after the pin moves, and anything else fails before it runs', () => {
+  inTemp('stale', (root) => {
+    checkout(root);
+    const stale = { commit: 'an-older-commit', files: { 'dom/nodes/gone.html': { pass: 1 } } };
+    writeFileSync(join(root, 'expectations.json'), JSON.stringify(stale));
+    const check = node(root, 'run.mjs', '--check');
+    assert.equal(check.status, 2, check.out);
+    assert.match(check.out, /recorded at an-older-commit/);
+    assert.doesNotMatch(check.out, /running \d+ files/, 'fails before the run');
+    const filtered = node(root, 'run.mjs', '--update', 'dom/nodes/');
+    assert.equal(filtered.status, 2, filtered.out);
+    assert.equal(node(root, 'run.mjs', '--update').status, 0);
+    const recorded = JSON.parse(readFileSync(join(root, 'expectations.json'), 'utf8'));
+    assert.equal(recorded.commit, COMMIT);
+    assert.equal(recorded.files['dom/nodes/gone.html'], undefined, 'none of the old carried over');
+  });
+});
+
 test('--check fails where a recorded file was not run, with a filter too', () => {
   inTemp('missing', (root) => {
     const at = checkout(root);

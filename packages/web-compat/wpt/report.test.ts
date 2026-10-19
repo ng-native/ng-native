@@ -35,6 +35,23 @@ test('a file passing fewer subtests, or other ones, is worse', () => {
   assert.deepEqual(verdict(compare(recorded, fewer, () => false)), { worse: 1, unrecorded: 0 });
 });
 
+test('a file passing more, where one it passed fails now, is worse', () => {
+  const was = { 'c.html': expectationOf(result('OK', ['one', 'two', 'three'], ['one'])) };
+  const now = { 'c.html': result('OK', ['one', 'two', 'three'], ['two', 'three']) };
+  const changes = compare(was, now, () => true);
+  assert.deepEqual(
+    changes.map((each: { kind: string }) => each.kind),
+    ['failing'],
+  );
+  assert.deepEqual(verdict(changes), { worse: 1, unrecorded: 0 });
+  // Passing more of other subtests is a change, which nothing says is a gain.
+  const grown = { 'c.html': result('OK', ['one', 'two', 'three', 'four'], ['one', 'four']) };
+  assert.deepEqual(
+    compare(was, grown, () => true).map((each: { kind: string }) => each.kind),
+    ['changed'],
+  );
+});
+
 test('a file that ends another way, passing the same subtests, is no change', () => {
   // A file passing nothing lands either side of its time limit from one run to the next.
   const results = {

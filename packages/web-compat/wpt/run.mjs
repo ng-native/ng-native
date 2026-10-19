@@ -193,12 +193,19 @@ function writeFound(results, summary, keep) {
   console.log(`\n${summary}`);
 }
 
-/** The expectations a run is compared with, where there are any for this commit. */
-function expectations(check) {
+/**
+ * The expectations a run is compared with, where there are any for this commit. Read before the
+ * run, so one that cannot be compared fails at once. A full `--update` after the pin moves
+ * records afresh, with none of the old commit's carried over.
+ */
+function expectations(opts) {
   const expected = readExpectations();
-  if (check && !expected) throw new Error('there is no expectations.json to check against');
+  if (opts.check && !expected) throw new Error('there is no expectations.json to check against');
   if (expected && expected.commit !== COMMIT) {
-    throw new Error(`expectations.json was recorded at ${expected.commit}: run with --update`);
+    if (opts.update && opts.filters.length === 0 && !opts.check) return undefined;
+    throw new Error(
+      `expectations.json was recorded at ${expected.commit}: run every suite with --update`,
+    );
   }
   return expected;
 }
@@ -210,6 +217,7 @@ async function main() {
   }
   const { run, skipped, support } = plan(opts.filters);
   if (!run.length) throw new Error('no test matches: nothing was run');
+  const expected = expectations(opts);
   const whole = opts.filters.length === 0;
   console.log(`running ${run.length} files, one process, ${opts.timeout} ms a file`);
   const results = await runAll(run, opts);
@@ -218,12 +226,11 @@ async function main() {
   const summary = summarize({ commit: COMMIT, suites: SUITES, results, skipped, support, ...opts });
   writeFound(results, summary, opts.update && whole);
 
-  compareAndRecord(results, opts);
+  compareAndRecord(results, opts, expected);
 }
 
 /** Compare the run with the expectations, record it on `--update`, and fail `--check` on a difference. */
-function compareAndRecord(results, opts) {
-  const expected = expectations(opts.check);
+function compareAndRecord(results, opts, expected) {
   const inScope = matcher(opts.filters);
   const changes = expected ? compare(expected.files, results, inScope) : [];
   tellChanges(changes);
