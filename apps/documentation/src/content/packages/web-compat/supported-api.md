@@ -104,9 +104,10 @@ Gaps:
   observes nothing pays nothing for them.
 
 Gaps: elements have no browser default styles of their own: a `<div>` is laid out as the engine
-lays out a view, and sized by its border box. The window does not scroll. An inline element over two lines is one box around both, where
-a browser has two. `IntersectionObserver` takes `trackVisibility` but its `isVisible` is never
-true, since nothing tells it whether something is drawn over an element.
+lays out a view, and sized by its border box. The window does not scroll. An inline element over
+two lines is one box around both, where a browser has two. `IntersectionObserver` takes
+`trackVisibility` but its `isVisible` is never true, since nothing tells it whether something is
+drawn over an element.
 
 ## Events
 
