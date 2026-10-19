@@ -377,6 +377,57 @@ describe('the room a line keeps over its baseline', () => {
     near(s.box('s')[1], 9, 'the small box');
   });
 
+  it('is at the top of a block an aspect ratio gives its height, however tall the box on it', () => {
+    // Chrome, the line where a height of its own would have it: at the top of the block, and
+    // not on its bottom, where a block as tall as its content has it.
+    const css =
+      '.p { display: block; aspect-ratio: 1 / 2 } .narrow { width: 25px }' +
+      ' .c { display: inline-block; width: 92px; min-height: 72px }';
+    for (const conformance of ['classic', 'strict'] as const) {
+      const tall = scene(css, ['p', ['c']], undefined, conformance);
+      assert.deepEqual(tall.box('p'), [0, 0, 400, 800]);
+      assert.deepEqual(tall.box('c'), [0, 0, 92, 72], `${conformance}: a box past the block`);
+      const short = scene(css, ['p narrow', ['c']], undefined, conformance);
+      assert.deepEqual(short.box('p narrow'), [0, 0, 25, 50]);
+      assert.deepEqual(short.box('c'), [0, 0, 92, 72], `${conformance}: a box past the block`);
+    }
+  });
+
+  it('is at the top of a block an aspect ratio sizes, in the cases the layout fuzzer found', () => {
+    // Each with Chrome's numbers for the box on the line, by the fuzzer's seed, left to right
+    // where the seed's case is right to left, which this Yoga does not lay out. The canary
+    // mounts strict.
+    const cases: [seed: number, css: string, expected: number[]][] = [
+      [
+        13876,
+        '.p { display: block; width: 25px; aspect-ratio: 1 / 2; box-sizing: border-box }' +
+          ' .c { display: inline-block; min-width: 92px; min-height: 72px; padding: 8px;' +
+          ' margin-bottom: auto; width: calc(30px + 25%) }',
+        [0, 0, 92, 72],
+      ],
+      [
+        12417,
+        '.p { display: block; min-width: 50%; aspect-ratio: 1;' +
+          ' box-sizing: border-box; border-width: 6px }' +
+          ' .c { display: inline-block; width: 83px; height: 25%; margin: 14px;' +
+          ' border-width: 3px; margin-left: clamp(5px, 110px, 72px) }',
+        [78, 20, 83, 97],
+      ],
+      [
+        10868,
+        '.p { display: block; width: 72px; padding-right: 0px; margin-left: 12px;' +
+          ' border-top-width: 3px; flex-basis: calc(21px + 79px); aspect-ratio: 3 / 2 }' +
+          ' .c { display: inline-block; width: 59px; height: 55px; max-height: 146px;' +
+          ' padding: 13px; box-sizing: content-box }',
+        [12, 3, 85, 81],
+      ],
+    ];
+    for (const [seed, css, expected] of cases) {
+      const actual = scene(css, ['p', ['c']], undefined, 'strict').box('c');
+      expected.forEach((value, i) => near(actual[i], value, `seed ${seed}, [${i}]`));
+    }
+  });
+
   it('lets a box taller than the room over the baseline reach down, from the top of the line', () => {
     // Chrome: a share of the line's height, at the top of the line it overflows.
     const css = `${LINE} .q { display: inline-block; height: 75% } .full { height: 100% }`;

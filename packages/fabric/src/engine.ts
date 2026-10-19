@@ -3682,10 +3682,12 @@ const paddingUnder = (props: Record<string, unknown>): number => {
 
 /**
  * Whether a line's strut makes its box taller: where nothing else says how tall the box is, and
- * nothing on the line has text, whose own line is the same room.
+ * nothing on the line has text, whose own line is the same room. A height of its own says, and
+ * so does an aspect ratio, which a block has its height from: its line is at the top of it.
  */
 function strutted(node: EngineNode, props: Record<string, unknown>): boolean {
-  const tall = props['height'] != null && props['height'] !== 'auto';
+  const tall =
+    (props['height'] != null && props['height'] !== 'auto') || isSet(props['aspectRatio']);
   // Between two insets an out-of-flow box is as tall as they leave it.
   const held =
     OUT_OF_FLOW.has(props['position'] as string) && isSet(props['top']) && isSet(props['bottom']);
