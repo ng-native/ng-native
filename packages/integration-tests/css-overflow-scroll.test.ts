@@ -108,6 +108,8 @@ describe('an element that scrolls its overflow', () => {
     assert.equal(s.view().viewName, 'View');
     s.engine.setProp(s.panel, 'style', { overflow: 'auto' });
     assert.equal(s.view().viewName, 'ScrollView');
+    // Native has no `auto` and reads it as visible: the scroll view is told to clip.
+    assert.equal(s.view().props['overflow'], 'scroll');
   });
 
   it('follows its padding changing, on the content', () => {

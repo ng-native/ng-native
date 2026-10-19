@@ -874,6 +874,9 @@ function splitScroller(props: Record<string, unknown>): {
   for (const [key, value] of Object.entries(props)) {
     (CONTENT_KEYS.has(key) ? content : box)[key] = value;
   }
+  // A scroll view clips only as `scroll`: native reads `auto`, which an inline style can say, as
+  // visible.
+  if (box['overflow'] === 'auto') box['overflow'] = 'scroll';
   return { box, content };
 }
 
