@@ -3,15 +3,15 @@ wpt 6dcecaab61b33a51e04f49be43941461808193cc, every suite, 2000 ms a file
 
 PASS RATE
 suite                                                                          files run  all passing  files skipped  subtests passed  of     rate
-dom/nodes                                                                      347        195 (56.2%)  129            11903            12949  91.9%
+dom/nodes                                                                      347        195 (56.2%)  129            11905            12949  91.9%
 dom/events                                                                     99         59 (59.6%)   91             439              731    60.1%
 dom/collections                                                                12         10 (83.3%)   1              56               60     93.3%
-css/selectors                                                                  223        126 (56.5%)  618            4670             5665   82.4%
+css/selectors                                                                  223        127 (57.0%)  618            4672             5665   82.5%
 html/canvas/element                                                            1091       747 (68.5%)  658            799              1257   63.6%
-css/cssom                                                                      257        155 (60.3%)  36             1757             1972   89.1%
+css/cssom                                                                      257        159 (61.9%)  36             1762             1972   89.4%
 uievents                                                                       15         10 (66.7%)   104            44               56     78.6%
 dom/traversal                                                                  18         16 (88.9%)   10             1602             1608   99.6%
-html/dom                                                                       211        56 (26.5%)   166            63892            64450  99.1%
+html/dom                                                                       211        56 (26.5%)   166            63892            64451  99.1%
 html/editing/the-hidden-attribute                                              10         2 (20.0%)    15             20               42     47.6%
 html/interaction/focus/sequential-focus-navigation-and-the-tabindex-attribute  3          1 (33.3%)    4              8                10     80.0%
 css/cssom-view                                                                 220        47 (21.4%)   27             682              1713   39.8%
@@ -38,7 +38,7 @@ html/editing/the-hidden-attribute: OK 5, TIMEOUT 5
 html/interaction/focus/sequential-focus-navigation-and-the-tabindex-attribute: ERROR 1, OK 2
 css/cssom-view: ERROR 17, OK 189, TIMEOUT 14
 resize-observer: ERROR 1, OK 24, TIMEOUT 7
-intersection-observer: ERROR 14, OK 119, TIMEOUT 4
+intersection-observer: ERROR 14, OK 118, TIMEOUT 5
 domparsing: ERROR 9, OK 56, TIMEOUT 3
 html/syntax/serializing-html-fragments: OK 8
 html/syntax/parsing: ERROR 4, OK 60, TIMEOUT 1
@@ -147,9 +147,9 @@ html/syntax/parsing-html-fragments: 13 support files, not tests
       2  no testharness (a reference, visual or print page)
       1  XML document (the runner reads HTML only)
 
-FAILURES BY CAUSE (6401 failures in 259 causes; the first 60)
+FAILURES BY CAUSE (6397 failures in 257 causes; the first 60)
 A failure is a subtest that did not pass, or a file that did not run to its end.
-  1. 2157 in 443 files: assert_equals: wrong value
+  1. 2160 in 446 files: assert_equals: wrong value
        dom/nodes/Comment-constructor.html: new Comment() should get the correct ownerDocument across globals: assert_equals: expected Document node with 1 child but got Document node with 2 children
        dom/nodes/Document-URL.html: Document.URL with redirect: assert_equals: expected "http://web-platform.test:8000/common/blank.html" but got "about:blank"
        dom/nodes/Document-characterSet-normalization-1.html: Name "IBM866" has label "866" (characterSet): assert_equals: expected "IBM866" but got "UTF-8"
@@ -165,7 +165,7 @@ A failure is a subtest that did not pass, or a file that did not run to its end.
        domparsing/tentative/stream-html-defer-async-script.html: element.streamAppendHTMLUnsafe with defer/async scripts: promise_test: Unhandled rejection with value: object "TypeError: placeholder[method] is not a function"
        domparsing/tentative/stream-html-run-scripts-option.html: element.streamAppendHTMLUnsafe with runScripts: true: promise_test: Unhandled rejection with value: object "TypeError: placeholder[method] is not a function"
        domparsing/tentative/stream-html-sanitizer.html: element.streamHTML with sanitizer {removeElements}: promise_test: Unhandled rejection with value: object "TypeError: placeholder[method] is not a function"
-  5. 221 in 40 files: assert_array_equals: wrong value
+  5. 218 in 40 files: assert_array_equals: wrong value
        dom/nodes/Document-getElementsByTagName.html: Element in non-HTML namespace, prefix, lowercase name: assert_array_equals: lengths differ, expected array [] length 0, got object "[object HTMLCollection]" length 1
        dom/nodes/Document-getElementsByTagNameNS.html: getElementsByTagNameNS('http://www.w3.org/1999/xhtml', '*'): assert_array_equals: lengths differ, expected array [Element node <html class="platform-ios"><body><div id="log"></div> <sc..., Element nod
        dom/nodes/Element-children.html: HTMLCollection edge cases 1: assert_array_equals: lengths differ, expected array ["0", "1", "2", "3", "4", "5", "foo", "bar", "baz"] length 9, got ["0", "1", "2", "3", "4", "5", "foo", "bar", "baz", "
@@ -173,11 +173,11 @@ A failure is a subtest that did not pass, or a file that did not run to its end.
        dom/nodes/Element-matches.html: In-document Element.matches: :target pseudo-class selector, matching the element referenced by the URL fragment identifier (with no refNodes): :target: assert_true: The element #target should match th
        dom/nodes/Element-webkitMatchesSelector.html: In-document Element.webkitMatchesSelector: :target pseudo-class selector, matching the element referenced by the URL fragment identifier (with no refNodes): :target: assert_true: The element #target s
        dom/nodes/ParentNode-querySelector-All.html: Document.querySelectorAll returns NodeList instance: assert_true: The result should be an instance of a NodeList expected true got false
-  7. 192 in 41 files: subtest NOTRUN
+  7. 193 in 42 files: subtest NOTRUN
        dom/nodes/Node-parentNode.html: Removed iframe: NOTRUN
        dom/nodes/moveBefore/relevant-mutations.html: Moving <img> into a <picture> triggers a relevant mutation on the <img>, loading <source>: NOTRUN
        dom/nodes/query-target-in-load-event.html: document.querySelector(":target") must work when called in the window.load event: NOTRUN
-  8. 186 in 65 files: assert_approx_equals: wrong value
+  8. 184 in 63 files: assert_approx_equals: wrong value
        html/canvas/element/color-type/2d.color.type.u8p3.to.u8srgb.to.u8p3.html: test srgb unorm8 canvas storing 8-bit display-p3 data accurately: assert_approx_equals: expected 116 +/- 2 but got 5
        html/canvas/element/color-type/2d.color.type.u8srgb.to.u8p3.to.u8srgb.html: test display-p3 unorm8 canvas not storing 8-bit srgb data accurately: assert_approx_equals: expected 9 +/- 2 but got 5
        html/canvas/element/drawing-images-to-the-canvas/2d.drawImage.animated.gif.html: drawImage() of an animated GIF draws the first frame: assert_approx_equals: Green channel of the pixel at (50, 25) expected 255 +/- 2 but got 0
@@ -196,7 +196,7 @@ A failure is a subtest that did not pass, or a file that did not run to its end.
        css/cssom-view/cssom-geometryutils-element-types.html: getBoxQuads() bounds match getBoundingClientRect() for HTML element: element.getBoxQuads is not a function
        css/cssom-view/cssom-geometryutils-fragmentation.html: getBoxQuads() returns every multicol fragment: fragmented.getBoxQuads is not a function
        css/cssom-view/cssom-geometryutils-getBoxQuads-options.html: getBoxQuads({box: "margin"}) returns the requested CSS box: target.getBoxQuads is not a function
- 13. 77 in 77 files: file TIMEOUT
+ 13. 78 in 78 files: file TIMEOUT
        dom/nodes/Document-contentType/contentType/contenttype_datauri_02.html: (file TIMEOUT) 
        dom/nodes/MutationObserver-childList.html: (file TIMEOUT) 
        dom/nodes/Node-parentNode.html: (file TIMEOUT) 
@@ -204,7 +204,7 @@ A failure is a subtest that did not pass, or a file that did not run to its end.
        css/selectors/class-prefix-selector-has-matching.tentative.html: :has(.foo-*) matches an element with a descendant, at any depth, whose class matches the prefix: ':has(.foo-*)' is not a valid selector.
        css/selectors/class-prefix-selector-matching-quirks.tentative.html: class="foo-bar" matches .foo-* in quirks mode: '.foo-*' is not a valid selector.
        css/selectors/class-prefix-selector-matching.tentative.html: class="foo-bar-baz" matches .foo-*: '.foo-*' is not a valid selector.
- 15. 71 in 53 files: assert_false: wrong value
+ 15. 72 in 54 files: assert_false: wrong value
        dom/nodes/Document-createElementNS.html: Lower-case non-HTML element without a prefix: assert_false: Should not be an HTMLElement expected false got true
        dom/nodes/Document-getElementsByTagName.html: hasOwnProperty, getOwnPropertyDescriptor, getOwnPropertyNames: assert_false: expected false got true
        dom/nodes/Element-getElementsByTagName.html: hasOwnProperty, getOwnPropertyDescriptor, getOwnPropertyNames: assert_false: expected false got true
@@ -233,7 +233,7 @@ A failure is a subtest that did not pass, or a file that did not run to its end.
        dom/nodes/MutationObserver-characterData.html: Range (r70) is created: document.createRange is not a function
        dom/nodes/MutationObserver-childList.html: Range (r70) is created: document.createRange is not a function
        dom/nodes/Node-normalize-2.html: normalize should move range's end boundary point into t1: document.createRange is not a function
- 23. 44 in 44 files: document.write is not a function
+ 23. 45 in 45 files: document.write is not a function
        html/dom/render-blocking/element-render-blocking-001.html: (file ERROR) TypeError: document.write is not a function
        html/dom/render-blocking/element-render-blocking-002.html: (file ERROR) TypeError: document.write is not a function
        html/dom/render-blocking/element-render-blocking-003.html: (file ERROR) TypeError: document.write is not a function
