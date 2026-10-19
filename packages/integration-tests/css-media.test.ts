@@ -9,7 +9,7 @@ import { after, before, describe, it } from 'node:test';
 import type { Type } from '@angular/core';
 import { Engine, StyleResolver, type StyleTarget } from '@ng-native/fabric';
 import { createRequire } from 'node:module';
-import { cleanup, render, settle, type BoundQueries } from '@ng-native/testing';
+import { cleanup, createFakeFabric, render, settle, type BoundQueries } from '@ng-native/testing';
 import { compileFixture } from './compile.ts';
 
 const require = createRequire(import.meta.url);
@@ -298,6 +298,19 @@ describe('a media feature written with no value', () => {
     assert.match(
       sheet('(hover)').refused[0]!,
       /'hover' is not a media feature a device can answer/,
+    );
+  });
+});
+
+describe("the engine's conditions", () => {
+  it('are what it was last given, for a package that answers a media query from a script', () => {
+    const engine = new Engine(createFakeFabric(), 1);
+    engine.updateConditions({ width: 400, height: 800, colorScheme: 'light' });
+    assert.equal(engine.conditions?.reducedMotion, undefined);
+    engine.updateConditions({ width: 400, height: 800, colorScheme: 'dark', reducedMotion: true });
+    assert.deepEqual(
+      [engine.conditions?.colorScheme, engine.conditions?.reducedMotion, engine.conditions?.width],
+      ['dark', true, 400],
     );
   });
 });

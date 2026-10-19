@@ -6857,7 +6857,19 @@ export class Engine implements HostEngine {
     return () => this.viewportWatchers.delete(listener);
   }
 
+  /**
+   * The conditions last given to `updateConditions`, or undefined before any: what a package
+   * answering a media query from a script, `matchMedia`, reads the colour scheme and the motion
+   * preference from.
+   */
+  get conditions(): Conditions | undefined {
+    return this.lastConditions;
+  }
+
+  private lastConditions: Conditions | undefined;
+
   updateConditions(next: Conditions): void {
+    this.lastConditions = next;
     this.viewportSize = { width: next.width, height: next.height };
     this.fontScale = next.fontScale;
     this.styles.setConditions(next);
