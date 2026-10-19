@@ -87,7 +87,7 @@
   "scripts": {
     "build": "ngc -p tsconfig.build.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "node --import @ng-native/testing/register --test \"src/*.test.ts\""
+    "test": "node --import @ng-native/testing/register --test \"src/*.test.ts\" \"wpt/*.test.ts\""
   },
   "license": "MIT",
   "homepage": "https://ng-native.com/packages/web-compat",

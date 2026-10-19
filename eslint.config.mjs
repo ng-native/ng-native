@@ -39,6 +39,9 @@ export default tseslint.config(
       'packages/nx/files/**',
       // A library as ng-packagr builds it, kept byte for byte: the tests read what it really emits.
       'packages/integration-tests/fixtures/ng-packagr/**',
+      // Web Platform Tests as `packages/web-compat/wpt/fetch.mjs` checks them out: another
+      // project's files, in a cache git ignores.
+      'packages/web-compat/wpt/.cache/**',
     ],
   },
   {
@@ -214,6 +217,8 @@ export default tseslint.config(
       // `@ng-native/web-compat`'s tests mount real components through the test harness, for the
       // same reason: its source imports neither.
       'packages/web-compat/src/*.test.ts',
+      // And the process its Web Platform Tests runner brings an app up in, the same way.
+      'packages/web-compat/wpt/worker.mjs',
       // The other way round: `@ng-native/testing`'s own tests import the package by its name,
       // not by relative path, because they stand in for an app's tests and an app has no other
       // way in. A relative import would bypass the `exports` map those tests exist to prove.

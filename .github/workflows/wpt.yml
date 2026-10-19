@@ -1,0 +1,113 @@
+name: Web Platform Tests
+
+# `@ng-native/web-compat` against the Web Platform Tests it records expectations for
+# (packages/web-compat/wpt). `--check` fails where a file passes less than recorded, and as much
+# where it passes more or ended another way: an improvement is recorded with `--update` in the
+# change that made it, so the expectations never go stale.
+#
+# Only when what the tests exercise changed: the package, the engine's CSS (the cascade and what
+# reads a value out of it, which web-compat's styles and computed style are built on), the
+# layout the page is laid out with, and the runner's own workflow.
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'packages/web-compat/**'
+      - '!packages/web-compat/**/*.md'
+      - 'packages/fabric/src/css*.ts'
+      - 'packages/fabric/src/engine.ts'
+      - 'packages/fabric/src/element-styles.ts'
+      - 'packages/fabric/src/inline-*.ts'
+      - 'packages/fabric/src/color-mix.ts'
+      - 'packages/fabric/src/relative-colour.ts'
+      - 'packages/fabric/src/background-layers.ts'
+      - 'packages/fabric/src/premultiplied-stops.ts'
+      - 'packages/fabric/src/font-faces.ts'
+      - 'packages/fabric/src/transition.ts'
+      - 'packages/integration-tests/laid-out-fabric.ts'
+      - 'packages/integration-tests/layout.ts'
+      - '.github/workflows/wpt.yml'
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+    paths:
+      - 'packages/web-compat/**'
+      - '!packages/web-compat/**/*.md'
+      - 'packages/fabric/src/css*.ts'
+      - 'packages/fabric/src/engine.ts'
+      - 'packages/fabric/src/element-styles.ts'
+      - 'packages/fabric/src/inline-*.ts'
+      - 'packages/fabric/src/color-mix.ts'
+      - 'packages/fabric/src/relative-colour.ts'
+      - 'packages/fabric/src/background-layers.ts'
+      - 'packages/fabric/src/premultiplied-stops.ts'
+      - 'packages/fabric/src/font-faces.ts'
+      - 'packages/fabric/src/transition.ts'
+      - 'packages/integration-tests/laid-out-fabric.ts'
+      - 'packages/integration-tests/layout.ts'
+      - '.github/workflows/wpt.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  check:
+    if: github.event.pull_request.draft != true
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: ./.github/actions/setup
+
+      # The commit the expectations were recorded at, read from where the runner reads it. On its
+      # own line, so a failure to read it fails the step rather than keying the cache on nothing.
+      - id: pin
+        run: |
+          commit=$(node --input-type=module -e "import { COMMIT } from './packages/web-compat/wpt/pin.mjs'; console.log(COMMIT)")
+          test -n "$commit"
+          echo "commit=$commit" >> "$GITHUB_OUTPUT"
+
+      # The checkout of that commit, kept between runs. Keyed by the commit and by pin.mjs as a
+      # whole, which lists the directories checked out: a suite added is a new checkout.
+      - id: cache
+        uses: actions/cache/restore@v6
+        with:
+          path: packages/web-compat/wpt/.cache/
+          key: wpt-${{ steps.pin.outputs.commit }}-${{ hashFiles('packages/web-compat/wpt/pin.mjs') }}
+
+      # Always: it does nothing on a checkout it stamped as whole, and fetches again otherwise. It
+      # exits non-zero on a fetch that failed or came back short, and the runner does not run
+      # without its stamp.
+      - run: node packages/web-compat/wpt/fetch.mjs
+
+      - if: steps.cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v6
+        with:
+          path: packages/web-compat/wpt/.cache/
+          key: wpt-${{ steps.pin.outputs.commit }}-${{ hashFiles('packages/web-compat/wpt/pin.mjs') }}
+
+      # The suites of the DOM, selectors and the CSSOM: about four minutes on a laptop, where every
+      # suite in pin.mjs takes over eight, most of it files waiting out their time limit. The rest
+      # (events, geometry, the observers, canvas, parsing) is the full run, which a change to them
+      # runs locally before it opens: see CONTRIBUTING.md. A filter is whole for what it matches:
+      # a recorded file in these suites that is not run fails the check.
+      - name: Check the Web Platform Tests against the expectations
+        run: >-
+          node packages/web-compat/wpt/run.mjs --check
+          dom/nodes/ dom/collections/ dom/traversal/ css/selectors/ css/cssom/ html/dom/ domparsing/
+
+      # What this run found, to compare with the checked-in summary.txt.
+      - if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: wpt-results
+          path: |
+            packages/web-compat/wpt/.cache/summary.txt
+            packages/web-compat/wpt/.cache/results.json
+          if-no-files-found: ignore
+          retention-days: 7
