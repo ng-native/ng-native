@@ -287,6 +287,16 @@ export const PACKAGES: NavSection = {
       ],
     },
     {
+      path: 'packages/web-compat',
+      title: 'Web compatibility',
+      summary: 'Component libraries written for a browser, on native views',
+      children: [
+        { path: 'packages/web-compat/supported-api', title: 'Supported API' },
+        { path: 'packages/web-compat/address-and-frames', title: 'Address and frames' },
+        { path: 'packages/web-compat/web-platform-tests', title: 'Web Platform Tests' },
+      ],
+    },
+    {
       path: 'packages/platform',
       title: 'Platform',
       summary: 'Bootstrapping an Angular application onto a device',
