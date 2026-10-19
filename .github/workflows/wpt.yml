@@ -26,6 +26,8 @@ on:
       - 'packages/fabric/src/transition.ts'
       - 'packages/integration-tests/laid-out-fabric.ts'
       - 'packages/integration-tests/layout.ts'
+      - 'packages/testing/src/**'
+      - 'pnpm-lock.yaml'
       - '.github/workflows/wpt.yml'
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review]
@@ -44,6 +46,8 @@ on:
       - 'packages/fabric/src/transition.ts'
       - 'packages/integration-tests/laid-out-fabric.ts'
       - 'packages/integration-tests/layout.ts'
+      - 'packages/testing/src/**'
+      - 'pnpm-lock.yaml'
       - '.github/workflows/wpt.yml'
   workflow_dispatch:
 
