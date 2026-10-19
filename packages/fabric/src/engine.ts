@@ -5445,6 +5445,11 @@ class RetainedNode {
   styled: true | undefined = undefined;
   bornIn: number | undefined = undefined;
   truncates: true | undefined = undefined;
+  // Written on nodes that never had one: a style set inline, and every node a commit forgets. A
+  // field a node is not made with gives it another shape when it is written.
+  inlineInherits: boolean | undefined = undefined;
+  line: LineBox | undefined = undefined;
+  inside: { handle: FabricNode; childHandles: FabricNode[] } | undefined = undefined;
   transitions?: Map<string, Transition>;
   playing?: RunningAnimation;
   scrolled?: ScrollAnimation;
