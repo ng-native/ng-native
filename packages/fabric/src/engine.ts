@@ -6482,6 +6482,12 @@ export class Engine implements HostEngine {
    * for them. Only those in the tree: see `releaseDetached`.
    */
   private readonly hoisted = new Set<EngineNode>();
+
+  /**
+   * Whether a subtree that left the tree has ever held a hoisted node of its own: until one has,
+   * a node taken out has none to carry, and `carryHoists` does not walk up to look.
+   */
+  private hoistsHeld = false;
   /** The nodes taken out of a child list since the last commit. See `releaseDetached`. */
   private readonly removedSinceCommit = new Set<EngineNode>();
   /**
@@ -7382,6 +7388,7 @@ export class Engine implements HostEngine {
    * release, puts each back with the subtree it is in.
    */
   private carryHoists(child: EngineNode): void {
+    if (!this.hoistsHeld) return;
     const top = this.topOf(child);
     if (top.dormantHoists) this.wakeHoists(top);
   }
@@ -7441,6 +7448,7 @@ export class Engine implements HostEngine {
       if (top === this.root) continue;
       this.hoisted.delete(node);
       (top.dormantHoists ??= []).push(node);
+      this.hoistsHeld = true;
     }
     for (const node of this.playing) {
       if (this.topOf(node) === this.root) continue;
@@ -7524,6 +7532,7 @@ export class Engine implements HostEngine {
     if (top !== this.root) {
       this.hoisted.delete(node);
       (top.dormantHoists ??= []).push(node);
+      this.hoistsHeld = true;
     }
     node.kept = undefined;
     // A field popped with the keyboard up never sends its blur.
