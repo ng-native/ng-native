@@ -2876,6 +2876,18 @@ function unaskedPlan(node: EngineNode): string[] {
 const askMode = (): 'all' | 'check' | undefined =>
   (globalThis as { ɵngNativeLayoutAsks?: 'all' | 'check' }).ɵngNativeLayoutAsks;
 
+/** Whether a key is a transition's or an animation's, as each of their declarations is kept. */
+const easesBy = (key: string): boolean =>
+  key.charCodeAt(0) === 36 && (key.startsWith('$transition') || key.startsWith('$animation'));
+
+/** Whether a style, an object or a list of them, transitions or animates. Allocates nothing. */
+function styleEases(style: unknown): boolean {
+  if (!style || typeof style !== 'object') return false;
+  if (Array.isArray(style)) return style.some(styleEases);
+  for (const key in style) if (easesBy(key)) return true;
+  return false;
+}
+
 /** What the declarations of a style ask for, together. */
 function styleAsks(style: unknown): number {
   if (style === null || typeof style !== 'object') return 0;
@@ -7535,10 +7547,14 @@ export class Engine implements HostEngine {
     }
   }
 
-  /** Note a prop, or a style set as one, that transitions or animates: see `eases`. */
+  /**
+   * Note a prop, or a style set as one, that transitions or animates: see `eases`. Asked of every
+   * prop and declaration set until one does, so it reads the keys where they are, copying none.
+   */
   private noteEasingProp(key: string, value: unknown): void {
-    this.noteEasing({ [key]: value });
-    if (key === 'style' || key === STYLE_OVERRIDE) this.noteEasing(flattenStyle(value, {}));
+    if (easesBy(key) || ((key === 'style' || key === STYLE_OVERRIDE) && styleEases(value))) {
+      this.eases = true;
+    }
   }
 
   /**
@@ -7695,7 +7711,11 @@ export class Engine implements HostEngine {
    * has changed for the props diff to notice.
    */
   styleChanged(node: EngineNode, key?: string): void {
-    if (!this.eases) this.noteEasingProp('style', node.props['style']);
+    // The rest of the style was noted as it was set: only the declaration changed can be new.
+    if (!this.eases) {
+      if (key === undefined) this.noteEasingProp('style', node.props['style']);
+      else if (easesBy(key)) this.eases = true;
+    }
     if (this.asked !== EVERYTHING) {
       const style = node.props['style'] as Record<string, unknown> | undefined;
       const value = key === undefined ? style : style?.[key];
