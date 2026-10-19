@@ -3197,8 +3197,16 @@ function compileCss(source, context = 'styles', options = {}) {
     ...(fonts.length ? { fonts } : {}),
     ...(Object.keys(keyframes).length ? { keyframes } : {}),
     ...invalidation(rules),
+    // Said on the sheet as `structural` is: the engine looks for the boxes only where one is.
+    ...(rules.some(drawsABox) ? { generated: true } : {}),
   };
 }
+
+/** Whether a rule is for a generated box, `::before` or `::after`. */
+const drawsABox = (rule) => {
+  const type = rule.compounds[rule.compounds.length - 1]?.type;
+  return type === '::before' || type === '::after';
+};
 
 /** The element that draws a background through its letters. */
 const GRADIENT_TEXT = 'gradient-text';

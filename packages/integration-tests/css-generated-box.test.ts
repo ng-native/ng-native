@@ -55,6 +55,11 @@ describe('a ::before or ::after rule, compiled', () => {
     assert.equal(box!['specificity'], plain!['specificity']);
   });
 
+  it('says on the sheet whether it has a rule for a box, for the engine to look only there', () => {
+    assert.equal((generated('.a::before { content: "" }') as { generated?: true }).generated, true);
+    assert.equal('generated' in generated('.a { width: 1px }'), false);
+  });
+
   it('still refuses any other pseudo-element, and says so', () => {
     const dropped: string[] = [];
     compileCss('.a::selection { color: red }', 'library.css', {

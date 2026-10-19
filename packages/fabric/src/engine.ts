@@ -5810,6 +5810,7 @@ const noGenerated = (): Generated => ({ [BEFORE]: generatedFor(), [AFTER]: gener
 
 /** What a sheet's `::before` and `::after` rules with a content give a box to, or null for none. */
 function generatedIn(sheet: StyleSheet): Generated | null {
+  if (!sheet.generated) return null;
   let boxes: Generated | null = null;
   for (const rule of sheet.rules) {
     const box = rule.compounds.at(-1)?.type;

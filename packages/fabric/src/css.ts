@@ -556,6 +556,11 @@ export interface StyleSheet {
    */
   readonly structural?: true;
   /**
+   * Some rule is for a generated box, `::before` or `::after`, which only a sheet compiled to
+   * draw them has. Said on the sheet so the engine reads the rules of no other for one.
+   */
+  readonly generated?: true;
+  /**
    * Some rule uses `:has()`, so what a node matches can change when something beneath it does.
    * Said on the sheet for the same reason `structural` is: the cost is invalidation, and only a
    * sheet that asks has the engine match a changed node's ancestors again.
