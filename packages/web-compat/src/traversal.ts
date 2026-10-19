@@ -2,6 +2,7 @@ import type { Engine, EngineNode } from '@ng-native/fabric';
 import { documentOfRoot } from './document-roots.ts';
 import { domError } from './dom-error.ts';
 import { inDocument } from './in-document.ts';
+import { WeakList } from './weak-list.ts';
 import { engineOf } from './window.ts';
 
 /**
@@ -303,22 +304,18 @@ export class TreeWalker extends Traversal {
 }
 
 /** Every iterator still held, which a node taken out of a document moves off: see below. */
-const everyIterator = new Set<WeakRef<NodeIterator>>();
+const everyIterator = new WeakList<NodeIterator>();
 
 /**
  * A doctype, comment or element is about to be taken out of a document, which no engine does:
  * each iterator moves off it, as for a node an engine takes out.
  */
 export function takingFromDocument(node: TreeNode): void {
-  for (const ref of [...everyIterator]) {
-    const iterator = ref.deref();
-    if (iterator) iterator.removing(node);
-    else everyIterator.delete(ref);
-  }
+  everyIterator.forEach((iterator) => iterator.removing(node));
 }
 
 /** The iterators an engine has made that are still held, to move off a node taken out. */
-const iterators = new WeakMap<Engine, Set<WeakRef<NodeIterator>>>();
+const iterators = new WeakMap<Engine, WeakList<NodeIterator>>();
 
 /** Where an iterator is: at a node, and before it or after it. */
 interface Position {
@@ -421,18 +418,12 @@ function engineOfDocument(document: TreeNode): Engine | undefined {
  * The iterators of an engine, told of each node it takes out before it does: an iterator on a
  * node taken out would otherwise walk on from a node that is in no tree.
  */
-function watchRemovals(engine: Engine): Set<WeakRef<NodeIterator>> {
+function watchRemovals(engine: Engine): WeakList<NodeIterator> {
   let held = iterators.get(engine);
   if (held) return held;
-  const all = (held = new Set());
+  const all = (held = new WeakList());
   iterators.set(engine, all);
-  const removing = (child: EngineNode) => {
-    for (const ref of [...all]) {
-      const iterator = ref.deref();
-      if (iterator) iterator.removing(child);
-      else all.delete(ref);
-    }
-  };
+  const removing = (child: EngineNode) => all.forEach((iterator) => iterator.removing(child));
   const { removeChild, appendChild, insertBefore } = engine;
   engine.removeChild = function (parent, child) {
     removing(child);

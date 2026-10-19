@@ -230,7 +230,10 @@ function traps(byName: boolean): ProxyHandler<object> {
     },
     ownKeys(target) {
       const items = itemsOf(target);
-      const names = byName ? namesIn(items).filter((name) => !(name in target)) : [];
+      // A name that is an index is not one of its keys, as a browser has it: the index is.
+      const names = byName
+        ? namesIn(items).filter((name) => indexOf(name) === undefined && !(name in target))
+        : [];
       return [...items.keys()].map(String).concat(names, Reflect.ownKeys(target) as string[]);
     },
   };

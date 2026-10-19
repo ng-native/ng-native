@@ -70,6 +70,30 @@ function checkElements(node: EngineNode, { child, replacing, others, after }: Pl
   }
 }
 
+const staysIn = () =>
+  domError("The page's element stays in it: the app is drawn in it.", 'NotSupportedError');
+
+/** How each document checks the nodes a child of it puts beside it: see `checkInDocument`. */
+const checks = new WeakMap<
+  object,
+  (items: readonly unknown[], child: Child | null, gone: readonly Child[], method: string) => void
+>();
+
+/**
+ * Throw where the nodes a child of a document is handed cannot go in it before `child`, with
+ * those `gone` taken out first: a child's `before`, `after` and `replaceWith`, checked as one
+ * before any is put in. See `tree-members.ts`.
+ */
+export function checkInDocument(
+  document: object,
+  items: readonly unknown[],
+  child: EngineNode | null,
+  gone: readonly EngineNode[],
+  method: string,
+): void {
+  checks.get(document)?.(items, child, gone, method);
+}
+
 /** The page's own element and doctype, for its document: see `document.ts`. */
 interface PageHeld {
   readonly element: EngineNode;
@@ -96,11 +120,12 @@ export function documentChildren(document: object, page?: PageHeld): PropertyDes
     child: Child | null,
     replacing: boolean,
     method: string,
-    emptied = false,
+    gone: readonly Child[] = [],
   ): Child {
     const given = nodeGiven(node, document, method);
-    // `replaceChildren` puts what it is given in place of all there is.
-    const all = emptied ? [] : held();
+    // What is taken out first: all there is for `replaceChildren`, the node replaced for
+    // `replaceWith`.
+    const all = held().filter((kid) => !gone.includes(kid));
     if (child !== null && !all.includes(child)) {
       throw domError(`The node to go by is not a child of this document.`, 'NotFoundError');
     }
@@ -142,20 +167,24 @@ export function documentChildren(document: object, page?: PageHeld): PropertyDes
   }
 
   function take(child: Child): void {
-    if (child === page?.element) {
-      throw domError(
-        "The page's element stays in it: the app is drawn in it.",
-        'NotSupportedError',
-      );
-    }
+    if (child === page?.element) throw staysIn();
     takingFromDocument(child);
     kids = held().filter((kid) => kid !== child);
     if (isDocumentType(child)) placeDocumentType(child, null);
     else unmarkRoot(child);
   }
 
-  /** What `append`, `prepend` and `replaceChildren` are given, as one node or several. */
-  function given(items: unknown[], method: string, emptied = false, child: Child | null = null) {
+  /**
+   * What `append`, `prepend`, `replaceChildren` and a child's `before` and the rest are given, as
+   * one node or several, checked as one before any is put in: a browser puts several in a
+   * fragment, which it checks.
+   */
+  function given(
+    items: readonly unknown[],
+    method: string,
+    gone: readonly Child[] = [],
+    child: Child | null = null,
+  ) {
     for (const item of items) {
       if (typeof item === 'string') throw hierarchy('A document holds no text.');
     }
@@ -163,7 +192,7 @@ export function documentChildren(document: object, page?: PageHeld): PropertyDes
     if (items.length > 1 && items.some(isDocumentType)) {
       throw hierarchy('A doctype cannot go in a fragment.');
     }
-    const nodes = items.map((item) => check(item, child, false, method, emptied));
+    const nodes = items.map((item) => check(item, child, false, method, gone));
     if (nodes.length > 1) {
       const elements = nodes.flatMap((node) =>
         isDocumentType(node) ? [] : insertedFor(node).filter(isElement),
@@ -172,6 +201,8 @@ export function documentChildren(document: object, page?: PageHeld): PropertyDes
     }
     return nodes;
   }
+
+  checks.set(document, (items, child, gone, method) => void given(items, method, gone, child));
 
   const get = (read: () => unknown) => ({ get: read, configurable: true });
   const method = (value: (...args: never[]) => unknown) => ({
@@ -253,11 +284,17 @@ export function documentChildren(document: object, page?: PageHeld): PropertyDes
     }),
     prepend: method((...items: unknown[]) => {
       const first = held()[0] ?? null;
-      for (const node of given(items, 'prepend', false, first)) put(node, first);
+      for (const node of given(items, 'prepend', [], first)) put(node, first);
     }),
     replaceChildren: method((...items: unknown[]) => {
-      const nodes = given(items, 'replaceChildren', true);
-      for (const kid of held()) if (!nodes.includes(kid)) take(kid);
+      const nodes = given(items, 'replaceChildren', held());
+      const kept = nodes.flatMap((node): Child[] =>
+        isDocumentType(node) ? [node] : insertedFor(node),
+      );
+      const taken = held().filter((kid) => !kept.includes(kid));
+      // The page's element among what goes, which stays, refused before anything is taken out.
+      if (page && taken.includes(page.element)) throw staysIn();
+      for (const kid of taken) take(kid);
       for (const node of nodes) put(node, null);
     }),
   };

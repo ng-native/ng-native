@@ -183,3 +183,21 @@ describe('how one node stands to another', () => {
     assert.equal(comment.isSameNode(comment), true);
   });
 });
+
+describe('the keys of an HTMLCollection', () => {
+  it('are its indices and then each name once, leaving out a name that is an index', async () => {
+    const { document, list } = await page();
+    const [one, two] = list.children;
+    one.id = '0';
+    two.id = 'same';
+    const three = list.appendChild(document.createElement('span'));
+    three.id = 'same';
+    three.setAttribute('name', 'other');
+    const children = list.children;
+    assert.deepEqual(Object.keys(children), ['0', '1', '2']);
+    assert.deepEqual(Reflect.ownKeys(children), ['0', '1', '2', 'same', 'other']);
+    assert.deepEqual({ ...children }, { 0: one, 1: two, 2: three });
+    assert.equal(children.same, two);
+    assert.equal(children.namedItem('0'), one);
+  });
+});

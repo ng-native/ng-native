@@ -115,6 +115,49 @@ describe('putting nodes beside a node', () => {
     assert.equal(b.previousSibling, null);
   });
 
+  it('checks every node it is handed before it puts any beside a node', async () => {
+    const { document } = await mount();
+    const list = document.createElement('div');
+    const [a, b, c, d] = ['a', 'b', 'c', 'd'].map((id) =>
+      Object.assign(document.createElement('p'), { id }),
+    );
+    list.append(c);
+    const said = () => [...list.childNodes].map((node: Dom) => node.id || node.textContent);
+    for (const put of ['before', 'after', 'replaceWith']) {
+      assert.throws(() => c[put](a, b, document), { name: 'HierarchyRequestError' }, put);
+      assert.throws(() => c[put](a, 'one', list), { name: 'HierarchyRequestError' }, put);
+      assert.deepEqual(said(), ['c'], put + ' put nothing in');
+      assert.deepEqual([a.parentNode, b.parentNode], [null, null]);
+    }
+    c.before(a, 'one', b);
+    c.after(d);
+    assert.deepEqual(said(), ['a', 'one', 'b', 'c', 'd']);
+    c.replaceWith(d, c, 'two');
+    assert.deepEqual(said(), ['a', 'one', 'b', 'd', 'c', 'two']);
+  });
+
+  it('checks every node it is handed before it puts any beside a node in the document', async () => {
+    const { document } = await mount();
+    const root = document.documentElement;
+    const comment = document.appendChild(document.createComment('end'));
+    const names = () => [...document.childNodes].map((node: Dom) => node.nodeName);
+    const all = names();
+    const [one, two] = ['one', 'two'].map((words) => document.createComment(words));
+    for (const put of ['before', 'after', 'replaceWith']) {
+      const div = document.createElement('div');
+      assert.throws(() => comment[put](one, div), { name: 'HierarchyRequestError' }, put);
+      assert.throws(() => comment[put](one, two, 'text'), { name: 'HierarchyRequestError' }, put);
+      assert.deepEqual(names(), all, put + ' put nothing in');
+    }
+    comment.before(one, two);
+    assert.deepEqual(names(), ['html', root.nodeName, '#comment', '#comment', '#comment']);
+    comment.replaceWith(two, one);
+    assert.deepEqual(
+      [...document.childNodes].slice(2).map((node: Dom) => node.data),
+      ['two', 'one'],
+    );
+  });
+
   it('puts a node at the place named around an element', async () => {
     const { document } = await mount();
     const outer = document.createElement('div');

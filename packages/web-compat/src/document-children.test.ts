@@ -126,4 +126,36 @@ describe('a comment the page document holds', () => {
     document.replaceChildren(documentElement, document.createComment('end'));
     assert.deepEqual(names(document), [documentElement.nodeName, '#comment']);
   });
+
+  it('refuses a replaceChildren before it takes anything out', async () => {
+    const document = await page();
+    const { doctype, documentElement } = document;
+    const before = document.insertBefore(document.createComment('before'), documentElement);
+    const comment = document.createComment('c');
+    const all = names(document);
+    // What a document cannot hold, as a browser refuses it.
+    assert.equal(
+      nameOf(() => document.replaceChildren(documentElement, document.createElement('div'))),
+      'HierarchyRequestError',
+    );
+    assert.equal(
+      nameOf(() => document.replaceChildren(comment, 'text')),
+      'HierarchyRequestError',
+    );
+    // And what would take the page's element out, which stays in it.
+    assert.equal(
+      nameOf(() => document.replaceChildren(comment)),
+      'NotSupportedError',
+    );
+    assert.equal(
+      nameOf(() => document.replaceChildren(doctype)),
+      'NotSupportedError',
+    );
+    assert.deepEqual(names(document), all, 'nothing taken out');
+    assert.equal(document.doctype === doctype, true);
+    assert.equal(before.parentNode === document, true);
+    document.replaceChildren(comment, documentElement);
+    assert.deepEqual(names(document), ['#comment', documentElement.nodeName]);
+    assert.deepEqual([doctype.parentNode, before.parentNode], [null, null]);
+  });
 });

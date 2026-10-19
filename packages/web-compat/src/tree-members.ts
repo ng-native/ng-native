@@ -1,6 +1,7 @@
 import { claimHost, type Engine, type EngineNode } from '@ng-native/fabric';
 import { createComment } from './character-data.ts';
 import { classAttribute, setClassAttribute } from './class-list.ts';
+import { checkInDocument } from './document-children.ts';
 import { documentOfRoot, topOf } from './document-roots.ts';
 import { insertedFor, isFragment, markFragment } from './document-fragment.ts';
 import { domError, required, withLength } from './dom-error.ts';
@@ -55,9 +56,26 @@ const asNodes = (node: EngineNode, items: readonly unknown[]): EngineNode[] =>
       : engineOf(node).createText(String(item)),
   );
 
+/**
+ * Throw where the nodes a node is handed cannot go in its parent before `before`, with the node
+ * itself taken out first where it is `replaced`: all of them checked before any moves, as a
+ * browser puts them in a fragment and checks that. Its parent is an element, or the document it
+ * is at the top of a tree in.
+ */
+function checkBeside(
+  node: Dom,
+  parent: Dom,
+  nodes: readonly EngineNode[],
+  before: EngineNode | null,
+  replaced: boolean,
+  method: string,
+): void {
+  if (isNode(parent)) return checkEach(parent, nodes);
+  checkInDocument(parent, nodes, before, replaced ? [node] : [], method);
+}
+
 /** Put nodes in a node's parent before another of its children, or at its end. */
-function putBefore(parent: Dom | null, nodes: readonly EngineNode[], before: EngineNode | null) {
-  if (!parent) return;
+function putBefore(parent: Dom, nodes: readonly EngineNode[], before: EngineNode | null) {
   together(parent, () => {
     for (const node of nodes) parent.insertBefore(node, before);
   });
@@ -237,22 +255,33 @@ export const treeMembers: PropertyDescriptorMap = {
       for (const node of nodes.flatMap(insertedFor)) putIn(this, node, null);
     });
   }),
+  // A node in no parent has nowhere to put anything, and checks nothing.
   before: method(function (...items: unknown[]) {
+    const parent = this.parentNode;
+    if (!parent) return;
     const nodes = asNodes(this, items);
-    adoptFirst(nodes.filter((node) => node !== this));
     // Before itself, or what follows it where it is one of those moved.
-    putBefore(this.parentNode, nodes, nodes.includes(this) ? nextNotAmong(this, nodes) : this);
+    const before = nodes.includes(this) ? nextNotAmong(this, nodes) : this;
+    checkBeside(this, parent, nodes, before, false, 'before');
+    adoptFirst(nodes.filter((node) => node !== this));
+    putBefore(parent, nodes, before);
   }),
   after: method(function (...items: unknown[]) {
+    const parent = this.parentNode;
+    if (!parent) return;
     const nodes = asNodes(this, items);
+    const before = nextNotAmong(this, nodes);
+    checkBeside(this, parent, nodes, before, false, 'after');
     adoptFirst(nodes.filter((node) => node !== this));
-    putBefore(this.parentNode, nodes, nextNotAmong(this, nodes));
+    putBefore(parent, nodes, before);
   }),
   replaceWith: method(function (...items: unknown[]) {
-    const nodes = asNodes(this, items);
     const parent = this.parentNode;
+    if (!parent) return;
+    const nodes = asNodes(this, items);
     const next = nextNotAmong(this, nodes);
-    if (parent && !nodes.includes(this)) parent.removeChild(this);
+    checkBeside(this, parent, nodes, next, true, 'replaceWith');
+    if (!nodes.includes(this)) parent.removeChild(this);
     putBefore(parent, nodes, next);
   }),
   insertAdjacentElement: method(function (...args: unknown[]) {
