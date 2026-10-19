@@ -2,25 +2,30 @@ import type { MediaCondition } from '@ng-native/fabric';
 import { CompatEvent, dispatch, listen, unlisten } from './events.ts';
 import { readMedia } from './media-query.ts';
 
-/** The size of a window, which is what a media query here is asked of. */
+/**
+ * What a media query here is asked of: the window's size, and the colour scheme and motion the
+ * engine was given, light and no preference where it was given none, as it settles them.
+ */
 export interface Screen {
   readonly width: number;
   readonly height: number;
+  readonly colorScheme?: 'light' | 'dark';
+  readonly reducedMotion?: boolean;
 }
 
-/**
- * Whether a condition holds for a window: `undefined` for a preference, the colour scheme or the
- * motion the user asked for, which the engine keeps and does not say.
- *
- * ponytail: so `(prefers-color-scheme: dark)` matches nothing here, where a stylesheet's holds as
- * the engine has it. Read the engine's conditions once it says them.
- */
+/** Whether a condition holds for a window: `undefined` for a feature that is not known here. */
 function holds(condition: MediaCondition, screen: Screen): boolean | undefined {
   if ('all' in condition || 'any' in condition) {
     const parts = 'all' in condition ? condition.all : condition.any;
     const answers = parts.map((part) => holds(part, screen));
     if (answers.includes(undefined)) return undefined;
     return 'all' in condition ? answers.every(Boolean) : answers.some(Boolean);
+  }
+  if (condition.feature === 'prefers-color-scheme') {
+    return condition.value === (screen.colorScheme ?? 'light');
+  }
+  if (condition.feature === 'prefers-reduced-motion') {
+    return (condition.value === 'reduce') === (screen.reducedMotion === true);
   }
   if (condition.feature === 'orientation') {
     return condition.value === (screen.width > screen.height ? 'landscape' : 'portrait');

@@ -464,7 +464,7 @@ describe('matchMedia', () => {
     assert.equal(globals.matchMedia('(min-width: 500px)').matches, false);
   });
 
-  it('reads a query as the engine does, and answers no preference it cannot say', async () => {
+  it('reads a query as the engine does', async () => {
     await page();
     const matches = (media: string): boolean => globals.matchMedia(media).matches;
     assert.equal(matches('screen and (min-width: 300px) and (max-height: 800px)'), true);
@@ -482,10 +482,26 @@ describe('matchMedia', () => {
     assert.equal(matches('(min-width: 1px) and (orientation: portrait) or (hover)'), false);
     assert.equal(matches('(hover: hover)'), false, 'a feature not read matches nothing');
     assert.equal(matches('not (hover: hover)'), false, 'negated or not');
-    assert.equal(matches('(prefers-color-scheme: dark)'), false);
-    assert.equal(matches('(prefers-color-scheme: light)'), false, 'nor a preference');
-    assert.equal(matches('not (prefers-color-scheme: dark)'), false);
     assert.throws(() => globals.matchMedia(), TypeError);
+  });
+
+  it('answers the colour scheme and the motion the engine was given, light and none before any', async () => {
+    const { engine } = await page();
+    const matches = (media: string): boolean => globals.matchMedia(media).matches;
+    assert.equal(matches('(prefers-color-scheme: light)'), true);
+    assert.equal(matches('(prefers-color-scheme: dark)'), false);
+    assert.equal(matches('not (prefers-color-scheme: dark)'), true);
+    assert.equal(matches('(prefers-reduced-motion)'), false);
+    assert.equal(matches('(prefers-reduced-motion: no-preference)'), true);
+    const dark = globals.matchMedia('(prefers-color-scheme: dark)');
+    let told = 0;
+    dark.addEventListener('change', () => told++);
+    engine.updateConditions({ width: 400, height: 800, colorScheme: 'dark', reducedMotion: true });
+    assert.equal(dark.matches, true);
+    assert.equal(told, 1, 'told when the scheme turns');
+    assert.equal(matches('(prefers-color-scheme: light)'), false);
+    assert.equal(matches('(prefers-reduced-motion: reduce)'), true);
+    assert.equal(matches('(prefers-reduced-motion: no-preference)'), false);
   });
 
   it('tells each kind of listener once of a change, with a MediaQueryListEvent', async () => {

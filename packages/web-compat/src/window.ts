@@ -66,7 +66,7 @@ function matchMedia(...args: unknown[]): MediaQueryList {
     throw new TypeError("Failed to execute 'matchMedia': 1 argument required, but only 0 present.");
   }
   return mediaQueryList(String(args[0]), {
-    screen: size,
+    screen: preferences,
     watch: (changed) => {
       const engine = engines.at(-1);
       return engine ? listenToResize(engine, changed) : noop;
@@ -313,6 +313,16 @@ export const windowSize = (engine: Engine): { width: number; height: number } =>
 const size = () => {
   const engine = engines.at(-1);
   return engine ? windowSize(engine) : { width: 0, height: 0 };
+};
+
+/** The window's size, with the colour scheme and the motion the engine was given. */
+const preferences = () => {
+  const conditions = engines.at(-1)?.conditions;
+  return {
+    ...size(),
+    colorScheme: conditions?.colorScheme,
+    reducedMotion: conditions?.reducedMotion,
+  };
 };
 
 /**
