@@ -6,6 +6,7 @@ import assert from 'node:assert/strict';
 import { afterEach, describe, it } from 'node:test';
 import { Component, DOCUMENT, ElementRef, inject, signal } from '@angular/core';
 import { Text, View } from '@ng-native/components';
+import { registeredViewName } from '@ng-native/fabric';
 import { cleanup, render, screen, userEvent } from '@ng-native/testing';
 
 afterEach(cleanup);
@@ -19,7 +20,8 @@ type Dom = any;
   template: `<view testID="box" (click)="clicks.set(clicks() + 1)"
       ><text>{{ clicks() }}</text></view
     >
-    <div id="clicks"></div>`,
+    <div id="clicks"></div>
+    <button id="pressed"></button>`,
 })
 class Clicks {
   readonly host: Dom = inject(ElementRef).nativeElement;
@@ -73,6 +75,8 @@ describe('provideWebCompat', () => {
     const members = membersOf((await render(Page)).instance.host);
     cleanup();
     const globals = globalsNow();
+    const windowPrototype = Object.getPrototypeOf(globalThis);
+    const buttonView = registeredViewName('button');
 
     const app = await render(Clicks, { providers: [provideWebCompat()] });
     const host = app.instance.host;
@@ -97,21 +101,44 @@ describe('provideWebCompat', () => {
     const observer = new (globalThis as Dom).MutationObserver(() => {});
     observer.observe(host, { childList: true, subtree: true });
     assert.equal(await pressHeard(), true);
+    // HTML: markup, names, attributes as nodes, what HTML reflects, and the elements it has.
+    const html = ['DOMParser', 'XMLSerializer', 'Attr', 'Document', 'HTMLDivElement'];
+    for (const name of [...html, 'DOMStringMap', 'ProcessingInstruction']) {
+      assert.equal(typeof (globalThis as Dom)[name], 'function', name);
+    }
+    const div = host.lastElementChild.previousElementSibling;
+    assert.equal(div.outerHTML, '<div id="clicks"></div>');
+    assert.equal(div.namespaceURI, 'http://www.w3.org/1999/xhtml');
+    assert.equal(div.title, '');
+    assert.equal(typeof div.dataset, 'object');
+    assert.equal(div.attributes.length, 1);
+    assert.equal(typeof app.instance.document.implementation.createHTMLDocument, 'function');
+    assert.equal((globalThis as Dom).clicks, div, 'an element with an id is a global by it');
+    assert.equal(registeredViewName('button'), 'View');
+    assert.equal(host.lastElementChild.props['accessibilityRole'], 'button');
 
     cleanup();
     assert.deepEqual(globalsNow(), globals, 'every global as it was, the document too');
     assert.deepEqual(membersOf(host), members, 'every node member as it was');
     assert.equal(host.getAttribute, undefined);
-    for (const name of tree) assert.equal((globalThis as Dom)[name], undefined, name);
+    for (const name of [...tree, ...html]) assert.equal((globalThis as Dom)[name], undefined, name);
     assert.deepEqual(
       [host.childNodes, host.cloneNode, host.append],
       [undefined, undefined, undefined],
     );
+    assert.deepEqual(
+      [div.innerHTML, div.namespaceURI, div.title, div.dataset, div.attributes],
+      [undefined, undefined, undefined, undefined, undefined],
+    );
+    assert.equal(Object.getPrototypeOf(globalThis), windowPrototype, 'no named properties');
+    assert.equal((globalThis as Dom).clicks, undefined);
+    assert.equal(registeredViewName('button'), buttonView);
     // The engine's own, which has no more than `contains`.
     assert.equal(host.classList.add, undefined);
     // The window's listeners went with it, and the renderer's extension.
     const again = await render(Clicks);
     assert.equal(again.instance.host.getAttribute, undefined);
+    assert.equal(again.instance.host.childList.at(-1).props['accessibilityRole'], undefined);
     assert.equal(await pressHeard(), false);
     cleanup();
     await render(Page, { providers: [provideWebCompat()] });
@@ -139,9 +166,12 @@ describe('provideWebCompat', () => {
     const plain = await render(Clicks);
     assert.equal(await pressHeard(), false);
     // Its attributes are the props they are written as: an id is no native id.
-    const box = plain.instance.host.lastElementChild;
+    const box = plain.instance.host.lastElementChild.previousElementSibling;
     assert.deepEqual([box.props['id'], box.props['nativeID']], ['clicks', undefined]);
     assert.equal(box.ownerDocument, null);
+    // Its button has no role given it, and its element with an id is no global.
+    assert.equal(plain.instance.host.lastElementChild.props['accessibilityRole'], undefined);
+    assert.equal((globalThis as Dom).clicks, undefined);
   });
 
   it('adds it all again for an app that asks after the last one went', async () => {

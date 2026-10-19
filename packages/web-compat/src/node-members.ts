@@ -1,7 +1,10 @@
 import type { Engine, EngineNode } from '@ng-native/fabric';
 import type { Renderer2 } from '@angular/core';
+import { attributeRemoved } from './attr.ts';
+import { isCDATASection } from './cdata-section.ts';
 import { isCharacterData, setData, wordsOf } from './character-data.ts';
 import { classAttribute, classListOf, setClassAttribute } from './class-list.ts';
+import { inXmlDocument, madeDocumentOf } from './created-document.ts';
 import { documentOf, eventPath, nameOf } from './document.ts';
 import { isFragment } from './document-fragment.ts';
 import { documentOfRoot, topOf } from './document-roots.ts';
@@ -11,6 +14,16 @@ import { inDocument, isInDocument, lastInDocument } from './in-document.ts';
 import { listenNatively, hasCapture, topLevel } from './listen.ts';
 import { observing, removingAttribute, settingAttribute, together } from './mutation-observer.ts';
 import { NODE_CONSTANTS } from './node-constants.ts';
+import { isProcessingInstruction, targetOf } from './processing-instruction.ts';
+import {
+  asciiLower,
+  asciiUpper,
+  checkAttributeName,
+  nameRecordOf,
+  noteAttributeName,
+  XHTML,
+} from './qualified-name.ts';
+import { BY_ELEMENT, GLOBAL } from './reflected-attributes.ts';
 import { engineOf } from './window.ts';
 
 /** A node as a library holds one: an engine node with the members below on it. */
@@ -87,6 +100,19 @@ export function copyWritten(from: EngineNode, to: EngineNode): void {
   if (all) written.set(to, new Map(all));
 }
 
+/**
+ * Names in the order they were set: those set some other way first, a template's, as they come,
+ * then those a script wrote, in the order it first wrote them.
+ */
+function inWrittenOrder(node: EngineNode, names: readonly string[]): string[] {
+  const all = written.get(node);
+  if (!all) return [...names];
+  return [
+    ...names.filter((name) => !all.has(name)),
+    ...[...all.keys()].filter((name) => names.includes(name)),
+  ];
+}
+
 /** Set an attribute as a template sets one: through its app's renderer where it has one. */
 function setAsWritten(node: EngineNode, name: string, value: unknown): void {
   const engine = engineOf(node);
@@ -146,8 +172,108 @@ function elementBeside(node: EngineNode, step: 1 | -1): EngineNode | null {
 const textOf = (node: EngineNode): string =>
   node.nodeKind === 'text' ? node.nodeText : inDocument(node).map(textOf).join('');
 
-/** An element's name as the DOM says it, in the upper case an HTML document has it in. */
-const domName = (node: EngineNode): string => nameOf(node, engineOf(node)).toUpperCase();
+/** Whether a node is an element of the DOM's: no text, no comment, no fragment. */
+const isElement = (node: EngineNode): boolean => node.nodeKind === 'element' && !isFragment(node);
+
+/**
+ * An element's name as the DOM says it: upper case for one of HTML's in an HTML document, and as
+ * it is written for any other, one a script made in another namespace or one of an XML
+ * document's. A template's elements are HTML's.
+ */
+function domName(node: EngineNode): string {
+  const name = nameRecordOf(node);
+  if (!name) return nameOf(node, engineOf(node)).toUpperCase();
+  const qualified = name.prefix === null ? name.localName : `${name.prefix}:${name.localName}`;
+  return name.namespace === XHTML && !inXmlDocument(node) ? asciiUpper(qualified) : qualified;
+}
+
+/** The namespace of an element: the one it was made in, or HTML's for what a template makes. */
+function namespaceOf(node: EngineNode): string | null {
+  if (!isElement(node)) return null;
+  const name = nameRecordOf(node);
+  return name ? name.namespace : XHTML;
+}
+
+/**
+ * A name written as a native view's prop is: a capital after a small letter, `testID` or
+ * `accessibilityLabel`. An app passes these through to the view it draws, and they are kept as
+ * written; no HTML attribute is named so, and a library reads none of them back in lower case.
+ * But for the name of a property HTML reflects, `accessKey`, which is an attribute's in any case.
+ */
+const PROP_CASE = /[a-z][A-Z]/;
+const nativeProp = (node: EngineNode, name: string): boolean =>
+  PROP_CASE.test(name) && !(name in GLOBAL) && !(name in (BY_ELEMENT[node.tag] ?? {}));
+
+/**
+ * The name an attribute is kept by on an element. An HTML element's are lower case, as a browser
+ * makes them, and read by any case of them: one a script made keeps a name written so, but for a
+ * native prop's. One a template made is written as it is given: a native prop's name has
+ * capitals in it.
+ */
+function attributeNamed(node: EngineNode, given: unknown, writing = false): string {
+  const name = String(given);
+  if (namespaceOf(node) !== XHTML) return name;
+  if (writing) return nameRecordOf(node) && !nativeProp(node, name) ? asciiLower(name) : name;
+  const lower = asciiLower(name);
+  // Written in lower case by a script, before a native prop of the name in another case.
+  if (written.get(node)?.has(lower)) return lower;
+  if (hasAttribute(node, name)) return name;
+  return Object.keys(node.props).find((key) => asciiLower(key) === lower) ?? lower;
+}
+
+/**
+ * The props an element is given for its native view, which are no attribute of it: whether it is
+ * an element of its own to accessibility and can be focused, what draws an image, and every name
+ * written as a native prop's is (`accessibilityRole`, `pointerEvents`). One a script or markup set
+ * is one all the same.
+ */
+const NATIVE_ONLY =
+  /^(accessible|focusable|collapsable|source|editable|multiline|responsible)$|[a-z][A-Z]/;
+function isNativeOnly(node: EngineNode, key: string): boolean {
+  if (key === 'nativeID' || written.get(node)?.has(key)) return false;
+  // A field's width in characters and what is typed in it.
+  if (key === 'size' || key === 'text') return node.tag === 'input' || node.tag === 'textarea';
+  return NATIVE_ONLY.test(key);
+}
+
+/** An element's attribute names, `class` and `style` among them, in the order they were set. */
+function attributeNames(node: EngineNode): string[] {
+  if (!isElement(node)) return [];
+  const names = Object.keys(node.props)
+    .filter((key) => key !== 'style' && node.props[key] != null && !isNativeOnly(node, key))
+    .map((key) => (key === 'nativeID' ? 'id' : key));
+  const all = [
+    ...(classAttribute(node) === null ? [] : ['class']),
+    ...(written.get(node)?.has('style') ? ['style'] : []),
+    ...names,
+  ];
+  return inWrittenOrder(node, all);
+}
+
+/**
+ * Write an attribute by the name it is kept by, as `setAttribute` does once it has named it and
+ * `setAttributeNS` does with the name it was given, in whatever case that is. Told to an observer
+ * in the namespace given.
+ */
+export function writeAttribute(
+  node: EngineNode,
+  name: string,
+  value: string,
+  namespace: string | null = null,
+): void {
+  // Written with no namespace, until `setAttributeNS` says it is in one.
+  noteAttributeName(node, name, null);
+  settingAttribute(
+    node,
+    name,
+    () => {
+      noteWritten(node, name, value);
+      if (name === 'class') return setClassAttribute(node, value);
+      setAsWritten(node, name, attributeValue(name, value));
+    },
+    namespace,
+  );
+}
 
 /**
  * Attach a listener `addEventListener` was given to what native says of its type. Core maps the
@@ -177,9 +303,6 @@ const get = (read: (this: Dom) => unknown, write?: (this: Dom, value: unknown) =
 });
 const method = (value: (this: Dom, ...args: never[]) => unknown) => ({ value, writable: true });
 
-/** Whether a node is an element of the DOM's: no text, no comment, no fragment. */
-const isElement = (node: EngineNode): boolean => node.nodeKind === 'element' && !isFragment(node);
-
 /**
  * The DOM members every engine node answers to, for `extendNodes`. `core` is the node prototype
  * as it was: its listeners are what Angular's `@defer` triggers go through, and still do. The
@@ -189,22 +312,34 @@ export const nodeMembers = (core: CoreNode): PropertyDescriptorMap => ({
   // Upper case, as the DOM has an HTML element's: a library walking up stops at `HTML` or `BODY`.
   nodeName: get(function () {
     if (isFragment(this)) return '#document-fragment';
-    if (this.nodeKind === 'anchor') return '#comment';
-    if (this.nodeKind === 'text') return '#text';
+    if (this.nodeKind === 'anchor') return targetOf(this) ?? '#comment';
+    if (this.nodeKind === 'text') return isCDATASection(this) ? '#cdata-section' : '#text';
     return domName(this);
+  }),
+  // A processing instruction's: a link's and a form's are the attribute, see `html-members.ts`.
+  target: get(function () {
+    return targetOf(this);
   }),
   // An element's own name, as `nodeName` gives it: the DOM has none for a text or a comment.
   tagName: get(function () {
     return isElement(this) ? domName(this) : undefined;
   }),
   localName: get(function () {
-    return isElement(this) ? nameOf(this, engineOf(this)) : null;
+    if (!isElement(this)) return null;
+    return nameRecordOf(this)?.localName ?? nameOf(this, engineOf(this));
+  }),
+  prefix: get(function () {
+    return isElement(this) ? (nameRecordOf(this)?.prefix ?? null) : null;
+  }),
+  namespaceURI: get(function () {
+    return namespaceOf(this);
   }),
   // The kind of node it is: the engine says an element of everything, for Angular's own check.
   nodeType: get(function () {
     if (isFragment(this)) return 11;
-    if (this.nodeKind === 'anchor') return 8;
-    return this.nodeKind === 'text' ? 3 : 1;
+    if (this.nodeKind === 'anchor') return isProcessingInstruction(this) ? 7 : 8;
+    if (this.nodeKind === 'text') return isCDATASection(this) ? 4 : 3;
+    return 1;
   }),
   // `Node`'s constants, on every node as they are on a browser's: `nodeType` is compared with them.
   ...Object.fromEntries(Object.entries(NODE_CONSTANTS).map(([name, value]) => [name, { value }])),
@@ -218,39 +353,57 @@ export const nodeMembers = (core: CoreNode): PropertyDescriptorMap => ({
   ),
 
   // Told to an observer as it is named, even where it is set to what it was: see
-  // `mutation-observer.ts`.
+  // `mutation-observer.ts`. By the name it is kept by: see `attributeNamed`.
   setAttribute: method(function (...args: unknown[]) {
     required(args, 2, 'setAttribute');
-    const name = String(args[0]);
-    const value = String(args[1]);
-    settingAttribute(this, name, () => {
-      if (name === 'class') return setClassAttribute(this, value);
-      noteWritten(this, name, value);
-      setAsWritten(this, name, attributeValue(name, value));
-    });
+    const name = attributeNamed(this, checkAttributeName(String(args[0])), true);
+    writeAttribute(this, name, String(args[1]));
   }),
   getAttribute: method(function (name: unknown) {
-    return attributeOf(this, String(name));
+    return attributeOf(this, attributeNamed(this, name));
   }),
   hasAttribute: method(function (name: unknown) {
-    return hasAttribute(this, String(name));
+    return hasAttribute(this, attributeNamed(this, name));
   }),
   removeAttribute: method(function (given: unknown) {
-    const name = String(given);
+    const name = attributeNamed(this, given);
     removingAttribute(this, name, () => {
-      if (name === 'class') return setClassAttribute(this, null);
-      if (!hasAttribute(this, name)) return;
+      // Its node keeps the value it had: see `attr.ts`.
+      attributeRemoved(this, name, attributeOf(this, name));
+      noteAttributeName(this, name, null);
+      const had = hasAttribute(this, name);
       noteWritten(this, name, null);
-      setAsWritten(this, name, null);
+      if (name === 'class') return setClassAttribute(this, null);
+      if (had) setAsWritten(this, name, null);
     });
   }),
   toggleAttribute: method(function (given: unknown, force?: boolean) {
-    const name = String(given);
-    const set = force ?? !hasAttribute(this, name);
+    const name = checkAttributeName(String(given));
+    const set = force ?? !this['hasAttribute']!(name);
     if (set) this['setAttribute']!(name, '');
     else this['removeAttribute']!(name);
     return set;
   }),
+  getAttributeNames: method(function () {
+    return attributeNames(this);
+  }),
+  hasAttributes: method(function () {
+    return attributeNames(this).length > 0;
+  }),
+
+  // A library disables a control by the property as often as by the attribute: one is the other.
+  // A form control's own is HTML's, in `reflected-attributes.ts`.
+  disabled: get(
+    function () {
+      if (!isElement(this)) return undefined;
+      const value = this.props['disabled'];
+      return value != null && value !== false && value !== 'false';
+    },
+    function (value) {
+      if (value) this['setAttribute']!('disabled', '');
+      else this['removeAttribute']!('disabled');
+    },
+  ),
 
   // Written to, it is its `value` written, as a browser forwards it.
   classList: get(
@@ -340,9 +493,16 @@ export const nodeMembers = (core: CoreNode): PropertyDescriptorMap => ({
       setData(this, wordsOf(value));
     },
   ),
-  // The page's document, for a node of an app that asked for one.
+  // A node of a document `document.implementation` made is that document's: see
+  // `dom-implementation.ts`. Any other is the page's, for an app that asked for one.
   ownerDocument: get(function () {
-    return documentOf(engineOf(this)) ?? null;
+    return madeDocumentOf(this) ?? documentOf(engineOf(this)) ?? null;
+  }),
+  // What a URL an attribute of it says is resolved against: its document's.
+  baseURI: get(function () {
+    const document = (madeDocumentOf(this) ?? documentOf(engineOf(this))) as
+      { baseURI?: unknown } | undefined;
+    return typeof document?.baseURI === 'string' ? document.baseURI : 'about:blank';
   }),
 
   // A touch stays with the node that took it until it ends, so there is no capture to set or to

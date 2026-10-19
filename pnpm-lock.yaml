@@ -1958,6 +1958,9 @@ importers:
       '@ng-native/platform':
         specifier: workspace:*
         version: link:../platform
+      parse5:
+        specifier: ^7.3.0
+        version: 7.3.0
     devDependencies:
       '@angular/common':
         specifier: 22.2.0

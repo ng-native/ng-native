@@ -49,7 +49,8 @@
   },
   "dependencies": {
     "@ng-native/fabric": "workspace:*",
-    "@ng-native/platform": "workspace:*"
+    "@ng-native/platform": "workspace:*",
+    "parse5": "^7.3.0"
   },
   "peerDependencies": {
     "@angular/core": "^22.0.0"

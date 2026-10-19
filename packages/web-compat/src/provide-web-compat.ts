@@ -11,7 +11,12 @@ import { Engine, extendNodes } from '@ng-native/fabric';
 import { extendRenderer } from '@ng-native/platform';
 import { documentFor } from './document.ts';
 import { webListen } from './listen.ts';
+import { attributeMembers } from './attribute-members.ts';
 import { characterDataMembers } from './character-data.ts';
+import { registerElements } from './elements.ts';
+import { withHtmlMembers } from './html-members.ts';
+import { htmlMethods } from './html-methods.ts';
+import { markupMembers } from './markup-members.ts';
 import { nodeMembers, setAttributesWith, type CoreNode } from './node-members.ts';
 import { relationMembers } from './node-relations.ts';
 import { treeMembers } from './tree-members.ts';
@@ -31,13 +36,20 @@ function install(engine: Engine): void {
   // Read now: once extended, the prototype's listeners are this package's.
   const { addEventListener, removeEventListener } = core;
   removals = [
-    extendNodes({
-      ...nodeMembers({ addEventListener, removeEventListener }),
-      ...treeMembers,
-      ...characterDataMembers,
-      ...relationMembers,
-    }),
+    // The properties of HTML elements over the rest: see `html-members.ts`.
+    extendNodes(
+      withHtmlMembers({
+        ...nodeMembers({ addEventListener, removeEventListener }),
+        ...treeMembers,
+        ...characterDataMembers,
+        ...relationMembers,
+        ...attributeMembers,
+        ...markupMembers,
+        ...htmlMethods,
+      }),
+    ),
     extendRenderer(webListen),
+    registerElements(),
   ];
 }
 
@@ -60,13 +72,16 @@ function setGlobalDocument(document: unknown): void {
 /**
  * Let a component library written for the browser render in this app.
  *
- * - Nodes answer to the DOM members such a library calls on its elements: their names,
- *   attributes and classes, the tree around them and every way to change it, and their
- *   listeners.
+ * - Nodes answer to the DOM members such a library calls on its elements: their names and
+ *   namespaces, attributes, classes and `dataset`, the properties HTML reflects attributes as,
+ *   their markup, the tree around them and every way to change it, and their listeners.
+ * - The HTML elements a library writes that the engine has no view for, a `<button>` or a
+ *   `<table>`, are views, and a button and a link have their roles.
  * - `DOCUMENT`, and the global `document`, create engine nodes, with a `body` that draws over the
- *   screen for overlays.
- * - The `window` globals a library reads exist: its listeners, `Event`, its size, and
- *   `MutationObserver`, which hears what changes in the tree.
+ *   screen for overlays, and its `implementation` makes documents that are never drawn.
+ * - The `window` globals a library reads exist: its listeners, `Event`, its size,
+ *   `MutationObserver`, which hears what changes in the tree, `DOMParser` and `XMLSerializer`,
+ *   the interfaces of HTML's elements, and an element with an id as a global of that name.
  * - A `click` listener hears a press.
  *
  * Nothing is added until this is called, and all of it is taken away again when the last app

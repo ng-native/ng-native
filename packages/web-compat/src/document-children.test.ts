@@ -1,6 +1,7 @@
 /**
- * What the page's document holds, in order: its element, a doctype before it, and comments, put
- * in, moved and taken out as a browser refuses or allows.
+ * What a document holds, in order, the page's and one a script makes: its element, a doctype
+ * before it, and comments and processing instructions, put in, moved and taken out as a browser
+ * refuses or allows.
  */
 import assert from 'node:assert/strict';
 import { afterEach, describe, it } from 'node:test';
@@ -53,6 +54,10 @@ describe("what the page's document holds", () => {
     assert.equal(document.parentNode, null);
     assert.equal(document.previousSibling, null);
     assert.equal(document.nextSibling, null);
+    assert.equal(document.characterSet, 'UTF-8');
+    assert.equal(document.charset, 'UTF-8');
+    assert.equal(document.inputEncoding, 'UTF-8');
+    assert.equal(document.contentType, 'text/html');
   });
 
   it('takes comments around its element, and keeps its element, which the app is drawn in', async () => {
@@ -157,5 +162,96 @@ describe('a comment the page document holds', () => {
     document.replaceChildren(comment, documentElement);
     assert.deepEqual(names(document), ['#comment', documentElement.nodeName]);
     assert.deepEqual([doctype.parentNode, before.parentNode], [null, null]);
+  });
+});
+
+describe('what a made document holds', () => {
+  it('keeps comments and instructions in order around its doctype and element', async () => {
+    const document = await page();
+    const doc = document.implementation.createDocument(null, null, null);
+    const comment = doc.createComment('c');
+    doc.appendChild(comment);
+    const element = doc.appendChild(doc.createElement('r'));
+    doc.insertBefore(doc.implementation.createDocumentType('r', '', ''), element);
+    doc.prepend(doc.createProcessingInstruction('p', 'd'));
+    assert.deepEqual(names(doc), ['p', '#comment', 'r', 'r']);
+    assert.equal(doc.firstChild.nodeType, 7);
+    assert.equal(doc.lastChild, element);
+    assert.equal(doc.documentElement, element);
+    assert.equal(doc.doctype.nextSibling, element);
+    assert.equal(comment.parentNode, doc);
+    comment.remove();
+    assert.deepEqual(names(doc), ['p', 'r', 'r']);
+    assert.equal(comment.parentNode, null);
+    const other = doc.createElement('o');
+    assert.equal(doc.replaceChild(other, element), element);
+    assert.equal(doc.documentElement, other);
+    assert.equal(element.parentNode, null);
+  });
+
+  it('refuses text, a second element, and a doctype after its element', async () => {
+    const document = await page();
+    const doc = document.implementation.createDocument(null, 'r', null);
+    assert.equal(
+      nameOf(() => doc.appendChild(doc.createTextNode('t'))),
+      'HierarchyRequestError',
+    );
+    assert.equal(
+      nameOf(() => doc.append('t')),
+      'HierarchyRequestError',
+    );
+    assert.equal(
+      nameOf(() => doc.appendChild(doc.createElement('e'))),
+      'HierarchyRequestError',
+    );
+    const doctype = doc.implementation.createDocumentType('r', '', '');
+    assert.equal(
+      nameOf(() => doc.appendChild(doctype)),
+      'HierarchyRequestError',
+    );
+    assert.equal(
+      nameOf(() => doc.appendChild(doc)),
+      'HierarchyRequestError',
+    );
+    assert.equal(
+      nameOf(() => doc.insertBefore(doctype, document.createElement('x'))),
+      'NotFoundError',
+    );
+    assert.equal(
+      nameOf(() => doc.removeChild(doc.createComment('c'))),
+      'NotFoundError',
+    );
+    const fragment = doc.createDocumentFragment();
+    fragment.append(doc.createElement('a'), doc.createElement('b'));
+    assert.equal(
+      nameOf(() => doc.replaceChild(fragment, doc.documentElement)),
+      'HierarchyRequestError',
+    );
+    assert.deepEqual(names(doc), ['r']);
+  });
+
+  it('takes an element from where it was, and gives it up when it is put elsewhere', async () => {
+    const document = await page();
+    const one = document.implementation.createDocument(null, 'a', null);
+    const two = document.implementation.createDocument(null, null, null);
+    const element = one.documentElement;
+    two.appendChild(element);
+    assert.equal(one.documentElement, null);
+    assert.equal(two.documentElement, element);
+    assert.equal(element.ownerDocument, two);
+    document.createElement('div').appendChild(element);
+    assert.equal(two.documentElement, null);
+    assert.equal(two.hasChildNodes(), false);
+  });
+
+  it('puts what replaceChildren is given in place of all it holds', async () => {
+    const document = await page();
+    const doc = document.implementation.createHTMLDocument('t');
+    const element = doc.createElement('html');
+    doc.replaceChildren(element);
+    assert.deepEqual(names(doc), ['HTML']);
+    const doctype = doc.implementation.createDocumentType('html', '', '');
+    doc.replaceChildren(doctype);
+    assert.deepEqual([doc.doctype, doc.documentElement], [doctype, null]);
   });
 });

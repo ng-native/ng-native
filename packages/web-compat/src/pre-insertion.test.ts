@@ -225,7 +225,9 @@ describe('insertAdjacentElement and insertAdjacentText', () => {
 describe('what an element and a doctype are handed', () => {
   it('say they take two arguments where they do', async () => {
     const document = await page();
-    for (const node of [document.createElement('div'), document, document.doctype]) {
+    const made = document.implementation.createHTMLDocument('t');
+    const nodes = [document.createElement('div'), document, document.doctype, made, made.doctype];
+    for (const node of nodes) {
       assert.deepEqual([node.insertBefore.length, node.replaceChild.length], [2, 2]);
     }
   });
@@ -245,11 +247,17 @@ describe('what an element and a doctype are handed', () => {
     assert.equal(doctype.parentNode, document, 'and it stays where it is');
     div.prepend(null, undefined);
     assert.equal(div.textContent, 'nullundefined');
+    // One made in no document as well.
+    const loose = document.implementation.createDocumentType('html', '', '');
+    assert.equal(
+      nameOf(() => div.append(loose)),
+      'HierarchyRequestError',
+    );
   });
 
   it('is a TypeError to hand a doctype what is no node', async () => {
     const document = await page();
-    const doctype = document.doctype.cloneNode();
+    const doctype = document.implementation.createDocumentType('html', '', '');
     assert.equal(
       nameOf(() => doctype.insertBefore(null, null)),
       'TypeError',
@@ -303,6 +311,11 @@ describe('moveBefore', () => {
       nameOf(() => document.createElement('div').moveBefore(moved, null)),
       'HierarchyRequestError',
     );
+    const other = document.implementation.createHTMLDocument('t');
+    assert.equal(
+      nameOf(() => parent.moveBefore(other.body, null)),
+      'HierarchyRequestError',
+    );
   });
 
   it('moves only an element or character data, and checks as an insertion does', async () => {
@@ -336,6 +349,38 @@ describe('moveBefore on a document', () => {
   it('moves what may be its child into it, from within its own tree only', async () => {
     const doc = await page();
     const document = doc;
+    const comment = doc.body.appendChild(doc.createComment('c'));
+    doc.moveBefore(comment, null);
+    assert.equal(comment.parentNode, doc);
+    assert.equal(doc.lastChild, comment);
+    doc.moveBefore(comment, doc.documentElement);
+    assert.equal(doc.documentElement.previousSibling, comment);
+    // One element, and no text, as for any insertion; and not one from another document.
+    assert.equal(
+      nameOf(() => doc.moveBefore(doc.body, null)),
+      'HierarchyRequestError',
+    );
+    assert.equal(
+      nameOf(() => doc.moveBefore(doc.body.appendChild(doc.createTextNode('t')), null)),
+      'HierarchyRequestError',
+    );
+    assert.equal(
+      nameOf(() => doc.moveBefore(document.createComment('c'), null)),
+      'HierarchyRequestError',
+    );
+    assert.equal(
+      nameOf(() => doc.moveBefore(doc.doctype, null)),
+      'HierarchyRequestError',
+    );
+    assert.equal(
+      nameOf(() => doc.moveBefore(comment)),
+      'TypeError',
+    );
+  });
+
+  it("moves what may be a made document's child into it, from within its tree only", async () => {
+    const document = await page();
+    const doc = document.implementation.createHTMLDocument('t');
     const comment = doc.body.appendChild(doc.createComment('c'));
     doc.moveBefore(comment, null);
     assert.equal(comment.parentNode, doc);

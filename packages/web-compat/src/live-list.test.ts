@@ -1,7 +1,7 @@
 /**
  * What a library reads of the tree as lists, and how it asks one node how it stands to another:
- * the live lists `childNodes`, `children` and `getElementsBy*` answer, `compareDocumentPosition`
- * and `isEqualNode`.
+ * the live lists `childNodes`, `children` and `getElementsBy*` answer, `compareDocumentPosition`,
+ * `isEqualNode` and the namespace lookups.
  */
 import assert from 'node:assert/strict';
 import { afterEach, describe, it } from 'node:test';
@@ -159,7 +159,7 @@ describe('how one node stands to another', () => {
     assert.equal(text.contains(text), true);
   });
 
-  it('isEqualNode, normalize and hasChildNodes', async () => {
+  it('isEqualNode, normalize, hasChildNodes and the namespace lookups', async () => {
     const { document, list } = await page();
     const one = list.cloneNode(true);
     assert.equal(one.isEqualNode(list.cloneNode(true)), true);
@@ -181,6 +181,32 @@ describe('how one node stands to another', () => {
     assert.equal(comment.isEqualNode(document.createComment('a')), true);
     assert.equal(comment.isEqualNode(document.createComment('b')), false);
     assert.equal(comment.isSameNode(comment), true);
+    assert.equal(box.lookupNamespaceURI(null), 'http://www.w3.org/1999/xhtml');
+    assert.equal(box.lookupNamespaceURI('xml'), 'http://www.w3.org/XML/1998/namespace');
+    assert.equal(box.isDefaultNamespace('http://www.w3.org/1999/xhtml'), true);
+    assert.equal(box.lookupPrefix('http://www.w3.org/1999/xhtml'), null);
+  });
+
+  it('isEqualNode compares words, names in a namespace, and attributes by theirs', async () => {
+    const { document } = await page();
+    const comment = document.createComment('a');
+    assert.equal(comment.isEqualNode(document.createComment('a')), true);
+    assert.equal(comment.isEqualNode(document.createComment('b')), false);
+    const pi = document.createProcessingInstruction('t', 'a');
+    assert.equal(pi.isEqualNode(document.createProcessingInstruction('t', 'b')), false);
+    const named = (namespace: string, qualified: string) =>
+      document.createElementNS(namespace, qualified);
+    assert.equal(named('urn:a', 'p:x').isEqualNode(named('urn:a', 'p:x')), true);
+    assert.equal(named('urn:a', 'p:x').isEqualNode(named('urn:b', 'p:x')), false);
+    assert.equal(named('urn:a', 'p:x').isEqualNode(named('urn:a', 'q:x')), false);
+    const withAttribute = (namespace: string, qualified: string) => {
+      const element = document.createElement('e');
+      element.setAttributeNS(namespace, qualified, 'v');
+      return element;
+    };
+    const one = withAttribute('urn:a', 'p:x');
+    assert.equal(one.isEqualNode(withAttribute('urn:a', 'q:x')), true, 'another prefix');
+    assert.equal(one.isEqualNode(withAttribute('urn:b', 'p:x')), false, 'another namespace');
   });
 });
 

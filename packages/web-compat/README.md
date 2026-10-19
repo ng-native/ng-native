@@ -7,8 +7,14 @@ so such a library can render as native views.
 
 Experimental and partial. It has:
 
-- Node names and kinds, attributes and classes, `textContent`, and listeners with
-  `dispatchEvent`.
+- Node names and kinds, namespaces and prefixes, attributes (in a browser's case, as `Attr`
+  nodes and in a namespace) and classes, `dataset`, `textContent`, `innerText`, and listeners
+  with `dispatchEvent`.
+- Markup: `innerHTML`, `outerHTML`, `insertAdjacentHTML`, `setHTML` and its kin, and a
+  `<template>`'s `content`, parsed as a browser parses HTML.
+- The properties HTML reflects attributes as (`hidden`, `title`, `dir`, `tabIndex`, `type`,
+  ARIA's and the rest), a table's rows and cells, and the element interfaces, `HTMLInputElement`
+  and the rest, for `instanceof`.
 - The tree: live `childNodes` and `children`, the nodes around one, `appendChild`,
   `insertBefore`, `removeChild`, `replaceChild`, `append`, `prepend`, `replaceChildren`,
   `before`, `after`, `replaceWith`, `insertAdjacentElement`, `moveBefore`, `cloneNode`,
@@ -17,13 +23,17 @@ Experimental and partial. It has:
 - Live `getElementsByTagName`, `getElementsByClassName` and `getElementsByName`.
 - `MutationObserver`, with `childList`, `attributes`, `characterData`, `subtree` and old values.
 - A `document` that creates engine nodes and fragments, with a `body` that draws over the screen
-  for overlays, a doctype, `createTreeWalker` and `createNodeIterator`.
+  for overlays, a doctype, `createElementNS`, `createTreeWalker` and `createNodeIterator`, and a
+  `document.implementation` that makes HTML and XML documents that are never drawn.
 - The basic `window` globals: its listeners, `Event`, `CustomEvent`, `HTMLElement`, `Node`,
-  `Text`, `Comment`, `DocumentFragment`, `NodeList`, `HTMLCollection` and the window's size.
+  `Text`, `Comment`, `DocumentFragment`, `NodeList`, `HTMLCollection`, `DOMParser`,
+  `XMLSerializer`, `Document`, `Attr`, the window's size, and an element with an id as a global
+  by it.
+- A `<button>` and an `<a>` with their roles, and a table's and a form's elements as views.
 - A `click` listener that hears a press.
 
-Markup (`innerHTML`), selectors, `element.style`, computed style, geometry, the other observers,
-forms and the rest of the DOM are not part of it yet.
+Selectors, `element.style`, computed style, geometry, the other observers, forms and the rest of
+the DOM are not part of it yet.
 
 Nothing in an app changes until it adds the provider, and everything the provider adds is taken
 away again when the app is destroyed.

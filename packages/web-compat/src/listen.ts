@@ -1,7 +1,10 @@
 import type { Engine, EngineNode } from '@ng-native/fabric';
 import type { RendererExtension } from '@ng-native/platform';
 import { documentOf, listenAnywhere, type CompatDocument } from './document.ts';
+import { giveRole } from './elements.ts';
 import { listen, type Heard } from './events.ts';
+import { buildAs, setMarkup } from './html.ts';
+import { together } from './mutation-observer.ts';
 
 /** Elements whose own component already turns a touch into a press. */
 const PRESSABLES = new Set(['pressable', 'touchable-opacity']);
@@ -35,6 +38,16 @@ const SETTERS: Readonly<
     (node as unknown as { textContent: unknown }).textContent = value;
     return true;
   },
+  // A binding to `innerHTML` replaces what the element holds with what the markup is.
+  innerHTML(node, value, engine) {
+    together(node, () => setMarkup(node, value, engine));
+    return true;
+  },
+  // HTML's `hidden` bound to `false` is no attribute: the element has none to read back.
+  hidden(node, value, engine) {
+    engine.setProp(node, 'hidden', value === false ? null : value);
+    return true;
+  },
   // An HTML `id` is the view's `nativeID`, which is where a lookup reads it.
   id(node, value, engine) {
     engine.setProp(node, 'nativeID', value);
@@ -53,6 +66,10 @@ const SETTERS: Readonly<
  * A pressable's own hit testing is the upgrade.
  */
 export const webListen: RendererExtension = {
+  // A button and a link have their roles: see `elements.ts`.
+  created(node, engine) {
+    giveRole(node, engine);
+  },
   set(node, name, value, engine) {
     const own = documentOf(engine) ? SETTERS[name] : undefined;
     return own ? own(node, value, engine) : false;
@@ -72,6 +89,9 @@ export const webListen: RendererExtension = {
     return listen(on, eventName, callback, undefined, attach) ?? (() => {});
   },
 };
+
+// What markup builds is given what a template's elements are, as they are made: see `html-tree.ts`.
+buildAs(webListen);
 
 /** What a template's listener is on: Angular names the window, the document and the body. */
 function listenedOn(target: EngineNode | string, document: CompatDocument): EngineNode | object {

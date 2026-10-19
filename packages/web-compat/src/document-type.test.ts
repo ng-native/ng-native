@@ -1,6 +1,7 @@
 /**
- * A document's `<!DOCTYPE>`, as `document.doctype` answers: a node a script reads, compares,
- * copies, takes out of its document and puts back.
+ * A document's `<!DOCTYPE>`, as `document.doctype` answers and `createDocumentType` makes one: a
+ * node a script reads, compares, copies, takes out of its document, puts back and moves between
+ * documents.
  */
 import assert from 'node:assert/strict';
 import { afterEach, describe, it } from 'node:test';
@@ -100,5 +101,68 @@ describe('document types', () => {
     assert.equal(document.doctype.name, 'html');
     assert.equal(document.doctype.parentNode, document);
     assert.equal(document.doctype, document.doctype);
+  });
+
+  it('are made with a name and two ids, and are in no namespace', async () => {
+    const document = await page();
+    const doctype = document.implementation.createDocumentType('foo', 'pub', 'sys');
+    assert.ok(doctype instanceof (globalThis as Dom).DocumentType);
+    assert.deepEqual(
+      [doctype.nodeType, doctype.nodeName, doctype.name, doctype.publicId, doctype.systemId],
+      [10, 'foo', 'foo', 'pub', 'sys'],
+    );
+    assert.equal(doctype.ownerDocument, document);
+    assert.equal(doctype.lookupNamespaceURI(null), null);
+    assert.equal(doctype.lookupPrefix('foo'), null);
+    assert.equal(doctype.isDefaultNamespace(null), true);
+    assert.equal(doctype.isDefaultNamespace('foo'), false);
+  });
+
+  it('refuses a name with whitespace or a closing bracket in it', async () => {
+    const document = await page();
+    assert.equal(
+      nameOf(() => document.implementation.createDocumentType('edi:>', '', '')),
+      'InvalidCharacterError',
+    );
+    assert.equal(
+      nameOf(() => document.implementation.createDocumentType('edi:a ', '', '')),
+      'InvalidCharacterError',
+    );
+    assert.equal(
+      nameOf(() => document.implementation.createDocumentType('edi:"', '', '')),
+      'none',
+    );
+  });
+
+  it('is given to a document made with one', async () => {
+    const document = await page();
+    const doctype = document.implementation.createDocumentType('foo', '', '');
+    const made = document.implementation.createDocument(null, 'foo', doctype);
+    assert.equal(made.doctype, doctype);
+    assert.equal(doctype.ownerDocument, made);
+    assert.equal(doctype.parentNode, made);
+    assert.equal(doctype.nextSibling, made.documentElement);
+    const html = document.implementation.createHTMLDocument('t');
+    assert.equal(html.doctype.name, 'html');
+    assert.equal(html.doctype.parentNode, html);
+  });
+
+  it('are equal by their names and ids, and put in a made document until removed', async () => {
+    const document = await page();
+    const make = (name: string) => document.implementation.createDocumentType(name, 'p', 's');
+    const one = make('a');
+    assert.equal(one.isSameNode(make('a')), false);
+    assert.equal(one.isEqualNode(make('a')), true);
+    assert.equal(one.isEqualNode(make('b')), false);
+    const made = document.implementation.createDocument(null, '', null);
+    made.appendChild(one);
+    assert.equal(one.parentNode, made);
+    assert.equal(one.ownerDocument, made);
+    assert.equal(made.doctype, one);
+    assert.equal(made.childNodes[0], one);
+    one.remove();
+    assert.equal(one.parentNode, null);
+    assert.equal(made.doctype, null);
+    assert.equal(made.childNodes.length, 0);
   });
 });

@@ -4,9 +4,10 @@ import { brandNode, isAnyNode } from './node-interfaces.ts';
 import { nodeGiven, position } from './node-relations.ts';
 
 /**
- * `DocumentType`: the `<!DOCTYPE>` of a document, as `document.doctype` answers. It is a node of
- * the DOM's and none of the engine's: it is never drawn, holds nothing and goes nowhere but in a
- * document, so it is kept apart from the tree, with the document it is in noted beside it.
+ * `DocumentType`: the `<!DOCTYPE>` of a document, as `document.doctype` answers and
+ * `document.implementation.createDocumentType` makes one. It is a node of the DOM's and none of
+ * the engine's: it is never drawn, holds nothing and goes nowhere but in a document, so it is
+ * kept apart from the tree, with the document it is in noted beside it.
  *
  * ponytail: no events of its own. Add them where a library is seen to listen to one.
  */
@@ -19,7 +20,7 @@ interface Holder {
 
 /** The document each doctype is in, where it is in one. */
 const parents = new WeakMap<DocumentType, Holder>();
-/** The document each doctype belongs to, which adopting it gives it to. */
+/** The document each doctype belongs to, which a made document takes it into. */
 const owners = new WeakMap<DocumentType, object>();
 
 /** Note the document a doctype is in, or that it is in none, with `null`. */
@@ -35,6 +36,14 @@ export const adoptDocumentType = (doctype: DocumentType, owner: object): void =>
 /** Whether a value is a doctype. */
 export const isDocumentType = (value: unknown): value is DocumentType =>
   value instanceof DocumentType;
+
+/** The DOM's check of a doctype's name: no ASCII whitespace, NUL or `>` in it. */
+function checkDoctypeName(name: string): string {
+  if (/[\t\n\f\r \0>]/.test(name)) {
+    throw domError(`'${name}' is not a valid doctype name.`, 'InvalidCharacterError');
+  }
+  return name;
+}
 
 const making = Symbol('making');
 
@@ -127,6 +136,16 @@ export class DocumentType {
   getRootNode(): object {
     return parents.get(this) ?? this;
   }
+  // A doctype is in no namespace, and has no prefix for one.
+  lookupNamespaceURI(): null {
+    return null;
+  }
+  lookupPrefix(): null {
+    return null;
+  }
+  isDefaultNamespace(namespace: unknown): boolean {
+    return namespace === undefined || namespace === null || namespace === '';
+  }
   remove(): void {
     parents.get(this)?.removeChild?.(this);
     parents.delete(this);
@@ -157,6 +176,13 @@ for (const [name, value] of Object.entries(NODE_CONSTANTS)) {
   Object.defineProperty(DocumentType.prototype, name, { value });
 }
 
-/** The doctype of a document's, by its name: the page's is `html`. */
-export const createDocumentType = (owner: object, name: string): DocumentType =>
-  new DocumentType(making, owner, name, '', '');
+/** A doctype of a document's, as `createDocumentType` makes one: refused where its name is. */
+export function createDocumentType(
+  owner: object,
+  name: unknown,
+  publicId: unknown = '',
+  systemId: unknown = '',
+): DocumentType {
+  const named = checkDoctypeName(String(name));
+  return new DocumentType(making, owner, named, String(publicId), String(systemId));
+}

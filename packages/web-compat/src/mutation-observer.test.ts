@@ -80,7 +80,7 @@ describe('MutationObserver', () => {
   });
 
   it('tells of each attribute a script sets, by every way there is to set one', async () => {
-    const { panel } = await mount();
+    const { panel, document } = await mount();
     const { all } = watching(panel, { attributes: true, attributeOldValue: true });
     panel.setAttribute('data-state', 'a');
     panel.setAttribute('data-state', 'a');
@@ -91,7 +91,12 @@ describe('MutationObserver', () => {
     panel.className = 'x';
     panel.classList.add('y', 'z');
     panel.classList.remove('y');
-    panel.setAttribute('title', 't');
+    panel.dataset.kind = 'k';
+    delete panel.dataset.kind;
+    panel.getAttributeNode('id').value = 'q';
+    const attr = document.createAttribute('title');
+    attr.value = 't';
+    panel.setAttributeNode(attr);
     await settle();
     assert.deepEqual(all().map(line), [
       'attributes data-state null',
@@ -102,18 +107,28 @@ describe('MutationObserver', () => {
       'attributes class panel',
       'attributes class x',
       'attributes class x y z',
+      'attributes data-kind null',
+      'attributes data-kind k',
+      'attributes id p',
       'attributes title null',
     ]);
   });
 
-  it('keeps to its filter', async () => {
+  it('gives an attribute its namespace and keeps to its filter', async () => {
     const { panel } = await mount();
     const { all } = watching(panel, { attributeFilter: ['aria-expanded', 'href'] });
     panel.setAttribute('data-other', '1');
+    panel.setAttributeNS('http://www.w3.org/1999/xlink', 'xlink:href', '#a');
     panel.setAttribute('aria-expanded', 'true');
     await settle();
+    // One in a namespace is no name a filter has.
     assert.deepEqual(all().map(line), ['attributes aria-expanded null']);
     assert.equal(all()[0].attributeNamespace, null);
+    const { all: every } = watching(panel, { attributes: true });
+    panel.setAttributeNS('http://www.w3.org/1999/xlink', 'xlink:href', '#b');
+    await settle();
+    assert.equal(every()[0].attributeNamespace, 'http://www.w3.org/1999/xlink');
+    assert.equal(every()[0].attributeName, 'href');
   });
 
   it('tells of the words of a text, and with subtree of a text inside', async () => {
@@ -157,7 +172,7 @@ describe('MutationObserver', () => {
     // Moved within the same parent: taken out, and put in again.
     panel.appendChild(a);
     panel.replaceChildren(a, b);
-    panel.replaceChildren(document.createElement('span'), document.createElement('span'));
+    panel.innerHTML = '<span>x</span><span>y</span>';
     panel.textContent = 'words';
     panel.textContent = 'words';
     await settle();

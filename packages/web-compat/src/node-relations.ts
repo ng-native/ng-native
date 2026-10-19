@@ -3,18 +3,22 @@ import { documentOfRoot } from './document-roots.ts';
 import { inDocument } from './in-document.ts';
 import { isAnyNode } from './node-interfaces.ts';
 import { isNode } from './pre-insertion.ts';
+import { attributeNameOf, attributeNamespace, XML, XMLNS } from './qualified-name.ts';
 import { engineOf } from './window.ts';
 
 /**
  * How one node stands to another, and to what it holds: `compareDocumentPosition`, which a
- * library sorts what registers with it by; `isEqualNode`; `normalize`; and the counts and ends
- * of what an element holds.
+ * library sorts what registers with it by; `isEqualNode`; `normalize`; the namespace lookups;
+ * and the counts and ends of what an element holds.
  */
 type Dom = EngineNode & {
   readonly nodeType: number;
   readonly nodeName: string;
   readonly localName: string | null;
+  readonly namespaceURI: string | null;
+  readonly prefix: string | null;
   getAttribute(name: string): string | null;
+  getAttributeNames(): string[];
 };
 
 const DISCONNECTED = 1;
@@ -91,18 +95,12 @@ export function containsNode(node: object, other: unknown): boolean {
   return false;
 }
 
-/**
- * An element's attributes as `getAttribute` reads them, by the name each is kept as.
- *
- * ponytail: every prop is taken for an attribute, the engine's own among them. Read the names
- * `getAttributeNames` gives once nodes have it.
- */
-function attributesOf(node: Dom): Map<string, string> {
-  const all = new Map<string, string>();
-  for (const name of ['class', ...Object.keys(node.props)]) {
-    const key = name === 'nativeID' ? 'id' : name;
-    const value = node.getAttribute(key);
-    if (value !== null) all.set(key, value);
+/** An element's attributes, by namespace and local name. */
+function attributesOf(node: Dom): Map<string, string | null> {
+  const all = new Map<string, string | null>();
+  for (const name of node.getAttributeNames()) {
+    const { namespace, localName } = attributeNameOf(node, name);
+    all.set(`${namespace ?? ''} ${localName}`, node.getAttribute(name));
   }
   return all;
 }
@@ -115,12 +113,24 @@ function sameAttributes(one: Dom, other: Dom): boolean {
   return true;
 }
 
+/** Whether two elements have the same names, and the same attributes. */
+function sameElement(one: Dom, other: Dom): boolean {
+  return (
+    one.namespaceURI === other.namespaceURI &&
+    one.prefix === other.prefix &&
+    one.localName === other.localName &&
+    sameAttributes(one, other)
+  );
+}
+
 /** Whether two nodes are alike: of a kind and a name, with the same text, attributes and children. */
 function equal(one: Dom, other: Dom): boolean {
-  if (one.nodeType !== other.nodeType || one.nodeName !== other.nodeName) return false;
-  // A text's words, and a comment's.
+  if (one.nodeType !== other.nodeType) return false;
+  // An element by its names, below: its `nodeName` is upper case in an HTML document alone.
+  if (one.nodeKind !== 'element' && one.nodeName !== other.nodeName) return false;
+  // A text's words, a comment's and a processing instruction's.
   if (one.nodeKind !== 'element' && one.nodeText !== other.nodeText) return false;
-  if (one.nodeKind === 'element' && !sameAttributes(one, other)) return false;
+  if (one.nodeKind === 'element' && !sameElement(one, other)) return false;
   const mine = inDocument(one);
   const theirs = inDocument(other);
   return (
@@ -145,6 +155,62 @@ function normalize(node: EngineNode): void {
   }
 }
 
+/** The element a node's namespaces are looked up from: itself, or the element it is in. */
+function elementFor(node: Dom): Dom | null {
+  if (node.nodeType === 1) return node;
+  // A fragment has none, and a text or a comment has that of what it is in.
+  if (node.nodeType !== 3 && node.nodeType !== 8 && node.nodeType !== 4 && node.nodeType !== 7) {
+    return null;
+  }
+  return node.parent?.nodeKind === 'element' ? (node.parent as Dom) : null;
+}
+
+const elementAbove = (element: Dom): Dom | null =>
+  element.parent?.nodeKind === 'element' ? (element.parent as Dom) : null;
+
+/** The value of the `xmlns` or `xmlns:prefix` attribute written in the XMLNS namespace. */
+function declared(element: Dom, prefix: string | null): string | null | undefined {
+  const name = prefix === null ? 'xmlns' : `xmlns:${prefix}`;
+  if (attributeNamespace(element, name) !== XMLNS) return undefined;
+  return element.getAttribute(name) || null;
+}
+
+/** The DOM's "locate a namespace": what a prefix stands for at a node, `null` for none. */
+function namespaceFor(node: Dom, prefix: string | null): string | null {
+  let at = elementFor(node);
+  if (!at) return null;
+  if (prefix === 'xml') return XML;
+  if (prefix === 'xmlns') return XMLNS;
+  for (; at; at = elementAbove(at)) {
+    if (at.namespaceURI !== null && at.prefix === prefix) return at.namespaceURI;
+    const value = declared(at, prefix);
+    if (value !== undefined) return value;
+  }
+  return null;
+}
+
+/** The DOM's "locate a namespace prefix": a prefix that stands for a namespace at a node. */
+function prefixFor(node: Dom, namespace: string): string | null {
+  for (let at = elementFor(node); at; at = elementAbove(at)) {
+    if (at.namespaceURI === namespace && at.prefix !== null) return at.prefix;
+    const element = at;
+    const name = element
+      .getAttributeNames()
+      .find(
+        (each) =>
+          each.startsWith('xmlns:') &&
+          attributeNamespace(element, each) === XMLNS &&
+          element.getAttribute(each) === namespace,
+      );
+    if (name) return name.slice('xmlns:'.length);
+  }
+  return null;
+}
+
+/** A namespace or a prefix as these are given one: the empty string is none. */
+const orNone = (value: unknown): string | null =>
+  value === undefined || value === null || value === '' ? null : String(value);
+
 const elementsIn = (node: EngineNode): EngineNode[] =>
   inDocument(node).filter((child) => child.nodeKind === 'element');
 
@@ -167,6 +233,16 @@ export const relationMembers: PropertyDescriptorMap = {
   }),
   hasChildNodes: method(function () {
     return inDocument(this).length > 0;
+  }),
+  lookupNamespaceURI: method(function (prefix: unknown) {
+    return namespaceFor(this, orNone(prefix));
+  }),
+  lookupPrefix: method(function (namespace: unknown) {
+    const given = orNone(namespace);
+    return given === null ? null : prefixFor(this, given);
+  }),
+  isDefaultNamespace: method(function (namespace: unknown) {
+    return namespaceFor(this, null) === orNone(namespace);
   }),
   childElementCount: get(function () {
     return elementsIn(this).length;

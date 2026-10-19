@@ -171,4 +171,20 @@ describe('document.createNodeIterator', () => {
     document.doctype.remove();
     assert.equal(iterator.referenceNode === document, true, 'moved back to the document');
   });
+
+  it('walks a made document, and off a doctype taken out of it', async () => {
+    const { document } = await tree();
+    const all = 0xffffffff;
+    const walker = document.createTreeWalker(document, all);
+    assert.equal(walker.firstChild() === document.doctype, true);
+    assert.equal(walker.nextSibling() === document.documentElement, true);
+    assert.equal(walker.parentNode() === document, true);
+    const made = document.implementation.createHTMLDocument('made');
+    const iterator = document.createNodeIterator(made, all);
+    iterator.nextNode();
+    iterator.nextNode();
+    assert.equal(iterator.referenceNode === made.doctype, true);
+    made.doctype.remove();
+    assert.equal(iterator.referenceNode === made, true, 'moved back to the document');
+  });
 });

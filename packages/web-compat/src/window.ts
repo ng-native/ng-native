@@ -1,5 +1,9 @@
 import type { Engine, EngineNode } from '@ng-native/fabric';
+import { Attr } from './attr.ts';
+import { DOMStringMap } from './dataset.ts';
+import { Document, XMLDocument } from './dom-implementation.ts';
 import { DocumentType } from './document-type.ts';
+import { elementInterfaces } from './element-interfaces.ts';
 import {
   CompatCustomEvent,
   CompatEvent,
@@ -8,12 +12,15 @@ import {
   unlisten,
   unlistenAll,
 } from './events.ts';
+import { domParser } from './html.ts';
 import { HTMLCollection, NodeList } from './live-list.ts';
 import { MutationObserver, MutationRecord } from './mutation-observer.ts';
 import { NODE_CONSTANTS } from './node-constants.ts';
 import { nodeInterfaces } from './node-interfaces.ts';
+import { installNamedProperties } from './named-properties.ts';
 import { NodeFilter, NodeIterator, TreeWalker } from './traversal.ts';
 import { listenOnWindow, windowListensTo } from './window-listeners.ts';
+import { XMLSerializer } from './xml-serializer.ts';
 
 /** The engine a node is in. */
 export const engineOf = (node: EngineNode): Engine =>
@@ -60,6 +67,20 @@ const GLOBALS: Readonly<Record<string, unknown>> = {
   ...nodeInterfaces,
   // A document's `<!DOCTYPE>`: see `document-type.ts`.
   DocumentType,
+  // What a document is, and what a script makes one with: see `dom-implementation.ts`.
+  Document,
+  XMLDocument,
+  // An attribute as a node: see `attr.ts`.
+  Attr,
+  // `HTMLDivElement` and the rest, which a library asks whether an element is one of: see
+  // `element-interfaces.ts`.
+  ...elementInterfaces,
+  // What `element.dataset` is: see `dataset.ts`.
+  DOMStringMap,
+  // What Angular's sanitizer parses the markup of an `innerHTML` binding with: see `html.ts`.
+  DOMParser: domParser(() => engines.at(-1)),
+  // What a chart library exports a drawing as markup with: see `xml-serializer.ts`.
+  XMLSerializer,
   // What a walk of the tree is told to show, and what its filter answers of each node.
   NodeFilter,
   TreeWalker,
@@ -83,6 +104,8 @@ export function installWindow(): () => void {
   const windowed = typeof target['window'] === 'undefined';
   if (windowed) target['window'] = target;
   const unplaced = placeNodes(target);
+  // An element with an id is a global by it: see `named-properties.ts`.
+  const unnamed = installNamedProperties(target);
   const sized = Object.keys(SIZES).filter((name) => typeof target[name] === 'undefined');
   for (const name of sized) {
     Object.defineProperty(target, name, { configurable: true, get: SIZES[name] });
@@ -93,6 +116,7 @@ export function installWindow(): () => void {
     // What was added with them goes with them, as a page's listeners go with its window.
     unlistenAll(globalThis);
     unplaced();
+    unnamed();
     if (windowed) delete target['window'];
     if (target['HTMLElement'] !== ours) return;
     if (element === undefined) delete target['HTMLElement'];
@@ -127,6 +151,9 @@ function placeNodes(target: Record<string, unknown>): () => void {
 
 /** The engines of the apps that are up, oldest first: the newest is the one `window` speaks for. */
 const engines: Engine[] = [];
+
+/** The engine of the newest app up, which the window speaks for. */
+export const currentEngine = (): Engine | undefined => engines.at(-1);
 
 /** An app that asked for the package has started: its window is the one read, until it goes. */
 export function windowOf(engine: Engine): () => void {

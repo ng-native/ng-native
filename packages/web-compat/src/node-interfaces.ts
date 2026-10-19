@@ -1,9 +1,10 @@
 import type { EngineNode } from '@ng-native/fabric';
 
 /**
- * `Text`, `Comment`, `CharacterData` and `DocumentFragment` as globals: what a library asks
- * whether a node is one of, with `instanceof`, and makes one with, with `new`. A node is made in
- * the document of the newest app up, as the global `document` is that app's.
+ * `Text`, `Comment`, `CharacterData`, `CDATASection`, `ProcessingInstruction` and
+ * `DocumentFragment` as globals: what a library asks whether a node is one of, with
+ * `instanceof`, and makes one with, with `new`. A node is made in the document of the newest app
+ * up, as the global `document` is that app's.
  */
 
 interface Maker {
@@ -66,6 +67,16 @@ export const nodeInterfaces: Readonly<Record<string, unknown>> = {
     'Comment',
     (value) => kindOf(value) === 'anchor' && nodeTypeOf(value) === 8,
     (data) => page('Comment').createComment(data),
+  ),
+  // A text of an XML document's: see `cdata-section.ts`.
+  CDATASection: nodeInterface(
+    'CDATASection',
+    (value) => kindOf(value) === 'text' && nodeTypeOf(value) === 4,
+  ),
+  // An anchor too, with a target: see `processing-instruction.ts`.
+  ProcessingInstruction: nodeInterface(
+    'ProcessingInstruction',
+    (value) => kindOf(value) === 'anchor' && nodeTypeOf(value) === 7,
   ),
   DocumentFragment: nodeInterface(
     'DocumentFragment',

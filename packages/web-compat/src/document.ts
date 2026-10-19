@@ -1,4 +1,6 @@
 import { claimHost, type Engine, type EngineNode } from '@ng-native/fabric';
+import { createAttribute, createAttributeNS } from './attr.ts';
+import { createCDATASection } from './cdata-section.ts';
 import { createComment } from './character-data.ts';
 import { documentChildren } from './document-children.ts';
 import { markFragment } from './document-fragment.ts';
@@ -6,11 +8,23 @@ import { documentNodeMembers } from './document-node.ts';
 import { markRoot } from './document-roots.ts';
 import { createDocumentType } from './document-type.ts';
 import { required } from './dom-error.ts';
-import { byClassName, byName, byTagName } from './elements-by.ts';
+import { implementationFor } from './dom-implementation.ts';
+import { byClassName, byName, byTagName, byTagNameNS } from './elements-by.ts';
 import { dispatch, listen, passiveFor, unlisten } from './events.ts';
+import { madeByScript } from './html-tree.ts';
 import { descendants } from './in-document.ts';
 import { delivering, touchFields } from './listen.ts';
+import { NODE_CONSTANTS } from './node-constants.ts';
 import { brandNode } from './node-interfaces.ts';
+import { createProcessingInstruction } from './processing-instruction.ts';
+import {
+  asciiLower,
+  checkElementName,
+  extractName,
+  recordName,
+  XHTML,
+  type QualifiedName,
+} from './qualified-name.ts';
 import { createNodeIterator, createTreeWalker } from './traversal.ts';
 import { listenToResize } from './window.ts';
 
@@ -31,7 +45,7 @@ export const documentOf = (engine: Engine): CompatDocument | undefined => docume
  * A view of the package's own, in no template: claimed, so the engine does not take it for a
  * `<view>` a template wrote without importing its component.
  */
-function ownView(engine: Engine): EngineNode {
+export function ownView(engine: Engine): EngineNode {
   const node = engine.createElement('view');
   claimHost(node);
   return node;
@@ -44,6 +58,40 @@ function ownView(engine: Engine): EngineNode {
 export function nameOf(node: EngineNode, engine: Engine): string {
   if (engine.root === node) return 'html';
   return documents.get(engine)?.body === node ? 'body' : node.tag;
+}
+
+/**
+ * An element by the names the DOM gives it, as `createElementNS` makes one, given what a
+ * template's of its name is given as it is made.
+ */
+export function elementNamed(engine: Engine, name: QualifiedName): EngineNode {
+  const node = engine.createElement(asciiLower(name.localName));
+  recordName(node, name);
+  madeByScript(node, engine);
+  return node;
+}
+
+/** The document's `fgColor` and the rest: each the attribute its body reflects, by its own name. */
+const COLOURS = {
+  fgColor: 'text',
+  linkColor: 'link',
+  vlinkColor: 'vLink',
+  alinkColor: 'aLink',
+  bgColor: 'bgColor',
+};
+
+function bodyColours(body: EngineNode): PropertyDescriptorMap {
+  const reflected = body as unknown as Record<string, unknown>;
+  return Object.fromEntries(
+    Object.entries(COLOURS).map(([name, own]) => [
+      name,
+      {
+        get: () => reflected[own],
+        set: (value: unknown) => (reflected[own] = value),
+        configurable: true,
+      },
+    ]),
+  );
 }
 
 /** Over anything an app gives a z-index of its own, under the root. */
@@ -288,6 +336,8 @@ export function documentFor(engine: Engine): CompatDocument {
   }
   // A listener on the body hears the whole page, as one on the document does.
   const bodyListeners = anywhere(engine, body);
+  /** Its `implementation`, made the first time it is asked for. */
+  let implementation: object | undefined;
   Object.defineProperties(body, {
     addEventListener: { value: bodyListeners.addEventListener },
     removeEventListener: { value: bodyListeners.removeEventListener },
@@ -296,6 +346,8 @@ export function documentFor(engine: Engine): CompatDocument {
     body,
     head,
     documentElement: engine.root,
+    // `Node`'s constants, as every node has them.
+    ...NODE_CONSTANTS,
     nodeType: 9,
     nodeName: '#document',
     nodeValue: null,
@@ -309,6 +361,18 @@ export function documentFor(engine: Engine): CompatDocument {
     parentElement: null,
     previousSibling: null,
     nextSibling: null,
+    // What the app's text is, and what its page is, to a library that asks.
+    characterSet: 'UTF-8',
+    charset: 'UTF-8',
+    inputEncoding: 'UTF-8',
+    contentType: 'text/html',
+    // Its element's `dir`.
+    get dir() {
+      return (engine.root as unknown as { dir: string }).dir;
+    },
+    set dir(value: unknown) {
+      (engine.root as unknown as { dir: unknown }).dir = value;
+    },
     readyState: 'complete',
     visibilityState: 'visible',
     // The field the keyboard belongs to, which a library reads to know one is being typed in.
@@ -316,10 +380,23 @@ export function documentFor(engine: Engine): CompatDocument {
       return engine.focused ?? body;
     },
     defaultView: globalThis,
+    // Its name checked and in lower case, and given what a template's element of the name is.
     createElement(...args: unknown[]) {
       required(args, 1, 'createElement');
-      return engine.createElement(String(args[0]).toLowerCase());
+      return elementNamed(engine, {
+        namespace: XHTML,
+        prefix: null,
+        localName: asciiLower(checkElementName(String(args[0]))),
+      });
     },
+    // By the names the DOM gives it, as they are written: a qualified name in a namespace.
+    createElementNS(...args: unknown[]) {
+      required(args, 2, 'createElementNS');
+      return elementNamed(engine, extractName(args[0], String(args[1]), 'element'));
+    },
+    // Attributes on no element, to set on one: see `attr.ts`.
+    createAttribute,
+    createAttributeNS,
     createTextNode(...args: unknown[]) {
       required(args, 1, 'createTextNode');
       return engine.createText(String(args[0]));
@@ -329,6 +406,10 @@ export function documentFor(engine: Engine): CompatDocument {
       required(args, 1, 'createComment');
       return createComment(engine, args[0]);
     },
+    // An anchor too, with its target: see `processing-instruction.ts`. An HTML document has no
+    // CDATA sections, and refuses to make one.
+    createProcessingInstruction: (...args: unknown[]) => createProcessingInstruction(engine, args),
+    createCDATASection: (...args: unknown[]) => createCDATASection(engine, args, true),
     // A box that is never drawn, which puts what it holds where it is put: see
     // `document-fragment.ts`.
     createDocumentFragment: () => markFragment(ownView(engine)),
@@ -344,15 +425,22 @@ export function documentFor(engine: Engine): CompatDocument {
     getElementsByTagName: (name: unknown) => byTagName(engine, everything, name),
     getElementsByClassName: (names: unknown) => byClassName(engine, everything, names),
     getElementsByName: (name: unknown) => byName(engine, everything, name),
+    getElementsByTagNameNS: (namespace: unknown, local: unknown) =>
+      byTagNameNS(engine, everything, namespace, local),
+    // Documents a script makes for itself, which are never drawn: see `dom-implementation.ts`.
+    get implementation() {
+      return (implementation ??= implementationFor(engine, created as never, created));
+    },
     dispatchEvent: (event: unknown) => dispatch(event, [created, globalThis]),
     hasFocus: () => true,
   };
   Object.assign(created, anywhere(engine, created));
-  Object.assign(created, documentNodeMembers(created as never));
+  Object.assign(created, documentNodeMembers(created as never, false));
   // Its doctype, which is HTML's own, and the root: see `document-children.ts`.
   const doctype = createDocumentType(created, 'html');
   Object.defineProperties(created, documentChildren(created, { element: engine.root, doctype }));
   markRoot(engine.root, created);
+  Object.defineProperties(created, bodyColours(body));
   // A node, to `instanceof Node`, as an element is.
   brandNode(created);
   passiveFor(created, body, engine.root);

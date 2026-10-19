@@ -1,16 +1,19 @@
 import { claimHost, type Engine, type EngineNode } from '@ng-native/fabric';
+import { copySection } from './cdata-section.ts';
 import { createComment } from './character-data.ts';
 import { classAttribute, setClassAttribute } from './class-list.ts';
 import { checkInDocument } from './document-children.ts';
 import { documentOfRoot, topOf } from './document-roots.ts';
 import { insertedFor, isFragment, markFragment } from './document-fragment.ts';
 import { domError, required, withLength } from './dom-error.ts';
-import { byClassName, byTagName } from './elements-by.ts';
+import { byClassName, byTagName, byTagNameNS } from './elements-by.ts';
 import { descendants, inDocument } from './in-document.ts';
 import { liveCollection, liveNodeList, type HTMLCollection, type NodeList } from './live-list.ts';
 import { adopt, adoptFirst, together } from './mutation-observer.ts';
 import { copyWritten } from './node-members.ts';
 import { checkEach, checkInsertion, checkRemoval, isNode } from './pre-insertion.ts';
+import { copyTarget } from './processing-instruction.ts';
+import { copyAttributeNames, copyName } from './qualified-name.ts';
 import { engineOf } from './window.ts';
 
 /**
@@ -113,12 +116,24 @@ const ownCopy = (value: unknown): unknown =>
  * A copy of a node, as `cloneNode` makes one: an element of the same name with the same classes
  * and what is set on it, in no tree, and with `deep` a copy of each thing it holds. Its style is
  * its own object, so a change to one is not a change to the other. Listeners are not copied, as
- * a browser copies none, nor a box a rule generated, which the copy is given its own of.
+ * a browser copies none, nor a box a rule generated, which the copy is given its own of. Its
+ * names and those of its attributes are the element's, and a copy of a CDATA section or a
+ * processing instruction is one too.
  */
 function cloned(engine: Engine, node: EngineNode, deep: boolean): EngineNode {
-  if (node.nodeKind === 'text') return engine.createText(node.nodeText);
-  if (node.nodeKind !== 'element') return createComment(engine, node.nodeText);
+  if (node.nodeKind === 'text') {
+    const copy = engine.createText(node.nodeText);
+    copySection(node, copy);
+    return copy;
+  }
+  if (node.nodeKind !== 'element') {
+    const copy = createComment(engine, node.nodeText);
+    copyTarget(node, copy);
+    return copy;
+  }
   const copy = engine.createElement(node.tag, node.templateSheet);
+  copyName(node, copy);
+  copyAttributeNames(node, copy);
   // Its component's, as the one it is a copy of is: no `<view>` a template forgot to import.
   if (node.claimed) claimHost(copy as never);
   if (isFragment(node)) markFragment(copy);
@@ -306,6 +321,9 @@ export const treeMembers: PropertyDescriptorMap = {
   // Live lists of the elements under it: see `elements-by.ts`.
   getElementsByTagName: method(function (name: string) {
     return byTagName(engineOf(this), () => descendants(this), name);
+  }),
+  getElementsByTagNameNS: method(function (namespace: unknown, local: unknown) {
+    return byTagNameNS(engineOf(this), () => descendants(this), namespace, local);
   }),
   getElementsByClassName: method(function (names: string) {
     return byClassName(engineOf(this), () => descendants(this), names);

@@ -8,14 +8,15 @@ import {
 } from './live-list.ts';
 
 /**
- * `getElementsByTagName` and `getElementsByClassName`, for an element and for a document, and a
- * document's `getElementsByName`: a live list of the elements under it that match. `under` is
- * every node below where the search starts, in the order of the page.
+ * `getElementsByTagName`, `getElementsByTagNameNS` and `getElementsByClassName`, for an element
+ * and for a document, and a document's `getElementsByName`: a live list of the elements under it
+ * that match. `under` is every node below where the search starts, in the order of the page.
  */
 
 type Under = () => Iterable<EngineNode>;
 type Named = EngineNode & {
   readonly localName: string;
+  readonly namespaceURI: string | null;
   getAttribute(name: string): string | null;
 };
 
@@ -35,6 +36,24 @@ export function byTagName(engine: Engine, under: Under, name: unknown): HTMLColl
     elementsUnder(
       under,
       (node) => wanted === '*' || node.localName === (isHtml(node) ? lower : wanted),
+    ),
+  );
+}
+
+/** By namespace and local name, either of which may be `*`. No namespace is `null` or `''`. */
+export function byTagNameNS(
+  engine: Engine,
+  under: Under,
+  namespace: unknown,
+  local: unknown,
+): HTMLCollection {
+  const space = namespace === '' || namespace == null ? null : String(namespace);
+  const name = String(local);
+  return liveCollection(engine, () =>
+    elementsUnder(
+      under,
+      (node) =>
+        (space === '*' || node.namespaceURI === space) && (name === '*' || node.localName === name),
     ),
   );
 }

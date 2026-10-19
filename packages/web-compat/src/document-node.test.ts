@@ -1,6 +1,7 @@
 /**
- * A document as the node it is: taking nodes in, comparing itself, and the live list of the
- * elements by their name.
+ * A document as the node it is, the page's and one a script makes: taking nodes in from other
+ * documents, comparing itself, looking up a namespace, copying itself, the attributes it
+ * reflects, and the live list of the elements by their name.
  */
 import assert from 'node:assert/strict';
 import { afterEach, describe, it } from 'node:test';
@@ -98,6 +99,21 @@ describe('a document as a node', () => {
     );
   });
 
+  it('places a made document and its doctype among the nodes they hold', async () => {
+    const document = await page();
+    const doctype = document.implementation.createDocumentType('r', '', '');
+    const doc = document.implementation.createDocument(null, 'r', doctype);
+    const child = doc.documentElement.appendChild(doc.createElement('c'));
+    assert.equal(doc.compareDocumentPosition(child), 16 | 4);
+    assert.equal(child.compareDocumentPosition(doc), 8 | 2);
+    assert.equal(doctype.compareDocumentPosition(doc.documentElement), 4);
+    assert.equal(doc.documentElement.compareDocumentPosition(doctype), 2);
+    assert.deepEqual(
+      [doc.contains(child), doc.contains(doctype), doc.contains(null)],
+      [true, true, false],
+    );
+  });
+
   it('names the page a document with no value, text or parent', async () => {
     const document = await page();
     assert.deepEqual(
@@ -117,6 +133,119 @@ describe('a document as a node', () => {
     assert.equal(element.parentElement, null);
     assert.deepEqual([fragment.tagName, fragment.localName], [undefined, null]);
   });
+
+  it('imports a copy of a node of a made document, and back', async () => {
+    const document = await page();
+    const doc = document.implementation.createHTMLDocument('t');
+    const div = doc.body.appendChild(doc.createElement('div'));
+    div.appendChild(doc.createElement('span'));
+    const shallow = document.importNode(div);
+    assert.equal(shallow.ownerDocument, document);
+    assert.equal(shallow.firstChild, null);
+    const deep = document.importNode(div, true);
+    assert.equal(deep.firstChild.ownerDocument, document);
+    assert.equal(div.ownerDocument, doc);
+    const back = doc.importNode(deep, true);
+    assert.equal(back.ownerDocument, doc);
+    assert.equal(
+      nameOf(() => document.importNode(doc)),
+      'NotSupportedError',
+    );
+    assert.equal(
+      nameOf(() => document.importNode({})),
+      'TypeError',
+    );
+  });
+
+  it('adopts a node into a made document, and back', async () => {
+    const document = await page();
+    const element = document.createElement('div');
+    document.getElementById('page').appendChild(element);
+    const doc = document.implementation.createDocument(null, null, null);
+    assert.equal(doc.adoptNode(element), element);
+    assert.equal(element.parentNode, null);
+    assert.equal(element.ownerDocument, doc);
+    document.adoptNode(element);
+    assert.equal(element.ownerDocument, document);
+    const doctype = document.doctype;
+    assert.equal(document.adoptNode(doctype), doctype);
+    assert.equal(doctype.parentNode, null);
+    assert.equal(document.doctype, null);
+    assert.equal(
+      nameOf(() => document.adoptNode(doc)),
+      'NotSupportedError',
+    );
+  });
+
+  it('is the same as itself, and equal to a copy of itself', async () => {
+    const document = await page();
+    const doc = document.implementation.createDocument(null, 'r', null);
+    doc.documentElement.appendChild(doc.createElement('c'));
+    assert.equal(doc.isSameNode(doc), true);
+    assert.equal(document.isSameNode(doc), false);
+    const copy = doc.cloneNode(true);
+    assert.notEqual(copy, doc);
+    assert.equal(Object.getPrototypeOf(copy), Object.getPrototypeOf(doc));
+    assert.equal(copy.documentElement.firstChild.localName, 'c');
+    assert.equal(copy.documentElement.ownerDocument, copy);
+    assert.equal(doc.isEqualNode(copy), true);
+    assert.equal(doc.cloneNode().documentElement, null);
+    assert.equal(doc.isEqualNode(doc.cloneNode()), false);
+  });
+
+  it('looks a namespace up through its element', async () => {
+    const document = await page();
+    assert.equal(document.lookupNamespaceURI(null), 'http://www.w3.org/1999/xhtml');
+    assert.equal(document.isDefaultNamespace('http://www.w3.org/1999/xhtml'), true);
+    const doc = document.implementation.createDocument(null, null, null);
+    assert.equal(doc.lookupNamespaceURI(null), null);
+    assert.equal(doc.isDefaultNamespace(null), true);
+  });
+
+  it('gives a made HTML document a title holding its text, an empty one too', async () => {
+    const document = await page();
+    const made = document.implementation.createHTMLDocument('');
+    const title = made.head.firstChild;
+    assert.equal(title.localName, 'title');
+    assert.equal(title.childNodes.length, 1);
+    assert.equal(title.firstChild.data, '');
+    assert.equal(document.implementation.createHTMLDocument().head.childNodes.length, 0);
+  });
+});
+
+describe("a document's reflected attributes", () => {
+  it('reads and sets dir on its element', async () => {
+    const document = await page();
+    assert.equal(document.dir, '');
+    document.dir = 'RTL';
+    assert.equal(document.documentElement.getAttribute('dir'), 'RTL');
+    assert.equal(document.dir, 'rtl');
+    document.documentElement.setAttribute('dir', 'sideways');
+    assert.equal(document.dir, '');
+    document.documentElement.removeAttribute('dir');
+  });
+
+  it("reads and sets the colours on its body, by the body's attribute names", async () => {
+    const document = await page();
+    const names = {
+      fgColor: 'text',
+      linkColor: 'link',
+      vlinkColor: 'vlink',
+      alinkColor: 'alink',
+      bgColor: 'bgcolor',
+    };
+    try {
+      for (const [property, attribute] of Object.entries(names)) {
+        assert.equal(document[property], '');
+        document[property] = 'red';
+        assert.equal(document.body.getAttribute(attribute), 'red');
+        document.body.setAttribute(attribute, 'blue');
+        assert.equal(document[property], 'blue');
+      }
+    } finally {
+      for (const attribute of Object.values(names)) document.body.removeAttribute(attribute);
+    }
+  });
 });
 
 describe('getElementsByName', () => {
@@ -127,10 +256,14 @@ describe('getElementsByName', () => {
     assert.equal(list.length, 0);
     const input = document.body.appendChild(document.createElement('input'));
     const span = document.body.appendChild(document.createElement('span'));
+    const svg = document.body.appendChild(
+      document.createElementNS('http://www.w3.org/2000/svg', 'svg'),
+    );
     const other = document.body.appendChild(document.createElement('i'));
     try {
       input.setAttribute('name', 'a');
       span.setAttribute('name', 'a');
+      svg.setAttribute('name', 'a');
       other.setAttribute('name', 'A');
       assert.deepEqual(
         [...list].map((each) => each.localName),
@@ -142,7 +275,7 @@ describe('getElementsByName', () => {
         ['span'],
       );
     } finally {
-      for (const each of [input, span, other]) each.remove();
+      for (const each of [input, span, svg, other]) each.remove();
     }
   });
 });

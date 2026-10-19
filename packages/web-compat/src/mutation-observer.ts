@@ -1,5 +1,6 @@
 import type { Engine, EngineNode } from '@ng-native/fabric';
 import { liveNodeList, type NodeList } from './live-list.ts';
+import { noteRenaming } from './renamings.ts';
 import { report } from './events.ts';
 import { isFragment } from './document-fragment.ts';
 
@@ -430,6 +431,7 @@ export function settingAttribute<T>(
   change: () => T,
   namespace: string | null = null,
 ): T {
+  noteRenaming(name);
   const watch = watchOf(node);
   if (!watch || scoped === node) return change();
   return within(node, () => attributeChange(watch, node, name, namespace, change));
@@ -442,6 +444,7 @@ export function removingAttribute<T>(
   change: () => T,
   namespace: string | null = null,
 ): T {
+  noteRenaming(name);
   const watch = watchOf(node);
   if (!watch || scoped === node) return change();
   const has = (node as unknown as { hasAttribute?(name: string): boolean }).hasAttribute;
