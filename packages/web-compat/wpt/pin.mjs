@@ -60,6 +60,8 @@ export const CHECKOUT = join(CACHE, 'wpt/');
  * the run, so a variable left set in a shell is seen and not silently fetched and checked.
  */
 export function replacedPin() {
-  const names = ['WPT_COMMIT', 'WPT_REPOSITORY', 'WPT_CACHE'].filter((name) => process.env[name]);
+  const names = ['WPT_COMMIT', 'WPT_REPOSITORY', 'WPT_CACHE', 'WPT_EXPECTATIONS'].filter(
+    (name) => process.env[name],
+  );
   if (names.length) console.warn(`${names.join(', ')} replace the pin, from the environment`);
 }

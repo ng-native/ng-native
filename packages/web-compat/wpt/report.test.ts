@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { compare, expectationOf, verdict } from './report.mjs';
+import { compare, expectationOf, summarize, verdict } from './report.mjs';
 
 /** A file's result as the worker reports it: `passed` of `names` passed. */
 const result = (status: string, names: string[], passed: string[]) => ({
@@ -95,4 +95,19 @@ test('a recorded file not run is worse where it was asked for, and no news where
   assert.deepEqual(kinds(results, false), []);
   const onlyB = compare(recorded, results, (path: string) => path.startsWith('b'));
   assert.deepEqual(verdict(onlyB), { worse: 1, unrecorded: 0 });
+});
+
+test('the summary says every way a file can end, and counts a CRASH as one', () => {
+  const crashed = { ...result('CRASH', ['one'], ['one']), suite: 'dom/nodes', message: 'died' };
+  const summary = summarize({
+    commit: 'c',
+    suites: ['dom/nodes'],
+    results: { 'dom/nodes/a.html': crashed },
+    skipped: {},
+    support: {},
+    filters: [],
+    timeout: 2000,
+  });
+  assert.match(summary, /OK, ERROR, TIMEOUT, PRECONDITION_FAILED or CRASH/);
+  assert.match(summary, /dom\/nodes: CRASH 1/);
 });

@@ -62,7 +62,11 @@ const gitIn = (at: string, ...args: string[]) =>
  */
 function checkout(root: string, stamp: object = {}, pages: Record<string, string> = {}) {
   const at = join(root, 'cache', 'wpt');
-  for (const directory of SUITES) mkdirSync(join(at, directory), { recursive: true });
+  // A file in each suite, which git keeps, so a suite taken away is seen.
+  for (const directory of SUITES) {
+    mkdirSync(join(at, directory), { recursive: true });
+    writeFileSync(join(at, directory, 'kept.txt'), directory);
+  }
   mkdirSync(join(at, 'resources'), { recursive: true });
   writeFileSync(join(at, 'resources', 'testharness.js'), HARNESS);
   const all = { 'a.html': twoTests('a'), 'b.html': twoTests('b'), ...pages };
@@ -108,6 +112,9 @@ function nodeWith(env: Record<string, string>, root: string, script: string, ...
       WPT_REPOSITORY: join(root, 'no-repository'),
       WPT_COMMIT: commitOf(root),
       PASSING: 'b',
+      // Set by `node --test` for what it starts, and read by `@ng-native/testing/register`,
+      // which then starts the test runner in the test process: a run from a shell has neither.
+      NODE_TEST_CONTEXT: undefined,
       ...env,
     },
   });
@@ -208,11 +215,10 @@ test('the runner refuses a checkout that is missing, of another commit, changed 
     rmSync(join(at, 'resources', 'testharness.js'));
     refused(node(root, 'run.mjs', '--check'));
 
+    // A suite taken away whole.
     checkout(root);
     rmSync(join(at, SUITES.at(-1)), { recursive: true });
-    const partial = node(root, 'run.mjs', '--check');
-    assert.equal(partial.status, 2, partial.out);
-    assert.match(partial.out, /wpt run failed: ENOENT/);
+    refused(node(root, 'run.mjs', '--check'));
   });
 });
 
@@ -241,6 +247,141 @@ test('a page with a module script is skipped, not run as a classic one', () => {
     assert.equal(recorded.files['dom/nodes/m.html'], undefined, run.out);
     assert.ok(recorded.files['dom/nodes/a.html']);
     assert.match(run.out, /module script/);
+  });
+});
+
+/** `node wpt/run.mjs --update ...args` over the pages given: answers what each file found. */
+function found(root: string, pages: Record<string, string>, ...args: string[]) {
+  checkout(root, {}, pages);
+  const run = node(root, 'run.mjs', '--update', ...args);
+  assert.equal(run.status, 0, run.out);
+  const results = JSON.parse(readFileSync(join(root, 'cache', 'results.json'), 'utf8'));
+  return { out: run.out, results };
+}
+
+/** A page of one test, which passes where `passes` is true when the test runs. */
+const checks = (passes: string) =>
+  page(`test(function () { if (!(${passes})) throw new Error('no'); }, 'one'); done();`);
+
+test('a script in a template, or of a type that is data, is no script of the page', () => {
+  inTemp('inert', (root) => {
+    const run = found(root, {
+      // In a template, which is inert, and of a type that is data.
+      't.html': `<template><script type="module"></script></template>${checks('true')}`,
+      'u.html': `<script type="text/plain" src="/dom/absent.js"></script>${checks('true')}`,
+    });
+    for (const name of ['t.html', 'u.html']) {
+      assert.equal(run.results[`dom/nodes/${name}`]?.status, 'OK', `${name}: ${run.out}`);
+    }
+  });
+});
+
+test('a page loads with the doctype it was written with, or none', () => {
+  inTemp('doctype', (root) => {
+    const quirks = checks('document.doctype === null').replace('<!doctype html>', '');
+    const legacy = checks("document.doctype.publicId === '-//W3C//DTD HTML 4.01//EN'").replace(
+      '<!doctype html>',
+      '<!DOCTYPE html PUBLIC "-//W3C//DTD HTML 4.01//EN">',
+    );
+    const run = found(root, { 'q.html': quirks, 'r.html': legacy });
+    for (const name of ['q.html', 'r.html']) {
+      assert.equal(run.results[`dom/nodes/${name}`].subtests[0]?.status, 'PASS', name);
+    }
+  });
+});
+
+test('a deferred script runs once the page is parsed, and an async one no sooner', () => {
+  inTemp('deferred', (root) => {
+    const later = (attribute: string) =>
+      page('').replace(
+        '<script></script>',
+        `<script ${attribute} src="late.js"></script><p id="after"></p>`,
+      );
+    const run = found(root, {
+      'late.js':
+        "test(function () { if (!document.getElementById('after')) throw 1; }, 'one'); done();",
+      'd.html': later('defer'),
+      'e.html': later('async'),
+    });
+    for (const name of ['d.html', 'e.html']) {
+      assert.equal(run.results[`dom/nodes/${name}`].subtests[0]?.status, 'PASS', name);
+    }
+  });
+});
+
+test('a page that loads a directory as a script is skipped, not run', () => {
+  inTemp('directory', (root) => {
+    const run = found(root, {
+      'f.html': page('').replace('<script></script>', '<script src="/resources"></script>'),
+    });
+    assert.equal(run.results['dom/nodes/f.html'], undefined, run.out);
+    assert.match(run.out, /loads a script the checkout does not have/);
+  });
+});
+
+test('window.onunhandledrejection hears a promise rejected with nothing to handle it', () => {
+  inTemp('rejection', (root) => {
+    const handled = page(
+      "window.onunhandledrejection = function () { test(function () {}, 'one'); done(); }; Promise.reject(1);",
+    );
+    const run = found(root, { 'h.html': handled }, '--timeout=500');
+    assert.equal(run.results['dom/nodes/h.html'].status, 'OK', run.out);
+  });
+});
+
+test('a file after one that changed the realm sees none of it, put back or past putting back', () => {
+  inTemp('isolated', (root) => {
+    const left = (change: string, look: string) => [
+      page(`${change}; test(function () {}, 'one'); done();`),
+      page(`test(function () { if (${look}) throw 1; }, 'one'); done();`),
+    ];
+    // Only how a global is described, which is put back; and a global and a prototype's
+    // property that cannot be deleted, which are left to a process of their own.
+    const [l1, l2] = left(
+      "Object.defineProperty(window, 'parseInt', { enumerable: true })",
+      "window.propertyIsEnumerable('parseInt')",
+    );
+    const [m1, m2] = left(
+      "Object.defineProperty(window, 'leftover', { value: 1 })",
+      "'leftover' in window",
+    );
+    const [n1, n2] = left(
+      "Object.defineProperty(Array.prototype, 'leftover', { value: 1 })",
+      '[].leftover !== undefined',
+    );
+    const run = found(root, {
+      'l1.html': l1,
+      'l2.html': l2,
+      'm1.html': m1,
+      'm2.html': m2,
+      'n1.html': n1,
+      'n2.html': n2,
+    });
+    for (const name of ['l2.html', 'm2.html', 'n2.html']) {
+      assert.equal(run.results[`dom/nodes/${name}`].subtests[0]?.status, 'PASS', name);
+    }
+  });
+});
+
+test('a file that ends its process is a CRASH with the subtests it finished and its time', () => {
+  inTemp('ended', (root) => {
+    const ends = page("test(function () {}, 'one'); process.exit(9);");
+    const run = found(root, { 'k.html': ends });
+    const crashed = run.results['dom/nodes/k.html'];
+    assert.equal(crashed.status, 'CRASH', run.out);
+    assert.equal(crashed.subtests.length, 1, JSON.stringify(crashed));
+    assert.ok(crashed.ms > 0, JSON.stringify(crashed));
+  });
+});
+
+test('an error between files is told on the process error output, not dropped', () => {
+  inTemp('between', (root) => {
+    // Thrown once the file is over, and seen in what the next file's crash says the process wrote.
+    const late = page(
+      "test(function () {}, 'one'); done(); setImmediate(function () { throw new Error('late'); });",
+    );
+    const run = found(root, { 'j1.html': late, 'j2.html': page('process.exit(9);') });
+    assert.match(run.results['dom/nodes/j2.html'].message, /Error: late/, run.out);
   });
 });
 
@@ -310,7 +451,10 @@ test('a pin replaced from the environment is said, so a stray variable is seen',
     checkout(root);
     const run = node(root, 'run.mjs', '--update');
     assert.equal(run.status, 0, run.out);
-    assert.match(run.out, /WPT_COMMIT, WPT_REPOSITORY, WPT_CACHE replace the pin/);
+    assert.match(
+      run.out,
+      /WPT_COMMIT, WPT_REPOSITORY, WPT_CACHE, WPT_EXPECTATIONS replace the pin/,
+    );
   });
 });
 

@@ -4,7 +4,7 @@
  * Nothing is dropped without a reason: every file under a suite is run, skipped with a reason
  * that is counted in the summary, or is a support file, which is counted too.
  */
-import { existsSync, readFileSync, readdirSync } from 'node:fs';
+import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { dirname, join, posix, resolve, sep } from 'node:path';
 import { CHECKOUT } from './pin.mjs';
 import { hasModuleScript, scriptSources } from './page.mjs';
@@ -69,7 +69,10 @@ function byScripts(sources, path) {
     if (isReport(script)) continue;
     const file = inCheckout(script);
     if (!file) return 'loads a script outside the checkout';
-    if (!existsSync(file)) return 'loads a script the checkout does not have';
+    // A directory is not a script either: reading one as a script throws.
+    if (!statSync(file, { throwIfNoEntry: false })?.isFile()) {
+      return 'loads a script the checkout does not have';
+    }
   }
   return undefined;
 }

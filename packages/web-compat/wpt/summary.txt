@@ -25,6 +25,7 @@ html/syntax/parsing-html-fragments                                             1
 "all passing" is a file whose harness finished and every subtest passed.
 
 HOW EACH FILE ENDED
+A file ends OK, ERROR, TIMEOUT, PRECONDITION_FAILED or CRASH, where its process died or hung; an ending no file had is not listed.
 dom/nodes: ERROR 5, OK 329, TIMEOUT 13
 dom/events: ERROR 3, OK 90, TIMEOUT 6
 dom/collections: OK 12

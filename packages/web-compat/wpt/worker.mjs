@@ -6,7 +6,8 @@
  * A test's scripts run in this realm, as they must: they are handed the engine's own nodes, and
  * an error thrown by one is compared with this realm's `TypeError`. So what a file leaves behind
  * is taken away after it: the globals it added, the ones it changed, what it changed on their
- * prototypes, its timers and its page.
+ * prototypes, its timers and its page. What cannot be taken away, a property a test made that
+ * cannot be deleted say, ends the process after the file: the next has a new one.
  *
  * An iframe is the emulated frame document (`frames: 'emulated'`), whose document a test reads
  * as one of its own origin. Its `src` in the checkout is read from it as WPT's server serves the
@@ -147,24 +148,46 @@ function scriptAt(path) {
 /** The global object's own properties as they are now, to put back. */
 const snapshot = () => Object.getOwnPropertyDescriptors(globalThis);
 
-const same = (a, b) => a.value === b.value && a.get === b.get && a.set === b.set;
+/** Whether two descriptors are the same: the same value or accessors, and the same attributes. */
+const same = (a, b) =>
+  ['value', 'get', 'set', 'writable', 'enumerable', 'configurable'].every(
+    (key) => a[key] === b[key],
+  );
 
-/** Take away what was added to the global object since a snapshot, and put back what changed. */
-function restore(before) {
-  for (const name of Reflect.ownKeys(globalThis)) {
+/**
+ * Put an object's own properties back as a snapshot had them: what was added since is taken away,
+ * and what changed or went is put back. Answers whether all of it could be.
+ */
+function putBack(object, before) {
+  let clean = true;
+  for (const name of Reflect.ownKeys(object)) {
+    // Its own: what a prototype holds is a plain object, which a test that adds to
+    // `Object.prototype` gives the same name, and what the test added would be kept.
     const had = Object.hasOwn(before, name) ? before[name] : undefined;
-    const has = Object.getOwnPropertyDescriptor(globalThis, name);
+    const has = Object.getOwnPropertyDescriptor(object, name);
     try {
-      if (!had && !Reflect.deleteProperty(globalThis, name)) globalThis[name] = undefined;
-      else if (had && has && !same(had, has)) Object.defineProperty(globalThis, name, had);
+      if (!had && !Reflect.deleteProperty(object, name)) {
+        clean = false;
+        // Emptied at least, as a strict script's declarations are: see `evaluate`.
+        object[name] = undefined;
+      } else if (had && has && !same(had, has)) Object.defineProperty(object, name, had);
     } catch {
-      // Not configurable and not writable: it is there until the process is replaced.
+      // Not configurable: it is there until the process is replaced.
+      clean = false;
     }
   }
   for (const name of Reflect.ownKeys(before)) {
-    if (!Object.hasOwn(globalThis, name)) Object.defineProperty(globalThis, name, before[name]);
+    try {
+      if (!Object.hasOwn(object, name)) Object.defineProperty(object, name, before[name]);
+    } catch {
+      clean = false;
+    }
   }
+  return clean;
 }
+
+/** Take away what was added to the global object since a snapshot, and put back what changed. */
+const restore = (before) => putBack(globalThis, before);
 
 /**
  * The prototypes of the global classes as they are now, to put back: a test that tampers with
@@ -184,23 +207,9 @@ function snapshotPrototypes() {
 }
 
 function restorePrototypes(kept) {
-  for (const [prototype, before] of kept) {
-    for (const name of Reflect.ownKeys(prototype)) {
-      // Its own: what it holds is a plain object, which a test that adds to `Object.prototype`
-      // gives the same name, and what the test added would be kept.
-      const had = Object.hasOwn(before, name) ? before[name] : undefined;
-      const has = Object.getOwnPropertyDescriptor(prototype, name);
-      try {
-        if (!had) Reflect.deleteProperty(prototype, name);
-        else if (has && !same(had, has)) Object.defineProperty(prototype, name, had);
-      } catch {
-        // Not configurable: it stays as the test left it.
-      }
-    }
-    for (const name of Reflect.ownKeys(before)) {
-      if (!Object.hasOwn(prototype, name)) Object.defineProperty(prototype, name, before[name]);
-    }
-  }
+  let clean = true;
+  for (const [prototype, before] of kept) clean = putBack(prototype, before) && clean;
+  return clean;
 }
 
 /** Timers a file starts, to stop when it is over: a late one would call into the next file. */
@@ -277,6 +286,11 @@ class FileRun {
     const event = new Event('unhandledrejection', { cancelable: true });
     Object.assign(event, { reason, promise });
     globalThis.dispatchEvent(event);
+    try {
+      globalThis.onunhandledrejection?.(event);
+    } catch (error) {
+      this.uncaught(error);
+    }
   }
 
   /**
@@ -304,7 +318,12 @@ class FileRun {
       stack: short(test.stack),
     });
     globalThis.setup({ output: false, explicit_timeout: true });
-    globalThis.add_result_callback((test) => this.finished.push(subtest(test)));
+    globalThis.add_result_callback((test) => {
+      const finished = subtest(test);
+      this.finished.push(finished);
+      // Told as it finishes as well: a process that dies or hangs has nothing to say after.
+      process.send({ type: 'subtest', test: finished });
+    });
     globalThis.add_completion_callback((tests, status) =>
       this.complete({
         status: FILE_STATUS[status.status] ?? String(status.status),
@@ -329,7 +348,9 @@ class FileRun {
       (script) => this.script(script),
       (error, token) => {
         const what = token.open ? `<${token.open}>` : Object.keys(token)[0];
-        this.pageErrors.push(`${what}: ${describe(error)}`);
+        const said = `${what}: ${describe(error)}`;
+        this.pageErrors.push(said);
+        process.send({ type: 'pageError', said });
       },
     );
   }
@@ -411,10 +432,18 @@ class FileRun {
   }
 }
 
-/** The file being run, which an error with no one to catch it is this file's. */
+/**
+ * The file being run, which an error with no one to catch it is this file's. Between files it is
+ * no file's, and is written where `run.mjs` keeps what the process says for a crash.
+ */
 let current;
-process.on('uncaughtException', (error) => current?.uncaught(error));
-process.on('unhandledRejection', (reason, promise) => current?.rejected(reason, promise));
+const unowned = (error) => process.stderr.write(`between files: ${describe(error)}\n`);
+process.on('uncaughtException', (error) => (current ? current.uncaught(error) : unowned(error)));
+process.on('unhandledRejection', (reason, promise) =>
+  current ? current.rejected(reason, promise) : unowned(reason),
+);
+/** Whether a file left what could not be taken away: see the head of this file. */
+let dirty = false;
 
 function emptyPage() {
   try {
@@ -467,8 +496,8 @@ async function runFile(path, limit) {
   } finally {
     current = undefined;
     emptyPage();
-    if (before) restore(before);
-    if (prototypes) restorePrototypes(prototypes);
+    if (before && !restore(before)) dirty = true;
+    if (prototypes && !restorePrototypes(prototypes)) dirty = true;
     // After the global object is put back: the snapshot was taken with the timers tracked, and
     // would put the tracking back where this has just taken it away.
     untrack();
@@ -493,6 +522,7 @@ process.once('message', async ({ files, timeout }) => {
     process.send({ type: 'start', path });
     const result = await runFile(path, timeout);
     process.send({ type: 'result', path, result });
+    if (dirty) break;
   }
   process.send({ type: 'done' }, () => process.exit(0));
 });

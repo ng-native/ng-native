@@ -8,9 +8,10 @@
  *   was run.
  * - `--check` exits non-zero where the run differs from `expectations.json` at all: a file passes
  *   less than it says or was expected and not run, and as much where a file passes more, is new
- *   or has more or fewer subtests, which `--update` records. How a file ended (OK, TIMEOUT) is
- *   recorded and not compared: see `change` in `report.mjs`. With filters, a file they match that was
- *   expected and not run counts as well.
+ *   or has more or fewer subtests, which `--update` records. How a file ended (OK, ERROR, TIMEOUT,
+ *   PRECONDITION_FAILED, or CRASH where its process died or hung) is recorded and not compared:
+ *   see `change` in `report.mjs`. With filters, a file they match that was expected and not run
+ *   counts as well.
  * - `--timeout=2000` is how long a file has, in milliseconds (three times it for one marked
  *   long). The harness's own is 10 s: a file that needs longer than is given is a TIMEOUT.
  * - `--dump=<file>` writes each failing subtest's message, by file, to `<file>`: what to group
@@ -94,7 +95,9 @@ function plan(filters) {
 
 /**
  * Run some files in one process, telling `report` of each as it ends. Answers how many of them
- * are accounted for: all, or as far as the one the process died or hung on, which is a CRASH.
+ * are accounted for: all, as far as the process ran them, which ends early after a file that
+ * left what it could not take away, or as far as the one it died or hung on, which is a CRASH
+ * with what that file had told of itself.
  */
 function runBatch(files, { timeout, hang }, report) {
   return new Promise((resolve, reject) => {
@@ -109,6 +112,9 @@ function runBatch(files, { timeout, hang }, report) {
     });
     let done = 0;
     let started = false;
+    let ended = false;
+    /** The file being run, as far as it has told of itself. */
+    let running;
     let killedFor;
     let errors = '';
     let watchdog;
@@ -123,20 +129,29 @@ function runBatch(files, { timeout, hang }, report) {
     };
     child.on('message', (message) => {
       watch();
-      if (message.type === 'start') started = true;
+      if (message.type === 'start') {
+        started = true;
+        running = { subtests: [], pageErrors: [], began: performance.now() };
+      }
+      if (message.type === 'subtest') running?.subtests.push(message.test);
+      if (message.type === 'pageError') running?.pageErrors.push(message.said);
+      if (message.type === 'done') ended = true;
       if (message.type !== 'result') return;
       done++;
+      running = undefined;
       report(message.path, message.result);
     });
     // Once its output and messages are all read, which `exit` can come before.
     child.on('close', (code, signal) => {
       clearTimeout(watchdog);
-      if (done === files.length) return resolve(done);
+      if (done === files.length || (ended && done > 0)) return resolve(done);
       // Before any test: the runner itself is broken, and every file would be a crash.
       if (!started) return reject(new Error(`the test process did not start:\n${errors}`));
       const message =
         killedFor ?? `the process ended (${signal ?? `exit ${code}`}): ${errors.slice(-300)}`;
-      report(files[done], { status: 'CRASH', message, subtests: [], ms: 0 });
+      const { subtests = [], pageErrors = [], began } = running ?? {};
+      const ms = began === undefined ? 0 : Math.round(performance.now() - began);
+      report(files[done], { status: 'CRASH', message, subtests, pageErrors, namedAccess: [], ms });
       resolve(done + 1);
     });
     watch();

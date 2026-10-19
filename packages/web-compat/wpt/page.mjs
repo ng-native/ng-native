@@ -1,7 +1,11 @@
 /**
  * A test's `.html` file read as a browser reads a page: parsed by parse5, the HTML parsing
  * algorithm whole, each element made in the document as its tag is reached, and each script run
- * as its end tag is, with what is above it already there.
+ * as its end tag is, with what is above it already there. A script loaded `defer` or `async` is
+ * run once the page is parsed, in the order the page has them: where a browser runs a deferred
+ * one, and where it can run an async one, which a file of the checkout has loaded by then.
+ * The page keeps the doctype it was written with, or has none, and is parsed in the mode that
+ * gives it.
  *
  * The elements are made with the document's own `createElement`, `createElementNS`,
  * `createTextNode` and `appendChild`, not `innerHTML`: a script can keep an element an earlier
@@ -29,19 +33,30 @@ const RAW = new Set(
   'script style textarea title xmp iframe noembed noframes noscript plaintext'.split(' '),
 );
 
-/** Every element under a node of parse5's own tree, in document order. */
+/**
+ * Every element under a node of parse5's own tree, in document order, but what is in a template:
+ * its content is inert, and a script there is never run.
+ */
 function* elementsOf(node) {
   for (const child of node.childNodes ?? []) {
     if (child.tagName) yield child;
-    yield* elementsOf(child.content ?? child);
+    yield* elementsOf(child);
+  }
+}
+
+/** The scripts of a page's own tree a browser runs: classic and module, and not a data block. */
+function* scriptsOf(source) {
+  for (const element of elementsOf(parse(source))) {
+    if (element.tagName !== 'script') continue;
+    const type = element.attrs.find(({ name }) => name === 'type')?.value ?? '';
+    if (JAVASCRIPT.test(type) || MODULE.test(type)) yield { element, type };
   }
 }
 
 /** The `src` of every script a page loads, as written. */
 export function scriptSources(source) {
   const found = [];
-  for (const element of elementsOf(parse(source))) {
-    if (element.tagName !== 'script') continue;
+  for (const { element } of scriptsOf(source)) {
     const src = element.attrs.find(({ name }) => name === 'src');
     if (src) found.push(src.value);
   }
@@ -53,11 +68,7 @@ export function scriptSources(source) {
  * page is parsed, none of which the classic scripts here do.
  */
 export function hasModuleScript(source) {
-  for (const element of elementsOf(parse(source))) {
-    if (element.tagName !== 'script') continue;
-    const type = element.attrs.find(({ name }) => name === 'type');
-    if (type && MODULE.test(type.value)) return true;
-  }
+  for (const { type } of scriptsOf(source)) if (MODULE.test(type)) return true;
   return false;
 }
 
@@ -70,9 +81,10 @@ const attributesOf = (element) =>
 
 /**
  * The document as parse5's tree. A step the document refuses, an element it cannot make say,
- * is handed to `failed` and the page goes on from the next.
+ * is handed to `failed` and the page goes on from the next. A script to run once the page is
+ * parsed is put in `later`.
  */
-function treeOf(document, run, failed, ids) {
+function treeOf(document, run, failed, ids, later) {
   const own = new Map([
     ['html', document.documentElement],
     ['head', document.head],
@@ -106,6 +118,12 @@ function treeOf(document, run, failed, ids) {
   };
   /** The text of each element of raw text that is open, put in it as one when it ends. */
   const pending = new Map();
+  /** The mode the doctype gives the page, and whether it had one, to put in place of HTML's own. */
+  let mode = 'no-quirks';
+  let doctyped = false;
+  const unDoctype = () => {
+    if (document.doctype) attempt({ doctype: true }, () => document.removeChild(document.doctype));
+  };
   const insertText = (parent, text, next = null) => {
     if (RAW.has(parent.localName) && parent.namespaceURI === HTML && next === null) {
       pending.set(parent, (pending.get(parent) ?? '') + text);
@@ -135,9 +153,22 @@ function treeOf(document, run, failed, ids) {
     insertBefore: (parent, child, next) => append(parent, child, next),
     setTemplateContent() {},
     getTemplateContent: (template) => template.content ?? template,
-    setDocumentType() {},
-    setDocumentMode() {},
-    getDocumentMode: () => 'no-quirks',
+    setDocumentType(_, name, publicId, systemId) {
+      doctyped = true;
+      unDoctype();
+      attempt({ doctype: name }, () =>
+        document.insertBefore(
+          document.implementation.createDocumentType(name, publicId, systemId),
+          document.firstChild,
+        ),
+      );
+    },
+    // Told once, as the page's first token is read: after its doctype, where it has one.
+    setDocumentMode(_, given) {
+      mode = given;
+      if (!doctyped) unDoctype();
+    },
+    getDocumentMode: () => mode,
     detachNode: (node) =>
       attempt({ close: node.localName }, () => node.parentNode?.removeChild(node)),
     insertText: (parent, text) => insertText(parent, text),
@@ -165,7 +196,8 @@ function treeOf(document, run, failed, ids) {
     setNodeSourceCodeLocation() {},
     getNodeSourceCodeLocation: () => undefined,
     updateNodeSourceCodeLocation() {},
-    // A script runs as its end tag is reached, where it is in the page and not a template's.
+    // A script runs as its end tag is reached, where it is in the page and not a template's, or
+    // once the page is parsed: see the head of this file.
     onItemPop(element) {
       const text = pending.get(element);
       pending.delete(element);
@@ -174,20 +206,23 @@ function treeOf(document, run, failed, ids) {
       const type = element.getAttribute('type') ?? '';
       if (!JAVASCRIPT.test(type)) return;
       const src = element.getAttribute('src');
-      if (src !== null) run({ src });
-      else run({ code: element.textContent });
+      if (src === null) run({ code: element.textContent });
+      else if (element.hasAttribute('defer') || element.hasAttribute('async')) later.push({ src });
+      else run({ src });
     },
   };
 }
 
 /**
- * Build a page in a document, running each script as it is reached: `run` is given
- * `{ src }` or `{ code }`. A step that throws, an element the document cannot make say, is
- * handed to `failed` and the page goes on from the next. Answers the ids the page gave its
- * elements.
+ * Build a page in a document, running each script as it is reached or once the page is parsed:
+ * `run` is given `{ src }` or `{ code }`. A step that throws, an element the document cannot
+ * make say, is handed to `failed` and the page goes on from the next. Answers the ids the page
+ * gave its elements.
  */
 export function buildPage(source, document, run, failed) {
   const ids = new Set();
-  parse(source, { treeAdapter: treeOf(document, run, failed, ids) });
+  const later = [];
+  parse(source, { treeAdapter: treeOf(document, run, failed, ids, later) });
+  for (const script of later) run(script);
   return ids;
 }
