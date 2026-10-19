@@ -377,8 +377,15 @@ export function together<T>(node: EngineNode, change: () => T): T {
  * change: a browser takes a node out of its parent first as it replaces a child with it. A
  * fragment is told as it empties.
  */
+/** What is told of a node `adopt` takes out, before it goes: see `tree-members.ts`. */
+let leaving: (node: EngineNode) => void = () => {};
+export const whenAdopting = (hear: (node: EngineNode) => void): void => {
+  leaving = hear;
+};
+
 export function adopt(node: EngineNode): void {
   if (!node.parent || isFragment(node) || !watchOf(node)) return;
+  leaving(node);
   hostOf(node).removeChild(node.parent, node);
 }
 

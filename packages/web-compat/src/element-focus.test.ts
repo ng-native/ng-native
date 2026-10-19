@@ -114,6 +114,17 @@ describe('focus on what is not a text field', () => {
     one.focus();
     outer.appendChild(document.getElementById('two'));
     assert.equal(active(document), 'one');
+    // And while an observer watches, which takes the element out first, as a browser does.
+    const observer = new (globalThis as unknown as { MutationObserver: Dom }).MutationObserver(
+      () => {},
+    );
+    observer.observe(outer, { childList: true, subtree: true });
+    try {
+      outer.appendChild(one);
+      assert.equal(active(document), 'body', 'with an observer watching');
+    } finally {
+      observer.disconnect();
+    }
   });
 
   it('takes the focus from a text field, which native is told to blur', async () => {

@@ -108,11 +108,26 @@ export function passOverToldBlurs(engine: Engine): () => void {
   };
 }
 
+/** While `moveBefore` moves a node, which keeps the focus that a removal and an insertion lose. */
+let keepsFocus = false;
+
+/** Move a node as `moveBefore` does, keeping the focus in it: see `loseFocusMoving`. */
+export function keepingFocus(move: () => void): void {
+  keepsFocus = true;
+  try {
+    move();
+  } finally {
+    keepsFocus = false;
+  }
+}
+
 /**
  * Take the focus off an element that is moved, or off the one in it that has it: a browser takes
- * an element out of the tree before it puts it back, and what is taken out is not focused.
+ * an element out of the tree before it puts it back, and what is taken out is not focused. Told
+ * before the node leaves its parent, by whichever takes it out first.
  */
 export function loseFocusMoving(node: EngineNode): void {
+  if (keepsFocus || !node.parent) return;
   const engine = engineOf(node);
   const had = engine.focused;
   for (let at = had; at; at = at.parent) if (at === node) return giveUpFocus(engine, had!);
