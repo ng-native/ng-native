@@ -18,10 +18,9 @@ import { controlOf, pressControl } from './label.ts';
  * the click's default cancels it, and a checkbox goes back to what it was.
  *
  * A radio checked unchecks the others of its group, and one that was checked already says nothing.
- * A form is submitted only once its controls pass their constraints: see `form.ts`.
- *
- * ponytail: a form is submitted from a button only: return in one of its fields submits it in
- * a browser too; say so from the field's own submit if a library waits for one.
+ * A form is submitted only once its controls pass their constraints: see `form.ts`. Return in a
+ * field of one line submits it too, through its first submit button where it has one: see
+ * `implicitSubmit` in `form.ts` and `submitOnReturn` in `listen.ts`.
  */
 
 /** What runs once a click is over, told whether a listener cancelled it. */
