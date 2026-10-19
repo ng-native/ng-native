@@ -640,6 +640,10 @@ function windowed(frame: Frame, document: Members, contentType: string): void {
     get location() {
       return frameOfDocument.get(document)?.document === document && frame.live ? location : null;
     },
+    // Set as the window's is, while this is the frame's document: see `locate`.
+    set location(value: unknown) {
+      if (frameOfDocument.get(document)?.document === document && frame.live) locate(frame, value);
+    },
     get defaultView() {
       return frame.document === document && frame.live ? frame.window : null;
     },

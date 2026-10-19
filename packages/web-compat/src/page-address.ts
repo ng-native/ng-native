@@ -164,9 +164,7 @@ export class PageLocation {
    */
   get origin(): string {
     const url = this.#url();
-    if (!url) return 'null';
-    if (url.origin !== 'null') return url.origin;
-    return url.href.startsWith(`${url.protocol}//`) ? `${url.protocol}//${url.host}` : 'null';
+    return url ? webOrigin(url) : 'null';
   }
 
   get protocol(): string {
@@ -297,4 +295,20 @@ export function detectedRoot(): string {
   }
   const scheme = schemeIn(manifest as Manifest | undefined);
   return scheme ? `${scheme}://` : 'app://';
+}
+
+/**
+ * A URL's origin as a page at it has one: the scheme and the host, as a browser gives a page at a
+ * scheme the app registers, as a web view gives `capacitor://localhost`. The URL Standard gives
+ * any but `http` and the rest `null`, which a library that builds a URL from `location.origin`
+ * would build on.
+ */
+export function webOrigin(url: {
+  origin: string;
+  href: string;
+  protocol: string;
+  host: string;
+}): string {
+  if (url.origin !== 'null') return url.origin;
+  return url.href.startsWith(`${url.protocol}//`) ? `${url.protocol}//${url.host}` : 'null';
 }

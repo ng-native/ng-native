@@ -4,8 +4,10 @@ import {
   type Engine,
   type EngineNode,
 } from '@ng-native/fabric';
+import { domError } from './dom-error.ts';
 import { newEvent, report } from './events.ts';
 import { deliverMessage, pageOrigin } from './message-event.ts';
+import { webOrigin } from './page-address.ts';
 import { parseUrl } from './parse-url.ts';
 
 /**
@@ -448,7 +450,9 @@ function originOf(view: FrameView): string {
 function addressed(target: string, origin: string, sender: string): boolean {
   if (target === '*') return true;
   if (target === '/') return origin === sender;
-  return parseUrl(target)?.origin === origin;
+  // As the page's own is read, so one at the app's scheme, `exp://` in Expo Go, is found.
+  const url = parseUrl(target);
+  return !!url && webOrigin(url) === origin;
 }
 
 // The frame's window, as the app has it
@@ -493,6 +497,10 @@ function windowFor(view: FrameView): object {
         typeof options === 'string'
           ? options
           : ((options as { targetOrigin?: string } | undefined)?.targetOrigin ?? '/');
+      // A target that is no URL is a mistake a browser says so of.
+      if (target !== '*' && target !== '/' && !parseUrl(target)) {
+        throw domError(`${target} is not an origin to post to.`, 'SyntaxError');
+      }
       const origin = originOf(view);
       if (!addressed(target, origin, pageOrigin(engine))) return;
       // Asked again of the page itself, which may have gone elsewhere since it last said where, or

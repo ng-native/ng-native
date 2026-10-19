@@ -66,6 +66,15 @@ async function framed(document: Dom, attributes: Record<string, string>): Promis
 }
 
 describe('iframe', () => {
+  it("goes where its document's location is set, as its window's is", async () => {
+    const document = await page();
+    const iframe = await framed(document, { src: 'https://shop.example/frame.html' });
+    const loading = loadOf(iframe);
+    iframe.contentDocument.location = 'https://other.example/frame.html';
+    await loading;
+    assert.ok(iframe.contentDocument.getElementById('theirs'));
+  });
+
   it('has no document or window until it is in the page, and none once it is out', async () => {
     const document = await page();
     const iframe = document.createElement('iframe');

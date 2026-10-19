@@ -375,6 +375,20 @@ describe('iframe as a web view', () => {
     assert.equal(messages[0].source, iframe.contentWindow);
   });
 
+  it("posts to an origin at the app's own scheme, and throws for one that is no URL", async () => {
+    installWebView();
+    const { document, fabric } = await page({ url: 'exp://127.0.0.1:8081/--/' });
+    const iframe = await framed(document, { srcdoc: '<p>Hi</p>' });
+    const sent = () => fabric.commands.filter((each) => each.name === 'injectJavaScript');
+    // Expo Go's address, whose origin the page reads as its scheme and host.
+    iframe.contentWindow.postMessage('hello', 'exp://127.0.0.1:8081');
+    assert.equal(sent().length, 1);
+    assert.throws(
+      () => iframe.contentWindow.postMessage('hello', 'not a url'),
+      (error: Dom) => error.name === 'SyntaxError',
+    );
+  });
+
   it('sends nothing for the app to a page of another origin that is still loading', async () => {
     installWebView();
     const { document, fabric } = await page();
