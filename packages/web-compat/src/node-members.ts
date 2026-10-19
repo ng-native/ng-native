@@ -23,10 +23,13 @@ import {
   checkAttributeName,
   nameRecordOf,
   noteAttributeName,
+  SVG,
   XHTML,
 } from './qualified-name.ts';
 import { BY_ELEMENT, GLOBAL } from './reflected-attributes.ts';
 import { setStyleAttribute, styleOf } from './style-declaration.ts';
+import { isKeptOnShape, isShape, shapeAttributes } from './svg.ts';
+import { boxOf } from './svg-box.ts';
 import { engineOf } from './window.ts';
 
 /** A node as a library holds one: an engine node with the members below on it. */
@@ -148,7 +151,8 @@ function attributeOf(node: EngineNode, name: string): string | null {
   const text = written.get(node)?.get(name);
   if (name === 'style') return text ?? null;
   if (text === undefined && isEngineState(node, name)) return null;
-  const value = node.props[propOf(name)];
+  // A shape's attribute is kept as written: the prop it is drawn by is another thing.
+  const value = shapeAttributes(node)[name] ?? node.props[propOf(name)];
   if (value == null) return null;
   if (typeof value !== 'boolean') return String(value);
   // A boolean prop is what the text was coerced to: the text itself is what was written.
@@ -196,17 +200,27 @@ const isElement = (node: EngineNode): boolean => node.nodeKind === 'element' && 
  */
 function domName(node: EngineNode): string {
   const name = nameRecordOf(node);
-  if (!name) return nameOf(node, engineOf(node)).toUpperCase();
+  if (!name) return isDrawn(node) ? ownName(node) : ownName(node).toUpperCase();
   const qualified = name.prefix === null ? name.localName : `${name.prefix}:${name.localName}`;
   return name.namespace === XHTML && !inXmlDocument(node) ? asciiUpper(qualified) : qualified;
 }
 
-/** The namespace of an element: the one it was made in, or HTML's for what a template makes. */
+/**
+ * The namespace of an element: the one it was made in, or for what a template makes, SVG's for
+ * what is written in an `<svg>` and HTML's for the rest.
+ */
 function namespaceOf(node: EngineNode): string | null {
   if (!isElement(node)) return null;
   const name = nameRecordOf(node);
-  return name ? name.namespace : XHTML;
+  if (name) return name.namespace;
+  return isDrawn(node) ? SVG : XHTML;
 }
+
+/** Whether an element is a drawing's, which the renderer made in SVG's namespace. */
+const isDrawn = (node: EngineNode): boolean => node.namespace === 'svg';
+
+/** The name an element was written as: the one a stylesheet reads, where it is kept by another. */
+const ownName = (node: EngineNode): string => node.typeName ?? nameOf(node, engineOf(node));
 
 /**
  * A name written as a native view's prop is: a capital after a small letter, `testID` or
@@ -254,13 +268,17 @@ function isNativeOnly(node: EngineNode, key: string): boolean {
 /** An element's attribute names, `class` and `style` among them, in the order they were set. */
 function attributeNames(node: EngineNode): string[] {
   if (!isElement(node)) return [];
+  // A shape's are kept as written, and its props are what it is drawn by.
   const names = Object.keys(node.props)
+    .filter((key) => !(isShape(node) || node.tag === 'svg') || isKeptOnShape(key))
     .filter((key) => key !== 'style' && node.props[key] != null && !isNativeOnly(node, key))
     .map((key) => (key === 'nativeID' ? 'id' : key));
+  const drawn = Object.keys(shapeAttributes(node)).filter((name) => !names.includes(name));
   const all = [
     ...(classAttribute(node) === null ? [] : ['class']),
     ...(written.get(node)?.has('style') ? ['style'] : []),
     ...names,
+    ...drawn,
   ];
   return inWrittenOrder(node, all);
 }
@@ -344,7 +362,7 @@ export const nodeMembers = (core: CoreNode): PropertyDescriptorMap => ({
   }),
   localName: get(function () {
     if (!isElement(this)) return null;
-    return nameRecordOf(this)?.localName ?? nameOf(this, engineOf(this));
+    return nameRecordOf(this)?.localName ?? ownName(this);
   }),
   prefix: get(function () {
     return isElement(this) ? (nameRecordOf(this)?.prefix ?? null) : null;
@@ -410,6 +428,20 @@ export const nodeMembers = (core: CoreNode): PropertyDescriptorMap => ({
     return attributeNames(this).length > 0;
   }),
 
+  // What a shape in a drawing takes up, and how long a text in one is: see `svg-box.ts`.
+  getBBox: method(function () {
+    return boxOf(this);
+  }),
+  getComputedTextLength: method(function () {
+    return boxOf(this).width;
+  }),
+  // The drawing a shape is in: the nearest `<svg>` above it, and none for the drawing itself.
+  ownerSVGElement: get(function () {
+    for (let at = this.parent; at; at = at.parent) if (at.tag === 'svg') return at;
+    return null;
+  }),
+  createSVGRect: method(() => ({ x: 0, y: 0, width: 0, height: 0 })),
+
   // A library disables a control by the property as often as by the attribute: one is the other.
   // A form control's own is HTML's, in `reflected-attributes.ts`.
   disabled: get(
@@ -442,9 +474,11 @@ export const nodeMembers = (core: CoreNode): PropertyDescriptorMap => ({
       classListOf(this).value = String(value);
     },
   ),
+  // A drawing's element has its classes as an object, which a chart library reads `baseVal` of.
   className: get(
     function () {
-      return classAttribute(this) ?? '';
+      const classes = classAttribute(this) ?? '';
+      return isDrawn(this) ? { baseVal: classes, animVal: classes } : classes;
     },
     function (value) {
       setClassAttribute(this, String(value));

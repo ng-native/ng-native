@@ -1,6 +1,8 @@
 import type { Engine, EngineNode, TokenValue } from '@ng-native/fabric';
 import { applyChanged } from './runtime-style.ts';
 import { computedTransform } from './computed-transform.ts';
+import { isShape } from './svg.ts';
+import { fontSizeOf } from './svg-box.ts';
 import { alphaText, canvasColour } from './canvas-colour.ts';
 import { domError } from './dom-error.ts';
 import { documentOf } from './document.ts';
@@ -434,6 +436,8 @@ class ComputedStyle {
     settle(node);
     const whole = wholeOf(key, (part) => this.read(part));
     if (whole !== undefined) return whole;
+    // A text of a drawing is measured by its font size, which a chart library reads in pixels.
+    if (key === 'fontSize' && isShape(node)) return `${fontSizeOf(node)}px`;
     this[INLINE] ??= inlineOf(node);
     return settled(node, key, resolved(node, key, this[INLINE]));
   }

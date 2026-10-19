@@ -28,6 +28,7 @@ import { relationMembers } from './node-relations.ts';
 import { watchStyles } from './runtime-style.ts';
 import { scrollingMembers } from './scrolling.ts';
 import { selectorMembers } from './selector-members.ts';
+import { registerSvg } from './svg.ts';
 import { treeMembers } from './tree-members.ts';
 import { installWindow, windowOf } from './window.ts';
 
@@ -66,6 +67,8 @@ function install(engine: Engine): void {
     ),
     extendRenderer(webListen),
     registerElements(),
+    // The drawing's own elements, as react-native-svg's native views: see `svg.ts`.
+    registerSvg(),
   ];
 }
 
@@ -110,6 +113,8 @@ function setGlobalDocument(document: unknown): void {
  *   its options, and controls answer as a browser's do: their value, whether they are checked,
  *   their validity and selection, and their form, which is submitted and reset as a browser's
  *   is. See `field.ts`, `select.ts`, `form-controls.ts`, `validity.ts` and `form.ts`.
+ * - An `<svg>` is drawn by react-native-svg's native views, with SVG's names, namespace and
+ *   geometry members: see `svg.ts`.
  *
  * Nothing is added until this is called, and all of it is taken away again when the last app
  * that asked for it is destroyed.

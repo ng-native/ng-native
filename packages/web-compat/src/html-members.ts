@@ -36,11 +36,14 @@ const EVERY_NODE: Readonly<Record<string, Reflection>> = {
 
 const DATASET = own((element) => datasetOf(element as never));
 
-/** An element of HTML's: no text, no fragment, and none a script made in another namespace. */
+/**
+ * An element of HTML's: no text, no fragment, and none a script made in another namespace or a
+ * template wrote in one, as it writes a drawing's in an `<svg>`.
+ */
 const isHtml = (node: EngineNode) => {
   if (node.nodeKind !== 'element' || isFragment(node)) return false;
   const name = nameRecordOf(node);
-  return !name || name.namespace === XHTML;
+  return name ? name.namespace === XHTML : node.namespace === undefined;
 };
 
 /** Every name an element answers here. */

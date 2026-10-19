@@ -18,7 +18,7 @@ import {
 import { fenceUnder } from './fieldset.ts';
 import { implicitSubmit } from './form.ts';
 import { setChecked } from './form-controls.ts';
-import { buildAs, setMarkup } from './html.ts';
+import { buildAs, holdIconBox, setMarkup } from './html.ts';
 import { inlineStyle } from './inline-style.ts';
 import { labelPress, setLabel } from './label.ts';
 import { MOUSE_OF_TOUCH, TOUCH_EVENTS, asMouse, heardTouch } from './mouse-after-touch.ts';
@@ -33,6 +33,8 @@ import {
 } from './select.ts';
 import { engineOf } from './window.ts';
 import { together } from './mutation-observer.ts';
+import { setSvg, stopChanged, svgInserted, svgNamed, wordsInSpans } from './svg.ts';
+import { styleShape } from './svg-box.ts';
 
 /** Elements whose own component already turns a touch into a press. */
 const PRESSABLES = new Set(['pressable', 'touchable-opacity']);
@@ -66,9 +68,11 @@ const SETTERS: Readonly<
     (node as unknown as { textContent: unknown }).textContent = value;
     return true;
   },
-  // A binding to `innerHTML` replaces what the element holds with what the markup is.
+  // A binding to `innerHTML` replaces what the element holds with what the markup is. But for
+  // an icon's, set on a `<template>` and long, which `@ng-native/icons` draws from its name.
   innerHTML(node, value, engine) {
-    together(node, () => setMarkup(node, value, engine));
+    if (node.tag === 'template') holdIconBox(node, engine);
+    else together(node, () => setMarkup(node, value, engine));
     return true;
   },
   // HTML's `hidden` bound to `false` is no attribute: the element has none to read back. A
@@ -86,8 +90,10 @@ const SETTERS: Readonly<
     hide(node, on(value) && value !== 'until-found', engine);
     return true;
   },
-  // An HTML `id` is the view's `nativeID`, which is where a lookup reads it.
+  // An HTML `id` is the view's `nativeID`, which is where a lookup reads it, and the name a
+  // shape's clip or gradient is found by in a drawing.
   id(node, value, engine) {
+    setSvg(node, 'id', value, engine);
     engine.setProp(node, 'nativeID', value);
     return true;
   },
@@ -132,6 +138,9 @@ export const announcesDisabled = (node: EngineNode): boolean => announced.has(no
  * A pressable's own hit testing is the upgrade.
  */
 export const webListen: RendererExtension = {
+  // An element written inside an `<svg>` is the drawing's, in an app that asked for the package:
+  // see `svg.ts`. Another app's is its own.
+  named: (name, namespace, engine) => (documentOf(engine) ? svgNamed(name, namespace) : undefined),
   // A button and a link have their roles, and take a press with no listener: see `elements.ts`.
   created(node, engine) {
     if (giveRole(node, engine)) takesPress(engine, node);
@@ -142,16 +151,21 @@ export const webListen: RendererExtension = {
     if (createSelect(node, engine)) onTouch(engine, node, 'click', () => pressSelect(node, engine));
     // What overflows it scrolls, where its style says so: see `elements.ts`.
     scrollWhereStyled(node, engine);
+    // A drawing's text has its words drawn by a span: see `wordsInSpans`.
+    wordsInSpans(node);
     // A stylesheet is read, and has no box of its own: see `runtime-style.ts`.
     if (node.tag === 'style' && documentOf(engine)) styleMade(node, engine);
   },
   // What a select shows, and whether a field is in a disabled fieldset, follow where an option
-  // and a field are put: see `select.ts` and `fieldset.ts`.
+  // and a field are put: see `select.ts` and `fieldset.ts`. What a drawing's own elements are
+  // given as they are put in it goes with them as the engine takes them out: see `svg.ts` and
+  // `hearRemovals`.
   inserted(node, parent, engine) {
     if (!documentOf(engine)) return;
     optionInserted(node, parent, engine);
     if (node.tag === 'legend' && parent.tag === 'fieldset') fenceUnder(parent, engine);
     else fenceUnder(node, engine);
+    svgInserted(node, parent, engine);
   },
   removed(node, engine) {
     optionRemoved(node, engine);
@@ -163,13 +177,19 @@ export const webListen: RendererExtension = {
     checkControl(node, name, value, engine);
     setLabel(node, name, value, engine);
     const own = SETTERS[name];
-    const took = own ? own(node, value, engine) : false;
+    // An attribute of a shape in a drawing is what it draws: see `setSvg`.
+    const took = own ? own(node, value, engine) : setSvg(node, name, value, engine);
     // A field's and a select's own: see `field.ts` and `select.ts`.
     return setSelect(node, name, value, engine) || setField(node, name, value, engine) || took;
   },
-  // A style a library binds is set as what a native view reads: see `inline-style.ts`.
+  // A style a library binds is set as what a native view reads: see `inline-style.ts`. A
+  // gradient's stop is given its colour as a style as often as an attribute, and a shape's paint
+  // and font are its own: see `svg-box.ts`.
   style(node, name, value, engine) {
-    return documentOf(engine) ? inlineStyle(node, name, value) : undefined;
+    if (!documentOf(engine)) return undefined;
+    if (node.tag === 'stop') stopChanged(node, engine);
+    if (styleShape(node, name, value, engine)) return {};
+    return inlineStyle(node, name, value);
   },
   // Kept as `addEventListener` keeps a listener, so what a script sends reaches a template's too.
   listen(target, eventName, callback, engine) {

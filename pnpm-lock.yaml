@@ -1551,6 +1551,9 @@ importers:
       '@ng-native/web':
         specifier: workspace:*
         version: link:../web
+      '@ng-native/web-compat':
+        specifier: workspace:*
+        version: link:../web-compat
       '@oxc-angular/vite':
         specifier: 0.0.41
         version: 0.0.41(vite@8.3.1(@types/node@26.6.3)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.51.2)(yaml@2.9.1))
@@ -1974,9 +1977,15 @@ importers:
       '@emotion/css':
         specifier: ^11.13.5
         version: 11.13.5
+      '@ng-icons/core':
+        specifier: ^36.0.0
+        version: 36.0.0(@angular-devkit/schematics@22.1.9(chokidar@5.0.0))(@angular/common@22.2.0(@angular/core@22.2.0(@angular/compiler@22.2.0)(rxjs@7.8.2))(rxjs@7.8.2))(@angular/core@22.2.0(@angular/compiler@22.2.0)(rxjs@7.8.2))(@schematics/angular@22.1.9(chokidar@5.0.0))(rxjs@7.8.2)
       '@ng-native/components':
         specifier: workspace:*
         version: link:../components
+      '@ng-native/icons':
+        specifier: workspace:*
+        version: link:../icons
       '@ng-native/testing':
         specifier: workspace:*
         version: link:../testing

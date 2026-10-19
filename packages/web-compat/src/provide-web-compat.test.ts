@@ -59,6 +59,18 @@ class PlainFields {}
 @Component({ selector: 'x-asking-fields', template: '<input testID="asked-field" />' })
 class AskingFields {}
 
+@Component({
+  selector: 'x-drawn',
+  template: `<svg testID="root" viewBox="0 0 2 2"><text testID="label" x="1">Hi</text></svg>`,
+})
+class Drawn {}
+
+@Component({
+  selector: 'x-shape',
+  template: `<svg testID="drawing" viewBox="0 0 2 2"><path testID="shape" d="M0 0" /></svg>`,
+})
+class Shape {}
+
 /** The package, read the first time a test asks for it: see the first test. */
 const load = () => import('./index.ts');
 
@@ -230,6 +242,46 @@ describe('provideWebCompat', () => {
     assert.deepEqual(listened, []);
   });
 
+  it('draws an svg while the app is up, and takes the names it gave its elements away after', async () => {
+    const { provideWebCompat } = await load();
+    const names = ['svg', 'path', 'svg:text', 'svg:tspan', 'svg:undrawn'];
+    const before = names.map((name) => registeredViewName(name));
+    await render(Drawn);
+    const plain = [screen.getByTestId('root').viewName, screen.getByTestId('label').viewName];
+    cleanup();
+
+    await render(Drawn, { providers: [provideWebCompat()] });
+    const label: Dom = screen.getByTestId('label');
+    assert.deepEqual(
+      [screen.getByTestId('root').viewName, label.viewName, label.children[0].viewName],
+      ['RNSVGSvgView', 'RNSVGText', 'RNSVGTSpan'],
+    );
+    const element = label.instanceHandle;
+    assert.deepEqual(
+      [element.tagName, element.namespaceURI, element.className.baseVal],
+      ['text', 'http://www.w3.org/2000/svg', ''],
+    );
+    assert.equal(registeredViewName('path'), 'RNSVGPath');
+
+    cleanup();
+    assert.deepEqual(
+      names.map((name) => registeredViewName(name)),
+      before,
+      'every name as it was',
+    );
+    assert.deepEqual(
+      before,
+      names.map(() => undefined),
+      'none of them a name before',
+    );
+    // And the renderer names an element in an `<svg>` as it is written again.
+    await render(Drawn);
+    assert.deepEqual(
+      [screen.getByTestId('root').viewName, screen.getByTestId('label').viewName],
+      plain,
+    );
+  });
+
   it('stays while any app that asked for it is up, and gives the document to the newest', async () => {
     const { provideWebCompat } = await load();
     const before = Object.getOwnPropertyDescriptor(globalThis, 'document');
@@ -289,6 +341,11 @@ describe('provideWebCompat', () => {
       changedTouches: [{ identifier: 0, pageX: 1, pageY: 1 }],
     });
     assert.equal(buttons.instance.host.childList[1].active, undefined, 'no press taken');
+
+    // A drawing's attributes are the props they are written as, and a shape has no fill given it.
+    await render(Shape);
+    assert.equal(screen.getByTestId('drawing').props['viewBox'], '0 0 2 2');
+    assert.equal(screen.getByTestId('shape').props['fill'], undefined);
     // A style it binds is set as written, as the renderer sets one: no inset read as a side.
     await render(Inset);
     assert.equal(screen.getByTestId('inset').props['start'], undefined);

@@ -2,6 +2,7 @@ import type { Engine, EngineNode } from '@ng-native/fabric';
 import type { RendererExtension } from '@ng-native/platform';
 import type { html, Token, TreeAdapter, TreeAdapterTypeMap } from 'parse5';
 import { createComment } from './character-data.ts';
+import { drawingElement } from './svg.ts';
 import { markFragment } from './document-fragment.ts';
 import { ownView } from './document.ts';
 import { recordName } from './qualified-name.ts';
@@ -122,7 +123,7 @@ function madeElement(
   namespace: string,
   attributes: Token.Attribute[],
 ) {
-  const element = engine.createElement(name);
+  const element = drawingElement(engine, name, namespace === SVG_NAMESPACE);
   recordName(element, { namespace, prefix: null, localName: name });
   asATemplates.created?.(element, engine);
   giveAttributes(element, attributes);

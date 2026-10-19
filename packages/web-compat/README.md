@@ -62,6 +62,15 @@ Experimental and partial. It has:
   `Text`, `Comment`, `DocumentFragment`, `NodeList`, `HTMLCollection`, `DOMParser`,
   `XMLSerializer`, `Document`, `Attr`, `CSS`, `MediaList`, the window's size, and an element
   with an id as a global by it.
+- SVG: an `<svg>` a template writes, markup builds or a script makes with `createElementNS` is
+  drawn by react-native-svg's native views, the ones `@ng-native/icons` draws with: shapes,
+  groups, texts and their spans, a text along a path, gradients and their stops, clips, masks,
+  markers, patterns, a drop shadow and HTML in a `foreignObject`. Its elements have SVG's names
+  and namespace, `className` as an object with `baseVal`, `getBBox`, `getComputedTextLength`,
+  `ownerSVGElement` and `createSVGRect`, and a paint that names a token is the token's colour.
+  `@ng-native/icons` is a peer dependency for this. The app installs `react-native-svg` for the
+  native views; none of its JavaScript is imported, and without it a drawing shows nothing, as
+  an icon does.
 - A `<button>` and an `<a>` with their roles, each taking a press with no listener (`:active`
   while held) and marked `data-hover` while a pointer is over it, a disabled one announced as
   disabled, and a table's and a form's elements as views.

@@ -17,7 +17,8 @@ import {
   registerViewName,
   type EngineNode,
 } from '@ng-native/fabric';
-import { cleanup, createFakeFabric, render, type FakeFabricNode } from '@ng-native/testing';
+import { cleanup, createFakeFabric, render, settle, type FakeFabricNode } from '@ng-native/testing';
+import { provideWebCompat } from '@ng-native/web-compat';
 import { compileFixture } from './compile.ts';
 
 const require = createRequire(import.meta.url);
@@ -67,78 +68,140 @@ function scene(css?: string, drawing = true) {
 
 const SHAPES = { 'x-svg': 'RNSVGSvgView', 'x-g': 'RNSVGGroup', 'x-path': 'RNSVGPath' };
 
-describe('an icon an app draws today', () => {
+// What main committed for these icons, on both platforms, before a drawing could be painted by
+// a stylesheet: in a view whose text style, colour and token every shape inherits.
+const text = { fontSize: 18, fontWeight: 700 };
+const ink = { ...text, color: 'rgb(4, 5, 6)' };
+const svgView = (nativeID: string, color = 'rgb(4, 5, 6)') => [
+  'RNSVGSvgView',
+  {
+    ...text,
+    color,
+    width: 18,
+    height: 18,
+    nativeID,
+    bbWidth: '100%',
+    bbHeight: '100%',
+    minX: 0,
+    minY: 0,
+    vbWidth: 24,
+    vbHeight: 24,
+    align: 'xMidYMid',
+    meetOrSlice: 0,
+    accessible: false,
+  },
+];
+const lists = { x: [], y: [], dx: [], dy: [], rotate: [] };
+const DRAWN = [
+  svgView('outline'),
+  [
+    'RNSVGGroup',
+    {
+      ...ink,
+      stroke: { type: 2 },
+      strokeWidth: '2',
+      propList: ['fill', 'stroke', 'strokeWidth'],
+    },
+  ],
+  ['RNSVGPath', { ...ink, d: 'M0 0L5 5' }],
+  [
+    'RNSVGCircle',
+    { ...ink, fill: { type: 0, payload: 'red' }, propList: ['fill'], cx: '4', cy: '4', r: '2' },
+  ],
+  svgView('glyph', 'rgb(9, 9, 9)'),
+  ['RNSVGGroup', { ...text, color: 'rgb(9, 9, 9)', fill: { type: 2 }, propList: ['fill'] }],
+  ['RNSVGPath', { ...text, color: 'rgb(9, 9, 9)', d: 'M1 1L6 6' }],
+  svgView('token'),
+  ['RNSVGGroup', { ...ink, stroke: { type: 0, payload: 'rgb(1, 2, 3)' }, propList: ['stroke'] }],
+  ['RNSVGGroup', { ...ink, fill: { type: 0, payload: 'blue' }, propList: ['stroke', 'fill'] }],
+  ['RNSVGPath', { ...ink, d: 'M2 2L7 7' }],
+  ['RNSVGPath', { ...ink, d: 'M3 3L8 8' }],
+  svgView('words'),
+  ['RNSVGGroup', ink],
+  [
+    'RNSVGText',
+    { ...ink, x: ['1'], y: ['10'], dx: [], dy: [], rotate: [], font: { fontSize: '8' } },
+  ],
+  ['RNSVGTSpan', { ...ink, content: 'Hi ' }],
+  ['RNSVGTSpan', { ...ink, ...lists, font: { fontWeight: 'bold' } }],
+  ['RNSVGTSpan', { ...ink, content: 'there' }],
+];
+
+/** What an app's icons commit: every shape of react-native-svg's, with its props. */
+const drawnIcons = (fabric: { committed: readonly FakeFabricNode[] }) =>
+  flatten(fabric.committed)
+    .filter((node) => node.viewName.startsWith('RNSVG'))
+    .map((node) => [node.viewName, node.props]);
+
+const iconsApp = async () =>
+  (await compileFixture('fixtures/svg-icons-unchanged.ts'))['SvgIconsUnchanged'] as Type<unknown>;
+const libraryText = async () =>
+  (await compileFixture('fixtures/svg-library-text.ts'))['SvgLibraryText'] as Type<unknown>;
+
+/** What a library sees of an element: loosely typed, as its own code would be against the DOM. */
+type Dom = any;
+
+/** The words of a library's text, by what draws each and what it says. */
+const words = (fabric: { committed: readonly FakeFabricNode[] }) =>
+  flatten(fabric.committed)
+    .filter((node) => node.viewName === 'RNSVGText')
+    .flatMap((node) => node.children.map((child) => [child.viewName, child.props['content']]));
+
+// First in the file, so the first icon of the process is drawn in it: an icon names the native
+// text for its own once, and what draws a text's loose words is the native text's to say.
+describe('an icon beside a library drawing in an app that asked for web-compat', () => {
   afterEach(cleanup);
 
-  // What main committed for these icons, on both platforms, before a drawing could be painted by
-  // a stylesheet: in a view whose text style, colour and token every shape inherits.
-  const text = { fontSize: 18, fontWeight: 700 };
-  const ink = { ...text, color: 'rgb(4, 5, 6)' };
-  const svgView = (nativeID: string, color = 'rgb(4, 5, 6)') => [
-    'RNSVGSvgView',
-    {
-      ...text,
-      color,
-      width: 18,
-      height: 18,
-      nativeID,
-      bbWidth: '100%',
-      bbHeight: '100%',
-      minX: 0,
-      minY: 0,
-      vbWidth: 24,
-      vbHeight: 24,
-      align: 'xMidYMid',
-      meetOrSlice: 0,
-      accessible: false,
-    },
-  ];
-  const lists = { x: [], y: [], dx: [], dy: [], rotate: [] };
-  const DRAWN = [
-    svgView('outline'),
-    [
-      'RNSVGGroup',
-      {
-        ...ink,
-        stroke: { type: 2 },
-        strokeWidth: '2',
-        propList: ['fill', 'stroke', 'strokeWidth'],
-      },
-    ],
-    ['RNSVGPath', { ...ink, d: 'M0 0L5 5' }],
-    [
-      'RNSVGCircle',
-      { ...ink, fill: { type: 0, payload: 'red' }, propList: ['fill'], cx: '4', cy: '4', r: '2' },
-    ],
-    svgView('glyph', 'rgb(9, 9, 9)'),
-    ['RNSVGGroup', { ...text, color: 'rgb(9, 9, 9)', fill: { type: 2 }, propList: ['fill'] }],
-    ['RNSVGPath', { ...text, color: 'rgb(9, 9, 9)', d: 'M1 1L6 6' }],
-    svgView('token'),
-    ['RNSVGGroup', { ...ink, stroke: { type: 0, payload: 'rgb(1, 2, 3)' }, propList: ['stroke'] }],
-    ['RNSVGGroup', { ...ink, fill: { type: 0, payload: 'blue' }, propList: ['stroke', 'fill'] }],
-    ['RNSVGPath', { ...ink, d: 'M2 2L7 7' }],
-    ['RNSVGPath', { ...ink, d: 'M3 3L8 8' }],
-    svgView('words'),
-    ['RNSVGGroup', ink],
-    [
-      'RNSVGText',
-      { ...ink, x: ['1'], y: ['10'], dx: [], dy: [], rotate: [], font: { fontSize: '8' } },
-    ],
-    ['RNSVGTSpan', { ...ink, content: 'Hi ' }],
-    ['RNSVGTSpan', { ...ink, ...lists, font: { fontWeight: 'bold' } }],
-    ['RNSVGTSpan', { ...ink, content: 'there' }],
-  ];
+  it("leaves the library's words drawn by a span after the first icon is drawn", async () => {
+    const [Icons, Library] = [await iconsApp(), await libraryText()];
+    const first = await render(Library, { providers: [provideWebCompat()] });
+    assert.deepEqual(words(first.fabric), [['RNSVGTSpan', 'Hi']]);
+    await render(Icons);
+    // One a script makes, and one a template does.
+    const document = (globalThis as { document?: Dom }).document!;
+    const made = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+    made.append('There');
+    document.querySelector('svg').append(made);
+    await settle();
+    assert.deepEqual(words(first.fabric), [
+      ['RNSVGTSpan', 'Hi'],
+      ['RNSVGTSpan', 'There'],
+    ]);
+    const after = await render(Library, { providers: [provideWebCompat()] });
+    assert.deepEqual(words(after.fabric), [['RNSVGTSpan', 'Hi']]);
+  });
+
+  for (const platform of ['ios', 'android']) {
+    it(`commits the same shapes in an app that asked for it on ${platform}`, async () => {
+      registerPlatformComponents(platform);
+      try {
+        const app = await render(await iconsApp(), { providers: [provideWebCompat()] });
+        assert.deepEqual(drawnIcons(app.fabric), DRAWN);
+      } finally {
+        registerPlatformComponents('ios');
+      }
+    });
+  }
+
+  it('commits the same shapes in an app beside one that asked, and after it went', async () => {
+    const Icons = await iconsApp();
+    const asking = await render(await libraryText(), { providers: [provideWebCompat()] });
+    assert.deepEqual(drawnIcons((await render(Icons)).fabric), DRAWN);
+    asking.unmount();
+    cleanup();
+    assert.deepEqual(drawnIcons((await render(Icons)).fabric), DRAWN);
+  });
+});
+
+describe('an icon an app draws today', () => {
+  afterEach(cleanup);
 
   for (const platform of ['ios', 'android']) {
     it(`commits the same shapes on ${platform}`, async () => {
       registerPlatformComponents(platform);
       try {
-        const mod = await compileFixture('fixtures/svg-icons-unchanged.ts');
-        const app = await render(mod['SvgIconsUnchanged'] as Type<unknown>);
-        const drawn = flatten(app.fabric.committed)
-          .filter((node) => node.viewName.startsWith('RNSVG'))
-          .map((node) => [node.viewName, node.props]);
-        assert.deepEqual(drawn, DRAWN);
+        const app = await render(await iconsApp());
+        assert.deepEqual(drawnIcons(app.fabric), DRAWN);
       } finally {
         registerPlatformComponents('ios');
       }

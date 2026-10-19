@@ -9,6 +9,7 @@ import { SHORTHANDS, ALL_LONGHANDS } from './css-properties.ts';
 import { inlineStyle } from './inline-style.ts';
 import { settingStyle } from './mutation-observer.ts';
 import { noteWritten } from './node-members.ts';
+import { styleShape } from './svg-box.ts';
 import { engineOf } from './window.ts';
 
 /**
@@ -36,6 +37,8 @@ function apply(node: EngineNode, property: string, written: unknown): void {
   const value = written === '' || written == null ? null : written;
   if (property.startsWith('--')) return engine.setCustomProperty(node, property, value);
   const key = camel(property);
+  // A shape's paint and font are its own, set as the attribute of the name: see `svg-box.ts`.
+  if (styleShape(node, key, value, engine)) return;
   const as = inlineStyle(node, key, value);
   const next = { ...currentStyle(node) };
   for (const [name, set] of Object.entries(as ?? { [key]: value })) {

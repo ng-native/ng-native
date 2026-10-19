@@ -109,6 +109,15 @@ export function fragmentOf(markup: unknown, context: EngineNode, engine: Engine)
   return fragment;
 }
 
+/**
+ * An icon's markup a template binds to a `<template>`, as `@ng-icons/core` does, which
+ * `@ng-native/icons` draws from its name: the content is an empty box, and none of it is built.
+ */
+export function holdIconBox(template: EngineNode, engine: Engine): void {
+  const content = contentOf(template, engine);
+  if (content.childList.length === 0) engine.appendChild(content, ownView(engine));
+}
+
 /** Replace what an element holds with the elements, text and comments some markup is. */
 export function setMarkup(node: EngineNode, markup: unknown, engine: Engine): void {
   const into = node.tag === 'template' && !isFragment(node) ? contentOf(node, engine) : node;

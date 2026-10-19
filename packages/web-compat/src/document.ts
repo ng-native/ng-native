@@ -25,9 +25,11 @@ import {
   checkElementName,
   extractName,
   recordName,
+  SVG,
   XHTML,
   type QualifiedName,
 } from './qualified-name.ts';
+import { drawingElement } from './svg.ts';
 import { adopt, adoptedOf, styleSheetsOf } from './runtime-style.ts';
 import type { CSSStyleSheet } from './css-style-sheet.ts';
 import { query } from './selector.ts';
@@ -73,7 +75,12 @@ export function nameOf(node: EngineNode, engine: Engine): string {
  * template's of its name is given as it is made.
  */
 export function elementNamed(engine: Engine, name: QualifiedName): EngineNode {
-  const node = engine.createElement(asciiLower(name.localName));
+  // In a drawing, by the name SVG writes it as, capital inside and all: a chart library makes
+  // its shapes this way.
+  const drawn = name.namespace === SVG;
+  const node = drawn
+    ? drawingElement(engine, name.localName, true)
+    : engine.createElement(asciiLower(name.localName));
   recordName(node, name);
   madeByScript(node, engine);
   return node;

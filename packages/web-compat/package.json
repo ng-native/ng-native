@@ -54,6 +54,7 @@
   },
   "peerDependencies": {
     "@angular/core": "^22.0.0",
+    "@ng-native/icons": "workspace:*",
     "expo-document-picker": "^57.0.0"
   },
   "peerDependenciesMeta": {
@@ -66,7 +67,9 @@
     "@angular/core": "22.2.0",
     "@emotion/css": "^11.13.5",
     "@ng-native/components": "workspace:*",
-    "@ng-native/testing": "workspace:*"
+    "@ng-native/testing": "workspace:*",
+    "@ng-native/icons": "workspace:*",
+    "@ng-icons/core": "^36.0.0"
   },
   "nx": {
     "tags": [

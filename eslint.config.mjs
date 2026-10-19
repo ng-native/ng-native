@@ -102,10 +102,11 @@ export default tseslint.config(
             },
             {
               // A package that presents the engine to code written for another host. It sits on
-              // the platform as well as the engine, to extend the renderer. Nothing that ships
-              // depends on it.
+              // the platform as well as the engine, to extend the renderer, and on the icons for
+              // the props react-native-svg's views read, which a library's drawing is drawn by.
+              // Nothing that ships depends on it.
               sourceTag: 'layer:compat',
-              onlyDependOnLibsWithTags: ['layer:runtime', 'scope:platform'],
+              onlyDependOnLibsWithTags: ['layer:runtime', 'scope:platform', 'scope:icons'],
               bannedExternalImports: ['lightningcss', '@oxc-angular/*'],
             },
             {
