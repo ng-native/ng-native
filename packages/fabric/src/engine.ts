@@ -7861,11 +7861,12 @@ export class Engine implements HostEngine {
     if (!set) listeners.set(topLevelType, (set = new Set()));
     set.add(fn);
     // With the last of a type goes its set, and with the last set the map: `destroyNode` leaves
-    // them, so an empty one would stay on the node for good and read as someone listening. The
-    // set is looked up again, since a teardown run twice must not take a later one's away.
+    // them, so an empty one would stay on the node for good and read as someone listening. Only
+    // from the set it was put in: a teardown run again once that set is gone takes nothing from
+    // a later one, the same function listening again included.
     return () => {
       const current = node.listeners?.get(topLevelType);
-      if (!current?.delete(fn) || current.size) return;
+      if (current !== set || !set.delete(fn) || set.size) return;
       node.listeners!.delete(topLevelType);
       if (!node.listeners!.size) node.listeners = null;
     };

@@ -49,4 +49,17 @@ describe('taking a listener off a node', () => {
     engine.dispatchEvent(node, 'topTouchEnd', {});
     assert.deepEqual(log, ['second']);
   });
+
+  it('leaves the same function listening again alone when its old teardown runs again', () => {
+    const { engine, node } = mounted();
+    const log: string[] = [];
+    const heard = () => log.push('heard');
+    const offFirst = engine.setEventListener(node, 'topTouchEnd', heard);
+    offFirst();
+    engine.setEventListener(node, 'topTouchEnd', heard);
+
+    offFirst();
+    engine.dispatchEvent(node, 'topTouchEnd', {});
+    assert.deepEqual(log, ['heard']);
+  });
 });
