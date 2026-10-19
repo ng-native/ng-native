@@ -3459,6 +3459,8 @@ export class StyleResolver {
    */
   private readonly deepSheets = new Set<StyleSheet>();
   private readonly deepIndexes = new WeakMap<StyleSheet, RuleIndex>();
+  /** Each component sheet's rules for a box of its host: see `hostBoxIndex`. */
+  private readonly hostBoxIndexes = new WeakMap<StyleSheet, RuleIndex>();
 
   /**
    * Read the classes a sheet names, once, as soon as any node is given it. One `scoped` to a
@@ -3952,7 +3954,7 @@ export class StyleResolver {
     // `:host::before` is written: it is no host itself, so a bare `:host` rule still misses it.
     const host =
       boxesDrawn && node.tag.charCodeAt(0) === COLON ? node.parent?.hostSheet : undefined;
-    if (host) indexes.push(this.ownIndex(host, HOSTS));
+    if (host) indexes.push(this.hostBoxIndex(host));
     if (node.templateSheet) indexes.push(this.ownIndex(node.templateSheet, CREATED));
     if (this.deepSheets.size) this.reachedFromAbove(node, indexes);
     indexes.push(this.sharedIndex());
@@ -3969,6 +3971,23 @@ export class StyleResolver {
       if (!sheet || sheet === node.templateSheet || sheet === node.hostSheet) continue;
       if (this.deepSheets.has(sheet)) indexes.push(this.deepIndex(sheet));
     }
+  }
+
+  /**
+   * A sheet's rules for a box of its host alone, `:host::before` and `:host(.x)::after`, filed as
+   * a component's own are. Its other rules for a box are for the elements of its template, which
+   * is how emulated encapsulation scopes them on the web: `.icon::before` in it never reaches the
+   * box of a host its parent puts the class `icon` on.
+   */
+  private hostBoxIndex(sheet: StyleSheet): RuleIndex {
+    let index = this.hostBoxIndexes.get(sheet);
+    if (!index) {
+      const boxes = this.entries(sheet, COMPONENT_SPECIFICITY_BUMP).filter(
+        ({ rule }) => rule.compounds.at(-2)?.host !== undefined,
+      );
+      this.hostBoxIndexes.set(sheet, (index = indexRules(boxes, undefined, HOSTS * SHEET_ROOM)));
+    }
+    return index;
   }
 
   /** A sheet's `::ng-deep` rules alone, filed as a component's own are. */

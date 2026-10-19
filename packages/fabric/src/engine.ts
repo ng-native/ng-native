@@ -12770,7 +12770,10 @@ export class Engine implements HostEngine {
    * when it is shown again, as Modal.js creates it afresh. Committed again, it ignores every touch.
    */
   private withheld(child: EngineNode): boolean {
-    if (this.generated !== null && isGenerated(child.tag)) return this.undrawn(child);
+    // A box drawn and then hidden is `display: none`, as any element is.
+    if (this.generated !== null && isGenerated(child.tag)) {
+      return this.undrawn(child) || this.undisplayed(child);
+    }
     if (this.undisplayed(child)) return true;
     if (child.props['visible'] !== false || child.presented) return false;
     if (viewNameOf(child) !== MODAL_HOST) return false;

@@ -1187,14 +1187,19 @@ const isContent = (declaration) =>
 
 /**
  * What a `content` makes of a generated box: `none` for no box at all, or the string written,
- * which the engine draws as the box's text.
+ * which the engine draws as the box's text. Null for a value it cannot draw, which is no box and
+ * is reported.
  *
  * ponytail: a `content` of anything but one string, an `attr()` or a counter, is no box. Read
  * each when a library is seen to need one.
  */
 function contentOf(declaration) {
-  const [first] = meaningful(declaration.value.value);
-  return first?.type === 'token' && first.value.type === 'string' ? first.value.value : 'none';
+  const terms = meaningful(declaration.value.value);
+  const [first] = terms;
+  if (terms.length !== 1 || first.type !== 'token') return null;
+  if (first.value.type === 'string') return first.value.value;
+  const word = first.value.type === 'ident' ? first.value.value : '';
+  return word === 'none' || word === 'normal' ? 'none' : null;
 }
 
 /** A rule with only its declarations that have a `light-dark()` in them, on their dark side. */
@@ -2720,6 +2725,15 @@ function compileCss(source, context = 'styles', options = {}) {
     }
   }
 
+  /** A generated box's `content`, or `none` and the report of why where it is one no box draws. */
+  function declareContent(declaration, out, context) {
+    const content = contentOf(declaration);
+    out.content = content ?? 'none';
+    if (content !== null) return;
+    const why = 'a generated box draws one string, so it draws none for this';
+    onUnsupported?.(reported(context, "dropped 'content'", why));
+  }
+
   /**
    * A part put together once its rule is read, as a transition is from its longhands, or with
    * `onUnsupported` given, the report of why it was dropped. It is reported as the declaration it
@@ -3007,7 +3021,7 @@ function compileCss(source, context = 'styles', options = {}) {
         const declaration = ownToken(stated, raw);
         if (declaration === null) continue;
         if (options.generated && isContent(declaration)) {
-          out.content = contentOf(declaration);
+          declareContent(declaration, out, context);
           continue;
         }
         if (easedByToken(declaration, out, deferred, context)) continue;

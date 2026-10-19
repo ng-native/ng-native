@@ -587,3 +587,105 @@ describe('a generated box whose content is declared twice', () => {
     assert.deepEqual(s.held('a'), [1]);
   });
 });
+
+describe("a component's rule for a box of its own elements", () => {
+  // A browser scopes a component's rules to the elements of its template: `.icon::before` in
+  // it is for an `.icon` inside it, and only `:host::before` reaches a box of its host, whatever
+  // class the parent puts on the host.
+  const CSS =
+    '.icon::before { content: ""; width: 1px; height: 5px } :host::before { content: ""; width: 2px }';
+
+  const views = (fabric: ReturnType<typeof createFakeFabric>, id: string) => {
+    const all = (nodes: readonly FakeFabricNode[]): FakeFabricNode[] =>
+      nodes.flatMap((node) => [node, ...all(node.children)]);
+    return all(fabric.committed)
+      .find((node) => node.props['nativeID'] === id)!
+      .children.map((view) => view.props['width'] ?? view.props['nativeID']);
+  };
+
+  const host = (engine: Engine, sheet: never) => {
+    const node = engine.createElement('view');
+    engine.setProp(node, 'nativeID', 'host');
+    engine.setClasses(node, 'icon');
+    engine.appendChild(engine.root, node);
+    engine.setHostSheet(node, sheet);
+    return node;
+  };
+
+  it('draws no box in a host that has the class, where :host::before draws its own', () => {
+    const fabric = createFakeFabric();
+    const engine = new Engine(fabric, 1);
+    const sheet = generated(CSS) as never;
+    const node = host(engine, sheet);
+    const inner = engine.createElement('view', sheet);
+    engine.setProp(inner, 'nativeID', 'inner');
+    engine.setClasses(inner, 'icon');
+    engine.appendChild(node, inner);
+    engine.commit();
+    assert.deepEqual(views(fabric, 'host'), [2, 'inner']);
+    assert.deepEqual(views(fabric, 'inner'), [1], 'an element of its own still has the box');
+    assert.equal(
+      node.childList[0]!.committed?.props['height'],
+      undefined,
+      'nothing of .icon::before',
+    );
+    assert.equal(inner.childList[0]!.committed?.props['height'], 5);
+  });
+
+  it('draws no box in a host that has the class, with no :host::before', () => {
+    const fabric = createFakeFabric();
+    const engine = new Engine(fabric, 1);
+    host(engine, generated('.icon::before { content: ""; width: 1px }') as never);
+    engine.commit();
+    assert.deepEqual(views(fabric, 'host'), []);
+  });
+});
+
+describe('a generated box that is display: none', () => {
+  it('has no view while it is not displayed, and one again once it is', () => {
+    const s = scene('.x::after { content: ""; width: 2px } .x.collapsed::after { display: none }');
+    const x = s.element('x collapsed');
+    const views = () => {
+      s.engine.commit();
+      return s.fabric.committed.find((node) => node.props['nativeID'] === 'x collapsed')!.children;
+    };
+    assert.equal(views().length, 0);
+    s.engine.removeClass(x, 'collapsed');
+    s.engine.commit();
+    const shown = s.fabric.committed[0]!.children;
+    assert.deepEqual(
+      shown.map((view) => view.props['width']),
+      [2],
+    );
+    s.engine.addClass(x, 'collapsed');
+    s.engine.commit();
+    assert.equal(s.fabric.committed[0]!.children.length, 0);
+  });
+});
+
+describe('a content the engine cannot draw', () => {
+  const warned = (css: string): string[] => {
+    const messages: string[] = [];
+    compileCss(css, 'library.css', {
+      generated: true,
+      onUnsupported: (message) => messages.push(message),
+    });
+    return messages;
+  };
+
+  it('is reported, naming content, and draws no box', () => {
+    for (const value of ['attr(data-x)', 'counter(item)', 'var(--x)', 'open-quote', '"a" "b"']) {
+      const messages = warned(`.a::before { content: ${value} }`);
+      assert.equal(messages.length, 1, value);
+      assert.match(messages[0]!, /content/, value);
+    }
+    const { rules } = generated('.a::before { content: attr(data-x) }');
+    assert.deepEqual(rules[0]!['declarations'], { content: 'none' });
+  });
+
+  it('is not one string, none or an empty string, which say nothing', () => {
+    for (const value of ['"x"', '""', 'none']) {
+      assert.deepEqual(warned(`.a::before { content: ${value} }`), [], value);
+    }
+  });
+});
