@@ -54,3 +54,12 @@ export const CACHE = process.env.WPT_CACHE || fileURLToPath(new URL('./.cache/',
 /** Written last by a fetch that finished: the commit and how many files it checked out. */
 export const STAMP = join(CACHE, '.fetched.json');
 export const CHECKOUT = join(CACHE, 'wpt/');
+
+/**
+ * What of the above the environment replaces, for the runner's own tests. Said by the fetch and
+ * the run, so a variable left set in a shell is seen and not silently fetched and checked.
+ */
+export function replacedPin() {
+  const names = ['WPT_COMMIT', 'WPT_REPOSITORY', 'WPT_CACHE'].filter((name) => process.env[name]);
+  if (names.length) console.warn(`${names.join(', ')} replace the pin, from the environment`);
+}

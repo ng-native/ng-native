@@ -457,7 +457,13 @@ async function runFile(path, limit) {
     current = file;
     return { ...(await file.run()), ms: Math.round(performance.now() - started) };
   } catch (error) {
-    return { status: 'CRASH', message: short(describe(error)), subtests: file.finished, ms: 0 };
+    const crash = { status: 'CRASH', message: short(describe(error)), subtests: file.finished };
+    return {
+      ...crash,
+      pageErrors: file.pageErrors,
+      namedAccess: file.namedAccess(crash),
+      ms: Math.round(performance.now() - started),
+    };
   } finally {
     current = undefined;
     emptyPage();

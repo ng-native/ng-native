@@ -17,6 +17,7 @@
  *   the failures by.
  * - `--hang=30000` is how long the process may say nothing before it is killed and the file it
  *   was on recorded as a CRASH. `--batch=100` is how many files a process runs before a new one.
+ * - Any other option is refused: a misspelt `--check` would run and compare nothing.
  *
  * One process at a time. The tests are fetched by `fetch.mjs`, and nothing runs from a checkout
  * that is not the pinned commit, whole and unchanged.
@@ -25,7 +26,7 @@ import { fork } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fetched } from './fetch.mjs';
-import { CACHE, COMMIT, HERE, SUITES } from './pin.mjs';
+import { CACHE, COMMIT, HERE, SUITES, replacedPin } from './pin.mjs';
 import { compare, expectationOf, summarize, verdict, writeExpectations } from './report.mjs';
 import { classify, filesUnder, suiteOf } from './tests.mjs';
 
@@ -34,8 +35,16 @@ const EXPECTATIONS = process.env.WPT_EXPECTATIONS || join(HERE, 'expectations.js
 /** Beside it: what `--update` of every suite found, for a reader. */
 const SUMMARY = join(dirname(EXPECTATIONS), 'summary.txt');
 
+/** The options `run.mjs` takes: a switch alone, and a value after `=`. */
+const SWITCHES = ['--update', '--check'];
+const VALUES = ['timeout', 'hang', 'batch', 'dump'];
+
 function options(argv) {
   const flags = argv.filter((arg) => arg.startsWith('--'));
+  for (const flag of flags) {
+    const known = SWITCHES.includes(flag) || VALUES.some((name) => flag.startsWith(`--${name}=`));
+    if (!known) throw new Error(`${flag}: not an option of run.mjs`);
+  }
   const number = (name, otherwise) => {
     const flag = flags.find((each) => each.startsWith(`--${name}=`));
     if (!flag) return otherwise;
@@ -119,7 +128,8 @@ function runBatch(files, { timeout, hang }, report) {
       done++;
       report(message.path, message.result);
     });
-    child.on('exit', (code, signal) => {
+    // Once its output and messages are all read, which `exit` can come before.
+    child.on('close', (code, signal) => {
       clearTimeout(watchdog);
       if (done === files.length) return resolve(done);
       // Before any test: the runner itself is broken, and every file would be a crash.
@@ -218,6 +228,7 @@ function expectations(opts) {
 
 async function main() {
   const opts = options(process.argv.slice(2));
+  replacedPin();
   if (!fetched()) {
     throw new Error(
       `the tests are not fetched at ${COMMIT}, or changed since: run node wpt/fetch.mjs`,

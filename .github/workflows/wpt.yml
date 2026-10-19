@@ -5,9 +5,10 @@ name: Web Platform Tests
 # where it passes more or has other subtests: an improvement is recorded with `--update` in the
 # change that made it, so the expectations never go stale.
 #
-# Only when what the tests run on changed: the package, the engine and the renderer under it,
-# the layout the page is laid out with, the testing package and the loader the runner starts its
-# processes with, the lockfile, and this workflow and the setup it uses.
+# Only when what the tests run on changed: the package and the device and icons packages it
+# imports, the engine and the renderer under it, the layout the page is laid out with, the testing
+# package and the loader the runner starts its processes with, the Metro transform that compiles
+# the components, the lockfile, and this workflow and the setup it uses.
 on:
   push:
     branches: [main]
@@ -21,6 +22,10 @@ on:
       - 'packages/testing/src/**'
       - 'packages/testing/runner/**'
       - 'packages/testing/package.json'
+      - 'packages/device/src/**'
+      - 'packages/icons/src/**'
+      - 'packages/metro/**'
+      - '!packages/metro/**/*.md'
       - 'pnpm-lock.yaml'
       - '.github/workflows/wpt.yml'
       - '.github/actions/setup/**'
@@ -36,6 +41,10 @@ on:
       - 'packages/testing/src/**'
       - 'packages/testing/runner/**'
       - 'packages/testing/package.json'
+      - 'packages/device/src/**'
+      - 'packages/icons/src/**'
+      - 'packages/metro/**'
+      - '!packages/metro/**/*.md'
       - 'pnpm-lock.yaml'
       - '.github/workflows/wpt.yml'
       - '.github/actions/setup/**'

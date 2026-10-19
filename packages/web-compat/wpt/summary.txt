@@ -72,7 +72,7 @@ css/selectors: 176 support files, not tests
       3  needs a server (.sub.)
       2  manual test
       2  no testharness (a reference, visual or print page)
-      1  loads a script outside the checkout
+      1  loads a script the checkout does not have
       1  module script (the runner runs classic scripts only)
 html/canvas/element: 472 support files, not tests
     346  manual test
@@ -85,13 +85,13 @@ css/cssom: 60 support files, not tests
      12  reftest
       7  module script (the runner runs classic scripts only)
       3  XML document (the runner reads HTML only)
-      2  loads a script outside the checkout
+      2  loads a script the checkout does not have
       2  needs a server (.sub.)
 uievents: 30 support files, not tests
      52  needs testdriver (input automation)
      43  no testharness (a reference, visual or print page)
       6  manual test
-      1  loads a script outside the checkout
+      1  loads a script the checkout does not have
       1  XML document (the runner reads HTML only)
       1  crashtest (no assertions)
 dom/traversal: 4 support files, not tests
@@ -118,20 +118,20 @@ css/cssom-view: 62 support files, not tests
      11  reftest
       5  needs testdriver (input automation)
       3  crashtest (no assertions)
-      3  loads a script outside the checkout
+      3  loads a script the checkout does not have
       2  no testharness (a reference, visual or print page)
       2  XML document (the runner reads HTML only)
       1  needs a server (.https.)
 resize-observer: 10 support files, not tests
       3  reftest
-      1  loads a script outside the checkout
+      1  loads a script the checkout does not have
       1  crashtest (no assertions)
       1  needs a server (.sub.)
       1  XML document (the runner reads HTML only)
 intersection-observer: 24 support files, not tests
       9  needs a server (.sub.)
       5  needs a server (.sub. script)
-      1  loads a script outside the checkout
+      1  loads a script the checkout does not have
       1  no testharness (a reference, visual or print page)
       1  crashtest (no assertions)
 domparsing: 14 support files, not tests

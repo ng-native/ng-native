@@ -18,7 +18,16 @@ import {
 } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { CACHE, CHECKOUT, COMMIT, REPOSITORY, STAMP, SUITES, SUPPORT } from './pin.mjs';
+import {
+  CACHE,
+  CHECKOUT,
+  COMMIT,
+  REPOSITORY,
+  STAMP,
+  SUITES,
+  SUPPORT,
+  replacedPin,
+} from './pin.mjs';
 
 const gitIn = (checkout, ...args) =>
   execFileSync('git', ['-C', checkout, ...args], {
@@ -95,6 +104,7 @@ function checkOut() {
 }
 
 function main() {
+  replacedPin();
   if (fetched() && !process.argv.includes('--force')) {
     console.log(`wpt ${COMMIT.slice(0, 12)} is already fetched`);
     return;

@@ -244,6 +244,76 @@ test('a page with a module script is skipped, not run as a classic one', () => {
   });
 });
 
+test('a classic script of any JavaScript type is run, with white space about it', () => {
+  inTemp('types', (root) => {
+    const typed = (type: string) =>
+      page('').replace(
+        '<script></script>',
+        `<script type="${type}">test(function () {}, 'one'); done();</script>`,
+      );
+    checkout(
+      root,
+      {},
+      { 'x.html': typed('text/x-javascript'), 'w.html': typed(' text/JavaScript\n') },
+    );
+    const run = node(root, 'run.mjs', '--update', '--timeout=500');
+    assert.equal(run.status, 0, run.out);
+    const recorded = JSON.parse(readFileSync(join(root, 'expectations.json'), 'utf8'));
+    for (const name of ['x.html', 'w.html']) {
+      assert.equal(recorded.files[`dom/nodes/${name}`].status, 'OK', name);
+      assert.equal(recorded.files[`dom/nodes/${name}`].pass, 1, name);
+    }
+  });
+});
+
+test('a file that throws as it is run is a CRASH with what its page had and how long it took', () => {
+  inTemp('thrown', (root) => {
+    // The paragraph cannot be made, which is a page error, nor the span made in its place.
+    const refuse = "document.createElement = function () { throw new Error('refused'); };";
+    const broken = `${page(refuse)}<p></p>`;
+    checkout(root, {}, { 'z.html': broken });
+    const run = node(root, 'run.mjs', '--update');
+    assert.equal(run.status, 0, run.out);
+    const results = JSON.parse(readFileSync(join(root, 'cache', 'results.json'), 'utf8'));
+    const crashed = results['dom/nodes/z.html'];
+    assert.equal(crashed.status, 'CRASH', run.out);
+    assert.ok(crashed.ms > 0, JSON.stringify(crashed));
+    assert.equal(crashed.pageErrors.length, 1, JSON.stringify(crashed));
+    assert.deepEqual(crashed.namedAccess, []);
+  });
+});
+
+test('a page that loads a script the checkout does not have is skipped as that', () => {
+  inTemp('absent', (root) => {
+    const absent = '<script src="/dom/absent.js"></script>';
+    checkout(root, {}, { 'n.html': page('').replace('<script></script>', absent) });
+    const run = node(root, 'run.mjs', '--update');
+    assert.equal(run.status, 0, run.out);
+    assert.match(run.out, /loads a script the checkout does not have/);
+    assert.doesNotMatch(run.out, /outside the checkout/);
+  });
+});
+
+test('an option the runner does not know is refused, not run without', () => {
+  inTemp('unknown', (root) => {
+    checkout(root);
+    for (const flag of ['--chek', '--update=yes', '--dump']) {
+      const run = node(root, 'run.mjs', flag);
+      assert.equal(run.status, 2, `${flag}: ${run.out}`);
+      assert.match(run.out, new RegExp(`${flag}: not an option`));
+    }
+  });
+});
+
+test('a pin replaced from the environment is said, so a stray variable is seen', () => {
+  inTemp('overridden', (root) => {
+    checkout(root);
+    const run = node(root, 'run.mjs', '--update');
+    assert.equal(run.status, 0, run.out);
+    assert.match(run.out, /WPT_COMMIT, WPT_REPOSITORY, WPT_CACHE replace the pin/);
+  });
+});
+
 test('a page that loads a script from outside the checkout is skipped, not run', () => {
   inTemp('outside', (root) => {
     const outside = '<script src="../../../outside.js"></script>';

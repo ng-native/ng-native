@@ -11,8 +11,17 @@
 import { parse } from 'parse5';
 
 const HTML = 'http://www.w3.org/1999/xhtml';
-/** A classic script's type. A module script is not run: `tests.mjs` skips the page it is on. */
-const JAVASCRIPT = /^(|(text|application)\/(java|ecma)script)$/i;
+/**
+ * A classic script's type: none, or a JavaScript MIME type with white space about it and no
+ * parameters, as a browser matches it. A module script is not run: `tests.mjs` skips its page.
+ */
+const JAVASCRIPT = new RegExp(
+  '^[\\t\\n\\f\\r ]*(|' +
+    '(text|application)/(x-)?(java|ecma)script|' +
+    'text/(javascript1\\.[0-5]|jscript|livescript)' +
+    ')[\\t\\n\\f\\r ]*$',
+  'i',
+);
 const MODULE = /^[\t\n\f\r ]*module[\t\n\f\r ]*$/i;
 const SPACE = /^[\t\n\f\r ]*$/;
 /** What holds text that is not markup: given it whole as it ends, as the page wrote it. */

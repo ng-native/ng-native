@@ -50,7 +50,6 @@ export const isReport = (path) => path === 'resources/testharnessreport.js';
 
 /** What a test's name alone says it cannot be run for, if anything. */
 function byName(path) {
-  if (/\.py$/.test(path)) return 'needs a server (.py)';
   if (/\.sub\./.test(path)) return 'needs a server (.sub.)';
   if (/\.(https|h2|www)\./.test(path)) return 'needs a server (.https.)';
   if (/-manual\./.test(path) || /(^|\/)manual\//.test(path)) return 'manual test';
@@ -69,7 +68,8 @@ function byScripts(sources, path) {
     if (/\.sub\.|\?pipe=/.test(src)) return 'needs a server (.sub. script)';
     if (isReport(script)) continue;
     const file = inCheckout(script);
-    if (!file || !existsSync(file)) return 'loads a script outside the checkout';
+    if (!file) return 'loads a script outside the checkout';
+    if (!existsSync(file)) return 'loads a script the checkout does not have';
   }
   return undefined;
 }
