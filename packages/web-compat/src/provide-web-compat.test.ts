@@ -116,6 +116,14 @@ describe('provideWebCompat', () => {
     assert.equal((globalThis as Dom).clicks, div, 'an element with an id is a global by it');
     assert.equal(registeredViewName('button'), 'View');
     assert.equal(host.lastElementChild.props['accessibilityRole'], 'button');
+    // Selectors: what an element matches, and what is under it and the document that does.
+    const selectors = ['matches', 'webkitMatchesSelector', 'closest'];
+    for (const name of [...selectors, 'querySelector', 'querySelectorAll']) {
+      assert.equal(typeof host[name], 'function', name);
+    }
+    assert.equal(host.querySelector('#clicks'), div);
+    assert.equal(div.matches('#clicks'), true);
+    assert.equal(app.instance.document.querySelector('#pressed'), host.lastElementChild);
 
     cleanup();
     assert.deepEqual(globalsNow(), globals, 'every global as it was, the document too');
@@ -130,6 +138,9 @@ describe('provideWebCompat', () => {
       [div.innerHTML, div.namespaceURI, div.title, div.dataset, div.attributes],
       [undefined, undefined, undefined, undefined, undefined],
     );
+    for (const name of [...selectors, 'querySelector', 'querySelectorAll']) {
+      assert.equal(host[name], undefined, name);
+    }
     assert.equal(Object.getPrototypeOf(globalThis), windowPrototype, 'no named properties');
     assert.equal((globalThis as Dom).clicks, undefined);
     assert.equal(registeredViewName('button'), buttonView);

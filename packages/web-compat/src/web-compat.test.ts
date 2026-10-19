@@ -113,8 +113,7 @@ const globals = globalThis as Dom;
 const mount = async () => {
   const app = await render(Card, { providers: [provideWebCompat()] });
   const host = app.instance.host;
-  const card = host.firstElementChild as Dom;
-  return { app, host, card };
+  return { app, host, card: host.querySelector('.card') as Dom };
 };
 
 /** A finger down on, or lifted from, a node: what Fabric sends for either. */
@@ -222,6 +221,20 @@ describe('@ng-native/web-compat nodes', () => {
     assert.equal(root.parentElement, null);
   });
 
+  it('matches selectors, and finds what does under a node', async () => {
+    const { host, card } = await mount();
+    const [first, second] = card.querySelectorAll('.row');
+    assert.deepEqual([first, second], card.childList);
+    assert.equal(host.querySelector('#second'), second);
+    assert.equal(host.querySelector('view.row.first'), first);
+    assert.equal(host.querySelector('[data-kind="a"] .row'), first);
+    assert.equal(host.querySelector('[data-kind="b"] .row'), null);
+    assert.equal(host.querySelector('[id=second]'), second);
+    assert.equal(second.closest('.card'), card);
+    assert.equal(second.matches('.row, .other'), true);
+    assert.equal(first.matches('#second'), false);
+  });
+
   it('moves and removes nodes through the engine', async () => {
     const { card } = await mount();
     const [first, second] = card.childList as Dom[];
@@ -297,6 +310,12 @@ describe('@ng-native/web-compat document and window', () => {
     const document = app.instance.document;
     assert.equal(globals.document, document);
     assert.equal(host.ownerDocument, document);
+    assert.equal(document.querySelector('#second'), document.getElementById('second'));
+    // What the CDK's live announcer looks for an element it left behind with.
+    assert.deepEqual(
+      [...document.getElementsByClassName('row first')],
+      [document.querySelector('.row.first')],
+    );
 
     const overlay = document.createElement('DIV');
     assert.equal(overlay.tag, 'div');
@@ -336,6 +355,10 @@ describe('@ng-native/web-compat document and window', () => {
     assert.equal(document.createElement('div').nodeName, 'DIV');
     assert.equal(document.nodeType, Node.DOCUMENT_NODE);
     assert.equal(document.nodeName, '#document');
+    // And finds them by those names: a library looks for the `body` it puts its overlays in.
+    assert.equal(document.querySelector('body'), document.body);
+    assert.equal(document.body.matches('body'), true);
+    assert.equal(document.querySelector('html'), document.documentElement);
   });
 
   it('does not hand a document listener the press it was added during', async () => {
@@ -376,8 +399,8 @@ describe('@ng-native/web-compat document and window', () => {
   it('tells a box of a pointer that comes down on an element in it that listens too', async () => {
     // A colour area and the thumb in it: the area's own pointerdown starts the drag, and the
     // finger comes down on the thumb, which has listeners of its own. A browser tells both.
-    const { card } = await mount();
-    const first = card.firstElementChild as Dom;
+    const { card, host } = await mount();
+    const first = host.querySelector('.first') as Dom;
     const heard: unknown[] = [];
     first.addEventListener('pointerdown', () => heard.push('thumb'));
     card.addEventListener('pointerdown', (event: Dom) =>
@@ -733,7 +756,7 @@ describe('@ng-native/web-compat events a script dispatches', () => {
   it('goes down from the window to the target and back up, as the DOM orders it', async () => {
     const { app, card } = await mount();
     const document = app.instance.document;
-    const row = card.firstElementChild;
+    const row = card.querySelector('.first');
     const heard: string[] = [];
     for (const [name, at] of [
       ['window', globalThis],
@@ -787,7 +810,7 @@ describe('@ng-native/web-compat events a script dispatches', () => {
 
   it('stops where a listener says, and says whether the default was prevented', async () => {
     const { card } = await mount();
-    const row = card.firstElementChild;
+    const row = card.querySelector('.first');
     const heard: string[] = [];
     let stop: 'none' | 'propagation' | 'immediate' = 'propagation';
     row.addEventListener('picked', (event: Dom) => {
@@ -940,7 +963,7 @@ describe('@ng-native/web-compat events a script dispatches', () => {
     const app = await render(Heard, { providers: [provideWebCompat()] });
     await settle();
     const { heard, host } = app.instance;
-    const inner = host.firstElementChild.firstElementChild;
+    const inner = host.querySelector('.inner');
     const own: string[] = [];
     inner.addEventListener('click', () => void own.push('click'));
     inner.dispatchEvent(new Event('click', { bubbles: true }));
@@ -960,7 +983,7 @@ describe('@ng-native/web-compat events a script dispatches', () => {
     const app = await render(Heard, { providers: [provideWebCompat()] });
     await settle();
     const { heard, host, document } = app.instance;
-    const inner = host.firstElementChild.firstElementChild;
+    const inner = host.querySelector('.inner');
     const elsewhere = document.createElement('div');
     const forwarded: string[] = [];
     elsewhere.addEventListener('click', (event: Dom) => void forwarded.push(event.type));

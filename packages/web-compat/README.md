@@ -21,6 +21,9 @@ Experimental and partial. It has:
   `getRootNode`, `compareDocumentPosition`, `isEqualNode` and `normalize`, each checked as a
   browser checks an insertion. Texts and comments have `data` and the rest of `CharacterData`.
 - Live `getElementsByTagName`, `getElementsByClassName` and `getElementsByName`.
+- Selectors: `querySelector` and `querySelectorAll` on an element, a fragment and a document,
+  `matches`, `closest`, read as Selectors Level 4 has them, with a `SyntaxError` for one that
+  cannot be read. A state nothing here reads, `:hover` or `:checked`, matches nothing.
 - `MutationObserver`, with `childList`, `attributes`, `characterData`, `subtree` and old values.
 - A `document` that creates engine nodes and fragments, with a `body` that draws over the screen
   for overlays, a doctype, `createElementNS`, `createTreeWalker` and `createNodeIterator`, and a
@@ -32,7 +35,7 @@ Experimental and partial. It has:
 - A `<button>` and an `<a>` with their roles, and a table's and a form's elements as views.
 - A `click` listener that hears a press.
 
-Selectors, `element.style`, computed style, geometry, the other observers, forms and the rest of
+`element.style`, computed style, geometry, the other observers, forms and the rest of
 the DOM are not part of it yet.
 
 Nothing in an app changes until it adds the provider, and everything the provider adds is taken

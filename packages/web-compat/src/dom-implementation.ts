@@ -15,6 +15,7 @@ import { elementNamed } from './document.ts';
 import { engineOf } from './window.ts';
 import { byClassName, byName, byTagName, byTagNameNS } from './elements-by.ts';
 import { descendants } from './in-document.ts';
+import { query } from './selector.ts';
 import { createDocumentType, isDocumentType, type DocumentType } from './document-type.ts';
 
 /**
@@ -157,6 +158,14 @@ function madeDocument(
     createDocumentFragment: () => markMade(markFragment(page.createElement('view')), document),
     getElementById: (id: unknown) =>
       all().find((node) => node.props['nativeID'] === String(id)) ?? null,
+    querySelector: (...args: unknown[]) => {
+      required(args, 1, 'querySelector');
+      return query(all(), args[0], root(), true)[0] ?? null;
+    },
+    querySelectorAll: (...args: unknown[]) => {
+      required(args, 1, 'querySelectorAll');
+      return query(all(), args[0], root(), false);
+    },
     getElementsByTagName: (name: string) => byTagName(engine, under, name),
     getElementsByTagNameNS: (namespace: string | null, local: string) =>
       byTagNameNS(engine, under, namespace, local),

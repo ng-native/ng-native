@@ -19,6 +19,7 @@ import { htmlMethods } from './html-methods.ts';
 import { markupMembers } from './markup-members.ts';
 import { nodeMembers, setAttributesWith, type CoreNode } from './node-members.ts';
 import { relationMembers } from './node-relations.ts';
+import { selectorMembers } from './selector-members.ts';
 import { treeMembers } from './tree-members.ts';
 import { installWindow, windowOf } from './window.ts';
 
@@ -46,6 +47,7 @@ function install(engine: Engine): void {
         ...attributeMembers,
         ...markupMembers,
         ...htmlMethods,
+        ...selectorMembers,
       }),
     ),
     extendRenderer(webListen),
@@ -74,11 +76,13 @@ function setGlobalDocument(document: unknown): void {
  *
  * - Nodes answer to the DOM members such a library calls on its elements: their names and
  *   namespaces, attributes, classes and `dataset`, the properties HTML reflects attributes as,
- *   their markup, the tree around them and every way to change it, and their listeners.
+ *   their markup, the tree around them and every way to change it, the selectors they match and
+ *   the elements under them that do, and their listeners.
  * - The HTML elements a library writes that the engine has no view for, a `<button>` or a
  *   `<table>`, are views, and a button and a link have their roles.
  * - `DOCUMENT`, and the global `document`, create engine nodes, with a `body` that draws over the
- *   screen for overlays, and its `implementation` makes documents that are never drawn.
+ *   screen for overlays, it finds elements by a selector, and its `implementation` makes
+ *   documents that are never drawn.
  * - The `window` globals a library reads exist: its listeners, `Event`, its size,
  *   `MutationObserver`, which hears what changes in the tree, `DOMParser` and `XMLSerializer`,
  *   the interfaces of HTML's elements, and an element with an id as a global of that name.

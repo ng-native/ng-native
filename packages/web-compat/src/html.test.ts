@@ -247,7 +247,7 @@ describe('DOMParser', () => {
     assert.equal(parsed.contentType, 'text/html');
     assert.equal(parsed.head.innerHTML, '<title>T</title>');
     assert.equal(parsed.body.innerHTML, '<p class="x">a &amp; <b>b</b></p><!--c-->');
-    assert.equal(parsed.getElementsByTagName('b')[0].textContent, 'b');
+    assert.equal(parsed.querySelector('.x b').textContent, 'b');
     assert.notEqual(parsed, document);
   });
 

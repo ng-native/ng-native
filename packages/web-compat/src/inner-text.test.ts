@@ -108,7 +108,7 @@ describe('innerText and outerText written', () => {
     const document = await page();
     const div = document.createElement('div');
     div.innerHTML = 'A <span>B</span> C';
-    div.childNodes[1].outerText = 'x';
+    div.querySelector('span').outerText = 'x';
     assert.equal(div.childNodes.length, 1);
     assert.equal(div.innerHTML, 'A x C');
     assert.throws(() => (document.createElement('span').outerText = ''), {

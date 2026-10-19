@@ -32,7 +32,7 @@ class Bound {
 const mount = async () => {
   const app = await render(Bound, { providers: [provideWebCompat()] });
   const { host, document } = app.instance;
-  return { app, host, document, panel: host.firstElementChild as Dom };
+  return { app, host, document, panel: host.querySelector('.panel') as Dom };
 };
 
 const Observer = () => (globalThis as Dom).MutationObserver;
