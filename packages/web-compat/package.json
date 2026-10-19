@@ -54,10 +54,10 @@
   },
   "peerDependencies": {
     "@angular/core": "^22.0.0",
-    "@ng-native/expo": "workspace:*"
+    "expo-document-picker": "^57.0.0"
   },
   "peerDependenciesMeta": {
-    "@ng-native/expo": {
+    "expo-document-picker": {
       "optional": true
     }
   },

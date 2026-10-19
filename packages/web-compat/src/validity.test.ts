@@ -34,6 +34,27 @@ const page = async () => {
 };
 
 describe('constraint validation', () => {
+  it("finds a url field's mismatch where the runtime's URL takes anything, as React Native's does", async () => {
+    const { make } = await page();
+    const url = make('input', { type: 'url' });
+    const had = globalThis.URL;
+    // React Native's: with no base it keeps what it is given, and throws for nothing.
+    (globalThis as Dom).URL = class {
+      readonly href: string;
+      constructor(href: string) {
+        this.href = href;
+      }
+    };
+    try {
+      url.value = 'not a url';
+      assert.equal(url.validity.typeMismatch, true);
+      url.value = 'https://example.com/a';
+      assert.equal(url.validity.typeMismatch, false);
+    } finally {
+      globalThis.URL = had;
+    }
+  });
+
   it("works each flag out from the control as it is read, and a script's message", async () => {
     const { make } = await page();
     const name = make('input', { required: '' });

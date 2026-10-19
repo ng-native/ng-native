@@ -146,10 +146,18 @@ export const focusMembers: PropertyDescriptorMap = {
     if (!isFileInput(this)) return clickElement(this);
     if (disabled(this)) return;
     const engine = engineOf(this);
-    void pickFiles(this, engine).then((type) => {
-      // What was picked is `input` and then `change`, as a browser tells it.
-      const told = type === 'change' ? ['input', 'change'] : ['cancel'];
-      for (const each of told) dispatch(newEvent(each, { bubbles: true }), eventPath(engine, this));
-    });
+    void pickFiles(this, engine)
+      // A picker that fails, open already or with no native module, picked nothing: `cancel`,
+      // which is what a library waiting on the input hears for that.
+      .catch((failure: unknown) => {
+        console.warn('[angular-native] the file picker failed:', failure);
+        return 'cancel' as const;
+      })
+      .then((type) => {
+        // What was picked is `input` and then `change`, as a browser tells it.
+        const told = type === 'change' ? ['input', 'change'] : ['cancel'];
+        for (const each of told)
+          dispatch(newEvent(each, { bubbles: true }), eventPath(engine, this));
+      });
   }),
 };

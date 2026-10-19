@@ -4,6 +4,7 @@ import { controlsOf, formOf } from './form-controls.ts';
 import { method, own, type Reflecting, type Reflection } from './reflect.ts';
 import { elementsUnder } from './element-tree.ts';
 import { fenced } from './fieldset.ts';
+import { parseUrl } from './parse-url.ts';
 
 /**
  * HTML's constraint validation: `validity`, `willValidate`, `validationMessage`,
@@ -86,13 +87,8 @@ function typeMismatch(node: Control): boolean {
     const each = has(node, 'multiple') ? value.split(',').map((one) => one.trim()) : [value];
     return each.some((one) => !EMAIL.test(one));
   }
-  if (type !== 'url') return false;
-  try {
-    new URL(value);
-    return false;
-  } catch {
-    return true;
-  }
+  // An absolute URL, read as the URL Standard reads one: React Native's `URL` takes anything.
+  return type === 'url' && parseUrl(value) === null;
 }
 
 /** A `pattern` as HTML compiles it: the whole value, with the `v` flag where it is known. */

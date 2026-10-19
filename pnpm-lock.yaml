@@ -1958,6 +1958,9 @@ importers:
       '@ng-native/platform':
         specifier: workspace:*
         version: link:../platform
+      expo-document-picker:
+        specifier: ^57.0.0
+        version: 57.0.3(expo@57.0.26)
       parse5:
         specifier: ^7.3.0
         version: 7.3.0

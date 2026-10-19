@@ -3,10 +3,12 @@
  * it, a file input's picker, and where the selection is in a field.
  */
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { createRequire, stripTypeScriptTypes } from 'node:module';
 import { afterEach, describe, it } from 'node:test';
 import { Component, DOCUMENT, inject, signal } from '@angular/core';
-import { DocumentPicker } from '@ng-native/expo/document-picker';
 import { cleanup, fireEvent, render, screen, settle, userEvent } from '@ng-native/testing';
+import { FILE_PICKER } from './file-input.ts';
 import { provideWebCompat } from './index.ts';
 
 /** What a library sees of an element or a document: loosely typed, as its own code would be. */
@@ -181,7 +183,7 @@ describe('a file input', () => {
     const source = {
       getDocumentAsync: async (options: Dom) => ((asked = options), answer),
     };
-    const { document } = await order([{ provide: DocumentPicker.SOURCE, useValue: source }]);
+    const { document } = await order([{ provide: FILE_PICKER, useValue: source }]);
     const input = document.createElement('input');
     input.type = 'file';
     input.accept = 'application/pdf,.pdf';
@@ -210,6 +212,68 @@ describe('a file input', () => {
     input.click();
     await settle();
     assert.equal(heard.length, 3, 'not while it is disabled');
+  });
+
+  it('says cancel when the picker fails, as when it is closed', async () => {
+    const failed = new Error('the picker is open already');
+    const source = { getDocumentAsync: () => Promise.reject(failed) };
+    const { document } = await order([{ provide: FILE_PICKER, useValue: source }]);
+    const input = document.createElement('input');
+    input.type = 'file';
+    const heard: string[] = [];
+    for (const type of ['input', 'change', 'cancel']) {
+      input.addEventListener(type, () => heard.push(type));
+    }
+    const unhandled: unknown[] = [];
+    const hear = (reason: unknown) => unhandled.push(reason);
+    const warn = console.warn;
+    const warned: unknown[][] = [];
+    console.warn = (...said: unknown[]) => void warned.push(said);
+    process.on('unhandledRejection', hear);
+    try {
+      input.click();
+      await settle();
+      await new Promise((resolve) => setImmediate(resolve));
+    } finally {
+      process.off('unhandledRejection', hear);
+      console.warn = warn;
+    }
+    assert.deepEqual(unhandled, []);
+    assert.deepEqual(heard, ['cancel']);
+    assert.equal(warned.length, 1);
+    assert.equal(warned[0]![1], failed);
+  });
+
+  it('is nothing an app must install to build: Metro takes its picker for optional', () => {
+    // Metro by the path the package's own tests reach it, as Expo configures it.
+    let from = createRequire(import.meta.url);
+    for (const step of ['@ng-native/testing', '@ng-native/metro', '@expo/metro-config', 'metro']) {
+      from = createRequire(from.resolve(`${step}/package.json`));
+    }
+    const collect = from('metro/private/ModuleGraph/worker/collectDependencies').default;
+    const file = new URL('./file-input.ts', import.meta.url).pathname;
+    // Its types taken off first, as Metro's transform takes them off before it collects.
+    const ast = from('@babel/core').parseSync(stripTypeScriptTypes(readFileSync(file, 'utf8')), {
+      filename: file,
+      babelrc: false,
+      configFile: false,
+    });
+    const { dependencies } = collect(ast, {
+      asyncRequireModulePath: 'asyncRequire',
+      dependencyMapName: null,
+      dynamicRequires: 'reject',
+      inlineableCalls: [],
+      keepRequireNames: true,
+      allowOptionalDependencies: true,
+      unstable_allowRequireContext: false,
+      unstable_isESMImportAtSource: null,
+    });
+    const own = ['@angular/core', '@ng-native/fabric', 'asyncRequire'];
+    const loaded = (dependencies as Dom[])
+      .filter((each) => !own.includes(each.name))
+      .map((each) => [each.name, each.data.isOptional]);
+    // The native module itself, so nothing it is loaded through requires it in turn.
+    assert.deepEqual(loaded, [['expo-document-picker', true]]);
   });
 });
 

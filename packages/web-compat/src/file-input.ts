@@ -1,5 +1,25 @@
-import type { Injector } from '@angular/core';
+import { InjectionToken, type Injector } from '@angular/core';
 import type { Engine, EngineNode } from '@ng-native/fabric';
+
+/** A file as the picker answers with it. */
+interface PickedFile {
+  name: string;
+  mimeType?: string;
+  size?: number;
+  lastModified?: number;
+  uri: string;
+}
+
+/** `expo-document-picker`, by the one function a file input calls. */
+export interface FilePicker {
+  getDocumentAsync(options: {
+    type: string | string[];
+    multiple: boolean;
+  }): Promise<{ canceled: boolean; assets: readonly PickedFile[] | null }>;
+}
+
+/** The picker a file input opens, where an app or a test provides one: `expo-document-picker`. */
+export const FILE_PICKER = new InjectionToken<FilePicker>('angular-native.filePicker');
 
 const injectors = new WeakMap<Engine, Injector>();
 
@@ -18,23 +38,30 @@ export const isFileInput = (node: EngineNode): boolean =>
 let warned = false;
 
 /**
- * The picker of `@ng-native/expo`, which is `expo-document-picker`. Neither has to be installed:
- * an app with no file input has no use for them.
+ * `expo-document-picker`, which need not be installed: an app with no file input has no use for
+ * it. Imported here, inside the `try`, so Metro takes it for optional and builds an app without
+ * it. Through `@ng-native/expo` it would not be: that requires the module outside any `try`.
  */
-async function picker(engine: Engine) {
+async function expoPicker(): Promise<FilePicker | undefined> {
   try {
-    const { DocumentPicker } = await import('@ng-native/expo/document-picker');
-    return injectors.get(engine)?.get(DocumentPicker);
+    return (await import('expo-document-picker' as string)) as FilePicker;
   } catch {
     if (!warned) {
       console.warn(
         '[angular-native] a file input was clicked, and there is no file picker to open. ' +
-          'Install @ng-native/expo and expo-document-picker.',
+          'Install expo-document-picker.',
       );
     }
     warned = true;
     return undefined;
   }
+}
+
+/** The picker of the app that is up on an engine, or none while no app is. */
+async function picker(engine: Engine): Promise<FilePicker | undefined> {
+  const injector = injectors.get(engine);
+  if (!injector) return undefined;
+  return injector.get(FILE_PICKER, null) ?? (await expoPicker());
 }
 
 /**
@@ -58,7 +85,11 @@ function typesOf(accept: string | undefined): string | string[] {
  */
 export async function pickFiles(input: FileInput, engine: Engine): Promise<'change' | 'cancel'> {
   const native = await picker(engine);
-  const picked = await native?.pick({ type: typesOf(input.accept), multiple: !!input.multiple });
+  const result = await native?.getDocumentAsync({
+    type: typesOf(input.accept),
+    multiple: !!input.multiple,
+  });
+  const picked = result && !result.canceled ? result.assets : undefined;
   if (!picked?.length) return 'cancel';
   const files = picked.map((file) => ({
     name: file.name,

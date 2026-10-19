@@ -162,6 +162,34 @@ describe('a select', () => {
     assert.deepEqual([select.length, select.value], [3, '3m']);
   });
 
+  it('shows no option for a selectedIndex of -1 or a value none has, until its options change', async () => {
+    const { document, select } = await sizes();
+    select.selectedIndex = -1;
+    assert.deepEqual([select.value, select.selectedIndex, shown(select)], ['', -1, []]);
+    assert.deepEqual(select.selectedOptions, []);
+    select.selectedIndex = 7;
+    assert.deepEqual([select.value, select.selectedIndex], ['', -1], 'past the last is none too');
+    // An option coming in chooses again, as a browser does for a select with none chosen.
+    select.appendChild(Object.assign(document.createElement('option'), { value: 'xl' }));
+    assert.deepEqual([select.value, shown(select)], ['s', ['s']]);
+    // A value no option has, as forms writes for a null model: none is shown, not the first.
+    select.value = 'null';
+    assert.deepEqual([select.value, select.selectedIndex, shown(select)], ['', -1, []]);
+    // An option of that value coming in later is the one shown.
+    select.appendChild(Object.assign(document.createElement('option'), { value: 'null' }));
+    assert.deepEqual([select.value, select.selectedIndex], ['null', 4]);
+    // Taken out again: a value no option has now chooses again, as removing the chosen one does.
+    select.options[4].remove();
+    assert.deepEqual([select.value, shown(select)], ['s', ['s']]);
+  });
+
+  it('keeps the option chosen by its value when that value changes', async () => {
+    const { select } = await sizes();
+    select.value = 'm';
+    select.options[1].value = 'medium';
+    assert.deepEqual([select.value, shown(select)], ['medium', ['medium']]);
+  });
+
   it('shows what it has left when an option moves to another select', async () => {
     const { document, select } = await sizes();
     const other = document.createElement('select');

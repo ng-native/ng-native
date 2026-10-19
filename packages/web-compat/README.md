@@ -73,7 +73,7 @@ Experimental and partial. It has:
   has `checked`, `validity` with `checkValidity()`, `reportValidity()` and `setCustomValidity()`,
   `selectionStart` and `setSelectionRange()`, and its `form`, which has `elements`,
   `requestSubmit()` and `reset()`. A disabled `<fieldset>` disables what is in it, a file input's
-  `click()` opens the system's file picker through `@ng-native/expo`, and `:valid`, `:checked`,
+  `click()` opens the system's file picker through `expo-document-picker`, and `:valid`, `:checked`,
   `:placeholder-shown` and the rest match.
 
 The rest of the DOM is not part of it yet.

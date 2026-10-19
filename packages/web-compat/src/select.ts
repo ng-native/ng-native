@@ -15,8 +15,12 @@ import { documentOf, ownView } from './document.ts';
  * no `value` is read as the select shows again, not as the text changes.
  */
 interface Select {
-  /** The value last set or chosen, or nothing before either: the first option stands then. */
-  value: string | undefined;
+  /**
+   * The value last set or chosen, or nothing before either: the first option stands then. `null`
+   * is none chosen, as `selectedIndex = -1` leaves it. A value no option has shows none either,
+   * until an option of it comes in or options are taken out.
+   */
+  value: string | null | undefined;
   /** Takes the open list away, while it is open. */
   close?: () => void;
 }
@@ -73,14 +77,15 @@ const valueOfOption = (option: EngineNode): string =>
   option.props['value'] == null ? labelOf(option) : String(option.props['value']);
 
 /**
- * The option a select shows: the one of its value, or the last that says it is `selected`, or
- * the first that can be chosen.
+ * The option a select shows: the one of its value, or none for a value no option has, or with
+ * nothing set the last that says it is `selected`, or the first that can be chosen.
  */
 export function chosen(node: EngineNode): EngineNode | undefined {
   const options = optionsOf(node);
   const value = selects.get(node)?.value;
+  if (value === null) return undefined;
+  if (value !== undefined) return options.find((each) => valueOfOption(each) === value);
   return (
-    (value === undefined ? undefined : options.find((each) => valueOfOption(each) === value)) ??
     [...options].reverse().find((option) => on(option.props['selected'])) ??
     options.find((option) => !on(option.props['disabled'])) ??
     options[0]
@@ -104,10 +109,30 @@ export function selectValue(node: EngineNode): string | undefined {
 export const selectedIndex = (node: EngineNode): number =>
   selects.has(node) ? optionsOf(node).indexOf(chosen(node)!) : -1;
 
-/** `select.selectedIndex = 2`: the option at that place is the one shown. */
+/** `select.selectedIndex = 2`: the option at that place is the one shown, and none past them. */
 export function selectAt(node: EngineNode, index: number, engine: Engine): void {
+  const select = selects.get(node);
+  if (!select) return;
   const option = optionsOf(node)[index];
-  setSelect(node, 'value', option ? valueOfOption(option) : null, engine);
+  select.value = option ? valueOfOption(option) : null;
+  show(node, engine);
+}
+
+/**
+ * The options of a select changed: none chosen chooses again, as a browser's does once options
+ * come or go, and so does a value no option has once one is taken out. A value no option has yet
+ * stays for one coming in, which a binding set before its options were made is.
+ */
+function optionsChanged(node: EngineNode, removed: boolean, engine: Engine): void {
+  const select = selects.get(node);
+  if (!select) return;
+  const value = select.value;
+  const gone =
+    removed &&
+    typeof value === 'string' &&
+    !optionsOf(node).some((option) => valueOfOption(option) === value);
+  if (value === null || gone) select.value = undefined;
+  show(node, engine);
 }
 
 /** Show the chosen option in the select, and none of the others. */
@@ -143,10 +168,10 @@ export function optionInserted(node: EngineNode, parent: EngineNode, engine: Eng
   const before = ownedBy.get(node);
   ownedBy.delete(node);
   // Moved from another select, which shows what it has left.
-  if (before && before !== select) show(before, engine);
+  if (before && before !== select) optionsChanged(before, true, engine);
   if (select && selects.has(select)) {
     ownedBy.set(node, select);
-    show(select, engine);
+    optionsChanged(select, false, engine);
   }
 }
 
@@ -154,7 +179,7 @@ export function optionInserted(node: EngineNode, parent: EngineNode, engine: Eng
 export function optionRemoved(node: EngineNode, engine: Engine): void {
   const select = ownedBy.get(node);
   ownedBy.delete(node);
-  if (select) show(select, engine);
+  if (select) optionsChanged(select, true, engine);
 }
 
 /** What an option says that which one is shown reads. */
@@ -168,7 +193,11 @@ export function setSelect(node: EngineNode, name: string, value: unknown, engine
   if (node.tag === 'option' && CHOOSING.has(name)) {
     const select = selectOf(node);
     if (!select) return false;
+    const state = selects.get(select)!;
+    // The option chosen by its value is still the one chosen once its value changes.
+    const following = name === 'value' && state.value === valueOfOption(node);
     engine.setProp(node, name, value);
+    if (following) state.value = valueOfOption(node);
     show(select, engine);
     return true;
   }
