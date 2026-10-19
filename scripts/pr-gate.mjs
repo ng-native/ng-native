@@ -53,7 +53,7 @@ Options:
 
 /**
  * The options in `argv`, or `{ help: true }` for `--help`. Throws on a flag it does not know, one
- * missing its value, or a stray argument, so a typo never runs the gate against the wrong base.
+ * missing its value, a benchmark number that is not one, or a stray argument, so a typo never runs the gate against the wrong base.
  */
 export function options(argv) {
   const values = { '--base': 'origin/main', '--rounds': '3', '--limit': '3', '--out': undefined };
@@ -62,16 +62,22 @@ export function options(argv) {
     const arg = argv[at];
     if (arg === '--help' || arg === '-h') return { help: true };
     if (arg === '--skip-bench') bench = false;
-    else if (arg in values) {
+    else if (Object.hasOwn(values, arg)) {
       const next = argv[++at];
-      if (next === undefined || next.startsWith('--')) throw new Error(`${arg} needs a value`);
+      if (next === undefined || next.startsWith('-')) throw new Error(`${arg} needs a value`);
       values[arg] = next;
     } else throw new Error(`unknown option ${arg}`);
   }
+  const rounds = Number(values['--rounds']);
+  const limit = Number(values['--limit']);
+  if (!Number.isInteger(rounds) || rounds < 1)
+    throw new Error('--rounds needs a positive whole number');
+  if (!Number.isFinite(limit) || values['--limit'].trim() === '')
+    throw new Error('--limit needs a number');
   return {
     base: values['--base'],
-    rounds: Number(values['--rounds']),
-    limit: Number(values['--limit']),
+    rounds,
+    limit,
     out: values['--out'],
     bench,
   };
@@ -385,8 +391,7 @@ if (import.meta.url === url.pathToFileURL(process.argv[1] ?? '').href) {
     main();
   } catch (error) {
     console.error(`pr-gate: ${error.message}`);
-    if (/^(unknown option|--\w[\w-]* needs a value)/.test(error.message))
-      console.error(`\n${USAGE}`);
+    if (/^(unknown option|--\w[\w-]* needs a )/.test(error.message)) console.error(`\n${USAGE}`);
     process.exitCode = 1;
   }
 }

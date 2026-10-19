@@ -5,9 +5,10 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import { describe, it } from 'node:test';
+import { fileURLToPath } from 'node:url';
 // A script of the repository's, not a package: loaded by its path, which no import can name.
 const script = new URL('../../scripts/pr-gate.mjs', import.meta.url);
-const { compareBenches, editedTests, medians, needsPlan } = await import(
+const { compareBenches, editedTests, medians, needsPlan, options } = await import(
   new URL('../../scripts/pr-gate.mjs', import.meta.url).href
 );
 
@@ -98,7 +99,7 @@ describe('pr-gate', () => {
 
   it('prints its usage for --help and -h, and runs nothing', () => {
     for (const flag of ['--help', '-h']) {
-      const result = spawnSync(process.execPath, [script.pathname, flag], {
+      const result = spawnSync(process.execPath, [fileURLToPath(script), flag], {
         encoding: 'utf8',
         timeout: 20_000,
       });
@@ -110,8 +111,8 @@ describe('pr-gate', () => {
   });
 
   it('exits non-zero with its usage on a flag it does not know, running nothing', () => {
-    for (const argv of [['--bogus'], ['--base'], ['stray']]) {
-      const result = spawnSync(process.execPath, [script.pathname, ...argv], {
+    for (const argv of [['--bogus'], ['--base'], ['stray'], ['--rounds', '0'], ['--base', '-h']]) {
+      const result = spawnSync(process.execPath, [fileURLToPath(script), ...argv], {
         encoding: 'utf8',
         timeout: 20_000,
       });
@@ -119,5 +120,17 @@ describe('pr-gate', () => {
       assert.match(result.stderr, /Usage: node scripts\/pr-gate\.mjs/);
       assert.doesNotMatch(result.stdout, /✅|❌/, 'no check ran');
     }
+  });
+
+  it('rejects an inherited property name, a short flag as a value, and a bad benchmark number', () => {
+    assert.throws(() => options(['constructor', 'ignored']), /unknown option constructor/);
+    assert.throws(() => options(['--base', '-h']), /--base needs a value/);
+    for (const rounds of ['0', '1.5', 'nope', '']) {
+      assert.throws(() => options(['--rounds', rounds]), /--rounds needs a positive whole number/);
+    }
+    for (const limit of ['nope', 'Infinity', '']) {
+      assert.throws(() => options(['--limit', limit]), /--limit needs a number/);
+    }
+    assert.equal(options(['--rounds', '2', '--limit', '0']).rounds, 2);
   });
 });
