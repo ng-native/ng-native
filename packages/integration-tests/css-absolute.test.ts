@@ -158,6 +158,77 @@ describe('margin: auto on an absolute box', () => {
   });
 });
 
+describe('margin: auto on an absolute box with no size of its own', () => {
+  // Between two insets an auto size is what the insets leave, clamped by its min and max, and
+  // the auto margins share what the clamp leaves over (CSS 2.2, 10.3.7 and 10.6.4).
+  const ROOM = '.p { height: 300px }';
+
+  it('fills what the insets leave, with nothing to share', () => {
+    const s = scene(`${ROOM} .a { position: absolute; inset: 0; margin: auto }`, ['p', ['a']]);
+    assert.deepEqual(s.box('a'), [0, 0, 400, 300]);
+  });
+
+  it('is centred at its max-width, on the axis that has one', () => {
+    const css = `${ROOM} .a { position: absolute; left: 0; right: 0; margin: 0 auto; max-width: 200px; height: 20px }`;
+    assert.deepEqual(scene(css, ['p', ['a']]).box('a'), [100, 0, 200, 20]);
+  });
+
+  it('is centred at its max-width and max-height on both axes', () => {
+    const css = `${ROOM} .a { position: absolute; inset: 0; margin: auto; max-width: 100px; max-height: 50px }`;
+    assert.deepEqual(scene(css, ['p', ['a']]).box('a'), [150, 125, 100, 50]);
+  });
+
+  it('follows its container growing past its max-width and back under it', () => {
+    const css = `${ROOM} .a { position: absolute; left: 0; right: 0; margin: 0 auto; max-width: 200px; height: 20px } .narrow { width: 150px }`;
+    const s = scene(css, ['p', ['a']]);
+    s.engine.setClasses(s.nodes.get('p')!, 'p narrow');
+    assert.deepEqual(s.box('a'), [0, 0, 150, 20]);
+    s.engine.setClasses(s.nodes.get('p')!, 'p');
+    assert.deepEqual(s.box('a'), [100, 0, 200, 20]);
+    s.engine.setClasses(s.nodes.get('p')!, 'p narrow');
+    assert.deepEqual(s.box('a'), [0, 0, 150, 20]);
+  });
+
+  it('adds its padding to a max-width that is of its content box', () => {
+    const css = `${ROOM} .a { position: absolute; left: 0; right: 0; margin: 0 auto; max-width: 100px; height: 20px; box-sizing: content-box; padding: 0 10px }`;
+    assert.deepEqual(scene(css, ['p', ['a']]).box('a'), [140, 0, 120, 20]);
+  });
+
+  it('keeps a size given as a prop rather than a style, centred at it', () => {
+    const s = scene(`${ROOM} .a { position: absolute; inset: 0; margin: auto }`, ['p', ['a']]);
+    s.engine.setProp(s.nodes.get('a')!, 'width', 40);
+    s.engine.setProp(s.nodes.get('a')!, 'height', 20);
+    assert.deepEqual(s.box('a'), [180, 140, 40, 20]);
+  });
+
+  it('is no narrower than its padding, under a max-width that is less', () => {
+    const css = `${ROOM} .a { position: absolute; left: 0; right: 0; margin: 0 auto; max-width: 100px; height: 20px; padding: 0 60px }`;
+    assert.deepEqual(scene(css, ['p', ['a']]).box('a'), [140, 0, 120, 20]);
+  });
+
+  it('takes what its min-width overflows by from one auto margin, which goes below nothing', () => {
+    const css = `${ROOM} .p { width: 150px } .a { position: absolute; left: 0; right: 0; margin-left: auto; min-width: 200px; height: 20px }`;
+    assert.deepEqual(scene(css, ['p', ['a']]).box('a'), [-50, 0, 200, 20]);
+  });
+
+  it('keeps its max-width with text in it narrower than that, as a toast does', () => {
+    const css = `${ROOM} .a { position: absolute; left: 0; right: 0; bottom: 16px; margin-left: auto; margin-right: auto; max-width: 200px; padding: 8px }`;
+    const s = scene(css, ['p', ['a']]);
+    const text = s.engine.createElement('text');
+    s.engine.appendChild(s.nodes.get('a')!, text);
+    s.engine.appendChild(text, s.engine.createText('Saved'));
+    assert.deepEqual(s.box('a'), [100, 248, 200, 36]);
+  });
+
+  it('takes the height the insets leave beside an auto margin down it', () => {
+    // Chrome: 240 less the top inset, 10% of 240 at the bottom and the 7px margin under it.
+    const css =
+      '.w { display: block; width: 59px; height: 240px; padding-left: 13px; margin: 1px } ' +
+      '.a { width: 52px; margin: 7px; margin-top: auto; position: absolute; top: 30px; right: 11px; bottom: 10% }';
+    assert.deepEqual(scene(css, ['w', ['a']]).box('a'), [-10, 31, 52, 179]);
+  });
+});
+
 describe('a percentage size on an absolute box', () => {
   // A field's outline: `position: absolute; width: 100%` under a wrapper with padding, through a
   // box that is not positioned. Chrome makes it the 200 of the wrapper inside its border, where

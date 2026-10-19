@@ -1891,18 +1891,61 @@ function autoMargins(
   if (before !== 'auto' && after !== 'auto') return null;
   const start = resolveLength(style[axis.start.toLowerCase()], room);
   const end = resolveLength(style[axis.end.toLowerCase()], room);
-  const between = start !== undefined && end !== undefined;
-  const fixed = points(before) + points(after);
-  const free = between ? room - start - end - size - fixed : 0;
+  // Without both insets an auto margin is nothing, and a length written beside it stays.
+  const written = { [`margin${axis.start}`]: points(before), [`margin${axis.end}`]: points(after) };
+  if (start === undefined || end === undefined) return written;
+  const left = room - start - end - points(before) - points(after);
+  // An auto size between two insets is what they leave, clamped (CSS 2.2, 10.3.7 and 10.6.4):
+  // unclamped, it stretches between both with no room for the margins to share.
+  const own = clampedBetween(style, axis, left, room, width);
+  if (own?.border === left) return written;
+  const free = left - (own?.border ?? size);
   // Two auto margins centre the box, unless it overflows: then the start edge holds.
-  const lead = before !== 'auto' ? fixed : after === 'auto' ? Math.max(free / 2, 0) : free;
+  const lead = before !== 'auto' ? points(before) : after === 'auto' ? Math.max(free / 2, 0) : free;
   return {
+    ...written,
     [`margin${axis.start}`]: lead,
-    // A length written on the other side stays: with one inset, at the end, it still places it.
-    [`margin${axis.end}`]: after === 'auto' ? 0 : points(after),
-    // The start inset and the margin place it now, and both insets would stretch it.
-    ...(between ? { [axis.end.toLowerCase()]: null } : null),
+    // The start inset and the margin place it now, at its size, and both would stretch it.
+    [axis.end.toLowerCase()]: null,
+    ...(own ? { [AXIS_SIZES[axis.at]]: own.size } : null),
   };
+}
+
+const AXIS_SIZES = ['width', 'height'] as const;
+
+/** Whether a box has a size on the axis: its own, or one an aspect ratio takes from the other. */
+function hasSize(style: Record<string, unknown>, axis: (typeof ABSOLUTE_AXES)[number]): boolean {
+  const set = (key: string) => style[key] != null && style[key] !== 'auto';
+  return set(AXIS_SIZES[axis.at]) || (set('aspectRatio') && set(AXIS_SIZES[1 - axis.at]!));
+}
+
+/**
+ * The size of an out-of-flow box with an auto size on the axis, between two insets, and none
+ * for one with a size there: `left`, the room they and its margins leave, clamped by its min and
+ * max sizes (shares of `room`) and no smaller than its padding and border. `border` is its border
+ * box, `size` the size Yoga is given, which is without its padding and border for a content-box
+ * one.
+ */
+function clampedBetween(
+  style: Record<string, unknown>,
+  axis: (typeof ABSOLUTE_AXES)[number],
+  left: number,
+  room: number,
+  width: number,
+): { border: number; size: number } | undefined {
+  if (hasSize(style, axis)) return undefined;
+  const key = AXIS_SIZES[axis.at];
+  const caps = `${key[0]!.toUpperCase()}${key.slice(1)}`;
+  const edges = insets(style, width);
+  const frame = edges[axis.start] + edges[axis.end];
+  const extra = style['boxSizing'] === 'content-box' ? frame : 0;
+  const most = resolveLength(style[`max${caps}`], room);
+  const least = resolveLength(style[`min${caps}`], room);
+  let border = left;
+  if (most !== undefined) border = Math.min(border, most + extra);
+  if (least !== undefined) border = Math.max(border, least + extra);
+  border = Math.max(border, frame);
+  return { border, size: border - extra };
 }
 
 /**
@@ -9790,10 +9833,11 @@ export class Engine implements HostEngine {
     }
     // Its sizes always; its insets where it is placed by the box it is placed against, which a
     // fixed box is not: those are worked out against its page above.
-    Object.assign(resolved, shareOfBlock(withOwnSizes(node, style), against, by === against));
+    const sized = withOwnSizes(node, style);
+    Object.assign(resolved, shareOfBlock(sized, against, by === against));
     for (const axis of ABSOLUTE_AXES) {
       const [room, size, width] = [against[axis.size]!, box[axis.size]!, against[2]!];
-      Object.assign(resolved, autoMargins(style, axis, room, size, width));
+      Object.assign(resolved, autoMargins(sized, axis, room, size, width));
     }
     const top = this.flowPlace(node, style, by[1]);
     if (top !== undefined) resolved['top'] = top;
