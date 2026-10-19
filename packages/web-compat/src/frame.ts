@@ -7,6 +7,8 @@ import { createDocumentType } from './document-type.ts';
 import { implementationFor } from './dom-implementation.ts';
 import { dispatch, listen, newEvent, report, unlisten } from './events.ts';
 import { detached, treeOf } from './html-tree.ts';
+import { domError } from './dom-error.ts';
+import { webOrigin } from './page-address.ts';
 import { parseUrl } from './parse-url.ts';
 import { own, type Reflection } from './reflect.ts';
 import { descendants } from './in-document.ts';
@@ -521,10 +523,18 @@ export function postMessage(
     typeof options === 'string'
       ? options
       : ((options as { targetOrigin?: string } | undefined)?.targetOrigin ?? '/');
+  const wanted = target === '/' ? from : target === '*' ? at : originToPost(target);
   const copy = structuredCopy(message);
-  const wanted = target === '/' ? from : parseUrl(target)?.origin;
-  if (target !== '*' && wanted !== at) return;
+  if (wanted !== at) return;
   deliverMessage(window, copy, from, globalThis);
+}
+
+/** The origin a message is for, read as the page's own is, so one at the app's scheme is found. */
+function originToPost(target: string): string {
+  const url = parseUrl(target);
+  // A target that is no URL is a mistake a browser says so of.
+  if (!url) throw domError(`${target} is not an origin to post to.`, 'SyntaxError');
+  return webOrigin(url);
 }
 
 const structuredCopy = (value: unknown): unknown => {
@@ -742,7 +752,7 @@ function baseOf(frame: Frame, document: Members, url: string): string {
  */
 function locate(frame: Frame, value: unknown): void {
   const url = parseUrl(String(value), String(frame.document['baseURI']))?.href;
-  if (!url) return;
+  if (!url) throw domError(`'${String(value)}' is not a valid URL.`, 'SyntaxError');
   const unfragmented = (at: string) => at.split('#')[0];
   if (!url.includes('#') || unfragmented(url) !== unfragmented(String(frame.document['URL']))) {
     navigate(frame, { url });

@@ -396,6 +396,32 @@ describe('iframe', () => {
     assert.throws(() => window.postMessage(() => {}, '*'), { name: 'DataCloneError' });
   });
 
+  it("hears a message for the app's scheme, and throws for a target that is no URL", async () => {
+    const providers = [provideWebCompat({ url: 'canary://', frames: 'emulated' })];
+    const app = await render(Page, { providers });
+    await settle();
+    const document = app.fixture.componentInstance.document;
+    const iframe = document.createElement('iframe');
+    document.body.appendChild(iframe);
+    const window = iframe.contentWindow;
+    const heard: string[] = [];
+    window.addEventListener('message', (event: Dom) => heard.push(event.data));
+    window.postMessage('ours', 'canary://');
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    assert.deepEqual(heard, ['ours']);
+    assert.throws(() => window.postMessage('x', 'foo'), { name: 'SyntaxError' });
+  });
+
+  it('throws for a URL its location cannot go to, as a browser does', async () => {
+    const document = await page();
+    const iframe = await framed(document, { src: 'https://shop.example/frame.html' });
+    const { location } = iframe.contentWindow;
+    assert.throws(() => location.assign('http://['), { name: 'SyntaxError' });
+    assert.throws(() => location.replace('http://['), { name: 'SyntaxError' });
+    assert.throws(() => (location.href = 'http://['), { name: 'SyntaxError' });
+    assert.equal(location.href, 'https://shop.example/frame.html');
+  });
+
   it('calls its own window’s onload, and not the page’s', async () => {
     const document = await page();
     const globals = globalThis as Dom;

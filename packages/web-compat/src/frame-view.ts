@@ -324,10 +324,7 @@ const ATTRIBUTES: Readonly<Record<string, Take>> = {
   },
   allow: (view, given, engine) => {
     const { node } = view;
-    const features = (given ?? '')
-      .split(';')
-      .map((feature) => feature.trim().split(/\s+/)[0]!.toLowerCase())
-      .filter(Boolean);
+    const features = allowed(given ?? '');
     engine.setProp(node, 'mediaPlaybackRequiresUserAction', !features.includes('autoplay'));
     view.fullscreen.allow = features.includes('fullscreen');
     showFullscreen(view, engine);
@@ -360,21 +357,40 @@ const ATTRIBUTES: Readonly<Record<string, Take>> = {
   allowpaymentrequest: leftOutBy('allowpaymentrequest'),
 };
 
+/**
+ * The features `allow` allows: each named with an allowlist of its own, or with none, which is
+ * the frame's own origin. One whose allowlist is `'none'` is allowed nowhere.
+ *
+ * ponytail: an allowlist of origins is taken as the frame's, whichever origins it names.
+ */
+function allowed(given: string): string[] {
+  return given.split(';').flatMap((directive) => {
+    const [name, ...allowlist] = directive.trim().toLowerCase().split(/\s+/);
+    return name && (!allowlist.length || allowlist.some((each) => each !== "'none'")) ? [name] : [];
+  });
+}
+
 /** The address `src` names, resolved against the page's, or a blank page for none. */
 function pendingUrl(view: FrameView): string {
   const base = String((view.node as unknown as { baseURI?: string }).baseURI ?? '');
   return (view.src ? parseUrl(view.src, base)?.href : undefined) ?? 'about:blank';
 }
 
+/**
+ * The base the web view loads what `srcdoc` holds from: the page's address where it is a web
+ * address, and the frame is of the page's origin. None for any other, which loads at `about:`.
+ */
+function srcdocBase(view: FrameView): string | undefined {
+  const base = String((view.node as unknown as { baseURI?: string }).baseURI ?? '');
+  return !view.opaque && /^(https?|file):/i.test(base) ? base : undefined;
+}
+
 /** What the view shows: what `srcdoc` holds, or the page `src` names, or an empty page. */
 function sourceOf(view: FrameView): Record<string, unknown> {
   const base = String((view.node as unknown as { baseURI?: string }).baseURI ?? '');
   if (view.srcdoc !== null) {
-    // A base the web view can load from: the page's address where it is a web address, and the
-    // frame is of the page's origin.
-    return !view.opaque && /^(https?|file):/i.test(base)
-      ? { html: view.srcdoc, baseUrl: base }
-      : { html: view.srcdoc };
+    const baseUrl = srcdocBase(view);
+    return baseUrl ? { html: view.srcdoc, baseUrl } : { html: view.srcdoc };
   }
   const url = view.src ? parseUrl(view.src, base)?.href : undefined;
   if (!url || url === 'about:blank') return { html: '' };
@@ -436,13 +452,13 @@ function resize(view: FrameView): void {
 
 /**
  * The origin of the page in the frame: none, `'null'`, in a sandbox without `allow-same-origin`,
- * as a browser has it, and otherwise the app's for a blank page and for what `srcdoc` holds until
- * it goes to a web address of its own.
+ * as a browser has it, and otherwise the app's for a blank page and for what `srcdoc` holds, at
+ * the base it loads from, until it goes somewhere else: a `data:` URL is of no origin.
  */
 function originOf(view: FrameView): string {
   if (view.opaque) return 'null';
   if (/^about:/i.test(view.url)) return pageOrigin(view.engine);
-  if (view.srcdoc !== null && !/^https?:/i.test(view.url)) return pageOrigin(view.engine);
+  if (view.srcdoc !== null && view.url === srcdocBase(view)) return pageOrigin(view.engine);
   return parseUrl(view.url)?.origin ?? 'null';
 }
 
@@ -540,13 +556,15 @@ function receive(view: FrameView, event: { data?: unknown; url?: string }): void
     deliverMessage(globalThis, data, origin, view.window);
     return;
   }
-  let sent: { data?: unknown; target?: string };
+  let sent: { data?: unknown; target?: string } | null;
   try {
     sent = JSON.parse(data.slice(SENT.length)) as typeof sent;
   } catch (error) {
     report(error);
     return;
   }
+  // What the frame's own script sends is an object: anything else is not from it.
+  if (typeof sent !== 'object' || !sent) return;
   if (!addressed(String(sent.target ?? '/'), pageOrigin(view.engine), origin)) return;
   deliverMessage(globalThis, sent.data, origin, view.window);
 }

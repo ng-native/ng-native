@@ -36,13 +36,15 @@ const opened: Engine[] = [];
 
 /** The app's address, with the route on it, as a URL says it. */
 function addressOf(root: string): string {
-  return root.endsWith('/') && !root.endsWith('//') ? root.slice(0, -1) : root;
+  return root.endsWith('/') && !/^[a-z][a-z\d+.-]*:\/\/$/i.test(root) ? root.slice(0, -1) : root;
 }
 
 /** An app that asked for the package has started. Answers what closes its page. */
 export function openPage(engine: Engine, options: PageOptions): () => void {
-  // The app's first page, as a URL says it, without the `/` the route starts with.
-  const root = (parseUrl(`${addressOf(options.root)}/`)?.href ?? options.root).replace(/\/$/, '');
+  // The app's first page, as a URL says it, without the `/` the route starts with, or a query or a
+  // fragment, which the route has of its own.
+  const address = addressOf(options.root.replace(/[?#][^]*$/, ''));
+  const root = (parseUrl(`${address}/`)?.href ?? options.root).replace(/\/$/, '');
   pages.set(engine, { ...options, root, location: new PageLocation(engine) });
   opened.push(engine);
   return () => {

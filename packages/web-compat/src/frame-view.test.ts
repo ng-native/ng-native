@@ -441,6 +441,35 @@ describe('iframe as a web view', () => {
     assert.equal(sent().length, 1);
   });
 
+  it('gives a srcdoc frame that goes to a data: URL no origin', async () => {
+    installWebView();
+    const { document, fabric } = await page();
+    const iframe = await framed(document, { srcdoc: '<a href="data:text/html,x">Go</a>' });
+    fabric.emit(view(fabric), 'topLoadingFinish', { url: 'data:text/html,x' });
+    iframe.contentWindow.postMessage('secret', 'https://shop.example');
+    iframe.contentWindow.postMessage('secret', '/');
+    assert.equal(sent(fabric).length, 0);
+  });
+
+  it('drops a message the page sends as null, and hears the next', async () => {
+    installWebView();
+    const { document, fabric } = await page();
+    await framed(document, { srcdoc: '<p>Hi</p>' });
+    const messagingModuleName = view(fabric).props['messagingModuleName'];
+    // Android's module calls in with nothing between it and the listener to catch what throws.
+    const messages = await heard(() => {
+      callable!['onMessage']!({
+        messagingModuleName,
+        nativeEvent: { url: 'about:srcdoc', data: 'ng-native:frame-message:null' },
+      });
+      callable!['onMessage']!({ messagingModuleName, nativeEvent: { data: 'hi' } });
+    });
+    assert.deepEqual(
+      messages.map((each) => each.data),
+      ['hi'],
+    );
+  });
+
   it('is the app’s origin again once srcdoc replaces a page that loaded', async () => {
     installWebView();
     const { document, fabric } = await page();
@@ -552,6 +581,22 @@ describe('iframe as a web view', () => {
     iframe.setAttribute('allow', 'autoplay');
     await settle();
     assert.equal(fullscreen(), false);
+  });
+
+  it("allows no feature whose allowlist is 'none'", async () => {
+    installWebView();
+    const { document, fabric } = await page();
+    const iframe = await framed(document, {
+      allow: "autoplay 'none'; picture-in-picture 'none'; fullscreen 'none'",
+    });
+    const props = () => view(fabric).props;
+    assert.equal(props()['mediaPlaybackRequiresUserAction'], true);
+    assert.equal(props()['allowsPictureInPictureMediaPlayback'], false);
+    assert.equal(props()['allowsFullscreenVideo'], false);
+    iframe.setAttribute('allow', "autoplay 'self'; picture-in-picture *");
+    await settle();
+    assert.equal(props()['mediaPlaybackRequiresUserAction'], false);
+    assert.equal(props()['allowsPictureInPictureMediaPlayback'], true);
   });
 
   it('sends no name, password or fragment of the page as the referrer, by any policy', async () => {

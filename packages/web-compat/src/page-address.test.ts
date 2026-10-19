@@ -111,6 +111,26 @@ describe("the page's address", () => {
     assert.equal(String(location), location.href);
     assert.equal(new URL('../receipt', location.href).href, 'exp://127.0.0.1:8082/--/receipt');
   });
+
+  it('puts the route on the path of an address the app gives with a query or a fragment', async () => {
+    const history = new StillLocation();
+    const { document } = await page([
+      provideWebCompat({ url: 'https://shop.example/app/?x=1#top' }),
+      { provide: PlatformLocation, useValue: history },
+    ]);
+    Object.assign(history, { pathname: '/orders', search: '?tab=2' });
+    assert.equal(document.URL, 'https://shop.example/app/orders?tab=2');
+  });
+
+  it('takes one / off an address the app gives that ends in //, past its scheme', async () => {
+    const history = new StillLocation();
+    const { document } = await page([
+      provideWebCompat({ url: 'https://shop.example/app//' }),
+      { provide: PlatformLocation, useValue: history },
+    ]);
+    Object.assign(history, { pathname: '/orders' });
+    assert.equal(document.URL, 'https://shop.example/app//orders');
+  });
 });
 
 describe("Angular's Location", () => {
