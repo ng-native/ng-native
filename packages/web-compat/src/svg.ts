@@ -624,12 +624,19 @@ const drawn = new WeakMap<EngineNode, Drawn>();
 
 /**
  * Take an attribute of an `<svg>` or of a shape in one, and set what the native view reads for
- * all it has. Answers whether it was one.
+ * all it has. Answers whether it was one. An attribute is handed to the engine as well, for a
+ * selector to match, where a style set as one is not: `styled` says it is a style.
  */
-export function setSvg(node: EngineNode, name: string, value: unknown, engine: Engine): boolean {
+export function setSvg(
+  node: EngineNode,
+  name: string,
+  value: unknown,
+  engine: Engine,
+  styled = false,
+): boolean {
   if (node.tag === 'stop') return stopChanged(node, engine);
   const drawn = node.tag === 'svg' || node.tag === SVG_SPAN || Object.hasOwn(SHAPES, node.tag);
-  return drawn && setShape(node, name, value, engine);
+  return drawn && setShape(node, name, value, engine, styled);
 }
 
 /** Give a copy of a shape, or of an `<svg>`, the attributes it was given: see `cloneNode`. */
@@ -638,7 +645,13 @@ export function copyShape(from: EngineNode, to: EngineNode, engine: Engine): voi
     setSvg(to, name, value, engine);
 }
 
-function setShape(node: EngineNode, name: string, value: unknown, engine: Engine): boolean {
+function setShape(
+  node: EngineNode,
+  name: string,
+  value: unknown,
+  engine: Engine,
+  styled: boolean,
+): boolean {
   const root = node.tag === 'svg';
   // An `id` is the renderer's, and the name of what a definition is referred to by as well.
   const kept = KEPT.test(name);
@@ -647,6 +660,7 @@ function setShape(node: EngineNode, name: string, value: unknown, engine: Engine
   if (value == null) delete shape.attrs[name];
   else shape.attrs[name] = String(value);
   const written = shape.attrs[name];
+  if (!styled) engine.keepAttribute(node, name, written);
   if (root) {
     // Its own size is a default, as a browser has an attribute under any rule of a stylesheet.
     const props = drawAgain(node, engine);

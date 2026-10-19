@@ -86,6 +86,13 @@ registered once its last instance is gone, as in a browser with Angular's
 node each time. Shadow DOM's sheet stays the component's own, scoped as a shadow root scopes it.
 Angular Material writes every component this way.
 
+An attribute selector reads the node's prop of that name, `[disabled]` its `disabled` prop. A
+package that keeps an element's attributes apart from its props, because the native view reads
+them under other names, hands each one to `engine.keepAttribute(node, name, value)`:
+`@ng-native/web-compat` does this for a drawing's `width` and `fill`. The selector then reads the
+kept attribute over a prop of the same name, nothing about it is committed, and a change to it
+restyles what a prop's change would, a `:has()` above it included. `null` takes it away again.
+
 ## Inheritance is emulated, not real
 
 React Native's views do not inherit anything - a `color` set on a view has no effect on a `<text>`

@@ -220,6 +220,56 @@ describe('@ng-native/web-compat svg by element name', () => {
   });
 });
 
+describe('@ng-native/web-compat svg attributes in a selector', () => {
+  /** A page with a sheet a script writes into it, and a box to put a drawing in. */
+  const page = async (css: string) => {
+    const { host } = await mount();
+    const document = (globalThis as unknown as { document: Dom }).document;
+    const sheet = document.createElement('style');
+    sheet.textContent = css;
+    document.head.appendChild(sheet);
+    host.insertAdjacentHTML('beforeend', '<div class="box" id="attr"></div>');
+    await settle();
+    const svg = () => document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    return { document, box: host.querySelector('#attr') as Dom, svg };
+  };
+
+  it('matches a drawing a script makes by the attributes it gives it', async () => {
+    const { box, svg } = await page('svg[width="16"] { opacity: 0.5 }');
+    const made = svg();
+    made.setAttribute('width', '16');
+    box.appendChild(made);
+    assert.equal(getComputedStyle(made).opacity, '0.5');
+    made.setAttribute('width', '20');
+    assert.equal(getComputedStyle(made).opacity, '1');
+  });
+
+  it("matches a shape's attribute, and not a style a script sets as one", async () => {
+    const { document, box, svg } = await page('path[fill="none"] { opacity: 0.5 }');
+    const drawing = svg();
+    const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+    drawing.appendChild(path);
+    box.appendChild(drawing);
+    path.style.fill = 'none';
+    assert.equal(getComputedStyle(path).opacity, '1');
+    path.setAttribute('fill', 'none');
+    assert.equal(getComputedStyle(path).opacity, '0.5');
+  });
+
+  it("restyles a box's ::before as a drawing it matches by its attributes comes in", async () => {
+    const { box, svg } = await page(
+      '.box::before { content: " "; display: inline-block; width: 5px; height: 5px }' +
+        ' #attr:has(> [width="16"][height="16"])::before { width: 50px }',
+    );
+    assert.equal(getComputedStyle(box, '::before').width, '5px');
+    const made = svg();
+    made.setAttribute('width', '16');
+    made.setAttribute('height', '16');
+    box.appendChild(made);
+    assert.equal(getComputedStyle(box, '::before').width, '50px');
+  });
+});
+
 @Component({
   selector: 'x-foreign-label',
   template: `

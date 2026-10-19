@@ -281,7 +281,7 @@ export function styleShape(
   if (!isShape(node)) return false;
   const attr = name.replace(/[A-Z]/g, (letter) => `-${letter.toLowerCase()}`);
   // A text is painted with its fill, which a library sets as the colour it is to be read in.
-  if (attr === 'color' && node.tag === 'svg:text') setSvg(node, 'fill', value, engine);
+  if (attr === 'color' && node.tag === 'svg:text') setSvg(node, 'fill', value, engine, true);
   if (!STYLED.has(attr)) return false;
   if (attr === 'font-size') {
     if (/(^|[^r])em$|%$/.test(String(value).trim())) shares.set(node, value);
@@ -292,7 +292,7 @@ export function styleShape(
   }
   // A length in pixels is the number an attribute has: `stroke-dasharray: 126px`.
   const plain = typeof value === 'string' && /^-?[\d.]+px$/.test(value) ? parseFloat(value) : value;
-  setSvg(node, attr, plain, engine);
+  setSvg(node, attr, plain, engine, true);
   handDown(node, attr, plain, engine);
   return true;
 }
@@ -303,7 +303,7 @@ const shares = new WeakMap<EngineNode, unknown>();
 /** Set a shape's font size in points, worked out from the size around it now. */
 function sizeFont(node: EngineNode, written: unknown, engine: Engine): void {
   const points = lengthOf(written, fontSizeOf(node.parent));
-  setSvg(node, 'font-size', points ?? written, engine);
+  setSvg(node, 'font-size', points ?? written, engine, true);
   inherited(node, 'fontSize', points, engine);
 }
 

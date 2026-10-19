@@ -17,6 +17,7 @@ import {
   fills,
   inlineInherited,
   setsInherited,
+  attributeOf,
   handsDownPaint,
   StyleResolver,
   underOwnShorthands,
@@ -714,6 +715,8 @@ export interface EngineNode extends HostNode {
   nativeView?: true;
   /** Props kept for selectors to match and left out of what is committed. See `keepAsAttribute`. */
   attributeOnly?: Set<string>;
+  /** Attributes a package keeps apart from props, for selectors alone. See `keepAttribute`. */
+  keptAttributes: Record<string, string> | undefined;
   /**
    * Set by whoever needs to know which props have been written: each `setProp` with a value adds
    * its key, even one equal to the value already there, and one with `undefined` or `null` takes
@@ -5448,6 +5451,7 @@ class RetainedNode {
   parent: EngineNode | null = null;
   listeners: Map<string, Set<(event: unknown) => void>> | null = null;
   classes: Set<string> | null = null;
+  keptAttributes: Record<string, string> | undefined = undefined;
   templateSheet: StyleSheet | null = null;
   hostSheet: StyleSheet | null = null;
   customProperties: Record<string, TokenValue> | null = null;
@@ -5679,6 +5683,7 @@ const ENGINE_NODE_FIELDS = {
   componentHost: true,
   nativeView: true,
   attributeOnly: true,
+  keptAttributes: true,
   writes: true,
   paintsOn: true,
   paintTaker: true,
@@ -6327,7 +6332,7 @@ function wantsGenerated(node: EngineNode, boxes: GeneratedFor): boolean {
 /** Whether an element has an attribute a rule gives the box to by that alone. */
 function hasGeneratedAttribute(node: EngineNode, boxes: GeneratedFor): boolean {
   for (const name of boxes.attributes) {
-    const value = node.props[name];
+    const value = attributeOf(node, name);
     if (value !== undefined && value !== null && value !== false) return true;
   }
   return false;
@@ -7703,6 +7708,26 @@ export class Engine implements HostEngine {
     if (!(key in node.props)) return;
     (node.attributeOnly ??= new Set()).add(key);
     this.markProps(node, false);
+  }
+
+  /**
+   * Keep an attribute of a node apart from its props: matched by a selector, over a prop of the
+   * same name, and committed to nothing. For a package that keeps attributes a native view reads
+   * under other names, as `@ng-native/web-compat` keeps a drawing's `width`. What depends on it is
+   * restyled as it would be for a prop; `null` or `undefined` takes it away.
+   */
+  keepAttribute(node: EngineNode, name: string, value: string | null | undefined): void {
+    const kept = node.keptAttributes;
+    if (value === undefined || value === null) {
+      if (kept?.[name] === undefined) return;
+      delete kept[name];
+    } else {
+      if (kept?.[name] === value) return;
+      (node.keptAttributes ??= {})[name] = value;
+    }
+    if (this.generated !== null) this.generateFor(node, name);
+    // Only one some selector names can change what anything matches: see `setProp`.
+    if (this.styles.reads(name)) this.markProps(node, true, this.styles.readsBeside(name));
   }
 
   /**
