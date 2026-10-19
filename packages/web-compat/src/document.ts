@@ -54,12 +54,14 @@ export function ownView(engine: Engine): EngineNode {
 }
 
 /**
- * What an element is called: the root is `html` and the body `body`, which is where a library
- * walking up through parents knows to stop.
+ * What an element is called: the root is `html`, the head `head` and the body `body`, which is
+ * where a library walking up through parents knows to stop, and where one puts its styles.
  */
 export function nameOf(node: EngineNode, engine: Engine): string {
   if (engine.root === node) return 'html';
-  return documents.get(engine)?.body === node ? 'body' : node.tag;
+  const document = documents.get(engine);
+  if (document?.body === node) return 'body';
+  return document?.head === node ? 'head' : node.tag;
 }
 
 /**

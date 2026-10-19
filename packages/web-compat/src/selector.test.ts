@@ -283,6 +283,9 @@ describe('selectors on each kind of node', () => {
     document.head.appendChild(meta);
     assert.ok(Array.from(document.querySelectorAll('*')).includes(document.head));
     assert.equal(document.querySelectorAll('*:has(> meta)')[0], document.head);
+    // Called `head`, as a library that finds it to put its styles in asks for it.
+    assert.equal(document.querySelector('head'), document.head);
+    assert.deepEqual([document.head.tagName, document.head.localName], ['HEAD', 'head']);
   });
 
   it('finds the elements of a fragment, and not the fragment, which is no parent element', async () => {
