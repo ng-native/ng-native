@@ -457,7 +457,7 @@ export const nodeMembers = (core: CoreNode): PropertyDescriptorMap => ({
   // What a chart library tells a picture it draws from an object by: see `canvas-picture.ts`.
   // A method, as the engine's members are named by strings and not by `Symbol.toStringTag`.
   toString: method(function () {
-    const tag = PICTURE_TAGS[this.tag];
+    const tag = Object.hasOwn(PICTURE_TAGS, this.tag) ? PICTURE_TAGS[this.tag] : undefined;
     return tag ? `[object ${tag}]` : Object.prototype.toString.call(this);
   }),
 

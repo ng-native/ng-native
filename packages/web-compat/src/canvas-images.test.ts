@@ -283,6 +283,8 @@ describe('@ng-native/web-compat canvas pictures', () => {
     assert.equal(String(node), '[object HTMLCanvasElement]');
     assert.equal(String(image), '[object HTMLImageElement]');
     assert.equal(String(document().createElement('div')), '[object Object]');
+    // A tag named as a member every object has is no picture.
+    assert.equal(String(document().createElement('constructor')), '[object Object]');
   });
 
   it('refuses what is no picture, and a canvas of no size', async () => {
@@ -338,8 +340,10 @@ describe('@ng-native/web-compat canvas pictures', () => {
   it('keeps the way it lays a drawing over what is there as a browser does', async () => {
     const { context } = await canvases();
     assert.equal(context.globalCompositeOperation, 'source-over');
-    context.globalCompositeOperation = 'nonsense';
-    assert.equal(context.globalCompositeOperation, 'source-over');
+    for (const nonsense of ['nonsense', 'constructor', 'toString']) {
+      context.globalCompositeOperation = nonsense;
+      assert.equal(context.globalCompositeOperation, 'source-over');
+    }
     context.globalCompositeOperation = 'clear';
     assert.equal(context.globalCompositeOperation, 'clear');
     context.globalCompositeOperation = 'source-over';
@@ -391,5 +395,13 @@ describe('@ng-native/web-compat canvas pictures', () => {
       shapes().map((shape) => shape.props['fill']),
       [{ type: 0, payload: 'red' }],
     );
+    // A text drawn so is all there is too, and the pixels it does not cover are cleared.
+    context.fillText('Hi', 50, 40);
+    await settle();
+    assert.deepEqual(
+      shapes().map((shape) => shape.viewName),
+      ['RNSVGText'],
+    );
+    assert.deepEqual(pixel(context, 25, 5), [0, 0, 0, 0]);
   });
 });

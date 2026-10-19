@@ -219,9 +219,10 @@ export class Raster {
   apply(operation: Operation): void {
     if (operation.kind === 'clear') return this.clear(operation.d, operation.clips);
     const mode = operation.composite ?? 'source-over';
-    const unbounded = isUnbounded(mode);
-    const paint = paintOf(operation.style) ?? (unbounded ? () => null : null);
-    if (!paint || !(operation.alpha > 0 || unbounded)) return;
+    // What clears what is under it does so whatever it is painted with, and at any alpha.
+    const clears = isUnbounded(mode) || mode === 'clear';
+    const paint = paintOf(operation.style) ?? (clears ? () => null : null);
+    if (!paint || !(operation.alpha > 0 || clears)) return;
     const runs = flatten(operation.d);
     const covered =
       operation.kind === 'fill'

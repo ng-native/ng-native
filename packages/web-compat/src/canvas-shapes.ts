@@ -32,13 +32,15 @@ const SPREAD: Readonly<Record<number, readonly number[]>> = {
 };
 
 /**
- * The corners of a rounded rectangle, from the radii `roundRect` is given, in the order they are
- * traced from the corner it starts at: upper left, upper right, lower right and lower left where
- * it is given a width and a height, and the others round where either is less than none. Made
- * smaller together where two would overlap. Null for a radius that is not a number, which draws nothing.
+ * The corners of a rounded rectangle, from the radii `roundRect` is given: one, or any list of
+ * them, as Web IDL takes a sequence. They are in the order the rectangle is traced from the
+ * point it is given, which is the upper left where its width and height are more than none, and
+ * `roundRect` traces the other way along a side that is less. Made smaller together where two
+ * would overlap. Null for a radius that is not a number, which draws nothing.
  */
 export function roundRectCorners(radii: unknown, width: number, height: number): Corner[] | null {
-  const given = Array.isArray(radii) ? radii : [radii];
+  const listed = typeof radii === 'object' && radii !== null && Symbol.iterator in radii;
+  const given = listed ? [...(radii as Iterable<unknown>)] : [radii];
   if (given.length < 1 || given.length > 4) throw new RangeError('One to four radii are needed.');
   const corners = given.map(cornerOf);
   if (corners.some((corner) => corner === null)) return null;

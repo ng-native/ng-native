@@ -110,6 +110,52 @@ describe('@ng-native/web-compat canvas pixels', () => {
     square(60, true);
     context.fill();
     assert.deepEqual(pixel(context, 70, 20), [0, 0, 255, 255]);
+    // Turned the other way round, where the two overlap winds to none.
+    context.clearRect(0, 0, 100, 50);
+    context.beginPath();
+    square(50, true);
+    square(60, false);
+    context.fill();
+    assert.deepEqual(pixel(context, 70, 20), [0, 0, 0, 0]);
+    assert.deepEqual(pixel(context, 55, 20), [0, 0, 255, 255]);
+  });
+
+  it("clears what a shape covers under 'clear', at any alpha and with any style", async () => {
+    const { context } = await canvas();
+    context.fillStyle = '#f00';
+    context.fillRect(0, 0, 100, 50);
+    context.globalCompositeOperation = 'clear';
+    context.globalAlpha = 0;
+    context.fillRect(0, 0, 10, 10);
+    assert.deepEqual(pixel(context, 5, 5), [0, 0, 0, 0]);
+    context.globalAlpha = 1;
+    context.fillStyle = context.createLinearGradient(0, 0, 10, 0);
+    context.fillRect(20, 0, 10, 10);
+    assert.deepEqual(pixel(context, 25, 5), [0, 0, 0, 0]);
+    assert.deepEqual(pixel(context, 45, 5), [255, 0, 0, 255]);
+  });
+
+  it("adds what partly covers a pixel under 'lighter' by as much as it covers it", async () => {
+    const { context } = await canvas();
+    context.fillStyle = 'rgba(0, 0, 255, 0.5)';
+    context.fillRect(0, 0, 10, 10);
+    context.globalCompositeOperation = 'lighter';
+    context.fillStyle = 'rgba(0, 0, 255, 0.8)';
+    context.fillRect(0.5, 0, 9, 10);
+    // As Chrome has it: half of 0.8 added to 0.5, and the sum then held to 1.
+    near(pixel(context, 0, 5), [0, 0, 255, 230]);
+    assert.deepEqual(pixel(context, 5, 5), [0, 0, 255, 255]);
+  });
+
+  it('sets the transform as a DOMMatrix says, and to none where nothing is said', async () => {
+    const { context } = await canvas();
+    context.setTransform(2, 0, 0, 2, 5, 5);
+    context.setTransform();
+    assert.deepEqual(context.getTransform(), { a: 1, b: 0, c: 0, d: 1, e: 0, f: 0 });
+    context.setTransform({ m11: 3, m42: 4 });
+    assert.deepEqual(context.getTransform(), { a: 3, b: 0, c: 0, d: 1, e: 0, f: 4 });
+    assert.throws(() => context.setTransform({ a: 2, m11: 3 }), TypeError);
+    assert.equal(context.getTransform().a, 3);
   });
 
   it('lays a colour that lets some through over what is under it', async () => {
@@ -338,6 +384,12 @@ describe('@ng-native/web-compat canvas pixels', () => {
     }
     context.fillRect(0, 0, 10, 10);
     assert.deepEqual(pixel(context, 5, 5), [0, 255, 0, 255]);
+    // An offset is a number as a script converts one.
+    const stopped = context.createLinearGradient(0, 0, 100, 0);
+    stopped.addColorStop('0', '#00f');
+    context.fillStyle = stopped;
+    context.fillRect(0, 0, 10, 10);
+    assert.deepEqual(pixel(context, 5, 5), [0, 0, 255, 255]);
     assert.throws(() => context.createLinearGradient(0, 0, 1, 0).addColorStop(0, ''), {
       name: 'SyntaxError',
     });
@@ -352,6 +404,15 @@ describe('@ng-native/web-compat canvas pixels', () => {
     assert.deepEqual(pixel(context, 1, 1), [0, 0, 0, 0]);
     assert.deepEqual(pixel(context, 98, 48), [0, 0, 0, 0]);
     assert.deepEqual(pixel(context, 20, 1), [0, 255, 0, 255]);
+    // Any list of radii, as Web IDL takes a sequence: not only an array.
+    for (const radii of [new Float32Array([20]), new Set([20])]) {
+      context.clearRect(0, 0, 100, 50);
+      context.beginPath();
+      context.roundRect(0, 0, 100, 50, radii);
+      context.fill();
+      assert.deepEqual(pixel(context, 1, 1), [0, 0, 0, 0]);
+      assert.deepEqual(pixel(context, 20, 1), [0, 255, 0, 255]);
+    }
     assert.throws(() => context.roundRect(0, 0, 1, 1, [-1]), RangeError);
     assert.throws(() => context.roundRect(0, 0, 1, 1, []), RangeError);
     context.clearRect(0, 0, 100, 50);
@@ -410,6 +471,25 @@ describe('@ng-native/web-compat canvas pixels', () => {
     assert.deepEqual(pixel(context, 17, 10), [0, 0, 0, 0]);
   });
 
+  it('joins the dash that runs over where a closed path began, as Chrome does', async () => {
+    const { context } = await canvas();
+    context.lineWidth = 10;
+    // One dash longer than the path, and one that the start falls in the middle of.
+    for (const [dash, offset] of [
+      [[1000], 0],
+      [[60, 10], 30],
+    ] as const) {
+      context.clearRect(0, 0, 100, 50);
+      context.setLineDash(dash);
+      context.lineDashOffset = offset;
+      context.beginPath();
+      context.rect(20, 10, 30, 30);
+      context.stroke();
+      // The outer corner of the mitre where it began: butt ends there would leave it empty.
+      assert.deepEqual(pixel(context, 16, 6), [0, 0, 0, 255]);
+    }
+  });
+
   it(
     'strokes a line solid where its dashes are too many to draw, as Skia does',
     { timeout: 10_000 },
@@ -442,5 +522,18 @@ describe('@ng-native/web-compat ImageData', () => {
     assert.equal(held.height, 2);
     assert.throws(() => new ImageData(0, 1), { name: 'IndexSizeError' });
     assert.throws(() => new ImageData(new Uint8ClampedArray(6), 1), { name: 'InvalidStateError' });
+    // What it holds is its own: a script that sets a name of its own changes none of it.
+    Object.assign(blank, { pixels: null, wide: 9, high: 9 });
+    assert.deepEqual([blank.width, blank.height, blank.data.length], [2, 3, 24]);
+  });
+
+  it('is in the colour space it is asked for', async () => {
+    await canvas();
+    const ImageData = (globalThis as Dom).ImageData;
+    assert.equal(new ImageData(1, 1).colorSpace, 'srgb');
+    assert.equal(new ImageData(1, 1, { colorSpace: 'display-p3' }).colorSpace, 'display-p3');
+    const held = new ImageData(new Uint8ClampedArray(4), 1, 1, { colorSpace: 'display-p3' });
+    assert.equal(held.colorSpace, 'display-p3');
+    assert.throws(() => new ImageData(1, 1, { colorSpace: 'nope' }), TypeError);
   });
 });

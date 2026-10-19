@@ -1,12 +1,13 @@
 import { nativePlatform, registerViewName, type Engine, type EngineNode } from '@ng-native/fabric';
 import { viewBoxProps } from '@ng-native/icons';
 import { acceptedColour, canvasColour, serializedColour } from './canvas-colour.ts';
-import { isComposite } from './canvas-composite.ts';
+import { isComposite, isUnbounded } from './canvas-composite.ts';
 import { inverted, type FillRule, type Matrix } from './canvas-path.ts';
 import {
   fitted,
   IMAGE,
   imageProps,
+  matrixOf,
   PATTERN,
   Pattern,
   pictureOf,
@@ -165,12 +166,16 @@ class Gradient {
     this.geometry = geometry;
   }
 
-  addColorStop(at: number, colour: string): void {
-    if (!Number.isFinite(at)) throw new TypeError(`${at} is not a finite number.`);
-    if (at < 0 || at > 1) throw domError(`${at} is outside 0 to 1.`, 'IndexSizeError');
+  /** At an offset converted as a number is: `'0.5'` is half way along. */
+  addColorStop(at: unknown, colour: string): void {
+    const offset = Number(at);
+    if (!Number.isFinite(offset)) throw new TypeError(`${String(at)} is not a finite number.`);
+    if (offset < 0 || offset > 1) {
+      throw domError(`${String(at)} is outside 0 to 1.`, 'IndexSizeError');
+    }
     const given = acceptedColour(String(colour));
     if (given === undefined) throw domError(`${String(colour)} is not a colour.`, 'SyntaxError');
-    this.colours.push([at, given]);
+    this.colours.push([offset, given]);
   }
 
   // A library asks what a fill is by this before it eases one colour into another: Chart.js
@@ -369,21 +374,10 @@ class Context2D {
     const by: Matrix = [a, b, c, d, e, f].map(Number) as unknown as Matrix;
     if (finite(...by)) this.state.matrix = multiplied(this.state.matrix, by);
   }
-  /** To six numbers, or to what a `DOMMatrix` of one has. */
+  /** To six numbers, or to what a `DOMMatrix` of one has: none at all is the identity. */
   setTransform(...given: unknown[]): void {
-    const init = given[0] as Record<string, unknown> | undefined;
-    const numbers =
-      typeof init === 'object' && init !== null
-        ? [
-            init['a'] ?? 1,
-            init['b'] ?? 0,
-            init['c'] ?? 0,
-            init['d'] ?? 1,
-            init['e'] ?? 0,
-            init['f'] ?? 0,
-          ]
-        : given.slice(0, 6);
-    const to = numbers.map(Number) as unknown as Matrix;
+    const init = given.length === 0 || typeof given[0] === 'object';
+    const to = (init ? matrixOf(given[0]) : given.slice(0, 6).map(Number)) as unknown as Matrix;
     if (to.length === 6 && finite(...to)) this.state.matrix = to;
   }
   resetTransform(): void {
@@ -865,6 +859,20 @@ class Context2D {
 
   private text(text: string, x: number, y: number, paint: Record<string, string>): void {
     if (!finite(x, y)) return;
+    // Its pixels are not read back, but what it clears of what was there is, as with a shape.
+    const { globalAlpha: alpha, clips, composite } = this.state;
+    if (isUnbounded(composite)) {
+      this.operation({
+        kind: 'fill',
+        d: '',
+        rule: 'nonzero',
+        style: 'transparent',
+        alpha,
+        clips,
+        composite,
+      });
+    }
+    this.copied();
     const { size, weight } = fontOf(this.state.font);
     const [a, b, c, d, e, f] = this.state.matrix;
     this.add(
@@ -1263,8 +1271,9 @@ export const isCanvasBox = (node: EngineNode, key: string): boolean =>
 /** Give a copy of a canvas the size it was given: see `cloneNode`. */
 export function copyCanvas(from: EngineNode, to: EngineNode, engine: Engine): void {
   const given = written.get(from);
-  if (!given || to.tag !== 'canvas') return;
-  written.set(to, { ...given });
+  // Sized where what it is a copy of is: by what was written, or by a context it was drawn by.
+  if (to.tag !== 'canvas' || (!given && !contexts.has(from))) return;
+  if (given) written.set(to, { ...given });
   sizeCanvas(to, engine);
 }
 

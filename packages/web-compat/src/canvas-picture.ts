@@ -131,6 +131,21 @@ const MATRIX_KEYS = [
   ['f', 'm42', 0],
 ] as const;
 
+/**
+ * The six numbers of what a `DOMMatrix` of one has, by either of its names for each: one named
+ * both ways that says two things throws, as a browser has it, and one unsaid is the identity's.
+ */
+export function matrixOf(init: unknown): Matrix {
+  const given = (init ?? {}) as Record<string, unknown>;
+  return MATRIX_KEYS.map(([short, long, start]) => {
+    const [one, other] = [given[short], given[long]];
+    if (one !== undefined && other !== undefined && !Object.is(Number(one), Number(other))) {
+      throw new TypeError(`${short} and ${long} say different things.`);
+    }
+    return Number(one ?? other ?? start);
+  }) as unknown as Matrix;
+}
+
 const REPEATS = new Set(['repeat', 'repeat-x', 'repeat-y', 'no-repeat']);
 
 /**
@@ -157,14 +172,7 @@ export class Pattern {
 
   /** To what a `DOMMatrix` of one has, or none; one with what is no number is no change. */
   setTransform(init: unknown = {}): void {
-    const given = (init ?? {}) as Record<string, unknown>;
-    const numbers = MATRIX_KEYS.map(([short, long, start]) => {
-      const [one, other] = [given[short], given[long]];
-      if (one !== undefined && other !== undefined && !Object.is(Number(one), Number(other))) {
-        throw new TypeError(`${short} and ${long} say different things.`);
-      }
-      return Number(one ?? other ?? start);
-    }) as unknown as Matrix;
+    const numbers = matrixOf(init);
     if (numbers.every(Number.isFinite)) this.transform = numbers;
   }
 

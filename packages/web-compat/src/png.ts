@@ -94,24 +94,34 @@ export function pngOf(width: number, height: number, rgba: ArrayLike<number>): U
   return out;
 }
 
-const LETTERS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+const LETTERS = Uint16Array.from(
+  'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/',
+  (letter) => letter.charCodeAt(0),
+);
+const PAD = 61;
+
+/** The letters of a part of what is written, as a string. */
+const textOf = (codes: Uint16Array): string =>
+  String.fromCharCode.apply(null, codes as unknown as number[]);
 
 /** Bytes as base64, written here: Hermes has had no `btoa` in every version, and it takes text. */
 export function base64Of(bytes: Uint8Array): string {
   const parts: string[] = [];
-  let line = '';
+  // Written as letter codes and made a string a part at a time, which is some times quicker than
+  // adding letters to a string: a 1080p canvas's PNG is millions of them.
+  const part = new Uint16Array(4096);
+  let to = 0;
   for (let at = 0; at < bytes.length; at += 3) {
-    const [a, b, c] = [bytes[at]!, bytes[at + 1], bytes[at + 2]];
-    const word = (a << 16) | ((b ?? 0) << 8) | (c ?? 0);
-    line +=
-      LETTERS[word >>> 18]! +
-      LETTERS[(word >>> 12) & 63]! +
-      (b === undefined ? '=' : LETTERS[(word >>> 6) & 63]!) +
-      (c === undefined ? '=' : LETTERS[word & 63]!);
-    // Joined in parts: one string added to a letter at a time grows slower the longer it is.
-    if (line.length >= 4096) [parts[parts.length], line] = [line, ''];
+    const left = bytes.length - at;
+    const word = (bytes[at]! << 16) | ((bytes[at + 1] ?? 0) << 8) | (bytes[at + 2] ?? 0);
+    part[to] = LETTERS[word >>> 18]!;
+    part[to + 1] = LETTERS[(word >>> 12) & 63]!;
+    part[to + 2] = left > 1 ? LETTERS[(word >>> 6) & 63]! : PAD;
+    part[to + 3] = left > 2 ? LETTERS[word & 63]! : PAD;
+    to += 4;
+    if (to === part.length) [parts[parts.length], to] = [textOf(part), 0];
   }
-  parts.push(line);
+  parts.push(textOf(part.subarray(0, to)));
   return parts.join('');
 }
 

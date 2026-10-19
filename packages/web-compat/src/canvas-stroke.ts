@@ -188,6 +188,11 @@ class Dasher {
     this.current = this.index % 2 === 0 ? [...place] : null;
   }
 
+  /** How many numbers of the dash it is in it has so far: none in a gap, two where one begins. */
+  get drawn(): number {
+    return this.current?.length ?? 0;
+  }
+
   finish(): Subpath[] {
     if (this.current && this.current.length > 2) {
       this.pieces.push({ points: this.current, closed: false });
@@ -203,8 +208,24 @@ function dashed(run: Subpath, dash: readonly number[], offset: number): Subpath[
   if (points.length < 2) return [];
   if (run.closed) points.push(points[0]!);
   const dasher = new Dasher(dash, offset, total, points[0]!);
+  const begun = dasher.drawn > 0;
   for (let at = 1; at < points.length; at++) dasher.walk(points[at - 1]!, points[at]!);
-  return dasher.finish();
+  // One that begins only where the run ends is no dash, and is not drawn.
+  const ended = dasher.drawn > 2;
+  const pieces = dasher.finish();
+  return run.closed && begun && ended ? joinedAtStart(pieces) : pieces;
+}
+
+/**
+ * A closed run's dashes, where one runs over the place it began: that is one dash, with the
+ * run's corner there and no ends, as Skia draws it. All of the run where no gap falls in it.
+ */
+function joinedAtStart(pieces: Subpath[]): Subpath[] {
+  const last = pieces.pop();
+  if (!last) return pieces;
+  if (!pieces.length) return [{ points: last.points, closed: true }];
+  pieces[0] = { points: [...last.points, ...pieces[0]!.points.slice(2)], closed: false };
+  return pieces;
 }
 
 /** How long a run is, around to its start again where it is closed. */

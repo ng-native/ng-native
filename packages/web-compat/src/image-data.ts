@@ -16,33 +16,40 @@ export function whole(value: unknown): number {
  * premultiplied. What `getImageData` answers and `putImageData` is given.
  */
 export class ImageData {
-  private readonly pixels: Uint8ClampedArray;
-  private readonly wide: number;
-  private readonly high: number;
+  // Private as a browser's are: a script sees only the members the DOM names.
+  readonly #pixels: Uint8ClampedArray;
+  readonly #wide: number;
+  readonly #high: number;
+  readonly #space: string;
 
-  constructor(dataOrWidth: unknown, widthOrHeight: unknown, height?: unknown) {
+  /**
+   * Of a size, or of pixels, and then the settings, whose colour space is only named: the pixels
+   * are read and drawn as sRGB whatever it is.
+   */
+  constructor(dataOrWidth: unknown, widthOrHeight: unknown, ...rest: unknown[]) {
     if (arguments.length < 2) throw new TypeError('ImageData needs a width and a height.');
-    const made =
-      typeof dataOrWidth === 'object' && dataOrWidth !== null
-        ? held(dataOrWidth, widthOrHeight, height)
-        : blank(dataOrWidth, widthOrHeight);
-    this.pixels = made.pixels;
-    this.wide = made.wide;
-    this.high = made.high;
+    const isData = typeof dataOrWidth === 'object' && dataOrWidth !== null;
+    const made = isData
+      ? held(dataOrWidth, widthOrHeight, rest[0])
+      : blank(dataOrWidth, widthOrHeight);
+    this.#pixels = made.pixels;
+    this.#wide = made.wide;
+    this.#high = made.high;
+    this.#space = spaceOf(isData ? rest[1] : rest[0]);
   }
 
   // Read only, as a browser's are: a script that sets one changes nothing.
   get data(): Uint8ClampedArray {
-    return this.pixels;
+    return this.#pixels;
   }
   get width(): number {
-    return this.wide;
+    return this.#wide;
   }
   get height(): number {
-    return this.high;
+    return this.#high;
   }
   get colorSpace(): string {
-    return 'srgb';
+    return this.#space;
   }
   get pixelFormat(): string {
     return 'rgba-unorm8';
@@ -57,6 +64,17 @@ interface Made {
   readonly pixels: Uint8ClampedArray;
   readonly wide: number;
   readonly high: number;
+}
+
+const SPACES = new Set(['srgb', 'display-p3']);
+
+/** The colour space settings name: sRGB where they say none, and one not known throws. */
+function spaceOf(settings: unknown): string {
+  const named = (settings as { colorSpace?: unknown } | null | undefined)?.colorSpace;
+  if (named === undefined) return 'srgb';
+  const space = String(named);
+  if (!SPACES.has(space)) throw new TypeError(`${space} is not a colour space.`);
+  return space;
 }
 
 /** Pixels of a size, all transparent black. */

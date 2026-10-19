@@ -60,7 +60,7 @@ const UNMIXED = new Set(['hue', 'saturation', 'color', 'luminosity']);
 
 /** Whether a canvas takes a way of laying for `globalCompositeOperation`. */
 export const isComposite = (mode: string): boolean =>
-  mode in OPERATORS || mode in BLENDS || UNMIXED.has(mode);
+  Object.hasOwn(OPERATORS, mode) || Object.hasOwn(BLENDS, mode) || UNMIXED.has(mode);
 
 /**
  * The operators that clear what is under the source where there is none: drawn, they change the
@@ -92,17 +92,16 @@ export function laidBy(
   const ab = data[at + 3]! / 255;
   const blend = BLENDS[mode];
   const [fa, fb] = (OPERATORS[mode] ?? OPERATORS['source-over']!)(as, ab);
-  const lighter = mode === 'lighter';
-  let out = as * fa + ab * fb;
-  if (lighter) out = Math.min(1, out);
-  const kept = through * out + (1 - through) * ab;
+  // What `lighter` adds is held to 1 after how much is covered is taken in, as Chrome adds it.
+  const held =
+    mode === 'lighter' ? (value: number) => Math.min(1, value) : (value: number) => value;
+  const kept = held(through * (as * fa + ab * fb) + (1 - through) * ab);
   for (let channel = 0; channel < 3; channel++) {
     const cb = data[at + channel]! / 255;
     const cs = colour ? colour[channel]! / 255 : 0;
     const shown = blend ? (1 - ab) * cs + ab * blend(cs, cb) : cs;
-    let value = as * fa * shown + ab * fb * cb;
-    if (lighter) value = Math.min(1, value);
-    const premultiplied = through * value + (1 - through) * ab * cb;
+    const value = as * fa * shown + ab * fb * cb;
+    const premultiplied = held(through * value + (1 - through) * ab * cb);
     data[at + channel] = kept > 0 ? (premultiplied / kept) * 255 : 0;
   }
   data[at + 3] = kept * 255;

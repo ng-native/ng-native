@@ -249,7 +249,9 @@ describe('@ng-native/web-compat canvas', () => {
     context.fillRect(0, 0, 100, 50);
     await settle();
     assert.equal(shapes().length, 1);
-    assert.equal(shapes()[0]!.props['fill'] ?? null, null);
+    // A fill it says it has, of none: one it did not say it had is the black a group fills with.
+    assert.deepEqual(shapes()[0]!.props['propList'], ['fill']);
+    assert.equal('fill' in shapes()[0]!.props, false);
   });
 
   it('draws what is clipped under what it was clipped by', async () => {
@@ -527,5 +529,16 @@ describe('@ng-native/web-compat canvas a script makes', () => {
     const copy = document().querySelector('canvas').cloneNode(false);
     assert.deepEqual([copy.width, copy.height, copy.getAttribute('width')], [100, 50, '100']);
     assert.equal(copy.getContext('2d').getImageData(0, 0, 100, 50).width, 100);
+  });
+
+  it('is the size it has with nothing said, as what it is a copy of is', async () => {
+    await render(Drawings, { providers: [provideWebCompat()] });
+    const made = document().createElement('canvas');
+    made.getContext('2d').fillRect(0, 0, 5, 5);
+    const copy = made.cloneNode(false);
+    assert.deepEqual(copy.defaultStyle, { width: 300, height: 150 });
+    assert.deepEqual([copy.props['vbWidth'], copy.props['vbHeight']], [300, 150]);
+    // And one never drawn on is no size until it is, as what it is a copy of is not.
+    assert.equal(document().createElement('canvas').cloneNode(false).defaultStyle, undefined);
   });
 });
