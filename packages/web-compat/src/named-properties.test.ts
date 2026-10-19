@@ -65,6 +65,22 @@ describe('a named property of the window', () => {
     assert.equal(global.inTheHead, undefined);
   });
 
+  it('is one element in a head put in the page, not each of two', async () => {
+    const app = await render(Page, { providers: [provideWebCompat()] });
+    await settle();
+    const document = app.fixture.componentInstance.document;
+    document.documentElement.appendChild(document.head);
+    const meta = document.createElement('meta');
+    meta.id = 'inThePlacedHead';
+    document.head.appendChild(meta);
+    assert.equal(global.inThePlacedHead, meta);
+    // And a query of the document finds it once.
+    assert.equal(document.querySelectorAll('#inThePlacedHead').length, 1);
+    assert.equal(document.getElementsByTagName('meta').length, 1);
+    meta.remove();
+    assert.equal(global.inThePlacedHead, undefined);
+  });
+
   it('is found again once what was found is gone, renamed, or joined by another', async () => {
     const app = await render(Page, { providers: [provideWebCompat()] });
     await settle();

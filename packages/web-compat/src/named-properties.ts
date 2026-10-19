@@ -1,4 +1,5 @@
 import type { Engine, EngineNode } from '@ng-native/fabric';
+import { topOf } from './document-roots.ts';
 import { liveCollection } from './live-list.ts';
 import { headOf } from './document.ts';
 import { currentEngine } from './window.ts';
@@ -47,18 +48,17 @@ function index(node: EngineNode, into: Map<string, EngineNode[]>): Map<string, E
   return into;
 }
 
-/** The trees of a document: the head and then the page, as it searches them. */
+/**
+ * The trees of a document: the head and then the page, as it searches them. A head put in the
+ * page is searched with it, so each element in it is named once.
+ */
 const trees = (engine: Engine): EngineNode[] => {
   const head = headOf(engine);
-  return head ? [head, engine.root] : [engine.root];
+  return head && topOf(head) !== engine.root ? [head, engine.root] : [engine.root];
 };
 
 /** Whether a node is in the document, in its head or the page. */
-function inPage(node: EngineNode, engine: Engine): boolean {
-  let top: EngineNode = node;
-  while (top.parent) top = top.parent;
-  return trees(engine).includes(top);
-}
+const inPage = (node: EngineNode, engine: Engine): boolean => trees(engine).includes(topOf(node));
 
 /**
  * What each engine's page was last found to name: every name as the page was until the task that

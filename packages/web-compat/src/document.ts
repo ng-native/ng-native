@@ -5,7 +5,7 @@ import { createComment } from './character-data.ts';
 import { documentChildren } from './document-children.ts';
 import { markFragment } from './document-fragment.ts';
 import { documentNodeMembers } from './document-node.ts';
-import { markRoot } from './document-roots.ts';
+import { markRoot, topOf } from './document-roots.ts';
 import { createDocumentType } from './document-type.ts';
 import { required } from './dom-error.ts';
 import { implementationFor } from './dom-implementation.ts';
@@ -373,15 +373,19 @@ export function documentFor(engine: Engine): CompatDocument {
   const body = createBody(engine);
   // The head and then the page, as a document has them: a library looks for a stylesheet it
   // added before it adds one.
+  // A head a script put in the page is found with it, once.
+  const apart = () => topOf(head) !== engine.root;
   function* everything(): Generator<EngineNode> {
-    yield* descendants(head);
+    if (apart()) yield* descendants(head);
     yield* descendants(engine.root);
   }
   /** The elements a query of the document looks at: `<html>`, then the head, then the page. */
   function* elements(): Generator<EngineNode> {
     yield engine.root;
-    yield head;
-    yield* elementsUnder(head);
+    if (apart()) {
+      yield head;
+      yield* elementsUnder(head);
+    }
     yield* elementsUnder(engine.root);
   }
   const first = (...args: unknown[]): EngineNode | null => {
