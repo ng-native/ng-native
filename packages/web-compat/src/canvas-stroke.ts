@@ -164,6 +164,8 @@ class Dasher {
   /** Go along one line of the run, ending dashes and starting gaps as the pattern says. */
   walk(from: Point, to: Point): void {
     const length = Math.hypot(to[0] - from[0], to[1] - from[1]);
+    // A line of no length, as a closed run that ends where it began closes with, has no dashes.
+    if (!length) return;
     let done = 0;
     for (;;) {
       const step = Math.min(this.left, length - done);
@@ -205,10 +207,35 @@ function dashed(run: Subpath, dash: readonly number[], offset: number): Subpath[
   return dasher.finish();
 }
 
+/** How long a run is, around to its start again where it is closed. */
+function lengthOf(run: Subpath): number {
+  const { points } = run;
+  const count = run.closed ? points.length : points.length - 2;
+  let length = 0;
+  for (let at = 0; at < count; at += 2) {
+    const next = (at + 2) % points.length;
+    length += Math.hypot(points[next]! - points[at]!, points[next + 1]! - points[at + 1]!);
+  }
+  return length;
+}
+
+/** As many dashes as a line is cut into, past which it is drawn solid, as Skia draws it. */
+const MAX_DASHES = 1_000_000;
+
+/** Whether a path's line is cut into more dashes than are drawn. */
+function tooManyDashes(runs: readonly Subpath[], dash: readonly number[]): boolean {
+  const period = dash.reduce((sum, each) => sum + each, 0);
+  const length = runs.reduce((sum, run) => sum + lengthOf(run), 0);
+  return (length * (dash.length / 2)) / period > MAX_DASHES;
+}
+
 /** The outlines a path's line is drawn as, in a style, to be filled together, nonzero. */
 export function strokeOutlines(runs: readonly Subpath[], style: LineStyle): Subpath[] {
   const shapes: Subpath[] = [];
-  const dashes = style.dash.length > 0 && style.dash.some((each) => each > 0);
+  const dashes =
+    style.dash.length > 0 &&
+    style.dash.some((each) => each > 0) &&
+    !tooManyDashes(runs, style.dash);
   for (const run of runs) {
     if (!dashes) strokeRun(run, style, false, shapes);
     else

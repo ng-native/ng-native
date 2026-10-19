@@ -1,5 +1,6 @@
 import type { EngineNode } from '@ng-native/fabric';
 import { attributeOf, isHtml, parentElement } from './element-tree.ts';
+import { isInDocument } from './in-document.ts';
 
 /**
  * An element's directionality, as HTML works it out for `:dir()`
@@ -67,7 +68,7 @@ function textDirection(node: EngineNode): Direction | undefined {
       if (found) return found;
       continue;
     }
-    if (child.nodeKind !== 'element' || child.tag.startsWith('::')) continue;
+    if (child.nodeKind !== 'element' || !isInDocument(child)) continue;
     const own = attributeOf(child, 'dir')?.toLowerCase();
     if (isHtml(child, ...PASSED_OVER) || own === 'ltr' || own === 'rtl' || own === 'auto') {
       continue;

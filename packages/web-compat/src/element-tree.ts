@@ -1,15 +1,17 @@
 import type { EngineNode } from '@ng-native/fabric';
 import { isFragment } from './document-fragment.ts';
+import { isInDocument } from './in-document.ts';
 import { XHTML } from './qualified-name.ts';
 
 /**
  * The tree of elements as a selector walks it: no text, no comment, no fragment, and none of the
- * `::before` and `::after` boxes the engine keeps among an element's children.
+ * `::before` and `::after` boxes the engine keeps among an element's children, nor what a
+ * drawing keeps of its own: see `isInDocument`.
  */
 
 /** Whether a node is an element a selector can match. */
 export const isElement = (node: EngineNode): boolean =>
-  node.nodeKind === 'element' && !node.tag.startsWith('::') && !isFragment(node);
+  node.nodeKind === 'element' && isInDocument(node) && !isFragment(node);
 
 /** The element a node is in, or nothing at the top of a tree or of a fragment. */
 export function parentElement(node: EngineNode): EngineNode | null {
@@ -42,7 +44,7 @@ export function* elementsUnder(node: EngineNode): Generator<EngineNode> {
   for (let i = node.childList.length - 1; i >= 0; i--) stack.push(node.childList[i]!);
   while (stack.length) {
     const at = stack.pop()!;
-    if (at.nodeKind !== 'element' || at.tag.startsWith('::')) continue;
+    if (at.nodeKind !== 'element' || !isInDocument(at)) continue;
     yield at;
     const children = at.childList;
     for (let i = children.length - 1; i >= 0; i--) stack.push(children[i]!);

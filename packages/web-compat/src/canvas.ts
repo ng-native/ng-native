@@ -1,6 +1,6 @@
 import { nativePlatform, registerViewName, type Engine, type EngineNode } from '@ng-native/fabric';
 import { viewBoxProps } from '@ng-native/icons';
-import { acceptedColour, serializedColour } from './canvas-colour.ts';
+import { acceptedColour, canvasColour, serializedColour } from './canvas-colour.ts';
 import { isComposite } from './canvas-composite.ts';
 import { inverted, type FillRule, type Matrix } from './canvas-path.ts';
 import {
@@ -48,12 +48,13 @@ import { engineOf } from './window.ts';
  * `canvas-picture.ts`: an `<img>` by its own URL, and pixels as a PNG made of them when they are
  * shown, which is the one cost a canvas that only draws shapes never pays.
  *
- * ponytail: every shape drawn since the canvas was last cleared is a view. One drawn again
- * each frame keeps the views it had and moves them, see `flush`, which a chart of some tens of
- * shapes does at the screen's rate; one of thousands will not. What a bitmap alone can do is
- * not drawn: a way of laying other than source-over (`copy` with no clip is shown, as all there
- * is), a clear of part of it, and the transparent part of pixels put over part of it. A clip
- * drawn is the last one set and not where two overlap.
+ * ponytail: every shape drawn since the canvas was last cleared, or last filled over all of it
+ * with a colour nothing shows through, is a view. One drawn again each frame keeps the views it
+ * had and moves them, see `flush`, which a chart of some tens of shapes does at the screen's
+ * rate; one of thousands will not. What a bitmap alone can do is not drawn: a way of laying
+ * other than source-over (`copy` with no clip is shown, as all there is), a clear of part of
+ * it, and the transparent part of pixels put over part of it. A clip drawn is the last one set
+ * and not where two overlap.
  * Draw on a native canvas if a library is seen that needs any of them.
  *
  * Pixels read back are worked out when they are read, see `canvas-raster.ts`: what is drawn is
@@ -79,6 +80,7 @@ interface State {
   font: string;
   textAlign: string;
   textBaseline: string;
+  /** The last clip set, drawn: null for none, and empty for one of no path, which shows nothing. */
   clip: string | null;
   /** Every clip set, each inside the last: what the pixels read back are clipped by. */
   clips: readonly ClipPath[];
@@ -122,6 +124,12 @@ interface Shape {
 
 const CAPS = new Set(['butt', 'round', 'square']);
 const JOINS = new Set(['miter', 'round', 'bevel']);
+const ALIGNS = new Set(['start', 'end', 'left', 'right', 'center']);
+const BASELINE_NAMES = new Set(['top', 'hanging', 'middle', 'alphabetic', 'ideographic', 'bottom']);
+
+/** A font's size, then its family: what a font a canvas takes has, at least, as CSS writes it. */
+const SIZED_FONT =
+  /(?:^|\s)(?:[\d.]+(?:px|pt|pc|in|cm|mm|q|em|rem|ex|ch|%)|(?:xx?-|xxx-)?(?:small|large)|medium|smaller|larger)(?:\/\S+)?\s+\S/i;
 
 /** A canvas's size with nothing said, as a browser has one. */
 const DEFAULT_SIZE = { width: 300, height: 150 };
@@ -145,20 +153,15 @@ const multiplied = (a: Matrix, b: Matrix): Matrix => [
 ];
 
 /**
- * A gradient: the line or the circles it runs between, on the canvas's own grid as it was when
- * the gradient was made, and the colours along it. For the pixels read back, `geometry` is the
- * numbers it was given, which run under the transform there is when it is drawn with, as a
- * browser has it.
+ * A gradient: the numbers it was given for the line or the circles it runs between, and the
+ * colours along it. They run under the transform there is when it is drawn with, as a browser
+ * has it, and not the one there was when it was made: see `gradientAttributes`.
  */
 class Gradient {
-  readonly name: string;
-  readonly attrs: Record<string, string>;
   readonly geometry: GradientGeometry;
   readonly colours: [at: number, colour: string][] = [];
 
-  constructor(name: string, attrs: Record<string, string>, geometry: GradientGeometry) {
-    this.name = name;
-    this.attrs = attrs;
+  constructor(geometry: GradientGeometry) {
     this.geometry = geometry;
   }
 
@@ -325,19 +328,19 @@ class Context2D {
     return this.state.font;
   }
   set font(value: string) {
-    this.state.font = value;
+    if (SIZED_FONT.test(String(value))) this.state.font = String(value);
   }
   get textAlign(): string {
     return this.state.textAlign;
   }
   set textAlign(value: string) {
-    this.state.textAlign = value;
+    if (ALIGNS.has(value)) this.state.textAlign = value;
   }
   get textBaseline(): string {
     return this.state.textBaseline;
   }
   set textBaseline(value: string) {
-    this.state.textBaseline = value;
+    if (BASELINE_NAMES.has(value)) this.state.textBaseline = value;
   }
   /** A list with one that is no length, or not a number, is no list; an odd one is said twice. */
   setLineDash(given: readonly unknown[]): void {
@@ -553,10 +556,12 @@ class Context2D {
   }
   clip(rule?: unknown): void {
     const d = this.path.join('');
-    this.state.clip = this.path.length ? d : null;
+    // Inside one of no path is nothing too.
+    this.state.clip = this.path.length && this.state.clip !== '' ? d : '';
     this.state.clips = [...this.state.clips, { d, rule: ruleOf(rule) }];
   }
   fillRect(x: number, y: number, width: number, height: number): void {
+    if (finite(x, y, width, height) && this.paintsOver(x, y, width, height)) this.overAll();
     this.withPath(
       () => this.rect(x, y, width, height),
       () => this.fill(),
@@ -574,14 +579,7 @@ class Context2D {
    */
   clearRect(x: number, y: number, width: number, height: number): void {
     if (!finite(x, y, width, height)) return;
-    const size = canvasSize(this.canvas);
-    const [a, b, c, d, e, f] = this.state.matrix;
-    const whole =
-      a * x + c * y + e <= 0 &&
-      b * x + d * y + f <= 0 &&
-      a * (x + width) + c * (y + height) + e >= size.width &&
-      b * (x + width) + d * (y + height) + f >= size.height;
-    if (!whole) return this.clearPart(x, y, width, height);
+    if (!this.covers(x, y, width, height)) return this.clearPart(x, y, width, height);
     // Under a clip, the pixels are cleared only inside it. The shapes all go, see the note above.
     if (this.state.clips.length) this.clearPart(x, y, width, height);
     else [this.operations, this.blank] = [[], true];
@@ -611,16 +609,8 @@ class Context2D {
   }
   createLinearGradient(x1: number, y1: number, x2: number, y2: number): Gradient {
     if (!finite(x1, y1, x2, y2)) throw new TypeError('A point of the gradient is not a number.');
-    const [from, to] = [this.at(x1, y1).split(' '), this.at(x2, y2).split(' ')];
     const [x0, y0, x3, y3] = [x1, y1, x2, y2].map(Number) as [number, number, number, number];
-    return new Gradient(
-      'linearGradient',
-      {
-        ...{ x1: from[0]!, y1: from[1]!, x2: to[0]!, y2: to[1]! },
-        gradientUnits: 'userSpaceOnUse',
-      },
-      { kind: 'linear', x0, y0, x1: x3, y1: y3 },
-    );
+    return new Gradient({ kind: 'linear', x0, y0, x1: x3, y1: y3 });
   }
   /** Between two circles: drawn from the middle of the first out to the edge of the second. */
   createRadialGradient(
@@ -635,21 +625,10 @@ class Context2D {
       throw new TypeError('A circle of the gradient is not a number.');
     }
     if (radius1 < 0 || radius2 < 0) throw domError('A radius is less than 0.', 'IndexSizeError');
-    const [focus, centre] = [this.at(x1, y1).split(' '), this.at(x2, y2).split(' ')];
     const [x0, y0, r0, x3, y3, r1] = [x1, y1, radius1, x2, y2, radius2].map(
       Number,
     ) as unknown as Matrix;
-    const stretch = this.stretch;
-    const geometry = { x0, y0, r0, x1: x3, y1: y3, r1 };
-    return new Gradient(
-      'radialGradient',
-      {
-        ...{ fx: focus[0]!, fy: focus[1]!, cx: centre[0]!, cy: centre[1]! },
-        r: String(round(radius2 * stretch)),
-        gradientUnits: 'userSpaceOnUse',
-      },
-      { kind: 'radial', ...geometry },
-    );
+    return new Gradient({ kind: 'radial', x0, y0, r0, x1: x3, y1: y3, r1 });
   }
   /** A picture repeated: null for an image that has not loaded, which has nothing to repeat. */
   createPattern(image: unknown, repetition: unknown): Pattern | null {
@@ -759,6 +738,43 @@ class Context2D {
     for (const operation of this.operations) this.raster.apply(operation);
     this.operations = [];
     return this.raster;
+  }
+
+  /** Whether a box under the transform covers all of the canvas's grid. */
+  private covers(x: number, y: number, width: number, height: number): boolean {
+    const undo = inverted(this.state.matrix);
+    if (!undo) return false;
+    const { width: wide, height: high } = canvasSize(this.canvas);
+    const [a, b, c, d, e, f] = undo;
+    const [left, right] = [Math.min(x, x + width), Math.max(x, x + width)];
+    const [top, bottom] = [Math.min(y, y + height), Math.max(y, y + height)];
+    const corners: Point[] = [
+      [0, 0],
+      [wide, 0],
+      [0, high],
+      [wide, high],
+    ];
+    return corners.every(([cx, cy]) => {
+      const [px, py] = [a * cx + c * cy + e, b * cx + d * cy + f];
+      return px >= left - 1e-9 && px <= right + 1e-9 && py >= top - 1e-9 && py <= bottom + 1e-9;
+    });
+  }
+
+  /**
+   * Whether a box filled now hides all that was drawn before: a colour that lets nothing
+   * through, laid over as it is, unclipped, over all of the grid.
+   */
+  private paintsOver(x: number, y: number, width: number, height: number): boolean {
+    const { fillStyle, globalAlpha, composite, clips } = this.state;
+    if (globalAlpha < 1 || composite !== 'source-over' || clips.length) return false;
+    const colour = typeof fillStyle === 'string' ? canvasColour(fillStyle) : null;
+    return (colour?.[3] ?? 0) >= 1 && this.covers(x, y, width, height);
+  }
+
+  /** What was drawn before is hidden by what is drawn now: a new drawing, as a whole clear is. */
+  private overAll(): void {
+    [this.operations, this.blank] = [[], true];
+    this.startOver();
   }
 
   private clearPart(x: number, y: number, width: number, height: number): void {
@@ -876,7 +892,9 @@ class Context2D {
     if (!(style instanceof Gradient)) return typeof style === 'string' ? style : '#000';
     if (!style.colours.length) return 'none';
     const id = `canvas-paint-${this.paints++}`;
-    this.pending.push({ name: style.name, attrs: { ...style.attrs, id }, colours: style.colours });
+    const { name, attrs } = gradientAttributes(style.geometry, this.state.matrix);
+    // As they are now: a colour added after it is drawn with is not on what was drawn.
+    this.pending.push({ name, attrs: { ...attrs, id }, colours: [...style.colours] });
     return `url(#${id})`;
   }
 
@@ -937,6 +955,7 @@ class Context2D {
     more: Partial<Shape> = {},
   ): void {
     const clip = this.state.clip;
+    if (clip === '') return;
     const id = clip ? `canvas-clip-${this.clips++}` : undefined;
     if (clip && id) this.pending.push({ name: 'clipPath', attrs: { id, d: clip } });
     this.pending.push({ name, attrs, words, clippedBy: id, ...more });
@@ -1000,6 +1019,32 @@ const styleRead = (style: unknown): unknown =>
   typeof style === 'string' ? serializedColour(style) : style;
 
 const ruleOf = (rule: unknown): FillRule => (rule === 'evenodd' ? 'evenodd' : 'nonzero');
+
+/**
+ * A gradient as a shape draws it, on the canvas's grid under a transform: the points it runs
+ * between where the transform puts them, and its outer circle's radius as long as the transform
+ * makes a length. A radial one drawn under a transform that stretches one way more than another
+ * is drawn as a circle, not the ellipse it is in the pixels read back.
+ */
+function gradientAttributes(
+  geometry: GradientGeometry,
+  [a, b, c, d, e, f]: Matrix,
+): { name: string; attrs: Record<string, string> } {
+  const at = (x: number, y: number) => [round(a * x + c * y + e), round(b * x + d * y + f)];
+  const userSpace = { gradientUnits: 'userSpaceOnUse' };
+  if (geometry.kind === 'linear') {
+    const [[x1, y1], [x2, y2]] = [at(geometry.x0, geometry.y0), at(geometry.x1, geometry.y1)];
+    const ends = { x1: x1!, y1: y1!, x2: x2!, y2: y2! };
+    return { name: 'linearGradient', attrs: { ...stringsOf(ends), ...userSpace } };
+  }
+  const [[fx, fy], [cx, cy]] = [at(geometry.x0, geometry.y0), at(geometry.x1, geometry.y1)];
+  const r = round(geometry.r1 * Math.sqrt(Math.abs(a * d - b * c)));
+  const circles = { fx: fx!, fy: fy!, cx: cx!, cy: cy!, r };
+  return { name: 'radialGradient', attrs: { ...stringsOf(circles), ...userSpace } };
+}
+
+const stringsOf = (numbers: Record<string, number>): Record<string, string> =>
+  Object.fromEntries(Object.entries(numbers).map(([key, value]) => [key, String(value)]));
 
 /** A style as the pixels are painted with it: a colour, or a gradient or a pattern as it is now. */
 function styleOf(style: unknown, matrix: Matrix): Style {
@@ -1210,6 +1255,19 @@ export const canvasAttributes = (node: EngineNode): Readonly<Record<string, stri
   written.get(node) ?? NONE;
 const NONE: Readonly<Record<string, string>> = {};
 
+/** The props of a canvas's view box, which it is drawn by and are no attribute of it. */
+const VIEW_BOX = new Set(Object.keys(viewBoxProps('0 0 1 1')));
+export const isCanvasBox = (node: EngineNode, key: string): boolean =>
+  node.tag === 'canvas' && VIEW_BOX.has(key);
+
+/** Give a copy of a canvas the size it was given: see `cloneNode`. */
+export function copyCanvas(from: EngineNode, to: EngineNode, engine: Engine): void {
+  const given = written.get(from);
+  if (!given || to.tag !== 'canvas') return;
+  written.set(to, { ...given });
+  sizeCanvas(to, engine);
+}
+
 /**
  * `canvas.getContext('2d')`: the one context a canvas has. No other kind is drawn, and a canvas
  * in an app that did not ask for the package draws none.
@@ -1348,12 +1406,23 @@ function blobOf(bytes: Uint8Array): Blob | null {
   }
 }
 
-/** A canvas's side as a script sets it: the attribute, which is what sizes the grid. */
+/**
+ * A canvas's side as a script sets it: the attribute, which is what sizes the grid. The value is
+ * an `unsigned long`, converted as a number is (`'50px'` is 0), and one past what an attribute
+ * holds is the size it has with nothing said.
+ */
 const side = (name: 'width' | 'height'): Reflection =>
   own(
     (node) => canvasSize(node)[name],
-    (node, value) => node.setAttribute(name, String(sizeGiven(value, name))),
+    (node, value) => node.setAttribute(name, String(unsignedOf(value, DEFAULT_SIZE[name]))),
   );
+
+function unsignedOf(value: unknown, fallback: number): number {
+  const number = Number(value);
+  const whole = Number.isFinite(number) ? Math.trunc(number) : 0;
+  const unsigned = ((whole % 2 ** 32) + 2 ** 32) % 2 ** 32;
+  return unsigned > 2 ** 31 - 1 ? fallback : unsigned;
+}
 
 /** A canvas's members, by element, over what HTML reflects: see `html-members.ts`. */
 export const CANVAS_MEMBERS: Readonly<Record<string, Readonly<Record<string, Reflection>>>> = {

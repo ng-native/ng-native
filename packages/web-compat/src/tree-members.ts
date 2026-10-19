@@ -11,6 +11,7 @@ import { marksHover } from './elements.ts';
 import { byClassName, byTagName, byTagNameNS } from './elements-by.ts';
 import { insertedByScript, removedByScript } from './html-tree.ts';
 import { descendants, inDocument } from './in-document.ts';
+import { copyCanvas } from './canvas.ts';
 import { copyShape, svgInserted } from './svg.ts';
 import { liveCollection, liveNodeList, type HTMLCollection, type NodeList } from './live-list.ts';
 import { adopt, adoptFirst, together, whenAdopting } from './mutation-observer.ts';
@@ -170,6 +171,8 @@ function cloned(engine: Engine, node: EngineNode, deep: boolean): EngineNode {
   copyWritten(node, copy);
   // A shape's attributes are kept as written, apart from the props it is drawn by.
   copyShape(node, copy, engine);
+  // And a canvas's size, which is the grid it draws on.
+  copyCanvas(node, copy, engine);
   copyDeclarations(node, copy);
   if (copy.tag === 'style') styleMade(copy, engine);
   if (deep) {

@@ -1,7 +1,7 @@
 import type { Engine, EngineNode } from '@ng-native/fabric';
 import type { Renderer2 } from '@angular/core';
 import { attributeRemoved } from './attr.ts';
-import { canvasAttributes } from './canvas.ts';
+import { canvasAttributes, isCanvasBox } from './canvas.ts';
 import { isCDATASection } from './cdata-section.ts';
 import { isCharacterData, setData, wordsOf } from './character-data.ts';
 import { classAttribute, classListOf, setClassAttribute } from './class-list.ts';
@@ -142,10 +142,11 @@ function hasAttribute(node: EngineNode, name: string): boolean {
 
 /**
  * Whether a prop is a state this package gives an element, which is no attribute of it: the
- * `aria-disabled` a `disabled` announces, and the `data-hover` a pointer over it gives (see
- * `giveRole`).
+ * `aria-disabled` a `disabled` announces, the `data-hover` a pointer over it gives (see
+ * `giveRole`), and the view box a canvas is drawn by (see `canvas.ts`).
  */
 function isEngineState(node: EngineNode, key: string): boolean {
+  if (isCanvasBox(node, key)) return true;
   if (key === 'aria-disabled') return announcesDisabled(node);
   return key === 'data-hover' && marksHover(node);
 }

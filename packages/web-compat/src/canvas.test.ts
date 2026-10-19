@@ -260,7 +260,8 @@ describe('@ng-native/web-compat canvas', () => {
     context.clip();
     context.fillRect(0, 0, 100, 50);
     context.restore();
-    context.fillRect(0, 0, 100, 50);
+    // Short of the bottom: one over all of it is a new drawing, see the test of an opaque fill.
+    context.fillRect(0, 0, 100, 40);
     await settle();
     const [defined, clipped, free] = shapes();
     // Inside a definition: Android warns on every draw of a clip path outside one.
@@ -273,6 +274,108 @@ describe('@ng-native/web-compat canvas', () => {
     assert.equal(clipped!.props['clipPath'], clip!.props['name']);
     assert.equal(clipped!.children[0]!.viewName, 'RNSVGPath');
     assert.equal(free!.viewName, 'RNSVGPath');
+  });
+
+  it('runs a gradient under the transform it is filled under, not the one it was made under', async () => {
+    const { context } = await canvas();
+    const fade = context.createLinearGradient(0, 0, 10, 0);
+    fade.addColorStop(0, 'red');
+    fade.addColorStop(1, 'blue');
+    const ring = context.createRadialGradient(5, 5, 0, 5, 5, 10);
+    ring.addColorStop(0, 'red');
+    context.translate(50, 0);
+    context.fillStyle = fade;
+    context.fillRect(0, 0, 10, 10);
+    context.setTransform(2, 0, 0, 2, 10, 0);
+    context.fillStyle = ring;
+    context.fillRect(0, 0, 10, 10);
+    await settle();
+    const [linear, , radial] = shapes();
+    // As Chrome draws it, and as the pixels read back are: from 50 to 60, where the box is.
+    assert.deepEqual(
+      ['x1', 'y1', 'x2', 'y2'].map((key) => linear!.props[key]),
+      ['50', '0', '60', '0'],
+    );
+    assert.deepEqual(
+      ['fx', 'fy', 'cx', 'cy', 'rx', 'ry'].map((key) => radial!.props[key]),
+      ['20', '10', '20', '10', '20', '20'],
+    );
+  });
+
+  it('draws a gradient with the colours it had when it was filled with', async () => {
+    const { context } = await canvas();
+    const fade = context.createLinearGradient(0, 0, 100, 0);
+    fade.addColorStop(0, 'red');
+    fade.addColorStop(1, 'blue');
+    context.fillStyle = fade;
+    context.fillRect(0, 0, 100, 50);
+    // Before what is drawn is shown: a colour added after is not on the shape drawn before it.
+    fade.addColorStop(0.5, 'lime');
+    await settle();
+    assert.deepEqual(shapes()[0]!.props['gradient'], [0, 'red', 1, 'blue']);
+  });
+
+  it('draws nothing under a clip of no path, as Chrome draws nothing', async () => {
+    const { context } = await canvas();
+    context.save();
+    context.beginPath();
+    context.clip();
+    context.fillRect(0, 0, 100, 50);
+    context.fillText('Hidden', 0, 20);
+    // A clip inside one of nothing is nothing too.
+    context.rect(0, 0, 50, 50);
+    context.clip();
+    context.fillRect(0, 0, 100, 50);
+    await settle();
+    assert.deepEqual(shapes(), []);
+    assert.deepEqual([...context.getImageData(5, 5, 1, 1).data], [0, 0, 0, 0]);
+    context.restore();
+    context.fillRect(0, 0, 10, 10);
+    await settle();
+    assert.equal(shapes().length, 1);
+  });
+
+  it('is a new drawing once an opaque fill covers all of it, and not where anything shows through', async () => {
+    // A frame of an animation that paints its background rather than clearing.
+    const { context } = await canvas();
+    const frame = (wide: number) => {
+      context.fillStyle = '#fff';
+      context.fillRect(0, 0, 100, 50);
+      context.fillStyle = 'red';
+      context.fillRect(0, 0, wide, 10);
+    };
+    for (const wide of [10, 20, 30]) frame(wide);
+    await settle();
+    assert.equal(shapes().length, 2);
+    assert.equal(shapes()[1]!.props['d'], 'M0 0L30 0L30 10L0 10Z');
+    // Nor is what is read back kept to be replayed: only what this frame drew.
+    assert.equal((context as Dom).operations.length, 2);
+    assert.deepEqual([...context.getImageData(25, 5, 1, 1).data], [255, 0, 0, 255]);
+    // Under the transform, as all of the canvas is covered by what it puts the box at.
+    context.setTransform(-1, 0, 0, -1, 100, 50);
+    context.fillStyle = '#fff';
+    context.fillRect(0, 0, 100, 50);
+    context.resetTransform();
+    await settle();
+    assert.equal(shapes().length, 1);
+    // Not a fill that lets some through, nor one clipped, nor one short of an edge.
+    const kept = (draw: () => void) => {
+      context.save();
+      draw();
+      context.fillRect(0, 0, 100, 50);
+      context.restore();
+    };
+    kept(() => (context.fillStyle = 'rgba(0, 0, 0, 0.5)'));
+    kept(() => (context.globalAlpha = 0.5));
+    kept(() => (context.globalCompositeOperation = 'multiply'));
+    kept(() => (context.fillStyle = context.createLinearGradient(0, 0, 100, 0)));
+    kept(() => {
+      context.rect(0, 0, 100, 50);
+      context.clip();
+    });
+    kept(() => context.translate(1, 0));
+    await settle();
+    assert.equal(shapes().length, 8);
   });
 });
 
@@ -303,6 +406,47 @@ describe('@ng-native/web-compat canvas, as what it was given changes and goes', 
     await settle();
     assert.equal(view().props['vbWidth'], 300);
     assert.equal(context.getImageData(0, 0, 300, 1).data.length, 1200);
+  });
+
+  it('is sized by a property set as a number is, as a browser converts one', async () => {
+    const { node } = await canvas();
+    node.width = '50px';
+    assert.deepEqual([node.width, node.getAttribute('width')], [0, '0']);
+    node.width = '1e2';
+    assert.equal(node.width, 100);
+    // One past what an attribute holds is the size it has with nothing said.
+    node.width = -5;
+    assert.equal(node.width, 300);
+    // An attribute is read as one is written, in digits from the start.
+    node.setAttribute('height', '40px');
+    assert.equal(node.height, 40);
+  });
+
+  it('has as attributes only what it was given, and not the view box it is drawn by', async () => {
+    const { node } = await canvas();
+    assert.deepEqual(node.getAttributeNames(), ['width', 'height']);
+    assert.equal(node.getAttribute('align'), null);
+    assert.ok(!node.outerHTML.includes('align'), node.outerHTML);
+    const made = document().createElement('canvas');
+    made.getContext('2d');
+    assert.deepEqual(made.getAttributeNames(), []);
+  });
+
+  it('holds nothing a selector finds, nor a direction is read from', async () => {
+    const { node, context } = await canvas();
+    context.fillRect(0, 0, 10, 10);
+    context.fillText('שלום', 0, 20);
+    await settle();
+    assert.equal(node.querySelector('*'), null);
+    assert.equal(document().querySelectorAll('canvas *').length, 0);
+    // The words drawn are not the text before what follows the canvas.
+    const parent = node.parentNode;
+    parent.setAttribute('dir', 'auto');
+    parent.append('Sales');
+    assert.ok(parent.matches(':dir(ltr)'));
+    // What a script writes in it is found, and is the first thing in it.
+    node.innerHTML = '<p>No canvas</p>';
+    assert.equal(document().querySelector('canvas > p:first-child')?.textContent, 'No canvas');
   });
 
   it('keeps what it drew where a script takes out what it holds', async () => {
@@ -376,5 +520,12 @@ describe('@ng-native/web-compat canvas a script makes', () => {
     assert.deepEqual(others, []);
     assert.equal(group!.children[0]!.viewName, 'RNSVGPath');
     assert.deepEqual(screen.getByTestId('chart').children[0]!.children, []);
+  });
+
+  it('is the size of what it is a copy of', async () => {
+    await render(Drawings, { providers: [provideWebCompat()] });
+    const copy = document().querySelector('canvas').cloneNode(false);
+    assert.deepEqual([copy.width, copy.height, copy.getAttribute('width')], [100, 50, '100']);
+    assert.equal(copy.getContext('2d').getImageData(0, 0, 100, 50).width, 100);
   });
 });

@@ -379,6 +379,55 @@ describe('@ng-native/web-compat canvas pixels', () => {
     context.translate(Number.NaN, 0);
     assert.deepEqual(context.getTransform().e, 0);
   });
+
+  it('keeps the text style it had for one given what it cannot be, as Chrome does', async () => {
+    const { context } = await canvas();
+    context.textAlign = 'middle';
+    context.textBaseline = 'centre';
+    assert.deepEqual([context.textAlign, context.textBaseline], ['start', 'alphabetic']);
+    context.textAlign = 'center';
+    context.textBaseline = 'middle';
+    assert.deepEqual([context.textAlign, context.textBaseline], ['center', 'middle']);
+    // A font with no size, or a size and no family, is none.
+    for (const font of ['bold', '12px', 'Arial', '']) context.font = font;
+    assert.equal(context.font, '10px sans-serif');
+    context.font = 'italic bold 12px/1.5 Arial, sans-serif';
+    assert.equal(context.font, 'italic bold 12px/1.5 Arial, sans-serif');
+  });
+
+  it('strokes a dashed closed path that ends where it began', async () => {
+    const { context } = await canvas();
+    context.lineWidth = 2;
+    context.setLineDash([5, 5]);
+    context.beginPath();
+    context.moveTo(10, 10);
+    context.lineTo(40, 10);
+    context.lineTo(40, 40);
+    context.lineTo(10, 10);
+    context.closePath();
+    context.stroke();
+    assert.deepEqual(pixel(context, 12, 10), [0, 0, 0, 255]);
+    assert.deepEqual(pixel(context, 17, 10), [0, 0, 0, 0]);
+  });
+
+  it(
+    'strokes a line solid where its dashes are too many to draw, as Skia does',
+    { timeout: 10_000 },
+    async () => {
+      const { context } = await canvas();
+      context.lineWidth = 4;
+      context.setLineDash([1e-9]);
+      context.beginPath();
+      context.moveTo(0, 10);
+      context.lineTo(100, 10);
+      context.moveTo(0, 30);
+      context.lineTo(1, 30);
+      context.stroke();
+      // Chrome draws this one solid: past a million dashes, Skia draws the line without them.
+      assert.deepEqual(pixel(context, 50, 10), [0, 0, 0, 255]);
+      assert.deepEqual(pixel(context, 0, 30), [0, 0, 0, 255]);
+    },
+  );
 });
 
 describe('@ng-native/web-compat ImageData', () => {

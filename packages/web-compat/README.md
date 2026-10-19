@@ -75,7 +75,8 @@ Experimental and partial. It has:
   are the grid it draws on, and what is drawn reads back by `getImageData`, draws on another
   canvas by `drawImage` and is written as a PNG by `toDataURL` and `toBlob`. There is no bitmap:
   a clear of part of it, and a way of laying a drawing over what is there other than
-  `source-over`, change only the pixels read back. An `<img>` drawn on one draws nothing.
+  `source-over` (and `copy` where nothing clips it), change only the pixels read back. An
+  `<img>` drawn on one draws nothing.
 - A `<button>` and an `<a>` with their roles, each taking a press with no listener (`:active`
   while held) and marked `data-hover` while a pointer is over it, a disabled one announced as
   disabled, and a table's and a form's elements as views.
