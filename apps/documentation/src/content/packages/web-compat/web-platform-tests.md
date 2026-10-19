@@ -28,7 +28,7 @@ harness, and a test that needs a server or input automation from `testdriver`.
 
 ## The recorded pass rates
 
-`wpt/expectations.json` holds the subtests each file passes, and
+`wpt/expectations.json` holds how many subtests each file passes, with a digest of which, and
 [`wpt/summary.txt`](https://github.com/ng-native/ng-native/blob/main/packages/web-compat/wpt/summary.txt)
 the pass rate of each suite, how each file ended (OK, ERROR, TIMEOUT or CRASH) and what was
 skipped and why. The summary is the measure of where the package stands against each specification.

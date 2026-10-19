@@ -78,16 +78,17 @@ Gaps:
 
 - A rule in a sheet made while the app runs is passed over where its selector has a namespace,
   `:nth-child(... of S)` or a pseudo-class the engine does not track, `:hover` among them.
-- A rule for a pseudo-element other than `::before` and `::after` (`::first-line`, `::selection`)
-  is passed over, as is a `content` other than a string or `none` (a counter or `attr()`, say), and
-  a value the engine drops, `display: table` among them.
+- A selector for a pseudo-element other than `::before` and `::after` (`::first-line`,
+  `::selection`) is passed over, and the rule applies to the rest of its list. So is a `content`
+  other than a string or `none` (a counter or `attr()`, say), and a value the engine drops,
+  `display: table` among them.
 - An `@import` loads nothing, so the sheet it makes is empty.
 - `element.style` checks a value against what the property takes for the properties a script
   commonly sets, and drops one that does not match; any other longhand takes any value. A colour
   is written in lower case, and another keyword keeps the case it was written in:
   `display: BLOCK` stays `BLOCK`. The shorthands it splits into longhands are those of
-  sides, of pairs, and `border`, `border-radius`, `flex`, `font`, `list-style`,
-  `background` and `all`; `transition` and the rest are declared as themselves.
+  sides, of pairs, and `border`, `border-radius`, `flex`, `font`, `list-style`, `background`,
+  `background-position` and `all`; `transition` and the rest are declared as themselves.
 - `getComputedStyle` answers a percentage as written, reads no vertical writing mode, and answers
   a transform other than a move or a scale as written.
 
@@ -227,6 +228,6 @@ Gaps:
   `postMessage` both ways, and `window.frames`.
 
 Gaps: `location.reload()` does nothing. A frame's `loading` and the parts of `sandbox` other than
-`allow-scripts` are left out, and development says so. An emulated frame is not drawn and runs no
-script. [The page's address and frames](/packages/web-compat/address-and-frames) covers both in
-full.
+`allow-scripts` and `allow-same-origin` are left out, and development says so. An emulated frame is
+not drawn and runs no script. [The page's address and
+frames](/packages/web-compat/address-and-frames) covers both in full.
