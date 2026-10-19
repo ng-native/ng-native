@@ -4044,7 +4044,8 @@ const NO_SWIPE = Object.freeze({ start: -1, end: 0, top: -1, bottom: -1 });
  * What a box clipped to nothing is committed with: `clip: rect(0 0 0 0)`, how a library hides
  * what is for a screen reader alone. A view is clipped to no smaller than itself, its shadow is
  * drawn outside it and a minimum size is over the pixel it is given, so each of those is taken
- * away. It keeps its opacity: a view with none is not read out, which is all this one is for.
+ * away, as is a border or outline drawn around it. It keeps its opacity: a view with none is not
+ * read out, which is all this one is for.
  */
 const CLIPPED_AWAY = {
   boxShadow: [],
@@ -4053,6 +4054,10 @@ const CLIPPED_AWAY = {
   minHeight: 0,
   overflow: 'hidden',
   pointerEvents: 'none',
+  ...Object.fromEntries(
+    ['', 'Top', 'Right', 'Bottom', 'Left', 'Start', 'End'].map((side) => [`border${side}Width`, 0]),
+  ),
+  outlineWidth: 0,
 };
 
 /** What a box that is `visibility: hidden` is committed with: there, and not seen or touched. */

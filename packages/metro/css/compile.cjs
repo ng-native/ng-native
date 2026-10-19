@@ -1153,7 +1153,7 @@ const attribute = (name) => ({ type: 'attribute', namespace: null, name, operati
 /**
  * A control's state as the property the control has it as, which is where an element made for a
  * browser's `<input>` keeps it: `:checked` is `[checked]`, and `:enabled` is not `[disabled]`.
- * Through any `:not()` or `:is()` it is written in.
+ * Through any `:not()` or `:is()` it is written in, and the one compound of a `:host()`.
  */
 function controlState(part) {
   if (part.type !== 'pseudo-class') return part;
@@ -1162,6 +1162,8 @@ function controlState(part) {
     return { type: 'pseudo-class', kind: 'not', selectors: [[attribute('disabled')]] };
   }
   if (!part.selectors) return part;
+  // `:host()` holds the parts of one compound, where `:is()` holds a list of selectors.
+  if (part.kind === 'host') return { ...part, selectors: part.selectors.map(controlState) };
   return { ...part, selectors: part.selectors.map((parts) => parts.map(controlState)) };
 }
 
@@ -1223,8 +1225,9 @@ function insetByHalf({ property, value }) {
 /**
  * `overflow-x: hidden`, in a sheet read as a browser reads it: a view clips on both axes or on
  * neither, so what a library clips along one is clipped. A progress bar's track clips the bar
- * that slides across it. A list that scrolls down the page, `overflow-y: auto`, scrolls. Any
- * other value on one axis is no clipping, which a view has by default.
+ * that slides across it. A list that scrolls down the page, `overflow-y: auto`, is a scroll
+ * overflow, which clips a plain view on both axes and scrolls only a scroll view. Any other value
+ * on one axis is no clipping, which a view has by default.
  */
 function clippedOnAnAxis(declaration, out) {
   if (declaration.property !== 'overflow-x' && declaration.property !== 'overflow-y') return false;

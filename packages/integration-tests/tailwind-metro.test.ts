@@ -90,7 +90,8 @@ describe('the generated stylesheet module', () => {
 
   it('reads the sheet as a browser does under the classes named, and not anywhere else', () => {
     // Components written for a browser and styled by the app's own Tailwind sheet: a flex
-    // container under them is a row, `::before` draws a box, and one axis of overflow scrolls.
+    // container under them is a row, `::before` draws a box, and one axis of overflow is a
+    // scroll overflow.
     const css =
       '.bar { display: flex } .stack { display: flex; flex-direction: column } ' +
       '.line::before { content: ""; height: 1px } .list { overflow-y: auto }';

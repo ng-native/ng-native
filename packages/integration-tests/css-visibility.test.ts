@@ -77,6 +77,26 @@ describe('visibility in a stylesheet read as a browser reads it', () => {
     });
   });
 
+  it('hides what is in a hidden box, a box inside it that is visible included', () => {
+    // A browser shows a `visibility: visible` box inside a hidden one. Here the hidden box is a
+    // view with no opacity, and that is the opacity of all that is in it: the box inside is not
+    // seen. This pins that, so a box shown inside a hidden one is a change made on purpose.
+    const sheet = compileCss(CSS, 'library.css', { generated: true });
+    const fabric = createFakeFabric();
+    const engine = new Engine(fabric, 1, { globalStyles: sheet as never });
+    const outer = engine.createElement('view');
+    const inner = engine.createElement('view');
+    engine.setClasses(outer, 'mirror');
+    engine.setClasses(inner, 'shown');
+    engine.appendChild(outer, inner);
+    engine.appendChild(engine.root, outer);
+    engine.commit();
+    const [box] = fabric.committed;
+    assert.equal(box!.props['opacity'], 0);
+    assert.equal(box!.children.length, 1);
+    assert.equal(box!.children[0]!.props['opacity'] ?? null, null);
+  });
+
   it("is still refused in an app's own stylesheet, which is told what to write", () => {
     const s = scene(CSS, 'mirror', false);
     assert.deepEqual(s.seen(), { opacity: null, pointerEvents: null, visibility: null });
@@ -161,6 +181,36 @@ describe('a box clipped to nothing in a stylesheet read as a browser reads it', 
     assert.equal(props['minWidth'], 64);
     assert.equal(props['backgroundColor'], 'rgb(255, 0, 0)');
     assert.equal(props['overflow'] ?? null, null);
+  });
+
+  it('draws no border or outline, and is still there', () => {
+    const css =
+      '.ring { border: 1px solid red; outline: 2px solid blue; border-inline-start-width: 3px } ' +
+      '.sr { position: absolute; width: 1px; height: 1px; clip: rect(0 0 0 0) }';
+    const sheet = compileCss(css, 'library.css', { generated: true });
+    const fabric = createFakeFabric();
+    const engine = new Engine(fabric, 1, { globalStyles: sheet as never });
+    const view = engine.createElement('view');
+    engine.setClasses(view, 'ring sr');
+    engine.appendChild(engine.root, view);
+    const widths = () => {
+      engine.commit();
+      assert.equal(fabric.committed.length, 1, 'still in the tree');
+      const { props } = fabric.committed[0]!;
+      return Object.fromEntries(
+        Object.keys(props)
+          .filter((key) => /^(border|outline)\w*Width$/.test(key))
+          .map((key) => [key, props[key]]),
+      );
+    };
+    const clipped = widths();
+    assert.ok(Object.keys(clipped).length > 0);
+    for (const [key, width] of Object.entries(clipped)) assert.equal(width, 0, key);
+    engine.setClasses(view, 'ring');
+    const drawn = widths();
+    assert.equal(drawn['borderTopWidth'], 1);
+    assert.equal(drawn['borderStartWidth'], 3);
+    assert.equal(drawn['outlineWidth'], 2);
   });
 
   it('is drawn where the rectangle has something in it, and that is said', () => {

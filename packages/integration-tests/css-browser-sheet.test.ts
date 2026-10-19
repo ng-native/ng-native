@@ -1,8 +1,8 @@
 /**
  * What a stylesheet read as a browser reads it says that an app's own does not: one compiled
  * with `generated`, as the app's Tailwind sheet is under the classes its `browser` option names.
- * A clip along one axis is a clip, a list that scrolls down the page is the overflow a view
- * has, and a control's state is the prop the control keeps it in. An app's own sheet is told
+ * A clip along one axis is a clip, a list that scrolls down the page is a scroll overflow, and a
+ * control's state is the prop the control keeps it in. An app's own sheet is told
  * what to write instead, as before.
  */
 import assert from 'node:assert/strict';
@@ -46,7 +46,8 @@ describe('overflow along one axis, in a stylesheet read as a browser reads it', 
     }
   });
 
-  it('scrolls a list down the page, and leaves one that scrolls across unclipped', () => {
+  it('is a scroll overflow for a list down the page, and none for one that scrolls across', () => {
+    // A plain view clips both axes at `scroll` and does not scroll: only a scroll view does.
     assert.equal(scene('.c { overflow-y: auto }').props()['overflow'], 'scroll');
     assert.equal(scene('.c { overflow-y: scroll }').props()['overflow'], 'scroll');
     const across = scene('.c { overflow-x: auto }');
@@ -95,6 +96,20 @@ describe("a control's state, in a stylesheet read as a browser reads it", () => 
     assert.deepEqual(s.seen(), { opacity: 0.1, width: 4, height: 6 });
     s.engine.setProp(s.box, 'indeterminate', true);
     assert.equal(s.seen().opacity, 0.5);
+  });
+
+  it('is read on the host as well, whose selector is one compound and not a list', () => {
+    for (const [css, host] of [
+      [':host(.active) { opacity: 0.5 }', { classes: ['active'], host: true }],
+      [
+        ':host(:checked) { opacity: 0.5 }',
+        { classes: [], host: true, attributes: [{ name: 'checked' }] },
+      ],
+    ] as const) {
+      const { sheet, reports } = compiled(css);
+      assert.deepEqual(reports, [], css);
+      assert.deepEqual(sheet.rules[0].compounds, [host], css);
+    }
   });
 
   it("is still refused in an app's own stylesheet, which is told to bind an attribute", () => {

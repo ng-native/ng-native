@@ -551,13 +551,16 @@ write another way:
   pseudo-element is dropped with a warning, as in an app's own sheet.
 
 - `visibility: hidden` (and `collapse`) draws the box with no opacity and takes no touch, and the
-  box keeps its room. `visible` from a later rule shows it again.
+  box keeps its room. `visible` from a later rule shows it again. Unlike in a browser, a hidden box
+  hides all that is in it: a box inside it with `visibility: visible` is not seen either, as the
+  opacity of a view is the opacity of everything in it.
 - `clip: rect()` with nothing in it, and `clip-path: inset(50%)`, draw nothing of the box over
-  any rule that draws it - no background, shadow or minimum size - and leave it there for a screen
-  reader. Any other clip is dropped with a warning, as everywhere.
+  any rule that draws it - no background, shadow, border, outline or minimum size - and leave it
+  there for a screen reader. Any other clip is dropped with a warning, as everywhere.
 - `overflow-x` or `overflow-y` of `hidden` or `clip` clips both axes, since a view clips on both or
-  on neither. `overflow-y: auto` or `scroll` is `overflow: scroll`. Any other value on one axis is
-  no clip.
+  on neither. `overflow-y: auto` or `scroll` is `overflow: scroll`, which also clips both axes: the
+  box scrolls only where the element is a `<scroll-view>`, and a plain view does not. Any other
+  value on one axis is no clip.
 - `:checked` and `:indeterminate` match an element whose prop of that name is set, and `:enabled`
   one with no `disabled` prop.
 
