@@ -68,6 +68,9 @@ describe('cloneNode', () => {
     assert.equal(screen.getAllByText('One').length, 2, 'and is drawn where it is put');
     deep.remove();
     assert.equal(deep.isConnected, false);
+    // The argument is a WebIDL boolean, so any truthy value copies what it holds.
+    assert.equal(card.cloneNode(1).children.length, 2);
+    assert.equal(card.cloneNode(0).children.length, 0);
   });
 
   it('copies a text, a comment and a fragment as what each is', async () => {

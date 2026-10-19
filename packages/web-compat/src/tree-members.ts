@@ -295,8 +295,8 @@ export const treeMembers: PropertyDescriptorMap = {
     insertAdjacent(this, args[0], engineOf(this).createText(String(args[1])));
   }),
 
-  cloneNode: method(function (deep?: boolean) {
-    return cloned(engineOf(this), this, deep === true);
+  cloneNode: method(function (deep?: unknown) {
+    return cloned(engineOf(this), this, Boolean(deep));
   }),
   // The document, where the tree a node is in is the page's, and the top of it where it is not.
   getRootNode: method(function () {
