@@ -23,16 +23,33 @@ interface Panel {
   filled: { set(v: boolean): void };
 }
 
-/** Longer than the frame the platform asks for, which in Node is a 16ms timer. */
-const frame = () => new Promise((resolve) => setTimeout(resolve, 20));
+/**
+ * The frames the platform asks for, drawn only when a test says so. Left to Node's 16ms timer, a
+ * frame on a busy machine lands before the next pass and draws the view the first test needs
+ * undrawn, and the timer a test waits on races the one the platform asked for.
+ */
+const scope = globalThis as { requestAnimationFrame?: unknown };
+const real = scope.requestAnimationFrame;
+let frames: FrameRequestCallback[] = [];
+/** Draws the frames asked for so far, as one frame. */
+const frame = () => {
+  const drawn = frames;
+  frames = [];
+  for (const callback of drawn) callback(0);
+};
 /** A turn of its own, before any frame is drawn. */
 const task = () => new Promise((resolve) => setTimeout(resolve, 0));
 
 let mod: Record<string, unknown>;
 before(async () => {
   mod = await compileFixture('fixtures/first-paint.ts');
+  scope.requestAnimationFrame = (callback: FrameRequestCallback) => frames.push(callback);
 });
-after(cleanup);
+after(() => {
+  cleanup();
+  if (real === undefined) delete scope.requestAnimationFrame;
+  else scope.requestAnimationFrame = real;
+});
 
 async function boot() {
   let time = 1000;
@@ -45,7 +62,7 @@ async function boot() {
       'backgroundColor'
     ];
   // The screen the panel is added to has been drawn.
-  await frame();
+  frame();
   return {
     engine,
     instance,
@@ -73,6 +90,7 @@ describe('a transition before the first frame', () => {
     } finally {
       s.tick(1e9);
       cleanup();
+      frames = [];
     }
   });
 
@@ -81,7 +99,7 @@ describe('a transition before the first frame', () => {
     try {
       s.instance.shown.set(true);
       await task();
-      await frame();
+      frame();
       s.instance.filled.set(true);
       await settle();
       assert.equal(s.engine.animating, true);
@@ -90,6 +108,7 @@ describe('a transition before the first frame', () => {
     } finally {
       s.tick(1e9);
       cleanup();
+      frames = [];
     }
   });
 
@@ -98,7 +117,7 @@ describe('a transition before the first frame', () => {
     try {
       s.instance.shown.set(true);
       await task();
-      await frame();
+      frame();
       s.instance.filled.set(true);
       await settle();
       s.tick(200);
@@ -111,6 +130,7 @@ describe('a transition before the first frame', () => {
     } finally {
       s.tick(1e9);
       cleanup();
+      frames = [];
     }
   });
 });
