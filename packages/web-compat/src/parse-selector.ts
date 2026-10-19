@@ -1,5 +1,6 @@
 import { domError } from './dom-error.ts';
-import { tokenize, type Token } from './css-tokens.ts';
+import { tokenizeWritten, type Token } from './css-tokens.ts';
+import { serializeTokens } from './css-value.ts';
 
 /**
  * A selector list read as Selectors Level 4 has it (https://drafts.csswg.org/selectors-4/), over
@@ -11,8 +12,7 @@ export type Combinator = ' ' | '>' | '+' | '~';
 
 /**
  * The namespace a name is asked in: `undefined` where none is written (any, for an element; none,
- * for an attribute), `'*'` for any, or `null` for none (`|a`). A script's selector has no prefix
- * declared, so any other is a `SyntaxError`.
+ * for an attribute), `'*'` for any, `null` for none (`|a`), or the namespace a prefix stands for.
  */
 export type Namespace = string | null | undefined;
 
@@ -37,13 +37,31 @@ export type Simple =
       readonly flag?: 'i' | 's';
     }
   | { readonly kind: 'pseudo-class'; readonly name: string; readonly argument?: Argument }
-  | { readonly kind: 'pseudo-element'; readonly name: string };
+  | {
+      readonly kind: 'pseudo-element';
+      readonly name: string;
+      /** A functional one's argument, as it is written back: `::part(foo bar)`. */
+      readonly argument?: string;
+    };
 
 /** What a functional pseudo-class is given. */
 export type Argument =
-  | { readonly kind: 'selectors'; readonly list: readonly Complex[] }
+  | {
+      readonly kind: 'selectors';
+      readonly list: readonly Complex[];
+      /**
+       * A forgiving list's parts in order, those it could not read as their text: they match
+       * nothing, and are written back as they were.
+       */
+      readonly parts?: readonly (Complex | string)[];
+    }
   | { readonly kind: 'nth'; readonly nth: Nth }
-  | { readonly kind: 'words'; readonly words: readonly string[] }
+  | {
+      readonly kind: 'words';
+      readonly words: readonly string[];
+      /** The words as they are written back, a string still a string. */
+      readonly written: string;
+    }
   | { readonly kind: 'numbers'; readonly numbers: readonly number[] };
 
 /** A run of simple selectors with no combinator between: `a.b[c]:d`. */
@@ -137,6 +155,14 @@ function block(tokens: readonly Token[], from: number): number {
   return tokens.length;
 }
 
+/** Where a selector is read: the namespace prefixes it may use. */
+export interface ParseContext {
+  /** By prefix, and `''` for the default namespace. None but `*` without one. */
+  readonly namespaces?: ReadonlyMap<string, string>;
+  /** The text a run of the tokens was written as, which a part read as none is written back as. */
+  readonly written?: (from: number, to: number) => string;
+}
+
 /**
  * Where tokens are read: at the top, where a pseudo-element is; in a `:has()`, where another is
  * not; in `:host()`, where only a compound is; or after a pseudo-element, where only a
@@ -163,13 +189,21 @@ class Parser {
   private i: number;
   private readonly tokens: readonly Token[];
   private readonly end: number;
+  private readonly context: ParseContext;
   /** Where the tokens are, and so what is read in them. */
   private readonly nesting: Nesting;
 
-  constructor(tokens: readonly Token[], from: number, end: number, nesting: Nesting) {
+  constructor(
+    tokens: readonly Token[],
+    from: number,
+    end: number,
+    context: ParseContext,
+    nesting: Nesting,
+  ) {
     this.tokens = tokens;
     this.i = from;
     this.end = end;
+    this.context = context;
     this.nesting = nesting;
   }
 
@@ -208,8 +242,9 @@ class Parser {
   }
 
   /** Each part of a list on its own, those that cannot be read left out: `:is()`, `:where()`. */
-  forgiving(): Complex[] {
+  forgiving(): { list: Complex[]; parts: (Complex | string)[] } {
     const out: Complex[] = [];
+    const parts: (Complex | string)[] = [];
     let from = this.i;
     for (let i = this.i; i <= this.end; i++) {
       const token = this.tokens[i];
@@ -221,16 +256,17 @@ class Parser {
         continue;
       }
       const complex = this.forgivenPart(from, i);
-      if (complex) out.push(complex);
+      if (typeof complex !== 'string') out.push(complex);
+      parts.push(complex);
       from = i + 1;
     }
     this.i = this.end;
-    return out;
+    return { list: out, parts };
   }
 
-  /** One part of a forgiving list, or nothing where it cannot be read. */
-  private forgivenPart(from: number, to: number): Complex | undefined {
-    const part = new Parser(this.tokens, from, to, this.nesting);
+  /** One part of a forgiving list, or the text it was written as where it cannot be read. */
+  private forgivenPart(from: number, to: number): Complex | string {
+    const part = new Parser(this.tokens, from, to, this.context, this.nesting);
     try {
       part.spaces();
       const complex = part.complex();
@@ -238,7 +274,7 @@ class Parser {
     } catch (error) {
       if (!(error instanceof Unreadable)) throw error;
     }
-    return undefined;
+    return this.context.written?.(from, to).trim() ?? serializeTokens(this.tokens.slice(from, to));
   }
 
   complex(relative = false): Complex {
@@ -318,12 +354,16 @@ class Parser {
       return { kind: 'type', namespace: this.namespace(written), name: local };
     }
     this.i++;
-    return { kind: 'type', namespace: undefined, name: written };
+    return { kind: 'type', namespace: this.defaultNamespace(), name: written };
   }
 
-  /** Any namespace for `*`: no other prefix is declared. */
   private namespace(prefix: string): Namespace {
-    return prefix === '*' ? '*' : fail();
+    if (prefix === '*') return '*';
+    return this.context.namespaces?.get(prefix) ?? fail();
+  }
+
+  private defaultNamespace(): Namespace {
+    return this.context.namespaces?.get('');
   }
 
   private simple(afterElement: string | undefined): Simple | undefined {
@@ -368,7 +408,7 @@ class Parser {
 
   private attribute(): Simple {
     const close = this.closing();
-    const inside = new Parser(this.tokens, this.i + 1, close, this.nesting);
+    const inside = new Parser(this.tokens, this.i + 1, close, this.context, this.nesting);
     this.i = close + 1;
     return inside.attributeBody();
   }
@@ -468,19 +508,20 @@ class Parser {
       return { kind: 'pseudo-element', name };
     }
     const close = this.closing();
+    const argument = serializeTokens(this.tokens.slice(this.i + 1, close));
     // What `::slotted()` is of is one compound.
     if (name === 'slotted') {
       const nesting = { top: false, has: false, compound: true, pseudo: false };
-      new Parser(this.tokens, this.i + 1, close, nesting).read('compound');
+      new Parser(this.tokens, this.i + 1, close, this.context, nesting).read('compound');
     }
     this.i = close + 1;
-    return { kind: 'pseudo-element', name };
+    return { kind: 'pseudo-element', name, argument };
   }
 
   /** The argument of a functional pseudo-class, the function token at `this.i`. */
   private argument(takes: Takes | TakesWords, afterElement?: string): Argument {
     const close = this.closing();
-    const inside = new Parser(this.tokens, this.i + 1, close, {
+    const inside = new Parser(this.tokens, this.i + 1, close, this.context, {
       top: false,
       has: takes === 'relative' || this.nesting.has,
       compound: takes === 'compound' || (this.nesting.compound && takes !== 'relative'),
@@ -494,7 +535,7 @@ class Parser {
     this.spaces();
     switch (takes) {
       case 'forgiving':
-        return { kind: 'selectors', list: this.forgiving() };
+        return { kind: 'selectors', ...this.forgiving() };
       case 'complex':
         return { kind: 'selectors', list: this.list(() => this.complex()) };
       case 'relative':
@@ -534,14 +575,19 @@ class Parser {
       this.i++;
       return (token as { value: string }).value;
     };
+    const from = this.i;
     const words = takes === 'ident' ? [one()] : this.list(one);
     if (!this.done()) fail();
-    return { kind: 'words', words };
+    return { kind: 'words', words, written: serializeTokens(this.tokens.slice(from, this.end)) };
   }
 
   /** `an+b`, read from its tokens as CSS Syntax says (https://drafts.csswg.org/css-syntax-3/#anb-microsyntax). */
   private nth(of: boolean): Nth {
-    const { a, b } = readAnB(this);
+    const read = readAnB(this);
+    // Each a whole number of 32 bits at most, as a browser keeps them.
+    const [a, b] = [read.a, read.b].map((each) =>
+      Math.max(-(2 ** 31), Math.min(2 ** 31 - 1, each)),
+    );
     const spaced = this.spaces();
     if (this.i >= this.end) return { a, b };
     const token = this.peek();
@@ -668,10 +714,10 @@ function readN(at: Parser, token: Token | undefined): { a: number; b: number } {
 }
 
 /** A selector list read, or a `SyntaxError` where it is not one. */
-export function parseSelectorList(text: string): Complex[] {
-  const tokens = tokenize(text);
+export function parseSelectorList(text: string, context: ParseContext = {}): Complex[] {
+  const { tokens, written } = tokenizeWritten(text);
   try {
-    const parser = new Parser(tokens, 0, tokens.length, TOP);
+    const parser = new Parser(tokens, 0, tokens.length, { ...context, written }, TOP);
     return parser.list(() => parser.complex());
   } catch (error) {
     if (error instanceof Unreadable) throw invalid(text);

@@ -236,6 +236,23 @@ describe('hidden', () => {
   });
 });
 
+describe('sheet', () => {
+  it('answers sheet of a style in the page with its rules, and none of a link', async () => {
+    const { document, make } = await page();
+    const style = make('style');
+    assert.equal(style.sheet, null, 'none out of the page');
+    style.textContent = '.a { color: red }';
+    document.body.appendChild(style);
+    assert.equal(style.sheet.cssRules.length, 1);
+    assert.equal(style.sheet.rules, style.sheet.cssRules);
+    assert.equal(style.sheet.ownerNode, style);
+    style.remove();
+    assert.equal(style.sheet, null, 'and none once it has left');
+    assert.equal(make('link', { rel: 'stylesheet' }).sheet, null);
+    assert.equal(make('div').sheet, undefined, 'and no other element has one');
+  });
+});
+
 describe('dataset', () => {
   it('reads, sets, deletes and lists the data attributes', async () => {
     const { make } = await page();

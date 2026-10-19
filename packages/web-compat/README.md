@@ -24,19 +24,28 @@ Experimental and partial. It has:
 - Selectors: `querySelector` and `querySelectorAll` on an element, a fragment and a document,
   `matches`, `closest`, read as Selectors Level 4 has them, with a `SyntaxError` for one that
   cannot be read. A state nothing here reads, `:hover` or `:checked`, matches nothing.
+- Stylesheets: `document.styleSheets`, a `<style>`'s `sheet`, `CSSStyleSheet` (made by a script
+  too, with `replace`, `replaceSync` and `adoptedStyleSheets`), its rules with `insertRule` and
+  `deleteRule`, and the rest of the CSSOM's rule classes. A `<style>` a library makes while the
+  app runs is read and applied, for the layout properties, colours, custom properties and
+  transitions it declares, `@media` by the window's width, and `@supports`.
+- `element.style` as a `CSSStyleDeclaration`: `cssText`, `setProperty`, `getPropertyValue`,
+  `removeProperty` and each property by name, shorthands as their longhands, and the `style`
+  attribute as its text. A style a library binds is set as what a native view reads.
+- `getComputedStyle`, a `hidden` element drawn as `display: none`, and `CSS.escape` and
+  `CSS.supports`.
 - `MutationObserver`, with `childList`, `attributes`, `characterData`, `subtree` and old values.
 - A `document` that creates engine nodes and fragments, with a `body` that draws over the screen
   for overlays, a doctype, `createElementNS`, `createTreeWalker` and `createNodeIterator`, and a
   `document.implementation` that makes HTML and XML documents that are never drawn.
 - The basic `window` globals: its listeners, `Event`, `CustomEvent`, `HTMLElement`, `Node`,
   `Text`, `Comment`, `DocumentFragment`, `NodeList`, `HTMLCollection`, `DOMParser`,
-  `XMLSerializer`, `Document`, `Attr`, the window's size, and an element with an id as a global
-  by it.
+  `XMLSerializer`, `Document`, `Attr`, `CSS`, `MediaList`, the window's size, and an element
+  with an id as a global by it.
 - A `<button>` and an `<a>` with their roles, and a table's and a form's elements as views.
 - A `click` listener that hears a press.
 
-`element.style`, computed style, geometry, the other observers, forms and the rest of
-the DOM are not part of it yet.
+Geometry, the other observers, forms and the rest of the DOM are not part of it yet.
 
 Nothing in an app changes until it adds the provider, and everything the provider adds is taken
 away again when the app is destroyed.

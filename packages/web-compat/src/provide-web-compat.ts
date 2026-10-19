@@ -19,6 +19,7 @@ import { htmlMethods } from './html-methods.ts';
 import { markupMembers } from './markup-members.ts';
 import { nodeMembers, setAttributesWith, type CoreNode } from './node-members.ts';
 import { relationMembers } from './node-relations.ts';
+import { watchStyles } from './runtime-style.ts';
 import { selectorMembers } from './selector-members.ts';
 import { treeMembers } from './tree-members.ts';
 import { installWindow, windowOf } from './window.ts';
@@ -111,7 +112,9 @@ export function provideWebCompat(): EnvironmentProviders {
         inject(RendererFactory2).createRenderer(null, null),
       );
       const leaveWindow = windowOf(engine);
+      const unwatchStyles = watchStyles(engine);
       inject(DestroyRef).onDestroy(() => {
+        unwatchStyles();
         forgetRenderer();
         leaveWindow();
         // In whatever order the apps go: the newest still up, or what was there before any.

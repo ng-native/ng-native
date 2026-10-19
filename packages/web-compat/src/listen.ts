@@ -4,6 +4,8 @@ import { documentOf, listenAnywhere, type CompatDocument } from './document.ts';
 import { giveRole } from './elements.ts';
 import { listen, type Heard } from './events.ts';
 import { buildAs, setMarkup } from './html.ts';
+import { inlineStyle } from './inline-style.ts';
+import { styleMade } from './runtime-style.ts';
 import { together } from './mutation-observer.ts';
 
 /** Elements whose own component already turns a touch into a press. */
@@ -43,9 +45,11 @@ const SETTERS: Readonly<
     together(node, () => setMarkup(node, value, engine));
     return true;
   },
-  // HTML's `hidden` bound to `false` is no attribute: the element has none to read back.
+  // HTML's `hidden` bound to `false` is no attribute: the element has none to read back. A
+  // hidden element is drawn as `display: none`: see `hide`.
   hidden(node, value, engine) {
     engine.setProp(node, 'hidden', value === false ? null : value);
+    hide(node, on(value) && value !== 'until-found', engine);
     return true;
   },
   // An HTML `id` is the view's `nativeID`, which is where a lookup reads it.
@@ -69,10 +73,16 @@ export const webListen: RendererExtension = {
   // A button and a link have their roles: see `elements.ts`.
   created(node, engine) {
     giveRole(node, engine);
+    // A stylesheet is read, and has no box of its own: see `runtime-style.ts`.
+    if (node.tag === 'style' && documentOf(engine)) styleMade(node, engine);
   },
   set(node, name, value, engine) {
     const own = documentOf(engine) ? SETTERS[name] : undefined;
     return own ? own(node, value, engine) : false;
+  },
+  // A style a library binds is set as what a native view reads: see `inline-style.ts`.
+  style(node, name, value, engine) {
+    return documentOf(engine) ? inlineStyle(node, name, value) : undefined;
   },
   // Kept as `addEventListener` keeps a listener, so what a script sends reaches a template's too.
   listen(target, eventName, callback, engine) {
@@ -144,6 +154,33 @@ function listenOn(
 
 /** A boolean HTML attribute or property: present, and not `false`. */
 const on = (value: unknown): boolean => value != null && value !== false && value !== 'false';
+
+/** The `display` each hidden element had of its own before it was hidden, as `{ display }`. */
+const shownAs = new WeakMap<EngineNode, { readonly display: unknown }>();
+
+/**
+ * HTML's `hidden`: the element takes no space and draws nothing, whatever a stylesheet says of
+ * its display, which is what a browser's own sheet and every reset make of it. Shown again, it
+ * has the display of its own it had, or none.
+ *
+ * ponytail: `until-found` keeps its box, as a browser has it, and is drawn too, where a browser
+ * skips what is in it. A collapsible gives it no height and clips it while it is closed, and
+ * measures it as it opens. And a display a binding sets while it is hidden shows it.
+ */
+function hide(node: EngineNode, gone: boolean, engine: Engine): void {
+  const had = shownAs.get(node);
+  if (gone === (had !== undefined)) return;
+  const style = { ...(node.props['style'] as Record<string, unknown> | undefined) };
+  if (gone) {
+    shownAs.set(node, { display: style['display'] });
+    style['display'] = 'none';
+  } else {
+    shownAs.delete(node);
+    if (had!.display === undefined) delete style['display'];
+    else style['display'] = had!.display;
+  }
+  engine.setProp(node, 'style', style);
+}
 
 /** Whether an element is disabled, which takes no press: a browser sends it no click. */
 const disabled = (node: EngineNode): boolean => on(node.props['disabled']);

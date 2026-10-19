@@ -302,6 +302,187 @@ describe('@ng-native/web-compat nodes', () => {
     await userEvent.press(screen.getByTestId('card'));
     assert.equal(heard, 1);
   });
+
+  it('sets inline styles and custom properties', async () => {
+    const { card } = await mount();
+    assert.equal(card.ownerDocument.createTextNode('a').style, undefined, 'a text has none');
+    card.style.opacity = '0.5';
+    card.style.setProperty('margin-top', '4px');
+    // Read back as written, which is text in a browser too; the view is given the number.
+    assert.equal(card.style.opacity, '0.5');
+    assert.equal(card.style.getPropertyValue('margin-top'), '4px');
+    await settle();
+    const view = screen.getByTestId('card');
+    assert.equal(view.props['opacity'], 0.5);
+    assert.equal(view.props['marginTop'], 4);
+    // A custom property is the element's token, in scope for what it holds, until it is taken away.
+    card.style.setProperty('--gap', '6px');
+    assert.equal(card.style.getPropertyValue('--gap'), '6px');
+    assert.deepEqual(card.customProperties['--gap'], { length: 6 });
+    card.style.removeProperty('--gap');
+    assert.equal(card.customProperties?.['--gap'], undefined);
+    // A copy has them too, as it has the attribute.
+    const copy = card.cloneNode();
+    assert.equal(copy.style.getPropertyValue('margin-top'), '4px');
+    assert.equal(copy.getAttribute('style'), card.getAttribute('style'));
+    card.style.removeProperty('margin-top');
+    assert.equal(card.style.marginTop, '');
+    assert.equal(copy.style.marginTop, '4px', 'its own, apart from the one it is a copy of');
+  });
+
+  it('gives each side its own part of a shorthand written on an element', async () => {
+    // A stylesheet's rule compiles to a value a side, and a native view reads a side before
+    // the shorthand: `border-radius: 3rem` bound over a rule's corners was the rule's corners.
+    const { card } = await mount();
+    card.style.setProperty('border-radius', '3rem');
+    card.style.setProperty('padding', '1rem 1rem 1rem 1.5rem');
+    card.style.setProperty('margin', '4px 8px');
+    card.style.setProperty('border-width', '1px 2px 3px');
+    card.style.setProperty('border-color', 'red rgb(0, 0, 255)');
+    card.style.setProperty('gap', '4px 1rem');
+    await settle();
+    const view = screen.getByTestId('card');
+    const sides = (name: string, end = '') =>
+      ['Top', 'Right', 'Bottom', 'Left'].map((side) => view.props[`${name}${side}${end}`]);
+    assert.deepEqual(
+      ['TopLeft', 'TopRight', 'BottomRight', 'BottomLeft'].map(
+        (corner) => view.props[`border${corner}Radius`],
+      ),
+      [48, 48, 48, 48],
+    );
+    assert.deepEqual(sides('padding'), [16, 16, 16, 24]);
+    assert.deepEqual(sides('margin'), [4, 8, 4, 8]);
+    assert.deepEqual(sides('border', 'Width'), [1, 2, 3, 2]);
+    assert.deepEqual(sides('border', 'Color'), ['red', 'rgb(0, 0, 255)', 'red', 'rgb(0, 0, 255)']);
+    assert.deepEqual([view.props['rowGap'], view.props['columnGap']], [4, 16]);
+    // Nothing is left of the shorthand itself, which a view would read as text.
+    for (const whole of [
+      'padding',
+      'margin',
+      'borderRadius',
+      'borderWidth',
+      'borderColor',
+      'gap',
+    ]) {
+      assert.equal(view.props[whole] ?? null, null, whole);
+    }
+    // Read back as it was written, and taken away side by side.
+    assert.equal(card.style.getPropertyValue('padding'), '1rem 1rem 1rem 1.5rem');
+    card.style.removeProperty('padding');
+    card.style.removeProperty('border-radius');
+    await settle();
+    const after = screen.getByTestId('card').props;
+    assert.deepEqual(
+      ['Top', 'Right', 'Bottom', 'Left'].map((side) => after[`padding${side}`] ?? null),
+      [null, null, null, null],
+    );
+    assert.equal(after['borderTopLeftRadius'] ?? null, null);
+    assert.equal(after['marginTop'], 4, 'what was not taken away is as it was');
+  });
+
+  it('reads a border written whole on an element, and a side of one', async () => {
+    const { card } = await mount();
+    card.style.setProperty('border', '1px solid rgba(75, 175, 80, 0.3)');
+    await settle();
+    const sides = (end: string) =>
+      ['Top', 'Right', 'Bottom', 'Left'].map(
+        (side) => screen.getByTestId('card').props[`border${side}${end}`] ?? null,
+      );
+    assert.deepEqual(sides('Width'), [1, 1, 1, 1]);
+    assert.deepEqual(sides('Color'), Array(4).fill('rgba(75, 175, 80, 0.3)'));
+    assert.equal(screen.getByTestId('card').props['borderStyle'], 'solid');
+    assert.equal(screen.getByTestId('card').props['border'] ?? null, null);
+    // One side over it, in any order of its parts, and one taken away with `none`.
+    card.style.setProperty('border-bottom', 'dashed red 0.25rem');
+    card.style.setProperty('border-left', 'none');
+    await settle();
+    assert.deepEqual(sides('Width'), [1, 1, 4, 0]);
+    assert.equal(sides('Color')[2], 'red');
+    // Taken away whole, its sides go with it, as they are the same properties in a browser.
+    card.style.removeProperty('border');
+    await settle();
+    assert.deepEqual(sides('Width'), [null, null, null, null]);
+  });
+
+  it('sets a flex written with all three of its parts as each part', async () => {
+    // A panel that shares a row by its size binds `flex: 50 1 0`. A view's `flex` is one number.
+    const { card } = await mount();
+    card.style.flex = '50 1 0';
+    await settle();
+    const props = () => screen.getByTestId('card').props;
+    assert.deepEqual(
+      [props()['flex'], props()['flexGrow'], props()['flexShrink'], props()['flexBasis']],
+      [undefined, 50, 1, 0],
+    );
+    card.style.flex = 'none';
+    await settle();
+    assert.deepEqual(
+      [props()['flexGrow'], props()['flexShrink'], props()['flexBasis']],
+      [0, 0, 'auto'],
+    );
+    card.style.flex = '2';
+    await settle();
+    assert.equal(props()['flex'], 2, 'and one number is the flex a view reads');
+    assert.equal(props()['flexGrow'] ?? undefined, undefined);
+  });
+
+  it('reads a transform back as the matrix it comes to, as a browser computes one', async () => {
+    // A drawer dragged down reads how far from `matrix(1, 0, 0, 1, 0, 150)`, by its sixth number.
+    const { card } = await mount();
+    const computed = () => window.getComputedStyle(card as never).transform;
+    assert.equal(computed(), 'none');
+    card.style.transform = 'translateY(150px)';
+    assert.equal(computed(), 'matrix(1, 0, 0, 1, 0, 150)');
+    card.style.transform = 'translate(10px, -4px) scale(2)';
+    assert.equal(computed(), 'matrix(2, 0, 0, 2, 10, -4)');
+    card.style.transform = 'scale(2) translateX(5px)';
+    assert.equal(computed(), 'matrix(2, 0, 0, 2, 10, 0)');
+    // One this does not work out is left as it was written.
+    card.style.transform = 'rotate(45deg)';
+    assert.equal(computed(), 'rotate(45deg)');
+    card.style.transform = '';
+    assert.equal(computed(), 'none');
+  });
+
+  it('appends what it makes, and reads its style back once it is committed and seen', async () => {
+    const { card } = await mount();
+    const ripple = document.createElement('div') as unknown as typeof card & { bornIn?: number };
+    ripple.setAttribute('testID', 'ripple');
+    ripple.style.width = '40px';
+    ripple.style.transitionDuration = '225ms';
+    card.append(ripple as never);
+    const computed = window.getComputedStyle(ripple as never);
+    // Committed by the read, as a browser lays out for one: nothing waited for a render.
+    assert.equal(screen.getByTestId('ripple').props['width'], 40);
+    assert.equal(computed.transitionDuration, '225ms');
+    assert.equal(ripple.bornIn, undefined);
+    ripple.style.opacity = '0';
+    ripple.style.transitionDelay = '0.1s';
+    await settle();
+    const style = (ripple as unknown as { props: { style: Record<string, unknown> } }).props.style;
+    assert.deepEqual(
+      [style['opacity'], style['$transitionDuration'], style['$transitionDelay']],
+      [0, 225, 100],
+    );
+  });
+
+  it('sets a background written whole as the colour or the gradient it is', async () => {
+    // A swatch binds `background` to a colour, and a track to a gradient it worked out.
+    const { card } = await mount();
+    const props = () => screen.getByTestId('card').props;
+    card.style.background = '#f01e2b';
+    await settle();
+    assert.equal(props()['backgroundColor'], '#f01e2b');
+    card.style.background = 'linear-gradient(to right, rgb(255, 0, 0), rgb(0, 0, 255))';
+    await settle();
+    const [image] = props()['experimental_backgroundImage'] as { type: string }[];
+    assert.equal(image!.type, 'linear-gradient');
+    assert.equal(props()['backgroundColor'] ?? null, null);
+    card.style.background = 'rgb(0, 128, 0)';
+    await settle();
+    assert.equal(props()['experimental_backgroundImage'] ?? null, null);
+    assert.equal(props()['backgroundColor'], 'rgb(0, 128, 0)');
+  });
 });
 
 describe('@ng-native/web-compat document and window', () => {
@@ -1018,5 +1199,305 @@ describe('@ng-native/web-compat events a script dispatches', () => {
       target.Event = Native;
       target.CustomEvent = NativeCustom;
     }
+  });
+});
+
+@Component({
+  selector: 'x-panels',
+  template: `
+    <div testID="shown" [hidden]="false" style="opacity: 0.5">One</div>
+    <div testID="gone" [hidden]="gone()" style="opacity: 0.5">Two</div>
+    <div testID="static" hidden>Three</div>
+    <div testID="found" hidden="until-found">Four</div>
+    <div testID="plain">Five</div>
+    <span testID="label" [textContent]="label()"></span>
+  `,
+})
+class Panels {
+  readonly gone = signal(true);
+  readonly label = signal<string | null>('Apple');
+}
+
+describe('@ng-native/web-compat hidden', () => {
+  it('takes a hidden element out of the layout, and puts it back', async () => {
+    const app = await render(Panels, { providers: [provideWebCompat()] });
+    const hidden = { includeHiddenElements: true };
+    const block = screen.getByTestId('plain').props['display'];
+    assert.equal(screen.getByTestId('shown').props['display'], block);
+    // Not displayed is no view: not there for anyone to find, hidden elements and all.
+    assert.equal(screen.queryByTestId('gone', hidden), null);
+    assert.equal(screen.queryByTestId('static', hidden), null);
+    app.instance.gone.set(false);
+    await settle();
+    assert.equal(screen.getByTestId('gone').props['display'], block);
+    assert.equal(screen.getByTestId('gone').props['opacity'], 0.5, 'with its own style');
+  });
+
+  it('gives a hidden element back the display of its own it had, and none where it had none', async () => {
+    const { card } = await mount();
+    const shown = () => screen.queryByTestId('card');
+    card.style.display = 'flex';
+    card.hidden = true;
+    await settle();
+    assert.equal(shown(), null);
+    card.hidden = false;
+    await settle();
+    assert.equal(shown()?.props['display'], 'flex');
+    card.style.removeProperty('display');
+    card.setAttribute('hidden', '');
+    await settle();
+    assert.equal(shown(), null);
+    card.removeAttribute('hidden');
+    await settle();
+    assert.equal(shown()?.props['display'] ?? null, null);
+  });
+
+  it('keeps one hidden until found in the layout, where a library measures it', async () => {
+    // A collapsible's content: no height and clipped by its own styles while it is closed,
+    // and measured as it opens. A browser keeps its box, and only skips drawing what is in it.
+    await render(Panels, { providers: [provideWebCompat()] });
+    const found = (globalThis as unknown as { document: Dom }).document.querySelector(
+      '[testID="found"]',
+    );
+    // The display any div has, which a hidden one is given back.
+    const block = screen.getByTestId('plain').props['display'];
+    assert.equal(screen.getByTestId('found').props['display'], block);
+    found.removeAttribute('hidden');
+    await settle();
+    assert.equal(screen.getByTestId('found').props['display'], block);
+    found.setAttribute('hidden', '');
+    await settle();
+    assert.equal(screen.queryByTestId('found', { includeHiddenElements: true }), null);
+  });
+
+  it('draws the text bound to textContent, and follows it', async () => {
+    const app = await render(Panels, { providers: [provideWebCompat()] });
+    assert.equal(screen.getByTestId('label').props['textContent'], undefined);
+    assert.ok(screen.getByText('Apple'));
+    app.instance.label.set('Banana');
+    await settle();
+    assert.ok(screen.getByText('Banana'));
+    assert.equal(screen.queryByText('Apple'), null);
+    app.instance.label.set(null);
+    await settle();
+    assert.equal(screen.queryByText('Banana'), null);
+  });
+});
+
+@Component({
+  selector: 'x-insets',
+  template: `
+    <div
+      testID="thumb"
+      [style.inset-inline-start]="start()"
+      [style.inset-block]="block()"
+      [style.visibility]="shown() ? null : 'hidden'"
+      [style.opacity]="0.5"
+      style="inset-inline-end: 12px"
+    ></div>
+  `,
+})
+class Insets {
+  readonly start = signal<string | null>('calc(30% + 4.5px)');
+  readonly block = signal<string | null>('0px 70%');
+  readonly shown = signal(true);
+}
+
+@Component({
+  selector: 'x-units',
+  template: `<div testID="units" [style]="styles"></div>`,
+})
+class Units {
+  readonly styles = {
+    letterSpacing: '-0.5em',
+    lineHeight: 1,
+    boxShadow: 'none',
+    width: '10ch',
+    marginTop: '1.5rem',
+    height: '50%',
+    fontSize: '14px',
+    opacity: 0.5,
+    color: 'transparent',
+  };
+}
+
+@Component({
+  selector: 'x-origin',
+  template: `<div testID="origin" [style.transform-origin]="origin()"></div>`,
+})
+class Origin {
+  readonly origin = signal('left top');
+}
+
+describe('@ng-native/web-compat inline styles', () => {
+  const thumb = () => screen.getByTestId('thumb', { includeHiddenElements: true }).props;
+  const none = (key: string) => assert.equal(thumb()[key] ?? null, null, key);
+
+  it('sets a logical inset as the side the view reads, and a shorthand as both', async () => {
+    await render(Insets, { providers: [provideWebCompat()] });
+    assert.equal(thumb()['top'], 0);
+    assert.equal(thumb()['bottom'], '70%');
+    assert.equal(thumb()['end'], 12, 'from a style attribute too');
+    for (const key of ['insetInlineStart', 'insetBlock', 'insetInlineEnd']) none(key);
+  });
+
+  it('works out a calc() of percentages and lengths a library binds, for a size and an inset', async () => {
+    // A grid list's tile: its width and where it starts, each a sum written out in full.
+    const app = await render(Insets, { providers: [provideWebCompat()] });
+    const node = (globalThis as unknown as { document: Dom }).document.querySelector(
+      '[testID="thumb"]',
+    );
+    node.style.width = 'calc(((25% - (8px * 0.75)) * 3) + (2 * 8px))';
+    node.style.height = 'calc((80px * 2) + 8px)';
+    app.instance.start.set('calc((25% - 6px + 8px) * 3)');
+    await settle();
+    // The sum of the two is the engine's to finish, from the box it is a share of.
+    assert.equal(node.props.style.width, 'calc(75% + -2px)');
+    assert.equal(thumb()['height'], 168);
+    assert.equal(thumb()['start'], '75%');
+    assert.equal(thumb()['marginStart'], 6);
+  });
+
+  it('sets a percentage and a length as an inset and a margin, and takes both away', async () => {
+    const app = await render(Insets, { providers: [provideWebCompat()] });
+    assert.equal(thumb()['start'], '30%');
+    assert.equal(thumb()['marginStart'], 4.5);
+    app.instance.start.set('calc(50% - 2px)');
+    await settle();
+    assert.equal(thumb()['start'], '50%');
+    assert.equal(thumb()['marginStart'], -2);
+    // A library's arithmetic, written out: a negative length added.
+    app.instance.start.set('calc(70% + -3.25px)');
+    await settle();
+    assert.equal(thumb()['start'], '70%');
+    assert.equal(thumb()['marginStart'], -3.25);
+    app.instance.start.set('40%');
+    await settle();
+    assert.equal(thumb()['start'], '40%');
+    none('marginStart');
+    app.instance.start.set(null);
+    app.instance.block.set(null);
+    await settle();
+    for (const key of ['start', 'top', 'bottom']) none(key);
+  });
+
+  it('hides an element that keeps its space, and shows it again', async () => {
+    const app = await render(Insets, { providers: [provideWebCompat()] });
+    app.instance.shown.set(false);
+    await settle();
+    assert.equal(thumb()['opacity'], 0);
+    none('visibility');
+    // And takes no touch, over an opacity of its own: Highcharts hides a select it lays over its
+    // range buttons with both, and the select took their taps.
+    assert.equal(thumb()['pointerEvents'], 'none');
+    app.instance.shown.set(true);
+    await settle();
+    assert.equal(thumb()['opacity'], 0.5);
+    assert.notEqual(thumb()['pointerEvents'], 'none');
+  });
+
+  it('sets no value a native view cannot read: a length in a unit it has none of', async () => {
+    // Android throws on a string where it reads a number, which takes the whole screen down.
+    await render(Units, { providers: [provideWebCompat()] });
+    const props = screen.getByTestId('units').props;
+    for (const key of ['letterSpacing', 'lineHeight', 'boxShadow', 'width']) {
+      assert.equal(props[key] ?? null, null, key);
+    }
+    assert.equal(props['marginTop'], 24, 'a rem is sixteen points');
+    assert.equal(props['height'], '50%', 'a percentage is one it reads');
+    assert.equal(props['fontSize'], 14);
+    assert.equal(props['opacity'], 0.5);
+    assert.equal(props['color'], 'transparent');
+  });
+
+  it('sets a transform origin as the point a view reads, from the words CSS has for it', async () => {
+    const app = await render(Origin, { providers: [provideWebCompat()] });
+    const origin = () => screen.getByTestId('origin').props['transformOrigin'];
+    assert.deepEqual(origin(), ['0%', '0%', 0]);
+    for (const [written, read] of [
+      ['right bottom', ['100%', '100%', 0]],
+      ['top right', ['100%', '0%', 0]],
+      ['center', ['50%', '50%', 0]],
+      ['10px 25%', [10, '25%', 0]],
+    ] as const) {
+      app.instance.origin.set(written);
+      await settle();
+      assert.deepEqual(origin(), read, written);
+    }
+  });
+
+  it('reads what a library sets on element.style the same way, and hands it back as written', async () => {
+    // The CDK sets a menu's transform origin this way, and Spartan reads it back for the side.
+    const app = await render(Origin, { providers: [provideWebCompat()] });
+    const node = app.componentRef.location.nativeElement.children[0];
+    const props = () => screen.getByTestId('origin').props;
+    node.style.transformOrigin = 'right bottom';
+    node.style.letterSpacing = '-0.5em';
+    node.style.insetInlineStart = 'calc(50% + 2px)';
+    node.style.setProperty('margin-top', '1rem');
+    await settle();
+    assert.deepEqual(props()['transformOrigin'], ['100%', '100%', 0]);
+    assert.equal(props()['letterSpacing'] ?? null, null);
+    assert.equal(props()['start'], '50%');
+    assert.equal(props()['marginStart'], 2);
+    assert.equal(props()['marginTop'], 16);
+    assert.equal(node.style.transformOrigin, 'right bottom');
+    assert.equal(node.style.getPropertyValue('margin-top'), '1rem');
+    node.style.removeProperty('transform-origin');
+    node.style.insetInlineStart = '';
+    await settle();
+    assert.equal(props()['transformOrigin'] ?? null, null);
+    assert.equal(props()['start'] ?? null, null);
+    assert.equal(props()['marginStart'] ?? null, null);
+    assert.equal(node.style.transformOrigin, '');
+  });
+
+  it('leaves the styles of an app that did not ask for the package as written', async () => {
+    await render(Insets);
+    // Not read as a `start` and a margin. The sum itself is the engine's to finish, and it
+    // commits none under a name it has no box for.
+    assert.equal(thumb()['insetInlineStart'], undefined);
+    none('start');
+  });
+});
+
+@Component({
+  selector: 'x-padded',
+  styles: `
+    .list {
+      padding: 4px 8px;
+      display: flex;
+      opacity: 0.5;
+    }
+  `,
+  template: `<div testID="list" class="list"><div testID="row"></div></div>`,
+})
+class Padded {
+  readonly host: Dom = inject(ElementRef).nativeElement;
+}
+
+describe('@ng-native/web-compat getComputedStyle', () => {
+  const computed = (node: unknown) =>
+    (
+      globalThis as unknown as { getComputedStyle(node: unknown): Record<string, string> }
+    ).getComputedStyle(node);
+
+  it('answers what a rule gave an element, a length in pixels, and nothing as 0px', async () => {
+    // A list that draws only the rows in sight adds its content's padding to its size: read
+    // as a number from `0px`, and as no number at all from nothing.
+    const app = await render(Padded, { providers: [provideWebCompat()] });
+    await settle();
+    const list = app.fixture.componentInstance.host.querySelector('.list');
+    const style = computed(list);
+    assert.deepEqual([style['paddingLeft'], style['paddingTop']], ['8px', '4px']);
+    assert.deepEqual([style['display'], style['opacity']], ['flex', '0.5']);
+    const row = computed(list.children[0]);
+    assert.deepEqual(
+      [row['paddingLeft'], row['marginTop'], row['borderTopWidth']],
+      ['0px', '0px', '0px'],
+    );
+    // What is written on the element is over the rule, as it is in the cascade.
+    list.style.paddingLeft = '12px';
+    assert.equal(parseFloat(computed(list)['paddingLeft']!), 12);
   });
 });

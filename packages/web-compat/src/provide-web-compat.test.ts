@@ -35,6 +35,12 @@ class Page {
   readonly document: Dom = inject(DOCUMENT);
 }
 
+@Component({
+  selector: 'x-inset',
+  template: `<div testID="inset" [style.inset-inline-start]="'4px'"></div>`,
+})
+class Inset {}
+
 /** The package, read the first time a test asks for it: see the first test. */
 const load = () => import('./index.ts');
 
@@ -124,12 +130,31 @@ describe('provideWebCompat', () => {
     assert.equal(host.querySelector('#clicks'), div);
     assert.equal(div.matches('#clicks'), true);
     assert.equal(app.instance.document.querySelector('#pressed'), host.lastElementChild);
+    // CSSOM: sheets and their rules, inline and computed style, and the `CSS` namespace.
+    const cssom = ['CSSStyleSheet', 'CSSRule', 'CSSRuleList', 'CSSStyleRule', 'StyleSheet'];
+    for (const name of [...cssom, 'CSSStyleDeclaration', 'MediaList', 'getComputedStyle']) {
+      assert.equal(typeof (globalThis as Dom)[name], 'function', name);
+    }
+    assert.equal(typeof (globalThis as Dom).CSS.supports, 'function');
+    div.style.width = '10px';
+    assert.equal(div.style.width, '10px');
+    // Over the runtime's own, which answers nothing.
+    assert.equal((globalThis as Dom).getComputedStyle(div).width, '10px');
+    const style = app.instance.document.createElement('style');
+    style.textContent = '#pressed { width: 5px }';
+    app.instance.document.head.appendChild(style);
+    assert.equal(app.instance.document.styleSheets.length, 1);
+    assert.equal(style.sheet.cssRules.length, 1);
 
     cleanup();
     assert.deepEqual(globalsNow(), globals, 'every global as it was, the document too');
     assert.deepEqual(membersOf(host), members, 'every node member as it was');
     assert.equal(host.getAttribute, undefined);
-    for (const name of [...tree, ...html]) assert.equal((globalThis as Dom)[name], undefined, name);
+    // The runtime's own `getComputedStyle` is back, which the comparison above says.
+    for (const name of [...tree, ...html, ...cssom, 'CSS', 'MediaList']) {
+      assert.equal((globalThis as Dom)[name], undefined, name);
+    }
+    assert.deepEqual([div.style, style.sheet], [undefined, undefined]);
     assert.deepEqual(
       [host.childNodes, host.cloneNode, host.append],
       [undefined, undefined, undefined],
@@ -183,6 +208,9 @@ describe('provideWebCompat', () => {
     // Its button has no role given it, and its element with an id is no global.
     assert.equal(plain.instance.host.lastElementChild.props['accessibilityRole'], undefined);
     assert.equal((globalThis as Dom).clicks, undefined);
+    // A style it binds is set as written, as the renderer sets one: no inset read as a side.
+    await render(Inset);
+    assert.equal(screen.getByTestId('inset').props['start'], undefined);
   });
 
   it('adds it all again for an app that asks after the last one went', async () => {

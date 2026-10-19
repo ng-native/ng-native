@@ -24,6 +24,7 @@ import {
   XHTML,
 } from './qualified-name.ts';
 import { BY_ELEMENT, GLOBAL } from './reflected-attributes.ts';
+import { setStyleAttribute, styleOf } from './style-declaration.ts';
 import { engineOf } from './window.ts';
 
 /** A node as a library holds one: an engine node with the members below on it. */
@@ -87,7 +88,7 @@ const asWritten = (name: string, value: boolean): string =>
  */
 const written = new WeakMap<EngineNode, Map<string, string>>();
 
-function noteWritten(node: EngineNode, name: string, value: string | null): void {
+export function noteWritten(node: EngineNode, name: string, value: string | null): void {
   let all = written.get(node);
   if (value === null) return void all?.delete(name);
   if (!all) written.set(node, (all = new Map()));
@@ -269,6 +270,8 @@ export function writeAttribute(
     () => {
       noteWritten(node, name, value);
       if (name === 'class') return setClassAttribute(node, value);
+      // Its declarations are `element.style`'s: see `style-declaration.ts`.
+      if (name === 'style') return setStyleAttribute(node, value);
       setAsWritten(node, name, attributeValue(name, value));
     },
     namespace,
@@ -374,6 +377,7 @@ export const nodeMembers = (core: CoreNode): PropertyDescriptorMap => ({
       const had = hasAttribute(this, name);
       noteWritten(this, name, null);
       if (name === 'class') return setClassAttribute(this, null);
+      if (name === 'style') return setStyleAttribute(this, null);
       if (had) setAsWritten(this, name, null);
     });
   }),
@@ -405,6 +409,15 @@ export const nodeMembers = (core: CoreNode): PropertyDescriptorMap => ({
     },
   ),
 
+  // Written to, it is its `cssText` written, as a browser forwards it.
+  style: get(
+    function () {
+      return isElement(this) ? styleOf(this) : undefined;
+    },
+    function (text) {
+      if (isElement(this)) styleOf(this).cssText = text as string;
+    },
+  ),
   // Written to, it is its `value` written, as a browser forwards it.
   classList: get(
     function () {

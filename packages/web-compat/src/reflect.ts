@@ -39,7 +39,7 @@ export function contentOf(node: Reflecting, attribute: string, property: string)
 }
 
 /** The prop an attribute is kept as: an `id` is the view's `nativeID`. */
-const propOf = (attribute: string): string => (attribute === 'id' ? 'nativeID' : attribute);
+export const propOf = (attribute: string): string => (attribute === 'id' ? 'nativeID' : attribute);
 
 /** Whether a boolean attribute is there: one a template bound to `false` is not. */
 function present(node: Reflecting, attribute: string, property: string): boolean {

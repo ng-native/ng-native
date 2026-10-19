@@ -14,6 +14,8 @@ import { copyWritten } from './node-members.ts';
 import { checkEach, checkInsertion, checkRemoval, isNode } from './pre-insertion.ts';
 import { copyTarget } from './processing-instruction.ts';
 import { copyAttributeNames, copyName } from './qualified-name.ts';
+import { styleMade } from './runtime-style.ts';
+import { copyDeclarations } from './style-declaration.ts';
 import { engineOf } from './window.ts';
 
 /**
@@ -141,6 +143,8 @@ function cloned(engine: Engine, node: EngineNode, deep: boolean): EngineNode {
   if (classes !== null) setClassAttribute(copy, classes);
   for (const [key, value] of Object.entries(node.props)) engine.setProp(copy, key, ownCopy(value));
   copyWritten(node, copy);
+  copyDeclarations(node, copy);
+  if (copy.tag === 'style') styleMade(copy, engine);
   if (deep) {
     for (const child of inDocument(node)) engine.appendChild(copy, cloned(engine, child, true));
   }

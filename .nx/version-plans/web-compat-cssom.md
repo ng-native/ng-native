@@ -1,0 +1,5 @@
+---
+__default__: patch
+---
+
+`@ng-native/web-compat` gives a library the CSSOM. `document.styleSheets`, a `<style>`'s `sheet`, `CSSStyleSheet` with `insertRule`, `deleteRule`, `replace` and `replaceSync`, a sheet a script makes and adopts with `document.adoptedStyleSheets`, and the CSSOM's rule classes are there. A `<style>` a library puts in the page while the app runs is read and applied as it comes in, as its text changes and as it leaves, with what holds it too: the layout properties, colours, custom properties and transitions it declares, `@media` by the window's width and `@supports`. A `color-mix()` of a custom property in one is passed over with a warning. `element.style` is a `CSSStyleDeclaration`, with `cssText`, `setProperty`, `getPropertyValue`, `removeProperty`, shorthands written as their longhands and the `style` attribute as its text, and a style a library binds is set as what a native view reads. `getComputedStyle` answers what the element, a rule or the element's name gives it, a `hidden` element is drawn as `display: none`, and `CSS.escape` and `CSS.supports` are there.

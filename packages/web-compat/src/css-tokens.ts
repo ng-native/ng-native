@@ -94,13 +94,20 @@ class Reader {
     return this.at[this.i + ahead];
   }
 
-  all(): Token[] {
+  all(spans?: [number, number][]): Token[] {
     const out: Token[] = [];
     for (;;) {
       this.comments();
       if (this.i >= this.at.length) return out;
+      const from = this.i;
       out.push(this.next());
+      spans?.push([from, this.i]);
     }
+  }
+
+  /** The text from where one token starts to where another ends. */
+  text(from: number, to: number): string {
+    return this.at.slice(from, to).join('');
   }
 
   /** `/* ... *\/`, which is no token; one left open runs to the end. */
@@ -296,3 +303,16 @@ class Reader {
 
 /** The tokens of a piece of CSS, comments dropped. */
 export const tokenize = (text: string): Token[] => new Reader(text).all();
+
+/** The tokens of a piece of CSS, and the text a run of them was written as. */
+export function tokenizeWritten(text: string): {
+  tokens: Token[];
+  written: (from: number, to: number) => string;
+} {
+  const reader = new Reader(text);
+  const spans: [number, number][] = [];
+  const tokens = reader.all(spans);
+  const written = (from: number, to: number): string =>
+    to > from ? reader.text(spans[from]![0], spans[to - 1]![1]) : '';
+  return { tokens, written };
+}

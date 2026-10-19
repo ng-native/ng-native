@@ -93,6 +93,10 @@ describe('MutationObserver', () => {
     panel.classList.remove('y');
     panel.dataset.kind = 'k';
     delete panel.dataset.kind;
+    panel.style.width = '10px';
+    // The same again is no change, and is told as none.
+    panel.style.width = '10px';
+    panel.style.width = '20px';
     panel.getAttributeNode('id').value = 'q';
     const attr = document.createAttribute('title');
     attr.value = 't';
@@ -109,6 +113,9 @@ describe('MutationObserver', () => {
       'attributes class x y z',
       'attributes data-kind null',
       'attributes data-kind k',
+      // Each write to its style that changes it, with the attribute's text before.
+      'attributes style null',
+      'attributes style width: 10px;',
       'attributes id p',
       'attributes title null',
     ]);

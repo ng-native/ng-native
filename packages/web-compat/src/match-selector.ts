@@ -19,6 +19,8 @@ import {
 } from './element-tree.ts';
 import { XHTML } from './qualified-name.ts';
 
+export type { MatchContext, Test } from './pseudo-classes.ts';
+
 /**
  * A selector list made into one test of an element, matched right to left as a browser does:
  * the subject's compound first, which turns almost every element away, then each combinator in
@@ -32,7 +34,7 @@ const never: Test = () => false;
  * The attributes whose value HTML compares in any case, for an HTML element, where the selector
  * gives no `s` flag (https://html.spec.whatwg.org/#case-sensitivity-of-selectors).
  */
-const ANY_CASE: ReadonlySet<string> = new Set([
+export const ANY_CASE: ReadonlySet<string> = new Set([
   ...['accept', 'accept-charset', 'align', 'alink', 'axis', 'bgcolor', 'charset', 'checked'],
   ...['clear', 'codetype', 'color', 'compact', 'declare', 'defer', 'dir', 'direction'],
   ...['disabled', 'enctype', 'face', 'frame', 'hreflang', 'http-equiv', 'lang', 'language'],
@@ -224,7 +226,7 @@ function hasTest(list: readonly Complex[]): Test {
 }
 
 /** A selector list as one test of an element. */
-function compileList(list: readonly Complex[], relative = false): Test {
+export function compileList(list: readonly Complex[], relative = false): Test {
   if (relative) return hasTest(list);
   const tests = list.map(complexTest);
   if (tests.length === 1) {

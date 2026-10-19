@@ -1,5 +1,8 @@
 import type { Engine, EngineNode } from '@ng-native/fabric';
 import { Attr } from './attr.ts';
+import { computedStyle } from './computed-style.ts';
+import { cssNamespace } from './css-namespace.ts';
+import * as cssom from './css-style-sheet.ts';
 import { DOMStringMap } from './dataset.ts';
 import { Document, XMLDocument } from './dom-implementation.ts';
 import { DocumentType } from './document-type.ts';
@@ -14,6 +17,7 @@ import {
 } from './events.ts';
 import { domParser } from './html.ts';
 import { HTMLCollection, NodeList } from './live-list.ts';
+import { MediaList } from './media-list.ts';
 import { MutationObserver, MutationRecord } from './mutation-observer.ts';
 import { NODE_CONSTANTS } from './node-constants.ts';
 import { nodeInterfaces } from './node-interfaces.ts';
@@ -85,6 +89,11 @@ const GLOBALS: Readonly<Record<string, unknown>> = {
   NodeFilter,
   TreeWalker,
   NodeIterator,
+  // The rules of a stylesheet as a script reads and writes them: see `css-style-sheet.ts`.
+  ...Object.fromEntries(Object.entries(cssom).filter(([name]) => /^(CSS|StyleSheet$)/.test(name))),
+  MediaList,
+  // `escape`, and `supports` for what a stylesheet made at run time is read with: see `css-namespace.ts`.
+  CSS: cssNamespace,
   // What `childNodes` and `getElementsByTagName` answer: see `live-list.ts`.
   HTMLCollection,
   NodeList,
@@ -98,6 +107,10 @@ export function installWindow(): () => void {
   const target = globalThis as Record<string, unknown>;
   const added = Object.keys(GLOBALS).filter((name) => typeof target[name] === 'undefined');
   for (const name of added) target[name] = GLOBALS[name];
+  // Over the one the Metro preset's polyfill has, which answers nothing: an animation library
+  // asks it for a custom property, and a component library for what it just wrote.
+  const computed = target['getComputedStyle'];
+  target['getComputedStyle'] = computedStyle;
   const element = target['HTMLElement'];
   const ours = (target['HTMLElement'] = anyElement(element));
   // `window` itself, which React Native has as the global and Node, under a test, has not.
@@ -118,6 +131,7 @@ export function installWindow(): () => void {
     unplaced();
     unnamed();
     if (windowed) delete target['window'];
+    if (target['getComputedStyle'] === computedStyle) target['getComputedStyle'] = computed;
     if (target['HTMLElement'] !== ours) return;
     if (element === undefined) delete target['HTMLElement'];
     else target['HTMLElement'] = element;

@@ -129,6 +129,24 @@ describe('made documents', () => {
     assert.equal(sanitizeHtml(document, '<b>Bold</b><script>steal()</script>'), '<b>Bold</b>');
   });
 
+  it('styles nothing with a <style> put in a document it made', async () => {
+    const document = await page();
+    document.getElementById('page').setAttribute('testID', 'page');
+    const made = document.implementation.createHTMLDocument('');
+    const style = made.createElement('style');
+    style.textContent = '#page { width: 50px }';
+    made.head.appendChild(style);
+    await settle();
+    assert.equal(screen.getByTestId('page').props['width'] ?? null, null);
+    assert.equal(document.styleSheets.length, 0);
+    assert.equal(style.sheet, null);
+    // Put in the page, it is the page's, and styles it.
+    document.head.appendChild(style);
+    await settle();
+    assert.equal(screen.getByTestId('page').props['width'], 50);
+    assert.equal(document.styleSheets.length, 1);
+  });
+
   it('makes an XML document, with or without an element, and a doctype', async () => {
     const document = await page();
     const { implementation } = document;

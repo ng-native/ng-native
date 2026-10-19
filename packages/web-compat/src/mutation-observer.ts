@@ -463,6 +463,16 @@ function within<T>(node: EngineNode, change: () => T): T {
   }
 }
 
+/**
+ * A script writes to `element.style`: the `style` attribute changed. The block asks this only
+ * for what changes it, and for its `cssText` written, which is a change whatever it says.
+ */
+export function settingStyle(node: EngineNode, change: () => void): void {
+  const watch = watchOf(node);
+  if (!watch) return change();
+  within(node, () => attributeChange(watch, node, 'style', null, change));
+}
+
 /** The words of a comment changed, which the engine keeps none of. */
 export function dataChanged(node: EngineNode, old: string): void {
   const watch = watchOf(node);

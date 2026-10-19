@@ -26,6 +26,8 @@ import {
   XHTML,
   type QualifiedName,
 } from './qualified-name.ts';
+import { adopt, adoptedOf, styleSheetsOf } from './runtime-style.ts';
+import type { CSSStyleSheet } from './css-style-sheet.ts';
 import { query } from './selector.ts';
 import { createNodeIterator, createTreeWalker } from './traversal.ts';
 import { listenToResize } from './window.ts';
@@ -454,6 +456,18 @@ export function documentFor(engine: Engine): CompatDocument {
     // Documents a script makes for itself, which are never drawn: see `dom-implementation.ts`.
     get implementation() {
       return (implementation ??= implementationFor(engine, created as never, created));
+    },
+    // The sheet of each `<style>` in the page, which a script reads the rules of. Those compiled
+    // with the app are held by the engine, in no form a browser has, and are not among them.
+    get styleSheets() {
+      const list = styleSheetsOf(engine);
+      return Object.defineProperty(list, 'item', { value: (at: number) => list[at] ?? null });
+    },
+    get adoptedStyleSheets() {
+      return adoptedOf(engine);
+    },
+    set adoptedStyleSheets(sheets: Iterable<CSSStyleSheet>) {
+      adopt(engine, sheets);
     },
     dispatchEvent: (event: unknown) => dispatch(event, [created, globalThis]),
     hasFocus: () => true,
