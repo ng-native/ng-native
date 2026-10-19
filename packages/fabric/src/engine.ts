@@ -1410,6 +1410,10 @@ function unpinned<T>(
  * component's override, inline, a prop, its stylesheet, its default.
  */
 function ownLayout(node: EngineNode, key: string): unknown {
+  // With no rule marked `!important` on the node, its inline style stands whole, and `readStyle`
+  // answers the same without flattening a style into a new object: this is asked of every child
+  // a commit reconciles.
+  if (node.styleCache?.important === undefined) return readStyle(node, key);
   return (
     flattenStyle(node.props[STYLE_OVERRIDE], {})[key] ??
     inlineOf(node)[key] ??
