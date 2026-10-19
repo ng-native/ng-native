@@ -7864,7 +7864,11 @@ export class Engine implements HostEngine {
     // them, so an empty one would stay on the node for good and read as someone listening. Only
     // from the set it was put in: a teardown run again once that set is gone takes nothing from
     // a later one, the same function listening again included.
+    let done = false;
     return () => {
+      // Once: a teardown run again takes nothing, the same function listening again included.
+      if (done) return;
+      done = true;
       const current = node.listeners?.get(topLevelType);
       if (current !== set || !set.delete(fn) || set.size) return;
       node.listeners!.delete(topLevelType);
