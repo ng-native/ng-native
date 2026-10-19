@@ -217,9 +217,10 @@ class NativeRenderer implements Renderer2 {
   destroy(): void {}
 
   createElement(name: string, namespace?: string | null): EngineNode {
-    const named = namespace && namers ? nameIn(name, namespace) : name;
+    const claimed = namespace && namers ? nameIn(name, namespace, this.engine) : undefined;
+    const named = claimed ?? name;
     const node = this.engine.createElement(named, this.sheet);
-    if (namespace && namers) {
+    if (namespace && claimed !== undefined) {
       // Drawn as a library's drawing: see `EngineNode.namespace`.
       node.namespace = namespace;
       // Still the element it was written as to a stylesheet: a drawing's `text` is kept as another.
@@ -479,11 +480,13 @@ export interface RendererExtension {
   /**
    * Answer the element a name stands for in a namespace, where it is another than the name
    * alone is: Angular creates an element written inside an `<svg>` in the `svg` namespace, and
-   * a `<text>` there is the drawing's text, not the app's. Every element created in a namespace
-   * while an extension has this member is a library's drawing to the engine, painted and given
-   * its font as a browser does: see `EngineNode.namespace`.
+   * a `<text>` there is the drawing's text, not the app's. An element an extension answers for,
+   * with another name or its own, is a library's drawing to the engine, painted and given its
+   * font as a browser does: see `EngineNode.namespace`. Undefined leaves it the app's own element.
+   * Asked with the engine the element is created in, as every other member is, so an extension
+   * answers for the apps that asked for it and leaves another app in the process alone.
    */
-  named?(name: string, namespace: string): string | undefined;
+  named?(name: string, namespace: string, engine: Engine): string | undefined;
   /**
    * Take a listener over: answer what removes it, or nothing to leave it to the renderer. The
    * target is a node, or the name Angular gives a global one: `'window'`, `'document'`, `'body'`.
@@ -533,13 +536,16 @@ let extensions: readonly RendererExtension[] = [];
 /** How many of the extensions name elements in a namespace: see `RendererExtension.named`. */
 let namers = 0;
 
-/** The element a name in a namespace stands for: the first extension's answer, or the name. */
-function nameIn(name: string, namespace: string): string {
+/**
+ * The element a name in a namespace stands for: the first extension's answer, or undefined where
+ * none answers, which leaves it the app's own element.
+ */
+function nameIn(name: string, namespace: string, engine: Engine): string | undefined {
   for (const extension of extensions) {
-    const named = extension.named?.(name, namespace);
+    const named = extension.named?.(name, namespace, engine);
     if (named) return named;
   }
-  return name;
+  return undefined;
 }
 
 /**

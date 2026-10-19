@@ -374,7 +374,9 @@ test('an extension names an element written in a namespace, which a type selecto
   const undo = extendRenderer({
     named(name, namespace) {
       asked.push(`${namespace}:${name}`);
-      return namespace === 'svg' && name === 'text' ? 'svg:text' : undefined;
+      if (namespace !== 'svg') return undefined;
+      // Its own name for one kept as it is: still the library's drawing.
+      return name === 'text' ? 'svg:text' : name;
     },
   });
   try {
@@ -403,4 +405,43 @@ test('an extension names an element written in a namespace, which a type selecto
   } finally {
     other();
   }
+});
+
+test('an extension names an element for the app it is created in, and leaves another app alone', async () => {
+  // Two apps in one process: one asked for the extension, the other did not.
+  const web = (await render(Clicks)).componentRef.injector;
+  const plain = (await render(Clicks)).componentRef.injector;
+  const webEngine = web.get(Engine);
+  const plainEngine = plain.get(Engine);
+  assert.notEqual(webEngine, plainEngine, 'each app has an engine of its own');
+  const asked: [string, Engine][] = [];
+  const undo = extendRenderer({
+    named(name, namespace, engine) {
+      asked.push([name, engine]);
+      if (engine !== webEngine || namespace !== 'svg') return undefined;
+      // Answered with its own name: kept as it is, and still the library's drawing.
+      return name === 'text' ? 'svg:text' : name;
+    },
+  });
+  try {
+    const inWeb = rendererOf(web).createElement('text', 'svg') as EngineNode;
+    const inPlain = rendererOf(plain).createElement('text', 'svg') as EngineNode;
+    assert.equal(inWeb.tag, 'svg:text');
+    assert.equal(inPlain.tag, 'text', "the other app's element keeps its name");
+    assert.equal(inWeb.namespace, 'svg', 'a drawing in the app that asked');
+    assert.equal(inPlain.namespace, undefined, "and the other app's element is its own");
+    const path = rendererOf(web).createElement('path', 'svg') as EngineNode;
+    assert.deepEqual([path.tag, path.namespace, path.typeName], ['path', 'svg', undefined]);
+    assert.deepEqual(asked, [
+      ['text', webEngine],
+      ['text', plainEngine],
+      ['path', webEngine],
+    ]);
+  } finally {
+    undo();
+  }
+  asked.length = 0;
+  const after = rendererOf(web).createElement('text', 'svg') as EngineNode;
+  assert.equal(after.tag, 'text', 'not renamed once the extension is taken away');
+  assert.deepEqual(asked, [], 'and the extension is not asked with any engine');
 });

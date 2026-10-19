@@ -108,12 +108,15 @@ another host is built on them, and none of them puts that host's API in the engi
 **`extendRenderer(extension)`**, from `@ng-native/platform`, adds hooks the renderer calls. Each
 is optional, and the extensions are asked in the order they were added:
 
-- `named(name, namespace)` answers the element a name stands for in a namespace, or nothing to
-  keep the name: Angular creates what is written inside an `<svg>` in the `svg` namespace, where a
-  `<text>` is the drawing's text, not the app's. A type selector still matches the element by the
-  name it was written as. An element created in a namespace while an extension has this hook is a
-  drawing to the engine, whose react-native-svg shapes are painted by a stylesheet as a browser
-  paints them. An icon's shapes are created by name alone, and render as they always have.
+- `named(name, namespace, engine)` answers the element a name stands for in a namespace: another
+  name, or its own to keep it. Angular creates what is written inside an `<svg>` in the `svg`
+  namespace, where a `<text>` is the drawing's text, not the app's. An element an extension
+  answers for is a drawing to the engine, whose react-native-svg shapes are painted by a
+  stylesheet as a browser paints them, and a type selector still matches it by the name it was
+  written as. Answering nothing leaves the element the app's own. The engine is the one the
+  element is created in, so an extension answers only for the apps that asked for it and leaves
+  another app in the process alone. An icon's shapes are created by name alone, and render as
+  they always have.
 - `listen(target, eventName, callback, engine)` takes a listener over: it answers what removes the
   listener, or nothing to leave it to the renderer. The target is a node, or the name Angular gives
   a global one: `'window'`, `'document'` or `'body'`.
