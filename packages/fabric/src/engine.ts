@@ -12557,7 +12557,8 @@ export class Engine implements HostEngine {
     if (this.asked & LAYOUTS) this.noteHow(node, payload);
     const moved = this.childrenMoved(node, childHandles, held.childHandles);
     const { box, content } = splitScroller(payload ?? {});
-    if (this.notesMoves) this.noteClone(node, someProps(box), moved, childHandles, previous);
+    // All of it: the content's padding moves what it holds, and can resize the element.
+    if (this.notesMoves) this.noteClone(node, payload, moved, childHandles, previous);
     const inside = this.clonedFor(held.handle, someProps(content), moved ? childHandles : null);
     const handle = this.clonedFor(
       previous.handle,

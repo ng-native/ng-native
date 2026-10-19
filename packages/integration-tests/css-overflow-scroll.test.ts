@@ -13,6 +13,7 @@ import { describe, it } from 'node:test';
 import { createRequire } from 'node:module';
 import { Engine, scrollsOverflow, type EngineNode } from '@ng-native/fabric';
 import { createFakeFabric, type FakeFabricNode } from '@ng-native/testing';
+import { createLaidOutFabric } from './laid-out-fabric.ts';
 
 const require = createRequire(import.meta.url);
 const { compileCss } = require('@ng-native/metro/css/compile.cjs');
@@ -193,6 +194,38 @@ describe('an element that scrolls its overflow', () => {
     const scrolls = fabric.commands.filter((command) => command.name === 'scrollTo');
     assert.equal(scrolls[0]?.node?.props['nativeID'], 'panel');
     assert.deepEqual(scrolls, [{ viewName: 'ScrollView', name: 'scrollTo', args: [0, 76, true] }]);
+  });
+
+  it('places a box out of the flow in it again when only its padding changes', () => {
+    // Centred between its insets in a panel as tall as its padding and its row: the content's
+    // padding alone makes the panel taller, and the box is centred from boxes read back.
+    const css =
+      '.panel { overflow: auto; position: relative; width: 200px; padding: 8px }' +
+      ' .wide { padding: 20px } .row { height: 20px }' +
+      ' .a { position: absolute; top: 0; bottom: 0; left: 0; width: 10px; height: 10px; margin: auto 0 }';
+    const fabric = createLaidOutFabric();
+    const engine = new Engine(fabric, 1, { globalStyles: compileCss(css, 'app.css') as never });
+    const add = (id: string, parent: EngineNode): EngineNode => {
+      const node = engine.createElement('view');
+      engine.setClasses(node, id);
+      engine.setProp(node, 'nativeID', id);
+      engine.appendChild(parent, node);
+      return node;
+    };
+    const panel = engine.createElement('view');
+    scrollsOverflow(panel);
+    engine.setClasses(panel, 'panel');
+    engine.setProp(panel, 'nativeID', 'panel');
+    engine.appendChild(engine.root, panel);
+    add('row', panel);
+    add('a', panel);
+    const top = () => {
+      engine.commit();
+      return [fabric.box('panel').height, fabric.box('a').top];
+    };
+    assert.deepEqual(top(), [36, 13]);
+    engine.setClasses(panel, 'panel wide');
+    assert.deepEqual(top(), [60, 25]);
   });
 });
 
