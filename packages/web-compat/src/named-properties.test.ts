@@ -53,6 +53,47 @@ describe('a named property of the window', () => {
     assert.equal(typeof global.setTimeout, 'function');
   });
 
+  it('is an element put in the head', async () => {
+    const app = await render(Page, { providers: [provideWebCompat()] });
+    await settle();
+    const document = app.fixture.componentInstance.document;
+    const meta = document.createElement('div');
+    meta.id = 'inTheHead';
+    document.head.appendChild(meta);
+    assert.equal(global.inTheHead, meta);
+    meta.remove();
+    assert.equal(global.inTheHead, undefined);
+  });
+
+  it('is found again once what was found is gone, renamed, or joined by another', async () => {
+    const app = await render(Page, { providers: [provideWebCompat()] });
+    await settle();
+    const document = app.fixture.componentInstance.document;
+    const first = document.createElement('div');
+    first.id = 'keptName';
+    document.body.appendChild(first);
+    assert.equal(global.keptName, first);
+    await Promise.resolve();
+    // Another of the name in a later task: both of them, not the one found first.
+    const second = document.createElement('div');
+    second.id = 'keptName';
+    document.body.appendChild(second);
+    assert.equal(global.keptName.length, 2);
+    assert.equal(global.keptName.item(0), first);
+    // The first is renamed, and then the second is the one.
+    first.id = 'otherName';
+    assert.equal(global.keptName, second);
+    await Promise.resolve();
+    // The one found is taken away, and another comes after it.
+    second.remove();
+    assert.equal(global.keptName, undefined);
+    await Promise.resolve();
+    const third = document.createElement('div');
+    third.id = 'keptName';
+    document.body.appendChild(third);
+    assert.equal(global.keptName, third);
+  });
+
   it('is taken away with the window', async () => {
     const before = Object.getPrototypeOf(globalThis);
     await render(Page, { providers: [provideWebCompat()] });

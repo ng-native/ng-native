@@ -1,5 +1,6 @@
 import type { Engine, EngineNode } from '@ng-native/fabric';
 import { liveCollection } from './live-list.ts';
+import { headOf } from './document.ts';
 import { currentEngine } from './window.ts';
 import { renamings } from './renamings.ts';
 
@@ -11,13 +12,12 @@ import { renamings } from './renamings.ts';
  *
  * They are answered by an object put in the global's prototype chain, as a browser's
  * `WindowProperties` is: a name the global has is found before it is asked. Every other global a
- * script asks for is asked of it too, so what it found is kept: the element a name was last,
- * while it still has the name and is in the page, and every name for the rest of the task. The
- * engine is not watched for it, as nothing is until something observes it.
+ * script asks for is asked of it too, so what it found is kept: every name for the rest of the
+ * task, until an id or a name is written. The engine is not watched for it, as nothing is until
+ * something observes it.
  *
  * ponytail: an element put in with an id is a global by it from the next task, unless it is
- * written through the DOM; and a name that was one element's is that element's while it keeps
- * it, though another of the name is put in after.
+ * written through the DOM.
  */
 
 /** The elements named by their `name` as well as their id. */
@@ -47,19 +47,24 @@ function index(node: EngineNode, into: Map<string, EngineNode[]>): Map<string, E
   return into;
 }
 
-/** Whether a node is in the page. */
-function inPage(node: EngineNode, root: EngineNode): boolean {
-  let at: EngineNode | null = node;
-  while (at && at !== root) at = at.parent;
-  return at === root;
+/** The trees of a document: the head and then the page, as it searches them. */
+const trees = (engine: Engine): EngineNode[] => {
+  const head = headOf(engine);
+  return head ? [head, engine.root] : [engine.root];
+};
+
+/** Whether a node is in the document, in its head or the page. */
+function inPage(node: EngineNode, engine: Engine): boolean {
+  let top: EngineNode = node;
+  while (top.parent) top = top.parent;
+  return trees(engine).includes(top);
 }
 
 /**
- * What each engine's page was last found to name: the element a name was last, and every name
- * as the page was until the task that found them ends, or an id or a name is written.
+ * What each engine's page was last found to name: every name as the page was until the task that
+ * found them ends, or an id or a name is written.
  */
 interface Found {
-  readonly one: Map<string, EngineNode>;
   all: Map<string, EngineNode[]> | undefined;
   renamed: number;
 }
@@ -68,7 +73,8 @@ const found = new WeakMap<Engine, Found>();
 /** Every element by each name, kept for the rest of the task, as a loop asks again and again. */
 function allNamed(engine: Engine, known: Found): Map<string, EngineNode[]> {
   if (known.all && known.renamed === renamings()) return known.all;
-  const all = index(engine.root, new Map());
+  const all = new Map<string, EngineNode[]>();
+  for (const tree of trees(engine)) index(tree, all);
   known.all = all;
   known.renamed = renamings();
   queueMicrotask(() => {
@@ -82,17 +88,11 @@ function namedIn(name: string): EngineNode[] {
   const engine = currentEngine();
   if (!engine || !name) return [];
   const known =
-    found.get(engine) ??
-    found.set(engine, { one: new Map(), all: undefined, renamed: -1 }).get(engine)!;
-  const last = known.one.get(name);
-  if (last && isNamed(last, name) && inPage(last, engine.root)) return [last];
+    found.get(engine) ?? found.set(engine, { all: undefined, renamed: -1 }).get(engine)!;
   // Each still has the name, and is still in the page.
-  const all = (allNamed(engine, known).get(name) ?? []).filter(
-    (node) => isNamed(node, name) && inPage(node, engine.root),
+  return (allNamed(engine, known).get(name) ?? []).filter(
+    (node) => isNamed(node, name) && inPage(node, engine),
   );
-  if (all.length === 1) known.one.set(name, all[0]!);
-  else known.one.delete(name);
-  return all;
 }
 
 /** What a name reads: the one element it names, or every one where there are more. */

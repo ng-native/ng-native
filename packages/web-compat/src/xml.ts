@@ -77,8 +77,17 @@ function namespaceOf(
 function decode(text: string): string {
   return text.replace(/&([^;&]*);?/g, (whole, name: string) => {
     if (!whole.endsWith(';')) throw new NotWellFormed('A reference is not ended with ";".');
-    if (name.startsWith('#x')) return String.fromCodePoint(Number.parseInt(name.slice(2), 16));
-    if (name.startsWith('#')) return String.fromCodePoint(Number.parseInt(name.slice(1), 10));
+    if (name.startsWith('#')) {
+      const hex = name.startsWith('#x');
+      const digits = name.slice(hex ? 2 : 1);
+      const point = (hex ? /^[\da-fA-F]+$/ : /^\d+$/).test(digits)
+        ? Number.parseInt(digits, hex ? 16 : 10)
+        : NaN;
+      if (!(point > 0 && point <= 0x10ffff)) {
+        throw new NotWellFormed(`"&${name};" is not a character.`);
+      }
+      return String.fromCodePoint(point);
+    }
     const value = ENTITIES[name];
     if (value === undefined) throw new NotWellFormed(`The entity "${name}" is not defined.`);
     return value;
@@ -98,7 +107,11 @@ export function parseXml(markup: string, document: XmlTarget): boolean {
     new Parser(markup, document).parse();
     return true;
   } catch (error) {
-    if (!(error instanceof NotWellFormed)) throw error;
+    // A name the document refuses, such as an empty local name, is markup that is not well-formed.
+    const refused =
+      error instanceof Error &&
+      ['InvalidCharacterError', 'NamespaceError', 'HierarchyRequestError'].includes(error.name);
+    if (!(error instanceof NotWellFormed) && !refused) throw error;
     // What was put in the document before the error is taken out again.
     const holder = document as unknown as {
       childNodes: ArrayLike<unknown>;
@@ -106,7 +119,7 @@ export function parseXml(markup: string, document: XmlTarget): boolean {
     };
     for (const child of Array.from(holder.childNodes)) holder.removeChild(child);
     const report = document.createElementNS(PARSER_ERROR, 'parsererror');
-    report.appendChild(document.createTextNode(error.message));
+    report.appendChild(document.createTextNode((error as Error).message));
     document.appendChild(report);
     return false;
   }

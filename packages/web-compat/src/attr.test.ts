@@ -53,6 +53,29 @@ describe('Attr', () => {
     assert.equal(div.getAttributeNode('title'), null);
   });
 
+  it('is set under the name it has, in the case it was made in', async () => {
+    const document = await page();
+    const div = document.createElement('div');
+    const attr = document.createAttributeNS('urn:x', 'p:Local');
+    attr.value = 'v';
+    div.setAttributeNode(attr);
+    assert.deepEqual(div.getAttributeNames(), ['p:Local']);
+    assert.equal(div.getAttributeNS('urn:x', 'Local'), 'v');
+    assert.equal(attr.ownerElement === div, true);
+  });
+
+  it('finds a prefixed name by its local name only where it has no namespace', async () => {
+    const document = await page();
+    const div = document.createElement('div');
+    div.setAttributeNS('urn:a', 'p:x', 'v');
+    assert.equal(div.getAttributeNS('urn:b', 'x'), null);
+    assert.equal(div.hasAttributeNS('urn:b', 'x'), false);
+    assert.equal(div.getAttributeNS('urn:a', 'x'), 'v');
+    // One written with a prefix and no namespace, as a template does, is found in any.
+    div.setAttribute('xlink:href', 'h');
+    assert.equal(div.getAttributeNS('urn:b', 'href'), 'h');
+  });
+
   it('is made on no element, and set on one', async () => {
     const document = await page();
     const div = document.createElement('div');

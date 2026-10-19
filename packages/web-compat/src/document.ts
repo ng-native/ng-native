@@ -321,6 +321,9 @@ export function eventPath(engine: Engine, node: EngineNode): object[] {
   return [...path, document, globalThis];
 }
 
+/** The head of an engine's document, where it has been made. */
+export const headOf = (engine: Engine): EngineNode | undefined => documents.get(engine)?.head;
+
 /** The app's document, made the first time it is asked for. */
 export function documentFor(engine: Engine): CompatDocument {
   const existing = documents.get(engine);

@@ -9,7 +9,6 @@ import {
   XHTML,
   type QualifiedName,
 } from './qualified-name.ts';
-import { settingAttribute } from './mutation-observer.ts';
 
 /**
  * Attributes as nodes, as the DOM's `Attr` has them: the same one each time an element is asked
@@ -172,6 +171,18 @@ export const getAttributeNodeNS = (
   return kept === undefined ? null : attrOf(element, kept);
 };
 
+type Write = (element: Element, name: string, value: string, namespace: string | null) => void;
+
+/**
+ * How an attribute is written by the name it is kept by, `writeAttribute` in `node-members.ts`,
+ * given by `attribute-members.ts` as that module imports this one.
+ */
+let write: Write | undefined;
+
+export const writesAttributesWith = (writer: Write): void => {
+  write = writer;
+};
+
 /** `setAttributeNode`: an attribute put on an element, in the place of one of its names. */
 export function setAttributeNode(element: Element, attr: unknown): Attr | null {
   if (!(attr instanceof Attr)) throw new TypeError('The attribute given is not an Attr.');
@@ -183,12 +194,8 @@ export function setAttributeNode(element: Element, attr: unknown): Attr | null {
   if (old === attr) return attr;
   const value = attr.value;
   if (old) detach(old, old.value);
-  settingAttribute(
-    element,
-    attr.name,
-    () => element.setAttribute(attr.name, value),
-    attr.namespaceURI,
-  );
+  // As `setAttributeNS` writes it, in the case it has: `setAttribute` would lower it.
+  write!(element, attr.name, value, attr.namespaceURI);
   noteAttributeName(element, attr.name, attr[NAME]);
   attr[OWNER] = element;
   const attrs = made.get(element) ?? new Map<string, Attr>();

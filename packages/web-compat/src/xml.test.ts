@@ -66,6 +66,11 @@ describe('parseXml', () => {
       '<a x=1/>',
       '<p:a/>',
       '<a>&nbsp;</a>',
+      '<a>&#xZZ;</a>',
+      '<a>&#;</a>',
+      '<a>&#x110000;</a>',
+      '<a>&#0;</a>',
+      '<a xmlns:p="u"><p:/></a>',
     ]) {
       const [xml, ok] = await parsed(markup);
       assert.equal(ok, false, markup);

@@ -6,6 +6,7 @@ import {
   keptNameNS,
   removeAttributeNode,
   setAttributeNode,
+  writesAttributesWith,
 } from './attr.ts';
 import { required } from './dom-error.ts';
 import { removingAttribute } from './mutation-observer.ts';
@@ -16,6 +17,8 @@ import { attributeNameOf, extractName, noteAttributeName } from './qualified-nam
  * The members of an element for its attributes in a namespace, `setAttributeNS` and the rest, and
  * for its attributes as nodes: `attributes`, `getAttributeNode` and the rest, see `attr.ts`.
  */
+
+writesAttributesWith(writeAttribute);
 
 type Dom = EngineNode & {
   readonly namespaceURI: string | null;
@@ -31,14 +34,16 @@ const method = (value: (this: Dom, ...args: never[]) => unknown) => ({ value, wr
 
 /**
  * The name an attribute in a namespace is kept by. One a template wrote with a prefix,
- * `xlink:href`, was noted in no namespace, and is found by its local name in any but none.
+ * `xlink:href`, was noted in no namespace, and is found by its local name in any but none; one written in a namespace is found in that alone.
  */
 function qualified(node: Dom, namespace: unknown, local: string): string | undefined {
   const kept = keptNameNS(node, namespace, local);
   if (kept !== undefined || namespace === null || namespace === undefined || namespace === '') {
     return kept;
   }
-  return node.getAttributeNames().find((name) => name.endsWith(`:${local}`));
+  return node
+    .getAttributeNames()
+    .find((name) => name.endsWith(`:${local}`) && attributeNameOf(node, name).namespace === null);
 }
 
 export const attributeMembers: PropertyDescriptorMap = {
