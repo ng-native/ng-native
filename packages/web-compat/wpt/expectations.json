@@ -584,7 +584,7 @@
     "css/selectors/invalidation/has-invalidation-after-removing-non-first-element.html": {"status":"OK","pass":2,"fail":0,"total":2,"passed":"6845edd3af","names":"6845edd3af","failed":[]},
     "css/selectors/invalidation/has-invalidation-first-in-sibling-chain.html": {"status":"OK","pass":12,"fail":0,"total":12,"passed":"613ba0e34a","names":"613ba0e34a","failed":[]},
     "css/selectors/invalidation/has-invalidation-for-wiping-an-element.html": {"status":"OK","pass":5,"fail":0,"total":5,"passed":"52405ab2fe","names":"52405ab2fe","failed":[]},
-    "css/selectors/invalidation/has-pseudo-element-subject-child-mutation.html": {"status":"OK","pass":3,"fail":1,"total":4,"passed":"5abf7afe16","names":"ab964934e7","failed":["ad8d5304"]},
+    "css/selectors/invalidation/has-pseudo-element-subject-child-mutation.html": {"status":"OK","pass":4,"fail":0,"total":4,"passed":"ab964934e7","names":"ab964934e7","failed":[]},
     "css/selectors/invalidation/has-pseudoclass-only.html": {"status":"OK","pass":36,"fail":0,"total":36,"passed":"eef1dac107","names":"eef1dac107","failed":[]},
     "css/selectors/invalidation/has-sibling-insertion-removal.html": {"status":"OK","pass":28,"fail":0,"total":28,"passed":"52f3508907","names":"52f3508907","failed":[]},
     "css/selectors/invalidation/has-sibling.html": {"status":"OK","pass":71,"fail":0,"total":71,"passed":"7cad774525","names":"7cad774525","failed":[]},
