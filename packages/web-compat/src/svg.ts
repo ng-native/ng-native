@@ -493,13 +493,21 @@ export function reshape(
     attrs,
     nativeProps(node.tag, attrs, { color: (colour: string) => engine.color(colour) }),
   );
-  for (const key of Object.keys(shape.props)) if (!(key in props)) engine.setProp(node, key, null);
+  for (const key of Object.keys(shape.props)) {
+    if (!(key in props)) engine.setProp(node, key, gone(key));
+  }
   for (const [key, value] of Object.entries(props)) {
     if (!sameProp(shape.props[key], value)) engine.setProp(node, key, value);
   }
   shape.attrs = { ...attrs };
   shape.props = props;
 }
+
+/**
+ * What a prop taken off is set to. A transform is the identity: iOS only sets one of six numbers,
+ * so for nothing it keeps the one it had.
+ */
+const gone = (key: string): unknown => (key === 'matrix' ? [1, 0, 0, 1, 0, 0] : null);
 
 /** Whether a prop is what it was: the same value, or a list or a brush that says the same. */
 const sameProp = (before: unknown, after: unknown): boolean =>
@@ -766,7 +774,9 @@ function drawAgain(node: EngineNode, engine: Engine): Record<string, unknown> {
     if (!copy) linesAnchored(node, props);
   }
   if (node.tag === SVG_SPAN && isCopyUnder(node)) startsOver(node, props);
-  for (const key of Object.keys(shape.props)) if (!(key in props)) engine.setProp(node, key, null);
+  for (const key of Object.keys(shape.props)) {
+    if (!(key in props)) engine.setProp(node, key, gone(key));
+  }
   for (const [key, set] of Object.entries(props)) engine.setProp(node, key, set);
   shape.props = props;
   if (node.tag === 'feDropShadow') {

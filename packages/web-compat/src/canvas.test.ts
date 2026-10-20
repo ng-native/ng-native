@@ -145,6 +145,34 @@ describe('@ng-native/web-compat canvas', () => {
     );
   });
 
+  it('keeps a stretched stroke where the canvas has it, to a hundredth of the grid', async () => {
+    const { context } = await canvas();
+    context.scale(300, 150);
+    context.moveTo(0, 0);
+    context.lineTo(0.333, 0.5);
+    context.stroke();
+    await settle();
+    const [line] = shapes();
+    const [a, b, c, d, e, f] = line!.props['matrix'] as number[];
+    const [x, y] = String(line!.props['d']).split('L')[1]!.split(' ').map(Number);
+    // Chrome draws its end at 99.9, 75: a hundredth of the path's own units is 3 of the grid's.
+    assert.ok(Math.abs(a! * x! + c! * y! + e! - 99.9) < 0.01);
+    assert.ok(Math.abs(b! * x! + d! * y! + f! - 75) < 0.01);
+  });
+
+  it('strokes a path under a skew that keeps each way as long, where the transform is', async () => {
+    const { context } = await canvas();
+    context.transform(1, 0, 0.6, 0.8, 0, 0);
+    context.strokeRect(0, 0, 5, 5);
+    await settle();
+    const [box] = shapes();
+    // Both sides are as long as they were, but at a slant: no one width on the grid is that.
+    assert.deepEqual(
+      [box!.props['d'], box!.props['matrix']],
+      ['M0 0L5 0L5 5L0 5Z', [1, 0, 0.6, 0.8, 0, 0]],
+    );
+  });
+
   it('runs the gradient a stretched stroke is drawn with in the space it is stroked in', async () => {
     const { context } = await canvas();
     const fade = context.createLinearGradient(0, 0, 10, 0);
@@ -192,8 +220,29 @@ describe('@ng-native/web-compat canvas', () => {
     const [again] = shapes();
     // The same view, moved: not one made afresh.
     assert.equal(again!.reactTag, first!.reactTag);
-    // Taken off natively as a prop gone is: set to nothing, which is no transform.
-    assert.deepEqual([again!.props['d'], again!.props['matrix']], ['M0 0L5 0L5 5L0 5Z', null]);
+    // Taken off as the identity: iOS only sets a transform of six numbers, and keeps the one it
+    // had for nothing.
+    assert.deepEqual(
+      [again!.props['d'], again!.props['matrix']],
+      ['M0 0L5 0L5 5L0 5Z', [1, 0, 0, 1, 0, 0]],
+    );
+  });
+
+  it("runs the gradient a text is filled with from the text's own place", async () => {
+    const { context } = await canvas();
+    context.scale(2, 2);
+    const fade = context.createLinearGradient(0, 0, 10, 0);
+    fade.addColorStop(0, 'red');
+    context.fillStyle = fade;
+    context.fillText('Sales', 20, 10);
+    await settle();
+    const [gradient, text] = shapes();
+    assert.deepEqual(text!.props['matrix'], [2, 0, 0, 2, 40, 20]);
+    // The text's transform scales it: the gradient is on the text's own grid, not scaled again.
+    assert.deepEqual(
+      ['x1', 'x2'].map((key) => gradient!.props[key]),
+      ['-20', '-10'],
+    );
   });
 
   it("strokes a text as wide as the line, which the text's own transform then scales", async () => {
