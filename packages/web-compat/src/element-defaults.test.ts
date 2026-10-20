@@ -44,6 +44,11 @@ afterEach(cleanup);
     </select>
     <table testID="table"></table>
     <input testID="input" />
+    <ul>
+      <li testID="li">one</li>
+      <li testID="block-li">two</li>
+    </ul>
+    <details><summary testID="summary">More</summary></details>
     <svg testID="svg">
       <a testID="svg-a"><rect width="4" height="4" /></a>
     </svg>
@@ -108,9 +113,21 @@ describe('a library element in an app that asked for web-compat', () => {
     assert.equal(computed(element('sized')).boxSizing, 'border-box');
   });
 
+  it('calls an li and a summary list items, as a browser does, laid out as blocks', async () => {
+    const { element } = await asked();
+    assert.equal(computed(element('li')).display, 'list-item');
+    assert.equal(computed(element('summary')).display, 'list-item');
+    // Laid out as the engine lays out a block.
+    assert.equal(element('li').defaultStyle?.display, 'block');
+    // One a library gives a display of its own is that.
+    element('block-li').style.display = 'flex';
+    assert.equal(computed(element('block-li')).display, 'flex');
+  });
+
   it('leaves a span inline: no display of its own', async () => {
     const { element } = await asked();
     assert.equal(element('span').defaultStyle?.display, undefined);
+    assert.equal(element('span').defaultStyle?.boxSizing, 'content-box');
     assert.equal(screen.getByTestId('span').viewName, 'Paragraph');
   });
 
