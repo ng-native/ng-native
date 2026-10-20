@@ -12,8 +12,8 @@ import { pieces } from './css-style-declaration.ts';
  * to fill in: see `lineWithTokens`.
  *
  * ponytail: the physical sides, the outline and the corners. `border-block` and `border-inline`
- * and their sides, and their longhands, are passed over, as a corner with two radii is, and a
- * function in a line with a token, `calc()` or `color-mix()`.
+ * and their sides, and their longhands, are passed over, as a corner with two radii is, a
+ * `calc()` in a line with a token, and a `color-mix()` in a line, which the build mixes.
  */
 
 /** The native side, or outline, of each line a longhand is for. */
@@ -45,6 +45,19 @@ export const isLine = (name: string): boolean =>
   /^border(-(top|bottom)-(left|right))?-radius$/.test(name);
 
 type Line = Partial<Record<'Width' | 'Style' | 'Color', string>>;
+
+/**
+ * The style one side is written in that native draws solid: it has one style for the whole box,
+ * which a side of its own does not set. Nothing for a side drawn as written.
+ */
+export function drawnSolid(
+  name: string,
+  props: Readonly<Record<string, unknown>>,
+): string | undefined {
+  const [, side] = /^border-(top|right|bottom|left)$/.exec(name) ?? [];
+  const style = side && props[`border${capital(side)}Style`];
+  return typeof style === 'string' && style !== 'solid' && style !== 'none' ? style : undefined;
+}
 
 /**
  * Whether an outline is written `auto`, the platform's focus ring, which native has none of: the
@@ -148,10 +161,13 @@ const TEMPLATES: Readonly<Record<string, { sides: string[]; style?: string }>> =
   ),
 };
 
-/** `var(--c)`, `var(--c, red)` or `var(--c,)` as the token a line is filled in from. */
+/**
+ * `var(--c)`, `var(--c, red)` or `var(--c,)` as the token a line is filled in from. A fallback
+ * may be a colour function, `var(--c, rgb(1, 2, 3))`, as a part written alone may be.
+ */
 function referenceOf(part: string): Reference | undefined {
   const [, reference, comma, fallback = ''] =
-    /^var\(\s*(--[\w-]+)\s*(?:(,)([^()]*))?\)$/i.exec(part) ?? [];
+    /^var\(\s*(--[\w-]+)\s*(?:(,)((?:[^()]|(?:rgba?|hsla?)\([^()]*\))*))?\)$/i.exec(part) ?? [];
   if (!reference) return undefined;
   if (!comma) return { reference };
   if (!fallback.trim()) return { reference, empty: true };

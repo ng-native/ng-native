@@ -17,6 +17,9 @@ interface Page {
   createElement(name: string): Made;
   createTextNode(text: string): Made;
 }
+interface Lookup {
+  getElementById(id: string): Made;
+}
 interface Made {
   innerHTML: string;
   textContent: string;
@@ -30,7 +33,7 @@ interface Made {
   selector: 'x-strip',
   template: `
     <div id="strip" class="strip">
-      <div testID="one" class="item"></div>
+      <div id="one" testID="one" class="item"></div>
       <div testID="two" class="item wide"></div>
     </div>
   `,
@@ -40,6 +43,19 @@ class Strip {
 }
 
 afterEach(cleanup);
+
+/** A prop of the first item, styled by `css` and, where one is given, an inline style. */
+async function styledBy(css: string, prop: string, inline = ''): Promise<unknown> {
+  const app = await render(Strip, { providers: [provideWebCompat()] });
+  await settle();
+  const { document } = app.fixture.componentInstance;
+  const style = document.createElement('style');
+  document.head.appendChild(style);
+  style.textContent = `#strip { --c: blue; color: green } ${css}`;
+  if (inline) (document as unknown as Lookup).getElementById('one').setAttribute('style', inline);
+  await settle();
+  return screen.getByTestId('one').props[prop];
+}
 
 describe('a stylesheet read while the app runs', () => {
   it('is its rules, by id, class, attribute and what each is in, with what each declares', () => {
@@ -691,6 +707,8 @@ describe('a border in a <style> made while the app runs', () => {
       'border-top-width: 0.5em',
       'border-radius: 1em',
       'outline: 1em solid rgb(255, 0, 0)',
+      'border: 1px solid var(--c, rgb(1, 2, 3))',
+      'border-top: 2px solid var(--c, rgba(0, 0, 255, 0.5))',
     ]) {
       const css = `.box { ${declaration} }`;
       const [built] = compileCss(css).rules;
@@ -733,6 +751,60 @@ describe('a border in a <style> made while the app runs', () => {
       ['red', 5, 'green'],
     );
     assert.equal(props('two')['outlineWidth'], 10);
+  });
+
+  it('draws a line in the fallback of its token, where the fallback is a colour function', async () => {
+    const css = '.item { border: 1px solid var(--missing, rgb(1, 2, 3)) }';
+    assert.equal(await styledBy(css, 'borderTopColor'), 'rgb(1, 2, 3)');
+  });
+
+  it('offsets an outline by a length in em, in the font size of the element', async () => {
+    const css = '.item { font-size: 10px; outline: 1px solid; outline-offset: 1.5em }';
+    assert.equal(await styledBy(css, 'outlineOffset'), 15);
+    assert.equal(sheetOf('.box { outline-offset: 10% }').rules.length, 0, 'it takes no share');
+  });
+
+  it('draws a dotted or dashed side solid, and says so, as the build does', () => {
+    const said: string[] = [];
+    const warn = console.warn;
+    console.warn = (...all: unknown[]) => said.push(all.join(' '));
+    const told: string[] = [];
+    const sides = [
+      'border-left: 1px dotted rgb(255, 0, 0)',
+      'border-top: 2px dashed var(--c)',
+      'border-top: dashed',
+    ];
+    const whole = [
+      'border: 1px dashed rgb(255, 0, 0)',
+      'border-style: dotted',
+      'border-top-style: dashed',
+    ];
+    try {
+      for (const declaration of [...sides, ...whole, 'outline: 1px dashed rgb(255, 0, 0)']) {
+        const css = `.box { ${declaration} }`;
+        const [built] = compileCss(css, 'test', {
+          onUnsupported: (m: string) => void told.push(m),
+        }).rules;
+        const [read] = sheetOf(css).rules;
+        assert.deepEqual(
+          [read?.declarations, read?.deferred],
+          [built!.declarations, built!.deferred],
+          declaration,
+        );
+      }
+    } finally {
+      console.warn = warn;
+    }
+    assert.equal(told.length, sides.length, 'the build says it of each side');
+    assert.deepEqual(
+      said,
+      sides.map(
+        (declaration) =>
+          `[angular-native] a <style> made while the app runs: '${declaration}': native has one ` +
+          `border style for the whole box, so a '${/dotted|dashed/.exec(declaration)![0]}' side ` +
+          `is drawn solid, native's default.`,
+      ),
+    );
   });
 
   it('passes over an outline of auto, and says so, as the build drops it', () => {
@@ -819,6 +891,22 @@ describe('the order of declarations in one block of a <style> made while the app
     }
   });
 
+  it('drops a value set earlier in the block where a later declaration leaves the prop to the node, as the build does', () => {
+    for (const block of [
+      'border-top-color: rgb(255, 0, 0); border-top-color: currentcolor',
+      'border-width: 2px; border-width: 1em',
+    ]) {
+      const css = `.box { ${block} }`;
+      const [built] = compileCss(css).rules;
+      const [read] = sheetOf(css).rules;
+      assert.deepEqual(
+        [read?.declarations, read?.deferred],
+        [built!.declarations, built!.deferred],
+        block,
+      );
+    }
+  });
+
   it('keeps an important declaration over a later plain one, and a later rule over an earlier one', async () => {
     const app = await render(Strip, { providers: [provideWebCompat()] });
     await settle();
@@ -836,5 +924,27 @@ describe('the order of declarations in one block of a <style> made while the app
       await settle();
       assert.equal(screen.getByTestId('one').props['borderTopColor'], expected, css);
     }
+  });
+
+  const importantLine = '.item { border: 1px solid var(--c) !important }';
+
+  it("keeps an important line's template over a more specific rule", async () => {
+    const css = `${importantLine} #strip .item { border-top-color: red }`;
+    assert.equal(await styledBy(css, 'borderTopColor'), 'blue');
+  });
+
+  it("keeps an important line's template over an inline style", async () => {
+    assert.equal(await styledBy(importantLine, 'borderTopColor', 'border-top-color: red'), 'blue');
+  });
+
+  it('keeps an important length in em over a later plain one', async () => {
+    const css =
+      '.item { font-size: 10px; border: 1px solid; border-width: 1em !important; border-width: 2px }';
+    assert.equal(await styledBy(css, 'borderTopWidth'), 10);
+  });
+
+  it('keeps an important line of the colour in scope over a more specific rule', async () => {
+    const css = '.item { border: 1px solid !important } #strip .item { border-top-color: red }';
+    assert.equal(await styledBy(css, 'borderTopColor'), 'green');
   });
 });

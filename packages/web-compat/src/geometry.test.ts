@@ -879,6 +879,48 @@ describe('IntersectionObserver', () => {
     assert.deepEqual(bounds, ['0 0 200 200', '50 350 150 450']);
   });
 
+  it('clips a table inside its border where it hides what overflows, and only then, as Chrome does', async () => {
+    const { place, make } = await page();
+    const seen: string[] = [];
+    for (const overflow of ['hidden', 'clip', 'scroll', 'auto', 'visible']) {
+      const table = make(
+        'table',
+        undefined,
+        `border-width: 50px; border-style: solid; overflow: ${overflow}`,
+      );
+      const item = make('div', table);
+      await settle();
+      place(table, { x: 0, y: 0, width: 200, height: 200 });
+      // Half across and half down into the border, so a quarter of it is inside.
+      place(item, { x: 45, y: 45, width: 10, height: 10 });
+      for (const root of [table, null]) {
+        const observer = new globals.IntersectionObserver(
+          (entries: Dom[]) =>
+            seen.push(
+              `${overflow} ${root ? 'root' : 'in'} ${entries[0].intersectionRatio} ${root ? entries[0].rootBounds.width : ''}`,
+            ),
+          { root },
+        );
+        observer.observe(item);
+        await nextFrame();
+        observer.disconnect();
+      }
+      table.remove();
+    }
+    assert.deepEqual(seen, [
+      'hidden root 0.25 100',
+      'hidden in 0.25 ',
+      'clip root 0.25 100',
+      'clip in 0.25 ',
+      'scroll root 1 200',
+      'scroll in 1 ',
+      'auto root 1 200',
+      'auto in 1 ',
+      'visible root 1 200',
+      'visible in 1 ',
+    ]);
+  });
+
   it('looks again after a commit, and at what is in sight of a root and its margin', async () => {
     const { place, div } = await page();
     const root = div();

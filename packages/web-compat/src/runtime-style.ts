@@ -11,7 +11,7 @@ import { CSSStyleSheet, DETACH, sheetOfElement, type CSSRule } from './css-style
 import { supportsCondition } from './supports-condition.ts';
 import { mediaCondition } from './media-query.ts';
 import { transitionOf, transitionPart } from './transition-style.ts';
-import { isLine, lineProps, lineWithTokens } from './runtime-border.ts';
+import { drawnSolid, isLine, lineProps, lineWithTokens } from './runtime-border.ts';
 import { declarationsIn, pieces, withoutComments } from './css-style-declaration.ts';
 import { partsOf } from './css-grammar.ts';
 import { tokenize } from './css-tokens.ts';
@@ -123,6 +123,7 @@ function flex(value: string, out: Declarations): boolean {
 
 /** A value of one word: a length, a number, a keyword or a colour, by what its property takes. */
 function single(name: string, value: string): unknown {
+  if (name === 'outline-offset') return offset(value);
   if (LENGTHS.has(name)) return length(value);
   if (NUMBERS.has(name)) return /^-?[\d.]+$/.test(value) ? Number(value) : undefined;
   if (WORDS[name]) return WORDS[name].includes(value) ? value : undefined;
@@ -199,6 +200,12 @@ function lineValue(prop: string, text: string): unknown {
   return text === 'currentcolor' ? CURRENT_COLOUR : single('color', text);
 }
 
+/** An outline's offset: a length, one in `em` as the build writes it, and no share or `auto`. */
+function offset(value: string): unknown {
+  const read = length(value) ?? ems(value);
+  return typeof read === 'string' ? undefined : read;
+}
+
 /** A length in `em`, as the marker the build writes for the node to settle in its font size. */
 function ems(text: string): unknown {
   const [, factor] = /^(-?[\d.]+)em$/.exec(text) ?? [];
@@ -234,10 +241,23 @@ function declare(name: string, value: string, out: Declarations, later?: Deferre
 }
 
 const said = new Set<string>();
-function pass(what: string): void {
-  if (said.has(what)) return;
-  said.add(what);
-  console.warn(`[angular-native] a <style> made while the app runs: ${what} is not read.`);
+/** Say what of a declaration is passed over, once: `what is not read` where no `why` is given. */
+function pass(what: string, why = 'is not read'): void {
+  const message = `${what} ${why}`;
+  if (said.has(message)) return;
+  said.add(message);
+  console.warn(`[angular-native] a <style> made while the app runs: ${message}.`);
+}
+
+/** Say of a side native draws solid what the build says of it. */
+function sayDrawnSolid(name: string, value: string, set: Declarations): void {
+  const style = drawnSolid(name, set);
+  if (style === undefined) return;
+  pass(
+    `'${name}: ${value}':`,
+    `native has one border style for the whole box, so a '${style}' side is drawn solid, ` +
+      `native's default`,
+  );
 }
 
 type Deferred = NonNullable<StyleRule['deferred']>[number];
@@ -329,8 +349,11 @@ function declarations(block: string): Declared {
     if (token) later.push(written === value ? token : ({ ...token, important: true } as Deferred));
     // What a box takes from its parent, or has with no rule, is not a value of its own here.
     else if (CSS_WIDE.test(value) || !declare(name, value, set, lines)) pass(`'${name}: ${value}'`);
-    else if (written === value) wrote({ set, lines }, plain, later, false);
-    else wrote({ set, lines }, important, later, true);
+    else {
+      sayDrawnSolid(name, value, set);
+      const marked = written !== value;
+      wrote({ set, lines }, marked ? important : plain, later, marked);
+    }
   }
   return { plain, important, later, tokens, importantTokens };
 }

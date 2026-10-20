@@ -84,8 +84,9 @@ Gaps:
   other than a string or `none` (a counter or `attr()`, say), and a value the engine drops,
   `display: table` among them.
 - In a sheet made while the app runs, `border-inline`, `border-block` and their sides and
-  longhands are passed over, as are a corner of two radii, a `calc()` or `color-mix()` in a border
-  or outline with a token in it, and an outline of `auto`.
+  longhands are passed over, as are a corner of two radii, a `calc()` or a second `var()` in a
+  border or outline with a token in it, a `color-mix()` in `border`, `outline` or a side's
+  shorthand, and an outline of `auto`.
 - An `@import` loads nothing, so the sheet it makes is empty.
 - `element.style` checks a value against what the property takes for the properties a script
   commonly sets, and drops one that does not match; any other longhand takes any value. A colour
@@ -122,7 +123,8 @@ it is a block, with no margins and no heading sizes, and a table is not laid out
 window does not scroll.
 An inline element over two lines is one box around both, where a browser has two.
 A table's `clientTop` and `clientLeft` are its border's width with `border-collapse: collapse`
-too, where Chrome answers half of it.
+too, where Chrome answers half of it. A table whose overflow is `scroll` or `auto` scrolls, where
+Chrome draws it as `visible`; an `IntersectionObserver` sees it as Chrome does.
 `IntersectionObserver` takes `trackVisibility` but its `isVisible` is never true, since nothing
 tells it whether something is drawn over an element.
 

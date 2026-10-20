@@ -156,15 +156,19 @@ const isElement = (root: unknown): root is EngineNode =>
 const scrollsItself = (node: EngineNode): boolean =>
   node.scrollView === true || node.tag === 'scroll-view';
 
-/** Whether an element clips what is in it: it scrolls, or its overflow is not to be seen. */
-const clips = (node: EngineNode): boolean =>
-  scrollsItself(node) ||
-  ['hidden', 'clip', 'scroll', 'auto'].includes(String(styled(node, 'overflow')));
+/**
+ * Whether an element clips what is in it: it scrolls, or its overflow is not to be seen. A table
+ * clips only where its overflow is hidden: Chrome draws one that scrolls as one that does not.
+ */
+const clips = (node: EngineNode): boolean => {
+  const overflow = String(styled(node, 'overflow'));
+  if (isTable(node)) return overflow === 'hidden' || overflow === 'clip';
+  return scrollsItself(node) || ['hidden', 'clip', 'scroll', 'auto'].includes(overflow);
+};
 
-/** The box an element clips what it holds to: inside its border, and a table's all of it. */
+/** The box an element clips what it holds to: inside its border, a table's as well. */
 function paddingBox(node: EngineNode): Rect {
   const frame = frameOf(node);
-  if (isTable(node)) return frame;
   const inside = clientSize(node);
   const x = frame.x + border(node, 'Left');
   const y = frame.y + border(node, 'Top');
