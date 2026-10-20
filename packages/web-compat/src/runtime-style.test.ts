@@ -6,8 +6,8 @@
 import assert from 'node:assert/strict';
 import { afterEach, describe, it } from 'node:test';
 import { Component, DOCUMENT, inject, Renderer2 } from '@angular/core';
-import { Engine } from '@ng-native/fabric';
-import { cleanup, createFakeFabric, render, screen, settle } from '@ng-native/testing';
+import { Engine, type StyleRule } from '@ng-native/fabric';
+import { cleanup, compileCss, createFakeFabric, render, screen, settle } from '@ng-native/testing';
 import { provideWebCompat } from './index.ts';
 import { sheetOf } from './runtime-style.ts';
 
@@ -561,5 +561,139 @@ describe('a transition in a <style> made while the app runs', () => {
     });
     assert.equal(parts!.declarations['$transitionDuration'], 150);
     assert.equal(parts!.declarations['$transitionDelay'], 20);
+  });
+});
+
+/** What a rule sets, each prop to its value, a colour left to the node as `currentcolor`. */
+function propsOf(rule: StyleRule | undefined): Record<string, unknown> {
+  const props: Record<string, unknown> = { ...rule?.declarations };
+  for (const each of rule?.deferred ?? []) {
+    for (const prop of each.props) props[prop] = each.within ? 'currentcolor' : each;
+  }
+  return Object.fromEntries(Object.entries(props).sort(([a], [b]) => a.localeCompare(b)));
+}
+
+describe('a border in a <style> made while the app runs', () => {
+  it('is each side’s width, style and colour', () => {
+    const [rule] = sheetOf('.box { border: 1px solid black }').rules;
+    assert.deepEqual(propsOf(rule), {
+      ...Object.fromEntries(
+        ['Top', 'Right', 'Bottom', 'Left'].flatMap((side) => [
+          [`border${side}Color`, 'black'],
+          [`border${side}Style`, 'solid'],
+          [`border${side}Width`, 1],
+        ]),
+      ),
+      borderStyle: 'solid',
+    });
+  });
+
+  it('is what the build compiles the same declaration to, and nothing where it drops one', () => {
+    const said: unknown[] = [];
+    const warn = console.warn;
+    console.warn = (...all: unknown[]) => said.push(all.join(' '));
+    try {
+      for (const declaration of [
+        'border: 1px solid rgb(0, 0, 0)',
+        'border: 2px dashed rgb(255, 0, 0)',
+        'border: 1rem dotted rgb(255, 0, 0)',
+        'border: solid',
+        'border: none',
+        'border-top: 1px hidden',
+        'border: 0',
+        'border-top: 3px solid',
+        'border-bottom: 1px solid rgb(204, 204, 204)',
+        'border-left: none',
+        'border-width: 4px',
+        'border-width: thick 0',
+        'border-width: 1px 2px 3px',
+        'border-color: rgb(255, 0, 0)',
+        'border-color: rgb(255, 0, 0) rgb(0, 0, 255)',
+        'border-color: currentcolor',
+        'border-style: dashed',
+        'border-style: none',
+        'border-top-width: thin',
+        'border-right-style: dashed',
+        'border-left-color: rgb(255, 0, 0)',
+        'outline: 2px solid rgb(255, 0, 0)',
+        'outline: 2px dotted',
+        'outline: none',
+        'outline-width: 2px',
+        'outline-style: dashed',
+        'outline-color: rgb(255, 0, 0)',
+        'border-radius: 4px',
+        'border-radius: 4px 8px',
+        'border-radius: 1px 2px 3px 4px',
+        'border-radius: 50%',
+        'border-top-left-radius: 4px',
+      ]) {
+        const css = `.box { ${declaration} }`;
+        assert.deepEqual(
+          propsOf(sheetOf(css).rules[0]),
+          propsOf(compileCss(css).rules[0]),
+          declaration,
+        );
+      }
+      assert.deepEqual(said, []);
+      // What the build drops, a line native cannot draw and a corner of two radii, is passed over.
+      for (const declaration of [
+        'border: 1px double red',
+        'border-style: solid dashed',
+        'border-radius: 4px / 8px',
+        'border-top-left-radius: 4px 8px',
+        'border: 1px solid nonsense',
+      ]) {
+        assert.deepEqual(sheetOf(`.box { ${declaration} }`).rules, [], declaration);
+      }
+    } finally {
+      console.warn = warn;
+    }
+    assert.equal(said.length, 5);
+  });
+
+  it('leaves a token to each side, and transitions each side, as the build does', () => {
+    for (const declaration of [
+      'border-width: var(--w)',
+      'border-top-width: var(--w)',
+      'border-color: var(--c)',
+      'border-radius: var(--r)',
+      'outline-color: var(--c)',
+      'transition: border-color 1s',
+      'transition: border 1s',
+    ]) {
+      const css = `.box { ${declaration} }`;
+      const [built] = compileCss(css).rules;
+      const [read] = sheetOf(css).rules;
+      assert.deepEqual(read?.deferred, built!.deferred, declaration);
+      assert.deepEqual(
+        Object.keys(read?.declarations['$transition'] ?? {}).sort(),
+        Object.keys(built!.declarations['$transition'] ?? {}).sort(),
+        declaration,
+      );
+    }
+  });
+
+  it('is drawn on the element a rule is for', async () => {
+    const app = await render(Strip, { providers: [provideWebCompat()] });
+    await settle();
+    const { document } = app.fixture.componentInstance;
+    const style = document.createElement('style');
+    document.head.appendChild(style);
+    style.textContent =
+      '#strip .item { border: 2px dashed red } #strip .wide { border-top: 3px solid }';
+    await settle();
+    const props = (id: string) => screen.getByTestId(id).props;
+    assert.deepEqual(
+      [
+        props('one')['borderLeftWidth'],
+        props('one')['borderStyle'],
+        props('one')['borderLeftColor'],
+      ],
+      [2, 'dashed', 'red'],
+    );
+    assert.equal(props('two')['borderTopWidth'], 3);
+    assert.equal(props('two')['borderBottomWidth'], 2);
+    // A side written with no colour is the text's.
+    assert.equal(props('two')['borderTopColor'], 'black');
   });
 });

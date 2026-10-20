@@ -86,6 +86,8 @@ function placedIn(node: EngineNode): EngineNode | null {
 
 /** How wide an element's border is on one side, where a number says so. */
 export function border(node: EngineNode, side: 'Top' | 'Right' | 'Bottom' | 'Left'): number {
+  // A table's border is its grid's, inside the box around it and its caption, which has none.
+  if (node.tag === 'table') return 0;
   const width = styled(node, `border${side}Width`) ?? styled(node, 'borderWidth');
   return typeof width === 'number' ? width : 0;
 }

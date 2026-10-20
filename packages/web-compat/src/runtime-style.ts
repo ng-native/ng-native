@@ -11,6 +11,7 @@ import { CSSStyleSheet, DETACH, sheetOfElement, type CSSRule } from './css-style
 import { supportsCondition } from './supports-condition.ts';
 import { mediaCondition } from './media-query.ts';
 import { transitionOf, transitionPart } from './transition-style.ts';
+import { isLine, lineProps } from './runtime-border.ts';
 import { declarationsIn, pieces, withoutComments } from './css-style-declaration.ts';
 import { partsOf } from './css-grammar.ts';
 import { tokenize } from './css-tokens.ts';
@@ -39,7 +40,7 @@ import { domError } from './dom-error.ts';
  * ponytail: what a component writes this way and no more. Selectors as `runtime-selector.ts`
  * reads them; `@media` as `media-query.ts` reads it; lengths in `px`, `rem` and `%`, or one token; the layout
  * properties below, and colours as they are written. No shorthand but `flex`, `margin`,
- * `padding` and `inset`. A rule or a declaration outside that is passed over and said.
+ * `padding`, `inset`, and a border's as `runtime-border.ts` reads them. A rule or a declaration outside that is passed over and said.
  * `@supports` holds for what is read here, which is `CSS.supports` too. A library's whole theme
  * is the build's to compile: see `isTheBuilds`.
  */
@@ -181,13 +182,36 @@ const READERS: Readonly<
 /** The props a property sets, learnt by declaring it: one that takes no length is its own name. */
 function transitioned(property: string): readonly string[] {
   const set: Declarations = {};
-  declare(property, '1px', set);
+  // A border's line is each of its parts, which no one value is.
+  const samples = isLine(property) ? ['1px', 'red', '1px solid red'] : ['1px'];
+  for (const sample of samples) declare(property, sample, set);
   const props = Object.keys(set);
   return props.length ? props : [camel(property)];
 }
 
+/** The marker the build writes for `currentcolor`, which the node fills in. */
+const CURRENT_COLOUR = Object.freeze({ __colour: Object.freeze({ color: 'currentcolor' }) });
+
+/** A border's prop read as the kind its name says: a length, a colour, or a style as written. */
+function lineValue(prop: string, text: string): unknown {
+  if (/(Width|Radius)$/.test(prop)) return length(text);
+  if (!prop.endsWith('Color')) return text;
+  return text === 'currentcolor' ? CURRENT_COLOUR : single('color', text);
+}
+
+/** A border's props, all of them or none where one is not read. */
+function line(name: string, value: string, out: Declarations): boolean {
+  const props = lineProps(name, value);
+  if (!props) return false;
+  const read = Object.entries(props).map(([prop, text]) => [prop, lineValue(prop, text)]);
+  if (read.some(([, each]) => each === undefined)) return false;
+  Object.assign(out, Object.fromEntries(read));
+  return true;
+}
+
 /** Write one declaration as the props it is, and answer whether it was one this reads. */
 function declare(name: string, value: string, out: Declarations): boolean {
+  if (isLine(name)) return line(name, value, out);
   const reader = Object.hasOwn(READERS, name) ? READERS[name] : undefined;
   if (reader) return reader(name, value, out);
   const read = single(name, value);
@@ -208,6 +232,13 @@ type Deferred = NonNullable<StyleRule['deferred']>[number];
 function propsOf(name: string): { props: string[]; kind: string } | undefined {
   if (name === 'margin' || name === 'padding') {
     return { props: SIDES.map((side) => `${name}${side}`), kind: 'length' };
+  }
+  // A border's width, colour or corner, on each side or corner it sets.
+  const [, part] = (isLine(name) && /-(width|radius|color)$/.exec(name)) || [];
+  if (part) {
+    const set: Declarations = {};
+    line(name, part === 'color' ? 'red' : '1px', set);
+    return { props: Object.keys(set), kind: part === 'color' ? 'color' : 'length' };
   }
   if (LENGTHS.has(name)) return { props: [camel(name)], kind: 'length' };
   return COLOURS.has(name) ? { props: [camel(name)], kind: 'color' } : undefined;
@@ -279,7 +310,19 @@ function declarations(block: string): Declared {
       pass(`'${name}: ${value}'`);
     }
   }
+  later.push(...current(plain, false), ...current(important, true));
   return { plain, important, later, tokens, importantTokens };
+}
+
+/**
+ * The props a block leaves to the colour in scope, which the node fills in, taken out of its
+ * declarations as the build leaves them: a border written with no colour.
+ */
+function current(declared: Declarations, important: boolean): Deferred[] {
+  const props = Object.keys(declared).filter((prop) => declared[prop] === CURRENT_COLOUR);
+  for (const prop of props) delete declared[prop];
+  if (!props.length) return [];
+  return [{ props, within: CURRENT_COLOUR, ...(important ? { important: true } : {}) } as Deferred];
 }
 
 /** A block's custom properties as the engine keeps them, and those marked `!important`. */

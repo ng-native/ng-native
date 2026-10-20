@@ -196,6 +196,17 @@ describe('offset and client members', () => {
     assert.equal(document.documentElement.clientHeight, 800);
   });
 
+  it('keeps a table’s border in its client size, which is the box around the table', async () => {
+    const { make, place } = await page();
+    const table = make('table', undefined, 'border-width: 8px; border-style: solid');
+    await settle();
+    place(table, { x: 0, y: 0, width: 100, height: 50 });
+    assert.deepEqual(
+      [table.clientWidth, table.clientHeight, table.clientLeft, table.clientTop],
+      [100, 50, 0, 0],
+    );
+  });
+
   it('rounds each size and offset to a whole pixel, as a browser does, where a getter reads one', async () => {
     // A 1080-pixel Android screen at 2.625 is 411.43 points across: a library that sizes a
     // chart by offsetWidth draws it at 411 in a browser, and placed every line by the fraction.
