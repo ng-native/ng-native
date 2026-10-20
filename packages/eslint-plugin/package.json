@@ -31,6 +31,9 @@
     "tags": [
       "scope:eslint-plugin",
       "layer:build"
+    ],
+    "implicitDependencies": [
+      "@ng-native/components"
     ]
   },
   "scripts": {

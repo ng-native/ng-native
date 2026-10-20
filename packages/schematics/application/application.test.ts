@@ -124,7 +124,9 @@ describe('ng add', () => {
     for (const name of Object.keys(native.lintDevDependencies)) {
       assert.equal(devDependencies[name], undefined, name);
     }
-    assert.doesNotMatch(tree.readContent('projects/native/AGENTS.md'), /ng lint/);
+    const agents = tree.readContent('projects/native/AGENTS.md');
+    assert.doesNotMatch(agents, /ng lint/);
+    assert.match(agents, /Run `ng test native` after a change; it is fast/);
   });
 
   it("with --linter=eslint, lints on angular-eslint's builder with the project's own config", async () => {
@@ -142,7 +144,9 @@ describe('ng add', () => {
     for (const [name, range] of Object.entries(native.lintDevDependencies)) {
       assert.equal(devDependencies[name], range, name);
     }
-    assert.match(linted.readContent('projects/native/AGENTS.md'), /^ng lint native +# ESLint/m);
+    const agents = linted.readContent('projects/native/AGENTS.md');
+    assert.match(agents, /^ng lint native +# ESLint/m);
+    assert.match(agents, /Run `ng test native` and `ng lint native` after a change/);
   });
 
   it("routes ng generate in the project to this collection first, then Angular's", () => {

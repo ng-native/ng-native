@@ -51,11 +51,12 @@ in [Metro](/packages/metro), and the project's `angular.json` entry is what conn
 | `ng run native:typecheck`   | `ngc --noEmit`, which checks the templates as well as the code.  |
 | `ng lint native`            | ESLint, with `--linter=eslint` only.                             |
 
-Each is an Expo, Vitest or `ngc` command run in the project's directory, by the package's three
-builders, `@ng-native/schematics:expo`, `@ng-native/schematics:vitest` and
-`@ng-native/schematics:typecheck`. They run the copies the workspace installed, with the terminal
-attached, so Metro's QR code and keyboard shortcuts work as they do under `npx expo start`. A
-plain `ng test` runs the web app's tests and the native app's, since the Angular CLI runs `test`
+Each but `lint` is an Expo, Vitest or `ngc` command run in the project's directory, by the package's
+three builders, `@ng-native/schematics:expo`, `@ng-native/schematics:vitest` and
+`@ng-native/schematics:typecheck`. `lint` is angular-eslint's `@angular-eslint/builder:lint`, given
+the project's own `eslint.config.mjs`. They run the copies the workspace installed, with the
+terminal attached, so Metro's QR code and keyboard shortcuts work as they do under `npx expo start`.
+A plain `ng test` runs the web app's tests and the native app's, since the Angular CLI runs `test`
 for every project that has one. A plain `ng build` and `ng serve` still mean the web app.
 
 `ng test native` does not use `@angular/build:unit-test`. That builder compiles tests with the web

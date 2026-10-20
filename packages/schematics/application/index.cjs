@@ -107,7 +107,9 @@ function commands(name, lint) {
     '```',
     '',
     '`src/main.ts` mounts the root component, `src/app/app.ts`. ' +
-      `Run \`ng test ${name}\` after a change; it is fast.`,
+      (lint
+        ? `Run \`ng test ${name}\` and \`ng lint ${name}\` after a change; both are fast.`
+        : `Run \`ng test ${name}\` after a change; it is fast.`),
   ].join('\n');
 }
 
