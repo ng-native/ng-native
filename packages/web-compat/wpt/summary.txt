@@ -8,13 +8,13 @@ dom/events                                                                     9
 dom/collections                                                                12         10 (83.3%)   1              56               60     93.3%
 css/selectors                                                                  222        127 (57.2%)  619            4671             5660   82.5%
 html/canvas/element                                                            1091       752 (68.9%)  658            804              1257   64.0%
-css/cssom                                                                      250        159 (63.6%)  43             1762             1972   89.4%
+css/cssom                                                                      250        158 (63.2%)  43             1761             1972   89.3%
 uievents                                                                       15         10 (66.7%)   104            44               56     78.6%
 dom/traversal                                                                  18         16 (88.9%)   10             1602             1608   99.6%
 html/dom                                                                       209        56 (26.8%)   168            63898            64451  99.1%
 html/editing/the-hidden-attribute                                              10         2 (20.0%)    15             20               42     47.6%
 html/interaction/focus/sequential-focus-navigation-and-the-tabindex-attribute  3          1 (33.3%)    4              8                10     80.0%
-css/cssom-view                                                                 220        47 (21.4%)   27             682              1713   39.8%
+css/cssom-view                                                                 220        48 (21.8%)   27             696              1713   40.6%
 resize-observer                                                                32         7 (21.9%)    7              16               48     33.3%
 intersection-observer                                                          137        27 (19.7%)   17             145              337    43.0%
 domparsing                                                                     68         21 (30.9%)   20             614              1856   33.1%
@@ -151,9 +151,9 @@ html/syntax/parsing-html-fragments: 13 support files, not tests
       2  no testharness (a reference, visual or print page)
       1  XML document (the runner reads HTML only)
 
-FAILURES BY CAUSE (6358 failures in 249 causes; the first 60)
+FAILURES BY CAUSE (6345 failures in 249 causes; the first 60)
 A failure is a subtest that did not pass, or a file that did not run to its end.
-  1. 2149 in 441 files: assert_equals: wrong value
+  1. 2139 in 440 files: assert_equals: wrong value
        dom/nodes/Comment-constructor.html: new Comment() should get the correct ownerDocument across globals: assert_equals: expected Document node with 1 child but got Document node with 2 children
        dom/nodes/Document-URL.html: Document.URL with redirect: assert_equals: expected "http://web-platform.test:8000/common/blank.html" but got "about:blank"
        dom/nodes/Document-characterSet-normalization-1.html: Name "IBM866" has label "866" (characterSet): assert_equals: expected "IBM866" but got "UTF-8"
@@ -173,15 +173,15 @@ A failure is a subtest that did not pass, or a file that did not run to its end.
        dom/nodes/Document-getElementsByTagName.html: Element in non-HTML namespace, prefix, lowercase name: assert_array_equals: lengths differ, expected array [] length 0, got object "[object HTMLCollection]" length 1
        dom/nodes/Document-getElementsByTagNameNS.html: getElementsByTagNameNS('http://www.w3.org/1999/xhtml', '*'): assert_array_equals: lengths differ, expected array [Element node <html class="platform-ios"><body><div id="log"></div> <sc..., Element nod
        dom/nodes/Element-children.html: HTMLCollection edge cases 1: assert_array_equals: lengths differ, expected array ["0", "1", "2", "3", "4", "5", "foo", "bar", "baz"] length 9, got ["0", "1", "2", "3", "4", "5", "foo", "bar", "baz", "
-  6. 217 in 98 files: assert_true: wrong value
+  6. 218 in 99 files: assert_true: wrong value
        dom/nodes/Element-matches.html: In-document Element.matches: :target pseudo-class selector, matching the element referenced by the URL fragment identifier (with no refNodes): :target: assert_true: The element #target should match th
        dom/nodes/Element-webkitMatchesSelector.html: In-document Element.webkitMatchesSelector: :target pseudo-class selector, matching the element referenced by the URL fragment identifier (with no refNodes): :target: assert_true: The element #target s
        dom/nodes/ParentNode-querySelector-All.html: Document.querySelectorAll returns NodeList instance: assert_true: The result should be an instance of a NodeList expected true got false
-  7. 194 in 41 files: subtest NOTRUN
+  7. 191 in 41 files: subtest NOTRUN
        dom/nodes/Node-parentNode.html: Removed iframe: NOTRUN
        dom/nodes/moveBefore/relevant-mutations.html: Moving <img> into a <picture> triggers a relevant mutation on the <img>, loading <source>: NOTRUN
        dom/nodes/query-target-in-load-event.html: document.querySelector(":target") must work when called in the window.load event: NOTRUN
-  8. 186 in 65 files: assert_approx_equals: wrong value
+  8. 184 in 63 files: assert_approx_equals: wrong value
        html/canvas/element/color-type/2d.color.type.u8p3.to.u8srgb.to.u8p3.html: test srgb unorm8 canvas storing 8-bit display-p3 data accurately: assert_approx_equals: expected 116 +/- 2 but got 5
        html/canvas/element/color-type/2d.color.type.u8srgb.to.u8p3.to.u8srgb.html: test display-p3 unorm8 canvas not storing 8-bit srgb data accurately: assert_approx_equals: expected 9 +/- 2 but got 5
        html/canvas/element/drawing-images-to-the-canvas/2d.drawImage.animated.gif.html: drawImage() of an animated GIF draws the first frame: assert_approx_equals: Green channel of the pixel at (50, 25) expected 255 +/- 2 but got 0
@@ -208,7 +208,7 @@ A failure is a subtest that did not pass, or a file that did not run to its end.
        css/selectors/class-prefix-selector-has-matching.tentative.html: :has(.foo-*) matches an element with a descendant, at any depth, whose class matches the prefix: ':has(.foo-*)' is not a valid selector.
        css/selectors/class-prefix-selector-matching-quirks.tentative.html: class="foo-bar" matches .foo-* in quirks mode: '.foo-*' is not a valid selector.
        css/selectors/class-prefix-selector-matching.tentative.html: class="foo-bar-baz" matches .foo-*: '.foo-*' is not a valid selector.
- 15. 72 in 54 files: assert_false: wrong value
+ 15. 73 in 55 files: assert_false: wrong value
        dom/nodes/Document-createElementNS.html: Lower-case non-HTML element without a prefix: assert_false: Should not be an HTMLElement expected false got true
        dom/nodes/Document-getElementsByTagName.html: hasOwnProperty, getOwnPropertyDescriptor, getOwnPropertyNames: assert_false: expected false got true
        dom/nodes/Element-getElementsByTagName.html: hasOwnProperty, getOwnPropertyDescriptor, getOwnPropertyNames: assert_false: expected false got true

@@ -7,7 +7,7 @@ import { documentOfRoot, topOf } from './document-roots.ts';
 import { insertedFor, isFragment, markFragment } from './document-fragment.ts';
 import { domError, required, withLength } from './dom-error.ts';
 import { keepingFocus, loseFocusMoving } from './element-focus.ts';
-import { marksHover } from './elements.ts';
+import { copyDefaults, marksHover } from './elements.ts';
 import { byClassName, byTagName, byTagNameNS } from './elements-by.ts';
 import { insertedByScript, removedByScript } from './html-tree.ts';
 import { descendants, inDocument } from './in-document.ts';
@@ -158,6 +158,8 @@ function cloned(engine: Engine, node: EngineNode, deep: boolean): EngineNode {
   const copy = engine.createElement(node.tag, node.templateSheet);
   copyName(node, copy);
   copyAttributeNames(node, copy);
+  // What a browser's own stylesheet gives it: see `elements.ts`.
+  copyDefaults(node, copy, engine);
   // Its component's, as the one it is a copy of is: no `<view>` a template forgot to import.
   if (node.claimed) claimHost(copy as never);
   if (isFragment(node)) markFragment(copy);

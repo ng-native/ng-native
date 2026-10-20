@@ -6,6 +6,7 @@ import {
   type EngineNode,
 } from '@ng-native/fabric';
 import { documentOf } from './document.ts';
+import { nameRecordOf, XHTML } from './qualified-name.ts';
 
 /**
  * The HTML elements a library writes that the engine has no view for, each a plain view, with
@@ -112,6 +113,52 @@ const named = (name: string): boolean =>
 const isHtml = (name: string): boolean =>
   HTML_ELEMENTS.has(name) ||
   (registeredViewName(name) === undefined && (!name.includes('-') || named(name)));
+
+/**
+ * What a browser's own stylesheet starts an HTML element at, under every style an app or a
+ * library writes. Its padding and border are outside the width and height it is given, where a
+ * native view's are inside them.
+ */
+const CONTENT_BOX = { boxSizing: 'content-box' };
+/**
+ * What a browser sizes whole, its padding and border inside its size: a button, a select, and a
+ * table, which is no block and keeps the engine's layout.
+ */
+const WHOLE = { boxSizing: 'border-box' };
+/**
+ * The elements a browser lays out as blocks: one under the other, as wide as what holds them.
+ * A paragraph and a heading are text to the engine, and blocks to what holds them. A table's
+ * parts are not blocks in a browser, and keep the engine's layout.
+ */
+const BLOCKS = new Set([
+  ...['div', 'section', 'article', 'aside', 'header', 'footer', 'main', 'nav', 'address'],
+  ...['ul', 'ol', 'li', 'dl', 'dt', 'dd', 'menu', 'p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6'],
+  ...['hgroup', 'pre', 'blockquote', 'figure', 'figcaption', 'hr', 'form', 'fieldset', 'legend'],
+  ...['details', 'summary', 'search'],
+]);
+const BLOCK = { ...CONTENT_BOX, display: 'block' };
+const SIZED_WHOLE = new Set(['button', 'select', 'table']);
+
+/**
+ * Give an HTML element made in an app that asked for this package what a browser's own
+ * stylesheet gives one of its name. Not an element of a drawing, which SVG sizes itself, nor one
+ * a script made in no namespace or another, which has no browser default.
+ */
+export function giveDefaults(node: EngineNode, engine: Engine): void {
+  if (node.namespace !== undefined || !isHtml(node.tag) || !documentOf(engine)) return;
+  const record = nameRecordOf(node);
+  if (record && record.namespace !== XHTML) return;
+  const style = SIZED_WHOLE.has(node.tag) ? WHOLE : BLOCKS.has(node.tag) ? BLOCK : CONTENT_BOX;
+  engine.setDefaultStyle(node, style);
+}
+
+/** The defaults above, which a copy `cloneNode` makes is given as the element was. */
+const DEFAULTS: ReadonlySet<unknown> = new Set([CONTENT_BOX, WHOLE, BLOCK]);
+
+/** Give a copy of an element the default `giveDefaults` gave the element, where it gave one. */
+export function copyDefaults(node: EngineNode, copy: EngineNode, engine: Engine): void {
+  if (DEFAULTS.has(node.defaultStyle)) engine.setDefaultStyle(copy, node.defaultStyle);
+}
 
 /**
  * Have an element made in an app that asked for this package scroll what overflows it where its

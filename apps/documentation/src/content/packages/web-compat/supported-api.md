@@ -99,6 +99,12 @@ Gaps:
   out, with what is pending committed first.
 - `getComputedStyle` answers a `width` or `height` an element has none of its own of as it is
   drawn.
+- An HTML element starts as a browser's own stylesheet has it, under every style an app or a
+  library writes: sized `content-box`, so its padding and border add to its width and height, and
+  a block where HTML has one (`div`, `p`, `section`, `ul`, `li`, a heading and the rest). A
+  `<button>`, a `<select>` and a `<table>` are sized `border-box`. A `<view>`, a drawing's
+  elements, and every element of an app that did not ask for the package keep the engine's own
+  layout.
 - Scrolling: an element whose style says `overflow: auto` or `scroll` scrolls what overflows it,
   with `scrollTop` and `scrollLeft` to read and write, `scroll`, `scrollTo`, `scrollBy` and
   `scrollIntoView`. `document.scrollingElement` is the root.
@@ -107,8 +113,9 @@ Gaps:
   observes nothing pays nothing for them.
 
 Gaps: `ResizeObserver` has no `device-pixel-content-box`, and `scrollIntoView` reads no
-`scroll-margin` or `scroll-padding`. Elements have no browser default styles of their own: a `<div>`
-is laid out as the engine lays out a view, and sized by its border box. The window does not scroll.
+`scroll-margin` or `scroll-padding`. An element's browser defaults are its box sizing and whether
+it is a block, with no margins and no heading sizes, and a table is not laid out as a table. The
+window does not scroll.
 An inline element over two lines is one box around both, where a browser has two.
 `IntersectionObserver` takes `trackVisibility` but its `isVisible` is never true, since nothing
 tells it whether something is drawn over an element.

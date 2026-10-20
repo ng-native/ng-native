@@ -4,7 +4,7 @@ import { activate, ancestry, clickElement, disabled } from './activation.ts';
 import { canvasCreated, setCanvasSize } from './canvas.ts';
 import { documentOf, heldForMenu, listenAnywhere, type CompatDocument } from './document.ts';
 import { isTextField } from './element-focus.ts';
-import { giveRole, hoverWritten, scrollWhereStyled } from './elements.ts';
+import { giveDefaults, giveRole, hoverWritten, scrollWhereStyled } from './elements.ts';
 import { nativeEvent } from './event-classes.ts';
 import { listen, type Heard } from './events.ts';
 import {
@@ -150,6 +150,9 @@ export const webListen: RendererExtension = {
   named: (name, namespace, engine) => (documentOf(engine) ? svgNamed(name, namespace) : undefined),
   // A button and a link have their roles, and take a press with no listener: see `elements.ts`.
   created(node, engine) {
+    // What a browser's own stylesheet gives an element of its name, first: a field's and a
+    // select's own defaults are added to it. See `elements.ts`.
+    giveDefaults(node, engine);
     if (giveRole(node, engine)) takesPress(engine, node);
     // An input and a text area are the platform's text field, and a select opens a list of its
     // options when pressed: see `field.ts` and `select.ts`.
