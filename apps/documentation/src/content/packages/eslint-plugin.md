@@ -15,23 +15,68 @@ which reads both `.html` templates and the inline templates in `.ts` files.
 
 ## Setup
 
-An app made from the template, or by `@ng-native/nx` or `@ng-native/schematics`, has this already:
-`npm run lint`, `nx lint <app>` or `ng lint <app>`. Any other app installs it:
+The plugin runs on ESLint 9 or 10, with angular-eslint 22 and typescript-eslint 8.
+
+### An app from the template
+
+Install the packages:
 
 ```sh
 npm install --save-dev eslint typescript-eslint angular-eslint @ng-native/eslint-plugin
 ```
 
+Add `eslint.config.mjs` beside `package.json`:
+
 ```js
-// eslint.config.mjs
 import ngNative from '@ng-native/eslint-plugin';
 
-export default [...ngNative.configs.recommended];
+export default [
+  { ignores: ['.expo/', 'ios/', 'android/', 'dist/'] },
+  ...ngNative.configs.recommended,
+];
 ```
 
-`recommended` lints `**/*.ts` and `**/*.html`. An app that already has an angular-eslint config
-can keep it and add the rules alone: register the plugin as `@ng-native` and turn on the rules
-below for the files angular-eslint parses.
+Then add a `lint` script to `package.json`, and run it with `npm run lint`:
+
+```json
+{
+  "scripts": {
+    "lint": "eslint ."
+  }
+}
+```
+
+### An Nx workspace
+
+Generate the app with `--linter=eslint`:
+
+```sh
+nx g @ng-native/nx:app apps/mobile --linter=eslint
+```
+
+The app gets the `eslint.config.mjs` above, the four packages and a `lint` target, run with
+`nx lint mobile`. A workspace already on ESLint 9 keeps it. For an app generated without the
+option, install the packages and add the config as for the template, and give the project a
+`lint` target that runs `eslint .` in its directory.
+
+### An Angular CLI workspace
+
+Add the app with `--linter=eslint`:
+
+```sh
+ng add @ng-native/schematics --linter=eslint
+```
+
+`ng generate @ng-native/schematics:application` takes the option too. The project gets the
+`eslint.config.mjs` above, the four packages and a `lint` target on angular-eslint's builder, run
+with `ng lint native`. The target names the project's own config, so the rules apply to the native
+app and not to the workspace's web apps.
+
+### Beside an existing config
+
+`recommended` is two flat-config entries, one for `**/*.ts` and one for `**/*.html`. An app that
+already has an angular-eslint config can spread them into its own, or register the plugin as
+`@ng-native` and turn on the rules below one by one.
 
 A file that starts with `'use dom'` is an Expo DOM component, which runs in a web view with a real
 DOM, so the rules skip it. An external `templateUrl` of such a component is linted as any other

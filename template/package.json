@@ -1,6 +1,6 @@
 {
   "name": "@ng-native/template",
-  "version": "0.17.1",
+  "version": "0.16.0",
   "description": "An Angular app rendering real native views. Use with create-expo-app --template.",
   "license": "MIT",
   "main": "src/main.ts",
@@ -10,7 +10,6 @@
     "ios": "expo start --ios",
     "web": "node -e \"console.error('This app targets iOS and Android: use npm start, npm run ios or npm run android. To render it in a browser, see https://ng-native.com/packages/web#beside-a-native-app'); process.exit(1)\"",
     "typecheck": "node metro.config.js && ngc -p tsconfig.json --noEmit",
-    "lint": "eslint .",
     "test": "vitest run"
   },
   "dependencies": {
@@ -31,13 +30,9 @@
   "devDependencies": {
     "@angular/compiler-cli": "^22.0.0",
     "@babel/core": "^7.29.7",
-    "@ng-native/eslint-plugin": "workspace:*",
     "@ng-native/testing": "workspace:*",
     "@types/react": "~19.2.2",
-    "angular-eslint": "^22.0.0",
-    "eslint": "^10.0.0",
     "typescript": "~6.0.3",
-    "typescript-eslint": "^8.0.0",
     "vitest": "^5.0.0"
   },
   "repository": {

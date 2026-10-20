@@ -71,6 +71,7 @@ is left as it is, with a warning naming the two to decide.
 | `nx build mobile`       | `@nx/expo`     | an EAS build, on Expo's machines                                |
 | `nx test mobile`        | `project.json` | `vitest run`, through [`@ng-native/testing`](/packages/testing) |
 | `nx typecheck mobile`   | `project.json` | `ngc --noEmit`, which checks the templates as well as the code  |
+| `nx lint mobile`        | `project.json` | `eslint .`, with `--linter=eslint` only                         |
 
 `typecheck` and `test` are the two `@nx/expo` does not provide. Expo's `tsconfig` sets `noEmit`, and
 `@nx/js` disables its own inferred `typecheck` for a project that does, so the generator writes one.
@@ -287,11 +288,14 @@ warning saying what to add by hand.
 ## Options
 
 `nx g @ng-native/nx:app <directory>` takes `--name` (the directory's last segment by default),
-`--bundleIdentifier`, `--tags`, `--skipInstall` and `--skipFormat`, which leaves the generated files
-unformatted. `--bundleIdentifier` is the iOS bundle identifier and Android package in `app.json`;
-it defaults to `com.<scope>.<name>`, from the workspace's npm scope and the app's name with
-anything but letters and digits removed, where `expo prebuild` would otherwise use
-`com.anonymous.<name>`.
+`--bundleIdentifier`, `--tags`, `--linter`, `--skipInstall` and `--skipFormat`, which leaves the
+generated files unformatted. `--linter=eslint` adds an `eslint.config.mjs` with
+[`@ng-native/eslint-plugin`](/packages/eslint-plugin)'s recommended rules, its four packages and a
+`lint` target; `--linter=none`, the default, adds none of them.
+
+`--bundleIdentifier` is the iOS bundle identifier and Android package in `app.json`; it defaults to
+`com.<scope>.<name>`, from the workspace's npm scope and the app's name with anything but letters
+and digits removed, where `expo prebuild` would otherwise use `com.anonymous.<name>`.
 
 ## Upgrading
 

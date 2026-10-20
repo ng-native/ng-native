@@ -46,16 +46,35 @@ const devDependencies = {
   // The typecheck script compiles the templates too, which only the Angular compiler can.
   '@angular/compiler-cli': '^22.0.0',
   '@babel/core': '^7.29.7',
-  '@ng-native/eslint-plugin': version,
   '@ng-native/testing': version,
   '@types/react': '~19.2.2',
-  // The lint script's: angular-eslint parses the templates the plugin's rules read.
-  'angular-eslint': '^22.0.0',
-  eslint: '^10.0.0',
   typescript: '~6.0.3',
-  'typescript-eslint': '^8.0.0',
   vitest: '^5.0.0',
 };
+
+/**
+ * What `--linter=eslint` adds beside `devDependencies`: `@ng-native/eslint-plugin` and what it runs
+ * on, angular-eslint for the templates and typescript-eslint for the code.
+ *
+ * @type {Record<string, string>}
+ */
+const lintDevDependencies = {
+  '@ng-native/eslint-plugin': version,
+  'angular-eslint': '^22.0.0',
+  eslint: '^10.0.0',
+  'typescript-eslint': '^8.0.0',
+};
+
+/** The app's `eslint.config.mjs`, with `--linter=eslint`. */
+const ESLINT_CONFIG = `import ngNative from '@ng-native/eslint-plugin';
+
+// The DOM events, HTML controls and browser APIs that compile but do nothing on a device. See
+// https://ng-native.com/packages/eslint-plugin for each rule.
+export default [
+  { ignores: ['.expo/', 'ios/', 'android/', 'dist/'] },
+  ...ngNative.configs.recommended,
+];
+`;
 
 /**
  * The app's own `.gitignore`: the lines of the template's that are about the app's directory. The
@@ -201,12 +220,18 @@ const accepted = { vitest: '^4.0.8 || ^5.0.0', eslint: '^9.0.0 || ^10.0.0' };
  * generator.
  *
  * @param {{ dependencies?: Record<string, string>, devDependencies?: Record<string, string> }} manifest
+ * @param {{ linter?: 'eslint' | 'none' }} [options] with `eslint`, the lint packages are judged too
  * @returns {string[]}
  */
-function conflicts(manifest) {
+function conflicts(manifest, { linter = 'none' } = {}) {
   const existing = { ...manifest.dependencies, ...manifest.devDependencies };
   const problems = [];
-  for (const [name, installed] of Object.entries({ ...dependencies, ...devDependencies })) {
+  const lint = linter === 'eslint' ? lintDevDependencies : {};
+  for (const [name, installed] of Object.entries({
+    ...dependencies,
+    ...devDependencies,
+    ...lint,
+  })) {
     const range = existing[name];
     const wanted = accepted[name] ?? installed;
     if (!range || name.startsWith('@ng-native/')) continue;
@@ -223,6 +248,8 @@ function conflicts(manifest) {
 module.exports = {
   dependencies,
   devDependencies,
+  lintDevDependencies,
+  ESLINT_CONFIG,
   GITIGNORE,
   appJson,
   bundleIdentifier,

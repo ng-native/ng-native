@@ -49,6 +49,7 @@ in [Metro](/packages/metro), and the project's `angular.json` entry is what conn
 | `ng run native:run-ios`     | `expo run:ios`: a development build on a simulator.              |
 | `ng run native:run-android` | `expo run:android`.                                              |
 | `ng run native:typecheck`   | `ngc --noEmit`, which checks the templates as well as the code.  |
+| `ng lint native`            | ESLint, with `--linter=eslint` only.                             |
 
 Each is an Expo, Vitest or `ngc` command run in the project's directory, by the package's three
 builders, `@ng-native/schematics:expo`, `@ng-native/schematics:vitest` and
@@ -91,7 +92,10 @@ ng generate @ng-native/schematics:component profile-card --project native
 ## Options
 
 `ng add` takes `--name` (the project name and Expo slug, `native` by default), `--directory`
-(`projects/<name>` by default), `--bundleIdentifier` and `--skip-install`.
+(`projects/<name>` by default), `--bundleIdentifier`, `--linter` and `--skip-install`.
+`--linter=eslint` adds an `eslint.config.mjs` with
+[`@ng-native/eslint-plugin`](/packages/eslint-plugin)'s recommended rules, its four packages and a
+`lint` target on angular-eslint's builder; `--linter=none`, the default, adds none of them.
 `ng generate @ng-native/schematics:application mobile` adds another native app to the same
 workspace, and takes `--prefix` for its components' selectors as well.
 

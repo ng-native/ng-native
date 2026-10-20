@@ -187,13 +187,16 @@ describe('conflicts', () => {
     assert.deepEqual(problems, []);
   });
 
-  it('accepts the ESLint range @ng-native/eslint-plugin does, and names one older', () => {
+  it('accepts the ESLint range @ng-native/eslint-plugin does with a linter, and names one older', () => {
     const plugin = JSON.parse(
       readFileSync(new URL('../eslint-plugin/package.json', import.meta.url), 'utf8'),
     );
     assert.equal(native.accepted.eslint, plugin.peerDependencies.eslint);
-    assert.deepEqual(native.conflicts({ devDependencies: { eslint: '^9.8.0' } }), []);
-    const [problem] = native.conflicts({ devDependencies: { eslint: '^8.57.0' } });
+    const linter = 'eslint';
+    assert.deepEqual(native.conflicts({ devDependencies: { eslint: '^9.8.0' } }, { linter }), []);
+    // A workspace's own ESLint is its business unless the app is to be linted.
+    assert.deepEqual(native.conflicts({ devDependencies: { eslint: '^8.57.0' } }), []);
+    const [problem] = native.conflicts({ devDependencies: { eslint: '^8.57.0' } }, { linter });
     assert.match(
       problem,
       /eslint is \^8\.57\.0 here, and Angular Native needs \^9\.0\.0 \|\| \^10\.0\.0/,

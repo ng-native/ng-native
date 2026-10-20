@@ -2063,27 +2063,15 @@ importers:
       '@babel/core':
         specifier: ^7.29.7
         version: 7.29.7
-      '@ng-native/eslint-plugin':
-        specifier: workspace:*
-        version: link:../packages/eslint-plugin
       '@ng-native/testing':
         specifier: workspace:*
         version: link:../packages/testing
       '@types/react':
         specifier: ~19.2.2
         version: 19.2.18
-      angular-eslint:
-        specifier: ^22.0.0
-        version: 22.6.0(chokidar@5.0.0)(eslint@10.11.0(jiti@2.7.0))(typescript-eslint@8.70.1(eslint@10.11.0(jiti@2.7.0))(typescript@6.0.3))(typescript@6.0.3)
-      eslint:
-        specifier: ^10.0.0
-        version: 10.11.0(jiti@2.7.0)
       typescript:
         specifier: ~6.0.3
         version: 6.0.3
-      typescript-eslint:
-        specifier: ^8.0.0
-        version: 8.70.1(eslint@10.11.0(jiti@2.7.0))(typescript@6.0.3)
       vitest:
         specifier: ^5.0.0
         version: 5.0.2(@types/node@26.6.3)(@vitest/browser-playwright@5.0.2)(@vitest/coverage-v8@5.0.2)(@vitest/ui@5.0.2)(jsdom@27.4.0)(vite@8.3.1(@types/node@26.6.3)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.51.2)(yaml@2.9.1))
