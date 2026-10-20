@@ -21,8 +21,23 @@ type Dom = any;
 })
 class Page {}
 
-const page = async () => {
-  const app = await render(Page, { providers: [provideWebCompat()] });
+/** A template's listener on the document, passive there as a browser has it. */
+@Component({
+  template: `<div testID="page" style="overflow: auto">
+    <div id="slider" testID="slider"></div>
+  </div>`,
+  host: { '(document:touchmove)': 'told($event)' },
+})
+class Listening {
+  seen: boolean | undefined;
+  told(event: Dom) {
+    event.preventDefault();
+    this.seen = event.defaultPrevented;
+  }
+}
+
+const page = async (component: new () => object = Page) => {
+  const app = await render(component, { providers: [provideWebCompat()] });
   await settle();
   const engine = app.componentRef.injector.get(Engine);
   const document = (globalThis as Dom).document;
@@ -50,7 +65,7 @@ const page = async () => {
     return { during, after: scrolls() };
   };
   const slider = document.getElementById('slider');
-  return { document, slider, around: slider.parentNode, drag };
+  return { app, document, slider, around: slider.parentNode, drag };
 };
 
 const prevent = (event: Dom) => event.preventDefault();
@@ -88,7 +103,7 @@ describe('@ng-native/web-compat, a drag kept from the page', () => {
   it('leaves it to scroll for a listener after one that prevented it passively', async () => {
     const { slider, around, drag } = await page();
     slider.addEventListener('touchmove', prevent, { passive: true });
-    // Prevented when it is told, by one that could not: it keeps nothing it did not prevent.
+    // A passive listener's preventDefault is ignored, so the later listener does not hold the drag.
     around.addEventListener('touchmove', () => {});
     assert.deepEqual(drag(), { during: true, after: true });
   });
@@ -105,5 +120,41 @@ describe('@ng-native/web-compat, a drag kept from the page', () => {
     document.body.addEventListener('touchmove', told('not passive'), { passive: false });
     drag();
     assert.deepEqual(seen, { passive: false, 'not passive': true });
+  });
+
+  it("stops it for a listener that prevents it after a passive one's preventDefault", async () => {
+    const { slider, around, drag } = await page();
+    slider.addEventListener('touchmove', prevent, { passive: true });
+    around.addEventListener('touchmove', prevent);
+    assert.deepEqual(drag(), { during: false, after: true });
+  });
+
+  it('stops it for a listener that prevented it and then threw', async () => {
+    const { slider, drag } = await page();
+    slider.addEventListener('touchmove', (event: Dom) => {
+      event.preventDefault();
+      throw new Error('after preventing');
+    });
+    assert.deepEqual(drag(), { during: false, after: true });
+  });
+
+  it('stops it for a window listener that says it is not passive, and not for one that does not', async () => {
+    const { drag } = await page();
+    const window = globalThis as Dom;
+    window.addEventListener('touchmove', prevent);
+    assert.deepEqual(drag(), { during: true, after: true });
+    window.removeEventListener('touchmove', prevent);
+    window.addEventListener('touchmove', prevent, { passive: false });
+    try {
+      assert.deepEqual(drag(), { during: false, after: true });
+    } finally {
+      window.removeEventListener('touchmove', prevent);
+    }
+  });
+
+  it("leaves the default of a move a template's document listener prevented unprevented", async () => {
+    const { app, drag } = await page(Listening);
+    drag();
+    assert.equal((app.componentRef.instance as Listening).seen, false);
   });
 });

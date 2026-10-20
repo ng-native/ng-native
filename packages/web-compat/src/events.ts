@@ -112,15 +112,38 @@ export function listen(
     if (entry.removed) return;
     if (once) removeEntry();
     const prevented = defaultPrevented(event);
-    const answer = call(entry, target, event) as boolean | void;
-    if (!prevented && !entry.passive) keepDrag(entry.type, event);
-    return answer;
+    const allow = entry.passive ? preventNothing(event) : undefined;
+    try {
+      return call(entry, target, event) as boolean | void;
+    } finally {
+      // Kept for one that threw after preventing it, as a browser keeps it canceled.
+      allow?.();
+      if (!prevented && !entry.passive) keepDrag(entry.type, event);
+    }
   }, entry.passive);
   return removeEntry;
 }
 
 const defaultPrevented = (event: unknown): boolean =>
   (event as { defaultPrevented?: unknown } | null)?.defaultPrevented === true;
+
+/**
+ * Have a passive listener's `preventDefault()` do nothing, as in a browser: what native said is
+ * not marked canceled for a listener told after it. Answers what gives the event its own back.
+ */
+function preventNothing(event: unknown): (() => void) | undefined {
+  if (!event || typeof event !== 'object') return undefined;
+  const own = Object.getOwnPropertyDescriptor(event, 'preventDefault');
+  Object.defineProperty(event, 'preventDefault', {
+    value() {},
+    writable: true,
+    configurable: true,
+  });
+  return () => {
+    if (own) Object.defineProperty(event, 'preventDefault', own);
+    else delete (event as { preventDefault?: unknown }).preventDefault;
+  };
+}
 
 /**
  * The moves a listener keeps a drag from the page with, by preventing their default. Not a

@@ -140,10 +140,10 @@ tells it whether something is drawn over an element.
 - A `<button>` and an `<a>` take a press with no listener, are `:active` while held and marked
   `data-hover` while a pointer is over them, and are announced as disabled while they are.
 - A `touchmove` listener that is not passive and calls `preventDefault()` stops the scroll view
-  the finger is over from scrolling until the finger lifts, as a slider or a carousel asks a
-  browser to. A touch listener on the window, the document or the body is passive unless it says
-  `passive: false`, as in a browser. Preventing a `pointermove`'s default does not, as in a
-  browser: `touch-action` keeps a pointer's drag from the page.
+  the finger is over from scrolling until the touch ends or is canceled, as a slider or a carousel
+  asks a browser to. A `touchstart` or `touchmove` listener on the window, the document or the
+  body is passive unless it says `passive: false`, as in a browser. Preventing a `pointermove`'s
+  default does not, as in a browser: `touch-action` keeps a pointer's drag from the page.
 
 Gaps: `DragEvent`, `ClipboardEvent` and the other kinds not named here are not there. A handler
 written as an attribute's text is not compiled, and the window and the document have no handler

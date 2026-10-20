@@ -71,8 +71,9 @@ export function currentConditions(): Conditions {
  * out from the pixel ratio; off a device there is no answer, and inventing one would be a line of
  * the wrong weight in every test that draws one.
  *
- * Not watched, unlike the conditions: the pixel density of a screen does not change while an app
- * is open. The safe-area insets are the opposite case and arrive through `updateTokens`.
+ * Not watched, unlike the conditions: React Native works the hairline out once and keeps it, so
+ * a window moved to a screen of another density keeps the first screen's, as a React Native app's
+ * `StyleSheet.hairlineWidth` does. The safe-area insets arrive through `updateTokens`.
  */
 export function deviceTokens(): Record<string, TokenValue> {
   const native = reactNative();
