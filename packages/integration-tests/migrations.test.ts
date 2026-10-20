@@ -727,3 +727,81 @@ describe('ng-native-migrate', () => {
     assert.equal(manifest, app['package.json']);
   });
 });
+
+describe('library-typecheck-declaration-map, through nx migrate, ng update and ng-native-migrate', () => {
+  const generated = {
+    extends: './tsconfig.lib.json',
+    compilerOptions: { noEmit: true, composite: false, emitDeclarationOnly: false },
+    angularCompilerOptions: {
+      strictTemplates: true,
+      typeCheckHostBindings: false,
+      strictDomEventTypes: false,
+    },
+  };
+  const app = {
+    extends: './tsconfig.json',
+    compilerOptions: { paths: { '@ng-native/*': ['./node_modules/@ng-native/*'] } },
+  };
+  const chosen = {
+    ...generated,
+    compilerOptions: { ...generated.compilerOptions, declarationMap: true, declaration: true },
+  };
+  const json = (value: object) => JSON.stringify(value, null, 2) + '\n';
+  const files = {
+    'packages/ui/tsconfig.typecheck.json': json(generated),
+    'packages/forms/tsconfig.typecheck.json': json(chosen),
+    'apps/mobile/tsconfig.typecheck.json': json(app),
+    'packages/ui/tsconfig.lib.json': json(generated),
+    'packages/tool/tsconfig.typecheck.json': json({
+      extends: './tsconfig.lib.json',
+      compilerOptions: { composite: false },
+    }),
+    'apps/web/tsconfig.typecheck.json': json({ angularCompilerOptions: { strictTemplates: true } }),
+    // An app's own, of the same shape: only a library's extends its tsconfig.lib.json.
+    'apps/admin/tsconfig.typecheck.json': json({ ...generated, extends: './tsconfig.json' }),
+  };
+
+  it("turns off declaration maps in each library's typecheck config, and leaves the rest", async () => {
+    const { nx, angular, cli } = await acrossAdapters(
+      files,
+      'library-typecheck-declaration-map',
+      '0.17.0',
+    );
+    assert.deepEqual(JSON.parse(nx.files['packages/ui/tsconfig.typecheck.json']!), {
+      ...generated,
+      compilerOptions: { ...generated.compilerOptions, declarationMap: false },
+    });
+    for (const file of [
+      'packages/forms/tsconfig.typecheck.json',
+      'apps/mobile/tsconfig.typecheck.json',
+      'packages/ui/tsconfig.lib.json',
+      'packages/tool/tsconfig.typecheck.json',
+      'apps/web/tsconfig.typecheck.json',
+      'apps/admin/tsconfig.typecheck.json',
+    ] as const) {
+      assert.equal(nx.files[file], files[file], `${file} is left as it was`);
+    }
+    assert.deepEqual(nx.notes, []);
+    assert.deepEqual(angular, nx);
+    assert.deepEqual(cli, nx);
+  });
+
+  it('leaves a config with comments as it is, with a note', async () => {
+    const commented = { 'packages/ui/tsconfig.typecheck.json': '{\n  // ngc\n}\n' };
+    const { nx } = await acrossAdapters(commented, 'library-typecheck-declaration-map', '0.17.0');
+    assert.deepEqual(nx.files, commented);
+    assert.deepEqual(nx.notes, [
+      'packages/ui/tsconfig.typecheck.json: not plain JSON, so it was left as it is. If ngc ' +
+        'reports TS5069 for it, add "declarationMap": false to its compilerOptions.',
+    ]);
+  });
+
+  it('changes nothing the second time', async () => {
+    const first = await viaNx(files, 'library-typecheck-declaration-map');
+    const again = await viaNx(
+      first.files as Record<string, string>,
+      'library-typecheck-declaration-map',
+    );
+    assert.deepEqual(again.files, first.files);
+  });
+});
