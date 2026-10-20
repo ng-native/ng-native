@@ -353,6 +353,31 @@ describe('brightness', () => {
     assert.equal(current.service.level(), 0.8);
   });
 
+  it("keeps a later app's level when the earlier app restores", async () => {
+    const calls: string[] = [];
+    const native = {
+      get: async () => 0.4,
+      set: async (level: number) => void calls.push(`set:${level}`),
+      restore: async () => void calls.push('restore'),
+    };
+    const old = inAppWith(Brightness.SOURCE, native, () => new Brightness());
+    old.service.set(1);
+    const current = inAppWith(Brightness.SOURCE, native, () => new Brightness());
+    const restoreCurrent = current.service.set(0.8);
+    await settle();
+    calls.length = 0;
+
+    old.service.restore();
+    old.destroy();
+    await settle();
+    assert.deepEqual(calls, [], 'the later app still shows its level');
+    assert.equal(current.service.level(), 0.8);
+
+    restoreCurrent();
+    await settle();
+    assert.deepEqual(calls, ['restore'], "the system's once no app has one");
+  });
+
   it('sets the level again in a window that comes to the front', async () => {
     const calls: string[] = [];
     let front = () => {};

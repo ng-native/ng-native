@@ -90,7 +90,13 @@ export class Brightness {
   }
 
   restore(): void {
-    // Everything set so far is put back, so a release still to come has nothing left to undo.
+    // This app's levels are put back, so a release still to come has nothing left to undo. Another
+    // app's stay: the screen is the runtime's.
+    this.window.levels.claims.drop(this.owner);
+    if (untracked(this.window.levels.claims.all).length > 0) {
+      this.window.levels.apply();
+      return;
+    }
     this.window.levels.clear();
     this.window.restore();
   }
