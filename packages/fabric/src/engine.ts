@@ -10906,7 +10906,7 @@ export class Engine implements HostEngine {
   /** What a touch on an element that keeps a drag holds off, while it lasts: see `holdSwipe`. */
   private heldFor(node: EngineNode, merged: Record<string, unknown>): void {
     if (node === this.swipeHeld) merged['gestureResponseDistance'] = NO_SWIPE;
-    if (node === this.scrollHeld) merged['scrollEnabled'] = false;
+    if (this.scrollHeld.has(node)) merged['scrollEnabled'] = false;
   }
 
   /**
@@ -14507,8 +14507,8 @@ export class Engine implements HostEngine {
     this.tellScreen(screen);
   }
 
-  /** The scroll view whose scrolling is off while a drag over it is an element's own. */
-  private scrollHeld: EngineNode | null = null;
+  /** The scroll views whose scrolling is off while a drag over them is an element's own. */
+  private readonly scrollHeld = new Set<EngineNode>();
 
   /** Whether a package has kept the drag now under way from the page: see `keepDrag`. */
   private dragKept = false;
@@ -14523,20 +14523,20 @@ export class Engine implements HostEngine {
     if (this.dragKept) return;
     this.dragKept = true;
     if (this.currentResponder) this.tellNative(this.currentResponder, true);
-    if (!this.scrollHeld) this.holdScroll(node);
+    if (!this.scrollHeld.size) this.holdScroll(node);
   }
 
   /**
-   * Stop the scroll view a node is in from scrolling, until the touch ends. Telling native who
-   * holds the touch does this on Android. On iOS a scroll view is held off only by a responder
-   * that is over it, never one inside it, so it is told not to scroll.
+   * Stop every scroll view a node is in from scrolling, until the touch ends: one held off hands
+   * the drag to the one around it. Telling native who holds the touch does this on Android. On
+   * iOS a scroll view is held off only by a responder that is over it, never one inside it, so
+   * each is told not to scroll.
    */
   private holdScroll(node: EngineNode): void {
     for (let up = node.parent; up; up = up.parent) {
       if (up.nodeKind !== 'element' || !SCROLL_VIEWS.has(committedViewName(up))) continue;
-      this.scrollHeld = up;
+      this.scrollHeld.add(up);
       this.tellScreen(up);
-      return;
     }
   }
 
@@ -14560,11 +14560,10 @@ export class Engine implements HostEngine {
     if (left > 0) return;
     this.drag = null;
     this.dragKept = false;
-    for (const held of [this.scrollHeld, this.swipeHeld]) {
-      if (held === this.scrollHeld) this.scrollHeld = null;
-      else this.swipeHeld = null;
-      if (held) this.tellScreen(held);
-    }
+    const held = [...this.scrollHeld, this.swipeHeld];
+    this.scrollHeld.clear();
+    this.swipeHeld = null;
+    for (const each of held) if (each) this.tellScreen(each);
   }
 
   /**

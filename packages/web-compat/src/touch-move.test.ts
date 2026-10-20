@@ -52,9 +52,9 @@ const page = async (component: new () => object = Page) => {
     });
   };
   /** Whether the page may scroll, as native was last told. */
-  const scrolls = () => {
+  const scrolls = (id = 'page') => {
     engine.commit();
-    return screen.getByTestId('page').props['scrollEnabled'] !== false;
+    return screen.getByTestId(id).props['scrollEnabled'] !== false;
   };
   /** A drag across the slider, and whether the page could scroll while it was on. */
   const drag = () => {
@@ -65,10 +65,20 @@ const page = async (component: new () => object = Page) => {
     return { during, after: scrolls() };
   };
   const slider = document.getElementById('slider');
-  return { app, document, slider, around: slider.parentNode, drag };
+  return { app, document, slider, around: slider.parentNode, drag, send, scrolls };
 };
 
 const prevent = (event: Dom) => event.preventDefault();
+
+/** A slider in a carousel, in a page: a scroll view in a scroll view. */
+@Component({
+  template: `<div testID="outer" style="overflow: auto">
+    <div testID="page" style="overflow: auto">
+      <div id="slider" testID="slider"></div>
+    </div>
+  </div>`,
+})
+class Nested {}
 
 describe('@ng-native/web-compat, a drag kept from the page', () => {
   it('stops the page scrolling for a drag whose touchmove a listener prevented', async () => {
@@ -83,6 +93,16 @@ describe('@ng-native/web-compat, a drag kept from the page', () => {
     const { slider, drag } = await page();
     slider.addEventListener('pointermove', prevent);
     assert.deepEqual(drag(), { during: true, after: true });
+  });
+
+  it('stops every scroll view the slider is in, and gives each back', async () => {
+    const { slider, send, scrolls } = await page(Nested);
+    slider.addEventListener('touchmove', prevent);
+    send('Start', 10);
+    send('Move', 40);
+    assert.deepEqual([scrolls('page'), scrolls('outer')], [false, false]);
+    send('End', 40);
+    assert.deepEqual([scrolls('page'), scrolls('outer')], [true, true]);
   });
 
   it('stops it for a document listener that says it is not passive', async () => {
