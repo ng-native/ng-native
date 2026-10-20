@@ -129,6 +129,32 @@ describe('@ng-native/web-compat, a drag kept from the page', () => {
     assert.deepEqual(drag(), { during: false, after: true });
   });
 
+  it('stops it for a listener after a passive one that froze its event and prevented it', async () => {
+    const { slider, around, drag } = await page();
+    const seen: boolean[] = [];
+    slider.addEventListener(
+      'touchmove',
+      (event: Dom) => {
+        Object.freeze(event);
+        event.preventDefault();
+        seen.push(event.defaultPrevented);
+      },
+      { passive: true },
+    );
+    around.addEventListener('touchmove', prevent);
+    // What the app reports: nothing, where giving the event back once it was frozen threw.
+    const reported: unknown[] = [];
+    const error = console.error;
+    console.error = (...args: unknown[]) => void reported.push(args);
+    try {
+      assert.deepEqual(drag(), { during: false, after: true });
+    } finally {
+      console.error = error;
+    }
+    assert.deepEqual(seen, [false]);
+    assert.deepEqual(reported, []);
+  });
+
   it('stops it for a listener that prevented it and then threw', async () => {
     const { slider, drag } = await page();
     slider.addEventListener('touchmove', (event: Dom) => {

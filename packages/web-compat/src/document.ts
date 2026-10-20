@@ -11,7 +11,14 @@ import { required } from './dom-error.ts';
 import { implementationFor } from './dom-implementation.ts';
 import { byClassName, byName, byTagName, byTagNameNS } from './elements-by.ts';
 import type { HTMLCollection } from './live-list.ts';
-import { createEvent, dispatch, listen, passiveFor, unlisten } from './events.ts';
+import {
+  createEvent,
+  dispatch,
+  inPassiveListener,
+  listen,
+  passiveFor,
+  unlisten,
+} from './events.ts';
 import { asMouse } from './mouse-after-touch.ts';
 import { madeByScript } from './html-tree.ts';
 import { elementsUnder } from './element-tree.ts';
@@ -202,7 +209,6 @@ export function listenAnywhere(
   engine: Engine,
   type: string,
   listener: Listener,
-  passive = false,
 ): (() => void) | undefined {
   if (type === 'scroll') return listenToScrolls(engine, listener);
   if (type === 'resize')
@@ -231,9 +237,9 @@ export function listenAnywhere(
       cancelable: true,
       defaultPrevented: false,
       // Kept, for a move: a listener that is not passive keeps a drag from the page with it. One
-      // that is prevents nothing, as in a browser.
+      // that is prevents nothing, as in a browser: see `events.ts`.
       preventDefault(this: { defaultPrevented: boolean }) {
-        if (!passive) this.defaultPrevented = true;
+        if (!inPassiveListener(this)) this.defaultPrevented = true;
       },
       stopPropagation() {},
     });
@@ -347,9 +353,7 @@ function wasDrag(engine: Engine, event: unknown): boolean {
 function anywhere(engine: Engine, target: object) {
   return {
     addEventListener(type: string, listener: Listener, options?: unknown): void {
-      listen(target, type, listener, options, (heard, passive) =>
-        listenAnywhere(engine, type, heard, passive),
-      );
+      listen(target, type, listener, options, (heard) => listenAnywhere(engine, type, heard));
     },
     removeEventListener(type: string, listener: Listener, options?: unknown): void {
       unlisten(target, type, listener, options);

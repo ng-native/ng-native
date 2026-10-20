@@ -91,7 +91,7 @@ export function listen(
   type: string,
   callback: unknown,
   options: unknown,
-  attach?: (heard: Heard, passive: boolean) => (() => void) | undefined,
+  attach?: (heard: Heard) => (() => void) | undefined,
 ): (() => void) | undefined {
   const { capture, once, passive, signal } = optionsOf(options);
   if (!callback || (typeof callback !== 'function' && typeof callback !== 'object')) return;
@@ -112,38 +112,34 @@ export function listen(
     if (entry.removed) return;
     if (once) removeEntry();
     const prevented = defaultPrevented(event);
-    const allow = entry.passive ? preventNothing(event) : undefined;
+    const quiet = entry.passive && isObject(event) && !passiveNow.has(event);
+    if (quiet) passiveNow.add(event);
     try {
       return call(entry, target, event) as boolean | void;
     } finally {
       // Kept for one that threw after preventing it, as a browser keeps it canceled.
-      allow?.();
+      if (quiet) passiveNow.delete(event);
       if (!prevented && !entry.passive) keepDrag(entry.type, event);
     }
-  }, entry.passive);
+  });
   return removeEntry;
 }
 
 const defaultPrevented = (event: unknown): boolean =>
   (event as { defaultPrevented?: unknown } | null)?.defaultPrevented === true;
 
+const isObject = (event: unknown): event is object =>
+  (typeof event === 'object' || typeof event === 'function') && event !== null;
+
 /**
- * Have a passive listener's `preventDefault()` do nothing, as in a browser: what native said is
- * not marked canceled for a listener told after it. Answers what gives the event its own back.
+ * The events a passive listener is being told of now, whose `preventDefault()` does nothing, as
+ * in a browser: what native said is not marked canceled for a listener told after it. Kept here
+ * and not on the event, which a listener may have frozen.
  */
-function preventNothing(event: unknown): (() => void) | undefined {
-  if (!event || typeof event !== 'object') return undefined;
-  const own = Object.getOwnPropertyDescriptor(event, 'preventDefault');
-  Object.defineProperty(event, 'preventDefault', {
-    value() {},
-    writable: true,
-    configurable: true,
-  });
-  return () => {
-    if (own) Object.defineProperty(event, 'preventDefault', own);
-    else delete (event as { preventDefault?: unknown }).preventDefault;
-  };
-}
+const passiveNow = new WeakSet<object>();
+
+/** Whether a passive listener is being told of this event now: see `passiveNow`. */
+export const inPassiveListener = (event: object): boolean => passiveNow.has(event);
 
 /**
  * The moves a listener keeps a drag from the page with, by preventing their default. Not a

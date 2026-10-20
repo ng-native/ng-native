@@ -144,9 +144,7 @@ const GLOBALS: Readonly<Record<string, unknown>> = {
   // The window's own listeners, which hear what a script sends it or anything under it, and a
   // press, a scroll or a resize in any app: see `window-listeners.ts`.
   addEventListener: (type: string, listener: unknown, options?: unknown) =>
-    void listen(globalThis, type, listener, options, (heard, passive) =>
-      listenOnWindow(type, heard, passive),
-    ),
+    void listen(globalThis, type, listener, options, (heard) => listenOnWindow(type, heard)),
   removeEventListener: (type: string, listener: unknown, options?: unknown) =>
     unlisten(globalThis, type, listener, options),
   dispatchEvent: (event: unknown) => dispatch(event, [globalThis]),

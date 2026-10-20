@@ -6,7 +6,7 @@ import { documentOf, heldForMenu, listenAnywhere, type CompatDocument } from './
 import { isTextField } from './element-focus.ts';
 import { giveDefaults, giveRole, hoverWritten, scrollWhereStyled } from './elements.ts';
 import { nativeEvent } from './event-classes.ts';
-import { listen, type Heard } from './events.ts';
+import { inPassiveListener, listen, type Heard } from './events.ts';
 import {
   FIELD_EVENTS,
   createField,
@@ -777,6 +777,8 @@ function domFields(type: string, target: EngineNode, event: unknown): Record<str
     nativeEvent: event,
     defaultPrevented: cancelled.has(native ?? {}),
     preventDefault(this: { defaultPrevented?: boolean }) {
+      // Nothing, for a passive listener, as in a browser: see `events.ts`.
+      if (inPassiveListener(this)) return;
       this.defaultPrevented = true;
       if (native) cancelled.add(native);
     },
