@@ -31,7 +31,7 @@ import {
 } from './qualified-name.ts';
 import { BY_ELEMENT, GLOBAL } from './reflected-attributes.ts';
 import { setStyleAttribute, styleOf } from './style-declaration.ts';
-import { isKeptOnShape, isShape, shapeAttributes } from './svg.ts';
+import { isKeptOnShape, isShape, writtenAttributes } from './svg.ts';
 import { boxOf } from './svg-box.ts';
 import { engineOf } from './window.ts';
 
@@ -168,7 +168,7 @@ function setAsWritten(node: EngineNode, name: string, value: unknown): void {
 
 /** The attributes an element keeps as written, where the props it is drawn by are another thing. */
 const keptAttributes = (node: EngineNode): Readonly<Record<string, string>> =>
-  node.tag === 'canvas' ? canvasAttributes(node) : shapeAttributes(node);
+  node.tag === 'canvas' ? canvasAttributes(node) : writtenAttributes(node);
 
 /** Whether an element has an attribute. */
 function hasAttribute(node: EngineNode, name: string): boolean {

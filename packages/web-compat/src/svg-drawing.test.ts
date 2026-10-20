@@ -16,6 +16,7 @@ import {
   type FakeFabricNode,
 } from '@ng-native/testing';
 import { provideWebCompat } from './index.ts';
+import { shapeAttributes } from './svg.ts';
 import { textWidth } from './text-width.ts';
 
 afterEach(cleanup);
@@ -254,6 +255,39 @@ describe('@ng-native/web-compat svg attributes in a selector', () => {
     assert.equal(getComputedStyle(path).opacity, '1');
     path.setAttribute('fill', 'none');
     assert.equal(getComputedStyle(path).opacity, '0.5');
+  });
+
+  it('answers no attribute for a style a script sets as one, as a browser does', async () => {
+    const { document, box, svg } = await page('path { stroke: red }');
+    const drawing = svg();
+    const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+    drawing.appendChild(path);
+    box.appendChild(drawing);
+    path.style.fill = 'none';
+    assert.equal(path.getAttribute('fill'), null);
+    assert.equal(path.hasAttribute('fill'), false);
+    assert.equal(path.matches('path[fill="none"]'), false);
+    assert.equal([...path.getAttributeNames()].includes('fill'), false);
+    path.setAttribute('fill', 'none');
+    assert.equal(path.getAttribute('fill'), 'none');
+    assert.equal(path.matches('path[fill="none"]'), true);
+  });
+
+  it('copies a style a script set as a style, and not as an attribute', async () => {
+    const { document, box, svg } = await page('path[fill="none"] { opacity: 0.5 }');
+    const drawing = svg();
+    const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+    path.setAttribute('stroke', 'red');
+    drawing.appendChild(path);
+    box.appendChild(drawing);
+    path.style.fill = 'none';
+    const copy = path.cloneNode(true);
+    drawing.appendChild(copy);
+    assert.equal(getComputedStyle(path).opacity, '1');
+    assert.equal(getComputedStyle(copy).opacity, '1');
+    assert.equal(copy.getAttribute('fill'), null);
+    assert.equal(copy.getAttribute('stroke'), 'red');
+    assert.equal(copy.style.fill, 'none');
   });
 
   it("restyles a box's ::before as a drawing it matches by its attributes comes in", async () => {
@@ -889,7 +923,8 @@ describe('@ng-native/web-compat svg definitions', () => {
     label.textContent = 'Polish';
     group.appendChild(label);
     await settle();
-    const size = () => Number(label.getAttribute('font-size'));
+    // What it is drawn at: a style is no attribute, so `getAttribute` answers none.
+    const size = () => Number(shapeAttributes(label)['font-size']);
     assert.ok(Math.abs(size() - 7.84) < 0.01, String(size()));
     group.style.fontSize = '1em';
     await settle();

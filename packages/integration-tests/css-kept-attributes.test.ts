@@ -59,6 +59,15 @@ describe('an attribute a package keeps apart from props', () => {
     assert.equal(s.props('shape')?.['fill'], 4278190080);
   });
 
+  it('matches where a prop of the same name is false, which is no attribute of its own', () => {
+    const s = scene('[fill] { opacity: 0.5 }');
+    const node = s.el('shape');
+    s.engine.setProp(node, 'fill', false);
+    assert.equal(s.props('shape')?.['opacity'] ?? null, null);
+    s.engine.keepAttribute(node, 'fill', 'red');
+    assert.equal(s.props('shape')?.['opacity'], 0.5);
+  });
+
   it('has a `:has()` on the parent matched again as such a child comes or changes', () => {
     const s = scene('.host:has(> [width="16"]) { opacity: 0.5 }');
     const host = s.el('host');
