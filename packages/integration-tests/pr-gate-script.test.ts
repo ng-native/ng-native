@@ -125,6 +125,11 @@ describe('pr-gate', () => {
     assert.equal(needsPlan('M\tpackages/web/src/reset.css'), true);
     assert.equal(needsPlan('M\tpackages/web/browser/boot.ts'), false);
     assert.equal(needsPlan('M\tpackages/web/vitest.config.ts'), false);
+    // As npm reads a glob: a leading `./`, `?` and a class of characters.
+    assert.equal(needsPlan('M\tpackages/kit/src/a.ts', { kit: ['./src'] }), true);
+    assert.equal(needsPlan('M\tpackages/kit/a1.cjs', { kit: ['a?.cjs'] }), true);
+    assert.equal(needsPlan('M\tpackages/kit/ab.cjs', { kit: ['a[bc].cjs'] }), true);
+    assert.equal(needsPlan('M\tpackages/kit/ad.cjs', { kit: ['a[bc].cjs'] }), false);
     // `**` reaches into any directory under it.
     assert.equal(needsPlan('M\tpackages/kit/lib/a/b/file.cjs', { kit: ['lib/**/*.cjs'] }), true);
     assert.equal(needsPlan('M\tpackages/kit/lib/file.cjs', { kit: ['lib/**/*.cjs'] }), true);

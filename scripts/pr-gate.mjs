@@ -207,27 +207,18 @@ export function publishedOf(manifest, build) {
 
 /**
  * Whether `file`, a path in `packages/<name>/`, is one its package publishes. A pattern matches
- * as npm reads `files`: from the package's own directory, with `*` within one directory, and a
- * directory standing for everything in it.
+ * as npm reads `files`: as a glob from the package's own directory, against the file or any
+ * directory it is in, which stands for everything in it.
  */
 function published(file, packages) {
   const [, name = '', ...rest] = file.split('/');
   if (!Object.hasOwn(packages, name) || packages[name] === undefined) return true;
   if (packages[name] === null) return false;
-  const inside = rest.join('/');
+  const parts = rest;
+  const within = parts.map((_, at) => parts.slice(0, at + 1).join('/'));
   return packages[name].some((pattern) => {
-    // `**/` is any directories, none included, `**` anything, and `*` stays within a directory.
-    const within = (side) =>
-      side
-        .split('*')
-        .map((part) => part.replace(/[.+?^${}()|[\]\\]/g, '\\$&'))
-        .join('[^/]*');
-    const source = pattern
-      .replace(/\/+$/, '')
-      .split('**/')
-      .map((part) => part.split('**').map(within).join('.*'))
-      .join('(?:.*/)?');
-    return new RegExp(`^${source}(/.*)?$`).test(inside);
+    const glob = path.posix.normalize(pattern).replace(/\/+$/, '');
+    return within.some((candidate) => path.posix.matchesGlob(candidate, glob));
   });
 }
 
