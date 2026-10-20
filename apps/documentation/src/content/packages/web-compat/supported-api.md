@@ -66,8 +66,9 @@ a browser where the state is not the case. A button or a link a pointer is over 
   `replace`, `replaceSync` and `adoptedStyleSheets`.
 - A sheet's rules, with `insertRule` and `deleteRule`, and the rest of the CSSOM's rule classes.
 - A `<style>` a library makes while the app runs is read and applied: the layout properties,
-  colours, custom properties and transitions it declares, `@media` by the window's width and
-  height, which way up it is and the colour scheme and motion the user asked for, and `@supports`.
+  colours, borders, outlines, corners, custom properties and transitions it declares, `@media` by
+  the window's width and height, which way up it is and the colour scheme and motion the user
+  asked for, and `@supports`.
 - `element.style` as a `CSSStyleDeclaration`: `cssText`, `setProperty`, `getPropertyValue`,
   `removeProperty` and each property by name, shorthands as their longhands, and the `style`
   attribute as its text. A style a library binds is set as what a native view reads.
@@ -82,6 +83,9 @@ Gaps:
   `::selection`) is passed over, and the rule applies to the rest of its list. So is a `content`
   other than a string or `none` (a counter or `attr()`, say), and a value the engine drops,
   `display: table` among them.
+- In a sheet made while the app runs, `border-inline`, `border-block` and their sides and
+  longhands are passed over, as are a corner of two radii, a `calc()` or `color-mix()` in a border
+  or outline with a token in it, and an outline of `auto`.
 - An `@import` loads nothing, so the sheet it makes is empty.
 - `element.style` checks a value against what the property takes for the properties a script
   commonly sets, and drops one that does not match; any other longhand takes any value. A colour
@@ -117,6 +121,8 @@ Gaps: `ResizeObserver` has no `device-pixel-content-box`, and `scrollIntoView` r
 it is a block, with no margins and no heading sizes, and a table is not laid out as a table. The
 window does not scroll.
 An inline element over two lines is one box around both, where a browser has two.
+A table's `clientTop` and `clientLeft` are its border's width with `border-collapse: collapse`
+too, where Chrome answers half of it.
 `IntersectionObserver` takes `trackVisibility` but its `isVisible` is never true, since nothing
 tells it whether something is drawn over an element.
 

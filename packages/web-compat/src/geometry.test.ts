@@ -196,15 +196,37 @@ describe('offset and client members', () => {
     assert.equal(document.documentElement.clientHeight, 800);
   });
 
-  it('keeps a table’s border in its client size, which is the box around the table', async () => {
-    const { make, place } = await page();
+  it("counts a table's border in its client size, and nowhere else, as Chrome does", async () => {
+    const { place, make } = await page();
     const table = make('table', undefined, 'border-width: 8px; border-style: solid');
+    const row = make('tr', table);
+    const cell = make('td', row);
     await settle();
     place(table, { x: 0, y: 0, width: 100, height: 50 });
+    place(row, { x: 8, y: 8, width: 84, height: 34 });
+    place(cell, { x: 8, y: 8, width: 84, height: 34 });
     assert.deepEqual(
       [table.clientWidth, table.clientHeight, table.clientLeft, table.clientTop],
-      [100, 50, 0, 0],
+      [100, 50, 8, 8],
     );
+    // Within its border, where its cells are, as an offset and a scroll size are measured.
+    assert.deepEqual(
+      [row.offsetTop, row.offsetLeft, cell.offsetTop, cell.offsetLeft],
+      [0, 0, 0, 0],
+    );
+    assert.deepEqual([table.scrollWidth, table.scrollHeight], [84, 34]);
+  });
+
+  it('counts the border by the display a box has, not by its name', async () => {
+    const { place, make } = await page();
+    const border = 'border-width: 8px; border-style: solid';
+    const grid = make('div', undefined, `display: table; ${border}`);
+    const block = make('table', undefined, `display: block; ${border}`);
+    await settle();
+    place(grid, { x: 0, y: 0, width: 116, height: 16 });
+    place(block, { x: 0, y: 0, width: 100, height: 50 });
+    assert.deepEqual([grid.clientWidth, grid.clientHeight], [116, 16]);
+    assert.deepEqual([block.clientWidth, block.clientHeight], [84, 34]);
   });
 
   it('rounds each size and offset to a whole pixel, as a browser does, where a getter reads one', async () => {
@@ -832,6 +854,29 @@ describe('IntersectionObserver', () => {
     );
     observer.unobserve(item);
     assert.deepEqual([count(scroller, 'topScroll'), count(item, 'topLayout')], before);
+  });
+
+  it("sees a table's border as in sight of it, where a box's is outside, as Chrome does", async () => {
+    const { place, make } = await page();
+    const border = 'border-width: 50px; border-style: solid; overflow: scroll';
+    const table = make('table', undefined, border);
+    const box = make('div', undefined, border);
+    const items = [make('div', table), make('div', box)];
+    await settle();
+    place(table, { x: 0, y: 0, width: 200, height: 200 });
+    place(box, { x: 0, y: 300, width: 200, height: 200 });
+    place(items[0], { x: 50, y: 50, width: 10, height: 10 });
+    place(items[1], { x: 50, y: 350, width: 10, height: 10 });
+    const bounds: string[] = [];
+    for (const [at, root] of [table, box].entries()) {
+      const observer = new globals.IntersectionObserver(
+        (entries: Dom[]) => bounds.push(sides(entries[0].rootBounds)),
+        { root },
+      );
+      observer.observe(items[at]);
+    }
+    await nextFrame();
+    assert.deepEqual(bounds, ['0 0 200 200', '50 350 150 450']);
   });
 
   it('looks again after a commit, and at what is in sight of a root and its margin', async () => {

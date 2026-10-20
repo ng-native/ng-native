@@ -86,8 +86,6 @@ function placedIn(node: EngineNode): EngineNode | null {
 
 /** How wide an element's border is on one side, where a number says so. */
 export function border(node: EngineNode, side: 'Top' | 'Right' | 'Bottom' | 'Left'): number {
-  // A table's border is its grid's, inside the box around it and its caption, which has none.
-  if (node.tag === 'table') return 0;
   const width = styled(node, `border${side}Width`) ?? styled(node, 'borderWidth');
   return typeof width === 'number' ? width : 0;
 }
@@ -160,6 +158,23 @@ export function rectOf(node: EngineNode): DOMRect {
   if (!drawn(node)) return new DOMRect();
   const { x, y, width, height } = frameOf(node);
   return new DOMRect(x, y, width, height);
+}
+
+/**
+ * Whether a box is a table's, by its display: one a table has with none written. Its border is
+ * its grid's, inside the box around it, which `clientWidth` and an observer's root count.
+ */
+export function isTable(node: EngineNode): boolean {
+  const display = styled(node, 'display');
+  return display === undefined ? node.tag === 'table' : /^(inline-)?table$/.test(String(display));
+}
+
+/**
+ * `clientWidth` and `clientHeight`: a table's are its whole box, border and all, as Chrome
+ * answers them, where every other box's are inside its border.
+ */
+function clientOf(node: EngineNode): { width: number; height: number } {
+  return isTable(node) && drawn(node) ? sizeOf(node) : clientSize(node);
 }
 
 /** An element's size inside its border, which is what `clientWidth` and `clientHeight` are. */
@@ -249,10 +264,10 @@ export const geometryMembers: PropertyDescriptorMap = {
   offsetWidth: sized((node) => sizeOf(node).width),
   offsetHeight: sized((node) => sizeOf(node).height),
   clientWidth: get(function () {
-    return Math.round(clientSize(this).width);
+    return Math.round(clientOf(this).width);
   }),
   clientHeight: get(function () {
-    return Math.round(clientSize(this).height);
+    return Math.round(clientOf(this).height);
   }),
   // The width of the border, which is where what it holds starts.
   clientTop: sized((node) => border(node, 'Top')),

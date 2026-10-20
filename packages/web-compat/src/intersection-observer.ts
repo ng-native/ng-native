@@ -4,7 +4,7 @@ import { DOMRectReadOnly } from './dom-rect.ts';
 import { documentOf } from './document.ts';
 import { domError } from './dom-error.ts';
 import { report } from './events.ts';
-import { border, clientSize, drawn, frameOf, styled } from './geometry.ts';
+import { border, clientSize, drawn, frameOf, isTable, styled } from './geometry.ts';
 import { asElement } from './resize-observer.ts';
 import { engineOf, listenToResize, windowSize } from './window.ts';
 import { oncePerFrame } from './next-frame.ts';
@@ -161,9 +161,10 @@ const clips = (node: EngineNode): boolean =>
   scrollsItself(node) ||
   ['hidden', 'clip', 'scroll', 'auto'].includes(String(styled(node, 'overflow')));
 
-/** The box an element clips what it holds to: inside its border. */
+/** The box an element clips what it holds to: inside its border, and a table's all of it. */
 function paddingBox(node: EngineNode): Rect {
   const frame = frameOf(node);
+  if (isTable(node)) return frame;
   const inside = clientSize(node);
   const x = frame.x + border(node, 'Left');
   const y = frame.y + border(node, 'Top');
