@@ -19,10 +19,11 @@ Pod::Spec.new do |s|
   # `@expo/ui` is an optional peer. Where the app depends on it, which is when Expo links its pod,
   # the modifiers it is given are built. Read from the app's package.json, the nearest above its
   # Podfile: resolving the package finds a copy the app does not depend on, in a workspace's root
-  # or pnpm's store, and its pod is then not there to depend on.
+  # or pnpm's store, and its pod is then not there to depend on. Not an optional dependency, which
+  # an install can leave out.
   app = Pod::Config.instance.installation_root.ascend.find { |dir| (dir + 'package.json').file? }
   app_package = app ? JSON.parse((app + 'package.json').read) : {}
-  has_expo_ui = %w[dependencies devDependencies optionalDependencies].any? do |kind|
+  has_expo_ui = %w[dependencies devDependencies].any? do |kind|
     app_package.dig(kind, '@expo/ui')
   end
   s.dependency 'ExpoUI' if has_expo_ui
