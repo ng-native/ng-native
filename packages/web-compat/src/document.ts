@@ -205,6 +205,9 @@ function pointerOf(type: string, native: { identifier?: number } | undefined): o
  * node it landed on. Nothing for an event with no touch behind it, a key say, and no `click`
  * for a touch that was a drag.
  */
+/** The native events a listener on the document, the window or the body has prevented. */
+const prevented = new WeakSet<object>();
+
 export function listenAnywhere(
   engine: Engine,
   type: string,
@@ -235,11 +238,15 @@ export function listenAnywhere(
       ...pointerOf(type, nativeEvent),
       composedPath: () => path,
       cancelable: true,
-      defaultPrevented: false,
-      // Kept, for a move: a listener that is not passive keeps a drag from the page with it. One
-      // that is prevents nothing, as in a browser: see `events.ts`.
-      preventDefault(this: { defaultPrevented: boolean }) {
-        if (!inPassiveListener(this)) this.defaultPrevented = true;
+      // Kept by the event native sent, which each listener's wrapper shares, and not on the
+      // wrapper, which a listener may freeze: a later listener sees an earlier one's, as in a
+      // browser. One that is not passive keeps a drag from the page with it; one that is prevents
+      // nothing: see `events.ts`.
+      get defaultPrevented() {
+        return prevented.has(event as object);
+      },
+      preventDefault(this: object) {
+        if (!inPassiveListener(this)) prevented.add(event as object);
       },
       stopPropagation() {},
     });

@@ -122,6 +122,27 @@ describe('@ng-native/web-compat, a drag kept from the page', () => {
     assert.deepEqual(seen, { passive: false, 'not passive': true });
   });
 
+  it('keeps the default a document listener that froze its event prevented, for the next', async () => {
+    const { document, drag } = await page();
+    const seen: boolean[] = [];
+    document.addEventListener(
+      'touchmove',
+      (event: Dom) => {
+        Object.freeze(event);
+        event.preventDefault();
+        seen.push(event.defaultPrevented);
+      },
+      { passive: false },
+    );
+    document.body.addEventListener('touchmove', (event: Dom) => seen.push(event.defaultPrevented), {
+      passive: false,
+    });
+    const { during } = drag();
+    assert.equal(seen[0], true, 'prevented, frozen as it is');
+    assert.equal(seen.at(-1), true, 'and so to the listener after it');
+    assert.equal(during, false);
+  });
+
   it("stops it for a listener that prevents it after a passive one's preventDefault", async () => {
     const { slider, around, drag } = await page();
     slider.addEventListener('touchmove', prevent, { passive: true });
