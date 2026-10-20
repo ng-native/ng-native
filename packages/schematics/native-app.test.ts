@@ -111,6 +111,19 @@ describe('conflicts', () => {
     assert.match(problem, /@angular\/core is 21\.2\.0 here, and Angular Native needs \^22\.0\.0/);
   });
 
+  it('accepts the ESLint range @ng-native/eslint-plugin does, and names one older', () => {
+    const plugin = JSON.parse(
+      readFileSync(new URL('../eslint-plugin/package.json', import.meta.url), 'utf8'),
+    );
+    assert.equal(native.accepted.eslint, plugin.peerDependencies.eslint);
+    assert.deepEqual(native.conflicts({ devDependencies: { eslint: '^9.8.0' } }), []);
+    const [problem] = native.conflicts({ devDependencies: { eslint: '^8.57.0' } });
+    assert.match(
+      problem,
+      /eslint is \^8\.57\.0 here, and Angular Native needs \^9\.0\.0 \|\| \^10\.0\.0/,
+    );
+  });
+
   it("accepts the Vitest range @ng-native/testing's plugin does, and names one older", () => {
     const testing = JSON.parse(
       readFileSync(new URL('../testing/package.json', import.meta.url), 'utf8'),

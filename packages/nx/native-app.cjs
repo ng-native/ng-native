@@ -47,7 +47,7 @@ const expoCompanions = {
 const TYPECHECK = 'node metro.config.js && ngc -p tsconfig.json --noEmit';
 
 /** The template's files, copied verbatim into the new app. */
-const SOURCE_FILES = ['src/app/app.ts', 'src/main.ts', 'src/app/app.test.ts'];
+const SOURCE_FILES = ['src/app/app.ts', 'src/main.ts', 'src/app/app.test.ts', 'eslint.config.mjs'];
 
 /** @param {string} name */
 function sourceFile(name) {

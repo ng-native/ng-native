@@ -262,6 +262,11 @@ export const PACKAGES: NavSection = {
       ],
     },
     {
+      path: 'packages/eslint-plugin',
+      title: 'ESLint',
+      summary: 'What compiles and does nothing on a device',
+    },
+    {
       path: 'packages/tailwind',
       title: 'Tailwind',
       summary: 'The presets, and the variants a touch device needs',

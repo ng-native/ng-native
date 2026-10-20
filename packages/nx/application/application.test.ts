@@ -100,7 +100,10 @@ describe('in an integrated workspace', () => {
     await generate(tree, { directory: 'apps/mobile' });
     const agents = tree.read('apps/mobile/AGENTS.md', 'utf-8')!;
     assert.match(agents, /^nx run mobile:run-ios +# the iOS simulator$/m);
-    assert.match(agents, /Run `nx test mobile` and `nx typecheck mobile` after a change/);
+    assert.match(
+      agents,
+      /Run `nx test mobile`, `nx typecheck mobile` and `nx lint mobile` after a change/,
+    );
     assert.doesNotMatch(agents, /npm (start|test)/);
     assert.equal(tree.read('apps/mobile/CLAUDE.md', 'utf-8'), '@AGENTS.md\n');
   });
@@ -117,6 +120,19 @@ describe('in an integrated workspace', () => {
     );
     assert.equal(project.targets?.test?.options.command, 'vitest run');
     assert.equal(project.targets?.test?.options.cwd, 'apps/mobile');
+  });
+
+  it("lints with the app's own ESLint config, the template's", async () => {
+    const tree = integrated();
+    await generate(tree, { directory: 'apps/mobile' });
+    const { lint } = readProjectConfiguration(tree, 'mobile').targets ?? {};
+    assert.equal(lint?.options.command, 'eslint .');
+    assert.equal(lint?.options.cwd, 'apps/mobile');
+    assert.equal(lint?.cache, true);
+    assert.equal(
+      tree.read('apps/mobile/eslint.config.mjs', 'utf-8'),
+      native.sourceFile('eslint.config.mjs'),
+    );
   });
 
   it('runs expo start itself, since @nx/expo infers start with an executor it deprecates', async () => {

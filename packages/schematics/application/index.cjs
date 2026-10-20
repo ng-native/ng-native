@@ -41,6 +41,15 @@ function targets(root, name) {
     'run-android': expo('run:android'),
     test: { builder: '@ng-native/schematics:vitest', options: {} },
     typecheck: { builder: '@ng-native/schematics:typecheck', options: {} },
+    // angular-eslint's builder, which `ng lint` runs, with the project's own config: the rules
+    // that know a device from a browser, which a workspace's config for its web apps does not.
+    lint: {
+      builder: '@angular-eslint/builder:lint',
+      options: {
+        eslintConfig: path.join(root, 'eslint.config.mjs'),
+        lintFilePatterns: [path.join(root, '**/*.ts'), path.join(root, '**/*.html')],
+      },
+    },
   };
 }
 
@@ -85,6 +94,7 @@ function commands(name) {
     [`ng run ${name}:run-android`, 'the Android emulator'],
     [`ng test ${name}`, 'Vitest, in Node against a fake native layer: no simulator needed'],
     [`ng run ${name}:typecheck`, 'ngc, which checks the templates as well as the code'],
+    [`ng lint ${name}`, 'ESLint: what compiles but does nothing on a device'],
     [`ng build ${name}`, 'an exported bundle'],
   ];
   const width = Math.max(...rows.map(([command]) => command.length)) + 2;

@@ -143,6 +143,7 @@ function targets(directory, port, oneCopy) {
       outputs: ['{projectRoot}/.angular-native'],
     },
     test: { ...run('vitest run'), cache: true, inputs: ['default', '^production'] },
+    lint: { ...run('eslint .'), cache: true, inputs: ['default', '^production'] },
     start: { ...run(`expo start${own}`), continuous: true },
     serve: { ...run(`expo start${own}`), continuous: true },
     ...runs,
@@ -157,6 +158,7 @@ function commands(name) {
     [`nx run ${name}:run-android`, 'the Android emulator'],
     [`nx test ${name}`, 'Vitest, in Node against a fake native layer: no simulator needed'],
     [`nx typecheck ${name}`, 'TypeScript, without emitting'],
+    [`nx lint ${name}`, 'ESLint: what compiles but does nothing on a device'],
   ];
   const width = Math.max(...rows.map(([command]) => command.length)) + 2;
   return [
@@ -165,7 +167,8 @@ function commands(name) {
     '```',
     '',
     '`src/main.ts` mounts the root component, `src/app/app.ts`. ' +
-      `Run \`nx test ${name}\` and \`nx typecheck ${name}\` after a change; both are fast.`,
+      `Run \`nx test ${name}\`, \`nx typecheck ${name}\` and \`nx lint ${name}\` after a change; ` +
+      'all three are fast.',
   ].join('\n');
 }
 
@@ -279,7 +282,8 @@ async function application(tree, options) {
   if (!options.skipFormat) await formatFiles(tree);
   logger.info(
     `Created ${directory}. nx start ${projectName} runs Metro; nx run ${projectName}:run-ios, ` +
-      `nx test ${projectName}, nx typecheck ${projectName}, nx export ${projectName}.`,
+      `nx test ${projectName}, nx typecheck ${projectName}, nx lint ${projectName}, ` +
+      `nx export ${projectName}.`,
   );
   if (options.skipInstall) return initTask;
   return runTasksInSerial(initTask, () => installPackagesTask(tree, true));

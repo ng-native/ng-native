@@ -25,6 +25,7 @@ const SOURCE_FILES = [
   'vitest.config.mts',
   'metro.config.js',
   'tsconfig.json',
+  'eslint.config.mjs',
 ];
 
 /** @param {string} name */

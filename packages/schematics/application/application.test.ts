@@ -112,6 +112,18 @@ describe('ng add', () => {
     });
   });
 
+  it("gives the project a lint target on angular-eslint's builder, with its own config", () => {
+    const project = json(tree, 'angular.json').projects.native;
+    assert.deepEqual(project.architect.lint, {
+      builder: '@angular-eslint/builder:lint',
+      options: {
+        eslintConfig: `${project.root}/eslint.config.mjs`,
+        lintFilePatterns: [`${project.root}/**/*.ts`, `${project.root}/**/*.html`],
+      },
+    });
+    assert.ok(tree.exists(`${project.root}/eslint.config.mjs`));
+  });
+
   it("routes ng generate in the project to this collection first, then Angular's", () => {
     const project = json(tree, 'angular.json').projects.native;
     assert.deepEqual(project.cli.schematicCollections, [

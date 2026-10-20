@@ -19,10 +19,11 @@ npm run ios         # the iOS simulator
 npm run android     # the Android emulator
 npm test            # Vitest, in Node against a fake native layer: no simulator needed
 npm run typecheck
+npm run lint        # ESLint: what compiles but does nothing on a device
 ```
 
-`src/main.ts` mounts the root component, `src/app/app.ts`. Run `npm test` and `npm run typecheck` after a
-change; both are fast.
+`src/main.ts` mounts the root component, `src/app/app.ts`. Run `npm test`, `npm run typecheck` and
+`npm run lint` after a change; all three are fast.
 
 ## Rules that are easy to get wrong
 

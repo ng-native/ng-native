@@ -46,9 +46,14 @@ const devDependencies = {
   // The typecheck script compiles the templates too, which only the Angular compiler can.
   '@angular/compiler-cli': '^22.0.0',
   '@babel/core': '^7.29.7',
+  '@ng-native/eslint-plugin': version,
   '@ng-native/testing': version,
   '@types/react': '~19.2.2',
+  // The lint script's: angular-eslint parses the templates the plugin's rules read.
+  'angular-eslint': '^22.0.0',
+  eslint: '^10.0.0',
   typescript: '~6.0.3',
+  'typescript-eslint': '^8.0.0',
   vitest: '^5.0.0',
 };
 
@@ -180,10 +185,11 @@ function prebuildPins(root) {
 
 /**
  * Where what a workspace already has can be older than what a new app is given: `@ng-native/testing`
- * installs Vitest 5 but its plugin runs on 4, which `ng new` 22.1 and the Nx preset still start on.
- * The range here is that package's `vitest` peer, and a test holds the two together.
+ * installs Vitest 5 but its plugin runs on 4, which `ng new` 22.1 and the Nx preset still start on,
+ * and `@ng-native/eslint-plugin` runs on the ESLint 9 the Nx preset still starts on. Each range here
+ * is that package's peer, and a test holds the two together.
  */
-const accepted = { vitest: '^4.0.8 || ^5.0.0' };
+const accepted = { vitest: '^4.0.8 || ^5.0.0', eslint: '^9.0.0 || ^10.0.0' };
 
 /**
  * Why an existing dependency would stop this app installing or running, as a sentence each.

@@ -54,6 +54,7 @@
       "@ng-native/analog",
       "@ng-native/components",
       "@ng-native/device",
+      "@ng-native/eslint-plugin",
       "@ng-native/expo",
       "@ng-native/fabric",
       "@ng-native/icons",
