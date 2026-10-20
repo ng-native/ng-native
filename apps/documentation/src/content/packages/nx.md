@@ -220,8 +220,8 @@ this site do: `tsconfig.lib.json` allows it and `src/index.ts` is written that w
 takes that where a project emits declarations and no JavaScript, which is the preset's own setting,
 so a workspace that has changed it keeps the `.js` imports `@nx/js` writes.
 
-In the TypeScript preset `nx typecheck ui` checks the library's templates as well as its code, as
-an app's does: the generator writes `tsconfig.typecheck.json` beside `tsconfig.lib.json` and a
+In the TypeScript preset `nx typecheck @org/ui` checks the library's templates as well as its code,
+as an app's does: the generator writes `tsconfig.typecheck.json` beside `tsconfig.lib.json` and a
 `typecheck` target that runs `ngc` on it, in place of the `tsc` `@nx/js` infers, and adds
 `@angular/compiler-cli` to the library's dev dependencies. A misspelled input or a binding of the
 wrong type in a library component fails the target.
