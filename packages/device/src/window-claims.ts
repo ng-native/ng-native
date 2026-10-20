@@ -88,18 +88,22 @@ export class WindowClaims<T, O extends object = object> {
   }
 }
 
-/** The one stack, or whatever a module keeps for its window, for each native module. */
-const shared = new WeakMap<object, unknown>();
+/** For each purpose, the one stack, or whatever a module keeps for its window, per native module. */
+const shared = new WeakMap<object, WeakMap<object, unknown>>();
 const ABSENT = {};
 
 /**
- * What every app on `source` shares, made the first time one asks. `source` is the native module
- * the app writes through, or null for one that is not there.
+ * What every app on `source` shares for `purpose`, made the first time one asks. `source` is the
+ * native module the app writes through, or null for one that is not there. `purpose` is what the
+ * value is for, such as the class `create` makes, so two services never share one: not when both
+ * of their modules are absent, and not when one object stands in for two modules.
  */
-export function sharedBySource<W>(source: object | null, create: () => W): W {
+export function sharedBySource<W>(purpose: object, source: object | null, create: () => W): W {
+  let bySource = shared.get(purpose);
+  if (!bySource) shared.set(purpose, (bySource = new WeakMap()));
   const key = source ?? ABSENT;
-  if (!shared.has(key)) shared.set(key, create());
-  return shared.get(key) as W;
+  if (!bySource.has(key)) bySource.set(key, create());
+  return bySource.get(key) as W;
 }
 
 /**

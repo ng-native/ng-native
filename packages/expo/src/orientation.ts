@@ -61,7 +61,7 @@ export class DeviceOrientation {
         };
 
         // One per module, so every app the runtime mounts locks the same screen.
-        return sharedBySource(expo, () => ({
+        return sharedBySource(DeviceOrientation, expo, () => ({
           reported: observedFrom(
             async () => ORIENTATIONS[await expo.getOrientationAsync()] ?? 'unknown',
             (listener) =>
@@ -84,7 +84,7 @@ export class DeviceOrientation {
   readonly landscape: Signal<boolean> = computed(() => this.orientation().startsWith('landscape'));
 
   /** Every app's locks: the screen is the runtime's, not an app's. */
-  private readonly window = sharedBySource(this.source, () => lockWindow(this.source));
+  private readonly window = sharedBySource(lockWindow, this.source, () => lockWindow(this.source));
   /** This app, among the apps locking the screen. */
   private readonly owner = {};
 

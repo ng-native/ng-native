@@ -43,7 +43,7 @@ export class Brightness {
         // Missing from the build: the stand-in, to say so when it is used.
         if (!present(expo)) return expo as never;
         // One per module, so every app the runtime mounts sets the same screen.
-        return sharedBySource(expo, () => ({
+        return sharedBySource(Brightness, expo, () => ({
           get: () => expo.getBrightnessAsync(),
           set: (level) => expo.setBrightnessAsync(level),
           restore: () => expo.restoreSystemBrightnessAsync(),
@@ -55,7 +55,11 @@ export class Brightness {
 
   private readonly native = inject(Brightness.SOURCE);
   /** Every app's levels: the screen is the runtime's, not an app's. */
-  private readonly window = sharedBySource(this.native, () => new BrightnessWindow(this.native));
+  private readonly window = sharedBySource(
+    BrightnessWindow,
+    this.native,
+    () => new BrightnessWindow(this.native),
+  );
   private readonly current = this.window.current;
   /** This app, among the apps setting the level. */
   private readonly owner = {};

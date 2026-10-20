@@ -89,7 +89,7 @@ const NONE: StatusBarSource = {
 export function statusBarSource(): StatusBarSource {
   const native = reactNative();
   if (!native) return NONE;
-  return sharedBySource(native, () => nativeSource(native));
+  return sharedBySource(statusBarSource, native, () => nativeSource(native));
 }
 
 function nativeSource(native: NonNullable<ReturnType<typeof reactNative>>): StatusBarSource {
@@ -163,7 +163,11 @@ export class StatusBar {
   /** This app, among the apps claiming the bar: its scheme is what an `auto` style it claims follows. */
   private readonly owner: Owner = { scheme: inject(ColorScheme) };
   /** Every app's claims on this bar: the window is the runtime's, not an app's. */
-  private readonly window = sharedBySource(this.source, () => new StatusBarWindow(this.source));
+  private readonly window = sharedBySource(
+    StatusBarWindow,
+    this.source,
+    () => new StatusBarWindow(this.source),
+  );
 
   /** What is actually showing: every claim in order, later ones winning per property. */
   readonly state: Signal<StatusBarState> = this.window.state;

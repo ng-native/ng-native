@@ -39,6 +39,7 @@ import { SecureStorage } from '@ng-native/expo/secure-store';
 import { Storage } from '@ng-native/expo/async-storage';
 import { Updates } from '@ng-native/expo/updates';
 import type { InjectionToken } from '@angular/core';
+import { inAppWith } from './injected.ts';
 
 /** Modules by specifier, for one call. Anything not listed throws, which reads as "not installed". */
 function withModules<T>(modules: Record<string, unknown>, run: () => T): T {
@@ -525,6 +526,31 @@ describe('the screen capture source', () => {
       withModules({}, () => defaultSource(ScreenCapture.SOURCE)),
       null,
     );
+  });
+
+  it('leaves an app given the module itself as its source a window of its own', async () => {
+    const prevented: boolean[] = [];
+    const expoScreenCapture = {
+      addScreenshotListener: () => ({ remove() {} }),
+      preventScreenCaptureAsync: async () => void prevented.push(true),
+      allowScreenCaptureAsync: async () => void prevented.push(false),
+    };
+    // The default source, kept for this module.
+    withModules({ 'expo-screen-capture': expoScreenCapture }, () =>
+      defaultSource(ScreenCapture.SOURCE),
+    );
+    const app = inAppWith(
+      ScreenCapture.SOURCE,
+      expoScreenCapture as never,
+      () => new ScreenCapture(),
+    );
+    try {
+      await app.service.prevent();
+      await app.service.allow();
+    } finally {
+      app.destroy();
+    }
+    assert.deepEqual(prevented, [true, false]);
   });
 });
 
