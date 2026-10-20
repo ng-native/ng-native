@@ -16,8 +16,9 @@ nx start mobile
 
 `nx start` runs Metro, the same as `npx expo start` in an app made from the template. The app can
 import the workspace's Angular libraries, and they are compiled ahead of time into its bundle with
-the rest of its code. In a workspace whose root package is scoped, as the TypeScript preset's is,
-the project is named for the scope the way Nx names its own: `nx start @org/mobile`.
+the rest of its code. In a workspace with package-manager workspaces and a scoped root package, as
+the TypeScript preset has, each project is named for the scope the way Nx names its own:
+`nx start @org/mobile`, and `@org/ui` for a library, in the commands below as well.
 
 ## What nx add does
 
@@ -200,6 +201,8 @@ nx g @ng-native/nx:component profile-card --project ui
 nx test ui
 ```
 
+In the TypeScript preset the library is `@org/ui`: `--project @org/ui` and `nx test @org/ui`.
+
 `@nx/angular:library` writes tests that run on jsdom through Analog, with a `TestBed` spec for a
 `<p>`, and none of it can render a native component. `@ng-native/nx:library` runs the workspace's
 own library generator without its tests: `@nx/angular:library`, with the options `nx g` would give
@@ -237,6 +240,8 @@ the name, such as `settings/profile-card`.
 ```sh
 nx g @ng-native/nx:tailwind mobile --library ui
 ```
+
+In the TypeScript preset that is `nx g @ng-native/nx:tailwind @org/mobile --library @org/ui`.
 
 This sets up [Tailwind](/packages/tailwind) in an app, and in the libraries whose classes it uses.
 An app that uses a library's classes without this renders them unstyled, and nothing fails: the
