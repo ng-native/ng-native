@@ -43,7 +43,7 @@ const SETUP = fileURLToPath(new URL('./setup.mjs', import.meta.url));
 
 /**
  * Entry points a test gets a stand-in for, because what they import is React Native source that
- * Node cannot load: the gestures and reanimated entry points of `@ng-native/components`, the
+ * Node cannot load: the gestures, animations and reanimated entry points of `@ng-native/components`, the
  * gesture library itself, which an app imports for `Gesture`, and Reanimated and worklets, which
  * an app imports for `withTiming` and `scheduleOnRN`. See each stand-in for what it does and does
  * not do.
@@ -52,6 +52,7 @@ const STAND_INS = Object.fromEntries(
   Object.entries({
     '@ng-native/components/gestures': 'gestures',
     'react-native-gesture-handler': 'gesture-handler',
+    '@ng-native/components/animations': 'animations',
     '@ng-native/components/reanimated': 'reanimated',
     'react-native-reanimated': 'reanimated-library',
     'react-native-worklets': 'worklets-library',

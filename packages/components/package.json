@@ -30,6 +30,7 @@
       "browser": "./src/reanimated-web.ts",
       "default": "./src/reanimated.ts"
     },
+    "./stand-ins/animations": "./src/stand-ins/animations.ts",
     "./stand-ins/reanimated": "./src/stand-ins/reanimated.ts",
     "./stand-ins/worklets": "./src/stand-ins/worklets.ts",
     "./stand-ins/gesture-handler": "./src/stand-ins/gesture-handler.ts",
@@ -62,6 +63,10 @@
         "types": "./dist/reanimated.d.ts",
         "browser": "./dist/reanimated-web.js",
         "default": "./dist/reanimated.js"
+      },
+      "./stand-ins/animations": {
+        "types": "./dist/stand-ins/animations.d.ts",
+        "default": "./dist/stand-ins/animations.js"
       },
       "./stand-ins/reanimated": {
         "types": "./dist/stand-ins/reanimated.d.ts",
