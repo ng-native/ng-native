@@ -25,10 +25,12 @@ import { KeepAwake } from '@ng-native/expo/keep-awake';
 
 ```ts
 import { Component, DestroyRef, inject } from '@angular/core';
+import { Text } from '@ng-native/components';
 import { KeepAwake } from '@ng-native/expo/keep-awake';
 
 @Component({
   selector: 'app-recording',
+  imports: [Text],
   template: `<text>Recording...</text>`,
 })
 export class Recording {

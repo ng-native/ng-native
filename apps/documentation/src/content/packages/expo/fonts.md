@@ -139,10 +139,12 @@ registered:
 
 ```ts
 import { Component, inject } from '@angular/core';
+import { Text } from '@ng-native/components';
 import { Fonts } from '@ng-native/expo/fonts';
 
 @Component({
   selector: 'app-family-picker',
+  imports: [Text],
   template: `@for (family of fonts.families(); track family) {
     <text>{{ family }}</text>
   }`,

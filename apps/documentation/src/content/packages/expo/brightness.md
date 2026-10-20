@@ -27,10 +27,12 @@ import { Brightness } from '@ng-native/expo/brightness';
 
 ```ts
 import { Component, DestroyRef, inject } from '@angular/core';
+import { Text } from '@ng-native/components';
 import { Brightness } from '@ng-native/expo/brightness';
 
 @Component({
   selector: 'app-boarding-pass',
+  imports: [Text],
   template: `<text>Show this at the gate</text>`,
 })
 export class BoardingPass {

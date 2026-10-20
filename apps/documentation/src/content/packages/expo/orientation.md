@@ -31,10 +31,12 @@ import { DeviceOrientation } from '@ng-native/expo/orientation';
 
 ```ts
 import { Component, DestroyRef, inject } from '@angular/core';
+import { Text } from '@ng-native/components';
 import { DeviceOrientation } from '@ng-native/expo/orientation';
 
 @Component({
   selector: 'app-player',
+  imports: [Text],
   template: `<text>Playing in {{ orientation.orientation() }}</text>`,
 })
 export class Player {

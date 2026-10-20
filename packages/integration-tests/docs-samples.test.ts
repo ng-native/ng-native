@@ -21,6 +21,7 @@ import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { describe, it } from 'node:test';
 import ts from 'typescript';
+import { NgtscProgram } from '@angular/compiler-cli';
 import { extractDocSamples, type DocSample } from './docs-samples.ts';
 
 const OUT_DIR = path.join(import.meta.dirname, '.docs-samples');
@@ -178,10 +179,17 @@ describe('docs code samples typecheck against the real packages', () => {
     });
   }
 
-  it('typechecks every block that is not an obvious fragment', () => {
-    const byPath = writeFixtures(checkable);
-    const diagnostics = byFixture(typecheck([...byPath.keys(), writeStylesheetDeclaration()]));
+  /** The fixtures and TypeScript's word on them, worked out once for the tests below. */
+  let checked: { byPath: Map<string, DocSample>; diagnostics: Map<string, ts.Diagnostic[]> };
+  const check = () =>
+    (checked ??= (() => {
+      const byPath = writeFixtures(checkable);
+      const diagnostics = byFixture(typecheck([...byPath.keys(), writeStylesheetDeclaration()]));
+      return { byPath, diagnostics };
+    })());
 
+  it('typechecks every block that is not an obvious fragment', () => {
+    const { byPath, diagnostics } = check();
     const elidedContext: DocSample[] = [];
     const failures: string[] = [];
 
@@ -214,6 +222,59 @@ describe('docs code samples typecheck against the real packages', () => {
 
     if (failures.length > 0) {
       assert.fail(`${failures.length} type error(s) in docs code samples:\n${failures.join('\n')}`);
+    }
+  });
+
+  /**
+   * TypeScript reads no template, so a sample whose template uses <text> without importing Text
+   * passes it, and fails the app it is pasted into: the template's typecheck, which runs ngc with
+   * strictTemplates, reports NG8001, and the app renders a plain view with a warning. Angular's own
+   * compiler checks each component sample TypeScript found complete, with the template's options.
+   */
+  it('checks the template of every complete component sample, as the app template does', () => {
+    const { byPath, diagnostics } = check();
+    const components = [...byPath].filter(
+      ([file, sample]) =>
+        /@Component\(/.test(sample.code) && !isFragment(diagnostics.get(file) ?? []),
+    );
+    const options = {
+      target: ts.ScriptTarget.ES2022,
+      module: ts.ModuleKind.NodeNext,
+      moduleResolution: ts.ModuleResolutionKind.NodeNext,
+      strict: true,
+      noEmit: true,
+      skipLibCheck: true,
+      allowImportingTsExtensions: true,
+      types: ['node'],
+      lib: ['lib.es2022.d.ts'],
+      strictTemplates: true,
+      typeCheckHostBindings: false,
+      strictDomEventTypes: false,
+    };
+    const rootNames = [...components.map(([file]) => file), path.join(OUT_DIR, 'stylesheets.d.ts')];
+    // The template diagnostics alone: the TypeScript ones are the test above's, and ngc's
+    // `performCompilation` stops at those before it reads a template.
+    const program = new NgtscProgram(rootNames, options, ts.createCompilerHost(options));
+    const angular = [
+      ...program.getNgStructuralDiagnostics(),
+      ...program.getNgSemanticDiagnostics(),
+    ];
+    const samples = new Map(components);
+    const failures = angular.flatMap((d) => {
+      if (d.category !== ts.DiagnosticCategory.Error) return [];
+      // A styleUrl or templateUrl the page does not show, as a relative import is to the pass above.
+      if (/^Could not find (stylesheet|template) file/.test(String(d.messageText))) return [];
+      const sample = d.file && samples.get(d.file.fileName);
+      if (!sample) return [];
+      const { line } = d.file!.getLineAndCharacterOfPosition(d.start ?? 0);
+      const text = ts.flattenDiagnosticMessageText(d.messageText, '\n').split('\n')[0];
+      return [`${sample.file}:${sample.line + line} - ${text}`];
+    });
+    assert.ok(components.length > 50, `only ${components.length} component samples were checked`);
+    if (failures.length > 0) {
+      assert.fail(
+        `${failures.length} template error(s) in docs code samples:\n${failures.join('\n')}`,
+      );
     }
   });
 });

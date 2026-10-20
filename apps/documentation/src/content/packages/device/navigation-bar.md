@@ -12,9 +12,10 @@ it closes, without either knowing about the other.
 
 ```ts
 import { Component, DestroyRef, inject } from '@angular/core';
+import { View } from '@ng-native/components';
 import { NavigationBar } from '@ng-native/device';
 
-@Component({ selector: 'app-player', template: `<view />` })
+@Component({ selector: 'app-player', imports: [View], template: `<view />` })
 export class Player {
   constructor() {
     const drop = inject(NavigationBar).push({ hidden: true });
@@ -97,9 +98,10 @@ front, and the claim is back when a screen without one is.
 
 ```ts
 import { Component, inject } from '@angular/core';
+import { View } from '@ng-native/components';
 import { NativeNavigation } from '@ng-native/router';
 
-@Component({ selector: 'app-library', template: `<view />` })
+@Component({ selector: 'app-library', imports: [View], template: `<view />` })
 export class Library {
   private readonly navigation = inject(NativeNavigation);
 

@@ -11,9 +11,10 @@ it back its own claim when it closes, and nothing else remembers what that was.
 
 ```ts
 import { Component, DestroyRef, inject } from '@angular/core';
+import { View } from '@ng-native/components';
 import { StatusBar } from '@ng-native/device';
 
-@Component({ selector: 'app-photo-viewer', template: `<view />` })
+@Component({ selector: 'app-photo-viewer', imports: [View], template: `<view />` })
 export class PhotoViewer {
   constructor() {
     const drop = inject(StatusBar).push({ style: 'light', hidden: true });

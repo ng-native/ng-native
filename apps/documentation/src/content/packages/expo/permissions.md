@@ -29,9 +29,14 @@ import { Permission } from '@ng-native/expo';
 ```ts
 import * as Camera from 'expo-camera';
 import { Component, inject } from '@angular/core';
+import { Text } from '@ng-native/components';
 import { Permission } from '@ng-native/expo';
 
-@Component({ selector: 'app-scanner', template: '<text>{{ camera.status() }}</text>' })
+@Component({
+  selector: 'app-scanner',
+  imports: [Text],
+  template: '<text>{{ camera.status() }}</text>',
+})
 export class Scanner {
   protected readonly camera = Permission.of(
     Camera.Camera.getCameraPermissionsAsync,

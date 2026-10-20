@@ -34,12 +34,14 @@ file spells out. Each entry, or `styles` itself, can be:
 
 ```ts
 import { Component } from '@angular/core';
+import { View } from '@ng-native/components';
 
 const BOX = '.box { width: 50px; }';
 const TITLE = '.title { font-weight: 600; }';
 
 @Component({
   selector: 'app-card',
+  imports: [View],
   styleUrl: '../shared/cards.css', // shared between files: a stylesheet, not an import
   styles: [
     `

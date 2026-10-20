@@ -23,10 +23,12 @@ import { Location } from '@ng-native/expo/location';
 
 ```ts
 import { Component, inject, type OnDestroy } from '@angular/core';
+import { Text } from '@ng-native/components';
 import { Location } from '@ng-native/expo/location';
 
 @Component({
   selector: 'app-run',
+  imports: [Text],
   template: `
     @if (location.position(); as here) {
       <text>{{ here.latitude }}, {{ here.longitude }}</text>

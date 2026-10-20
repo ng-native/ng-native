@@ -11,9 +11,10 @@ navigate to.
 
 ```ts
 import { Component, DestroyRef, inject } from '@angular/core';
+import { View } from '@ng-native/components';
 import { DeepLinks } from '@ng-native/device';
 
-@Component({ selector: 'app-root', template: `<view />` })
+@Component({ selector: 'app-root', imports: [View], template: `<view />` })
 export class Root {
   constructor() {
     const links = inject(DeepLinks);

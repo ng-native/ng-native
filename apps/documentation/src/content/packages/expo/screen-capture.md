@@ -27,10 +27,12 @@ import { ScreenCapture } from '@ng-native/expo/screen-capture';
 
 ```ts
 import { Component, DestroyRef, inject } from '@angular/core';
+import { Text } from '@ng-native/components';
 import { ScreenCapture } from '@ng-native/expo/screen-capture';
 
 @Component({
   selector: 'app-card-details',
+  imports: [Text],
   template: `
     <text>4242 4242 4242 4242</text>
     @if (capture.screenshots() > 0) {
