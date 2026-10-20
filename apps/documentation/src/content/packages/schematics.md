@@ -48,17 +48,22 @@ in [Metro](/packages/metro), and the project's `angular.json` entry is what conn
 | `ng test native`            | `vitest run`, through [`@ng-native/testing`](/packages/testing). |
 | `ng run native:run-ios`     | `expo run:ios`: a development build on a simulator.              |
 | `ng run native:run-android` | `expo run:android`.                                              |
+| `ng run native:typecheck`   | `ngc --noEmit`, which checks the templates as well as the code.  |
 
-Each is an Expo or Vitest command run in the project's directory, by the package's two builders,
-`@ng-native/schematics:expo` and `@ng-native/schematics:vitest`. They run the copies the workspace
-installed, with the terminal attached, so Metro's QR code and keyboard shortcuts work as they do
-under `npx expo start`. A plain `ng test` runs the web app's tests and the native app's, since the
-Angular CLI runs `test` for every project that has one. A plain `ng build` and `ng serve` still mean
-the web app.
+Each is an Expo, Vitest or `ngc` command run in the project's directory, by the package's three
+builders, `@ng-native/schematics:expo`, `@ng-native/schematics:vitest` and
+`@ng-native/schematics:typecheck`. They run the copies the workspace installed, with the terminal
+attached, so Metro's QR code and keyboard shortcuts work as they do under `npx expo start`. A
+plain `ng test` runs the web app's tests and the native app's, since the Angular CLI runs `test`
+for every project that has one. A plain `ng build` and `ng serve` still mean the web app.
 
 `ng test native` does not use `@angular/build:unit-test`. That builder compiles tests with the web
 build and runs them against a DOM, and a native test renders onto the fake Fabric instead,
 compiled by the same transform Metro uses.
+
+`ng run native:typecheck` loads `metro.config.js` before `ngc`, as the template's `typecheck`
+script does, so that once [Tailwind](/packages/tailwind) is added, the sheet `src/main.ts` imports
+exists on a fresh checkout. A project without a Metro config runs `ngc` alone.
 
 ## ng generate
 
@@ -67,12 +72,14 @@ cd projects/native
 ng generate component profile-card
 ```
 
-Run inside the project, `ng generate component` writes a native component: `<view>` and `<text>`
-imported from `@ng-native/components`, and a `profile-card.test.ts` that renders it with
-`@ng-native/testing`. Angular's own component schematic would write a `<p>`, which is not a native
-element, and a spec that needs `TestBed` on a DOM. Everything this package has no schematic for,
-a service or a pipe, falls through to Angular's, with its spec turned off in this project, because
-Angular's specs assume Vitest's globals and a DOM, and neither is here.
+Run inside the project, `ng generate component` writes a native component in
+`src/app/profile-card`, beside `app.ts`: `<view>` and `<text>` imported from
+`@ng-native/components`, and a `profile-card.test.ts` that renders it with `@ng-native/testing`.
+Run from a directory inside `src`, it writes there instead. Angular's own component schematic
+would write a `<p>`, which is not a native element, and a spec that needs `TestBed` on a DOM.
+Everything this package has no schematic for, a service or a pipe, falls through to Angular's,
+with its spec turned off in this project, because Angular's specs assume Vitest's globals and a
+DOM, and neither is here.
 
 From the workspace root, name the collection. `--project` on its own does not switch collections,
 which is the Angular CLI's rule:

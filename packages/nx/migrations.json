@@ -34,6 +34,11 @@
       "version": "0.17.1",
       "description": "Turn off declarationMap in each Nx library's tsconfig.typecheck.json, which TypeScript refuses beside composite: false.",
       "implementation": "./migrations/run.cjs#library-typecheck-declaration-map"
+    },
+    "native-typecheck-target": {
+      "version": "0.17.1",
+      "description": "Give each Angular Native project in angular.json a typecheck target, run by ngc.",
+      "implementation": "./migrations/run.cjs#native-typecheck-target"
     }
   }
 }

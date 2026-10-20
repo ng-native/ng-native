@@ -40,6 +40,7 @@ function targets(root, name) {
     'run-ios': expo('run:ios'),
     'run-android': expo('run:android'),
     test: { builder: '@ng-native/schematics:vitest', options: {} },
+    typecheck: { builder: '@ng-native/schematics:typecheck', options: {} },
   };
 }
 
@@ -83,6 +84,7 @@ function commands(name) {
     [`ng run ${name}:run-ios`, 'the iOS simulator'],
     [`ng run ${name}:run-android`, 'the Android emulator'],
     [`ng test ${name}`, 'Vitest, in Node against a fake native layer: no simulator needed'],
+    [`ng run ${name}:typecheck`, 'ngc, which checks the templates as well as the code'],
     [`ng build ${name}`, 'an exported bundle'],
   ];
   const width = Math.max(...rows.map(([command]) => command.length)) + 2;
@@ -161,7 +163,7 @@ function application(options) {
     if (!options.skipInstall) context.addTask(new NodePackageInstallTask());
     context.logger.info(
       `Created ${root}. Run it with: ng serve ${name} (Metro), ng run ${name}:run-ios, ` +
-        `ng test ${name}, ng build ${name}.`,
+        `ng test ${name}, ng run ${name}:typecheck, ng build ${name}.`,
     );
   };
 }

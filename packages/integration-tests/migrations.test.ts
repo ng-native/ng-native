@@ -805,3 +805,101 @@ describe('library-typecheck-declaration-map, through nx migrate, ng update and n
     assert.deepEqual(again.files, first.files);
   });
 });
+
+describe('native-typecheck-target, through nx migrate, ng update and ng-native-migrate', () => {
+  const native = (extra: object = {}) => ({
+    projectType: 'application',
+    root: 'projects/native',
+    architect: {
+      serve: { builder: '@ng-native/schematics:expo', options: { command: 'start' } },
+      test: { builder: '@ng-native/schematics:vitest', options: {} },
+      ...extra,
+    },
+  });
+  const web = {
+    projectType: 'application',
+    root: '',
+    architect: { build: { builder: '@angular/build:application', options: {} } },
+  };
+  const own = { builder: '@angular/build:unit-test', options: {} };
+  const files = {
+    'angular.json':
+      JSON.stringify(
+        {
+          version: 1,
+          projects: { web, native: native(), mobile: native({ typecheck: own }) },
+        },
+        null,
+        2,
+      ) + '\n',
+  };
+
+  it('adds a typecheck target to each native project that has none, and leaves the rest', async () => {
+    const { nx, angular, cli } = await acrossAdapters(files, 'native-typecheck-target', '0.17.0');
+    const workspace = JSON.parse(nx.files['angular.json']!);
+    assert.deepEqual(workspace.projects.native.architect.typecheck, {
+      builder: '@ng-native/schematics:typecheck',
+      options: {},
+    });
+    assert.deepEqual(workspace.projects.mobile.architect.typecheck, own, 'its own target stays');
+    assert.deepEqual(workspace.projects.web, web);
+    assert.match(nx.files['angular.json']!, /^ {2}"version": 1,$/m, 'written as it was indented');
+    assert.deepEqual(nx.notes, []);
+    assert.deepEqual(angular, nx);
+    assert.deepEqual(cli, nx);
+  });
+
+  it('skips a project or a target that is not an object, rather than stopping the update', async () => {
+    const odd = {
+      'angular.json':
+        JSON.stringify(
+          {
+            version: 1,
+            projects: {
+              broken: null,
+              // First, so the check for a native builder reaches it before one that is.
+              native: { ...native(), architect: { lint: null, ...native().architect } },
+            },
+          },
+          null,
+          2,
+        ) + '\n',
+    };
+    const { nx } = await acrossAdapters(odd, 'native-typecheck-target', '0.17.0');
+    const workspace = JSON.parse(nx.files['angular.json']!);
+    assert.equal(workspace.projects.broken, null);
+    assert.deepEqual(workspace.projects.native.architect.typecheck, {
+      builder: '@ng-native/schematics:typecheck',
+      options: {},
+    });
+  });
+
+  it('leaves an angular.json with comments as it is, with a note saying what to add', async () => {
+    const commented = {
+      'angular.json': '{\n  // The workspace.\n  "version": 1,\n  "projects": {}\n}\n',
+    };
+    const { nx, angular, cli } = await acrossAdapters(
+      commented,
+      'native-typecheck-target',
+      '0.17.0',
+    );
+    assert.deepEqual(nx.files, commented);
+    assert.deepEqual(nx.notes, [
+      'angular.json: not plain JSON, so no typecheck target was added. Give each Angular Native ' +
+        'project one by hand: "typecheck": { "builder": "@ng-native/schematics:typecheck" } in its ' +
+        'architect.',
+    ]);
+    assert.deepEqual(angular, nx);
+    assert.deepEqual(cli, nx);
+  });
+
+  it('changes nothing the second time, without a native project, or with no angular.json', async () => {
+    const first = await viaNx(files, 'native-typecheck-target');
+    const again = await viaNx(first.files as Record<string, string>, 'native-typecheck-target');
+    assert.deepEqual(again.files, first.files);
+    const webOnly = { 'angular.json': '{ "version": 1, "projects": { "web": { "root": "" } } }\n' };
+    assert.deepEqual((await viaNx(webOnly, 'native-typecheck-target')).files, webOnly);
+    const plain = { 'package.json': '{ "name": "app" }\n' };
+    assert.deepEqual((await viaNx(plain, 'native-typecheck-target')).files, plain);
+  });
+});

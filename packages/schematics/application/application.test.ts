@@ -104,6 +104,14 @@ describe('ng add', () => {
     assert.equal(project.architect.test.builder, '@ng-native/schematics:vitest');
   });
 
+  it('gives the project a typecheck target, which checks templates with ngc', () => {
+    const project = json(tree, 'angular.json').projects.native;
+    assert.deepEqual(project.architect.typecheck, {
+      builder: '@ng-native/schematics:typecheck',
+      options: {},
+    });
+  });
+
   it("routes ng generate in the project to this collection first, then Angular's", () => {
     const project = json(tree, 'angular.json').projects.native;
     assert.deepEqual(project.cli.schematicCollections, [

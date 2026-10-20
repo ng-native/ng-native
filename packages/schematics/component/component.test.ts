@@ -52,7 +52,7 @@ describe('ng generate component', () => {
   });
 
   it('writes a component from native elements, in a folder of its own', () => {
-    const source = tree.readContent('projects/native/profile-card/profile-card.ts');
+    const source = tree.readContent('projects/native/src/app/profile-card/profile-card.ts');
     assert.match(source, /import \{ Text, View \} from '@ng-native\/components';/);
     assert.match(source, /selector: 'app-profile-card'/);
     assert.match(source, /imports: \[Text, View\]/);
@@ -61,14 +61,14 @@ describe('ng generate component', () => {
   });
 
   it('writes a test that renders it on the fake Fabric', () => {
-    const test = tree.readContent('projects/native/profile-card/profile-card.test.ts');
+    const test = tree.readContent('projects/native/src/app/profile-card/profile-card.test.ts');
     assert.match(test, /from '@ng-native\/testing'/);
     assert.match(test, /import \{ ProfileCard \} from '\.\/profile-card\.ts';/);
     assert.match(test, /screen\.getByText\('profile-card works'\)/);
   });
 
   it('writes no external template or stylesheet, and no TestBed spec', () => {
-    assert.deepEqual(tree.getDir('projects/native/profile-card').subfiles.slice().sort(), [
+    assert.deepEqual(tree.getDir('projects/native/src/app/profile-card').subfiles.slice().sort(), [
       'profile-card.test.ts',
       'profile-card.ts',
     ]);
@@ -76,22 +76,36 @@ describe('ng generate component', () => {
 });
 
 describe('where it goes', () => {
-  it('into the directory ng generate ran from, when that is inside the project', async () => {
+  /** Where `avatar` is written when ng generate runs from `cwd`, as the CLI passes it in `path`. */
+  async function from(cwd: string | undefined): Promise<string[]> {
     const tree = await runner.runSchematic(
       'component',
-      { name: 'avatar', project: 'native', path: 'projects/native/settings' },
+      { name: 'avatar', project: 'native', ...(cwd === undefined ? {} : { path: cwd }) },
       workspace(),
     );
-    assert.ok(tree.exists('projects/native/settings/avatar/avatar.ts'));
+    return tree.files.filter((file) => file.endsWith('/avatar.ts'));
+  }
+
+  it("into src/app, beside the app's own components, from the workspace root", async () => {
+    assert.deepEqual(await from(undefined), ['/projects/native/src/app/avatar/avatar.ts']);
   });
 
-  it("into the project's root, when it ran from outside the project", async () => {
-    const tree = await runner.runSchematic(
-      'component',
-      { name: 'avatar', project: 'native', path: 'projects/web/src' },
-      workspace(),
-    );
-    assert.ok(tree.exists('projects/native/avatar/avatar.ts'));
+  it("into src/app from the project's own directory, as the docs have it run", async () => {
+    assert.deepEqual(await from('projects/native'), ['/projects/native/src/app/avatar/avatar.ts']);
+  });
+
+  it('into the directory ng generate ran from, when that is inside src', async () => {
+    assert.deepEqual(await from('projects/native/src/app/settings'), [
+      '/projects/native/src/app/settings/avatar/avatar.ts',
+    ]);
+  });
+
+  it('into src itself when it ran from there', async () => {
+    assert.deepEqual(await from('projects/native/src'), ['/projects/native/src/avatar/avatar.ts']);
+  });
+
+  it('into src/app when it ran from outside the project', async () => {
+    assert.deepEqual(await from('projects/web/src'), ['/projects/native/src/app/avatar/avatar.ts']);
   });
 
   it('under a path given with the name, flat if asked, and without a test if asked', async () => {
@@ -101,10 +115,10 @@ describe('where it goes', () => {
       workspace(),
     );
     assert.match(
-      tree.readContent('projects/native/settings/toggle-row.ts'),
+      tree.readContent('projects/native/src/app/settings/toggle-row.ts'),
       /export class ToggleRow/,
     );
-    assert.equal(tree.exists('projects/native/settings/toggle-row.test.ts'), false);
+    assert.equal(tree.exists('projects/native/src/app/settings/toggle-row.test.ts'), false);
   });
 
   it('refuses a project angular.json does not have', async () => {
