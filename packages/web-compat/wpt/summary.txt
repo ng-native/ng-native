@@ -14,9 +14,9 @@ dom/traversal                                                                  1
 html/dom                                                                       209        56 (26.8%)   168            63898            64451  99.1%
 html/editing/the-hidden-attribute                                              10         2 (20.0%)    15             20               42     47.6%
 html/interaction/focus/sequential-focus-navigation-and-the-tabindex-attribute  3          1 (33.3%)    4              8                10     80.0%
-css/cssom-view                                                                 220        48 (21.8%)   27             696              1713   40.6%
+css/cssom-view                                                                 220        48 (21.8%)   27             697              1713   40.7%
 resize-observer                                                                32         7 (21.9%)    7              16               48     33.3%
-intersection-observer                                                          137        27 (19.7%)   17             145              337    43.0%
+intersection-observer                                                          137        28 (20.4%)   17             146              337    43.3%
 domparsing                                                                     68         21 (30.9%)   20             614              1856   33.1%
 html/syntax/serializing-html-fragments                                         8          6 (75.0%)    1              368              375    98.1%
 html/syntax/parsing                                                            65         23 (35.4%)   20             2672             2739   97.6%
@@ -151,9 +151,9 @@ html/syntax/parsing-html-fragments: 13 support files, not tests
       2  no testharness (a reference, visual or print page)
       1  XML document (the runner reads HTML only)
 
-FAILURES BY CAUSE (6345 failures in 249 causes; the first 60)
+FAILURES BY CAUSE (6342 failures in 249 causes; the first 60)
 A failure is a subtest that did not pass, or a file that did not run to its end.
-  1. 2139 in 440 files: assert_equals: wrong value
+  1. 2131 in 438 files: assert_equals: wrong value
        dom/nodes/Comment-constructor.html: new Comment() should get the correct ownerDocument across globals: assert_equals: expected Document node with 1 child but got Document node with 2 children
        dom/nodes/Document-URL.html: Document.URL with redirect: assert_equals: expected "http://web-platform.test:8000/common/blank.html" but got "about:blank"
        dom/nodes/Document-characterSet-normalization-1.html: Name "IBM866" has label "866" (characterSet): assert_equals: expected "IBM866" but got "UTF-8"
@@ -177,7 +177,7 @@ A failure is a subtest that did not pass, or a file that did not run to its end.
        dom/nodes/Element-matches.html: In-document Element.matches: :target pseudo-class selector, matching the element referenced by the URL fragment identifier (with no refNodes): :target: assert_true: The element #target should match th
        dom/nodes/Element-webkitMatchesSelector.html: In-document Element.webkitMatchesSelector: :target pseudo-class selector, matching the element referenced by the URL fragment identifier (with no refNodes): :target: assert_true: The element #target s
        dom/nodes/ParentNode-querySelector-All.html: Document.querySelectorAll returns NodeList instance: assert_true: The result should be an instance of a NodeList expected true got false
-  7. 191 in 41 files: subtest NOTRUN
+  7. 196 in 41 files: subtest NOTRUN
        dom/nodes/Node-parentNode.html: Removed iframe: NOTRUN
        dom/nodes/moveBefore/relevant-mutations.html: Moving <img> into a <picture> triggers a relevant mutation on the <img>, loading <source>: NOTRUN
        dom/nodes/query-target-in-load-event.html: document.querySelector(":target") must work when called in the window.load event: NOTRUN

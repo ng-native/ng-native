@@ -164,10 +164,11 @@ export function giveDefaults(node: EngineNode, engine: Engine): void {
 /**
  * Have an element made in an app that asked for this package scroll what overflows it where its
  * style says `overflow: auto` or `scroll`, as a browser's does: a list of options in a panel. The
- * engine's own views, a `<view>` or a `<scroll-view>`, keep what they are, and a text field
- * scrolls its own text, and is no field as a scroll view.
+ * engine's own views, a `<view>` or a `<scroll-view>`, keep what they are, a text field
+ * scrolls its own text, and is no field as a scroll view, and a table scrolls nothing, as Chrome
+ * draws one.
  */
 export function scrollWhereStyled(node: EngineNode, engine: Engine): void {
-  if (node.tag === 'input' || node.tag === 'textarea') return;
+  if (node.tag === 'input' || node.tag === 'textarea' || node.tag === 'table') return;
   if (isHtml(node.tag) && documentOf(engine)) scrollsOverflow(node);
 }

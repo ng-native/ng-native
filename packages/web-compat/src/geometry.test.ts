@@ -312,18 +312,12 @@ describe('scrolling an element', () => {
     assert.equal(box.scrollTop, 30);
   });
 
-  it("leaves the engine's own views, a component and a text field to scroll as they do", async () => {
+  it("leaves the engine's own views, a component, a text field and a table to scroll as they do", async () => {
     const { make } = await page();
     const scrolls = (name: string) => make(name).scrollsOverflow === true;
-    assert.deepEqual(['div', 'span', 'td', 'x-mine', 'view', 'input', 'textarea'].map(scrolls), [
-      true,
-      true,
-      true,
-      false,
-      false,
-      false,
-      false,
-    ]);
+    const names = ['div', 'span', 'td', 'x-mine', 'view', 'input', 'textarea', 'table'];
+    // A table scrolls nothing in a browser, whatever its overflow says.
+    assert.deepEqual(names.map(scrolls), [true, true, true, false, false, false, false, false]);
     // A library's own element, which the build names as a browser's.
     const named = globals.ɵngNativeBrowserElements;
     globals.ɵngNativeBrowserElements = new Set(['x-library']);
@@ -858,10 +852,9 @@ describe('IntersectionObserver', () => {
 
   it("sees a table's border as in sight of it, where a box's is outside, as Chrome does", async () => {
     const { place, make } = await page();
-    // Not one that scrolls, which is a scroll view here and clips as a box does.
-    const border = 'border-width: 50px; border-style: solid';
+    const border = 'border-width: 50px; border-style: solid; overflow: scroll';
     const table = make('table', undefined, border);
-    const box = make('div', undefined, `${border}; overflow: scroll`);
+    const box = make('div', undefined, border);
     const items = [make('div', table), make('div', box)];
     await settle();
     place(table, { x: 0, y: 0, width: 200, height: 200 });
@@ -882,7 +875,7 @@ describe('IntersectionObserver', () => {
     assert.deepEqual(bounds, ['0 0 200 200', '50 350 150 450']);
   });
 
-  it('clips a table inside its border where it hides what overflows or is a scroll view, and only then', async () => {
+  it('clips a table inside its border where it hides what overflows, and only then, as Chrome does', async () => {
     const { place, make } = await page();
     const seen: string[] = [];
     for (const overflow of ['hidden', 'clip', 'scroll', 'auto', 'visible']) {
@@ -915,10 +908,10 @@ describe('IntersectionObserver', () => {
       'hidden in 0.25 ',
       'clip root 0.25 100',
       'clip in 0.25 ',
-      'scroll root 0.25 100',
-      'scroll in 0.25 ',
-      'auto root 0.25 100',
-      'auto in 0.25 ',
+      'scroll root 1 200',
+      'scroll in 1 ',
+      'auto root 1 200',
+      'auto in 1 ',
       'visible root 1 200',
       'visible in 1 ',
     ]);
