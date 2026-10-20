@@ -140,24 +140,25 @@ const BLOCK = { ...CONTENT_BOX, display: 'block' };
 const SIZED_WHOLE = new Set(['button', 'select', 'table']);
 
 /**
- * Give an HTML element made in an app that asked for this package what a browser's own
- * stylesheet gives one of its name. Not an element of a drawing, which SVG sizes itself, nor one
- * a script made in no namespace or another, which has no browser default.
+ * What a browser's own stylesheet gives an HTML element of this one's name, in an app that asked
+ * for this package. None for an element of a drawing, which SVG sizes itself, nor one a script
+ * made in no namespace or another, which has no browser default.
  */
-export function giveDefaults(node: EngineNode, engine: Engine): void {
-  if (node.namespace !== undefined || !isHtml(node.tag) || !documentOf(engine)) return;
+export function defaultsOf(node: EngineNode, engine: Engine): Record<string, unknown> | undefined {
+  if (node.namespace !== undefined || !isHtml(node.tag) || !documentOf(engine)) return undefined;
   const record = nameRecordOf(node);
-  if (record && record.namespace !== XHTML) return;
-  const style = SIZED_WHOLE.has(node.tag) ? WHOLE : BLOCKS.has(node.tag) ? BLOCK : CONTENT_BOX;
-  engine.setDefaultStyle(node, style);
+  if (record && record.namespace !== XHTML) return undefined;
+  return SIZED_WHOLE.has(node.tag) ? WHOLE : BLOCKS.has(node.tag) ? BLOCK : CONTENT_BOX;
 }
 
-/** The defaults above, which a copy `cloneNode` makes is given as the element was. */
-const DEFAULTS: ReadonlySet<unknown> = new Set([CONTENT_BOX, WHOLE, BLOCK]);
-
-/** Give a copy of an element the default `giveDefaults` gave the element, where it gave one. */
-export function copyDefaults(node: EngineNode, copy: EngineNode, engine: Engine): void {
-  if (DEFAULTS.has(node.defaultStyle)) engine.setDefaultStyle(copy, node.defaultStyle);
+/**
+ * Give an element what `defaultsOf` says, where it says anything: one made, and a copy
+ * `cloneNode` makes, which is given it by its name and not by what the element has now: a
+ * field's and a select's own defaults are added to it.
+ */
+export function giveDefaults(node: EngineNode, engine: Engine): void {
+  const style = defaultsOf(node, engine);
+  if (style) engine.setDefaultStyle(node, style);
 }
 
 /**

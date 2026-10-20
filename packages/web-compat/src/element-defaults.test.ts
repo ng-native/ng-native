@@ -34,6 +34,14 @@ afterEach(cleanup);
     <view testID="view" style="padding-top: 4px"></view>
     <button testID="button">Go</button>
     <select testID="select"></select>
+    <button testID="holding"><span>Go</span></button>
+    <textarea testID="textarea"></textarea>
+    <select testID="chooser">
+      <optgroup testID="group" label="Fruit">
+        <option testID="first">Apple</option>
+      </optgroup>
+      <option testID="second">Pear</option>
+    </select>
     <table testID="table"></table>
     <input testID="input" />
     <svg testID="svg">
@@ -130,6 +138,31 @@ describe('a library element in an app that asked for web-compat', () => {
     assert.equal(element('section').cloneNode().defaultStyle?.display, 'block');
     assert.equal(element('button').cloneNode(true).defaultStyle?.boxSizing, 'border-box');
     assert.equal(element('view').cloneNode().defaultStyle, undefined);
+  });
+
+  it("gives a copy of a select, a field and a button that holds a box its name's default", async () => {
+    const { element } = await asked();
+    for (const id of ['select', 'holding']) {
+      assert.equal(element(id).cloneNode(true).defaultStyle?.boxSizing, 'border-box', id);
+    }
+    for (const id of ['input', 'textarea']) {
+      assert.equal(element(id).cloneNode(true).defaultStyle?.boxSizing, 'content-box', id);
+    }
+  });
+
+  it("keeps a select's options and groups content-box, before and after an option comes in", async () => {
+    const { element } = await asked();
+    const sized = () =>
+      ['group', 'first', 'second'].map((id) => element(id).defaultStyle?.boxSizing).join(' ');
+    assert.equal(sized(), 'content-box content-box content-box');
+    const document: Dom = (globalThis as Dom).document;
+    const added = document.createElement('option');
+    added.textContent = 'Plum';
+    element('chooser').appendChild(added);
+    await settle();
+    assert.equal(sized(), 'content-box content-box content-box');
+    assert.equal(added.defaultStyle?.boxSizing, 'content-box');
+    assert.equal(element('second').defaultStyle?.display, 'none', 'an option not chosen');
   });
 
   it('leaves a <view> and a drawing as they are', async () => {

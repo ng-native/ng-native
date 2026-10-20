@@ -1,5 +1,6 @@
 import { claimHost, type Engine, type EngineNode } from '@ng-native/fabric';
 import { documentOf, ownView } from './document.ts';
+import { defaultsOf } from './elements.ts';
 
 /**
  * `<select>`: a control that shows the option chosen and, pressed, a list of its options to
@@ -139,7 +140,9 @@ function optionsChanged(node: EngineNode, removed: boolean, engine: Engine): voi
 function show(node: EngineNode, engine: Engine): void {
   const shown = chosen(node);
   for (const option of optionsOf(node)) {
-    engine.setDefaultStyle(option, option === shown ? undefined : HIDDEN);
+    // Over what its name gives it: an option is sized content-box, shown or not.
+    const own = defaultsOf(option, engine);
+    engine.setDefaultStyle(option, option === shown ? own : { ...own, ...HIDDEN });
     // An option's own background is for the list: in the select it is the select's.
     engine.setProp(option, 'style', option === shown ? SHOWN : null);
   }
@@ -148,7 +151,7 @@ function show(node: EngineNode, engine: Engine): void {
 /** Make a `<select>` the control, and have an `<optgroup>` lay nothing out of its own. */
 export function createSelect(node: EngineNode, engine: Engine): boolean {
   if (!documentOf(engine)) return false;
-  if (node.tag === 'optgroup') engine.setDefaultStyle(node, GROUP);
+  if (node.tag === 'optgroup') engine.setDefaultStyle(node, { ...node.defaultStyle, ...GROUP });
   if (node.tag !== 'select') return false;
   selects.set(node, { value: undefined });
   // After the element's own default, which the hook that made it has already set.
