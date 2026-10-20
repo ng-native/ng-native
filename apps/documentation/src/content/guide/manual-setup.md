@@ -24,14 +24,13 @@ rm App.tsx index.ts
 npm pkg set main=src/main.ts
 ```
 
-The packages support Expo SDK 57, the SDK the template is on. Without `@sdk-57`,
-`create-expo-app` takes the newest SDK, and on SDK 58 the `@ng-native/metro` config plugin stops
-`expo prebuild`, so no development or release build can be made.
+The packages support Expo SDK 57 and 58. `@sdk-57` starts the app on SDK 57, the SDK the template
+is on; without it, `create-expo-app` takes the newest SDK.
 
-**For an existing app:** it has to be on SDK 57: `npx expo install expo@^57.0.0`, then
-`npx expo install --fix`. Remove its entry point, `App.tsx` and `index.ts` or `index.js`, and run
-`npm pkg set main=src/main.ts`, so Expo starts from the `src/main.ts` below. Keep the dependencies,
-native configuration and assets.
+**For an existing app:** it has to be on SDK 57 or 58. An app on an older SDK moves with
+`npx expo install expo@^57.0.0`, then `npx expo install --fix`. Remove its entry point, `App.tsx`
+and `index.ts` or `index.js`, and run `npm pkg set main=src/main.ts`, so Expo starts from the
+`src/main.ts` below. Keep the dependencies, native configuration and assets.
 
 For either route, install the framework, configure Metro and write the two app files below.
 

@@ -457,6 +457,30 @@ describe('the status bar source', () => {
     assert.match(String(warnings[1]), /translucent has no effect/);
   });
 
+  it('says once that they do nothing on React Native 0.88, which removed both, without throwing', () => {
+    const warnings: unknown[] = [];
+    const warn = console.warn;
+    console.warn = (message: unknown) => warnings.push(message);
+    try {
+      const native = {
+        Platform: { OS: 'android', Version: 34 },
+        TurboModuleRegistry: { get: () => ({ getConstants: () => ({ isEdgeToEdge: false }) }) },
+        StatusBar: { setBarStyle: () => {}, setHidden: () => {} },
+      };
+      withNative(native, () => {
+        const source = statusBarSource();
+        source.setBackgroundColor('#000000', false);
+        source.setBackgroundColor('#ffffff', false);
+        source.setTranslucent(true);
+      });
+    } finally {
+      console.warn = warn;
+    }
+    assert.equal(warnings.length, 2);
+    assert.match(String(warnings[0]), /backgroundColor has no effect/);
+    assert.match(String(warnings[1]), /translucent has no effect/);
+  });
+
   it('says screens set the bar on Android only', () => {
     const bar = { StatusBar: {} };
     const on = (OS: string) =>

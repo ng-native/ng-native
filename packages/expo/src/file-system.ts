@@ -17,7 +17,9 @@ export interface NativeFile {
   readonly exists: boolean;
   readonly size: number;
   create(options?: { overwrite?: boolean; intermediates?: boolean }): void;
+  /** Synchronous up to SDK 57. From SDK 58 it answers a promise, and `writeSync` is synchronous. */
   write(content: string | Uint8Array): void;
+  writeSync?(content: string | Uint8Array): void;
   text(): Promise<string>;
   textSync(): string;
   /** The contents as bytes: a PDF, an image, anything that is not text. */
@@ -105,11 +107,13 @@ export class FileSystem {
   /**
    * Write text, or bytes for anything that is not text, whether or not the file is there already.
    * `write` alone throws on a file that has never been created, which is the first thing everyone
-   * hits. It replaces what was there.
+   * hits. It replaces what was there, and has written by the time it returns: from SDK 58 through
+   * `writeSync`, since `write` there answers a promise.
    */
   write(file: NativeFile, content: string | Uint8Array): void {
     if (!file.exists) file.create({ intermediates: true });
-    file.write(content);
+    if (file.writeSync) file.writeSync(content);
+    else file.write(content);
   }
 
   private installed(): NativeFiles {

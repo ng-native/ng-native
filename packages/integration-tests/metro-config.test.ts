@@ -329,6 +329,38 @@ describe('the Metro preset', () => {
   });
 
   /**
+   * React Native 0.88 no longer exports `./src/*`, and the engine moves sticky headers through its
+   * `NativeAnimatedHelper`, whose node tags every other animated value shares. Metro falls back to
+   * the file with a warning on every bundle; asked for it by path, it never looks at the exports.
+   */
+  describe("React Native's NativeAnimatedHelper", () => {
+    type Context = { resolveRequest: Resolve; originModulePath: string };
+    const helper = 'react-native/src/private/animated/NativeAnimatedHelper';
+    const resolve = (asked: string[]) =>
+      (withAngularNative(base()) as MetroConfig).resolver.resolveRequest!(
+        {
+          resolveRequest: (_context, name) => {
+            asked.push(name);
+            if (name !== 'react-native/package.json') throw new Error(`${name} is not exported`);
+            return { type: 'sourceFile', filePath: '/app/node_modules/react-native/package.json' };
+          },
+          originModulePath: '/app/node_modules/@ng-native/platform/dist/adapter.js',
+        } as Context,
+        helper,
+        'ios',
+      );
+
+    it("is the file in the app's react-native, without asking its exports for it", () => {
+      const asked: string[] = [];
+      assert.deepEqual(resolve(asked), {
+        type: 'sourceFile',
+        filePath: '/app/node_modules/react-native/src/private/animated/NativeAnimatedHelper.js',
+      });
+      assert.deepEqual(asked, ['react-native/package.json']);
+    });
+  });
+
+  /**
    * pnpm installs a package once per set of peers it resolves. A workspace library that lists
    * `@ng-native/components` but not the app's `@babel/core` gets react-native's Babel peer at 8
    * where the app has 7, so both, and every package peering on them, land in a second directory

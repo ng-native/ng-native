@@ -100,9 +100,13 @@ function nativeSource(native: NonNullable<ReturnType<typeof reactNative>>): Stat
   // checks. That answer is not enough on its own: Expo Go on Android 16 reports false.
   const info = native.TurboModuleRegistry?.get('DeviceInfo') as
     { getConstants?(): { isEdgeToEdge?: boolean } } | null | undefined;
+  // React Native 0.88 draws every Android app edge-to-edge, and removed both setters with it.
+  const settable = typeof StatusBar.setBackgroundColor === 'function';
   const edgeToEdge =
     android &&
-    (Number(native.Platform.Version) >= 36 || info?.getConstants?.().isEdgeToEdge === true);
+    (!settable ||
+      Number(native.Platform.Version) >= 36 ||
+      info?.getConstants?.().isEdgeToEdge === true);
   const warned = new Set<string>();
   return {
     setStyle: (style, animated) => StatusBar.setBarStyle(BAR_STYLES[style], animated),
@@ -110,12 +114,12 @@ function nativeSource(native: NonNullable<ReturnType<typeof reactNative>>): Stat
     setBackgroundColor: (color, animated) => {
       if (!android) return;
       if (edgeToEdge) warnNoEffect('backgroundColor', warned);
-      StatusBar.setBackgroundColor(color, animated);
+      StatusBar.setBackgroundColor?.(color, animated);
     },
     setTranslucent: (translucent) => {
       if (!android) return;
       if (edgeToEdge) warnNoEffect('translucent', warned);
-      StatusBar.setTranslucent(translucent);
+      StatusBar.setTranslucent?.(translucent);
     },
     get height() {
       return StatusBar.currentHeight;

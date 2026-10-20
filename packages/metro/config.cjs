@@ -274,6 +274,33 @@ function expoChunkUrl(context, name, platform) {
   return { type: 'sourceFile', filePath: path.join(path.dirname(from), 'buildUrlForBundle.ts') };
 }
 
+/** React Native's own module the engine moves a sticky header through. */
+const NATIVE_ANIMATED_HELPER = 'react-native/src/private/animated/NativeAnimatedHelper';
+
+/**
+ * `NativeAnimatedHelper`, as the file it is in the app's `react-native`.
+ *
+ * The engine takes its node tags from React Native's own helper, so they never collide with an
+ * animated value's (see `native-drive.ts` in `@ng-native/fabric`). React Native 0.88 stopped
+ * exporting `./src/*`, and Metro falls back to the file with a warning on every bundle. Its
+ * `package.json` is still exported, and the helper is beside it: the same file, so the same module
+ * React Native's own `Animated` uses.
+ *
+ * @param {Function} resolve
+ * @param {object} context
+ * @param {string} name
+ * @param {string | null} platform
+ */
+function nativeAnimatedHelper(resolve, context, name, platform) {
+  if (name !== NATIVE_ANIMATED_HELPER) return undefined;
+  const manifest = resolve(context, 'react-native/package.json', platform)?.filePath;
+  if (!manifest) return undefined;
+  return {
+    type: 'sourceFile',
+    filePath: path.join(path.dirname(manifest), 'src/private/animated/NativeAnimatedHelper.js'),
+  };
+}
+
 /** Marks a resolver this preset already wrapped, so applying the preset twice wraps it once. */
 const WRAPPED = Symbol.for('ng-native.resolveRequest');
 
@@ -301,6 +328,8 @@ function withTypeScriptJsImports(next, projectRoot) {
     const resolve = next ?? context.resolveRequest;
     const chunkUrl = expoChunkUrl(context, name, platform);
     if (chunkUrl) return chunkUrl;
+    const helper = nativeAnimatedHelper(resolve, context, name, platform);
+    if (helper) return helper;
     if (projectRoot && /^@babel\/runtime(\/|$)/.test(name)) {
       try {
         const fromProject = {

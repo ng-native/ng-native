@@ -1291,19 +1291,19 @@ importers:
         specifier: workspace:*
         version: link:../fabric
       expo-clipboard:
-        specifier: ^57.0.0
+        specifier: ^57.0.0 || ^58.0.0
         version: 57.0.2(expo@57.0.26)(react-native@0.86.3(@babel/core@7.29.7)(@react-native/metro-config@0.86.3(@babel/core@7.29.7))(@types/react@19.2.18)(react@19.2.3))(react@19.2.3)
       expo-file-system:
-        specifier: ^57.0.0
+        specifier: ^57.0.0 || ^58.0.0
         version: 57.0.7(expo@57.0.26)(react-native@0.86.3(@babel/core@7.29.7)(@react-native/metro-config@0.86.3(@babel/core@7.29.7))(@types/react@19.2.18)(react@19.2.3))
       expo-font:
-        specifier: ^57.0.0
+        specifier: ^57.0.0 || ^58.0.0
         version: 57.0.4(expo@57.0.26)(react-native@0.86.3(@babel/core@7.29.7)(@react-native/metro-config@0.86.3(@babel/core@7.29.7))(@types/react@19.2.18)(react@19.2.3))(react@19.2.3)
       expo-haptics:
-        specifier: ^57.0.0
+        specifier: ^57.0.0 || ^58.0.0
         version: 57.0.3(expo@57.0.26)
       expo-modules-core:
-        specifier: ^57.0.0
+        specifier: ^57.0.0 || ^58.0.0
         version: 57.0.20(react-native-worklets@0.10.1(@babel/core@7.29.7)(@react-native/metro-config@0.86.3(@babel/core@7.29.7))(react-native@0.86.3(@babel/core@7.29.7)(@react-native/metro-config@0.86.3(@babel/core@7.29.7))(@types/react@19.2.18)(react@19.2.3))(react@19.2.3))(react-native@0.86.3(@babel/core@7.29.7)(@react-native/metro-config@0.86.3(@babel/core@7.29.7))(@types/react@19.2.18)(react@19.2.3))(react@19.2.3)
       react-native:
         specifier: 0.86.3
@@ -1966,7 +1966,7 @@ importers:
         specifier: workspace:*
         version: link:../platform
       expo-document-picker:
-        specifier: ^57.0.0
+        specifier: ^57.0.0 || ^58.0.0
         version: 57.0.3(expo@57.0.26)
       parse5:
         specifier: ^7.3.0

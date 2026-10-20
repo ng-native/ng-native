@@ -85,7 +85,7 @@
   "peerDependencies": {
     "@angular/core": "^22.0.0",
     "react-native": ">=0.86.0",
-    "react-native-gesture-handler": "^2.32.0",
+    "react-native-gesture-handler": "^2.32.0 || ^3.3.0",
     "react-native-reanimated": "^4.5.1",
     "react-native-safe-area-context": "^5.7.0",
     "react-native-keyboard-controller": "^1.21.9",
