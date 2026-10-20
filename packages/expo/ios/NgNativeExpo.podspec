@@ -17,7 +17,14 @@ Pod::Spec.new do |s|
 
   s.dependency 'ExpoModulesCore'
   # `@expo/ui` is an optional peer. Where the app has it, the modifiers it is given are built.
-  has_expo_ui = system('node', '-e', "require.resolve('@expo/ui/package.json', { paths: [process.argv[1]] })", __dir__, out: File::NULL, err: File::NULL)
+  # Looked for from the app's Podfile, not from here, and without the NODE_PATH `expo run:ios`
+  # sets: from here, or through pnpm's store, a workspace app finds this package's own copy.
+  has_expo_ui = system(
+    { 'NODE_PATH' => nil },
+    'node', '-e', "require.resolve('@expo/ui/package.json', { paths: [process.argv[1]] })",
+    Pod::Config.instance.installation_root.to_s,
+    out: File::NULL, err: File::NULL
+  )
   s.dependency 'ExpoUI' if has_expo_ui
 
   s.source_files = '**/*.swift'
