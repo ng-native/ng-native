@@ -200,14 +200,17 @@ function pointerOf(type: string, native: { identifier?: number } | undefined): o
 }
 
 /**
+ * The native events a listener on the document, the window or the body has prevented, by type: a
+ * `pointermove` and a `touchmove` are one native move here, and in a browser each is its own.
+ */
+const prevented = new Map<string, WeakSet<object>>();
+
+/**
  * Listen for an event anywhere in the app, as a listener on `document`, `body` or `window` does.
  * A touch bubbles to the engine's root, which is where this listens, and the event names the
  * node it landed on. Nothing for an event with no touch behind it, a key say, and no `click`
  * for a touch that was a drag.
  */
-/** The native events a listener on the document, the window or the body has prevented. */
-const prevented = new WeakSet<object>();
-
 export function listenAnywhere(
   engine: Engine,
   type: string,
@@ -219,6 +222,8 @@ export function listenAnywhere(
   const native = DOCUMENT_EVENTS[type];
   if (!native) return undefined;
   watchTouches(engine);
+  const marks = prevented.get(type) ?? new WeakSet<object>();
+  prevented.set(type, marks);
   // Not for the event it is added during: a listener a press adds on the document, as opening an
   // overlay does, is added after a browser has passed the document for that press. But a
   // `mousedown` is sent after its touch, and is owed the touch it is added during.
@@ -243,10 +248,10 @@ export function listenAnywhere(
       // browser. One that is not passive keeps a drag from the page with it; one that is prevents
       // nothing: see `events.ts`.
       get defaultPrevented() {
-        return prevented.has(event as object);
+        return marks.has(event as object);
       },
       preventDefault(this: object) {
-        if (!inPassiveListener(this)) prevented.add(event as object);
+        if (!inPassiveListener(this)) marks.add(event as object);
       },
       stopPropagation() {},
     });

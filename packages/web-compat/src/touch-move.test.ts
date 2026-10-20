@@ -143,6 +143,23 @@ describe('@ng-native/web-compat, a drag kept from the page', () => {
     assert.equal(during, false);
   });
 
+  it('stops it for a document touchmove listener after a pointermove one that prevented its own', async () => {
+    // One native move is both events here; in a browser each is its own, prevented apart.
+    const { document, drag } = await page();
+    const seen: boolean[] = [];
+    document.addEventListener('pointermove', prevent);
+    document.addEventListener(
+      'touchmove',
+      (event: Dom) => {
+        seen.push(event.defaultPrevented);
+        event.preventDefault();
+      },
+      { passive: false },
+    );
+    assert.deepEqual(drag(), { during: false, after: true });
+    assert.deepEqual(seen, [false]);
+  });
+
   it("stops it for a listener that prevents it after a passive one's preventDefault", async () => {
     const { slider, around, drag } = await page();
     slider.addEventListener('touchmove', prevent, { passive: true });
@@ -188,11 +205,11 @@ describe('@ng-native/web-compat, a drag kept from the page', () => {
   it('stops it for a window listener that says it is not passive, and not for one that does not', async () => {
     const { drag } = await page();
     const window = globalThis as Dom;
-    window.addEventListener('touchmove', prevent);
-    assert.deepEqual(drag(), { during: true, after: true });
-    window.removeEventListener('touchmove', prevent);
-    window.addEventListener('touchmove', prevent, { passive: false });
     try {
+      window.addEventListener('touchmove', prevent);
+      assert.deepEqual(drag(), { during: true, after: true });
+      window.removeEventListener('touchmove', prevent);
+      window.addEventListener('touchmove', prevent, { passive: false });
       assert.deepEqual(drag(), { during: false, after: true });
     } finally {
       window.removeEventListener('touchmove', prevent);

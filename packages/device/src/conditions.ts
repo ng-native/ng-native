@@ -55,7 +55,7 @@ export function currentConditions(): Conditions {
     // already on screen, so nothing is lost by learning it a tick late.
     reducedMotion: false,
     fontScale: fontScale(),
-    // Read again when the window is resized: it moves to a screen of another density so.
+    // Read again when the window is resized, which it is when it moves to a screen of another density.
     pixelRatio: pixelRatio(),
     // Settled while the native side starts up, and fixed until the app restarts.
     direction: directionSource().current(),
