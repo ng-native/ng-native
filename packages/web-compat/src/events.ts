@@ -1,3 +1,4 @@
+import type { HostNode } from '@ng-native/fabric';
 import { domError } from './dom-error.ts';
 /**
  * Listeners as `addEventListener` keeps them, and events a script sends with `dispatchEvent`.
@@ -90,7 +91,7 @@ export function listen(
   type: string,
   callback: unknown,
   options: unknown,
-  attach?: (heard: Heard) => (() => void) | undefined,
+  attach?: (heard: Heard, passive: boolean) => (() => void) | undefined,
 ): (() => void) | undefined {
   const { capture, once, passive, signal } = optionsOf(options);
   if (!callback || (typeof callback !== 'function' && typeof callback !== 'object')) return;
@@ -114,15 +115,19 @@ export function listen(
     const answer = call(entry, target, event) as boolean | void;
     if (!prevented && !entry.passive) keepDrag(entry.type, event);
     return answer;
-  });
+  }, entry.passive);
   return removeEntry;
 }
 
 const defaultPrevented = (event: unknown): boolean =>
   (event as { defaultPrevented?: unknown } | null)?.defaultPrevented === true;
 
-/** The moves a listener keeps a drag from the page with, by preventing their default. */
-const MOVES = new Set(['touchmove', 'pointermove']);
+/**
+ * The moves a listener keeps a drag from the page with, by preventing their default. Not a
+ * `pointermove`, which a browser scrolls for whatever its listeners say: `touch-action` keeps a
+ * pointer's drag.
+ */
+const MOVES = new Set(['touchmove']);
 
 /**
  * Keep the drag a move is of from the page, where the listener just told of it prevented its
@@ -130,8 +135,8 @@ const MOVES = new Set(['touchmove', 'pointermove']);
  */
 function keepDrag(type: string, event: unknown): void {
   if (!MOVES.has(type) || !defaultPrevented(event)) return;
-  const target = (event as { target?: { engine?: { keepDrag?(node: unknown): void } } }).target;
-  target?.engine?.keepDrag?.(target);
+  const target = (event as { target?: HostNode | null }).target;
+  if (target) target.engine?.keepDrag?.(target);
 }
 
 /** What a listener on the window, the document, its root or its body is passive to unless told. */

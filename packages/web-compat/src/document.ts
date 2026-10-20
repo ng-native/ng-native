@@ -202,6 +202,7 @@ export function listenAnywhere(
   engine: Engine,
   type: string,
   listener: Listener,
+  passive = false,
 ): (() => void) | undefined {
   if (type === 'scroll') return listenToScrolls(engine, listener);
   if (type === 'resize')
@@ -229,9 +230,10 @@ export function listenAnywhere(
       composedPath: () => path,
       cancelable: true,
       defaultPrevented: false,
-      // Kept, for a move: a listener that is not passive keeps a drag from the page with it.
+      // Kept, for a move: a listener that is not passive keeps a drag from the page with it. One
+      // that is prevents nothing, as in a browser.
       preventDefault(this: { defaultPrevented: boolean }) {
-        this.defaultPrevented = true;
+        if (!passive) this.defaultPrevented = true;
       },
       stopPropagation() {},
     });
@@ -345,7 +347,9 @@ function wasDrag(engine: Engine, event: unknown): boolean {
 function anywhere(engine: Engine, target: object) {
   return {
     addEventListener(type: string, listener: Listener, options?: unknown): void {
-      listen(target, type, listener, options, (heard) => listenAnywhere(engine, type, heard));
+      listen(target, type, listener, options, (heard, passive) =>
+        listenAnywhere(engine, type, heard, passive),
+      );
     },
     removeEventListener(type: string, listener: Listener, options?: unknown): void {
       unlisten(target, type, listener, options);

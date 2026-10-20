@@ -20,8 +20,9 @@ import { engineOf } from './window.ts';
  * watched each commit of its app is looked after for it having had a size and lost its view: see
  * `commit-watch.ts`. Shown again, an element's view is made again, and native lays that out.
  *
- * ponytail: the content and border boxes, as Safari has them. `device-pixel-content-box` needs the
- * screen's pixel ratio, which comes with `devicePixelRatio`.
+ * ponytail: the content and border boxes, as Safari has them. `device-pixel-content-box` is the
+ * content box in `devicePixelRatio`'s pixels, snapped to where its edges fall on them, which
+ * native lays out in points and does not say.
  */
 type Box = 'content-box' | 'border-box';
 const BOXES = new Set<string>(['content-box', 'border-box']);

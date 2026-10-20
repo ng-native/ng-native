@@ -13,6 +13,8 @@ import { listenAnywhere } from './document.ts';
 interface WindowListener {
   readonly type: string;
   readonly heard: (event: unknown) => unknown;
+  /** Whether it was added passive, and so prevents nothing. */
+  readonly passive: boolean;
   /** What takes it off each app it was attached to. */
   readonly stops: Map<Engine, () => void>;
 }
@@ -21,13 +23,17 @@ const listeners = new Set<WindowListener>();
 const apps = new Set<Engine>();
 
 function attach(listener: WindowListener, engine: Engine): void {
-  const stop = listenAnywhere(engine, listener.type, listener.heard);
+  const stop = listenAnywhere(engine, listener.type, listener.heard, listener.passive);
   if (stop) listener.stops.set(engine, stop);
 }
 
 /** Attach a listener the window was given to every app up, and to each that comes up after. */
-export function listenOnWindow(type: string, heard: (event: unknown) => unknown): () => void {
-  const listener: WindowListener = { type, heard, stops: new Map() };
+export function listenOnWindow(
+  type: string,
+  heard: (event: unknown) => unknown,
+  passive = false,
+): () => void {
+  const listener: WindowListener = { type, heard, passive, stops: new Map() };
   listeners.add(listener);
   for (const engine of apps) attach(listener, engine);
   return () => {

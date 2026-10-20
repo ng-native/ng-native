@@ -132,6 +132,13 @@ export abstract class HostEngine {
   adoptScope(_node: HostNode, _like: HostNode | null): void {}
 
   /**
+   * Keep the drag now under way from the page until the last finger lifts, as a browser does for
+   * a `touchmove` a listener prevented the default of. A host whose page a browser scrolls leaves
+   * it out.
+   */
+  keepDrag?(node: HostNode): void;
+
+  /**
    * Take the user to a node: a text input gets the cursor, and anything else is brought on
    * screen. What a DOM element's own `focus()` does, for code that calls it on an element.
    */

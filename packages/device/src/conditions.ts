@@ -30,6 +30,11 @@ function fontScale(): number {
   return reactNative()?.PixelRatio.getFontScale() ?? 1;
 }
 
+/** The screen's pixels in a point. One off a device. */
+function pixelRatio(): number {
+  return reactNative()?.PixelRatio.get() ?? 1;
+}
+
 export interface WatchOptions {
   /**
    * Keep a `dark` class on the root in step with the system scheme, which is what
@@ -50,8 +55,8 @@ export function currentConditions(): Conditions {
     // already on screen, so nothing is lost by learning it a tick late.
     reducedMotion: false,
     fontScale: fontScale(),
-    // Fixed for as long as the app is open, as the hairline in `deviceTokens` is.
-    pixelRatio: reactNative()?.PixelRatio.get() ?? 1,
+    // Read again when the window is resized: it moves to a screen of another density so.
+    pixelRatio: pixelRatio(),
     // Settled while the native side starts up, and fixed until the app restarts.
     direction: directionSource().current(),
   };
@@ -112,7 +117,7 @@ export function watchConditions<Node>(
   };
 
   const sizes = screen.subscribe(({ window }) =>
-    resize({ width: window.width, height: window.height }, fontScale()),
+    resize({ width: window.width, height: window.height, pixelRatio: pixelRatio() }, fontScale()),
   );
   const scheme = colors.subscribe((colorScheme) => push({ colorScheme }));
   const settings = accessibility.subscribe((change) => {

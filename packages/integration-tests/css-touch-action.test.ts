@@ -217,3 +217,76 @@ describe('touch-action', () => {
     );
   });
 });
+
+describe('a drag a package keeps from the page', () => {
+  // What `@ng-native/web-compat` asks for a `touchmove` a listener prevented the default of: the
+  // button says nothing of `touch-action`, so only the ask keeps its drag.
+  const kept = () => {
+    const s = scene();
+    const scrolls = () => s.props('page')['scrollEnabled'] !== false;
+    /** A move on the button, with this many fingers down. */
+    const fingers = (phase: 'Start' | 'Move' | 'End' | 'Cancel', down: number) =>
+      s.engine.dispatchEvent(s.nodes['button']!, `topTouch${phase}`, {
+        pageX: 100,
+        pageY: 100,
+        touches: Array.from({ length: down }, () => ({ pageX: 100, pageY: 100 })),
+      });
+    const keep = () => s.engine.keepDrag(s.nodes['button']!);
+    return { ...s, scrolls, fingers, keep };
+  };
+
+  it('holds native off the touch and the page still, until the last finger lifts', () => {
+    const s = kept();
+    s.fingers('Start', 1);
+    s.fingers('Move', 1);
+    assert.deepEqual(s.told.at(-1), [true, false], 'nothing asked yet');
+    s.keep();
+    assert.deepEqual(s.told.at(-1), [true, true], 'whoever holds the touch keeps it');
+    assert.equal(s.scrolls(), false);
+    s.fingers('End', 0);
+    assert.equal(s.scrolls(), true, 'given back with the touch');
+  });
+
+  it('leaves the next drag, that no listener keeps, to the page', () => {
+    const s = kept();
+    s.fingers('Start', 1);
+    s.keep();
+    s.fingers('End', 0);
+    s.told.length = 0;
+    s.fingers('Start', 1);
+    s.fingers('Move', 1);
+    assert.deepEqual(s.told, [[true, false]]);
+    assert.equal(s.scrolls(), true);
+    s.keep();
+    assert.equal(s.scrolls(), false, 'and keeps it when it is asked again');
+  });
+
+  it('lets go of a kept drag whose end never came, when the next touch starts', () => {
+    const s = kept();
+    s.fingers('Start', 1);
+    s.keep();
+    s.fingers('Start', 1);
+    assert.equal(s.scrolls(), true);
+  });
+
+  it('keeps it while a second finger is down after the first lifts', () => {
+    const s = kept();
+    s.fingers('Start', 1);
+    s.keep();
+    s.fingers('Start', 2);
+    s.fingers('End', 1);
+    assert.equal(s.scrolls(), false, 'a finger is still on');
+    s.fingers('End', 0);
+    assert.equal(s.scrolls(), true);
+  });
+
+  it('gives it back for a touch native cancelled', () => {
+    const s = kept();
+    s.fingers('Start', 1);
+    s.keep();
+    s.fingers('Cancel', 0);
+    assert.equal(s.scrolls(), true);
+    s.fingers('Start', 1);
+    assert.deepEqual(s.told.at(-1), [true, false]);
+  });
+});
