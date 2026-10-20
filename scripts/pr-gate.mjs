@@ -216,10 +216,14 @@ function published(file, packages) {
   if (packages[name] === null) return false;
   const parts = rest;
   const within = parts.map((_, at) => parts.slice(0, at + 1).join('/'));
-  return packages[name].some((pattern) => {
-    const glob = path.posix.normalize(pattern).replace(/\/+$/, '');
-    return within.some((candidate) => path.posix.matchesGlob(candidate, glob));
-  });
+  // In order, as npm reads them: a `!` pattern takes away what the ones before it matched.
+  let shipped = false;
+  for (const pattern of packages[name]) {
+    const negated = pattern.startsWith('!');
+    const glob = path.posix.normalize(negated ? pattern.slice(1) : pattern).replace(/\/+$/, '');
+    if (within.some((candidate) => path.posix.matchesGlob(candidate, glob))) shipped = !negated;
+  }
+  return shipped;
 }
 
 /** Whether a change to what is shipped comes with a version plan. */

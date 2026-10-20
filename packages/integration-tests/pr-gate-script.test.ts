@@ -125,6 +125,18 @@ describe('pr-gate', () => {
     assert.equal(needsPlan('M\tpackages/web/src/reset.css'), true);
     assert.equal(needsPlan('M\tpackages/web/browser/boot.ts'), false);
     assert.equal(needsPlan('M\tpackages/web/vitest.config.ts'), false);
+    // A `!` pattern takes away what an earlier one matched, and a later one gives it back.
+    assert.equal(
+      needsPlan('M\tpackages/kit/src/internal/a.ts', { kit: ['src', '!src/internal'] }),
+      false,
+    );
+    assert.equal(needsPlan('M\tpackages/kit/src/a.ts', { kit: ['src', '!src/internal'] }), true);
+    assert.equal(
+      needsPlan('M\tpackages/kit/src/internal/a.ts', {
+        kit: ['src', '!src/internal', 'src/internal/a.ts'],
+      }),
+      true,
+    );
     // As npm reads a glob: a leading `./`, `?` and a class of characters.
     assert.equal(needsPlan('M\tpackages/kit/src/a.ts', { kit: ['./src'] }), true);
     assert.equal(needsPlan('M\tpackages/kit/a1.cjs', { kit: ['a?.cjs'] }), true);
