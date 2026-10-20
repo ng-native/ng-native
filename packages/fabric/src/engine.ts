@@ -4741,6 +4741,13 @@ const HOIST_TARGETS = new Set<string>();
 const HOIST_ONLY = new Set<string>();
 /** Element name -> the ancestor names it never hoists past. See `HoistOptions.stopAt`. */
 const HOIST_STOPS: Record<string, ReadonlySet<string>> = {};
+/** Element name -> its registrations, the newest last, which is the one in effect. */
+const HOIST_REGISTRATIONS = new Map<string, HoistRegistration[]>();
+
+interface HoistRegistration {
+  readonly ancestorName: string;
+  readonly options: HoistOptions;
+}
 
 /**
  * Commit every `elementName` as a direct child of its nearest `ancestorName`, wherever the
@@ -4762,22 +4769,39 @@ export function registerHoist(
   ancestorName: string,
   options: HoistOptions = {},
 ): () => void {
-  HOISTS[elementName] = ancestorName;
-  HOIST_TARGETS.add(ancestorName);
+  const registration = { ancestorName, options };
+  const stack = HOIST_REGISTRATIONS.get(elementName) ?? [];
+  stack.push(registration);
+  HOIST_REGISTRATIONS.set(elementName, stack);
+  hoistAs(elementName, registration);
+  return () => {
+    const index = stack.indexOf(registration);
+    if (index === -1) return;
+    stack.splice(index, 1);
+    // Registered again since, the later registration stays the one that counts.
+    if (index < stack.length) return;
+    if (stack.length === 0) HOIST_REGISTRATIONS.delete(elementName);
+    hoistAs(elementName, stack.at(-1));
+  };
+}
+
+/** Hoist an element as a registration says, or not at all, and note again what each ancestor is. */
+function hoistAs(elementName: string, registration: HoistRegistration | undefined): void {
+  const { ancestorName, options } = registration ?? { ancestorName: undefined, options: {} };
+  if (ancestorName === undefined) delete HOISTS[elementName];
+  else HOISTS[elementName] = ancestorName;
   if (options.standIn) STAND_INS[elementName] = options.standIn;
-  if (options.only) HOIST_ONLY.add(ancestorName);
+  else delete STAND_INS[elementName];
   if (options.stopAt) HOIST_STOPS[elementName] = new Set(options.stopAt);
   else delete HOIST_STOPS[elementName];
-  return () => {
-    // Registered again since, it is the later registration's to take away.
-    if (HOISTS[elementName] !== ancestorName) return;
-    delete HOISTS[elementName];
-    delete STAND_INS[elementName];
-    delete HOIST_STOPS[elementName];
-    if (Object.values(HOISTS).includes(ancestorName)) return;
-    HOIST_TARGETS.delete(ancestorName);
-    HOIST_ONLY.delete(ancestorName);
-  };
+  // An ancestor no registration in effect names any more is an ordinary view again.
+  HOIST_TARGETS.clear();
+  HOIST_ONLY.clear();
+  for (const all of HOIST_REGISTRATIONS.values()) {
+    const current = all.at(-1)!;
+    HOIST_TARGETS.add(current.ancestorName);
+    if (current.options.only) HOIST_ONLY.add(current.ancestorName);
+  }
 }
 
 export interface HoistOptions {
@@ -9324,7 +9348,7 @@ export class Engine implements HostEngine {
     for (let up = node.parent; up && up !== this.root; up = up.parent) {
       if (!this.movedItself(up) && holdsItsContent(up)) return up;
       // One committed under another view than its parent is laid out in that one.
-      if (this.hoisted.has(up) || this.fixedLate.has(up) || this.isFixedIn(up)) return null;
+      if (this.committedElsewhere(up) || this.fixedLate.has(up) || this.isFixedIn(up)) return null;
     }
     return null;
   }

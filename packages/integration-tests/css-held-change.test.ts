@@ -8,7 +8,13 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { createRequire } from 'node:module';
-import { Engine, type EngineNode, type FabricNode, type FabricUIManager } from '@ng-native/fabric';
+import {
+  Engine,
+  registerHoist,
+  type EngineNode,
+  type FabricNode,
+  type FabricUIManager,
+} from '@ng-native/fabric';
 import { createLaidOutFabric } from './laid-out-fabric.ts';
 
 const require = createRequire(import.meta.url);
@@ -32,7 +38,8 @@ const CSS = `
 
 type Spec = [name: string, ...children: Spec[]];
 
-function scene(spec: Spec) {
+/** `tags` names the element a node is, where it is not a view. */
+function scene(spec: Spec, tags: Record<string, string> = {}) {
   const fabric = createLaidOutFabric();
   const read: string[] = [];
   const rect = (fabric as FabricUIManager).getBoundingClientRect!;
@@ -43,7 +50,7 @@ function scene(spec: Spec) {
   const engine = new Engine(fabric, 1, { globalStyles: compileCss(CSS, 'app.css') as never });
   const nodes = new Map<string, EngineNode>();
   const build = ([name, ...children]: Spec, parent: EngineNode): void => {
-    const node = engine.createElement('view');
+    const node = engine.createElement(tags[name] ?? 'view');
     engine.setClasses(node, name.split('#')[0]!);
     engine.setProp(node, 'nativeID', name);
     engine.appendChild(parent, node);
@@ -93,6 +100,28 @@ describe('a change inside a box out of the flow with a size of its own', () => {
       read.filter((name) => outside.includes(name)),
       [],
     );
+  });
+
+  it('reads back no box outside it where the change is in a group hoisted into the box itself', () => {
+    // A canvas commits only the group it draws in, hoisted into it as its one child.
+    const undo = registerHoist('held-layer', 'held-canvas', { only: true });
+    try {
+      const s = scene(
+        ['page', ['chip', ['cell']], ['held#progress', ['layer', ['track', ['bar']]]]],
+        { 'held#progress': 'held-canvas', layer: 'held-layer' },
+      );
+      s.say('cell', 'One fish');
+      s.commit();
+      s.engine.setClasses(s.nodes.get('bar')!, 'bar half');
+      const read = s.commit();
+      assert.equal(s.fabric.box('bar').width, 100);
+      assert.deepEqual(
+        read.filter((name) => ['page', 'chip', 'cell'].includes(name)),
+        [],
+      );
+    } finally {
+      undo();
+    }
   });
 
   it('still lays out again what is inside it', () => {

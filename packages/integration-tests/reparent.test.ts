@@ -64,34 +64,77 @@ it('creates what a destroyed node holds again when the node comes back', () => {
   assert.notEqual(engine.tagOf(line), before, 'a new view under the new caret');
 });
 
-it('commits a hoisted element where it is once its registration is taken away', () => {
-  const tree = () => {
-    const fabric = createFakeFabric();
-    const engine = new Engine(fabric, 1, {});
-    const add = (name: string, id: string, parent: EngineNode) => {
-      const node = engine.createElement(name);
-      engine.setProp(node, 'nativeID', id);
-      engine.appendChild(parent, node);
-      return node;
-    };
-    const host = add('undo-host', 'host', engine.root);
-    add('undo-config', 'config', add('view', 'frame', host));
-    engine.commit();
-    const walk = (all: readonly FakeFabricNode[]): unknown[] =>
-      all.map((node) => [node.props['nativeID'], ...walk(node.children)]);
-    return walk(fabric.committed);
+/** The views committed for a host holding a frame holding a config, as names. */
+function hoistedTree(host: string, config: string): unknown[] {
+  const fabric = createFakeFabric();
+  const engine = new Engine(fabric, 1, {});
+  const add = (name: string, id: string, parent: EngineNode) => {
+    const node = engine.createElement(name);
+    engine.setProp(node, 'nativeID', id);
+    engine.appendChild(parent, node);
+    return node;
   };
+  const frame = add('undo-frame', 'frame', add(host, 'host', engine.root));
+  add('view', 'item', frame);
+  add(config, 'config', frame);
+  engine.commit();
+  const walk = (all: readonly FakeFabricNode[]): unknown[] =>
+    all.map((node) => [node.props['nativeID'], ...walk(node.children)]);
+  return walk(fabric.committed);
+}
+
+it('commits a hoisted element where it is once its registration is taken away', () => {
   const undo = registerHoist('undo-config', 'undo-host', { only: true });
-  assert.deepEqual(tree(), [['host', ['config']]]);
-  undo();
-  assert.deepEqual(tree(), [['host', ['frame', ['config']]]]);
-  // A registration made again since is the later one's to take away.
-  const first = registerHoist('undo-config', 'view');
-  const later = registerHoist('undo-config', 'undo-host');
-  first();
-  assert.deepEqual(tree(), [['host', ['frame'], ['config']]]);
-  later();
-  assert.deepEqual(tree(), [['host', ['frame', ['config']]]]);
+  try {
+    assert.deepEqual(hoistedTree('undo-host', 'undo-config'), [['host', ['config']]]);
+  } finally {
+    undo();
+  }
+  assert.deepEqual(hoistedTree('undo-host', 'undo-config'), [
+    ['host', ['frame', ['item'], ['config']]],
+  ]);
+});
+
+it('leaves the ancestor a registration made again replaces an ordinary view', () => {
+  const undos = [registerHoist('again-config', 'again-host', { only: true })];
+  try {
+    undos.push(registerHoist('again-config', 'undo-frame'));
+    // The host commits what is written in it again, the frame no longer being in it alone.
+    assert.deepEqual(hoistedTree('again-host', 'again-config'), [
+      ['host', ['frame', ['item'], ['config']]],
+    ]);
+  } finally {
+    for (const undo of undos.reverse()) undo();
+  }
+});
+
+it('restores what a registration replaced when it is taken away, and only that one', () => {
+  const undos: (() => void)[] = [];
+  try {
+    undos.push(registerHoist('stack-config', 'stack-host'));
+    const later = registerHoist('stack-config', 'undo-frame');
+    undos.push(later);
+    later();
+    // The earlier registration counts again.
+    assert.deepEqual(hoistedTree('stack-host', 'stack-config'), [
+      ['host', ['frame', ['item']], ['config']],
+    ]);
+    // Two of the same: taking the first away leaves the second, and the second the one before.
+    const first = registerHoist('stack-config', 'stack-host', { only: true });
+    const second = registerHoist('stack-config', 'stack-host', { only: true });
+    undos.push(first, second);
+    first();
+    assert.deepEqual(hoistedTree('stack-host', 'stack-config'), [['host', ['config']]]);
+    second();
+    assert.deepEqual(hoistedTree('stack-host', 'stack-config'), [
+      ['host', ['frame', ['item']], ['config']],
+    ]);
+  } finally {
+    for (const undo of undos.reverse()) undo();
+  }
+  assert.deepEqual(hoistedTree('stack-host', 'stack-config'), [
+    ['host', ['frame', ['item'], ['config']]],
+  ]);
 });
 
 it('hoists a destroyed element again when it comes back', () => {
