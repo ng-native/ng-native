@@ -8,4 +8,4 @@ A token in a border or outline, `border: 1px solid var(--c)`, is filled in where
 
 A token and a plain declaration in one rule are applied in the order they are written, so `padding: var(--p); padding-top: 2px` pads the top by 2.
 
-A box whose display is `table` counts its border in its `clientWidth` and `clientHeight`, as Chrome does. An `IntersectionObserver` sees a table clip what is in it, inside its border, only where its overflow is `hidden` or `clip`, as Chrome does.
+A box whose display is `table` counts its border in its `clientWidth` and `clientHeight`, as Chrome does where its borders are not collapsed. An `IntersectionObserver` sees a table clip what is in it, inside its border, where its overflow is `hidden` or `clip`, as Chrome does, or where it scrolls.

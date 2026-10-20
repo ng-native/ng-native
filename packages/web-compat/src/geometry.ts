@@ -177,7 +177,7 @@ function clientOf(node: EngineNode): { width: number; height: number } {
   return isTable(node) && drawn(node) ? sizeOf(node) : clientSize(node);
 }
 
-/** An element's size inside its border, which is what `clientWidth` and `clientHeight` are. */
+/** An element's size inside its border: its `clientWidth` and `clientHeight`, but a table's. */
 export function clientSize(node: EngineNode): { width: number; height: number } {
   if (!drawn(node)) return { width: 0, height: 0 };
   const engine = engineOf(node);

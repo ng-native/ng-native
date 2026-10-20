@@ -158,12 +158,13 @@ const scrollsItself = (node: EngineNode): boolean =>
 
 /**
  * Whether an element clips what is in it: it scrolls, or its overflow is not to be seen. A table
- * clips only where its overflow is hidden: Chrome draws one that scrolls as one that does not.
+ * clips only where its overflow is hidden, as Chrome draws one, or where it is a scroll view here.
  */
 const clips = (node: EngineNode): boolean => {
+  if (scrollsItself(node)) return true;
   const overflow = String(styled(node, 'overflow'));
   if (isTable(node)) return overflow === 'hidden' || overflow === 'clip';
-  return scrollsItself(node) || ['hidden', 'clip', 'scroll', 'auto'].includes(overflow);
+  return ['hidden', 'clip', 'scroll', 'auto'].includes(overflow);
 };
 
 /** The box an element clips what it holds to: inside its border, a table's as well. */

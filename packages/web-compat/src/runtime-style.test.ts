@@ -762,6 +762,7 @@ describe('a border in a <style> made while the app runs', () => {
     const css = '.item { font-size: 10px; outline: 1px solid; outline-offset: 1.5em }';
     assert.equal(await styledBy(css, 'outlineOffset'), 15);
     assert.equal(sheetOf('.box { outline-offset: 10% }').rules.length, 0, 'it takes no share');
+    assert.equal(sheetOf('.box { outline-offset: 1..2em }').rules.length, 0, 'nor a broken number');
   });
 
   it('draws a dotted or dashed side solid, and says so, as the build does', () => {

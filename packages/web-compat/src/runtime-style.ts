@@ -208,8 +208,8 @@ function offset(value: string): unknown {
 
 /** A length in `em`, as the marker the build writes for the node to settle in its font size. */
 function ems(text: string): unknown {
-  const [, factor] = /^(-?[\d.]+)em$/.exec(text) ?? [];
-  return factor === undefined ? undefined : { __defer: { unit: 'em', factor: Number(factor) } };
+  const factor = Number(/^(-?[\d.]+)em$/.exec(text)?.[1] ?? NaN);
+  return Number.isFinite(factor) ? { __defer: { unit: 'em', factor } } : undefined;
 }
 
 /**

@@ -858,9 +858,10 @@ describe('IntersectionObserver', () => {
 
   it("sees a table's border as in sight of it, where a box's is outside, as Chrome does", async () => {
     const { place, make } = await page();
-    const border = 'border-width: 50px; border-style: solid; overflow: scroll';
+    // Not one that scrolls, which is a scroll view here and clips as a box does.
+    const border = 'border-width: 50px; border-style: solid';
     const table = make('table', undefined, border);
-    const box = make('div', undefined, border);
+    const box = make('div', undefined, `${border}; overflow: scroll`);
     const items = [make('div', table), make('div', box)];
     await settle();
     place(table, { x: 0, y: 0, width: 200, height: 200 });
@@ -868,18 +869,20 @@ describe('IntersectionObserver', () => {
     place(items[0], { x: 50, y: 50, width: 10, height: 10 });
     place(items[1], { x: 50, y: 350, width: 10, height: 10 });
     const bounds: string[] = [];
-    for (const [at, root] of [table, box].entries()) {
+    const observers = [table, box].map((root, at) => {
       const observer = new globals.IntersectionObserver(
         (entries: Dom[]) => bounds.push(sides(entries[0].rootBounds)),
         { root },
       );
       observer.observe(items[at]);
-    }
+      return observer;
+    });
     await nextFrame();
+    for (const observer of observers) observer.disconnect();
     assert.deepEqual(bounds, ['0 0 200 200', '50 350 150 450']);
   });
 
-  it('clips a table inside its border where it hides what overflows, and only then, as Chrome does', async () => {
+  it('clips a table inside its border where it hides what overflows or is a scroll view, and only then', async () => {
     const { place, make } = await page();
     const seen: string[] = [];
     for (const overflow of ['hidden', 'clip', 'scroll', 'auto', 'visible']) {
@@ -912,10 +915,10 @@ describe('IntersectionObserver', () => {
       'hidden in 0.25 ',
       'clip root 0.25 100',
       'clip in 0.25 ',
-      'scroll root 1 200',
-      'scroll in 1 ',
-      'auto root 1 200',
-      'auto in 1 ',
+      'scroll root 0.25 100',
+      'scroll in 0.25 ',
+      'auto root 0.25 100',
+      'auto in 0.25 ',
       'visible root 1 200',
       'visible in 1 ',
     ]);
