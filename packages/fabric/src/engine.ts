@@ -10906,7 +10906,7 @@ export class Engine implements HostEngine {
   /** What a touch on an element that keeps a drag holds off, while it lasts: see `holdSwipe`. */
   private heldFor(node: EngineNode, merged: Record<string, unknown>): void {
     if (node === this.swipeHeld) merged['gestureResponseDistance'] = NO_SWIPE;
-    if (this.scrollHeld.has(node)) merged['scrollEnabled'] = false;
+    if (this.scrollHeld.size && this.scrollHeld.has(node)) merged['scrollEnabled'] = false;
   }
 
   /**
