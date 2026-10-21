@@ -541,6 +541,22 @@ describe('a native stack driven by the router', () => {
       assert.equal(top().props['replaceAnimation'], undefined);
     });
 
+    it('is not read by a reset to a screen kept below, which pops back to that screen', async () => {
+      // The screen is the one already on the stack, so nothing new is put up to carry the
+      // animation, and `RNSScreenStack` pops back to it as the screen leaving says. Making the
+      // named animation play there means committing it onto the screen leaving before that screen
+      // goes; until then, this pins what a reset to a kept screen does.
+      const home = top().reactTag;
+      await nav.push('/user/1');
+      await idle();
+      await nav.reset('/', { presentation: { stackAnimation: 'none' } });
+      await idle();
+      assert.deepEqual(stack(fabric), ['home']);
+      assert.equal(top().reactTag, home);
+      assert.equal(top().props['stackAnimation'], undefined);
+      assert.equal(top().props['replaceAnimation'], undefined);
+    });
+
     it('is not there for a reset that names the default, which animates as a back', async () => {
       await nav.push('/user/1');
       await idle();
