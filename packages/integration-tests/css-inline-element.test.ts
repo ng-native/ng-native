@@ -16,7 +16,7 @@ const { compileCss } = require('@ng-native/metro/css/compile.cjs');
 
 const CSS =
   '.page { display: block; width: 300px } .pill { display: inline-flex; width: 50px; height: 20px } ' +
-  '.block { display: block; height: 10px }';
+  '.block { display: block; height: 10px } .tall { padding-top: 4px }';
 
 function scene() {
   const fabric = createLaidOutFabric();
@@ -42,6 +42,37 @@ function scene() {
   };
   return { engine, element, page, box };
 }
+
+describe('a line of empty inline elements', () => {
+  // A component's host with nothing in it, after a field: a datepicker's, which draws in an
+  // overlay. A line with no text and nothing of any size on it is no line (CSS 2.2, 9.4.2): the
+  // field's block is as tall as the field, and not a strut taller.
+  it('is no taller than nothing, among blocks', () => {
+    const s = scene();
+    s.element('block', s.page);
+    s.element('empty', s.page, 'unless-block');
+    assert.equal(s.box('page')[3], 10);
+  });
+
+  it('is no taller than nothing, as the only line of a block', () => {
+    const s = scene();
+    const holder = s.element('holder', s.page, 'unless-block');
+    s.element('empty', holder, 'unless-block');
+    assert.equal(s.box('page')[3], 0);
+  });
+
+  it('is a line again once one of them holds something, or has a size', () => {
+    const s = scene();
+    s.element('block', s.page);
+    const empty = s.element('empty', s.page, 'unless-block');
+    const pill = s.element('pill', empty);
+    assert.ok(s.box('page')[3] > 10 + 20);
+    s.engine.removeChild(empty, pill);
+    assert.equal(s.box('page')[3], 10);
+    s.engine.setClasses(empty, 'tall');
+    assert.ok(s.box('page')[3] > 10);
+  });
+});
 
 describe('an element that is inline in a browser', () => {
   it('sits in a line beside the next, each as wide as the inline boxes it holds', () => {

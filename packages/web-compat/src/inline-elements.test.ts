@@ -6,17 +6,25 @@
  */
 import assert from 'node:assert/strict';
 import { afterEach, beforeEach, describe, it } from 'node:test';
-import { CUSTOM_ELEMENTS_SCHEMA, Component } from '@angular/core';
+import { Component } from '@angular/core';
 import { cleanup, render, screen, settle } from '@ng-native/testing';
 import { provideWebCompat } from './index.ts';
 
 /** What a library sees of an element: loosely typed, as its own code would be against the DOM. */
 type Dom = any;
 
+/** A library's components, as their hosts are: custom elements that hold what they are given. */
+@Component({ selector: 'x-label', template: '<ng-content />' })
+class Label {}
+@Component({ selector: 'x-chip', template: '<ng-content />' })
+class Chip {}
+@Component({ selector: 'x-icon', template: '' })
+class Icon {}
+
 /** A form field's label, and a chip in a row: the elements a library writes. */
 @Component({
   selector: 'x-page',
-  schemas: [CUSTOM_ELEMENTS_SCHEMA],
+  imports: [Label, Chip, Icon],
   styles: `
     .row {
       display: flex;

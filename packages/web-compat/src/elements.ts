@@ -170,9 +170,12 @@ export function giveDefaults(node: EngineNode, engine: Engine): void {
   else if (style !== BLOCK && !NOT_INLINE.has(node.tag)) engine.setInline(node, 'always');
 }
 
-/** HTML's elements that are no block and not inline either: a table's, and what is not drawn. */
+/**
+ * HTML's elements that are no block and not inline either: a table's, what is not drawn, and a
+ * line break, which ends the line it is in and is laid out as a block among inline boxes is.
+ */
 const NOT_INLINE = new Set([
-  ...['table', 'caption', 'thead', 'tbody', 'tfoot', 'tr', 'th', 'td'],
+  ...['table', 'caption', 'thead', 'tbody', 'tfoot', 'tr', 'th', 'td', 'br'],
   ...UNDRAWN,
 ]);
 

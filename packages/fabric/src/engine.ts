@@ -3375,7 +3375,7 @@ function lineStrut(
   first: EngineNode,
   fontScale: number | undefined,
 ): LineStrut {
-  if (risenLine(container, first)) return RISEN;
+  if (risenLine(container, first) || emptyLine(container, first)) return RISEN;
   const under = underLine(container, first);
   const above = strutOf(inherited).above * textScale(inherited, fontScale);
   return { minHeight: Math.round((above + under) * 1000) / 1000, alignContent: 'flex-end' };
@@ -3428,6 +3428,50 @@ const risenLine = (container: EngineNode, first: EngineNode): boolean =>
   container.flow?.plan.lines.get(first)?.boxes.some((box) => container.flow?.rises?.has(box)) ===
   true;
 const RISEN: LineStrut = { minHeight: 0, alignContent: 'flex-start' };
+
+/** A block whose lines have nothing on them: no room is kept for any. */
+function nothingOnLines(flow: Flow): void {
+  flow.lifts = new Map();
+  flow.unders = new Map();
+  flow.rises = new Map();
+  flow.risen = true;
+  if (flow.plan.kind === 'lines') flow.under = 0;
+}
+
+/** A line among blocks with nothing on it: see `addsNothing`. */
+const emptyLine = (container: EngineNode, first: EngineNode): boolean =>
+  container.flow?.plan.lines.get(first)?.boxes.every(addsNothing) === true;
+
+/**
+ * Whether a box puts nothing on a line: an element a browser lays out inline that holds
+ * nothing, or only more such elements, with no size, padding, border or margin of its own. A line of nothing else has no
+ * height (CSS 2.2, 9.4.2): a component's empty host after a field, a datepicker's, which draws
+ * in an overlay, adds no strut under the field.
+ */
+function addsNothing(node: EngineNode): boolean {
+  if (!node.inlineLevel) return false;
+  // Nothing in it but more of the same.
+  for (const child of node.childList) {
+    if (child.nodeKind === 'text' || (child.nodeKind === 'element' && !addsNothing(child))) {
+      return false;
+    }
+  }
+  return BOX_KEYS.every((key) => {
+    const value = readStyle(node, key);
+    return value == null || value === 0 || value === 'auto';
+  });
+}
+
+/** What gives a box a size on a line, whatever it holds. */
+const BOX_KEYS = [
+  ...['width', 'height', 'minWidth', 'minHeight', 'flexBasis', 'aspectRatio'],
+  ...['padding', 'paddingHorizontal', 'paddingVertical', 'paddingTop', 'paddingBottom'],
+  ...['paddingLeft', 'paddingRight', 'paddingStart', 'paddingEnd'],
+  ...['margin', 'marginHorizontal', 'marginVertical', 'marginTop', 'marginBottom'],
+  ...['marginLeft', 'marginRight', 'marginStart', 'marginEnd'],
+  ...['borderWidth', 'borderTopWidth', 'borderBottomWidth', 'borderLeftWidth', 'borderRightWidth'],
+  ...['borderStartWidth', 'borderEndWidth'],
+];
 
 /** The room under the baseline of a line among blocks, by its first box. */
 const underLine = (container: EngineNode, first: EngineNode): number =>
@@ -3784,7 +3828,11 @@ function strutted(node: EngineNode, props: Record<string, unknown>): boolean {
   // Between two insets an out-of-flow box is as tall as they leave it.
   const held =
     OUT_OF_FLOW.has(props['position'] as string) && isSet(props['top']) && isSet(props['bottom']);
-  return !tall && !held && !holdsText(node);
+  if (tall || held || holdsText(node)) return false;
+  // No line at all, in a block that holds nothing, or lines with nothing on them: see
+  // `addsNothing`.
+  const boxes = node.childList.filter((child) => child.nodeKind === 'element');
+  return !boxes.every(addsNothing);
 }
 
 /**
@@ -11156,11 +11204,17 @@ export class Engine implements HostEngine {
    * an element is not seen here until the inline form compiles to one.
    */
   private liftLines(node: EngineNode, flow: Flow): void {
-    const runs =
+    const all =
       flow.plan.kind === 'lines'
         ? [this.onLines(node)]
         : [...flow.plan.lines.values()].map((line) => line.boxes);
-    if (!runs.some((boxes) => boxes.length)) return;
+    // A line with nothing on it has no height, and its boxes are given no room: see
+    // `addsNothing`.
+    const runs = all.filter((boxes) => !boxes.every(addsNothing));
+    if (!runs.length) {
+      if (all.some((boxes) => boxes.length)) nothingOnLines(flow);
+      return;
+    }
     const below = this.strutBelow(node);
     const lifts = new Map<EngineNode, number>();
     const unders = new Map<EngineNode, number>();
