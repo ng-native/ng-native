@@ -21,6 +21,12 @@ import {
   shadowRemoved,
   KEPT as KEPT_NODE,
 } from './svg-filter.ts';
+import {
+  LONG_PATH,
+  drawnPathData,
+  redrawLongPathsUnder,
+  type DrawingReader,
+} from './dense-drawing.ts';
 
 /**
  * An `<svg>` a library writes in its own template, a checkbox's tick or a switch's icon, drawn
@@ -147,6 +153,11 @@ export function svgInserted(node: EngineNode, parent: EngineNode, engine: Engine
   // One with no attribute is never drawn by one being set, and is the whole drawing.
   if (node.tag === 'foreignObject') drawLater(node, engine);
   startFilled(node, engine);
+  // Where it is put changes the scale a long path is drawn across.
+  if (node.tag === 'path' && (attributesOf(node).attrs['d']?.length ?? 0) >= LONG_PATH) {
+    drawLater(node, engine);
+  } else if (node.tag === 'g')
+    redrawLongPathsUnder(node, engine, (path) => drawLater(path, engine));
 }
 
 /** What a text is drawn by beside its words, put in it: a path it is set along, a copy as its outline. */
@@ -704,6 +715,7 @@ function setShape(
     // Its own size is a default, as a browser has an attribute under any rule of a stylesheet.
     const props = drawAgain(node, engine);
     engine.setDefaultStyle(node, { ...proportioned(props), ...sizeOf(shape.attrs) });
+    redrawLongPathsUnder(node, engine, (path) => drawLater(path, engine));
   } else {
     drawLater(node, engine);
     paintSet(node, name, written, engine);
@@ -737,9 +749,20 @@ function drawUndrawn(engine: Engine): void {
   if (!nodes) return;
   undrawn.delete(engine);
   for (const node of nodes) {
+    const matrix = attributesOf(node).props['matrix'];
     drawAgain(node, engine);
+    // A group scaled anew draws the long paths in it across other columns.
+    if (node.tag === 'g' && !sameProp(matrix, attributesOf(node).props['matrix'])) {
+      redrawLongPathsUnder(node, engine, (path) => drawAgain(path, engine));
+    }
   }
 }
+
+/** What drawing a long path reads of the shapes it is in. */
+const READER: DrawingReader = {
+  props: (node) => attributesOf(node).props,
+  attrs: (node) => attributesOf(node).attrs,
+};
 
 /** A path a text is set along gives the text its anchor, and a span of a copy its outline. */
 function partChanged(node: EngineNode, engine: Engine): void {
@@ -755,8 +778,12 @@ function propsOf(node: EngineNode, engine: Engine): Record<string, unknown> {
   if (node.tag === 'svg') return viewBox(attrs['viewBox']);
   if (node.tag === 'feDropShadow') return shadowProps(attrs);
   const color = (colour: string) => engine.color(sideFor(node, colour, engine));
-  const read = nativeProps(node.tag, attrs, { color });
-  return drawable(node.tag, attrs, read);
+  const props = drawable(node.tag, attrs, nativeProps(node.tag, attrs, { color }));
+  // A long line is drawn thinned; what a script reads of it is as written.
+  if (node.tag === 'path' && typeof props['d'] === 'string') {
+    props['d'] = drawnPathData(node, props['d'], READER, engine);
+  }
+  return props;
 }
 
 /**

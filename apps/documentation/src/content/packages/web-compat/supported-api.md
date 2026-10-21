@@ -239,6 +239,11 @@ a page written right to left too, and a date's or a time's `valueAsNumber` is `N
 - A style a script sets on a shape is its paint or its font, a paint that names a token is that
   token's colour, and a `light-dark()` paint is the side for the app's colour scheme, drawn again
   as the scheme changes.
+- A `<path>` of thousands of straight segments that go one way across, a chart's line series, is
+  drawn thinned to the lowest and highest point of each point-wide column: react-native-svg on
+  iOS takes seconds over a stroke that long. `getAttribute('d')` and `getBBox` read the whole
+  path. A curve, a relative command, a path that turns back, or one under a rotation or a skew is
+  drawn as written.
 
 Gaps: without react-native-svg's native views a drawing shows nothing, as an icon does. A
 stylesheet's attribute selector does not match a drawing's attributes: `svg[width="16"]` matches

@@ -109,6 +109,125 @@ describe('@ng-native/web-compat, a shape a script draws', () => {
   });
 });
 
+/** A noisy line of `count` points across `width`, written as a path, the same every time. */
+function lineOf(count: number, width: number): string {
+  let seed = 7;
+  const random = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+  return Array.from({ length: count }, (_, at) => {
+    const x = Math.round((at / (count - 1)) * width * 100) / 100;
+    const y = Math.round((50 + (random() - 0.5) * 40) * 100) / 100;
+    return `${at ? 'L' : 'M'} ${x} ${y}`;
+  }).join(' ');
+}
+
+/** The points a path goes through. */
+const pointsIn = (d: string): number => (d.match(/[ML]/g) ?? []).length;
+
+describe('@ng-native/web-compat, a long line a script draws', () => {
+  const LONG = lineOf(5000, 300);
+
+  it('is thinned for the native drawing, and read back whole', async () => {
+    const { document, svg, view } = await drawing();
+    svg.setAttribute('width', '300');
+    const path = document.createElementNS(SVG, 'path');
+    path.setAttribute('d', LONG);
+    path.setAttribute('fill', 'none');
+    path.setAttribute('stroke', 'black');
+    svg.appendChild(path);
+    await settle();
+    const drawn = view(path)!.props['d'] as string;
+    assert.ok(pointsIn(drawn) <= 2 * 300 + 4, `${pointsIn(drawn)} points drawn`);
+    assert.equal(path.getAttribute('d'), LONG);
+    const box = path.getBBox();
+    assert.equal(box.x, 0);
+    assert.equal(box.width, 300);
+  });
+
+  it('draws a short path as written', async () => {
+    const { document, svg, view } = await drawing();
+    const path = document.createElementNS(SVG, 'path');
+    path.setAttribute('d', POINT.d);
+    svg.appendChild(path);
+    await settle();
+    assert.equal(view(path)!.props['d'], POINT.d);
+  });
+
+  it('is drawn as written once it is short, and again when it is long', async () => {
+    const { document, svg, view } = await drawing();
+    svg.setAttribute('width', '300');
+    const path = document.createElementNS(SVG, 'path');
+    path.setAttribute('d', LONG);
+    svg.appendChild(path);
+    await settle();
+    assert.ok(pointsIn(view(path)!.props['d'] as string) < 700);
+    path.setAttribute('d', 'M 1 1 L 2 2');
+    await settle();
+    assert.equal(view(path)!.props['d'], 'M 1 1 L 2 2');
+    path.setAttribute('d', LONG);
+    await settle();
+    assert.ok(pointsIn(view(path)!.props['d'] as string) < 700);
+    path.removeAttribute('d');
+    await settle();
+    assert.equal(view(path)!.props['d'] ?? null, null);
+    assert.equal(path.getAttribute('d'), null);
+  });
+
+  it('is thinned again where a group it is in is scaled, and back where that is taken off', async () => {
+    const { document, svg, view } = await drawing();
+    svg.setAttribute('width', '300');
+    const group = document.createElementNS(SVG, 'g');
+    const path = document.createElementNS(SVG, 'path');
+    path.setAttribute('d', LONG);
+    group.appendChild(path);
+    svg.appendChild(group);
+    await settle();
+    const plain = pointsIn(view(path)!.props['d'] as string);
+    // Drawn twice as wide, a column is half a unit: twice the points are worth keeping.
+    group.setAttribute('transform', 'matrix(2 0 0 2 0 0)');
+    await settle();
+    const doubled = pointsIn(view(path)!.props['d'] as string);
+    assert.ok(doubled > plain * 1.5, `${doubled} after ${plain}`);
+    group.removeAttribute('transform');
+    await settle();
+    assert.equal(pointsIn(view(path)!.props['d'] as string), plain);
+    // Turned, a column is no use: it is drawn as written.
+    group.setAttribute('transform', 'rotate(30)');
+    await settle();
+    assert.equal(view(path)!.props['d'], LONG);
+  });
+
+  it('is thinned across the scale of the group it is moved into', async () => {
+    const { document, svg, view } = await drawing();
+    svg.setAttribute('width', '300');
+    const group = document.createElementNS(SVG, 'g');
+    group.setAttribute('transform', 'matrix(2 0 0 2 0 0)');
+    svg.appendChild(group);
+    const path = document.createElementNS(SVG, 'path');
+    path.setAttribute('d', LONG);
+    svg.appendChild(path);
+    await settle();
+    const plain = pointsIn(view(path)!.props['d'] as string);
+    group.appendChild(path);
+    await settle();
+    assert.ok(pointsIn(view(path)!.props['d'] as string) > plain * 1.5);
+  });
+
+  it('is thinned to the width its drawing is given, and again where that changes', async () => {
+    const { document, svg, view } = await drawing();
+    svg.setAttribute('viewBox', '0 0 300 100');
+    svg.setAttribute('width', '300');
+    const path = document.createElementNS(SVG, 'path');
+    path.setAttribute('d', LONG);
+    svg.appendChild(path);
+    await settle();
+    const full = pointsIn(view(path)!.props['d'] as string);
+    svg.setAttribute('width', '150');
+    await settle();
+    const half = pointsIn(view(path)!.props['d'] as string);
+    assert.ok(half < full * 0.75, `${half} after ${full}`);
+  });
+});
+
 describe('@ng-native/web-compat, react-native-svg', () => {
   it('is drawn with by the names of its native views, and none of its JavaScript is imported', () => {
     // An app without it installed sees nothing where a drawing is, as it does for an icon: the
