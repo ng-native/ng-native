@@ -62,6 +62,11 @@ Experimental and partial. It has:
   header, an element in a screen is placed where it is drawn and touched, so a library that
   compares a finger with what it measured finds the element under the finger. A touch says
   whether native measures short, and until one does an element in a screen is taken to be.
+- Animations: `getAnimations()`, on an element and with `subtree` on what it holds, gives each
+  `@keyframes` animation and transition the engine runs there as a Web Animations `Animation`,
+  with `playState`, a `finished` that settles when it ends or stops, `finish()`, `cancel()`, and
+  an `effect` with `getTiming()`, `getComputedTiming()` and `updateTiming()`, whose
+  `fill: 'forwards'` holds an `@keyframes` animation at its last frame.
 - `MutationObserver`, with `childList`, `attributes`, `characterData`, `subtree` and old values.
 - A `document` that creates engine nodes and fragments, with a `body` that draws over the screen
   for overlays (what a library puts in it is first seen in the frame after, by when it has been

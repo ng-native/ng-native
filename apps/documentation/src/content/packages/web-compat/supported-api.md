@@ -163,6 +163,30 @@ tells it whether something is drawn over an element.
 The window starts under the header of the newest screen in the tree, which is the one in sight
 in a stack: with two stacks side by side it is the header of whichever pushed a screen last.
 
+## Animations
+
+- `getAnimations()` on an element, and with `{ subtree: true }` on what it holds as well, gives
+  each `@keyframes` animation and transition the engine runs there as a Web Animations
+  `Animation`, the same one each time it is asked, with its `animationName` or
+  `transitionProperty`, its `playState` and its `effect`'s `target`.
+- `finished` resolves with the animation when the engine ends it, and rejects with an
+  `AbortError` when it stops first: the element no longer asks for it, it is taken away, or its
+  app goes. A library waits on it before it takes a leaving element away.
+- `effect.getComputedTiming()` says how far it has got: `progress`, `currentIteration`,
+  `localTime`, `activeDuration` and `endTime`, with its `delay`, the `duration` of one iteration,
+  `iterations`, `fill` and `direction`. `effect.getTiming()` is what Angular's `animate.leave`
+  reads, and its `duration` is the whole run, every iteration.
+- `effect.updateTiming({ fill: 'forwards' })` holds an `@keyframes` animation at its last frame
+  once it ends, as `animation-fill-mode: forwards` does, and `fill: 'none'` lets it go again.
+- `finish()` resolves `finished` at once, and throws an `InvalidStateError` for an animation that
+  never ends; `cancel()` rejects it.
+
+Gaps: `finish()` and `cancel()` settle `finished` and `playState` and leave the frames to the
+engine, which plays on until the element is taken away or no longer asks for the animation.
+`updateTiming` reads only `fill`, and does nothing to a transition. There is no `play()`,
+`pause()`, `reverse()`, `playbackRate`, `ready`, `element.animate()` or
+`document.getAnimations()`. A transition's delay is in its start, so its `delay` reads 0.
+
 ## Events
 
 - `MouseEvent`, `PointerEvent`, `KeyboardEvent`, `FocusEvent`, `TouchEvent`, `Touch` and the

@@ -39,6 +39,7 @@ import { scrollingMembers } from './scrolling.ts';
 import { selectorMembers } from './selector-members.ts';
 import { registerSvg } from './svg.ts';
 import { treeMembers } from './tree-members.ts';
+import { cancelAnimations } from './web-animation.ts';
 import { installWindow, windowOf } from './window.ts';
 import { keyboardMoved, windowHeight } from './window-size.ts';
 
@@ -54,14 +55,14 @@ let original: PropertyDescriptor | undefined;
 function install(engine: Engine): void {
   const core = Object.getPrototypeOf(engine.root) as CoreNode;
   // Read now: once extended, the prototype's listeners are this package's.
-  const { addEventListener, removeEventListener } = core;
+  const { addEventListener, removeEventListener, getAnimations } = core;
   removals = [
     // The properties of HTML elements over the rest: see `html-members.ts`.
     extendNodes(
       withHtmlMembers({
         // `onclick` and the rest: see `event-handlers.ts`.
         ...eventHandlerMembers,
-        ...nodeMembers({ addEventListener, removeEventListener }),
+        ...nodeMembers({ addEventListener, removeEventListener, getAnimations }),
         ...treeMembers,
         ...characterDataMembers,
         ...relationMembers,
@@ -237,6 +238,8 @@ export function provideWebCompat(options: WebCompatOptions = {}): EnvironmentPro
         forgetFrameMode();
         forgetFrames();
         unwatchStyles();
+        // Each `finished` it still owed, before its commits go: see `web-animation.ts`.
+        cancelAnimations(engine);
         // What an observer still watching in it heard of its commits: see `commit-watch.ts`.
         forgetCommits(engine);
         forgetRenderer();

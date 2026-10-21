@@ -15,7 +15,7 @@ import { dispatch, listen, unlisten, type Heard } from './events.ts';
 import { isField } from './field.ts';
 import { frameCreated } from './frame.ts';
 import { setFrameView } from './frame-view.ts';
-import { inDocument, isInDocument, lastInDocument } from './in-document.ts';
+import { descendants, inDocument, isInDocument, lastInDocument } from './in-document.ts';
 import { announcesDisabled, listenNatively, hasCapture, topLevel } from './listen.ts';
 import { observing, removingAttribute, settingAttribute, together } from './mutation-observer.ts';
 import { NODE_CONSTANTS } from './node-constants.ts';
@@ -33,6 +33,7 @@ import { BY_ELEMENT, GLOBAL } from './reflected-attributes.ts';
 import { setStyleAttribute, styleOf } from './style-declaration.ts';
 import { isKeptOnShape, isShape, writtenAttributes } from './svg.ts';
 import { boxOf } from './svg-box.ts';
+import { webAnimation, type CoreAnimation } from './web-animation.ts';
 import { engineOf } from './window.ts';
 
 /** A node as a library holds one: an engine node with the members below on it. */
@@ -43,6 +44,7 @@ type Listener = (event: unknown) => void;
 export interface CoreNode {
   addEventListener(type: string, listener: Listener): void;
   removeEventListener(type: string, listener: Listener): void;
+  getAnimations(): unknown[];
 }
 
 /**
@@ -589,6 +591,16 @@ export const nodeMembers = (core: CoreNode): PropertyDescriptorMap => ({
   contains: method(function (other: EngineNode | null) {
     for (let at = other; at; at = at.parent) if (at === this) return true;
     return false;
+  }),
+  // As the Web Animations API has them, and those of what it holds where asked: a dialog asks its
+  // pane for the animations of its content. See `web-animation.ts`.
+  getAnimations: method(function (options?: { subtree?: boolean }) {
+    const nodes = options?.subtree ? [this, ...descendants(this)] : [this];
+    return nodes.flatMap((node) =>
+      (core.getAnimations.call(node) as CoreAnimation[]).flatMap(
+        (animation) => webAnimation(animation, node) ?? [],
+      ),
+    );
   }),
   textContent: get(
     function () {
