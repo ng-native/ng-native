@@ -3450,17 +3450,22 @@ const emptyLine = (container: EngineNode, first: EngineNode): boolean =>
  */
 function addsNothing(node: EngineNode): boolean {
   if (!node.inlineLevel) return false;
-  // Nothing in it but more of the same.
+  // A display of its own, an inline-block written in a sheet, is a box on the line however
+  // empty: only the one the engine gives an inline element is not.
+  if (ownStyle(node, 'display') != null) return false;
+  // Nothing in it but more of the same, and text of no length.
   for (const child of node.childList) {
-    if (child.nodeKind === 'text' || (child.nodeKind === 'element' && !addsNothing(child))) {
-      return false;
-    }
+    if (child.nodeKind === 'text' ? child.nodeText !== '' : !emptyOrNotABox(child)) return false;
   }
   return BOX_KEYS.every((key) => {
     const value = readStyle(node, key);
     return value == null || value === 0 || value === 'auto';
   });
 }
+
+/** Whether a node in an inline element adds nothing to its line: see `addsNothing`. */
+const emptyOrNotABox = (node: EngineNode): boolean =>
+  node.nodeKind !== 'element' || addsNothing(node);
 
 /** What gives a box a size on a line, whatever it holds. */
 const BOX_KEYS = [
@@ -3471,6 +3476,10 @@ const BOX_KEYS = [
   ...['marginLeft', 'marginRight', 'marginStart', 'marginEnd'],
   ...['borderWidth', 'borderTopWidth', 'borderBottomWidth', 'borderLeftWidth', 'borderRightWidth'],
   ...['borderStartWidth', 'borderEndWidth'],
+  ...['paddingBlock', 'paddingBlockStart', 'paddingBlockEnd'],
+  ...['paddingInline', 'paddingInlineStart', 'paddingInlineEnd'],
+  ...['marginBlock', 'marginBlockStart', 'marginBlockEnd'],
+  ...['marginInline', 'marginInlineStart', 'marginInlineEnd'],
 ];
 
 /** The room under the baseline of a line among blocks, by its first box. */
@@ -3883,6 +3892,11 @@ function styleKey(value: unknown, key: string): unknown {
 
 /** What a node's own style says for `key`, as `ownLayout` answers it, without an allocation. */
 function readStyle(node: EngineNode, key: string): unknown {
+  return ownStyle(node, key) ?? node.defaultStyle?.[key];
+}
+
+/** The same, without the default an element is given for its name or by the engine. */
+function ownStyle(node: EngineNode, key: string): unknown {
   const props = node.props;
   // Asked of most nodes more than once a commit, and most have neither of the first two.
   const over = props[STYLE_OVERRIDE];
@@ -3897,8 +3911,7 @@ function readStyle(node: EngineNode, key: string): unknown {
         ? (inline as Record<string, unknown>)[key]
         : styleKey(inline, key)) ??
     props[key] ??
-    node.styleCache?.style[key] ??
-    node.defaultStyle?.[key]
+    node.styleCache?.style[key]
   );
 }
 

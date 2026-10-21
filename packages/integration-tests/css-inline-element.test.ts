@@ -16,7 +16,8 @@ const { compileCss } = require('@ng-native/metro/css/compile.cjs');
 
 const CSS =
   '.page { display: block; width: 300px } .pill { display: inline-flex; width: 50px; height: 20px } ' +
-  '.block { display: block; height: 10px } .tall { padding-top: 4px }';
+  '.block { display: block; height: 10px } .tall { padding-top: 4px } ' +
+  '.atomic { display: inline-block }';
 
 function scene() {
   const fabric = createLaidOutFabric();
@@ -71,6 +72,31 @@ describe('a line of empty inline elements', () => {
     assert.ok(s.box('page')[3] > 10 + 20);
     s.engine.removeChild(empty, pill);
     assert.equal(s.box('page')[3], 10);
+  });
+
+  it('is a line where an empty element says it is an inline-block, which is content', () => {
+    const s = scene();
+    s.element('block', s.page);
+    s.element('empty atomic', s.page, 'unless-block');
+    assert.ok(s.box('page')[3] > 10);
+  });
+
+  it('is still no line where an empty element holds text of no length', () => {
+    const s = scene();
+    s.element('block', s.page);
+    const empty = s.element('empty', s.page, 'unless-block');
+    s.engine.appendChild(empty, s.engine.createText(''));
+    assert.equal(s.box('page')[3], 10);
+  });
+
+  it('is a line where an empty element has padding bound along the block', () => {
+    // A sheet's `padding-block-start` compiles to `paddingTop`; a bound style keeps its name.
+    const s = scene();
+    s.element('block', s.page);
+    const empty = s.element('empty', s.page, 'unless-block');
+    s.engine.setProp(empty, 'style', { paddingBlockStart: 4 });
+    // A line, with its strut, and not only the padding's 4 points.
+    assert.ok(s.box('page')[3] > 10 + 4 + 10);
   });
 
   it('is a line again once one of them holds something, or has a size', () => {
