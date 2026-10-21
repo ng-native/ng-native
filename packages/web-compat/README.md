@@ -44,6 +44,8 @@ Experimental and partial. It has:
 - The window: `screen`, `visualViewport`, `matchMedia` with a `change` listener, and
   `ResizeObserver` and `IntersectionObserver`, with a root, a margin and thresholds. An app that
   observes nothing pays nothing for them.
+- `navigator.userAgent` naming a phone of the platform the app runs on, and `maxTouchPoints`, where
+  the runtime's own `navigator` says no browser: a library picks touch handling from them.
 - `MutationObserver`, with `childList`, `attributes`, `characterData`, `subtree` and old values.
 - A `document` that creates engine nodes and fragments, with a `body` that draws over the screen
   for overlays, a doctype, `createElementNS`, `createTreeWalker` and `createNodeIterator`, and a

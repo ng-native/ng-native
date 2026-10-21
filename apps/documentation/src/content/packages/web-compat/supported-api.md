@@ -117,6 +117,10 @@ Gaps:
   and `matchMedia` with a `change` listener.
 - `ResizeObserver`, and `IntersectionObserver` with a root, a margin and thresholds. An app that
   observes nothing pays nothing for them.
+- `navigator.userAgent` names a phone of the platform the app runs on (an iPhone on iOS, an Android
+  phone on Android) and `navigator.maxTouchPoints` is 5, so a library that picks touch handling
+  from them does. A user agent that already names a browser, and a touch count the runtime has, are
+  left alone.
 
 Gaps: `ResizeObserver` has no `device-pixel-content-box`, `matchMedia` does not read
 `resolution` or `-webkit-device-pixel-ratio`, and `scrollIntoView` reads no `scroll-margin` or

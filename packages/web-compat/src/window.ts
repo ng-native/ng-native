@@ -33,6 +33,7 @@ import { MutationObserver, MutationRecord } from './mutation-observer.ts';
 import { NODE_CONSTANTS } from './node-constants.ts';
 import { nodeInterfaces } from './node-interfaces.ts';
 import { installNamedProperties } from './named-properties.ts';
+import { installNavigator } from './navigator-identity.ts';
 import { ResizeObserver, ResizeObserverEntry, ResizeObserverSize } from './resize-observer.ts';
 import { scrollAsked, scrollPromise } from './scroll-offset.ts';
 import { NodeFilter, NodeIterator, TreeWalker } from './traversal.ts';
@@ -273,6 +274,8 @@ export function installWindow(): () => void {
   const windowed = typeof target['window'] === 'undefined';
   if (windowed) target['window'] = target;
   const unplaced = placeNodes(target);
+  // A phone's browser, as the user agent says: see `navigator-identity.ts`.
+  const unidentified = installNavigator();
   // An element with an id is a global by it: see `named-properties.ts`.
   const unnamed = installNamedProperties(target);
   // The event a listener is being told: see `events.ts`.
@@ -302,6 +305,7 @@ export function installWindow(): () => void {
     // What was added with them goes with them, as a page's listeners go with its window.
     unlistenAll(globalThis);
     unplaced();
+    unidentified();
     unnamed();
     unphased();
     if (evented) delete target['event'];
