@@ -264,6 +264,22 @@ describe('a sheet with an @media rule in it', () => {
     });
   }
 
+  it('keeps the pair logical beside a comment, or an & in a comment or a string', () => {
+    const pair = 'padding-inline-start: 4px; padding-inline-end: 4px';
+    const sheets = [
+      `/* a & b */ .a { ${pair} } ${MEDIA}`,
+      `.a { ${pair}; font-family: "A & B" } ${MEDIA}`,
+      `.a { ${pair} } /* note */ ${MEDIA}`,
+      `/* note */ @media (width > 1px) { .a { ${pair} } }`,
+    ];
+    for (const css of sheets) {
+      const rule = ruleOf(css)!;
+      assert.equal(rule.declarations['paddingStart'], 4, css);
+      assert.equal(rule.declarations['paddingEnd'], 4, css);
+      assert.equal(has(rule.declarations, 'paddingLeft'), false, css);
+    }
+  });
+
   it('is still left and right for the shorthand', () => {
     const rule = ruleOf(`.a { padding-inline: 4px } ${MEDIA}`)!;
     assert.equal(rule.declarations['paddingLeft'], 4);
@@ -279,6 +295,9 @@ describe('a sheet with an @media rule in it', () => {
       '.a\\} { .b { opacity: 0.5 } }',
       '.a[title="\\"}"] { .b { opacity: 0.5 } }',
       '.a { .b { opacity: 0.5 }',
+      '/* note */ @media (width > 1px) { .a { .b { opacity: 0.5 } } }',
+      '@layer x { @media (width > 1px) { .a { .b { opacity: 0.5 } } } }',
+      '.a { & .b { opacity: 0.5 } }',
     ];
     for (const css of lowered) {
       const rule = ruleOf(css, 'b');

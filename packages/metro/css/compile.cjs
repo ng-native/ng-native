@@ -4005,6 +4005,8 @@ function vlq(segment) {
  * Whether a sheet nests a rule in a rule, which `flatten` lowers: an `&`, a block opening inside
  * a style rule's block, or any block inside one inside an at-rule's. A style rule inside a
  * top-level at-rule, `@media (width > 1px) { .a { ... } }` or a `@keyframes` step, is not nesting.
+ * An at-rule inside one is sent to it all the same: it also puts `@keyframes` written in layers
+ * in the layers' order.
  *
  * A sheet sent to `flatten` that did not need it is not only parsed once more: lightningcss's
  * printer folds an equal `padding-inline-start` and `padding-inline-end` into `padding-inline`,
@@ -4014,16 +4016,20 @@ function vlq(segment) {
  * with nothing open is yes, and a block left open is yes.
  */
 function nests(source) {
-  if (source.includes('&')) return true;
   // For each open block, whether it is an at-rule's.
   const open = [];
   let prelude = 0;
   for (let i = 0; i < source.length; i = skipOver(source, i) + 1) {
     const character = source[i];
+    if (character === '&') return true;
     if (character === ';' || character === '}') prelude = i + 1;
     if (character === '}' && open.pop() === undefined) return true;
     if (character !== '{') continue;
-    const atRule = source.slice(prelude, i).trimStart().startsWith('@');
+    const atRule = source
+      .slice(prelude, i)
+      .replace(/\/\*[\s\S]*?(\*\/|$)/g, '')
+      .trimStart()
+      .startsWith('@');
     if (open.length > 0 && (open.length > 1 || !open[0] || atRule)) return true;
     open.push(atRule);
     prelude = i + 1;
