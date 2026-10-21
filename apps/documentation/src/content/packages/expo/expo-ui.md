@@ -14,8 +14,12 @@ the price of a table of names.
 ## Install
 
 ```sh
-npx expo install @expo/ui
+npx expo install @expo/ui react-dom
 ```
+
+`react-dom` is installed with it at the SDK's version: `@expo/ui` has it as an optional peer,
+and npm otherwise takes the newest `react-dom`, whose React peer the app's React does not meet, so
+every later `npm install` stops with `ERESOLVE`.
 
 ```ts
 import { registerExpoUiViews } from '@ng-native/expo';

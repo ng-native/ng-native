@@ -1,6 +1,6 @@
 {
   "name": "@ng-native/schematics",
-  "version": "0.16.0",
+  "version": "0.17.1",
   "description": "ng add and ng generate for Angular Native: an Expo app in an Angular CLI workspace, with builders that run it.",
   "keywords": [
     "angular",
@@ -28,6 +28,7 @@
       "@ng-native/analog",
       "@ng-native/components",
       "@ng-native/device",
+      "@ng-native/eslint-plugin",
       "@ng-native/expo",
       "@ng-native/fabric",
       "@ng-native/icons",
@@ -39,7 +40,8 @@
       "@ng-native/schematics",
       "@ng-native/tailwind",
       "@ng-native/testing",
-      "@ng-native/web"
+      "@ng-native/web",
+      "@ng-native/web-compat"
     ]
   },
   "dependencies": {

@@ -12,8 +12,12 @@ itself comes from `expo-widgets`.
 ## Install
 
 ```sh
-npx expo install expo-widgets @expo/ui
+npx expo install expo-widgets @expo/ui react-dom
 ```
+
+`react-dom` is installed with it at the SDK's version: `@expo/ui` has it as an optional peer,
+and npm otherwise takes the newest `react-dom`, whose React peer the app's React does not meet, so
+every later `npm install` stops with `ERESOLVE`.
 
 Add `expo-widgets` to the plugins in `app.json`, then run `npx expo prebuild -p ios`:
 

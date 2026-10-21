@@ -35,6 +35,7 @@ on:
       - '.github/workflows/latest.yml'
       - '.github/workflows/release.yml'
       - '.github/workflows/triage.yml'
+      - '.github/workflows/wpt.yml'
       - '.nx/version-plans/**'
   workflow_dispatch:
   workflow_call:

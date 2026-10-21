@@ -23,10 +23,12 @@ import { FileSystem } from '@ng-native/expo/file-system';
 
 ```ts
 import { Component, inject } from '@angular/core';
+import { Pressable, Text } from '@ng-native/components';
 import { FileSystem } from '@ng-native/expo/file-system';
 
 @Component({
   selector: 'app-notes',
+  imports: [Pressable, Text],
   template: `<pressable (press)="save()"><text>Save</text></pressable>`,
 })
 export class Notes {

@@ -12,9 +12,10 @@ it closes, without either knowing about the other.
 
 ```ts
 import { Component, DestroyRef, inject } from '@angular/core';
+import { View } from '@ng-native/components';
 import { NavigationBar } from '@ng-native/device';
 
-@Component({ selector: 'app-player', template: `<view />` })
+@Component({ selector: 'app-player', imports: [View], template: `<view />` })
 export class Player {
   constructor() {
     const drop = inject(NavigationBar).push({ hidden: true });
@@ -26,7 +27,9 @@ export class Player {
 `set()` replaces the base claim, for an app that configures the bar once at startup. `push()` adds a
 claim on top of whatever is there and returns the function that drops it. `state` is every claim in
 the stack merged in order, later ones winning per property. Anything a claim leaves unset falls
-through to the claim underneath it.
+through to the claim underneath it. As for the [status bar](/packages/device/status-bar), every app
+the runtime mounts claims the same stack, an app's claims leave it when the app is destroyed, and
+an activity that comes to the front is given the bar again.
 
 `NavigationBarState` takes `style` and `hidden`:
 
@@ -95,9 +98,10 @@ front, and the claim is back when a screen without one is.
 
 ```ts
 import { Component, inject } from '@angular/core';
+import { View } from '@ng-native/components';
 import { NativeNavigation } from '@ng-native/router';
 
-@Component({ selector: 'app-library', template: `<view />` })
+@Component({ selector: 'app-library', imports: [View], template: `<view />` })
 export class Library {
   private readonly navigation = inject(NativeNavigation);
 

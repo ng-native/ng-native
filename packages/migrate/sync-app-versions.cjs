@@ -82,4 +82,4 @@ function syncAppVersions(host) {
   ];
 }
 
-module.exports = { syncAppVersions };
+module.exports = { syncAppVersions, formatted };

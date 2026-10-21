@@ -14,7 +14,7 @@ import { assetResource, assets } from '@ng-native/expo/assets';
 import { Database, type Migration, type NativeDatabase } from '@ng-native/expo/database';
 import { KeepAwake } from '@ng-native/expo/keep-awake';
 import { Updates } from '@ng-native/expo/updates';
-import { serviceWith } from './injected.ts';
+import { inAppWith, serviceWith } from './injected.ts';
 import { compileFixture } from './compile.ts';
 
 function database() {
@@ -515,6 +515,72 @@ describe('keeping the screen on', () => {
     release();
     await settle();
     assert.deepEqual(native.held, ['b']);
+  });
+
+  it('keeps the screen on for a later app when the earlier app goes', async () => {
+    // Android recreates an activity after a font size change: the new app mounts and holds the
+    // screen, and only then is the old app destroyed, its holds released with it.
+    // A set of tags, as expo-keep-awake keeps for the runtime.
+    const held = new Set<string>();
+    const native = {
+      activate: async (tag: string) => void held.add(tag),
+      deactivate: async (tag: string) => void held.delete(tag),
+    };
+    const old = inAppWith(KeepAwake.SOURCE, native, () => new KeepAwake());
+    const releaseOld = old.service.hold();
+    const current = inAppWith(KeepAwake.SOURCE, native, () => new KeepAwake());
+    current.service.hold();
+
+    releaseOld();
+    old.destroy();
+    await settle();
+    assert.deepEqual([...held], ['angular-native']);
+    assert.equal(current.service.active(), true);
+  });
+
+  it('releases what an app still holds when it goes', async () => {
+    const native = platform();
+    const app = inAppWith(KeepAwake.SOURCE, native, () => new KeepAwake());
+    app.service.hold('video');
+    app.destroy();
+    await settle();
+    assert.deepEqual(native.held, []);
+  });
+
+  it('holds the screen on again in a window that comes to the front', async () => {
+    const calls: string[] = [];
+    let front = () => {};
+    const native = {
+      activate: async (tag: string) => void calls.push(`on ${tag}`),
+      deactivate: async (tag: string) => void calls.push(`off ${tag}`),
+      onWindowFront: (listener: () => void) => ((front = listener), () => {}),
+    };
+    const keepAwake = serviceWith(KeepAwake.SOURCE, native, () => new KeepAwake());
+    keepAwake.hold('video');
+    keepAwake.hold('recording')();
+    calls.length = 0;
+
+    front();
+    await settle();
+    assert.deepEqual(calls, ['off video', 'on video']);
+  });
+
+  it('does not hold a tag again that was released while the window came to the front', async () => {
+    const calls: string[] = [];
+    let front = () => {};
+    const native = {
+      activate: async (tag: string) => void calls.push(`on ${tag}`),
+      deactivate: async (tag: string) => void calls.push(`off ${tag}`),
+      onWindowFront: (listener: () => void) => ((front = listener), () => {}),
+    };
+    const keepAwake = serviceWith(KeepAwake.SOURCE, native, () => new KeepAwake());
+    const release = keepAwake.hold('video');
+    calls.length = 0;
+
+    front();
+    release();
+    await settle();
+    assert.deepEqual(calls, ['off video', 'off video']);
   });
 });
 

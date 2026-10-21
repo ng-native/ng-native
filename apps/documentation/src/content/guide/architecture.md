@@ -91,9 +91,8 @@ on one platform is React Native's own semantics. `float` has no native equivalen
 with a build warning naming the file, the line and the reason; dropping it without a word would
 hide the problem.
 
-`::before`, `::after`, grid, table layout, `position: fixed` and `position: sticky` are permanently
-unsupported - their warnings say so rather than "not yet". React Native's style API cannot express
-them. A pseudo-element,
+`::before`, `::after` and table layout are permanently unsupported - their warnings say so rather
+than "not yet". React Native's style API cannot express them. A pseudo-element,
 for example, requires a node absent from the template, making the rendered tree diverge from the
 code. Declare the element in the template instead.
 

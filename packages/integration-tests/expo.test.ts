@@ -304,6 +304,21 @@ describe('the file system', () => {
     assert.deepEqual(await missing.file.bytes(), pdf);
   });
 
+  it('writes before it returns on SDK 58, whose File.write is async and writeSync is not', () => {
+    const sdk58 = fakeFile(true);
+    const later: (() => void)[] = [];
+    const file = {
+      ...sdk58.file,
+      write: (content: string | Uint8Array) =>
+        new Promise<void>((resolve) => later.push(() => (sdk58.written.push(content), resolve()))),
+      writeSync: (content: string | Uint8Array) => void sdk58.written.push(content),
+    };
+    const system = serviceWith(FileSystem.SOURCE, files(file), () => new FileSystem());
+    system.write(file, 'hello');
+    assert.equal(file.textSync(), 'hello', 'the content is there as soon as write returns');
+    assert.equal(later.length, 0, 'the async write is never started');
+  });
+
   it('writes an existing file without creating it again', () => {
     const present = fakeFile(true);
     const system = serviceWith(FileSystem.SOURCE, files(present.file), () => new FileSystem());

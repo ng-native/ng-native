@@ -12,10 +12,12 @@ waiting for the next change. The subscription is removed when the app is destroy
 
 ```ts
 import { Component, computed, inject } from '@angular/core';
+import { View } from '@ng-native/components';
 import { Keyboard } from '@ng-native/device';
 
 @Component({
   selector: 'app-composer',
+  imports: [View],
   template: `<view [style.marginBottom]="clearance()" />`,
 })
 export class Composer {
@@ -52,10 +54,12 @@ To move with the keyboard on iOS, hand its timing to
 
 ```ts
 import { Component, effect, inject, signal } from '@angular/core';
+import { View } from '@ng-native/components';
 import { Keyboard, LayoutAnimation, type LayoutEasing } from '@ng-native/device';
 
 @Component({
   selector: 'app-composer',
+  imports: [View],
   template: `<view [style.marginBottom]="clearance()" />`,
 })
 export class Composer {

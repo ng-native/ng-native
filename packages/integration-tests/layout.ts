@@ -17,6 +17,7 @@ import Yoga, {
   FlexDirection,
   Gutter,
   Justify,
+  MeasureMode,
   Overflow,
   PositionType,
   Wrap,
@@ -52,6 +53,14 @@ const config = Yoga.Config.create();
 config.setErrata(Errata.All);
 config.setPointScaleFactor(3);
 
+/**
+ * Yoga as an app mounted with `layoutConformance: 'strict'` has it: none of the errata, which is
+ * how a web library's layout is laid out. Some of what the engine works around is only there.
+ */
+const strict = Yoga.Config.create();
+strict.setErrata(Errata.None);
+strict.setPointScaleFactor(3);
+
 /** The scene laid out by Yoga, with the case's resolved style on the case. */
 export function layOut(
   style: Readonly<Record<string, unknown>>,
@@ -76,7 +85,16 @@ export function layOut(
     return node;
   });
   inside.forEach((node, i) => target.insertChild(node, i));
-  [before, target, after].forEach((node, i) => container.insertChild(node, i));
+  // `order` moves the case among its siblings, which the engine does by committing them in that
+  // order: Yoga has no such property.
+  const order = Number(style['order'] ?? 0) || 0;
+  const siblings =
+    order < 0
+      ? [target, before, after]
+      : order > 0
+        ? [before, after, target]
+        : [before, target, after];
+  siblings.forEach((node, i) => container.insertChild(node, i));
   // The container sits in a viewport-sized root, as a screen's root view does, so a viewport
   // unit and a percentage of the root mean the same on both sides.
   const root = Yoga.Node.create(config);
@@ -138,6 +156,56 @@ export function layOutTree<T extends TreeNode>(
   }
   root.freeRecursive();
   return sizes;
+}
+
+/**
+ * Lay out a committed tree in a screen-sized root view, and answer each node's box against the
+ * screen. `measured` gives a node a size from its content, as a paragraph has, in place of
+ * children: the width it takes with nothing limiting it, and its height at a width.
+ */
+export function layOutRects<T extends TreeNode>(
+  nodes: readonly T[],
+  screen: { width: number; height: number },
+  measured: (
+    node: T,
+  ) => ((width: number | undefined) => { width: number; height: number }) | undefined,
+  conformance: 'classic' | 'strict' = 'classic',
+): Map<T, Box> {
+  const yoga = new Map<T, Node>();
+  const build = (node: T): Node => {
+    const created = Yoga.Node.create(conformance === 'strict' ? strict : config);
+    // A prop taken away is committed as null, which native reads as unset.
+    apply(
+      created,
+      Object.fromEntries(Object.entries(node.props).filter(([, value]) => value !== null)),
+    );
+    const measure = measured(node);
+    if (measure) {
+      created.setMeasureFunc((width, mode) =>
+        measure(mode === MeasureMode.Undefined ? undefined : width),
+      );
+    } else {
+      (node.children as T[]).forEach((child, i) => created.insertChild(build(child), i));
+    }
+    yoga.set(node, created);
+    return created;
+  };
+  const root = Yoga.Node.create(conformance === 'strict' ? strict : config);
+  root.setWidth(screen.width);
+  root.setHeight(screen.height);
+  nodes.forEach((node, i) => root.insertChild(build(node), i));
+  root.calculateLayout(undefined, undefined, Direction.LTR);
+  const boxes = new Map<T, Box>();
+  const place = (node: T, origin: { left: number; top: number }) => {
+    const { left, top, width, height } = yoga.get(node)!.getComputedLayout();
+    const box = { left: origin.left + left, top: origin.top + top, width, height };
+    boxes.set(node, box);
+    if (yoga.get(node)!.getChildCount())
+      for (const child of node.children as T[]) place(child, box);
+  };
+  for (const node of nodes) place(node, { left: 0, top: 0 });
+  root.freeRecursive();
+  return boxes;
 }
 
 type Value = number | 'auto' | `${number}%` | undefined;

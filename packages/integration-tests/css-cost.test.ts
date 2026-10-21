@@ -64,6 +64,7 @@ describe('what CSS costs', () => {
       nodesResolved: 0,
       rulesFiled: 0,
       subjectTests: 0,
+      placesIndexed: 0,
     });
   });
 

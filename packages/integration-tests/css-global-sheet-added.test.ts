@@ -46,7 +46,7 @@ function scene() {
     engine.commit();
     return styleStats.nodesResolved - before;
   };
-  return { engine, props, styled, panel };
+  return { engine, props, styled, panel, add };
 }
 
 describe('a global sheet added while the app runs', () => {
@@ -154,6 +154,65 @@ describe('a global sheet added while the app runs', () => {
     s.engine.addGlobalSheet(added);
     s.engine.commit();
     assert.ok(s.styled(() => s.engine.removeGlobalSheet(added)) > 20);
+    assert.equal(s.props('panel')['opacity'] ?? null, null);
+  });
+
+  it('asks each node once for the sheets added before a commit, however many there are', () => {
+    // A screen of a component library adds a sheet for each component it renders the first time.
+    const s = scene();
+    const before = styleStats.subjectTests;
+    for (let i = 0; i < 5; i++) s.engine.addGlobalSheet(sheet(`.never-${i} { top: 1px }`));
+    s.engine.commit();
+    const asked = styleStats.subjectTests - before;
+    assert.ok(asked <= 44, `${asked} nodes asked of the 44 there are`);
+  });
+
+  it('styles what each of several sheets added before one commit matches', () => {
+    const s = scene();
+    s.engine.addGlobalSheet(sheet('.panel { opacity: 0.5 }'));
+    s.engine.addGlobalSheet(sheet('.inside { top: 7px }'));
+    s.engine.addGlobalSheet(sheet('.nothing { top: 1px }'));
+    s.engine.commit();
+    assert.equal(s.props('panel')['opacity'], 0.5);
+    assert.equal(s.props('label inside')['top'], 7);
+  });
+
+  it('styles what each matches, added a commit apart', () => {
+    const s = scene();
+    s.engine.addGlobalSheet(sheet('.panel { opacity: 0.5 }'));
+    s.engine.commit();
+    s.engine.addGlobalSheet(sheet('.inside { top: 7px }'));
+    s.engine.commit();
+    assert.equal(s.props('panel')['opacity'], 0.5);
+    assert.equal(s.props('label inside')['top'], 7);
+  });
+
+  it('styles nothing from a sheet added and taken away before the commit, or added back', () => {
+    const s = scene();
+    const added = sheet('.panel { opacity: 0.5 }');
+    s.engine.addGlobalSheet(added);
+    s.engine.removeGlobalSheet(added);
+    s.engine.commit();
+    assert.equal(s.props('panel')['opacity'] ?? null, null);
+    s.engine.addGlobalSheet(added);
+    s.engine.removeGlobalSheet(added);
+    s.engine.addGlobalSheet(added);
+    s.engine.commit();
+    assert.equal(s.props('panel')['opacity'], 0.5);
+  });
+
+  it('styles a node that arrives, or changes its classes, after the sheet and before the commit', () => {
+    const s = scene();
+    s.engine.addGlobalSheet(sheet('.late { opacity: 0.25 } .row { top: 2px }'));
+    s.add('view', 'late', s.engine.root);
+    s.engine.setClasses(s.panel, 'panel late');
+    s.engine.commit();
+    assert.equal(s.props('late')['opacity'], 0.25);
+    assert.equal(s.props('panel')['opacity'], 0.25);
+    assert.equal(s.props('row')['top'], 2);
+    s.engine.addGlobalSheet(sheet('.later { opacity: 0.75 }'));
+    s.engine.setClasses(s.panel, 'panel');
+    s.engine.commit();
     assert.equal(s.props('panel')['opacity'] ?? null, null);
   });
 });

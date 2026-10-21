@@ -22,10 +22,12 @@ import { Browser } from '@ng-native/expo/browser';
 
 ```ts
 import { Component, inject } from '@angular/core';
+import { Pressable, Text } from '@ng-native/components';
 import { Browser } from '@ng-native/expo/browser';
 
 @Component({
   selector: 'app-sign-in',
+  imports: [Pressable, Text],
   template: '<pressable (press)="signIn()"><text>Sign in</text></pressable>',
 })
 export class SignIn {

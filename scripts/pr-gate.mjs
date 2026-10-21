@@ -22,7 +22,7 @@
  * It exits 1 where a check failed, and fails closed: a step that cannot run is a failed step.
  */
 import { spawnSync } from 'node:child_process';
-import { existsSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import url from 'node:url';
@@ -33,24 +33,54 @@ const ROOT = path.resolve(path.dirname(url.fileURLToPath(import.meta.url)), '..'
 const BENCHES = ['bench', 'bench:tailwind', 'bench:screens'];
 
 /**
- * A path whose change is a change someone using the packages could see: code in a package, but
- * not its tests or fixtures, nor the integration tests, which ship nothing.
+ * A path whose change could be a change someone using the packages could see: code in a package,
+ * but not its tests or fixtures, nor the integration tests, which ship nothing. Whether the
+ * package publishes it is `published`'s to say.
  */
 const SHIPPED =
   /^packages\/(?!integration-tests\/)[^/]+\/(?!.*\/fixtures\/).+\.(ts|cjs|mjs|js|css)$/;
 const TEST = /\.test\.(ts|mts|mjs)$/;
 
-function options(argv) {
-  const value = (name, fallback) => {
-    const at = argv.indexOf(name);
-    return at === -1 ? fallback : argv[at + 1];
-  };
+export const USAGE = `Usage: node scripts/pr-gate.mjs [options]
+
+Options:
+  --base <ref>      the branch the change goes into (default: origin/main)
+  --rounds <n>      benchmark rounds on each side (default: 3)
+  --limit <percent> how much slower a benchmark may be (default: 3)
+  --out <file>      also write the report to this file
+  --skip-bench      run all but the benchmarks
+  -h, --help        print this and exit
+`;
+
+/**
+ * The options in `argv`, or `{ help: true }` for `--help`. Throws on a flag it does not know, one
+ * missing its value, a benchmark number that is not one, or a stray argument, so a typo never runs the gate against the wrong base.
+ */
+export function options(argv) {
+  const values = { '--base': 'origin/main', '--rounds': '3', '--limit': '3', '--out': undefined };
+  let bench = true;
+  for (let at = 0; at < argv.length; at++) {
+    const arg = argv[at];
+    if (arg === '--help' || arg === '-h') return { help: true };
+    if (arg === '--skip-bench') bench = false;
+    else if (Object.hasOwn(values, arg)) {
+      const next = argv[++at];
+      if (next === undefined || next.startsWith('-')) throw new Error(`${arg} needs a value`);
+      values[arg] = next;
+    } else throw new Error(`unknown option ${arg}`);
+  }
+  const rounds = Number(values['--rounds']);
+  const limit = Number(values['--limit']);
+  if (!Number.isInteger(rounds) || rounds < 1)
+    throw new Error('--rounds needs a positive whole number');
+  if (!Number.isFinite(limit) || values['--limit'].trim() === '')
+    throw new Error('--limit needs a number');
   return {
-    base: value('--base', 'origin/main'),
-    rounds: Number(value('--rounds', '3')),
-    limit: Number(value('--limit', '3')),
-    out: value('--out', undefined),
-    bench: !argv.includes('--skip-bench'),
+    base: values['--base'],
+    rounds,
+    limit,
+    out: values['--out'],
+    bench,
   };
 }
 
@@ -134,13 +164,77 @@ export function editedTests(nameStatus) {
     .map(([status, file, renamed]) => ({ status: status[0], file, renamed }));
 }
 
+/**
+ * What each package publishes, by directory: the patterns of its package.json `files`, `null`
+ * for one that is never published, and `undefined` for one with no `files`, which publishes all
+ * of itself. A pattern naming what the package builds, `dist`, stands for what it is built from,
+ * the `rootDir` of its tsconfig.build.json, since a change there is what changes it.
+ */
+function publishedPackages() {
+  const dir = path.join(ROOT, 'packages');
+  const found = {};
+  for (const name of readdirSync(dir)) {
+    const file = path.join(dir, name, 'package.json');
+    if (!existsSync(file)) continue;
+    const build = path.join(dir, name, 'tsconfig.build.json');
+    found[name] = publishedOf(
+      JSON.parse(readFileSync(file, 'utf8')),
+      existsSync(build) ? JSON.parse(readFileSync(build, 'utf8')).compilerOptions : undefined,
+    );
+  }
+  return found;
+}
+
+/**
+ * What one package publishes, from its manifest and its tsconfig.build `compilerOptions`: see
+ * `publishedPackages`. The build's output stands for its `rootDir`, and where that cannot be read,
+ * or is the package itself, all of the package counts: the gate fails closed.
+ *
+ * ponytail: the build's `exclude` is not read, so a source file the build leaves out still asks
+ * for a plan. That asks for one too many, never one too few.
+ */
+export function publishedOf(manifest, build) {
+  if (manifest.private === true) return null;
+  if (!Array.isArray(manifest.files)) return undefined;
+  const bare = (pattern) => path.posix.normalize(pattern).replace(/(\/\*\*)?\/*$/, '');
+  const out = build?.outDir ? bare(build.outDir) : 'dist';
+  const isBuilt = (pattern) => bare(pattern) === out;
+  if (!manifest.files.some(isBuilt)) return manifest.files;
+  const source = build?.rootDir ? bare(build.rootDir) : '';
+  if (!build?.outDir || source === '' || source === '.') return undefined;
+  return manifest.files.map((pattern) => (isBuilt(pattern) ? source : pattern));
+}
+
+/**
+ * Whether `file`, a path in `packages/<name>/`, is one its package publishes. A pattern matches
+ * as npm reads `files`: as a glob from the package's own directory, against the file or any
+ * directory it is in, which stands for everything in it.
+ */
+function published(file, packages) {
+  const [, name = '', ...rest] = file.split('/');
+  if (!Object.hasOwn(packages, name) || packages[name] === undefined) return true;
+  if (packages[name] === null) return false;
+  const parts = rest;
+  const within = parts.map((_, at) => parts.slice(0, at + 1).join('/'));
+  // In order, as npm reads them: a `!` pattern takes away what the ones before it matched.
+  let shipped = false;
+  for (const pattern of packages[name]) {
+    const negated = pattern.startsWith('!');
+    const glob = path.posix.normalize(negated ? pattern.slice(1) : pattern).replace(/\/+$/, '');
+    if (within.some((candidate) => path.posix.matchesGlob(candidate, glob))) shipped = !negated;
+  }
+  return shipped;
+}
+
 /** Whether a change to what is shipped comes with a version plan. */
-export function needsPlan(nameStatus) {
+export function needsPlan(nameStatus, packages = publishedPackages()) {
   const files = nameStatus
     .split('\n')
     .map((line) => line.split('\t'))
     .filter(([, file]) => file);
-  const shipped = files.some(([, file]) => SHIPPED.test(file) && !TEST.test(file));
+  const shipped = files.some(
+    ([, file]) => SHIPPED.test(file) && !TEST.test(file) && published(file, packages),
+  );
   const plan = files.some(
     ([status, file]) => status === 'A' && file.startsWith('.nx/version-plans/'),
   );
@@ -166,6 +260,10 @@ function baseCheckout(ref) {
 
 function main() {
   const opts = options(process.argv.slice(2));
+  if (opts.help) {
+    console.log(USAGE);
+    return;
+  }
   const lines = [];
   let failed = false;
   const check = (name, ok, detail = '') => {
@@ -344,6 +442,7 @@ if (import.meta.url === url.pathToFileURL(process.argv[1] ?? '').href) {
     main();
   } catch (error) {
     console.error(`pr-gate: ${error.message}`);
+    if (/^(unknown option|--\w[\w-]* needs a )/.test(error.message)) console.error(`\n${USAGE}`);
     process.exitCode = 1;
   }
 }

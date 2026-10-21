@@ -61,6 +61,13 @@ export {
   type StatusBarStyle,
 } from './status-bar.ts';
 export {
+  TopClaim,
+  WindowClaims,
+  onWindowFront,
+  sharedBySource,
+  type Claim,
+} from './window-claims.ts';
+export {
   NavigationBar,
   navigationBarSource,
   type NavigationBarSource,
@@ -68,4 +75,5 @@ export {
   type NavigationBarStyle,
 } from './navigation-bar.ts';
 export { SCREEN_IN_FRONT } from './screen-in-front.ts';
+export { NATIVE_HISTORY } from './native-history.ts';
 export { OS_VERSION } from './os-version.ts';

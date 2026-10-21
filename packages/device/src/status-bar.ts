@@ -21,7 +21,9 @@ import {
   type Signal,
 } from '@angular/core';
 import { ColorScheme, type Scheme } from './color-scheme.ts';
+import { mergeClaims } from './merge-claims.ts';
 import { reactNative } from './react-native.ts';
+import { WindowClaims, onWindowFront, sharedBySource } from './window-claims.ts';
 
 /**
  * Dark text for a light bar, light text for a dark one. `default` is whatever the OS picks, which on
@@ -68,23 +70,29 @@ export interface StatusBarSource {
    * own props or, with none, to light text and shown. So a claim has to ride on every screen too.
    */
   readonly screensSetBar?: boolean;
+  /** Calls `listener` when a window comes to the front, to be given the whole bar again. */
+  onWindowFront?(listener: () => void): () => void;
 }
 
 /** RN spells the styles for its own platforms; `light` means light *content*, as CSS would. */
 const BAR_STYLES = { default: 'default', light: 'light-content', dark: 'dark-content' } as const;
 
+const NONE: StatusBarSource = {
+  setStyle: () => {},
+  setHidden: () => {},
+  setBackgroundColor: () => {},
+  setTranslucent: () => {},
+  height: undefined,
+};
+
+/** One per React Native, so every app the runtime mounts claims the same bar. */
 export function statusBarSource(): StatusBarSource {
   const native = reactNative();
-  if (!native) {
-    return {
-      setStyle: () => {},
-      setHidden: () => {},
-      setBackgroundColor: () => {},
-      setTranslucent: () => {},
-      height: undefined,
-    };
-  }
+  if (!native) return NONE;
+  return sharedBySource(statusBarSource, native, () => nativeSource(native));
+}
 
+function nativeSource(native: NonNullable<ReturnType<typeof reactNative>>): StatusBarSource {
   const { StatusBar } = native;
   const android = native.Platform?.OS === 'android';
   // Android 16 draws an app targeting SDK 35 or later edge-to-edge whatever its theme says. Before
@@ -92,9 +100,13 @@ export function statusBarSource(): StatusBarSource {
   // checks. That answer is not enough on its own: Expo Go on Android 16 reports false.
   const info = native.TurboModuleRegistry?.get('DeviceInfo') as
     { getConstants?(): { isEdgeToEdge?: boolean } } | null | undefined;
+  // React Native 0.88 draws every Android app edge-to-edge, and removed both setters with it.
+  const settable = typeof StatusBar.setBackgroundColor === 'function';
   const edgeToEdge =
     android &&
-    (Number(native.Platform.Version) >= 36 || info?.getConstants?.().isEdgeToEdge === true);
+    (!settable ||
+      Number(native.Platform.Version) >= 36 ||
+      info?.getConstants?.().isEdgeToEdge === true);
   const warned = new Set<string>();
   return {
     setStyle: (style, animated) => StatusBar.setBarStyle(BAR_STYLES[style], animated),
@@ -102,17 +114,18 @@ export function statusBarSource(): StatusBarSource {
     setBackgroundColor: (color, animated) => {
       if (!android) return;
       if (edgeToEdge) warnNoEffect('backgroundColor', warned);
-      StatusBar.setBackgroundColor(color, animated);
+      StatusBar.setBackgroundColor?.(color, animated);
     },
     setTranslucent: (translucent) => {
       if (!android) return;
       if (edgeToEdge) warnNoEffect('translucent', warned);
-      StatusBar.setTranslucent(translucent);
+      StatusBar.setTranslucent?.(translucent);
     },
     get height() {
       return StatusBar.currentHeight;
     },
     screensSetBar: android,
+    onWindowFront,
   };
 }
 
@@ -147,13 +160,17 @@ export class StatusBar {
   });
 
   private readonly source = inject(StatusBar.SOURCE);
-  private readonly scheme = inject(ColorScheme);
-  private readonly stack = signal<readonly StatusBarState[]>([{}]);
+  /** This app, among the apps claiming the bar: its scheme is what an `auto` style it claims follows. */
+  private readonly owner: Owner = { scheme: inject(ColorScheme) };
+  /** Every app's claims on this bar: the window is the runtime's, not an app's. */
+  private readonly window = sharedBySource(
+    StatusBarWindow,
+    this.source,
+    () => new StatusBarWindow(this.source),
+  );
 
   /** What is actually showing: every claim in order, later ones winning per property. */
-  readonly state: Signal<StatusBarState> = computed(() =>
-    this.stack().reduce((merged, entry) => ({ ...merged, ...entry }), {}),
-  );
+  readonly state: Signal<StatusBarState> = this.window.state;
 
   /**
    * How tall it is, in points. Android reports it; iOS does not, and on iOS the number a layout
@@ -172,40 +189,73 @@ export class StatusBar {
   }> = computed(() => {
     if (!this.source.screensSetBar) return {};
     const { style, hidden } = this.state();
-    return { style: style && resolve(style, this.scheme.current()), hidden };
+    return { style: style && this.window.resolve(style), hidden };
   });
 
   constructor() {
     // Straight from the source rather than through an effect, so an `auto` bar changes in the same
     // turn as the scheme. The scheme is the listener's own: `ColorScheme.current` may not have
     // heard yet.
-    const stop = inject(ColorScheme.SOURCE).subscribe((scheme) => {
-      const { style, animated } = untracked(this.state);
-      if (style === 'auto') this.source.setStyle(resolve(style, scheme), animated);
+    const stop = inject(ColorScheme.SOURCE).subscribe((scheme) =>
+      this.window.schemeChanged(this.owner, scheme),
+    );
+    inject(DestroyRef).onDestroy(() => {
+      stop();
+      // An app that goes takes its claims with it, and leaves the bar to the apps still here.
+      this.window.claims.drop(this.owner);
+      this.window.apply();
     });
-    inject(DestroyRef).onDestroy(stop);
   }
 
   /** The base claim, for an app that sets the bar once at startup. */
   set(state: StatusBarState): void {
-    this.stack.update((entries) => [state, ...entries.slice(1)]);
-    this.apply();
+    this.window.claims.setBase(this.owner, state);
+    this.window.apply();
   }
 
   /** A claim on top of whatever is there. Call the returned function to drop it. */
   push(state: StatusBarState): () => void {
-    const entry = { ...state };
-    this.stack.update((entries) => [...entries, entry]);
-    this.apply();
-
+    const drop = this.window.claims.push(this.owner, { ...state });
+    this.window.apply();
     return () => {
-      this.stack.update((entries) => entries.filter((one) => one !== entry));
-      this.apply();
+      drop();
+      this.window.apply();
     };
   }
+}
+
+interface Owner {
+  readonly scheme: ColorScheme;
+}
+
+/** The bar, as every app on one source claims it. */
+class StatusBarWindow {
+  readonly claims = new WindowClaims<StatusBarState, Owner>();
+  readonly state: Signal<StatusBarState> = computed(() =>
+    mergeClaims(this.claims.all().map((claim) => claim.value)),
+  );
 
   /** The properties a claim has had the platform change, which no claim names any more. */
   private readonly changed = new Set<'style' | 'hidden' | 'translucent'>();
+
+  private readonly source: StatusBarSource;
+
+  constructor(source: StatusBarSource) {
+    this.source = source;
+    // Lives as long as the source, which is the runtime's.
+    source.onWindowFront?.(() => this.apply(true));
+  }
+
+  /** `style` for the platform, `auto` by the scheme of the app whose claim the style is. */
+  resolve(style: StatusBarStyle, scheme?: Scheme): PlatformStatusBarStyle {
+    return resolve(style, scheme ?? this.styleOwner()?.scheme.current() ?? 'light');
+  }
+
+  schemeChanged(owner: Owner, scheme: Scheme): void {
+    const { style, animated } = untracked(this.state);
+    if (style !== 'auto' || untracked(() => this.styleOwner()) !== owner) return;
+    this.source.setStyle(this.resolve(style, scheme), animated);
+  }
 
   /**
    * Push the merged state at the platform.
@@ -213,20 +263,30 @@ export class StatusBar {
    * Written whole rather than diffed: the platform's own setters are the cheap part. A property
    * the last claim to name it has dropped goes back to the platform's own, once. Not the
    * background color, whose own the theme decides. Read untracked, so an effect that sets the bar
-   * does not also subscribe to it and run again on every later claim.
+   * does not also subscribe to it and run again on every later claim. A window come to the front
+   * is given what is claimed, with nothing animated and nothing put back.
    */
-  private apply(): void {
+  apply(front = false): void {
     const { style, hidden, animated, backgroundColor, translucent } = untracked(this.state);
+    const animate = front ? undefined : animated;
     if (this.changes('style', style)) {
-      this.source.setStyle(resolve(style ?? 'default', untracked(this.scheme.current)), animated);
+      this.source.setStyle(
+        untracked(() => this.resolve(style ?? 'default')),
+        animate,
+      );
     }
     if (this.changes('hidden', hidden)) {
-      this.source.setHidden(hidden ?? false, animated ? 'fade' : undefined);
+      this.source.setHidden(hidden ?? false, animate ? 'fade' : undefined);
     }
-    if (backgroundColor !== undefined) this.source.setBackgroundColor(backgroundColor, animated);
+    if (backgroundColor !== undefined) this.source.setBackgroundColor(backgroundColor, animate);
     if (this.changes('translucent', translucent)) {
       this.source.setTranslucent(translucent ?? false);
     }
+  }
+
+  /** The app whose claim the style in force comes from. */
+  private styleOwner(): Owner | undefined {
+    return this.claims.last((state) => state.style !== undefined)?.owner;
   }
 
   /** Whether to tell the platform: a claim names `property`, or the last one to has dropped. */

@@ -104,13 +104,24 @@ describe('a class no stylesheet mentions', () => {
     );
   });
 
-  it('restyles for every class where a selector reads the class attribute some other way', () => {
-    const s = scene(`${CSS} [class^="pan"] .cell { color: red }`);
-    // The hundred cells the rule is for, under the element whose class list changed.
+  it('restyles where a class changes what a selector reading the whole attribute answers', () => {
+    const s = scene(
+      `${CSS} [class^="pan"] .cell { color: red } [class$="-end"] .cell { opacity: 0.5 }`,
+    );
+    const red = s.props('cell')['color'];
+    // `panel touched` starts with `pan` as `panel` did, and ends as neither test asks.
     assert.equal(
       s.restyled(() => s.engine.addClass(s.panel, 'touched')),
-      100,
+      0,
     );
+    assert.ok(s.restyled(() => s.engine.setClasses(s.panel, 'touched panel')) > 100);
+    assert.notEqual(s.props('cell')['color'], red);
+    assert.ok(s.restyled(() => s.engine.addClass(s.panel, 'at-end')) >= 100);
+    assert.equal(s.props('cell')['opacity'], 0.5);
+    assert.ok(s.restyled(() => s.engine.removeClass(s.panel, 'touched')) >= 100);
+    assert.equal(s.props('cell')['color'], red);
+    assert.ok(s.restyled(() => s.engine.removeClass(s.panel, 'at-end')) >= 100);
+    assert.equal(s.props('cell')['opacity'] ?? 1, 1);
   });
 });
 

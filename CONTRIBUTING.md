@@ -95,8 +95,37 @@ pnpm --filter documentation dev  # the documentation site, on http://localhost:5
 - `packages/testing` has tests of its own, for the fake Fabric and the Testing Library layer it
   ships to everyone else.
 
-`packages/nx` and `packages/schematics` carry `*.test.ts` files next to the source they test. Every
-package not named here has no tests of its own: `packages/integration-tests` covers it.
+`packages/nx` and `packages/schematics` carry `*.test.ts` files next to the source they test, and
+`packages/web-compat` does too, with the Web Platform Tests below. Every package not named here has
+no tests of its own: `packages/integration-tests` covers it.
+
+### Web Platform Tests
+
+`packages/web-compat/wpt` runs suites of the Web Platform Tests (the list is in `pin.mjs`) against
+`@ng-native/web-compat`, and keeps what each file passes in `expectations.json`, with a summary of
+the pass rates in `summary.txt`. The tests are fetched at a pinned commit into a cache git ignores.
+
+```sh
+cd packages/web-compat
+node wpt/fetch.mjs              # once, and after pin.mjs changes
+node wpt/run.mjs --check        # every suite, against expectations.json
+node wpt/run.mjs --update       # record what the change passes now
+node wpt/run.mjs dom/nodes      # one suite, or any part of a test's path, while working on it
+```
+
+`--check` fails on any difference in the subtests a file passes: one that passes fewer, and one
+that passes more, so a change that makes a test pass records it with `--update` in the same pull
+request. How a file ended (OK or TIMEOUT) is recorded but not compared, since a file that
+passes nothing lands either side of its time limit from one run to the next.
+
+The Web Platform Tests workflow runs `--check` on the DOM, selector, CSSOM, `html/dom` and
+`domparsing` suites, in about four minutes on a laptop, when what they run on changes: the package,
+`packages/fabric` and `packages/platform`, the layout fixtures in `packages/integration-tests`,
+`packages/testing`, the lockfile, or the workflow and its setup (the paths are in
+`.github/workflows/wpt.yml`). The full run takes over eight, one process at a time, so a change to
+the other suites (events, geometry, the observers, canvas, parsing) runs `node wpt/run.mjs --check`
+locally before its pull request opens, and records with `--update` from a full run so `summary.txt`
+stays whole.
 
 ## CSS engine changes are test-first
 
@@ -142,6 +171,27 @@ What the sweep reads as props, the canary's Tailwind screen draws.
 `examples/canary`, against a release build; `pnpm e2e:ios:record` takes a new one), and the Android
 release smoke opens it in CI. `pnpm bench:tailwind` in `packages/integration-tests` times a screen
 of Tailwind cards through the engine.
+
+### Layout against Chrome
+
+`packages/layout` holds taffy's layout fixtures with where Chrome puts each box
+(`oracle/chrome.json`), and lists for each way of laying them out the fixtures it gets wrong:
+`oracle/today.json` for Yoga as React Native configures it, `oracle/strict.json` for Yoga with none
+of its legacy errata. Each list is pinned both ways: a fixture that starts to fail is a regression,
+and one that starts to pass has to come off the list.
+
+```sh
+pnpm nx run @ng-native/layout:test                                    # against the pinned lists
+LAYOUT_UPDATE=1 pnpm --filter @ng-native/layout exec node --test "src/**/*.test.ts"   # after a deliberate change
+pnpm --filter @ng-native/layout record                                # Chrome's boxes, after a fixture changes
+```
+
+`pnpm layout-fuzz` in `packages/integration-tests` lays random cases out in Chrome and through the
+engine with React Native's own Yoga (built with `clang++` the first time), compares every box,
+shrinks each case that differs and groups them into classes. `--cases`, `--seed` and `--out` set how
+many, from where and where the results go; a change to layout is checked against main on the same
+seed. It also counts the
+properties the compiler refused.
 
 ## Writing Markdown
 

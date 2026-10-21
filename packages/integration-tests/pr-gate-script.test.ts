@@ -3,9 +3,12 @@
  * pull request is slower, has changed existing tests, or owes a version plan.
  */
 import assert from 'node:assert/strict';
+import { spawnSync } from 'node:child_process';
 import { describe, it } from 'node:test';
+import { fileURLToPath } from 'node:url';
 // A script of the repository's, not a package: loaded by its path, which no import can name.
-const { compareBenches, editedTests, medians, needsPlan } = await import(
+const script = new URL('../../scripts/pr-gate.mjs', import.meta.url);
+const { compareBenches, editedTests, medians, needsPlan, options, publishedOf } = await import(
   new URL('../../scripts/pr-gate.mjs', import.meta.url).href
 );
 
@@ -89,5 +92,107 @@ describe('pr-gate', () => {
     );
     assert.equal(needsPlan('M\tpackages/integration-tests/css.test.ts'), false);
     assert.equal(needsPlan('A\tscripts/pr-gate.mjs\nM\texamples/canary/src/app/app.ts'), false);
+    // A package that is never published, as its package.json says, is released by no plan.
+    assert.equal(needsPlan('A\tpackages/layout/src/compare.ts', { layout: null }), false);
+    assert.equal(needsPlan('M\tpackages/fabric/src/css.ts', { layout: null }), true);
+  });
+
+  it('reads a build as the source it is made from, and fails closed where it cannot', () => {
+    const build = { outDir: 'dist', rootDir: 'src' };
+    assert.deepEqual(publishedOf({ files: ['dist'] }, build), ['src']);
+    // As written with a slash or every file under it.
+    assert.deepEqual(publishedOf({ files: ['dist/'] }, build), ['src']);
+    assert.deepEqual(publishedOf({ files: ['dist/**'] }, { outDir: 'dist/', rootDir: 'src/' }), [
+      'src',
+    ]);
+    // A build of the package itself, one with no source, and none at all: all of it counts.
+    assert.equal(publishedOf({ files: ['dist'] }, { outDir: 'dist', rootDir: '.' }), undefined);
+    assert.equal(publishedOf({ files: ['dist'] }, { outDir: 'dist' }), undefined);
+    assert.equal(publishedOf({ files: ['dist'] }, undefined), undefined);
+    // What is not built is published as written, and a private package not at all.
+    assert.deepEqual(publishedOf({ files: ['index.cjs'] }, undefined), ['index.cjs']);
+    assert.equal(publishedOf({ private: true, files: ['dist'] }, build), null);
+  });
+
+  it('asks for a plan only for a file the package publishes, or one its build is made from', () => {
+    // Each read from the package.json and tsconfig.build.json on disk.
+    // web-compat publishes `dist`, built from `src`, and `build.cjs`, but not its WPT runner.
+    assert.equal(needsPlan('M\tpackages/web-compat/src/dom/node.ts'), true);
+    assert.equal(needsPlan('M\tpackages/web-compat/build.cjs'), true);
+    assert.equal(needsPlan('A\tpackages/web-compat/wpt/run.mjs'), false);
+    // web publishes `dist` and `vite.mjs`, not the browser tests' page.
+    assert.equal(needsPlan('M\tpackages/web/vite.mjs'), true);
+    assert.equal(needsPlan('M\tpackages/web/src/reset.css'), true);
+    assert.equal(needsPlan('M\tpackages/web/browser/boot.ts'), false);
+    assert.equal(needsPlan('M\tpackages/web/vitest.config.ts'), false);
+    // A `!` pattern takes away what an earlier one matched, and a later one gives it back.
+    assert.equal(
+      needsPlan('M\tpackages/kit/src/internal/a.ts', { kit: ['src', '!src/internal'] }),
+      false,
+    );
+    assert.equal(needsPlan('M\tpackages/kit/src/a.ts', { kit: ['src', '!src/internal'] }), true);
+    assert.equal(
+      needsPlan('M\tpackages/kit/src/internal/a.ts', {
+        kit: ['src', '!src/internal', 'src/internal/a.ts'],
+      }),
+      true,
+    );
+    // As npm reads a glob: a leading `./`, `?` and a class of characters.
+    assert.equal(needsPlan('M\tpackages/kit/src/a.ts', { kit: ['./src'] }), true);
+    assert.equal(needsPlan('M\tpackages/kit/a1.cjs', { kit: ['a?.cjs'] }), true);
+    assert.equal(needsPlan('M\tpackages/kit/ab.cjs', { kit: ['a[bc].cjs'] }), true);
+    assert.equal(needsPlan('M\tpackages/kit/ad.cjs', { kit: ['a[bc].cjs'] }), false);
+    // `**` reaches into any directory under it.
+    assert.equal(needsPlan('M\tpackages/kit/lib/a/b/file.cjs', { kit: ['lib/**/*.cjs'] }), true);
+    assert.equal(needsPlan('M\tpackages/kit/lib/file.cjs', { kit: ['lib/**/*.cjs'] }), true);
+    assert.equal(needsPlan('M\tpackages/kit/other/file.cjs', { kit: ['lib/**/*.cjs'] }), false);
+    // A pattern in `files` is anchored at the package, and `*` stays within a directory.
+    assert.equal(needsPlan('M\tpackages/metro/transformer.cjs'), true);
+    assert.equal(needsPlan('M\tpackages/metro/css/compile.cjs'), true);
+    assert.equal(needsPlan('M\tpackages/metro/css/tools/generate.cjs'), false);
+    assert.equal(needsPlan('M\tpackages/nx/application/index.cjs'), true);
+    assert.equal(needsPlan('M\tpackages/nx/files/src/main.ts'), true);
+    assert.equal(needsPlan('M\tpackages/testing/runner/loader.mjs'), true);
+    assert.equal(needsPlan('M\tpackages/testing/vitest.config.ts'), false);
+    // A package with no `files` publishes all of it but its tests.
+    assert.equal(needsPlan('M\tpackages/thing/tools/make.mjs', { thing: undefined }), true);
+    assert.equal(needsPlan('M\tpackages/thing/tools/make.test.mjs', { thing: undefined }), false);
+  });
+
+  it('prints its usage for --help and -h, and runs nothing', () => {
+    for (const flag of ['--help', '-h']) {
+      const result = spawnSync(process.execPath, [fileURLToPath(script), flag], {
+        encoding: 'utf8',
+        timeout: 20_000,
+      });
+      assert.equal(result.status, 0, `${flag} exits 0`);
+      assert.match(result.stdout, /Usage: node scripts\/pr-gate\.mjs/);
+      assert.match(result.stdout, /--base <ref>/);
+      assert.doesNotMatch(result.stdout, /✅|❌/, 'no check ran');
+    }
+  });
+
+  it('exits non-zero with its usage on a flag it does not know, running nothing', () => {
+    for (const argv of [['--bogus'], ['--base'], ['stray'], ['--rounds', '0'], ['--base', '-h']]) {
+      const result = spawnSync(process.execPath, [fileURLToPath(script), ...argv], {
+        encoding: 'utf8',
+        timeout: 20_000,
+      });
+      assert.notEqual(result.status, 0, `${argv.join(' ')} fails`);
+      assert.match(result.stderr, /Usage: node scripts\/pr-gate\.mjs/);
+      assert.doesNotMatch(result.stdout, /✅|❌/, 'no check ran');
+    }
+  });
+
+  it('rejects an inherited property name, a short flag as a value, and a bad benchmark number', () => {
+    assert.throws(() => options(['constructor', 'ignored']), /unknown option constructor/);
+    assert.throws(() => options(['--base', '-h']), /--base needs a value/);
+    for (const rounds of ['0', '1.5', 'nope', '']) {
+      assert.throws(() => options(['--rounds', rounds]), /--rounds needs a positive whole number/);
+    }
+    for (const limit of ['nope', 'Infinity', '']) {
+      assert.throws(() => options(['--limit', limit]), /--limit needs a number/);
+    }
+    assert.equal(options(['--rounds', '2', '--limit', '0']).rounds, 2);
   });
 });

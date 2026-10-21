@@ -30,14 +30,22 @@ own module installed. `Player`, `PlayerState` and the watchers both use come fro
 ## The smallest useful example
 
 ```ts
-import { Component } from '@angular/core';
+import { Component, input } from '@angular/core';
+import { Pressable, Text } from '@ng-native/components';
 import { registerExpoViews } from '@ng-native/expo';
 import { videoPlayer } from '@ng-native/expo/video';
 
 registerExpoViews('expo-video'); // once, before the app mounts
 
+/** The view's one prop this uses, as an input, so the template is checked against it. */
+@Component({ selector: 'expo-video', template: '', host: { '[player]': 'player()' } })
+class ExpoVideo {
+  readonly player = input<number>();
+}
+
 @Component({
   selector: 'app-clip',
+  imports: [ExpoVideo, Pressable, Text],
   template: `
     <expo-video [player]="player.id" class="flex-1" />
     <text>{{ player.state().currentTime }} / {{ player.state().duration }}</text>

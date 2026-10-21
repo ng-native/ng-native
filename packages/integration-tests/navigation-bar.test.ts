@@ -231,3 +231,179 @@ describe("the navigation bar's platform source", () => {
     await new Promise((resolve) => setImmediate(resolve));
   });
 });
+
+describe('a navigation bar claim with a property set to undefined', () => {
+  // As for the status bar: an undefined property leaves whatever the claim underneath said.
+  it('keeps the bar hidden underneath while the claim lasts', () => {
+    const { calls, source } = recorder();
+    const { bar } = build(source);
+    bar.set({ hidden: true });
+    calls.length = 0;
+
+    bar.push({ hidden: undefined, style: 'light' });
+    assert.deepEqual(calls, [
+      ['style', 'light'],
+      ['hidden', true],
+    ]);
+    assert.equal(bar.state().hidden, true);
+  });
+
+  it('keeps what is underneath until the claim drops, then puts it back', () => {
+    const { calls, source } = recorder();
+    const { bar } = build(source);
+    bar.set({ style: 'light', hidden: true });
+    calls.length = 0;
+
+    const claim = bar.push({ style: undefined, hidden: false });
+    assert.deepEqual(calls, [
+      ['style', 'light'],
+      ['hidden', false],
+    ]);
+    calls.length = 0;
+
+    claim();
+    assert.deepEqual(calls, [
+      ['style', 'light'],
+      ['hidden', true],
+    ]);
+    assert.deepEqual(bar.state(), { style: 'light', hidden: true });
+  });
+
+  it('leaves an undefined property of the base claim out of the state', () => {
+    const { calls, source } = recorder();
+    const { bar } = build(source);
+    bar.set({ style: 'light', hidden: undefined });
+    assert.deepEqual(calls, [['style', 'light']]);
+    assert.deepEqual(bar.state(), { style: 'light' });
+  });
+
+  it('sends the fixed style underneath again on a scheme change', () => {
+    const { calls, source } = recorder();
+    const colors = scheme('light');
+    const { bar } = build(source, colors.source);
+    bar.set({ style: 'dark' });
+    bar.push({ style: undefined, hidden: true });
+    calls.length = 0;
+
+    colors.change('dark');
+    assert.deepEqual(calls, [['style', 'dark']]);
+  });
+
+  it('hands the screens the visibility underneath', () => {
+    const { source } = recorder(true);
+    const { bar } = build(source);
+    bar.set({ hidden: true });
+    bar.push({ hidden: undefined, style: 'dark' });
+    assert.deepEqual(bar.forScreens(), { hidden: true });
+  });
+});
+
+describe('a navigation bar two apps claim', () => {
+  // As for the status bar: the old app of a recreated activity goes after the new one claimed.
+  it('keeps the bar a later app claimed when the earlier app goes', () => {
+    const { calls, source } = recorder();
+    const old = build(source);
+    const dropOld = old.bar.push({ style: 'light', hidden: true });
+    const current = build(source);
+    current.bar.set({ style: 'dark', hidden: true });
+    calls.length = 0;
+
+    dropOld();
+    old.injector.destroy();
+    const last = (kind: string) => calls.filter(([one]) => one === kind).at(-1)?.[1];
+    assert.equal(last('hidden'), true);
+    assert.equal(last('style'), 'dark');
+    assert.deepEqual(current.bar.state(), { style: 'dark', hidden: true });
+  });
+
+  it('takes an app that goes without dropping its claims out of the bar', () => {
+    const { calls, source } = recorder();
+    const old = build(source);
+    old.bar.set({ hidden: true });
+    const current = build(source);
+    current.bar.set({ style: 'dark' });
+    calls.length = 0;
+
+    old.injector.destroy();
+    assert.deepEqual(calls, [
+      ['style', 'dark'],
+      ['hidden', false],
+    ]);
+  });
+
+  it('follows the scheme of the app whose auto style is in force', () => {
+    const { calls, source } = recorder();
+    const oldColors = scheme('light');
+    const currentColors = scheme('light');
+    build(source, oldColors.source);
+    const current = build(source, currentColors.source);
+    current.bar.set({ style: 'auto' });
+    calls.length = 0;
+
+    oldColors.change('dark');
+    assert.deepEqual(calls, [], 'not the scheme of an app with no style claimed');
+    currentColors.change('dark');
+    assert.deepEqual(calls, [['style', 'light']]);
+  });
+
+  it('follows the scheme of the app left once no style is claimed', () => {
+    const { calls, source } = recorder();
+    const oldColors = scheme('light');
+    const currentColors = scheme('dark');
+    const old = build(source, oldColors.source);
+    old.bar.set({ style: 'light' });
+    const current = build(source, currentColors.source);
+    current.bar.set({ hidden: false });
+    calls.length = 0;
+
+    old.injector.destroy();
+    assert.deepEqual(calls[0], ['style', 'light'], 'auto, by the dark scheme of the app left');
+  });
+});
+
+describe('a navigation bar window that comes to the front', () => {
+  function fronting() {
+    const { calls, source } = recorder();
+    const fronts = new Set<() => void>();
+    return {
+      calls,
+      source: {
+        ...source,
+        onWindowFront: (listener: () => void) => (
+          fronts.add(listener),
+          () => fronts.delete(listener)
+        ),
+      },
+      front: () => {
+        for (const listener of fronts) listener();
+      },
+    };
+  }
+
+  it('is given what is claimed again', () => {
+    const { calls, source, front } = fronting();
+    const { bar } = build(source);
+    bar.set({ style: 'dark', hidden: true });
+    calls.length = 0;
+
+    front();
+    assert.deepEqual(calls, [
+      ['style', 'dark'],
+      ['hidden', true],
+    ]);
+  });
+
+  it('is given an auto style once a style was named, and nothing it never had', () => {
+    const { calls, source, front } = fronting();
+    const colors = scheme('dark');
+    const { bar } = build(source, colors.source);
+    front();
+    assert.deepEqual(calls, [], 'no claim has named anything');
+
+    const drop = bar.push({ style: 'dark', hidden: true });
+    drop();
+    calls.length = 0;
+    front();
+    assert.deepEqual(calls, [['style', 'light']]);
+  });
+});

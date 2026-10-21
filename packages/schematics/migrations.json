@@ -2,7 +2,7 @@
   "$schema": "../../node_modules/@angular-devkit/schematics/collection-schema.json",
   "schematics": {
     "sync-app-versions": {
-      "version": "0.16.0",
+      "version": "0.17.1",
       "description": "Move the @ng-native packages each project's own package.json lists to the new version.",
       "factory": "./migrations/run.cjs#sync-app-versions"
     },
@@ -30,6 +30,16 @@
       "version": "0.17.0",
       "description": "Read an engine node's children, text, kind, host and sheet by their new names.",
       "factory": "./migrations/run.cjs#engine-node-fields"
+    },
+    "library-typecheck-declaration-map": {
+      "version": "0.17.1",
+      "description": "Turn off declarationMap in each Nx library's tsconfig.typecheck.json, which TypeScript refuses beside composite: false.",
+      "factory": "./migrations/run.cjs#library-typecheck-declaration-map"
+    },
+    "native-typecheck-target": {
+      "version": "0.17.1",
+      "description": "Give each Angular Native project in angular.json a typecheck target, run by ngc.",
+      "factory": "./migrations/run.cjs#native-typecheck-target"
     }
   }
 }

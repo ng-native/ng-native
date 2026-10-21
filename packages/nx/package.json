@@ -1,6 +1,6 @@
 {
   "name": "@ng-native/nx",
-  "version": "0.16.0",
+  "version": "0.17.1",
   "description": "Nx generators for Angular Native: nx add, an Expo app project whose targets run it, and native libraries and components.",
   "keywords": [
     "angular",
@@ -23,6 +23,7 @@
       "@ng-native/analog",
       "@ng-native/components",
       "@ng-native/device",
+      "@ng-native/eslint-plugin",
       "@ng-native/expo",
       "@ng-native/fabric",
       "@ng-native/icons",
@@ -34,7 +35,8 @@
       "@ng-native/schematics",
       "@ng-native/tailwind",
       "@ng-native/testing",
-      "@ng-native/web"
+      "@ng-native/web",
+      "@ng-native/web-compat"
     ]
   },
   "dependencies": {

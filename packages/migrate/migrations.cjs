@@ -20,6 +20,8 @@
 const { deviceReactNativeImport } = require('./device-react-native-import.cjs');
 const { engineNodeFields } = require('./engine-node-fields.cjs');
 const { engineNodeTag } = require('./engine-node-tag.cjs');
+const { libraryTypecheckDeclarationMap } = require('./library-typecheck-declaration-map.cjs');
+const { nativeTypecheckTarget } = require('./native-typecheck-target.cjs');
 const { splitStoreAndPlayer } = require('./split-store-and-player.cjs');
 const { syncAppVersions } = require('./sync-app-versions.cjs');
 const { trackingAvailableGetter } = require('./tracking-available-getter.cjs');
@@ -65,6 +67,19 @@ const migrations = [
     version: '0.17.0',
     description: "Read an engine node's children, text, kind, host and sheet by their new names.",
     run: engineNodeFields,
+  },
+  {
+    name: 'library-typecheck-declaration-map',
+    version: '0.17.1',
+    description:
+      "Turn off declarationMap in each Nx library's tsconfig.typecheck.json, which TypeScript refuses beside composite: false.",
+    run: libraryTypecheckDeclarationMap,
+  },
+  {
+    name: 'native-typecheck-target',
+    version: '0.17.1',
+    description: 'Give each Angular Native project in angular.json a typecheck target, run by ngc.',
+    run: nativeTypecheckTarget,
   },
 ];
 

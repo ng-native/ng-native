@@ -250,6 +250,57 @@ function appCopy(resolve, context, name, platform, resolution, projectRoot) {
   }
 }
 
+const EXPO_ASYNC_REQUIRE = /[\\/]expo[\\/]src[\\/]async-require[\\/][^\\/]+$/;
+
+/**
+ * Expo's lazy chunk URL on native in a development build, built by its file that asks the dev
+ * server.
+ *
+ * Expo's native `buildUrlForBundle` builds on `location.origin` wherever there is a global
+ * `location`, and web-compat gives the page one: the app's address, `exp://` in Expo Go, which
+ * React Native fetches nothing from. Its other file asks the dev server alone, as the native one
+ * does where there is no `location`. A release build is left Expo's: it has no dev server, and
+ * hosts its chunks where `location.origin` says.
+ *
+ * @param {{ originModulePath?: string, dev?: boolean }} context
+ * @param {string} name
+ * @param {string | null} platform
+ */
+function expoChunkUrl(context, name, platform) {
+  const from = context.originModulePath;
+  if (name !== './buildUrlForBundle' || platform === 'web' || !from || !context.dev)
+    return undefined;
+  if (!EXPO_ASYNC_REQUIRE.test(from)) return undefined;
+  return { type: 'sourceFile', filePath: path.join(path.dirname(from), 'buildUrlForBundle.ts') };
+}
+
+/** React Native's own module the engine moves a sticky header through. */
+const NATIVE_ANIMATED_HELPER = 'react-native/src/private/animated/NativeAnimatedHelper';
+
+/**
+ * `NativeAnimatedHelper`, as the file it is in the app's `react-native`.
+ *
+ * The engine takes its node tags from React Native's own helper, so they never collide with an
+ * animated value's (see `native-drive.ts` in `@ng-native/fabric`). React Native 0.88 stopped
+ * exporting `./src/*`, and Metro falls back to the file with a warning on every bundle. Its
+ * `package.json` is still exported, and the helper is beside it: the same file, so the same module
+ * React Native's own `Animated` uses.
+ *
+ * @param {Function} resolve
+ * @param {object} context
+ * @param {string} name
+ * @param {string | null} platform
+ */
+function nativeAnimatedHelper(resolve, context, name, platform) {
+  if (name !== NATIVE_ANIMATED_HELPER) return undefined;
+  const manifest = resolve(context, 'react-native/package.json', platform)?.filePath;
+  if (!manifest) return undefined;
+  return {
+    type: 'sourceFile',
+    filePath: path.join(path.dirname(manifest), 'src/private/animated/NativeAnimatedHelper.js'),
+  };
+}
+
 /** Marks a resolver this preset already wrapped, so applying the preset twice wraps it once. */
 const WRAPPED = Symbol.for('ng-native.resolveRequest');
 
@@ -275,6 +326,10 @@ function withTypeScriptJsImports(next, projectRoot) {
   if (next?.[WRAPPED]) return next;
   const resolveRequest = (context, name, platform) => {
     const resolve = next ?? context.resolveRequest;
+    const chunkUrl = expoChunkUrl(context, name, platform);
+    if (chunkUrl) return chunkUrl;
+    const helper = nativeAnimatedHelper(resolve, context, name, platform);
+    if (helper) return helper;
     if (projectRoot && /^@babel\/runtime(\/|$)/.test(name)) {
       try {
         const fromProject = {

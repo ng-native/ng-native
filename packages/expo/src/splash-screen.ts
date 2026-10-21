@@ -29,6 +29,7 @@
  * platform rather than injecting it, because the first call happens before there is an injector.
  */
 import { InjectionToken } from '@angular/core';
+import { nextFrame as defaultNextFrame } from '@ng-native/fabric';
 import { expoModuleNow } from './native.ts';
 
 /** The slice of `expo-splash-screen` this needs. */
@@ -100,7 +101,7 @@ export class Splash {
    * is the empty one. Waiting a frame is what makes the handover invisible, and is why this is a
    * method rather than two calls at a call site.
    */
-  async hideWhenReady(work: Promise<unknown>, nextFrame = defaultFrame): Promise<void> {
+  async hideWhenReady(work: Promise<unknown>, nextFrame = defaultNextFrame): Promise<void> {
     try {
       await work;
     } finally {
@@ -109,15 +110,6 @@ export class Splash {
     }
   }
 }
-
-/** One turn of the frame loop, or the macrotask queue where there is no loop to wait on. */
-const defaultFrame = (): Promise<void> =>
-  new Promise((resolve) => {
-    const raf = (globalThis as { requestAnimationFrame?: (cb: () => void) => void })
-      .requestAnimationFrame;
-    if (raf) raf(() => resolve());
-    else setTimeout(resolve, 0);
-  });
 
 /**
  * The one instance, exported directly because it is needed before an injector exists: holding the

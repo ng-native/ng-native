@@ -12,8 +12,10 @@ import { Component, input, output, signal } from '@angular/core';
 import { Pressable, ScrollView, Text, TextInput, View } from '@ng-native/components';
 import {
   cleanup,
+  configure,
   fireEvent,
   render,
+  resetToDefaults,
   screen,
   userEvent,
   waitFor,
@@ -55,6 +57,41 @@ class List {
 })
 class Items {}
 
+@Component({
+  selector: 'x-states',
+  imports: [Pressable, Text, View],
+  template: `
+    <pressable
+      testID="save"
+      accessibilityRole="button"
+      [disabled]="saving()"
+      [accessibilityState]="{ busy: saving() }"
+    >
+      <text>Save</text>
+    </pressable>
+    <pressable testID="cancel" accessibilityRole="button"><text>Cancel</text></pressable>
+    <view testID="tab-a" accessibilityRole="tab" aria-selected="true"><text>A</text></view>
+    <view testID="tab-b" accessibilityRole="tab"><text>B</text></view>
+    <view testID="agree" accessibilityRole="checkbox" [accessibilityState]="{ checked: 'mixed' }">
+      <text>Agree</text>
+    </view>
+    <view testID="terms" accessibilityRole="checkbox"><text>Terms</text></view>
+    <view testID="news" accessibilityRole="checkbox" [accessibilityState]="{ checked: false }">
+      <text>News</text>
+    </view>
+    <pressable testID="pin" accessibilityRole="button" [accessibilityState]="{ checked: true }">
+      <text>Pin</text>
+    </pressable>
+    <view testID="less" accessibilityRole="button" aria-expanded="true"><text>Less</text></view>
+    <view testID="more" accessibilityRole="button" aria-expanded="false"><text>More</text></view>
+    <text-input testID="locked" accessibilityRole="search" [editable]="false" />
+    <text-input testID="open" accessibilityRole="search" />
+  `,
+})
+class States {
+  readonly saving = signal(true);
+}
+
 describe('queries', () => {
   it('finds by test id, through testID or nativeID', async () => {
     await render(List);
@@ -72,6 +109,44 @@ describe('queries', () => {
       screen.queryByRole('listitem', { name: 'pears', exact: false })?.props['testID'],
       'second',
     );
+  });
+
+  it('finds by role in a state, as React Native Testing Library does', async () => {
+    await render(States);
+    const ids = (nodes: FakeFabricNode[]) => nodes.map((node) => node.props['testID']);
+    // A state no one set is false for disabled, selected and busy, and unset for checked and expanded.
+    assert.deepEqual(ids(screen.getAllByRole('button', { disabled: true })), ['save']);
+    assert.deepEqual(ids(screen.getAllByRole('button', { disabled: false })), [
+      'cancel',
+      'pin',
+      'less',
+      'more',
+    ]);
+    assert.deepEqual(ids(screen.getAllByRole('button', { busy: true })), ['save']);
+    assert.deepEqual(ids(screen.getAllByRole('tab', { selected: true })), ['tab-a']);
+    assert.deepEqual(ids(screen.getAllByRole('tab', { selected: false })), ['tab-b']);
+    assert.deepEqual(ids(screen.getAllByRole('checkbox', { checked: 'mixed' })), ['agree']);
+    // Only the checkbox that says it is unchecked: one that says nothing has no checked state.
+    assert.deepEqual(ids(screen.getAllByRole('checkbox', { checked: false })), ['news']);
+    // A button has no checked state, whatever its accessibilityState says.
+    assert.equal(screen.queryByRole('button', { checked: true }), null);
+    assert.deepEqual(ids(screen.getAllByRole('button', { expanded: true })), ['less']);
+    assert.deepEqual(ids(screen.getAllByRole('button', { expanded: false })), ['more']);
+    assert.deepEqual(ids(screen.getAllByRole('search', { disabled: true })), ['locked']);
+    assert.deepEqual(ids(screen.getAllByRole('search', { disabled: false })), ['open']);
+    assert.equal(screen.queryByRole('button', { name: 'Save', disabled: false }), null);
+    assert.throws(
+      () => screen.getByRole('button', { name: 'Save', disabled: false }),
+      /role "button" and name "Save" and disabled false/,
+    );
+  });
+
+  it('waits for a role to reach a state', async () => {
+    const { instance } = await render(States);
+    assert.equal(screen.queryByRole('button', { name: 'Save', disabled: false }), null);
+    setTimeout(() => instance.saving.set(false), 20);
+    const save = await screen.findByRole('button', { name: 'Save', disabled: false });
+    assert.equal(save.props['testID'], 'save');
   });
 
   it('names a labelled node by its label alone, as a screen reader does', async () => {
@@ -141,6 +216,34 @@ describe('queries', () => {
     );
     assert.equal((await screen.findAllByRole('listitem')).length, 2);
     assert.equal((await screen.findByTestId('list')).props['testID'], 'list');
+  });
+
+  it('waits as long as configure says, unless a call says otherwise', async () => {
+    const { instance } = await render(List);
+    const hide = async () => {
+      instance.shown.set(false);
+      await waitForElementToBeRemoved(() => screen.queryByText('Going soon'));
+    };
+    const show = () => setTimeout(() => instance.shown.set(true), 20);
+    await hide();
+    try {
+      // No time at all: one try, and the node arrives after it.
+      configure({ asyncUtilTimeout: 0 });
+      show();
+      await assert.rejects(screen.findByText('Going soon'), /Unable to find a node/);
+      await assert.rejects(
+        waitFor(() => screen.getByText('Going soon')),
+        /Unable to find a node/,
+      );
+      assert.ok(await screen.findByText('Going soon', undefined, { timeout: 500 }));
+
+      resetToDefaults();
+      await hide();
+      show();
+      assert.ok(await screen.findByText('Going soon'), 'a second, by default again');
+    } finally {
+      resetToDefaults();
+    }
   });
 
   it('waits for a held node to go, and refuses one that is already gone', async () => {

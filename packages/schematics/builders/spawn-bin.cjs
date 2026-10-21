@@ -21,13 +21,14 @@ function findManifest(name, from) {
 }
 
 /**
- * @param {string} name the package, `expo` or `vitest`
+ * @param {string} name the package, such as `expo`, `vitest` or `@angular/compiler-cli`
  * @param {string} from the directory to resolve it from
+ * @param {string} command the entry of its `bin` to run, when not named for the package: `ngc`
  */
-function resolveBin(name, from) {
+function resolveBin(name, from, command = name) {
   const manifestPath = findManifest(name, from);
   const { bin } = JSON.parse(readFileSync(manifestPath, 'utf8'));
-  const file = typeof bin === 'string' ? bin : bin[name];
+  const file = typeof bin === 'string' ? bin : bin[command];
   return path.join(path.dirname(manifestPath), file);
 }
 
@@ -56,12 +57,25 @@ const SIGNALS = ['SIGINT', 'SIGTERM', 'SIGHUP'];
  */
 async function spawnBin(name, args, context) {
   const cwd = await projectRoot(context);
-  const bin = resolveBin(name, cwd);
+  return spawnFile(resolveBin(name, cwd), args, cwd, name, context);
+}
+
+/**
+ * Runs `file` with Node in `cwd`, logged and reported as `label`.
+ *
+ * @param {string} file
+ * @param {string[]} args
+ * @param {string} cwd
+ * @param {string} label
+ * @param {import('@angular-devkit/architect').BuilderContext} context
+ * @returns {Promise<{ success: boolean, error?: string }>}
+ */
+function spawnFile(file, args, cwd, label, context) {
   context.logger.info(
-    `${name} ${args.join(' ')}  (in ${path.relative(context.workspaceRoot, cwd)})`,
+    `${[label, ...args].join(' ')}  (in ${path.relative(context.workspaceRoot, cwd)})`,
   );
   return new Promise((resolve) => {
-    const child = spawn(process.execPath, [bin, ...args], { cwd, stdio: 'inherit' });
+    const child = spawn(process.execPath, [file, ...args], { cwd, stdio: 'inherit' });
     // Ctrl-C reaches the whole process group, but a supervisor, CI or an IDE's task runner signals
     // `ng` alone, and Metro would outlive it on its port. So a stop is passed on.
     const stop = (signal) => child.kill(signal);
@@ -75,10 +89,10 @@ async function spawnBin(name, args, context) {
       settle(
         code === 0
           ? { success: true }
-          : { success: false, error: `${name} exited with ${signal ?? `code ${code}`}` },
+          : { success: false, error: `${label} exited with ${signal ?? `code ${code}`}` },
       ),
     );
   });
 }
 
-module.exports = { resolveBin, projectRoot, spawnBin };
+module.exports = { resolveBin, projectRoot, spawnBin, spawnFile };

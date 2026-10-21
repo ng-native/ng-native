@@ -9,7 +9,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { createRequire } from 'node:module';
-import { Engine, type EngineNode } from '@ng-native/fabric';
+import { Engine, type EngineNode, type StyleSheet } from '@ng-native/fabric';
 import { resetStyleStats, styleStats } from '../fabric/src/css.ts';
 import { createFakeFabric, type FakeFabricNode } from '@ng-native/testing';
 import { build } from './tailwind-cli.ts';
@@ -20,9 +20,13 @@ const { flattenTailwind } = require('@ng-native/tailwind') as {
   flattenTailwind(css: string): string;
 };
 
-function scene(css: string) {
+/** A scene styled by `css`, or by a sheet built by hand for what the build refuses. */
+function scene(css: string | StyleSheet) {
   const reports: string[] = [];
-  const sheet = compileCss(css, 'app.css', { onUnsupported: (m: string) => reports.push(m) });
+  const sheet =
+    typeof css === 'string'
+      ? compileCss(css, 'app.css', { onUnsupported: (m: string) => reports.push(m) })
+      : css;
   const fabric = createFakeFabric();
   const engine = new Engine(fabric, 1, { globalStyles: sheet as never });
   /** An element with `classes`, under `parent` or the root. */
@@ -238,6 +242,250 @@ describe(':has() as what is beneath a node changes', () => {
     s.engine.removeChild(s.card, action);
     assert.equal(s.opacity('title') ?? null, null);
   });
+
+  it('asks a rule only of a box with the class its :is() or :where() names', () => {
+    // Tailwind's `group-has-*` compiles to `:is(:where(.group):has(.on) *)`: a box with no
+    // `.group` cannot be the one it asks, so a change under one is no reason to match again.
+    const s = scene(':where(.group):has(.on) .title { opacity: 0.5 }');
+    const TITLES = 40;
+    for (let i = 0; i < TITLES; i++) s.el('title', s.el('row', s.card));
+    const group = s.el('group', s.card);
+    const title = s.el('title', group);
+    s.engine.setProp(title, 'testID', 'title');
+    assert.equal(s.opacity('title'), undefined);
+
+    resetStyleStats();
+    s.el('', s.el('row', s.card));
+    s.engine.commit();
+    assert.ok(styleStats.nodesResolved < 5, `${styleStats.nodesResolved} nodes styled again`);
+
+    const on = s.el('on', group);
+    assert.equal(s.opacity('title'), 0.5);
+    s.engine.removeChild(group, on);
+    assert.equal(s.opacity('title') ?? null, null);
+  });
+
+  it('asks a rule only of a box of the element it names', () => {
+    // A table's `tr:has(+ .selected) > td`: a box that is no `tr` cannot be the one it asks.
+    const s = scene('section:has(.on) .title { opacity: 0.5 }');
+    const TITLES = 40;
+    for (let i = 0; i < TITLES; i++) s.el('title', s.el('row', s.card));
+    const section = s.el('', s.card, 'section');
+    const title = s.el('title', section);
+    s.engine.setProp(title, 'testID', 'title');
+    assert.equal(s.opacity('title'), undefined);
+
+    resetStyleStats();
+    s.el('', s.el('row', s.card));
+    s.engine.commit();
+    assert.ok(styleStats.nodesResolved < 5, `${styleStats.nodesResolved} nodes styled again`);
+
+    const on = s.el('on', section);
+    assert.equal(s.opacity('title'), 0.5);
+    s.engine.removeChild(section, on);
+    assert.equal(s.opacity('title') ?? null, null);
+  });
+
+  it('asks a rule of a box with any of the classes an :is() list names', () => {
+    const s = scene(':is(.group, .panel):has(.on) .title { opacity: 0.5 }');
+    const panel = s.el('panel', s.card);
+    const title = s.el('title', panel);
+    s.engine.setProp(title, 'testID', 'title');
+    const on = s.el('on', panel);
+    assert.equal(s.opacity('title'), 0.5);
+    s.engine.removeChild(panel, on);
+    assert.equal(s.opacity('title') ?? null, null);
+  });
+});
+
+describe(':has() and the cost of asking it', () => {
+  it('follows a change under a box that is not drawn', () => {
+    const s = scene(`${RULE} .none { display: none }`);
+    const hidden = s.el('none', s.card);
+    const inner = s.el('', hidden);
+    assert.equal(s.opacity('card'), undefined);
+    s.engine.addClass(inner, 'action');
+    assert.equal(s.opacity('card'), 0.5);
+    s.engine.removeClass(inner, 'action');
+    assert.equal(s.opacity('card') ?? null, null);
+  });
+
+  it('asks a box once a commit, however many of what it holds ask it', () => {
+    // Each row asks whether the card has an action, which is a walk of every row in the card.
+    const s = scene('.card:has(.action) .row { opacity: 0.5 }');
+    const rows = 2000;
+    for (let i = 0; i < rows; i++) s.el('row', s.card);
+    resetStyleStats();
+    s.engine.commit();
+    assert.ok(
+      styleStats.compoundTests < rows * 20,
+      `${styleStats.compoundTests} compound tests for ${rows} rows`,
+    );
+  });
+});
+
+describe(':has() of what comes after a node, on a long list', () => {
+  // `.item:has(~ .later)` and `.item:has(+ .next)`, as a stylesheet read while the app runs has
+  // them: the build refuses both.
+  const after = (combinator: 'later-sibling' | 'next-sibling', name: string): StyleSheet => ({
+    rules: [
+      {
+        compounds: [
+          {
+            classes: ['item'],
+            has: [
+              {
+                any: [],
+                relative: [{ compounds: [{ classes: [name] }], combinators: [combinator] }],
+              },
+            ],
+          },
+        ],
+        combinators: [],
+        specificity: 2000,
+        order: 0,
+        declarations: { opacity: 0.5 },
+      },
+    ],
+    has: true,
+  });
+  const ITEMS = 2000;
+  const list = (sheet: StyleSheet) => {
+    const s = scene(sheet);
+    const items = Array.from({ length: ITEMS }, () => s.el('item', s.card));
+    s.engine.setProp(items[0]!, 'testID', 'first');
+    s.engine.setProp(items.at(-2)!, 'testID', 'second last');
+    s.engine.setProp(items.at(-1)!, 'testID', 'last');
+    /** Work a commit did, in compound tests and children indexed for their place. */
+    const work = (): number => {
+      resetStyleStats();
+      s.engine.commit();
+      return styleStats.compoundTests + styleStats.placesIndexed;
+    };
+    return { ...s, items, work };
+  };
+
+  it('asks each item what comes after it in work that grows with the list, not its square', () => {
+    const s = list(after('later-sibling', 'later'));
+    const cost = s.work();
+    assert.ok(cost < ITEMS * 20, `${cost} for ${ITEMS} items`);
+    assert.equal(s.opacity('first') ?? null, null);
+
+    s.engine.addClass(s.items.at(-1)!, 'later');
+    const marked = s.work();
+    assert.ok(marked < ITEMS * 20, `${marked} for ${ITEMS} items, one later`);
+    assert.equal(s.opacity('first'), 0.5);
+    assert.equal(s.opacity('second last'), 0.5);
+    assert.equal(s.opacity('last') ?? null, null);
+  });
+
+  it('follows an item coming in at the end, going, and restyled, across the whole list', () => {
+    const s = list(after('later-sibling', 'later'));
+    s.work();
+    const extra = s.el('later', s.card);
+    assert.equal(s.opacity('first'), 0.5);
+    assert.equal(s.opacity('last'), 0.5);
+    s.engine.removeChild(s.card, extra);
+    assert.equal(s.opacity('first') ?? null, null);
+    s.engine.addClass(s.items[1]!, 'later');
+    assert.equal(s.opacity('first'), 0.5);
+    assert.equal(s.opacity('second last') ?? null, null);
+    s.engine.removeClass(s.items[1]!, 'later');
+    assert.equal(s.opacity('first') ?? null, null);
+  });
+
+  it('asks each item what comes next in work that grows with the list, not its square', () => {
+    const s = list(after('next-sibling', 'next'));
+    const cost = s.work();
+    assert.ok(cost < ITEMS * 20, `${cost} for ${ITEMS} items`);
+    s.engine.addClass(s.items.at(-1)!, 'next');
+    s.engine.addClass(s.items[1]!, 'next');
+    const marked = s.work();
+    assert.ok(marked < ITEMS * 20, `${marked} for ${ITEMS} items, two next`);
+    assert.equal(s.opacity('first'), 0.5);
+    assert.equal(s.opacity('second last'), 0.5);
+    assert.equal(s.opacity('last') ?? null, null);
+    s.engine.removeChild(s.card, s.items[1]!);
+    assert.equal(s.opacity('first') ?? null, null);
+  });
+
+  it('marks each item before a change once, however many come in after it before a commit', () => {
+    const s = scene(after('later-sibling', 'later'));
+    s.engine.commit();
+    let marks = 0;
+    const items = Array.from({ length: ITEMS }, () => {
+      const item = s.engine.createElement('view');
+      s.engine.setClasses(item, 'item');
+      let dirty = false;
+      Object.defineProperty(item, 'hasDirty', {
+        get: () => dirty,
+        set: (value: boolean) => {
+          if (value) marks++;
+          dirty = value;
+        },
+      });
+      return item;
+    });
+    for (const item of items) s.engine.appendChild(s.card, item);
+    assert.ok(marks < ITEMS * 5, `${marks} marks for ${ITEMS} items`);
+    s.engine.setProp(items[0]!, 'testID', 'first');
+    s.engine.addClass(items.at(-1)!, 'later');
+    assert.equal(s.opacity('first'), 0.5);
+  });
+
+  it('matches again what comes after many boxes asked :has() in one pass of the list', () => {
+    // `.item:has(.mark) ~ .item`, the other way round: each item before a change is asked again,
+    // and what comes after each one with it.
+    const sheet = after('later-sibling', 'later');
+    const s = list({
+      ...sheet,
+      rules: [
+        ...sheet.rules,
+        {
+          compounds: [
+            { classes: ['item'], has: [{ any: [{ classes: ['mark'] }] }] },
+            { classes: ['item'] },
+          ],
+          combinators: ['later-sibling'],
+          specificity: 3000,
+          order: 1,
+          declarations: { opacity: 0.25 },
+        },
+      ],
+    });
+    s.work();
+    let marks = 0;
+    for (const item of s.items) {
+      let dirty = item.ownDirty;
+      Object.defineProperty(item, 'ownDirty', {
+        get: () => dirty,
+        set: (value: boolean) => {
+          if (value) marks++;
+          dirty = value;
+        },
+      });
+    }
+    s.engine.addClass(s.items.at(-1)!, 'later');
+    s.work();
+    assert.ok(marks < ITEMS * 5, `${marks} marks for ${ITEMS} items`);
+    assert.equal(s.opacity('second last'), 0.5);
+    s.el('mark', s.items[0]!);
+    assert.equal(s.opacity('second last'), 0.25);
+    assert.equal(s.opacity('first'), 0.5);
+  });
+
+  it('marks again what moved into the place of items taken out before a commit', () => {
+    const s = list(after('later-sibling', 'later'));
+    s.engine.setProp(s.items[8]!, 'testID', 'moved');
+    s.work();
+    // A change to the eighth has the seven before it matched again. Two go from the front, and
+    // the ninth, which nothing marked, is where the seventh was. What comes after it changes.
+    s.engine.addClass(s.items[7]!, 'later');
+    s.engine.removeChild(s.card, s.items[0]!);
+    s.engine.removeChild(s.card, s.items[1]!);
+    s.engine.addClass(s.items.at(-1)!, 'later');
+    assert.equal(s.opacity('moved'), 0.5);
+  });
 });
 
 describe(':has() on a box the styled node is in', () => {
@@ -312,6 +560,29 @@ describe(':has() on a box the styled node is in', () => {
     assert.equal(s.title.styleCache, before, 'nothing under the box was matched again');
   });
 
+  it('keeps no record of the rules a node matched once the last sheet that asked is gone', () => {
+    // The record is what a node matched again is compared with, which nothing needs after.
+    const s = titled('.unused { opacity: 1 }');
+    const restyled = () => {
+      s.engine.setClasses(s.title, s.title.classes!.has('x') ? 'title' : 'title x');
+      s.engine.commit();
+      return s.title.styleCache!.matched;
+    };
+    const first = compileCss(ABOVE, 'first.css', { onUnsupported: () => {} });
+    const second = compileCss(ABOVE, 'second.css', { onUnsupported: () => {} });
+    s.engine.addGlobalSheet(first);
+    s.engine.addGlobalSheet(second);
+    assert.ok(restyled(), 'kept while a sheet asks');
+    s.engine.removeGlobalSheet(first);
+    assert.ok(restyled(), 'kept while another still asks');
+    s.engine.removeGlobalSheet(second);
+    assert.equal(restyled(), undefined, 'not kept once none asks');
+    s.engine.addGlobalSheet(first);
+    assert.ok(restyled(), 'kept again for a sheet that asks again');
+    s.el('action', s.card);
+    assert.equal(s.opacity('title'), 0.5);
+  });
+
   it('styles again only what such a rule is for, of all that is in the box', () => {
     const s = titled();
     const other = s.el('other', s.body);
@@ -323,23 +594,19 @@ describe(':has() on a box the styled node is in', () => {
   });
 });
 
-describe(':has() the engine does not take', () => {
-  it('refuses what it cannot match and what a browser drops, each by name', () => {
-    for (const [css, why] of [
-      ['.card:has(.action) + .title { opacity: 0.5 }', /the node the rule styles/],
-      ['.card:has(.action) ~ .panel .title { opacity: 0.5 }', /the node the rule styles/],
-      ['.card:has(.a .b) { opacity: 0.5 }', /one compound/],
-      ['.card:has(+ .next) { opacity: 0.5 }', /one compound/],
-      ['.card:has(~ .later) { opacity: 0.5 }', /one compound/],
-      // Chrome drops each of these as invalid: no ':has()' inside another.
-      ['.card:has(.a:has(.b)) { opacity: 0.5 }', /inside another/],
-      ['.card:has(.a:not(:has(.b))) { opacity: 0.5 }', /inside another/],
-      ['.card:has(:is(.a:has(.b))) { opacity: 0.5 }', /inside another/],
-      ['.card .title:has(> .a:has(.b)) { opacity: 0.5 }', /inside another/],
-    ] as const) {
+describe(':has() and the sheet it is in', () => {
+  it('takes one beside the styled node, a combinator inside, and a sibling', () => {
+    // What each matches is in css-nested-selector.
+    for (const css of [
+      '.card:has(.action) + .title { opacity: 0.5 }',
+      '.card:has(.action) ~ .panel .title { opacity: 0.5 }',
+      '.card:has(.a .b) { opacity: 0.5 }',
+      '.card:has(+ .next) { opacity: 0.5 }',
+      '.card:has(~ .later) { opacity: 0.5 }',
+    ]) {
       const s = scene(css);
-      assert.equal(s.reports.length, 1, css);
-      assert.match(s.reports[0]!, why, css);
+      assert.deepEqual(s.reports, [], css);
+      assert.equal((s.sheet as { rules: unknown[] }).rules.length, 1, css);
     }
   });
 

@@ -144,23 +144,41 @@ keyboard stops appearing: clear `AutomaticMinimizationEnabled` and `HardwareKeyb
 ## 5. Compare
 
 By pixels, not bytes: simctl does not encode the same screen to the same PNG twice. A BMP is the
-pixels uncompressed, so the bytes that differ between two of them are the pixels that do. Under
-0.01% of them is noise (antialiasing, the status bar) and the same screen:
+pixels uncompressed. A pixel differs where any channel moves by more than 2 of 255, and a screen
+is the same only where no pixel does. The tolerance is for iOS's Liquid Glass controls, such as
+the header's back button, which shade by 1 between two launches of the same build; a real change
+moves pixels by far more. There is no allowance for a count of pixels: a small icon that moved is a
+few hundred, which a share of the screen would let through.
 
 ```sh
-for file in "$out"/shots/base/*.png; do
-  name=$(basename "$file" .png)
-  sips -s format bmp "$file" --out "$out/a.bmp" > /dev/null
-  sips -s format bmp "$out/shots/change/$name.png" --out "$out/b.bmp" > /dev/null
-  differ=$(cmp -l "$out/a.bmp" "$out/b.bmp" | wc -l | tr -d ' ')
-  total=$(stat -f %z "$out/a.bmp")
-  if [ "$differ" -lt $((total / 10000)) ]; then echo "same: $name"; else echo "differs: $name ($differ of $total bytes)"; fi
-done
+python3 - "$out" <<'PY'
+import os, struct, subprocess, sys
+out = sys.argv[1]
+def pixels(png):
+    subprocess.run(['sips', '-s', 'format', 'bmp', png, '--out', f'{out}/x.bmp'], capture_output=True)
+    data = open(f'{out}/x.bmp', 'rb').read()
+    offset = struct.unpack_from('<I', data, 10)[0]
+    width, height = struct.unpack_from('<ii', data, 18)
+    return data[offset:], width, abs(height)
+for name in sorted(os.listdir(f'{out}/shots/base')):
+    a, width, height = pixels(f'{out}/shots/base/{name}')
+    b, *size = pixels(f'{out}/shots/change/{name}')
+    if size != [width, height]:
+        print(f'differs: {name} (size)')
+        continue
+    moved = [i // 4 for i in range(0, len(a), 4) if max(abs(a[i + k] - b[i + k]) for k in range(3)) > 2]
+    if not moved:
+        print(f'same: {name}')
+        continue
+    rows, xs = [p // width for p in moved], [p % width for p in moved]
+    print(f'differs: {name}: {len(moved)} pixels, rows {min(rows)}-{max(rows)}, x {min(xs)}-{max(xs)}')
+PY
 ```
 
 For each that differs, shrink both (`sips -Z 900 <png> --out <smaller>`) and look at them side by
 side. Say what changed, where on the screen, and whether it is what the change meant to do. A
-difference in a spinner, a caret or the clock alone is noise: say so. Check that a screenshot is
+difference in a spinner or a caret alone is noise: say so. The clock is frozen at 9:41 in step 3,
+so a clock that differs means the override was skipped. Check that a screenshot is
 of the screen named, not the home screen, a dialog or a red error screen.
 
 ## 6. Clean up

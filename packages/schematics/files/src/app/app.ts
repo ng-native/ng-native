@@ -3,8 +3,8 @@ import { Pressable, SafeAreaProvider, SafeAreaView, Text, View } from '@ng-nativ
 import { StatusBar } from '@ng-native/device';
 
 /**
- * Element names are lowercase, and that is load-bearing rather than style: an uppercase name is
- * read as an unknown Angular component and commits as a plain view with nothing in it.
+ * Element names are lowercase, and that is load-bearing rather than style: an uppercase name such
+ * as <View> matches no component's selector, and the Metro transform fails the build on it.
  */
 @Component({
   imports: [Pressable, SafeAreaProvider, SafeAreaView, Text, View],

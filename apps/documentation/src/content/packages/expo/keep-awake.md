@@ -25,10 +25,12 @@ import { KeepAwake } from '@ng-native/expo/keep-awake';
 
 ```ts
 import { Component, DestroyRef, inject } from '@angular/core';
+import { Text } from '@ng-native/components';
 import { KeepAwake } from '@ng-native/expo/keep-awake';
 
 @Component({
   selector: 'app-recording',
+  imports: [Text],
   template: `<text>Recording...</text>`,
 })
 export class Recording {
@@ -49,7 +51,11 @@ export class Recording {
 - **`active`** - whether anything currently holds the screen on, computed from whether `holders` is
   non-empty.
 
-Releasing the same hold twice does nothing the second time.
+Releasing the same hold twice does nothing the second time. Holds are counted across every app the
+runtime mounts, and an app that is destroyed releases the holds it still has. On Android, each time
+an activity comes to the front, a recreated one included, every held tag is released and taken
+again. A new activity starts with its screen free to sleep, and `expo-keep-awake`, which keeps its
+tags for as long as the runtime runs, turns the screen on only when its first tag comes.
 
 ## Without the module
 

@@ -40,7 +40,13 @@ function rewriteImports(code: string, file: string, seen: Set<string>): string {
       return match;
     }
     const generated = emit(target, seen);
-    return `${keyword}${quote}${path.relative(path.dirname(file), generated).replace(/^(?!\.)/, './')}${quote}`;
+    // A specifier is a URL path: Windows separates a relative path with `\`, which no module
+    // resolver reads as one.
+    const rewritten = path
+      .relative(path.dirname(file), generated)
+      .replaceAll('\\', '/')
+      .replace(/^(?!\.)/, './');
+    return `${keyword}${quote}${rewritten}${quote}`;
   });
 }
 

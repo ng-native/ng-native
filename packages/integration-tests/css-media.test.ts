@@ -9,7 +9,7 @@ import { after, before, describe, it } from 'node:test';
 import type { Type } from '@angular/core';
 import { Engine, StyleResolver, type StyleTarget } from '@ng-native/fabric';
 import { createRequire } from 'node:module';
-import { cleanup, render, settle, type BoundQueries } from '@ng-native/testing';
+import { cleanup, createFakeFabric, render, settle, type BoundQueries } from '@ng-native/testing';
 import { compileFixture } from './compile.ts';
 
 const require = createRequire(import.meta.url);
@@ -299,5 +299,28 @@ describe('a media feature written with no value', () => {
       sheet('(hover)').refused[0]!,
       /'hover' is not a media feature a device can answer/,
     );
+  });
+});
+
+describe("the engine's conditions", () => {
+  it('are what it was last given, for a package that answers a media query from a script', () => {
+    const engine = new Engine(createFakeFabric(), 1);
+    engine.updateConditions({ width: 400, height: 800, colorScheme: 'light' });
+    assert.equal(engine.conditions?.reducedMotion, undefined);
+    engine.updateConditions({ width: 400, height: 800, colorScheme: 'dark', reducedMotion: true });
+    assert.deepEqual(
+      [engine.conditions?.colorScheme, engine.conditions?.reducedMotion, engine.conditions?.width],
+      ['dark', true, 400],
+    );
+  });
+
+  it("are the constructor's where it is given them, as an app's engine is made", () => {
+    assert.equal(new Engine(createFakeFabric(), 1).conditions, undefined);
+    const dark = new Engine(createFakeFabric(), 1, {
+      conditions: { width: 400, height: 800, colorScheme: 'dark' },
+    });
+    assert.equal(dark.conditions?.colorScheme, 'dark');
+    dark.updateConditions({ width: 400, height: 800, colorScheme: 'light' });
+    assert.equal(dark.conditions?.colorScheme, 'light');
   });
 });

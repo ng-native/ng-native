@@ -1052,6 +1052,16 @@ export class VirtualList<T> extends ScrollViewProps {
     this.measuredVersion.update((version) => version + 1);
   }
 
+  /**
+   * A row handed a view native has laid out before. Native reports a layout only when a view's
+   * frame differs from the last one it reported, so an item that lands where the view already was,
+   * at the same size, is never measured; the view's last size is its own until native says
+   * otherwise.
+   */
+  adoptRow(row: VirtualRow<T>, layout: { width?: number; height?: number }): void {
+    if (!this.measured.has(row.key)) this.measureRow(row, layout);
+  }
+
   /** Drop the measurements of items long gone, so churn cannot grow the map without bound. */
   private forgetDeparted(): void {
     const items = this.items();
@@ -1397,10 +1407,20 @@ function holds(style: Record<string, unknown>, props: Record<string, unknown>): 
 export class VirtualListRow<T = unknown> {
   readonly row = input.required<VirtualRow<T>>({ alias: 'virtualListRow' });
   private readonly list = inject<VirtualList<T>>(VirtualList);
+  /** The last layout native reported for this view, whichever item it held. */
+  private layout: { width?: number; height?: number } | undefined;
+
+  constructor() {
+    effect(() => {
+      const row = this.row();
+      if (this.layout) untracked(() => this.list.adoptRow(row, this.layout!));
+    });
+  }
 
   protected onLayout(
     event: NativeSyntheticEvent<{ layout?: { width?: number; height?: number } }>,
   ): void {
+    this.layout = event.nativeEvent?.layout ?? this.layout;
     this.list.measureRow(this.row(), event.nativeEvent?.layout);
   }
 }

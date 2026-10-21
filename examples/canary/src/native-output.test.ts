@@ -13,7 +13,14 @@
  */
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { Router, type Route } from '@angular/router';
+import {
+  NavigationCancel,
+  NavigationEnd,
+  NavigationError,
+  NavigationSkipped,
+  Router,
+  type Route,
+} from '@angular/router';
 import { Engine, styleSheetOf, type StyleSheet } from '@ng-native/fabric';
 import { cleanup, render, settle, type FakeFabricNode } from '@ng-native/testing';
 import { afterEach, test, vi } from 'vitest';
@@ -92,6 +99,28 @@ async function tailwind(): Promise<StyleSheet | null> {
   }
 }
 
+/**
+ * Once the router has no navigation in flight. The first one, to the home screen, loads it with
+ * `import()`, which `settle()` does not wait for: on a busy machine it lands after, and one side
+ * writes the home screen without its stack screen.
+ */
+async function routed(router: Router): Promise<void> {
+  const ended = (event: unknown) =>
+    event instanceof NavigationEnd ||
+    event instanceof NavigationCancel ||
+    event instanceof NavigationError ||
+    event instanceof NavigationSkipped;
+  while (router.currentNavigation()) {
+    await new Promise<void>((resolve) => {
+      const subscription = router.events.subscribe((event) => {
+        if (!ended(event)) return;
+        subscription.unsubscribe();
+        resolve();
+      });
+    });
+  }
+}
+
 afterEach(() => {
   cleanup();
   vi.useRealTimers();
@@ -123,8 +152,10 @@ for (const url of urls(routes).filter((each) => !(each in SKIPPED))) {
       const global = styleSheetOf(GlobalStyles);
       if (global) engine.addGlobalSheet(global);
       if (sheet) engine.addGlobalSheet(sheet);
+      const router = app.componentRef.injector.get(Router);
+      await routed(router);
       await settle();
-      if (url) await app.componentRef.injector.get(Router).navigateByUrl(`/${url}`);
+      if (url) await router.navigateByUrl(`/${url}`);
       await settle();
       record({ views: app.fabric.committed.map(plain) });
     } catch (error) {

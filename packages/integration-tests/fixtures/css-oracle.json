@@ -1713,6 +1713,94 @@
     }
   },
   {
+    "name": "an inline padding is over a padding-top in a rule",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "padding-top": "10px"
+    }
+  },
+  {
+    "name": "an inline padding is under a padding-top a rule marks important",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "padding-top": "4px"
+    }
+  },
+  {
+    "name": "an inline padding-top is over an inline padding before it",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "padding-top": "2px"
+    }
+  },
+  {
+    "name": "an inline margin is over a margin-top in a rule",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "margin-top": "10px"
+    }
+  },
+  {
+    "name": "an inline inset is over a top in a rule",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "top": "10px"
+    }
+  },
+  {
+    "name": "an inline gap is over a row-gap in a rule",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "row-gap": "10px"
+    }
+  },
+  {
+    "name": "an inline border-width is over a border-top-width in a rule",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "border-top-width": "10px"
+    }
+  },
+  {
+    "name": "an inline border-color is over a border-top-color in a rule",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "border-top-color": "rgb(0, 0, 255)"
+    }
+  },
+  {
+    "name": "an inline border-radius is over a border-top-left-radius in a rule",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "border-top-left-radius": "10px"
+    }
+  },
+  {
+    "name": "an inline padding-inline is over a padding-left in a rule",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "padding-left": "10px"
+    }
+  },
+  {
+    "name": "an inline padding is over a padding-inline-end on the left, right to left",
+    "expected": {
+      "color": "rgb(0, 0, 0)",
+      "background-color": "rgba(0, 0, 0, 0)",
+      "padding-left": "10px"
+    }
+  },
+  {
     "name": "background: var() of a colour token is the background colour",
     "expected": {
       "color": "rgb(0, 0, 0)",

@@ -41,6 +41,11 @@ scroll view's width with nothing to scroll to, which looks exactly like a horizo
 that simply does not have enough in it to scroll - `horizontal` handles both, so this only matters
 if something is overriding the content container's own layout.
 
+On Android a horizontal scroll view is a different native view from a vertical one, as it is in
+React Native, and so is the view that holds its content. Changing `horizontal` after the scroll
+view is on screen makes it again, with everything in it, so its scroll position starts over. iOS
+has one scroll view for both axes and changes it in place.
+
 ## Keyboard taps
 
 `keyboardShouldPersistTaps` controls what a tap elsewhere in the scroll view does while a

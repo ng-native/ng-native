@@ -81,13 +81,14 @@ describe('a font face url', () => {
 
 describe('a shorthand with one value native cannot take', () => {
   it('drops the whole declaration, as its warning says, not all but its first side', () => {
-    const { sheet, warnings } = sheetOf('.a { padding: 8px calc(50% - 10px) }');
+    // A `calc()` of a share and points is a value the engine works out; `anchor-size()` is not.
+    const { sheet, warnings } = sheetOf('.a { padding: 8px anchor-size(width) }');
     assert.match(warnings.join('\n'), /dropped 'padding'/);
     assert.doesNotMatch(sheet, /paddingTop/, 'no side of a dropped shorthand is applied');
   });
 
   it('leaves no unresolved marker in the declarations of a dropped inset', () => {
-    const { sheet, warnings } = sheetOf('.a { inset: 0 10vw calc(100% - 40px) }');
+    const { sheet, warnings } = sheetOf('.a { inset: 0 10vw anchor(top) }');
     assert.match(warnings.join('\n'), /dropped 'inset'/);
     assert.doesNotMatch(sheet, /"declarations":\{[^}]*__defer/);
     assert.doesNotMatch(sheet, /"top":0/);

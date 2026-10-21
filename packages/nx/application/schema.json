@@ -8,7 +8,10 @@
     "directory": {
       "type": "string",
       "description": "Where the app goes, relative to the workspace root: apps/mobile.",
-      "$default": { "$source": "argv", "index": 0 },
+      "$default": {
+        "$source": "argv",
+        "index": 0
+      },
       "x-prompt": "Which directory should the app be created in?"
     },
     "name": {
@@ -23,6 +26,12 @@
     "tags": {
       "type": "string",
       "description": "Comma-separated tags for the project."
+    },
+    "linter": {
+      "type": "string",
+      "description": "eslint adds an eslint.config.mjs with @ng-native/eslint-plugin's recommended rules, its dependencies and a lint target.",
+      "enum": ["eslint", "none"],
+      "default": "none"
     },
     "skipInstall": {
       "type": "boolean",
