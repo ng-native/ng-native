@@ -100,6 +100,11 @@ own sources, relative to the project. A library written for native is left out o
 its columns. The transformer's cache version changes with both lists, so a file transformed before
 a list changed is transformed again.
 
+`withWebCompat` also gives the window its `addEventListener`, `removeEventListener` and
+`dispatchEvent` before any module runs, for a library that adds a listener as it loads, as the
+CDK does to learn whether one can be passive. What they are given is handed to the window once an
+app is up, so such a library can be imported anywhere in the app, not only on a lazy route.
+
 The same options go to Vitest, as a Vite plugin beside `ngNative()`:
 
 ```ts

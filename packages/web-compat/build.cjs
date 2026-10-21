@@ -67,12 +67,21 @@ function withWebCompat(config, options) {
   const join = (version) => [version, named].filter(Boolean).join('-');
   // In Metro's own version too, which every transformer's cache key starts from: a transformer
   // of the app's own need not read the one the preset's transformer hashes.
+  // The window's listeners, before any module runs: a library adds one as its modules load,
+  // before an app is up to ask for them. See `before-modules.js`.
+  const polyfills = config.serializer?.getPolyfills;
   return {
     ...config,
     cacheVersion: join(config.cacheVersion),
     transformer: { ...config.transformer, cacheVersion: join(config.transformer?.cacheVersion) },
+    serializer: {
+      ...config.serializer,
+      getPolyfills: (options) => [...(polyfills?.(options) ?? []), BEFORE_MODULES],
+    },
   };
 }
+
+const BEFORE_MODULES = path.join(__dirname, 'before-modules.js');
 
 /** The same for Vitest, as a Vite plugin: `plugins: [ngNative(), webCompat({ libraries })]`. */
 function webCompat(options) {

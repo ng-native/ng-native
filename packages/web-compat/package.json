@@ -101,6 +101,7 @@
   },
   "files": [
     "dist",
+    "before-modules.js",
     "build.cjs",
     "build.d.cts"
   ]

@@ -142,6 +142,11 @@ module.exports = withWebCompat(config, {
 `libraries` are npm packages. `sources` are directories of the app's own sources, relative to the
 project. Every other component in the app stays the native view it is.
 
+`withWebCompat` also gives the window its `addEventListener`, `removeEventListener` and
+`dispatchEvent` before any module runs, for a library that adds a listener as it loads, as the
+CDK does to learn whether one can be passive. What they are given is handed to the window once an
+app is up, so such a library can be imported anywhere in the app, not only on a lazy route.
+
 ## A library that asks whether it is in a browser
 
 Angular's `PLATFORM_ID` is `native` on a device, and some libraries open an overlay or measure

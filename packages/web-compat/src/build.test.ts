@@ -52,6 +52,19 @@ describe("a library's sheets read as a browser reads them, asked for by the buil
     );
   });
 
+  it('has Metro give the window its listeners before any module runs', () => {
+    const first = () => ['/rn/console.js'];
+    const config = withWebCompat({ serializer: { getPolyfills: first } }, WEB) as unknown as {
+      serializer: { getPolyfills(options: unknown): string[] };
+    };
+    const polyfills = config.serializer.getPolyfills({ platform: 'ios' });
+    assert.equal(polyfills[0], '/rn/console.js');
+    assert.equal(polyfills.at(-1), path.join(import.meta.dirname, '..', 'before-modules.js'));
+    // And with no polyfills of the config's own.
+    const bare = withWebCompat({}, WEB) as unknown as typeof config;
+    assert.deepEqual(bare.serializer.getPolyfills({}), [polyfills.at(-1)]);
+  });
+
   it('is asked of Vitest', () => {
     const plugin = webCompat({ libraries: ['@a/web'], sources: ['/abs/ui'] });
     assert.equal(process.env[LIBRARIES], '@a/web');

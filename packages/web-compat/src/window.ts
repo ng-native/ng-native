@@ -222,14 +222,47 @@ const GLOBALS: Readonly<Record<string, unknown>> = {
   IntersectionObserverEntry,
 };
 
+/** The window's listening, which `before-modules.js` stands in for before any module runs. */
+const LISTENING = ['addEventListener', 'removeEventListener', 'dispatchEvent'] as const;
+
+interface StandIns {
+  addEventListener(type: string, listener: unknown, options?: unknown): void;
+  removeEventListener(type: string, listener: unknown, options?: unknown): void;
+  dispatchEvent(event: unknown): boolean;
+  readonly kept: { type: string; listener: unknown; options: unknown }[];
+}
+
+/** The stand-ins Metro put in, taken out for the window's own to go in. */
+function takeStandIns(target: Record<string, unknown>): StandIns | undefined {
+  const standIns = (target['addEventListener'] as { standIns?: StandIns } | undefined)?.standIns;
+  if (standIns) for (const name of LISTENING) delete target[name];
+  return standIns;
+}
+
+/** What a library gave the stand-ins as it loaded, given to the window's own listeners. */
+function handOver(standIns: StandIns | undefined, target: Record<string, unknown>): void {
+  const listen = target['addEventListener'] as StandIns['addEventListener'];
+  for (const { type, listener, options } of standIns?.kept ?? []) listen(type, listener, options);
+}
+
+/** The stand-ins back, once the window's own have gone, for a later app to be handed. */
+function giveBack(standIns: StandIns | undefined, target: Record<string, unknown>): void {
+  if (standIns) for (const name of LISTENING) target[name] ??= standIns[name];
+}
+
 /**
  * Define the globals above that the runtime does not have, and answer what removes them again.
  * One the runtime has is left alone: React Native's own `requestAnimationFrame`, a test's jsdom.
  */
 export function installWindow(): () => void {
   const target = globalThis as Record<string, unknown>;
+  // The stand-ins Metro put in before any module ran, and what a library gave them as it loaded:
+  // see `before-modules.js`. The window's own go in over them, are handed what they kept, and
+  // give them back after.
+  const standIns = takeStandIns(target);
   const added = Object.keys(GLOBALS).filter((name) => typeof target[name] === 'undefined');
   for (const name of added) target[name] = GLOBALS[name];
+  handOver(standIns, target);
   // Over the one the Metro preset's polyfill has, which answers nothing: an animation library
   // asks it for a custom property, and a component library for what it just wrote.
   const computed = target['getComputedStyle'];
@@ -264,6 +297,7 @@ export function installWindow(): () => void {
     }
     watchOthersWith(undefined);
     for (const name of added) if (target[name] === GLOBALS[name]) delete target[name];
+    giveBack(standIns, target);
     for (const name of sized) delete target[name];
     // What was added with them goes with them, as a page's listeners go with its window.
     unlistenAll(globalThis);
