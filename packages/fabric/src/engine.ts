@@ -766,6 +766,8 @@ export interface EngineNode extends HostNode {
    * keeps it for the dismissal animation. See `Engine.withheld`.
    */
   presented?: true;
+  /** Committed and not to be seen or touched yet: see `Engine.hold`. */
+  held?: true;
   /** This node's own props changed. */
   propsDirty: boolean;
   /** This node's child list changed. */
@@ -5811,6 +5813,7 @@ const ENGINE_NODE_FIELDS = {
   oneWord: true,
   raised: true,
   presented: true,
+  held: true,
   propsDirty: true,
   structureDirty: true,
   subtreeDirty: true,
@@ -7138,6 +7141,20 @@ export class Engine implements HostEngine {
     if (HOISTS[name]) this.hoisted.add(node);
     if (this.generated !== null) this.generate(node);
     return node;
+  }
+
+  /**
+   * Commit a node without it being seen or touched, or let it be again. A browser paints nothing
+   * until a task and its animation frame are over, and native draws each commit as it comes: what
+   * a library inserts, measures and only then styles is held for the frame between. Over every
+   * opacity and `pointerEvents` it has, an eased one included, which it is committed with again
+   * once let go. Nothing it matches changes, so nothing is styled again.
+   */
+  hold(node: EngineNode, held: boolean): void {
+    if ((node.held === true) === held) return;
+    if (held) node.held = true;
+    else delete node.held;
+    this.markProps(node, false);
   }
 
   addClass(node: EngineNode, name: string): void {
@@ -10983,8 +11000,12 @@ export class Engine implements HostEngine {
    * return fresh objects, so diffing their output would re-send every image and shadow on every
    * unrelated change.
    */
-  /** What a touch on an element that keeps a drag holds off, while it lasts: see `holdSwipe`. */
+  /**
+   * What a touch on an element that keeps a drag holds off, while it lasts (see `holdSwipe`), and
+   * a node held unseen (see `hold`).
+   */
   private heldFor(node: EngineNode, merged: Record<string, unknown>): void {
+    if (node.held) Object.assign(merged, UNSEEN);
     if (node === this.swipeHeld) merged['gestureResponseDistance'] = NO_SWIPE;
     if (this.scrollHeld.size && this.scrollHeld.has(node)) merged['scrollEnabled'] = false;
   }
