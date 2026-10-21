@@ -27,7 +27,7 @@ import { createRequire } from 'node:module';
 import { execFileSync } from 'node:child_process';
 import { mkdtempSync, writeFileSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { Type } from '@angular/core';
 import { render, screen } from '@ng-native/testing';
@@ -36,6 +36,9 @@ import { compileFixture } from './compile.ts';
 
 const require = createRequire(import.meta.url);
 const { compileCss } = require('@ng-native/metro/css/compile.cjs');
+// `npx` is `npx.cmd` on Windows, which `execFileSync` cannot start on its own, and the CLI is a
+// Node script: run it with the Node already running this test.
+const CLI = join(dirname(require.resolve('@tailwindcss/cli/package.json')), 'dist/index.mjs');
 
 /**
  * A theme in the shape an app writes one: the tokens in `:root` and `.dark`, each block setting
@@ -88,7 +91,7 @@ function buildTheme(): string {
     ].join('\n'),
   );
   try {
-    execFileSync('npx', ['@tailwindcss/cli', '-i', entry, '-o', out], { cwd: dir, stdio: 'pipe' });
+    execFileSync(process.execPath, [CLI, '-i', entry, '-o', out], { cwd: dir, stdio: 'pipe' });
     return readFileSync(out, 'utf8');
   } finally {
     rmSync(entry, { force: true });

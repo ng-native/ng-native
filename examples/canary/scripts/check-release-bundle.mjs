@@ -5,11 +5,15 @@
  */
 import { execFileSync } from 'node:child_process';
 import { mkdtempSync, readdirSync, readFileSync, rmSync } from 'node:fs';
+import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 
 const APP = path.resolve(import.meta.dirname, '..');
 const PLATFORM = process.argv[2] ?? 'ios';
+// `npx` is `npx.cmd` on Windows, which `execFileSync` cannot start on its own. Expo's CLI is a
+// Node script, so run it with the Node already running this one.
+const EXPO = createRequire(import.meta.url).resolve('expo/bin/cli');
 
 // Identifiers that exist only in @angular/compiler. Plain "@angular/compiler" is no good as a
 // probe: it appears as error-message text inside @angular/core.
@@ -32,10 +36,11 @@ const check = (ok, message) => {
 try {
   // --clear because Metro keys its cache on the transformer, and a release check that reuses
   // whatever the dev server left behind is not checking the release build.
-  execFileSync('npx', ['expo', 'export', '--clear', '--platform', PLATFORM, '--output-dir', out], {
-    cwd: APP,
-    stdio: 'inherit',
-  });
+  execFileSync(
+    process.execPath,
+    [EXPO, 'export', '--clear', '--platform', PLATFORM, '--output-dir', out],
+    { cwd: APP, stdio: 'inherit' },
+  );
 
   const dir = path.join(out, '_expo/static/js', PLATFORM);
   const bundle = readdirSync(dir).find((file) => file.endsWith('.hbc') || file.endsWith('.js'));
