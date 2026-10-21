@@ -155,11 +155,26 @@ export function defaultsOf(node: EngineNode, engine: Engine): Record<string, unk
  * Give an element what `defaultsOf` says, where it says anything: one made, and a copy
  * `cloneNode` makes, which is given it by its name and not by what the element has now: a
  * field's and a select's own defaults are added to it.
+ *
+ * And whether a browser lays it out inline: one of HTML's that is no block, a span, a label, a
+ * button or a field, always; a library's custom element until it holds a block. The engine sets
+ * what such an element holds on its line, and gives it a line in the block it is in (see
+ * `setInline`). A custom element that is a flex item is laid out the same way inside, as a
+ * browser makes it a block there.
  */
 export function giveDefaults(node: EngineNode, engine: Engine): void {
   const style = defaultsOf(node, engine);
-  if (style) engine.setDefaultStyle(node, style);
+  if (!style) return;
+  engine.setDefaultStyle(node, style);
+  if (node.tag.includes('-')) engine.setInline(node, 'unless-block');
+  else if (style !== BLOCK && !NOT_INLINE.has(node.tag)) engine.setInline(node, 'always');
 }
+
+/** HTML's elements that are no block and not inline either: a table's, and what is not drawn. */
+const NOT_INLINE = new Set([
+  ...['table', 'caption', 'thead', 'tbody', 'tfoot', 'tr', 'th', 'td'],
+  ...UNDRAWN,
+]);
 
 /**
  * Have an element made in an app that asked for this package scroll what overflows it where its
