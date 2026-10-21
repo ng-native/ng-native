@@ -262,13 +262,23 @@ a page written right to left too, and a date's or a time's `valueAsNumber` is `N
   path. A curve, a relative command, a path that turns back so often that no run is long, or one
   under a rotation or a skew, or in a drawing whose width is not in points, is drawn as written.
   A long line a `<canvas>` draws is thinned the same way, each time it is drawn again.
+- A shape with a listener for a touch, a click, a pointer or the mouse takes the touch, as does
+  every shape in a group or a drawing with one, for as long as the listener is there.
+- A touch native finds no shape for, as one between the letters of a text, is on the text,
+  rectangle, circle or ellipse whose box is under the finger, in a shape that listens.
+- A touch on a shape sends `mouseover` to it and `mouseenter` to it and what it is in, after the
+  touch events and not for a touch a listener cancels, as a phone's browser sends the mouse events
+  of a tap: a chart shows a series' tooltip. The mouse stays there as the finger lifts, and goes
+  `mouseout` and `mouseleave` when a finger comes down on another shape or anywhere else.
 
 Gaps: without react-native-svg's native views a drawing shows nothing, as an icon does. A
 stylesheet's attribute selector does not match a drawing's attributes: `svg[width="16"]` matches
 nothing. A marker is drawn from the `marker-start`, `marker-mid` and `marker-end` attributes, not
 from a style. A filter draws its drop shadow and its blur; each other step passes on what it
 is given. A paint written as `var()` is not followed to its token. `getBBox` does not follow a
-rotation or a skew, and a curve's box includes its handles.
+rotation or a skew, and a curve's box includes its handles. A path native finds no touch on is
+not found by its box, and the mouse a touch is goes over a drawing's shapes only, not over other
+elements.
 
 ## Images
 

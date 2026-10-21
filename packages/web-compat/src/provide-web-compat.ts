@@ -18,7 +18,7 @@ import { loadFramesWith, type FrameLoader } from './frame.ts';
 import { registerFrameViews, showFramesAs, type FrameMode } from './frame-view.ts';
 import { StillLocation } from './location.ts';
 import { detectedRoot, installLocation, openPage } from './page-address.ts';
-import { webListen } from './listen.ts';
+import { touchTarget, webListen } from './listen.ts';
 import { registerCanvas } from './canvas.ts';
 import { registerImage } from './image.ts';
 import { attributeMembers } from './attribute-members.ts';
@@ -227,8 +227,11 @@ export function provideWebCompat(options: WebCompatOptions = {}): EnvironmentPro
       const forgetPicker = pickWith(engine, injector);
       // An element a library moves while a finger is on it keeps its touch: see `Engine`.
       engine.holdMovesUnderFinger(true);
+      // A touch on a drawing is on the shape a browser finds under the finger: see `listen.ts`.
+      engine.setTouchTarget(touchTarget(engine));
       inject(DestroyRef).onDestroy(() => {
         engine.holdMovesUnderFinger(false);
+        engine.setTouchTarget(null);
         forgetPicker();
         closePage();
         forgetFrameMode();

@@ -86,7 +86,11 @@ Experimental and partial. It has:
   no area. Its elements have SVG's names
   and namespace, `className` as an object with `baseVal`, `getBBox`, `getComputedTextLength`,
   `ownerSVGElement` and `createSVGRect`, and a paint that names a token is the token's colour.
-  `@ng-native/icons` is a peer dependency for this. The app installs `react-native-svg` for the
+  A shape with a listener for a touch, or in a group or a drawing with one, takes the touch; a
+  touch native finds no shape for, as between the letters of a text, is on the text, rectangle,
+  circle or ellipse whose box is under the finger; and a touch on a shape sends `mouseover` and
+  `mouseenter`, and `mouseout` and `mouseleave` for the shape before, as a phone's browser does,
+  so a chart shows a series' tooltip. `@ng-native/icons` is a peer dependency for this. The app installs `react-native-svg` for the
   native views; none of its JavaScript is imported, and without it a drawing shows nothing, as
   an icon does. A `<path>` of thousands of straight segments that go one way across, a chart's
   line series, is drawn thinned to the lowest and highest point of each point-wide column, as

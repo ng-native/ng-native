@@ -43,6 +43,9 @@ import { setFrameView } from './frame-view.ts';
 import { keepTaken } from './node-members.ts';
 import { setSvg, stopChanged, svgInserted, svgNamed, wordsInSpans } from './svg.ts';
 import { styleShape } from './svg-box.ts';
+import { shapeUnder } from './svg-hit.ts';
+import { hoverElsewhere, hoverTouched } from './svg-hover.ts';
+import { isDrawn, shapeInserted, takesTouches } from './svg-touch.ts';
 import {
   columnsSpanned,
   rowsSpanned,
@@ -212,6 +215,7 @@ export const webListen: RendererExtension = {
     tableInserted(node, engine);
     // A screen made apart, or what holds one: the window starts under its header.
     putInPage(engine);
+    shapeInserted(node, parent, engine);
   },
   removed(node, engine) {
     optionRemoved(node, engine);
@@ -308,7 +312,47 @@ export function listenNatively(
   if (anywhere || target === document.body || target === (document as unknown)) {
     return listenAnywhere(engine, eventName, callback);
   }
-  return listenOn(engine, target, eventName, callback);
+  if (!TOUCHED.has(eventName) || !isDrawn(target))
+    return listenOn(engine, target, eventName, callback);
+  // A shape, or a drawing, with a listener for a touch takes one: see `svg-touch.ts`.
+  const stop =
+    listenOn(engine, target, eventName, callback) ??
+    engine.setEventListener(target, topLevel(eventName), callback);
+  const taken = takesTouches(target, engine);
+  return () => {
+    taken();
+    stop();
+  };
+}
+
+/** What a listener listens to that a touch on a shape is told as. */
+const TOUCHED = new Set([
+  ...['click', 'contextmenu', 'pointerdown', 'pointermove', 'pointerup', 'pointercancel'],
+  ...['touchstart', 'touchmove', 'touchend', 'touchcancel', 'mousedown', 'mouseup'],
+  ...['mouseover', 'mouseout', 'mouseenter', 'mouseleave'],
+]);
+
+/**
+ * Where a touch that starts on a drawing, or on a shape in one, is taken to be: the shape under
+ * the finger that listens, found by the boxes shapes are drawn in, as a browser finds a text by
+ * its letters' boxes and native by their ink. See `shapeUnder`. The mouse goes over what it is
+ * taken to be on once every listener has heard the touch start, as a browser sends the mouse
+ * events of a tap after its touch events, and goes nowhere for a touch a listener cancels: see
+ * `svg-hover.ts`.
+ */
+export function touchTarget(engine: Engine): (target: EngineNode, event: unknown) => EngineNode {
+  return (target, event) => {
+    const { x, y } = pointOf({ nativeEvent: event });
+    const drawn = isDrawn(target);
+    const taken = (drawn && shapeUnder(target, x, y)) || target;
+    queueMicrotask(() => {
+      if (cancelled.has(event as object)) return;
+      const at = { clientX: x, clientY: y, pageX: x, pageY: y, screenX: x, screenY: y };
+      if (drawn) hoverTouched(engine, taken, at);
+      else hoverElsewhere(engine, taken, at);
+    });
+    return taken;
+  };
 }
 
 /**
