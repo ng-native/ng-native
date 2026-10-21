@@ -22,6 +22,7 @@ import {
 import { asMouse } from './mouse-after-touch.ts';
 import { madeByScript } from './html-tree.ts';
 import { elementsUnder } from './element-tree.ts';
+import { elementFromPoint, elementsFromPoint } from './hit-test.ts';
 import { descendants } from './in-document.ts';
 import { baseUrl, locationOf, pageUrl } from './page-address.ts';
 import { delivering, touchFields } from './listen.ts';
@@ -527,6 +528,9 @@ export function documentFor(engine: Engine): CompatDocument {
     // Walked as they are asked: see `traversal.ts`.
     createTreeWalker,
     createNodeIterator,
+    // What is drawn at a point of the window: see `hit-test.ts`.
+    elementFromPoint: (...point: unknown[]) => elementFromPoint(engine, body, point),
+    elementsFromPoint: (...point: unknown[]) => elementsFromPoint(engine, body, point),
     getElementById(id: unknown) {
       const wanted = String(id);
       for (const node of everything()) if (node.props['nativeID'] === wanted) return node;

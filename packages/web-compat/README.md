@@ -37,7 +37,9 @@ Experimental and partial. It has:
   drawn, a `hidden` element drawn as `display: none`, and `CSS.escape` and `CSS.supports`.
 - Geometry: `getBoundingClientRect` and `getClientRects` as `DOMRect`s, `offsetParent` and the
   `offset`, `client` and `scroll` sizes and positions, each read from where native last laid the
-  element out with what is pending committed first.
+  element out with what is pending committed first. `document.elementFromPoint` and
+  `elementsFromPoint` answer the element drawn at a point, passing over `pointer-events: none` and
+  `display: none`.
 - Scrolling: an element whose style says `overflow: auto` or `scroll` scrolls what overflows it,
   with `scrollTop` and `scrollLeft` to read and write, `scroll`, `scrollTo`, `scrollBy` and
   `scrollIntoView`. The window does not scroll, and `document.scrollingElement` is its root.

@@ -14,7 +14,7 @@ dom/traversal                                                                  1
 html/dom                                                                       209        56 (26.8%)   168            63898            64451  99.1%
 html/editing/the-hidden-attribute                                              10         2 (20.0%)    15             20               42     47.6%
 html/interaction/focus/sequential-focus-navigation-and-the-tabindex-attribute  3          1 (33.3%)    4              8                10     80.0%
-css/cssom-view                                                                 220        48 (21.8%)   27             693              1713   40.5%
+css/cssom-view                                                                 220        52 (23.6%)   27             713              1714   41.6%
 resize-observer                                                                32         7 (21.9%)    7              16               48     33.3%
 intersection-observer                                                          137        29 (21.2%)   17             147              337    43.6%
 domparsing                                                                     68         21 (30.9%)   20             614              1856   33.1%
@@ -37,7 +37,7 @@ dom/traversal: OK 18
 html/dom: ERROR 45, OK 153, TIMEOUT 11
 html/editing/the-hidden-attribute: OK 5, TIMEOUT 5
 html/interaction/focus/sequential-focus-navigation-and-the-tabindex-attribute: ERROR 1, OK 2
-css/cssom-view: ERROR 17, OK 188, TIMEOUT 15
+css/cssom-view: ERROR 16, OK 189, TIMEOUT 15
 resize-observer: ERROR 1, OK 24, TIMEOUT 7
 intersection-observer: ERROR 14, OK 119, TIMEOUT 4
 domparsing: ERROR 9, OK 56, TIMEOUT 3
