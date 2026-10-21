@@ -88,12 +88,13 @@ function nativeView(): true {
   host: {
     '[matchContentsVertical]': 'matchVertical()',
     '[matchContentsHorizontal]': 'matchHorizontal()',
-    '[ignoreSafeArea]': 'ignoreSafeArea()',
+    '[ignoreSafeArea]': 'android ? undefined : ignoreSafeArea()',
     '[useViewportSizeMeasurement]': 'useViewportSizeMeasurement()',
   },
 })
 export class UiHost {
   protected readonly nativeView = nativeView();
+  protected readonly android = nativePlatform() === 'android';
   readonly matchContents = input<
     boolean | { readonly vertical?: boolean; readonly horizontal?: boolean }
   >();
@@ -105,6 +106,7 @@ export class UiHost {
     const match = this.matchContents();
     return typeof match === 'object' ? match.horizontal : match;
   });
+  /** The safe area SwiftUI's host ignores, iOS only: Compose's host has no such prop. */
   readonly ignoreSafeArea = input<'all' | 'keyboard' | 'container'>();
   readonly useViewportSizeMeasurement = input<boolean>(undefined, { transform: optionalBoolean });
 }
@@ -114,19 +116,24 @@ export class UiHost {
   selector: 'ui-menu',
   template: '<ng-content />',
   host: {
-    '[label]': 'label()',
-    '[systemImage]': 'systemImage()',
-    '[accessibilityLabel]': 'accessibilityLabel()',
-    '[modifiers]': 'modifiers()',
+    '[label]': 'android ? undefined : label()',
+    '[systemImage]': 'android ? undefined : systemImage()',
+    '[modifiers]': 'android ? modifiers() : resolvedModifiers()',
   },
 })
 export class UiMenu {
   protected readonly nativeView = nativeView();
+  protected readonly android = nativePlatform() === 'android';
   readonly label = input<string>();
   /** An SF Symbol name. */
   readonly systemImage = input<string>();
+  /** What VoiceOver reads for the menu's trigger: SwiftUI's `accessibilityLabel` modifier. */
   readonly accessibilityLabel = input<string>();
   readonly modifiers = input<readonly UiModifier[]>();
+
+  protected readonly resolvedModifiers = computed(() =>
+    withModifiers(this.modifiers(), spokenLabel(this.accessibilityLabel())),
+  );
 }
 
 /**
@@ -143,13 +150,18 @@ export class UiMenu {
   selector: 'ui-view-host',
   template: '<ng-content />',
   host: {
+    // `@expo/ui` to 57.0.22 reads `matchContents`, and from 57.0.23 one prop for each axis.
     '[matchContents]': 'matchContents()',
+    '[matchContentsHorizontal]': 'matchContents()',
+    '[matchContentsVertical]': 'matchContents()',
     '[expoInternalSizeFromChildren]': 'matchContents()',
     '[layoutRoot]': 'layoutRoot()',
-    '[modifiers]': 'modifiers()',
+    // SwiftUI's view host takes no modifiers; Compose's does.
+    '[modifiers]': 'android ? modifiers() : undefined',
   },
 })
 export class UiViewHost {
+  protected readonly android = nativePlatform() === 'android';
   protected readonly nativeView = nativeView();
   readonly matchContents = input<boolean>(undefined, { transform: optionalBoolean });
   /**
@@ -157,6 +169,7 @@ export class UiViewHost {
    * delivers its touches: it then takes them itself, and is measured from itself.
    */
   readonly layoutRoot = input<boolean>(undefined, { transform: optionalBoolean });
+  /** Compose's modifiers for the view host, Android only: SwiftUI's view host takes none. */
   readonly modifiers = input<readonly UiModifier[]>();
 }
 
@@ -193,10 +206,9 @@ export class UiContextMenu {
     <ng-content />`,
   host: {
     '(buttonPressed)': 'android && buttonPress.emit($event)',
-    '[label]': 'label()',
-    '[systemImage]': 'systemImage()',
-    '[role]': 'role()',
-    '[target]': 'target()',
+    '[label]': 'android ? undefined : label()',
+    '[systemImage]': 'android ? undefined : systemImage()',
+    '[role]': 'android ? undefined : role()',
     '[modifiers]': 'modifiers()',
   },
 })
@@ -209,7 +221,8 @@ export class UiButton {
   readonly role = input<'default' | 'cancel' | 'destructive' | 'close'>();
   /**
    * In a home-screen widget's or a Live Activity's layout, what a tap on it hands the app: see
-   * `@ng-native/expo/widget` and `@ng-native/expo/live-activity`.
+   * `@ng-native/expo/widget` and `@ng-native/expo/live-activity`. The layout's build reads it, so
+   * an app's own button is not sent it: `@expo/ui`'s button there has no target.
    */
   readonly target = input<string>();
   readonly modifiers = input<readonly UiModifier[]>();
@@ -238,13 +251,14 @@ export class UiDivider {
   host: {
     '[name]': 'android ? undefined : name()',
     '[slotName]': 'android ? name() : undefined',
-    '[extraProps]': 'extraProps()',
+    '[extraProps]': 'android ? undefined : extraProps()',
   },
 })
 export class UiSlot {
   protected readonly nativeView = nativeView();
   protected readonly android = nativePlatform() === 'android';
   readonly name = input.required<string>();
+  /** What the slot tells its SwiftUI parent about itself, iOS only. */
   readonly extraProps = input<Readonly<Record<string, unknown>>>();
 }
 
@@ -364,22 +378,40 @@ export class UiVStack {
   selector: 'ui-image',
   template: '',
   host: {
-    '[systemName]': 'systemName()',
-    '[assetName]': 'assetName()',
-    '[uiImage]': 'uiImage()',
-    '[size]': 'size()',
-    '[color]': 'color()',
-    '[modifiers]': 'modifiers()',
+    '[systemName]': 'android ? undefined : systemName()',
+    '[assetName]': 'android ? undefined : assetName()',
+    '[uiImage]': 'android ? undefined : uiImage()',
+    '[modifiers]': 'android ? modifiers() : resolvedModifiers()',
   },
 })
 export class UiImage {
   protected readonly nativeView = nativeView();
+  /** Compose's image is another control, which takes a `source`: none of these are its. */
+  protected readonly android = nativePlatform() === 'android';
   readonly systemName = input<string>();
   readonly assetName = input<string>();
   readonly uiImage = input<string>();
+  /**
+   * A symbol's size in points, as a `font` modifier of that size, which does not scale with
+   * Dynamic Type. A `font` modifier in `modifiers` wins over it. Without either, the symbol is
+   * SwiftUI's default size, where `@expo/ui`'s own `Image` and a widget layout draw it at 24.
+   */
   readonly size = input<number>(undefined, { transform: optionalNumber });
+  /** A symbol's colour, as a `foregroundStyle` modifier. */
   readonly color = input<string>();
   readonly modifiers = input<readonly UiModifier[]>();
+
+  /** SwiftUI's image reads neither `size` nor `color`: `@expo/ui`'s `Image` makes them modifiers. */
+  protected readonly resolvedModifiers = computed(() => {
+    const modifiers = this.modifiers();
+    const size = this.size();
+    const hasFont = modifiers?.some((modifier) => modifier.$type === 'font');
+    return withModifiers(
+      modifiers,
+      size !== undefined && !hasFont && { $type: 'font', size },
+      foregroundColor(this.color()),
+    );
+  });
 }
 
 /** A moment: a `Date`, milliseconds since the epoch, or a string `Date` reads. */
@@ -449,7 +481,7 @@ export type UiDateChangeEvent = NativeSyntheticEvent<{ readonly date: number | s
  */
 function listen(event: string, handle: (payload: Record<string, unknown>) => void): void {
   const node = inject(ElementRef).nativeElement as HostNode;
-  const engine = node.host ?? inject(HostEngine);
+  const engine = node.engine ?? inject(HostEngine);
   const stop = engine.setEventListener(node, event, (raw) =>
     handle((raw as NativeSyntheticEvent<Record<string, unknown>>)?.nativeEvent ?? {}),
   );
@@ -467,6 +499,38 @@ function withNativeEvent<T>(event: NativeSyntheticEvent, nativeEvent: T): Native
     stopPropagation: () => event.stopPropagation(),
     isPropagationStopped: () => event.isPropagationStopped(),
   };
+}
+
+/**
+ * The caller's modifiers, with each modifier given added after them: what `@expo/ui`'s own
+ * components do with an input their native view reads as a modifier rather than as a prop.
+ */
+function withModifiers(
+  modifiers: readonly UiModifier[] | undefined,
+  ...added: readonly (UiModifier | false | undefined)[]
+): readonly UiModifier[] | undefined {
+  const given = added.filter((modifier): modifier is UiModifier => !!modifier);
+  return given.length ? [...(modifiers ?? []), ...given] : modifiers;
+}
+
+/**
+ * SwiftUI's `foregroundStyle` modifier in one colour, as `@expo/ui`'s `foregroundStyle(color)`.
+ * `@expo/ui` to 57.0.14 reads `styleType` and `color`, and from 57.0.15 a `style`: this sends both.
+ */
+function foregroundColor(color: string | undefined): UiModifier | undefined {
+  return color === undefined
+    ? undefined
+    : { $type: 'foregroundStyle', style: { type: 'color', color }, styleType: 'color', color };
+}
+
+/** SwiftUI's `accessibilityLabel` modifier, what VoiceOver reads for the view. */
+function spokenLabel(label: string | undefined): UiModifier | undefined {
+  return label === undefined ? undefined : { $type: 'accessibilityLabel', label };
+}
+
+/** Compose's `semantics` modifier with a `contentDescription`, what TalkBack reads for the view. */
+function contentDescription(label: string | undefined): UiModifier | undefined {
+  return label === undefined ? undefined : { $type: 'semantics', contentDescription: label };
 }
 
 /** The caller's modifiers, with SwiftUI's `disabled` added while the field is. */
@@ -495,12 +559,12 @@ function withDisabled(
   selector: 'ui-date-picker',
   template: '',
   host: {
-    '[title]': 'title()',
-    '[selection]': 'resolvedSelection()',
-    '[initialDate]': 'initialDate()',
+    '[title]': 'android ? undefined : title()',
+    '[selection]': 'android ? undefined : resolvedSelection()',
+    '[initialDate]': 'android ? initialDate() : undefined',
     '[displayedComponents]': 'resolvedComponents()',
-    '[range]': 'range()',
-    '[accessibilityLabel]': 'accessibilityLabel()',
+    '[range]': 'android ? undefined : range()',
+    '[selectableDates]': 'android ? selectableDates() : undefined',
     '[modifiers]': 'resolvedModifiers()',
   },
 })
@@ -525,8 +589,8 @@ export class UiDatePicker {
 
   private readonly android = nativePlatform() === 'android';
 
-  protected readonly resolvedSelection = computed(() =>
-    this.android ? undefined : (this.selection() ?? this.value()?.toISOString()),
+  protected readonly resolvedSelection = computed(
+    () => this.selection() ?? this.value()?.toISOString(),
   );
   /** SwiftUI takes a list of what to show, and Compose one word for it. */
   protected readonly resolvedComponents = computed(() => {
@@ -534,11 +598,25 @@ export class UiDatePicker {
     if (!this.android || !shown) return shown;
     return shown.length === 1 ? shown[0] : 'dateAndTime';
   });
-  protected readonly initialDate = computed(() =>
-    this.android ? (this.value()?.getTime() ?? null) : undefined,
-  );
+  protected readonly initialDate = computed(() => this.value()?.getTime() ?? null);
+  /** Compose takes `range` as `selectableDates`, each end in milliseconds. */
+  protected readonly selectableDates = computed(() => {
+    const range = this.range();
+    return (
+      range && { start: milliseconds(range.start) ?? null, end: milliseconds(range.end) ?? null }
+    );
+  });
+  /**
+   * SwiftUI's picker reads `disabled` and `accessibilityLabel` as modifiers, and Compose's reads
+   * `accessibilityLabel` as the `semantics` modifier's `contentDescription`.
+   */
   protected readonly resolvedModifiers = computed(() =>
-    this.android ? this.modifiers() : withDisabled(this.modifiers(), this.disabled()),
+    this.android
+      ? withModifiers(this.modifiers(), contentDescription(this.accessibilityLabel()))
+      : withModifiers(
+          withDisabled(this.modifiers(), this.disabled()),
+          spokenLabel(this.accessibilityLabel()),
+        ),
   );
 
   /**
@@ -735,7 +813,7 @@ export interface UiPickerOption {
     }
   `,
   host: {
-    '[label]': 'android ? undefined : label()',
+    '[label]': 'android ? undefined : shownLabel()',
     '[systemImage]': 'android ? undefined : systemImage()',
     '[selection]': 'android ? undefined : value()',
     '[modifiers]': 'android ? undefined : resolvedModifiers()',
@@ -771,6 +849,8 @@ export class UiPicker {
   );
 
   protected readonly android = nativePlatform() === 'android';
+  /** SwiftUI's picker view draws nothing without a label, and a segmented one never shows it. */
+  protected readonly shownLabel = computed(() => this.label() ?? '');
   /** Whether Android's dropdown is open. */
   protected readonly open = signal(false);
   /**
@@ -822,7 +902,7 @@ export type UiToggleChangeEvent = NativeSyntheticEvent<{ readonly isOn: boolean 
   host: {
     '[isOn]': 'android ? undefined : isOn()',
     '[value]': 'android ? (isOn() ?? switchedOn()) : undefined',
-    '[label]': 'label()',
+    '[label]': 'android ? undefined : label()',
     '[modifiers]': 'modifiers()',
     '(checkedChange)': 'android && checked($event)',
   },
@@ -917,19 +997,28 @@ export class UiColorPicker {
   readonly selectionChange = output<UiColorChangeEvent>();
 }
 
-/** A SwiftUI `Gauge`: `value` between `min` and `max`, drawn as `type` says. */
+/**
+ * A SwiftUI `Gauge`: `value` between `min` and `max`, drawn as `type` says, with its labels drawn as
+ * text in the slots SwiftUI reads them from, as `@expo/ui`'s `Gauge` draws them.
+ */
 @Component({
   selector: 'ui-gauge',
-  template: '<ng-content />',
+  imports: [UiSlot, UiText],
+  template: `@if (currentValueLabel() !== undefined) {
+      <ui-slot name="currentValue"><ui-text [text]="currentValueLabel()" /></ui-slot>
+    }
+    @if (minimumValueLabel() !== undefined) {
+      <ui-slot name="minimumValue"><ui-text [text]="minimumValueLabel()" /></ui-slot>
+    }
+    @if (maximumValueLabel() !== undefined) {
+      <ui-slot name="maximumValue"><ui-text [text]="maximumValueLabel()" /></ui-slot>
+    }
+    <ng-content />`,
   host: {
     '[value]': 'value()',
     '[min]': 'min()',
     '[max]': 'max()',
-    '[type]': 'type()',
-    '[currentValueLabel]': 'currentValueLabel()',
-    '[minimumValueLabel]': 'minimumValueLabel()',
-    '[maximumValueLabel]': 'maximumValueLabel()',
-    '[modifiers]': 'modifiers()',
+    '[modifiers]': 'resolvedModifiers()',
   },
 })
 export class UiGauge {
@@ -937,11 +1026,20 @@ export class UiGauge {
   readonly value = input<number>(undefined, { transform: optionalNumber });
   readonly min = input<number>(undefined, { transform: optionalNumber });
   readonly max = input<number>(undefined, { transform: optionalNumber });
+  /**
+   * How it is drawn, as the `gaugeStyle` modifier: `'automatic'`, `'circular'`,
+   * `'circularCapacity'`, `'linear'` or `'linearCapacity'`.
+   */
   readonly type = input<string>();
   readonly currentValueLabel = input<string>();
   readonly minimumValueLabel = input<string>();
   readonly maximumValueLabel = input<string>();
   readonly modifiers = input<readonly UiModifier[]>();
+
+  protected readonly resolvedModifiers = computed(() => {
+    const style = this.type();
+    return withModifiers(this.modifiers(), style !== undefined && { $type: 'gaugeStyle', style });
+  });
 }
 
 /** One point of a `ui-chart`: `x`, a label or a number, against `y`, with a colour of its own. */
@@ -1259,11 +1357,13 @@ export class UiAccessoryWidgetBackground {
 /** A SwiftUI `Label`: a title beside an SF Symbol. */
 @Component({
   selector: 'ui-label',
-  template: '',
+  imports: [UiImage, UiSlot],
+  template: `@if (iconColor(); as color) {
+    <ui-slot name="icon"><ui-image [systemName]="systemImage()" [modifiers]="[color]" /></ui-slot>
+  }`,
   host: {
     '[title]': 'title()',
     '[systemImage]': 'systemImage()',
-    '[color]': 'color()',
     '[modifiers]': 'modifiers()',
   },
 })
@@ -1272,8 +1372,17 @@ export class UiLabel {
   readonly title = input<string>();
   /** An SF Symbol name. */
   readonly systemImage = input<string>();
+  /**
+   * The colour of the symbol alone, drawn as the label's icon in that colour, since SwiftUI's
+   * label takes no colour. The `foregroundStyle` modifier colours the title too.
+   */
   readonly color = input<string>();
   readonly modifiers = input<readonly UiModifier[]>();
+
+  /** The icon's colour, when there is a symbol to draw in it. */
+  protected readonly iconColor = computed(() =>
+    this.systemImage() === undefined ? undefined : foregroundColor(this.color()),
+  );
 }
 
 /**
@@ -1320,11 +1429,19 @@ export class UiForm {
   readonly modifiers = input<readonly UiModifier[]>();
 }
 
-/** A SwiftUI `Section` of a form or a list, under `title`. */
+/**
+ * A SwiftUI `Section` of a form or a list, under `title`, iOS only. A `<ui-slot name="header">`
+ * is its header in place of a `title`, and a `<ui-slot name="footer">` is the note under its rows.
+ * When both a non-empty `title` and a header slot are set, `@expo/ui`'s `SectionView` draws the
+ * `title` and drops the slot; an empty `title` counts as unset. The slot's `name` is written as it is,
+ * not bound, as that is what picks it out of the rows.
+ */
 @Component({
   selector: 'ui-section',
   imports: [UiSlot],
-  template: '<ui-slot name="content"><ng-content /></ui-slot>',
+  template: `<ng-content select="ui-slot[name=header]" />
+    <ui-slot name="content"><ng-content /></ui-slot>
+    <ng-content select="ui-slot[name=footer]" />`,
   host: { '[title]': 'title()', '[modifiers]': 'modifiers()' },
 })
 export class UiSection {
@@ -1442,7 +1559,7 @@ export interface UiBottomSheetViewFunctions {
 /** The window's width as the engine knows it, or undefined before the platform has said. */
 function windowWidth(): Signal<number | undefined> {
   const node = inject(ElementRef).nativeElement as HostNode;
-  const engine = (node.host ?? inject(HostEngine)) as Partial<
+  const engine = (node.engine ?? inject(HostEngine)) as Partial<
     Pick<Engine, 'viewport' | 'watchViewport'>
   >;
   const read = () => engine.viewport?.width || undefined;
@@ -1544,6 +1661,7 @@ function windowWidth(): Signal<number | undefined> {
         <ui-bottom-sheet-view
           #sheet
           [showDragHandle]="showDragIndicator()"
+          [containerColor]="color()"
           [skipPartiallyExpanded]="fits()"
           (dismissRequest)="dismissRequested($event)"
         >
@@ -1616,6 +1734,13 @@ export class UiBottomSheet {
   readonly detents = input<readonly UiPresentationDetent[]>();
   /** Whether the grabber shows at the top of the sheet. */
   readonly showDragIndicator = input(true, { transform: booleanAttribute });
+  /**
+   * The colour of the sheet behind its content: SwiftUI's `presentationBackground` on iOS, where
+   * a sheet below its full height is otherwise drawn as glass, and Compose's `containerColor` on
+   * Android. Over a `background-color` the element has from CSS, which colours the sheet the same
+   * way. Neither is the sheet as the system draws it.
+   */
+  readonly backgroundColor = input<string>();
   /**
    * The sheet has finished closing, whether the user dismissed it or `open` was set false: the
    * moment another sheet or a dialog can be presented.
@@ -1692,7 +1817,26 @@ export class UiBottomSheet {
       $type: 'presentationDragIndicator',
       visibility: this.showDragIndicator() ? 'visible' : 'hidden',
     },
+    ...this.background(),
   ]);
+
+  /** The `background-color` the element has from CSS, which the sheet draws rather than it. */
+  private readonly painted = signal<unknown>(undefined);
+
+  /** The sheet's colour: the input's, or else the element's from CSS. */
+  protected readonly color = computed(() => this.backgroundColor() || this.painted() || undefined);
+
+  /**
+   * The sheet's own background, a colour converted as any colour is, where one is given. As a
+   * shape style for `@expo/ui` 57.0.17 and later, and as the plain colour the versions before it
+   * read, Expo Go's among them. Each ignores the other's field.
+   */
+  private readonly background = computed<readonly UiModifier[]>(() => {
+    const given = this.color();
+    if (given === undefined) return [];
+    const color = this.engine?.color(given) ?? given;
+    return [{ $type: 'presentationBackground', style: { type: 'color', color }, color }];
+  });
 
   /**
    * The one view a view host holds. Sized to its content it needs a width of its own, the
@@ -1711,6 +1855,9 @@ export class UiBottomSheet {
     effect(() => {
       if (!this.open()) untracked(() => this.close());
     });
+    const host = inject<ElementRef<EngineNode>>(ElementRef).nativeElement;
+    const stop = this.engine?.takePaint?.(host, (color) => this.painted.set(color));
+    if (stop) inject(DestroyRef).onDestroy(stop);
     if (this.swiftUI && !this.toolbarInBuild) {
       const warned = effect(() => {
         if (!this.toolbarItems().length) return;

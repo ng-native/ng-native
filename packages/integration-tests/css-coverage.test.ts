@@ -533,6 +533,13 @@ describe('names Fabric actually reads', () => {
     assert.throws(() => declarationsOf('vertical-align: baseline'), /baseline/);
   });
 
+  it('reads a length for vertical-align as how far over the baseline a box in a line sits', () => {
+    assert.deepEqual(declarationsOf('vertical-align: -20px'), { baselineShift: -20 });
+    assert.deepEqual(declarationsOf('vertical-align: 0'), { baselineShift: 0 });
+    assert.throws(() => declarationsOf('vertical-align: 3'), /needs a unit/);
+    assert.throws(() => declarationsOf('vertical-align: 37%'), /keyword/);
+  });
+
   it('reads user-select as whether the text is selectable', () => {
     assert.deepEqual(declarationsOf('user-select: none'), { selectable: false });
     assert.deepEqual(declarationsOf('user-select: text'), { selectable: true });

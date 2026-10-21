@@ -119,6 +119,33 @@ describe('in an integrated workspace', () => {
     assert.equal(project.targets?.test?.options.cwd, 'apps/mobile');
   });
 
+  it('adds no linting unless asked', async () => {
+    const tree = integrated();
+    await generate(tree, { directory: 'apps/mobile' });
+    assert.equal(readProjectConfiguration(tree, 'mobile').targets?.lint, undefined);
+    assert.equal(tree.exists('apps/mobile/eslint.config.mjs'), false);
+    const { devDependencies } = readJson(tree, 'package.json');
+    for (const name of Object.keys(native.lintDevDependencies)) {
+      assert.equal(devDependencies?.[name], undefined, name);
+    }
+  });
+
+  it("with --linter=eslint, lints with the app's own ESLint config", async () => {
+    const tree = integrated();
+    await generate(tree, { directory: 'apps/mobile', linter: 'eslint' });
+    const { lint } = readProjectConfiguration(tree, 'mobile').targets ?? {};
+    assert.equal(lint?.options.command, 'eslint .');
+    assert.equal(lint?.options.cwd, 'apps/mobile');
+    assert.equal(lint?.cache, true);
+    assert.equal(tree.read('apps/mobile/eslint.config.mjs', 'utf-8'), native.ESLINT_CONFIG);
+    const { devDependencies } = readJson(tree, 'package.json');
+    for (const name of Object.keys(native.lintDevDependencies)) {
+      assert.ok(devDependencies?.[name], name);
+    }
+    const agents = tree.read('apps/mobile/AGENTS.md', 'utf-8')!;
+    assert.match(agents, /Run `nx test mobile`, `nx typecheck mobile` and `nx lint mobile`/);
+  });
+
   it('runs expo start itself, since @nx/expo infers start with an executor it deprecates', async () => {
     // @nx/expo 23.2's plugin infers `start` as `@nx/expo:start`, and every `nx start` printed that
     // the executor would be removed in Nx 24 and to run convert-to-inferred, which changes nothing.
@@ -481,6 +508,24 @@ describe('in a pnpm workspace', () => {
       app.devDependencies['@ng-native/testing'],
       native.devDependencies['@ng-native/testing'],
     );
+  });
+
+  it("with --linter=eslint, lists the lint packages itself, on the root's ESLint 9", async () => {
+    // The Nx preset starts a workspace on ESLint 9, which the plugin runs on, so the app shares it.
+    const tree = pnpmWorkspace();
+    updateJson(tree, 'package.json', (manifest) => {
+      manifest.devDependencies = { ...manifest.devDependencies, eslint: '^9.8.0' };
+      return manifest;
+    });
+    await generate(tree, { directory: 'apps/mobile', linter: 'eslint' });
+    const app = readJson(tree, 'apps/mobile/package.json');
+    assert.equal(app.devDependencies.eslint, '^9.8.0');
+    assert.equal(
+      app.devDependencies['@ng-native/eslint-plugin'],
+      native.lintDevDependencies['@ng-native/eslint-plugin'],
+    );
+    assert.equal(app.devDependencies['angular-eslint'], '^22.0.0');
+    assert.ok(tree.exists('apps/mobile/eslint.config.mjs'));
   });
 
   it("adds the app's directory to the workspace when no glob covers it", async () => {

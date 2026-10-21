@@ -10,9 +10,10 @@ incoming call, not for button feedback (that is haptics, in `@ng-native/expo`).
 
 ```ts
 import { Component, inject } from '@angular/core';
+import { View } from '@ng-native/components';
 import { Vibration } from '@ng-native/device';
 
-@Component({ selector: 'app-timer', template: `<view />` })
+@Component({ selector: 'app-timer', imports: [View], template: `<view />` })
 export class Timer {
   private readonly vibration = inject(Vibration);
 

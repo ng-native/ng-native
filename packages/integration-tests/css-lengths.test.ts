@@ -29,10 +29,32 @@ describe('calc', () => {
     assert.deepEqual(declarationsOf('width: calc(30px / 2)'), { width: 15 });
   });
 
-  it('refuses one that mixes a percentage with a length', () => {
-    // Native resolves percentages during layout, so there is nothing here that could fold it and
-    // nothing on device that could evaluate it later.
-    assert.throws(() => declarationsOf('width: calc(100% - 10px)'), /percentage/i);
+  it('keeps one that mixes a percentage with a length, for the engine to finish', () => {
+    // A percentage is of a box only layout knows, so the sum is kept as its two parts, in
+    // points, and resolved on the device once that box has been laid out.
+    assert.deepEqual(declarationsOf('width: calc(100% - 10px)'), { width: 'calc(100% + -10px)' });
+    assert.deepEqual(declarationsOf('max-width: calc(100% - 2rem)'), {
+      maxWidth: 'calc(100% + -32px)',
+    });
+    assert.deepEqual(declarationsOf('margin-left: calc(2 * (25% + 4px))'), {
+      marginLeft: 'calc(50% + 8px)',
+    });
+    assert.deepEqual(declarationsOf('top: calc(50% - 5px)'), { top: 'calc(50% + -5px)' });
+    // Of the element's own box, for a translate.
+    assert.deepEqual(declarationsOf('translate: calc(100% - 2px) 0'), {
+      __translate: [{ translateX: 'calc(100% + -2px)' }, { translateY: 0 }],
+    });
+  });
+
+  it('folds a calc() of a percentage alone into the percentage', () => {
+    assert.deepEqual(declarationsOf('width: calc(50% * 2)'), { width: '100%' });
+    assert.deepEqual(declarationsOf('width: calc(25% + 25%)'), { width: '50%' });
+  });
+
+  it('refuses one where a percentage is of nothing a box has, or meets another relative unit', () => {
+    assert.throws(() => declarationsOf('font-size: calc(100% - 2px)'), /percentage/i);
+    assert.throws(() => declarationsOf('column-gap: calc(10% + 2px)'), /percentage/i);
+    assert.throws(() => declarationsOf('width: calc(50% + 1vw)'), /one relative unit/);
   });
 
   it('folds min(), max() and clamp() over absolute lengths', () => {
@@ -64,7 +86,7 @@ describe('calc', () => {
       parent: null,
       classes: new Set(classes),
       props: {},
-      sheet: null,
+      templateSheet: null,
       hostSheet: null,
       styleCache: null,
       styleDirty: true,
@@ -86,7 +108,7 @@ describe('calc', () => {
         parent: null,
         classes: new Set(['a']),
         props: {},
-        sheet: null,
+        templateSheet: null,
         hostSheet: null,
         styleCache: null,
         styleDirty: true,
@@ -200,7 +222,7 @@ describe('viewport and font-relative lengths', () => {
       parent: null,
       classes: new Set(['a']),
       props: {},
-      sheet: null,
+      templateSheet: null,
       hostSheet: null,
       styleCache: null,
       styleDirty: true,
@@ -226,7 +248,7 @@ describe('viewport and font-relative lengths', () => {
       parent: null,
       classes: new Set(['a']),
       props: {},
-      sheet: null,
+      templateSheet: null,
       hostSheet: null,
       styleCache: null,
       styleDirty: true,
@@ -252,7 +274,7 @@ describe('viewport and font-relative lengths', () => {
         parent: null,
         classes: new Set(['x', 'y']),
         props: {},
-        sheet: null,
+        templateSheet: null,
         hostSheet: null,
         styleCache: null,
         styleDirty: true,
@@ -355,7 +377,7 @@ describe('a length written with no unit', () => {
       parent: null,
       classes: new Set(['a']),
       props: {},
-      sheet: null,
+      templateSheet: null,
       hostSheet: null,
       styleCache: null,
       styleDirty: true,

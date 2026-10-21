@@ -99,9 +99,9 @@ describe('text with nowhere to wrap', () => {
     const s = scene();
     const label = s.say('label', 'Save');
     assert.deepEqual(s.lines('label'), [1, 'clip']);
-    s.engine.setText(label.children[0]!, 'Save all');
+    s.engine.setText(label.childList[0]!, 'Save all');
     assert.deepEqual(s.lines('label'), [null, 'tail']);
-    s.engine.setText(label.children[0]!, 'Saved');
+    s.engine.setText(label.childList[0]!, 'Saved');
     assert.deepEqual(s.lines('label'), [1, 'clip']);
     // A second run, with the space between the two words in it.
     const more = s.engine.createElement('text');

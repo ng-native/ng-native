@@ -14,6 +14,7 @@ import { compileFixture } from './compile.ts';
 interface Vars {
   surface: { set(value: string | undefined): void };
   colour: { set(value: string | undefined): void };
+  tint: { set(value: string | undefined): void };
 }
 let app: Awaited<ReturnType<typeof render<Vars>>>;
 const props = (id: string) => app.getByTestId(id).props;
@@ -56,8 +57,29 @@ describe('a var() in a bound style declaration', () => {
     assert.equal(props('kinds')['display'], 'flex', 'block is flex on native');
   });
 
+  it('reads a color-mix() of a token, follows the token, and is unset when it goes', async () => {
+    assert.equal(props('mixed')['backgroundColor'], 'rgb(130, 130, 131)');
+    try {
+      app.instance.tint.set('rgb(1, 1, 1)');
+      await settle();
+      assert.equal(props('mixed')['backgroundColor'], 'rgb(128, 128, 128)');
+      app.instance.tint.set(undefined);
+      await settle();
+      assert.equal(props('mixed')['backgroundColor'], null, 'removed');
+    } finally {
+      app.instance.tint.set('rgb(4, 5, 6)');
+      await settle();
+    }
+  });
+
+  it('reads a relative color() in srgb, with clamp() in its channels', () => {
+    assert.equal(props('contrast-dark')['color'], 'rgb(255, 255, 255)');
+    assert.equal(props('contrast-light')['color'], 'rgb(0, 0, 0)');
+  });
+
   it('never reaches native as text', () => {
-    for (const id of ['card', 'inner', 'fallback', 'chain', 'tinted', 'switching', 'object']) {
+    const ids = ['card', 'inner', 'fallback', 'chain', 'tinted', 'switching', 'object'];
+    for (const id of [...ids, 'mixed', 'contrast-dark', 'contrast-light']) {
       const sent = Object.values(props(id)).filter((value) => /var\(/.test(String(value)));
       assert.deepEqual(sent, [], id);
     }

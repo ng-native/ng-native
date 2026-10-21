@@ -58,6 +58,14 @@ types the default export as the `StyleSheet` `globalStyles` takes. Both are rebu
 so `.angular-native/` belongs in `.gitignore`. An app from the template or `nx g @ng-native/nx:app`
 ignores it already.
 
+The `browser` option names the classes that components written for a browser sit under, where
+the app styles them from this sheet: `browser: ['.ui']`. Under an element with one of those
+classes a flex container that names no direction is a row, as a browser lays it out; everywhere
+else in the app a flex container stays a column. With the option set, the whole sheet is also
+[read as a browser reads it](/packages/fabric/supported-css#a-sheet-read-as-a-browser-reads-it),
+`before:` and `after:` utilities included. Each entry is one class with its dot;
+anything else fails the build.
+
 A fresh clone, or a CI job, has neither file until something loads the Metro config, so a
 typecheck run first fails with `Cannot find module '../.angular-native/app.tailwind.js'`. Loading
 the config builds them once and exits, without watching, so a typecheck script that does it first
@@ -134,10 +142,12 @@ end margin beat a left or right one whatever the cascade says (see [what CSS rea
 device](/packages/fabric/supported-css)). Use `ms-*` and `me-*` on those children. `divide-double`
 is dropped with a warning, as a native border has no double style.
 
-Variants and utilities that style a pseudo-element, `before:`, `file:` and the rest, style nothing:
-native has no element for a pseudo-element to be. `placeholder:` is the exception: its text colour
-is a text input's placeholder colour, so `placeholder:text-gray-400` works, and anything else after
-it is dropped with a warning. A rule that is only for one is
+Without the `browser` option, variants and utilities that style a pseudo-element, `before:`,
+`file:` and the rest, style nothing: native has no element for a pseudo-element to be. With it,
+`before:` and `after:` draw their boxes, as above, and the rest still style nothing.
+`placeholder:` is the exception: its text colour is a text input's placeholder colour, so
+`placeholder:text-gray-400` works, and anything else after it is dropped with a warning. A rule
+that is only for one is
 refused with a build warning; where a pseudo-element shares a selector list with real elements, as
 in Tailwind's own resets, it is taken out of the list and the rest of the rule is kept.
 

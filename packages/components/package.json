@@ -1,6 +1,6 @@
 {
   "name": "@ng-native/components",
-  "version": "0.13.0",
+  "version": "0.17.1",
   "description": "Angular Native's core components: view, text, image, pressable, scroll-view, virtual-list, text-input and the rest of React Native's set.",
   "keywords": [
     "angular",
@@ -30,6 +30,7 @@
       "browser": "./src/reanimated-web.ts",
       "default": "./src/reanimated.ts"
     },
+    "./stand-ins/animations": "./src/stand-ins/animations.ts",
     "./stand-ins/reanimated": "./src/stand-ins/reanimated.ts",
     "./stand-ins/worklets": "./src/stand-ins/worklets.ts",
     "./stand-ins/gesture-handler": "./src/stand-ins/gesture-handler.ts",
@@ -63,6 +64,10 @@
         "browser": "./dist/reanimated-web.js",
         "default": "./dist/reanimated.js"
       },
+      "./stand-ins/animations": {
+        "types": "./dist/stand-ins/animations.d.ts",
+        "default": "./dist/stand-ins/animations.js"
+      },
       "./stand-ins/reanimated": {
         "types": "./dist/stand-ins/reanimated.d.ts",
         "default": "./dist/stand-ins/reanimated.js"
@@ -85,7 +90,7 @@
   "peerDependencies": {
     "@angular/core": "^22.0.0",
     "react-native": ">=0.86.0",
-    "react-native-gesture-handler": "^2.32.0",
+    "react-native-gesture-handler": "^2.32.0 || ^3.3.0",
     "react-native-reanimated": "^4.5.1",
     "react-native-safe-area-context": "^5.7.0",
     "react-native-keyboard-controller": "^1.21.9",

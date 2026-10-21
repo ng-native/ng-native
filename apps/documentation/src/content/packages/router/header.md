@@ -128,15 +128,23 @@ along with the field.
 Every other input is left unset unless bound, so the platform's own default applies:
 `placeholder`, `cancelButtonText`, `hideWhenScrolling` (scroll the field away with the content, as
 iOS lists do by default), `autoCapitalize`, `obscureBackground` (dim the content while typing),
-`hideNavigationBar` (hide the bar while typing), `tintColor` and `textColor`.
+`hideNavigationBar` (hide the bar while typing), `tintColor` (on iOS the cursor and the Cancel
+button, on Android the field's background) and `textColor` (the typed text).
 
 `placement` and `allowToolbarIntegration` decide where iOS puts the field. The default,
 `automatic`, lets iOS 26 fold it into a toolbar, and a presented sheet has none, so there the
-field shows nowhere; `placement="stacked"` keeps it under the title. react-native-screens
-declares `tintColor` and `textColor` but has not implemented them on iOS yet, and its Android-only
-search bar props (`autoFocus`, `inputType`, `hintTextColor` and the rest) are not inputs here.
-There is no scope bar and there are no search tokens, because react-native-screens has neither:
-a scope is a segmented control under the header, and a token is text.
+field shows nowhere; `placement="stacked"` keeps it under the title. react-native-screens'
+Android-only search bar props (`autoFocus`, `inputType`, `hintTextColor` and the rest) are not
+inputs here.
+
+The field and its placeholder are drawn in the system font, on iOS and Android, whatever the
+header's `titleFontFamily` or the page's CSS says: react-native-screens' search bar has no font
+prop on either platform, so `<native-search-bar>` has no font input, and a `font-family` or
+`font-size` on it changes nothing. For a search field in the app's own font, put a
+[`<search-field>`](/packages/expo/search-field) under the header instead, which takes the font
+its CSS resolves to. There is no scope bar and there are no search tokens either, because
+react-native-screens has neither: a scope is a segmented control under the header, and a token is
+text.
 
 In a test, the field is found by its view name, `fabric.find('RNSSearchBar')`, and takes typing
 from `fireEvent.changeText` or `userEvent.type` like a text field. The commands it sends, such as

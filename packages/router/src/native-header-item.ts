@@ -10,8 +10,8 @@
  * Native bar button items would look truer to the platform and bring menus and system symbols
  * with them, but they are data rather than views; they are a later opt-in.
  */
-import { Component, ElementRef, computed, inject, input } from '@angular/core';
-import type { EngineNode } from '@ng-native/fabric';
+import { Component, ElementRef, computed, effect, inject, input } from '@angular/core';
+import { type Engine, type EngineNode, HostEngine, nativePlatform } from '@ng-native/fabric';
 import { ownHost } from './own-host.ts';
 import { optionalBoolean } from './transforms.ts';
 
@@ -20,6 +20,13 @@ import { optionalBoolean } from './transforms.ts';
  * `title` is committed as `center`, the only spelling Android's header knows.
  */
 export type HeaderItemType = 'back' | 'left' | 'center' | 'title' | 'right' | 'searchBar';
+
+/**
+ * A title item's least size on iOS, under any the app gives it. react-native-screens makes the
+ * item the bar's title view at its Yoga size, and UIKit lays out no title view of 0 by 0, so a
+ * `ui-host` sized to its SwiftUI content, which has no size until it is laid out, stayed 0 by 0.
+ */
+const TITLE_LEAST = { minWidth: 1, minHeight: 1 } as const;
 
 @Component({
   selector: 'native-header-item',
@@ -31,7 +38,14 @@ export type HeaderItemType = 'back' | 'left' | 'center' | 'title' | 'right' | 's
 })
 export class NativeHeaderItem {
   constructor() {
-    ownHost(inject(ElementRef).nativeElement as EngineNode, this.constructor);
+    const node = inject(ElementRef).nativeElement as EngineNode;
+    ownHost(node, this.constructor);
+    const engine = (node.engine ?? inject(HostEngine)) as Partial<Engine>;
+    if (nativePlatform() === 'ios') {
+      effect(() => {
+        engine.setDefaultStyle?.(node, this.slot() === 'center' ? TITLE_LEAST : undefined);
+      });
+    }
   }
 
   /** Which slot to sit in. Native defaults to `left`. */

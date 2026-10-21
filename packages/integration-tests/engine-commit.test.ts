@@ -12,7 +12,7 @@ import {
   type StyleSheet,
 } from '@ng-native/fabric';
 import { resetStyleStats, styleStats } from '../fabric/src/css.ts';
-import { createFakeFabric, type FakeFabric } from '@ng-native/testing';
+import { createFakeFabric, type FakeFabric, type FakeFabricNode } from '@ng-native/testing';
 
 const sheet: StyleSheet = {
   rules: [
@@ -311,6 +311,82 @@ describe('what a commit sends', () => {
     ]);
   });
 
+  it('sends no brush for a fill or stroke that is no colour native reads', () => {
+    // react-native-svg stops the app on a solid brush with no colour in it, as processColor
+    // answers for a value it cannot read.
+    const fabric = createFakeFabric();
+    const engine = new Engine(fabric, 1, {
+      processColor: (value) => (value === 'red' ? 0xffff0000 : null),
+    });
+    for (const paint of ['red', 'not-a-colour']) {
+      const path = engine.createElement('path');
+      engine.setProp(path, 'style', { fill: paint, stroke: paint });
+      engine.appendChild(engine.root, path);
+    }
+    engine.commit();
+    assert.deepEqual(
+      fabric.committed.map((each) => [each.props['fill'], each.props['stroke']]),
+      [
+        [
+          { type: 0, payload: 0xffff0000 },
+          { type: 0, payload: 0xffff0000 },
+        ],
+        [undefined, undefined],
+      ],
+    );
+  });
+
+  it('takes the paint off a shape whose fill turns into a colour native cannot read', () => {
+    // Fabric keeps a prop a clone leaves out, and JSI leaves out one that is undefined: the old
+    // paint goes only when null is sent for it.
+    const fabric = createFakeFabric();
+    const engine = new Engine(fabric, 1, {
+      processColor: (value) => (value === 'red' ? 0xffff0000 : null),
+    });
+    const path = engine.createElement('path');
+    engine.setProp(path, 'style', { fill: 'red' });
+    engine.appendChild(engine.root, path);
+    engine.commit();
+    engine.setProp(path, 'style', { fill: 'not-a-colour' });
+    engine.commit();
+    assert.equal(fabric.committed[0]!.props['fill'] ?? null, null);
+  });
+
+  it('sends no paint for none, on a shape created with it and on one changed to it', () => {
+    const fabric = createFakeFabric();
+    const engine = new Engine(fabric, 1, {
+      processColor: (value) => (value === 'red' ? 0xffff0000 : null),
+    });
+    const created = engine.createElement('path');
+    engine.setProp(created, 'style', { fill: 'none', stroke: 'none' });
+    engine.appendChild(engine.root, created);
+    const changed = engine.createElement('path');
+    engine.setProp(changed, 'style', { fill: 'red' });
+    engine.appendChild(engine.root, changed);
+    engine.commit();
+    engine.setProp(changed, 'style', { fill: 'none' });
+    engine.commit();
+    const [first, second] = fabric.committed;
+    assert.equal(first!.props['fill'], null);
+    assert.equal(first!.props['stroke'], null);
+    assert.equal(second!.props['fill'], null);
+  });
+
+  it('sends no brush an icon made of a colour native reads nothing in', () => {
+    // @ng-native/icons builds its solid brush before the engine sees it, with whatever
+    // processColor answered: null for a colour it cannot read.
+    const fabric = createFakeFabric();
+    const engine = new Engine(fabric, 1);
+    const path = engine.createElement('path');
+    engine.setProp(path, 'fill', { type: 0, payload: null });
+    engine.setProp(path, 'stroke', { type: 0, payload: 0xffff0000 });
+    engine.appendChild(engine.root, path);
+    engine.commit();
+    const [committed] = fabric.committed;
+    assert.equal(committed!.props['fill'], undefined);
+    assert.deepEqual(committed!.props['stroke'], { type: 0, payload: 0xffff0000 });
+  });
+
   it('keeps hyphenated attributes to the engine, since no native prop is spelt that way', () => {
     const props = committed({ 'data-row': '3', testID: 'row' });
     assert.equal(props['data-row'], undefined);
@@ -323,5 +399,90 @@ describe('what a commit sends', () => {
       style: { aspectRatio: 1 },
     });
     assert.deepEqual([props['width'], props['height'], props['aspectRatio']], [100, undefined, 1]);
+  });
+});
+
+describe('a clone with new children', () => {
+  /** A box of views named by `nativeID`, and what each commit hands native for it. */
+  function scene(names: readonly string[]) {
+    const fabric = createFakeFabric();
+    const engine = new Engine(fabric, 1);
+    const box = engine.createElement('view');
+    engine.setProp(box, 'nativeID', 'box');
+    engine.appendChild(engine.root, box);
+    const views = new Map<string, EngineNode>();
+    for (const name of names) {
+      const view = engine.createElement('view');
+      engine.setProp(view, 'nativeID', name);
+      engine.appendChild(box, view);
+      views.set(name, view);
+    }
+    engine.commit();
+    const handed: unknown[][] = [];
+    let appended = 0;
+    const { cloneNodeWithNewChildren, cloneNodeWithNewChildrenAndProps, appendChild } = fabric;
+    fabric.cloneNodeWithNewChildren = (...args) => {
+      handed.push(args);
+      return cloneNodeWithNewChildren(...args);
+    };
+    fabric.cloneNodeWithNewChildrenAndProps = (...args) => {
+      handed.push(args);
+      return cloneNodeWithNewChildrenAndProps(...args);
+    };
+    fabric.appendChild = (...args) => (appended++, appendChild(...args));
+    const inBox = (): string[] =>
+      fabric.committed[0]!.children.map((child) => String(child.props['nativeID']));
+    return { fabric, engine, box, views, handed, inBox, appended: () => appended };
+  }
+
+  it('hands native the children as an array in the one call, appending none after', () => {
+    const s = scene(['a', 'b']);
+    const c = s.engine.createElement('view');
+    s.engine.setProp(c, 'nativeID', 'c');
+    s.engine.appendChild(s.box, c);
+    s.engine.commit();
+    assert.deepEqual(s.inBox(), ['a', 'b', 'c']);
+    const [call] = s.handed;
+    assert.equal(s.handed.length, 1);
+    assert.equal(call!.length, 2, 'the node and its children, and no props that did not change');
+    assert.ok(Array.isArray(call![1]));
+    assert.deepEqual(
+      (call![1] as FakeFabricNode[]).map((child) => child.props['nativeID']),
+      ['a', 'b', 'c'],
+    );
+    assert.equal(s.appended(), 0);
+  });
+
+  it('hands them before the props where the props changed as well', () => {
+    const s = scene(['a']);
+    s.engine.setProp(s.box, 'testID', 'changed');
+    s.engine.removeChild(s.box, s.views.get('a')!);
+    s.engine.commit();
+    const [call] = s.handed;
+    assert.equal(call!.length, 3);
+    assert.deepEqual(call![1], []);
+    assert.equal((call![2] as Record<string, unknown>)['testID'], 'changed');
+    assert.deepEqual(s.inBox(), []);
+    assert.equal(s.fabric.committed[0]!.props['testID'], 'changed');
+  });
+
+  it('commits the children as they are now: none, one, many, reordered', () => {
+    const s = scene(['a', 'b', 'c', 'd']);
+    const at = (name: string) => s.views.get(name)!;
+    s.engine.insertBefore(s.box, at('d'), at('a'));
+    s.engine.insertBefore(s.box, at('b'), null);
+    s.engine.commit();
+    assert.deepEqual(s.inBox(), ['d', 'a', 'c', 'b']);
+    s.engine.removeChild(s.box, at('a'));
+    s.engine.removeChild(s.box, at('c'));
+    s.engine.commit();
+    assert.deepEqual(s.inBox(), ['d', 'b']);
+    s.engine.removeChild(s.box, at('d'));
+    s.engine.commit();
+    assert.deepEqual(s.inBox(), ['b']);
+    s.engine.removeChild(s.box, at('b'));
+    s.engine.commit();
+    assert.deepEqual(s.inBox(), []);
+    assert.equal(s.appended(), 0);
   });
 });

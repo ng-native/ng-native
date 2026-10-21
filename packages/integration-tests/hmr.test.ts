@@ -62,6 +62,26 @@ describe('Angular HMR', () => {
     assert.equal(instance.count(), 2, 'the component instance survived the swap');
   });
 
+  for (const name of ['Map', 'WeakMap', 'Object', 'Reflect', 'JSON']) {
+    it(`renders and swaps a component named ${name}, a global the HMR code also uses`, async () => {
+      // A class declaration in the file shadows the global of the same name for everything in it,
+      // the HMR code included, which would construct the component for its registry.
+      const source = readFileSync(fixture('counter.ts'), 'utf8').replaceAll('Counter', name);
+      // A file of its own, so the registry holds no other case's component under its name.
+      const filename = fixture(`counter-${name}.ts`);
+      const first = await evaluate(source, filename, fixture(`counter-${name}.hmr-a.generated.ts`));
+      const { fabric } = await render(first[name] as Type<unknown>);
+      assert.match(fabric.render(), /RawText "tap"/);
+      await evaluate(
+        source.replace('>tap<', '>tapped<'),
+        filename,
+        fixture(`counter-${name}.hmr-b.generated.ts`),
+      );
+      await settle();
+      assert.match(fabric.render(), /RawText "tapped"/);
+    });
+  }
+
   it('compiles a component whose path has an @ in it, as a scoped package in node_modules does', async () => {
     // The HMR compiler reads the class name back out of a `path@ClassName` id by the first `@`,
     // so `node_modules/@ng-native/...` came out as a function named after the path: a syntax
@@ -122,6 +142,24 @@ export class Inline {
 
     assert.deepEqual(reloads, [], 'nothing asked for a reload');
     assert.match(fabric.render(), /RawText "now it's 1"/, 'new template, old state');
+    assert.equal(instance.count(), 1);
+  });
+
+  it('swaps a template with an aliased @if and a @switch in it, rather than reloading', async () => {
+    // The HMR compiler reports a warning about these blocks beside an update that is complete, and
+    // a warning was taken for a template that did not compile, so every edit to one reloaded.
+    const source = inline(
+      "template: '@if (count(); as n) { <text>n is {{ n }}</text> } " +
+        "@switch (count()) { @case (1) { <text>one</text> } @default { <text>more</text> } }'",
+    );
+    const { fabric, instance, reloads, edit } = await liveInline(source, 'control-flow-template');
+    assert.match(fabric.render(), /RawText "n is 1"/);
+
+    await edit(source.replace('n is', 'now n is').replace('>one<', '>just one<'));
+
+    assert.deepEqual(reloads, [], 'nothing asked for a reload');
+    assert.match(fabric.render(), /RawText "now n is 1"/, 'new template, old state');
+    assert.match(fabric.render(), /RawText "just one"/);
     assert.equal(instance.count(), 1);
   });
 
@@ -1207,6 +1245,67 @@ describe('Angular HMR, with a stylesheet shared through a ../ path', () => {
     const mod = await evaluate(read(home), home, beside(home, 'stale-a'));
     const { fabric } = await render(mod['Home'] as Type<unknown>);
     assert.deepEqual(backgrounds(fabric), ['rgb(7, 7, 7)'], 'the edit, not the cached copy');
+  });
+});
+
+describe('Angular HMR, with a stylesheet shared by templates with an aliased @if and a @switch', () => {
+  // The HMR compiler reports a warning about these blocks beside an update that is complete. The
+  // sheet's module took the warning for a template that did not compile and threw, so the whole
+  // bundle failed with a syntax error on the stylesheet.
+  const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
+  const evaluate = (source: string, filename: string, out: string) =>
+    compileSource(source, filename, out, { dev: true });
+  const flatten = (nodes: FakeFabricNode[]): FakeFabricNode[] =>
+    nodes.flatMap((node) => [node, ...flatten(node.children)]);
+  const backgrounds = (fabric: FakeFabric) =>
+    flatten(fabric.committed)
+      .map((node) => node.props['backgroundColor'])
+      .filter((colour) => colour !== undefined);
+
+  const sheet = fixture('shared-sheet-control-flow/flow.css');
+  const when = fixture('shared-sheet-control-flow/when.ts');
+  const which = fixture('shared-sheet-control-flow/which.ts');
+  const read = (file: string) => readFileSync(file, 'utf8');
+  const beside = (file: string, tag: string) => file.replace(/\.(ts|css)$/, `.${tag}.generated.ts`);
+  const scope = globalThis as Record<string, unknown>;
+
+  let reloads: unknown[];
+  beforeEach(() => {
+    delete scope['__angularNativeHmr'];
+    delete scope['__angularNativeHmrPending'];
+    reloads = [];
+    scope['__angularNativeReload'] = (id: unknown) => reloads.push(id);
+  });
+  after(() => delete scope['__angularNativeReload']);
+  afterEach(cleanup);
+
+  it("builds the sheet's module, carrying the update for both components", () => {
+    const { transformAngular } = createRequire(import.meta.url)(
+      '@ng-native/metro/angular-transform.cjs',
+    );
+    const { code } = transformAngular(read(sheet), sheet, { dev: true });
+    assert.ok(code.includes(JSON.stringify(`${when}@When`)), 'the @if one');
+    assert.ok(code.includes(JSON.stringify(`${which}@Which`)), 'and the @switch one');
+  });
+
+  it('swaps the edited sheet on a live component without losing state', async () => {
+    await evaluate(read(sheet), sheet, beside(sheet, 'swap-a'));
+    const mod = await evaluate(read(when), when, beside(when, 'swap-a'));
+    const { fabric, instance } = await render<{ inc(): void; count(): number }>(
+      mod['When'] as Type<{ inc(): void; count(): number }>,
+    );
+    instance.inc();
+    await settle();
+    assert.match(fabric.render(), /RawText "count is 2"/);
+    assert.deepEqual(backgrounds(fabric), ['rgb(1, 1, 1)'], 'the sheet applied before the edit');
+
+    const edited = read(sheet).replace('rgb(1, 1, 1)', 'rgb(9, 9, 9)');
+    await evaluate(edited, sheet, beside(sheet, 'swap-b'));
+    await settle();
+
+    assert.deepEqual(backgrounds(fabric), ['rgb(9, 9, 9)'], 'the new rule reached the live view');
+    assert.match(fabric.render(), /RawText "count is 2"/, 'with the state it had');
+    assert.deepEqual(reloads, [], 'and nothing asked for a reload');
   });
 });
 

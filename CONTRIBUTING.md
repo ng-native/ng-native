@@ -81,8 +81,37 @@ pnpm --filter documentation dev  # the documentation site, on http://localhost:5
 - `packages/testing` has tests of its own, for the fake Fabric and the Testing Library layer it
   ships to everyone else.
 
-`packages/nx` and `packages/schematics` carry `*.test.ts` files next to the source they test. Every
-package not named here has no tests of its own: `packages/integration-tests` covers it.
+`packages/nx` and `packages/schematics` carry `*.test.ts` files next to the source they test, and
+`packages/web-compat` does too, with the Web Platform Tests below. Every package not named here has
+no tests of its own: `packages/integration-tests` covers it.
+
+### Web Platform Tests
+
+`packages/web-compat/wpt` runs suites of the Web Platform Tests (the list is in `pin.mjs`) against
+`@ng-native/web-compat`, and keeps what each file passes in `expectations.json`, with a summary of
+the pass rates in `summary.txt`. The tests are fetched at a pinned commit into a cache git ignores.
+
+```sh
+cd packages/web-compat
+node wpt/fetch.mjs              # once, and after pin.mjs changes
+node wpt/run.mjs --check        # every suite, against expectations.json
+node wpt/run.mjs --update       # record what the change passes now
+node wpt/run.mjs dom/nodes      # one suite, or any part of a test's path, while working on it
+```
+
+`--check` fails on any difference in the subtests a file passes: one that passes fewer, and one
+that passes more, so a change that makes a test pass records it with `--update` in the same pull
+request. How a file ended (OK or TIMEOUT) is recorded but not compared, since a file that
+passes nothing lands either side of its time limit from one run to the next.
+
+The Web Platform Tests workflow runs `--check` on the DOM, selector, CSSOM, `html/dom` and
+`domparsing` suites, in about four minutes on a laptop, when what they run on changes: the package,
+`packages/fabric` and `packages/platform`, the layout fixtures in `packages/integration-tests`,
+`packages/testing`, the lockfile, or the workflow and its setup (the paths are in
+`.github/workflows/wpt.yml`). The full run takes over eight, one process at a time, so a change to
+the other suites (events, geometry, the observers, canvas, parsing) runs `node wpt/run.mjs --check`
+locally before its pull request opens, and records with `--update` from a full run so `summary.txt`
+stays whole.
 
 ## CSS engine changes are test-first
 
@@ -129,6 +158,27 @@ What the sweep reads as props, the canary's Tailwind screen draws.
 release smoke opens it in CI. `pnpm bench:tailwind` in `packages/integration-tests` times a screen
 of Tailwind cards through the engine.
 
+### Layout against Chrome
+
+`packages/layout` holds taffy's layout fixtures with where Chrome puts each box
+(`oracle/chrome.json`), and lists for each way of laying them out the fixtures it gets wrong:
+`oracle/today.json` for Yoga as React Native configures it, `oracle/strict.json` for Yoga with none
+of its legacy errata. Each list is pinned both ways: a fixture that starts to fail is a regression,
+and one that starts to pass has to come off the list.
+
+```sh
+pnpm nx run @ng-native/layout:test                                    # against the pinned lists
+LAYOUT_UPDATE=1 pnpm --filter @ng-native/layout exec node --test "src/**/*.test.ts"   # after a deliberate change
+pnpm --filter @ng-native/layout record                                # Chrome's boxes, after a fixture changes
+```
+
+`pnpm layout-fuzz` in `packages/integration-tests` lays random cases out in Chrome and through the
+engine with React Native's own Yoga (built with `clang++` the first time), compares every box,
+shrinks each case that differs and groups them into classes. `--cases`, `--seed` and `--out` set how
+many, from where and where the results go; a change to layout is checked against main on the same
+seed. It also counts the
+properties the compiler refused.
+
 ## Writing Markdown
 
 [`docs/README.md`](./docs/README.md) says where a Markdown file goes (`docs/`, the documentation site
@@ -170,5 +220,27 @@ See [RELEASING.md](./docs/RELEASING.md) for how an actual release goes out.
 - Commit messages here are sentence-case summaries of the change, often followed by a body
   explaining why (see `git log --oneline -20` for the style); there is no conventional-commits
   prefix convention (`feat:`, `fix:`, and so on) in use.
+
+### Checking a change against main
+
+`node scripts/pr-gate.mjs` runs what a pull request is checked for against `origin/main`, and prints
+a report for its description:
+
+- formatting, then lint, typecheck and tests of every project the change can reach;
+- the existing tests the change edits or deletes, which the description explains;
+- a version plan, where a package's code changed;
+- what every canary screen sends native, on main and on the change, and each view and prop that
+  differs (`scripts/native-output.mjs`);
+- `pnpm bench`, `bench:tailwind` and `bench:screens` in `packages/integration-tests`, run in turn
+  on each side. A measure fails where it is more than 3% slower and every round of the change was
+  slower than every round of main; one past 3% whose rounds overlap is marked, to be run again with
+  more rounds.
+
+`--base <ref>`, `--rounds <n>`, `--limit <percent>` and `--out <file>` change what it compares with
+and how, and `--skip-bench` leaves the benchmarks out. It exits 1 where a check failed.
+
+What the native output cannot show is how native draws it. For a change that draws, the
+`screens-check` skill (`.claude/skills/screens-check`) opens each screen whose native output changed
+on a simulator, in main's bundle and the change's, and compares the two screenshots.
 
 For maintainers cutting a release, see [RELEASING.md](./docs/RELEASING.md).

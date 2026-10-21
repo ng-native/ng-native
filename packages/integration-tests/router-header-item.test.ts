@@ -5,7 +5,8 @@
 import assert from 'node:assert/strict';
 import { afterEach, before, describe, it } from 'node:test';
 import type { Type, WritableSignal } from '@angular/core';
-import { cleanup, render, type FakeFabric } from '@ng-native/testing';
+import { compileCss, cleanup, render, type FakeFabric } from '@ng-native/testing';
+import { registerPlatformComponents } from '@ng-native/fabric';
 import type { HeaderItemType } from '../router/src/native-header-item.ts';
 import { registerScreenComponents } from '../router/src/screens.ts';
 import { compileFixture } from './compile.ts';
@@ -13,12 +14,14 @@ import { compileFixture } from './compile.ts';
 describe('native header item', () => {
   let Host: Type<unknown>;
   let InComponent: Type<unknown>;
+  let Styled: Type<unknown>;
 
   before(async () => {
     registerScreenComponents();
     const mod = await compileFixture('fixtures/header-item.ts');
     Host = mod['HeaderItemHost'] as Type<unknown>;
     InComponent = mod['HeaderItemInComponent'] as Type<unknown>;
+    Styled = mod['HeaderItemStyled'] as Type<unknown>;
   });
 
   afterEach(() => cleanup());
@@ -29,6 +32,51 @@ describe('native header item', () => {
     const item = fabric.find('RNSScreenStackHeaderSubview');
     assert.ok(item);
     assert.equal(item.props['type'], 'center');
+  });
+
+  // UIKit lays out no title view of 0 by 0, and a host sized to its SwiftUI content has no size
+  // until it is laid out: a matchContents ui-host in the title measured 0 by 0 for good (#909).
+  describe('as the title on iOS', () => {
+    const sizes = (fabric: FakeFabric) => {
+      const item = fabric.find('RNSScreenStackHeaderSubview')!;
+      return {
+        minWidth: item.props['minWidth'] ?? null,
+        minHeight: item.props['minHeight'] ?? null,
+      };
+    };
+
+    it('is at least a point each way, so its content is laid out and measured', async () => {
+      const { fabric } = await render(Host);
+      assert.deepEqual(sizes(fabric), { minWidth: 1, minHeight: 1 });
+    });
+
+    it('is not once it moves to another slot, nor in one', async () => {
+      const { fabric, instance, detectChanges } = await render(Host);
+      const type = (instance as { type: WritableSignal<HeaderItemType | undefined> }).type;
+      type.set('left');
+      await detectChanges();
+      assert.deepEqual(sizes(fabric), { minWidth: null, minHeight: null });
+      type.set('center');
+      await detectChanges();
+      assert.deepEqual(sizes(fabric), { minWidth: 1, minHeight: 1 });
+    });
+
+    it("gives way to the app's own size for it", async () => {
+      const { fabric } = await render(Styled, {
+        globalStyles: compileCss('.wide { min-width: 120px }', 'global'),
+      });
+      assert.deepEqual(sizes(fabric), { minWidth: 120, minHeight: 1 });
+    });
+
+    it('is not on Android, where the header lays its items out itself', async () => {
+      registerPlatformComponents('android');
+      try {
+        const { fabric } = await render(Host);
+        assert.deepEqual(sizes(fabric), { minWidth: null, minHeight: null });
+      } finally {
+        registerPlatformComponents('ios');
+      }
+    });
   });
 
   it('commits every other slot as it is written', async () => {

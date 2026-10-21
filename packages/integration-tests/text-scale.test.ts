@@ -117,6 +117,7 @@ describe('watchConditions and the text size', () => {
   let appState: ((state: string) => void)[];
   let rightToLeft = false;
   let fontScale: number;
+  let pixelRatio: number;
   let remeasured: number;
   const original = (globalThis as { require?: unknown }).require;
 
@@ -124,6 +125,7 @@ describe('watchConditions and the text size', () => {
     dimensions = [];
     appState = [];
     fontScale = 1;
+    pixelRatio = 3;
     remeasured = 0;
     const subscription = { remove: () => {} };
     const native = {
@@ -151,7 +153,7 @@ describe('watchConditions and the text size', () => {
           subscription
         ),
       },
-      PixelRatio: { get: () => 3, getFontScale: () => fontScale },
+      PixelRatio: { get: () => pixelRatio, getFontScale: () => fontScale },
       I18nManager: {
         get isRTL() {
           return rightToLeft;
@@ -219,6 +221,24 @@ describe('watchConditions and the text size', () => {
   it('starts with the text size in the conditions', () => {
     fontScale = 1.25;
     assert.equal(currentConditions().fontScale, 1.25);
+  });
+
+  it("starts with the screen's pixel ratio in the conditions", () => {
+    // What a page reads as `devicePixelRatio` with web-compat, to draw a canvas sharp.
+    assert.equal(currentConditions().pixelRatio, 3);
+  });
+
+  it("hands the engine the screen's pixel ratio again when the window is resized", () => {
+    // The window moved to a screen of another density: a monitor, or a phone's folded half.
+    let conditions: { pixelRatio?: number } = {};
+    const stop = watchConditions({
+      ...engine(),
+      updateConditions: (next: { pixelRatio?: number }) => void (conditions = next),
+    });
+    pixelRatio = 2;
+    resize(1);
+    assert.equal(conditions.pixelRatio, 2);
+    stop();
   });
 
   it("starts with the app's layout direction in the conditions", () => {

@@ -183,6 +183,8 @@ describe('host primitives', () => {
     assert.equal(fading().props['opacity'], 1);
     assert.equal(dimmed().props['opacity'], 0.8, "the caller's own opacity is untouched");
 
+    // Pressed once the screen has been drawn: a view no frame has shown yet starts nothing.
+    await new Promise((resolve) => setTimeout(resolve, 20));
     await fireEvent(fading(), 'touchStart');
     // Halfway through the 150ms fade in. A value at either end here would mean the transition
     // never ran and the component had simply set the target, which is what it used to do.
@@ -255,15 +257,21 @@ describe('host primitives', () => {
 describe('platform view names', () => {
   it('answers what a node commits as, for a host that is not the engine', async () => {
     const { viewNameOf } = await import('@ng-native/fabric');
-    const paragraph = { kind: 'element', tag: 'text', parent: null };
+    const paragraph = { nodeKind: 'element', tag: 'text', parent: null };
 
-    assert.equal(viewNameOf({ kind: 'element', tag: 'view', parent: null }), 'View');
+    assert.equal(viewNameOf({ nodeKind: 'element', tag: 'view', parent: null }), 'View');
     assert.equal(viewNameOf(paragraph), 'Paragraph');
-    assert.equal(viewNameOf({ kind: 'element', tag: 'text', parent: paragraph }), 'VirtualText');
-    assert.equal(viewNameOf({ kind: 'text', tag: '#text', parent: paragraph }), 'RawText');
-    assert.equal(viewNameOf({ kind: 'element', tag: 'pressable', parent: null }), 'View');
-    assert.equal(viewNameOf({ kind: 'element', tag: 'scroll-view', parent: null }), 'ScrollView');
-    assert.equal(viewNameOf({ kind: 'element', tag: 'app-habit-row', parent: null }), 'View');
+    assert.equal(
+      viewNameOf({ nodeKind: 'element', tag: 'text', parent: paragraph }),
+      'VirtualText',
+    );
+    assert.equal(viewNameOf({ nodeKind: 'text', tag: '#text', parent: paragraph }), 'RawText');
+    assert.equal(viewNameOf({ nodeKind: 'element', tag: 'pressable', parent: null }), 'View');
+    assert.equal(
+      viewNameOf({ nodeKind: 'element', tag: 'scroll-view', parent: null }),
+      'ScrollView',
+    );
+    assert.equal(viewNameOf({ nodeKind: 'element', tag: 'app-habit-row', parent: null }), 'View');
   });
 
   it('swaps the components Android registers differently', async () => {

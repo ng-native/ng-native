@@ -10,8 +10,9 @@
 import { into, outOf, type MixSpace, type Vector } from './color-mix.ts';
 import { parseColor } from './transition.ts';
 
-/** A channel: a number, a keyword, or arithmetic on two channels. */
-export type Channel = number | string | readonly [op: '+' | '-' | '*' | '/', Channel, Channel];
+/** A channel: a number, a keyword, or arithmetic on two channels, `min()` and `max()` included. */
+export type Channel =
+  number | string | readonly [op: '+' | '-' | '*' | '/' | 'min' | 'max', Channel, Channel];
 
 /** What a keyword's number is, per unit of the space's own coordinate. */
 const SCALES: Record<MixSpace, Vector> = {
@@ -75,5 +76,7 @@ function evaluate(channel: Channel, values: Readonly<Record<string, number>>): n
   if (op === '+') return left + right;
   if (op === '-') return left - right;
   if (op === '*') return left * right;
+  if (op === 'min') return Math.min(left, right);
+  if (op === 'max') return Math.max(left, right);
   return left / right;
 }

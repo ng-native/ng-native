@@ -20,9 +20,12 @@ gives it. It has no props beyond the shared ones on every element - all of its b
 
 ## Yoga, not CSS
 
-Every element lays out with Yoga, React Native's flexbox implementation, and only with Yoga:
-there is no `display: block`, no inline formatting context, and no way to opt out of flex layout
-for a `<view>`. The default is not the one CSS in a browser uses. Yoga starts every node at
+Every element lays out with Yoga, React Native's flexbox implementation. The engine adds block
+containers and lines of boxes on top of it, not a browser's whole inline formatting:
+`display: block` is a flex column the engine arranges as a block, and `inline-block` and
+`inline-flex` boxes sit on lines by their baselines (see
+[Supported CSS](/packages/fabric/supported-css)). The default is not the one CSS in a browser uses.
+Yoga starts every node at
 `display: flex; flex-direction: column; align-items: stretch; flex-shrink: 0`, so two `<view>`s
 with nothing set stack vertically and stretch to their parent's width - a browser's defaults would
 lay the same markup out as a shrink-to-fit row. Write `flex-direction: row` explicitly wherever a

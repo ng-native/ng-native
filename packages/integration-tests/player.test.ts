@@ -169,7 +169,7 @@ describe('watching a player', () => {
  */
 describe('owning a player', () => {
   it('creates a video player through expo-video, and releases it when the component goes', () => {
-    const native = player();
+    const native = Object.assign(player(), { __expo_shared_object_id__: 7 });
     const created: unknown[] = [];
     const expoVideo = {
       createVideoPlayer: (source: unknown) => (created.push(source), native),
@@ -181,6 +181,7 @@ describe('owning a player', () => {
     );
 
     assert.equal(owned.native, native);
+    assert.equal(owned.id, 7, 'the shared-object id, which is what <expo-video [player]> takes');
     assert.deepEqual(created, [{ uri: 'file://a.mp4' }]);
     assert.equal(owned.state().status, 'idle');
 

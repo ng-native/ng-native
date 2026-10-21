@@ -41,7 +41,7 @@ export class AnimatedStyleBase {
   private readonly node = inject(ElementRef).nativeElement as HostNode;
   // The shared host seam, read off the node as every primitive reads it, so a browser host serves
   // this as well as Fabric does. Only the react tag is Fabric's own, and `connect()` asks for it.
-  private readonly engine = this.node.host ?? inject(HostEngine);
+  private readonly engine = this.node.engine ?? inject(HostEngine);
   private readonly animation = inject(ANIMATION);
 
   /** A style object whose values may be animated nodes, plain numbers, or a mix. */

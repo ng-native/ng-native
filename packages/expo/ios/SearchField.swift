@@ -45,6 +45,20 @@ public final class SearchFieldModule: Module {
       Prop("tintColor") { (view: SearchFieldView, color: UIColor?) in
         view.searchBar.tintColor = color
       }
+      // The face and size the field's CSS resolves to, as a text's: the face by its PostScript name.
+      Prop("fontFamily") { (view: SearchFieldView, family: String?) in
+        view.fontFamily = family
+      }
+      Prop("fontSize") { (view: SearchFieldView, size: Double?) in
+        view.fontSize = size.map { CGFloat($0) }
+      }
+      // A weight and a slant no matched face already draws: a number, or `normal` and `bold`.
+      Prop("fontWeight") { (view: SearchFieldView, weight: Either<Double, String>?) in
+        view.fontWeight = weight.flatMap(SearchFieldView.weight)
+      }
+      Prop("fontStyle") { (view: SearchFieldView, style: String?) in
+        view.italic = style == "italic"
+      }
 
       AsyncFunction("focus") { (view: SearchFieldView) in
         view.searchBar.becomeFirstResponder()
@@ -72,6 +86,20 @@ final class SearchFieldView: ExpoView, UISearchBarDelegate {
   var text = "" {
     didSet { applyText() }
   }
+  /// The field's own font, put back when the CSS names none.
+  private lazy var systemFont = searchBar.searchTextField.font ?? .preferredFont(forTextStyle: .body)
+  var fontFamily: String? {
+    didSet { applyFont() }
+  }
+  var fontSize: CGFloat? {
+    didSet { applyFont() }
+  }
+  var fontWeight: UIFont.Weight? {
+    didSet { applyFont() }
+  }
+  var italic = false {
+    didSet { applyFont() }
+  }
   /// Nil shows the Cancel button while the field has the keyboard.
   var showsCancelButton: Bool? {
     didSet { searchBar.setShowsCancelButton(showsCancelButton ?? searchBar.isFirstResponder, animated: false) }
@@ -87,6 +115,48 @@ final class SearchFieldView: ExpoView, UISearchBarDelegate {
   override func layoutSubviews() {
     super.layoutSubviews()
     searchBar.frame = bounds
+  }
+
+  /// The CSS's face at its size, weight and slant, scaled with the text size setting as a text's is,
+  /// or the field's own font when the CSS names none of them. A name no face is registered under is
+  /// looked up as a family; one the system does not have either keeps the system face.
+  private func applyFont() {
+    let field = searchBar.searchTextField
+    guard fontFamily != nil || fontSize != nil || fontWeight != nil || italic else {
+      field.adjustsFontForContentSizeCategory = false
+      field.font = systemFont
+      return
+    }
+    let size = fontSize ?? systemFont.pointSize
+    var font = fontWeight.map { UIFont.systemFont(ofSize: size, weight: $0) } ?? systemFont.withSize(size)
+    if let family = fontFamily {
+      let named = UIFont(name: family, size: size)
+      let familyName = named?.familyName ?? (UIFont.fontNames(forFamilyName: family).isEmpty ? nil : family)
+      if let familyName, let weight = fontWeight {
+        font = UIFont(descriptor: UIFontDescriptor(fontAttributes: [
+          .family: familyName,
+          .traits: [UIFontDescriptor.TraitKey.weight: weight],
+        ]), size: size)
+      } else if let named {
+        font = named
+      } else if let familyName {
+        font = UIFont(descriptor: UIFontDescriptor(fontAttributes: [.family: familyName]), size: size)
+      }
+    }
+    if italic, let slanted = font.fontDescriptor.withSymbolicTraits(font.fontDescriptor.symbolicTraits.union(.traitItalic)) {
+      font = UIFont(descriptor: slanted, size: size)
+    }
+    field.font = UIFontMetrics.default.scaledFont(for: font)
+    field.adjustsFontForContentSizeCategory = true
+  }
+
+  /// A CSS weight as UIKit's nearest, as React Native maps a text's.
+  static func weight(_ value: Either<Double, String>) -> UIFont.Weight? {
+    let string: String? = value.get()
+    let css: Double? = value.get() ?? (string == "bold" ? 700 : string == "normal" ? 400 : string.flatMap(Double.init))
+    guard let css else { return nil }
+    let weights: [UIFont.Weight] = [.ultraLight, .thin, .light, .regular, .medium, .semibold, .bold, .heavy, .black]
+    return weights[min(max(Int((css / 100).rounded()) - 1, 0), weights.count - 1)]
   }
 
   /// Puts JavaScript's text in the field, unless it answers a keystroke older than the last one.

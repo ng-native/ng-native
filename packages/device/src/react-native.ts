@@ -140,8 +140,10 @@ export interface ReactNative {
     currentHeight?: number;
     setBarStyle(style: string, animated?: boolean): void;
     setHidden(hidden: boolean, animation?: string): void;
-    setBackgroundColor(color: string, animated?: boolean): void;
-    setTranslucent(translucent: boolean): void;
+    /** Removed in React Native 0.88, with edge-to-edge on every Android app. */
+    setBackgroundColor?(color: string, animated?: boolean): void;
+    /** Removed in React Native 0.88, with `setBackgroundColor`. */
+    setTranslucent?(translucent: boolean): void;
   };
   Linking: {
     getInitialURL(): Promise<string | null>;

@@ -22,7 +22,7 @@ function node(
     parent,
     classes: new Set(classes),
     props,
-    sheet: null,
+    templateSheet: null,
     hostSheet: null,
     styleCache: null,
     styleDirty: true,
@@ -146,10 +146,15 @@ describe(':is, :where and :not', () => {
     assert.equal(hits('view:not(.a[disabled])', node('view', {}, ['a'])), true);
   });
 
-  it('refuses a longer selector inside, which would need a second matching pass', () => {
+  it('takes a longer selector inside, matched from the node as a rule is', () => {
     // One compound under another is an ancestor test of that compound: see css-child-test.
-    assert.throws(() => compileCss('view:is(.a > .b) { color: red }'), /combinator/i);
-    assert.throws(() => compileCss('view:is(.a .b .c) { color: red }'), /combinator/i);
+    const under = (parent: string[]) => node('view', {}, ['b'], node('view', {}, parent));
+    assert.equal(hits('view:is(.a > .b)', under(['a'])), true);
+    assert.equal(hits('view:is(.a > .b)', under(['c'])), false);
+    const deep = (top: string[]) =>
+      node('view', {}, ['c'], node('view', {}, ['b'], node('view', {}, top)));
+    assert.equal(hits('view:is(.a .b .c)', deep(['a'])), true);
+    assert.equal(hits('view:is(.a .b .c)', deep(['b'])), false);
   });
 });
 
@@ -157,10 +162,9 @@ describe(':is, :where and :not', () => {
  * `group-*`: a variant that styles a node from the state of something above it.
  *
  * Tailwind writes it as `:is(:where(.group) [data-x] *)` - a descendant combinator inside `:is()`,
- * which is refused in general and has to be, because a combinator there means a second matching
- * pass rooted at the node. This one shape is the exception: a compound followed by a descendant
- * `*` says "some ancestor matches", which is what `:host-context()` already means and what the
- * matcher already walks the tree to answer.
+ * which is read as a test of one compound rather than a selector matched from the node: a compound
+ * followed by a descendant `*` says "some ancestor matches", which is what `:host-context()`
+ * already means and what the matcher already walks the tree to answer.
  *
  * Worth supporting rather than working around, because the whole `group-*` family compiles to it,
  * and shadcn reaches for it wherever a part is styled by the state of the thing containing it -
@@ -184,14 +188,6 @@ describe('an ancestor test inside :is()', () => {
 
   it('does not match the node itself, which is what the descendant combinator means', () => {
     assert.equal(hits('.track:is(:where(.track) *)', node('view', {}, ['track'])), false);
-  });
-
-  it('still refuses a combinator that is not the ancestor shape', () => {
-    assert.throws(
-      () => compileCss('.a:is(.b > .c) { color: red }', 'other'),
-      /combinator/,
-      'a child combinator inside :is() is a second matching pass, and stays refused',
-    );
   });
 });
 
@@ -318,14 +314,7 @@ describe('what a refused selector says', () => {
   };
 
   // Every pseudo-class the matcher had no answer for was refused as though it were :hover, with
-  // "Native has no hover or focus cascade", which is nothing to do with :has() or :checked.
-  it('says which :has() it takes, not that native has no hover', () => {
-    const message = refusal('view:has(+ .a)');
-    assert.match(message, /':has\(\)' takes one compound selector/);
-    assert.match(message, /sibling/);
-    assert.doesNotMatch(message, /hover/);
-  });
-
+  // "Native has no hover or focus cascade", which is nothing to do with :nth-child() or :checked.
   it('says :nth-child() of a selector is the form it cannot count, and which it can', () => {
     const message = refusal('view:nth-child(2 of .x)');
     assert.match(message, /':nth-child\(\)' with 'of <selector>'/);
@@ -364,16 +353,16 @@ describe('an id', () => {
  * selectors skip as the web skips a text node.
  */
 function family(names: string[]): StyleTarget[] {
-  const parent: StyleTarget & { children: StyleTarget[] } = { ...node('view'), children: [] };
+  const parent: StyleTarget & { childList: StyleTarget[] } = { ...node('view'), childList: [] };
   for (const name of names) {
     const child: StyleTarget = {
       ...node(name === '#text' ? '#text' : name, {}, [], parent),
-      kind: name === '#text' ? 'text' : 'element',
-      children: [],
+      nodeKind: name === '#text' ? 'text' : 'element',
+      childList: [],
     };
-    parent.children.push(child);
+    parent.childList.push(child);
   }
-  return parent.children;
+  return parent.childList;
 }
 
 describe('position among siblings', () => {
@@ -415,16 +404,16 @@ describe('position among siblings', () => {
     const [bare] = family(['view']);
     assert.equal(hits('view:empty', bare!), true);
     const [full] = family(['view']);
-    (full!.children as StyleTarget[]).push(node('text', {}, [], full!));
+    (full!.childList as StyleTarget[]).push(node('text', {}, [], full!));
     assert.equal(hits('view:empty', full!), false);
   });
 
   it('matches :empty over text of no length, which a binding to nothing leaves', () => {
     const [bound] = family(['view']);
-    const text = { ...node('#text', {}, [], bound!), kind: 'text' as const, text: '' };
-    (bound!.children as StyleTarget[]).push(text);
+    const text = { ...node('#text', {}, [], bound!), nodeKind: 'text' as const, nodeText: '' };
+    (bound!.childList as StyleTarget[]).push(text);
     assert.equal(hits('view:empty', bound!), true);
-    text.text = ' ';
+    text.nodeText = ' ';
     assert.equal(hits('view:empty', bound!), false);
   });
 });

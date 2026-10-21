@@ -281,6 +281,86 @@ describe('the Metro preset', () => {
   });
 
   /**
+   * Expo's native chunk loader builds a lazy route's URL from `location.origin` wherever there
+   * is a global `location`, and from the dev server only where there is none. web-compat gives
+   * the page an address, `exp://` in Expo Go, and React Native fetches nothing from that.
+   */
+  describe("Expo's lazy chunk URL", () => {
+    type Context = { resolveRequest: Resolve; originModulePath: string; dev: boolean };
+    const dir = '/ws/node_modules/expo/src/async-require';
+    const metro: Resolve = (context, name, platform) => ({
+      type: 'sourceFile',
+      filePath: `${path.dirname((context as Context).originModulePath)}/${name.slice(2)}.${platform}.ts`,
+    });
+    const resolve = (origin: string, name: string, platform: string, dev = true) =>
+      (withAngularNative(base()) as MetroConfig).resolver.resolveRequest!(
+        { resolveRequest: metro, originModulePath: origin, dev } as Context,
+        name,
+        platform,
+      );
+
+    it('is built on native by the file that asks the dev server, not location', () => {
+      for (const platform of ['ios', 'android'])
+        assert.deepEqual(resolve(`${dir}/loadBundle.ts`, './buildUrlForBundle', platform), {
+          type: 'sourceFile',
+          filePath: `${dir}/buildUrlForBundle.ts`,
+        });
+    });
+
+    it('is left alone on the web, and for any other file of that name', () => {
+      assert.deepEqual(resolve(`${dir}/loadBundle.ts`, './buildUrlForBundle', 'web'), {
+        type: 'sourceFile',
+        filePath: `${dir}/buildUrlForBundle.web.ts`,
+      });
+      assert.deepEqual(resolve('/app/src/load.ts', './buildUrlForBundle', 'ios'), {
+        type: 'sourceFile',
+        filePath: '/app/src/buildUrlForBundle.ios.ts',
+      });
+      assert.deepEqual(resolve(`${dir}/loadBundle.ts`, './getDevServer', 'ios'), {
+        type: 'sourceFile',
+        filePath: `${dir}/getDevServer.ios.ts`,
+      });
+      // A release build hosts its chunks where `location.origin` says, which it is not asked of.
+      assert.deepEqual(resolve(`${dir}/loadBundle.ts`, './buildUrlForBundle', 'ios', false), {
+        type: 'sourceFile',
+        filePath: `${dir}/buildUrlForBundle.ios.ts`,
+      });
+    });
+  });
+
+  /**
+   * React Native 0.88 no longer exports `./src/*`, and the engine moves sticky headers through its
+   * `NativeAnimatedHelper`, whose node tags every other animated value shares. Metro falls back to
+   * the file with a warning on every bundle; asked for it by path, it never looks at the exports.
+   */
+  describe("React Native's NativeAnimatedHelper", () => {
+    type Context = { resolveRequest: Resolve; originModulePath: string };
+    const helper = 'react-native/src/private/animated/NativeAnimatedHelper';
+    const resolve = (asked: string[]) =>
+      (withAngularNative(base()) as MetroConfig).resolver.resolveRequest!(
+        {
+          resolveRequest: (_context, name) => {
+            asked.push(name);
+            if (name !== 'react-native/package.json') throw new Error(`${name} is not exported`);
+            return { type: 'sourceFile', filePath: '/app/node_modules/react-native/package.json' };
+          },
+          originModulePath: '/app/node_modules/@ng-native/platform/dist/adapter.js',
+        } as Context,
+        helper,
+        'ios',
+      );
+
+    it("is the file in the app's react-native, without asking its exports for it", () => {
+      const asked: string[] = [];
+      assert.deepEqual(resolve(asked), {
+        type: 'sourceFile',
+        filePath: '/app/node_modules/react-native/src/private/animated/NativeAnimatedHelper.js',
+      });
+      assert.deepEqual(asked, ['react-native/package.json']);
+    });
+  });
+
+  /**
    * pnpm installs a package once per set of peers it resolves. A workspace library that lists
    * `@ng-native/components` but not the app's `@babel/core` gets react-native's Babel peer at 8
    * where the app has 7, so both, and every package peering on them, land in a second directory

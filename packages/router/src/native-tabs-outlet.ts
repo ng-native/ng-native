@@ -227,7 +227,10 @@ export class NativeTabsOutlet implements RouterOutletContract, AfterContentInit 
         entry.ref?.destroy();
       }
       this.entries.length = 0;
-      this.parentContexts.onChildOutletDestroyed(this.name);
+      // Only while it is this outlet's, as for a stack: see `NativeStackOutlet`.
+      if (this.parentContexts.getContext(this.name)?.outlet === this) {
+        this.parentContexts.onChildOutletDestroyed(this.name);
+      }
     });
   }
 
@@ -600,6 +603,11 @@ export class NativeTabsOutlet implements RouterOutletContract, AfterContentInit 
   private onNativeSelect(selection: TabSelection | undefined): void {
     if (!selection) return;
     this.provenance = selection.provenance;
+
+    // Native answering a request of ours is not a switch to follow. The router made the request,
+    // and an answer that arrives after a later request, such as a cold-start link's, names a tab
+    // the router has already left.
+    if (selection.actionOrigin === 'programmatic-js') return;
 
     const entry = this.readTabs().find(
       (tab) => screenKeyOf(tab.key) === selection.selectedScreenKey,

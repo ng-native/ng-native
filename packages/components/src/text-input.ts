@@ -102,6 +102,7 @@ export type SubmitBehavior = 'submit' | 'blurAndSubmit' | 'newline';
     '[autoFocus]': 'autoFocus()',
     '[maxLength]': 'maxLength()',
     '[numberOfLines]': 'numberOfLines()',
+    '[rows]': 'rows()',
     '[selection]': 'selection()',
     '[selectionColor]': 'selectionColor()',
     '[selectTextOnFocus]': 'selectTextOnFocus()',
@@ -177,6 +178,11 @@ export class TextInput extends ViewBase {
   readonly maxLength = input(undefined, { transform: optionalNumber });
   /** Android: the height of a multiline field, in lines. */
   readonly numberOfLines = input(undefined, { transform: optionalNumber });
+  /**
+   * How many lines of its `line-height` a multiline field is tall, where nothing sets its height,
+   * as a `<textarea rows>` is. Read by the engine, which sizes the field; never sent to native.
+   */
+  readonly rows = input(undefined, { transform: optionalNumber });
   /** The selected range, or the caret when `start` equals `end`. */
   readonly selection = input<{ readonly start: number; readonly end?: number }>();
   readonly selectionColor = input<string>();

@@ -23,10 +23,12 @@ import { ImagePicker, type PickedAsset } from '@ng-native/expo/image-picker';
 
 ```ts
 import { Component, inject, signal } from '@angular/core';
+import { Pressable, Text } from '@ng-native/components';
 import { ImagePicker, type PickedAsset } from '@ng-native/expo/image-picker';
 
 @Component({
   selector: 'app-avatar',
+  imports: [Pressable, Text],
   template: `
     <pressable (press)="choose()"><text>Choose a photo</text></pressable>
     <pressable (press)="take()"><text>Take one</text></pressable>

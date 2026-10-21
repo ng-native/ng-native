@@ -303,20 +303,32 @@ interface PageWindow {
   sessionStorage: Storage;
 }
 
-describe("the files a page's stylesheet names, in a release build", () => {
+describe("the files a page's stylesheet names", () => {
   const PNG = Buffer.from(
     'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==',
     'base64',
   );
   const md5 = (data: Buffer) => createHash('md5').update(data).digest('hex');
 
-  /** Our worker in front of Expo's own, over a project with a stylesheet and files beside it. */
-  function project(css: string, files: Record<string, Buffer> = {}, sheet = 'web/page.css') {
-    const root = mkdtempSync(path.join(tmpdir(), 'ng-native-page-css-'));
+  /**
+   * Our worker in front of Expo's own, over a project with a stylesheet and files beside it. The
+   * files are written from the workspace; the project is `app` within it, or the workspace itself.
+   */
+  function project(
+    css: string,
+    files: Record<string, Buffer> = {},
+    sheet = 'web/page.css',
+    app = '',
+  ) {
+    const workspace = mkdtempSync(path.join(tmpdir(), 'ng-native-page-css-'));
+    const root = path.join(workspace, app);
+    mkdirSync(root, { recursive: true });
     for (const [name, data] of Object.entries({ [sheet]: Buffer.from(css), ...files })) {
-      mkdirSync(path.dirname(path.join(root, name)), { recursive: true });
-      writeFileSync(path.join(root, name), data);
+      mkdirSync(path.dirname(path.join(workspace, name)), { recursive: true });
+      writeFileSync(path.join(workspace, name), data);
     }
+    // As Metro names a file: from the project, which may mean outside it.
+    const filename = path.relative(root, path.join(workspace, sheet));
     const expo = createRequire(require.resolve('expo/package.json')).resolve(
       '@expo/metro-config/build/transform-worker/transform-worker.js',
     );
@@ -328,10 +340,12 @@ describe("the files a page's stylesheet names, in a release build", () => {
       angularNativeAssetExts: ['png', 'woff2'],
       assetPlugins: [],
       publicPath: '/assets',
+      // Metro's default, which the module wrapper is named with.
+      globalPrefix: '',
     };
     const warnings: string[] = [];
     const transform = (options: object = {}) =>
-      ours.transform(config, root, sheet, Buffer.from(css), {
+      ours.transform(config, root, filename, Buffer.from(css), {
         platform: 'web',
         dev: false,
         type: 'module',
@@ -345,6 +359,8 @@ describe("the files a page's stylesheet names, in a release build", () => {
         const sheet = await transform(options);
         return {
           css: sheet.output[0]!.data.css?.code ?? '',
+          // In development, the sheet the module puts in the page's `<style>`.
+          injected: injectedCss(sheet.output[0]!.data.code),
           dependencies: sheet.dependencies.map((dependency) => dependency.name),
           resources: (sheet.angularNativeResources ?? []).map((resource) => resource.file),
         };
@@ -356,8 +372,25 @@ describe("the files a page's stylesheet names, in a release build", () => {
       run,
       transform,
       warnings,
-      cleanup: () => rmSync(root, { recursive: true, force: true }),
+      cleanup: () => rmSync(workspace, { recursive: true, force: true }),
     };
+  }
+
+  /** The text a development stylesheet's module sets on its `<style>`, run with a stand-in DOM. */
+  function injectedCss(code: string): string {
+    const style = { textContent: '', setAttribute() {}, appendChild() {} };
+    const document = {
+      head: { appendChild() {} },
+      createElement: () => style,
+      createTextNode: (text: string) => ((style.textContent += text), {}),
+      querySelector: () => null,
+    };
+    const module = { exports: {} };
+    // Metro's module wrapper, `__d(factory)`, and the page's `window`, without which it does nothing.
+    const define = (factory: (...args: unknown[]) => void) =>
+      factory({}, () => ({}), null, null, module, module.exports, []);
+    new Function('document', 'window', '__d', code)(document, {}, define);
+    return style.textContent;
   }
 
   it('are in the bundle, and the url()s point at where the export writes them', async () => {
@@ -476,22 +509,139 @@ describe("the files a page's stylesheet names, in a release build", () => {
     }
   });
 
-  it('are left to Metro in development, and in a page that is not a DOM component', async () => {
+  it('leaves the text of a string alone, which only looks like a url()', async () => {
+    const { run, cleanup } = project(
+      `.a::after { content: "url('./pic.png')"; } .b { background: url('./pic.png'); }`,
+      { 'web/pic.png': PNG },
+    );
+    try {
+      const sheet = await run();
+      assert.ok(sheet.css.includes(`content: "url('./pic.png')"`), sheet.css);
+      assert.ok(sheet.css.includes(`url("../../../assets/web/pic.${md5(PNG)}.png")`), sheet.css);
+    } finally {
+      cleanup();
+    }
+  });
+
+  it('are left alone in a page that is not a DOM component', async () => {
     const { run, cleanup } = project(`.a { background: url('./pic.png'); }`, {
       'web/pic.png': PNG,
     });
     try {
-      assert.deepEqual((await run({ dev: true })).resources, []);
       const web = await run({ customTransformOptions: {} });
       assert.ok(web.css.includes('url("./pic.png")'), web.css);
+      assert.deepEqual(web.resources, []);
+      const dev = await run({ dev: true, customTransformOptions: {} });
+      assert.ok(dev.injected.includes('url("./pic.png")'), dev.injected);
     } finally {
       cleanup();
     }
+  });
+
+  describe('in development', () => {
+    // The page is served from `/_expo/@dom/`, so a url left relative is asked for there and fails.
+    const served = (file: string) => `/assets?unstable_path=${encodeURIComponent(file)}`;
+
+    it("point at Metro's asset server, in the sheet the page injects", async () => {
+      const { run, warnings, cleanup } = project(
+        `.a { background: url('./pic.png'); }
+         @font-face { font-family: F; src: url("fonts/f.woff2?v=1#x") format('woff2'); }`,
+        { 'web/pic.png': PNG, 'web/fonts/f.woff2': Buffer.from('a font') },
+      );
+      try {
+        const sheet = await run({ dev: true });
+        assert.ok(sheet.injected.includes(`url("${served('web/pic.png')}")`), sheet.injected);
+        assert.ok(
+          sheet.injected.includes(`url("${served('web/fonts/f.woff2')}&v=1#x")`),
+          sheet.injected,
+        );
+        assert.deepEqual(
+          warnings,
+          [],
+          "and Expo's warning that they are not supported is not said",
+        );
+        // A cached transform is stale once a file it pointed at goes.
+        assert.deepEqual(sheet.resources, ['web/pic.png', 'web/fonts/f.woff2']);
+      } finally {
+        cleanup();
+      }
+    });
+
+    it('reach a file outside the project, as a package in a pnpm store at the workspace root is', async () => {
+      const font = 'node_modules/.pnpm/@fontsource+nunito@5.0.0/node_modules/@fontsource/nunito';
+      const { run, cleanup } = project(
+        `@font-face { font-family: N; src: url(./files/n.woff2) format('woff2'); }`,
+        { [`${font}/files/n.woff2`]: Buffer.from('a font') },
+        `${font}/latin-400.css`,
+        'app',
+      );
+      try {
+        const sheet = await run({ dev: true });
+        const file = `../${font}/files/n.woff2`;
+        // `+` in the folder's name too: in a query unescaped it would be a space.
+        assert.ok(sheet.injected.includes(`url("${served(file)}")`), sheet.injected);
+        assert.ok(served(file).includes('%2B'));
+      } finally {
+        cleanup();
+      }
+    });
+
+    it('leave a file that is missing, or that Metro would not take as an asset, with a warning', async () => {
+      const { run, warnings, cleanup } = project(
+        `.a { background: url('./gone.png'), url('./notes.txt'), url(data:image/png;base64,AAAA), url(/a.png), url('./pic.png'); }`,
+        { 'web/notes.txt': Buffer.from('notes'), 'web/pic.png': PNG },
+      );
+      try {
+        const sheet = await run({ dev: true });
+        for (const url of ['./gone.png', './notes.txt', 'data:image/png;base64,AAAA', '/a.png']) {
+          assert.ok(sheet.injected.includes(`url("${url}")`), `${url} in ${sheet.injected}`);
+        }
+        assert.ok(sheet.injected.includes(`url("${served('web/pic.png')}")`), sheet.injected);
+        assert.deepEqual(sheet.resources, ['web/pic.png']);
+        assert.equal(warnings.length, 2, 'as Expo said it, for the two beside the sheet');
+      } finally {
+        cleanup();
+      }
+    });
+
+    it('take a url() in capitals, as CSS does', async () => {
+      const { run, cleanup } = project(`.a { background: URL('./pic.png'); }`, {
+        'web/pic.png': PNG,
+      });
+      try {
+        const sheet = await run({ dev: true });
+        assert.ok(sheet.injected.includes(`url("${served('web/pic.png')}")`), sheet.injected);
+      } finally {
+        cleanup();
+      }
+    });
+
+    it('leave the text of a string or a comment alone, which only looks like a url()', async () => {
+      const { run, cleanup } = project(
+        `/* url('./pic.png') */
+         /* it's a comment */ .c0 { background: url('./pic.png'); }
+         .a::after { content: "url('./pic.png')"; }
+         .b::after { content: 'url("./pic.png")'; }
+         .c { background: url('./pic.png'); }`,
+        { 'web/pic.png': PNG },
+      );
+      try {
+        const sheet = await run({ dev: true });
+        // The rule after the strings is still read, so they still end where they did.
+        assert.ok(sheet.injected.includes(`url("${served('web/pic.png')}")`), sheet.injected);
+        // An apostrophe in a comment starts no string, which would hide the url() after it.
+        assert.ok(!sheet.injected.includes(`url("./pic.png")`), sheet.injected);
+        assert.ok(sheet.injected.includes(`content: "url('./pic.png')"`), sheet.injected);
+        assert.ok(sheet.injected.includes(`content: "url(\\"./pic.png\\")"`), sheet.injected);
+      } finally {
+        cleanup();
+      }
+    });
   });
 });
 
 interface Sheet {
   dependencies: { name: string }[];
-  output: { data: { css?: { code: string } } }[];
+  output: { data: { code: string; css?: { code: string } } }[];
   angularNativeResources?: { file: string }[];
 }

@@ -30,16 +30,24 @@ own module installed. `Player`, `PlayerState` and the watchers both use come fro
 ## The smallest useful example
 
 ```ts
-import { Component } from '@angular/core';
+import { Component, input } from '@angular/core';
+import { Pressable, Text } from '@ng-native/components';
 import { registerExpoViews } from '@ng-native/expo';
 import { videoPlayer } from '@ng-native/expo/video';
 
 registerExpoViews('expo-video'); // once, before the app mounts
 
+/** The view's one prop this uses, as an input, so the template is checked against it. */
+@Component({ selector: 'expo-video', template: '', host: { '[player]': 'player()' } })
+class ExpoVideo {
+  readonly player = input<number>();
+}
+
 @Component({
   selector: 'app-clip',
+  imports: [ExpoVideo, Pressable, Text],
   template: `
-    <expo-video [player]="player.native" class="flex-1" />
+    <expo-video [player]="player.id" class="flex-1" />
     <text>{{ player.state().currentTime }} / {{ player.state().duration }}</text>
     <pressable (press)="player.native.play()"><text>Play</text></pressable>
   `,
@@ -60,8 +68,11 @@ Each returns a `Player<T>`:
 
 - **`native`** - the module's own player object, straight through: it already has `play()`,
   `pause()`, `seekBy()`, `replace()` and the rest, and wrapping them would be a second place for
-  each to be wrong. Pass it to `<expo-video [player]="player.native">`, or call its methods
-  directly for audio.
+  each to be wrong. Call its methods directly.
+- **`id`** - the player's shared-object id, which is what `<expo-video [player]="player.id">`
+  takes: `expo-video`'s own `VideoView` passes this id, not the player. Bound to the player
+  itself, the view has no player and draws nothing, while the video keeps playing with nothing on
+  screen.
 - **`state`** - a signal, updated from the player's own change events: `playing`, `status`
   (`'idle'`, `'loading'`, `'readyToPlay'`, `'error'`), `currentTime`, `duration`, `muted`,
   `volume`, and `ended` (set once playback runs to the end, cleared when it starts again). Video
@@ -95,19 +106,33 @@ import { registerExpoViews } from '@ng-native/expo';
 registerExpoViews('expo-video');
 ```
 
-Then use it as a plain element, with `player` bound to `player.native`:
+Then use it as a plain element, with `player` bound to `player.id`:
 
 ```html
-<expo-video [player]="player.native" [nativeControls]="false" contentFit="cover" class="flex-1" />
+<expo-video [player]="player.id" [nativeControls]="false" contentFit="cover" class="flex-1" />
 ```
+
+The view is `VideoView` on iOS and `SurfaceVideoView` on Android, as `expo-video` names them;
+`registerExpoViews('expo-video')` registers each on its own platform.
 
 The props are `expo-video`'s own `VideoViewProps`, unwrapped: `player`, `nativeControls` (default
 `true`), `contentFit` (`'contain'`, `'cover'` or `'fill'`, default `'contain'`),
 `requiresLinearPlayback`, `fullscreenOptions`, and a few platform-specific ones (`showsTimecodes`
-on iOS, `surfaceType` and `buttonOptions` on Android). There is no Angular component wrapping
-these props one by one - an unknown prop on the element reaches native exactly as it would in
-`expo-video`'s own React component, and the module's own documentation is the reference for what
-each one does.
+on iOS, `buttonOptions` on Android). There is no Angular component wrapping these props one by
+one - an unknown prop on the element reaches native exactly as it would in `expo-video`'s own
+React component, and the module's own documentation is the reference for what each one does.
+
+`surfaceType` is the exception: `expo-video`'s React component reads it to choose between two
+Android views, and no native view reads it, so on the element it does nothing. For a
+`TextureView` on Android, register that view under an element of its own:
+
+```ts
+import { registerExpoView } from '@ng-native/expo';
+
+registerExpoView('expo-texture-video', 'ExpoVideo', {
+  viewName: { ios: 'VideoView', android: 'TextureVideoView' },
+});
+```
 
 Audio has no view: `expo-audio` plays through the device's audio session, not a view on screen.
 

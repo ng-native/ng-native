@@ -22,6 +22,7 @@ export { memoryDatabase, type MemoryDatabase } from './memory-database.ts';
 export { compileCss, type CompileCssOptions } from './compile-css.ts';
 export type { BoundQueries, ByRoleOptions, Matcher, TextMatchOptions } from './queries.ts';
 export { waitFor, type WaitForOptions } from './wait-for.ts';
+export { configure, resetToDefaults, type Config } from './configure.ts';
 export { gestureOf } from './gesture-of.ts';
 export type { TestGesture } from './gesture-handler.ts';
 export {

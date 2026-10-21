@@ -178,6 +178,22 @@ describe('a press', () => {
     assert.equal(s.touch('topTouchStart'), 0);
   });
 
+  it('keeps no record of the rules an element matched once no sheet asks about a press', () => {
+    const s = scene(BASE);
+    const asks = compileCss('.btn:active { opacity: 0.5 }') as StyleSheet;
+    const restyled = (classes: string) => {
+      s.engine.setClasses(s.button, classes);
+      s.engine.commit();
+      return s.button.styleCache!.matched;
+    };
+    s.engine.addGlobalSheet(asks);
+    assert.ok(restyled('btn x'));
+    s.engine.removeGlobalSheet(asks);
+    assert.equal(restyled('btn'), undefined);
+    s.engine.addGlobalSheet(asks);
+    assert.ok(restyled('btn x'));
+  });
+
   it('styles nothing at all under a stylesheet with no pressed style in it', () => {
     const s = scene(BASE);
     assert.equal(s.touch('topTouchStart'), 0);

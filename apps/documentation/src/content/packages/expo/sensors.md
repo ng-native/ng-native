@@ -35,10 +35,12 @@ import {
 
 ```ts
 import { Component, DestroyRef, inject } from '@angular/core';
+import { Text } from '@ng-native/components';
 import { Accelerometer } from '@ng-native/expo/sensors';
 
 @Component({
   selector: 'app-shake-detector',
+  imports: [Text],
   template: `<text>z: {{ motion.reading().z.toFixed(2) }}</text>`,
 })
 export class ShakeDetector {

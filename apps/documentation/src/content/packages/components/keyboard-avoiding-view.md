@@ -85,8 +85,29 @@ An inverted list draws its first item at the bottom, against the dock, so `newes
 transcript reversed: `computed(() => this.messages().toReversed())`.
 
 The lifted view sits inside one that clips, so what rises past its top is hidden rather than
-drawn over the screen above it. Without the library, and on Android, the dock sits in flow,
-padded by as much of the keyboard as covers it, which it learns as the keyboard starts to move.
+drawn over the screen above it.
+
+On Android, `provideNativeKeyboard()` from [`@ng-native/expo/keyboard`](/packages/expo/keyboard)
+moves the bar the same way, on the native side, every frame, and `[keyboardLift]` with it. It moves
+the bar by how far the keyboard covers the dock on screen, so a dock that is not at the bottom of
+the window rises only as far as it must, and one in a form sheet that react-native-screens raises
+with the keyboard is not lifted twice. A dock in a `<modal>` follows the keyboard of the modal's own
+window. Android does not use react-native-keyboard-controller even when it is installed: its view
+adds the navigation bar as margins around the whole app's content, which an app drawn edge to edge
+does not want.
+
+```ts
+import { provideKeyboardController } from '@ng-native/components';
+import { provideNativeKeyboard } from '@ng-native/expo/keyboard';
+
+export const appConfig = {
+  providers: [provideKeyboardController(), provideNativeKeyboard() /* ... */],
+};
+```
+
+Without either, the dock sits in flow, padded by as much of the keyboard as covers it, which it
+learns as the keyboard starts to move. On Android the bar jumps into place then, rather than moving
+with the keyboard.
 
 `covered()` is how much of the bottom of the screen the keyboard covers beyond the dock's own
 place, for content that keeps clear of it with padding or an inset rather than moving with it. It
@@ -116,5 +137,12 @@ The adjustment itself animates with the keyboard's own motion, the way React Nat
 `KeyboardAvoidingView` does: a keyboard event's `duration` and `easing` configure the next layout
 animation before the style change that moves this view, so the two run together rather than the
 padding, height or position jumping to its resting place in one step.
+
+Android animates no layout alongside the keyboard unless an app turns React Native's layout
+animations on, and its keyboard events carry no duration, so there the view jumps to its resting
+place as the keyboard starts to move. With `provideNativeKeyboard()` from
+[`@ng-native/expo/keyboard`](/packages/expo/keyboard) it follows the keyboard frame by frame
+instead: each frame is a commit from JavaScript, so it trails the keyboard by a frame or two, where
+a `<keyboard-dock>` is moved on the native side and does not.
 
 <!-- api: KeyboardAvoidingView -->

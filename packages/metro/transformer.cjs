@@ -14,19 +14,20 @@ const { isAngularDomComponent, domComponentReference } = require('./dom-componen
 const { markdownModule, markdownVersions } = require('./markdown-module.cjs');
 
 /**
- * Expo's transformer, from wherever the app's `expo` has it. pnpm and most npm installs hoist
- * `@expo/metro-config` beside this package, but npm can nest it under `expo` instead, where only
- * `expo` itself can reach it.
+ * Expo's transformer, from the app's `expo`, so it is the SDK the app is on. A copy beside this
+ * package can be another SDK's: pnpm resolves the optional `@expo/metro-config` peer to the newest
+ * release. Only when `expo` cannot be found from the working directory is that copy used.
  */
 function expoTransformer() {
   const id = '@expo/metro-config/build/babel-transformer';
+  let expo;
   try {
-    return require(id);
+    expo = path.dirname(require.resolve('expo/package.json', { paths: [process.cwd()] }));
   } catch (error) {
     if (/** @type {any} */ (error).code !== 'MODULE_NOT_FOUND') throw error;
-    const expo = path.dirname(require.resolve('expo/package.json', { paths: [process.cwd()] }));
-    return require(require.resolve(id, { paths: [expo] }));
+    return require(id);
   }
+  return require(require.resolve(id, { paths: [expo] }));
 }
 
 /**
@@ -148,6 +149,9 @@ function libraryStylesOf(params) {
 
 let warnedWorker = false;
 
+/** A file Babel can parse: JavaScript or TypeScript. */
+const SCRIPT = /\.[cm]?[jt]sx?$/;
+
 /**
  * The Angular stage, or the file's own syntax error when that is why it failed.
  *
@@ -155,7 +159,8 @@ let warnedWorker = false;
  * "Unexpected token" with no line, no column and no code frame. Babel reports the same mistake
  * with all three, so when the Angular stage fails, the file is handed to Babel as written: if it
  * cannot parse either, its error is the one to show. If it can, the fault is in a template or a
- * stylesheet, and the Angular error stands.
+ * stylesheet, and the Angular error stands. A stylesheet or a template file is not JavaScript, so
+ * Babel always fails on it with a place, and only the Angular error says what is wrong.
  */
 function angularOrSyntaxError(params) {
   try {
@@ -167,6 +172,7 @@ function angularOrSyntaxError(params) {
       projectRoot: params.options?.projectRoot,
     });
   } catch (error) {
+    if (!SCRIPT.test(params.filename)) throw error;
     try {
       upstream.transform(params);
     } catch (syntaxError) {

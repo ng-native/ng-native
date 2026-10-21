@@ -4,7 +4,7 @@
  * wrapper does before native sees a prop.
  */
 import assert from 'node:assert/strict';
-import { afterEach, before, describe, it } from 'node:test';
+import { afterEach, before, describe, it, mock } from 'node:test';
 import type { Type } from '@angular/core';
 import { Keyboard } from '@ng-native/device';
 import {
@@ -51,14 +51,25 @@ describe('press timing', () => {
     assert.deepEqual(instance.log, ['in', 'long', 'out']);
   });
 
+  /**
+   * How long the press was held is read from the clock, and settling each touch takes real time:
+   * on a busy machine it took longer than `minPressDuration`, the tap counted as a long hold, and
+   * `pressOut` came at once, ahead of `press`. The clock stands still here, so the tap is instant.
+   */
   it('keeps the pressed look for minPressDuration on a quick tap', async () => {
     const { fabric, instance } = await boot<{ log: string[] }>('PressTiming');
     const btn = byID(fabric, 'btn');
-    await touch(btn, 'topTouchStart');
-    await touch(btn, 'topTouchEnd');
-    assert.deepEqual(instance.log, ['in', 'press'], 'pressOut waits');
-    await wait(60);
-    assert.deepEqual(instance.log, ['in', 'press', 'out']);
+    const at = performance.now();
+    const clock = mock.method(performance, 'now', () => at);
+    try {
+      await touch(btn, 'topTouchStart');
+      await touch(btn, 'topTouchEnd');
+      assert.deepEqual(instance.log, ['in', 'press'], 'pressOut waits');
+      await wait(60);
+      assert.deepEqual(instance.log, ['in', 'press', 'out']);
+    } finally {
+      clock.mock.restore();
+    }
   });
 
   it('still counts a tap that lifts before delayPressIn', async () => {

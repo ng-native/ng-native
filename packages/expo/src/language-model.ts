@@ -64,7 +64,6 @@ export interface GenerateOptions {
   /** System instructions: who the model is and how it answers. Kept apart from the prompt. */
   readonly instructions?: string;
   readonly temperature?: number;
-  /** Capped at 256 on Android. */
   readonly maxTokens?: number;
   readonly topK?: number;
 }
@@ -130,14 +129,10 @@ export class LanguageModel {
     {
       factory: () => {
         // The package loads without its native half, so that half is what decides.
-        const llm = expoModule(
-          'expo-local-llm',
-          () => {
-            const loaded = require('expo-local-llm') as typeof import('expo-local-llm');
-            return loaded.ExpoLocalLlmModule ? loaded : null;
-          },
-          ['ios'],
-        );
+        const llm = expoModule('expo-local-llm', () => {
+          const loaded = require('expo-local-llm') as typeof import('expo-local-llm');
+          return loaded.ExpoLocalLlmModule ? loaded : null;
+        });
         // Missing from the build: the stand-in, to say so when it is used.
         if (llm && !present(llm)) return llm as never;
         const module = llm?.ExpoLocalLlmModule;
@@ -216,7 +211,7 @@ export class LanguageModel {
 
   /**
    * An answer shaped by `schema`, parsed. iOS constrains the model's decoding to the schema, so
-   * the answer always fits it; Android only asks the model to follow it, so check what comes back.
+   * the answer always fits it. Android rejects: `expo-local-llm` does not support a schema there.
    */
   async generateObject<T = unknown>(
     prompt: string,

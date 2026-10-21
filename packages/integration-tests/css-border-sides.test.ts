@@ -15,7 +15,7 @@ function resolvedStyle(css: string, classes: string[]): Record<string, unknown> 
     parent: null,
     classes: new Set(classes),
     props: {},
-    sheet: null,
+    templateSheet: null,
     hostSheet: null,
     styleCache: null,
     styleDirty: true,

@@ -1,0 +1,21 @@
+/**
+ * A Metro config that reads the sheets of the `libraries` it names, and of the app's `sources`, as
+ * a browser does. The transformer's cache version changes with both.
+ */
+export function withWebCompat<T extends object>(config: T, options: WebCompatOptions): T;
+
+export interface WebCompatOptions {
+  /**
+   * The npm packages written for a browser, whose sheets are read as one reads them: a flex
+   * container a row. A library written for native is left out, and keeps its columns.
+   */
+  libraries: readonly string[];
+  /**
+   * The directories of the app's own sources written for a browser: components copied into the
+   * app from a library, as Spartan UI's styled layer is. A relative path is from the project.
+   */
+  sources?: readonly string[];
+}
+
+/** The same for Vitest, as a Vite plugin: `plugins: [ngNative(), webCompat({ libraries })]`. */
+export function webCompat(options: WebCompatOptions): { name: string; enforce: 'pre' };

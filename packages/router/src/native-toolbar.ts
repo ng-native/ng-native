@@ -103,7 +103,7 @@ export class NativeToolbarItem {
 
   constructor() {
     const node = ownHost(inject(ElementRef).nativeElement as EngineNode, NativeToolbarItem);
-    const engine = node.host ?? inject(HostEngine);
+    const engine = node.engine ?? inject(HostEngine);
     inject(DestroyRef).onDestroy(
       engine.setEventListener(node, 'topSelected', () => this.press.emit()),
     );

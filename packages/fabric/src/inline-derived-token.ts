@@ -373,6 +373,7 @@ function mixColour(cursor: Cursor): ColourExpression {
   if (fn === 'color-mix') return mixExpression(cursor);
   if (!fn) return { color: (match(cursor, WORD) ?? fail())[0] };
   if (RELATIVE[fn] && takeWord(cursor, 'from')) return relativeExpression(cursor, RELATIVE[fn]);
+  if (fn === 'color' && takeWord(cursor, 'from')) return srgbExpression(cursor);
   cursor.at = closing(cursor);
   return functionColour(cursor.text.slice(start, cursor.at));
 }
@@ -485,16 +486,45 @@ function relativeExpression(cursor: Cursor, { space, keywords, full }: RelativeS
 }
 
 /**
- * One channel: a `calc()` of numbers and keywords, a keyword, a number, a percentage of the
- * channel's range, or an angle for a hue.
+ * The rest of `color(from <colour> srgb <channel> <channel> <channel> [/ <alpha>])` once `from` is
+ * read: what Highcharts writes for the colour a label stands out in on a colour it cannot read.
+ * Its `r g b` run from 0 to 1, as the channels it makes do: each is the same channel of `rgb()`
+ * read as a share of 255.
+ */
+function srgbExpression(cursor: Cursor) {
+  const from = mixColour(cursor);
+  match(cursor, SPACE);
+  if (!takeWord(cursor, 'srgb')) fail();
+  const names = ['r', 'g', 'b', 'alpha'];
+  const share = (channel: Channel): Channel =>
+    typeof channel === 'string'
+      ? channel === 'alpha'
+        ? channel
+        : ['/', channel, 255]
+      : typeof channel === 'number'
+        ? channel
+        : [channel[0], share(channel[1]), share(channel[2])];
+  const channels = [0, 1, 2].map((): Channel => {
+    match(cursor, SPACE);
+    return ['*', share(relativeChannel(cursor, names, 1)), 255];
+  }) as [Channel, Channel, Channel];
+  const alpha = take(cursor, '/') ? share(relativeChannel(cursor, names, 1)) : undefined;
+  expect(cursor, ')');
+  return {
+    relative: { space: 'srgb' as const, from, channels, ...(alpha === undefined ? {} : { alpha }) },
+  };
+}
+
+/** The functions a channel is worked out with: arithmetic, and the least, the most or between. */
+const CHANNEL_MATH: ReadonlySet<string> = new Set(['calc', 'min', 'max', 'clamp']);
+
+/**
+ * One channel: a `calc()`, `min()`, `max()` or `clamp()` of numbers and keywords, a keyword, a
+ * number, a percentage of the channel's range, or an angle for a hue.
  */
 function relativeChannel(cursor: Cursor, keywords: readonly string[], full: number | null) {
   const fn = match(cursor, FUNCTION)?.[1]?.toLowerCase();
-  if (fn) {
-    const value = fn === 'calc' ? channelSum(cursor, keywords) : fail();
-    expect(cursor, ')');
-    return value;
-  }
+  if (fn) return channelMath(cursor, fn, keywords);
   const found = match(cursor, LITERAL);
   if (!found) return channelOperand(cursor, keywords);
   const value = Number(found[1]) * channelScale((found[2] ?? '').toLowerCase(), full);
@@ -525,12 +555,28 @@ function channelProduct(cursor: Cursor, keywords: readonly string[]): Channel {
   return value;
 }
 
+/** The rest of a `calc()`, `min()`, `max()` or `clamp()` of channels, once its name is read. */
+function channelMath(cursor: Cursor, fn: string, keywords: readonly string[]): Channel {
+  if (!CHANNEL_MATH.has(fn)) fail();
+  const sides = [channelSum(cursor, keywords)];
+  while (fn !== 'calc' && take(cursor, ',')) sides.push(channelSum(cursor, keywords));
+  expect(cursor, ')');
+  if (fn === 'clamp') {
+    if (sides.length !== 3) fail();
+    const [least, value, most] = sides;
+    return ['max', least!, ['min', value!, most!]];
+  }
+  return sides.reduce((a, b) => [fn as 'min' | 'max', a, b]);
+}
+
 function channelFactor(cursor: Cursor, keywords: readonly string[]): Channel {
   if (take(cursor, '(')) {
     const value = channelSum(cursor, keywords);
     expect(cursor, ')');
     return value;
   }
+  const fn = match(cursor, FUNCTION)?.[1]?.toLowerCase();
+  if (fn) return channelMath(cursor, fn, keywords);
   const found = match(cursor, LITERAL);
   // A percentage or an angle stands alone: inside arithmetic the keywords are numbers.
   if (found) return found[2] ? fail() : Number(found[1]);

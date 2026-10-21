@@ -11,9 +11,10 @@ navigate to.
 
 ```ts
 import { Component, DestroyRef, inject } from '@angular/core';
+import { View } from '@ng-native/components';
 import { DeepLinks } from '@ng-native/device';
 
-@Component({ selector: 'app-root', template: `<view />` })
+@Component({ selector: 'app-root', imports: [View], template: `<view />` })
 export class Root {
   constructor() {
     const links = inject(DeepLinks);
@@ -45,6 +46,14 @@ that resolves `initialUrl()` races the first navigation and neither order is gua
 
 `open(url)` hands a url to whatever else on the device handles it: a browser, Maps, another app.
 
+`follow(path)` hands a path of the app's own to what `subscribe()` was given, as a link that
+arrived from outside is handed, so the router navigates to it. With nothing subscribed, as in an
+app without `provideNativeRouter()`, the path goes nowhere: it is not kept for a listener later.
+
+`NATIVE_HISTORY` is the native router's `PlatformLocation`, which `provideNativeRouter()` provides.
+A package that stands in a `PlatformLocation` for an app with no router reads it first, so the
+router's is kept in whichever order the two are provided.
+
 `openSettings()` opens the app's own page in the system settings, where a person turns on a
 permission the platform no longer asks for (see [Permissions](/packages/expo/permissions)). Android
 has no url for that page, so `open()` cannot reach it there.
@@ -55,6 +64,12 @@ against the schemes you mean to open, usually `https:` and the app's own, before
 
 Opening goes the other way too: any app or web page can open any of your routes by deep link, so a
 route that acts as it arrives needs a guard (see [Router](/packages/router)).
+
+`DeepLinks` gives a path, so the scheme, the host and the query of a link are gone by the time you
+see it. An app that needs the whole address reads the platform's source itself: `deepLinkSource()`
+returns the `DeepLinkSource` that `DeepLinks` is built on, with `launchUrl()`, `subscribe()`,
+`open()` and `openSettings()`, all in terms of the url as it arrived.
+Off a device it is a source that never delivers a link.
 
 `@ng-native/router`'s `provideNativeRouter(routes)` wires this into `PlatformLocation` for you, so
 most apps never call `DeepLinks` directly.
