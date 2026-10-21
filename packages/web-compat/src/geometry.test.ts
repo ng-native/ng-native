@@ -646,7 +646,9 @@ describe('ResizeObserver', () => {
     const shown = async () => {
       await settle();
       const layout = { x: 0, y: 0, width: 50, height: 20 };
-      app.fabric.emit(screen.getByTestId('watched'), 'topLayout', { layout });
+      // Laid out though it is not seen yet, as what is put over the app is not for a frame.
+      const watched = screen.getByTestId('watched', { includeHiddenElements: true });
+      app.fabric.emit(watched, 'topLayout', { layout });
       await nextFrame();
     };
     const seen: number[] = [];
@@ -698,7 +700,8 @@ describe('ResizeObserver', () => {
     );
     observer.observe(box);
     const layout = { x: 0, y: 0, width: 60, height: 20 };
-    app.fabric.emit(screen.getByTestId('again'), 'topLayout', { layout });
+    const again = screen.getByTestId('again', { includeHiddenElements: true });
+    app.fabric.emit(again, 'topLayout', { layout });
     await nextFrame();
     observer.unobserve(box);
     // Laid out again while nothing heard it.

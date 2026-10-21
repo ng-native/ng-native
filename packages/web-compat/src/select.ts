@@ -1,5 +1,6 @@
 import { claimHost, type Engine, type EngineNode } from '@ng-native/fabric';
 import { documentOf, ownView } from './document.ts';
+import { drawAtOnce } from './inserted-unseen.ts';
 import { defaultsOf } from './elements.ts';
 
 /**
@@ -264,6 +265,7 @@ export function pressSelect(node: EngineNode, engine: Engine): void {
     });
   }
   engine.appendChild(layer, list);
+  drawAtOnce(layer);
   // Through the body's own append, which is what joins it to the tree, on top of the app.
   (body as unknown as { appendChild(child: EngineNode): void }).appendChild(layer);
   select.close = () => {

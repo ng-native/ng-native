@@ -23,7 +23,9 @@ listed is not there.
 - Live `getElementsByTagName`, `getElementsByClassName` and `getElementsByName`.
 - `MutationObserver`, with `childList`, `attributes`, `characterData`, `subtree` and old values.
 - A `document` that creates engine nodes and fragments, with a `body` that draws over the screen
-  for overlays, a doctype, `createElementNS`, `createTreeWalker` and `createNodeIterator`, and a
+  for overlays (what a library puts in it is first seen in the frame after, by when it has been
+  measured and styled, as a browser first paints it, and stays a view native does not flatten
+  away), a doctype, `createElementNS`, `createTreeWalker` and `createNodeIterator`, and a
   `document.implementation` that makes HTML and XML documents.
 - The `window` globals a library reads: `Event`, `CustomEvent`, `HTMLElement`, `Node`, `Text`,
   `Comment`, `DocumentFragment`, `NodeList`, `HTMLCollection`, `DOMParser`, `XMLSerializer`,

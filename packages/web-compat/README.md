@@ -54,7 +54,9 @@ Experimental and partial. It has:
   `null`, and a `ShadowRoot` that nothing is an instance of.
 - `MutationObserver`, with `childList`, `attributes`, `characterData`, `subtree` and old values.
 - A `document` that creates engine nodes and fragments, with a `body` that draws over the screen
-  for overlays, a doctype, `createElementNS`, `createTreeWalker` and `createNodeIterator`, and a
+  for overlays (what a library puts in it is first seen in the frame after, by when it has been
+  measured and styled, as a browser first paints it, and stays a view native does not flatten
+  away), a doctype, `createElementNS`, `createTreeWalker` and `createNodeIterator`, and a
   `document.implementation` that makes HTML and XML documents that are never drawn.
 - Events: `MouseEvent`, `PointerEvent`, `KeyboardEvent`, `FocusEvent`, `TouchEvent` and the
   other kinds, `document.createEvent` with each kind's `init*Event`, `window.event`, and handler
