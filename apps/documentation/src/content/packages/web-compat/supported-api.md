@@ -189,6 +189,9 @@ before a listener hears of it.
   `<textarea>` says how tall its text is as `scrollHeight`.
 - A file input's `click()` opens the system's file picker through `expo-document-picker`, which
   the app installs.
+- A `<fieldset>`'s `<legend>` sits on the fieldset's top border, the border running through the
+  middle of the legend's height, as the legend's measured height is known. A fieldset with no
+  border leaves it where it is written.
 - A form has `elements`, `requestSubmit()` and `reset()`, is submitted only once its controls pass
   their constraints, and `document.forms` lists the forms.
 

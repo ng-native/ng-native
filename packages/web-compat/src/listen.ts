@@ -16,7 +16,7 @@ import {
   setField,
   wasRefused,
 } from './field.ts';
-import { fenceUnder } from './fieldset.ts';
+import { fenceUnder, legendInserted } from './fieldset.ts';
 import { implicitSubmit } from './form.ts';
 import { setChecked } from './form-controls.ts';
 import { buildAs, holdIconBox, setMarkup } from './html.ts';
@@ -188,14 +188,15 @@ export const webListen: RendererExtension = {
     // A web view, or a document of its own: see `frame-view.ts` and `frame.ts`.
     frameCreated(node, engine);
   },
-  // What a select shows, whether a field is in a disabled fieldset and a table's columns follow
-  // where an option, a field and a row or a cell
-  // and a field are put: see `select.ts` and `fieldset.ts`. What a drawing's own elements are
-  // given as they are put in it goes with them as the engine takes them out: see `svg.ts` and
-  // `hearRemovals`.
+  // What a select shows, whether a field is in a disabled fieldset, where a legend sits on its
+  // fieldset's border and a table's columns follow where an option, a field, a legend and a row
+  // or a cell are put: see `select.ts`, `fieldset.ts` and `table.ts`. What a drawing's own
+  // elements are given as they are put in it goes with them as the engine takes them out: see
+  // `svg.ts` and `hearRemovals`.
   inserted(node, parent, engine) {
     if (!documentOf(engine)) return;
     optionInserted(node, parent, engine);
+    legendInserted(node, parent, engine);
     if (node.tag === 'legend' && parent.tag === 'fieldset') fenceUnder(parent, engine);
     else fenceUnder(node, engine);
     svgInserted(node, parent, engine);
