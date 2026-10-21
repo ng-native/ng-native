@@ -152,14 +152,14 @@ class MemoryStorage {
   key(at: number): string | null {
     return [...this.kept.keys()][at] ?? null;
   }
-  getItem(name: string): string | null {
-    return this.kept.get(name) ?? null;
+  getItem(name: unknown): string | null {
+    return this.kept.get(String(name)) ?? null;
   }
-  setItem(name: string, value: unknown): void {
-    this.kept.set(name, String(value));
+  setItem(name: unknown, value: unknown): void {
+    this.kept.set(String(name), String(value));
   }
-  removeItem(name: string): void {
-    this.kept.delete(name);
+  removeItem(name: unknown): void {
+    this.kept.delete(String(name));
   }
   clear(): void {
     this.kept.clear();

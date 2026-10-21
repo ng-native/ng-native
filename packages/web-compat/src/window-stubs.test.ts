@@ -32,6 +32,11 @@ describe('the window of an app that asked for the package', () => {
     localStorage.setItem('count', 3);
     assert.equal(localStorage.getItem('table'), '{"first":10}');
     assert.equal(localStorage.getItem('count'), '3', 'a value is kept as text');
+    // And a name is text too, as a browser keeps it.
+    localStorage.setItem(7, 'seven');
+    assert.equal(localStorage.getItem('7'), 'seven');
+    localStorage.removeItem(7);
+    assert.equal(localStorage.getItem(7), null);
     assert.equal(localStorage.length, 2);
     assert.equal(localStorage.key(0), 'table');
     assert.equal(localStorage.key(1), 'count');
