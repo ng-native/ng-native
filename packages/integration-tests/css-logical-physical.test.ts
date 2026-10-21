@@ -264,13 +264,15 @@ describe('a sheet with an @media rule in it', () => {
     });
   }
 
-  it('keeps the pair logical beside a comment, or an & in a comment or a string', () => {
+  it('keeps the pair logical beside a comment, an & in a comment or a string, or nested @media', () => {
     const pair = 'padding-inline-start: 4px; padding-inline-end: 4px';
     const sheets = [
       `/* a & b */ .a { ${pair} } ${MEDIA}`,
       `.a { ${pair}; font-family: "A & B" } ${MEDIA}`,
       `.a { ${pair} } /* note */ ${MEDIA}`,
       `/* note */ @media (width > 1px) { .a { ${pair} } }`,
+      `@media (width > 1px) { @media (height > 1px) { .a { ${pair} } } }`,
+      `@layer x { @media (width > 1px) { .a { ${pair} } } }`,
     ];
     for (const css of sheets) {
       const rule = ruleOf(css)!;
