@@ -6,7 +6,8 @@ import { domError } from './dom-error.ts';
 import { report } from './events.ts';
 import { border, clientSize, drawn, frameOf, isTable, styled } from './geometry.ts';
 import { asElement } from './resize-observer.ts';
-import { engineOf, listenToResize, windowSize } from './window.ts';
+import { engineOf } from './window.ts';
+import { listenToResize, windowSize } from './window-size.ts';
 import { oncePerFrame } from './next-frame.ts';
 
 /**

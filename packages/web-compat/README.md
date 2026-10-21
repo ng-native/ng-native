@@ -52,6 +52,12 @@ Experimental and partial. It has:
 - Stand-ins for what a library asks of the window: `localStorage` and `sessionStorage` held in
   memory for as long as the app is up, `getSelection()` with nothing selected, `open()` returning
   `null`, and a `ShadowRoot` that nothing is an instance of.
+- The window starts under the navigation header of the screen in sight and ends at the top of the
+  keyboard while it is up, as a browser on a phone ends its window there: `innerHeight`,
+  `visualViewport` and where an element or a touch is are read from there, `resize` is sent as
+  either moves, and `document.body`, where an overlay goes, covers just that part of the screen,
+  with what is `fixed` in it fixed to it. On Android, which draws an app under its system bars,
+  the window is as tall as the app is drawn. `screen` and `matchMedia` read the whole screen.
 - `MutationObserver`, with `childList`, `attributes`, `characterData`, `subtree` and old values.
 - A `document` that creates engine nodes and fragments, with a `body` that draws over the screen
   for overlays, a doctype, `createElementNS`, `createTreeWalker` and `createNodeIterator`, and a

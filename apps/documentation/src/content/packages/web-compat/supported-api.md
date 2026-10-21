@@ -124,6 +124,12 @@ Gaps:
   `scrollIntoView`. `document.scrollingElement` is the root.
 - The window: `screen`, `visualViewport`, `devicePixelRatio` as the screen's pixels in a point,
   and `matchMedia` with a `change` listener.
+- The window starts under the navigation header of the screen in sight and ends at the top of the
+  keyboard while it is up, as a browser on a phone ends its window there: `innerHeight`,
+  `visualViewport` and where an element or a touch is are read from there, `resize` is sent as
+  either moves, and `document.body`, where an overlay goes, covers just that part of the screen,
+  with what is `fixed` in it fixed to it. On Android, which draws an app under its system bars,
+  the window is as tall as the app is drawn. `screen` and `matchMedia` read the whole screen.
 - `ResizeObserver`, and `IntersectionObserver` with a root, a margin and thresholds. An app that
   observes nothing pays nothing for them.
 - `navigator.userAgent` names a phone of the platform the app runs on (an iPhone on iOS, an Android
@@ -148,6 +154,8 @@ too, where Chrome answers half of it. A table whose overflow is `scroll` or `aut
 Chrome draws it as `visible`; an `IntersectionObserver` sees it as Chrome does.
 `IntersectionObserver` takes `trackVisibility` but its `isVisible` is never true, since nothing
 tells it whether something is drawn over an element.
+The window starts under the header of the newest screen in the tree, which is the one in sight
+in a stack: with two stacks side by side it is the header of whichever pushed a screen last.
 
 ## Events
 

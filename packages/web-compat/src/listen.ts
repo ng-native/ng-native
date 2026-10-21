@@ -36,6 +36,7 @@ import {
   setSelect,
 } from './select.ts';
 import { engineOf } from './window.ts';
+import { headerMoved, topMoved, windowTop } from './window-size.ts';
 import { together } from './mutation-observer.ts';
 import { frameAttributeSet, frameCreated } from './frame.ts';
 import { setFrameView } from './frame-view.ts';
@@ -192,6 +193,8 @@ export const webListen: RendererExtension = {
     imageCreated(node, engine);
     // A web view, or a document of its own: see `frame-view.ts` and `frame.ts`.
     frameCreated(node, engine);
+    // The window starts under a screen's navigation header: see `underHeader`.
+    if (node.tag === 'screen' && documentOf(engine)) underHeader(node, engine);
   },
   // What a select shows, whether a field is in a disabled fieldset, where a legend sits on its
   // fieldset's border and a table's columns follow where an option, a field, a legend and a row
@@ -213,6 +216,9 @@ export const webListen: RendererExtension = {
     // The table a row or a cell was in: see `table.ts`.
     tableRemoved(node, engine);
     legendRemoved(node, engine);
+    // A screen, or what one is in: the window starts under the header of another.
+    if (node.tag === 'screen') headerMoved(engine, node, undefined);
+    else topMoved(engine);
   },
   set(node, name, value, engine) {
     // By the name HTML has it, as a template may write it in capitals.
@@ -543,6 +549,19 @@ const capturing = new WeakSet<EngineNode>();
 /** Whether a touch is on the node, and so every move of it comes to the node's listeners. */
 export const hasCapture = (node: EngineNode): boolean => capturing.has(node);
 
+/**
+ * Hear how tall the navigation header over a screen is, which the screen says as it is laid out
+ * and as its header changes: the window starts under it. See `windowTop`.
+ */
+function underHeader(screen: EngineNode, engine: Engine): void {
+  headerMoved(engine, screen, 0);
+  engine.setEventListener(screen, 'topHeaderHeightChange', (event) => {
+    const height = (event as { nativeEvent?: { headerHeight?: unknown } }).nativeEvent
+      ?.headerHeight;
+    if (typeof height === 'number') headerMoved(engine, screen, height);
+  });
+}
+
 /** Where on the screen a touch is. */
 function pointOf(event: unknown): { x: number; y: number } {
   const touch = (event as { nativeEvent?: { pageX?: number; pageY?: number } }).nativeEvent;
@@ -735,36 +754,39 @@ interface Touch {
   pageY?: number;
 }
 
-/** A touch as a DOM `Touch` reads: the page and the client both, with no window to scroll. */
-const asTouch = (touch: Touch): object => ({
-  ...touch,
-  clientX: touch.pageX ?? 0,
-  clientY: touch.pageY ?? 0,
-});
+/**
+ * A touch as a DOM `Touch` reads: the page and the client both, with no window to scroll, from
+ * the top of the window, which is `top` down the screen.
+ */
+const asTouch = (touch: Touch, top: number): object => {
+  const y = (touch.pageY ?? 0) - top;
+  return { ...touch, pageY: y, clientX: touch.pageX ?? 0, clientY: y };
+};
 
 /** A list of touches, which a library reads one of by its place: `touches.item(0)`. */
-const touchList = (touches: readonly Touch[] | undefined): object[] => {
-  const list = (touches ?? []).map(asTouch);
+const touchList = (touches: readonly Touch[] | undefined, top: number): object[] => {
+  const list = (touches ?? []).map((touch) => asTouch(touch, top));
   return Object.assign(list, { item: (index: number) => list[index] ?? null });
 };
 
 /**
  * Where a touch is, as a DOM event says it: the finger that changed at the page and the client,
- * and the fingers down as `touches`.
+ * and the fingers down as `touches`. Native says where on the screen, and the window starts `top`
+ * down it, under a navigation header: see `windowTop`.
  */
-export function touchFields(native: unknown): Record<string, unknown> {
+export function touchFields(native: unknown, top: number): Record<string, unknown> {
   const said = native as
     { pageX?: number; pageY?: number; touches?: Touch[]; changedTouches?: Touch[] } | undefined;
   if (!said) return {};
   const x = said.pageX ?? 0;
-  const y = said.pageY ?? 0;
+  const y = (said.pageY ?? 0) - top;
   return {
     clientX: x,
     clientY: y,
     pageX: x,
     pageY: y,
-    touches: touchList(said.touches),
-    changedTouches: touchList(said.changedTouches),
+    touches: touchList(said.touches, top),
+    changedTouches: touchList(said.changedTouches, top),
   };
 }
 
@@ -819,7 +841,7 @@ function domFields(type: string, target: EngineNode, event: unknown): Record<str
   // What native said, which every element the event goes up through is told of.
   const native = (event as { nativeEvent?: object } | undefined)?.nativeEvent;
   return {
-    ...touchFields(native),
+    ...touchFields(native, windowTop(engineOf(target))),
     // The key a field says was pressed: see `field.ts`.
     ...keyOf(native as { key?: unknown } | undefined),
     type,

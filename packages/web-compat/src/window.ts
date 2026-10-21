@@ -38,6 +38,7 @@ import { ResizeObserver, ResizeObserverEntry, ResizeObserverSize } from './resiz
 import { scrollAsked, scrollPromise } from './scroll-offset.ts';
 import { NodeFilter, NodeIterator, TreeWalker } from './traversal.ts';
 import { listenOnWindow, windowListensTo } from './window-listeners.ts';
+import { listenToResize, windowSize } from './window-size.ts';
 import { XMLSerializer } from './xml-serializer.ts';
 
 /** The engine a node is in. */
@@ -80,28 +81,28 @@ function matchMedia(...args: unknown[]): MediaQueryList {
 }
 
 /**
- * `window.screen`: the window, as nothing here is drawn outside it. Read each time, as the
- * device can turn.
+ * `window.screen`: the screen the window is on, which the keyboard and a navigation header do
+ * not make any smaller. Read each time, as the device can turn.
  */
 const screen = Object.freeze({
   get width() {
-    return size().width;
+    return screenSize().width;
   },
   get height() {
-    return size().height;
+    return screenSize().height;
   },
   get availWidth() {
-    return size().width;
+    return screenSize().width;
   },
   get availHeight() {
-    return size().height;
+    return screenSize().height;
   },
   availLeft: 0,
   availTop: 0,
   colorDepth: 24,
   pixelDepth: 24,
   get orientation() {
-    const { width, height } = size();
+    const { width, height } = screenSize();
     const portrait = height >= width;
     return { type: portrait ? 'portrait-primary' : 'landscape-primary', angle: portrait ? 0 : 90 };
   },
@@ -415,26 +416,23 @@ export function windowOf(engine: Engine): () => void {
   };
 }
 
-/**
- * Hear the window of an app change size, as a `resize` listener on `window` does: the device
- * turning, or the window given another size.
- */
-export const listenToResize = (engine: Engine, listener: () => void): (() => void) =>
-  engine.watchViewport(listener);
-
-/** The size of an app's window, which is the screen's: nothing is drawn outside it. */
-export const windowSize = (engine: Engine): { width: number; height: number } => engine.viewport;
-
+/** The size of the window `window` speaks for: see `window-size.ts`. */
 const size = () => {
   const engine = engines.at(-1);
   return engine ? windowSize(engine) : { width: 0, height: 0 };
 };
 
-/** The window's size, with the colour scheme and the motion the engine was given. */
+/** The size of the screen, which the keyboard and a header are drawn over and do not change. */
+const screenSize = () => engines.at(-1)?.viewport ?? { width: 0, height: 0 };
+
+/**
+ * The screen's size, with the colour scheme and the motion the engine was given: what a media
+ * query reads, as the app's own stylesheets do, so a keyboard coming up turns no query.
+ */
 const preferences = () => {
   const conditions = engines.at(-1)?.conditions;
   return {
-    ...size(),
+    ...screenSize(),
     colorScheme: conditions?.colorScheme,
     reducedMotion: conditions?.reducedMotion,
   };

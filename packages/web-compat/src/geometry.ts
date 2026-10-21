@@ -1,6 +1,7 @@
 import type { Engine, EngineNode } from '@ng-native/fabric';
 import { scrollOf } from './scroll-offset.ts';
-import { engineOf, windowSize } from './window.ts';
+import { engineOf } from './window.ts';
+import { windowSize, windowTop } from './window-size.ts';
 import { documentOf } from './document.ts';
 import { DOMRect, DOMRectList } from './dom-rect.ts';
 
@@ -97,8 +98,13 @@ export function frameOf(node: EngineNode) {
   if (node === engine.root) return { x: 0, y: 0, ...windowSize(engine) };
   let frame = { x: 0, y: 0, width: 0, height: 0 };
   layOut(engine);
-  // Fabric answers before `measure` returns, so this reads as a DOM measurement does.
-  engine.measure(node, (measured) => (frame = measured));
+  // Fabric answers before `measure` returns, so this reads as a DOM measurement does. From
+  // where the window starts, which is under a navigation header: see `windowTop`.
+  const top = windowTop(engine);
+  engine.measure(
+    node,
+    (measured) => (frame = top ? { ...measured, y: measured.y - top } : measured),
+  );
   return frame;
 }
 
