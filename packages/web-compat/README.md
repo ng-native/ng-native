@@ -102,7 +102,8 @@ Experimental and partial. It has:
   ask for, and `readOnly` and `disabled` making it one that cannot be typed into. A `<select>`
   shows its chosen `<option>` and opens a list of them when it or its label is pressed. A control
   has `checked`, `validity` with `checkValidity()`, `reportValidity()` and `setCustomValidity()`,
-  `selectionStart` and `setSelectionRange()`, and its `form`, which has `elements`,
+  `selectionStart` and `setSelectionRange()`, `select()` followed by `document.execCommand('copy')`
+  writing the text to the clipboard through `expo-clipboard`, and its `form`, which has `elements`,
   `requestSubmit()` and `reset()`. A disabled `<fieldset>` disables what is in it, its `<legend>`
   sits on its top border, a file input's
   `click()` opens the system's file picker through `expo-document-picker`, and `:valid`, `:checked`,

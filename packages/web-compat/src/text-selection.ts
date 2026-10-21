@@ -1,4 +1,5 @@
 import type { EngineNode } from '@ng-native/fabric';
+import { select as keepSelected } from './copy-command.ts';
 import { domError } from './dom-error.ts';
 import { selectNatively } from './field.ts';
 import { method, own, type Reflecting, type Reflection } from './reflect.ts';
@@ -101,8 +102,9 @@ const MEMBERS: Readonly<Record<string, Reflection>> = {
   ) {
     setRange(this, from, to, direction);
   }),
-  // The whole text.
+  // The whole text, and the field kept as the one a copy takes.
   select: method(function (this: Field) {
+    keepSelected(engineOf(this), this);
     if (selectable(this)) setRange(this, 0, textOf(this).length);
   }),
 };

@@ -2,6 +2,7 @@ import { claimHost, type Engine, type EngineNode } from '@ng-native/fabric';
 import { createAttribute, createAttributeNS } from './attr.ts';
 import { createCDATASection } from './cdata-section.ts';
 import { createComment } from './character-data.ts';
+import { copySelected } from './copy-command.ts';
 import { documentChildren } from './document-children.ts';
 import { markFragment } from './document-fragment.ts';
 import { documentNodeMembers } from './document-node.ts';
@@ -569,6 +570,7 @@ export function documentFor(engine: Engine): CompatDocument {
     hasFocus: () => true,
     // The window's, which nothing is selected in: see `window.ts`.
     getSelection: () => (globalThis as { getSelection?: () => unknown }).getSelection?.() ?? null,
+    execCommand: (command: string) => command === 'copy' && copySelected(engine),
   };
   Object.assign(created, anywhere(engine, created));
   Object.assign(created, documentNodeMembers(created as never, false));

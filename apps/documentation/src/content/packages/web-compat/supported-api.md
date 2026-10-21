@@ -193,6 +193,10 @@ before a listener hears of it.
   `:out-of-range`, `:placeholder-shown`, `:checked`, `:indeterminate` and `:default` match.
 - A field has `selectionStart`, `selectionEnd`, `setSelectionRange()` and `select()`, and a
   `<textarea>` says how tall its text is as `scrollHeight`.
+- `document.execCommand('copy')` puts the text selected in the field last given `select()` (the
+  range selected, or all of it where none is) on the clipboard through `expo-clipboard`, which the
+  app installs. It answers `false` with no such field, without the module, and for any other
+  command.
 - A file input's `click()` opens the system's file picker through `expo-document-picker`, which
   the app installs.
 - A `<fieldset>`'s `<legend>` sits on the fieldset's top border, the border running through the
