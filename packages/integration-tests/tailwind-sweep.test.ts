@@ -49,13 +49,6 @@ const DELIBERATE: readonly Accounted[] = [
       "the initial one, `medium`; native draws none. An app's own token is set.",
   },
   {
-    property: /^\(unsided\) borderWidth$/,
-    case: /^border-hairline!?$/,
-    reason:
-      'A width from a token writes the sides only, so the unsided 0 of preflight stays beside ' +
-      'them. Native draws each side at its own width, and Android a rounded dashed one solid.',
-  },
-  {
     where: 'child',
     property: /^cursor$/,
     reason:

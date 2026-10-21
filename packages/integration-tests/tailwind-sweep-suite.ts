@@ -572,10 +572,10 @@ function whereOnlyOursSets(
 }
 
 /**
- * Where ours writes a border's unsided width or colour unlike the four sides, which agree. Android
- * strokes a rounded border, the only way it draws one dashed or dotted, from the unsided props,
- * and only when every side equals them: Chrome's sides, compared already, say nothing of them.
- * Sides that differ are read on their own, and the unsided prop is not read at all.
+ * Where a border's unsided width or colour is not what the four sides agree on. Android strokes
+ * a rounded border, the only way it draws one dashed or dotted, from the unsided props, and only
+ * when every side equals them: Chrome's sides, compared already, say nothing of them. Sides that
+ * differ, or a logical side, are read on their own, and a border with no width strokes nothing.
  */
 function whereUnsidedDiffers(
   name: string,
@@ -583,14 +583,25 @@ function whereUnsidedDiffers(
   style: Record<string, unknown>,
 ): Disagreement[] {
   const problems: Disagreement[] = [];
-  for (const part of ['width', 'color'] as const) {
-    const key = `border${cap(part)}`;
-    if (style[key] === undefined) continue;
+  const logical = (part: string) =>
+    ['Start', 'End', 'Block', 'BlockStart', 'BlockEnd'].some(
+      (side) => style[`border${side}${cap(part)}`] !== undefined,
+    );
+  const agreed = (part: 'width' | 'color') => {
     const [first, ...rest] = ['top', 'right', 'bottom', 'left'].map((side) =>
       JSON.stringify(ours(style, `border-${side}-${part}`)),
     );
-    if (rest.some((side) => side !== first) || JSON.stringify(style[key]) === first) continue;
-    const text = `${label}: ours ${JSON.stringify(style[key])}, every side ${first}`;
+    return rest.every((side) => side === first) && !logical(part) ? first : undefined;
+  };
+  const width = agreed('width');
+  const drawn = width !== undefined && width !== '0';
+  for (const part of ['width', 'color'] as const) {
+    const key = `border${cap(part)}`;
+    const every = agreed(part);
+    const unsided = JSON.stringify(style[key]);
+    if (every === undefined || unsided === every) continue;
+    if (style[key] === undefined && !drawn) continue;
+    const text = `${label}: ours ${unsided ?? 'nothing'}, every side ${every}`;
     problems.push({ case: name, property: `(unsided) ${key}`, text });
   }
   return problems;
