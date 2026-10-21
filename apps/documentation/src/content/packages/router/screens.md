@@ -261,7 +261,7 @@ bookkeeping on your part.
 `replace()` and `reset()` take a presentation too. A `stackAnimation` named there is the one the
 new screen arrives with, so `reset('/', { presentation: { stackAnimation: 'none' } })` lands with
 no animation: the screen is given `replaceAnimation: 'push'` unless the navigation names a
-`replaceAnimation` of its own. With no `stackAnimation`, a replace or a reset animates as a back
+`replaceAnimation` of its own. With neither option named, a replace or a reset animates as a back
 from the screen it takes away, as `react-native-screens` does.
 
 ## A sideways drag on iOS 26
