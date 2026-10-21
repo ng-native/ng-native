@@ -4,9 +4,12 @@
  * tall as its text, which with none typed is one line.
  */
 import assert from 'node:assert/strict';
-import { describe, it } from 'node:test';
-import { Engine } from '@ng-native/fabric';
-import { compileCss, createFakeFabric } from '@ng-native/testing';
+import path from 'node:path';
+import { afterEach, describe, it } from 'node:test';
+import type { Type } from '@angular/core';
+import { Engine, registerPlatformComponents } from '@ng-native/fabric';
+import { cleanup, compileCss, createFakeFabric, render, settle } from '@ng-native/testing';
+import { compileSource } from './compile.ts';
 
 function field(css: string, props: Record<string, unknown>, fontScale = 1) {
   const fabric = createFakeFabric();
@@ -21,7 +24,7 @@ function field(css: string, props: Record<string, unknown>, fontScale = 1) {
     engine.commit();
     return fabric.committed[0]!.props['height'] ?? null;
   };
-  return { engine, input, height };
+  return { engine, input, height, fabric };
 }
 
 const LINES = 'text-input { line-height: 20px }';
@@ -58,6 +61,30 @@ describe('rows on a multiline text input', () => {
     assert.equal(area.height(), null);
   });
 
+  it('is not sent to native, which has no prop of that name', () => {
+    const area = field(LINES, { multiline: true, rows: 3 });
+    assert.equal(area.height(), 60);
+    assert.equal('rows' in area.fabric.committed[0]!.props, false);
+    // Android's field, under its own name.
+    registerPlatformComponents('android');
+    try {
+      const android = field(LINES, { multiline: true, rows: 3 });
+      assert.equal(android.height(), 60);
+      assert.equal(android.fabric.committed[0]!.viewName, 'AndroidTextInput');
+      assert.equal('rows' in android.fabric.committed[0]!.props, false);
+    } finally {
+      registerPlatformComponents('ios');
+    }
+    // Another view's own `rows` is its business, and goes through.
+    const fabric = createFakeFabric();
+    const engine = new Engine(fabric, 1);
+    const grid = engine.createElement('view');
+    engine.setProp(grid, 'rows', 3);
+    engine.appendChild(engine.root, grid);
+    engine.commit();
+    assert.equal(fabric.committed[0]!.props['rows'], 3);
+  });
+
   it('counts its lines at the system text size, as the field draws them', () => {
     const padded = `${LINES} text-input { padding: 4px 0 }`;
     assert.equal(field(padded, { multiline: true, rows: 3 }, 1.5).height(), 98);
@@ -66,5 +93,54 @@ describe('rows on a multiline text input', () => {
     assert.equal(field(padded, fixed, 1.5).height(), 68);
     const capped = { multiline: true, rows: 3, maxFontSizeMultiplier: 1.2 };
     assert.equal(field(padded, capped, 1.5).height(), 80);
+  });
+});
+
+describe('rows on the text-input component', () => {
+  afterEach(() => cleanup());
+
+  const source = `
+import { Component, signal } from '@angular/core';
+import { TextInput } from '../components/src/text-input.ts';
+@Component({
+  selector: 'x-area',
+  imports: [TextInput],
+  template: \`
+    <text-input testID="static" multiline rows="3" style="line-height: 20px; padding: 0" />
+    <text-input testID="bound" multiline [rows]="rows()" style="line-height: 20px; padding: 0" />
+  \`,
+})
+export class Area { readonly rows = signal<number | undefined>(2); }
+`;
+
+  it('sizes the field, says nothing of it in development, and keeps it from native', async () => {
+    const file = path.join(import.meta.dirname, 'text-input-rows.fixture.ts');
+    const mod = await compileSource(source, file, file.replace(/\.ts$/, '.generated.ts'));
+    const warn = console.warn;
+    const warnings: string[] = [];
+    console.warn = (...args: unknown[]) => warnings.push(args.map(String).join(' '));
+    try {
+      const { fabric, instance } = await render(
+        mod['Area'] as Type<{ rows: { set(value: number | undefined): void } }>,
+        { dev: true },
+      );
+      const byID = (id: string) =>
+        fabric.committed[0]!.children.find((n) => n.props['testID'] === id)!;
+      assert.equal(byID('static').props['height'], 60);
+      assert.equal(byID('bound').props['height'], 40);
+      instance.rows.set(4);
+      await settle();
+      assert.equal(byID('bound').props['height'], 80);
+      instance.rows.set(undefined);
+      await settle();
+      assert.equal(byID('bound').props['height'], null);
+      for (const id of ['static', 'bound']) assert.equal('rows' in byID(id).props, false, id);
+      assert.deepEqual(
+        warnings.filter((line) => line.includes('has no prop')),
+        [],
+      );
+    } finally {
+      console.warn = warn;
+    }
   });
 });

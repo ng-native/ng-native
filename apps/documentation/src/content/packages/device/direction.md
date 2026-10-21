@@ -10,10 +10,12 @@ device's locale.
 
 ```ts
 import { Component, inject } from '@angular/core';
+import { View } from '@ng-native/components';
 import { Direction } from '@ng-native/device';
 
 @Component({
   selector: 'app-drawer',
+  imports: [View],
   template: `<view [style.left]="direction.rtl() ? null : 0" />`,
 })
 export class Drawer {

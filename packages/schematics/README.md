@@ -22,8 +22,9 @@ ng serve native                  # expo start: Metro, with Expo Go or a simulato
 ng build native                  # expo export, into dist/native
 ng test native                   # vitest run, on the fake Fabric
 ng run native:run-ios            # expo run:ios
+ng run native:typecheck          # ngc: the templates as well as the code
 
-cd projects/native && ng generate component profile-card   # <view>, <text>, and a test
+cd projects/native && ng generate component profile-card   # src/app/profile-card: <view>, <text>, a test
 ```
 
 ## What's in the package

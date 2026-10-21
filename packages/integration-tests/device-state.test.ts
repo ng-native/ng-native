@@ -14,7 +14,7 @@ import { Battery } from '@ng-native/expo/battery';
 import { Brightness } from '@ng-native/expo/brightness';
 import { Network, type NetworkStatus } from '@ng-native/expo/network';
 import { DeviceOrientation } from '@ng-native/expo/orientation';
-import { serviceWith } from './injected.ts';
+import { inAppWith, serviceWith } from './injected.ts';
 
 const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
 
@@ -211,6 +211,62 @@ describe('orientation', () => {
     assert.equal(calls.filter((call) => call === 'unlock').length, 1);
   });
 
+  it("keeps a later app's lock when the earlier app goes", async () => {
+    // Android recreates an activity after a font size change: the new app mounts and locks the
+    // screen, and only then is the old app destroyed, its locks released with it.
+    const calls: string[] = [];
+    const native = {
+      reported: source('portrait' as const),
+      lock: async (lock: string) => void calls.push(`lock:${lock}`),
+      unlock: async () => void calls.push('unlock'),
+    };
+    const old = inAppWith(DeviceOrientation.SOURCE, native, () => new DeviceOrientation());
+    const releaseOld = old.service.lock('landscape');
+    const current = inAppWith(DeviceOrientation.SOURCE, native, () => new DeviceOrientation());
+    current.service.lock('portrait');
+    calls.length = 0;
+
+    releaseOld();
+    old.destroy();
+    await settle();
+    assert.deepEqual(calls, []);
+  });
+
+  it('unlocks when the only app holding a lock goes', async () => {
+    const calls: string[] = [];
+    const native = {
+      reported: source('portrait' as const),
+      lock: async (lock: string) => void calls.push(`lock:${lock}`),
+      unlock: async () => void calls.push('unlock'),
+    };
+    const app = inAppWith(DeviceOrientation.SOURCE, native, () => new DeviceOrientation());
+    app.service.lock('landscape');
+    app.destroy();
+    await settle();
+    assert.deepEqual(calls, ['lock:landscape', 'unlock']);
+  });
+
+  it('locks a window that comes to the front again', async () => {
+    const calls: string[] = [];
+    let front = () => {};
+    const orientation = serviceWith(
+      DeviceOrientation.SOURCE,
+      {
+        reported: source('portrait' as const),
+        lock: async (lock: string) => void calls.push(`lock:${lock}`),
+        unlock: async () => void calls.push('unlock'),
+        onWindowFront: (listener) => ((front = listener), () => {}),
+      },
+      () => new DeviceOrientation(),
+    );
+    front();
+    assert.deepEqual(calls, [], 'nothing to lock yet');
+    orientation.lock('landscape');
+    front();
+    await settle();
+    assert.deepEqual(calls, ['lock:landscape', 'lock:landscape']);
+  });
+
   it('is about the device, not the window', async () => {
     // A screen pinned to portrait still has a phone that is sideways, which is what a camera
     // preview needs to know.
@@ -274,6 +330,71 @@ describe('brightness', () => {
     restoreBelow();
     await settle();
     assert.equal(calls.at(-1), 'restore');
+  });
+
+  it("keeps a later app's level when the earlier app goes", async () => {
+    const calls: string[] = [];
+    const native = {
+      get: async () => 0.4,
+      set: async (level: number) => void calls.push(`set:${level}`),
+      restore: async () => void calls.push('restore'),
+    };
+    const old = inAppWith(Brightness.SOURCE, native, () => new Brightness());
+    const restoreOld = old.service.set(1);
+    const current = inAppWith(Brightness.SOURCE, native, () => new Brightness());
+    current.service.set(0.8);
+    await settle();
+    calls.length = 0;
+
+    restoreOld();
+    old.destroy();
+    await settle();
+    assert.deepEqual(calls, []);
+    assert.equal(current.service.level(), 0.8);
+  });
+
+  it("keeps a later app's level when the earlier app restores", async () => {
+    const calls: string[] = [];
+    const native = {
+      get: async () => 0.4,
+      set: async (level: number) => void calls.push(`set:${level}`),
+      restore: async () => void calls.push('restore'),
+    };
+    const old = inAppWith(Brightness.SOURCE, native, () => new Brightness());
+    old.service.set(1);
+    const current = inAppWith(Brightness.SOURCE, native, () => new Brightness());
+    const restoreCurrent = current.service.set(0.8);
+    await settle();
+    calls.length = 0;
+
+    old.service.restore();
+    old.destroy();
+    await settle();
+    assert.deepEqual(calls, [], 'the later app still shows its level');
+    assert.equal(current.service.level(), 0.8);
+
+    restoreCurrent();
+    await settle();
+    assert.deepEqual(calls, ['restore'], "the system's once no app has one");
+  });
+
+  it('sets the level again in a window that comes to the front', async () => {
+    const calls: string[] = [];
+    let front = () => {};
+    const brightness = serviceWith(
+      Brightness.SOURCE,
+      {
+        get: async () => 0.4,
+        set: async (level) => void calls.push(`set:${level}`),
+        restore: async () => void calls.push('restore'),
+        onWindowFront: (listener) => ((front = listener), () => {}),
+      },
+      () => new Brightness(),
+    );
+    brightness.set(1);
+    front();
+    await settle();
+    assert.deepEqual(calls, ['set:1', 'set:1']);
   });
 
   it('refuses to ask for a level outside the range the platform has', () => {

@@ -45,9 +45,10 @@ same code, and tell the agent about it.
   after. Update `PATTERN` and restart it as agents come and go; a restart resumes anything left stopped.
   Stop it when no agent is running.
 
-- **Device checks:** an agent that needs a simulator takes the shared device lock. The simulator it starts is
-  not its child, so pausing the agent can deadlock the check. If that happens, exempt the agent for the
-  length of the check.
+- **Device checks:** agents boot their own simulators and emulators after a memory check, and take the
+  shared build lock only for a native build (see fix-issue's `devices.md`). A device is not the agent's
+  child, so pausing the agent neither frees its memory nor stops the check from timing out. If that
+  happens, exempt the agent for the length of the check.
 - **Tell a paused agent afterwards,** so it re-runs a command that timed out rather than treating the timeout
   as a failure.
 
@@ -110,7 +111,7 @@ When a group's PRs have merged:
 
 - Remove its agent worktrees. Check each is clean first; its work is on main.
 - Delete any temporary branches you made.
-- Stop the watchdog and the merge queue, and remove the device lock if one is left.
+- Stop the watchdog and the merge queue, and remove the build lock if one is left and no native build is running (`pgrep -fl 'xcodebuild|gradle'` prints nothing); another session may hold it.
 - Leave other threads' worktrees alone.
 
 Report what merged and which issues it closed, what is still open, and the follow-ups found.

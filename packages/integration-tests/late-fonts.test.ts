@@ -196,9 +196,9 @@ function payloads(fabric: FakeFabric): Map<number, Record<string, unknown>> {
     record(node, props);
     return withProps(node, props);
   };
-  fabric.cloneNodeWithNewChildrenAndProps = (node, props) => {
+  fabric.cloneNodeWithNewChildrenAndProps = (node, children, props) => {
     record(node, props);
-    return withBoth(node, props);
+    return withBoth(node, children, props);
   };
   return sent;
 }

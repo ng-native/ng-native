@@ -21,7 +21,7 @@ The model is the platform's, so whether there is one is the platform's decision,
 | Platform | What it needs                                                                                                                                                                                                                                                                   |
 | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | iOS      | iOS 26 or later, on hardware that runs Apple Intelligence (iPhone 15 Pro and later, and iPads and Macs with an M-series chip), with Apple Intelligence switched on in Settings and its model downloaded. The simulator works when the Mac it runs on has Apple Intelligence on. |
-| Android  | A phone that ships Gemini Nano. `expo-local-llm` names Pixel 8 and later and Galaxy S25 and later; the model may have to be downloaded first. Not buildable yet: see below.                                                                                                     |
+| Android  | A phone that ships Gemini Nano. `expo-local-llm` names Pixel 8 and later and Galaxy S25 and later; the model may have to be downloaded first. The app needs `minSdkVersion` 26: see below.                                                                                      |
 
 Everything else - an older iPhone, iOS 25, most Android phones - loads the module and reports the
 model as unavailable, with the reason. Plan for that being most of your users for a while.
@@ -42,25 +42,30 @@ SDK 57's default deployment target; if you have lowered yours, raise it with
 import { LanguageModel } from '@ng-native/expo/language-model';
 ```
 
-### Android does not build yet
+### Android needs minSdk 26
 
-`expo-local-llm` 0.6's Android code depends on Google's
-`com.google.ai.edge.localagent:localagent`, which is not published to Google's Maven repository or
-Maven Central yet, so an Android build with the module in it fails to resolve that dependency.
-Until it is, leave the module out of Android's native build in `package.json`:
+On Android the module asks Gemini Nano through ML Kit's Prompt API, which needs API level 26
+(Android 8.0). Expo SDK 57 builds for 24, so raise it with `expo-build-properties`:
+
+```sh
+npx expo install expo-build-properties
+```
 
 ```json
 {
   "expo": {
-    "autolinking": {
-      "android": { "exclude": ["expo-local-llm"] }
-    }
+    "plugins": [["expo-build-properties", { "android": { "minSdkVersion": 26 } }]]
   }
 }
 ```
 
-`LanguageModel` then reports `notInstalled` on Android and works as before on iOS, so the same
-code runs on both.
+`expo-local-llm` marks its Android generation as experimental: it has not been validated on Gemini
+Nano hardware yet.
+
+An app that does not want to raise it can leave the module out of Android's native build instead,
+with `"autolinking": { "android": { "exclude": ["expo-local-llm"] } }` under `expo` in its
+`package.json`. `LanguageModel` then reports `notInstalled` on Android and works as before on iOS,
+so the same code runs on both.
 
 ## Streaming an answer into a template
 
@@ -138,7 +143,7 @@ The options, for all three calls:
   from the prompt. iOS passes them to Foundation Models as instructions; Android prepends them to
   the prompt.
 - **`temperature`**, **`topK`** - sampling. Lower is more predictable.
-- **`maxTokens`** - a cap on the answer's length. Android caps it at 256 whatever you ask for.
+- **`maxTokens`** - a cap on the answer's length.
 
 ## A structured answer
 
@@ -157,9 +162,9 @@ const triage = await this.model.generateObject<{ topic: string; urgent: boolean 
 
 Fields are `string` (optionally with `enum`), `number`, `integer`, `boolean`, `array` with `items`,
 and `object` with `properties`. On iOS the model's decoding is constrained to the schema, so the
-answer always fits it. On Android the schema is only described to the model in the prompt, so
-check what comes back before trusting it. A malformed schema rejects before reaching the model,
-with the field paths that are wrong.
+answer always fits it. On Android `generateObject()` rejects: `expo-local-llm` does not support a
+structured answer there yet. A malformed schema rejects before reaching the model, with the field
+paths that are wrong.
 
 ## Availability
 
@@ -182,6 +187,9 @@ Intelligence on in Settings and returning. It does not announce the model finish
 preparation while the app is open, so `refresh()` asks again and returns the answer. Every call
 re-reads it before starting, so the signal being stale never sends a prompt to a model that is not
 there.
+
+On Android the first reading can be `unknown` while the module asks ML Kit whether Gemini Nano is
+there; the signal moves when the module announces the answer.
 
 A call made while the model is unavailable is refused before it reaches the model, with a
 `LanguageModelUnavailableError` whose `reason` is one of the values above. `generate()` and
@@ -213,7 +221,7 @@ go to a server.
   summarizing, rewriting, classifying and extracting, weak at facts and reasoning. Do not use it
   as a source of truth.
 - **Short context.** About 4,000 tokens on iOS, prompt and answer together; a longer conversation
-  or document fails. Android answers are capped at 256 tokens.
+  or document fails.
 - **Guardrails.** Apple's model refuses some categories of prompt, such as interpreting personal
   health data. A refusal arrives as an error.
 - **One conversation per call.** Each call is a fresh session, so the model does not remember the

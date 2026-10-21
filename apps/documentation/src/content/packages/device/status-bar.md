@@ -11,9 +11,10 @@ it back its own claim when it closes, and nothing else remembers what that was.
 
 ```ts
 import { Component, DestroyRef, inject } from '@angular/core';
+import { View } from '@ng-native/components';
 import { StatusBar } from '@ng-native/device';
 
-@Component({ selector: 'app-photo-viewer', template: `<view />` })
+@Component({ selector: 'app-photo-viewer', imports: [View], template: `<view />` })
 export class PhotoViewer {
   constructor() {
     const drop = inject(StatusBar).push({ style: 'light', hidden: true });
@@ -28,6 +29,12 @@ claim on top of whatever is there and returns the function that drops it, ready 
 order, later ones winning per property. Anything a claim leaves unset falls through to the claim
 underneath it.
 
+The bar is the device's, not one app's. Every app the runtime mounts claims the same stack, an app's
+claims above those of an app that claimed before it, and an app's claims, its base claim included,
+leave the stack when the app is destroyed. On Android, each time an activity comes to the front, a
+recreated one included, the bar is given every claimed property again, since a new activity starts
+with the platform's own bar.
+
 `StatusBarState` takes `style` (`'default' | 'light' | 'dark' | 'auto'`, `'light'` meaning light
 _content_ for a dark bar, as CSS would), `hidden` and `animated`.
 
@@ -35,8 +42,10 @@ It also takes `backgroundColor` and `translucent`, which are deprecated and do n
 Android-only, and under [Android edge-to-edge](/guide/android-edge-to-edge) the app always draws
 under the bar, which has no background of its own: React Native's Android module ignores both. In
 development the first use of each logs a warning on Android, unless the app has opted out of
-edge-to-edge, where both still work. On iOS neither is sent, so React
-Native's "only available on Android" warning no longer shows. To color the area behind the bar,
+edge-to-edge, where both still work up to React Native 0.86 (Expo SDK 57). React Native 0.88 (Expo
+SDK 58) draws every Android app edge-to-edge and has neither, so there both do nothing and warn
+whatever the theme. On iOS neither is sent, so React Native's "only available on Android" warning
+no longer shows. To color the area behind the bar,
 color the view under it.
 
 ## Following the color scheme

@@ -10,6 +10,11 @@
       "implementation": "./builders/vitest.cjs",
       "schema": "./builders/vitest.json",
       "description": "Runs the project's tests once with Vitest, through @ng-native/testing."
+    },
+    "typecheck": {
+      "implementation": "./builders/typecheck.cjs",
+      "schema": "./builders/typecheck.json",
+      "description": "Checks the project's code and templates with ngc, after loading its Metro config."
     }
   }
 }

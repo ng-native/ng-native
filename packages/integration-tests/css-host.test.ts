@@ -99,7 +99,7 @@ describe('a host node, straight from the resolver', () => {
     parent: null,
     classes: new Set(classes),
     props: {},
-    sheet: null,
+    templateSheet: null,
     hostSheet,
     styleCache: null,
     styleDirty: true,

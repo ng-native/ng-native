@@ -134,7 +134,8 @@
 }
 
 .md-img {
-  width: 100%;
+  width: var(--md-img-width, 100%);
+  max-width: 100%;
   height: 200px;
   border-radius: 8px;
 }
@@ -150,13 +151,18 @@
   flex-direction: row;
 }
 
+/* The text hugs its content inside the column's least width, so it can report a narrower one. */
+.md-cell {
+  align-items: flex-start;
+}
+
 .md-th,
 .md-td {
-  flex: 1;
+  max-width: 280px;
   padding: 6px 8px;
 }
 
-.md-td {
+.md-cell-body {
   border-top-width: 1px;
   border-top-color: #d1d1d6;
 }
@@ -189,7 +195,7 @@
 
   .md-blockquote,
   .md-table,
-  .md-td {
+  .md-cell-body {
     border-color: #38383a;
   }
 

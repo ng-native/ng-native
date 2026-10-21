@@ -52,7 +52,8 @@ describe('a prop an input stops asking for', () => {
     assert.equal(getByTestId('busy').props['pointerEvents'], 'none');
     instance.busy.set(false);
     await rerender();
-    assert.equal(getByTestId('busy').props['pointerEvents'] ?? null, null, 'touchable again');
+    // Cleared as auto, what no value means: react-native-svg's Android root takes no null (#884).
+    assert.equal(getByTestId('busy').props['pointerEvents'], 'auto', 'touchable again');
     cleanup();
   });
 });

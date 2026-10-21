@@ -26,10 +26,12 @@ import { Haptics } from '@ng-native/expo/haptics';
 
 ```ts
 import { Component, inject } from '@angular/core';
+import { Pressable, Text } from '@ng-native/components';
 import { Haptics } from '@ng-native/expo/haptics';
 
 @Component({
   selector: 'app-save-button',
+  imports: [Pressable, Text],
   template: `<pressable (press)="save()"><text>Save</text></pressable>`,
 })
 export class SaveButton {

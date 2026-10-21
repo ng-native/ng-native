@@ -128,6 +128,7 @@ export const WRITTEN_PROPS: readonly string[] = [
   'resizeMultiplier',
   'returnKeyType',
   'role',
+  'rows',
   'scrollEnabled',
   'scrollEventThrottle',
   'scrollIndicatorInsets',

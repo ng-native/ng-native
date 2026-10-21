@@ -467,7 +467,12 @@ describe('nx typecheck for a library in the TypeScript preset', () => {
     await generate(tree, { directory: 'packages/ui' });
     assert.deepEqual(readJson(tree, 'packages/ui/tsconfig.typecheck.json'), {
       extends: './tsconfig.lib.json',
-      compilerOptions: { noEmit: true, composite: false, emitDeclarationOnly: false },
+      compilerOptions: {
+        noEmit: true,
+        composite: false,
+        emitDeclarationOnly: false,
+        declarationMap: false,
+      },
       angularCompilerOptions: {
         strictTemplates: true,
         typeCheckHostBindings: false,
@@ -488,6 +493,16 @@ describe('nx typecheck for a library in the TypeScript preset', () => {
     tree.write('packages/ui/src/lib/ui.ts', component('{{ missing() }}'));
     assert.match(compile(tree, 'ngc', 'packages/ui/tsconfig.typecheck.json'), /missing/);
 
+    tree.write('packages/ui/src/lib/ui.ts', component('{{ count() }}'));
+    assert.equal(compile(tree, 'ngc', 'packages/ui/tsconfig.typecheck.json'), '');
+  });
+
+  it('passes under a base with declaration maps on, as the preset writes it', async () => {
+    const tree = tsPreset();
+    updateJson(tree, 'tsconfig.base.json', (base) => ({
+      compilerOptions: { ...base.compilerOptions, declarationMap: true },
+    }));
+    await generate(tree, { directory: 'packages/ui' });
     tree.write('packages/ui/src/lib/ui.ts', component('{{ count() }}'));
     assert.equal(compile(tree, 'ngc', 'packages/ui/tsconfig.typecheck.json'), '');
   });

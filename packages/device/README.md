@@ -38,8 +38,8 @@ setup, and one nobody injects is never constructed.
 - `Screen`, `SafeArea` - the window, the physical display, orientation and safe-area insets.
 - `ColorScheme`, `Accessibility`, `Direction` - light or dark, screen reader and reduced-motion
   state, and text direction.
-- `StatusBar`, `Keyboard`, `HardwareBack`, `AppState`, `DeepLinks`, `AndroidPermissions`,
-  `LayoutAnimation` - the rest of the system surfaces a screen reads from.
+- `StatusBar`, `NavigationBar`, `Keyboard`, `HardwareBack`, `AppState`, `DeepLinks`,
+  `AndroidPermissions`, `LayoutAnimation` - the rest of the system surfaces a screen reads from.
 - `Dialogs`, `Sharing`, `Vibration` - the platform's own alert, share sheet and vibration motor.
 - `DevMenu` - switches in the shake menu, gone in a release build.
 

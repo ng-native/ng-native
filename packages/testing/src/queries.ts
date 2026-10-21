@@ -27,11 +27,64 @@ export interface TextMatchOptions {
   includeHiddenElements?: boolean;
 }
 
-/** `ByRole`'s options: a role alone matches every node with it, `name` narrows it to one. */
+/**
+ * `ByRole`'s options: a role alone matches every node with it, `name` narrows it to one, and a
+ * state narrows it to the nodes in that state, as React Native Testing Library's do.
+ */
 export interface ByRoleOptions extends TextMatchOptions {
   /** The accessible name: `accessibilityLabel`, or failing that the text inside the node. */
   name?: Matcher;
+  /** Disabled, from `accessibilityState` or `aria-disabled`; a field that is not editable is. */
+  disabled?: boolean;
+  selected?: boolean;
+  checked?: boolean | 'mixed';
+  busy?: boolean;
+  expanded?: boolean;
 }
+
+/** The states `ByRole` filters on. */
+const STATES = ['disabled', 'selected', 'checked', 'busy', 'expanded'] as const;
+type State = (typeof STATES)[number];
+
+/** The roles React Native Testing Library reads `checked` for; any other has none. */
+const CHECKABLE: ReadonlySet<unknown> = new Set(['checkbox', 'radio', 'switch']);
+
+/** What a state is when nothing set it: off, or for `checked` and `expanded`, not had at all. */
+const UNSET: Readonly<Record<State, false | undefined>> = {
+  disabled: false,
+  selected: false,
+  checked: undefined,
+  busy: false,
+  expanded: undefined,
+};
+
+/** Whether a node can have the state at all: `checked` only on a checkbox, radio or switch. */
+const has = (node: FakeFabricNode, state: State): boolean =>
+  state !== 'checked' || CHECKABLE.has(node.props['accessibilityRole'] ?? node.props['role']);
+
+/**
+ * A state as a screen reader has it: what the committed `accessibilityState` says, which the
+ * components and the `aria-*` attributes write. Unset is false for the states that are off until
+ * something says otherwise, and stays unset for `checked` and `expanded`, which a node only has
+ * when it can be checked or expanded; `checked` only counts on a checkbox, radio or switch. React
+ * Native Testing Library's rules.
+ */
+function stateOf(node: FakeFabricNode, state: State): boolean | 'mixed' | undefined {
+  if (state === 'disabled' && isTextInput(node) && node.props['editable'] === false) return true;
+  if (!has(node, state)) return undefined;
+  const value = (node.props['accessibilityState'] as Record<string, unknown> | undefined)?.[state];
+  return value === true || value === false || value === 'mixed' ? value : UNSET[state];
+}
+
+/** Whether a node is in every state the options ask for. */
+const inStates = (node: FakeFabricNode, options: ByRoleOptions): boolean =>
+  STATES.every((state) => options[state] === undefined || stateOf(node, state) === options[state]);
+
+/** The states the options ask for, for an error message. */
+const describeStates = (options: ByRoleOptions): string =>
+  STATES.filter((state) => options[state] !== undefined)
+    .map((state) => ` and ${state} ${String(options[state])}`)
+    .join('');
 
 interface QueryArgs {
   Role: [role: Matcher, options?: ByRoleOptions];
@@ -144,10 +197,13 @@ const nameOf = (node: FakeFabricNode): string =>
 const QUERIES: { [K in Name]: (...args: QueryArgs[K]) => Query } = {
   Role: (role, options = {}) => ({
     describe:
-      `role ${show(role)}` + (options.name === undefined ? '' : ` and name ${show(options.name)}`),
+      `role ${show(role)}` +
+      (options.name === undefined ? '' : ` and name ${show(options.name)}`) +
+      describeStates(options),
     select: (node) =>
       (matches(node.props['accessibilityRole'], role) || matches(node.props['role'], role)) &&
-      (options.name === undefined || matches(nameOf(node), options.name, options.exact)),
+      (options.name === undefined || matches(nameOf(node), options.name, options.exact)) &&
+      inStates(node, options),
   }),
   // `Paragraph` alone: a nested `<text>` commits as a `Text` span inside one, so the paragraph is
   // the whole run of text and the span is only a part of it.

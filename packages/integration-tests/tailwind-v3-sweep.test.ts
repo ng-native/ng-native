@@ -86,6 +86,13 @@ const KNOWN: readonly Accounted[] = [];
 const YOGA: readonly Accounted[] = [
   {
     property: /^layout /,
+    case: /^!?fixed$/,
+    reason:
+      'A fixed box is not laid out in place: the engine commits it under the page it is on, out ' +
+      'of the flow, which this scene of one container does not model (css-fixed.test.ts).',
+  },
+  {
+    property: /^layout /,
     case: /^!?(m|my|mt|mb)-56$/,
     reason:
       'As in Tailwind 4: Yoga caps a box at the room left after its margins, and a margin larger ' +

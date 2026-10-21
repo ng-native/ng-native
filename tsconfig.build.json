@@ -24,6 +24,7 @@
       "@ng-native/expo/*": ["./packages/expo/dist/*.d.ts"],
       "@ng-native/web": ["./packages/web/dist/index.d.ts"],
       "@ng-native/web/*": ["./packages/web/dist/*.d.ts"],
+      "@ng-native/web-compat": ["./packages/web-compat/dist/index.d.ts"],
       "@ng-native/testing": ["./packages/testing/dist/index.d.ts"],
       "@ng-native/testing/*": ["./packages/testing/dist/*.d.ts"]
     }

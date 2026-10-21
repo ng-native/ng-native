@@ -75,6 +75,10 @@ function withHandle(node: Omit<FakeFabricNode, 'instanceHandle'>, instanceHandle
   return node as FakeFabricNode;
 }
 
+/** The props JSI hands native: a key whose value is undefined is not there at all. */
+const defined = (props: object): Record<string, unknown> =>
+  Object.fromEntries(Object.entries(props).filter(([, value]) => value !== undefined));
+
 export function createFakeFabric(): FakeFabric {
   let handle = 0;
   let committed: FakeFabricNode[] = [];
@@ -169,17 +173,34 @@ export function createFakeFabric(): FakeFabric {
 
   const clone = (n: FabricNode, props?: object, keepChildren = false): FabricNode => {
     const source = n as unknown as FakeFabricNode;
-    noteModal(source, props as Record<string, unknown> | undefined);
+    const given = props ? defined(props) : undefined;
+    noteModal(source, given);
     return withHandle(
       {
         ...source,
         handle: ++handle,
-        // Fabric merges raw props onto the source props rather than replacing them.
-        props: props ? { ...source.props, ...props } : source.props,
+        // Fabric merges raw props onto the source props rather than replacing them, and JSI
+        // drops a key whose value is undefined on the way (JSIDynamic.cpp), so it changes nothing.
+        props: given ? { ...source.props, ...given } : source.props,
         children: keepChildren ? source.children : [],
       },
       source.instanceHandle,
     ) as unknown as FabricNode;
+  };
+
+  /**
+   * A clone with the children it was handed, as native takes them: in the call that makes it, as
+   * an array (`shadowNodeListFromValue`). Anything else is a mistake here, such as props passed
+   * where the children go, and native would read it as no list of views at all.
+   */
+  const holding = (parent: FabricNode, children: unknown): FabricNode => {
+    if (!Array.isArray(children)) throw new TypeError('A clone takes its children as an array.');
+    const into = parent as unknown as FakeFabricNode;
+    for (const child of children as FakeFabricNode[]) {
+      adopt(into.reactTag, child);
+      into.children.push(child);
+    }
+    return parent;
   };
 
   const node = (
@@ -189,7 +210,7 @@ export function createFakeFabric(): FakeFabric {
     instanceHandle: unknown,
   ): FakeFabricNode =>
     withHandle(
-      { handle: ++handle, reactTag, viewName, props: { ...props }, children: [] },
+      { handle: ++handle, reactTag, viewName, props: defined(props), children: [] },
       instanceHandle,
     );
 
@@ -221,17 +242,21 @@ export function createFakeFabric(): FakeFabric {
       calls.createNode++;
       return node(reactTag, viewName, props, instanceHandle) as unknown as FabricNode;
     },
-    cloneNodeWithNewChildren(n) {
+    cloneNodeWithNewChildren(n, ...children: unknown[]) {
       calls.cloneWithChildren++;
-      return clone(n);
+      // As `UIManagerBinding.cpp` reads it: no second argument is no children.
+      return holding(clone(n), children.length ? children[0] : []);
     },
     cloneNodeWithNewProps(n, newProps) {
       calls.cloneWithProps++;
       return clone(n, newProps, true);
     },
-    cloneNodeWithNewChildrenAndProps(n, newProps) {
+    cloneNodeWithNewChildrenAndProps(n, ...rest: unknown[]) {
       calls.cloneWithChildrenAndProps++;
-      return clone(n, newProps);
+      // As the binding reads it: with three arguments the children are the second, and with any
+      // other count there are none and the props are the second.
+      const [children, newProps] = rest.length === 2 ? rest : [[], rest[0]];
+      return holding(clone(n, newProps as object), children);
     },
     appendChild(parent, child) {
       const into = parent as unknown as FakeFabricNode;

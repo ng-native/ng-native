@@ -2,7 +2,7 @@
 
 <!-- prettier-ignore-start -->
 <!-- ALL-CONTRIBUTORS-BADGE:START - Do not remove or modify this section -->
-[![All Contributors](https://img.shields.io/badge/all_contributors-12-orange.svg?style=flat-square)](#contributors-)
+[![All Contributors](https://img.shields.io/badge/all_contributors-14-orange.svg?style=flat-square)](#contributors-)
 <!-- ALL-CONTRIBUTORS-BADGE:END -->
 <!-- prettier-ignore-end -->
 
@@ -132,7 +132,8 @@ Analog's file-based routing (`analog`).
 
 ## Requirements
 
-Angular 22, Expo SDK 57 and React Native 0.86 with the New Architecture, on Node 22.18 or later.
+Angular 22, and Expo SDK 57 or 58 (React Native 0.86 or 0.88) with the New Architecture, on Node
+22.18 or later. The template starts on SDK 57.
 
 ## Status
 
@@ -176,6 +177,8 @@ Thanks goes to these wonderful people:
       <td align="center" valign="top" width="14.28%"><a href="https://www.linkedin.com/in/gabesilvadev/"><img src="https://avatars.githubusercontent.com/u/96894950?v=4?s=100" width="100px;" alt="Gabriel Silva"/><br /><sub><b>Gabriel Silva</b></sub></a><br /><a href="https://github.com/ng-native/ng-native/commits?author=GabeSilvaDev" title="Code">💻</a></td>
       <td align="center" valign="top" width="14.28%"><a href="https://github.com/Emanuel-Hosu"><img src="https://avatars.githubusercontent.com/u/131873705?v=4?s=100" width="100px;" alt="Emanuel Hosu"/><br /><sub><b>Emanuel Hosu</b></sub></a><br /><a href="https://github.com/ng-native/ng-native/commits?author=Emanuel-Hosu" title="Code">💻</a></td>
       <td align="center" valign="top" width="14.28%"><a href="https://github.com/WassimAarab08"><img src="https://avatars.githubusercontent.com/u/132829535?v=4?s=100" width="100px;" alt="Wassim Aarab"/><br /><sub><b>Wassim Aarab</b></sub></a><br /><a href="https://github.com/ng-native/ng-native/commits?author=WassimAarab08" title="Code">💻</a></td>
+      <td align="center" valign="top" width="14.28%"><a href="https://github.com/shaharkazaz"><img src="https://avatars.githubusercontent.com/u/17194830?v=4?s=100" width="100px;" alt="Shahar Kazaz"/><br /><sub><b>Shahar Kazaz</b></sub></a><br /><a href="https://github.com/ng-native/ng-native/commits?author=shaharkazaz" title="Code">💻</a></td>
+      <td align="center" valign="top" width="14.28%"><a href="https://nstudio.io"><img src="https://avatars.githubusercontent.com/u/457187?v=4?s=100" width="100px;" alt="Nathan Walker"/><br /><sub><b>Nathan Walker</b></sub></a><br /><a href="https://github.com/ng-native/ng-native/commits?author=NathanWalker" title="Code">💻</a></td>
     </tr>
   </tbody>
 </table>

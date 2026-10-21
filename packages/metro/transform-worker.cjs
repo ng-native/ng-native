@@ -15,6 +15,7 @@ const {
   isAngularDomComponent,
   domComponentEntry,
   withExportedUrls,
+  withServedUrls,
 } = require('./dom-component.cjs');
 const { withResources } = require('./resource-cache.cjs');
 
@@ -75,9 +76,8 @@ function withLibraryStyles(config, options) {
   };
 }
 
-/** A stylesheet of a DOM component's page in a release build, which Expo writes out as a file. */
+/** A stylesheet of a DOM component's page. */
 const isPageStylesheet = (filename, options) =>
-  !options.dev &&
   options.platform === 'web' &&
   options.type !== 'asset' &&
   typeof options.customTransformOptions?.dom === 'string' &&
@@ -110,6 +110,23 @@ async function pageStylesheet(expo, config, projectRoot, filename, data, options
   return exported.read.length
     ? { ...exported.result, [URL_FILES]: exported.read }
     : exported.result;
+}
+
+/** Expo's stylesheet in development, with the files its `url()`s name served: see `withServedUrls`. */
+async function servedPageStylesheet(expo, config, projectRoot, filename, data, options) {
+  const served = withServedUrls(data.toString('utf8'), {
+    filename,
+    projectRoot,
+    assetExts: config.angularNativeAssetExts ?? [],
+  });
+  const result = await require(expo).transform(
+    config,
+    projectRoot,
+    filename,
+    Buffer.from(served.code),
+    options,
+  );
+  return served.read.length ? { ...result, [URL_FILES]: served.read } : result;
 }
 
 /** The sheets whose warnings are being held, and what `console.warn` was before the first. */
@@ -165,9 +182,12 @@ function transformFile(config, projectRoot, filename, data, options) {
     IS_STYLESHEET.test(filename) &&
     !IS_CSS_MODULE.test(filename);
   if (!ours) {
-    return isPageStylesheet(filename, options)
-      ? pageStylesheet(expo, config, projectRoot, filename, data, options)
-      : require(expo).transform(config, projectRoot, filename, data, options);
+    if (!isPageStylesheet(filename, options)) {
+      return require(expo).transform(config, projectRoot, filename, data, options);
+    }
+    return options.dev
+      ? servedPageStylesheet(expo, config, projectRoot, filename, data, options)
+      : pageStylesheet(expo, config, projectRoot, filename, data, options);
   }
 
   return innerWorker(expo).transform(config, projectRoot, filename, data, options);

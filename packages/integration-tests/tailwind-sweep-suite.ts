@@ -357,6 +357,7 @@ const CSS_OF: Record<string, string | readonly string[]> = {
   touchAction: 'touch-action',
   ellipsizeMode: 'text-overflow',
   textAlignVertical: 'vertical-align',
+  baselineShift: 'vertical-align',
   start: 'left',
   end: 'right',
   marginStart: 'margin-left',
@@ -495,13 +496,13 @@ function resolverFor(
     parent,
     classes: new Set(classes),
     props,
-    sheet: null,
+    templateSheet: null,
     hostSheet: null,
     styleCache: null,
     styleDirty: true,
   });
   const withChildren = (node: StyleTarget, children: StyleTarget[]) => {
-    (node as { children?: StyleTarget[] }).children = children;
+    (node as { childList?: StyleTarget[] }).childList = children;
   };
   const root = target('view', world.rootClasses.split(' '), null);
   /** With `inside`, the node holds that many views instead, as the layout scene's case does. */

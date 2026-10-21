@@ -2,12 +2,13 @@
  * A bar on the keyboard, as a chat's composer is. On iOS with react-native-keyboard-controller,
  * native moves it by the keyboard's height every frame - an interactive dismissal included, which
  * no layout driven by keyboard events can follow, because iOS reports the keyboard's frame only
- * once the finger lets go. Otherwise it sits in flow, padded clear of the keyboard.
+ * once the finger lets go. On Android with `KEYBOARD_MOTION`, native moves it by how far the
+ * keyboard covers it, every frame. Otherwise it sits in flow, padded clear of the keyboard.
  */
 import assert from 'node:assert/strict';
 import { afterEach, before, describe, it } from 'node:test';
 import type { Provider, Type } from '@angular/core';
-import { Keyboard, SafeArea, type KeyboardMetrics } from '@ng-native/device';
+import { KEYBOARD_MOTION, Keyboard, SafeArea, type KeyboardMetrics } from '@ng-native/device';
 import { registerPlatformComponents } from '@ng-native/fabric';
 import { cleanup, fireEvent, render, screen, type FakeFabricNode } from '@ng-native/testing';
 import { compileFixture } from './compile.ts';
@@ -27,13 +28,17 @@ const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
 const flatten = (nodes: readonly FakeFabricNode[]): FakeFabricNode[] =>
   nodes.flatMap((node) => [node, ...flatten(node.children)]);
 
-async function boot(name = 'DockedComposer', controller = false) {
+/** The motion view's name, as `@ng-native/expo` would provide it. */
+const MOTION_VIEW = 'ViewManagerAdapter_NgNativeKeyboard';
+
+async function boot(name = 'DockedComposer', controller = false, motion = false) {
   const listeners = new Set<(metrics: KeyboardMetrics) => void>();
   const { native, named, drives } = recorder();
   const rendered = await render(mod[name] as Type<unknown>, {
     nativeAnimated: native,
     providers: [
       ...(controller ? [(mod['provideKeyboardController'] as () => Provider)()] : []),
+      ...(motion ? [{ provide: KEYBOARD_MOTION, useValue: { viewName: MOTION_VIEW } }] : []),
       {
         provide: Keyboard.SOURCE,
         useValue: {
@@ -212,5 +217,118 @@ describe('keyboard dock on Android', () => {
       layout: { x: 0, y: 520, width: 402, height: 54 },
     });
     assert.equal(screen.getByTestId('dock').props['paddingBottom'], 0);
+  });
+
+  it('stays in flow with react-native-keyboard-controller, whose view adds the navigation bar as margins around the app', async () => {
+    registerPlatformComponents('android');
+    const { fabric, keyboard, bottom, named } = await boot('DockedComposer', true);
+    await bottom(24);
+    assert.equal(
+      flatten(fabric.committed).some((node) => node.viewName === 'KeyboardControllerView'),
+      false,
+    );
+    assert.deepEqual(named('event'), []);
+    fabric.frames.set('dock', { x: 0, y: 820, width: 402, height: 54 });
+    await fireEvent(screen.getByTestId('dock'), 'layout', {
+      layout: { x: 0, y: 820, width: 402, height: 54 },
+    });
+    await keyboard({ height: 300, screenY: 574 });
+    assert.equal(screen.getByTestId('dock').props['paddingBottom'], 300);
+    await keyboard({ height: 0 });
+    assert.equal(
+      screen.getByTestId('dock').props['paddingBottom'],
+      24,
+      'and back once it has gone',
+    );
+  });
+});
+
+describe('keyboard dock on Android with the keyboard motion view', () => {
+  const motionView = (fabric: { committed: readonly FakeFabricNode[] }) =>
+    flatten(fabric.committed).find((node) => node.viewName === MOTION_VIEW)!;
+
+  it('has native move the bar by how far the keyboard covers the dock, frame by frame', async () => {
+    registerPlatformComponents('android');
+    const { fabric, bottom, named, drives } = await boot('DockedComposer', true, true);
+    await bottom(24);
+    const dock = screen.getByTestId('dock');
+    assert.equal(dock.props['paddingBottom'], 24, 'docked above the navigation bar');
+    const view = motionView(fabric);
+    assert.ok(view, 'the motion view is committed in the dock');
+    assert.deepEqual(
+      [view.props['position'], view.props['top'], view.props['bottom'], view.props['width']],
+      ['absolute', 0, 0, 0],
+      "over the dock, so its bottom edge is the dock's, and out of the way of the layout",
+    );
+    assert.equal(
+      flatten(fabric.committed).some(
+        (node) =>
+          node.viewName === 'KeyboardControllerView' || node.viewName === 'KeyboardGestureArea',
+      ),
+      false,
+      'react-native-keyboard-controller is not used, though it is provided',
+    );
+    assert.deepEqual(
+      named('event').map(([, tag, name]) => [tag, name]),
+      [
+        [view.reactTag, 'onKeyboardMove'],
+        [view.reactTag, 'onKeyboardMoveInteractive'],
+        [view.reactTag, 'onKeyboardMoveEnd'],
+      ],
+    );
+    assert.deepEqual(
+      drives().get(dock.children.at(-1)!.reactTag)?.inputRange,
+      [24, 10024],
+      'the bar rises once the keyboard covers more of the dock than the inset it sits above',
+    );
+  });
+
+  it('is not padded by the keyboard events, which native has already moved it clear of', async () => {
+    registerPlatformComponents('android');
+    const { fabric, keyboard, bottom } = await boot('DockedComposer', false, true);
+    await bottom(24);
+    fabric.frames.set('dock', { x: 0, y: 820, width: 402, height: 54 });
+    await fireEvent(screen.getByTestId('dock'), 'layout', {
+      layout: { x: 0, y: 820, width: 402, height: 54 },
+    });
+    await keyboard({ height: 300, screenY: 574 });
+    assert.equal(screen.getByTestId('dock').props['paddingBottom'], 24);
+  });
+
+  it('reports how much the keyboard covers beyond the dock, once it has moved', async () => {
+    registerPlatformComponents('android');
+    const { fabric, bottom } = await boot('DockedComposer', false, true);
+    await bottom(24);
+    await fireEvent(motionView(fabric), 'keyboardMoveEnd', { height: 324 });
+    assert.equal(screen.getByTestId('transcript').props['paddingBottom'], 300);
+    await fireEvent(motionView(fabric), 'keyboardMoveStart', { height: 0 });
+    assert.equal(screen.getByTestId('transcript').props['paddingBottom'], 0);
+  });
+
+  it('moves content above with the bar where it asks to be', async () => {
+    registerPlatformComponents('android');
+    const { fabric, bottom, drives, named } = await boot('LiftedComposer', false, true);
+    await bottom(24);
+    assert.deepEqual(
+      [...new Set(named('event').map(([, tag]) => tag))],
+      [motionView(fabric).reactTag],
+    );
+    assert.deepEqual(
+      drives().get(screen.getByTestId('transcript').reactTag)?.inputRange,
+      [24, 10024],
+    );
+  });
+
+  it('is not used on iOS, where the controller reports the keyboard', async () => {
+    const { fabric } = await boot('DockedComposer', false, true);
+    assert.equal(
+      flatten(fabric.committed).some((node) => node.viewName === MOTION_VIEW),
+      false,
+    );
+    assert.equal(
+      flatten(fabric.committed).some((node) => node.viewName === 'KeyboardControllerView'),
+      false,
+      'nor anything else without the controller',
+    );
   });
 });

@@ -63,19 +63,35 @@ xcrun simctl install "$udid" "$app" || exit 1
 # fail by what it no longer shows: so the runner gets longer to start, and when it did not start
 # or was lost, the flow is walked once more from the start. So is a link that `simctl openurl` gave
 # up on (ETIMEDOUT, NSPOSIX 60): a starved simulator has timed one out that reached the app a second
-# later, and Maestro fails a flow on it outright, past any `retry` or `optional`. Its console is kept, since the
-# startup failure is reported there and not in maestro.log.
+# later, and Maestro fails a flow on it outright, past any `retry` or `optional`. So is a driver
+# that answers with an empty 500. Its console is kept, since the startup failure is reported there
+# and not in maestro.log.
 export MAESTRO_DRIVER_STARTUP_TIMEOUT=${MAESTRO_DRIVER_STARTUP_TIMEOUT:-180000}
+# Maestro can throw on its main thread and keep running, which a job then waits out to its
+# timeout: the watch ends it then, and a walk that runs past this many seconds. A passing walk,
+# the driver's start included, takes under ten minutes; two of these and a reboot fit in the job.
+watch="$(dirname "$0")/maestro-watch.sh"
+flow_limit=${SMOKE_FLOW_LIMIT:-720}
+# One flow at a time, without ANSI: given a directory, Maestro prints nothing until every flow has
+# finished, where given a file it prints each command as it runs. A failing flow stops the walk,
+# so the logs left in the output dir are its own.
 walk() {
-  step "walking the flow; Maestro's driver takes a minute or two to start"
+  local flow code
   mkdir -p "$1"
-  maestro --device "$udid" test "$flows" --test-output-dir "$1" --debug-output "$1" \
-    --flatten-debug-output 2>&1 | tee "$1/console.log"
-  return "${PIPESTATUS[0]}"
+  : > "$1/console.log"
+  for flow in "$flows"/*.yaml; do
+    step "walking $(basename "$flow"); Maestro's driver takes a minute or two to start"
+    "$watch" "$1/console.log" "$flow_limit" -- maestro --device "$udid" test --no-ansi "$flow" \
+      --test-output-dir "$1" --debug-output "$1" --flatten-debug-output
+    code=$?
+    [ "$code" -eq 0 ] || return "$code"
+  done
 }
 walk "$out"
 status=$?
-lost='DeviceUnreachableException|IOSDriverTimeoutException|domain=NSPOSIXErrorDomain, code=60'
+# The XCTest driver answering a request with an empty 500, "Request for terminateApp failed, code:
+# 500, body: ", is the driver failing, before the app is asked anything.
+lost='DeviceUnreachableException|IOSDriverTimeoutException|domain=NSPOSIXErrorDomain, code=60|failed, code: 500, body: \)'
 if [ "$status" -ne 0 ] && grep -qE "$lost" "$out/console.log" "$out/maestro.log" 2>/dev/null; then
   echo "Maestro lost its driver or simctl timed out opening a link, not the app: walking the flow again" >&2
   # A reboot clears what the lost walk left on screen: a link's "Open in canary?" dialog stays up

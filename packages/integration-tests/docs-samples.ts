@@ -77,7 +77,10 @@ export function extractDocSamples(): DocSample[] {
         inBlock = false;
         const code = body.join('\n');
         samples.push({
-          file: path.relative(CONTENT_ROOT, file),
+          // Named as a module path, not a file path: a fixture name, a diagnostic's location and
+          // a link in a report all read the same on every platform, and `\` is not a separator
+          // in any of them.
+          file: path.relative(CONTENT_ROOT, file).replaceAll('\\', '/'),
           line: start,
           code,
           skipReason: structuralSkipReason(code),

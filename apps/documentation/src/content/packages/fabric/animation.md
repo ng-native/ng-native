@@ -48,9 +48,20 @@ commit changes, so it is used where the only boxes that commit resizes or moves 
 transition; where another box is resized in the same commit, text comes to another length, or an
 element is added or removed, the transition is eased from JavaScript, a commit on every frame, by
 its own curve. So is one with a `transition-delay`, and every such transition on a host with no
-layout animation. Native takes one length of time for a commit: of several that start together
-and take different times, the longest is the one it plays, and the others are eased from
-JavaScript. `transitionend` is sent when the transition's time is up.
+layout animation. Android is one unless the app turns layout animations on: React Native ships
+them off there, and Expo Go cannot turn them on (see
+[layout animations on Android](/packages/device/layout-animation#on-android)). Native takes one
+length of time for a commit: of several that start together and take different times, the longest
+is the one it plays, and the others are eased from JavaScript. `transitionend` is sent when the
+transition's time is up. One eased from JavaScript stalls while JavaScript is busy.
+
+A transition of a size or a place that is started again before it ends, twice in a row, such as
+a progress bar that steps every 50ms and eases each step over 150ms, is committed where it ends
+from that third start on, with `transitionend` sent at once, whether the host plays layout
+animations or the engine eases from JavaScript.
+CSS would ease every step, but easing one that is always restarted keeps a commit, or a layout
+animation, running on every frame for as long as the bar moves, so the steps are the motion. The
+next start after the size has been left alone for as long as the transition lasts is eased again.
 
 A plain view with a transition is a native view for as long as it has one, as an `Animated.View`
 is in React Native. Left to itself React Native makes a native view of one only while its opacity

@@ -1,6 +1,6 @@
 ---
 title: Camera
-summary: <expo-camera> on screen, and a picture taken from it without a React ref.
+summary: <expo-camera> on screen, and a picture or a video taken from it without a React ref.
 ---
 
 # Camera
@@ -109,6 +109,42 @@ the functions Expo defines on the view itself (`AsyncFunction('takePicture')` in
 module), which native finds by reading the tag off whatever it is called on. `Camera` calls that
 same function with the tag the engine committed the view under, so no ref is needed - `takePicture`
 is a method on the directive instance a `viewChild` reaches.
+
+## Recording a video
+
+**`record(options)`** records from the same view and resolves once the recording stops - when
+**`stopRecording()`** is called, when `maxDuration` (seconds) or `maxFileSize` (bytes) is reached,
+or when the preview stops - to `{ uri }`, a file in the cache directory. It takes `expo-camera`'s
+own `CameraRecordingOptions` (minus `mirror`, which `expo-camera` has deprecated for the view's
+`mirror` prop), and resolves to **null** before the view has reached the screen, or without the
+module.
+
+```html
+<expo-camera mode="video" facing="back" class="flex-1" />
+```
+
+```ts
+protected readonly recording = signal(false);
+
+protected async toggle(): Promise<void> {
+  if (this.recording()) {
+    await this.camera()?.stopRecording();
+    return;
+  }
+  this.recording.set(true);
+  try {
+    const video = await this.camera()?.record({ maxDuration: 60 }); // resolves when it stops
+    if (video) console.log(video.uri);
+  } finally {
+    this.recording.set(false);
+  }
+}
+```
+
+The view records with `mode="video"`. Without `mute` on the view, `record()` needs the microphone
+permission (`ExpoCamera.Camera.requestMicrophonePermissionsAsync`, through `Permission.of()` like
+the camera's): without it, Android rejects and iOS records without sound. With `mute`, it records
+without sound and needs no microphone permission.
 
 ## Reference
 

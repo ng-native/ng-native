@@ -22,10 +22,12 @@ import { Biometrics } from '@ng-native/expo/biometrics';
 
 ```ts
 import { Component, inject } from '@angular/core';
+import { Pressable, Text } from '@ng-native/components';
 import { Biometrics } from '@ng-native/expo/biometrics';
 
 @Component({
   selector: 'app-wallet',
+  imports: [Pressable, Text],
   template: '<pressable (press)="unlock()"><text>Unlock</text></pressable>',
 })
 export class Wallet {

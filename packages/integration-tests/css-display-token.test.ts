@@ -1,9 +1,10 @@
 /**
  * `display: var(--d)`: the token is read on device, as one of the values native has. `flex`,
- * `none` and `contents` are themselves; `block`, `inline`, `inline-block`, `flow-root` and
- * `inline-flex` are flex, as the compiler reads them written out, and so is each of them in
- * the two-keyword form, `inline flex`. Anything else unsets display, which is flex on native,
- * and says so in development, since native has no grid or table to lay out.
+ * `none` and `contents` are themselves. The block containers, `block`, `flow-root` and
+ * `inline-block`, are laid out by the engine and committed as flex, and `inline` and
+ * `inline-flex` are flex, as the compiler reads each written out; so is each of them in the
+ * two-keyword form, `inline flex`. Anything else unsets display, which is flex on native, and
+ * says so in development, since native has no table to lay out. A grid is kept, and laid out by the engine.
  *
  * Chrome's values for the stylesheet path are in the oracle (`css-oracle-cases.ts`); this covers
  * a token set on an element, and one that changes after the first commit.
@@ -82,15 +83,7 @@ describe('display: var()', () => {
   it('unsets display for a token that is no display value native has, over a weaker rule', () => {
     const { engine, node, display } = tree('.a { display: none } .a.b { display: var(--d) }');
     engine.addClass(node, 'b');
-    for (const value of [
-      'red',
-      'grid',
-      '2px',
-      'inline-grid',
-      'table',
-      'block grid',
-      '-webkit-box',
-    ]) {
+    for (const value of ['red', '2px', 'table', 'inline-table', '-webkit-box']) {
       engine.setCustomProperty(node, '--d', value);
       engine.commit();
       // Cleared on native, which commits a removed prop as null: Yoga's default, flex.
@@ -121,16 +114,7 @@ const AS_FLEX = [
 ];
 
 /** Values Chrome keeps that native has no layout for, or that are no display at all. */
-const UNREAD = [
-  'grid',
-  'inline-grid',
-  'block grid',
-  'table',
-  'table-cell',
-  'list-item',
-  '-webkit-box',
-  'red',
-];
+const UNREAD = ['table', 'inline-table', 'table-cell', 'list-item', '-webkit-box', 'red'];
 
 describe('display: var() of two keywords', () => {
   it('reads one bound on the element as flex, over a weaker none', () => {
@@ -165,10 +149,10 @@ describe('display: var() with a written fallback', () => {
   it('refuses such a fallback outright in a strict compile, even inside a lenient one', () => {
     // A strict compile run from another's warning callback must not take that compile's reporter.
     let nested: unknown;
-    compileCss('.a { display: var(--missing, grid) }', 'outer', {
+    compileCss('.a { display: var(--missing, table) }', 'outer', {
       onUnsupported: () => {
         try {
-          compileCss('.b { display: var(--missing, grid) }', 'inner');
+          compileCss('.b { display: var(--missing, table) }', 'inner');
         } catch (error) {
           nested = error;
         }
@@ -178,7 +162,7 @@ describe('display: var() with a written fallback', () => {
   });
 
   it('still reads the token where it is set, with such a fallback', () => {
-    assert.equal(tree('.a { --d: none; display: var(--d, grid) }').display(), 'none');
+    assert.equal(tree('.a { --d: none; display: var(--d, table) }').display(), 'none');
   });
 
   it('keeps a fallback of two keywords', () => {
@@ -219,9 +203,9 @@ describe('display: var() of a value native has no layout for, in development', (
   });
 
   it('names a token from the stylesheet', () => {
-    tree('.p { --d: grid } .a { display: var(--d) }', ['p'], true);
+    tree('.p { --d: table } .a { display: var(--d) }', ['p'], true);
     assert.equal(said().length, 1, warnings.join('\n'));
-    assert.match(said()[0]!, /display: var\(--d\) is grid,/);
+    assert.match(said()[0]!, /display: var\(--d\) is table,/);
   });
 
   it('says nothing of a display native has, an unset token or a fallback', () => {
@@ -236,7 +220,7 @@ describe('display: var() of a value native has no layout for, in development', (
 
   it('says nothing when an important display wins over the token', () => {
     const { display } = tree(
-      '.p { --d: grid } .a { display: none !important } .a { display: var(--d) }',
+      '.p { --d: table } .a { display: none !important } .a { display: var(--d) }',
       ['p'],
       true,
     );
@@ -246,7 +230,7 @@ describe('display: var() of a value native has no layout for, in development', (
 
   it('says nothing in a release build', () => {
     const { engine, node } = tree('.a { display: var(--d) }');
-    engine.setCustomProperty(node, '--d', 'grid');
+    engine.setCustomProperty(node, '--d', 'table');
     engine.commit();
     assert.deepEqual(warnings, []);
   });

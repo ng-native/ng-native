@@ -25,10 +25,12 @@ import { Clipboard } from '@ng-native/expo/clipboard';
 
 ```ts
 import { Component, inject } from '@angular/core';
+import { Pressable, Text } from '@ng-native/components';
 import { Clipboard } from '@ng-native/expo/clipboard';
 
 @Component({
   selector: 'app-share-link',
+  imports: [Pressable, Text],
   template: `<pressable (press)="copy()"><text>Copy link</text></pressable>`,
 })
 export class ShareLink {

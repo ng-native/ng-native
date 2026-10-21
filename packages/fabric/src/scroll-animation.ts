@@ -215,16 +215,74 @@ function heldGroup(resting: unknown): TransformChannel[] | null {
 
 /**
  * A transform as native's transform node holds it, entry by entry, each move by a share as the
- * points it is of the box `sizeOf` answers. Null for one native cannot take that way: a matrix,
- * or a share of a box with no size yet.
+ * points it is of the box `sizeOf` answers and a flat matrix as the move, turn, skew and scale it
+ * is. Null for one native cannot take that way: a matrix in depth, or a share of a box with no
+ * size yet.
  */
 export function heldTransform(
   value: unknown,
   sizeOf: () => { width: number; height: number } | undefined,
+  skews: boolean,
 ): { property: string; value: number }[] | null {
   const size = sharesIn(value) ? sizeOf() : undefined;
-  const channels = heldGroup(size ? inPoints(value, size) : value);
+  const channels = heldGroup(flatMatrices(size ? inPoints(value, size) : value, skews));
   return channels as { property: string; value: number }[] | null;
+}
+
+/** Where each number of a flat matrix is in React Native's sixteen, by column. */
+const FLAT = { a: 0, b: 1, c: 4, d: 5, e: 12, f: 13 } as const;
+/** What the rest of a flat matrix's sixteen are. */
+const FLAT_REST: readonly [number, number][] = [
+  [2, 0],
+  [3, 0],
+  [6, 0],
+  [7, 0],
+  [8, 0],
+  [9, 0],
+  [10, 1],
+  [11, 0],
+  [14, 0],
+  [15, 1],
+];
+
+/** A transform list with each flat matrix in it as the entries `flatMatrix` makes of it. */
+function flatMatrices(value: unknown, skews: boolean): unknown {
+  const matrixOf = (entry: unknown) => (entry as { matrix?: unknown } | null)?.matrix;
+  if (!Array.isArray(value) || !value.some((entry) => matrixOf(entry) !== undefined)) return value;
+  return value.flatMap((entry) => flatMatrix(matrixOf(entry), skews) ?? [entry]);
+}
+
+/**
+ * A matrix in two dimensions as the move, turn, skew and scale it is, in that order, as CSS
+ * decomposes one: numbers native's transform node takes. Null for one in three dimensions, one
+ * that flattens the view to a line, or one with a skew where the platform draws none, which
+ * native cannot be set to.
+ *
+ * Once a graph has set a view's transform, no commit changes it again (see `Touched`), so a
+ * matrix bound after a native animation that native is not set to leaves the view where the
+ * animation ended.
+ */
+function flatMatrix(raw: unknown, skews: boolean): Record<string, number>[] | null {
+  if (!Array.isArray(raw) || raw.length !== 16 || !raw.every(Number.isFinite)) return null;
+  const m = raw as number[];
+  if (FLAT_REST.some(([index, value]) => m[index] !== value)) return null;
+  const [a, b, c, d] = [m[FLAT.a]!, m[FLAT.b]!, m[FLAT.c]!, m[FLAT.d]!];
+  const scaleX = Math.hypot(a, b);
+  if (scaleX === 0) return null;
+  const [cos, sin] = [a / scaleX, b / scaleX];
+  const shear = cos * c + sin * d;
+  const scaleY = cos * (d - sin * shear) - sin * (c - cos * shear);
+  if (scaleY === 0) return null;
+  // Android draws no skew: React Native leaves `skewX` out there, so a sheared matrix is left as it is.
+  if (!skews && Math.abs(shear) > 1e-9) return null;
+  return [
+    { translateX: m[FLAT.e]! },
+    { translateY: m[FLAT.f]! },
+    { rotate: Math.atan2(sin, cos) },
+    { skewX: Math.atan(shear / scaleY) },
+    { scaleX },
+    { scaleY },
+  ];
 }
 
 function restingAmount(resting: unknown, index: number, key: string, identity: number): number {

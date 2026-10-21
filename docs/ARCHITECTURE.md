@@ -65,6 +65,13 @@ commit is a wasted native commit per frame during a fling. The exceptions are fr
 on their own clock: a JavaScript-driven `Animated` frame and a CSS transition or animation commit
 outside change detection, because waiting for the next pass would drop the frame.
 
+A commit that changes a grid, a box fitted to its content or a box sized by a sum of a percentage
+and a length is followed, inside `commit()`, by the ones that lay it out. Yoga has none of these,
+so the engine reads sizes back from the commit it just made (`getBoundingClientRect`, which Fabric
+answers from the layout it ran in `completeRoot`) and commits what it worked out. Fabric mounts
+once, at the end of the task, so only the last of them is drawn. A commit that touches none of
+these makes no more commits.
+
 **Element names in templates are lowercase.** `<view>`, `<scroll-view>`, `<text-input>`. This is
 not style: a component's selector is lowercase, and Angular matches element names case-sensitively,
 so `<View>` matches no component and renders as an empty box with no compiler error. The Metro

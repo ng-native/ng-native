@@ -7,8 +7,8 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { Engine } from '@ng-native/fabric';
-import { compileCss, createFakeFabric, type FakeFabricNode } from '@ng-native/testing';
-import { layOutTree } from './layout.ts';
+import { compileCss, createFakeFabric } from '@ng-native/testing';
+import { createLaidOutFabric } from './laid-out-fabric.ts';
 
 function scene(css: string, classes: string) {
   const fabric = createFakeFabric();
@@ -56,9 +56,9 @@ describe('aspect-ratio on a box with both sizes given', () => {
 
 type Spec = [name: string, ...children: Spec[]];
 
-/** Each box `[name, ...children]` with the class of its name, laid out as React Native's Yoga does. */
+/** Each box `[name, ...children]` with the class of its name, laid out as the canary does. */
 function laidOut(css: string, spec: Spec) {
-  const fabric = createFakeFabric();
+  const fabric = createLaidOutFabric('strict');
   const engine = new Engine(fabric, 1, { globalStyles: compileCss(css, 'app.css') as never });
   const nodes = new Map<string, ReturnType<typeof engine.createElement>>();
   const build = ([name, ...children]: Spec, parent: ReturnType<typeof engine.createElement>) => {
@@ -70,21 +70,14 @@ function laidOut(css: string, spec: Spec) {
     for (const child of children) build(child, node);
   };
   build(spec, engine.root);
-  const find = (all: readonly FakeFabricNode[], name: string): FakeFabricNode | undefined => {
-    for (const each of all) {
-      const found = each.props['nativeID'] === name ? each : find(each.children, name);
-      if (found) return found;
-    }
-    return undefined;
+  const box = (name: string) => {
+    engine.commit();
+    const { left, top, width, height } = fabric.box(name);
+    return [left, top, width, height];
   };
   /** The width and height of the box with this name. */
-  const size = (name: string) => {
-    engine.commit();
-    const sizes = layOutTree(fabric.committed, { width: 400, height: 800 });
-    const { width, height } = sizes.get(find(fabric.committed, name)!)!;
-    return [width, height];
-  };
-  return { engine, nodes, size };
+  const size = (name: string) => box(name).slice(2);
+  return { engine, nodes, box, size };
 }
 
 // Chrome's numbers. A flex item that stretches across its line, with its size across the line
@@ -93,20 +86,21 @@ function laidOut(css: string, spec: Spec) {
 describe('aspect-ratio on a flex item that stretches across its line', () => {
   const RATIO =
     '.r { aspect-ratio: 2 } .h { height: 100px } .w { width: 100px } .start { align-self: flex-start }' +
-    ' .row { flex-direction: row } .tall { height: 100px } .s { width: 10px; height: 80px }' +
+    ' .row { flex-direction: row } .tall { height: 100px } .s { width: 10px; height: 80px } .b { display: block }' +
     ' .ba { flex-basis: auto } .mn { min-height: 60px } .mx { max-height: 40px }' +
     ' .mx70 { max-height: 70px }';
 
   it('is as wide as a column, with the height it was given', () => {
-    assert.deepEqual(laidOut(RATIO, ['p', ['r h']]).size('r h'), [400, 100]);
-    // Not stretched, the ratio gives its width.
-    assert.deepEqual(laidOut(RATIO, ['p', ['r h start']]).size('r h start'), [200, 100]);
+    assert.deepEqual(laidOut(RATIO, ['p', ['r h']]).box('r h'), [0, 0, 400, 100]);
+    // Not stretched, and in a block, the ratio gives its width.
+    assert.deepEqual(laidOut(RATIO, ['p', ['r h start']]).box('r h start'), [0, 0, 200, 100]);
+    assert.deepEqual(laidOut(RATIO, ['p b', ['r h']]).box('r h'), [0, 0, 200, 100]);
   });
 
   it('is as tall as a row, and at least the height the ratio gives its width', () => {
-    assert.deepEqual(laidOut(RATIO, ['p row tall', ['r w']]).size('r w'), [100, 100]);
-    assert.deepEqual(laidOut(RATIO, ['p row', ['r w'], ['s']]).size('r w'), [100, 80]);
-    assert.deepEqual(laidOut(RATIO, ['p row', ['r w']]).size('r w'), [100, 50]);
+    assert.deepEqual(laidOut(RATIO, ['p row tall', ['r w']]).box('r w'), [0, 0, 100, 100]);
+    assert.deepEqual(laidOut(RATIO, ['p row', ['r w'], ['s']]).box('r w'), [0, 0, 100, 80]);
+    assert.deepEqual(laidOut(RATIO, ['p row', ['r w']]).box('r w'), [0, 0, 100, 50]);
   });
 
   it('is as tall as a row with a basis of auto, which is its width', () => {
@@ -135,11 +129,11 @@ describe('aspect-ratio on a flex item that stretches across its line', () => {
 
   it('follows the box it is in turning from a column to a row', () => {
     const s = laidOut(RATIO, ['p', ['r w'], ['s']]);
-    assert.deepEqual(s.size('r w'), [100, 50]);
+    assert.deepEqual(s.box('r w'), [0, 0, 100, 50]);
     s.engine.setClasses(s.nodes.get('p')!, 'p row');
-    assert.deepEqual(s.size('r w'), [100, 80]);
+    assert.deepEqual(s.box('r w'), [0, 0, 100, 80]);
     s.engine.setClasses(s.nodes.get('p')!, 'p');
-    assert.deepEqual(s.size('r w'), [100, 50]);
+    assert.deepEqual(s.box('r w'), [0, 0, 100, 50]);
   });
 
   it('keeps an image to its picture, stretched or not', () => {

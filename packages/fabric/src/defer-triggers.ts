@@ -11,6 +11,7 @@
  * `installDeferTriggers` runs once, from `mount()`, before anything renders.
  */
 import { isEngineNode, viewNameOf, type EngineNode, type WindowFrame } from './engine.ts';
+import { letEngineNodesPass, type Constructor } from './node-global.ts';
 
 /** The views a node scrolls inside of, and whose scrolling can bring it into view. */
 const SCROLLERS = new Set(['ScrollView', 'AndroidHorizontalScrollView']);
@@ -56,10 +57,10 @@ export class EngineIntersectionObserver {
   observe(target: EngineNode): void {
     if (this.watched.has(target)) return;
     const check = () => this.check(target);
-    const stops = [target.host!.setEventListener(target, 'topLayout', check)];
+    const stops = [target.engine!.setEventListener(target, 'topLayout', check)];
     for (let at = target.parent; at; at = at.parent) {
       if (!SCROLLERS.has(viewNameOf(at))) continue;
-      stops.push(at.host!.setEventListener(at, 'topScroll', check));
+      stops.push(at.engine!.setEventListener(at, 'topScroll', check));
     }
     this.watched.set(target, { stops });
     // A node laid out before it was observed sends no layout event of its own. Measured now,
@@ -109,7 +110,7 @@ const box = (frame: WindowFrame): Box => ({
 
 function measured(node: EngineNode): Box | null {
   let found: Box | null = null;
-  node.host!.measure(node, (frame) => (found = box(frame)));
+  node.engine!.measure(node, (frame) => (found = box(frame)));
   return found;
 }
 
@@ -133,7 +134,7 @@ function visibleShare(target: EngineNode): number | null {
     const scroller = measured(at);
     if (scroller) clip(visible, scroller);
   }
-  const window = (target.host as { viewport?: { width: number; height: number } }).viewport;
+  const window = (target.engine as { viewport?: { width: number; height: number } }).viewport;
   if (window && window.width > 0 && window.height > 0) {
     clip(visible, { left: 0, top: 0, right: window.width, bottom: window.height });
   }
@@ -143,8 +144,6 @@ function visibleShare(target: EngineNode): number | null {
   const area = (frame.right - frame.left) * (frame.bottom - frame.top);
   return area > 0 ? (width * height) / area : 1;
 }
-
-type Constructor = abstract new (...args: never[]) => object;
 
 /** React Native's own `IntersectionObserver`, when its feature flag has installed one. */
 interface NativeObserver {
@@ -173,14 +172,7 @@ export function installDeferTriggers(): void {
 
   const existing = scope['Element'] as Constructor | undefined;
   if (existing) {
-    // Its own check if it defines one, and the ordinary prototype walk if not.
-    const own = existing[Symbol.hasInstance];
-    Object.defineProperty(existing, Symbol.hasInstance, {
-      configurable: true,
-      value(this: Constructor, value: unknown): boolean {
-        return (this === existing && isEngineNode(value)) || own.call(this, value);
-      },
-    });
+    letEngineNodesPass(existing);
   } else {
     scope['Element'] = class Element {
       static [Symbol.hasInstance](value: unknown): boolean {

@@ -152,8 +152,8 @@ describe('keyboard-avoiding-view', () => {
   });
 
   it('does not configure a layout animation when the keyboard reports no duration', async () => {
-    // Android's own keyboard event always has duration 0 - the platform animates the keyboard
-    // itself, and nothing here should ask native to animate an update it never asked to run.
+    // React Native's own keyboard event on Android has duration 0 - it says nothing of the motion,
+    // and nothing here should ask native to animate an update it never asked to run.
     const order: string[] = [];
     const native: NativeLayoutAnimation = { configureNext: () => order.push('configure') };
 
@@ -180,6 +180,104 @@ describe('keyboard-avoiding-view', () => {
 
     assert.deepEqual(order, []);
     assert.equal(fabric.committed[0]!.children[0]!.props['paddingBottom'], 280);
+
+    app.applicationRef.destroy();
+  });
+});
+
+/**
+ * Android animates no layout alongside the keyboard unless an app turns that on, so where the
+ * source reports the keyboard's motion, as `provideNativeKeyboard()`'s does, the view follows the
+ * keyboard frame by frame instead of animating to where it is going.
+ */
+describe('keyboard-avoiding-view following the motion', () => {
+  let Component: Type<unknown>;
+
+  before(async () => {
+    const mod = await compileFixture('fixtures/sections.ts');
+    Component = mod['Sections'] as Type<unknown>;
+  });
+
+  it('pads by where the keyboard is at each frame, and configures no layout animation', async () => {
+    const order: string[] = [];
+    let emit: (metrics: KeyboardMetrics) => void = () => {};
+    let move: (frame: KeyboardMetrics | null) => void = () => {};
+    const fabric = createFakeFabric();
+    const app = mount(1, Component, fabric, {
+      providers: [
+        {
+          provide: Keyboard.SOURCE,
+          useValue: {
+            subscribe: (fn: typeof emit) => ((emit = fn), () => {}),
+            subscribeMotion: (fn: typeof move) => ((move = fn), () => {}),
+            dismiss: () => {},
+          },
+        },
+        {
+          provide: LayoutAnimation.SOURCE,
+          useValue: { configureNext: () => order.push('configure') },
+        },
+      ],
+    });
+    await settle();
+    const padding = () => fabric.committed[0]!.children[0]!.props['paddingBottom'];
+
+    move({ height: 0 });
+    emit({ height: 300, duration: 250, easing: 'easeOut' });
+    await settle();
+    assert.equal(padding(), undefined, 'not where the keyboard is going, before it has moved');
+
+    move({ height: 120 });
+    await settle();
+    assert.equal(padding(), 100, 'where it is, less the offset');
+    move({ height: 300 });
+    move(null);
+    await settle();
+    assert.equal(padding(), 280);
+    assert.deepEqual(order, [], 'nothing animated alongside the frames');
+
+    move({ height: 300 });
+    emit({ height: 0, duration: 250, easing: 'easeOut' });
+    await settle();
+    assert.equal(padding(), 280, 'still where the keyboard is as it starts down');
+    move({ height: 40 });
+    await settle();
+    assert.equal(padding(), 20);
+    move(null);
+    await settle();
+    assert.equal(padding(), null, 'and none once it has gone');
+
+    app.applicationRef.destroy();
+  });
+
+  it('configures no layout animation for a frame that commits with the motion starting', async () => {
+    const order: string[] = [];
+    let emit: (metrics: KeyboardMetrics) => void = () => {};
+    let move: (frame: KeyboardMetrics | null) => void = () => {};
+    const fabric = createFakeFabric();
+    const app = mount(1, Component, fabric, {
+      providers: [
+        {
+          provide: Keyboard.SOURCE,
+          useValue: {
+            subscribe: (fn: typeof emit) => ((emit = fn), () => {}),
+            subscribeMotion: (fn: typeof move) => ((move = fn), () => {}),
+            dismiss: () => {},
+          },
+        },
+        {
+          provide: LayoutAnimation.SOURCE,
+          useValue: { configureNext: () => order.push('configure') },
+        },
+      ],
+    });
+    await settle();
+
+    emit({ height: 300, duration: 250, easing: 'easeOut' });
+    move({ height: 120 });
+    await settle();
+    assert.equal(fabric.committed[0]!.children[0]!.props['paddingBottom'], 100);
+    assert.deepEqual(order, [], 'the frame is where the keyboard is, not a step to animate');
 
     app.applicationRef.destroy();
   });

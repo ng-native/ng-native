@@ -526,6 +526,39 @@ describe('native tabs outlet', () => {
     assert.deepEqual(navigated, []);
   });
 
+  it('does not navigate back to a tab native confirms after a later request superseded it', async () => {
+    // A cold-start link: the outlet asked for the first tab, then the link selected another
+    // before native's answer to the first request arrived.
+    outlet.activateWith(routeFor(library), env);
+    await settle();
+    outlet.detach();
+    outlet.activateWith(routeFor(search), env);
+    await settle();
+    const host = flatten(fabric.committed).find((node) => node.viewName === 'RNSTabsHostIOS')!;
+
+    await fireEvent(host, 'tabSelected', {
+      selectedScreenKey: 'library',
+      provenance: 4,
+      actionOrigin: 'programmatic-js',
+    });
+    assert.deepEqual(navigated, [], 'an answer to our own request is not a tap');
+
+    const request = () =>
+      flatten(fabric.committed).find((node) => node.viewName === 'RNSTabsHostIOS')?.props[
+        'navStateRequest'
+      ] as { selectedScreenKey: string; baseProvenance: number };
+    assert.equal(
+      request().selectedScreenKey,
+      'search',
+      'native is still asked for the tab in front',
+    );
+
+    outlet.detach();
+    outlet.activateWith(routeFor(library), env);
+    await settle();
+    assert.equal(request().baseProvenance, 4, 'the answer still counts as acknowledged state');
+  });
+
   it('remembers a url inside its own tab, and not one that only starts with its path', async () => {
     const router = componentRef.injector.get(Router) as unknown as { url: string };
     const host = flatten(fabric.committed).find((node) => node.viewName === 'RNSTabsHostIOS')!;

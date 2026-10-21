@@ -7,6 +7,7 @@ import colourExpressionSource from '@ng-native/metro/css/colour-expression.cjs?r
 import tokenArithmeticSource from '@ng-native/metro/css/token-arithmetic.cjs?raw';
 import compileSource from '@ng-native/metro/css/compile.cjs?raw';
 import filtersSource from '@ng-native/metro/css/filters.cjs?raw';
+import gridSource from '@ng-native/metro/css/grid.cjs?raw';
 import gradientsSource from '@ng-native/metro/css/gradients.cjs?raw';
 import propertiesSource from '@ng-native/metro/css/properties.cjs?raw';
 import shorthandsSource from '@ng-native/metro/css/shorthands.cjs?raw';
@@ -23,5 +24,6 @@ export const SOURCES: Readonly<Record<string, string>> = {
   './gradients.cjs': gradientsSource,
   './shorthands.cjs': shorthandsSource,
   './filters.cjs': filtersSource,
+  './grid.cjs': gridSource,
   './flatten.cjs': flattenSource,
 };

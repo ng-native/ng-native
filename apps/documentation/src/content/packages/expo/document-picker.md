@@ -26,10 +26,12 @@ import { DocumentPicker } from '@ng-native/expo/document-picker';
 
 ```ts
 import { Component, inject, signal } from '@angular/core';
+import { Pressable, Text } from '@ng-native/components';
 import { DocumentPicker } from '@ng-native/expo/document-picker';
 
 @Component({
   selector: 'app-attach',
+  imports: [Pressable, Text],
   template: `
     <pressable (press)="attach()"><text>Attach a PDF</text></pressable>
     <text>{{ attached() }}</text>

@@ -76,6 +76,20 @@ export interface ScrollDrive {
   stop(): void;
 }
 
+/**
+ * A transform entry native applies after a drive's translate: an amount, or a node of another
+ * graph's that native moves, such as a transition's along its clock.
+ */
+export type FollowingTransform =
+  | { readonly property: string; readonly value: number }
+  | { readonly property: string; readonly node: number };
+
+/** A drive whose transform after its translate can change. */
+export interface ComposedDrive extends ScrollDrive {
+  /** Have native apply these after the translate, in place of what it applied after it before. */
+  follow(entries: readonly FollowingTransform[]): void;
+}
+
 interface Offset {
   readonly value: number;
   readonly viewTag: number;
@@ -91,6 +105,8 @@ interface Nodes {
   transform: number;
   style: number;
   props: number;
+  /** The nodes of other graphs' the transform applies after the translate. */
+  followed: readonly number[];
 }
 
 interface Drive {
@@ -98,6 +114,8 @@ interface Drive {
   range: ScrollRange;
   /** The amount added to the range's translate, or null for a drive without one. */
   shift: number | null;
+  /** What native applies after the translate. */
+  after: readonly FollowingTransform[];
   nodes: Nodes | null;
   stopped: boolean;
 }
@@ -153,6 +171,12 @@ function shapeOf(values: SetValues): string {
 }
 
 const NONE_HELD: ReadonlySet<string> = new Set();
+
+/** The nodes a set of channels was built of: the props node, where there is one, first. */
+interface Built {
+  readonly props: number | null;
+  readonly nodes: readonly number[];
+}
 
 export class NativeScrollDriver {
   private readonly native: NativeAnimated;
@@ -275,8 +299,11 @@ export class NativeScrollDriver {
     statics: readonly StaticTransform[],
     tagOf: (node: object) => number | null,
     shift: number | null = null,
-  ): ScrollDrive {
-    const drive: Drive = { viewTag: null, range, shift, nodes: null, stopped: false };
+  ): ComposedDrive {
+    const after = statics.flatMap((entry) =>
+      Object.entries(entry).map(([property, value]) => ({ property, value })),
+    );
+    const drive: Drive = { viewTag: null, range, shift, after, nodes: null, stopped: false };
     const key = feedKey(feed);
     const connect = (): boolean => {
       if (drive.stopped) return true;
@@ -285,23 +312,31 @@ export class NativeScrollDriver {
       if (viewTag === null || sourceTag === null) return false;
       drive.viewTag = viewTag;
       const offset = this.offset(source, sourceTag, feed, key);
-      drive.nodes = this.build(offset.value, viewTag, property, drive, statics);
+      drive.nodes = this.build(offset.value, viewTag, property, drive);
       this.hold(view, viewTag, drive.nodes.props, ['transform']);
       this.flush();
       return true;
     };
     if (!connect()) this.pending.add(connect);
+    const rebuild = () => {
+      if (!drive.nodes || drive.viewTag === null) return;
+      this.tearDown(drive.nodes, drive.viewTag);
+      this.letGo(view, drive.nodes.props);
+      const offset = this.offsets.get(source)!.get(key)!;
+      drive.nodes = this.build(offset.value, drive.viewTag, property, drive);
+      this.hold(view, drive.viewTag, drive.nodes.props, ['transform']);
+      this.flush();
+    };
     return {
       update: (next) => {
         if (drive.stopped || sameRange(drive.range, next)) return;
         drive.range = next;
-        if (!drive.nodes || drive.viewTag === null) return;
-        this.tearDown(drive.nodes, drive.viewTag);
-        this.letGo(view, drive.nodes.props);
-        const offset = this.offsets.get(source)!.get(key)!;
-        drive.nodes = this.build(offset.value, drive.viewTag, property, drive, statics);
-        this.hold(view, drive.viewTag, drive.nodes.props, ['transform']);
-        this.flush();
+        rebuild();
+      },
+      follow: (entries) => {
+        if (drive.stopped || sameFollowing(drive.after, entries)) return;
+        drive.after = entries;
+        rebuild();
       },
       shift: (amount) => {
         if (drive.stopped || drive.shift === null || drive.shift === amount) return;
@@ -338,7 +373,7 @@ export class NativeScrollDriver {
     const state = {
       channels,
       viewTag: null as number | null,
-      nodes: null as number[] | null,
+      nodes: null as Built | null,
       stopped: false,
     };
     const key = feedKey(feed);
@@ -383,6 +418,10 @@ export class NativeScrollDriver {
    * of the last iteration; `stop` lets the view go, and stops an animation still playing.
    *
    * Null where the native module cannot start an animation, and the caller plays it itself.
+   *
+   * With `lend`, the transform is not set on the view: its entries are handed to `lend` once
+   * built, for a graph that sets the view's transform already to apply, and `lend` is told null
+   * before they go.
    */
   play(
     view: object,
@@ -390,13 +429,14 @@ export class NativeScrollDriver {
     timing: { frames: readonly number[]; toValue: number; iterations: number },
     tagOf: (node: object) => number | null,
     ended: () => void,
+    lend?: (entries: readonly FollowingTransform[] | null) => void,
   ): { stop(): void } | null {
     const { API } = this.native;
     const start = API.startAnimatingNode;
     if (!start || !API.stopAnimation || !this.native.generateNewAnimationId) return null;
     const state = {
       viewTag: null as number | null,
-      nodes: null as number[] | null,
+      nodes: null as Built | null,
       value: 0,
       id: 0,
       over: false,
@@ -408,7 +448,7 @@ export class NativeScrollDriver {
       state.viewTag = viewTag;
       state.value = this.native.generateNewNodeTag();
       API.createAnimatedNode(state.value, { type: 'value', value: 0, offset: 0 });
-      state.nodes = this.buildChannels(view, state.value, viewTag, channels);
+      state.nodes = this.buildPlayed(view, state.value, viewTag, channels, lend);
       state.id = this.native.generateNewAnimationId!();
       const config = { type: 'frames', frames: [...timing.frames], toValue: timing.toValue };
       start(state.id, state.value, { ...config, iterations: timing.iterations }, (result) => {
@@ -433,11 +473,58 @@ export class NativeScrollDriver {
         this.pending.delete(connect);
         if (!state.nodes || state.viewTag === null) return;
         if (state.id) API.stopAnimation!(state.id);
+        if (lend && channels.transform.length) lend(null);
         this.dropChannels(view, state.nodes, state.viewTag);
         API.dropAnimatedNode(state.value);
         this.flush();
       },
     };
+  }
+
+  /**
+   * The nodes for what `play` plays: a transform handed to `lend` is set by another graph, and
+   * with nothing else to set the view has no props node.
+   */
+  private buildPlayed(
+    view: object,
+    value: number,
+    viewTag: number,
+    channels: DrivenChannels,
+    lend: ((entries: readonly FollowingTransform[] | null) => void) | undefined,
+  ): Built {
+    if (!lend || !channels.transform.length) {
+      return this.buildChannels(view, value, viewTag, channels);
+    }
+    const lent: number[] = [];
+    lend(
+      channels.transform.map((channel) =>
+        'range' in channel
+          ? { property: channel.property, node: this.interpolation(value, channel.range, lent) }
+          : channel,
+      ),
+    );
+    const rest = { ...channels, transform: [] };
+    if (!rest.opacity && !Object.keys(rest.colors ?? {}).length) {
+      return { props: null, nodes: lent.reverse() };
+    }
+    const built = this.buildChannels(view, value, viewTag, rest);
+    return { props: built.props, nodes: [...built.nodes, ...lent.reverse()] };
+  }
+
+  /** An interpolation from `value`, clamped at both ends, noted in `made`. */
+  private interpolation(value: number, range: ScrollRange, made: number[]): number {
+    const { API } = this.native;
+    const tag = this.native.generateNewNodeTag();
+    API.createAnimatedNode(tag, {
+      type: 'interpolation',
+      inputRange: [...range.input],
+      outputRange: [...range.output],
+      extrapolateLeft: 'clamp',
+      extrapolateRight: 'clamp',
+    });
+    API.connectAnimatedNodes(value, tag);
+    made.push(tag);
+    return tag;
   }
 
   /** The nodes for a set of channels, connected to the view; the props node first. */
@@ -446,22 +533,10 @@ export class NativeScrollDriver {
     value: number,
     viewTag: number,
     channels: DrivenChannels,
-  ): number[] {
+  ): Built {
     const { API } = this.native;
     const made: number[] = [];
-    const interpolation = (range: ScrollRange): number => {
-      const tag = this.native.generateNewNodeTag();
-      API.createAnimatedNode(tag, {
-        type: 'interpolation',
-        inputRange: [...range.input],
-        outputRange: [...range.output],
-        extrapolateLeft: 'clamp',
-        extrapolateRight: 'clamp',
-      });
-      API.connectAnimatedNodes(value, tag);
-      made.push(tag);
-      return tag;
-    };
+    const interpolation = (range: ScrollRange) => this.interpolation(value, range, made);
     const style: Record<string, number> = {};
     if (channels.opacity) style['opacity'] = interpolation(channels.opacity);
     for (const [property, parts] of Object.entries(channels.colors ?? {})) {
@@ -494,14 +569,16 @@ export class NativeScrollDriver {
     API.connectAnimatedNodes(styleTag, props);
     API.connectAnimatedNodeToView(props, viewTag);
     this.hold(view, viewTag, props, channelKeys(channels));
-    return [props, styleTag, ...made.reverse()];
+    return { props, nodes: [props, styleTag, ...made.reverse()] };
   }
 
-  private dropChannels(view: object, nodes: readonly number[], viewTag: number): void {
+  private dropChannels(view: object, built: Built, viewTag: number): void {
     const { API } = this.native;
-    this.letGo(view, nodes[0]!);
-    API.disconnectAnimatedNodeFromView(nodes[0]!, viewTag);
-    for (const tag of nodes) API.dropAnimatedNode(tag);
+    if (built.props !== null) {
+      this.letGo(view, built.props);
+      API.disconnectAnimatedNodeFromView(built.props, viewTag);
+    }
+    for (const tag of built.nodes) API.dropAnimatedNode(tag);
   }
 
   /** Connects every drive still waiting for its views, now that a commit may have made them. */
@@ -542,13 +619,7 @@ export class NativeScrollDriver {
     this.native.API.dropAnimatedNode(offset.value);
   }
 
-  private build(
-    value: number,
-    viewTag: number,
-    property: DrivenProperty,
-    drive: Drive,
-    statics: readonly StaticTransform[],
-  ): Nodes {
+  private build(value: number, viewTag: number, property: DrivenProperty, drive: Drive): Nodes {
     const { API } = this.native;
     const range = drive.range;
     const interpolation = this.native.generateNewNodeTag();
@@ -576,15 +647,14 @@ export class NativeScrollDriver {
           property,
           nodeTag: sum ?? interpolation,
         },
-        ...statics.flatMap((entry) =>
-          Object.entries(entry).map(([property, amount]) => ({
-            type: 'static',
-            property,
-            value: amount,
-          })),
+        ...drive.after.map((entry) =>
+          'node' in entry
+            ? { type: 'animated', property: entry.property, nodeTag: entry.node }
+            : { type: 'static', property: entry.property, value: entry.value },
         ),
       ],
     });
+    const followed = drive.after.flatMap((entry) => ('node' in entry ? [entry.node] : []));
     // A style node between, as `Animated` builds it: RN's props node on iOS reads its values from
     // a style node and ignores a transform node connected to it directly.
     const style = this.native.generateNewNodeTag();
@@ -599,10 +669,11 @@ export class NativeScrollDriver {
     } else {
       API.connectAnimatedNodes(interpolation, transform);
     }
+    for (const node of followed) API.connectAnimatedNodes(node, transform);
     API.connectAnimatedNodes(transform, style);
     API.connectAnimatedNodes(style, props);
     API.connectAnimatedNodeToView(props, viewTag);
-    return { interpolation, shift, sum, transform, style, props };
+    return { interpolation, shift, sum, transform, style, props, followed };
   }
 
   private tearDown(nodes: Nodes, viewTag: number): void {
@@ -610,6 +681,8 @@ export class NativeScrollDriver {
     API.disconnectAnimatedNodeFromView(nodes.props, viewTag);
     API.dropAnimatedNode(nodes.props);
     API.dropAnimatedNode(nodes.style);
+    // Another graph's nodes outlast this one: none of them is left feeding a node that is gone.
+    for (const node of nodes.followed) API.disconnectAnimatedNodes(node, nodes.transform);
     API.dropAnimatedNode(nodes.transform);
     if (nodes.sum !== null) API.dropAnimatedNode(nodes.sum);
     if (nodes.shift !== null) API.dropAnimatedNode(nodes.shift);
@@ -628,6 +701,19 @@ function feedKey(feed: EventFeed): string {
 /** A scroll view's offset along an axis, as `onScroll` carries it. */
 export function scrollFeed(axis: ScrollAxis): EventFeed {
   return { events: ['onScroll'], path: ['contentOffset', axis] };
+}
+
+function sameFollowing(a: readonly FollowingTransform[], b: readonly FollowingTransform[]) {
+  return (
+    a.length === b.length &&
+    a.every((entry, i) => {
+      const other = b[i]!;
+      if (entry.property !== other.property) return false;
+      return 'node' in entry
+        ? 'node' in other && entry.node === other.node
+        : 'value' in other && entry.value === other.value;
+    })
+  );
 }
 
 function sameRange(a: ScrollRange, b: ScrollRange): boolean {
