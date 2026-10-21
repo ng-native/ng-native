@@ -4012,8 +4012,8 @@ function vlq(segment) {
  * printer folds an equal `padding-inline-start` and `padding-inline-end` into `padding-inline`,
  * which is left and right, so a pair written logical came out physical for the sheet having a
  * `@media` rule in it. A nested sheet kept from it is a rule that silently never matches, so this
- * still errs towards yes: a comment, a string and an escaped character are stepped over, a `}`
- * with nothing open is yes, and a block left open is yes.
+ * still errs towards yes: a comment, a string, an unquoted url and an escaped character are
+ * stepped over, a `}` with nothing open is yes, and a block left open is yes.
  */
 function nests(source) {
   // For each open block, whether it is an at-rule's.
@@ -4037,10 +4037,14 @@ function nests(source) {
   return open.length > 0;
 }
 
-/** The last index of the comment, string or escaped character that starts at `i`, or `i`. */
+/**
+ * The last index of the comment, string, unquoted `url()` or escaped character that starts at `i`,
+ * or `i`.
+ */
 function skipOver(source, i) {
   const character = source[i];
   if (character === '\\') return i + 1;
+  if (character === 'u' || character === 'U') return urlEnd(source, i);
   if (character === '/' && source[i + 1] === '*') {
     const end = source.indexOf('*/', i + 2);
     return end === -1 ? source.length : end + 1;
@@ -4048,6 +4052,18 @@ function skipOver(source, i) {
   if (character !== '"' && character !== "'") return i;
   let at = i + 1;
   while (at < source.length && source[at] !== character) at += source[at] === '\\' ? 2 : 1;
+  return at;
+}
+
+/**
+ * The `)` of the unquoted `url()` that starts at `i`, or `i`. An unquoted url runs to its `)`, so
+ * an `&` or a `/*` in it is the url's. A quoted one is a string, which `skipOver` steps over.
+ */
+function urlEnd(source, i) {
+  const url = /^url\(\s*(?=[^\s"'])/i.exec(source.slice(i, i + 64));
+  if (!url) return i;
+  let at = i + url[0].length;
+  while (at < source.length && source[at] !== ')') at += source[at] === '\\' ? 2 : 1;
   return at;
 }
 

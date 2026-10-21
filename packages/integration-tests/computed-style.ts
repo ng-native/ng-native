@@ -433,8 +433,12 @@ function sameAnimation(property: string, browser: string, value: unknown): boole
   }
 }
 
-/** Tailwind's `calc(infinity * 1px)`, which each side clamps to its own largest length. */
+/**
+ * Tailwind's `calc(infinity * 1px)`, which each side clamps to its own largest length: Chrome to
+ * 2^25px, and the compiler to 9999, React Native's own idiom for it.
+ */
 const INFINITE = 1e6;
+const HUGE = 9999;
 
 function sameLength(browser: string, value: unknown): boolean {
   if (browser === 'auto' || browser === 'normal' || browser === 'none') {
@@ -450,7 +454,7 @@ function sameLength(browser: string, value: unknown): boolean {
   if (browser.endsWith('px')) {
     if (typeof value !== 'number') return false;
     const theirs = parseFloat(browser);
-    return (theirs >= INFINITE && value >= INFINITE) || close(value, theirs);
+    return (theirs >= INFINITE && value >= HUGE) || close(value, theirs);
   }
   return false;
 }
