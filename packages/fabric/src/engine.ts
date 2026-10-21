@@ -2396,8 +2396,18 @@ function sharesRow(node: EngineNode): boolean {
  * the flow is a share of a box it has no part in the width of, a focus ring over a chip.
  */
 function sharesWidth(node: EngineNode): boolean {
-  if (!isShare(readStyle(node, 'width')) && !isShare(readStyle(node, 'minWidth'))) return false;
-  return !OUT_OF_FLOW.has(readStyle(node, 'position') as string);
+  const share =
+    isShare(readStyle(node, 'width')) || isShare(readStyle(node, 'minWidth')) || basisOfRow(node);
+  return share && !OUT_OF_FLOW.has(readStyle(node, 'position') as string);
+}
+
+/**
+ * Whether a box's basis is a share of the row it is an item of, which is a share of its width
+ * as a percentage width is: a chip's cell, `flex-basis: 100%` in the chip.
+ */
+function basisOfRow(node: EngineNode): boolean {
+  const row = node.parent;
+  return row?.nodeKind === 'element' && isShare(readStyle(node, 'flexBasis')) && isRow(row);
 }
 
 /** A percentage: of the box a node is in, for a width or the least it may be. */
@@ -2842,11 +2852,11 @@ const SHARES_OF: Record<string, number> = {
   minWidth: SHARED_WIDTHS,
   height: SHARED_HEIGHTS,
   minHeight: SHARED_HEIGHTS,
-  flexBasis: SHARED_HEIGHTS,
+  // Of a column's height, or of a row's width: which, the box it is in says.
+  flexBasis: SHARED_HEIGHTS | SHARED_WIDTHS,
 };
 
-const heightShare = (key: string): number =>
-  SHARES_OF[key] === SHARED_HEIGHTS ? SHARED_HEIGHTS : 0;
+const heightShare = (key: string): number => (SHARES_OF[key] ?? 0) & SHARED_HEIGHTS;
 
 /** What a size asks for: a share of its box, an automatic minimum, or a keyword of CSS's. */
 function asksBySize(key: string, value: string): number {
@@ -9652,7 +9662,8 @@ export class Engine implements HostEngine {
 
   /**
    * The boxes inside `node` that Yoga sizes from the room on offer and not from their content:
-   * one with a percentage width, and one that takes a share of a row from a basis of nothing.
+   * one with a percentage width or a percentage basis in a row, and one that takes a share of a
+   * row from a basis of nothing.
    * Nothing under a box with a width of its own in points is looked at: that width is its
    * content's room whatever it holds.
    */
@@ -9661,8 +9672,11 @@ export class Engine implements HostEngine {
     for (const child of node.childList) {
       if (child.nodeKind !== 'element') continue;
       const width = readStyle(child, 'width');
+      const basis = readStyle(child, 'flexBasis');
       const shares =
-        typeof readStyle(child, 'flex') === 'number' || isNoBasis(readStyle(child, 'flexBasis'));
+        typeof readStyle(child, 'flex') === 'number' ||
+        isNoBasis(basis) ||
+        (isShare(basis) && isRow(node));
       if (typeof width === 'string' || shares || isShare(readStyle(child, 'minWidth'))) {
         found.push(child);
       }
