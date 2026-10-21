@@ -19,17 +19,27 @@ if (typeof global.addEventListener !== 'function') {
       // Read as a browser reads them, which is what a library asking about `passive` hears.
       var once = Boolean(options && typeof options === 'object' && options.once);
       var passive = options && typeof options === 'object' ? options.passive : undefined;
-      if (!listener) return;
+      // A listener added with a signal already aborted is never added, and goes once it aborts.
+      var signal = options && typeof options === 'object' ? options.signal : undefined;
+      if (!listener || (signal && signal.aborted)) return;
       for (var i = 0; i < kept.length; i++) {
         if (kept[i].type === type && kept[i].listener === listener && kept[i].capture === capture)
           return;
       }
-      kept.push({
+      var entry = {
         type: type,
         listener: listener,
         capture: capture,
-        options: { capture: capture, once: once, passive: passive },
-      });
+        options: { capture: capture, once: once, passive: passive, signal: signal },
+      };
+      kept.push(entry);
+      if (signal && typeof signal.addEventListener === 'function') {
+        signal.addEventListener('abort', function () {
+          kept = kept.filter(function (each) {
+            return each !== entry;
+          });
+        });
+      }
     },
     removeEventListener: function (type, listener, options) {
       var capture = captures(options);

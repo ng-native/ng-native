@@ -71,3 +71,18 @@ it('puts the stand-ins back once the app is gone, for the next app to be handed'
   win.dispatchEvent(new Event('picked'));
   assert.deepEqual(heard, ['later']);
 });
+
+it('drops a listener whose signal aborts before an app is up, as a browser does', async () => {
+  runBeforeModules();
+  const heard: string[] = [];
+  const early = new AbortController();
+  win.addEventListener('picked', () => void heard.push('aborted'), { signal: early.signal });
+  early.abort();
+  const already = new AbortController();
+  already.abort();
+  win.addEventListener('picked', () => void heard.push('already'), { signal: already.signal });
+  win.addEventListener('picked', () => void heard.push('kept'));
+  await render(Page, { providers: [provideWebCompat()] });
+  win.dispatchEvent(new Event('picked'));
+  assert.deepEqual(heard, ['kept']);
+});

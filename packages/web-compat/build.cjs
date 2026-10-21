@@ -65,11 +65,11 @@ function withWebCompat(config, options) {
   const sources = askForBrowserSources(options, config.projectRoot);
   const named = ['library-browser', [...libraries].sort().join(','), ...sources].join('-');
   const join = (version) => [version, named].filter(Boolean).join('-');
-  // In Metro's own version too, which every transformer's cache key starts from: a transformer
-  // of the app's own need not read the one the preset's transformer hashes.
   // The window's listeners, before any module runs: a library adds one as its modules load,
   // before an app is up to ask for them. See `before-modules.js`.
   const polyfills = config.serializer?.getPolyfills;
+  // In Metro's own version too, which every transformer's cache key starts from: a transformer
+  // of the app's own need not read the one the preset's transformer hashes.
   return {
     ...config,
     cacheVersion: join(config.cacheVersion),
