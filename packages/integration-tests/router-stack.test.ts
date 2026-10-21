@@ -541,6 +541,15 @@ describe('a native stack driven by the router', () => {
       assert.equal(top().props['replaceAnimation'], undefined);
     });
 
+    it('is not there for a reset that names the default, which animates as a back', async () => {
+      await nav.push('/user/1');
+      await idle();
+      await nav.reset('/user/2', { presentation: { stackAnimation: 'default' } });
+      await idle();
+      assert.equal(top().props['stackAnimation'], 'default');
+      assert.equal(top().props['replaceAnimation'], undefined);
+    });
+
     it('is not there for a push, which animates as the screen arriving already', async () => {
       await nav.push('/user/1', { presentation: { stackAnimation: 'none' } });
       await idle();

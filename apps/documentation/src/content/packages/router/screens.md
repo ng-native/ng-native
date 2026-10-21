@@ -259,10 +259,13 @@ carries: going back to a screen restores the presentation it was originally give
 bookkeeping on your part.
 
 `replace()` and `reset()` take a presentation too. A `stackAnimation` named there is the one the
-new screen arrives with, so `reset('/', { presentation: { stackAnimation: 'none' } })` lands with
-no animation: the screen is given `replaceAnimation: 'push'` unless the navigation names a
-`replaceAnimation` of its own. With neither option named, a replace or a reset animates as a back
-from the screen it takes away, as `react-native-screens` does.
+new screen arrives with, so `reset('/sign-in', { presentation: { stackAnimation: 'none' } })` lands
+with no animation: the navigation is given `replaceAnimation: 'push'` unless it names a
+`replaceAnimation` of its own. With neither option named, or a `stackAnimation` of `default`, a
+replace or a reset animates as a back from the screen it takes away, as `react-native-screens`
+does. So does a reset to a screen still on the stack, `reset('/')` from a screen pushed over the
+first: that screen is the one kept, not a new one, and the pop back to it animates as the screen
+leaving says.
 
 ## A sideways drag on iOS 26
 

@@ -616,28 +616,14 @@ export class NativeStackOutlet implements RouterOutletContract, OnInit {
    * first pop a screen nobody could see. A presentation the navigation names itself wins, and a
    * reset starts a stack with nothing to follow. A presented screen that is a stack of its own is
    * where a push to one of its children goes instead, inside it.
-   *
-   * A reset or a replace that names a `stackAnimation` pushes its screen in with it, unless it
-   * names a `replaceAnimation` too. `RNSScreenStack` otherwise runs it as a pop of the screen
-   * leaving, which animates as that screen says and never reads the one arriving.
    */
   private presentationFor(intent: NativeIntent | null): ScreenPresentation | undefined {
-    const own = this.replacedIn(intent, this.claimPresentation(intent));
+    const own = this.claimPresentation(intent);
     const covering = this.top?.presentation?.stackPresentation;
     if (intent?.stack === 'reset' || !covering || covering === 'push' || own?.stackPresentation) {
       return own;
     }
     return { ...own, stackPresentation: covering };
-  }
-
-  /** A presentation that names how its screen animates in, made to say so for a replace too. */
-  private replacedIn(
-    intent: NativeIntent | null,
-    own: ScreenPresentation | undefined,
-  ): ScreenPresentation | undefined {
-    const replacing = intent?.stack === 'reset' || intent?.stack === 'replace';
-    if (!replacing || !own?.stackAnimation || own.replaceAnimation) return own;
-    return { ...own, replaceAnimation: 'push' };
   }
 
   /** The navigation's own presentation, unless an outlet further out already presented it. */

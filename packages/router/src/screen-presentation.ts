@@ -54,7 +54,7 @@ export interface ScreenPresentation {
   /**
    * How a replace or a reset brings this screen in. `pop`, the platform's default, animates as a
    * back from the screen leaving; `push` runs this screen's `stackAnimation`. A replace or a reset
-   * that names a `stackAnimation` and no `replaceAnimation` is given `push`.
+   * that names a `stackAnimation` other than `default`, and no `replaceAnimation`, is given `push`.
    */
   readonly replaceAnimation?: ReplaceAnimation;
 

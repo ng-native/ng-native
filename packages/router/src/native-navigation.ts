@@ -64,6 +64,20 @@ const asksMore = (commands: NavigationCommands, extras: NavigationExtras): boole
 /** A url string up to its query or fragment. */
 const pathOf = (url: string): string => url.split(/[?#]/, 1)[0]!;
 
+/**
+ * A replace's or a reset's presentation, made to push its screen in with the `stackAnimation` it
+ * names unless it names a `replaceAnimation` too. `RNSScreenStack` otherwise runs it as a pop of
+ * the screen leaving, which animates as that screen says and never reads the one arriving.
+ * `default` names no animation of its own, so it is left a pop, as no `stackAnimation` is.
+ */
+function arrivingAs(intent: NativeIntent, presentation: ScreenPresentation): ScreenPresentation {
+  const replacing = intent.stack === 'replace' || intent.stack === 'reset';
+  const named =
+    presentation.stackAnimation !== undefined && presentation.stackAnimation !== 'default';
+  if (!replacing || !named || presentation.replaceAnimation) return presentation;
+  return { ...presentation, replaceAnimation: 'push' };
+}
+
 /** Read the intent off a navigation's state, if it carries one. */
 export function intentOf(state: unknown): NativeIntent | null {
   if (!state || typeof state !== 'object') return null;
@@ -170,8 +184,8 @@ export class NativeNavigation {
    * Swap the current screen for another. The history entry is replaced too, so a back from the
    * new screen goes where a back from the old one would have.
    *
-   * A `stackAnimation` in `presentation` is the one the new screen arrives with. Without one, or a
-   * `replaceAnimation`, the swap animates as the screen leaving was opened.
+   * A `stackAnimation` in `presentation` is the one the new screen arrives with. Without one, with
+   * `default`, or with a `replaceAnimation`, the swap animates as the screen leaving was opened.
    */
   replace(commands: NavigationCommands, options: NativeNavigationOptions = {}): Promise<boolean> {
     return this.go(commands, { ...options, replaceUrl: true }, { stack: 'replace' });
@@ -209,9 +223,10 @@ export class NativeNavigation {
    * Replace the whole stack with one screen, the way signing out or finishing onboarding does.
    * Every screen below is destroyed, so there is nothing to go back to.
    *
-   * A `stackAnimation` in `presentation` is the one the screen arrives with:
-   * `reset('/', { presentation: { stackAnimation: 'none' } })` lands with no animation. Without
-   * one, or a `replaceAnimation`, the reset animates as the screen leaving was opened.
+   * A `stackAnimation` in `presentation` is the one a new screen arrives with:
+   * `reset('/sign-in', { presentation: { stackAnimation: 'none' } })` lands with no animation.
+   * Without one, with `default`, or with a `replaceAnimation`, the reset animates as the screen
+   * leaving was opened, and so does a reset to a screen still on the stack, which is kept.
    */
   reset(commands: NavigationCommands, options: NativeNavigationOptions = {}): Promise<boolean> {
     return this.go(commands, { ...options, replaceUrl: true }, { stack: 'reset' });
@@ -276,7 +291,7 @@ export class NativeNavigation {
   ): Promise<boolean> {
     const { presentation, state, ...extras } = options;
     const full: NativeIntent = presentation
-      ? { ...intent, presentation: { ...intent.presentation, ...presentation } }
+      ? { ...intent, presentation: arrivingAs(intent, { ...intent.presentation, ...presentation }) }
       : intent;
 
     const navigate = () => {
