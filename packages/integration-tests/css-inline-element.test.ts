@@ -61,6 +61,18 @@ describe('a line of empty inline elements', () => {
     assert.equal(s.box('page')[3], 0);
   });
 
+  it('is a line again once something comes into an empty element inside one of them', () => {
+    const s = scene();
+    s.element('block', s.page);
+    const holder = s.element('holder', s.page, 'unless-block');
+    const empty = s.element('empty', holder, 'unless-block');
+    assert.equal(s.box('page')[3], 10);
+    const pill = s.element('pill', empty);
+    assert.ok(s.box('page')[3] > 10 + 20);
+    s.engine.removeChild(empty, pill);
+    assert.equal(s.box('page')[3], 10);
+  });
+
   it('is a line again once one of them holds something, or has a size', () => {
     const s = scene();
     s.element('block', s.page);

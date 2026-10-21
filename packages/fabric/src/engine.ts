@@ -3444,9 +3444,9 @@ const emptyLine = (container: EngineNode, first: EngineNode): boolean =>
 
 /**
  * Whether a box puts nothing on a line: an element a browser lays out inline that holds
- * nothing, or only more such elements, with no size, padding, border or margin of its own. A line of nothing else has no
- * height (CSS 2.2, 9.4.2): a component's empty host after a field, a datepicker's, which draws
- * in an overlay, adds no strut under the field.
+ * nothing, or only more such elements, with no size, padding, border or margin of its own. A
+ * line of nothing else has no height (CSS 2.2, 9.4.2): a component's empty host after a field,
+ * a datepicker's, which draws in an overlay, adds no strut under the field.
  */
 function addsNothing(node: EngineNode): boolean {
   if (!node.inlineLevel) return false;
