@@ -369,7 +369,7 @@ const CSS_OF: Record<string, string | readonly string[]> = {
   borderStartColor: 'border-left-color',
   borderEndColor: 'border-right-color',
   borderStyle: 'border-top-style',
-  // Written beside the four sides when they agree, which Chrome has compared already.
+  // Written beside the four sides, and held to them by `whereUnsidedDiffers`.
   borderWidth: [
     'border-top-width',
     'border-right-width',
@@ -463,6 +463,7 @@ function disagreements(
     problems.push(...whereChromeSets(test.name, label, all, own, skipped).map(tag));
     if (!skipped.size) {
       problems.push(...whereOnlyOursSets(test.name, label, all, own, control, recorded).map(tag));
+      problems.push(...whereUnsidedDiffers(test.name, label, own).map(tag));
     }
     const handed = recorded.children?.[test.name];
     if (handed) {
@@ -566,6 +567,31 @@ function whereOnlyOursSets(
     if (web !== undefined && compare(properties[0]!, web, style, TRANSFORM_BOX).agrees) continue;
     const text = `${label}: ours ${JSON.stringify(style[key])}, chrome ${web ?? 'nothing'}`;
     problems.push({ case: name, property: `(ours only) ${key}`, text });
+  }
+  return problems;
+}
+
+/**
+ * Where ours writes a border's unsided width or colour unlike the four sides, which agree. Android
+ * strokes a rounded border, the only way it draws one dashed or dotted, from the unsided props,
+ * and only when every side equals them: Chrome's sides, compared already, say nothing of them.
+ * Sides that differ are read on their own, and the unsided prop is not read at all.
+ */
+function whereUnsidedDiffers(
+  name: string,
+  label: string,
+  style: Record<string, unknown>,
+): Disagreement[] {
+  const problems: Disagreement[] = [];
+  for (const part of ['width', 'color'] as const) {
+    const key = `border${cap(part)}`;
+    if (style[key] === undefined) continue;
+    const [first, ...rest] = ['top', 'right', 'bottom', 'left'].map((side) =>
+      JSON.stringify(ours(style, `border-${side}-${part}`)),
+    );
+    if (rest.some((side) => side !== first) || JSON.stringify(style[key]) === first) continue;
+    const text = `${label}: ours ${JSON.stringify(style[key])}, every side ${first}`;
+    problems.push({ case: name, property: `(unsided) ${key}`, text });
   }
   return problems;
 }

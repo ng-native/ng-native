@@ -736,7 +736,7 @@ function lineSides(prefix) {
 function unsided(value, out, part) {
   if (Object.keys(SIDES).some((side) => value[side] === undefined)) return;
   const [first, ...rest] = Object.values(SIDES).map((side) => out[`border${side}${part}`]);
-  if (rest.every((one) => one === first)) out[`border${part}`] = first;
+  if (rest.every((one) => sameValue(one, first))) out[`border${part}`] = first;
 }
 
 /**

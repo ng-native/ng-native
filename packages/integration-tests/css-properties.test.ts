@@ -147,6 +147,15 @@ describe('a border the same on every side', () => {
     assert.equal(declarationsOf('border-color: red')['borderColor'], 'rgb(255, 0, 0)');
   });
 
+  it('is written unsided where the width is resolved on device', () => {
+    // Each side compiles to a marker of its own, alike but not the same object.
+    const { deferred } = compileCss('view { border-width: 0.5em }').rules[0];
+    assert.deepEqual(
+      deferred.find(({ props }: { props: string[] }) => props.includes('borderWidth'))?.compute,
+      { unit: 'em', factor: 0.5 },
+    );
+  });
+
   it('is not, where the sides differ', () => {
     assert.equal('borderWidth' in declarationsOf('border-width: 1px 2px'), false);
     assert.equal('borderColor' in declarationsOf('border-color: red blue'), false);
