@@ -82,6 +82,9 @@ Experimental and partial. It has:
 - A `<button>` and an `<a>` with their roles, each taking a press with no listener (`:active`
   while held) and marked `data-hover` while a pointer is over it, a disabled one announced as
   disabled, and a table's and a form's elements as views.
+- A table laid out in columns: a cell as wide as the columns it is across (`colspan`), one down
+  several rows (`rowspan`), the columns sharing the table's width by what their cells hold or
+  the widths the cells say, and `table-layout: fixed` giving them one width.
 - The page's address: `document.URL`, `baseURI` and `<base href>`, `window.location`, a link's
   `href` and the parts of its URL, the other URLs an element's attributes say, resolved against
   it, and `:target`.

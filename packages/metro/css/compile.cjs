@@ -1170,14 +1170,30 @@ function controlState(part) {
 
 /**
  * Take a declaration only a sheet read as a browser reads it has a meaning for: a clip along one
- * axis, a box that is clipped to nothing, a box that is not seen. Answers whether it was one.
+ * axis, a box that is clipped to nothing, a box that is not seen, a table's layout. Answers
+ * whether it was one.
  */
 function asABrowserReads(declaration, out) {
   return (
     clippedOnAnAxis(declaration, out) ||
     clippedToNothing(declaration, out) ||
-    seenOrNot(declaration, out)
+    seenOrNot(declaration, out) ||
+    tableLaidOut(declaration, out)
   );
+}
+
+/**
+ * `table-layout`, in a sheet read as a browser reads it: kept for what lays a table out in
+ * `@ng-native/web-compat`, which gives a `fixed` table columns of one width, and taken off what
+ * native is sent. A value that is a token is left to be refused.
+ */
+function tableLaidOut(declaration, out) {
+  // lightningcss has no parser of its own for it: a custom property by the name it is written.
+  if (declaration.property !== 'custom' || declaration.value.name !== 'table-layout') return false;
+  const [only, ...rest] = declaration.value.value;
+  if (rest.length || only?.type !== 'token' || only.value.type !== 'ident') return false;
+  out.tableLayout = only.value.value === 'fixed' ? 'fixed' : 'auto';
+  return true;
 }
 
 /**

@@ -2474,11 +2474,13 @@ const sameEntries = (a: unknown, b: readonly unknown[]): boolean =>
 
 /**
  * Take off what is read here and is no style of a native view: `order`, by the container in
- * `inOrder`, and `justify-self`, by the block a box is in.
+ * `inOrder`, `justify-self`, by the block a box is in, and `table-layout`, by what lays a
+ * table out.
  */
 function notNative(props: Record<string, unknown>): void {
   if (props['order'] !== undefined) delete props['order'];
   if (props['justifySelf'] !== undefined) delete props['justifySelf'];
+  if (props['tableLayout'] !== undefined) delete props['tableLayout'];
 }
 
 /**
@@ -2787,7 +2789,7 @@ const SIZE_KEYS = new Set([
  * What only the engine reads, whatever it is set to: no native view lays out by any of them, or
  * draws by `visibility` or a clip to nothing (`seenByCss`).
  */
-const LAID_OUT_HERE = new Set([...GRID_KEYS, 'order', 'visibility', 'clipped']);
+const LAID_OUT_HERE = new Set([...GRID_KEYS, 'order', 'visibility', 'clipped', 'tableLayout']);
 const POSITIONS_HERE = new Set(['static', 'fixed', 'sticky']);
 
 /** What a declaration can ask of the engine that an app of plain flex does not: see `asks`. */

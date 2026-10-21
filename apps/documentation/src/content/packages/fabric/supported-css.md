@@ -571,7 +571,8 @@ These are dropped with a warning that says so, not declarations that quietly do 
 - `float`
 - `subgrid`, and the `grid` and `grid-template` shorthands
 - `list-style`
-- Table layout: `table-layout`, `border-collapse`, `caption-side`, `empty-cells`
+- Table layout: `table-layout`, `border-collapse`, `caption-side`, `empty-cells`. A library's
+  sheet read as a browser's keeps `table-layout`, for `@ng-native/web-compat`'s tables
 - Multi-column layout
 - `will-change`
 - `contain`

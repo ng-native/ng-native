@@ -39,7 +39,10 @@ Gaps: a document `document.implementation` makes is never drawn, has no events o
   `<template>`'s `content`, parsed as a browser parses HTML.
 - The properties HTML reflects attributes as: `hidden`, `title`, `dir`, `tabIndex`, `type`, the
   ARIA properties and the rest.
-- A table's rows and cells.
+- A table's rows and cells, laid out in columns: a cell is as wide as the columns it is across
+  (`colspan`), one down several rows (`rowspan`) is drawn over them, and the columns share the
+  table's width by what their cells hold or by the widths the cells say. `table-layout: fixed`
+  gives them one width.
 - The element interfaces, `HTMLInputElement` and the rest, for `instanceof`.
 - The HTML elements a library writes that the engine has no view for, a `<button>` or a
   `<table>`, are views. A `<button>` and an `<a>` have their roles.
@@ -121,7 +124,9 @@ Gaps:
 Gaps: `ResizeObserver` has no `device-pixel-content-box`, `matchMedia` does not read
 `resolution` or `-webkit-device-pixel-ratio`, and `scrollIntoView` reads no `scroll-margin` or
 `scroll-padding`. An element's browser defaults are its box sizing and whether it is a block,
-with no margins and no heading sizes, and a table is not laid out as a table. The window does not
+with no margins and no heading sizes. A table's columns are worked out again when a row or a
+cell is put in or a span changes, and not when one is taken out or what a cell holds changes;
+`border-collapse`, `border-spacing` and `caption-side` are not read. The window does not
 scroll.
 An inline element over two lines is one box around both, where a browser has two.
 A table's `clientTop` and `clientLeft` are its border's width with `border-collapse: collapse`
