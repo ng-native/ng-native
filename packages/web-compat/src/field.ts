@@ -1,5 +1,6 @@
 import { markComponentHost, type Engine, type EngineNode } from '@ng-native/fabric';
 import { documentOf } from './document.ts';
+import { keepTaken } from './node-members.ts';
 
 /**
  * `<input>` and `<textarea>`: the platform's text field, in an app that asked for this package.
@@ -115,6 +116,25 @@ function asAField(node: EngineNode, engine: Engine, typed: boolean): void {
   const rest = { ...node.defaultStyle };
   for (const key of Object.keys(FIELD_DEFAULTS)) delete rest[key];
   engine.setDefaultStyle(node, typed ? { ...rest, ...FIELD_DEFAULTS } : rest);
+}
+
+/**
+ * `caret-color` on a field, which is a prop of a native text input and no style: a transparent
+ * caret is one that is hidden, as a one-time code field hides its own to draw one per slot, and
+ * any other colour is the selection's and caret's. Answers whether the declaration was one.
+ */
+export function caretColor(
+  node: EngineNode,
+  name: string,
+  value: unknown,
+  engine: Engine,
+): boolean {
+  if ((name !== 'caret-color' && name !== 'caretColor') || !fields.has(node)) return false;
+  const hidden = value === 'transparent';
+  const colour = hidden || value == null || value === 'auto' ? null : value;
+  engine.setProp(node, 'caretHidden', hidden ? true : null);
+  engine.setProp(node, 'selectionColor', colour);
+  return true;
 }
 
 /** Make an `<input>` or `<textarea>` a text field that keeps up with what is typed into it. */
@@ -235,11 +255,15 @@ const SETTERS: Readonly<
     engine.keepAsAttribute(node, 'value');
     return true;
   },
-  // A text area's columns are its width in characters, which the engine reads as a `size`.
+  // How many characters wide it is with no width of its own, which is a browser's twenty where
+  // the field says none (zero, or less, is none): the field's own default is that twenty, and
+  // taking the prop away leaves it. A text area's columns are its size, by the name it has for
+  // them. Kept as written too, to read back: the prop is the number or none.
   cols(_, node, value, engine) {
-    const columns = Number(value);
-    if (node.tag === 'textarea') engine.setProp(node, 'size', columns > 0 ? columns : null);
-    return false;
+    return node.tag === 'textarea' && setSize(node, 'cols', value, engine);
+  },
+  size(_, node, value, engine) {
+    return node.tag === 'input' && setSize(node, 'size', value, engine);
   },
   // Kept as written too: a stylesheet selects on `[type="email"]`.
   type(_, node, value, engine) {
@@ -288,6 +312,14 @@ const SETTERS: Readonly<
     return false;
   },
 };
+
+/** A field's size in characters, or none where it is not a number above zero. */
+function setSize(node: EngineNode, attribute: string, value: unknown, engine: Engine): true {
+  const characters = Number(value);
+  engine.setProp(node, 'size', characters > 0 ? characters : null);
+  keepTaken(node, attribute, value);
+  return true;
+}
 
 /**
  * Set an attribute or property of a field as the props a native text field reads. Answers

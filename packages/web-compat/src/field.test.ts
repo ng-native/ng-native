@@ -73,6 +73,20 @@ class Grow {
   readonly document: Dom = inject(DOCUMENT);
 }
 
+@Component({
+  selector: 'x-details',
+  template: `
+    <input testID="caret" [style]="caret()" />
+    <input testID="sized" />
+    <textarea testID="columns"></textarea>
+    <div testID="plain" [style]="caret()"></div>
+  `,
+})
+class Details {
+  readonly document: Dom = inject(DOCUMENT);
+  readonly caret = signal('caret-color: transparent');
+}
+
 afterEach(cleanup);
 
 const fields = async () => {
@@ -318,5 +332,74 @@ describe('a text field', () => {
     } finally {
       fabric.frames.get = get;
     }
+  });
+});
+
+describe('the details of a text field', () => {
+  const details = async (providers: unknown[] = [provideWebCompat()]) => {
+    const app = await render(Details, { providers: providers as never });
+    await settle();
+    return { app, instance: app.instance, document: app.instance.document as Dom };
+  };
+  const wide = (id: string) => Math.round(field(id).props['width'] as number);
+
+  it('hides its caret for a transparent caret-color, and colours the selection for another', async () => {
+    // A one-time code field is one input drawn as a slot a character, with a caret of its own.
+    const { instance } = await details();
+    assert.equal(prop('caret', 'caretHidden'), true);
+    assert.equal(prop('caret', 'selectionColor'), undefined);
+    instance.caret.set('caret-color: red');
+    await settle();
+    assert.equal(prop('caret', 'caretHidden'), undefined);
+    assert.equal(prop('caret', 'selectionColor'), 'red');
+    instance.caret.set('caret-color: auto');
+    await settle();
+    assert.equal(prop('caret', 'caretHidden'), undefined);
+    assert.equal(prop('caret', 'selectionColor'), undefined, "the platform's own again");
+  });
+
+  it('leaves the caret-color of anything but a field as a style', async () => {
+    await details();
+    assert.equal(prop('plain', 'caretHidden'), undefined);
+    assert.equal(prop('plain', 'selectionColor'), undefined);
+  });
+
+  it('is twenty characters wide with no size, as wide as its size says, and twenty again without', async () => {
+    const { document } = await details();
+    const twenty = wide('sized');
+    assert.ok(twenty > 0);
+    const area = wide('columns');
+    assert.ok(area > 0, 'a text area with no cols too');
+    const sized = document.querySelector('input[testID="sized"]');
+    sized.setAttribute('size', '10');
+    await settle();
+    assert.ok(wide('sized') < twenty);
+    assert.equal(sized.getAttribute('size'), '10');
+    sized.removeAttribute('size');
+    await settle();
+    assert.equal(sized.getAttribute('size'), null);
+    assert.equal(wide('sized'), twenty);
+    sized.setAttribute('size', '10');
+    sized.setAttribute('size', '0');
+    await settle();
+    assert.equal(wide('sized'), twenty, 'a size of none is no size');
+    const columns = document.querySelector('textarea');
+    columns.setAttribute('cols', '10');
+    await settle();
+    assert.ok(wide('columns') < area);
+    assert.equal(columns.getAttribute('cols'), '10');
+    columns.setAttribute('cols', '0');
+    await settle();
+    assert.equal(wide('columns'), area, 'no columns is none');
+    columns.setAttribute('cols', '10');
+    columns.removeAttribute('cols');
+    await settle();
+    assert.equal(wide('columns'), area);
+  });
+
+  it('is a plain view with none of it in an app without provideWebCompat()', async () => {
+    await details([]);
+    assert.equal(prop('caret', 'caretHidden'), undefined);
+    assert.equal(prop('sized', 'size'), undefined);
   });
 });

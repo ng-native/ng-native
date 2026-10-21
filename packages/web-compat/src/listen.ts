@@ -9,6 +9,7 @@ import { nativeEvent } from './event-classes.ts';
 import { inPassiveListener, listen, type Heard } from './events.ts';
 import {
   FIELD_EVENTS,
+  caretColor,
   createField,
   isField,
   keyOf,
@@ -241,7 +242,7 @@ export const webListen: RendererExtension = {
   style(node, name, value, engine) {
     if (!documentOf(engine)) return undefined;
     if (node.tag === 'stop') stopChanged(node, engine);
-    if (styleShape(node, name, value, engine)) return {};
+    if (styleShape(node, name, value, engine) || caretColor(node, name, value, engine)) return {};
     return inlineStyle(node, name, value);
   },
   // Kept as `addEventListener` keeps a listener, so what a script sends reaches a template's too.

@@ -185,6 +185,10 @@ before a listener hears of it.
 - An `<input>` and a `<textarea>` are the platform's text field, as wide as a browser's, with
   `value` read as it is typed and `defaultValue` as written, `input` as it is typed and `change`
   once the edit ends, and each key as a `keydown` and `keyup` with its `key` and `keyCode`.
+- A field is twenty characters wide until its `size` (a text area's `cols`) says otherwise, and a
+  `size` or `cols` of zero or less says nothing. A `caret-color` set on a field in `style` is its
+  `selectionColor`, and `transparent` hides its caret, as a one-time code field does to draw its
+  own.
 - Its `type`, `inputmode`, `autocomplete` and `maxlength` are the keyboard and entry native has for
   them, and `readOnly`, `disabled` or a disabled `<fieldset>` around it make it a field that cannot
   be typed into.
