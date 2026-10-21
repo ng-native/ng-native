@@ -15,8 +15,9 @@ const inside = (node: EngineNode, x: number, y: number): boolean => {
  * Each element drawn at a point of the window under `node`, the one drawn over the rest first:
  * the deepest there, and the last of those beside each other. Into `found`, and as far as the
  * first where `first` says so. A node that takes no touches is passed over with what it holds;
- * one that takes none itself, but lets what it holds take them, is passed over alone, and one
- * that is not drawn is passed over with what it holds.
+ * one that takes none itself, but lets what it holds take them, is passed over alone; one that
+ * takes them only itself is looked at without what it holds; and one that is not drawn is passed
+ * over with what it holds.
  *
  * ponytail: every element on the way is measured, which is a call to native each. A z-index
  * is read only for the body, which is looked in first.
@@ -24,7 +25,8 @@ const inside = (node: EngineNode, x: number, y: number): boolean => {
 function collect(node: EngineNode, x: number, y: number, found: EngineNode[], first: boolean) {
   const takes = touchable(node);
   if (node.nodeKind !== 'element' || takes === 'none' || styled(node, 'display') === 'none') return;
-  for (let index = node.childList.length - 1; index >= 0; index--) {
+  // One that takes touches itself, and none of what it holds, is looked at alone.
+  for (let index = takes === 'box-only' ? -1 : node.childList.length - 1; index >= 0; index--) {
     collect(node.childList[index]!, x, y, found, first);
     if (first && found.length) return;
   }
@@ -49,7 +51,7 @@ function pointOf(args: readonly unknown[]): [number, number] {
 /** Whether a point is in the window, where the app has been told how big the window is. */
 const inWindow = (engine: Engine, x: number, y: number): boolean => {
   const { width, height } = windowSize(engine);
-  return x >= 0 && y >= 0 && (!width || x <= width) && (!height || y <= height);
+  return x >= 0 && y >= 0 && (!width || x < width) && (!height || y < height);
 };
 
 /**

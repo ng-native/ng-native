@@ -60,6 +60,9 @@ describe('elementFromPoint', () => {
     assert.throws(() => document.elementFromPoint(0, Number.POSITIVE_INFINITY), TypeError);
     same(document.elementFromPoint(-1, 5), null);
     same(document.elementFromPoint(5, 900), null);
+    // The window's far edge is past it, as a browser has it.
+    same(document.elementFromPoint(400, 5), null);
+    same(document.elementFromPoint(5, 800), null);
     same(document.elementFromPoint(15, 15), box);
     same(document.elementFromPoint(300, 300), document.documentElement);
     assert.equal(document.elementsFromPoint(-1, 5).length, 0);
@@ -131,6 +134,14 @@ describe('elementFromPoint', () => {
       document.documentElement,
       'the wrapper alone is not hit',
     );
+    // One that takes touches itself, and none of what it holds, is hit over its child.
+    const shell = div();
+    shell.setAttribute('pointerEvents', 'box-only');
+    const inner = div(shell);
+    await settle();
+    place(shell, { x: 200, y: 0, width: 50, height: 50 });
+    place(inner, { x: 210, y: 10, width: 10, height: 10 });
+    same(document.elementFromPoint(215, 15), shell, 'the box, not what it holds');
   });
 
   it('passes over what a stylesheet says takes no touches, as one written on it is', async () => {
