@@ -124,6 +124,34 @@ describe('asking for a screen', () => {
     assert.deepEqual(intent(), { stack: 'reset' });
   });
 
+  it('carries a reset that names a stackAnimation as one that pushes its screen in', async () => {
+    // In the intent, not only on the screen the outlet creates: a presented page reads the same
+    // presentation, and so does the history entry a screen is restored from.
+    await navigation.reset('/signed-out', { presentation: { stackAnimation: 'none' } });
+    assert.deepEqual(intent(), {
+      stack: 'reset',
+      presentation: { stackAnimation: 'none', replaceAnimation: 'push' },
+    });
+  });
+
+  it('carries a replace that names a stackAnimation as one that pushes its screen in', async () => {
+    await navigation.replace('/detail', { presentation: { stackAnimation: 'fade' } });
+    assert.deepEqual(intent(), {
+      stack: 'replace',
+      presentation: { stackAnimation: 'fade', replaceAnimation: 'push' },
+    });
+  });
+
+  it('leaves a replace that names the default stackAnimation animating as a back', async () => {
+    await navigation.replace('/detail', { presentation: { stackAnimation: 'default' } });
+    assert.deepEqual(intent(), { stack: 'replace', presentation: { stackAnimation: 'default' } });
+  });
+
+  it('leaves a push that names a stackAnimation as it is', async () => {
+    await navigation.push('/detail', { presentation: { stackAnimation: 'none' } });
+    assert.deepEqual(intent(), { stack: 'push', presentation: { stackAnimation: 'none' } });
+  });
+
   it('presents as a modal unless told otherwise', async () => {
     // A presented screen still *pushes* - it is the `stackPresentation` that makes it a modal
     // rather than a screen in the stack, and `modal` is the default because it is the one that

@@ -27,7 +27,8 @@ it('leaves a compiled copy in place while it says what its source compiles to, a
     symlinkSync(
       fileURLToPath(new URL('./node_modules', import.meta.url)),
       path.join(root, 'node_modules'),
-      'dir',
+      // A junction on Windows, which needs no privileges; ignored elsewhere.
+      'junction',
     );
     writeFileSync(path.join(root, 'package.json'), '{"type":"module"}');
     const file = path.join(root, 'probe.ts');

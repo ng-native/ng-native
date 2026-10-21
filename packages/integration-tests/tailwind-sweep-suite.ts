@@ -369,6 +369,19 @@ const CSS_OF: Record<string, string | readonly string[]> = {
   borderStartColor: 'border-left-color',
   borderEndColor: 'border-right-color',
   borderStyle: 'border-top-style',
+  // Written beside the four sides, and held to them by `whereUnsidedDiffers`.
+  borderWidth: [
+    'border-top-width',
+    'border-right-width',
+    'border-bottom-width',
+    'border-left-width',
+  ],
+  borderColor: [
+    'border-top-color',
+    'border-right-color',
+    'border-bottom-color',
+    'border-left-color',
+  ],
   experimental_backgroundImage: 'background-image',
   experimental_backgroundSize: 'background-size',
   experimental_backgroundRepeat: 'background-repeat',
@@ -450,6 +463,7 @@ function disagreements(
     problems.push(...whereChromeSets(test.name, label, all, own, skipped).map(tag));
     if (!skipped.size) {
       problems.push(...whereOnlyOursSets(test.name, label, all, own, control, recorded).map(tag));
+      problems.push(...whereUnsidedDiffers(test.name, label, own).map(tag));
     }
     const handed = recorded.children?.[test.name];
     if (handed) {
@@ -553,6 +567,42 @@ function whereOnlyOursSets(
     if (web !== undefined && compare(properties[0]!, web, style, TRANSFORM_BOX).agrees) continue;
     const text = `${label}: ours ${JSON.stringify(style[key])}, chrome ${web ?? 'nothing'}`;
     problems.push({ case: name, property: `(ours only) ${key}`, text });
+  }
+  return problems;
+}
+
+/**
+ * Where a border's unsided width or colour is not what the four sides agree on. Android strokes
+ * a rounded border, the only way it draws one dashed or dotted, from the unsided props, and only
+ * when every side equals them: Chrome's sides, compared already, say nothing of them. Sides that
+ * differ, or a logical side, are read on their own, and a border with no width strokes nothing.
+ */
+function whereUnsidedDiffers(
+  name: string,
+  label: string,
+  style: Record<string, unknown>,
+): Disagreement[] {
+  const problems: Disagreement[] = [];
+  const logical = (part: string) =>
+    ['Start', 'End', 'Block', 'BlockStart', 'BlockEnd'].some(
+      (side) => style[`border${side}${cap(part)}`] !== undefined,
+    );
+  const agreed = (part: 'width' | 'color') => {
+    const [first, ...rest] = ['top', 'right', 'bottom', 'left'].map((side) =>
+      JSON.stringify(ours(style, `border-${side}-${part}`)),
+    );
+    return rest.every((side) => side === first) && !logical(part) ? first : undefined;
+  };
+  const width = agreed('width');
+  const drawn = width !== undefined && width !== '0';
+  for (const part of ['width', 'color'] as const) {
+    const key = `border${cap(part)}`;
+    const every = agreed(part);
+    const unsided = JSON.stringify(style[key]);
+    if (every === undefined || unsided === every) continue;
+    if (style[key] === undefined && !drawn) continue;
+    const text = `${label}: ours ${unsided ?? 'nothing'}, every side ${every}`;
+    problems.push({ case: name, property: `(unsided) ${key}`, text });
   }
   return problems;
 }

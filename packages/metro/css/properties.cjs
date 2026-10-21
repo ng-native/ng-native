@@ -1794,9 +1794,9 @@ const TRANSLATORS = new Map([
       );
     },
   ],
-  // The shorthand is uniform by definition, so the unsided RN props say it in three keys rather
-  // than nine. A per-side longhand still wins: Yoga reads borderLeftWidth over borderWidth,
-  // exactly as CSS does.
+  // Written side by side, so a per-side longhand from a weaker rule cannot win over it (see
+  // `lineSides`). The engine adds the unsided width and colour where the four sides agree
+  // (`settleUnsidedBorder` in css.ts).
   ['border', (property, value, out) => line(value, 'border', out, property)],
   ...each(['border-top', 'border-right', 'border-bottom', 'border-left'], (property, value, out) =>
     sideBorder(property, [SIDES[property.slice('border-'.length)]], value, out),

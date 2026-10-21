@@ -231,6 +231,17 @@ describe('scroll view keyboard policy', () => {
     assert.deepEqual(fabric.commands, []);
   });
 
+  // A view takes focus from a hardware keyboard or a D-pad, and holds no keyboard to put away, so
+  // the scroll view has no reason to take the tap from the child it lands on.
+  it('leaves a tap to its child while what has the focus is not a text input', async () => {
+    const { fabric, instance } = await boot<{ pressed: string[] }>('KeyboardTaps');
+    await fireEvent(byID(fabric, 'elsewhere2'), 'focus', {});
+    await touch(byID(fabric, 'button'), 'topTouchStart');
+    await touch(byID(fabric, 'button'), 'topTouchEnd');
+    assert.deepEqual(instance.pressed, ['button'], 'the pressable got its press');
+    assert.deepEqual(fabric.commands, []);
+  });
+
   it('exposes the scroll commands and reports content size', async () => {
     const { fabric, instance } = await boot<{
       scroll(): {

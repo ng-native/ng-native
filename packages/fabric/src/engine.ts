@@ -14188,6 +14188,16 @@ export class Engine implements HostEngine {
     return this.focusedNode;
   }
 
+  get focusedField(): EngineNode | null {
+    const node = this.focused;
+    return node && TEXT_INPUTS.has(viewNameOf(node)) ? node : null;
+  }
+
+  blurFocused(): void {
+    const field = this.focusedField;
+    if (field) this.dispatchCommand(field, 'blur');
+  }
+
   /** Whether a node is still part of the tree, rather than in a subtree that was removed. */
   private isAttached(node: EngineNode): boolean {
     let current: EngineNode | null = node;

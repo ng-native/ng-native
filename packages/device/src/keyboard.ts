@@ -15,6 +15,7 @@ import {
   signal,
   type Signal,
 } from '@angular/core';
+import { HostEngine } from '@ng-native/fabric';
 import { reactNative, type NativeKeyboardEvent } from './react-native.ts';
 
 /** What the platform reports when the keyboard moves. */
@@ -141,6 +142,7 @@ export class Keyboard {
   });
 
   private readonly source = inject(Keyboard.SOURCE);
+  private readonly engine = inject(HostEngine, { optional: true });
   private readonly current = signal<KeyboardMetrics>({ height: 0 });
   private readonly frame = signal<KeyboardMetrics | null>(null);
 
@@ -169,8 +171,16 @@ export class Keyboard {
     if (stop) destroyRef.onDestroy(stop);
   }
 
-  /** Put the keyboard away, as tapping outside a field would. */
+  /**
+   * Put the keyboard away, as tapping outside a field would: the focused text field is sent
+   * `blur`, as a scroll view does at such a tap. A focused view or button is left as it is.
+   *
+   * React Native's own `Keyboard.dismiss()`, which the source calls too, blurs only a field its
+   * `TextInput` component recorded in `TextInputState`. A `text-input` here is the native component
+   * with no `TextInput.js` around it, so nothing is recorded and that call alone blurs nothing.
+   */
   dismiss(): void {
+    this.engine?.blurFocused();
     this.source.dismiss();
   }
 }

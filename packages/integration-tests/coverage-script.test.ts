@@ -12,6 +12,7 @@ import {
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { describe, it } from 'node:test';
+import { pathToFileURL } from 'node:url';
 
 const script = new URL('../../scripts/coverage.mjs', import.meta.url);
 const reports = ['native.info', 'web.info', 'testing.info', 'web-compat.info', 'browser/lcov.info'];
@@ -37,7 +38,7 @@ function cli(root: string, args = ['--report', '--min', '95'], stub = false) {
   return spawnSync(
     process.execPath,
     [
-      ...(stub ? ['--import', path.join(root, 'suites.mjs')] : []),
+      ...(stub ? ['--import', pathToFileURL(path.join(root, 'suites.mjs')).href] : []),
       path.join(root, 'scripts/coverage.mjs'),
       ...args,
     ],

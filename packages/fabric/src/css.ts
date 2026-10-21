@@ -848,6 +848,50 @@ function settleBorders(own: Record<string, unknown>): void {
   else own['borderStyle'] = drawn;
 }
 
+/** A border's four sides and its logical ones, by the part of it they hold. */
+const BORDER_SIDES = Object.fromEntries(
+  (['Width', 'Color'] as const).map((part) => [
+    part,
+    {
+      physical: ['Top', 'Right', 'Bottom', 'Left'].map((side) => `border${side}${part}`),
+      logical: ['Start', 'End', 'Block', 'BlockStart', 'BlockEnd'].map(
+        (side) => `border${side}${part}`,
+      ),
+    },
+  ]),
+) as Record<'Width' | 'Color', { physical: string[]; logical: string[] }>;
+
+/**
+ * A border's unsided width and colour, written beside the four sides once the cascade and every
+ * token have settled them, where they agree. Android strokes a rounded border, the only way it
+ * draws one dashed or dotted, from `borderWidth` and `borderColor` alone, and only when every
+ * side equals them; given the sides alone it fills each in solid. A border with no width strokes
+ * nothing, so preflight's `border: 0 solid` adds nothing to every element.
+ */
+function settleUnsidedBorder(own: Record<string, unknown>): void {
+  // No top width, its own or unsided: no four sides that agree. Most views have no border.
+  if (own['borderTopWidth'] === undefined && own['borderWidth'] === undefined) return;
+  const width = agreedSides(own, 'Width');
+  if (width === undefined || width === 0) return;
+  own['borderWidth'] = width;
+  const colour = agreedSides(own, 'Color');
+  if (colour !== undefined) own['borderColor'] = colour;
+}
+
+/**
+ * What the four sides of a border are, each read as native reads it, where they are the same,
+ * a colour held in an object by what is in it. A logical side, which a direction makes left or
+ * right, leaves it unsaid.
+ */
+function agreedSides(own: Record<string, unknown>, part: 'Width' | 'Color'): unknown {
+  const { physical, logical } = BORDER_SIDES[part];
+  if (logical.some((key) => own[key] !== undefined)) return undefined;
+  const unsided = own[`border${part}`];
+  const [first, ...rest] = physical.map((key) => own[key] ?? unsided);
+  const same = (one: unknown) => one === first || JSON.stringify(one) === JSON.stringify(first);
+  return rest.every(same) ? first : undefined;
+}
+
 /**
  * Deterministic work counters for the matcher.
  *
@@ -4253,6 +4297,7 @@ export class StyleResolver {
       this.applyDeferred(result.deferred, own, tokens, parentInherited, result.important);
     }
     settleBorders(own);
+    settleUnsidedBorder(own);
     // `pointer-events: inherit` won the cascade: what the parent hands down stands.
     if (own['pointerEvents'] === 'inherit') delete own['pointerEvents'];
     const style = { ...parentInherited, ...own };

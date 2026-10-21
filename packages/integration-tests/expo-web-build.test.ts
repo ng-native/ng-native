@@ -54,7 +54,12 @@ function app(root: string, withExpo: boolean): void {
   };
   const link = (name: string) => {
     mkdirSync(path.dirname(path.join(root, 'node_modules', name)), { recursive: true });
-    symlinkSync(realpathSync(packageDir(name)), path.join(root, 'node_modules', name), 'dir');
+    symlinkSync(
+      realpathSync(packageDir(name)),
+      path.join(root, 'node_modules', name),
+      // A junction on Windows, which needs no privileges; ignored elsewhere.
+      'junction',
+    );
   };
 
   // A package's own build, into the app rather than into its `dist`. `@ng-native/device` is

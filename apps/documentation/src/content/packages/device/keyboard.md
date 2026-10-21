@@ -28,7 +28,13 @@ export class Composer {
 
 `metrics` is everything the platform said, for a layout that needs the animation `duration` or
 `easing` too. `height` and `visible` are the common case, derived from `metrics`. `dismiss()` puts
-the keyboard away, as tapping outside a field would.
+the keyboard away, as tapping outside a field would: the `text-input` that has the focus is sent
+`blur`, which on iOS resigns it as first responder and on Android clears its focus and hides the
+keyboard. A view or a pressable that has the focus, from a hardware keyboard or a D-pad, holds no
+keyboard and is left as it is. A `search-field` or an `@expo/ui` text field does not tell the
+engine it has the focus, so `dismiss()` does not put its keyboard away. Call it while that field is
+still on screen. Once its view has been removed there is nothing left
+to send `blur` to, and Android, unlike iOS, does not take the keyboard down with the field.
 
 ## When it changes
 
@@ -106,9 +112,11 @@ which native moves.
 
 ## Off a device and on the web
 
-Off a device `metrics` stays at `{ height: 0 }` forever and `dismiss()` does nothing, because there
-is no `Keyboard` module underneath it. There is no software keyboard concept on the web in the same
-shape; `Keyboard` is a native-only service.
+Off a device `metrics` stays at `{ height: 0 }` forever, because there is no `Keyboard` module
+underneath it. `dismiss()` still blurs the focused field, so a test can see it sent as a `blur`
+command in the fake Fabric's `commands`. There is no software keyboard concept on the web in the
+same shape; `Keyboard` is a native-only service. Called on the web all the same, `dismiss()` blurs
+a focused `text-input` and leaves the focus on anything else, such as the button that was clicked.
 
 ## Reference
 

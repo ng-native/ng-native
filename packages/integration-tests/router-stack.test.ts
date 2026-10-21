@@ -480,6 +480,100 @@ describe('a native stack driven by the router', () => {
     });
   });
 
+  /**
+   * `RNSScreenStack` runs a replace, which a reset is too, as a pop of the screen leaving unless
+   * the screen arriving has `replaceAnimation: 'push'`. A pop animates as the screen leaving says,
+   * so a `stackAnimation` named for the screen arriving is never read, on iOS or on Android.
+   */
+  describe('the animation a reset or a replace names', () => {
+    const top = () =>
+      flatten(fabric.committed)
+        .filter((n) => n.viewName === 'RNSScreen')
+        .at(-1)!;
+
+    it('is the one a reset plays, the screen arriving pushed in with it', async () => {
+      await nav.push('/user/1');
+      await idle();
+      await nav.reset('/user/2', { presentation: { stackAnimation: 'none' } });
+      await idle();
+      assert.deepEqual(stack(fabric), ['user 2']);
+      assert.equal(top().props['stackAnimation'], 'none');
+      assert.equal(top().props['replaceAnimation'], 'push');
+    });
+
+    it('is the one a replace plays, the screen arriving pushed in with it', async () => {
+      await nav.push('/user/1');
+      await idle();
+      await nav.replace('/user/2', { presentation: { stackAnimation: 'fade' } });
+      await idle();
+      assert.deepEqual(stack(fabric), ['home', 'user 2']);
+      assert.equal(top().props['stackAnimation'], 'fade');
+      assert.equal(top().props['replaceAnimation'], 'push');
+    });
+
+    it('is the one a replace over a modal plays, presented as the modal is', async () => {
+      await nav.present('/modal');
+      await nav.push('/user/1');
+      await idle();
+      await nav.replace('/user/2', { presentation: { stackAnimation: 'none' } });
+      await idle();
+      assert.equal(top().props['stackPresentation'], 'modal');
+      assert.equal(top().props['stackAnimation'], 'none');
+      assert.equal(top().props['replaceAnimation'], 'push');
+    });
+
+    it('gives way to a replaceAnimation the navigation names itself', async () => {
+      await nav.push('/user/1');
+      await idle();
+      await nav.reset('/user/2', {
+        presentation: { stackAnimation: 'none', replaceAnimation: 'pop' },
+      });
+      await idle();
+      assert.equal(top().props['replaceAnimation'], 'pop');
+    });
+
+    it('is not there for a reset that names none, which still animates as the screen leaving', async () => {
+      await nav.push('/user/1');
+      await idle();
+      await nav.reset('/user/2');
+      await idle();
+      assert.equal(top().props['stackAnimation'], undefined);
+      assert.equal(top().props['replaceAnimation'], undefined);
+    });
+
+    it('is not read by a reset to a screen kept below, which pops back to that screen', async () => {
+      // The screen is the one already on the stack, so nothing new is put up to carry the
+      // animation, and `RNSScreenStack` pops back to it as the screen leaving says. Making the
+      // named animation play there means committing it onto the screen leaving before that screen
+      // goes; until then, this pins what a reset to a kept screen does.
+      const home = top().reactTag;
+      await nav.push('/user/1');
+      await idle();
+      await nav.reset('/', { presentation: { stackAnimation: 'none' } });
+      await idle();
+      assert.deepEqual(stack(fabric), ['home']);
+      assert.equal(top().reactTag, home);
+      assert.equal(top().props['stackAnimation'], undefined);
+      assert.equal(top().props['replaceAnimation'], undefined);
+    });
+
+    it('is not there for a reset that names the default, which animates as a back', async () => {
+      await nav.push('/user/1');
+      await idle();
+      await nav.reset('/user/2', { presentation: { stackAnimation: 'default' } });
+      await idle();
+      assert.equal(top().props['stackAnimation'], 'default');
+      assert.equal(top().props['replaceAnimation'], undefined);
+    });
+
+    it('is not there for a push, which animates as the screen arriving already', async () => {
+      await nav.push('/user/1', { presentation: { stackAnimation: 'none' } });
+      await idle();
+      assert.equal(top().props['stackAnimation'], 'none');
+      assert.equal(top().props['replaceAnimation'], undefined);
+    });
+  });
+
   describe('a page that throws on its first render', () => {
     const failed = (url: string, extras?: Parameters<NativeNavigation['push']>[1]) =>
       nav.push(url, extras).then(

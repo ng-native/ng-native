@@ -261,7 +261,8 @@ function compiled(context, source, file, options) {
  */
 function removeModuleCopies(vitest) {
   const dir = vitest._tmpDir;
-  if (typeof dir !== 'string' || path.dirname(dir) !== path.resolve(tmpdir())) return;
+  // Vitest builds `_tmpDir` with `/` even on Windows; resolve it before comparing.
+  if (typeof dir !== 'string' || path.dirname(path.resolve(dir)) !== path.resolve(tmpdir())) return;
   vitest.onClose(() => rmSync(dir, { recursive: true, force: true }));
 }
 

@@ -107,3 +107,31 @@ describe('the focused node', () => {
     assert.equal(heard, 2, 'and it hears the focus coming back after a blur');
   });
 });
+
+/*
+ * `blurFocused` is what `Keyboard.dismiss()` and a scroll view's tap elsewhere both send. Only a
+ * text input has a `blur` command: a view or a pressable takes focus from a hardware keyboard or a
+ * D-pad, and holds no keyboard to put away.
+ */
+describe('blurring the focused node', () => {
+  it('sends blur to a focused text input', () => {
+    const s = scene();
+    s.fabric.emit(s.fabric.committed[0]!.children[0]!, 'topFocus', {});
+    s.engine.blurFocused();
+    assert.deepEqual(s.fabric.commands, [{ viewName: 'TextInput', name: 'blur', args: [] }]);
+  });
+
+  it('sends nothing to a focused view', () => {
+    const s = scene();
+    s.fabric.emit(s.fabric.committed[0]!, 'topFocus', {});
+    assert.equal(s.engine.focused, s.wrapper);
+    s.engine.blurFocused();
+    assert.deepEqual(s.fabric.commands, []);
+  });
+
+  it('sends nothing when nothing is focused', () => {
+    const s = scene();
+    s.engine.blurFocused();
+    assert.deepEqual(s.fabric.commands, []);
+  });
+});
