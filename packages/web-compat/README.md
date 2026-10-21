@@ -12,9 +12,10 @@ Experimental and partial. It has:
   with `dispatchEvent`.
 - Markup: `innerHTML`, `outerHTML`, `insertAdjacentHTML`, `setHTML` and its kin, and a
   `<template>`'s `content`, parsed as a browser parses HTML.
-- The properties HTML reflects attributes as (`hidden`, `title`, `dir`, `tabIndex`, `type`,
-  ARIA's and the rest), a table's rows and cells, and the element interfaces, `HTMLInputElement`
-  and the rest, for `instanceof`.
+- The properties HTML reflects attributes as (`hidden`, `title`, `dir`, `tabIndex`, `draggable`,
+  `type`, ARIA's and the rest), `isContentEditable` from `contenteditable`, a
+  table's rows and cells, and the element interfaces, `HTMLInputElement` and the rest, for
+  `instanceof`.
 - The tree: live `childNodes` and `children`, the nodes around one, `appendChild`,
   `insertBefore`, `removeChild`, `replaceChild`, `append`, `prepend`, `replaceChildren`,
   `before`, `after`, `replaceWith`, `insertAdjacentElement`, `moveBefore`, `cloneNode`,

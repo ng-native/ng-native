@@ -92,3 +92,16 @@ export const attributeOf = (node: EngineNode, name: string): string | null =>
   null;
 export const hasAttribute = (node: EngineNode, name: string): boolean =>
   attributeOf(node, name) !== null;
+
+/**
+ * Whether `contenteditable` makes an element editable: by its own value, or by the nearest
+ * element above with one where its own is missing, `inherit`, or none of the keywords.
+ */
+export function editedByContent(node: EngineNode): boolean {
+  for (let at: EngineNode | null = node; at; at = parentElement(at)) {
+    const value = attributeOf(at, 'contenteditable')?.toLowerCase();
+    if (value === '' || value === 'true' || value === 'plaintext-only') return true;
+    if (value === 'false') return false;
+  }
+  return false;
+}

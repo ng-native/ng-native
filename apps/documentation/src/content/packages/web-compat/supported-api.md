@@ -37,8 +37,9 @@ Gaps: a document `document.implementation` makes is never drawn, has no events o
 
 - Markup: `innerHTML`, `outerHTML`, `insertAdjacentHTML`, `setHTML` and its kin, and a
   `<template>`'s `content`, parsed as a browser parses HTML.
-- The properties HTML reflects attributes as: `hidden`, `title`, `dir`, `tabIndex`, `type`, the
-  ARIA properties and the rest.
+- The properties HTML reflects attributes as: `hidden`, `title`, `dir`, `tabIndex`, `draggable`,
+  `type`, the ARIA properties and the rest. `isContentEditable` is read from `contenteditable` on
+  the element or the nearest element above that has one, and a text field answers `false`.
 - A table's rows and cells, laid out in columns: a cell is as wide as the columns it is across
   (`colspan`), one down several rows (`rowspan`) is drawn over them, and the columns share the
   table's width by what their cells hold or by the widths the cells say. `table-layout: fixed`
